@@ -1,6 +1,8 @@
 //! First-class compilation-root identity.
 //!
 //! A compilation is a small, fixed set of roots: `sys`, `syn`, `std`, and the entry program. [`RootId`] is the handle every other stage compares by equality instead of re-deriving "which root does this belong to" from a qualified-name string. It lives in `curios-base` — the compiler's shared vocabulary — because both `curios-text` (module resolution) and `curios-elab` (on `ConceptDecl`, `Structure`, and `Inductive` registry entries) key on it. Neither the host/guest wire ABI nor the runtime names it.
+//!
+//! There is deliberately no constructor from a name. A leading segment identifies a root only while the entry program is the one non-embedded root, and a mounted package's prefix is indistinguishable from a module the entry declares — so every root arrives from whoever mounted it and travels by copy from there.
 
 #[cfg(test)]
 mod tests;
@@ -16,16 +18,6 @@ pub enum RootId {
 }
 
 impl RootId {
-    /// The `RootId` a qualified name's leading path segment names. Any segment that isn't one of the three embedded roots is the entry program — today the only other root there is.
-    pub fn of_segment(segment: &str) -> RootId {
-        match segment {
-            "sys" => RootId::Sys,
-            "syn" => RootId::Syn,
-            "std" => RootId::Std,
-            _ => RootId::Entry,
-        }
-    }
-
     /// This root's privilege tier. `sys` is internal; `sys`/`syn`/`std` are each privileged (may reference an internal root); the entry program is ordinary.
     pub fn kind(self) -> RootKind {
         match self {

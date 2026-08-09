@@ -302,6 +302,8 @@ fn seed(
     let info = table
         .get(prefix)
         .expect("module info present from discovery");
+    // The root every synthetic namespace this walk materializes belongs to — an inductive's constructor module, a concept's method-wrapper module. Read off the parent, which discovery already stamped, rather than re-derived from `prefix`'s leading segment: a segment names a root only while the entry is the one non-embedded root, and a mounted package's prefix is indistinguishable from a module the entry declares.
+    let root = info.root;
 
     for label in info.public_children() {
         let target = prefix.with(&label);
@@ -373,7 +375,7 @@ fn seed(
                     let ctor = prefix.with(&induct_decl.label);
 
                     // Constructor bindings are public within their synthetic namespace. The parent's child bit, seeded separately as `vis_pub && rep_pub`, gates all external walks while the declaring module retains direct access.
-                    let mut direct = ModuleInfo::new(RootId::of_segment(prefix.root_segment()));
+                    let mut direct = ModuleInfo::new(root);
                     for case in &induct_decl.cases {
                         direct.insert_binding(case.label.clone(), true)?;
                     }
@@ -397,7 +399,7 @@ fn seed(
                 // A concept's method wrappers live in a nested namespace, exactly like an inductive's constructors: seed both the direct info and the public interface of that module unconditionally (the fields are always public within it), so `Show/show` resolves. The concept's own visibility gates the walk from outside via the parent's child-module flag.
                 let namespace = prefix.with(&concept.label);
 
-                let mut direct = ModuleInfo::new(RootId::of_segment(prefix.root_segment()));
+                let mut direct = ModuleInfo::new(root);
                 // Superclass fields are anonymous — positional slots with no name to reach them by, and no wrapper (`into_core` filters them out of wrapper generation the same way). Registering their empty labels here is what made two superclasses collide as an empty-named duplicate declaration.
                 for field in concept.fields.iter().filter(|field| !field.is_super) {
                     direct.insert_binding(field.label.clone(), true)?;

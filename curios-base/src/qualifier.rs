@@ -127,7 +127,7 @@ impl Qualifier {
         self.segments_slice().len() == 1
     }
 
-    /// The leading (root) segment. Panics on the empty qualifier — use [`Qualifier::root_segment`] where the root qualifier is a legitimate value.
+    /// The leading (root) segment. Panics on the empty qualifier.
     pub fn head(&self) -> &str {
         &self.segments_slice()[0]
     }
@@ -156,14 +156,6 @@ impl Qualifier {
     /// The qualifier suffix — everything but the leading (root) segment — a root's own qualifier for content nested under it. `[a, b, c]` → `[b, c]`; a single-segment or already-empty qualifier drops to empty.
     pub fn without_first(&self) -> Qualifier {
         Self::of(self.segments_slice().iter().skip(1).cloned().collect())
-    }
-
-    /// The first segment, or `""` if empty. Distinct from `head`, which indexes unchecked — this is for values (like `Context::island`) that can legitimately be the empty (root) qualifier.
-    pub fn root_segment(&self) -> &str {
-        self.segments_slice()
-            .first()
-            .map(String::as_str)
-            .unwrap_or("")
     }
 
     /// Whether this qualifier lies within `ancestor`'s subtree — equal to it, or nested below it at any depth. The comparison is segment-wise, not textual, so `/Foobar` is not within `/Foo`; the empty qualifier is the root, and every qualifier lies within it.

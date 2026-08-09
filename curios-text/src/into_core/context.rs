@@ -42,7 +42,7 @@ pub(super) enum FlatItem {
 }
 
 impl FlatItem {
-    /// Whether this flat item belongs to the fixed embedded prelude — every let in it is declared under a privileged root (`RootId::of_segment(..).kind()`). Checked on the *structured* qualifier's root segment, before names are flattened to strings.
+    /// Whether this flat item belongs to the fixed embedded prelude — every let in it is declared under a privileged root. Read off the root each let already carries, never re-derived from its name.
     pub(super) fn in_prelude(&self) -> bool {
         let lets = match self {
             FlatItem::Let(let_) => std::slice::from_ref(let_),
