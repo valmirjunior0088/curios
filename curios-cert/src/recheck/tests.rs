@@ -13,7 +13,11 @@ use {
         StructType, Subterm, Telescope, Term, Totality, UniverseConstraint, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseContext, UniverseMetaId, UniverseParam,
     },
-    std::collections::{BTreeMap, BTreeSet},
+    std::{
+        collections::{BTreeMap, BTreeSet},
+        panic::{AssertUnwindSafe, catch_unwind},
+        sync::Arc,
+    },
 };
 
 /// The floor must clear every local a module's terms mention, whatever `Module::binder_floor` claims.
@@ -1403,7 +1407,7 @@ fn a_forged_foreign_row_still_inhabits_its_wire_type() {
 
 /// `let held : claimed = <a forged host row returning one `Nat`>`, with `False` declared alongside.
 fn forged_foreign(claimed: &Term, false_name: &Global) -> Module {
-    let row = std::sync::Arc::new(ForeignFunction {
+    let row = Arc::new(ForeignFunction {
         namespace: "ffi",
         name: "/forged".to_string(),
         subject: None,
@@ -2262,7 +2266,7 @@ fn unsaturated_cases() -> Vec<(&'static str, Module)> {
 fn a_binder_set_is_not_opened_at_a_count_the_term_supplied() {
     for (label, module) in unguarded_opener_cases() {
         // The demonstrated defect is the *abort*: `recheck_module_verdicts` is documented as walking to the end with each verdict independent of the others, and a panic makes that false.
-        let verdicts = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let verdicts = catch_unwind(AssertUnwindSafe(|| {
             recheck_module_verdicts(&module, 1_000_000)
         }))
         .unwrap_or_else(|_| panic!("{label}: reduction aborted the walk instead of refusing"));
