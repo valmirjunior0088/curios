@@ -145,6 +145,8 @@ fn a_peeled_prefix_keeps_its_binder_tail() {
         refined: BTreeMap::new(),
         nonzero: BTreeSet::new(),
         entered: Vec::new(),
+        ops: Vec::new(),
+        scopes: Vec::new(),
         calls: Vec::new(),
     };
 
@@ -167,6 +169,56 @@ fn a_peeled_prefix_keeps_its_binder_tail() {
         )),
         "expected a one-element run over the binder tail, got {shape:?}"
     );
+}
+
+/// Levels of written nesting in the deep body below.
+///
+/// The native recursion this replaces overflowed the default test-thread stack between 800 and 1,400 levels, so a regression here aborts the process rather than merely running long.
+const DEEP: usize = 100_000;
+
+#[test]
+fn a_deeply_nested_body_walks_without_native_recursion() {
+    // `(((… f(n) …)))`: a program-generated tuple nest, the mild sibling of a packed literal — bounded by the size of the source that spelled it rather than by a value, and unbounded by anything the walk controls. The nest is inert to the size order (no arm, no refinement, nothing to force), so what it measures is the traversal's own depth, and the graded call at the bottom is the evidence the walk arrived there.
+    let mut kernel = Kernel::new(100_000);
+    let f = Free::local(1, Some("f"));
+    let rec = Term::rec(
+        vec![(
+            f.clone(),
+            Term::intrinsic(Intrinsic::NatType),
+            Term::free_var(&f),
+        )],
+        Term::free_var(&f),
+    );
+    let Subterm::Rec(Rec { group, .. }) = &*rec else {
+        panic!("the fixture changed shape");
+    };
+
+    let n = Free::local(2, Some("n"));
+    let mut body = Term::apply(Term::rec_proj(group.clone(), 0), [Term::free_var(&n)]);
+    for _ in 0..DEEP {
+        body = Term::tuple([body]);
+    }
+
+    let params = [n];
+    let arities = vec![1];
+    let mut walk = Walk {
+        env: &mut kernel,
+        group,
+        arities: &arities,
+        caller: 0,
+        params: &params,
+        refined: BTreeMap::new(),
+        nonzero: BTreeSet::new(),
+        entered: Vec::new(),
+        ops: Vec::new(),
+        scopes: Vec::new(),
+        calls: Vec::new(),
+    };
+    walk.walk(&body);
+
+    // The call passes the parameter itself, so it grades `Same` — a grade only a walk that reached the bottom of the nest can record.
+    assert_eq!(walk.calls.len(), 1);
+    assert_eq!(walk.calls[0].2.entry(0, 0), SAME);
 }
 
 #[test]
