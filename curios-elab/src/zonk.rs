@@ -184,7 +184,7 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
         universe_seeds: Vec::new(),
         induct_decls,
         struct_decls,
-        // Concept metadata and witness markers carry no terms of their own (each concept's telescopes live in `struct_decls`, zonked above).
+        // Witness markers carry no terms; a concept carries only its parameter telescope, zonked here — its field telescopes live in `struct_decls`, zonked above.
         concepts: module
             .concepts
             .iter()
@@ -1194,7 +1194,7 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
     })
 }
 
-/// Zonk an intrinsic's term operands. Mirrors `traverse_intrinsic`'s rebuild, but fallibly substitutes metavariable solutions rather than de Bruijn shifting.
+/// Zonk an intrinsic's term operands. Mirrors [`Intrinsic::traverse`]'s rebuild, but fallibly substitutes metavariable solutions rather than de Bruijn shifting.
 fn zonk_intrinsic(context: &Context, intrinsic: &Intrinsic) -> Result<Intrinsic, Error> {
     Ok(match intrinsic {
         Intrinsic::BoolType
