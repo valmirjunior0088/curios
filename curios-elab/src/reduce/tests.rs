@@ -2,7 +2,6 @@ use curios_core::*;
 use {
     crate::*,
     curios_base::{Flt, Grain, Int, PackedBin, Qualifier},
-    std::time::Instant,
 };
 
 /// A declaration's name, from the path a test writes. Fixture-only.
@@ -299,7 +298,6 @@ fn deep_let_chain_is_one_flat_block_reducing_without_native_recursion() {
     let base = Term::free_var(&binders[depth - 1]);
 
     // `let x0 = 0; let x1 = x0; …; let x{n-1} = x{n-2}; x{n-1}`.
-    let t0 = Instant::now();
     let term = (0..depth).rev().fold(base, |tail, i| {
         let value = match i {
             0 => nat(0),
@@ -313,7 +311,6 @@ fn deep_let_chain_is_one_flat_block_reducing_without_native_recursion() {
             tail,
         )
     });
-    eprintln!("build: {:?}", t0.elapsed());
 
     match &*term {
         Subterm::Let(let_) => {
@@ -328,9 +325,7 @@ fn deep_let_chain_is_one_flat_block_reducing_without_native_recursion() {
 
     // Every reference is internal (no free variables escape), and both `reach` and `reduce` compute over the whole depth without recursing per binding.
     assert_eq!(term.reach(), 0);
-    let t1 = Instant::now();
     assert_eq!(reduce(&mut context, term), Ok(nat(0)));
-    eprintln!("reduce: {:?}", t1.elapsed());
 }
 
 #[test]
