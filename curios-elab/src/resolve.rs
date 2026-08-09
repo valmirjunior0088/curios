@@ -14,7 +14,7 @@ use {
         ConceptDecl, Field, Free, Global, ImplicitOrigin, Level, MetaId, Metavar, StructType,
         Subterm, Telescope, Term, UniverseContext, WitnessOrigin,
     },
-    std::collections::{BTreeMap, BTreeSet, HashSet},
+    std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
 };
 
 /// The outcome of one resolution attempt.
@@ -103,7 +103,7 @@ fn lift_chain(
     }
 
     let mut parents: BTreeMap<HeadKey, usize> = BTreeMap::new();
-    let mut queue = std::collections::VecDeque::from([from.clone()]);
+    let mut queue = VecDeque::from([from.clone()]);
     while let Some(node) = queue.pop_front() {
         if node == *to {
             break;
@@ -841,7 +841,7 @@ pub(crate) fn check_concept_registry(context: &Context) -> Result<(), Error> {
 
     // Three-color DFS over the superclass edges.
     fn visit(
-        concepts: &std::collections::BTreeMap<Global, ConceptDecl>,
+        concepts: &BTreeMap<Global, ConceptDecl>,
         name: &Global,
         visiting: &mut BTreeSet<Global>,
         done: &mut BTreeSet<Global>,
