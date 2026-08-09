@@ -1,6 +1,9 @@
 //! Witness resolution: filling omitted `use`-plicity arguments (instance arguments). A goal is a metavariable standing in a `use` slot together with its (concept application) type. Resolution is deterministic, in strict order:
 //!
-//! 1. **Local scope, direct** — the `use` binders in Γ, innermost-first; first match wins (shadowing, like names). 2. **Local scope, superclass projection** — projections of local `use` binders through the (acyclic) superclass graph, breadth-first by depth; two matches at the same minimal depth are ambiguous. 3. **Global table** — pure lookup by `(concept, tuple of the rigid heads of every parameter)`; a hit instantiates the witness's telescope (fresh metavariables for `@` binders, recursive goals for `use` premises) and unifies its result type against the goal. No projections here. 4. **Flex head** — any parameter still headed by a metavariable parks the goal, woken when a watched metavariable solves.
+//! 1. **Local scope, direct** — the `use` binders in Γ, innermost-first; first match wins (shadowing, like names).
+//! 2. **Local scope, superclass projection** — projections of local `use` binders through the (acyclic) superclass graph, breadth-first by depth; two matches at the same minimal depth are ambiguous.
+//! 3. **Global table** — pure lookup by `(concept, tuple of the rigid heads of every parameter)`; a hit instantiates the witness's telescope (fresh metavariables for `@` binders, recursive goals for `use` premises) and unifies its result type against the goal. No projections here.
+//! 4. **Flex head** — any parameter still headed by a metavariable parks the goal, woken when a watched metavariable solves.
 //!
 //! A rigid, keyable head with no table entry *defers* rather than failing: items elaborate in order, and a later item may register the witness. The deferred store is retried after every item and drained — erroring — once the whole module has elaborated.
 
@@ -99,7 +102,12 @@ fn lift_chain(
         let [m, n] = key.0.as_slice() else {
             continue;
         };
-        edges.push((m.clone(), n.clone(), key.to_string(), witness.module.clone()));
+        edges.push((
+            m.clone(),
+            n.clone(),
+            key.to_string(),
+            witness.module.clone(),
+        ));
     }
 
     let mut parents: BTreeMap<HeadKey, usize> = BTreeMap::new();
