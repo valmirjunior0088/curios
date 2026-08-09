@@ -6,12 +6,15 @@
 //!
 //! The folded term reintroduces the elaboration-transient `Infix` node (under [`Subterm::Transient`]) purely for observation: it only ever meets the printer, never checking, reduction, or erasure.
 
+#[cfg(test)]
+mod tests;
+
 use {
     super::{Context, TermBuilders},
     curios_base::NumOp,
     curios_core::{
-        Apply, Bound, Field, Free, Global, Intrinsic, Metavar, MetavarOrigin, Proj, StructType,
-        Subterm, Term, UniverseInst, Visit,
+        Apply, Bound, Field, Free, Global, Metavar, MetavarOrigin, Proj, StructType, Subterm, Term,
+        UniverseInst, Visit,
     },
     std::{collections::BTreeMap, rc::Rc},
 };
@@ -72,22 +75,6 @@ pub(crate) fn denoise_for_display(table: &Operators, binders: &BinderTypes, term
 
 /// The node-level fold. A substituted node is not descended into, so a folded call denoises its own operands before wrapping them.
 fn fold(table: &Operators, binders: &BinderTypes, term: &Term) -> Option<Term> {
-    // `a != b` elaborates as `BoolXor(<Eql call>, true)` — no `BoolNot` intrinsic exists (`elaborate_infix`). Match the wrapper before the bare call so the pair folds to `!=` rather than to a stray xor around `==`.
-    if let Subterm::Intrinsic(Intrinsic::BoolXor(call, negate)) = &**term
-        && matches!(&**negate, Subterm::Intrinsic(Intrinsic::Bool(true)))
-        && let Some((op, left, right)) = operator_call(table, binders, call)
-    {
-        let op = match op {
-            NumOp::Eql => NumOp::Neq,
-            op => op,
-        };
-        return Some(Term::infix(
-            op,
-            denoise_for_display(table, binders, left),
-            denoise_for_display(table, binders, right),
-        ));
-    }
-
     let (op, left, right) = operator_call(table, binders, term)?;
     Some(Term::infix(
         op,
@@ -96,7 +83,7 @@ fn fold(table: &Operators, binders: &BinderTypes, term: &Term) -> Option<Term> {
     ))
 }
 
-/// Recognize `Apply(Proj(witness, index), [left, right])` — the exact shape `elaborate_infix` rebuilds — and name its operator. The `Neq` spelling normalizes to `Eql` here (the two share a concept entry, and the bare call *is* the equality); the xor wrapper above restores `!=`.
+/// Recognize `Apply(Proj(witness, index), [left, right])` — the exact shape `elaborate_infix` rebuilds — and name its operator. `!=` needs no special case: `Neq` has its own concept slot, so [`OperatorSyntax::operator_for`](curios_base::OperatorSyntax::operator_for) keys the `neq` projection exactly.
 fn operator_call<'a>(
     table: &Operators,
     binders: &BinderTypes,
@@ -144,10 +131,6 @@ fn operator_call<'a>(
         _ => return None,
     };
 
-    let op = match op {
-        NumOp::Neq => NumOp::Eql,
-        op => op,
-    };
     Some((op, left, right))
 }
 
