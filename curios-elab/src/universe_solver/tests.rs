@@ -113,9 +113,16 @@ fn solver_rejects_inconsistent_constant_bounds_through_atoms() {
 }
 
 #[test]
-fn incremental_consistency_matches_the_exact_solver() {
-    let mut state = 0x4d59_5df4_d0f3_3173_u64;
-    for trial in 0..1_000 {
+fn consistency_checks_match_the_exact_solver() {
+    for trial in 0..1_000_u64 {
+        // One independent generator per trial, indexed off the high bits: an LCG's low three bits cycle with period 8, and one generator threaded across trials at a step count divisible by 8 kept every trial at the same phase — the shape under which this test once compared four distinct constraints, all discharged before either solver, twelve thousand times.
+        let mut state = 0x4d59_5df4_d0f3_3173_u64 ^ trial.wrapping_mul(0x9e37_79b9_7f4a_7c15);
+        let mut draw = || {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1);
+            (state >> 33) as usize
+        };
         let mut solver = UniverseSolver::new(0);
         let u = solver.fresh(UniverseRole::Generalizable, None);
         let v = solver.fresh(UniverseRole::Generalizable, None);
@@ -130,20 +137,15 @@ fn incremental_consistency_matches_the_exact_solver() {
             Level::max([Level::meta(u).succ().unwrap(), Level::meta(v)]),
         ];
         for step in 0..12 {
-            state = state
-                .wrapping_mul(6_364_136_223_846_793_005)
-                .wrapping_add(1);
-            let lower = levels[(state as usize) % levels.len()].clone();
-            state = state
-                .wrapping_mul(6_364_136_223_846_793_005)
-                .wrapping_add(1);
-            let upper = levels[(state as usize) % levels.len()].clone();
+            let lower = levels[draw() % levels.len()].clone();
+            let upper = levels[draw() % levels.len()].clone();
             let constraint = UniverseConstraint {
                 lower,
                 upper,
                 origin: origin(&format!("trial {trial}, step {step}")),
             };
 
+            // The exact side: the same normalization and insertion-time discharges `add_constraint` performs, then the ground-up exponential check over the pushed store.
             let mut exact = solver.clone();
             exact.consistency = None;
             let normalized = UniverseConstraint {
@@ -167,12 +169,21 @@ fn incremental_consistency_matches_the_exact_solver() {
                 exact.constraints.push(normalized);
                 exact.check_consistent_full()
             };
-            let incremental_result = solver.add_constraint(constraint);
+
+            // The incremental side decides in two moves — `add_constraint` refuses only the ground case and records otherwise; `check_consistent` is the verdict — so the comparison targets the pair, not the insertion alone.
+            let incremental_result = solver
+                .add_constraint(constraint)
+                .and_then(|()| solver.check_consistent());
             assert_eq!(
                 incremental_result.is_ok(),
                 exact_result.is_ok(),
                 "consistency diverged in trial {trial} at step {step}"
             );
+
+            // An inconsistent store stays inconsistent — every later step would re-compare the same verdict — so a trial ends at its first refusal.
+            if exact_result.is_err() {
+                break;
+            }
         }
     }
 }
