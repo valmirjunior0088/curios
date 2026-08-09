@@ -2902,10 +2902,10 @@ fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
     };
 
     let verdicts = recheck_module_verdicts(&module, 1_000_000);
-    println!("VERDICTS: {verdicts:?}");
+
     assert!(
         !verdicts.is_empty(),
-        "PROBE: a bogus occurrence passed as a tuple field type",
+        "the kernel certified a bogus occurrence standing as a tuple field type",
     );
 }
 
