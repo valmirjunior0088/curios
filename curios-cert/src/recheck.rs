@@ -12,6 +12,9 @@
 //!
 //! Every compilation calls this. `compile_entrypoint` runs [`recheck_module_suffix`] and fails the build on a refusal, judging the user's items while the archived prelude prefix is defined on the archive's word — the ground for that word being `curios-prelude`'s build script, which runs the full [`recheck_module_verdicts`] walk when the archive is constructed and fails the build on any refusal. An archive that exists is one whose every item the kernel accepted.
 
+#[cfg(test)]
+mod tests;
+
 use {
     super::{
         Coverage, Erased, Kernel, KernelError, check_definition, check_entrypoint,
@@ -446,7 +449,7 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, prefix: Option<Prefix<'_>>
 
                 if let Err(error) = outcome {
                     verdicts.push(Verdict {
-                        name: item.declared_names().first().map(|&name| name.clone()),
+                        name: item_name.clone(),
                         error,
                     });
                     // The define `check_rec_group` performs on success: each export is the folded selection of the member it names.
@@ -544,9 +547,6 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, prefix: Option<Prefix<'_>>
 
     verdicts
 }
-
-#[cfg(test)]
-mod tests;
 
 /// What is wrong with a universe context the walk is about to assume, if anything.
 ///
