@@ -51,53 +51,152 @@ struct DifferenceEdge {
     origin: Option<usize>,
 }
 
-#[derive(Debug, Clone)]
-struct DifferenceGraph {
-    nodes: Vec<DifferenceNode>,
-    positions: BTreeMap<DifferenceNode, usize>,
-    edges: Vec<DifferenceEdge>,
+/// One difference constraint over *indexed* nodes. Node identity is resolved once, at insertion: keeping `DifferenceNode` keys in the engine instead made every relaxation step a `BTreeMap` lookup, inside the innermost loop of an exponential search.
+#[derive(Debug, Clone, Copy)]
+struct Arc {
+    from: usize,
+    to: usize,
+    weight: i64,
+    origin: Option<usize>,
+}
+
+/// One journal entry: a node's distance and predecessor before a relaxation overwrote them.
+type Touched = (usize, i128, Option<usize>);
+
+/// A feasible potential over committed arcs — the one relaxation engine both consistency paths drive. The incremental graph commits destructively (`touched: None`; an inconsistency discards the whole graph), while the exact search journals every write so a refuted branch reverts in O(changes) — the only capability the two paths do not share.
+///
+/// The invariant is that `distance` satisfies every arc in `arcs`. Committing more arcs restores it by relaxing outward from those arcs alone; re-deriving the whole potential per search node instead — a full Bellman-Ford over every arc — is what made the exact search dominate elaboration.
+#[derive(Debug, Clone, Default)]
+struct Potential {
+    arcs: Vec<Arc>,
     outgoing: Vec<Vec<usize>>,
     distance: Vec<i128>,
     predecessor: Vec<Option<usize>>,
 }
 
+impl Potential {
+    /// Grow to `count` nodes. Every node has an implicit zero-weight edge from a super-source, so the all-zero potential is feasible for the empty arc set.
+    fn ensure_nodes(&mut self, count: usize) {
+        while self.distance.len() < count {
+            self.outgoing.push(Vec::new());
+            self.distance.push(0);
+            self.predecessor.push(None);
+        }
+    }
+
+    fn push_arc(&mut self, arc: Arc) -> usize {
+        let index = self.arcs.len();
+        self.arcs.push(arc);
+        self.outgoing[arc.from].push(index);
+        index
+    }
+
+    /// Tighten `to` along one arc. `Ok(None)` means the potential already satisfied it; `Err` means committing it closes a negative cycle, reported as the origins around that cycle.
+    fn relax(
+        &mut self,
+        arc: usize,
+        touched: Option<&mut Vec<Touched>>,
+    ) -> Result<Option<usize>, Vec<usize>> {
+        let Arc {
+            from, to, weight, ..
+        } = self.arcs[arc];
+        let candidate = self.distance[from] + i128::from(weight);
+        if self.distance[to] <= candidate {
+            return Ok(None);
+        }
+
+        // Predecessors form a forest while the potential is feasible. Making an ancestor depend on its descendant closes a cycle, and the strict improvement proves its weight is negative.
+        let mut cursor = from;
+        let mut path = vec![arc];
+        loop {
+            if cursor == to {
+                let mut origins = path
+                    .into_iter()
+                    .filter_map(|arc| self.arcs[arc].origin)
+                    .collect::<Vec<_>>();
+                origins.reverse();
+                origins.dedup();
+                return Err(origins);
+            }
+            let Some(predecessor) = self.predecessor[cursor] else {
+                break;
+            };
+            path.push(predecessor);
+            cursor = self.arcs[predecessor].from;
+        }
+
+        if let Some(touched) = touched {
+            touched.push((to, self.distance[to], self.predecessor[to]));
+        }
+        self.distance[to] = candidate;
+        self.predecessor[to] = Some(arc);
+        Ok(Some(to))
+    }
+
+    /// Restore feasibility after arcs `first..` were pushed: relax each new arc, then work the improvements outward.
+    fn restore_from(
+        &mut self,
+        first: usize,
+        mut touched: Option<&mut Vec<Touched>>,
+    ) -> Result<(), Vec<usize>> {
+        let mut queue = VecDeque::new();
+        let mut queued = vec![false; self.distance.len()];
+        for arc in first..self.arcs.len() {
+            if let Some(to) = self.relax(arc, touched.as_deref_mut())?
+                && !queued[to]
+            {
+                queued[to] = true;
+                queue.push_back(to);
+            }
+        }
+        while let Some(from) = queue.pop_front() {
+            queued[from] = false;
+            for index in 0..self.outgoing[from].len() {
+                let arc = self.outgoing[from][index];
+                if let Some(to) = self.relax(arc, touched.as_deref_mut())?
+                    && !queued[to]
+                {
+                    queued[to] = true;
+                    queue.push_back(to);
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+/// The incremental consistency graph: the shared [`Potential`] behind a node-interning face, extended one constraint at a time and discarded whole on inconsistency.
+#[derive(Debug, Clone)]
+struct DifferenceGraph {
+    positions: BTreeMap<DifferenceNode, usize>,
+    potential: Potential,
+}
+
 impl DifferenceGraph {
     fn new() -> Self {
-        Self {
-            nodes: vec![DifferenceNode::Zero],
+        let mut graph = Self {
             positions: BTreeMap::from([(DifferenceNode::Zero, 0)]),
-            edges: Vec::new(),
-            outgoing: vec![Vec::new()],
-            distance: vec![0],
-            predecessor: vec![None],
-        }
+            potential: Potential::default(),
+        };
+        graph.potential.ensure_nodes(1);
+        graph
     }
 
-    fn ensure_node(&mut self, node: DifferenceNode) {
-        if self.positions.contains_key(&node) {
-            return;
+    fn ensure_node(&mut self, node: DifferenceNode) -> usize {
+        if let Some(&index) = self.positions.get(&node) {
+            return index;
         }
-        let index = self.nodes.len();
-        self.nodes.push(node);
+        let index = self.positions.len();
         self.positions.insert(node, index);
-        self.outgoing.push(Vec::new());
-        self.distance.push(0);
-        self.predecessor.push(None);
-        if node != DifferenceNode::Zero {
-            self.push_edge(DifferenceEdge {
-                from: node,
-                to: DifferenceNode::Zero,
-                weight: 0,
-                origin: None,
-            });
-        }
-    }
-
-    fn push_edge(&mut self, edge: DifferenceEdge) {
-        let from = self.positions[&edge.from];
-        let index = self.edges.len();
-        self.edges.push(edge);
-        self.outgoing[from].push(index);
+        self.potential.ensure_nodes(index + 1);
+        // Universe heads range over naturals: `0 - head ≤ 0`.
+        self.potential.push_arc(Arc {
+            from: index,
+            to: 0,
+            weight: 0,
+            origin: None,
+        });
+        index
     }
 
     fn extend(
@@ -108,71 +207,62 @@ impl DifferenceGraph {
         for node in nodes {
             self.ensure_node(node);
         }
-        let first_new_edge = self.edges.len();
+        let first = self.potential.arcs.len();
         for edge in edges {
-            self.ensure_node(edge.from);
-            self.ensure_node(edge.to);
-            self.push_edge(edge);
+            let from = self.ensure_node(edge.from);
+            let to = self.ensure_node(edge.to);
+            self.potential.push_arc(Arc {
+                from,
+                to,
+                weight: edge.weight,
+                origin: edge.origin,
+            });
         }
-        self.relax_from(first_new_edge)
+        self.potential.restore_from(first, None)
+    }
+}
+
+/// What one committed arc changed, in the order it changed it.
+struct Undo {
+    arcs: usize,
+    from: usize,
+    touched: Vec<Touched>,
+}
+
+/// The exact search's engine: the shared [`Potential`] plus the journal that makes branch exploration reversible.
+struct Search(Potential);
+
+impl Search {
+    fn new(node_count: usize) -> Self {
+        let mut potential = Potential::default();
+        potential.ensure_nodes(node_count);
+        Self(potential)
     }
 
-    fn relax_from(&mut self, first_new_edge: usize) -> Result<(), Vec<usize>> {
-        let mut queue = VecDeque::new();
-        let mut queued = vec![false; self.nodes.len()];
-        for edge_index in first_new_edge..self.edges.len() {
-            if let Some(to) = self.relax_edge(edge_index)? {
-                queued[to] = true;
-                queue.push_back(to);
+    /// Commit one arc, restoring feasibility. On failure the search is left exactly as it was, so a refuted branch costs nothing.
+    fn commit(&mut self, arc: Arc) -> Result<Undo, Vec<usize>> {
+        let index = self.0.push_arc(arc);
+        let mut undo = Undo {
+            arcs: index,
+            from: arc.from,
+            touched: Vec::new(),
+        };
+        match self.0.restore_from(index, Some(&mut undo.touched)) {
+            Ok(()) => Ok(undo),
+            Err(path) => {
+                self.revert(undo);
+                Err(path)
             }
         }
-        while let Some(from) = queue.pop_front() {
-            queued[from] = false;
-            let outgoing = self.outgoing[from].clone();
-            for edge_index in outgoing {
-                if let Some(to) = self.relax_edge(edge_index)?
-                    && !queued[to]
-                {
-                    queued[to] = true;
-                    queue.push_back(to);
-                }
-            }
-        }
-        Ok(())
     }
 
-    fn relax_edge(&mut self, edge_index: usize) -> Result<Option<usize>, Vec<usize>> {
-        let edge = &self.edges[edge_index];
-        let from = self.positions[&edge.from];
-        let to = self.positions[&edge.to];
-        let candidate = self.distance[from] + i128::from(edge.weight);
-        if self.distance[to] <= candidate {
-            return Ok(None);
+    fn revert(&mut self, undo: Undo) {
+        for (node, distance, predecessor) in undo.touched.into_iter().rev() {
+            self.0.distance[node] = distance;
+            self.0.predecessor[node] = predecessor;
         }
-
-        // Predecessors form a forest while the graph is feasible. Making an ancestor depend on its descendant closes a cycle; the strict distance improvement proves that cycle has negative total weight.
-        let mut cursor = from;
-        let mut path = vec![edge_index];
-        loop {
-            if cursor == to {
-                let mut origins = path
-                    .into_iter()
-                    .filter_map(|index| self.edges[index].origin)
-                    .collect::<Vec<_>>();
-                origins.reverse();
-                origins.dedup();
-                return Err(origins);
-            }
-            let Some(predecessor) = self.predecessor[cursor] else {
-                break;
-            };
-            path.push(predecessor);
-            cursor = self.positions[&self.edges[predecessor].from];
-        }
-
-        self.distance[to] = candidate;
-        self.predecessor[to] = Some(edge_index);
-        Ok(Some(to))
+        self.0.outgoing[undo.from].pop();
+        self.0.arcs.truncate(undo.arcs);
     }
 }
 
@@ -237,19 +327,11 @@ fn atomic_difference_edge(
 /// The difference-graph fragment one constraint contributes: the nodes it names and the edges relating them.
 type DifferenceFragment = (BTreeSet<DifferenceNode>, Vec<DifferenceEdge>);
 
-/// Encode a constraint whose right-hand maxima have one forced viable choice. `Ok(None)` means that the exact disjunctive solver is required.
-fn forced_difference_edges(
-    constraint: &UniverseConstraint,
-    index: usize,
-) -> Result<Option<DifferenceFragment>, Vec<usize>> {
-    let nodes = BTreeSet::from_iter(
-        constraint
-            .lower
-            .atoms()
-            .chain(constraint.upper.atoms())
-            .map(|(head, _)| DifferenceNode::Head(head))
-            .chain([DifferenceNode::Zero]),
-    );
+/// One side's part in a constraint's max-decomposition: an atom's head at its offset, or a bare constant.
+type Part = (Option<LevelHead>, u32);
+
+/// A constraint's max-decomposition: each lower part (every atom, plus a nonzero constant) must be dominated by some upper part. A redundant zero upper constant beside atoms is dropped — canonical normalization leaves it only when every atom dominates it, and keeping it would double the consistency search for nearly every ordinary max constraint. Both consistency paths read their clauses off this one decomposition.
+fn constraint_parts(constraint: &UniverseConstraint) -> (Vec<Part>, Vec<Part>) {
     let mut lower_parts = constraint
         .lower
         .atoms()
@@ -266,28 +348,50 @@ fn forced_difference_edges(
     if upper_parts.is_empty() || constraint.upper.constant != 0 {
         upper_parts.push((None, constraint.upper.constant));
     }
+    (lower_parts, upper_parts)
+}
+
+/// One lower part's deduplicated alternatives against every upper part: `None` is "already satisfied"; an empty list refutes constraint `index` outright.
+fn edge_choices(lower: Part, upper_parts: &[Part], index: usize) -> Vec<Option<DifferenceEdge>> {
+    let mut choices = upper_parts
+        .iter()
+        .copied()
+        .filter_map(|upper| atomic_difference_edge(lower, upper, index).ok())
+        .collect::<Vec<_>>();
+    choices.sort_by_key(|edge| {
+        edge.as_ref()
+            .map_or((DifferenceNode::Zero, DifferenceNode::Zero, 0), |edge| {
+                (edge.from, edge.to, edge.weight)
+            })
+    });
+    choices.dedup_by(|left, right| match (left, right) {
+        (None, None) => true,
+        (Some(left), Some(right)) => {
+            left.from == right.from && left.to == right.to && left.weight == right.weight
+        }
+        _ => false,
+    });
+    choices
+}
+
+/// Encode a constraint whose right-hand maxima have one forced viable choice. `Ok(None)` means that the exact disjunctive solver is required.
+fn forced_difference_edges(
+    constraint: &UniverseConstraint,
+    index: usize,
+) -> Result<Option<DifferenceFragment>, Vec<usize>> {
+    let nodes = BTreeSet::from_iter(
+        constraint
+            .lower
+            .atoms()
+            .chain(constraint.upper.atoms())
+            .map(|(head, _)| DifferenceNode::Head(head))
+            .chain([DifferenceNode::Zero]),
+    );
+    let (lower_parts, upper_parts) = constraint_parts(constraint);
 
     let mut edges = Vec::new();
     for lower in lower_parts {
-        let mut choices = upper_parts
-            .iter()
-            .copied()
-            .filter_map(|upper| atomic_difference_edge(lower, upper, index).ok())
-            .collect::<Vec<_>>();
-        choices.sort_by_key(|edge| {
-            edge.as_ref()
-                .map_or((DifferenceNode::Zero, DifferenceNode::Zero, 0), |edge| {
-                    (edge.from, edge.to, edge.weight)
-                })
-        });
-        choices.dedup_by(|left, right| match (left, right) {
-            (None, None) => true,
-            (Some(left), Some(right)) => {
-                left.from == right.from && left.to == right.to && left.weight == right.weight
-            }
-            _ => false,
-        });
-        match choices.as_slice() {
+        match edge_choices(lower, &upper_parts, index).as_slice() {
             [] => return Err(vec![index]),
             [None] => {}
             [Some(edge)] => edges.push(edge.clone()),
@@ -1303,208 +1407,6 @@ impl UniverseSolver {
     fn check_consistent_full(&self) -> Result<(), UniverseError> {
         curios_profile::profile!("universe::check_consistent_full");
         let constraints = self.constraints.as_slice();
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-        enum Node {
-            Zero,
-            Head(LevelHead),
-        }
-
-        /// The difference constraint `to - from ≤ weight`.
-        #[derive(Debug, Clone)]
-        struct Edge {
-            from: Node,
-            to: Node,
-            weight: i64,
-            origin: Option<usize>,
-        }
-
-        fn atomic_edge(
-            lower: (Option<LevelHead>, u32),
-            upper: (Option<LevelHead>, u32),
-            origin: usize,
-        ) -> Result<Option<Edge>, ()> {
-            match (lower, upper) {
-                ((None, lower), (None, upper)) => {
-                    if lower <= upper {
-                        Ok(None)
-                    } else {
-                        Err(())
-                    }
-                }
-                ((Some(lower), lower_offset), (None, upper)) => {
-                    if lower_offset > upper {
-                        Err(())
-                    } else {
-                        Ok(Some(Edge {
-                            from: Node::Zero,
-                            to: Node::Head(lower),
-                            weight: i64::from(upper) - i64::from(lower_offset),
-                            origin: Some(origin),
-                        }))
-                    }
-                }
-                ((None, lower), (Some(upper), upper_offset)) => Ok((lower > upper_offset)
-                    .then_some(Edge {
-                        from: Node::Head(upper),
-                        to: Node::Zero,
-                        weight: i64::from(upper_offset) - i64::from(lower),
-                        origin: Some(origin),
-                    })),
-                ((Some(lower), lower_offset), (Some(upper), upper_offset)) => {
-                    if lower == upper {
-                        if lower_offset <= upper_offset {
-                            Ok(None)
-                        } else {
-                            Err(())
-                        }
-                    } else {
-                        Ok(Some(Edge {
-                            from: Node::Head(upper),
-                            to: Node::Head(lower),
-                            weight: i64::from(upper_offset) - i64::from(lower_offset),
-                            origin: Some(origin),
-                        }))
-                    }
-                }
-            }
-        }
-
-        /// One difference constraint over *indexed* nodes.
-        ///
-        /// The search resolves node identity once, up front. Keeping `Node` keys here instead made every relaxation step a `BTreeMap` lookup, inside the innermost loop of an exponential search.
-        #[derive(Debug, Clone, Copy)]
-        struct Arc {
-            from: usize,
-            to: usize,
-            weight: i64,
-            origin: Option<usize>,
-        }
-
-        /// A feasible potential over the committed arcs, maintained across the branch search.
-        ///
-        /// The invariant is that `distance` satisfies every arc currently in `arcs`. Committing one more arc restores it by relaxing outward from that arc alone, and backtracking replays the entries it changed. Re-deriving the whole potential per search node instead — a full Bellman-Ford over every arc — is what made this search dominate elaboration.
-        struct Search {
-            arcs: Vec<Arc>,
-            outgoing: Vec<Vec<usize>>,
-            distance: Vec<i128>,
-            predecessor: Vec<Option<usize>>,
-        }
-
-        /// What one committed arc changed, in the order it changed it.
-        struct Undo {
-            arcs: usize,
-            from: usize,
-            touched: Vec<(usize, i128, Option<usize>)>,
-        }
-
-        impl Search {
-            fn new(node_count: usize) -> Self {
-                Self {
-                    arcs: Vec::new(),
-                    outgoing: vec![Vec::new(); node_count],
-                    // Every node has an implicit zero-weight edge from a super-source, so the all-zero potential is feasible for the empty arc set.
-                    distance: vec![0; node_count],
-                    predecessor: vec![None; node_count],
-                }
-            }
-
-            /// Tighten `to` along one arc. `Ok(None)` means the potential already satisfied it; `Err` means committing it closes a negative cycle, reported as the origins around that cycle.
-            fn relax(
-                &mut self,
-                arc: usize,
-                touched: &mut Vec<(usize, i128, Option<usize>)>,
-            ) -> Result<Option<usize>, Vec<usize>> {
-                let Arc {
-                    from, to, weight, ..
-                } = self.arcs[arc];
-                let candidate = self.distance[from] + i128::from(weight);
-                if self.distance[to] <= candidate {
-                    return Ok(None);
-                }
-
-                // Predecessors form a forest while the potential is feasible. Making an ancestor depend on its descendant closes a cycle, and the strict improvement proves its weight is negative.
-                let mut cursor = from;
-                let mut path = vec![arc];
-                loop {
-                    if cursor == to {
-                        let mut origins = path
-                            .into_iter()
-                            .filter_map(|arc| self.arcs[arc].origin)
-                            .collect::<Vec<_>>();
-                        origins.reverse();
-                        origins.dedup();
-                        return Err(origins);
-                    }
-                    let Some(predecessor) = self.predecessor[cursor] else {
-                        break;
-                    };
-                    path.push(predecessor);
-                    cursor = self.arcs[predecessor].from;
-                }
-
-                touched.push((to, self.distance[to], self.predecessor[to]));
-                self.distance[to] = candidate;
-                self.predecessor[to] = Some(arc);
-                Ok(Some(to))
-            }
-
-            fn propagate(
-                &mut self,
-                seed: usize,
-                touched: &mut Vec<(usize, i128, Option<usize>)>,
-            ) -> Result<(), Vec<usize>> {
-                let mut queue = VecDeque::from([seed]);
-                let mut queued = vec![false; self.distance.len()];
-                queued[seed] = true;
-                while let Some(node) = queue.pop_front() {
-                    queued[node] = false;
-                    for index in 0..self.outgoing[node].len() {
-                        let arc = self.outgoing[node][index];
-                        if let Some(to) = self.relax(arc, touched)?
-                            && !queued[to]
-                        {
-                            queued[to] = true;
-                            queue.push_back(to);
-                        }
-                    }
-                }
-                Ok(())
-            }
-
-            /// Commit one arc, restoring feasibility. On failure the search is left exactly as it was, so a refuted branch costs nothing.
-            fn commit(&mut self, arc: Arc) -> Result<Undo, Vec<usize>> {
-                let index = self.arcs.len();
-                self.arcs.push(arc);
-                self.outgoing[arc.from].push(index);
-                let mut undo = Undo {
-                    arcs: index,
-                    from: arc.from,
-                    touched: Vec::new(),
-                };
-                let relaxed = self
-                    .relax(index, &mut undo.touched)
-                    .and_then(|seed| match seed {
-                        Some(seed) => self.propagate(seed, &mut undo.touched),
-                        None => Ok(()),
-                    });
-                match relaxed {
-                    Ok(()) => Ok(undo),
-                    Err(path) => {
-                        self.revert(undo);
-                        Err(path)
-                    }
-                }
-            }
-
-            fn revert(&mut self, undo: Undo) {
-                for (node, distance, predecessor) in undo.touched.into_iter().rev() {
-                    self.distance[node] = distance;
-                    self.predecessor[node] = predecessor;
-                }
-                self.outgoing[undo.from].pop();
-                self.arcs.truncate(undo.arcs);
-            }
-        }
 
         /// One suspended clause of the search: which alternative to try next, the arc committed for the alternative currently being explored (to revert on the way back), and the longest refutation any alternative has produced so far.
         struct Frame {
@@ -1623,14 +1525,14 @@ impl UniverseSolver {
         }
 
         // A maximum on the left is conjunctive. A maximum on the right is a finite disjunction: under any satisfying valuation, each left atom is dominated by at least one right atom. Enumerating those symbolic choices and checking their difference graphs decides consistency without searching numeric universe assignments.
-        let mut nodes = BTreeSet::from([Node::Zero]);
+        let mut nodes = BTreeSet::from([DifferenceNode::Zero]);
         for constraint in constraints {
             nodes.extend(
                 constraint
                     .lower
                     .atoms()
                     .chain(constraint.upper.atoms())
-                    .map(|(head, _)| Node::Head(head)),
+                    .map(|(head, _)| DifferenceNode::Head(head)),
             );
         }
         let positions = nodes
@@ -1638,8 +1540,8 @@ impl UniverseSolver {
             .enumerate()
             .map(|(index, node)| (*node, index))
             .collect::<BTreeMap<_, _>>();
-        let zero = positions[&Node::Zero];
-        let arc = |edge: Edge| Arc {
+        let zero = positions[&DifferenceNode::Zero];
+        let arc = |edge: DifferenceEdge| Arc {
             from: positions[&edge.from],
             to: positions[&edge.to],
             weight: edge.weight,
@@ -1648,43 +1550,12 @@ impl UniverseSolver {
 
         let mut clauses = Vec::<(usize, Vec<Option<Arc>>)>::new();
         for (index, constraint) in constraints.iter().enumerate() {
-            let mut lower_parts = constraint
-                .lower
-                .atoms()
-                .map(|(head, offset)| (Some(head), offset))
-                .collect::<Vec<_>>();
-            if constraint.lower.constant != 0 {
-                lower_parts.push((None, constraint.lower.constant));
-            }
-            let mut upper_parts = constraint
-                .upper
-                .atoms()
-                .map(|(head, offset)| (Some(head), offset))
-                .collect::<Vec<_>>();
-            // Canonical normalization leaves a zero constant beside atoms only when every atom dominates it for every natural valuation. Keeping that redundant branch would multiply the consistency search by two for nearly every ordinary max constraint.
-            if upper_parts.is_empty() || constraint.upper.constant != 0 {
-                upper_parts.push((None, constraint.upper.constant));
-            }
-
+            let (lower_parts, upper_parts) = constraint_parts(constraint);
             for lower in lower_parts {
-                let mut choices = upper_parts
-                    .iter()
-                    .copied()
-                    .filter_map(|upper| atomic_edge(lower, upper, index).ok())
+                let choices = edge_choices(lower, &upper_parts, index)
+                    .into_iter()
                     .map(|edge| edge.map(&arc))
                     .collect::<Vec<_>>();
-                choices.sort_by_key(|choice| {
-                    choice.map_or((0, 0, 0), |arc| (arc.from, arc.to, arc.weight))
-                });
-                choices.dedup_by(|left, right| match (left, right) {
-                    (None, None) => true,
-                    (Some(left), Some(right)) => {
-                        left.from == right.from
-                            && left.to == right.to
-                            && left.weight == right.weight
-                    }
-                    _ => false,
-                });
                 clauses.push((index, choices));
             }
         }
