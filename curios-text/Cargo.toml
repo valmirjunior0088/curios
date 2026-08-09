@@ -16,7 +16,6 @@ profile = ["curios-profile/enabled"]
 curios-profile = { workspace = true }
 curios-abi = { workspace = true }
 curios-base = { workspace = true }
-curios-cert = { workspace = true }
 curios-core = { workspace = true }
 curios-elab = { workspace = true }
 num-bigint = { workspace = true }

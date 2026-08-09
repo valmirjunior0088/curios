@@ -626,7 +626,6 @@ version = "0.8.0"
 dependencies = [
  "curios-abi",
  "curios-base",
- "curios-cert",
  "curios-core",
  "curios-elab",
  "curios-profile",
