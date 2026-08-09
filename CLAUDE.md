@@ -160,9 +160,11 @@ cargo test --workspace --all-targets --all-features
 
 This is deliberately *not* CI's list of jobs. CI runs `check`, `clippy` and `test` as three separate jobs that never share a target directory, so it pays nothing for the overlap between them; a local sequential run pays for all of it. Two consequences, both measured on this workspace.
 
-`cargo check` is dropped because `cargo clippy` is the same compilation with more lints, and `cargo test` compiles for real — so `check` establishes nothing either of them misses, and it cost a full pass of its own (9m30s of a 30-minute gate). What it buys back is only that a type error surfaces a little earlier, which is not worth a third of the wall clock. CI keeps its own `check` job, where it is free.
+`cargo check` is dropped because `cargo clippy` is the same compilation with more lints, and `cargo test` compiles for real — so `check` establishes nothing either of them misses, while costing a full pass of its own: 9m30s of a 35m56s gate, plus one prelude rebuild. What it buys back is only that a type error surfaces a little earlier. CI keeps its own `check` job, where it is free.
 
-The Clippy denial is passed *after* `--` rather than as `RUSTFLAGS` for the same class of reason. `RUSTFLAGS` is a global fingerprint input, so setting it for one step forks every unit in the graph — including `curios-prelude`'s build script, which then re-elaborates and re-certifies the whole fixed prelude for that step alone. Three prelude builds per gate became two when it moved after the separator, and dropping `check` takes it to one.
+The Clippy denial is passed *after* `--` rather than as `RUSTFLAGS` for the same class of reason. `RUSTFLAGS` is a global fingerprint input, so setting it for one step forks every unit in the graph — including `curios-prelude`'s build script, which then re-elaborates and re-certifies the whole fixed prelude for that step alone. Measured per step rather than as a total: with the denial after the separator, the `clippy` step rebuilds the prelude **zero** times, reusing what ran before it.
+
+Do not quote a whole-gate rebuild total. That number was stated here twice and was wrong twice, because a run measured with one test invocation was compared against a run measured with another — the suite step's own count depends on `--all-targets`, not on either change above. Measure a step, name the step.
 
 Expect the gate to be latency-bound rather than throughput-bound: the crate graph is a deep near-linear chain, so a 12-core machine runs it at roughly one and a half cores busy. Wall clock is the critical path, and more parallelism in the build does not shorten it.
 
