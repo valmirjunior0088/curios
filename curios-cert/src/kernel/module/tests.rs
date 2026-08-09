@@ -2,8 +2,8 @@ use {
     crate::{Kernel, KernelError, check_induct_decl, check_struct_decl},
     curios_base::{Plicity, Qualifier, RootId},
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, Polarity, StructDecl,
-        Telescope, Term, UniverseContext,
+        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, StructDecl, Telescope, Term,
+        UniverseContext,
     },
 };
 
@@ -20,7 +20,6 @@ fn fam() -> Global {
 
 /// One single-constructor family whose payload is `payload_type`, declared at `result_sort` with no parameters, registered and returned for checking.
 fn family(kernel: &mut Kernel, result_sort: Term, payload_type: Term) -> InductDecl {
-    let name = Global::Authored(Qualifier::from(["Fam"]));
     let payload = Free::local(0, Some("x"));
 
     let declaration = InductDecl {
@@ -39,7 +38,7 @@ fn family(kernel: &mut Kernel, result_sort: Term, payload_type: Term) -> InductD
         rep_public: true,
         polarities: Vec::new(),
     };
-    kernel.declare_induct(&name, &declaration);
+    kernel.declare_induct(&fam(), &declaration);
 
     declaration
 }
@@ -203,10 +202,7 @@ fn prefixed(kernel: &mut Kernel, prefix: Term) -> InductDecl {
 #[test]
 fn a_proposition_may_not_carry_an_informative_field() {
     let mut kernel = kernel();
-    let declaration = proposition_with_field(
-        &mut kernel,
-        Term::intrinsic(curios_core::Intrinsic::NatType),
-    );
+    let declaration = proposition_with_field(&mut kernel, Term::intrinsic(Intrinsic::NatType));
 
     assert!(matches!(
         check_struct_decl(&mut kernel, &declaration),
@@ -266,20 +262,16 @@ fn proposition(kernel: &mut Kernel, path: &str) -> Term {
 fn proposition_with_field(kernel: &mut Kernel, field_type: Term) -> StructDecl {
     let name = Global::Authored(Qualifier::from(["Bad"]));
     let declaration = StructDecl {
-        universe_context: UniverseContext::empty(),
-        arity: Telescope::Done(Box::new(Telescope::Cons(
-            field_type,
-            curios_core::Scope::close(
-                curios_core::One,
-                &[&Free::local(0, Some("value"))],
-                Telescope::Done(Box::new(())),
-            ),
-        ))),
+        universe_context: UniverseContext::default(),
+        arity: Telescope::done(Telescope::build(
+            [(Free::local(0, Some("value")), field_type)],
+            (),
+        )),
         result_sort: Term::prop(),
         module: Qualifier::default(),
         root: RootId::Entry,
         rep_public: true,
-        polarities: Vec::<Polarity>::new(),
+        polarities: Vec::new(),
     };
     kernel.declare_struct(&name, &declaration);
 
