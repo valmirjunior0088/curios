@@ -127,7 +127,7 @@ fn build() {
     .unwrap_or_else(|error| {
         panic!(
             "fixed prelude failed to elaborate: {}",
-            error.format_with(&lowered)
+            error.format_with(&lowered, &[])
         )
     });
 
@@ -139,7 +139,7 @@ fn build() {
         .unwrap_or_else(|error| {
             panic!(
                 "fixed prelude failed to erase into the arena prefix: {}",
-                error.format_with(&core)
+                error.format_with(&core, &[])
             )
         });
 

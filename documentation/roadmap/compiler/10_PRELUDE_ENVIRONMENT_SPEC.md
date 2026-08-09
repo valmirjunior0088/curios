@@ -162,6 +162,14 @@ With the environment in place, caching a module's elaborated Core and its verdic
 
 Whole-module passes never cache and re-run at link: positivity over the complete declaration set, declaration sizing, and witness coherence, which is program-wide by definition since a violation is only visible where two modules meet. That bounds the win without removing it, since per-item typing is the expensive part.
 
+## What a module carrying only its own names also changes
+
+Diagnostics. `build_shorten` decides whether a global can be abbreviated by counting how many *distinct* names share a segment-suffix, and it counts them over `Module::module_symbols()` — the module's items and its two registries. When those held the prelude, `Vec` was unambiguous because the table knew every other name; once a module carries only its own, the table no longer contains `/std/Vec/Vec` and every prelude type in every error message renders fully qualified.
+
+Nothing about correctness changes, and no rule alters its verdict — this is the printer losing the universe it disambiguates against. But it is invisible to `clippy`, invisible to the prelude's own certification, and it cost five tests in `curios/src/tests` (`lift`, `state`, and three in `runtime`) that assert on rendered diagnostics. The fix is the same shape as everything else here: both renderers — `curios_elab::Error::format_with` and `curios_cert::KernelError::format_with` — take the scope's names beside the module's, and `curios-pipeline` supplies the prelude's on the error path.
+
+**The general statement, for M7.** Anything that reasons over "every name the program has" was reading `Module` as the complete program, and each such site becomes a scope question when it stops being one. Two are now handled — strict positivity's declaration set and the shortening table — and both were found by a test rather than by inspection. A third is not obviously ruled out; a search for `module_symbols`, `items.iter()` and registry iteration is the cheap way to look before caching user modules multiplies the number of things "in scope" can mean.
+
 ## Out of scope
 
 - **The identity-space watermarks** — `binder_floor`, `universe_floor`, `metavar_floor`, `witness_floor`. These partition *allocation spaces*, which is a problem a watermark is a reasonable answer to, and they are a separate concern from the items splice. `Entropy::seed` only raises, so combining is `max` and widening is always safe; that property is load-bearing for `derived_binder_floor` and is not to be lost by accident.

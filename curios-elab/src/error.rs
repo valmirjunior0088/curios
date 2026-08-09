@@ -992,9 +992,12 @@ impl Error {
         Rc::new(build_rename(&names, shorten))
     }
 
-    /// Render this error with source-style names, shortening global names against `module`'s symbol table (axis (b)) — the qualified-name universe an error's globals are spelled relative to. Every elaboration error reaching a reader comes through here, so all three axes are set in one place; axis (c) belongs to the whole render rather than any one variant, since every error that prints a term prints it from the raw elaborated spelling.
-    pub fn format_with(&self, module: &Module) -> String {
-        let shorten = Rc::new(build_shorten(&module.module_symbols()));
+    /// Render this error with source-style names, shortening global names against `module`'s symbols together with `scope`'s (axis (b)) — the qualified-name universe an error's globals are spelled relative to. Every elaboration error reaching a reader comes through here, so all three axes are set in one place; axis (c) belongs to the whole render rather than any one variant, since every error that prints a term prints it from the raw elaborated spelling.
+    pub fn format_with(&self, module: &Module, scope: &[Global]) -> String {
+        // The universe a name is shortened against is everything a reader could see, which is `module`'s own names *and* what its environment put in scope. A module carries only its own declarations, so a diagnostic naming `/std/Vec/Vec` has to be told the prelude exists or it cannot know the suffix `Vec` is unambiguous.
+        let mut symbols = module.module_symbols();
+        symbols.extend_from_slice(scope);
+        let shorten = Rc::new(build_shorten(&symbols));
         self.render(&Rc::new(
             Spelling::default()
                 .with_pretty_names(self.rename_map(&shorten))

@@ -49,6 +49,13 @@ impl From<CompileError> for String {
     }
 }
 
+/// The names the fixed prelude puts in scope, for shortening a diagnostic's globals.
+///
+/// A module carries only its own declarations, so `Vec` in an error message would render as `/std/Vec/Vec` unless the renderer is told what else a reader can see. Computed on the error path only, where walking the prelude's symbols costs nothing anyone waits for.
+fn prelude_symbols() -> Vec<curios_core::Global> {
+    with_prelude(|prelude| prelude.core().module_symbols())
+}
+
 /// Put `module` to the independent kernel with the archived prelude already in scope, so only what the prelude does not already answer for is judged — the prelude's own items resting on the archive's word.
 ///
 /// The [`Globals`] environment is assembled here because it is built from the restored prelude, which exists only inside `with_prelude`'s scope — so every caller that wants the compile path's rechecking gets the same environment rather than reconstructing one.
@@ -94,11 +101,11 @@ pub fn typecheck_reporting(
             core_mode,
         )
     })
-    .map_err(|error| CompileError::of(&error, error.format_with(&lowered)))?;
+    .map_err(|error| CompileError::of(&error, error.format_with(&lowered, &prelude_symbols())))?;
 
     let obligations = obligations
         .into_iter()
-        .map(|error| error.format_with(&lowered))
+        .map(|error| error.format_with(&lowered, &prelude_symbols()))
         .collect();
 
     Ok((module, obligations))
@@ -146,7 +153,7 @@ where
             core_mode,
         )
     })
-    .map_err(|error| CompileError::of(&error, error.format_with(&lowered)))?;
+    .map_err(|error| CompileError::of(&error, error.format_with(&lowered, &prelude_symbols())))?;
 
     observe(Stage::CoreElab(&module));
 
@@ -202,7 +209,7 @@ where
     {
         curios_profile::profile!("recheck");
         if let Some(verdict) = recheck(&module, budget).into_iter().next() {
-            let refusal = verdict.error.format_with(&module);
+            let refusal = verdict.error.format_with(&module, &prelude_symbols());
             return Err(CompileError::Failure(match &verdict.name {
                 Some(name) => format!("the kernel refused {name}: {refusal}"),
                 None => format!("the kernel refused the entrypoint: {refusal}"),
@@ -219,7 +226,7 @@ where
             prelude.ersd(),
         )
     })
-    .map_err(|error| CompileError::Failure(error.format_with(&module)))?;
+    .map_err(|error| CompileError::Failure(error.format_with(&module, &prelude_symbols())))?;
 
     Ok((lower_from_ersd(ersd_module, &mut observe), foreigns))
 }
