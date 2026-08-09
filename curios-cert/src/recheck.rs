@@ -163,17 +163,18 @@ type ItemPositions = (Option<Global>, Vec<(Term, Erased)>);
 /// The first metavariable an `induct` registry entry carries, in the order the entry stores its parts.
 fn induct_metavar(declaration: &InductDecl) -> Option<MetaId> {
     let mut found = None;
-    {
-        let mut note = |id: MetaId| {
-            found = Some(id);
-            true
-        };
+    let mut note = |id: MetaId| {
+        found = Some(id);
+        true
+    };
 
-        let _ = declaration.arity.any_metavar(&mut note)
-            || declaration.result_sort.any_metavar(&mut note)
-            || declaration
-                .signatures()
-                .any(|constructor| constructor.telescope.any_metavar(&mut note));
+    if !declaration.arity.any_metavar(&mut note) && !declaration.result_sort.any_metavar(&mut note)
+    {
+        for constructor in declaration.signatures() {
+            if constructor.telescope.any_metavar(&mut note) {
+                break;
+            }
+        }
     }
 
     found
@@ -182,14 +183,13 @@ fn induct_metavar(declaration: &InductDecl) -> Option<MetaId> {
 /// [`induct_metavar`] for a `struct` registry entry.
 fn struct_metavar(declaration: &StructDecl) -> Option<MetaId> {
     let mut found = None;
-    {
-        let mut note = |id: MetaId| {
-            found = Some(id);
-            true
-        };
+    let mut note = |id: MetaId| {
+        found = Some(id);
+        true
+    };
 
-        let _ = declaration.arity.any_metavar(&mut note)
-            || declaration.result_sort.any_metavar(&mut note);
+    if !declaration.arity.any_metavar(&mut note) {
+        declaration.result_sort.any_metavar(&mut note);
     }
 
     found
