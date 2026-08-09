@@ -169,5 +169,3 @@ pub(super) fn parse_plicity<'a>() -> Parser<'a, Plicity> {
         .map(|()| Plicity::Implicit)
         .or(pure(Plicity::Explicit))
 }
-
-// A `use` Π-binder: `use term`. Always anonymous — it binds nothing nameable (`_`) but joins the instance scope; an instance is reached by resolution, never by name. `use` is a reserved word, so there is no ambiguity with an ordinary binder name.

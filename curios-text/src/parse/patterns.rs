@@ -48,7 +48,7 @@ pub(super) fn parse_func_type<'a>() -> Parser<'a, Term> {
     .map(Into::into)
 }
 
-// A lambda parameter with an optional domain annotation. `(x)` is sugar for `(x : _)`; the annotation, when present, parses as an arbitrary term and stops at the closing `)` (mirrors `parse_func_type_param`). A binder name: a plain identifier (`_` to ignore). The `label(params) = value`/`label(params) -> type` definition-sugar parameter lists stay single-name-only — see `parse_func_param` below. `let`, lambda, and function-definition-sugar parameters accept a full `Pattern` instead (see `parse_pattern`); match arms accept a full `MatchPattern` instead (see `parse_match_pattern`).
+// A binder name: a plain identifier (`_` to ignore). The `label(params) = value`/`label(params) -> type` definition-sugar parameter lists stay single-name-only — see `parse_func_param` below. `let`, lambda, and function-definition-sugar parameters accept a full `Pattern` instead (see `parse_pattern`); match arms accept a full `MatchPattern` instead (see `parse_match_pattern`).
 pub(super) fn parse_binder<'a>() -> Parser<'a, String> {
     parse_identifier().map(str::to_string)
 }
@@ -194,7 +194,7 @@ pub(super) fn parse_bool_match_pattern<'a>() -> Parser<'a, MatchPattern> {
 
 // The `0` leaf of a `Nat` match-arm pattern (the zero case of an induction, or literal `0` in a switch). Only the numeral `0` maps here; every other literal is `parse_nat_lit_match_pattern`.
 pub(super) fn parse_nat_zero_match_pattern<'a>() -> Parser<'a, MatchPattern> {
-    catch(parse_nat().flat_map(|lit| match lit {
+    catch(parse_nat_digits().flat_map(|lit| match lit {
         NatLiteral(n, _) if n.is_zero() => pure(MatchPattern::Nat(NatPattern::Zero)),
         _ => fail("expected 0 as a nested Nat zero pattern"),
     }))
@@ -218,7 +218,7 @@ pub(super) fn parse_nat_succ_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     })
 }
 
-// The literal-dispatch leaf `k` of a `Nat` match-arm pattern (`| 5 =>`, `| 0x90 =>`). Reuses `parse_nat_literal_u32`, so hex/char literals dispatch by value; a column of these (with no `pred + 1; ih` arm) lowers to a `switch`. `0` is rejected here: it is always the `Zero` leaf (tried earlier in `parse_match_pattern`), keeping one canonical leaf per value. Tried before the generic `Binder` fallback, which would otherwise swallow a bare digit as an identifier.
+// The literal-dispatch leaf `k` of a `Nat` match-arm pattern (`| 5 =>`, `| 0x90 =>`). Reuses `parse_nat_literal_u32`, so hex literals dispatch by value; a column of these (with no `pred + 1; ih` arm) lowers to a `switch`. `0` is rejected here: it is always the `Zero` leaf (tried earlier in `parse_match_pattern`), keeping one canonical leaf per value. Tried before the generic `Binder` fallback, which would otherwise swallow a bare digit as an identifier.
 pub(super) fn parse_nat_lit_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     catch(parse_nat_literal_u32().flat_map(|k| match k {
         0 => fail("0 is the Nat zero pattern, not a literal-dispatch case"),
@@ -321,7 +321,7 @@ pub(super) fn parse_func_param<'a>() -> Parser<'a, (Plicity, String, Option<Term
         .map(|((plicity, name), annotation)| (plicity, name, annotation))
 }
 
-// A lambda parameter with an optional domain annotation and a binder pattern in place of a plain name — the pattern-accepting counterpart of `parse_func_param`, forked rather than generalized in place because `parse_func_param` also serves the out-of-scope `label(params) = value` definition sugar (`parse_tuple_field_prefix`), which stays single-name-only. A lambda parameter's plicity mark: `@` (implicit) or `use` (witness) prefixing the binder pattern, or no mark (explicit). Unlike the function-type and definition-sugar `use` forms — where a witness binder is anonymous and `use` is followed by the domain *type* — a lambda's `use` names a binder the body can reference (`use show`), so the mark precedes an ordinary pattern.
+// A lambda parameter's plicity mark: `@` (implicit) or `use` (witness) prefixing the binder pattern, or no mark (explicit). Unlike the function-type and definition-sugar `use` forms — where a witness binder is anonymous and `use` is followed by the domain *type* — a lambda's `use` names a binder the body can reference (`use show`), so the mark precedes an ordinary pattern.
 fn parse_func_binder_plicity<'a>() -> Parser<'a, Plicity> {
     catch(parse_keyword("use"))
         .map(|()| Plicity::Witness)
@@ -329,6 +329,7 @@ fn parse_func_binder_plicity<'a>() -> Parser<'a, Plicity> {
         .or(pure(Plicity::Explicit))
 }
 
+// A lambda parameter with an optional domain annotation and a binder pattern in place of a plain name — the pattern-accepting counterpart of `parse_func_param`, forked rather than generalized in place because `parse_func_param` also serves the out-of-scope `label(params) = value` definition sugar (`parse_tuple_field_prefix`), which stays single-name-only. `(x)` is sugar for `(x : _)`; the annotation, when present, parses as an arbitrary term and stops at the closing `)` (mirrors `parse_func_type_param`).
 pub(super) fn parse_func_pattern_param<'a>() -> Parser<'a, FuncParam> {
     parse_func_binder_plicity()
         .and(parse_pattern())

@@ -16,7 +16,7 @@ type InductCase = (
     curios_core::Term,
 );
 
-/// One in-progress row of the matrix compiler's recursion (see [`MatchCompiler::compile_matrix`]): the still-unconsumed column patterns (left to right, one per not-yet-retired column, borrowed from the original [`MatrixArm`]), the `let` bindings accumulated so far from retired all-[`MatchPattern::Binder`] columns — applied at the leaf, outermost first, matching [`Lowerer::lower_pattern_fields`]'s "first field's let ends up outermost" convention — and the row's own (still-surface) body. A name already bound directly by an enclosing core binder (see [`MatchCompiler::compile_ctor`]'s single-row fast path) needs no entry here at all — [`Lowerer::scoped`] is called inline, right where that binder's name is decided, instead of threading a second bookkeeping list through the recursion for it.
+/// One in-progress row of the matrix compiler's recursion (see [`MatchCompiler::compile_matrix`]): the still-unconsumed column patterns (left to right, one per not-yet-retired column, borrowed from the original [`MatrixArm`]), the `let` bindings accumulated so far from retired all-[`MatchPattern::Binder`] columns — applied at the leaf, outermost first, matching [`Lowerer::lower_pattern_fields`]'s "first field's let ends up outermost" convention — and the row's own (still-surface) body. A name already bound directly by an enclosing core binder (see [`MatchCompiler::compile_ctor`]'s single-row fast path) needs no entry here at all — [`Lowerer::bound`] is called inline, right where that binder's name is decided, instead of threading a second bookkeeping list through the recursion for it.
 struct MatrixRow<'t> {
     patterns: Vec<&'t MatchPattern>,
     binds: Vec<(super::lowerer::Binder, curios_core::Term)>,
@@ -405,7 +405,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 return Err(Error::MatrixInconsistentShape);
             }
 
-            // The single-row fast path: a plain-binder slot's own name becomes the core arm's binder directly, with `self.scoped` called right here — exactly where the name is decided — rather than deferred through `MatrixRow`. Only a slot needing further decomposition still gets a fresh synthetic column.
+            // The single-row fast path: a plain-binder slot's own name becomes the core arm's binder directly, with `self.bound` called right here — exactly where the name is decided — rather than deferred through `MatrixRow`. Only a slot needing further decomposition still gets a fresh synthetic column.
             if group.len() == 1 {
                 let (args, mut row) = group.pop().unwrap();
                 let mut binder_names = Vec::with_capacity(arity);
@@ -882,7 +882,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         self.compile(new_columns, new_rows, None, leaf)
     }
 
-    /// The leaf of the matrix compiler's recursion: exactly one row remains once every column is consumed. Lowers the row's body under every accumulated binder name (so a reference resolves to the binder rather than a like-named module binding, exactly like [`Self::scoped`]'s other callers), then wraps it in the accumulated `let`s, outermost first.
+    /// The leaf of the matrix compiler's recursion: exactly one row remains once every column is consumed. Lowers the row's body under every accumulated binder name (so a reference resolves to the binder rather than a like-named module binding, exactly like [`Self::bound`]'s other callers), then wraps it in the accumulated `let`s, outermost first.
     /// The single-row hypothesis slot: a plain-name pattern keeps the fast path — its spelling becomes the core node's binder hint directly, exactly as before — while a compound pattern mints an unwritten binder for the node and binds each written leaf to its projection chain off it through the row-binds mechanism (`finish_row` materializes the `let`s), the same projection sugar an irrefutable `let` pattern lowers to.
     fn cons_ih_pattern(
         &self,
