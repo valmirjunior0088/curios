@@ -157,13 +157,10 @@ fn print_motive(motive: Option<Term>) -> Printer {
 }
 
 fn print_flt(value: f32) -> Printer {
+    // `Display` for `f32` never uses exponent notation (that is `{:e}`), so decimalizing is one suffix check.
     let mut string = value.to_string();
 
-    if let Some(index) = string.find(['e', 'E']) {
-        if !string[..index].contains('.') {
-            string.insert_str(index, ".0");
-        }
-    } else if !string.contains('.') {
+    if !string.contains('.') {
         string.push_str(".0");
     }
 
