@@ -1,4 +1,3 @@
-use crate::{IntrinsicBuilders, TermBuilders};
 use curios_core::*;
 use {
     crate::*,
