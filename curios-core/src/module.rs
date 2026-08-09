@@ -78,7 +78,7 @@ pub struct Definition {
     pub island: Qualifier,
     /// This definition's declaring root — `island`'s leading segment, precomputed once by `into_core` the same way `ConceptDecl`/`StructDecl`/ `InductDecl` are, so `Context::set_island` (and, downstream, the orphan-rule check) never has to re-derive it from `island` itself.
     pub root: RootId,
-    /// Whether this definition terminates on every input, together with everything it reaches. Written back by [`crate::record_totality`] after zonking — like `polarities` on a declaration, and for the same reason: the analysis needs final, meta-free terms, so construction cannot know the answer. It defaults to [`Totality::Partial`], which is what makes a site that forgets to stamp it fail closed rather than open.
+    /// Whether this definition terminates on every input, together with everything it reaches. Written back by `crate::record_totality` after zonking — like `polarities` on a declaration, and for the same reason: the analysis needs final, meta-free terms, so construction cannot know the answer. It defaults to [`Totality::Partial`], which is what makes a site that forgets to stamp it fail closed rather than open.
     ///
     /// This is the cross-module summary the erasure gates read. A user program that mentions a prelude definition inherits the flag rather than re-analyzing the prelude, which is sound because "partial" already means "something partial is in its closure".
     pub totality: Totality,

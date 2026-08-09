@@ -92,7 +92,7 @@ fn dependency_order(module: &Module, checked_from: usize) -> Vec<usize> {
 pub struct Prefix<'a> {
     /// The prefix module. Its items are `module.items[..prefix.module.items.len()]` of the module being judged, and its declarations are the ones the suffix did not add.
     pub module: &'a Module,
-    /// [`derived_binder_floor`] over `module`, computed by the build that established it. A floor is a bound, so this is combined by maximum with the suffix's own and can only ever widen.
+    /// `derived_binder_floor` over `module`, computed by the build that established it. A floor is a bound, so this is combined by maximum with the suffix's own and can only ever widen.
     pub binder_floor: usize,
 }
 
@@ -133,7 +133,7 @@ pub fn recheck_module(module: &Module, budget: u64) -> Result<(), KernelError> {
 ///
 /// # Why the verdicts are independent
 ///
-/// [`check_definition`] and [`check_rec_group`] both return before their `Kernel::define` step, so a refused item has defined nothing. Running that same define anyway is what keeps this from degenerating into a cascade: every item enters the environment at its declared type with its real body whether or not it checked, so each later item is judged against exactly what it would have been judged against in a fully passing walk.
+/// `check_definition` and `check_rec_group` both return before their `Kernel::define` step, so a refused item has defined nothing. Running that same define anyway is what keeps this from degenerating into a cascade: every item enters the environment at its declared type with its real body whether or not it checked, so each later item is judged against exactly what it would have been judged against in a fully passing walk.
 ///
 /// Nothing else survives an item. [`Kernel`] holds no caches, its conversion history is built fresh per comparison, and every binder it opens is retracted on the failing path as well as the succeeding one. So recovery here is exact rather than approximate, and a verdict late in the list is worth as much as the first.
 ///

@@ -90,7 +90,7 @@ enum MockResource {
     TlsConfig,
 }
 
-/// The scripted, in-memory [`Host`] used by the test suite — the mirror of `OsHost`. Build one with [`MockHost::builder`], move it into the runner, and read what the run produced through the [`MockIo`] handle `build` returns.
+/// The scripted, in-memory `Host` used by the test suite — the mirror of `OsHost`. Build one with [`MockHost::builder`], move it into the runner, and read what the run produced through the [`MockIo`] handle `build` returns.
 pub struct MockHost {
     /// Scripted stdin, pre-joined and newline-terminated; `read(Handle::Stdin, …)` drains its front and reports `Status::Eof` once it runs dry.
     input: Mutex<VecDeque<u8>>,

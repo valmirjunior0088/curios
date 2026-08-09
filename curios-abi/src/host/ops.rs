@@ -1,6 +1,6 @@
 //! The single authored list of builtin host operations, and the two projections `curios-abi` derives from it.
 //!
-//! [`host_ops!`] is the one place a builtin operation is written. It is an X-macro: invoked with the name of a callback macro, it expands to that callback applied to the whole table, so each generated projection comes from this single source and cannot drift. `curios-abi` generates two — the [`host_ops`] wire store and the typed [`HostOps`] trait; the native adapter's codec bindings (`curios-runtime`'s `sys_impls`) are *hand-written* against that pair and cross-checked, as the macro doc below details.
+//! `host_ops!` is the one place a builtin operation is written. It is an X-macro: invoked with the name of a callback macro, it expands to that callback applied to the whole table, so each generated projection comes from this single source and cannot drift. `curios-abi` generates two — the `host_ops` wire store and the typed [`HostOps`] trait; the native adapter's codec bindings (`curios-runtime`'s `sys_impls`) are *hand-written* against that pair and cross-checked, as the macro doc below details.
 //!
 //! Each operand and result is one of a closed vocabulary of slot kinds (`Handle`, `Nat`, `Bool`, `Int`, `Bytes`, `Mode`, `Status`, `ListBytes`, `ListHandle`, `ListPoll`), each a fixed `(wire type, trait parameter, trait result)` triple the `*_of!` helpers below encode. Result arity fixes the guest-facing shape exactly as the prelude's `host_fn` reads it: `0` results is the unit value, `1` the bare result, `2..` a record of the named fields. If an operation ever needs an eleventh slot kind, reconsider the vocabulary before extending it. `exit` is deliberately absent — it traps rather than returns, its guest type is the polymorphic bottom `(@A : Type) -> Nat -> A`, and it is wired directly as a trap, so it stays a hardcoded intrinsic outside both the store and the trait.
 //!
@@ -12,7 +12,7 @@ use super::{
 
 /// The one authored list of builtin host operations. Invoked with the name of a callback macro (`host_ops!(my_callback)`), it applies that callback to the whole table so every projection comes off this single source. Each row is `method as Subject/label [param: Slot, …] [result: Slot, …];` — the method name is both the wasm import name and the [`HostOps`] method, `Subject/label` is where the guest surfaces it under `/sys`, and each `Slot` is one of the closed vocabulary the `*_of!` helpers map to concrete types.
 ///
-/// This macro is private to `curios-abi`: the two projections it drives — [`host_ops`] and [`HostOps`] — are the only interfaces the rest of the system uses. The native adapter's codec bindings are hand-written against that pair (they marshal wasmtime values, which cannot live in this leaf), and cross-checked against it — a `define` name must be a real store row and each call must match the trait.
+/// This macro is private to `curios-abi`: the two projections it drives — `host_ops` and [`HostOps`] — are the only interfaces the rest of the system uses. The native adapter's codec bindings are hand-written against that pair (they marshal wasmtime values, which cannot live in this leaf), and cross-checked against it — a `define` name must be a real store row and each call must match the trait.
 macro_rules! host_ops {
     ($callback:ident) => {
         $callback! {
@@ -173,7 +173,7 @@ macro_rules! result_ty {
 /// Project the op list to the typed host interface.
 macro_rules! declare_host_trait {
     ($($(#[$attr:meta])* $method:ident as $subject:ident / $label:ident [$($p:ident : $ps:ident),* $(,)?] [$($r:ident : $rs:ident),* $(,)?];)*) => {
-        /// The host side of the builtin import surface: one method per [`host_ops`] store row, generated from the [`host_ops!`] list so the store and this trait cannot drift. Handles cross as [`Handle`], failures as [`Status`]; one shared `Arc<H>` backs every import closure, so methods take `&self` and implementations synchronize internally. Implemented by `OsHost` over real OS resources and by `MockHost` over scripted in-memory ones.
+        /// The host side of the builtin import surface: one method per `host_ops` store row, generated from the `host_ops!` list so the store and this trait cannot drift. Handles cross as [`Handle`], failures as [`Status`]; one shared `Arc<H>` backs every import closure, so methods take `&self` and implementations synchronize internally. Implemented by `OsHost` over real OS resources and by `MockHost` over scripted in-memory ones.
         pub trait HostOps {
             $(
                 $(#[$attr])*

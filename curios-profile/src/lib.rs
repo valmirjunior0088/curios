@@ -13,7 +13,7 @@ pub use tracing;
 
 /// Time an entire function: expands to a span guard held to the end of the enclosing block. Write it as the function's first statement, named after the function, so the report reads as a call profile.
 ///
-/// ```ignore
+/// ```text
 /// pub fn check_definition(…) -> Result<(), KernelError> {
 ///     curios_profile::profile!("check_definition");
 ///     …
@@ -29,7 +29,7 @@ macro_rules! profile {
 
 /// Evaluate an expression inside a named span — the per-step sibling of [`profile!`], for breaking down one call site of a loop.
 ///
-/// ```ignore
+/// ```text
 /// let changed = curios_profile::profile_span!("inline_known_calls", inline_known_calls(module))
 ///     | curios_profile::profile_span!("contify_calls", contify_calls(module));
 /// ```

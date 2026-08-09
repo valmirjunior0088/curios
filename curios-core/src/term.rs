@@ -41,7 +41,7 @@ pub enum HeadTag<'a> {
     Intrinsic(&'static str),
 }
 
-/// A core-calculus term: an `Rc`-shared [`Node`] — a [`Subterm`] plus its lazily-cached, span-independent derivations (a structural hash, `reach`, the free-variable set, and the `has_local_free`/`has_metavar` bits) — with an optional per-occurrence source span. Clones are pointer bumps that share the node's cache, so a subterm shared across occurrences memoizes each derivation once, not once per occurrence. Equality short-circuits first on pointer identity, then on the cached hashes, before falling back to structural comparison — which is what keeps conversion and the reduction memo affordable on heavily shared trees. The span is identity-irrelevant: hash and equality look only at the node, so re-spanning a term never splits a cache.
+/// A core-calculus term: an `Rc`-shared `Node` — a [`Subterm`] plus its lazily-cached, span-independent derivations (a structural hash, `reach`, the free-variable set, and the `has_local_free`/`has_metavar` bits) — with an optional per-occurrence source span. Clones are pointer bumps that share the node's cache, so a subterm shared across occurrences memoizes each derivation once, not once per occurrence. Equality short-circuits first on pointer identity, then on the cached hashes, before falling back to structural comparison — which is what keeps conversion and the reduction memo affordable on heavily shared trees. The span is identity-irrelevant: hash and equality look only at the node, so re-spanning a term never splits a cache.
 #[derive(Debug, Clone)]
 #[cfg_attr(
     feature = "archive",
@@ -125,12 +125,12 @@ impl Term {
         self.scalars().hash
     }
 
-    /// Whether any *free* variable in this term is a binder some scope opened ([`Free::Local`]) rather than a top-level definition — the cached spelling of [`Subterm::has_local_free`], which records why this is a discriminant test and not a spelling probe. Binder labels inside `Scope`s are closed occurrences, not free variables, and never count. Cached per node and computed from the children's cached scalars, so a shared subterm — a DAG-shaped lowered literal — pays O(degree) here, not O(size): the elaboration cache gates every `elaborate` call on this bit and must not re-walk shared chains.
+    /// Whether any *free* variable in this term is a binder some scope opened ([`Free::Local`]) rather than a top-level definition — the cached spelling of `Subterm::has_local_free`, which records why this is a discriminant test and not a spelling probe. Binder labels inside `Scope`s are closed occurrences, not free variables, and never count. Cached per node and computed from the children's cached scalars, so a shared subterm — a DAG-shaped lowered literal — pays O(degree) here, not O(size): the elaboration cache gates every `elaborate` call on this bit and must not re-walk shared chains.
     pub fn has_local_free(&self) -> bool {
         self.scalars().has_local_free
     }
 
-    /// Whether any `Metavar` node occurs in this term. Cached per node like [`has_local_free`](Self::has_local_free) and for the same reason: the elaboration cache's O(1)-per-call gate.
+    /// Whether any `Metavar` node occurs in this term. Cached per node like `has_local_free` and for the same reason: the elaboration cache's O(1)-per-call gate.
     pub(crate) fn has_metavar(&self) -> bool {
         self.scalars().has_metavar
     }
@@ -825,7 +825,7 @@ impl Term {
         Self::struct_at(name, Vec::<Level>::new(), params, fields)
     }
 
-    /// Build the intrinsic eliminator of a nominal inductive ([`Cases::Induct`]): one arm per constructor tag, each closed over its payload binders (all-explicit). [`Term::induct_match_marked`] carries per-binder plicity.
+    /// Build the intrinsic eliminator of a nominal inductive ([`Cases::Induct`]): one arm per constructor tag, each closed over its payload binders (all-explicit). `Term::induct_match_marked` carries per-binder plicity.
     pub fn induct_match<H, M, I, A, B>(
         head: H,
         motive_binder: Option<&Free>,
@@ -871,7 +871,7 @@ impl Term {
         )
     }
 
-    /// [`Term::induct_match_marked`] over an already-built motive scope, with the optional `| _ =>` catch-all folded in — `into_core`'s single entry point for a nominal-inductive elimination.
+    /// `Term::induct_match_marked` over an already-built motive scope, with the optional `| _ =>` catch-all folded in — `into_core`'s single entry point for a nominal-inductive elimination.
     pub fn induct_match_scoped_marked<H, I, A, B>(
         head: H,
         motive: Scope<Many>,
@@ -1159,7 +1159,7 @@ impl Term {
 
     /// Member `index` of `group`, spelled as what it is: the group bound, with a tail that selects one member. `rec f and g; f`.
     ///
-    /// This is an ordinary [`Rec`] node and not a form of its own, which is what keeps one typing rule from having to be written twice — a member occurrence is checked by the rule that checks the group, because it *is* the group. Opening this tail over the group's members yields the same term back, so a projection is the fixed point of `rec` unfolding and therefore a normal form; [`Term::as_rec_proj`] is how a reducer recognizes one without running the substitution to find out.
+    /// This is an ordinary [`Rec`] node and not a form of its own, which is what keeps one typing rule from having to be written twice — a member occurrence is checked by the rule that checks the group, because it *is* the group. Opening this tail over the group's members yields the same term back, so a projection is the fixed point of `rec` unfolding and therefore a normal form; `Term::as_rec_proj` is how a reducer recognizes one without running the substitution to find out.
     pub fn rec_proj(group: RecGroup, index: usize) -> Self {
         assert!(
             index < group.length(),
@@ -1216,7 +1216,7 @@ impl Hash for Term {
 
 /// Structural equality, walked with an explicit worklist.
 ///
-/// The recursion this replaces was native, and a term deep enough overflowed the stack rather than answering — which a kernel must not do, and which the step budget cannot prevent, because depth is not steps. Every other derivation over a term already avoids native depth the same way ([`Term::fill_post_order`], `traverse_rewrite_spine`); this closes the last one that decides acceptance.
+/// The recursion this replaces was native, and a term deep enough overflowed the stack rather than answering — which a kernel must not do, and which the step budget cannot prevent, because depth is not steps. Every other derivation over a term already avoids native depth the same way (`Term::fill_post_order`, `traverse_rewrite_spine`); this closes the last one that decides acceptance.
 ///
 /// Two shortcuts carry the common cases before any of that: pointer identity (hash-consing makes shared structure genuinely common) and the cached hashes. Only a pair that is distinct-but-hash-equal reaches the walk.
 impl PartialEq for Term {
@@ -1542,7 +1542,7 @@ impl Term {
             .expect("warm_frees fills the free-variable cache")
     }
 
-    /// Whether `name` occurs free in this term, through the same memoized set [`Bound::free_vars`] fills — but as a membership probe instead of a set clone ([`FreeCache::contains`]): `define`'s selective reduction-cache invalidation probes every cached WHNF, and cloning each entry's set there would swamp the walk it avoids.
+    /// Whether `name` occurs free in this term, through the same memoized set [`Bound::free_vars`] fills — but as a membership probe instead of a set clone (`FreeCache::contains`): `define`'s selective reduction-cache invalidation probes every cached WHNF, and cloning each entry's set there would swamp the walk it avoids.
     pub fn mentions_free(&self, name: &Free) -> bool {
         self.warm_frees();
         self.inner.frees.contains(name)
@@ -1553,7 +1553,7 @@ impl Term {
         self.get_or_init_free_vars().as_ref().clone()
     }
 
-    /// The ids of every metavariable in this term. Inherent, and gated on the memoized [`has_metavar`](Self::has_metavar): a ground term (every data spine) short-circuits without walking, so the enumeration only ever recurses through metavariable-bearing structure, whose depth is bounded by the written program.
+    /// The ids of every metavariable in this term. Inherent, and gated on the memoized `has_metavar`: a ground term (every data spine) short-circuits without walking, so the enumeration only ever recurses through metavariable-bearing structure, whose depth is bounded by the written program.
     pub fn metavars(&self) -> BTreeSet<MetaId> {
         let mut ids = BTreeSet::new();
         if self.has_metavar() {
@@ -1562,7 +1562,7 @@ impl Term {
         ids
     }
 
-    /// Whether any metavariable in this term satisfies `pred`. Inherent and gated on [`has_metavar`](Self::has_metavar) like [`metavars`](Self::metavars), and — since `Subterm::any_metavar`'s recursion re-enters through each child `Term` — every ground subtree it reaches short-circuits too.
+    /// Whether any metavariable in this term satisfies `pred`. Inherent and gated on `has_metavar` like [`metavars`](Self::metavars), and — since `Subterm::any_metavar`'s recursion re-enters through each child `Term` — every ground subtree it reaches short-circuits too.
     pub fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
         self.has_metavar() && self.inner.subterm.any_metavar(pred)
     }
@@ -1824,7 +1824,7 @@ pub struct Struct {
 ///
 /// An *elaborated* motive is closed at the eliminator's own arity: the scrutinee's indices in declaration order, then the scrutinee. That is 1 for every intrinsic carrier and for an unindexed inductive, and `n_indices + 1` for an indexed one. Parameters are never abstracted — they are uniform across constructors and fixed by the scrutinee's type, so the motive body refers to them through the ambient scope like any other term.
 ///
-/// Before elaboration the motive is instead the *written term*, carried in an arity-0 scope — see [`Term::match_motive_written`].
+/// Before elaboration the motive is instead the *written term*, carried in an arity-0 scope — see `Term::match_motive_written`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2182,11 +2182,11 @@ pub struct WitnessOrigin {
 pub enum MetavarOrigin {
     Implicit(ImplicitOrigin),
     Witness(WitnessOrigin),
-    /// A written goal `?` (`into_core` mints it via [`Term::goal`]): the user asked what elaboration determines here, so zonk errors with the goal's scope, type, and solution — solved or not — instead of splicing.
+    /// A written goal `?` (`into_core` mints it via `Term::goal`): the user asked what elaboration determines here, so zonk errors with the goal's scope, type, and solution — solved or not — instead of splicing.
     Goal,
 }
 
-/// A metavariable's identity: a dense index into the `Context`'s `MetaStore`, minted monotonically by an [`Entropy`](Entropy). A newtype so it can never be confused with the other `usize`-shaped notions the kernel juggles (de Bruijn indices, telescope arities, variant tags, `Nat` magnitudes).
+/// A metavariable's identity: a dense index into the `Context`'s `MetaStore`, minted monotonically by an `Entropy`(Entropy). A newtype so it can never be confused with the other `usize`-shaped notions the kernel juggles (de Bruijn indices, telescope arities, variant tags, `Nat` magnitudes).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -2610,7 +2610,7 @@ impl Subterm {
         }
     }
 
-    /// Whether any direct child `Term` of this subterm satisfies `pred`, short-circuiting on the first hit — the shared structural walk under the cached [`has_local_free`](Self::has_local_free)/[`has_metavar`](Self::has_metavar) bits, which pass a child's own memoized accessor as `pred` so shared subterms are never re-walked. Scope bodies are visited closed: binder occurrences are bound indices there, so binder labels stay invisible to any free-variable predicate.
+    /// Whether any direct child `Term` of this subterm satisfies `pred`, short-circuiting on the first hit — the shared structural walk under the cached `has_local_free`/`has_metavar` bits, which pass a child's own memoized accessor as `pred` so shared subterms are never re-walked. Scope bodies are visited closed: binder occurrences are bound indices there, so binder labels stay invisible to any free-variable predicate.
     ///
     /// Also the descent `positivity` uses for the forms it cannot see through, with a `pred` that always returns `false` so the walk is exhaustive rather than short-circuiting. That reuse is deliberate: it is what keeps the positivity check from silently missing a recursive occurrence when a new term former is added.
     pub fn any_child_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {

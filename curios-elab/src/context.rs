@@ -80,7 +80,7 @@ pub(crate) struct SolutionMark {
     universe: UniverseMark,
 }
 
-/// The kernel's ambient state, threaded mutably through elaboration, typing, reduction, conversion, and erasure. Two lifetimes coexist: the *frame-scoped* lexical state ([`Frames`]), pushed and popped as binders and match arms are entered, and the *flat monotonic facts* about the program ([`Solutions`], [`Program`]), which frames never touch. The [`Caches`] police both with their write stamps, and this façade is where the two halves coordinate: any method that writes a store *and* must stamp or clear a cache lives here, naming both sub-stores explicitly. Reduction is bounded by a step budget restored at every declaration boundary — see [`Context::new`].
+/// The kernel's ambient state, threaded mutably through elaboration, typing, reduction, conversion, and erasure. Two lifetimes coexist: the *frame-scoped* lexical state (`Frames`), pushed and popped as binders and match arms are entered, and the *flat monotonic facts* about the program (`Solutions`, `Program`), which frames never touch. The `Caches` police both with their write stamps, and this façade is where the two halves coordinate: any method that writes a store *and* must stamp or clear a cache lives here, naming both sub-stores explicitly. Reduction is bounded by a step budget restored at every declaration boundary — see [`Context::new`].
 #[derive(Debug)]
 pub struct Context {
     fresh_names: Entropy,
@@ -115,7 +115,7 @@ impl Context {
 
     /// A fresh, empty context in which each declaration may spend `budget` reduction steps, synthesizing the `/syn` names `syntax` registers. Declarations, definitions, and the metavariable floor arrive later, seeded by `elaborate_module_suffix` as it walks the lowered module.
     ///
-    /// The budget is *per declaration*, not per compilation: `elaborate_module_suffix` calls [`Context::restore_budget`] at every item boundary. A cumulative budget would make whether one declaration typechecks depend on how much the declarations before it had already spent, which is not a property of the declaration. Counting steps rather than elapsed time is what makes the answer a fact about the program instead of about the machine that ran it, so acceptance is reproducible across hosts, loads, and runs.
+    /// The budget is *per declaration*, not per compilation: `elaborate_module_suffix` calls `Context::restore_budget` at every item boundary. A cumulative budget would make whether one declaration typechecks depend on how much the declarations before it had already spent, which is not a property of the declaration. Counting steps rather than elapsed time is what makes the answer a fact about the program instead of about the machine that ran it, so acceptance is reproducible across hosts, loads, and runs.
     ///
     /// The registry is a constructor argument rather than something a later call may or may not install, so an embedding cannot reach a type-directed feature with no vocabulary to emit. Whether the named declarations are actually *in scope* is a separate question the features already answer for themselves — a missing concept registration reports `no witness`, and row subsumption declines and lets the original mismatch speak.
     pub fn new(budget: u64, syntax: SyntaxRegistry) -> Self {

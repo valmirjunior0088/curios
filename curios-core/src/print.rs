@@ -165,7 +165,7 @@ impl<'a, T> Spelled<'a, T> {
     }
 }
 
-/// Every name the printer will emit for `term`: free vars (Γ references) and the stored labels of every binder it reopens. Free vars come from the robust `Bound` traversal; binder labels — which that traversal never surfaces — from [`collect_labels`], which descends scope bodies (where nested binders live).
+/// Every name the printer will emit for `term`: free vars (Γ references) and the stored labels of every binder it reopens. Free vars come from the robust `Bound` traversal; binder labels — which that traversal never surfaces — from `collect_labels`, which descends scope bodies (where nested binders live).
 pub fn display_names(term: &Term) -> BTreeSet<Free> {
     let mut names = term.free_vars();
     collect_labels(term, &mut names);

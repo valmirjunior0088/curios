@@ -269,7 +269,7 @@ impl fmt::Display for Displayed<'_> {
 
 /// The kernel's side of the shared-analysis seam.
 ///
-/// `assumption` reads the *locals* rather than [`Kernel::type_of`], because a shared analysis asking what a binder was assumed at means the binder in scope, not a top-level name that happens to share its spelling. That matches what the elaborator's `Context::assumption` answers, which is the point of the seam.
+/// `assumption` reads the *locals* rather than `Kernel::type_of`, because a shared analysis asking what a binder was assumed at means the binder in scope, not a top-level name that happens to share its spelling. That matches what the elaborator's `Context::assumption` answers, which is the point of the seam.
 impl Env for Kernel {
     type Error = KernelError;
 
@@ -308,7 +308,7 @@ impl Judge for Kernel {
 ///
 /// Deliberately small, and now deliberately *composed*. The elaborator's `Context` carries fifteen-odd stores — caches, parked goals, refinement layers, a metavariable heap — and each is a place where an answer can come from something other than the term in hand. This held seventeen loose fields, which is the same shape read from the other end: five independent jobs whose invariants were spread across the methods that happened to touch them. Each is now a component that states its own, and what remains here is the composition and the couplings that genuinely cross it.
 ///
-/// The one such coupling is worth naming, because it is why [`Globals::insert`] reports rather than acts: overwriting a definition invalidates every remembered reduct, which is a fact about [`Globals`] *and* [`Memos`] and therefore belongs to neither.
+/// The one such coupling is worth naming, because it is why `Globals::insert` reports rather than acts: overwriting a definition invalidates every remembered reduct, which is a fact about `Globals` *and* `Memos` and therefore belongs to neither.
 ///
 /// Growing this struct is still how independence gets lost. A new *component* should have to argue for itself the way a new field used to.
 pub struct Kernel {

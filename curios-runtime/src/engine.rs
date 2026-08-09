@@ -74,7 +74,7 @@ fn host_func_type(engine: &Engine, function: &ForeignFunction) -> FuncType {
 type Trampoline =
     Arc<dyn Fn(Caller<'_, ()>, &[Val], &mut [Val]) -> wasmtime::Result<()> + Send + Sync>;
 
-/// The host side of a foreign registry: for each [`ForeignFunction`] in a store, the trampoline implementing it. `instantiate` fills the `sys`-tier one from the [`Host`] trait, and links *pull-based* — it walks the module's imports and defines exactly what the module demands, so an import with no registered implementation is a clean, named error instead of a stranded wasmtime lookup. An embedder builds its own `ffi`-tier one from a [`ForeignStore`] returned by `compile_entrypoint`, `define`-ing each row it wants to supply.
+/// The host side of a foreign registry: for each [`ForeignFunction`] in a store, the trampoline implementing it. `instantiate` fills the `sys`-tier one from the `Host` trait, and links *pull-based* — it walks the module's imports and defines exactly what the module demands, so an import with no registered implementation is a clean, named error instead of a stranded wasmtime lookup. An embedder builds its own `ffi`-tier one from a [`ForeignStore`] returned by `compile_entrypoint`, `define`-ing each row it wants to supply.
 pub struct ForeignBindings {
     foreigns: ForeignStore,
     trampolines: HashMap<String, Trampoline>,

@@ -272,7 +272,7 @@ fn fits(root: &mut Printer, rest: &mut [Step], available: usize, inside: bool) -
 
 /// The entry point: executes a printer against `formatter`, with `indent_step` spaces added per [`indent`] level. Typically the entire body of a `Display::fmt` impl — every IR crate's `print.rs` builds a [`Printer`] and hands it here.
 ///
-/// Unbounded width: every [`group`] renders flat, so a document without [`line`]s renders exactly as it did before the layout variants existed. [`run_printer_within`] is the width-fitting entry.
+/// Unbounded width: every [`group`] renders flat, so a document without `line`s renders exactly as it did before the layout variants existed. [`run_printer_within`] is the width-fitting entry.
 ///
 /// Iterative by construction: the work stack holds what is left to emit, so a document's nesting costs heap rather than native frames.
 pub fn run_printer<'b, 'c>(
@@ -463,7 +463,7 @@ pub fn line() -> Printer {
     }
 }
 
-/// A [`line`] that vanishes when flat: nothing on one line, a newline when broken.
+/// A `line` that vanishes when flat: nothing on one line, a newline when broken.
 pub fn soft_line() -> Printer {
     Printer::Line {
         flat: String::new(),
@@ -486,7 +486,7 @@ pub fn fill(items: impl IntoIterator<Item = Printer>) -> Printer {
     Printer::Fill(items.into_iter().collect())
 }
 
-/// The width-adaptive unit: renders `printer` flat — every enclosed [`line`] as its flat spelling — when that fits the room left on the line ([`run_printer_within`]), and broken otherwise. Without a width every group is flat, so grouping is behavior-neutral on the unbounded [`run_printer`] path.
+/// The width-adaptive unit: renders `printer` flat — every enclosed `line` as its flat spelling — when that fits the room left on the line ([`run_printer_within`]), and broken otherwise. Without a width every group is flat, so grouping is behavior-neutral on the unbounded [`run_printer`] path.
 pub fn group(printer: Printer) -> Printer {
     Printer::Group(Box::new(printer))
 }

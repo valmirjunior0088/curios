@@ -31,7 +31,7 @@ pub struct EmbeddingDiagnosis {
     pub target: Box<Term>,
     /// Whether any `Monad` witness exists for the source's head: an edge out of a non-monad could never be declared, so suggesting one would be a trap.
     pub source_is_monad: bool,
-    /// A chain of declared edges from source to target, each hop `(key display, declaring module)`. Non-empty means the embeddings exist but were never composed — embeddings never chain automatically. The module rides as its [`Qualifier`] so rendering stays with [`declaring_module`], the one spelling of "declared in …".
+    /// A chain of declared edges from source to target, each hop `(key display, declaring module)`. Non-empty means the embeddings exist but were never composed — embeddings never chain automatically. The module rides as its [`Qualifier`] so rendering stays with `declaring_module`, the one spelling of "declared in …".
     pub chain: Vec<(String, Qualifier)>,
 }
 

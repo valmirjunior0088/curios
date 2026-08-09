@@ -331,7 +331,7 @@ pub fn shift_universe_params(level: &Level, amount: usize) -> Result<Level, Univ
 ///
 /// Universe parameters are innermost-first: beneath the `depth` universe binders this walk has crossed, the scheme's own parameters occupy `depth .. depth + arguments.len()`. An index above that range belongs to an *enclosing* scheme and is shifted down by the parameters this instantiation discharges, exactly as `curios-elab`'s `UniverseSolver::instantiate_at` rewrites the outer references in a nested residual context.
 ///
-/// Instance arity is the owning [`UniverseContext`]'s contract and is checked against its declared `parameter_count`. Rejecting an out-of-range index here instead would misread every legitimate outer-scheme reference as a missing argument.
+/// Instance arity is the owning `UniverseContext`'s contract and is checked against its declared `parameter_count`. Rejecting an out-of-range index here instead would misread every legitimate outer-scheme reference as a missing argument.
 pub fn instantiate_universe_levels_scoped<B: Bound>(
     value: &B,
     arguments: &[Level],
@@ -372,7 +372,7 @@ pub fn universe_metas<B: Bound>(value: &B) -> BTreeSet<UniverseMetaId> {
 pub enum SelfReference {
     /// Still a free variable. Nothing else will supply the instance, so the occurrence must carry one explicitly: a later use site instantiates the stored scheme by substituting the declaration's universe parameters, and a bare variable has none to substitute.
     Free,
-    /// Already captured by an enclosing [`RecGroup`]'s binder, which instantiates its own members through [`RecGroup::instantiate_universes`]. An explicit instance here would be applied a second time when the group is opened, against a group whose parameters that first instantiation already consumed.
+    /// Already captured by an enclosing `RecGroup`'s binder, which instantiates its own members through `RecGroup::instantiate_universes`. An explicit instance here would be applied a second time when the group is opened, against a group whose parameters that first instantiation already consumed.
     Bound,
 }
 
@@ -382,7 +382,7 @@ pub enum SelfReference {
 ///
 /// Nominal normal forms always carry the instance in their own universe vector. Variable occurrences carry it only when they are still [`SelfReference::Free`].
 ///
-/// The per-node rule is [`Term::stamp_declaration_node`]; this driver only carries it through the binders and telescopes an arbitrary [`Bound`] holds. An empty instance is the identity, so a monomorphic declaration pays a single comparison rather than a traversal.
+/// The per-node rule is `Term::stamp_declaration_node`; this driver only carries it through the binders and telescopes an arbitrary [`Bound`] holds. An empty instance is the identity, so a monomorphic declaration pays a single comparison rather than a traversal.
 pub fn stamp_declaration_instance<B: Bound>(
     value: &B,
     names: &BTreeSet<Global>,
@@ -476,7 +476,7 @@ impl<A: Arity, B: Bound> Scope<A, B> {
         }
     }
 
-    /// Fallible [`Self::map_body`], for a rewrite that can reject its input.
+    /// Fallible `Self::map_body`, for a rewrite that can reject its input.
     pub fn try_map_body<E>(&self, f: impl FnOnce(&B) -> Result<B, E>) -> Result<Self, E> {
         Ok(Self {
             arity: self.arity,
@@ -803,7 +803,7 @@ impl Telescope<Term> {
         }
     }
 
-    /// Walk a function/Π telescope (`Func`/`FuncType`): the parameter types and the trailing body/return type. Concrete in `Term` — no collector trait needed. See [`Subterm::collect_construction_names`](super::Subterm::collect_construction_names).
+    /// Walk a function/Π telescope (`Func`/`FuncType`): the parameter types and the trailing body/return type. Concrete in `Term` — no collector trait needed. See `Subterm::collect_construction_names`.
     pub fn collect_construction_names(&self, names: &mut BTreeSet<Global>) {
         match self {
             Telescope::Cons(ty, rest) => {
@@ -911,7 +911,7 @@ impl<B: Bound> Hash for Telescope<B> {
 
 /// All three derivations walk the spine in a loop rather than one native frame per parameter.
 ///
-/// A telescope's length is its written arity, and "written depth is a bound the default stack tolerates" is the assumption this file already retired for `Let`/`Rec` spines — [`Visit::enter_scope`]/[`Visit::leave_scope`] exist for exactly this shape. The spine is the sibling that kept the recursion, which is invisible in authored signatures and unbounded in generated ones.
+/// A telescope's length is its written arity, and "written depth is a bound the default stack tolerates" is the assumption this file already retired for `Let`/`Rec` spines — `Visit::enter_scope`/`Visit::leave_scope` exist for exactly this shape. The spine is the sibling that kept the recursion, which is invisible in authored signatures and unbounded in generated ones.
 impl<B: Bound> Bound for Telescope<B> {
     fn traverse<F>(&self, visit: &mut Visit<F>) -> Self
     where
@@ -1023,7 +1023,7 @@ impl Sharing {
 type Rewrite = Box<dyn FnMut(usize, &Term) -> Option<Term>>;
 type LevelRewrite = Box<dyn FnMut(usize, &Level) -> Level>;
 
-/// The traversal driver threaded through [`Bound::traverse`]: it owns the current binder depth (bumped and restored by `visit_scope` as scopes are crossed), the variable callback, and what the traversal does beyond rewriting variables ([`Mode`]).
+/// The traversal driver threaded through [`Bound::traverse`]: it owns the current binder depth (bumped and restored by `visit_scope` as scopes are crossed), the variable callback, and what the traversal does beyond rewriting variables (`Mode`).
 pub struct Visit<F> {
     term_depth: usize,
     universe_depth: usize,
@@ -1228,7 +1228,7 @@ where
         }
     }
 
-    /// The children [`Mode::Masking`] stood down, in traversal order, leaving the visit ready to mask another node.
+    /// The children `Mode::Masking` stood down, in traversal order, leaving the visit ready to mask another node.
     pub fn take_masked_children(&mut self) -> Vec<Term> {
         match &mut self.mode {
             Mode::Masking { children, .. } => mem::take(children),

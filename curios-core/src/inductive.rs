@@ -45,7 +45,7 @@ pub struct InductDecl {
     pub root: RootId,
     /// Whether construction and elimination are available outside `module`. This metadata is elaboration-only and does not affect erased layouts.
     pub rep_public: bool,
-    /// How this inductive uses each of its `params`, one entry per parameter in declaration order — the fact positivity composes through when a recursive occurrence travels via this type. Computed by [`check_positivity`](crate::check_positivity) after elaboration and carried into the prelude archive so the standard library's are derived once per compiler build. Empty until then; read through [`Self::polarity`], never indexed directly.
+    /// How this inductive uses each of its `params`, one entry per parameter in declaration order — the fact positivity composes through when a recursive occurrence travels via this type. Computed by `check_positivity` after elaboration and carried into the prelude archive so the standard library's are derived once per compiler build. Empty until then; read through [`Self::polarity`], never indexed directly.
     pub polarities: Vec<Polarity>,
 }
 
