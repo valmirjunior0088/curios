@@ -1623,21 +1623,15 @@ impl fmt::Display for Displayed<'_> {
                 goal,
                 solution,
             } => {
-                let goal = goal.spelled(spelling);
-                // `?` itself is the turnstile: hypotheses as `name : type` lines, then `? : type` states the goal and `? = term` its solution — the declaration idiom `name : type = value` split into clauses about `?`. No `? =` line means nothing determined it.
-                write!(f, "goal `?`")?;
-                for (name, type_) in scope {
-                    let shown = match unnameable_binder(name) {
-                        true => "_".to_string(),
-                        false => name.spelled(spelling).to_string(),
-                    };
-                    write!(f, "\n  {shown} : {}", type_.spelled(spelling))?;
-                }
-                write!(f, "\n  ? : {goal}")?;
-                match solution {
-                    Some(solution) => write!(f, "\n  ? = {}", solution.spelled(spelling)),
-                    None => Ok(()),
-                }
+                // Rendered as a one-element batch so the safety-net spelling and the compile path's [`Error::Goals`] can never drift; this form carries no occurrence span or candidates of its own.
+                let report = GoalReport {
+                    span: None,
+                    scope: scope.clone(),
+                    goal: (**goal).clone(),
+                    solution: solution.as_deref().cloned(),
+                    candidates: Vec::new(),
+                };
+                Displayed(&Error::Goals(vec![report]), Rc::clone(spelling)).fmt(f)
             }
             Error::Goals(reports) => {
                 // A report's terms render within a fixed width — the pipeline is pure and stays terminal-blind, so the target is a constant — and a broken term's continuation lines re-indent under the clause body rather than restarting at column zero.
@@ -1837,12 +1831,12 @@ impl fmt::Display for Displayed<'_> {
             Error::FltLiteralOutOfRange { value } => {
                 write!(f, "Flt literal {value} overflows the finite range")
             }
+            // `render_body` intercepts both wrappers before a real spelling ever reaches this match, but these arms must not rely on that: interpolating `{error}` would route through `Display for Error`, silently resetting a nested term's spelling to core's default. Recurse with the spelling in hand instead.
             Error::InDeclaration { name, error } => {
-                write!(f, "while elaborating {name}:\n{error}")
+                writeln!(f, "while elaborating {name}:")?;
+                Displayed(error, Rc::clone(spelling)).fmt(f)
             }
-            Error::Located { error, .. } => {
-                write!(f, "{error}")
-            }
+            Error::Located { error, .. } => Displayed(error, Rc::clone(spelling)).fmt(f),
         }
     }
 }
