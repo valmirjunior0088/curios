@@ -2,13 +2,12 @@ use curios_core::*;
 use {
     crate::*,
     curios_base::{Plicity, Qualifier, RootId},
-    curios_core::Totality,
     std::collections::{BTreeMap, BTreeSet},
 };
 
 /// A declaration's name, from the path a test writes. Fixture-only.
-fn nominal(path: &str) -> curios_core::Global {
-    curios_core::Global::Authored(Qualifier::from([path]))
+fn nominal(path: &str) -> Global {
+    Global::Authored(Qualifier::from([path]))
 }
 
 fn context() -> Context {
@@ -16,8 +15,8 @@ fn context() -> Context {
 }
 
 /// A top-level definition's identity, from the path a test writes — the same name [`definition`] declares it under. Fixture-only.
-fn global(path: &str) -> curios_core::Free {
-    curios_core::Free::global(Qualifier::from([path]))
+fn global(path: &str) -> Free {
+    Free::global(Qualifier::from([path]))
 }
 
 fn nat_lit(n: usize) -> Term {
@@ -742,7 +741,7 @@ fn a_variant_match_binds_payload_without_projections() {
         None,
         Term::intrinsic(Intrinsic::NatType),
         [
-            ("none", Vec::<curios_core::Free>::new(), nat_lit(0)),
+            ("none", Vec::<Free>::new(), nat_lit(0)),
             ("some", vec![x.clone()], Term::free_var(&x)),
         ],
     );
@@ -870,10 +869,7 @@ fn a_mixed_recursive_group_erases_to_a_rec_group() {
     let consume = context.fresh(Some("consume"));
     // rec { produce() = consume; consume = produce } — a dormant knot: the computed member's initializer references the function, and the function body references the computed member (dormant until applied).
     let produce_type = Term::func_type(
-        [(
-            u.clone(),
-            Term::tuple_type(Vec::<(curios_core::Free, Term)>::new()),
-        )],
+        [(u.clone(), Term::tuple_type(Vec::<(Free, Term)>::new()))],
         Term::intrinsic(Intrinsic::NatType),
     );
     let body = Term::rec(
