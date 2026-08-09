@@ -48,7 +48,7 @@ pub fn record_definition_totality(context: &mut Context, definition: &Definition
 
 /// Obligation (T), at the one point a non-productive type-level loop can still be diagnosed: before the type is reduced.
 ///
-/// The whole-module gate runs post-zonk, which is after elaboration has already performed the type-level reduction it exists to make safe. A type that reaches a partial definition and *is productive* survives elaboration and the gate rejects it; one that is not productive spins until the step budget dies, and the program is refused for apparently running out of a resource that no amount of would have helped. This refuses it first, by name, for the reason it is actually wrong.
+/// The whole-module gate runs post-zonk, which is after elaboration has already performed the type-level reduction it exists to make safe. A type that reaches a partial definition and *is productive* survives elaboration and the gate rejects it; one that is not productive spins until the step budget dies, and the program is refused for apparently running out of a resource no amount of which would have helped. This refuses it first, by name, for the reason it is actually wrong.
 ///
 /// It reads the *lowered* type, before elaboration touches it, so the mentions it sees are the written ones. That is why it is an early net rather than a replacement: the post-zonk gate still runs, and still sees everything elaboration produces.
 pub fn check_written_type_totality(
@@ -224,7 +224,7 @@ fn faults(
     // One cache across every position: (V) seeds a literal's derivation once per link, and those links share their tails.
     let mut memo = LocalMemo::new();
     for position in positions {
-        if term_is_locally_partial(context, &position.term, &mut memo) {
+        if locally_partial(context, &position.term, &mut memo) {
             faults.push((position.site.clone(), Fault::Inline));
         }
     }
@@ -408,11 +408,6 @@ pub fn check_rec_item_totality(context: &mut Context, rec: &RecItem) -> Result<(
         .map(|definition| definition.name.to_string())
         .collect::<Vec<_>>();
     check_rec_totality(context, &rec.group, &names)
-}
-/// Whether this term is partial on its own account, with no name to blame: it contains a `rec` group that does not descend, or an exit.
-#[allow(clippy::mutable_key_type)]
-fn term_is_locally_partial(context: &mut Context, term: &Term, memo: &mut LocalMemo) -> bool {
-    locally_partial(context, term, memo)
 }
 
 /// Per-node verdicts for [`locally_partial`], carried across the terms one pass classifies.
