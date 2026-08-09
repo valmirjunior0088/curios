@@ -2,9 +2,9 @@
 
 use {
     super::*,
-    curios_elab::{Context, erase_module},
+    curios_elab::{Context, erase_module_with_prelude},
     curios_ersd::Analysis,
-    curios_prelude::SYNTAX,
+    curios_prelude::{SYNTAX, with_prelude},
     curios_text::{Entrypoint, RootSource},
     curios_wasm::to_bytes,
 };
@@ -1902,7 +1902,9 @@ fn dead_user_definition_is_still_typechecked() {
     assert!(error.contains("mismatch"), "unexpected error: {error}");
 }
 
-/// Elaborate `source` to its meta-free Core module and erase it through the arena path, prelude erased fresh — the Phase-2 erasure vertical.
+/// Elaborate `source` to its meta-free Core module and erase it exactly as `compile_entrypoint` does — the archived erased prelude replayed, the entry's own items erased onto it.
+///
+/// It used to erase *fresh*, passing the whole module to `erase_module`, which worked only because a compiled module carried the prelude spliced into its items. It no longer does, and a from-scratch erasure of the entry alone leaves every prelude name unbound. Replaying is also the path production takes, so what these tests exercise is what actually runs; erasing the prelude fresh is `erase_prelude_prefix`'s job at archive-build time, where a failure panics the build.
 fn erase_to_ir(source: &str, type_: Option<&str>) -> curios_ersd::Module {
     let entrypoint = with_entrypoint_type(source, type_);
     let (module, core_type, _foreigns) = super::elaborate_and_zonk(
@@ -1912,17 +1914,21 @@ fn erase_to_ir(source: &str, type_: Option<&str>) -> curios_ersd::Module {
         &mut |_| {},
     )
     .unwrap();
-    erase_module(
-        &mut Context::with_default_budget(SYNTAX),
-        &module,
-        &core_type,
-    )
+    with_prelude(|prelude| {
+        erase_module_with_prelude(
+            &mut Context::with_default_budget(SYNTAX),
+            prelude.core(),
+            &module,
+            &core_type,
+            prelude.ersd(),
+        )
+    })
     .expect("the elaborated module erases into a verified arena module")
 }
 
 #[test]
 fn arena_erasure_covers_the_fixed_prelude() {
-    // The entrypoint pulls in string formatting, so the erased module carries the whole fixed prelude — every construct the corpus uses — through the arena path, fresh, into one verified module.
+    // The entrypoint pulls in string formatting, so the erased module carries the whole fixed prelude — every construct the corpus uses — replayed onto the arena path and verified as one module.
     let module = erase_to_ir(r#"/std/Fmt/print("hello")"#, None);
     assert!(
         module.functions().len() > 100,

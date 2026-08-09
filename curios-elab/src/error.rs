@@ -993,16 +993,25 @@ impl Error {
     }
 
     /// Render this error with source-style names, shortening global names against `module`'s symbols together with `scope`'s (axis (b)) — the qualified-name universe an error's globals are spelled relative to. Every elaboration error reaching a reader comes through here, so all three axes are set in one place; axis (c) belongs to the whole render rather than any one variant, since every error that prints a term prints it from the raw elaborated spelling.
-    pub fn format_with(&self, module: &Module, scope: &[Global]) -> String {
-        // The universe a name is shortened against is everything a reader could see, which is `module`'s own names *and* what its environment put in scope. A module carries only its own declarations, so a diagnostic naming `/std/Vec/Vec` has to be told the prelude exists or it cannot know the suffix `Vec` is unambiguous.
+    pub fn format_with(&self, module: &Module, scope: Option<&Module>) -> String {
+        // Everything a reader could see: `module`'s own declarations *and* whatever its environment put in scope. A module carries only its own, so both halves of the spelling have to be told the prelude exists — the shortening table to know `Vec` is an unambiguous suffix, and the plicity marks to know `Eq`'s first parameter is implicit.
+        //
+        // Taking the scope as a `Module` rather than as one of its projections is deliberate: this was first fixed by passing a name slice, which repaired the shortening and left the plicities reading a module that no longer holds the prelude. A second projection would have been a second thing to forget.
         let mut symbols = module.module_symbols();
-        symbols.extend_from_slice(scope);
+        let mut plicities = module.nominal_plicities();
+        if let Some(scope) = scope {
+            symbols.extend(scope.module_symbols());
+            for (name, marks) in scope.nominal_plicities() {
+                plicities.entry(name).or_insert(marks);
+            }
+        }
+
         let shorten = Rc::new(build_shorten(&symbols));
         self.render(&Rc::new(
             Spelling::default()
                 .with_pretty_names(self.rename_map(&shorten))
                 .with_short_names(shorten)
-                .with_nominal_plicities(Rc::new(module.nominal_plicities()))
+                .with_nominal_plicities(Rc::new(plicities))
                 .with_erased_universes(),
         ))
     }
