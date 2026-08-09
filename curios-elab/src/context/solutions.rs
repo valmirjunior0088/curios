@@ -143,12 +143,17 @@ impl Solutions {
     }
 
     /// Commit a solution: sets the entry, records the wake signal, and journals for rollback. The façade stamps the write.
+    ///
+    /// An unborn id is the caller's broken contract, not a program error: every minting path births immediately, and the conversion solver's no-birth-record arm refuses before committing. A silent no-op here would surface as an unsolved metavariable far from the violation.
     pub(crate) fn solve(&mut self, id: MetaId, term: Term) {
-        if let Some(Some(entry)) = self.entries.get_mut(id.0) {
-            entry.solution = Some(term);
-            self.newly_solved.push(id);
-            self.solved_log.push(id);
-        }
+        let entry = self
+            .entries
+            .get_mut(id.0)
+            .and_then(Option::as_mut)
+            .expect("a solved metavariable has a birth record");
+        entry.solution = Some(term);
+        self.newly_solved.push(id);
+        self.solved_log.push(id);
     }
 
     /// If `term` is a witness-resolution hole, its provenance and the concept goal it stands for (e.g. `Add(Nat)`). A conversion left stuck between two such holes is really an unresolved witness — reported as one rather than as a bare metavariable mismatch between two anonymous placeholders.
