@@ -338,8 +338,9 @@ pub(super) fn guard_large_elimination(
                     let determined = pinned_by_targets(targets);
 
                     for component in payload {
+                        // Loud rather than a `continue`, because the quiet skip fails open: a component this loop passed over would stand exempt from the information check.
                         let Subterm::Var(var) = &**component else {
-                            continue;
+                            unreachable!("open_payload mints a variable occurrence per binder")
                         };
                         let name = var.unwrap();
 
