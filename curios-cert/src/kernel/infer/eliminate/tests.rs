@@ -700,7 +700,6 @@ fn an_empty_proposition_eliminates_into_a_type() {
 #[test]
 fn a_proposition_with_two_constructors_does_not_eliminate_into_a_type() {
     let mut kernel = kernel();
-    let (left, right) = (binder(10, "l"), binder(11, "r"));
 
     let family = declare(
         &mut kernel,
@@ -716,7 +715,6 @@ fn a_proposition_with_two_constructors_does_not_eliminate_into_a_type() {
         nat_type(),
         vec![("here", Vec::new(), nat(1)), ("there", Vec::new(), nat(2))],
     );
-    let _ = (left, right);
 
     assert_eq!(
         infer(&mut kernel, &term),
