@@ -889,7 +889,7 @@ fn goal_report(context: &Context, id: MetaId) -> Error {
     }
 }
 
-pub(crate) fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
+fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
     // A metavariable node *is* the substitution site: replace it by its solution, recursively zonked (the solution may itself mention solved metavariables).
     if let Subterm::Metavar(Metavar { id, spine, origin }) = &**term {
         // A written goal `?` never splices — the whole point of writing it was the report. Solved or not, error with what elaboration determined: the frozen scope, the goal's type, and the solution when one landed.
