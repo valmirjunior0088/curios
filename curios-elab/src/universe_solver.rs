@@ -3,7 +3,7 @@
 //! Elaboration machinery, not representation: it owns the live inequality store, the difference graph that decides consistency, and the marks that roll a speculative branch back. The levels, contexts, and schemes it solves over live in `universe`, which knows nothing about any of this.
 
 mod constraints;
-use constraints::{ConstraintStore, StoreMark};
+use constraints::{ConstraintStore, StoreMark, StoreScope};
 
 #[cfg(test)]
 mod tests;
@@ -19,7 +19,7 @@ use {
 /// A stable point to which all universe assignments and constraints can be rolled back after a speculative elaboration branch.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct UniverseMark {
-    constraints: StoreMark,
+    constraints: StoreScope,
     solution_log_len: usize,
 }
 
@@ -508,11 +508,17 @@ impl UniverseSolver {
             .and_then(|entry| entry.origin.as_ref())
     }
 
-    pub fn mark(&self) -> UniverseMark {
+    /// Open a speculative scope, which [`UniverseSolver::release`] closes. Paired by hand at every site — see `Context::solution_mark` for why a closure bracket is not used here.
+    pub fn mark(&mut self) -> UniverseMark {
         UniverseMark {
-            constraints: self.constraints.mark(),
+            constraints: self.constraints.enter(),
             solution_log_len: self.solution_log.len(),
         }
+    }
+
+    /// End a scope, keeping whatever it left in place. Restoring rather than decrementing, so closing an outer scope also closes any inner one left open.
+    pub fn release(&mut self, mark: UniverseMark) {
+        self.constraints.release(mark.constraints);
     }
 
     pub(crate) fn state_token(&self) -> UniverseStateToken {
@@ -639,19 +645,24 @@ impl UniverseSolver {
         right: Level,
         origin: UniverseConstraintOrigin,
     ) -> Result<(), UniverseError> {
+        // Hand-paired rather than bracketed: conversion reaches this from inside its own recursion, where a closure body is a stack frame per level.
         let mark = self.mark();
         if let Err(error) = self.default_shape_equal(&left, &right) {
             self.rollback(mark);
+            self.release(mark);
             return Err(error);
         }
         if let Err(error) = self.add_leq(left.clone(), right.clone(), origin.clone()) {
             self.rollback(mark);
+            self.release(mark);
             return Err(error);
         }
         if let Err(error) = self.add_leq(right, left, origin) {
             self.rollback(mark);
+            self.release(mark);
             return Err(error);
         }
+        self.release(mark);
         Ok(())
     }
 
@@ -954,10 +965,12 @@ impl UniverseSolver {
                 .try_for_each(|(meta, floor)| self.assign(meta, floor))
                 .and_then(|()| self.check_consistent())
                 .is_ok();
+            if !committed {
+                self.rollback(mark);
+            }
+            self.release(mark);
             if committed {
                 woken.extend(dependents);
-            } else {
-                self.rollback(mark);
             }
         }
         Ok(woken)
@@ -1091,19 +1104,28 @@ impl UniverseSolver {
                     LevelHead::Meta(_) => None,
                 })
             };
-            let instantiated = UniverseConstraint {
-                lower: substitute(&constraint.lower)?,
-                upper: substitute(&constraint.upper)?,
-                origin: UniverseConstraintOrigin {
-                    kind: UniverseConstraintKind::SchemeInstantiation,
-                    ..constraint.origin.clone()
+            let instantiated = match (substitute(&constraint.lower), substitute(&constraint.upper))
+            {
+                (Ok(lower), Ok(upper)) => UniverseConstraint {
+                    lower,
+                    upper,
+                    origin: UniverseConstraintOrigin {
+                        kind: UniverseConstraintKind::SchemeInstantiation,
+                        ..constraint.origin.clone()
+                    },
                 },
+                (Err(error), _) | (_, Err(error)) => {
+                    self.release(mark);
+                    return Err(error);
+                }
             };
             if let Err(error) = self.add_constraint(instantiated) {
                 self.rollback(mark);
+                self.release(mark);
                 return Err(error);
             }
         }
+        self.release(mark);
         Ok(())
     }
 

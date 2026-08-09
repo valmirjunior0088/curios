@@ -968,8 +968,15 @@ impl Context {
         self.solutions.solve(id, term);
     }
 
+    /// Close a [`Context::solution_mark`] transaction, keeping whatever it left in place. Undoing is [`Context::rollback_solutions`]; a path that undoes still ends here.
+    pub(crate) fn end_solutions(&mut self, mark: SolutionMark) {
+        self.universe_solver.release(mark.universe);
+    }
+
     /// Watermark for [`Context::rollback_solutions`]: how many solutions have been committed so far. Spans both unification stores, which is why it lives here rather than on either.
-    pub(crate) fn solution_mark(&self) -> SolutionMark {
+    ///
+    /// Opens a speculative scope on the universe solver, which [`Context::end_solutions`] closes. The two are paired by hand at every site: a closure bracket in the manner of [`Context::with_frame`] would be safer, but these sit on elaboration's recursions, where its body is a stack frame per level.
+    pub(crate) fn solution_mark(&mut self) -> SolutionMark {
         SolutionMark {
             term_solution_log_len: self.solutions.solved_len(),
             universe: self.universe_solver.mark(),

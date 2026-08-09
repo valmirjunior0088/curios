@@ -174,14 +174,19 @@ pub(crate) fn probe_match(
     candidate: &Term,
     goal: &Term,
 ) -> Result<Probe, Error> {
+    // Hand-paired rather than bracketed by a closure: this sits on the witness-resolution recursion, where a closure body costs a stack frame per nested premise.
     let mark = context.solution_mark();
-    let outcome =
-        convert_outcome(context, &Term::type_ground(), candidate, goal).map_err(|error| {
-            Error::from_reduce(error, || {
+    let outcome = match convert_outcome(context, &Term::type_ground(), candidate, goal) {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            context.end_solutions(mark);
+            return Err(Error::from_reduce(error, || {
                 Error::convert_exhausted(candidate.clone(), goal.clone())
-            })
-        })?;
+            }));
+        }
+    };
     context.rollback_solutions(mark);
+    context.end_solutions(mark);
 
     Ok(match outcome {
         Outcome::Converts => Probe::Yes,
@@ -192,15 +197,19 @@ pub(crate) fn probe_match(
 
 /// Like [`probe_match`], but a positive verdict keeps its solutions — the unification is what pins the goal's open parameters to the candidate's.
 fn commit_match(context: &mut Context, candidate: &Term, goal: &Term) -> Result<Probe, Error> {
+    // Hand-paired for the same reason as [`probe_match`]: this is on the recursion.
     let mark = context.solution_mark();
-    let outcome =
-        convert_outcome(context, &Term::type_ground(), candidate, goal).map_err(|error| {
-            Error::from_reduce(error, || {
+    let outcome = match convert_outcome(context, &Term::type_ground(), candidate, goal) {
+        Ok(outcome) => outcome,
+        Err(error) => {
+            context.end_solutions(mark);
+            return Err(Error::from_reduce(error, || {
                 Error::convert_exhausted(candidate.clone(), goal.clone())
-            })
-        })?;
+            }));
+        }
+    };
 
-    Ok(match outcome {
+    let probe = match outcome {
         Outcome::Converts => Probe::Yes,
         Outcome::Mismatch => {
             context.rollback_solutions(mark);
@@ -210,7 +219,10 @@ fn commit_match(context: &mut Context, candidate: &Term, goal: &Term) -> Result<
             context.rollback_solutions(mark);
             Probe::Undecided
         }
-    })
+    };
+    context.end_solutions(mark);
+
+    Ok(probe)
 }
 
 /// Run the resolution algorithm for `goal`. `origin` anchors spans and parked premise goals. Solutions committed by a successful match stay in force.
@@ -431,6 +443,7 @@ fn instantiate(
     goal: &Term,
     origin: &Term,
 ) -> Result<Resolution, Error> {
+    // Hand-paired for the same reason as [`probe_match`]: this is the recursion, one level per nested premise, and this body is large.
     let mark = context.solution_mark();
     let (signature, universes) =
         context.instantiate_universe_bound(&witness.universe_context, &witness.signature)?;
@@ -495,10 +508,12 @@ fn instantiate(
         Probe::Yes => {}
         Probe::No => {
             context.rollback_solutions(mark);
+            context.end_solutions(mark);
             return Ok(Resolution::NoMatch);
         }
         Probe::Undecided => {
             context.rollback_solutions(mark);
+            context.end_solutions(mark);
             return Ok(Resolution::Flex);
         }
     }
@@ -529,6 +544,7 @@ fn instantiate(
         false => Term::apply_marked(head, args),
     };
 
+    context.end_solutions(mark);
     Ok(Resolution::Solved(term))
 }
 
