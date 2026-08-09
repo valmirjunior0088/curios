@@ -72,7 +72,7 @@ impl Arity for Two {
     }
 }
 
-/// The static three-binder arity — the `(head, tail, ih)` cons arms of the `Bin`/`Lst` eliminators.
+/// The static three-binder arity — the `(head, tail, ih)` cons arms of the `Bin`/`List` eliminators.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",

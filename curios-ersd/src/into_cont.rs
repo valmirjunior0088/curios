@@ -628,7 +628,7 @@ impl Lowerer<'_> {
             } => {
                 let args: Vec<curios_cont::CpsAtom> =
                     operands.iter().map(|&atom| self.lower_atom(atom)).collect();
-                if let SequenceOp::LstBuild = operation {
+                if let SequenceOp::ListBuild = operation {
                     return self.straight(result, rest, terminator, target, move |bound, next| {
                         curios_cont::CpsNode::LetValue {
                             result: bound,
@@ -791,7 +791,7 @@ impl Lowerer<'_> {
                 operands,
             } => {
                 let op = match intrinsic {
-                    Intrinsic::LstMap => curios_cont::CpsIntrinsicCall::LstMap,
+                    Intrinsic::ListMap => curios_cont::CpsIntrinsicCall::ListMap,
                 };
                 // Both representations bind the list first, then the mapper; the operands transcribe in order.
                 let args = operands
@@ -1621,7 +1621,7 @@ fn operation_intrinsic(operation: Operation) -> curios_cont::CpsIntrinsicOp {
     }
 }
 
-/// The Cont intrinsic of a [`SequenceOp`], threading the operand count into the variadic concatenations. `LstBuild` is a list value, never an intrinsic.
+/// The Cont intrinsic of a [`SequenceOp`], threading the operand count into the variadic concatenations. `ListBuild` is a list value, never an intrinsic.
 fn sequence_intrinsic(operation: SequenceOp, arity: usize) -> curios_cont::CpsIntrinsicOp {
     use SequenceOp as S;
     match operation {
@@ -1631,12 +1631,12 @@ fn sequence_intrinsic(operation: SequenceOp, arity: usize) -> curios_cont::CpsIn
         S::BinSlice(grain) => curios_cont::CpsIntrinsicOp::BinSlice(grain),
         S::BinAppend(grain) => curios_cont::CpsIntrinsicOp::BinAppend(grain),
         S::BinConcat(grain) => curios_cont::CpsIntrinsicOp::BinConcat(grain, arity),
-        S::LstLen => curios_cont::CpsIntrinsicOp::LstLen,
-        S::LstGet => curios_cont::CpsIntrinsicOp::LstGet,
-        S::LstSlice => curios_cont::CpsIntrinsicOp::LstSlice,
-        S::LstAppend => curios_cont::CpsIntrinsicOp::LstAppend,
-        S::LstConcat => curios_cont::CpsIntrinsicOp::LstConcat(arity),
-        S::LstBuild => unreachable!("LstBuild is lowered as a list value"),
+        S::ListLen => curios_cont::CpsIntrinsicOp::ListLen,
+        S::ListGet => curios_cont::CpsIntrinsicOp::ListGet,
+        S::ListSlice => curios_cont::CpsIntrinsicOp::ListSlice,
+        S::ListAppend => curios_cont::CpsIntrinsicOp::ListAppend,
+        S::ListConcat => curios_cont::CpsIntrinsicOp::ListConcat(arity),
+        S::ListBuild => unreachable!("ListBuild is lowered as a list value"),
     }
 }
 
@@ -1650,21 +1650,21 @@ fn cell_op(operation: CellOperation) -> curios_cont::CpsCellOp {
 
 fn sequence_len_op(grain: SequenceGrain) -> curios_cont::CpsIntrinsicOp {
     match grain {
-        SequenceGrain::List => curios_cont::CpsIntrinsicOp::LstLen,
+        SequenceGrain::List => curios_cont::CpsIntrinsicOp::ListLen,
         SequenceGrain::Bin(grain) => curios_cont::CpsIntrinsicOp::BinLen(grain),
     }
 }
 
 fn sequence_get_op(grain: SequenceGrain) -> curios_cont::CpsIntrinsicOp {
     match grain {
-        SequenceGrain::List => curios_cont::CpsIntrinsicOp::LstGet,
+        SequenceGrain::List => curios_cont::CpsIntrinsicOp::ListGet,
         SequenceGrain::Bin(grain) => curios_cont::CpsIntrinsicOp::BinGet(grain),
     }
 }
 
 fn sequence_slice_op(grain: SequenceGrain) -> curios_cont::CpsIntrinsicOp {
     match grain {
-        SequenceGrain::List => curios_cont::CpsIntrinsicOp::LstSlice,
+        SequenceGrain::List => curios_cont::CpsIntrinsicOp::ListSlice,
         SequenceGrain::Bin(grain) => curios_cont::CpsIntrinsicOp::BinSlice(grain),
     }
 }

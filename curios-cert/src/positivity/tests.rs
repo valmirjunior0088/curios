@@ -181,10 +181,10 @@ fn reaching_a_bad_cycle_without_joining_it_is_not_a_rejection() {
 // Prelude declarations are sinks of the relation: they cannot mention user code, so a user declaration that travels through one has no way back and the closure terminates without inventing an edge.
 #[test]
 fn a_sink_contributes_no_path_back() {
-    let closed = close(&relation(&[("User", "PreludeLst", Strict)]));
+    let closed = close(&relation(&[("User", "PreludeList", Strict)]));
 
     assert_eq!(diagonal(&closed, "User"), None);
-    assert_eq!(diagonal(&closed, "PreludeLst"), None);
+    assert_eq!(diagonal(&closed, "PreludeList"), None);
 }
 
 #[test]

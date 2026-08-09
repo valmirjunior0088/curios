@@ -2,7 +2,7 @@ pub use /sys/{Flt};
 pub use /sys/Flt/{
     add, sub, mul, div, rem, min, max, eql, neq, lt, gt, lte, gte, neg, abs, sqrt, floor, ceil,
     trunc, nearest, copysign, to_nat, to_int, to_le_bytes, of_le_bytes};
-use /std/{Nat, Byte, Int, Str, Bool, Option, Bytes, Lst, Order, BigNat, Eql, Cmp, Add, Sub, Mul,
+use /std/{Nat, Byte, Int, Str, Bool, Option, Bytes, List, Order, BigNat, Eql, Cmp, Add, Sub, Mul,
     Div, Rem, Show, Ord};
 
 let pow2(k: Nat) -> BigNat =
@@ -32,7 +32,7 @@ rec scale_down(
     | false => (r, mp, mm, k)
     end;
 
-rec generate(r: BigNat, s: BigNat, mp: BigNat, mm: BigNat, even: Bool) -> Lst(Nat) =
+rec generate(r: BigNat, s: BigNat, mp: BigNat, mm: BigNat, even: Bool) -> List(Nat) =
     let r10 = BigNat/mul/small(r, 10);
     let mp10 = BigNat/mul/small(mp, 10);
     let mm10 = BigNat/mul/small(mm, 10);
@@ -52,14 +52,14 @@ rec generate(r: BigNat, s: BigNat, mp: BigNat, mm: BigNat, even: Bool) -> Lst(Na
     | false => [d, ..generate(rem, s, mp10, mm10, even)]
     end;
 
-let digits_to_str(ds: Lst(Nat)) -> Str =
-    Lst/fold(ds, "", (d, acc) => Str/concat(acc, Nat/to_str(d)));
+let digits_to_str(ds: List(Nat)) -> Str =
+    List/fold(ds, "", (d, acc) => Str/concat(acc, Nat/to_str(d)));
 
-rec normalize(ds: Lst(Nat)) -> {Lst(Nat), Bool} =
+rec normalize(ds: List(Nat)) -> {List(Nat), Bool} =
     match ds
     | [] => ([], false)
     | [h, ..t] =>
-        match Lst/len(t) == 0
+        match List/len(t) == 0
         | true => match h == 10 | true => ([0], true) | false => ([h], false) end
         | false =>
             let (rest, carry) = normalize(t);

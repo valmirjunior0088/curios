@@ -62,8 +62,8 @@ pub use Bits/{let Bits};
 pub mod Bytes;
 pub use Bytes/{let Bytes};
 
-pub mod Lst;
-pub use Lst/{let Lst};
+pub mod List;
+pub use List/{let List};
 
 pub mod Cell;
 pub use Cell/{let Cell};

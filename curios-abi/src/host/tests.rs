@@ -107,7 +107,7 @@ fn result_records_keep_their_labels() {
     assert_eq!(labels("env"), ["status", "value"]);
 }
 
-/// Every signature is well-formed: single results ride a name too (the guest type is the bare wire type, but the printer uses the label), and parameter names are unique within a signature. Nothing asserts that `Lst` does not nest — [`WireLeaf`](super::WireLeaf) makes a nested one unrepresentable.
+/// Every signature is well-formed: single results ride a name too (the guest type is the bare wire type, but the printer uses the label), and parameter names are unique within a signature. Nothing asserts that `List` does not nest — [`WireLeaf`](super::WireLeaf) makes a nested one unrepresentable.
 #[test]
 fn signatures_are_well_formed() {
     for function in host_ops().iter() {

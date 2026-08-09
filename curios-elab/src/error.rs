@@ -54,11 +54,11 @@ pub enum Error {
         start: usize,
         end: usize,
     },
-    LstGetOutOfBounds {
+    ListGetOutOfBounds {
         len: usize,
         index: usize,
     },
-    LstSliceOutOfRange {
+    ListSliceOutOfRange {
         len: usize,
         start: usize,
         end: usize,
@@ -142,7 +142,7 @@ pub enum Error {
     NotBoolType {
         head_type: Box<Term>,
     },
-    NotLstType {
+    NotListType {
         head_type: Box<Term>,
     },
     /// `grain` names the packed binary the operation wanted, so the message says `Bits` or `Bytes` — the spellings the surface has. There is no surface type named after the grain-parametric family.
@@ -433,15 +433,15 @@ impl Error {
                 end,
                 span,
             } => Error::BinSliceOutOfRange { len, start, end }.at_opt(span),
-            ReduceError::LstGetOutOfBounds { len, index, span } => {
-                Error::LstGetOutOfBounds { len, index }.at_opt(span)
+            ReduceError::ListGetOutOfBounds { len, index, span } => {
+                Error::ListGetOutOfBounds { len, index }.at_opt(span)
             }
-            ReduceError::LstSliceOutOfRange {
+            ReduceError::ListSliceOutOfRange {
                 len,
                 start,
                 end,
                 span,
-            } => Error::LstSliceOutOfRange { len, start, end }.at_opt(span),
+            } => Error::ListSliceOutOfRange { len, start, end }.at_opt(span),
             ReduceError::DivisionByZero { kind, span } => {
                 Error::DivisionByZero { kind }.at_opt(span)
             }
@@ -580,8 +580,8 @@ impl Error {
         }
     }
 
-    pub(crate) fn not_lst_type<U: Into<Term>>(head_type: U) -> Self {
-        Self::NotLstType {
+    pub(crate) fn not_list_type<U: Into<Term>>(head_type: U) -> Self {
+        Self::NotListType {
             head_type: Box::new(head_type.into()),
         }
     }
@@ -1058,7 +1058,7 @@ impl Error {
             | Self::NotATuple { head_type }
             | Self::NotNatType { head_type }
             | Self::NotBoolType { head_type }
-            | Self::NotLstType { head_type }
+            | Self::NotListType { head_type }
             | Self::NotBinType { head_type, .. }
             | Self::NotAInductType { head_type } => out.push(head_type),
             Self::NotAFunctionType { expected } | Self::NotATupleType { expected } => {
@@ -1293,9 +1293,9 @@ impl fmt::Display for Displayed<'_> {
                 let head_type = head_type.spelled(spelling);
                 write!(f, "expected Bool but got {head_type}")
             }
-            Error::NotLstType { head_type } => {
+            Error::NotListType { head_type } => {
                 let head_type = head_type.spelled(spelling);
-                write!(f, "expected Lst but got {head_type}")
+                write!(f, "expected List but got {head_type}")
             }
             Error::NotBinType { grain, head_type } => {
                 let head_type = head_type.spelled(spelling);
@@ -1816,13 +1816,13 @@ impl fmt::Display for Displayed<'_> {
                     "Bin.slice range {start}..{end} out of range (length {len})"
                 )
             }
-            Error::LstGetOutOfBounds { len, index } => {
-                write!(f, "Lst.get index {index} out of bounds (length {len})")
+            Error::ListGetOutOfBounds { len, index } => {
+                write!(f, "List.get index {index} out of bounds (length {len})")
             }
-            Error::LstSliceOutOfRange { len, start, end } => {
+            Error::ListSliceOutOfRange { len, start, end } => {
                 write!(
                     f,
-                    "Lst.slice range {start}..{end} out of range (length {len})"
+                    "List.slice range {start}..{end} out of range (length {len})"
                 )
             }
             Error::DivisionByZero { kind } => {

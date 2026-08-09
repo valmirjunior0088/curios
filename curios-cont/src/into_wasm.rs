@@ -56,14 +56,14 @@ pub fn into_wasm(module: &CpsModule) -> curios_wasm::Module {
     wasm_module
 }
 
-/// A constructed value: the scalar immediates, packed `Bits`/`Bytes`, `Lst`/`Tpl` aggregates, and `EmissionClosure` naming its definition plus the captures filling its environment. Aggregates are flat — elements are names of already-bound values, never nested `EmissionData` — so constructing one is a single allocation. `EmissionData` is also the payload of module consts, where codegen materialises it into a wasm global.
+/// A constructed value: the scalar immediates, packed `Bits`/`Bytes`, `List`/`Tpl` aggregates, and `EmissionClosure` naming its definition plus the captures filling its environment. Aggregates are flat — elements are names of already-bound values, never nested `EmissionData` — so constructing one is a single allocation. `EmissionData` is also the payload of module consts, where codegen materialises it into a wasm global.
 #[derive(Debug, Clone)]
 pub(crate) enum EmissionData {
     Nat(u32),
     Int(i32),
     Flt(f32),
     Bin(Grain, PackedBin),
-    Lst(Vec<EmissionValueName>),
+    List(Vec<EmissionValueName>),
     Tpl(Vec<EmissionValueName>),
     Closure(EmissionClosureName, Vec<EmissionValueName>),
 }
@@ -71,11 +71,11 @@ pub(crate) enum EmissionData {
 /// One pure intrinsic computation over already-bound values — the expression vocabulary of the IR. Every variant produces exactly one value and has no effects (anything stateful is a [`EmissionTail`], per the IR's atomicity law), which is what licenses the optimizer to fold, dedupe, hoist, and drop `Eval` bindings freely.
 #[derive(Debug, Clone)]
 pub(crate) enum EmissionCode {
-    /// One [`CpsIntrinsicOp`] over its operands, in the order and arity the op fixes — verified at the CPS boundary, so codegen indexes the vector directly. The scalar families (`Nat*`/`Int*`/`Flt*`) lower to the wasm ops they mirror one-for-one; the `Bin*`/`Lst*` families are rope operations codegen services through shared helper functions.
+    /// One [`CpsIntrinsicOp`] over its operands, in the order and arity the op fixes — verified at the CPS boundary, so codegen indexes the vector directly. The scalar families (`Nat*`/`Int*`/`Flt*`) lower to the wasm ops they mirror one-for-one; the `Bin*`/`List*` families are rope operations codegen services through shared helper functions.
     Intrinsic(CpsIntrinsicOp, Vec<EmissionValueName>),
-    // `LstMap(src, f)`: map closure `f` over list `src` into a fresh list of the same length. Codegen lowers it to the shared `$lst/map` rope helper: one allocation, one fill loop applying `f` per slot via `call_ref`.
+    // `ListMap(src, f)`: map closure `f` over list `src` into a fresh list of the same length. Codegen lowers it to the shared `$list/map` rope helper: one allocation, one fill loop applying `f` per slot via `call_ref`.
     /// The list-map runtime helper call: list first, mapper second. Not an [`Intrinsic`](Self::Intrinsic) member because it is no [`CpsIntrinsicOp`] upstream — it runs a closure, so CPS carries it as the call-shaped `CpsIntrinsicCall` with a return continuation, and only structurization collapses it to a pure helper call.
-    LstMap(EmissionValueName, EmissionValueName),
+    ListMap(EmissionValueName, EmissionValueName),
 }
 
 /// The right-hand side of one binding in the emission body.
@@ -178,7 +178,7 @@ pub(crate) enum EmissionTail {
 /// One straight-line body fragment and the sub-structure hanging off it: bindings evaluated in order, the labeled join blocks its jumps enter, and the single [`EmissionTail`] transfer that ends it. All control flow in a body lives in its region tree — a [`EmissionValue`] binding never branches, which is what the optimizer's freedom to fold, dedupe, and reorder bindings rests on.
 #[derive(Debug, Clone)]
 pub(crate) struct EmissionBody {
-    /// Closure shells reserved before their captures are filled, so a self- or mutually-recursive capture can name the shell. Only closures need this; cyclic tuples/lists are rejected upstream (`into_cont`), which keeps `tpl`/`lst` immutable.
+    /// Closure shells reserved before their captures are filled, so a self- or mutually-recursive capture can name the shell. Only closures need this; cyclic tuples/lists are rejected upstream (`into_cont`), which keeps `tpl`/`list` immutable.
     pub(crate) shells: Vec<(EmissionValueName, EmissionClosureName)>,
     pub(crate) values: Vec<(EmissionValueName, EmissionValue)>,
     pub(crate) blocks: Vec<(EmissionBlockName, EmissionBlock)>,

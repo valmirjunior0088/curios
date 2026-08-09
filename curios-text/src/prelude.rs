@@ -76,11 +76,11 @@ fn record(fields: Vec<(&str, Term)>) -> Term {
     .into()
 }
 
-fn lst_of(elem: Term) -> Term {
-    intrinsic(Intrinsic::LstType(elem))
+fn list_of(elem: Term) -> Term {
+    intrinsic(Intrinsic::ListType(elem))
 }
 
-// A single-argument function type `(domain) -> output`, for higher-order intrinsics (the `f` of `Lst/map`).
+// A single-argument function type `(domain) -> output`, for higher-order intrinsics (the `f` of `List/map`).
 fn fn_of(domain: Term, output: Term) -> Term {
     Subterm::FuncType(FuncType {
         params: vec![FuncTypeParam {
@@ -195,7 +195,7 @@ fn wire_type(type_: &WireType) -> Term {
         WireType::Bool => bool_(),
         WireType::Bytes => bin(Grain::X),
         WireType::Handle => handle(),
-        WireType::Lst(element) => lst_of(wire_type(&(*element).into())),
+        WireType::List(element) => list_of(wire_type(&(*element).into())),
     }
 }
 
@@ -457,37 +457,37 @@ fn bin_ops(grain: Grain) -> Vec<TopItem> {
     ]
 }
 
-fn lst_ops() -> Vec<TopItem> {
+fn list_ops() -> Vec<TopItem> {
     vec![
         pub_fn_marked(
             "len",
             vec![
                 (Plicity::Implicit, "T", type_()),
-                (Plicity::Explicit, "a", lst_of(name("T"))),
+                (Plicity::Explicit, "a", list_of(name("T"))),
             ],
             nat(),
-            intrinsic(Intrinsic::LstLen(name("T"), name("a"))),
+            intrinsic(Intrinsic::ListLen(name("T"), name("a"))),
         ),
         pub_fn_marked(
             "get",
             vec![
                 (Plicity::Implicit, "T", type_()),
-                (Plicity::Explicit, "a", lst_of(name("T"))),
+                (Plicity::Explicit, "a", list_of(name("T"))),
                 (Plicity::Explicit, "i", nat()),
             ],
             name("T"),
-            intrinsic(Intrinsic::LstGet(name("T"), name("a"), name("i"))),
+            intrinsic(Intrinsic::ListGet(name("T"), name("a"), name("i"))),
         ),
         pub_fn_marked(
             "slice",
             vec![
                 (Plicity::Implicit, "T", type_()),
-                (Plicity::Explicit, "a", lst_of(name("T"))),
+                (Plicity::Explicit, "a", list_of(name("T"))),
                 (Plicity::Explicit, "s", nat()),
                 (Plicity::Explicit, "e", nat()),
             ],
-            lst_of(name("T")),
-            intrinsic(Intrinsic::LstSlice(
+            list_of(name("T")),
+            intrinsic(Intrinsic::ListSlice(
                 name("T"),
                 name("a"),
                 name("s"),
@@ -498,32 +498,32 @@ fn lst_ops() -> Vec<TopItem> {
             "append",
             vec![
                 (Plicity::Implicit, "T", type_()),
-                (Plicity::Explicit, "a", lst_of(name("T"))),
+                (Plicity::Explicit, "a", list_of(name("T"))),
                 (Plicity::Explicit, "x", name("T")),
             ],
-            lst_of(name("T")),
-            intrinsic(Intrinsic::LstAppend(name("T"), name("a"), name("x"))),
+            list_of(name("T")),
+            intrinsic(Intrinsic::ListAppend(name("T"), name("a"), name("x"))),
         ),
         pub_fn_marked(
             "concat",
             vec![
                 (Plicity::Implicit, "T", type_()),
-                (Plicity::Explicit, "a", lst_of(name("T"))),
-                (Plicity::Explicit, "b", lst_of(name("T"))),
+                (Plicity::Explicit, "a", list_of(name("T"))),
+                (Plicity::Explicit, "b", list_of(name("T"))),
             ],
-            lst_of(name("T")),
-            intrinsic(Intrinsic::LstConcat(name("T"), name("a"), name("b"))),
+            list_of(name("T")),
+            intrinsic(Intrinsic::ListConcat(name("T"), name("a"), name("b"))),
         ),
         pub_fn_marked(
             "map",
             vec![
                 (Plicity::Implicit, "A", type_()),
                 (Plicity::Implicit, "B", type_()),
-                (Plicity::Explicit, "a", lst_of(name("A"))),
+                (Plicity::Explicit, "a", list_of(name("A"))),
                 (Plicity::Explicit, "f", fn_of(name("A"), name("B"))),
             ],
-            lst_of(name("B")),
-            intrinsic(Intrinsic::LstMap(
+            list_of(name("B")),
+            intrinsic(Intrinsic::ListMap(
                 name("A"),
                 name("B"),
                 name("a"),
@@ -719,7 +719,7 @@ fn host_operations(subjects: Vec<(String, Vec<TopItem>)>) -> Vec<TopItem> {
     items
 }
 
-/// Construct the generated `/sys` surface module from the authoritative host function store. Each type module (`Nat`, …, `Handle`, `Lst`, `Cell`, `Io`) holds its type and operations and hoists the type to the `/sys` root; each host-operation subject the store names becomes a module of its own (`file`, `socket`, `dns`, …) except `Handle`'s, which join their type module; then the `status`/`poll`/`mode` code modules. Exposed for the build-time prelude artifact builder; production compilation never lowers it at runtime.
+/// Construct the generated `/sys` surface module from the authoritative host function store. Each type module (`Nat`, …, `Handle`, `List`, `Cell`, `Io`) holds its type and operations and hoists the type to the `/sys` root; each host-operation subject the store names becomes a module of its own (`file`, `socket`, `dns`, …) except `Handle`'s, which join their type module; then the `status`/`poll`/`mode` code modules. Exposed for the build-time prelude artifact builder; production compilation never lowers it at runtime.
 pub fn sys_module(foreigns: &ForeignStore) -> Module {
     let mut subjects = host_subjects(foreigns);
     let handle_host = take_subject(&mut subjects, "Handle");
@@ -758,13 +758,13 @@ pub fn sys_module(foreigns: &ForeignStore) -> Module {
         ),
         pub_use("Handle"),
         pub_mod(
-            "Lst",
+            "List",
             with_type(
-                pub_fn("Lst", vec![("T", type_())], type_(), lst_of(name("T"))),
-                lst_ops(),
+                pub_fn("List", vec![("T", type_())], type_(), list_of(name("T"))),
+                list_ops(),
             ),
         ),
-        pub_use("Lst"),
+        pub_use("List"),
         pub_mod(
             "Cell",
             with_type(

@@ -1,7 +1,7 @@
 pub use /syn/{Str};
 pub use /syn/Str/{Class, classify, Scan, step, Utf8, Valid};
 use /syn/{True, False};
-use /std/{Char, Nat, Byte, Bytes, Bool, Lst, Option, Eql, Show};
+use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Eql, Show};
 
 -- The scan-witness machinery every operation below rests on.
 pub mod utf8;
@@ -36,8 +36,8 @@ let take_n(n: Nat, s: Str) -> Str =
 pub let slice(s: Str, x: Nat, y: Nat) -> Str =
     take_n(y - x, drop_n(x, s));
 
-pub let flatten(parts: Lst(Str)) -> Str =
-    Lst/fold(parts, "", (p, acc) => concat(acc, p));
+pub let flatten(parts: List(Str)) -> Str =
+    List/fold(parts, "", (p, acc) => concat(acc, p));
 
 pub let eql(a: Str, b: Str) -> Bool =
     Bytes/eql(to_bytes(a), to_bytes(b));
@@ -54,7 +54,7 @@ pub let eql_ascii_ci(a: Str, b: Str) -> Bool =
     Bytes/eql(lower_ascii_bytes(to_bytes(a)), lower_ascii_bytes(to_bytes(b)));
 
 pub let repeat(s: Str, n: Nat) -> Str =
-    Lst/balanced(n, "", (i) => s, (l, r) => concat(l, r));
+    List/balanced(n, "", (i) => s, (l, r) => concat(l, r));
 
 pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
     (match s.bytes: (b) => (sc: Scan, valid: Utf8(sc, b), acc: {A, Nat}) -> {A, Nat}
@@ -156,11 +156,11 @@ pub let at(s: Str, i: Nat, ok: Nat/Lt(i, len(s))) -> Char =
         i,
         lte_succ_of_lt(i, count_scalars(Scan/lead(), s.bytes), ok));
 
-pub let join(sep: Str, parts: Lst(Str)) -> Str =
-    Lst/balanced(
-        Lst/len(parts),
+pub let join(sep: Str, parts: List(Str)) -> Str =
+    List/balanced(
+        List/len(parts),
         "",
-        (i) => Option/unwrap_or(Lst/get(parts, i), ""),
+        (i) => Option/unwrap_or(List/get(parts, i), ""),
         (l, r) => concat(concat(l, sep), r));
 
 let trim_bounds(s: Str) -> {Nat, Nat} =

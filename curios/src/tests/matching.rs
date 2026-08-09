@@ -316,12 +316,12 @@ fn nested_nat_pattern_dispatches_by_shape() {
     assert_eq!(run(source), b"2");
 }
 
-// An `Lst` literal leaf (`[]`/`[h, ..t]`) nested inside a tuple field.
+// An `List` literal leaf (`[]`/`[h, ..t]`) nested inside a tuple field.
 #[test]
-fn nested_lst_pattern_dispatches_by_shape() {
+fn nested_list_pattern_dispatches_by_shape() {
     let source = r#"
-        use /std/{Nat, Lst, Handle};
-        let f(p : { Nat, Lst(Nat) }) -> Nat =
+        use /std/{Nat, List, Handle};
+        let f(p : { Nat, List(Nat) }) -> Nat =
             match p
             | (x, []) => x
             | (x, [h, ..t]) => h
@@ -386,7 +386,7 @@ fn matrix_match_rejects_incomplete_nat_pattern() {
     );
 }
 
-// A dependent motive is legal on a top-level `Nat` head too, not just a `Ctor` head — `BoolMatch`/`NatMatch::Induction`/`LstMatch`/`BinMatch` all already support the full motive ladder flat today. The arms are written succ-case-first: written zero-then-succ (in that literal order) is valid input to the pre-existing flat `parse_nat_match` grammar too, which would swallow the source before it ever reached the matrix compiler — Path A gives rows no priority order, so reordering doesn't change the meaning, only which parser accepts it.
+// A dependent motive is legal on a top-level `Nat` head too, not just a `Ctor` head — `BoolMatch`/`NatMatch::Induction`/`ListMatch`/`BinMatch` all already support the full motive ladder flat today. The arms are written succ-case-first: written zero-then-succ (in that literal order) is valid input to the pre-existing flat `parse_nat_match` grammar too, which would swallow the source before it ever reached the matrix compiler — Path A gives rows no priority order, so reordering doesn't change the meaning, only which parser accepts it.
 #[test]
 fn matrix_match_allows_dependent_motive_on_nat_head() {
     let source = r#"
@@ -551,8 +551,8 @@ fn choose_bind_arm_destructures_or_falls_through() {
 #[test]
 fn choose_nested_bind_shares_the_fallthrough() {
     let source = r#"
-        use /std/{Option, Lst, Nat, Bytes, rand, Handle};
-        let f(o : Option(Lst(Nat))) -> Nat =
+        use /std/{Option, List, Nat, Bytes, rand, Handle};
+        let f(o : Option(List(Nat))) -> Nat =
             choose
             | some([h, ..t]) = o => h + 1
             | _ => 99

@@ -343,21 +343,21 @@ fn parse_top_foreign_zero_arg() {
     );
 }
 
-/// `Lst` does not nest. Codegen forces and embeds exactly one level at the host boundary — a second level would hand the host rope structs where flat arrays belong — so `WireLeaf` keeps the grammar to what codegen implements, and the parser rejects the nested spelling outright rather than accepting a signature nothing can lower.
+/// `List` does not nest. Codegen forces and embeds exactly one level at the host boundary — a second level would hand the host rope structs where flat arrays belong — so `WireLeaf` keeps the grammar to what codegen implements, and the parser rejects the nested spelling outright rather than accepting a signature nothing can lower.
 #[test]
-fn parse_top_foreign_rejects_nested_lst() {
+fn parse_top_foreign_rejects_nested_list() {
     assert!(
-        "foreign frobnicate : (Lst(Lst(Nat))) -> Bool;"
+        "foreign frobnicate : (List(List(Nat))) -> Bool;"
             .parse::<Module>()
             .is_err()
     );
 }
 
-/// One level of `Lst` still parses, over each leaf the wire admits.
+/// One level of `List` still parses, over each leaf the wire admits.
 #[test]
-fn parse_top_foreign_lst_of_leaf() {
+fn parse_top_foreign_list_of_leaf() {
     assert_eq!(
-        "foreign frobnicate : (Lst(Bytes), Lst(Handle)) -> Lst(Nat);"
+        "foreign frobnicate : (List(Bytes), List(Handle)) -> List(Nat);"
             .parse::<Module>()
             .unwrap()
             .items,
@@ -366,10 +366,10 @@ fn parse_top_foreign_lst_of_leaf() {
             label: "frobnicate".to_string(),
             signature: WireSignature {
                 params: vec![
-                    ("a0".to_string(), WireType::Lst(WireLeaf::Bytes)),
-                    ("a1".to_string(), WireType::Lst(WireLeaf::Handle)),
+                    ("a0".to_string(), WireType::List(WireLeaf::Bytes)),
+                    ("a1".to_string(), WireType::List(WireLeaf::Handle)),
                 ],
-                results: vec![("_".to_string(), WireType::Lst(WireLeaf::Nat))],
+                results: vec![("_".to_string(), WireType::List(WireLeaf::Nat))],
             },
         })]
     );
@@ -386,7 +386,7 @@ fn foreign_declaration_round_trips() {
         "foreign frobnicate : (Nat, Bytes) -> Nat;",
         "pub foreign frobnicate : (Nat, Bytes) -> Nat;",
         "foreign clock : Nat;",
-        "foreign frobnicate : (Lst(Bytes), Lst(Handle)) -> Lst(Nat);",
+        "foreign frobnicate : (List(Bytes), List(Handle)) -> List(Nat);",
     ] {
         let module = source.parse::<Module>().unwrap();
 
@@ -584,13 +584,13 @@ fn bare_type_names_parse_as_names() {
 #[test]
 fn parse_use_brace_group() {
     assert_eq!(
-        "use /std/{Bin, Lst};".parse::<Module>().unwrap().items,
+        "use /std/{Bin, List};".parse::<Module>().unwrap().items,
         vec![TopItem::Use(TopUse {
             vis_pub: false,
             name: Name::new(true, Qualifier::from(["std".to_string()])),
             group: UseGroup::Named(vec![
                 GroupItem::Both("Bin".to_string()),
-                GroupItem::Both("Lst".to_string()),
+                GroupItem::Both("List".to_string()),
             ]),
         })]
     );
@@ -599,7 +599,7 @@ fn parse_use_brace_group() {
 #[test]
 fn parse_use_brace_group_kinds() {
     assert_eq!(
-        "use /std/{mod Bin, let Nat, Lst};"
+        "use /std/{mod Bin, let Nat, List};"
             .parse::<Module>()
             .unwrap()
             .items,
@@ -609,7 +609,7 @@ fn parse_use_brace_group_kinds() {
             group: UseGroup::Named(vec![
                 GroupItem::Mod("Bin".to_string()),
                 GroupItem::Let("Nat".to_string()),
-                GroupItem::Both("Lst".to_string()),
+                GroupItem::Both("List".to_string()),
             ]),
         })]
     );
@@ -1489,7 +1489,7 @@ fn parse_function_field_sugar_in_values() {
 #[test]
 fn positional_fields_that_start_like_the_sugar_backtrack() {
     // A positional application field is not the sugar: without `->` / `=` the sugared alternative backtracks and the field re-parses as a term.
-    let term = "{ Lst(Nat), Nat }".parse::<Term>().unwrap();
+    let term = "{ List(Nat), Nat }".parse::<Term>().unwrap();
     let Subterm::TupleType(TupleType { fields }) = term.as_subterm() else {
         panic!("expected a tuple type");
     };
@@ -1610,7 +1610,7 @@ fn spread_entries_are_struct_literal_only() {
 }
 
 #[test]
-fn lst_literal_spread_entries() {
+fn list_literal_spread_entries() {
     let name = |n: &str| -> Term { Subterm::Name(Name::from([n.to_string()])).into() };
     let nat = |n: usize| -> Term {
         Subterm::NumLit(NumLit {
@@ -1625,18 +1625,18 @@ fn lst_literal_spread_entries() {
     // Spreads splice anywhere, any count; plain elements stay `Elem`.
     assert_eq!(
         "[1, ..xs, 2]".parse::<Term>().unwrap(),
-        Subterm::Intrinsic(Intrinsic::Lst(vec![
-            LstEntry::Elem(nat(1)),
-            LstEntry::Spread(name("xs")),
-            LstEntry::Elem(nat(2)),
+        Subterm::Intrinsic(Intrinsic::List(vec![
+            ListEntry::Elem(nat(1)),
+            ListEntry::Spread(name("xs")),
+            ListEntry::Elem(nat(2)),
         ]))
         .into()
     );
     assert_eq!(
         "[..xs, ..ys]".parse::<Term>().unwrap(),
-        Subterm::Intrinsic(Intrinsic::Lst(vec![
-            LstEntry::Spread(name("xs")),
-            LstEntry::Spread(name("ys")),
+        Subterm::Intrinsic(Intrinsic::List(vec![
+            ListEntry::Spread(name("xs")),
+            ListEntry::Spread(name("ys")),
         ]))
         .into()
     );
@@ -1948,7 +1948,7 @@ fn matrix_match_round_trips() {
         // Nat literal leaves nested inside a constructor payload, with and without the optional induction hypothesis.
         "match o | some(0) => y | some(n + 1; ih) => y | none() => y end",
         "match o | some(0) => y | some(n + 1) => n | none() => y end",
-        // Lst literal leaves nested inside a tuple field, with and without the optional induction hypothesis.
+        // List literal leaves nested inside a tuple field, with and without the optional induction hypothesis.
         "match p | (x, []) => x | (x, [h, ..t]) => h end",
         "match p | (x, [h, ..t]; ih) => h | (x, []) => x end",
         // Bits and Bytes literal leaves nested inside a constructor payload.
@@ -2206,8 +2206,8 @@ fn concept_out_marker_is_rejected() {
 fn parse_witness_item() {
     // A premised witness: an `@` binder, a `use` premise, an explicit `use <term>` fill for the concept's superclass field, and the definition sugar (`cmp(a, b) = ...`).
     let source = "\
-        satisfy (@A : Type, use Ord(A)) => Ord(Lst(A)) { \
-            use eql_lst, \
+        satisfy (@A : Type, use Ord(A)) => Ord(List(A)) { \
+            use eql_list, \
             cmp(a, b) = Order/lt() \
         } u";
     let entrypoint = source.parse::<Entrypoint>().unwrap();
@@ -2223,7 +2223,7 @@ fn parse_witness_item() {
     assert_eq!(witness.params[0].plicity, Plicity::Implicit);
     assert_eq!(witness.params[1].plicity, Plicity::Witness);
 
-    // The definition-sugar field keeps its written parameter list; the value slot holds the body, and only the struct-literal lowering builds the lambda (via `TupleField::desugared_value`). The `use eql_lst` entry fills the concept's `use`-marked field without naming it.
+    // The definition-sugar field keeps its written parameter list; the value slot holds the body, and only the struct-literal lowering builds the lambda (via `TupleField::desugared_value`). The `use eql_list` entry fills the concept's `use`-marked field without naming it.
     assert_eq!(witness.entries.len(), 2);
     let WitnessEntry::Use(fill) = &witness.entries[0] else {
         panic!("expected a use fill");
@@ -2284,7 +2284,7 @@ fn concept_witness_use_round_trip() {
         "pub concept Ord(A : Type) : Type { use Eql(A), cmp : A } u",
         "concept Convert(A : Type, B : Type) : Type { convert : A } u",
         "satisfy Show(Nat) { show = f } u",
-        "satisfy (@A : Type, use Show(A)) => Show(Lst(A)) { show = g } u",
+        "satisfy (@A : Type, use Show(A)) => Show(List(A)) { show = g } u",
         "f(use dict, x)",
         "(@A : Type, use Show(A), x : A) -> A",
     ] {
@@ -2300,11 +2300,11 @@ fn concept_witness_use_round_trip() {
 #[test]
 fn parameterized_witness_prints_separator_syntax() {
     // The witness body is an always-broken brace block, so printing canonicalizes the flat source form.
-    let source = "satisfy (@A : Type, use Show(A)) => Show(Lst(A)) { show = g }\nu";
+    let source = "satisfy (@A : Type, use Show(A)) => Show(List(A)) { show = g }\nu";
     let entrypoint = source.parse::<Entrypoint>().unwrap();
     assert_eq!(
         entrypoint.to_string(),
-        "satisfy (@A: Type, use Show(A)) => Show(Lst(A)) {\n    show = g,\n}\nu"
+        "satisfy (@A: Type, use Show(A)) => Show(List(A)) {\n    show = g,\n}\nu"
     );
 }
 

@@ -3,7 +3,7 @@ use {
     super::{Context, MatchCompiler},
     crate::{
         BinSegment, Choose, ChooseTest, Error, Field, FuncParam, Intrinsic, Let, LetBinding,
-        LstEntry, Name, Nat, NatLiteral, NumLit, Pattern, PatternField, Rec, StructLitEntry,
+        ListEntry, Name, Nat, NatLiteral, NumLit, Pattern, PatternField, Rec, StructLitEntry,
         Subterm, Syn, Term,
     },
     curios_base::{Grain, PackedBin, Plicity, Qualifier, Span, SyntaxName},
@@ -616,9 +616,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 self.collect(&infix.left, binds)?,
                 self.collect(&infix.right, binds)?,
             ),
-            // An `Lst` literal's elements and spread operands hoist their bangs into this region, like an application's arguments.
-            Subterm::Intrinsic(Intrinsic::Lst(entries)) => curios_core::Term::intrinsic(
-                self.lower_lst_literal(entries, |term| self.collect(term, binds))?,
+            // An `List` literal's elements and spread operands hoist their bangs into this region, like an application's arguments.
+            Subterm::Intrinsic(Intrinsic::List(entries)) => curios_core::Term::intrinsic(
+                self.lower_list_literal(entries, |term| self.collect(term, binds))?,
             ),
             // A `Bits`/`Bytes` literal's spread operands hoist likewise (a spread-free literal has no subterms and lowers unchanged).
             Subterm::Intrinsic(Intrinsic::Bin(grain, segments)) => {
@@ -823,7 +823,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         tail
     }
 
-    /// A `Nat` succ or `Lst`/`Bin` cons arm's induction-hypothesis binder: an omitted `; ih` (`None` — there is no source name at all) mints an unwritten binder; a written one is minted with its spelling as the hint.
+    /// A `Nat` succ or `List`/`Bin` cons arm's induction-hypothesis binder: an omitted `; ih` (`None` — there is no source name at all) mints an unwritten binder; a written one is minted with its spelling as the hint.
     pub(super) fn cons_ih_binder(&self, ih_label: &Option<String>) -> Binder {
         match ih_label {
             Some(name) => (
@@ -860,8 +860,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
     /// Flush the pending elements onto `operands`.
     ///
-    /// A single element following an operand is an *append* onto it: the surface wrote one generator, and `LstAppend` is what one generator is — the same reading `\.` takes on the packed side, so `[..xs, y]` and `x[..xs, y]` lower alike. Two or more go into an `Lst` chunk, which the carrier holds directly; the packed literal chunks its atoms the same way whenever it can represent them, and reaches for `BinAppend` only where it cannot.
-    fn flush_lst_run(
+    /// A single element following an operand is an *append* onto it: the surface wrote one generator, and `ListAppend` is what one generator is — the same reading `\.` takes on the packed side, so `[..xs, y]` and `x[..xs, y]` lower alike. Two or more go into an `List` chunk, which the carrier holds directly; the packed literal chunks its atoms the same way whenever it can represent them, and reaches for `BinAppend` only where it cannot.
+    fn flush_list_run(
         &self,
         operands: &mut Vec<curios_core::Term>,
         run: &mut Vec<curios_core::Term>,
@@ -874,20 +874,20 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 let base = operands.pop().expect("the operand just matched");
                 let elem = run.pop().expect("the run just measured one");
                 operands.push(curios_core::Term::intrinsic(
-                    curios_core::Intrinsic::lst_append(element(), base, elem),
+                    curios_core::Intrinsic::list_append(element(), base, elem),
                 ));
             }
-            _ => operands.push(curios_core::Term::intrinsic(curios_core::Intrinsic::Lst(
+            _ => operands.push(curios_core::Term::intrinsic(curios_core::Intrinsic::List(
                 element(),
                 std::mem::take(run),
             ))),
         }
     }
 
-    /// Lowers a list literal's entries. A spread-free literal lowers to a plain `Lst` — exactly the pre-spread lowering, `[]` included. With spreads, elements join the literal through [`Self::flush_lst_run`] and the whole becomes an n-ary `LstConcat`; its element-type slot is a fresh metavar (an implicit the literal cannot name), solved by elaboration — bidirectionally from the expected type when checking (see the `LstConcat` case in `curios_elab`'s `elaborate_intrinsic`). `lower` is the per-term lowering — [`Self::term`] on the plain path, the bang-collector on the region path — so both share this grouping.
-    pub(super) fn lower_lst_literal(
+    /// Lowers a list literal's entries. A spread-free literal lowers to a plain `List` — exactly the pre-spread lowering, `[]` included. With spreads, elements join the literal through [`Self::flush_list_run`] and the whole becomes an n-ary `ListConcat`; its element-type slot is a fresh metavar (an implicit the literal cannot name), solved by elaboration — bidirectionally from the expected type when checking (see the `ListConcat` case in `curios_elab`'s `elaborate_intrinsic`). `lower` is the per-term lowering — [`Self::term`] on the plain path, the bang-collector on the region path — so both share this grouping.
+    pub(super) fn lower_list_literal(
         &self,
-        entries: &[LstEntry],
+        entries: &[ListEntry],
         mut lower: impl FnMut(&Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Intrinsic, Error> {
         // The literal's element-type slot: an implicit the literal cannot name, minted fresh and solved by elaboration — bidirectionally from the expected type when checking, from the elements otherwise.
@@ -898,31 +898,31 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
         for entry in entries {
             match entry {
-                LstEntry::Elem(term) => run.push(lower(term)?),
-                LstEntry::Spread(term) => {
-                    self.flush_lst_run(&mut operands, &mut run);
+                ListEntry::Elem(term) => run.push(lower(term)?),
+                ListEntry::Spread(term) => {
+                    self.flush_list_run(&mut operands, &mut run);
                     operands.push(lower(term)?);
                 }
             }
         }
 
         if operands.is_empty() {
-            return Ok(curios_core::Intrinsic::Lst(element(), run));
+            return Ok(curios_core::Intrinsic::List(element(), run));
         }
 
-        self.flush_lst_run(&mut operands, &mut run);
+        self.flush_list_run(&mut operands, &mut run);
 
         match operands.len() {
             // A lone list-shaped operand is the value itself; the concatenation would only be normalised away. Only the family the literal builds may collapse: any other lone operand keeps its wrapper, which is what makes elaboration check a spread (`[..b]`) against a list type instead of adopting the operand's own — `[..true]` once collapsed to `true` and typechecked as `Bool`.
             1 => match &*operands[0] {
                 curios_core::Subterm::Intrinsic(
-                    intrinsic @ (curios_core::Intrinsic::Lst(..)
-                    | curios_core::Intrinsic::LstAppend(..)
-                    | curios_core::Intrinsic::LstConcat(..)),
+                    intrinsic @ (curios_core::Intrinsic::List(..)
+                    | curios_core::Intrinsic::ListAppend(..)
+                    | curios_core::Intrinsic::ListConcat(..)),
                 ) => Ok(intrinsic.clone()),
-                _ => Ok(curios_core::Intrinsic::LstConcat(element(), operands)),
+                _ => Ok(curios_core::Intrinsic::ListConcat(element(), operands)),
             },
-            _ => Ok(curios_core::Intrinsic::LstConcat(element(), operands)),
+            _ => Ok(curios_core::Intrinsic::ListConcat(element(), operands)),
         }
     }
 
@@ -971,7 +971,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         folded
     }
 
-    /// The `Bits`/`Bytes` sibling of [`Self::lower_lst_literal`]: a spread-free literal lowers to one packed value, and atom and spread segments splice into an n-ary `BinConcat` (the shared internal intrinsic has no element-type slot).
+    /// The `Bits`/`Bytes` sibling of [`Self::lower_list_literal`]: a spread-free literal lowers to one packed value, and atom and spread segments splice into an n-ary `BinConcat` (the shared internal intrinsic has no element-type slot).
     ///
     /// An atom is the free monoid's generator at a value the parser cannot know, so it lowers to a `BinAppend` onto whatever precedes it, with no carve-out: `x[\48, b]` is one append rather than a two-operand concatenation, `x[..acc, b]` is the append it spells out, and adjacent atoms chain. Leading a literal it appends onto the empty packed value — the singleton spelling `curios_elab`'s packed-match refinement builds for a cons scrutinee, so `b[h, ..t]` meets a refined motive without unfolding anything.
     pub(super) fn lower_bin_literal(
@@ -1301,33 +1301,35 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Intrinsic::BinConcat(grain, left, right) => {
                 curios_core::Intrinsic::bin_concat(*grain, [self.term(left)?, self.term(right)?])
             }
-            Intrinsic::LstType(inner) => curios_core::Intrinsic::lst_type(self.term(inner)?),
-            Intrinsic::Lst(entries) => self.lower_lst_literal(entries, |term| self.term(term))?,
-            Intrinsic::LstLen(ty, inner) => {
-                curios_core::Intrinsic::lst_len(self.term(ty)?, self.term(inner)?)
+            Intrinsic::ListType(inner) => curios_core::Intrinsic::list_type(self.term(inner)?),
+            Intrinsic::List(entries) => self.lower_list_literal(entries, |term| self.term(term))?,
+            Intrinsic::ListLen(ty, inner) => {
+                curios_core::Intrinsic::list_len(self.term(ty)?, self.term(inner)?)
             }
-            Intrinsic::LstGet(ty, list, index) => {
-                curios_core::Intrinsic::lst_get(self.term(ty)?, self.term(list)?, self.term(index)?)
-            }
-            Intrinsic::LstSlice(ty, list, start, end) => curios_core::Intrinsic::lst_slice(
+            Intrinsic::ListGet(ty, list, index) => curios_core::Intrinsic::list_get(
+                self.term(ty)?,
+                self.term(list)?,
+                self.term(index)?,
+            ),
+            Intrinsic::ListSlice(ty, list, start, end) => curios_core::Intrinsic::list_slice(
                 self.term(ty)?,
                 self.term(list)?,
                 self.term(start)?,
                 self.term(end)?,
             ),
-            Intrinsic::LstAppend(ty, list, elem) => curios_core::Intrinsic::lst_append(
+            Intrinsic::ListAppend(ty, list, elem) => curios_core::Intrinsic::list_append(
                 self.term(ty)?,
                 self.term(list)?,
                 self.term(elem)?,
             ),
-            Intrinsic::LstConcat(ty, left, right) => curios_core::Intrinsic::lst_concat(
+            Intrinsic::ListConcat(ty, left, right) => curios_core::Intrinsic::list_concat(
                 self.term(ty)?,
                 [self.term(left)?, self.term(right)?],
             ),
-            Intrinsic::LstMap(a, b, lst, f) => curios_core::Intrinsic::lst_map(
+            Intrinsic::ListMap(a, b, list, f) => curios_core::Intrinsic::list_map(
                 self.term(a)?,
                 self.term(b)?,
-                self.term(lst)?,
+                self.term(list)?,
                 self.term(f)?,
             ),
             Intrinsic::CellType(inner) => curios_core::Intrinsic::cell_type(self.term(inner)?),

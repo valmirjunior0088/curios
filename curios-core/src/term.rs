@@ -394,9 +394,9 @@ impl Term {
         }))
     }
 
-    /// [`Term::lst_match`] over an already-built motive scope.
+    /// [`Term::list_match`] over an already-built motive scope.
     #[allow(clippy::too_many_arguments)]
-    pub fn lst_match_scoped<H, EL, EC, CC>(
+    pub fn list_match_scoped<H, EL, EC, CC>(
         head: H,
         elem: EL,
         motive: Scope<Many>,
@@ -416,7 +416,7 @@ impl Term {
             head.into(),
             motive,
             Cases::FreeMonoid {
-                carrier: Carrier::Lst {
+                carrier: Carrier::List {
                     elem: elem.into(),
                     empty_case: empty_case.into(),
                     cons_case: Scope::close(
@@ -1007,7 +1007,7 @@ impl Term {
         )
     }
 
-    /// Build the structural `Nat` eliminator ([`Carrier::Nat`]): a zero arm plus a successor arm closed over `(pred, ih)` — `Nat`'s generator carries no payload, so the cons arm binds one fewer variable than `Bin`/`Lst`'s.
+    /// Build the structural `Nat` eliminator ([`Carrier::Nat`]): a zero arm plus a successor arm closed over `(pred, ih)` — `Nat`'s generator carries no payload, so the cons arm binds one fewer variable than `Bin`/`List`'s.
     pub fn nat_match<H, M, ZC, SC>(
         head: H,
         motive_binder: Option<&Free>,
@@ -1033,9 +1033,9 @@ impl Term {
         )
     }
 
-    /// Build the structural `Lst` eliminator ([`Carrier::Lst`]): the element type `elem`, an empty arm, and a cons arm closed over `(head, tail, ih)` — the induction hypothesis at the tail.
+    /// Build the structural `List` eliminator ([`Carrier::List`]): the element type `elem`, an empty arm, and a cons arm closed over `(head, tail, ih)` — the induction hypothesis at the tail.
     #[allow(clippy::too_many_arguments)]
-    pub fn lst_match<H, M, EL, EC, CC>(
+    pub fn list_match<H, M, EL, EC, CC>(
         head: H,
         elem: EL,
         motive_binder: Option<&Free>,
@@ -1053,7 +1053,7 @@ impl Term {
         EC: Into<Term>,
         CC: Into<Term>,
     {
-        Self::lst_match_scoped(
+        Self::list_match_scoped(
             head,
             elem,
             Self::motive_scope(motive_binder, motive.into()),
@@ -1902,11 +1902,11 @@ pub enum Cases {
         cases: Vec<(Atom, InductArm)>,
         default: Option<Term>,
     },
-    /// Structural induction on a native free-monoid intrinsic (`Nat`/`Lst`/ `Bin`): the `carrier` selects the intrinsic and carries both its parameters (`Lst`'s element type) and its two arms — an identity arm plus a cons arm binding the head generator (absent for `Nat`, whose unary generator carries no payload), the tail, and the induction hypothesis at the tail.
+    /// Structural induction on a native free-monoid intrinsic (`Nat`/`List`/ `Bin`): the `carrier` selects the intrinsic and carries both its parameters (`List`'s element type) and its two arms — an identity arm plus a cons arm binding the head generator (absent for `Nat`, whose unary generator carries no payload), the tail, and the induction hypothesis at the tail.
     FreeMonoid { carrier: Carrier },
 }
 
-/// The native free-monoid intrinsic a `Cases::FreeMonoid` eliminates, with its type parameters and its two eliminator arms. `Nat` is the free monoid on one (payload-less) generator; `Bin` carries none; `Lst` carries its element type. Each variant pairs an identity arm (`empty_case`) with a cons arm whose arity is fixed by the carrier — `Scope<Two>` for `Nat` (predecessor, ih), `Scope<Three>` for `Bin`/`Lst` (head, tail, ih).
+/// The native free-monoid intrinsic a `Cases::FreeMonoid` eliminates, with its type parameters and its two eliminator arms. `Nat` is the free monoid on one (payload-less) generator; `Bin` carries none; `List` carries its element type. Each variant pairs an identity arm (`empty_case`) with a cons arm whose arity is fixed by the carrier — `Scope<Two>` for `Nat` (predecessor, ih), `Scope<Three>` for `Bin`/`List` (head, tail, ih).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -1922,7 +1922,7 @@ pub enum Carrier {
         empty_case: Term,
         cons_case: Scope<Three>,
     },
-    Lst {
+    List {
         elem: Term,
         empty_case: Term,
         cons_case: Scope<Three>,
@@ -2486,7 +2486,7 @@ impl Subterm {
                             empty_case.collect_construction_names(names);
                             cons_case.body().collect_construction_names(names);
                         }
-                        Carrier::Lst {
+                        Carrier::List {
                             elem,
                             empty_case,
                             cons_case,
@@ -2585,7 +2585,7 @@ impl Subterm {
                                 cons_case,
                                 ..
                             } => empty_case.any_metavar(pred) || cons_case.body().any_metavar(pred),
-                            Carrier::Lst {
+                            Carrier::List {
                                 elem,
                                 empty_case,
                                 cons_case,
@@ -2671,7 +2671,7 @@ impl Subterm {
                                 cons_case,
                                 ..
                             } => pred(empty_case) || pred(cons_case.body()),
-                            Carrier::Lst {
+                            Carrier::List {
                                 elem,
                                 empty_case,
                                 cons_case,
@@ -2975,11 +2975,11 @@ impl Bound for Subterm {
                                 empty_case: visit.visit_subterm(empty_case),
                                 cons_case: visit.visit_scope(cons_case),
                             },
-                            Carrier::Lst {
+                            Carrier::List {
                                 elem,
                                 empty_case,
                                 cons_case,
-                            } => Carrier::Lst {
+                            } => Carrier::List {
                                 elem: visit.visit_subterm(elem),
                                 empty_case: visit.visit_subterm(empty_case),
                                 cons_case: visit.visit_scope(cons_case),
@@ -3116,7 +3116,7 @@ impl Bound for Subterm {
                         cons_case,
                         ..
                     } => empty_case.reach().max(cons_case.reach()),
-                    Carrier::Lst {
+                    Carrier::List {
                         elem,
                         empty_case,
                         cons_case,

@@ -356,14 +356,14 @@ fn reduce_match(head: Term, forced: Term, motive: Scope<Many>, cases: Cases) -> 
             })))
         }
 
-        // Structural induction on a native free-monoid intrinsic (`Nat`/`Bin`/`Lst`). The carrier-specific one-step decode lives in `FreeMonoid::uncons` (the eliminator-side analogue of `spine::peel_intrinsic`); this driver is the shared catamorphism over it. An identity `Layer` takes the empty arm; a cons `Layer` peels a generator (its head absent for the unary `Nat`) and recurses symbolically for the induction hypothesis; a stuck scrutinee rebuilds.
+        // Structural induction on a native free-monoid intrinsic (`Nat`/`Bin`/`List`). The carrier-specific one-step decode lives in `FreeMonoid::uncons` (the eliminator-side analogue of `spine::peel_intrinsic`); this driver is the shared catamorphism over it. An identity `Layer` takes the empty arm; a cons `Layer` peels a generator (its head absent for the unary `Nat`) and recurses symbolically for the induction hypothesis; a stuck scrutinee rebuilds.
         Cases::FreeMonoid { carrier } => {
             let scrutinee = Term::unwrap_or_clone(forced);
 
             let layer = match &carrier {
                 Carrier::Nat { .. } => FreeMonoid::Unary,
                 Carrier::Bin { grain, .. } => FreeMonoid::Bin(*grain),
-                Carrier::Lst { .. } => FreeMonoid::Lst,
+                Carrier::List { .. } => FreeMonoid::List,
             }
             .uncons(scrutinee);
 
@@ -371,7 +371,7 @@ fn reduce_match(head: Term, forced: Term, motive: Scope<Many>, cases: Cases) -> 
                 Layer::Empty => Reduce::Continue(match carrier {
                     Carrier::Nat { empty_case, .. }
                     | Carrier::Bin { empty_case, .. }
-                    | Carrier::Lst { empty_case, .. } => empty_case,
+                    | Carrier::List { empty_case, .. } => empty_case,
                 }),
                 Layer::Cons { head, tail } => {
                     let ih: Term = Subterm::Match(Match {
@@ -386,9 +386,9 @@ fn reduce_match(head: Term, forced: Term, motive: Scope<Many>, cases: Cases) -> 
                     // The cons arm binds the generator's payload (a head, absent for the unary `Nat`), then the tail and the induction hypothesis.
                     Reduce::Continue(match &carrier {
                         Carrier::Nat { cons_case, .. } => cons_case.open(&[&tail, &ih]),
-                        Carrier::Bin { cons_case, .. } | Carrier::Lst { cons_case, .. } => {
+                        Carrier::Bin { cons_case, .. } | Carrier::List { cons_case, .. } => {
                             cons_case.open(&[
-                                head.as_ref().expect("Bin/Lst cons layer carries a head"),
+                                head.as_ref().expect("Bin/List cons layer carries a head"),
                                 &tail,
                                 &ih,
                             ])

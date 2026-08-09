@@ -5,7 +5,7 @@ use {
     super::{
         Apply, BinPattern, BinSegment, Choose, ChooseArm, ChooseTest, ConceptField, Field, Func,
         FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, Intrinsic, Let,
-        LetBinding, LetSignature, LstEntry, LstPattern, Match, MatchPattern, MatchPatternField,
+        LetBinding, LetSignature, ListEntry, ListPattern, Match, MatchPattern, MatchPatternField,
         Nat, NatLiteral, NatPattern, NumLit, Pattern, PatternField, Proj, Radix, Rec, StructLit,
         StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem,
         TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType,
@@ -229,7 +229,7 @@ fn print_struct_entry(entry: StructLitEntry) -> Printer {
     }
 }
 
-/// The optional `; ih` tail of a `Nat` fold's succ arm or an `Lst`/`Bin` fold's cons arm — any irrefutable pattern, printed through `print_pattern`; `None` prints nothing at all (a plain case-split), matching how it was written.
+/// The optional `; ih` tail of a `Nat` fold's succ arm or an `List`/`Bin` fold's cons arm — any irrefutable pattern, printed through `print_pattern`; `None` prints nothing at all (a plain case-split), matching how it was written.
 fn print_cons_ih(ih: Option<Pattern>) -> Printer {
     match ih {
         Some(ih) => flat([pure("; "), print_pattern(ih)]),
@@ -329,8 +329,8 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer {
             flat([pure(pred_label), pure(" + 1"), print_cons_ih(ih)])
         }
         MatchPattern::Nat(NatPattern::Lit(n)) => pure(n.to_string()),
-        MatchPattern::Lst(LstPattern::Nil) => pure("[]"),
-        MatchPattern::Lst(LstPattern::Cons {
+        MatchPattern::List(ListPattern::Nil) => pure("[]"),
+        MatchPattern::List(ListPattern::Cons {
             head_label,
             tail_label,
             ih,
@@ -625,32 +625,32 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             ),
             vec![left, right],
         ),
-        Intrinsic::LstType(elem) => print_intrinsic_call("Lst", vec![elem]),
-        Intrinsic::Lst(entries) => listed(
+        Intrinsic::ListType(elem) => print_intrinsic_call("List", vec![elem]),
+        Intrinsic::List(entries) => listed(
             "[",
             entries
                 .into_iter()
                 .map(|entry| match entry {
-                    LstEntry::Elem(term) => print_term(term),
-                    LstEntry::Spread(term) => flat([pure(".."), print_term(term)]),
+                    ListEntry::Elem(term) => print_term(term),
+                    ListEntry::Spread(term) => flat([pure(".."), print_term(term)]),
                 })
                 .collect(),
             "]",
         ),
-        Intrinsic::LstLen(ty, operand) => print_intrinsic_call("Lst.len", vec![ty, operand]),
-        Intrinsic::LstGet(ty, list, index) => {
-            print_intrinsic_call("Lst.get", vec![ty, list, index])
+        Intrinsic::ListLen(ty, operand) => print_intrinsic_call("List.len", vec![ty, operand]),
+        Intrinsic::ListGet(ty, list, index) => {
+            print_intrinsic_call("List.get", vec![ty, list, index])
         }
-        Intrinsic::LstSlice(ty, list, start, end) => {
-            print_intrinsic_call("Lst.slice", vec![ty, list, start, end])
+        Intrinsic::ListSlice(ty, list, start, end) => {
+            print_intrinsic_call("List.slice", vec![ty, list, start, end])
         }
-        Intrinsic::LstAppend(ty, list, elem) => {
-            print_intrinsic_call("Lst.append", vec![ty, list, elem])
+        Intrinsic::ListAppend(ty, list, elem) => {
+            print_intrinsic_call("List.append", vec![ty, list, elem])
         }
-        Intrinsic::LstConcat(ty, left, right) => {
-            print_intrinsic_call("Lst.concat", vec![ty, left, right])
+        Intrinsic::ListConcat(ty, left, right) => {
+            print_intrinsic_call("List.concat", vec![ty, left, right])
         }
-        Intrinsic::LstMap(a, b, lst, f) => print_intrinsic_call("Lst.map", vec![a, b, lst, f]),
+        Intrinsic::ListMap(a, b, list, f) => print_intrinsic_call("List.map", vec![a, b, list, f]),
         Intrinsic::HandleType => pure("Handle"),
         Intrinsic::Handle(token) => pure(format!("Handle({token})")),
         Intrinsic::HandleEql(left, right) => print_intrinsic_call("Handle.eql", vec![left, right]),
@@ -1057,7 +1057,9 @@ fn print_wire_type(type_: WireType) -> Printer {
         WireType::Bool => pure("Bool"),
         WireType::Bytes => pure("Bytes"),
         WireType::Handle => pure("Handle"),
-        WireType::Lst(element) => flat([pure("Lst("), print_wire_type(element.into()), pure(")")]),
+        WireType::List(element) => {
+            flat([pure("List("), print_wire_type(element.into()), pure(")")])
+        }
     }
 }
 

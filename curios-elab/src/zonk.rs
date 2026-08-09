@@ -1124,11 +1124,11 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
                             empty_case: zonk_term(context, empty_case)?,
                             cons_case: cons_case.try_map_body(|b| zonk_term(context, b))?,
                         },
-                        Carrier::Lst {
+                        Carrier::List {
                             elem,
                             empty_case,
                             cons_case,
-                        } => Carrier::Lst {
+                        } => Carrier::List {
                             elem: zonk_term(context, elem)?,
                             empty_case: zonk_term(context, empty_case)?,
                             cons_case: cons_case.try_map_body(|b| zonk_term(context, b))?,
@@ -1453,36 +1453,36 @@ fn zonk_intrinsic(context: &Context, intrinsic: &Intrinsic) -> Result<Intrinsic,
             Intrinsic::BinConcat(Grain::B, zonk_terms(context, terms)?)
         }
 
-        Intrinsic::LstType(t) => Intrinsic::LstType(zonk_term(context, t)?),
-        Intrinsic::Lst(elem, elems) => {
-            Intrinsic::Lst(zonk_term(context, elem)?, zonk_terms(context, elems)?)
+        Intrinsic::ListType(t) => Intrinsic::ListType(zonk_term(context, t)?),
+        Intrinsic::List(elem, elems) => {
+            Intrinsic::List(zonk_term(context, elem)?, zonk_terms(context, elems)?)
         }
-        Intrinsic::LstLen(a, b) => {
-            Intrinsic::LstLen(zonk_term(context, a)?, zonk_term(context, b)?)
+        Intrinsic::ListLen(a, b) => {
+            Intrinsic::ListLen(zonk_term(context, a)?, zonk_term(context, b)?)
         }
-        Intrinsic::LstGet(a, b, c) => Intrinsic::LstGet(
+        Intrinsic::ListGet(a, b, c) => Intrinsic::ListGet(
             zonk_term(context, a)?,
             zonk_term(context, b)?,
             zonk_term(context, c)?,
         ),
-        Intrinsic::LstAppend(a, b, c) => Intrinsic::LstAppend(
+        Intrinsic::ListAppend(a, b, c) => Intrinsic::ListAppend(
             zonk_term(context, a)?,
             zonk_term(context, b)?,
             zonk_term(context, c)?,
         ),
-        Intrinsic::LstSlice(a, b, c, d) => Intrinsic::LstSlice(
+        Intrinsic::ListSlice(a, b, c, d) => Intrinsic::ListSlice(
             zonk_term(context, a)?,
             zonk_term(context, b)?,
             zonk_term(context, c)?,
             zonk_term(context, d)?,
         ),
-        Intrinsic::LstConcat(ty, operands) => {
-            Intrinsic::LstConcat(zonk_term(context, ty)?, zonk_terms(context, operands)?)
+        Intrinsic::ListConcat(ty, operands) => {
+            Intrinsic::ListConcat(zonk_term(context, ty)?, zonk_terms(context, operands)?)
         }
-        Intrinsic::LstMap(a, b, lst, f) => Intrinsic::LstMap(
+        Intrinsic::ListMap(a, b, list, f) => Intrinsic::ListMap(
             zonk_term(context, a)?,
             zonk_term(context, b)?,
-            zonk_term(context, lst)?,
+            zonk_term(context, list)?,
             zonk_term(context, f)?,
         ),
 

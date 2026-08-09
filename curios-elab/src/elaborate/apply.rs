@@ -227,7 +227,7 @@ pub(super) fn elaborate_apply(
                         &*written,
                         Subterm::Func(_)
                             | Subterm::Tuple(_)
-                            | Subterm::Intrinsic(Intrinsic::Lst(..))
+                            | Subterm::Intrinsic(Intrinsic::List(..))
                     )
                     && {
                         let result_metavars = result_metavars_from(context, &rest);

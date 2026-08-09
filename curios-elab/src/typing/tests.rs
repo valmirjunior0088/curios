@@ -82,7 +82,7 @@ fn both_checkers_decide_non_informativeness_alike() {
     let types = vec![
         ("Nat", nat()),
         ("Bool", Term::intrinsic(Intrinsic::BoolType)),
-        ("Lst(Nat)", Term::intrinsic(Intrinsic::LstType(nat()))),
+        ("List(Nat)", Term::intrinsic(Intrinsic::ListType(nat()))),
         // The position that diverged: a term at `Type` is a type, and conversion reads it back in full.
         ("Type 0", Term::type_ground()),
         (

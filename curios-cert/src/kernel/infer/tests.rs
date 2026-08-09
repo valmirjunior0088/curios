@@ -414,15 +414,15 @@ fn a_list_literal_checks_its_elements_against_its_carried_type() {
     assert_eq!(
         infer(
             &mut kernel,
-            &Term::intrinsic(Intrinsic::Lst(nat_type(), vec![nat(1), nat(2)])),
+            &Term::intrinsic(Intrinsic::List(nat_type(), vec![nat(1), nat(2)])),
         ),
-        Ok(Term::intrinsic(Intrinsic::LstType(nat_type()))),
+        Ok(Term::intrinsic(Intrinsic::ListType(nat_type()))),
     );
 
     assert!(matches!(
         infer(
             &mut kernel,
-            &Term::intrinsic(Intrinsic::Lst(
+            &Term::intrinsic(Intrinsic::List(
                 nat_type(),
                 vec![nat(1), Term::intrinsic(Intrinsic::Bool(true))],
             )),
@@ -433,9 +433,9 @@ fn a_list_literal_checks_its_elements_against_its_carried_type() {
     assert_eq!(
         infer(
             &mut kernel,
-            &Term::intrinsic(Intrinsic::Lst(nat_type(), Vec::new()))
+            &Term::intrinsic(Intrinsic::List(nat_type(), Vec::new()))
         ),
-        Ok(Term::intrinsic(Intrinsic::LstType(nat_type()))),
+        Ok(Term::intrinsic(Intrinsic::ListType(nat_type()))),
     );
 }
 
@@ -643,10 +643,10 @@ fn a_free_monoid_carrier_must_match_its_scrutinee() {
     let head = binder(2, "head");
     let tail = binder(3, "tail");
     let ih = binder(4, "ih");
-    kernel.assume(&xs, &Term::intrinsic(Intrinsic::LstType(nat_type())));
+    kernel.assume(&xs, &Term::intrinsic(Intrinsic::ListType(nat_type())));
 
     // Carrier claims Bool elements over a Nat-list scrutinee.
-    let mismatched = Term::lst_match(
+    let mismatched = Term::list_match(
         Term::free_var(&xs),
         bool_type(),
         Some(&motive),
@@ -665,13 +665,13 @@ fn a_free_monoid_carrier_must_match_its_scrutinee() {
 
 /// A list or a cell *of* proofs is not a proposition, and the typing rule has to say so — `Sort::of` already does.
 ///
-/// The two answers came from two implementations of one rule. `Sort::of` routes a parameterized former through `sort_of_intrinsic`, which lands a `Prop`-sorted element at `Type 0` on the reasoning `sort/tests.rs` states: a list has a length and a cell has an identity, so their inhabitants are distinguishable however indistinguishable the elements are. The typing rule computed the *element's* sort instead and reported that as the former's, so `Lst(P)` inferred at `Prop` while `Sort::of(Lst(P))` said `Type 0`.
+/// The two answers came from two implementations of one rule. `Sort::of` routes a parameterized former through `sort_of_intrinsic`, which lands a `Prop`-sorted element at `Type 0` on the reasoning `sort/tests.rs` states: a list has a length and a cell has an identity, so their inhabitants are distinguishable however indistinguishable the elements are. The typing rule computed the *element's* sort instead and reported that as the former's, so `List(P)` inferred at `Prop` while `Sort::of(List(P))` said `Type 0`.
 ///
-/// Only one of those can be right, and the disagreement is a closed inhabitant of `False`. `Prop` is the type of propositions, so a former admitted there stands wherever one is wanted: at `(X : Prop, x : X, y : X) -> Eq(@X, x, y)` — reflexivity discharges it, since irrelevance identifies any two inhabitants of `X` — instantiating `X` at `Lst(P)` yields `Eq(Lst(P), [p], [])` for a one-element list against the empty one. Congruence through `Lst/len` carries that to `Eq(1, 0)`, and transport turns `()` into a proof of `False`.
+/// Only one of those can be right, and the disagreement is a closed inhabitant of `False`. `Prop` is the type of propositions, so a former admitted there stands wherever one is wanted: at `(X : Prop, x : X, y : X) -> Eq(@X, x, y)` — reflexivity discharges it, since irrelevance identifies any two inhabitants of `X` — instantiating `X` at `List(P)` yields `Eq(List(P), [p], [])` for a one-element list against the empty one. Congruence through `List/len` carries that to `Eq(1, 0)`, and transport turns `()` into a proof of `False`.
 ///
-/// Verified while the hole was open: `check(Lst(P), Prop)` returned `Ok(())`, `check_definition` accepted that lemma, and `infer` on the instantiated application returned `Eq(Lst P, [p], [])`. The surface route was live too — `curios/src/tests/perimeter::a_list_of_proofs_is_not_a_proposition` is the program, which elaborated and which the compile-path recheck certified. It stopped short of a runtime only in erasure, which refuses any call whose every argument erases; that is a separate defect of the erase boundary, and the same lemma at a genuine proposition trips it identically.
+/// Verified while the hole was open: `check(List(P), Prop)` returned `Ok(())`, `check_definition` accepted that lemma, and `infer` on the instantiated application returned `Eq(List P, [p], [])`. The surface route was live too — `curios/src/tests/perimeter::a_list_of_proofs_is_not_a_proposition` is the program, which elaborated and which the compile-path recheck certified. It stopped short of a runtime only in erasure, which refuses any call whose every argument erases; that is a separate defect of the erase boundary, and the same lemma at a genuine proposition trips it identically.
 ///
-/// The controls are the other half. A list at a relevant element still reports that element's level, `Lst(Type 0)` included, so the fix cannot have pinned every former at zero; and a genuine proposition still stands where a `Prop` is wanted, so it cannot have closed the hole by refusing the position outright.
+/// The controls are the other half. A list at a relevant element still reports that element's level, `List(Type 0)` included, so the fix cannot have pinned every former at zero; and a genuine proposition still stands where a `Prop` is wanted, so it cannot have closed the hole by refusing the position outright.
 #[test]
 fn a_list_or_cell_of_proofs_is_not_a_proposition() {
     let mut kernel = kernel();
@@ -693,7 +693,7 @@ fn a_list_or_cell_of_proofs_is_not_a_proposition() {
     );
     let proposition = Term::induct_type(name, Vec::<Term>::new(), Vec::<Term>::new());
 
-    let list = Term::intrinsic(Intrinsic::LstType(proposition.clone()));
+    let list = Term::intrinsic(Intrinsic::ListType(proposition.clone()));
     let cell = Term::intrinsic(Intrinsic::CellType(proposition.clone()));
 
     assert_eq!(infer(&mut kernel, &list), Ok(Term::type_ground()));
@@ -712,14 +712,14 @@ fn a_list_or_cell_of_proofs_is_not_a_proposition() {
     assert_eq!(
         infer(
             &mut kernel,
-            &Term::intrinsic(Intrinsic::LstType(nat_type()))
+            &Term::intrinsic(Intrinsic::ListType(nat_type()))
         ),
         Ok(Term::type_ground()),
     );
     assert_eq!(
         infer(
             &mut kernel,
-            &Term::intrinsic(Intrinsic::LstType(Term::type_ground())),
+            &Term::intrinsic(Intrinsic::ListType(Term::type_ground())),
         ),
         Ok(Term::type_at(one())),
     );
@@ -823,7 +823,7 @@ fn a_structure_occurrence_at_its_declared_parameter_count_still_works() {
 
 /// A case form names the carrier it eliminates, and that claim needs establishing like any other.
 ///
-/// `check_free_monoid` establishes it — `Carrier::Nat` matches the scrutinee's type against `NatType`, `Carrier::Bin` against its own grain, and `Carrier::Lst` converts its carried element type against the scrutinee's — and `Cases::Induct` gets it from needing an `InductType` to read a declaration off at all. The other two forms read the claim and checked nothing, which is the same shape as every count the boundary now checks: no typing rule looks at a case form, so no ordering discipline would ever have caught it.
+/// `check_free_monoid` establishes it — `Carrier::Nat` matches the scrutinee's type against `NatType`, `Carrier::Bin` against its own grain, and `Carrier::List` converts its carried element type against the scrutinee's — and `Cases::Induct` gets it from needing an `InductType` to read a declaration off at all. The other two forms read the claim and checked nothing, which is the same shape as every count the boundary now checks: no typing rule looks at a case form, so no ordering discipline would ever have caught it.
 ///
 /// What it costs is the discipline the free-monoid rule states for itself: the arms are typed at the *case values* — `false` and `true`, or the enumerated literals — while the result is typed at `motive(scrutinee)` and a value flowing through the match carries the scrutinee's type, so a disagreement types the arms at one carrier and runs them at another. `curios-elab` refuses both spellings at `check_intrinsic_head`, which is why no surface program reaches them and why the certifier's copy of the rule went unwritten.
 #[test]

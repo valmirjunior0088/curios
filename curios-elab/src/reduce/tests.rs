@@ -400,10 +400,10 @@ fn reduce_flt_mul_stays_stuck() {
 }
 
 #[test]
-fn reduce_lst_get_returns_element_at_index() {
+fn reduce_list_get_returns_element_at_index() {
     let mut context = context();
 
-    let list = Subterm::Intrinsic(Intrinsic::Lst(
+    let list = Subterm::Intrinsic(Intrinsic::List(
         Term::intrinsic(Intrinsic::NatType),
         vec![
             Subterm::Intrinsic(Intrinsic::Nat(Nat::new(10usize))).into(),
@@ -415,7 +415,7 @@ fn reduce_lst_get_returns_element_at_index() {
     assert_eq!(
         reduce(
             &mut context,
-            Subterm::Intrinsic(Intrinsic::lst_get(
+            Subterm::Intrinsic(Intrinsic::list_get(
                 Subterm::Intrinsic(Intrinsic::NatType),
                 list.clone(),
                 Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize)))
@@ -427,7 +427,7 @@ fn reduce_lst_get_returns_element_at_index() {
     assert_eq!(
         reduce(
             &mut context,
-            Subterm::Intrinsic(Intrinsic::lst_get(
+            Subterm::Intrinsic(Intrinsic::list_get(
                 Subterm::Intrinsic(Intrinsic::NatType),
                 list,
                 Subterm::Intrinsic(Intrinsic::Nat(Nat::new(2usize)))
@@ -439,10 +439,10 @@ fn reduce_lst_get_returns_element_at_index() {
 }
 
 #[test]
-fn reduce_lst_get_errors_on_out_of_bounds() {
+fn reduce_list_get_errors_on_out_of_bounds() {
     let mut context = context();
 
-    let list = Subterm::Intrinsic(Intrinsic::Lst(
+    let list = Subterm::Intrinsic(Intrinsic::List(
         Term::intrinsic(Intrinsic::NatType),
         vec![Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))).into()],
     ));
@@ -450,14 +450,14 @@ fn reduce_lst_get_errors_on_out_of_bounds() {
     assert!(matches!(
         reduce(
             &mut context,
-            Subterm::Intrinsic(Intrinsic::lst_get(
+            Subterm::Intrinsic(Intrinsic::list_get(
                 Subterm::Intrinsic(Intrinsic::NatType),
                 list,
                 Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))),
             ))
             .into(),
         ),
-        Err(ReduceError::LstGetOutOfBounds {
+        Err(ReduceError::ListGetOutOfBounds {
             len: 1,
             index: 1,
             ..
@@ -506,10 +506,10 @@ fn reduce_bin_append_adds_the_full_byte_range() {
 }
 
 #[test]
-fn reduce_lst_append_adds_element() {
+fn reduce_list_append_adds_element() {
     let mut context = context();
 
-    let list = Subterm::Intrinsic(Intrinsic::Lst(
+    let list = Subterm::Intrinsic(Intrinsic::List(
         Term::intrinsic(Intrinsic::NatType),
         vec![
             Subterm::Intrinsic(Intrinsic::Nat(Nat::new(10usize))).into(),
@@ -520,14 +520,14 @@ fn reduce_lst_append_adds_element() {
     assert_eq!(
         reduce(
             &mut context,
-            Subterm::Intrinsic(Intrinsic::lst_append(
+            Subterm::Intrinsic(Intrinsic::list_append(
                 Subterm::Intrinsic(Intrinsic::NatType),
                 list,
                 Subterm::Intrinsic(Intrinsic::Nat(Nat::new(30usize)))
             ))
             .into()
         ),
-        Ok(Subterm::Intrinsic(Intrinsic::Lst(
+        Ok(Subterm::Intrinsic(Intrinsic::List(
             Term::intrinsic(Intrinsic::NatType),
             vec![
                 Subterm::Intrinsic(Intrinsic::Nat(Nat::new(10usize))).into(),
@@ -1029,12 +1029,12 @@ mod intrinsic {
         ));
     }
 
-    // `cons(7, xs) = [7] ++ xs` over a symbolic tail `xs` — the symbolic cons `Lst/get` and `Lst/slice` previously could not peel (they folded only literal arrays), now decoded one element at a time like their `Bin` twins.
-    fn lst_cons_seven(xs: &Term) -> Term {
-        Term::intrinsic(Intrinsic::lst_concat(
+    // `cons(7, xs) = [7] ++ xs` over a symbolic tail `xs` — the symbolic cons `List/get` and `List/slice` previously could not peel (they folded only literal arrays), now decoded one element at a time like their `Bin` twins.
+    fn list_cons_seven(xs: &Term) -> Term {
+        Term::intrinsic(Intrinsic::list_concat(
             Term::intrinsic(Intrinsic::NatType),
             [
-                Term::intrinsic(Intrinsic::Lst(
+                Term::intrinsic(Intrinsic::List(
                     Term::intrinsic(Intrinsic::NatType),
                     vec![lit(7)],
                 )),
@@ -1044,16 +1044,16 @@ mod intrinsic {
     }
 
     #[test]
-    fn lst_get_peels_symbolic_cons() {
+    fn list_get_peels_symbolic_cons() {
         let mut context = context();
         let xs_binder = context.fresh(Some("xs"));
-        let cons = lst_cons_seven(&Term::free_var(&xs_binder));
+        let cons = list_cons_seven(&Term::free_var(&xs_binder));
 
         // `get(cons(7, xs), 0) = 7`.
         assert_eq!(
             reduced(
                 &mut context,
-                Term::intrinsic(Intrinsic::lst_get(
+                Term::intrinsic(Intrinsic::list_get(
                     Term::intrinsic(Intrinsic::NatType),
                     cons.clone(),
                     lit(0)
@@ -1066,34 +1066,34 @@ mod intrinsic {
         assert!(matches!(
             reduced(
                 &mut context,
-                Term::intrinsic(Intrinsic::lst_get(
+                Term::intrinsic(Intrinsic::list_get(
                     Term::intrinsic(Intrinsic::NatType),
                     cons,
                     lit(1)
                 ))
             ),
-            Subterm::Intrinsic(Intrinsic::LstGet(..)),
+            Subterm::Intrinsic(Intrinsic::ListGet(..)),
         ));
     }
 
     #[test]
-    fn lst_slice_peels_symbolic_cons() {
+    fn list_slice_peels_symbolic_cons() {
         let mut context = context();
         let xs_binder = context.fresh(Some("xs"));
-        let cons = lst_cons_seven(&Term::free_var(&xs_binder));
+        let cons = list_cons_seven(&Term::free_var(&xs_binder));
 
         // `slice(cons(7, xs), 0, 1) = [7] ++ slice(xs, 0, 0) = [7]`.
         assert_eq!(
             reduced(
                 &mut context,
-                Term::intrinsic(Intrinsic::lst_slice(
+                Term::intrinsic(Intrinsic::list_slice(
                     Term::intrinsic(Intrinsic::NatType),
                     cons.clone(),
                     lit(0),
                     lit(1)
                 ))
             ),
-            Subterm::Intrinsic(Intrinsic::Lst(
+            Subterm::Intrinsic(Intrinsic::List(
                 Term::intrinsic(Intrinsic::NatType),
                 vec![lit(7)]
             )),
@@ -1103,23 +1103,23 @@ mod intrinsic {
         assert_eq!(
             reduced(
                 &mut context,
-                Term::intrinsic(Intrinsic::lst_slice(
+                Term::intrinsic(Intrinsic::list_slice(
                     Term::intrinsic(Intrinsic::NatType),
                     cons,
                     lit(1),
                     lit(1)
                 ))
             ),
-            Subterm::Intrinsic(Intrinsic::Lst(
+            Subterm::Intrinsic(Intrinsic::List(
                 Term::intrinsic(Intrinsic::NatType),
                 Vec::new()
             )),
         );
     }
 
-    // `Lst/len` distributes over the monoid like `Bin/len`: a symbolic cons or append reduces its length to a `succ` spine instead of stalling.
+    // `List/len` distributes over the monoid like `Bin/len`: a symbolic cons or append reduces its length to a `succ` spine instead of stalling.
     #[test]
-    fn lst_len_distributes_over_cons_and_append() {
+    fn list_len_distributes_over_cons_and_append() {
         let mut context = context();
         let xs_binder = context.fresh(Some("xs"));
         let xs = Term::free_var(&xs_binder);
@@ -1129,7 +1129,7 @@ mod intrinsic {
                 context,
                 Term::intrinsic(Intrinsic::nat_add(
                     lit(1),
-                    Term::intrinsic(Intrinsic::lst_len(
+                    Term::intrinsic(Intrinsic::list_len(
                         Term::intrinsic(Intrinsic::NatType),
                         xs.clone(),
                     )),
@@ -1141,9 +1141,9 @@ mod intrinsic {
         assert_eq!(
             reduced(
                 &mut context,
-                Term::intrinsic(Intrinsic::lst_len(
+                Term::intrinsic(Intrinsic::list_len(
                     Term::intrinsic(Intrinsic::NatType),
-                    Term::intrinsic(Intrinsic::Lst(
+                    Term::intrinsic(Intrinsic::List(
                         Term::intrinsic(Intrinsic::NatType),
                         vec![lit(1), lit(2), lit(3)]
                     ))
@@ -1156,16 +1156,16 @@ mod intrinsic {
         assert_eq!(
             reduced(
                 &mut context,
-                Term::intrinsic(Intrinsic::lst_len(
+                Term::intrinsic(Intrinsic::list_len(
                     Term::intrinsic(Intrinsic::NatType),
-                    lst_cons_seven(&xs)
+                    list_cons_seven(&xs)
                 ))
             ),
             succ_len(&mut context),
         );
 
         // `len(append(xs, 9)) = 1 + len(xs)`.
-        let appended = Term::intrinsic(Intrinsic::lst_append(
+        let appended = Term::intrinsic(Intrinsic::list_append(
             Term::intrinsic(Intrinsic::NatType),
             xs.clone(),
             lit(9),
@@ -1173,7 +1173,7 @@ mod intrinsic {
         assert_eq!(
             reduced(
                 &mut context,
-                Term::intrinsic(Intrinsic::lst_len(
+                Term::intrinsic(Intrinsic::list_len(
                     Term::intrinsic(Intrinsic::NatType),
                     appended
                 ))
@@ -1182,20 +1182,20 @@ mod intrinsic {
         );
     }
 
-    // The full slice is the identity even over a symbolic array: `slice(xs, 0, len xs) = xs` (the `Lst` twin of `BinSlice`'s full-window identity).
+    // The full slice is the identity even over a symbolic array: `slice(xs, 0, len xs) = xs` (the `List` twin of `BinSlice`'s full-window identity).
     #[test]
-    fn lst_slice_full_window_is_identity() {
+    fn list_slice_full_window_is_identity() {
         let mut context = context();
         let xs_binder = context.fresh(Some("xs"));
         let xs = Term::free_var(&xs_binder);
-        let len = Term::intrinsic(Intrinsic::lst_len(
+        let len = Term::intrinsic(Intrinsic::list_len(
             Term::intrinsic(Intrinsic::NatType),
             xs.clone(),
         ));
         assert_eq!(
             reduced(
                 &mut context,
-                Term::intrinsic(Intrinsic::lst_slice(
+                Term::intrinsic(Intrinsic::list_slice(
                     Term::intrinsic(Intrinsic::NatType),
                     xs.clone(),
                     lit(0),

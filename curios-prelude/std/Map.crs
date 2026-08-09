@@ -1,5 +1,5 @@
 -- A crit-bit (Patricia) trie keyed on the byte string a `Key` witness produces. The map deliberately does not remember `K`: the trie's identity *is* that byte string, so two key types serializing alike are the same key. `Key` is therefore a write-side injection only — `entries`, `keys`, and `fold` hand back `Bytes`, and a caller wanting typed keys decodes at the boundary.
-use /std/{Bytes, Byte, Nat, Bool, Str, Lst, Option};
+use /std/{Bytes, Byte, Nat, Bool, Str, List, Option};
 
 induct Node(V: Type): Type
 | leaf(key: Bytes, value: V)
@@ -159,14 +159,14 @@ pub let fold(@V: Type, @A: Type, m: Map(V), init: A, f: (Bytes, V, A) -> A) -> A
         go(n, init)
     end;
 
-pub let entries(@V: Type, m: Map(V)) -> Lst({Bytes, V}) =
+pub let entries(@V: Type, m: Map(V)) -> List({Bytes, V}) =
     fold(m, [], (k, v, acc) => [..acc, (k, v)]);
 
-pub let keys(@V: Type, m: Map(V)) -> Lst(Bytes) =
+pub let keys(@V: Type, m: Map(V)) -> List(Bytes) =
     fold(m, [], (k, _, acc) => [..acc, k]);
 
-pub let values(@V: Type, m: Map(V)) -> Lst(V) =
+pub let values(@V: Type, m: Map(V)) -> List(V) =
     fold(m, [], (_, v, acc) => [..acc, v]);
 
-pub let of(@K: Type, @V: Type, use Key(K), l: Lst({K, V})) -> Map(V) =
-    Lst/fold(l, empty(), ((k, v), acc) => insert(acc, k, v));
+pub let of(@K: Type, @V: Type, use Key(K), l: List({K, V})) -> Map(V) =
+    List/fold(l, empty(), ((k, v), acc) => insert(acc, k, v));

@@ -13,13 +13,13 @@ pub fn wire_term(wire_type: &WireType) -> Term {
         WireType::Bool => Intrinsic::BoolType,
         WireType::Bytes => Intrinsic::BinType(Grain::X),
         WireType::Handle => Intrinsic::HandleType,
-        WireType::Lst(element) => Intrinsic::LstType(wire_term(&(*element).into())),
+        WireType::List(element) => Intrinsic::ListType(wire_term(&(*element).into())),
     };
 
     Subterm::Intrinsic(intrinsic).into()
 }
 
-/// The closed set of intrinsics of the core calculus: the built-in types (`BoolType`, `NatType`, `IntType`, `FltType`, `BinType`, `LstType`, `HandleType`, `CellType`, `IoType`), their literals, and the operator families over them, plus `ProcExit`. A host call is *not* here: [`Subterm::Foreign`] is a term former of its own, because what it means is read off an ABI row rather than fixed by this enum. Operand positions hold full [`Term`]s, so an intrinsic participates like any other subterm: elaboration checks operands against each variant's fixed signature, reduction constant-folds closed operands and rebuilds a canonical neutral otherwise, and erasure lowers each variant to its first-order IR op.
+/// The closed set of intrinsics of the core calculus: the built-in types (`BoolType`, `NatType`, `IntType`, `FltType`, `BinType`, `ListType`, `HandleType`, `CellType`, `IoType`), their literals, and the operator families over them, plus `ProcExit`. A host call is *not* here: [`Subterm::Foreign`] is a term former of its own, because what it means is read off an ABI row rather than fixed by this enum. Operand positions hold full [`Term`]s, so an intrinsic participates like any other subterm: elaboration checks operands against each variant's fixed signature, reduction constant-folds closed operands and rebuilds a canonical neutral otherwise, and erasure lowers each variant to its first-order IR op.
 ///
 /// An intrinsic that performs a host effect returns an `Io`. That is the invariant the whole effect discipline rests on and it is enforced nowhere but here and in the two checkers' per-variant arms, so a new effectful variant must be given an `IoType` result when it is added.
 ///
@@ -131,16 +131,16 @@ pub enum Intrinsic {
     BinSlice(Grain, Term, Term, Term),
     BinAppend(Grain, Term, Term),
     BinConcat(Grain, Vec<Term>),
-    LstType(Term),
+    ListType(Term),
     // A list literal, carrying its element type: the one value form whose elements alone cannot name it — `[]` has nothing to read a type from.
-    Lst(Term, Vec<Term>),
-    LstLen(Term, Term),
-    LstGet(Term, Term, Term),
-    LstSlice(Term, Term, Term, Term),
-    LstAppend(Term, Term, Term),
-    LstConcat(Term, Vec<Term>),
-    // (@A, @B, lst : Lst(A), f : (A) -> B) -> Lst(B): a structural map. Opaque under reduction on a symbolic operand, so it never unfolds a variable during type-checking. Erases to a single O(n) fill loop.
-    LstMap(Term, Term, Term, Term),
+    List(Term, Vec<Term>),
+    ListLen(Term, Term),
+    ListGet(Term, Term, Term),
+    ListSlice(Term, Term, Term, Term),
+    ListAppend(Term, Term, Term),
+    ListConcat(Term, Vec<Term>),
+    // (@A, @B, list : List(A), f : (A) -> B) -> List(B): a structural map. Opaque under reduction on a symbolic operand, so it never unfolds a variable during type-checking. Erases to a single O(n) fill loop.
+    ListMap(Term, Term, Term, Term),
     HandleType,
     Handle(u32),
     // (a, b) -> Bool: identity of two handles. The one pure operation on `Handle` -- handles are opaque i31 tokens, so this erases to the `Nat` equality op.
@@ -301,76 +301,76 @@ impl Intrinsic {
         Self::BinConcat(grain, operands.into_iter().map(|e| e.into()).collect())
     }
 
-    /// A `LstType` node from a term-shaped element type.
-    pub fn lst_type<T>(elem: T) -> Self
+    /// A `ListType` node from a term-shaped element type.
+    pub fn list_type<T>(elem: T) -> Self
     where
         T: Into<Term>,
     {
-        Self::LstType(elem.into())
+        Self::ListType(elem.into())
     }
 
-    /// A `LstLen` node from term-shaped element type and list.
-    pub fn lst_len<T, L>(type_: T, list: L) -> Self
+    /// A `ListLen` node from term-shaped element type and list.
+    pub fn list_len<T, L>(type_: T, list: L) -> Self
     where
         T: Into<Term>,
         L: Into<Term>,
     {
-        Self::LstLen(type_.into(), list.into())
+        Self::ListLen(type_.into(), list.into())
     }
 
-    /// A `LstGet` node from term-shaped element type, list, and index.
-    pub fn lst_get<T, L, I>(type_: T, list: L, index: I) -> Self
+    /// A `ListGet` node from term-shaped element type, list, and index.
+    pub fn list_get<T, L, I>(type_: T, list: L, index: I) -> Self
     where
         T: Into<Term>,
         L: Into<Term>,
         I: Into<Term>,
     {
-        Self::LstGet(type_.into(), list.into(), index.into())
+        Self::ListGet(type_.into(), list.into(), index.into())
     }
 
-    /// A `LstSlice` node from term-shaped element type, list, start, and end.
-    pub fn lst_slice<T, L, S, E>(type_: T, list: L, start: S, end: E) -> Self
+    /// A `ListSlice` node from term-shaped element type, list, start, and end.
+    pub fn list_slice<T, L, S, E>(type_: T, list: L, start: S, end: E) -> Self
     where
         T: Into<Term>,
         L: Into<Term>,
         S: Into<Term>,
         E: Into<Term>,
     {
-        Self::LstSlice(type_.into(), list.into(), start.into(), end.into())
+        Self::ListSlice(type_.into(), list.into(), start.into(), end.into())
     }
 
-    /// A `LstAppend` node from term-shaped element type, list, and element.
-    pub fn lst_append<T, L, E>(type_: T, list: L, elem: E) -> Self
+    /// A `ListAppend` node from term-shaped element type, list, and element.
+    pub fn list_append<T, L, E>(type_: T, list: L, elem: E) -> Self
     where
         T: Into<Term>,
         L: Into<Term>,
         E: Into<Term>,
     {
-        Self::LstAppend(type_.into(), list.into(), elem.into())
+        Self::ListAppend(type_.into(), list.into(), elem.into())
     }
 
-    /// A `LstConcat` node from a term-shaped element type and any iterator of term-shaped operands.
-    pub fn lst_concat<T, O>(type_: T, operands: O) -> Self
+    /// A `ListConcat` node from a term-shaped element type and any iterator of term-shaped operands.
+    pub fn list_concat<T, O>(type_: T, operands: O) -> Self
     where
         T: Into<Term>,
         O: IntoIterator,
         O::Item: Into<Term>,
     {
-        Self::LstConcat(
+        Self::ListConcat(
             type_.into(),
             operands.into_iter().map(|e| e.into()).collect(),
         )
     }
 
-    /// A `LstMap` node from term-shaped source element type, target element type, list, and function — the collection first, like every other sequence operation.
-    pub fn lst_map<A, B, R, F>(a: A, b: B, lst: R, f: F) -> Self
+    /// A `ListMap` node from term-shaped source element type, target element type, list, and function — the collection first, like every other sequence operation.
+    pub fn list_map<A, B, R, F>(a: A, b: B, list: R, f: F) -> Self
     where
         A: Into<Term>,
         B: Into<Term>,
         R: Into<Term>,
         F: Into<Term>,
     {
-        Self::LstMap(a.into(), b.into(), lst.into(), f.into())
+        Self::ListMap(a.into(), b.into(), list.into(), f.into())
     }
 
     /// A `CellType` node from a term-shaped element type.
@@ -456,7 +456,7 @@ impl Intrinsic {
             | Intrinsic::IntPopcnt(t)
             | Intrinsic::BinLen(Grain::X, t)
             | Intrinsic::BinLen(Grain::B, t)
-            | Intrinsic::LstType(t)
+            | Intrinsic::ListType(t)
             | Intrinsic::IoType(t)
             | Intrinsic::ProcExit(t) => visit(t),
 
@@ -527,7 +527,7 @@ impl Intrinsic {
             | Intrinsic::BinEql(Grain::B, a, b)
             | Intrinsic::BinGet(Grain::B, a, b)
             | Intrinsic::BinAppend(Grain::B, a, b)
-            | Intrinsic::LstLen(a, b)
+            | Intrinsic::ListLen(a, b)
             | Intrinsic::IoPure(a, b) => {
                 visit(a);
                 visit(b);
@@ -535,15 +535,15 @@ impl Intrinsic {
 
             Intrinsic::BinSlice(Grain::X, a, b, c)
             | Intrinsic::BinSlice(Grain::B, a, b, c)
-            | Intrinsic::LstGet(a, b, c)
-            | Intrinsic::LstAppend(a, b, c) => {
+            | Intrinsic::ListGet(a, b, c)
+            | Intrinsic::ListAppend(a, b, c) => {
                 visit(a);
                 visit(b);
                 visit(c);
             }
 
-            Intrinsic::LstSlice(a, b, c, d)
-            | Intrinsic::LstMap(a, b, c, d)
+            Intrinsic::ListSlice(a, b, c, d)
+            | Intrinsic::ListMap(a, b, c, d)
             | Intrinsic::IoBind(a, b, c, d) => {
                 visit(a);
                 visit(b);
@@ -555,7 +555,7 @@ impl Intrinsic {
                 terms.iter().for_each(&mut *visit)
             }
 
-            Intrinsic::Lst(ty, terms) | Intrinsic::LstConcat(ty, terms) => {
+            Intrinsic::List(ty, terms) | Intrinsic::ListConcat(ty, terms) => {
                 visit(ty);
                 terms.iter().for_each(&mut *visit);
             }
@@ -592,7 +592,7 @@ impl Intrinsic {
         found
     }
 
-    // Recurse into every operand `Term` so a construction nested inside an intrinsic (e.g. `Lst(Str)`'s element type) still contributes its head name. Intrinsics own no head names of their own.
+    // Recurse into every operand `Term` so a construction nested inside an intrinsic (e.g. `List(Str)`'s element type) still contributes its head name. Intrinsics own no head names of their own.
     pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<crate::Global>) {
         self.for_each_operand(&mut |term| term.collect_construction_names(names));
     }
@@ -721,36 +721,36 @@ impl Intrinsic {
                 *grain,
                 operands.iter().map(|e| visit.visit_subterm(e)).collect(),
             ),
-            Intrinsic::LstType(elem) => Intrinsic::LstType(visit.visit_subterm(elem)),
-            Intrinsic::Lst(elem, elems) => Intrinsic::Lst(
+            Intrinsic::ListType(elem) => Intrinsic::ListType(visit.visit_subterm(elem)),
+            Intrinsic::List(elem, elems) => Intrinsic::List(
                 visit.visit_subterm(elem),
                 elems.iter().map(|e| visit.visit_subterm(e)).collect(),
             ),
-            Intrinsic::LstLen(ty, list) => traverse_binary(ty, list, visit, Intrinsic::LstLen),
-            Intrinsic::LstGet(ty, list, index) => Intrinsic::LstGet(
+            Intrinsic::ListLen(ty, list) => traverse_binary(ty, list, visit, Intrinsic::ListLen),
+            Intrinsic::ListGet(ty, list, index) => Intrinsic::ListGet(
                 visit.visit_subterm(ty),
                 visit.visit_subterm(list),
                 visit.visit_subterm(index),
             ),
-            Intrinsic::LstSlice(ty, list, start, end) => Intrinsic::LstSlice(
+            Intrinsic::ListSlice(ty, list, start, end) => Intrinsic::ListSlice(
                 visit.visit_subterm(ty),
                 visit.visit_subterm(list),
                 visit.visit_subterm(start),
                 visit.visit_subterm(end),
             ),
-            Intrinsic::LstAppend(ty, list, elem) => Intrinsic::LstAppend(
+            Intrinsic::ListAppend(ty, list, elem) => Intrinsic::ListAppend(
                 visit.visit_subterm(ty),
                 visit.visit_subterm(list),
                 visit.visit_subterm(elem),
             ),
-            Intrinsic::LstConcat(ty, operands) => Intrinsic::LstConcat(
+            Intrinsic::ListConcat(ty, operands) => Intrinsic::ListConcat(
                 visit.visit_subterm(ty),
                 operands.iter().map(|e| visit.visit_subterm(e)).collect(),
             ),
-            Intrinsic::LstMap(a, b, lst, f) => Intrinsic::LstMap(
+            Intrinsic::ListMap(a, b, list, f) => Intrinsic::ListMap(
                 visit.visit_subterm(a),
                 visit.visit_subterm(b),
-                visit.visit_subterm(lst),
+                visit.visit_subterm(list),
                 visit.visit_subterm(f),
             ),
             Intrinsic::HandleType => Intrinsic::HandleType,

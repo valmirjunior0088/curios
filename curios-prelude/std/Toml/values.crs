@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, Lst, Map, Option, Result, Parse};
+use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, List, Map, Option, Result, Parse};
 use /std/Toml/{Toml};
 use /std/Toml/build/{inline_fold};
 use /std/Toml/scan/{byte_at_is, trivia, ws};
@@ -26,7 +26,7 @@ let val_number_digit: Parse(Toml) =
     Parse/or(datetime_value, Parse/or(flt_number, int_value));
 
 rec array_scan(input: Bytes, pos: Nat) -> Result({Nat, Toml}, Str) =
-    rec go(cur: Nat, acc: Lst(Toml)) -> Result({Nat, Toml}, Str) =
+    rec go(cur: Nat, acc: List(Toml)) -> Result({Nat, Toml}, Str) =
         match trivia.run(input, cur)
         | failure(msg) => Result/failure(msg)
         | success((c1, _)) =>
@@ -56,7 +56,7 @@ rec array_scan(input: Bytes, pos: Nat) -> Result({Nat, Toml}, Str) =
     | false => Result/failure("expected array")
     end
 and inline_scan(input: Bytes, pos: Nat) -> Result({Nat, Toml}, Str) =
-    rec go(cur: Nat, acc: Lst({Lst(Str), Toml})) -> Result({Nat, Toml}, Str) =
+    rec go(cur: Nat, acc: List({List(Str), Toml})) -> Result({Nat, Toml}, Str) =
         match key_dotted.run(input, cur)
         | failure(msg) => Result/failure(msg)
         | success((c1, path)) =>

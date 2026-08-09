@@ -158,10 +158,10 @@ fn bare_tuple_continuation_tail_infers() {
 fn checking_problem_parks_until_an_outer_pin_lands() {
     // The constraint store's own window: the inner apply's output expect parks (provisional success), so the postponed tuple re-check meets a still-unsolved expected type — it now parks as a *checking problem* behind a placeholder metavariable, and the outer annotation's pin wakes it. Before ParkedWork::Checking this was a NotATupleType error.
     let source = r#"
-        use /std/{Nat, Lst, Handle};
-        let mk(@A : Type, a : A) -> Lst(A) = [a];
-        let use_(@B : Type, l : Lst(B)) -> Lst(B) = l;
-        let v : Lst({ Nat, Nat }) = use_(mk((1, 2)));
+        use /std/{Nat, List, Handle};
+        let mk(@A : Type, a : A) -> List(A) = [a];
+        let use_(@B : Type, l : List(B)) -> List(B) = l;
+        let v : List({ Nat, Nat }) = use_(mk((1, 2)));
         match v : (_) => /std/Io({})
         | [] => /std/Io/pure(())
         | [p, ..rest] => let _ = Handle/write(Handle/stdout, /std/Str/to_bytes(Nat/to_str(p.1)))!; /std/Io/pure(())
@@ -220,15 +220,15 @@ fn nonproductive_inner_rec_in_type_position_exhausts_its_budget() {
     error(source);
 }
 
-// The flex-apply imitation rule: an implicit higher-kinded binder `@M` is inferred from an argument's concrete type — `?M(?A) ≡ Lst(Nat)` commits `?M := (A) => Lst(A)` and `?A := Nat` — where previously only the explicit `apply_m(@Lst, l)` spelling checked.
+// The flex-apply imitation rule: an implicit higher-kinded binder `@M` is inferred from an argument's concrete type — `?M(?A) ≡ List(Nat)` commits `?M := (A) => List(A)` and `?A := Nat` — where previously only the explicit `apply_m(@List, l)` spelling checked.
 #[test]
 fn higher_kinded_implicit_infers_by_imitation() {
     let source = r#"
-        use /std/{Nat, Lst, Handle, Str};
+        use /std/{Nat, List, Handle, Str};
         pub let apply_m(@M : (Type) -> Type, @A : Type, x : M(A)) -> M(A) = x;
-        let l : Lst(Nat) = [1, 2];
-        let k : Lst(Nat) = apply_m(l);
-        /std/print(Nat/to_str(Lst/len(k)))
+        let l : List(Nat) = [1, 2];
+        let k : List(Nat) = apply_m(l);
+        /std/print(Nat/to_str(List/len(k)))
         "#;
 
     assert_eq!(run(source), b"2");

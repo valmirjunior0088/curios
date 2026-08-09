@@ -214,7 +214,7 @@ pub(crate) fn expect(
     }
 }
 
-/// Whether `arg` is a checked-only introduction form (tuple, lambda, list literal) that cannot be elaborated yet because the type structure it needs is an unsolved metavar — a tuple or list literal whose whole expected type, or a lambda whose expected *domain*, reduces to one. (A lambda only needs its domain known: the body, which may project the parameter, can't be checked against an unknown domain; its codomain may stay a metavar. A list literal borrows its element type from `expected`, so it needs the expected head — `Lst _` — to be known.) Synthesizable forms return `false`: they have a turnaround of their own and must run eagerly so their solutions feed the result unification.
+/// Whether `arg` is a checked-only introduction form (tuple, lambda, list literal) that cannot be elaborated yet because the type structure it needs is an unsolved metavar — a tuple or list literal whose whole expected type, or a lambda whose expected *domain*, reduces to one. (A lambda only needs its domain known: the body, which may project the parameter, can't be checked against an unknown domain; its codomain may stay a metavar. A list literal borrows its element type from `expected`, so it needs the expected head — `List _` — to be known.) Synthesizable forms return `false`: they have a turnaround of their own and must run eagerly so their solutions feed the result unification.
 pub(crate) fn blocked_on_metavar(
     context: &mut Context,
     arg: &Term,
@@ -223,7 +223,7 @@ pub(crate) fn blocked_on_metavar(
     expected_ground: bool,
 ) -> Result<bool, Error> {
     let is_lambda = matches!(&**arg, Subterm::Func(_));
-    let is_list = matches!(&**arg, Subterm::Intrinsic(Intrinsic::Lst(..)));
+    let is_list = matches!(&**arg, Subterm::Intrinsic(Intrinsic::List(..)));
     let is_tuple = matches!(&**arg, Subterm::Tuple(_));
     if !is_lambda && !is_list && !is_tuple {
         return Ok(false);
@@ -630,7 +630,7 @@ fn spine_whnf(context: &mut Context, term: &Term) -> Result<Option<Term>, Error>
 
 /// What an eliminator's motive must abstract: the scrutinee's indices, then the scrutinee itself. Parameters are never abstracted — they are uniform across constructors and fixed by the scrutinee's type.
 pub(crate) enum MotiveShape<'a> {
-    /// An intrinsic carrier (`Bool`, `Nat`, `Lst`, `Bin`): no indices, so the motive binds only the scrutinee, at the carrier's own type.
+    /// An intrinsic carrier (`Bool`, `Nat`, `List`, `Bin`): no indices, so the motive binds only the scrutinee, at the carrier's own type.
     Intrinsic(&'a Term),
     /// A nominal inductive: `indices` is the declaration's index telescope already instantiated at the scrutinee's actual parameters (`InductDecl::indices_at`), and the scrutinee binder takes `I(p̄, ī)` at those index binders.
     Induct {

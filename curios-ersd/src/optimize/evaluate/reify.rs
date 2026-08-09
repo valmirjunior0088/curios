@@ -32,7 +32,7 @@ pub(super) fn reify_check(
         return Ok(());
     }
     match value {
-        Value::Lst(elements) => {
+        Value::List(elements) => {
             budget.payload(elements.len())?;
             for element in elements.iter() {
                 reify_check(module, element, budget)?;
@@ -87,14 +87,14 @@ pub(super) fn reify(
     }
 
     match value {
-        Value::Lst(elements) => {
+        Value::List(elements) => {
             budget.payload(elements.len())?;
             let operands = reify_all(module, elements, budget, out)?;
             Ok(emit(
                 module,
                 out,
                 Rhs::Sequence {
-                    operation: SequenceOp::LstBuild,
+                    operation: SequenceOp::ListBuild,
                     operands,
                 },
             ))

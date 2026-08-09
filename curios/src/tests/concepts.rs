@@ -18,22 +18,22 @@ fn concept_witness_resolves_through_wrapper() {
     assert_eq!(run(source), b"42");
 }
 
-// A premised witness: `show_arr` needs a `Show(A)` to show its elements. The resolver instantiates its telescope — `@A := ?B` with premise goal `Show(?B)` — unifies `Show(Lst(?B)) ≡ Show(Lst(Nat))` to solve `?B := Nat`, then resolves the premise to `show_nat`.
+// A premised witness: `show_arr` needs a `Show(A)` to show its elements. The resolver instantiates its telescope — `@A := ?B` with premise goal `Show(?B)` — unifies `Show(List(?B)) ≡ Show(List(Nat))` to solve `?B := Nat`, then resolves the premise to `show_nat`.
 #[test]
 fn premised_witness_resolves_recursively() {
     let source = r#"
-        use /std/{Nat, Handle, Str, Lst};
+        use /std/{Nat, Handle, Str, List};
         pub concept Show(A : Type) : pub Type {
             show(A) -> Str
         }
         satisfy Show(Nat) {
             show(n) = Nat/to_str(n)
         }
-        satisfy (@A : Type, use Show(A)) => Show(Lst(A)) {
+        satisfy (@A : Type, use Show(A)) => Show(List(A)) {
             show(l) =
-                Lst/fold(l, "[", (x, acc) => Str/concat(acc, Show/show(x)))
+                List/fold(l, "[", (x, acc) => Str/concat(acc, Show/show(x)))
         }
-        let l : Lst(Nat) = [1, 2, 3];
+        let l : List(Nat) = [1, 2, 3];
         /std/print(Show/show(l))
         "#;
 
@@ -302,14 +302,14 @@ fn prelude_monad_resolves_by_imitation() {
     assert_eq!(run(source), b"21");
 }
 
-// The Lst witness: bind is concat-map.
+// The List witness: bind is concat-map.
 #[test]
 fn prelude_monad_arr_binds() {
     let source = r#"
-        use /std/{Nat, Handle, Str, Lst, Monad};
-        let l : Lst(Nat) = [1, 2];
-        let doubled : Lst(Nat) = Monad/bind(l, (x) => [x, x]);
-        /std/print(Nat/to_str(Lst/len(doubled)))
+        use /std/{Nat, Handle, Str, List, Monad};
+        let l : List(Nat) = [1, 2];
+        let doubled : List(Nat) = Monad/bind(l, (x) => [x, x]);
+        /std/print(Nat/to_str(List/len(doubled)))
         "#;
 
     assert_eq!(run(source), b"4");
@@ -335,14 +335,14 @@ fn monadic_sugar_binds_through_the_concept() {
 fn bang_works_in_monad_generic_code() {
     let source = r#"
         use /syn/{Monad};
-        use /std/{Nat, Handle, Str, Option, Lst};
+        use /std/{Nat, Handle, Str, Option, List};
         pub let add_both(@M : (Type) -> Type, use Monad(M), a : M(Nat), b : M(Nat)) -> M(Nat) =
             Monad/pure(a! + b!);
         let o : Option(Nat) = add_both(Option/some(20), Option/some(22));
-        let l : Lst(Nat) = add_both([1, 2], [10]);
+        let l : List(Nat) = add_both([1, 2], [10]);
         /std/print(Str/concat(
             Nat/to_str(Option/unwrap_or(o, 0)),
-            Nat/to_str(Lst/len(l))))
+            Nat/to_str(List/len(l))))
         "#;
 
     assert_eq!(run(source), b"422");
@@ -436,14 +436,14 @@ fn higher_kinded_superclass_projects() {
     assert_eq!(run(source), b"11");
 }
 
-// `Intrinsic`-headed type constructors (`Lst`, `Cell`) carry their argument inside the `Intrinsic` node; the imitation rule rebuilds the node over the binder (`?M := λT. Lst(T)`), so `Monad/bind` over an `Lst` pins the witness from the action's type like any nominal constructor would.
+// `Intrinsic`-headed type constructors (`List`, `Cell`) carry their argument inside the `Intrinsic` node; the imitation rule rebuilds the node over the binder (`?M := λT. List(T)`), so `Monad/bind` over a `List` pins the witness from the action's type like any nominal constructor would.
 #[test]
 fn monad_over_intrinsic_constructor_resolves_by_imitation() {
     let source = r#"
-        use /std/{Nat, Lst, Handle, Str, Monad};
-        let a : Lst(Nat) = [1];
-        let b : Lst(Nat) = Monad/bind(a, (x) => a);
-        /std/print(Nat/to_str(Lst/len(b)))
+        use /std/{Nat, List, Handle, Str, Monad};
+        let a : List(Nat) = [1];
+        let b : List(Nat) = Monad/bind(a, (x) => a);
+        /std/print(Nat/to_str(List/len(b)))
         "#;
 
     assert_eq!(run(source), b"1");
@@ -590,7 +590,7 @@ fn misplaced_use_entries_are_errors() {
 #[test]
 fn omitted_superclass_resolves_from_a_premise() {
     let source = r#"
-        use /std/{Nat, Bool, Handle, Str, Order, Lst};
+        use /std/{Nat, Bool, Handle, Str, Order, List};
         pub concept Eq6(A : Type) : pub Type {
             eq6(A, A) -> Bool
         }
@@ -601,17 +601,17 @@ fn omitted_superclass_resolves_from_a_premise() {
         satisfy Eq6(Nat) {
             eq6(a, b) = a == b
         }
-        satisfy (@A : Type, use Eq6(A)) => Eq6(Lst(A)) {
-            eq6(a, b) = Lst/len(a) == Lst/len(b)
+        satisfy (@A : Type, use Eq6(A)) => Eq6(List(A)) {
+            eq6(a, b) = List/len(a) == List/len(b)
         }
-        satisfy (@A : Type, use Ord6(A)) => Ord6(Lst(A)) {
+        satisfy (@A : Type, use Ord6(A)) => Ord6(List(A)) {
             cmp6(a, b) = Order/lt()
         }
         satisfy Ord6(Nat) {
             cmp6(a, b) = Order/lt()
         }
         pub let same(@A : Type, use Ord6(A), x : A, y : A) -> Bool = Eq6/eq6(x, y);
-        let l : Lst(Nat) = [1, 2];
+        let l : List(Nat) = [1, 2];
         /std/print(Bool/to_str(same(l, l)))
         "#;
 

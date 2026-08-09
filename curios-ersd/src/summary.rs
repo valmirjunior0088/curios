@@ -127,7 +127,7 @@ fn call_behavior(rhs: &Rhs, summaries: &BTreeMap<FunctionId, LocalBehavior>) -> 
     match rhs {
         Rhs::Apply { callee, .. } => callee_behavior(*callee, summaries),
         Rhs::Intrinsic {
-            intrinsic: Intrinsic::LstMap,
+            intrinsic: Intrinsic::ListMap,
             operands,
         } => operands
             .get(1)

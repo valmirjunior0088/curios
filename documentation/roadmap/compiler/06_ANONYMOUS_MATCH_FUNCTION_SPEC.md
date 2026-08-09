@@ -239,7 +239,7 @@ The intended elaboration sequence:
 
 **No constructor-name guessing.** An inductive matcher whose scrutinee type is unknown must wait for an actual type constraint. Inferring an inductive from arm tags alone is forbidden: tags are not globally unique, and guessing would make name resolution affect typing unpredictably.
 
-**Intrinsic arms constrain their carriers eagerly.** Intrinsic arm shapes have an unambiguous carrier and should solve an unknown scrutinee type immediately rather than park — Boolean arms to `Bool`, numeric switch arms to `Nat`, bit and byte arms to their packed intrinsics, list-shaped arms to `Lst(?Element)` with the element type free to remain unknown.
+**Intrinsic arms constrain their carriers eagerly.** Intrinsic arm shapes have an unambiguous carrier and should solve an unknown scrutinee type immediately rather than park — Boolean arms to `Bool`, numeric switch arms to `Nat`, bit and byte arms to their packed intrinsics, list-shaped arms to `List(?Element)` with the element type free to remain unknown.
 
 ### Core design
 

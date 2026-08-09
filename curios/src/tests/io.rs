@@ -164,10 +164,10 @@ fn file_read_pulls_bytes_inside_the_bracket() {
 
 #[test]
 fn proc_args_indexes_the_argv_snapshot() {
-    // argv crosses as a host-built `Lst(Bytes)`; indexing it round-trips one entry.
+    // argv crosses as a host-built `List(Bytes)`; indexing it round-trips one entry.
     let (system, io) = MockHost::builder().args(["prog", "hello", "world"]).build();
     crate::run_text(r#"
-let _ = std/Handle/write(std/Handle/stdout, /std/Option/unwrap_or(/std/Lst/get(/std/proc/args!, 1), x[]))!;
+let _ = std/Handle/write(std/Handle/stdout, /std/Option/unwrap_or(/std/List/get(/std/proc/args!, 1), x[]))!;
 /std/Io/pure(())
 "#,
         system,

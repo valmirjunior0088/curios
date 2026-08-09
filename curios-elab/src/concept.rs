@@ -68,7 +68,7 @@ pub enum HeadKey {
     Bool,
     Bin(Grain),
     Handle,
-    Lst,
+    List,
     Cell,
     Io,
 }
@@ -80,7 +80,7 @@ impl HeadKey {
             Subterm::InductType(induct_decl) => Some(HeadKey::Nominal(induct_decl.name.clone())),
             Subterm::StructType(struct_decl) => Some(HeadKey::Nominal(struct_decl.name.clone())),
             Subterm::Intrinsic(intrinsic) => Self::of_intrinsic(intrinsic),
-            // The higher-kinded head: the type-constructor function's body is the normal form the applied constructor would reduce to (`λA. InductType(Option, [A])`, or `λT. LstType(T)` for an intrinsic former like `/sys/Lst`). The binders need not be opened — the name/former sits on the node.
+            // The higher-kinded head: the type-constructor function's body is the normal form the applied constructor would reduce to (`λA. InductType(Option, [A])`, or `λT. ListType(T)` for an intrinsic former like `/sys/List`). The binders need not be opened — the name/former sits on the node.
             Subterm::Func(func) => {
                 let mut telescope = &func.telescope;
                 while let Telescope::Cons(_, rest) = telescope {
@@ -128,7 +128,7 @@ impl HeadKey {
             Intrinsic::BoolType => Some(HeadKey::Bool),
             Intrinsic::BinType(grain) => Some(HeadKey::Bin(*grain)),
             Intrinsic::HandleType => Some(HeadKey::Handle),
-            Intrinsic::LstType(_) => Some(HeadKey::Lst),
+            Intrinsic::ListType(_) => Some(HeadKey::List),
             Intrinsic::CellType(_) => Some(HeadKey::Cell),
             Intrinsic::IoType(_) => Some(HeadKey::Io),
             _ => None,
@@ -148,7 +148,7 @@ impl fmt::Display for HeadKey {
             HeadKey::Bin(Grain::B) => write!(f, "Bits"),
             HeadKey::Bin(Grain::X) => write!(f, "Bytes"),
             HeadKey::Handle => write!(f, "Handle"),
-            HeadKey::Lst => write!(f, "Lst"),
+            HeadKey::List => write!(f, "List"),
             HeadKey::Cell => write!(f, "Cell"),
             HeadKey::Io => write!(f, "Io"),
         }

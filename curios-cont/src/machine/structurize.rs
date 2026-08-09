@@ -131,9 +131,9 @@ impl<'a> MachineFunctionBridge<'a> {
                         MachineConstruct::Literal(literal) => {
                             EmissionValue::Pure(literal_data(literal))
                         }
-                        MachineConstruct::List(elements) => EmissionValue::Pure(EmissionData::Lst(
-                            self.operands(elements, &mut values),
-                        )),
+                        MachineConstruct::List(elements) => EmissionValue::Pure(
+                            EmissionData::List(self.operands(elements, &mut values)),
+                        ),
                         MachineConstruct::Tuple(elements) => EmissionValue::Pure(
                             EmissionData::Tpl(self.operands(elements, &mut values)),
                         ),
@@ -300,7 +300,7 @@ impl<'a> MachineFunctionBridge<'a> {
                 self.cell(*op, args, self.resume.clone(), values)
             }
             MachineTerminator::Intrinsic {
-                op: CpsIntrinsicCall::LstMap,
+                op: CpsIntrinsicCall::ListMap,
                 args,
                 resume,
             } => {
@@ -308,7 +308,7 @@ impl<'a> MachineFunctionBridge<'a> {
                 self.list_map(args, resume, values)
             }
             MachineTerminator::IntrinsicReturn {
-                op: CpsIntrinsicCall::LstMap,
+                op: CpsIntrinsicCall::ListMap,
                 args,
             } => self.list_map(args, self.resume.clone(), values),
             MachineTerminator::Exit(value) => {
@@ -405,7 +405,7 @@ impl<'a> MachineFunctionBridge<'a> {
         ));
         values.push((
             result.clone(),
-            EmissionValue::Eval(EmissionCode::LstMap(args[0].clone(), args[1].clone())),
+            EmissionValue::Eval(EmissionCode::ListMap(args[0].clone(), args[1].clone())),
         ));
         EmissionTail::Jump(EmissionJumpTarget {
             target: resume,

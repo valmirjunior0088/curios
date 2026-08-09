@@ -467,7 +467,7 @@ fn infer_node(
 ///
 /// Coq's `type_of_case` and `infer_type` are this rule: compute the term's type, reduce it, destruct it as a sort. Lean's kernel enters through `inferType`; Agda carries the sort on the type itself so a type in hand is one that was checked. None of them has a second, weaker way to accept a type, and neither does this crate now.
 ///
-/// **The reduction comes first, and it is not incidental.** `Sort::of` opens by reducing, and typing the unreduced spelling instead answers a different question: `Lst.{v,w}(Waker)` types as `Type v` — its former's promised codomain — while its reduced form `LstType(Waker)` is the minimal `Type 0` that the constructor size condition needs, and a computed type is only the shape it computes to once reduced. Without this line the standard library loses twelve items to the size condition and one to a projection through `/std/Fmt`.
+/// **The reduction comes first, and it is not incidental.** `Sort::of` opens by reducing, and typing the unreduced spelling instead answers a different question: `List.{v,w}(Waker)` types as `Type v` — its former's promised codomain — while its reduced form `ListType(Waker)` is the minimal `Type 0` that the constructor size condition needs, and a computed type is only the shape it computes to once reduced. Without this line the standard library loses twelve items to the size condition and one to a projection through `/std/Fmt`.
 ///
 /// That reduction is also why `whnf` must be *total* on arbitrary terms rather than merely correct on well-typed ones: this judgment hands it a term nothing has typed yet, by construction.
 pub(super) fn infer_type(kernel: &mut Kernel, type_: &Term) -> Result<Sort, KernelError> {
@@ -624,7 +624,7 @@ fn check_cases(
     }
 }
 
-/// The free-monoid arm rule: the identity arm inhabits the motive at the carrier's empty value, and the cons arm — under a peeled generator, a tail, and an induction hypothesis at that tail — inhabits it at one generator prepended to the tail. The case values are spelled exactly as elaboration spelled them (`pred + 1`, the singleton-concat for `Lst`, the append-to-empty singleton for `Bin`, whose packed literals cannot hold a symbolic atom), and conversion's free-monoid peel is what makes those spellings and reduction's forms one normal form.
+/// The free-monoid arm rule: the identity arm inhabits the motive at the carrier's empty value, and the cons arm — under a peeled generator, a tail, and an induction hypothesis at that tail — inhabits it at one generator prepended to the tail. The case values are spelled exactly as elaboration spelled them (`pred + 1`, the singleton-concat for `List`, the append-to-empty singleton for `Bin`, whose packed literals cannot hold a symbolic atom), and conversion's free-monoid peel is what makes those spellings and reduction's forms one normal form.
 ///
 /// The carrier's own element type must agree with the scrutinee's: the arms are typed against the carrier's copy, and a value flowing through the match carries the scrutinee's, so a disagreement would type the arms at one type and run them at another.
 fn check_free_monoid(
@@ -695,12 +695,12 @@ fn check_free_monoid(
             )
         }
 
-        Carrier::Lst {
+        Carrier::List {
             elem,
             empty_case,
             cons_case,
         } => {
-            let Subterm::Intrinsic(Intrinsic::LstType(scrutinee_elem)) = &**scrutinee_type else {
+            let Subterm::Intrinsic(Intrinsic::ListType(scrutinee_elem)) = &**scrutinee_type else {
                 return Err(KernelError::Unclassified(scrutinee_type.clone()));
             };
             if !convert(kernel, &Term::type_ground(), elem, scrutinee_elem)? {
@@ -712,7 +712,7 @@ fn check_free_monoid(
 
             at(
                 kernel,
-                Term::intrinsic(Intrinsic::Lst(elem.clone(), Vec::new())),
+                Term::intrinsic(Intrinsic::List(elem.clone(), Vec::new())),
                 empty_case,
             )?;
 
@@ -720,10 +720,10 @@ fn check_free_monoid(
             let tail = kernel.fresh(cons_case.second_hint());
             let ih = kernel.fresh(cons_case.third_hint());
             let tail_occurrence = Term::free_var(&tail);
-            let cons_value = Term::intrinsic(Intrinsic::LstConcat(
+            let cons_value = Term::intrinsic(Intrinsic::ListConcat(
                 elem.clone(),
                 vec![
-                    Term::intrinsic(Intrinsic::Lst(elem.clone(), vec![Term::free_var(&head)])),
+                    Term::intrinsic(Intrinsic::List(elem.clone(), vec![Term::free_var(&head)])),
                     tail_occurrence.clone(),
                 ],
             ));
@@ -737,7 +737,7 @@ fn check_free_monoid(
                 kernel,
                 vec![
                     (&head, elem.clone()),
-                    (&tail, Term::intrinsic(Intrinsic::LstType(elem.clone()))),
+                    (&tail, Term::intrinsic(Intrinsic::ListType(elem.clone()))),
                     (&ih, motive.open(&[&tail_occurrence])),
                 ],
                 cons_value,

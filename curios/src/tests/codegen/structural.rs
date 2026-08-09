@@ -13,24 +13,24 @@ use {
 
 // -- fixtures ---------------------------------------------------------------
 //
-// Every fixture takes a runtime taint (`Lst/len(proc/args!)`) so its result is not constant-folded away, and prints through `/std/print(Nat/to_str(...))` to keep the kernel live.
+// Every fixture takes a runtime taint (`List/len(proc/args!)`) so its result is not constant-folded away, and prints through `/std/print(Nat/to_str(...))` to keep the kernel live.
 //
 // It arrives through two bindings rather than one annotated `let`, because an annotated top-level `let` is a module *item* and an item's value body is its own sequencing region — a `!` written there could not reach the program's. The unannotated binding opens the final term instead, and the annotation rides on a local `let` inside it.
 
 const LCG: &str = r#"
-    use /std/{Handle, Nat, Lst, proc};
+    use /std/{Handle, Nat, List, proc};
     rec loop(k : Nat, x : Nat) -> Nat =
         match k : (_) => Nat
         | 0 => x
         | kp + 1; ih => loop(kp, 75 * x % 65537)
         end;
-    let taint = Lst/len(proc/args!);
+    let taint = List/len(proc/args!);
     let n : Nat = taint;
     /std/print(Nat/to_str(loop(n, 1)))
     "#;
 
 const TREES: &str = r#"
-    use /std/{Handle, Nat, Lst, proc};
+    use /std/{Handle, Nat, List, proc};
     induct Tree : Type
     | leaf(Nat)
     | node(Nat, Tree, Tree)
@@ -45,26 +45,26 @@ const TREES: &str = r#"
         | leaf(n) => n % 1000003
         | node(n, l, r) => (n + sum(l) + sum(r)) % 1000003
         end;
-    let taint = Lst/len(proc/args!);
+    let taint = List/len(proc/args!);
     let d : Nat = taint;
     /std/print(Nat/to_str(sum(build(d, 1))))
     "#;
 
 const HIGHER_ORDER: &str = r#"
-    use /std/{Handle, Nat, Bool, Lst, proc};
+    use /std/{Handle, Nat, Bool, List, proc};
     let pick(b : Bool) -> (Nat) -> Nat =
         match b : (_) => (Nat) -> Nat
         | true => (y) => y + 1
         | false => (y) => y * 2
         end;
-    let taint = Lst/len(proc/args!);
+    let taint = List/len(proc/args!);
     let n : Nat = taint;
     let f = pick(n <= 0);
     /std/print(Nat/to_str(f(n)))
     "#;
 
 const DIRECT_ESCAPING: &str = r#"
-    use /std/{Handle, Nat, Bool, Lst, proc};
+    use /std/{Handle, Nat, Bool, List, proc};
     let inc(x : Nat) -> Nat = x + 1;
     let apply(g : (Nat) -> Nat, x : Nat) -> Nat = g(x);
     let select(b : Bool, g : (Nat) -> Nat) -> (Nat) -> Nat =
@@ -72,32 +72,32 @@ const DIRECT_ESCAPING: &str = r#"
         | true => g
         | false => (y) => y
         end;
-    let taint = Lst/len(proc/args!);
+    let taint = List/len(proc/args!);
     let n : Nat = taint;
     let escaped = select(n <= 0, inc);
     /std/print(Nat/to_str(inc(n) + apply(escaped, n)))
     "#;
 
 const FUNCTION_ONLY: &str = r#"
-    use /std/{Handle, Nat, Lst, proc};
+    use /std/{Handle, Nat, List, proc};
     rec down(n : Nat, acc : Nat) -> Nat =
         match n : (_) => Nat
         | 0 => acc
         | p + 1; ih => down(p, acc + 1)
         end;
-    let taint = Lst/len(proc/args!);
+    let taint = List/len(proc/args!);
     let n : Nat = taint;
     /std/print(Nat/to_str(down(n, 0)))
     "#;
 
 /// Two mutually recursive functions entered from two arms of a runtime match — the closest surface shape to an irreducible cycle. Curios has no unstructured jump, so the structurizer lays this out reducibly (no dispatcher); see [`mutual_recursion_stays_reducible`].
 const MUTUAL_RECURSION: &str = r#"
-    use /std/{Handle, Nat, Lst, proc};
+    use /std/{Handle, Nat, List, proc};
     rec ping(n : Nat) -> Nat =
         match n : (_) => Nat | 0 => 0 | p + 1; ih => pong(p) end
     and pong(n : Nat) -> Nat =
         match n : (_) => Nat | 0 => 1 | p + 1; ih => ping(p) end;
-    let taint = Lst/len(proc/args!);
+    let taint = List/len(proc/args!);
     let n : Nat = taint;
     let start = n <= 0;
     /std/print(Nat/to_str(match start : (_) => Nat | true => ping(n) | false => pong(n) end))

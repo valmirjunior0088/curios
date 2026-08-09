@@ -21,7 +21,7 @@ use {
     std::collections::BTreeSet,
 };
 
-/// A monoid registered for accumulator reassociation, keyed in the erased operators. No `And` row: boolean and bitwise `and` share an erased operator with different identities, so no single seed is sound for both. No append rows: `BinAppend`/`LstAppend` append an *element* to a sequence — heterogeneous, so the accumulator rewrite's carriers do not line up (the legacy engine's append rows fired on shapes this corpus does not contain; the gate below is the arbiter if one ever appears).
+/// A monoid registered for accumulator reassociation, keyed in the erased operators. No `And` row: boolean and bitwise `and` share an erased operator with different identities, so no single seed is sound for both. No append rows: `BinAppend`/`ListAppend` append an *element* to a sequence — heterogeneous, so the accumulator rewrite's carriers do not line up (the legacy engine's append rows fired on shapes this corpus does not contain; the gate below is the arbiter if one ever appears).
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Monoid {
     NatAdd,

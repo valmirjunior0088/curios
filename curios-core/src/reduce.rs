@@ -39,12 +39,12 @@ pub enum ReduceError {
         end: usize,
         span: Option<Span>,
     },
-    LstGetOutOfBounds {
+    ListGetOutOfBounds {
         len: usize,
         index: usize,
         span: Option<Span>,
     },
-    LstSliceOutOfRange {
+    ListSliceOutOfRange {
         len: usize,
         start: usize,
         end: usize,

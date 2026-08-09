@@ -2,7 +2,7 @@ use curios_elab::TermBuilders;
 use {
     super::{Hoisted, Lowerer},
     crate::{
-        BinPattern, Choose, ChooseArm, ChooseTest, Error, LstPattern, Match, MatchPattern,
+        BinPattern, Choose, ChooseArm, ChooseTest, Error, ListPattern, Match, MatchPattern,
         MatrixArm, NatPattern, Pattern, PatternField, Term,
     },
     curios_base::{Grain, Plicity},
@@ -324,7 +324,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 }
                 self.compile_fields(columns, rows, leaf)
             }
-            // The four hardcoded-carrier leaves. `Nat`/`Lst`/`Bin` each nest their own two-case sub-pattern (`NatPattern::{Zero,Succ}` and friends), so matching the outer variant alone already treats both sub-cases as one shape here — no separate classifier needed (see `is_dispatchable`'s doc comment).
+            // The four hardcoded-carrier leaves. `Nat`/`List`/`Bin` each nest their own two-case sub-pattern (`NatPattern::{Zero,Succ}` and friends), so matching the outer variant alone already treats both sub-cases as one shape here — no separate classifier needed (see `is_dispatchable`'s doc comment).
             MatchPattern::Bool(_) => {
                 if rows
                     .iter()
@@ -343,14 +343,14 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 }
                 self.compile_nat(columns, rows, top_motive, leaf)
             }
-            MatchPattern::Lst(_) => {
+            MatchPattern::List(_) => {
                 if rows
                     .iter()
-                    .any(|row| !matches!(row.patterns[0], MatchPattern::Lst(_)))
+                    .any(|row| !matches!(row.patterns[0], MatchPattern::List(_)))
                 {
                     return Err(Error::MatrixInconsistentShape);
                 }
-                self.compile_lst(columns, rows, top_motive, leaf)
+                self.compile_list(columns, rows, top_motive, leaf)
             }
             MatchPattern::Bin(_) => {
                 if rows
@@ -522,7 +522,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     /// - **Induction** (a `Succ` leaf present): `0`/`n+1; ih` structural peeling, emitted as [`curios_core::Term::nat_match`]. A `Lit` leaf mixed in is [`Error::MatrixMixedNatDispatch`] — no single core form peels a successor *and* dispatches on a value.
     /// - **Dispatch** (no `Succ`): value dispatch over `0`/`Lit(k)` cases, emitted as [`curios_core::Term::switch`] with the matrix default as its fallthrough. A `switch` over `Nat` is never exhaustive, so the default is mandatory (else [`Error::MatrixIncompleteCarrierMatch`]). Rows sharing a literal group and recurse together, exactly like [`Self::compile_ctor`]'s tags.
     ///
-    /// The induction path mirrors [`Self::compile_ctor`]'s single-row/multi-row naming discipline exactly, for the same reason: `curios-elab`'s erasure pass reads a `Nat` succ arm's stored binder labels as naming hints too (`erase_nat_match`, the same `Context::fresh` hint-compounding mechanism `erase_induct_match` has) — unconditionally minting a synthetic name here would resurrect the exact regression class `compile_ctor`'s fast path exists to avoid. A `NatSucc` group of exactly one row therefore reuses that row's own written `pred_label` (and a plain-name `; ih`) directly (the hypothesis through [`Self::cons_ih_pattern`], like [`Self::compile_lst`]); only a group with more than one row mints synthetic names, and — as in [`Self::compile_lst`] — a multi-row member that omitted `; ih` gets no ih bind pushed.
+    /// The induction path mirrors [`Self::compile_ctor`]'s single-row/multi-row naming discipline exactly, for the same reason: `curios-elab`'s erasure pass reads a `Nat` succ arm's stored binder labels as naming hints too (`erase_nat_match`, the same `Context::fresh` hint-compounding mechanism `erase_induct_match` has) — unconditionally minting a synthetic name here would resurrect the exact regression class `compile_ctor`'s fast path exists to avoid. A `NatSucc` group of exactly one row therefore reuses that row's own written `pred_label` (and a plain-name `; ih`) directly (the hypothesis through [`Self::cons_ih_pattern`], like [`Self::compile_list`]); only a group with more than one row mints synthetic names, and — as in [`Self::compile_list`] — a multi-row member that omitted `; ih` gets no ih bind pushed.
     ///
     /// `pred` is always a plain binder name, never a further sub-pattern (deep peeling stays out of scope), so — unlike a constructor argument slot — the multi-row case never needs a new column for it at all: each row's own written name is just bound to one shared synthetic variable via `row.binds`, exactly like [`Self::compile`]'s own all-`Binder`-column-retirement path. The `; ih` binds the fold result rather than scrutinee shape, so it additionally admits an irrefutable tuple/struct pattern, whose leaves ride the same binds as projections ([`Self::push_shared_ih_binds`]).
     ///
@@ -626,8 +626,8 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         ))
     }
 
-    /// Groups rows into `LstNil`/`LstCons` and emits [`curios_core::Term::lst_match`] directly. Structurally identical to [`Self::compile_nat`] but with three names (`head`/`tail`/optional `ih`) instead of two, reusing [`Self::cons_ih_pattern`] for the single-row case's `ih` (written name → bound, omitted → fresh, compound pattern → fresh plus projection binds). In the multi-row case, a row whose own `ih` was omitted never references any ih name, so no bind is pushed for it — only rows that wrote `; ih` get binds, sharing the one synthetic `ih` variable the emitted core node itself always needs.
-    fn compile_lst(
+    /// Groups rows into `ListNil`/`ListCons` and emits [`curios_core::Term::list_match`] directly. Structurally identical to [`Self::compile_nat`] but with three names (`head`/`tail`/optional `ih`) instead of two, reusing [`Self::cons_ih_pattern`] for the single-row case's `ih` (written name → bound, omitted → fresh, compound pattern → fresh plus projection binds). In the multi-row case, a row whose own `ih` was omitted never references any ih name, so no bind is pushed for it — only rows that wrote `; ih` get binds, sharing the one synthetic `ih` variable the emitted core node itself always needs.
+    fn compile_list(
         &self,
         mut columns: Vec<curios_core::Term>,
         rows: Vec<MatrixRow<'_>>,
@@ -641,18 +641,18 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         let mut cons_rows: Vec<(String, String, Option<Pattern>, MatrixRow<'_>)> = Vec::new();
         for mut row in rows {
             match row.patterns.remove(0) {
-                MatchPattern::Lst(LstPattern::Nil) => nil_rows.push(row),
-                MatchPattern::Lst(LstPattern::Cons {
+                MatchPattern::List(ListPattern::Nil) => nil_rows.push(row),
+                MatchPattern::List(ListPattern::Cons {
                     head_label,
                     tail_label,
                     ih,
                 }) => cons_rows.push((head_label.clone(), tail_label.clone(), ih.clone(), row)),
-                _ => unreachable!("every row classified as Lst"),
+                _ => unreachable!("every row classified as List"),
             }
         }
 
         if (nil_rows.is_empty() || cons_rows.is_empty()) && self.default.is_none() {
-            return Err(Error::MatrixIncompleteCarrierMatch { carrier: "Lst" });
+            return Err(Error::MatrixIncompleteCarrierMatch { carrier: "List" });
         }
 
         let motive = self.motive_scope(top_motive.unwrap_or(&None))?;
@@ -707,7 +707,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             (head_synth, tail_synth, ih_synth, cons_case)
         };
 
-        Ok(curios_core::Term::lst_match_scoped(
+        Ok(curios_core::Term::list_match_scoped(
             scrutinee,
             curios_core::Term::metavar(self.context.fresh_metavar()),
             motive,
@@ -719,7 +719,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
         ))
     }
 
-    /// Groups rows into `BinEnd`/`BinByte` and emits [`curios_core::Term::bin_match_scoped`] directly — identical to [`Self::compile_lst`] minus the `elem` metavar argument `Lst` needs for its polymorphic element type (`Bin` has none).
+    /// Groups rows into `BinEnd`/`BinByte` and emits [`curios_core::Term::bin_match_scoped`] directly — identical to [`Self::compile_list`] minus the `elem` metavar argument `List` needs for its polymorphic element type (`Bin` has none).
     fn compile_bin(
         &self,
         mut columns: Vec<curios_core::Term>,
@@ -989,7 +989,7 @@ fn refutation_count(pattern: &MatchPattern) -> usize {
         }
         MatchPattern::Bool(_)
         | MatchPattern::Nat(_)
-        | MatchPattern::Lst(_)
+        | MatchPattern::List(_)
         | MatchPattern::Bin(_) => 1,
     }
 }

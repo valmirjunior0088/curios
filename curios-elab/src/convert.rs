@@ -323,7 +323,7 @@ impl Sort {
             Subterm::TupleType(_) => Sort::Type(Level::zero()),
             // An intrinsic type former states its own level.
             //
-            // A closed intrinsic is small: it quantifies over nothing, so it sits at level 0. A parameterized one carries its parameter's level — `Lst : Type u -> Type u` — and pinning those at 0 would claim the type is smaller than it is, which is the unsound direction: it is what would let a large type be stored in a small universe.
+            // A closed intrinsic is small: it quantifies over nothing, so it sits at level 0. A parameterized one carries its parameter's level — `List : Type u -> Type u` — and pinning those at 0 would claim the type is smaller than it is, which is the unsound direction: it is what would let a large type be stored in a small universe.
             Subterm::Intrinsic(intrinsic) => match intrinsic {
                 Intrinsic::BoolType
                 | Intrinsic::NatType
@@ -332,7 +332,7 @@ impl Sort {
                 | Intrinsic::FltType
                 | Intrinsic::BinType(_)
                 | Intrinsic::HandleType => Sort::Type(Level::zero()),
-                Intrinsic::LstType(element)
+                Intrinsic::ListType(element)
                 | Intrinsic::CellType(element)
                 | Intrinsic::IoType(element) => {
                     let element = element.clone();
@@ -423,13 +423,13 @@ impl Sort {
                 | Intrinsic::IntXor(..)
                 | Intrinsic::IoBind(..)
                 | Intrinsic::IoPure(..)
-                | Intrinsic::Lst(..)
-                | Intrinsic::LstAppend(..)
-                | Intrinsic::LstConcat(..)
-                | Intrinsic::LstGet(..)
-                | Intrinsic::LstLen(..)
-                | Intrinsic::LstMap(..)
-                | Intrinsic::LstSlice(..)
+                | Intrinsic::List(..)
+                | Intrinsic::ListAppend(..)
+                | Intrinsic::ListConcat(..)
+                | Intrinsic::ListGet(..)
+                | Intrinsic::ListLen(..)
+                | Intrinsic::ListMap(..)
+                | Intrinsic::ListSlice(..)
                 | Intrinsic::Nat(..)
                 | Intrinsic::NatAdd(..)
                 | Intrinsic::NatAnd(..)
@@ -654,7 +654,7 @@ impl Convert {
         self.pending.push_back(Goal { type_, this, that });
     }
 
-    /// Enqueue the bodies of two arity-3 cons arms (`Bin`/`Lst`) for comparison, opened under shared fresh binders for `(head, tail, ih)`.
+    /// Enqueue the bodies of two arity-3 cons arms (`Bin`/`List`) for comparison, opened under shared fresh binders for `(head, tail, ih)`.
     fn compare_cons_three(
         &mut self,
         context: &mut Context,
@@ -1232,12 +1232,12 @@ impl Convert {
                     Ok(true)
                 }
                 (
-                    Carrier::Lst {
+                    Carrier::List {
                         elem: this_elem,
                         empty_case: this_empty,
                         cons_case: this_cons,
                     },
-                    Carrier::Lst {
+                    Carrier::List {
                         elem: that_elem,
                         empty_case: that_empty,
                         cons_case: that_cons,
@@ -1688,12 +1688,12 @@ impl Convert {
         Ok(true)
     }
 
-    /// Flex-apply imitation — the restricted higher-order rule: for `?m(a₁ … aₖ) ≡ T(p̄ ++ ī)` where `T` is a nominal (inductive or struct) type constructor or a unary intrinsic type former (`Lst`, `Cell`), commit the *imitation* solution `?m := λx₁…xₖ. T(x₁, …, xₖ)` and equate arguments pairwise. This is what unifies `?M(?A) ≡ Option(Nat)` for higher-kinded concepts — the same commitment Lean's first-order approximation and Agda's constructor-headed unification make.
+    /// Flex-apply imitation — the restricted higher-order rule: for `?m(a₁ … aₖ) ≡ T(p̄ ++ ī)` where `T` is a nominal (inductive or struct) type constructor or a unary intrinsic type former (`List`, `Cell`), commit the *imitation* solution `?m := λx₁…xₖ. T(x₁, …, xₖ)` and equate arguments pairwise. This is what unifies `?M(?A) ≡ Option(Nat)` for higher-kinded concepts — the same commitment Lean's first-order approximation and Agda's constructor-headed unification make.
     ///
     /// Deliberate restrictions (cf. the guards in `solve`):
     /// - **right-biased** partial application — for a spine of `k` arguments against `n` rigid arguments, `k < n` commits `?m := λx₁…xₖ. T(b₁, …, b_{n−k}, x₁, …, xₖ)`, the conventional choice kind-currying makes (it is why `Monad (Either e)` works in Haskell). The fixed prefix is taken from the rigid side, which a telescope's left-to-right dependency order keeps well-scoped, and `k` is never guessed: it is the spine's own length, checked against `?m`'s frozen birth arity. An equation whose intended solution abstracts a *prefix* is guessed wrong and blocked — incompleteness moves rather than disappearing — and a kind-wrong split (abstracting an index the birth type sorts differently) is refused by the re-validation below before it commits;
     /// - imitation only — the constant (`?m := λ_. T(b̄)`) and projection (`?m := λx. x`) solutions are never produced;
-    /// - rigid heads only — nominal constructors and the unary intrinsic formers (`Lst`, `Cell`), whose argument rides inside the `Intrinsic` node;
+    /// - rigid heads only — nominal constructors and the unary intrinsic formers (`List`, `Cell`), whose argument rides inside the `Intrinsic` node;
     /// - flex–flex stays blocked (dispatched before the structural match);
     /// - a rejected or postponed guess *blocks* the goal, never hard-fails it: refuting the imitation does not prove the equation unsatisfiable (a constant solution could still exist), and blocking preserves the drain's retry semantics — a permanently blocked goal surfaces as a type mismatch at its origin.
     ///
@@ -1746,10 +1746,10 @@ impl Convert {
                     }),
                 )
             }
-            // The unary intrinsic type formers: their argument rides inside the `Intrinsic` node, so the imitation body rebuilds the node over the binder (`?m := λT. Lst(T)` for `?m(?A) ≡ Lst(Nat)`).
-            Subterm::Intrinsic(Intrinsic::LstType(elem)) => (
+            // The unary intrinsic type formers: their argument rides inside the `Intrinsic` node, so the imitation body rebuilds the node over the binder (`?m := λT. List(T)` for `?m(?A) ≡ List(Nat)`).
+            Subterm::Intrinsic(Intrinsic::ListType(elem)) => (
                 vec![elem.clone()],
-                Box::new(|vars| Term::intrinsic(Intrinsic::LstType(vars[0].clone()))),
+                Box::new(|vars| Term::intrinsic(Intrinsic::ListType(vars[0].clone()))),
             ),
             Subterm::Intrinsic(Intrinsic::CellType(elem)) => (
                 vec![elem.clone()],
@@ -2193,7 +2193,7 @@ impl Convert {
                 (
                     Subterm::Apply(apply),
                     Subterm::Intrinsic(
-                        rigid @ (Intrinsic::LstType(_)
+                        rigid @ (Intrinsic::ListType(_)
                         | Intrinsic::CellType(_)
                         | Intrinsic::IoType(_)),
                     ),
@@ -2209,7 +2209,7 @@ impl Convert {
                 }
                 (
                     Subterm::Intrinsic(
-                        rigid @ (Intrinsic::LstType(_)
+                        rigid @ (Intrinsic::ListType(_)
                         | Intrinsic::CellType(_)
                         | Intrinsic::IoType(_)),
                     ),

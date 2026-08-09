@@ -1,8 +1,8 @@
-//! The fixed runtime heap-type shapes every emitted module declares: the data representations (`Flt`, packed binary sequences, `Lst`, `Cell`) whose structure is program-independent, unlike the per-program families (`tpl/N`, closures, environments, `func/N`) the emitter derives from the module. Kept in one file so the emitter has one spelling for each shape. curios-web's bridge builder imports [`bytes_sub_type`] and declares the same `$bytes` shape: wasm-GC canonicalizes structural types, so any module declaring the exact shape can exchange byte-payload refs with a compiled program. curios-runtime's `host_func_type` mirrors `$bytes` and `$elems` in wasmtime's type universe — keep that end in sync.
+//! The fixed runtime heap-type shapes every emitted module declares: the data representations (`Flt`, packed binary sequences, `List`, `Cell`) whose structure is program-independent, unlike the per-program families (`tpl/N`, closures, environments, `func/N`) the emitter derives from the module. Kept in one file so the emitter has one spelling for each shape. curios-web's bridge builder imports [`bytes_sub_type`] and declares the same `$bytes` shape: wasm-GC canonicalizes structural types, so any module declaring the exact shape can exchange byte-payload refs with a compiled program. curios-runtime's `host_func_type` mirrors `$bytes` and `$elems` in wasmtime's type universe — keep that end in sync.
 //!
 //! # The rope representation
 //!
-//! `Bits`, `Bytes`, and `Lst` are *ropes*: the two packed grains share one three-shape tagged union behind the non-final `$rope/bin` struct base, while lists use `$rope/lst` (both have fields `tag` + `len`). A `leaf` holds a flat payload array (`$bytes` / `$elems`); a `node` holds two children plus a memoization `cache`; a `view` is a window — a `base` rope plus an `offset`. The cost model this buys:
+//! `Bits`, `Bytes`, and `List` are *ropes*: the two packed grains share one three-shape tagged union behind the non-final `$rope/bin` struct base, while lists use `$rope/list` (both have fields `tag` + `len`). A `leaf` holds a flat payload array (`$bytes` / `$elems`); a `node` holds two children plus a memoization `cache`; a `view` is a window — a `base` rope plus an `offset`. The cost model this buys:
 //!
 //! - `concat`/`append` are O(1): one `node` allocation, no copying.
 //! - `len` is O(1): every shape carries it.
@@ -45,7 +45,7 @@ pub fn bytes_sub_type() -> curios_wasm::SubType {
     }
 }
 
-/// `$elems` — an `Lst` rope's flat element payload, and the host-boundary shape: `array (mut <top>)`. The element field stays mutable regardless of cyclicity: payloads are built with `array.new_default` + per-element `array.set`, so it must be writable.
+/// `$elems` — a `List` rope's flat element payload, and the host-boundary shape: `array (mut <top>)`. The element field stays mutable regardless of cyclicity: payloads are built with `array.new_default` + per-element `array.set`, so it must be writable.
 pub fn elems_sub_type(top_type: curios_wasm::ValType) -> curios_wasm::SubType {
     curios_wasm::SubType {
         is_final: true,
@@ -84,7 +84,7 @@ fn ref_field(
     }
 }
 
-/// A rope base (`$rope/bin` / `$rope/lst`) — the non-final struct every carrier ref is cast to: `struct (field $tag (i32)) (field $len (i32))`. `tag` is 0 for a leaf, 1 for a node, 2 for a view; `len` is the carrier's element count, so `len` and the tag dispatch never force.
+/// A rope base (`$rope/bin` / `$rope/list`) — the non-final struct every carrier ref is cast to: `struct (field $tag (i32)) (field $len (i32))`. `tag` is 0 for a leaf, 1 for a node, 2 for a view; `len` is the carrier's element count, so `len` and the tag dispatch never force.
 pub fn rope_base_sub_type(
     tag_field: curios_wasm::FieldName,
     len_field: curios_wasm::FieldName,
@@ -99,7 +99,7 @@ pub fn rope_base_sub_type(
     }
 }
 
-/// A rope leaf (`$rope/bin/leaf` / `$rope/lst/leaf`) — final, subtype of the base: adds the flat payload (`$bytes` / `$elems`).
+/// A rope leaf (`$rope/bin/leaf` / `$rope/list/leaf`) — final, subtype of the base: adds the flat payload (`$bytes` / `$elems`).
 pub fn rope_leaf_sub_type(
     base_type: curios_wasm::TypeName,
     tag_field: curios_wasm::FieldName,
@@ -121,7 +121,7 @@ pub fn rope_leaf_sub_type(
     }
 }
 
-/// A rope node (`$rope/bin/node` / `$rope/lst/node`) — final, subtype of the base: adds two children and the memoization `cache`. All three are mutable and nullable: forcing writes the flat payload into `cache` and nulls the children, releasing the tree while the memo stays live.
+/// A rope node (`$rope/bin/node` / `$rope/list/node`) — final, subtype of the base: adds two children and the memoization `cache`. All three are mutable and nullable: forcing writes the flat payload into `cache` and nulls the children, releasing the tree while the memo stays live.
 pub fn rope_node_sub_type(
     base_type: curios_wasm::TypeName,
     tag_field: curios_wasm::FieldName,
@@ -153,7 +153,7 @@ pub fn rope_node_sub_type(
     }
 }
 
-/// A rope view (`$rope/bin/view` / `$rope/lst/view`) — final, subtype of the base: a window into a `base` rope starting at `offset`. All fields are immutable; the invariant that makes windows read-through is *representational*: a `view`'s base is always flat-available (a leaf, or a node whose `cache` is already set), enforced by the only constructor, the emitted `slice` helper.
+/// A rope view (`$rope/bin/view` / `$rope/list/view`) — final, subtype of the base: a window into a `base` rope starting at `offset`. All fields are immutable; the invariant that makes windows read-through is *representational*: a `view`'s base is always flat-available (a leaf, or a node whose `cache` is already set), enforced by the only constructor, the emitted `slice` helper.
 pub fn rope_view_sub_type(
     base_type: curios_wasm::TypeName,
     tag_field: curios_wasm::FieldName,

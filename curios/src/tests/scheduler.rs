@@ -66,13 +66,13 @@ fn join_all_runs_children_concurrently_and_collects_in_order() {
     // `join_all` spawns every task as its own fiber (they run concurrently) and collects their results positionally regardless of completion order. Here both children complete synchronously when scheduled, writing "a;" then "b;", and the gathered results [1, 2] sum to 3.
     assert_eq!(
         run(r#"
-        use /std/{Async, Handle, Str, Nat, Lst};
+        use /std/{Async, Handle, Str, Nat, List};
         let main : Async({}) =
             let rs = Async/join_all([
                 Async/bind(Async/lift(Handle/write(Handle/stdout, Str/to_bytes("a;"))), (_) => Async/pure(1)),
                 Async/bind(Async/lift(Handle/write(Handle/stdout, Str/to_bytes("b;"))), (_) => Async/pure(2))
             ])!;
-            let s = Async/lift(Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(/std/Option/unwrap_or(Lst/get(rs, 0), 0), /std/Option/unwrap_or(Lst/get(rs, 1), 0))))))!;
+            let s = Async/lift(Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(/std/Option/unwrap_or(List/get(rs, 0), 0), /std/Option/unwrap_or(List/get(rs, 1), 0))))))!;
             Async/pure(());
         Async/run(main)
         "#),
@@ -214,23 +214,23 @@ fn manual_release_runs_a_finalizer_once_and_completion_does_not_repeat_it() {
 
 #[test]
 fn heterogeneous_existential_task_list_through_a_generic_map() {
-    // An `Lst` of existential-boxed tasks of DIFFERENT result types, mapped by a generic HOF whose body does an indirect closure call on a continuation pulled out of the box. The arity-1 closure definition is inlined away by the specializer, leaving the `call_ref` with no surviving definition — the codegen path that needs the call-site arity registered for `envr`/`clsr`.
+    // An `List` of existential-boxed tasks of DIFFERENT result types, mapped by a generic HOF whose body does an indirect closure call on a continuation pulled out of the box. The arity-1 closure definition is inlined away by the specializer, leaving the `call_ref` with no surviving definition — the codegen path that needs the call-site arity registered for `envr`/`clsr`.
     assert_eq!(
         run(r#"
-        use /std/{Handle, Str, Nat, Lst};
+        use /std/{Handle, Str, Nat, List};
         induct Susp(A : Type) : Type
         | now(A)
         | later(() -> Susp(A))
         end
         let Box : Type = { A : Type, t : Susp(A) };
-        let boxes : Lst(Box) =
+        let boxes : List(Box) =
             [(Nat, Susp/now(7)), ({}, Susp/now(()))];
-        let stepped = Lst/map(boxes, (b : Box) =>
+        let stepped = List/map(boxes, (b : Box) =>
             match b.t : (_) => Box
             | now(a) => (b.A, Susp/now(a))
             | later(k) => (b.A, k())
             end);
-        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Lst/len(stepped))))!;
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(List/len(stepped))))!;
         /std/Io/pure(())
         "#),
         b"2"

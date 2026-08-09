@@ -128,11 +128,11 @@ pub enum CpsIntrinsicOp {
     BinSlice(Grain),
     BinAppend(Grain),
     BinConcat(Grain, usize),
-    LstLen,
-    LstGet,
-    LstSlice,
-    LstAppend,
-    LstConcat(usize),
+    ListLen,
+    ListGet,
+    ListSlice,
+    ListAppend,
+    ListConcat(usize),
     TplGet(usize),
 }
 
@@ -170,10 +170,10 @@ impl CpsIntrinsicOp {
             | Self::FltOfLeBytes
             | Self::FltToInt
             | Self::BinLen(_)
-            | Self::LstLen
+            | Self::ListLen
             | Self::TplGet(_) => 1,
-            Self::BinSlice(_) | Self::LstSlice => 3,
-            Self::BinConcat(_, arity) | Self::LstConcat(arity) => arity,
+            Self::BinSlice(_) | Self::ListSlice => 3,
+            Self::BinConcat(_, arity) | Self::ListConcat(arity) => arity,
             _ => 2,
         }
     }
@@ -188,8 +188,8 @@ impl CpsIntrinsicOp {
             | Self::FltToInt
             | Self::BinGet(_)
             | Self::BinSlice(_)
-            | Self::LstGet
-            | Self::LstSlice
+            | Self::ListGet
+            | Self::ListSlice
             | Self::TplGet(_)
             | Self::NatAdd
             | Self::NatMul
@@ -200,8 +200,8 @@ impl CpsIntrinsicOp {
             | Self::IntMul => CpsIntrinsicEffect::MayTrap,
             Self::BinAppend(_)
             | Self::BinConcat(_, _)
-            | Self::LstAppend
-            | Self::LstConcat(_)
+            | Self::ListAppend
+            | Self::ListConcat(_)
             | Self::FltToLeBytes => CpsIntrinsicEffect::Allocates,
             _ => CpsIntrinsicEffect::Total,
         }
@@ -284,10 +284,10 @@ impl CpsCellOp {
     }
 }
 
-/// A call-like intrinsic. `LstMap` takes the list then the mapper — the carrier-first order of the whole sequence family, matched by the erased representation so the lowering transcribes without reordering — and runs the mapper once per element, in order.
+/// A call-like intrinsic. `ListMap` takes the list then the mapper — the carrier-first order of the whole sequence family, matched by the erased representation so the lowering transcribes without reordering — and runs the mapper once per element, in order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CpsIntrinsicCall {
-    LstMap,
+    ListMap,
 }
 
 #[derive(Debug, Clone)]
@@ -1018,13 +1018,13 @@ impl CpsModule {
                 }
             }
             CpsNode::Intrinsic {
-                op: CpsIntrinsicCall::LstMap,
+                op: CpsIntrinsicCall::ListMap,
                 args,
                 return_to,
             } => {
                 if args.len() != 2 {
                     return Err(CpsVerifyError(format!(
-                        "{id} LstMap expects two operands, got {}",
+                        "{id} ListMap expects two operands, got {}",
                         args.len()
                     )));
                 }
@@ -1037,7 +1037,7 @@ impl CpsModule {
                 )? != 1
                 {
                     return Err(CpsVerifyError(format!(
-                        "{id} LstMap continuation must accept one value"
+                        "{id} ListMap continuation must accept one value"
                     )));
                 }
             }
@@ -1463,8 +1463,8 @@ mod tests {
     }
 
     #[test]
-    fn lst_map_is_not_an_intrinsic_opcode() {
-        assert!(CpsIntrinsicOp::LstAppend.allocates());
+    fn list_map_is_not_an_intrinsic_opcode() {
+        assert!(CpsIntrinsicOp::ListAppend.allocates());
         assert!(!CpsIntrinsicOp::NatAdd.is_total());
     }
 

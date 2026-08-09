@@ -1,6 +1,6 @@
 pub use /sys/{Handle};
 pub use /sys/Handle/{stdin, stdout, stderr, eql};
-use /std/{Bytes, Nat, Result, Lst, Io};
+use /std/{Bytes, Nat, Result, List, Io};
 
 pub induct Error: pub Type
 | not_found()
@@ -12,7 +12,7 @@ pub induct Error: pub Type
 | other(Nat)
 end
 
-let errors: Lst({Nat, Error}) =
+let errors: List({Nat, Error}) =
     [
         (/sys/status/not_found, Error/not_found()),
         (/sys/status/permission_denied, Error/permission_denied()),
@@ -22,7 +22,7 @@ let errors: Lst({Nat, Error}) =
         (/sys/status/would_block, Error/would_block())];
 
 pub let error_of(status: Nat) -> Error =
-    Lst/fold(
+    List/fold(
         errors,
         -- Not a named code: the errno passthrough lane, offset by other_base so an errno never collides with a named code.
         Error/other(status - /sys/status/other_base),

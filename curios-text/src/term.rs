@@ -302,14 +302,14 @@ pub enum MatchPattern {
     Bool(bool),
     /// A nested `Nat` literal leaf — the `0`/`n+1; ih` (induction) or bare literal (dispatch) shapes a headed `Nat` match takes.
     Nat(NatPattern),
-    /// A nested `Lst` literal leaf — the `[]`/`[head,..tail][; ih]` shapes a headed `Lst` match takes.
-    Lst(LstPattern),
+    /// A nested `List` literal leaf — the `[]`/`[head,..tail][; ih]` shapes a headed `List` match takes.
+    List(ListPattern),
     /// A nested `Bits`/`Bytes` literal leaf — the prefixed empty and `\head\..tail[; ih]` shapes a headed packed-sequence match takes.
     Bin(BinPattern),
 }
 
 impl MatchPattern {
-    /// Whether this leaf is a genuine single-dispatch shape (`Ctor`/`Bool`/`Nat`/`Lst`/`Bits`/`Bytes`), as opposed to `Binder`/`Tuple`/ `Struct`, which never produce a core `Match` node at all (a binder never splits, a tuple/struct explodes into projections) — so there is nothing for a dependent motive to attach to. Used by the matrix compiler's (`into_core::match_compile`) dependent-motive gate: `Nat`/`Lst`/ `Bits`/`Bytes` each nest their own two-case sub-pattern, so a plain [`std::mem::discriminant`] comparison on the outer variant already treats e.g. `NatPattern::Zero` and `NatPattern::Succ` as the same dispatchable shape, with no separate classifier needed.
+    /// Whether this leaf is a genuine single-dispatch shape (`Ctor`/`Bool`/`Nat`/`List`/`Bits`/`Bytes`), as opposed to `Binder`/`Tuple`/ `Struct`, which never produce a core `Match` node at all (a binder never splits, a tuple/struct explodes into projections) — so there is nothing for a dependent motive to attach to. Used by the matrix compiler's (`into_core::match_compile`) dependent-motive gate: `Nat`/`List`/ `Bits`/`Bytes` each nest their own two-case sub-pattern, so a plain [`std::mem::discriminant`] comparison on the outer variant already treats e.g. `NatPattern::Zero` and `NatPattern::Succ` as the same dispatchable shape, with no separate classifier needed.
     pub(crate) fn is_dispatchable(&self) -> bool {
         !matches!(
             self,
@@ -323,7 +323,7 @@ impl MatchPattern {
 pub enum NatPattern {
     /// The `0` leaf.
     Zero,
-    /// The `pred + 1; ih` leaf. `pred_label` is always a plain binder name, never a further nested sub-pattern — deep peeling in one arm stays expressible only via hand-nested matches. The `; ih` binds the *fold result*, not scrutinee shape, so it takes any irrefutable [`Pattern`] (`; (cur, live)` destructures a tuple-valued hypothesis exactly as a `let` binder would); it is optional, exactly like the `; ih` on the `Lst`/`Bits`/`Bytes` cons leaves below — omitting it makes the arm an ordinary case split.
+    /// The `pred + 1; ih` leaf. `pred_label` is always a plain binder name, never a further nested sub-pattern — deep peeling in one arm stays expressible only via hand-nested matches. The `; ih` binds the *fold result*, not scrutinee shape, so it takes any irrefutable [`Pattern`] (`; (cur, live)` destructures a tuple-valued hypothesis exactly as a `let` binder would); it is optional, exactly like the `; ih` on the `List`/`Bits`/`Bytes` cons leaves below — omitting it makes the arm an ordinary case split.
     Succ {
         pred_label: String,
         ih: Option<Pattern>,
@@ -332,9 +332,9 @@ pub enum NatPattern {
     Lit(u32),
 }
 
-/// The two shapes a nested `Lst` leaf can take — see [`MatchPattern::Lst`].
+/// The two shapes a nested `List` leaf can take — see [`MatchPattern::List`].
 #[derive(Debug, Clone, PartialEq)]
-pub enum LstPattern {
+pub enum ListPattern {
     /// The `[]` leaf.
     Nil,
     /// The `[head, ..tail][; ih]` leaf. `ih` is `None` when `; ih` is omitted (lowering mints a fresh internal name) — a plain case-split with no fold hypothesis; when written it is any irrefutable [`Pattern`], like the `Nat` succ leaf's.
@@ -350,7 +350,7 @@ pub enum LstPattern {
 pub enum BinPattern {
     /// The `b[]`/`x[]` leaf.
     End(Grain),
-    /// The `\head\..tail[; ih]` leaf; `ih` is optional (and an irrefutable [`Pattern`]) exactly as on the `Lst` cons leaf.
+    /// The `\head\..tail[; ih]` leaf; `ih` is optional (and an irrefutable [`Pattern`]) exactly as on the `List` cons leaf.
     Atom {
         grain: Grain,
         head_label: String,

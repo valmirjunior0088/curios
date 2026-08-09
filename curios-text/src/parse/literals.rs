@@ -221,7 +221,7 @@ fn parse_hex_atom<'a>() -> Parser<'a, u8> {
     })
 }
 
-// One entry of a `Bits`/`Bytes` literal, mirroring `parse_lst_entry`: an escaped constant atom, a `..` spread contributing a whole packed value, or a plain term contributing a single atom. The escape has no term spelling of its own on purpose — it is what marks compile-time constant data, which lowering keeps as a packed run rather than a chain of appends (see `into_core`'s `lower_bin_literal`).
+// One entry of a `Bits`/`Bytes` literal, mirroring `parse_list_entry`: an escaped constant atom, a `..` spread contributing a whole packed value, or a plain term contributing a single atom. The escape has no term spelling of its own on purpose — it is what marks compile-time constant data, which lowering keeps as a packed run rather than a chain of appends (see `into_core`'s `lower_bin_literal`).
 fn parse_bin_entry<'a>(grain: Grain) -> Parser<'a, RawBinSegment> {
     parse_bin_atom(grain)
         .or(catch(parse_literal(".."))
@@ -247,7 +247,7 @@ pub(super) fn coalesce_bin_segments(raw: Vec<RawBinSegment>) -> Vec<BinSegment> 
     segments
 }
 
-// A `Bits`/`Bytes` literal `b[\1, flag, ..rest]` (empty `b[]`) — the packed siblings of the `Lst` literal, told apart by the grain letter glued to the bracket. Only that junction is tight: past the `[` the literal lexes like any other bracketed list, so whitespace, a trailing comma, and arbitrary (unparenthesized) element and spread terms are all free. The glue is what keeps `b` and `x` usable as ordinary binders — `b [1]` is the binder `b` followed by a list, not a `Bits` literal — and an identifier merely ending in the grain letter never starts one, since the name parser reaches `nb[…]` first.
+// A `Bits`/`Bytes` literal `b[\1, flag, ..rest]` (empty `b[]`) — the packed siblings of the `List` literal, told apart by the grain letter glued to the bracket. Only that junction is tight: past the `[` the literal lexes like any other bracketed list, so whitespace, a trailing comma, and arbitrary (unparenthesized) element and spread terms are all free. The glue is what keeps `b` and `x` usable as ordinary binders — `b [1]` is the binder `b` followed by a list, not a `Bits` literal — and an identifier merely ending in the grain letter never starts one, since the name parser reaches `nb[…]` first.
 pub(super) fn parse_bin_literal<'a>() -> Parser<'a, Term> {
     parse_bin_literal_grain(Grain::B, "b[").or(parse_bin_literal_grain(Grain::X, "x["))
 }
@@ -265,20 +265,20 @@ fn parse_bin_literal_grain<'a>(grain: Grain, prefix: &'static str) -> Parser<'a,
         .map(Into::into)
 }
 
-// One entry of an `Lst` literal: a `..` spread contributing a whole list, or a plain element. Unlike a `Bits`/`Bytes` literal, brackets and commas delimit, so spreads take full terms and `[.. xs]` may be spaced (as in struct spread).
-pub(super) fn parse_lst_entry<'a>() -> Parser<'a, LstEntry> {
+// One entry of a `List` literal: a `..` spread contributing a whole list, or a plain element. Unlike a `Bits`/`Bytes` literal, brackets and commas delimit, so spreads take full terms and `[.. xs]` may be spaced (as in struct spread).
+pub(super) fn parse_list_entry<'a>() -> Parser<'a, ListEntry> {
     catch(parse_literal(".."))
         .and_keep(lazy(parse_term))
-        .map(LstEntry::Spread)
-        .or(lazy(parse_term).map(LstEntry::Elem))
+        .map(ListEntry::Spread)
+        .or(lazy(parse_term).map(ListEntry::Elem))
 }
 
-// An `Lst` literal `[e0, ..rest, e1, …]` (empty `[]`) — the native contiguous-sequence sibling of the packed binary literals. Builds an `Intrinsic::Lst` directly (the element type is an implicit the literal cannot name; core elaboration infers it); spreads splice in place, any position and count.
-pub(super) fn parse_lst_literal<'a>() -> Parser<'a, Term> {
+// An `List` literal `[e0, ..rest, e1, …]` (empty `[]`) — the native contiguous-sequence sibling of the packed binary literals. Builds an `Intrinsic::List` directly (the element type is an implicit the literal cannot name; core elaboration infers it); spreads splice in place, any position and count.
+pub(super) fn parse_list_literal<'a>() -> Parser<'a, Term> {
     catch(parse_literal("["))
-        .and_keep(sep_by0_trailing(parse_lst_entry, || parse_literal(",")))
+        .and_keep(sep_by0_trailing(parse_list_entry, || parse_literal(",")))
         .and_drop(parse_literal("]"))
-        .map(|entries| Subterm::Intrinsic(Intrinsic::Lst(entries)))
+        .map(|entries| Subterm::Intrinsic(Intrinsic::List(entries)))
         .map(Into::into)
 }
 

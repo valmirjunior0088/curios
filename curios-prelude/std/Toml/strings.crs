@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, Lst, Map, Option, Result, Parse};
+use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, List, Map, Option, Result, Parse};
 use /std/Toml/scan/{byte_at_is, hex_val, newline};
 
 rec hex_scan(input: Bytes, cur: Nat, count: Nat, acc: Nat) -> Result({Nat, Nat}, Str) =

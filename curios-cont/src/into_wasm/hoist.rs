@@ -18,7 +18,7 @@ enum ConstKey {
     Int(i32),
     Flt(u32),
     Bin(u8, usize, Vec<u8>),
-    Lst(Vec<String>),
+    List(Vec<String>),
     Tpl(Vec<String>),
 }
 
@@ -116,11 +116,11 @@ fn collect_consts(body: &EmissionBody, interner: &mut ConstInterner, consts: &mu
                     consts.renames.insert(name.clone(), interned);
                 }
             }
-            EmissionData::Lst(elems) => {
+            EmissionData::List(elems) => {
                 if let Some(canonical) = intern_elements(elems, interner, consts) {
                     let key =
-                        ConstKey::Lst(canonical.iter().map(|name| name.as_string()).collect());
-                    let interned = interner.intern(key, EmissionData::Lst(canonical));
+                        ConstKey::List(canonical.iter().map(|name| name.as_string()).collect());
+                    let interned = interner.intern(key, EmissionData::List(canonical));
                     consts.renames.insert(name.clone(), interned);
                 }
             }
@@ -199,12 +199,12 @@ fn rename_value(
             | EmissionData::Int(_)
             | EmissionData::Flt(_)
             | EmissionData::Bin(_, _) => {}
-            EmissionData::Lst(elems) | EmissionData::Tpl(elems) => rename_names(elems, renames),
+            EmissionData::List(elems) | EmissionData::Tpl(elems) => rename_names(elems, renames),
             EmissionData::Closure(_, fields) => rename_names(fields, renames),
         },
         EmissionValue::Eval(code) => match code {
             EmissionCode::Intrinsic(_, args) => rename_names(args, renames),
-            EmissionCode::LstMap(list, mapper) => {
+            EmissionCode::ListMap(list, mapper) => {
                 rename_name(list, renames);
                 rename_name(mapper, renames);
             }

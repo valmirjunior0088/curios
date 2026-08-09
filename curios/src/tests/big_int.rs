@@ -4,7 +4,7 @@ use super::run;
 fn bigint_add_crosses_zero_in_both_directions() {
     // Mixed-sign `add` routes through `pos_sub`, which reads the sign straight off `cmp`: the same magnitudes flipped land exactly on the other side of zero, and equal magnitudes land on zero itself — which has its own constructor, so "-0" cannot even be produced.
     let source = r#"
-        use /std/{Handle, Str, Lst, BigInt};
+        use /std/{Handle, Str, List, BigInt};
         /std/print(Str/join(",", [
             BigInt/to_str(BigInt/add(BigInt/of_int(-70000), BigInt/of_int(+99999))),
             BigInt/to_str(BigInt/add(BigInt/of_int(+70000), BigInt/of_int(-99999))),
@@ -27,7 +27,7 @@ fn bigint_sub_is_total() {
 fn bigint_mul_multiplies_signs() {
     // The sign of a product is the product of the signs, and the magnitude rides `BigNat`'s numeral past any fixed width: (-99999) * (-99999) and (+99999) * (-99999) differ only in sign.
     let source = r#"
-        use /std/{Handle, Str, Lst, BigInt};
+        use /std/{Handle, Str, List, BigInt};
         /std/print(Str/join(",", [
             BigInt/to_str(BigInt/mul(BigInt/of_int(-99999), BigInt/of_int(-99999))),
             BigInt/to_str(BigInt/mul(BigInt/of_int(+99999), BigInt/of_int(-99999))),
@@ -61,7 +61,7 @@ fn bigint_cmp_orders_across_signs() {
 fn bigint_of_int_crosses_the_i31_boundary() {
     // `of_int` decodes a native `Int` sign-and-magnitude: the largest magnitude whose negation also fits the i31 carrier round-trips through the numeral in both signs and renders Int-style. (The carrier minimum itself is out of reach: `Int/abs(-2^30)` has no i31 representation.)
     let source = r#"
-        use /std/{Handle, Str, Lst, BigInt};
+        use /std/{Handle, Str, List, BigInt};
         /std/print(Str/join(",", [
             BigInt/to_str(BigInt/of_int(+1073741823)),
             BigInt/to_str(BigInt/of_int(-1073741823)),
@@ -74,7 +74,7 @@ fn bigint_of_int_crosses_the_i31_boundary() {
 fn bigint_neg_abs_and_parity() {
     // `neg` is an involution that `abs` collapses, and `is_even`/`div2` read the magnitude: -101 is odd and halves toward zero to -50.
     let source = r#"
-        use /std/{Handle, Str, Bool, Lst, BigInt};
+        use /std/{Handle, Str, Bool, List, BigInt};
         let show(b : Bool) -> Str =
             match b : (_) => Str
             | true => "T"
@@ -95,7 +95,7 @@ fn bigint_neg_abs_and_parity() {
 fn bigint_operators_dispatch_through_concepts() {
     // The `/std` facades carry `Add`/`Sub`/`Mul`/`Eql`/`Cmp`/`Show` witnesses for `BigInt`, so the operator syntax and `show` resolve on it like on any native numeric type.
     let source = r#"
-        use /std/{Handle, Str, Bool, Lst, BigInt, Show};
+        use /std/{Handle, Str, Bool, List, BigInt, Show};
         let a = BigInt/of_int(-6);
         let b = BigInt/of_int(+2);
         let show_bool(v : Bool) -> Str =

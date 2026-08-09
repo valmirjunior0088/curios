@@ -50,8 +50,8 @@ fn handle_type() -> Term {
     Term::intrinsic(Intrinsic::HandleType)
 }
 
-fn lst_type(element: Term) -> Term {
-    Term::intrinsic(Intrinsic::LstType(element))
+fn list_type(element: Term) -> Term {
+    Term::intrinsic(Intrinsic::ListType(element))
 }
 
 /// The element shape of a packed binary: its grain's own scalar type.
@@ -171,7 +171,7 @@ pub(super) fn erase_intrinsic(
         | Intrinsic::IntType
         | Intrinsic::FltType
         | Intrinsic::BinType(_)
-        | Intrinsic::LstType(_)
+        | Intrinsic::ListType(_)
         | Intrinsic::HandleType
         | Intrinsic::CellType(_)
         | Intrinsic::IoType(_) => Ok(Outcome::Emitted(lowering.unit())),
@@ -352,59 +352,59 @@ pub(super) fn erase_intrinsic(
             )
         }
 
-        Intrinsic::Lst(_, elements) => {
+        Intrinsic::List(_, elements) => {
             // Elaborate already checked this literal against a list type; the element type is re-derived only to lower the elements.
             let element_type = match Term::unwrap_or_clone(reduce_with(context, expected)?) {
-                Subterm::Intrinsic(Intrinsic::LstType(element_type)) => element_type,
+                Subterm::Intrinsic(Intrinsic::ListType(element_type)) => element_type,
                 _ => unreachable!("erase: list literal checked against non-list type"),
             };
             let pairs = elements
                 .iter()
                 .map(|element| (element, element_type.clone()))
                 .collect::<Vec<_>>();
-            lowering.sequence(context, curios_ersd::SequenceOp::LstBuild, &pairs, hint)
+            lowering.sequence(context, curios_ersd::SequenceOp::ListBuild, &pairs, hint)
         }
-        Intrinsic::LstLen(element_type, list) => lowering.sequence(
+        Intrinsic::ListLen(element_type, list) => lowering.sequence(
             context,
-            curios_ersd::SequenceOp::LstLen,
-            &[(list, lst_type(element_type.clone()))],
+            curios_ersd::SequenceOp::ListLen,
+            &[(list, list_type(element_type.clone()))],
             hint,
         ),
-        Intrinsic::LstGet(element_type, list, index) => lowering.sequence(
+        Intrinsic::ListGet(element_type, list, index) => lowering.sequence(
             context,
-            curios_ersd::SequenceOp::LstGet,
-            &[(list, lst_type(element_type.clone())), (index, nat_type())],
+            curios_ersd::SequenceOp::ListGet,
+            &[(list, list_type(element_type.clone())), (index, nat_type())],
             hint,
         ),
-        Intrinsic::LstSlice(element_type, list, start, end) => lowering.sequence(
+        Intrinsic::ListSlice(element_type, list, start, end) => lowering.sequence(
             context,
-            curios_ersd::SequenceOp::LstSlice,
+            curios_ersd::SequenceOp::ListSlice,
             &[
-                (list, lst_type(element_type.clone())),
+                (list, list_type(element_type.clone())),
                 (start, nat_type()),
                 (end, nat_type()),
             ],
             hint,
         ),
-        Intrinsic::LstAppend(element_type, list, element) => lowering.sequence(
+        Intrinsic::ListAppend(element_type, list, element) => lowering.sequence(
             context,
-            curios_ersd::SequenceOp::LstAppend,
+            curios_ersd::SequenceOp::ListAppend,
             &[
-                (list, lst_type(element_type.clone())),
+                (list, list_type(element_type.clone())),
                 (element, element_type.clone()),
             ],
             hint,
         ),
-        Intrinsic::LstConcat(element_type, operands) => {
+        Intrinsic::ListConcat(element_type, operands) => {
             let pairs = operands
                 .iter()
-                .map(|operand| (operand, lst_type(element_type.clone())))
+                .map(|operand| (operand, list_type(element_type.clone())))
                 .collect::<Vec<_>>();
-            lowering.sequence(context, curios_ersd::SequenceOp::LstConcat, &pairs, hint)
+            lowering.sequence(context, curios_ersd::SequenceOp::ListConcat, &pairs, hint)
         }
-        Intrinsic::LstMap(domain, codomain, list, mapper) => {
+        Intrinsic::ListMap(domain, codomain, list, mapper) => {
             let list_atom =
-                emitted!(lowering.walk(context, list, &lst_type(domain.clone()), None)?);
+                emitted!(lowering.walk(context, list, &list_type(domain.clone()), None)?);
             let mapper_type = Term::func_type(
                 [(context.fresh(Some("x")), domain.clone())],
                 codomain.clone(),
@@ -413,7 +413,7 @@ pub(super) fn erase_intrinsic(
             Ok(lowering.bind(
                 hint,
                 curios_ersd::Rhs::Intrinsic {
-                    intrinsic: curios_ersd::Intrinsic::LstMap,
+                    intrinsic: curios_ersd::Intrinsic::ListMap,
                     operands: vec![list_atom, mapper_atom],
                 },
             ))

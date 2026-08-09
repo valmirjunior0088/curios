@@ -90,7 +90,7 @@ impl Lift for Vec<u8> {
     }
 }
 
-/// Read an `Lst(Nat)`/`Lst(Handle)` host-import argument: a `params[0]` anyref array whose elements are i31-boxed scalars (the module's uniform `Lst` shape, not `Bytes`'s packed `i8`). The inbound dual of `lower.rs`'s `Vec<u32>` lowering.
+/// Read a `List(Nat)`/`List(Handle)` host-import argument: a `params[0]` anyref array whose elements are i31-boxed scalars (the module's uniform `List` shape, not `Bytes`'s packed `i8`). The inbound dual of `lower.rs`'s `Vec<u32>` lowering.
 fn lift_i31_array(caller: &mut Caller<'_, ()>, param: &Val) -> Result<Vec<u32>, wasmtime::Error> {
     let Val::AnyRef(Some(anyref)) = param else {
         return Err(wasmtime::Error::msg("expected non-null anyref"));
@@ -113,7 +113,7 @@ fn lift_i31_array(caller: &mut Caller<'_, ()>, param: &Val) -> Result<Vec<u32>, 
         .collect()
 }
 
-/// `Lst(Nat)` lifts to the per-handle interest masks — `poll`'s `events` array.
+/// `List(Nat)` lifts to the per-handle interest masks — `poll`'s `events` array.
 impl Lift for Vec<Poll> {
     fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         Ok(lift_i31_array(caller, &params[0])?
@@ -123,7 +123,7 @@ impl Lift for Vec<Poll> {
     }
 }
 
-/// Read an `Lst(Bytes)` host-import argument: a `params[0]` anyref array whose elements are themselves `Bytes` (i8 arrays). The inbound dual of `lower.rs`'s `Vec<Vec<u8>>` lowering; `Lst(Handle)` rides this shape now that a handle is bytes.
+/// Read a `List(Bytes)` host-import argument: a `params[0]` anyref array whose elements are themselves `Bytes` (i8 arrays). The inbound dual of `lower.rs`'s `Vec<Vec<u8>>` lowering; `List(Handle)` rides this shape now that a handle is bytes.
 fn lift_bytes_array(
     caller: &mut Caller<'_, ()>,
     param: &Val,
@@ -147,7 +147,7 @@ fn lift_bytes_array(
         .collect()
 }
 
-/// `Lst(Handle)` lifts each token through the same stdio/handle classification a single `Handle` does — `poll`'s `handles` array.
+/// `List(Handle)` lifts each token through the same stdio/handle classification a single `Handle` does — `poll`'s `handles` array.
 impl Lift for Vec<Handle> {
     fn lift(caller: &mut Caller<'_, ()>, params: &[Val]) -> Result<Self, wasmtime::Error> {
         Ok(lift_bytes_array(caller, &params[0])?

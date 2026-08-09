@@ -578,10 +578,10 @@ fn convert_intrinsic_nat_to_int_recurses_into_operand() {
 }
 
 #[test]
-fn convert_intrinsic_lst_compares_element_wise() {
+fn convert_intrinsic_list_compares_element_wise() {
     let mut context = context();
 
-    let this = Subterm::Intrinsic(Intrinsic::Lst(
+    let this = Subterm::Intrinsic(Intrinsic::List(
         Term::intrinsic(Intrinsic::NatType),
         vec![
             Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))).into(),
@@ -590,7 +590,7 @@ fn convert_intrinsic_lst_compares_element_wise() {
     ))
     .into();
 
-    let that = Subterm::Intrinsic(Intrinsic::Lst(
+    let that = Subterm::Intrinsic(Intrinsic::List(
         Term::intrinsic(Intrinsic::NatType),
         vec![
             Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))).into(),
@@ -603,16 +603,16 @@ fn convert_intrinsic_lst_compares_element_wise() {
 }
 
 #[test]
-fn convert_intrinsic_lst_rejects_different_lengths() {
+fn convert_intrinsic_list_rejects_different_lengths() {
     let mut context = context();
 
-    let this = Subterm::Intrinsic(Intrinsic::Lst(
+    let this = Subterm::Intrinsic(Intrinsic::List(
         Term::intrinsic(Intrinsic::NatType),
         vec![Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))).into()],
     ))
     .into();
 
-    let that = Subterm::Intrinsic(Intrinsic::Lst(
+    let that = Subterm::Intrinsic(Intrinsic::List(
         Term::intrinsic(Intrinsic::NatType),
         vec![
             Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))).into(),
@@ -1637,12 +1637,12 @@ fn eta_at_unit_trusts_the_goal_type_label() {
 
 // === Flex-apply imitation (higher-kinded metavariables) =====================
 
-/// Register a `Lst`-shaped inductive: one parameter, no indices.
-fn register_lst(context: &mut Context) {
+/// Register a `List`-shaped inductive: one parameter, no indices.
+fn register_list(context: &mut Context) {
     let elem = context.fresh(Some("A"));
     context
         .register_induct(
-            &nominal("Lst"),
+            &nominal("List"),
             InductDecl {
                 universe_context: UniverseContext::empty(),
                 arity: Telescope::build([(elem, Term::type_ground())], Telescope::done(())),
@@ -1692,36 +1692,36 @@ fn type_to_type(context: &mut Context) -> Term {
 #[test]
 fn imitation_solves_flex_apply_against_inductive() {
     let mut context = context();
-    register_lst(&mut context);
+    register_list(&mut context);
     let kind = type_to_type(&mut context);
     context.birth_metavar(MetaId(0), Vec::new(), kind);
 
-    // ?0(Nat) ≟ Lst(Nat)  — commits ?0 := λA. Lst(A).
+    // ?0(Nat) ≟ List(Nat)  — commits ?0 := λA. List(A).
     let flex = Term::apply(Term::metavar(0), [nat_type()]);
-    let rigid = Term::induct_type(nominal("Lst"), [nat_type()], Vec::<Term>::new());
+    let rigid = Term::induct_type(nominal("List"), [nat_type()], Vec::<Term>::new());
     assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
     assert!(context.metavar_solution(MetaId(0)).is_some());
 
-    // The committed solution is the imitation, not the constant: applied to a different argument it yields Lst of *that* argument.
+    // The committed solution is the imitation, not the constant: applied to a different argument it yields List of *that* argument.
     let at_bool = Term::apply(Term::metavar(0), [Term::intrinsic(Intrinsic::BoolType)]);
-    let lst_bool = Term::induct_type(
-        nominal("Lst"),
+    let list_bool = Term::induct_type(
+        nominal("List"),
         [Term::intrinsic(Intrinsic::BoolType)],
         Vec::<Term>::new(),
     );
-    assert_eq!(conv(&mut context, &at_bool, &lst_bool), Ok(true));
+    assert_eq!(conv(&mut context, &at_bool, &list_bool), Ok(true));
 }
 
 #[test]
 fn imitation_is_symmetric() {
     let mut context = context();
-    register_lst(&mut context);
+    register_list(&mut context);
     let kind = type_to_type(&mut context);
     context.birth_metavar(MetaId(0), Vec::new(), kind);
 
     // Rigid on the left, stuck application on the right.
     let flex = Term::apply(Term::metavar(0), [nat_type()]);
-    let rigid = Term::induct_type(nominal("Lst"), [nat_type()], Vec::<Term>::new());
+    let rigid = Term::induct_type(nominal("List"), [nat_type()], Vec::<Term>::new());
     assert_eq!(conv(&mut context, &rigid, &flex), Ok(true));
     assert!(context.metavar_solution(MetaId(0)).is_some());
 }
@@ -1729,14 +1729,14 @@ fn imitation_is_symmetric() {
 #[test]
 fn imitation_equates_arguments_pairwise() {
     let mut context = context();
-    register_lst(&mut context);
+    register_list(&mut context);
     let kind = type_to_type(&mut context);
     context.birth_metavar(MetaId(0), Vec::new(), kind);
     context.birth_metavar(MetaId(1), Vec::new(), Term::type_ground());
 
-    // ?0(?1) ≟ Lst(Nat) — the imitation solves ?0, the pairwise equation ?1.
+    // ?0(?1) ≟ List(Nat) — the imitation solves ?0, the pairwise equation ?1.
     let flex = Term::apply(Term::metavar(0), [Term::metavar(1)]);
-    let rigid = Term::induct_type(nominal("Lst"), [nat_type()], Vec::<Term>::new());
+    let rigid = Term::induct_type(nominal("List"), [nat_type()], Vec::<Term>::new());
     assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
     assert!(context.metavar_solution(MetaId(0)).is_some());
     assert_eq!(context.metavar_solution(MetaId(1)), Some(&nat_type()));
@@ -1839,12 +1839,12 @@ fn imitation_arity_mismatch_blocks() {
 #[test]
 fn imitation_non_function_birth_type_blocks() {
     let mut context = context();
-    register_lst(&mut context);
+    register_list(&mut context);
     // ?0's frozen type is not a function type: no candidate can be built.
     context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
 
     let flex = Term::apply(Term::metavar(0), [nat_type()]);
-    let rigid = Term::induct_type(nominal("Lst"), [nat_type()], Vec::<Term>::new());
+    let rigid = Term::induct_type(nominal("List"), [nat_type()], Vec::<Term>::new());
     let outcome = convert_outcome(&mut context, &Term::type_ground(), &flex, &rigid);
     assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
     assert_eq!(context.metavar_solution(MetaId(0)), None);
@@ -1854,13 +1854,13 @@ fn imitation_non_function_birth_type_blocks() {
 fn imitation_leaves_rigid_apply_pairs_alone() {
     let mut context = context();
     let f = context.fresh(Some("f"));
-    register_lst(&mut context);
+    register_list(&mut context);
     let kind = type_to_type(&mut context);
     context.assume(&f, &kind);
 
     // A *rigid* stuck application against a nominal type is not the imitation case: the guard falls back to the neutral path, which cannot equate them — a definite mismatch, exactly as before the rule existed.
     let stuck = Term::apply(Term::free_var(&f), [nat_type()]);
-    let rigid = Term::induct_type(nominal("Lst"), [nat_type()], Vec::<Term>::new());
+    let rigid = Term::induct_type(nominal("List"), [nat_type()], Vec::<Term>::new());
     assert_eq!(conv(&mut context, &stuck, &rigid), Ok(false));
 }
 
@@ -1870,10 +1870,10 @@ fn imitation_solves_flex_apply_against_intrinsic_former() {
     let kind = type_to_type(&mut context);
     context.birth_metavar(MetaId(0), Vec::new(), kind);
 
-    // ?0(?1) ≟ Lst(Nat) — the imitation solves ?0 := λT. Lst(T), the pairwise equation ?1 := Nat. This is what pins `M := Lst` for `Monad(Lst)`.
+    // ?0(?1) ≟ List(Nat) — the imitation solves ?0 := λT. List(T), the pairwise equation ?1 := Nat. This is what pins `M := List` for `Monad(List)`.
     context.birth_metavar(MetaId(1), Vec::new(), Term::type_ground());
     let flex = Term::apply(Term::metavar(0), [Term::metavar(1)]);
-    let rigid = Term::intrinsic(Intrinsic::LstType(nat_type()));
+    let rigid = Term::intrinsic(Intrinsic::ListType(nat_type()));
     assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
     assert!(context.metavar_solution(MetaId(0)).is_some());
     assert_eq!(context.metavar_solution(MetaId(1)), Some(&nat_type()));
@@ -1937,14 +1937,17 @@ fn computed_type(context: &mut Context, motive: Term) -> Term {
 
 /// An intrinsic with no hand-written congruence arm is still compared operand by operand.
 ///
-/// `LstMap` had no arm, and the wildcard beneath the table answered a *hard* mismatch rather than a postponement — so a metavariable standing in one of its operands was refused instead of solved. `convert`'s syntactic-identity short circuit hid that for every spelling that happened to be identical, which is why the omission survived. The rule now reads the operands off `Intrinsic::traverse`, so the table cannot be short an operation.
+/// `ListMap` had no arm, and the wildcard beneath the table answered a *hard* mismatch rather than a postponement — so a metavariable standing in one of its operands was refused instead of solved. `convert`'s syntactic-identity short circuit hid that for every spelling that happened to be identical, which is why the omission survived. The rule now reads the operands off `Intrinsic::traverse`, so the table cannot be short an operation.
 #[test]
 fn an_intrinsic_without_a_hand_written_arm_solves_a_metavariable_in_its_operand() {
     let mut context = context();
     let nat_type = Term::intrinsic(Intrinsic::NatType);
 
     let xs = context.fresh(Some("xs"));
-    context.assume(&xs, &Term::intrinsic(Intrinsic::lst_type(nat_type.clone())));
+    context.assume(
+        &xs,
+        &Term::intrinsic(Intrinsic::list_type(nat_type.clone())),
+    );
 
     let n = context.fresh(Some("n"));
     let mapper_type = Term::func_type([(n, nat_type.clone())], nat_type.clone());
@@ -1953,13 +1956,13 @@ fn an_intrinsic_without_a_hand_written_arm_solves_a_metavariable_in_its_operand(
 
     context.birth_metavar(MetaId(0), Vec::new(), mapper_type);
 
-    let flexible = Term::intrinsic(Intrinsic::lst_map(
+    let flexible = Term::intrinsic(Intrinsic::list_map(
         nat_type.clone(),
         nat_type.clone(),
         Term::free_var(&xs),
         Term::metavar(0),
     ));
-    let rigid = Term::intrinsic(Intrinsic::lst_map(
+    let rigid = Term::intrinsic(Intrinsic::list_map(
         nat_type.clone(),
         nat_type,
         Term::free_var(&xs),

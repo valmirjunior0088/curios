@@ -1,8 +1,8 @@
-use /std/{Lst, Option, Cell, Io};
+use /std/{List, Option, Cell, Io};
 use /std/Async/{Waker};
 
 induct State(A: Type): Type
-| pending(Lst(Waker))
+| pending(List(Waker))
 | ready(A)
 end
 
@@ -18,7 +18,7 @@ pub let poll(@A: Type, f: Future(A)) -> Io(Option(A)) =
     let state = Cell/get(f.0)!;
     Io/pure(match state | ready(a) => Option/some(a) | pending(_) => Option/none() end);
 
-rec wake_all(ws: Lst(Waker)) -> Io({}) =
+rec wake_all(ws: List(Waker)) -> Io({}) =
     match ws
     | [] => Io/pure(())
     | [w, ..more] =>

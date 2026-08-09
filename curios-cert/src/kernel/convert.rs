@@ -713,12 +713,12 @@ fn ground_cases(
                     && ground(kernel, history, this_empty, that_empty)?
                     && ground_scope_three(kernel, history, this_cons, that_cons)?),
                 (
-                    Carrier::Lst {
+                    Carrier::List {
                         elem: this_elem,
                         empty_case: this_empty,
                         cons_case: this_cons,
                     },
-                    Carrier::Lst {
+                    Carrier::List {
                         elem: that_elem,
                         empty_case: that_empty,
                         cons_case: that_cons,

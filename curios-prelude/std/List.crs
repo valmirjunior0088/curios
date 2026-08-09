@@ -1,17 +1,17 @@
-pub use /sys/{Lst};
-pub use /sys/Lst/{len, slice, map};
+pub use /sys/{List};
+pub use /sys/List/{len, slice, map};
 use /std/{Nat, Bool, Option, Eq, Str, Show, Monad};
 
-pub let at(@T: Type, a: Lst(T), i: Nat, ok: Nat/Lt(i, len(a))) -> T =
-    /sys/Lst/get(a, i);
+pub let at(@T: Type, a: List(T), i: Nat, ok: Nat/Lt(i, len(a))) -> T =
+    /sys/List/get(a, i);
 
-pub let get(@T: Type, a: Lst(T), i: Nat) -> Option(T) =
-    match i < len(a) | true => Option/some(/sys/Lst/get(a, i)) | false => Option/none() end;
+pub let get(@T: Type, a: List(T), i: Nat) -> Option(T) =
+    match i < len(a) | true => Option/some(/sys/List/get(a, i)) | false => Option/none() end;
 
-pub let flatten(@T: Type, parts: Lst(Lst(T))) -> Lst(T) =
+pub let flatten(@T: Type, parts: List(List(T))) -> List(T) =
     fold(parts, [], (a, acc) => [..acc, ..a]);
 
-pub let fold(@T: Type, @A: Type, l: Lst(T), init: A, f: (T, A) -> A) -> A =
+pub let fold(@T: Type, @A: Type, l: List(T), init: A, f: (T, A) -> A) -> A =
     let n = len(l);
     rec go(k: Nat, i: Nat, acc: A, inv: Eq(i + k, n)) -> A =
         match k
@@ -24,12 +24,12 @@ pub let fold(@T: Type, @A: Type, l: Lst(T), init: A, f: (T, A) -> A) -> A =
         end;
     go(n, 0, init, Eq/refl());
 
-pub let find(@T: Type, l: Lst(T), pred: (T) -> Bool) -> Option(T) =
+pub let find(@T: Type, l: List(T), pred: (T) -> Bool) -> Option(T) =
     let n = len(l);
     rec go(i: Nat) -> Option(T) =
         match i < n
         | true =>
-            let x = /sys/Lst/get(l, i);
+            let x = /sys/List/get(l, i);
             match pred(x) | true => Option/some(x) | false => go(i + 1) end
         | false => Option/none()
         end;
@@ -46,11 +46,11 @@ pub let balanced(@A: Type, n: Nat, empty: A, single: (Nat) -> A, combine: (A, A)
         end;
     go(0, n);
 
-satisfy (@A: Type, use Show(A)) => Show(Lst(A)) {
+satisfy (@A: Type, use Show(A)) => Show(List(A)) {
     show(l) = Str/concat("[", Str/concat(Str/join(", ", map(l, (x) => Show/show(x))), "]")),
 }
 
-satisfy Monad(Lst) {
+satisfy Monad(List) {
     pure(x) = [x],
     bind(m, f) = fold(m, [], (x, acc) => [..acc, ..f(x)]),
 }

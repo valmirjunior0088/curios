@@ -19,7 +19,7 @@ pub(super) fn parse_top_let<'a>() -> Parser<'a, TopItem> {
     })
 }
 
-// An `Lst` element type — the wire grammar minus `Lst` itself. Splitting it out of `parse_wire_type` is what makes `Lst(Lst(T))` unwritable: codegen forces and embeds exactly one level at the host boundary, so a second one would silently hand the host rope structs instead of flat arrays.
+// An `List` element type — the wire grammar minus `List` itself. Splitting it out of `parse_wire_type` is what makes `List(List(T))` unwritable: codegen forces and embeds exactly one level at the host boundary, so a second one would silently hand the host rope structs instead of flat arrays.
 fn parse_wire_leaf<'a>() -> Parser<'a, WireLeaf> {
     parse_identifier().flat_map(|name| match name {
         "Nat" => pure(WireLeaf::Nat),
@@ -28,12 +28,12 @@ fn parse_wire_leaf<'a>() -> Parser<'a, WireLeaf> {
         "Bytes" => pure(WireLeaf::Bytes),
         "Handle" => pure(WireLeaf::Handle),
         other => fail(format!(
-            "expected an Lst element type (Nat, Int, Bool, Bytes, or Handle — Lst does not nest), found '{other}'"
+            "expected a List element type (Nat, Int, Bool, Bytes, or Handle — List does not nest), found '{other}'"
         )),
     })
 }
 
-// One of the six wire types, by its own closed grammar — not an ordinary Curios type, so this needs no name resolution: `Nat`/`Int`/`Bool`/`Bytes`/`Handle` are literal keywords here, and `Lst(T)` takes a leaf.
+// One of the six wire types, by its own closed grammar — not an ordinary Curios type, so this needs no name resolution: `Nat`/`Int`/`Bool`/`Bytes`/`Handle` are literal keywords here, and `List(T)` takes a leaf.
 pub(super) fn parse_wire_type<'a>() -> Parser<'a, WireType> {
     parse_identifier().flat_map(|name| match name {
         "Nat" => pure(WireType::Nat),
@@ -41,12 +41,12 @@ pub(super) fn parse_wire_type<'a>() -> Parser<'a, WireType> {
         "Bool" => pure(WireType::Bool),
         "Bytes" => pure(WireType::Bytes),
         "Handle" => pure(WireType::Handle),
-        "Lst" => catch(parse_literal("("))
+        "List" => catch(parse_literal("("))
             .and_keep(parse_wire_leaf())
             .and_drop(parse_literal(")"))
-            .map(WireType::Lst),
+            .map(WireType::List),
         other => fail(format!(
-            "expected a wire type (Nat, Int, Bool, Bytes, Handle, or Lst(...)), found '{other}'"
+            "expected a wire type (Nat, Int, Bool, Bytes, Handle, or List(...)), found '{other}'"
         )),
     })
 }

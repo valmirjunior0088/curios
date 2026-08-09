@@ -74,7 +74,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] `Int`
   - [x] `Flt` (bit-preserving binary32 identity, including `to_le_bytes`/`of_le_bytes` reinterpretation across every compiler stage, plus the full native arithmetic and comparison family — `add`/`sub`/`mul`/`div`/`rem`/`min`/`max`/`neg`/`abs`/`sqrt`/`floor`/`ceil`/`trunc`/`nearest`/`copysign`)
   - [x] Packed `Bits` and `Bytes` (grain-specialized operations over shared immutable windows; O(1) slices and tails)
-  - [x] `Lst`
+  - [x] `List`
 
 ## Module System
 
@@ -165,7 +165,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Foundational sum types (`std/Option`, `std/Result`)
 - [x] Pure state threading (`std/State`: the context-first carrier `State(S, A)` with `state`/`get`/`put`/`modify`/`run` and the parametric `Monad` witness; deliberately no `Lift(Io, State(S))` edge, so a `State` region provably performs nothing)
 - [x] Short-circuiting failure (`std/Throw` over `Result`: `raise`/`rescue`/`of`/`run` with the parametric `Monad` witness — `!` as checked early return)
-- [x] Core collections (`std/Lst` and its helpers, length-indexed `std/Vec`)
+- [x] Core collections (`std/List` and its helpers, length-indexed `std/Vec`)
 - [x] Key-value map (`std/Map`: a canonical crit-bit trie over `Bytes` keys — same entries, same shape — with injective key encodings via its `Key` concept)
 - [x] Proof-carrying UTF-8 string storage and decoding (`std/Str`; decoded scalar values are exposed as certified `Char` values while storage remains packed `Bytes`)
 - [x] Certified Unicode-scalar `Char` type and `Str` migration (`'…' : Char`, typed character APIs, explicit Byte/Char/Nat boundaries, and ASCII-explicit classification and casing policy)

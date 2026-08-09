@@ -1,11 +1,11 @@
 use super::{error, run};
 
 #[test]
-fn lst_match_is_a_foldr() {
-    // Native `Lst` induction (slice 1): the `| [] | (h, t), ih` eliminator, erased by desugaring to `Nat`-induction on the length and reusing the loop. `f(h, ih) = ih * 10 + h` is non-commutative, so the result distinguishes a structural `foldr` (head is the *first* element, ih is the fold of the tail) from a reversed walk: `[1,2,3,4]` folds to `4321`, not `1234`.
+fn list_match_is_a_foldr() {
+    // Native `List` induction (slice 1): the `| [] | (h, t), ih` eliminator, erased by desugaring to `Nat`-induction on the length and reusing the loop. `f(h, ih) = ih * 10 + h` is non-commutative, so the result distinguishes a structural `foldr` (head is the *first* element, ih is the fold of the tail) from a reversed walk: `[1,2,3,4]` folds to `4321`, not `1234`.
     let source = r#"
-        use /std/{Handle, Str, Nat, Lst};
-        let xs : Lst(Nat) = [1, 2, 3, 4];
+        use /std/{Handle, Str, Nat, List};
+        let xs : List(Nat) = [1, 2, 3, 4];
         let digits : Nat =
             match xs : (_) => Nat
             | [] => 0
@@ -18,24 +18,24 @@ fn lst_match_is_a_foldr() {
 }
 
 #[test]
-fn lst_map_fills_every_slot() {
-    // `Lst/map` erases to a single O(n) fill loop (`emit_map`): size the result from `src.len`, allocate once, then write `f(src[i])` into slot `i` via an inline closure `call_ref`. A non-identity `f` (`+1`) over `[10, 20, 30]` must fill *every* slot, not just one: `get(_, 0) + get(_, 2)` = 11 + 31 = 42.
+fn list_map_fills_every_slot() {
+    // `List/map` erases to a single O(n) fill loop (`emit_map`): size the result from `src.len`, allocate once, then write `f(src[i])` into slot `i` via an inline closure `call_ref`. A non-identity `f` (`+1`) over `[10, 20, 30]` must fill *every* slot, not just one: `get(_, 0) + get(_, 2)` = 11 + 31 = 42.
     let source = r#"
-        use /std/{Handle, Str, Nat, Lst, Option};
-        let xs : Lst(Nat) = Lst/map([10, 20, 30], (n) => Nat/add(n, 1));
-        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Option/unwrap_or(Lst/get(xs, 0), 0), Option/unwrap_or(Lst/get(xs, 2), 0)))))!;
+        use /std/{Handle, Str, Nat, List, Option};
+        let xs : List(Nat) = List/map([10, 20, 30], (n) => Nat/add(n, 1));
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Option/unwrap_or(List/get(xs, 0), 0), Option/unwrap_or(List/get(xs, 2), 0)))))!;
         /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"42");
 }
 
 #[test]
-fn lst_map_distributes_over_cons() {
-    // The eliminator rule that lets `Lst/map` stand in for a structural `foldr` in proofs: for a SYMBOLIC tail `t`, `map f (x :: t) ≡ f x :: map f t` *definitionally*. `refl` checks only because `reduce` distributes the map over the `concat` spine and maps the singleton literal — the same peel the native `Lst` eliminator does, so it reduces under induction without unfolding a symbolic array.
+fn list_map_distributes_over_cons() {
+    // The eliminator rule that lets `List/map` stand in for a structural `foldr` in proofs: for a SYMBOLIC tail `t`, `map f (x :: t) ≡ f x :: map f t` *definitionally*. `refl` checks only because `reduce` distributes the map over the `concat` spine and maps the singleton literal — the same peel the native `List` eliminator does, so it reduces under induction without unfolding a symbolic array.
     let source = r#"
-        use /std/{Handle, Str, Eq, Nat, Lst};
-        let step(f : (Nat) -> Nat, x : Nat, t : Lst(Nat))
-            -> Eq(Lst/map([x, ..t], f), [f(x), ..Lst/map(t, f)]) =
+        use /std/{Handle, Str, Eq, Nat, List};
+        let step(f : (Nat) -> Nat, x : Nat, t : List(Nat))
+            -> Eq(List/map([x, ..t], f), [f(x), ..List/map(t, f)]) =
             Eq/refl();
         let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
         /std/Io/pure(())
@@ -45,7 +45,7 @@ fn lst_map_distributes_over_cons() {
 
 #[test]
 fn bin_match_is_a_foldr() {
-    // Native `Bytes` induction (slice 2): the `| x[] | (h, t), ih` eliminator, erased exactly like `Lst` — `Nat`-induction on the byte length, reusing the loop. The leading byte `h` is reflected as a `Nat`. Same non-commutative `foldr` probe as `lst_match_is_a_foldr`: the bytes `x[\01, \02, \03, \04]` fold to `4321`, not `1234`, pinning head = first byte and ih = fold of the tail.
+    // Native `Bytes` induction (slice 2): the `| x[] | (h, t), ih` eliminator, erased exactly like `List` — `Nat`-induction on the byte length, reusing the loop. The leading byte `h` is reflected as a `Nat`. Same non-commutative `foldr` probe as `list_match_is_a_foldr`: the bytes `x[\01, \02, \03, \04]` fold to `4321`, not `1234`, pinning head = first byte and ih = fold of the tail.
     let source = r#"
         use /std/{Handle, Str, Nat, Byte, Bytes};
         let bytes : Bytes = x[\01, \02, \03, \04];
@@ -122,15 +122,15 @@ fn bin_slice_window_seam_mismatch_is_rejected() {
 }
 
 #[test]
-fn lst_slice_is_a_monoid_citizen() {
-    // The `Lst` mirror of `bin_slice_is_a_monoid_citizen`: `Lst/slice` now rides the free-monoid spine as a measured `Window` (`core::spine`), so `split` fuses two adjacent windows of one base across their seam — the convert-level capability — while `empty` and `full` exercise the reduce-level slice identities.
+fn list_slice_is_a_monoid_citizen() {
+    // The `List` mirror of `bin_slice_is_a_monoid_citizen`: `List/slice` now rides the free-monoid spine as a measured `Window` (`core::spine`), so `split` fuses two adjacent windows of one base across their seam — the convert-level capability — while `empty` and `full` exercise the reduce-level slice identities.
     let source = r#"
-        use /std/{Handle, Str, Eq, Lst, Nat};
-        let split(@T : Type, a : Lst(T), s : Nat, m : Nat, e : Nat)
-            -> Eq([..Lst/slice(a, s, m), ..Lst/slice(a, m, e)], Lst/slice(a, s, e)) =
+        use /std/{Handle, Str, Eq, List, Nat};
+        let split(@T : Type, a : List(T), s : Nat, m : Nat, e : Nat)
+            -> Eq([..List/slice(a, s, m), ..List/slice(a, m, e)], List/slice(a, s, e)) =
             Eq/refl();
-        let empty(@T : Type, a : Lst(T), i : Nat) -> Eq(Lst/slice(a, i, i), []) = Eq/refl();
-        let full(@T : Type, a : Lst(T)) -> Eq(Lst/slice(a, 0, Lst/len(a)), a) = Eq/refl();
+        let empty(@T : Type, a : List(T), i : Nat) -> Eq(List/slice(a, i, i), []) = Eq/refl();
+        let full(@T : Type, a : List(T)) -> Eq(List/slice(a, 0, List/len(a)), a) = Eq/refl();
         let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
         /std/Io/pure(())
         "#;
@@ -138,11 +138,11 @@ fn lst_slice_is_a_monoid_citizen() {
 }
 
 #[test]
-fn lst_append_is_concat_with_a_single() {
+fn list_append_is_concat_with_a_single() {
     // A trailing element entry lowers to an append and a spread of a singleton to a concatenation — two different terms, so this is the peel doing the work rather than the two sides being spelled alike. An append rides the spine as `base ++ [e]` (`core::spine`), which is what converts them, for a symbolic base and element that `reduce` cannot fold.
     let source = r#"
-        use /std/{Handle, Str, Eq, Lst};
-        let law(@T : Type, xs : Lst(T), y : T)
+        use /std/{Handle, Str, Eq, List};
+        let law(@T : Type, xs : List(T), y : T)
             -> Eq([..xs, y], [..xs, ..[y]]) =
             Eq/refl();
         let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
@@ -153,7 +153,7 @@ fn lst_append_is_concat_with_a_single() {
 
 #[test]
 fn bin_append_is_concat_with_a_single_byte() {
-    // The `Bytes` twin of `lst_append_is_concat_with_a_single`: an atom splice rides the spine as `base ++ b`, so it converts to the concatenation-with-a-one-byte form by `refl` even for a symbolic base and a symbolic byte.
+    // The `Bytes` twin of `list_append_is_concat_with_a_single`: an atom splice rides the spine as `base ++ b`, so it converts to the concatenation-with-a-one-byte form by `refl` even for a symbolic base and a symbolic byte.
     let source = r#"
         use /std/{Handle, Str, Eq, Byte, Bytes};
         let law(xs : Bytes, y : Byte)
@@ -166,12 +166,12 @@ fn bin_append_is_concat_with_a_single_byte() {
 }
 
 #[test]
-fn lst_slice_window_seam_mismatch_is_rejected() {
-    // The dual of `bin_slice_window_seam_mismatch_is_rejected`: two `Lst` windows whose seam does not meet must NOT fuse, so the concat is not convertible to the single slice and the `refl` is rejected.
+fn list_slice_window_seam_mismatch_is_rejected() {
+    // The dual of `bin_slice_window_seam_mismatch_is_rejected`: two `List` windows whose seam does not meet must NOT fuse, so the concat is not convertible to the single slice and the `refl` is rejected.
     let source = r#"
-        use /std/{Handle, Str, Eq, Lst, Nat};
-        let bad(@T : Type, a : Lst(T), s : Nat, m : Nat, n : Nat, e : Nat)
-            -> Eq([..Lst/slice(a, s, m), ..Lst/slice(a, n, e)], Lst/slice(a, s, e)) =
+        use /std/{Handle, Str, Eq, List, Nat};
+        let bad(@T : Type, a : List(T), s : Nat, m : Nat, n : Nat, e : Nat)
+            -> Eq([..List/slice(a, s, m), ..List/slice(a, n, e)], List/slice(a, s, e)) =
             Eq/refl();
         let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
         /std/Io/pure(())
@@ -256,16 +256,16 @@ fn nat_sub_peels_a_successor_spine() {
 }
 
 #[test]
-fn lst_concat_is_a_free_monoid() {
-    // `peel_arr` (core::spine) makes `Lst` a free monoid on its elements, the twin of `bin_concat_is_a_free_monoid`: concatenation associates, the empty array `[]` is its identity, and a literal run re-segments freely — all by `refl` for SYMBOLIC arrays (and elements), which `reduce` cannot fold. `convert` peels the two `LstConcat`s to a common normal form. A spread whose operand is itself a list literal is what keeps the two nestings apart, exactly as the parenthesized packed operand does for `Bytes`.
+fn list_concat_is_a_free_monoid() {
+    // `peel_arr` (core::spine) makes `List` a free monoid on its elements, the twin of `bin_concat_is_a_free_monoid`: concatenation associates, the empty array `[]` is its identity, and a literal run re-segments freely — all by `refl` for SYMBOLIC arrays (and elements), which `reduce` cannot fold. `convert` peels the two `ListConcat`s to a common normal form. A spread whose operand is itself a list literal is what keeps the two nestings apart, exactly as the parenthesized packed operand does for `Bytes`.
     let source = r#"
-        use /std/{Handle, Str, Eq, Lst};
-        let assoc(@T : Type, a : Lst(T), b : Lst(T), c : Lst(T))
+        use /std/{Handle, Str, Eq, List};
+        let assoc(@T : Type, a : List(T), b : List(T), c : List(T))
             -> Eq([..a, ..[..b, ..c]], [..[..a, ..b], ..c]) =
             Eq/refl();
-        let left_id(@T : Type, a : Lst(T)) -> Eq([..[], ..a], a) = Eq/refl();
-        let right_id(@T : Type, a : Lst(T)) -> Eq([..a, ..[]], a) = Eq/refl();
-        let resegment(@T : Type, a : T, b : T, c : Lst(T))
+        let left_id(@T : Type, a : List(T)) -> Eq([..[], ..a], a) = Eq/refl();
+        let right_id(@T : Type, a : List(T)) -> Eq([..a, ..[]], a) = Eq/refl();
+        let resegment(@T : Type, a : T, b : T, c : List(T))
             -> Eq([a, b, ..c], [a, ..[b, ..c]]) =
             Eq/refl();
         let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
@@ -275,10 +275,10 @@ fn lst_concat_is_a_free_monoid() {
 }
 
 #[test]
-fn lst_concat_length_clash_is_rejected() {
-    // Unlike `Bytes`, an `Lst` element disagreement is NOT a clash (elements are terms that may be convertible) — but a literal *length* mismatch still is: `[x, y]` and `[x]` peel their shared head and leave one side longer, a definite `Clash`, so the `refl` is rejected. Exercises `peel_arr`'s clash against the empty identity (the element-mismatch case instead defers to the structural arm, kept sound by `Stuck` fall-through).
+fn list_concat_length_clash_is_rejected() {
+    // Unlike `Bytes`, a `List` element disagreement is NOT a clash (elements are terms that may be convertible) — but a literal *length* mismatch still is: `[x, y]` and `[x]` peel their shared head and leave one side longer, a definite `Clash`, so the `refl` is rejected. Exercises `peel_arr`'s clash against the empty identity (the element-mismatch case instead defers to the structural arm, kept sound by `Stuck` fall-through).
     let source = r#"
-        use /std/{Handle, Str, Eq, Lst};
+        use /std/{Handle, Str, Eq, List};
         let bad(@T : Type, x : T, y : T) -> Eq([x, y], [x]) = Eq/refl();
         let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
         /std/Io/pure(())
@@ -351,23 +351,23 @@ fn indexed_vec_append_executes() {
 }
 
 #[test]
-fn lst_fold_sums_elements() {
+fn list_fold_sums_elements() {
     let source = r#"
-        use /std/{Handle, Str, Nat, Lst};
-        let xs : Lst(Nat) = [10, 20, 30];
-        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Lst/fold(xs, 0, (e, acc) => Nat/add(acc, e)))))!;
+        use /std/{Handle, Str, Nat, List};
+        let xs : List(Nat) = [10, 20, 30];
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(List/fold(xs, 0, (e, acc) => Nat/add(acc, e)))))!;
         /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"60");
 }
 
 #[test]
-fn lst_spread_concats_segments() {
-    // `[1, ..xs, 4]` splices `xs` between the literal runs. The non-commutative foldr probe (see `lst_match_is_a_foldr`) distinguishes the spliced order `[1, 2, 3, 4]` from any permutation or grouping artifact.
+fn list_spread_concats_segments() {
+    // `[1, ..xs, 4]` splices `xs` between the literal runs. The non-commutative foldr probe (see `list_match_is_a_foldr`) distinguishes the spliced order `[1, 2, 3, 4]` from any permutation or grouping artifact.
     let source = r#"
-        use /std/{Handle, Str, Nat, Lst};
-        let xs : Lst(Nat) = [2, 3];
-        let ys : Lst(Nat) = [1, ..xs, 4];
+        use /std/{Handle, Str, Nat, List};
+        let xs : List(Nat) = [2, 3];
+        let ys : List(Nat) = [1, ..xs, 4];
         let digits : Nat =
             match ys : (_) => Nat
             | [] => 0
@@ -380,13 +380,13 @@ fn lst_spread_concats_segments() {
 }
 
 #[test]
-fn lst_spread_identity_and_multi() {
+fn list_spread_identity_and_multi() {
     // `[..xs]` is an identity copy (reduction collapses the lone operand), and spreads repeat: `[..ys, ..ys]` doubles the sequence in written order.
     let source = r#"
-        use /std/{Handle, Str, Nat, Lst};
-        let xs : Lst(Nat) = [2, 3];
-        let ys : Lst(Nat) = [..xs];
-        let zs : Lst(Nat) = [..ys, ..ys];
+        use /std/{Handle, Str, Nat, List};
+        let xs : List(Nat) = [2, 3];
+        let ys : List(Nat) = [..xs];
+        let zs : List(Nat) = [..ys, ..ys];
         let digits : Nat =
             match zs : (_) => Nat
             | [] => 0
@@ -399,24 +399,24 @@ fn lst_spread_identity_and_multi() {
 }
 
 #[test]
-fn lst_spread_borrows_expected_element_type() {
-    // The `LstConcat` bidirectionality case in `elaborate_intrinsic`: checking `[1, ..xs]` against `Lst(Int)` must solve the lowering-minted element slot from the expected type BEFORE the literal chunk elaborates, so the unsigned `1` lands at `Int`. Without the borrow, `1` would default-solve the slot to `Nat` and this program would be rejected.
+fn list_spread_borrows_expected_element_type() {
+    // The `ListConcat` bidirectionality case in `elaborate_intrinsic`: checking `[1, ..xs]` against `List(Int)` must solve the lowering-minted element slot from the expected type BEFORE the literal chunk elaborates, so the unsigned `1` lands at `Int`. Without the borrow, `1` would default-solve the slot to `Nat` and this program would be rejected.
     let source = r#"
-        use /std/{Handle, Str, Nat, Int, Lst};
-        let xs : Lst(Int) = [-1, +2];
-        let ys : Lst(Int) = [1, ..xs];
-        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Lst/len(ys))))!;
+        use /std/{Handle, Str, Nat, Int, List};
+        let xs : List(Int) = [-1, +2];
+        let ys : List(Int) = [1, ..xs];
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(List/len(ys))))!;
         /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"3");
 }
 
 #[test]
-fn lst_spread_of_non_list_is_rejected() {
-    // A spread operand must itself be a list of the element type — `..2` in a `Lst(Nat)` literal is an ordinary type mismatch (Nat vs Lst(Nat)).
+fn list_spread_of_non_list_is_rejected() {
+    // A spread operand must itself be a list of the element type — `..2` in a `List(Nat)` literal is an ordinary type mismatch (Nat vs List(Nat)).
     let source = r#"
-        use /std/{Handle, Str, Nat, Lst};
-        let bad : Lst(Nat) = [1, ..2];
+        use /std/{Handle, Str, Nat, List};
+        let bad : List(Nat) = [1, ..2];
         let _ = Handle/write(Handle/stdout, Str/to_bytes("unreachable"))!;
         /std/Io/pure(())
         "#;
@@ -424,11 +424,11 @@ fn lst_spread_of_non_list_is_rejected() {
 }
 
 #[test]
-fn lst_spread_element_type_clash_is_rejected() {
+fn list_spread_element_type_clash_is_rejected() {
     let source = r#"
-        use /std/{Handle, Str, Nat, Lst};
-        let ss : Lst(Str) = ["a"];
-        let bad : Lst(Nat) = [..ss];
+        use /std/{Handle, Str, Nat, List};
+        let ss : List(Str) = ["a"];
+        let bad : List(Nat) = [..ss];
         let _ = Handle/write(Handle/stdout, Str/to_bytes("unreachable"))!;
         /std/Io/pure(())
         "#;
@@ -436,13 +436,13 @@ fn lst_spread_element_type_clash_is_rejected() {
 }
 
 #[test]
-fn lst_spread_operand_hoists_bangs() {
+fn list_spread_operand_hoists_bangs() {
     // A bang inside a spread operand hoists into the enclosing region exactly like one inside a plain element — the literal is collected, not sealed.
     assert_eq!(
         run(r#"
-        use /std/{Async, Handle, Str, Nat, Lst};
+        use /std/{Async, Handle, Str, Nat, List};
         let prog : Async({}) =
-            let ys : Lst(Nat) = [1, ..Async/pure([2, 3])!, 4];
+            let ys : List(Nat) = [1, ..Async/pure([2, 3])!, 4];
             let digits : Nat =
                 match ys : (_) => Nat
                 | [] => 0
@@ -484,8 +484,8 @@ fn bin_spread_identity_and_multi() {
 fn bin_spread_of_non_bin_is_rejected() {
     // A spread operand must itself be a `Bytes` — a list is an ordinary type mismatch.
     let source = r#"
-        use /std/{Handle, Str, Nat, Lst, Bytes};
-        let xs : Lst(Nat) = [1, 2];
+        use /std/{Handle, Str, Nat, List, Bytes};
+        let xs : List(Nat) = [1, 2];
         let bad : Bytes = x[\00, ..xs];
         let _ = Handle/write(Handle/stdout, Str/to_bytes("unreachable"))!;
         /std/Io/pure(())
@@ -495,7 +495,7 @@ fn bin_spread_of_non_bin_is_rejected() {
 
 #[test]
 fn bin_spread_operand_hoists_bangs() {
-    // The `Bytes` sibling of `lst_spread_operand_hoists_bangs`, through the dedicated `Intrinsic::Bytes` collect arm — the glued `!` binds to the operand.
+    // The `Bytes` sibling of `list_spread_operand_hoists_bangs`, through the dedicated `Intrinsic::Bytes` collect arm — the glued `!` binds to the operand.
     assert_eq!(
         run(r#"
         use /std/{Async, Handle, Bytes};

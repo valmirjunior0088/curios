@@ -39,7 +39,7 @@ A path is one or more identifier segments separated by `/`. A leading `/` makes 
 ```crs
 Nat                 -- relative name
 Option/some         -- member of Option
-/std/Lst            -- absolute name
+/std/List           -- absolute name
 /sys/Handle         -- absolute intrinsic declaration
 ```
 
@@ -103,7 +103,7 @@ String escapes are `\n`, `\t`, `\r`, `\\`, and `\"`. An unrecognized escape in a
 
 ### List literals
 
-A list literal constructs `Lst(T)`. Entries are elements or spreads; a spread inserts every element of another list at its position.
+A list literal constructs `List(T)`. Entries are elements or spreads; a spread inserts every element of another list at its position.
 
 ```crs
 []
@@ -114,14 +114,14 @@ A list literal constructs `Lst(T)`. Entries are elements or spreads; a spread in
 A nonempty literal may infer `T` from its elements. An empty literal needs an expected list type from its position, such as a binder annotation:
 
 ```crs
-let empty : Lst(Nat) = [];
+let empty : List(Nat) = [];
 ```
 
 Spreads may appear in any position and may be repeated. Every element and spread operand must agree on the same element type.
 
 ### Packed literals
 
-Packed literals are bracketed like [list literals](#list-literals) and selected by a grain letter glued to the bracket: `b[…]` builds `Bits`, `x[…]` builds `Bytes`. A bare `[…]` remains `Lst`.
+Packed literals are bracketed like [list literals](#list-literals) and selected by a grain letter glued to the bracket: `b[…]` builds `Bits`, `x[…]` builds `Bytes`. A bare `[…]` remains `List`.
 
 An entry is a constant atom, a term, or a spread. A constant atom is escaped: `\0` or `\1` in a `Bits` literal, `\` followed by exactly two hexadecimal digits in a `Bytes` literal.
 
@@ -326,7 +326,7 @@ even(input)
 
 ### Irrefutable binder patterns
 
-The binders of `let`, lambdas, function-definition sugar, and the `;` fold-hypothesis position of `Nat`/`Lst`/`Bits`/`Bytes` match arms accept nested tuple and struct patterns.
+The binders of `let`, lambdas, function-definition sugar, and the `;` fold-hypothesis position of `Nat`/`List`/`Bits`/`Bytes` match arms accept nested tuple and struct patterns.
 
 ```crs
 let (x, (_, y)) = value;
@@ -690,7 +690,7 @@ use /syn/Str/{classify, step};
 Inside a group, a bare name imports both a child module and a value with that name when both exist. `mod Name` imports only the module namespace; `let Name` imports only the value namespace.
 
 ```crs
-pub use Lst/{let Lst};
+pub use List/{let List};
 use Package/{mod Syntax, let parse};
 ```
 
@@ -856,8 +856,8 @@ satisfy Show(Nat) {
 A witness may quantify over implicit parameters and require other witnesses. A nonempty telescope is separated from the concept application by `=>`. It cannot declare explicit parameters because resolution has no explicit arguments to supply.
 
 ```crs
-satisfy (@A : Type, use Show(A)) => Show(Lst(A)) {
-    show(values) = Lst/fold(values, "", (value, result) => Str/concat(result, Show/show(value))),
+satisfy (@A : Type, use Show(A)) => Show(List(A)) {
+    show(values) = List/fold(values, "", (value, result) => Str/concat(result, Show/show(value))),
 }
 ```
 
@@ -901,8 +901,8 @@ In a structure update, a spread copies superclass fields from the base. An expli
 A witness parameter is written `use Concept(args)` in a function type or definition telescope. It is anonymous but joins the witness scope of the function body.
 
 ```crs
-pub let join(@A : Type, use Show(A), values : Lst(A)) -> Str =
-    Lst/fold(values, "", (value, result) => Str/concat(result, Show/show(value)));
+pub let join(@A : Type, use Show(A), values : List(A)) -> Str =
+    List/fold(values, "", (value, result) => Str/concat(result, Show/show(value)));
 ```
 
 At a call site, `use value` supplies a witness argument explicitly and overrides resolution.
@@ -934,9 +934,9 @@ foreign frobnicate : (Nat, Bytes) -> Nat;
 pub foreign log : (Bytes) -> Nat;
 ```
 
-The wire types are `Nat`, `Int`, `Bool`, `Bytes`, `Handle`, and `Lst(T)`. A wire signature is a bare wire result type for a zero-argument foreign or a parenthesized wire parameter list followed by `->` and a wire result type.
+The wire types are `Nat`, `Int`, `Bool`, `Bytes`, `Handle`, and `List(T)`. A wire signature is a bare wire result type for a zero-argument foreign or a parenthesized wire parameter list followed by `->` and a wire result type.
 
-`Byte` and `Bits` are not distinct wire types. `Lst` does not nest: its element must be `Nat`, `Int`, `Bool`, `Bytes`, or `Handle`, so `Lst(Lst(T))` is rejected. `Lst` is in practice reachable only from builtin `/sys` operations — an embedder implementing a `foreign` declaration binds it through typed host closures, and the shapes those provide are the ones the builtins use. The Wasm import uses the declaration's fully qualified name in the `ffi` namespace.
+`Byte` and `Bits` are not distinct wire types. `List` does not nest: its element must be `Nat`, `Int`, `Bool`, `Bytes`, or `Handle`, so `List(List(T))` is rejected. `List` is in practice reachable only from builtin `/sys` operations — an embedder implementing a `foreign` declaration binds it through typed host closures, and the shapes those provide are the ones the builtins use. The Wasm import uses the declaration's fully qualified name in the `ffi` namespace.
 
 ## Equality and proofs
 

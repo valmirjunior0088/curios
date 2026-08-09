@@ -12,7 +12,7 @@ use {
 
 /// The constructor a [`Shape`] node stands for.
 ///
-/// Carriers are kept apart so a `Bin` layer can never be mistaken for an `Lst` layer. Well-typed code could not confuse them, but the size order is only as trustworthy as the identities it compares.
+/// Carriers are kept apart so a `Bin` layer can never be mistaken for a `List` layer. Well-typed code could not confuse them, but the size order is only as trustworthy as the identities it compares.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum Tag {
     /// An inductive constructor, by tag alone.
@@ -34,7 +34,7 @@ pub(super) enum Tag {
 pub(super) enum Carriers {
     Unary,
     Bin,
-    Lst,
+    List,
 }
 
 /// A call argument or a parameter, read as a constructor tree over binder atoms — the term on which the size order is a proper-subterm order.
@@ -46,7 +46,7 @@ pub(super) enum Shape {
     Node(Tag, Vec<Shape>),
     /// A packed run of `Nat` successors: `count` unary layers over `tail`, the shape-level mirror of `Nat::Succ`'s packed spine. Canonical by construction — built only through [`Shape::unary_run`], so the count is nonzero and the tail is never itself a unary run.
     UnaryRun { count: BigUint, tail: Box<Shape> },
-    /// A packed run of `Bin`/`Lst` elements over `tail`, front first — one head shape per element, held breadth-wise. The carrier is [`Carriers::Bin`] or [`Carriers::Lst`]; `Nat`'s payload-less layers are [`Shape::UnaryRun`]. Canonical by construction — built only through [`Shape::elem_run`], so the heads are nonempty and the tail is never an elem run of the same carrier.
+    /// A packed run of `Bin`/`List` elements over `tail`, front first — one head shape per element, held breadth-wise. The carrier is [`Carriers::Bin`] or [`Carriers::List`]; `Nat`'s payload-less layers are [`Shape::UnaryRun`]. Canonical by construction — built only through [`Shape::elem_run`], so the heads are nonempty and the tail is never an elem run of the same carrier.
     ElemRun {
         carrier: Carriers,
         heads: Vec<Shape>,

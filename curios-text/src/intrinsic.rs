@@ -3,9 +3,9 @@ use {
     curios_base::{Flt, Grain, Int},
 };
 
-/// One entry of a list literal `[a, ..xs, b]` — a plain element, or a `..`-spread whose term contributes a whole `Lst` run. Lowering groups consecutive elements into literal chunks and splices the spreads with the n-ary `LstConcat` intrinsic; a spread-free literal lowers to a plain `Lst` exactly as before.
+/// One entry of a list literal `[a, ..xs, b]` — a plain element, or a `..`-spread whose term contributes a whole `List` run. Lowering groups consecutive elements into literal chunks and splices the spreads with the n-ary `ListConcat` intrinsic; a spread-free literal lowers to a plain `List` exactly as before.
 #[derive(Debug, Clone, PartialEq)]
-pub enum LstEntry {
+pub enum ListEntry {
     Elem(Term),
     Spread(Term),
 }
@@ -20,7 +20,7 @@ pub enum BinSegment {
     Spread(Term),
 }
 
-/// The hardcoded intrinsic vocabulary, shaped after `curios_elab::Intrinsic` rather than after the written syntax (`Nat`'s payload still differs, keeping surface-only detail like radix and spread segments — `Int`/`Flt` share `Int`/`Flt` verbatim, since neither carries any surface-only presentation state): the scalar carriers (`Bool`/`Nat`/`Int`/`Flt`) with their type formers, literal values, and operators, the conversions between them, the packed `Bits`/`Bytes` and `Lst` free-monoid carriers with their literals and accessors, `Handle` with the store-described `Foreign` host calls, and the `Cell` mutable reference. The parser only ever produces the literal-value variants (`Bool`/`Nat`/`Flt`/packed binary/`Lst`); every other variant — type formers and operations alike — is baked directly into the embedded `sys` prelude's definition bodies (see `prelude`), so user code reaches them as ordinary named bindings rather than syntax.
+/// The hardcoded intrinsic vocabulary, shaped after `curios_elab::Intrinsic` rather than after the written syntax (`Nat`'s payload still differs, keeping surface-only detail like radix and spread segments — `Int`/`Flt` share `Int`/`Flt` verbatim, since neither carries any surface-only presentation state): the scalar carriers (`Bool`/`Nat`/`Int`/`Flt`) with their type formers, literal values, and operators, the conversions between them, the packed `Bits`/`Bytes` and `List` free-monoid carriers with their literals and accessors, `Handle` with the store-described `Foreign` host calls, and the `Cell` mutable reference. The parser only ever produces the literal-value variants (`Bool`/`Nat`/`Flt`/packed binary/`List`); every other variant — type formers and operations alike — is baked directly into the embedded `sys` prelude's definition bodies (see `prelude`), so user code reaches them as ordinary named bindings rather than syntax.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Intrinsic {
     BoolType,
@@ -124,14 +124,14 @@ pub enum Intrinsic {
     BinSlice(Grain, Term, Term, Term),
     BinAppend(Grain, Term, Term),
     BinConcat(Grain, Term, Term),
-    LstType(Term),
-    Lst(Vec<LstEntry>),
-    LstLen(Term, Term),
-    LstGet(Term, Term, Term),
-    LstSlice(Term, Term, Term, Term),
-    LstAppend(Term, Term, Term),
-    LstConcat(Term, Term, Term),
-    LstMap(Term, Term, Term, Term),
+    ListType(Term),
+    List(Vec<ListEntry>),
+    ListLen(Term, Term),
+    ListGet(Term, Term, Term),
+    ListSlice(Term, Term, Term, Term),
+    ListAppend(Term, Term, Term),
+    ListConcat(Term, Term, Term),
+    ListMap(Term, Term, Term, Term),
     HandleType,
     Handle(u32),
     HandleEql(Term, Term),

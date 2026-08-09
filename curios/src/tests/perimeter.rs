@@ -344,13 +344,13 @@ const A_PROPOSITION_MAY_NOT_CARRY_A_TYPE_FIELD: &str = r#"
         "#;
 
 const A_LIST_OF_PROOFS_IS_NOT_A_PROPOSITION: &str = r#"
-        use /std/{Eq, Lst, True};
+        use /std/{Eq, List, True};
 
         let all_equal(@X : Prop, x : X, y : X) -> Eq(x, y) =
             Eq/refl();
 
-        let one : Lst(True) = [True/qed()];
-        let none : Lst(True) = [];
+        let one : List(True) = [True/qed()];
+        let none : List(True) = [];
 
         let bad : Eq(one, none) =
             all_equal(one, none);
@@ -377,11 +377,11 @@ const IRRELEVANCE_STILL_IDENTIFIES_A_PROPOSITIONS_INHABITANTS: &str = r#"
         "#;
 
 const A_LIST_OF_PROOFS_IS_STILL_A_LIST: &str = r#"
-        use /std/{Nat, Lst, True};
+        use /std/{Nat, List, True};
 
-        let one : Lst(True) = [True/qed()];
+        let one : List(True) = [True/qed()];
 
-        /std/print(Nat/to_str(Lst/len(one)))
+        /std/print(Nat/to_str(List/len(one)))
         "#;
 
 const A_CATCH_ALL_IS_CHECKED_AT_ITS_SCRUTINEE: &str = r#"
@@ -605,13 +605,13 @@ fn a_proposition_may_not_carry_a_type_field() {
 
 // Definitional proof irrelevance, at the premise the rule is stated over rather than at the rule: *which* types are propositions. `Prop` is the type of propositions, so anything admitted at `Prop` is one as far as every later rule is concerned, and irrelevance then identifies its inhabitants without looking at them.
 //
-// `Lst(P)` is not a proposition however propositional `P` is — a list has a length, so two of them are distinguishable where their elements are not, and `Sort::of` says exactly that in both checkers. The *typing* rule for a parameterized intrinsic former was a second implementation of that one rule and reported the element's sort as the former's, so `Lst(True)` inferred at `Prop` on both sides. Nothing here needed the former written in a `Prop` position: `@X : Prop` is solved by unification, and the solution is the reduced `LstType` node.
+// `List(P)` is not a proposition however propositional `P` is — a list has a length, so two of them are distinguishable where their elements are not, and `Sort::of` says exactly that in both checkers. The *typing* rule for a parameterized intrinsic former was a second implementation of that one rule and reported the element's sort as the former's, so `List(True)` inferred at `Prop` on both sides. Nothing here needed the former written in a `Prop` position: `@X : Prop` is solved by unification, and the solution is the reduced `ListType` node.
 //
-// From there every step is the ordinary machinery. `all_equal` is sound and stays accepted below — reflexivity discharges `Eq(@X, x, y)` because irrelevance identifies any two inhabitants of the proposition `X`. Instantiating `X` at `Lst(True)` yields `Eq(one, none)` for a one-element list against the empty one; `Eq/cong` through `Lst/len` carries that to `Eq(1, 0)`, and `Eq/subst` transports `()` into `False`.
+// From there every step is the ordinary machinery. `all_equal` is sound and stays accepted below — reflexivity discharges `Eq(@X, x, y)` because irrelevance identifies any two inhabitants of the proposition `X`. Instantiating `X` at `List(True)` yields `Eq(one, none)` for a one-element list against the empty one; `Eq/cong` through `List/len` carries that to `Eq(1, 0)`, and `Eq/subst` transports `()` into `False`.
 //
-// Verified against the compiler of the day, while the hole was open: this source elaborated and `recheck_module_suffix` on the compile path certified `let /bad : Eq(Lst True, /one, /none)` with zero refusals — the `--print=core-elab` dump shows the solved `@X` as the `Lst` former applied to `True`. It never reached a runtime, and not because a checker stopped it: erasure refuses *any* call whose every argument erases, which is a defect of the erase boundary rather than of this rule, and which the control below trips identically at a genuine proposition.
+// Verified against the compiler of the day, while the hole was open: this source elaborated and `recheck_module_suffix` on the compile path certified `let /bad : Eq(List True, /one, /none)` with zero refusals — the `--print=core-elab` dump shows the solved `@X` as the `List` former applied to `True`. It never reached a runtime, and not because a checker stopped it: erasure refuses *any* call whose every argument erases, which is a defect of the erase boundary rather than of this rule, and which the control below trips identically at a genuine proposition.
 //
-// Both controls are load-bearing, because the two ways to "close" this without fixing it are to stop believing `Prop` and to stop believing `Lst`. Irrelevance must still identify two genuinely different inhabitants of a real proposition, and a list of proofs must still be an ordinary list with a length. The first is asserted through the two-checker matrix rather than by running, since it is the program the erase boundary cannot lower; what it has to establish is that both checkers still accept the lemma and its instantiation.
+// Both controls are load-bearing, because the two ways to "close" this without fixing it are to stop believing `Prop` and to stop believing `List`. Irrelevance must still identify two genuinely different inhabitants of a real proposition, and a list of proofs must still be an ordinary list with a length. The first is asserted through the two-checker matrix rather than by running, since it is the program the erase boundary cannot lower; what it has to establish is that both checkers still accept the lemma and its instantiation.
 #[test]
 fn a_list_of_proofs_is_not_a_proposition() {
     rejected_by(A_LIST_OF_PROOFS_IS_NOT_A_PROPOSITION, "type mismatch");

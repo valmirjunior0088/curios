@@ -346,10 +346,10 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
 
         match op {
             EmissionCode::Intrinsic(op, args) => self.emit_intrinsic(result_local, *op, args),
-            EmissionCode::LstMap(src, f) => {
-                let map = self.context.table().lst_map_func();
+            EmissionCode::ListMap(src, f) => {
+                let map = self.context.table().list_map_func();
                 let envr_type = self.context.table().find_envr_type(1);
-                self.emit_instrs(self.context.load_value_instrs(src, LoadAs::Lst));
+                self.emit_instrs(self.context.load_value_instrs(src, LoadAs::List));
                 self.emit_instrs(
                     self.context
                         .load_value_instrs(f, LoadAs::Concrete(envr_type)),
@@ -1173,44 +1173,44 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 let rope = self.context.table().bin_rope();
                 self.emit_rope_concat(&result_local, args, LoadAs::Bytes, &rope);
             }
-            CpsIntrinsicOp::LstLen => {
-                let rope = self.context.table().lst_rope();
+            CpsIntrinsicOp::ListLen => {
+                let rope = self.context.table().list_rope();
                 self.emit_unary_op(
                     &result_local,
                     &args[0],
-                    LoadAs::Lst,
+                    LoadAs::List,
                     Self::rope_get(&rope, &rope.len_field),
                     WrapAs::I31,
                 );
             }
-            CpsIntrinsicOp::LstGet => {
-                let read = self.context.table().lst_read_func();
-                self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::Lst));
+            CpsIntrinsicOp::ListGet => {
+                let read = self.context.table().list_read_func();
+                self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::List));
                 self.emit_instrs(self.context.load_value_instrs(&args[1], LoadAs::Nat));
                 self.emit_instr(curios_wasm::Instr::Call { func_name: read });
                 self.emit_instr(curios_wasm::Instr::LocalSet {
                     local_name: result_local.clone(),
                 });
             }
-            CpsIntrinsicOp::LstSlice => {
-                let slice = self.context.table().lst_slice_func();
+            CpsIntrinsicOp::ListSlice => {
+                let slice = self.context.table().list_slice_func();
                 self.emit_rope_slice(
                     &result_local,
                     &args[0],
                     &args[1],
                     &args[2],
-                    LoadAs::Lst,
+                    LoadAs::List,
                     slice,
                 );
             }
-            CpsIntrinsicOp::LstAppend => {
-                let rope = self.context.table().lst_rope();
+            CpsIntrinsicOp::ListAppend => {
+                let rope = self.context.table().list_rope();
                 let elem_instrs = self.context.load_value_instrs(&args[1], LoadAs::Null);
-                self.emit_rope_append(&result_local, &args[0], elem_instrs, LoadAs::Lst, &rope);
+                self.emit_rope_append(&result_local, &args[0], elem_instrs, LoadAs::List, &rope);
             }
-            CpsIntrinsicOp::LstConcat(_) => {
-                let rope = self.context.table().lst_rope();
-                self.emit_rope_concat(&result_local, args, LoadAs::Lst, &rope);
+            CpsIntrinsicOp::ListConcat(_) => {
+                let rope = self.context.table().list_rope();
+                self.emit_rope_concat(&result_local, args, LoadAs::List, &rope);
             }
             CpsIntrinsicOp::TplGet(index) => {
                 let tpl_n_type = self.context.table().find_tpl_type(index + 1);

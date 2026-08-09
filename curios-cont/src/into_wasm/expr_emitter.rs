@@ -91,8 +91,8 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     type_name: self.context.table().flt_type(),
                 },
             ]),
-            EmissionData::Lst(elems) => {
-                let rope = self.context.table().lst_rope();
+            EmissionData::List(elems) => {
+                let rope = self.context.table().list_rope();
 
                 // A literal is a leaf: tag 0, the static length, the payload.
                 self.emit_instr(curios_wasm::Instr::I32Const { value: 0 });
@@ -265,7 +265,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         for (value_name, value) in values {
             // An acyclic aggregate has no back-edge, so every field is already bound: build it directly with a single `struct.new` / `array.new_fixed` (via `emit_data`). Only a shell'd closure shell — a recursive capture reusing its own local — takes the `new_default` + per-field `struct.set` backpatch path. Tuples and arrays are never shell'd (cyclic ones are rejected in `into_cont`), so they always build directly.
             match value {
-                EmissionValue::Pure(value @ (EmissionData::Lst(_) | EmissionData::Tpl(_))) => {
+                EmissionValue::Pure(value @ (EmissionData::List(_) | EmissionData::Tpl(_))) => {
                     self.declare_local(value_name);
                     self.emit_let_pure(value_name, value);
                 }

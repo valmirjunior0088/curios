@@ -14,7 +14,7 @@ use std::{
     sync::Arc,
 };
 
-/// The element type of a wire [`WireType::Lst`] — the same vocabulary minus `Lst` itself, so a list of lists is unrepresentable rather than merely unchecked. Codegen's host-boundary force and embed steps handle exactly one level of nesting (a deep force for `Bytes`/`Handle` elements, a shallow one for scalars), and the runtime's uniform `Lst` load cannot distinguish layers, so a second level would silently hand the host rope structs where flat arrays belong. This type is what makes that unwritable.
+/// The element type of a wire [`WireType::List`] — the same vocabulary minus `List` itself, so a list of lists is unrepresentable rather than merely unchecked. Codegen's host-boundary force and embed steps handle exactly one level of nesting (a deep force for `Bytes`/`Handle` elements, a shallow one for scalars), and the runtime's uniform `List` load cannot distinguish layers, so a second level would silently hand the host rope structs where flat arrays belong. This type is what makes that unwritable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[cfg_attr(
     feature = "archive",
@@ -42,10 +42,10 @@ pub enum WireType {
     Bool,
     Bytes,
     Handle,
-    Lst(WireLeaf),
+    List(WireLeaf),
 }
 
-// A leaf is a wire type in its own right — the widening every projection over `Lst` takes to read its element, so the five-way match lives here once instead of in each of them.
+// A leaf is a wire type in its own right — the widening every projection over `List` takes to read its element, so the five-way match lives here once instead of in each of them.
 impl From<WireLeaf> for WireType {
     fn from(leaf: WireLeaf) -> Self {
         match leaf {

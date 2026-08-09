@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, Lst, Map, Option, Result, Parse};
+use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, List, Map, Option, Result, Parse};
 use /std/Toml/{Toml, Date, Time};
 use /std/Toml/calendar/{date_ok, offset_ok, time_ok};
 use /std/Toml/scan/{is_bare_byte};
@@ -140,8 +140,8 @@ rec value_str(v: Toml) -> Result(Str, Str) =
         | false => Result/failure("invalid time value")
         end
     | arr(items) =>
-        let start: Result(Lst(Str), Str) = Result/success([]);
-        match Lst/fold(
+        let start: Result(List(Str), Str) = Result/success([]);
+        match List/fold(
             items,
             start,
             (item, acc) =>
@@ -152,7 +152,7 @@ rec value_str(v: Toml) -> Result(Str, Str) =
         | failure(msg) => Result/failure(msg)
         end
     | table(m) =>
-        match Lst/len(Map/entries(m)) == 0
+        match List/len(Map/entries(m)) == 0
         | true => Result/success("{}")
         | false =>
             match pairs_str(Map/entries(m))
@@ -161,9 +161,9 @@ rec value_str(v: Toml) -> Result(Str, Str) =
             end
         end
     end
-and pairs_str(entries: Lst({Bytes, Toml})) -> Result(Str, Str) =
-    let start: Result(Lst(Str), Str) = Result/success([]);
-    match Lst/fold(
+and pairs_str(entries: List({Bytes, Toml})) -> Result(Str, Str) =
+    let start: Result(List(Str), Str) = Result/success([]);
+    match List/fold(
         entries,
         start,
         (entry, acc) =>
@@ -180,10 +180,10 @@ and pairs_str(entries: Lst({Bytes, Toml})) -> Result(Str, Str) =
     | failure(msg) => Result/failure(msg)
     end;
 
-rec encode_table(prefix: Lst(Str), m: Map(Toml)) -> Result(Str, Str) =
+rec encode_table(prefix: List(Str), m: Map(Toml)) -> Result(Str, Str) =
     let entries = Map/entries(m);
-    let start: Result(Lst(Str), Str) = Result/success([]);
-    match Lst/fold(
+    let start: Result(List(Str), Str) = Result/success([]);
+    match List/fold(
         entries,
         start,
         (entry, acc) =>
@@ -202,7 +202,7 @@ rec encode_table(prefix: Lst(Str), m: Map(Toml)) -> Result(Str, Str) =
                     end))
     | failure(msg) => Result/failure(msg)
     | success(lines) =>
-        match Lst/fold(
+        match List/fold(
             entries,
             start,
             (entry, acc) =>

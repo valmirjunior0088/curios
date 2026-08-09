@@ -1,5 +1,5 @@
 pub use /sys/Bytes/{let Bytes, len, eql, slice};
-use /std/{Lst, Nat, Byte, Bool, Option, Eq, Char, Str, Eql, Show};
+use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Eql, Show};
 
 pub let at(b: Bytes, i: Nat, ok: Nat/Lt(i, len(b))) -> Byte =
     /sys/Bytes/get(b, i);
@@ -7,8 +7,8 @@ pub let at(b: Bytes, i: Nat, ok: Nat/Lt(i, len(b))) -> Byte =
 pub let get(b: Bytes, i: Nat) -> Option(Byte) =
     match i < len(b) | true => Option/some(/sys/Bytes/get(b, i)) | false => Option/none() end;
 
-pub let flatten(parts: Lst(Bytes)) -> Bytes =
-    Lst/fold(parts, x[], (b, acc) => x[..acc, ..b]);
+pub let flatten(parts: List(Bytes)) -> Bytes =
+    List/fold(parts, x[], (b, acc) => x[..acc, ..b]);
 
 pub let fold(@A: Type, b: Bytes, init: A, f: (Byte, A) -> A) -> A =
     let n = len(b);
@@ -36,11 +36,11 @@ pub let find_index(b: Bytes, pred: (Byte) -> Bool) -> Option(Nat) =
                 end);
     found;
 
-pub let join(sep: Bytes, parts: Lst(Bytes)) -> Bytes =
-    Lst/balanced(
-        Lst/len(parts),
+pub let join(sep: Bytes, parts: List(Bytes)) -> Bytes =
+    List/balanced(
+        List/len(parts),
         x[],
-        (i) => Option/unwrap_or(Lst/get(parts, i), x[]),
+        (i) => Option/unwrap_or(List/get(parts, i), x[]),
         (l, r) => x[..l, ..sep, ..r]);
 
 satisfy Eql(Bytes) {

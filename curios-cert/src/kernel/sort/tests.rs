@@ -136,7 +136,7 @@ fn a_list_of_proofs_is_not_a_proposition() {
     let mut kernel = kernel();
     let proposition = declare(&mut kernel, "P", Term::prop());
 
-    let list = Term::intrinsic(Intrinsic::LstType(proposition));
+    let list = Term::intrinsic(Intrinsic::ListType(proposition));
 
     assert_eq!(Sort::of(&mut kernel, &list), Ok(Sort::Type(Level::zero())));
 }

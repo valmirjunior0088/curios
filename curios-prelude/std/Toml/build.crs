@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, Lst, Map, Option, Result, Parse};
+use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, List, Map, Option, Result, Parse};
 use /std/Toml/{Toml, Seg, State, let Build};
 
 induct Act: Type
@@ -38,7 +38,7 @@ let walk_final(
     pre: Bytes,
     name: Str,
     act: Act,
-) -> Result({Map(Toml), Map(State), Lst(Seg)}, Str) =
+) -> Result({Map(Toml), Map(State), List(Seg)}, Str) =
     let kf = seg_key(pre, Seg/plain(name));
     match act
     | act_table() =>
@@ -86,7 +86,7 @@ let walk_final(
                             (
                                 Map/insert(m, name, Toml/arr([..items, Toml/table(Map/empty())])),
                                 side,
-                                [Seg/at(name, Lst/len(items))]))
+                                [Seg/at(name, List/len(items))]))
                     | _ => Result/failure("cannot append to a static array")
                     end
                 | none() => Result/failure("cannot append to a static array")
@@ -110,10 +110,10 @@ rec walk(
     m: Map(Toml),
     side: Map(State),
     pre: Bytes,
-    segs: Lst(Seg),
+    segs: List(Seg),
     unchecked: Nat,
     act: Act,
-) -> Result({Map(Toml), Map(State), Lst(Seg)}, Str) =
+) -> Result({Map(Toml), Map(State), List(Seg)}, Str) =
     match segs
     | [] => Result/failure("empty key path")
     | [seg, ..rest] =>
@@ -143,7 +143,7 @@ rec walk(
                     | some(existing) =>
                         match existing
                         | arr(items) =>
-                            match Lst/get(items, index)
+                            match List/get(items, index)
                             | some(elem) =>
                                 match elem
                                 | table(inner) =>
@@ -157,9 +157,9 @@ rec walk(
                                     | success((inner2, side2, res)) =>
                                         let items2 =
                                             [
-                                                ..Lst/slice(items, 0, index),
+                                                ..List/slice(items, 0, index),
                                                 Toml/table(inner2),
-                                                ..Lst/slice(items, index + 1, Lst/len(items))];
+                                                ..List/slice(items, index + 1, List/len(items))];
                                         Result/success(
                                             (
                                                 Map/insert(m, name, Toml/arr(items2)),
@@ -244,16 +244,16 @@ rec walk(
                             | act_value(_) =>
                                 Result/failure("cannot extend an array of tables with dotted keys")
                             | _ =>
-                                let index = Lst/len(items) - 1;
+                                let index = List/len(items) - 1;
                                 let seg2 = Seg/at(name, index);
-                                match Lst/get(items, index)
+                                match List/get(items, index)
                                 | some(elem) =>
                                     match elem
                                     | table(inner) =>
                                         match walk(inner, side, seg_key(pre, seg2), rest, 0, act)
                                         | success((inner2, side2, res)) =>
                                             let items2 =
-                                                [..Lst/slice(items, 0, index), Toml/table(inner2)];
+                                                [..List/slice(items, 0, index), Toml/table(inner2)];
                                             Result/success(
                                                 (
                                                     Map/insert(m, name, Toml/arr(items2)),
@@ -275,24 +275,24 @@ rec walk(
         end
     end;
 
-let plains(names: Lst(Str)) -> Lst(Seg) =
-    Lst/map(names, (n) => Seg/plain(n));
+let plains(names: List(Str)) -> List(Seg) =
+    List/map(names, (n) => Seg/plain(n));
 
-pub let apply_assign(b: Build, path: Lst(Str), v: Toml) -> Result(Build, Str) =
-    match walk(b.root, b.side, x[], [..b.scope, ..plains(path)], Lst/len(b.scope), Act/act_value(v))
+pub let apply_assign(b: Build, path: List(Str), v: Toml) -> Result(Build, Str) =
+    match walk(b.root, b.side, x[], [..b.scope, ..plains(path)], List/len(b.scope), Act/act_value(v))
     | success((root2, side2, _)) =>
         Result/success(Build { root = root2, side = side2, scope = b.scope })
     | failure(msg) => Result/failure(msg)
     end;
 
-pub let apply_header(b: Build, path: Lst(Str)) -> Result(Build, Str) =
+pub let apply_header(b: Build, path: List(Str)) -> Result(Build, Str) =
     match walk(b.root, b.side, x[], plains(path), 0, Act/act_table())
     | success((root2, side2, resolved)) =>
         Result/success(Build { root = root2, side = side2, scope = resolved })
     | failure(msg) => Result/failure(msg)
     end;
 
-pub let apply_aot(b: Build, path: Lst(Str)) -> Result(Build, Str) =
+pub let apply_aot(b: Build, path: List(Str)) -> Result(Build, Str) =
     match walk(b.root, b.side, x[], plains(path), 0, Act/act_many())
     | success((root2, side2, resolved)) =>
         Result/success(Build { root = root2, side = side2, scope = resolved })
@@ -300,9 +300,9 @@ pub let apply_aot(b: Build, path: Lst(Str)) -> Result(Build, Str) =
     end;
 
 -- Inline tables reuse the same construction rules, scoped to the literal.
-pub let inline_fold(pairs: Lst({Lst(Str), Toml})) -> Result(Map(Toml), Str) =
+pub let inline_fold(pairs: List({List(Str), Toml})) -> Result(Map(Toml), Str) =
     let start: Result(Build, Str) = Result/success(build_empty);
-    match Lst/fold(
+    match List/fold(
         pairs,
         start,
         (pair, acc) => Result/bind(acc, (b) => apply_assign(b, pair.0, pair.1)))

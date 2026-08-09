@@ -10,10 +10,10 @@ fn traps_and_effects_classify_by_operation() {
     );
     assert!(!Semantics::operation(Operation::NatAdd).is_observable());
     assert!(!Semantics::operation(Operation::BoolNeq).is_observable());
-    assert!(Semantics::sequence(SequenceOp::LstGet).observable.may_trap);
-    assert!(!Semantics::sequence(SequenceOp::LstLen).is_observable());
+    assert!(Semantics::sequence(SequenceOp::ListGet).observable.may_trap);
+    assert!(!Semantics::sequence(SequenceOp::ListLen).is_observable());
     assert!(
-        Semantics::sequence(SequenceOp::LstAppend)
+        Semantics::sequence(SequenceOp::ListAppend)
             .operational
             .allocation
             == Allocation::Immutable

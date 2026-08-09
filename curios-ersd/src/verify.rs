@@ -524,7 +524,7 @@ impl<'m> Verifier<'m> {
                     )));
                 }
                 // The intrinsic's operand order is the list first, then the mapper.
-                if let Intrinsic::LstMap = intrinsic
+                if let Intrinsic::ListMap = intrinsic
                     && let [_, Atom::Function(mapper)] = operands[..]
                 {
                     let arity = self.function(mapper)?.params.len();

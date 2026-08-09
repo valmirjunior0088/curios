@@ -24,17 +24,17 @@ pub enum SequenceOp {
     /// `(bins…) -> bin`: concatenate any number of binaries.
     BinConcat(Grain),
     /// `(elements…) -> list`: build a list from any number of elements.
-    LstBuild,
+    ListBuild,
     /// `(list) -> Nat`: the element count.
-    LstLen,
+    ListLen,
     /// `(list, index) -> element`: the element at `index`; out of bounds traps.
-    LstGet,
+    ListGet,
     /// `(list, start, end) -> list`: the `[start, end)` view; out of bounds traps.
-    LstSlice,
+    ListSlice,
     /// `(list, element) -> list`: append one element.
-    LstAppend,
+    ListAppend,
     /// `(lists…) -> list`: concatenate any number of lists.
-    LstConcat,
+    ListConcat,
 }
 
 /// The operand contract of a [`SequenceOp`].
@@ -50,14 +50,14 @@ impl SequenceOp {
     /// The operand contract of this operation.
     pub fn arity(self) -> SequenceArity {
         match self {
-            Self::BinLen(_) | Self::LstLen => SequenceArity::Exactly(1),
+            Self::BinLen(_) | Self::ListLen => SequenceArity::Exactly(1),
             Self::BinEql(_)
             | Self::BinGet(_)
             | Self::BinAppend(_)
-            | Self::LstGet
-            | Self::LstAppend => SequenceArity::Exactly(2),
-            Self::BinSlice(_) | Self::LstSlice => SequenceArity::Exactly(3),
-            Self::BinConcat(_) | Self::LstBuild | Self::LstConcat => SequenceArity::AnyCount,
+            | Self::ListGet
+            | Self::ListAppend => SequenceArity::Exactly(2),
+            Self::BinSlice(_) | Self::ListSlice => SequenceArity::Exactly(3),
+            Self::BinConcat(_) | Self::ListBuild | Self::ListConcat => SequenceArity::AnyCount,
         }
     }
 }

@@ -43,16 +43,16 @@ fn infer_bin(context: &mut Context, bin: &Term) -> Result<Term, Error> {
     }
 }
 
-fn lst_type(elem: Term) -> Term {
-    Subterm::Intrinsic(Intrinsic::LstType(elem)).into()
+fn list_type(elem: Term) -> Term {
+    Subterm::Intrinsic(Intrinsic::ListType(elem)).into()
 }
 
 fn io_type(result: Term) -> Term {
     Subterm::Intrinsic(Intrinsic::IoType(result)).into()
 }
 
-/// Check every element of an `Lst` literal against an already-determined element type, returning the rebuilt elements. Shared by the two ways the element type is fixed: borrowed from `expected` when checking, or a fresh metavar when inferring (see [`elaborate_intrinsic`] and [`synth_intrinsic`]'s `Lst` arm).
-fn check_lst_elems(
+/// Check every element of a `List` literal against an already-determined element type, returning the rebuilt elements. Shared by the two ways the element type is fixed: borrowed from `expected` when checking, or a fresh metavar when inferring (see [`elaborate_intrinsic`] and [`synth_intrinsic`]'s `List` arm).
+fn check_list_elems(
     context: &mut Context,
     elems: &[Term],
     elem_type: &Term,
@@ -732,77 +732,77 @@ fn synth_intrinsic(
             }
             (Intrinsic::BinConcat(Grain::B, elaborated), bin_b_type)
         }
-        // The former's sort is `Sort::of`'s to compute, not the element's own: a list *of* proofs has a length, so it is not itself a proposition however propositional its element is. Restating the rule here typed `Lst(P)` at `Prop`, which admitted it wherever a proposition was wanted.
-        Intrinsic::LstType(elem) => {
+        // The former's sort is `Sort::of`'s to compute, not the element's own: a list *of* proofs has a length, so it is not itself a proposition however propositional its element is. Restating the rule here typed `List(P)` at `Prop`, which admitted it wherever a proposition was wanted.
+        Intrinsic::ListType(elem) => {
             let elem = crate::check_is_sort(context, elem)?.0;
-            let former: Term = Subterm::Intrinsic(Intrinsic::LstType(elem.clone())).into();
+            let former: Term = Subterm::Intrinsic(Intrinsic::ListType(elem.clone())).into();
             let sort = crate::sort_term(context, &former)?;
-            (Intrinsic::LstType(elem), sort)
+            (Intrinsic::ListType(elem), sort)
         }
         // Inferring: the element type is unknown, so mint a fresh metavar — the implicit `@T` a `nil`/`cons` constructor would insert — which the elements solve, an empty `[]` leaving it for a later unification to ground. Checking goes through `elaborate_intrinsic`, which borrows the concrete element type from `expected` before reaching here.
-        Intrinsic::Lst(_, elems) => {
+        Intrinsic::List(_, elems) => {
             let classifier = context.fresh_classifier_type("list element classifier");
             let elem_type = context.fresh_metavar(
                 classifier,
                 None,
                 ImplicitOrigin {
-                    func: "Lst".to_string(),
+                    func: "List".to_string(),
                     binder: "T".to_string(),
                 },
             );
-            let elaborated = check_lst_elems(context, elems, &elem_type)?;
+            let elaborated = check_list_elems(context, elems, &elem_type)?;
             (
-                Intrinsic::Lst(elem_type.clone(), elaborated),
-                lst_type(elem_type),
+                Intrinsic::List(elem_type.clone(), elaborated),
+                list_type(elem_type),
             )
         }
-        Intrinsic::LstLen(type_, list) => {
+        Intrinsic::ListLen(type_, list) => {
             let type_ = crate::check_is_sort(context, type_)?.0;
-            let list_type = lst_type(type_.clone());
+            let list_type = list_type(type_.clone());
             let list = elaborate(context, list, Mode::Check(list_type))?.0;
-            (Intrinsic::LstLen(type_, list), nat_type)
+            (Intrinsic::ListLen(type_, list), nat_type)
         }
-        Intrinsic::LstGet(type_, list, index) => {
+        Intrinsic::ListGet(type_, list, index) => {
             let type_ = crate::check_is_sort(context, type_)?.0;
-            let list_type = lst_type(type_.clone());
+            let list_type = list_type(type_.clone());
             let list = elaborate(context, list, Mode::Check(list_type))?.0;
             let index = elaborate(context, index, Mode::Check(nat_type))?.0;
             let output = type_.clone();
-            (Intrinsic::LstGet(type_, list, index), output)
+            (Intrinsic::ListGet(type_, list, index), output)
         }
-        Intrinsic::LstSlice(type_, list, start, end) => {
+        Intrinsic::ListSlice(type_, list, start, end) => {
             let type_ = crate::check_is_sort(context, type_)?.0;
-            let list_type = lst_type(type_.clone());
+            let list_type = list_type(type_.clone());
             let list = elaborate(context, list, Mode::Check(list_type.clone()))?.0;
             let start = elaborate(context, start, Mode::Check(nat_type.clone()))?.0;
             let end = elaborate(context, end, Mode::Check(nat_type))?.0;
-            (Intrinsic::LstSlice(type_, list, start, end), list_type)
+            (Intrinsic::ListSlice(type_, list, start, end), list_type)
         }
-        Intrinsic::LstAppend(type_, list, elem) => {
+        Intrinsic::ListAppend(type_, list, elem) => {
             let type_ = crate::check_is_sort(context, type_)?.0;
-            let list_type = lst_type(type_.clone());
+            let list_type = list_type(type_.clone());
             let list = elaborate(context, list, Mode::Check(list_type.clone()))?.0;
             let elem = elaborate(context, elem, Mode::Check(type_.clone()))?.0;
-            (Intrinsic::LstAppend(type_, list, elem), list_type)
+            (Intrinsic::ListAppend(type_, list, elem), list_type)
         }
-        Intrinsic::LstConcat(type_, operands) => {
+        Intrinsic::ListConcat(type_, operands) => {
             let type_ = crate::check_is_sort(context, type_)?.0;
-            let list_type = lst_type(type_.clone());
+            let list_type = list_type(type_.clone());
             let mut elaborated = Vec::with_capacity(operands.len());
             for operand in operands {
                 elaborated.push(elaborate(context, operand, Mode::Check(list_type.clone()))?.0);
             }
-            (Intrinsic::LstConcat(type_, elaborated), list_type)
+            (Intrinsic::ListConcat(type_, elaborated), list_type)
         }
-        Intrinsic::LstMap(a, b, lst, f) => {
+        Intrinsic::ListMap(a, b, list, f) => {
             let a = crate::check_is_sort(context, a)?.0;
             let b = crate::check_is_sort(context, b)?.0;
-            let lst_a = lst_type(a.clone());
-            let lst = elaborate(context, lst, Mode::Check(lst_a))?.0;
+            let list_a = list_type(a.clone());
+            let list = elaborate(context, list, Mode::Check(list_a))?.0;
             let f_type = Term::func_type([(context.fresh(Some("x")), a.clone())], b.clone());
             let f = elaborate(context, f, Mode::Check(f_type))?.0;
-            let lst_b = lst_type(b.clone());
-            (Intrinsic::LstMap(a, b, lst, f), lst_b)
+            let list_b = list_type(b.clone());
+            (Intrinsic::ListMap(a, b, list, f), list_b)
         }
         Intrinsic::HandleType => (intrinsic.clone(), Term::type_ground()),
         Intrinsic::Handle(_) => (intrinsic.clone(), handle_type),
@@ -811,7 +811,7 @@ fn synth_intrinsic(
             let code = elaborate(context, code, Mode::Check(nat_type))?.0;
             (Intrinsic::ProcExit(code), io_type(Term::tuple_type_unit()))
         }
-        // The same rule as `LstType` above, and for the same reason: a cell has an identity.
+        // The same rule as `ListType` above, and for the same reason: a cell has an identity.
         Intrinsic::CellType(elem) => {
             let elem = crate::check_is_sort(context, elem)?.0;
             let former: Term = Subterm::Intrinsic(Intrinsic::CellType(elem.clone())).into();
@@ -842,7 +842,7 @@ fn synth_intrinsic(
             let output = io_type(type_.clone());
             (Intrinsic::CellGet(type_, cell), output)
         }
-        // The same rule as `LstType` and `CellType` above, and for a third reason: a description has an effect, so it is not proof-irrelevant however propositional its result.
+        // The same rule as `ListType` and `CellType` above, and for a third reason: a description has an effect, so it is not proof-irrelevant however propositional its result.
         Intrinsic::IoType(result) => {
             let result = crate::check_is_sort(context, result)?.0;
             let former: Term = Subterm::Intrinsic(Intrinsic::IoType(result.clone())).into();
@@ -876,24 +876,25 @@ pub(crate) fn elaborate_intrinsic(
     intrinsic: &Intrinsic,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    // `Lst` is bidirectional. Checking against a concrete `Lst(T)`, it borrows the element type from `expected` — definitional, so each element is checked against the known type (better errors, and numeric element literals pick the right numeric type). Any other expected shape — a stuck `?M(?A)` awaiting the flex-apply imitation included — falls through to `synth_intrinsic`, which mints a fresh element-type metavar; the check-after-infer unification then equates `Lst(?T)` with the expected type (pinning `?M := Lst`, or reporting the genuine mismatch).
-    if let (Intrinsic::Lst(_, elems), Mode::Check(expected)) = (intrinsic, &mode)
-        && let Subterm::Intrinsic(Intrinsic::LstType(elem_type)) = &*reduce_with(context, expected)?
+    // `List` is bidirectional. Checking against a concrete `List(T)`, it borrows the element type from `expected` — definitional, so each element is checked against the known type (better errors, and numeric element literals pick the right numeric type). Any other expected shape — a stuck `?M(?A)` awaiting the flex-apply imitation included — falls through to `synth_intrinsic`, which mints a fresh element-type metavar; the check-after-infer unification then equates `List(?T)` with the expected type (pinning `?M := List`, or reporting the genuine mismatch).
+    if let (Intrinsic::List(_, elems), Mode::Check(expected)) = (intrinsic, &mode)
+        && let Subterm::Intrinsic(Intrinsic::ListType(elem_type)) =
+            &*reduce_with(context, expected)?
     {
-        let elaborated = check_lst_elems(context, elems, elem_type)?;
+        let elaborated = check_list_elems(context, elems, elem_type)?;
 
         return Ok((
-            Term::intrinsic(Intrinsic::Lst(elem_type.clone(), elaborated)),
+            Term::intrinsic(Intrinsic::List(elem_type.clone(), elaborated)),
             expected.clone(),
         ));
     }
 
-    // `LstConcat` mirrors `Lst`'s bidirectionality — and must, because the lowering of a spread list literal `[a, ..xs, b]` mints a fresh metavar for the element-type slot. Checking against a concrete `Lst(T)`, solve the slot against `expected` FIRST (`expect` unifies `Lst(slot)` with it), so the operands — the literal chunks especially — elaborate against the known element type instead of default-solving it from the first element. Any other expected shape falls through to `synth_intrinsic`, exactly as for `Lst`.
-    if let (Intrinsic::LstConcat(type_slot, operands), Mode::Check(expected)) = (intrinsic, &mode)
-        && let Subterm::Intrinsic(Intrinsic::LstType(_)) = &*reduce_with(context, expected)?
+    // `ListConcat` mirrors `List`'s bidirectionality — and must, because the lowering of a spread list literal `[a, ..xs, b]` mints a fresh metavar for the element-type slot. Checking against a concrete `List(T)`, solve the slot against `expected` FIRST (`expect` unifies `List(slot)` with it), so the operands — the literal chunks especially — elaborate against the known element type instead of default-solving it from the first element. Any other expected shape falls through to `synth_intrinsic`, exactly as for `List`.
+    if let (Intrinsic::ListConcat(type_slot, operands), Mode::Check(expected)) = (intrinsic, &mode)
+        && let Subterm::Intrinsic(Intrinsic::ListType(_)) = &*reduce_with(context, expected)?
     {
         let type_slot = crate::check_is_sort(context, type_slot)?.0;
-        expect(context, term, &lst_type(type_slot.clone()), expected)?;
+        expect(context, term, &list_type(type_slot.clone()), expected)?;
 
         let mut elaborated = Vec::with_capacity(operands.len());
         for operand in operands {
@@ -901,7 +902,7 @@ pub(crate) fn elaborate_intrinsic(
         }
 
         return Ok((
-            Term::intrinsic(Intrinsic::LstConcat(type_slot, elaborated)),
+            Term::intrinsic(Intrinsic::ListConcat(type_slot, elaborated)),
             expected.clone(),
         ));
     }

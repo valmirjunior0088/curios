@@ -115,13 +115,13 @@ macro_rules! wire_of {
         WireType::Nat
     };
     (ListBytes) => {
-        WireType::Lst(WireLeaf::Bytes)
+        WireType::List(WireLeaf::Bytes)
     };
     (ListHandle) => {
-        WireType::Lst(WireLeaf::Handle)
+        WireType::List(WireLeaf::Handle)
     };
     (ListPoll) => {
-        WireType::Lst(WireLeaf::Nat)
+        WireType::List(WireLeaf::Nat)
     };
 }
 

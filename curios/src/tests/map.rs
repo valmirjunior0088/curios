@@ -58,11 +58,11 @@ fn map_del_removes_and_collapses() {
 fn map_iterates_in_lexicographic_key_order() {
     // Iteration order is a property of the canonical shape, not of insertion order: the zero side of a fork holds the smaller keys, and the marker bits sort a prefix before its extensions ("" first, "ab" before "abc").
     let source = r#"
-        use /std/{Handle, Str, Map, Nat, Option, Lst};
+        use /std/{Handle, Str, Map, Nat, Option, List};
         let m : Map(Nat) =
             Map/of([("b", 0), ("abc", 0), ("", 0), ("a", 0), ("ab", 0)]);
         /std/print(Str/join(",",
-            Lst/map(Map/keys(m), (k) => Option/unwrap_or(Str/of_bytes(k), "?"))))
+            List/map(Map/keys(m), (k) => Option/unwrap_or(Str/of_bytes(k), "?"))))
         "#;
     assert_eq!(run(source), b",a,ab,abc,b");
 }
@@ -71,9 +71,9 @@ fn map_iterates_in_lexicographic_key_order() {
 fn map_entries_agree_across_insertion_orders() {
     // Canonicity, observed through the API: the same entry set reached by two different insertion histories (including a detour through a later-deleted key) folds to the same entry sequence.
     let source = r#"
-        use /std/{Handle, Str, Map, Nat, Option, Lst};
+        use /std/{Handle, Str, Map, Nat, Option, List};
         let show(m : Map(Nat)) -> Str =
-            Str/join(",", Lst/map(
+            Str/join(",", List/map(
                 Map/entries(m),
                 ((k, v)) => Str/concat(Option/unwrap_or(Str/of_bytes(k), "?"), Nat/to_str(v))));
         let m1 : Map(Nat) = Map/of([("x", 1), ("y", 2), ("z", 3)]);
@@ -87,8 +87,8 @@ fn map_entries_agree_across_insertion_orders() {
 fn map_nat_keys_encode_injectively() {
     // The `Key(Nat)` witness must keep 0 (empty encoding), one-byte, boundary (255/256), and multi-byte keys distinct.
     let source = r#"
-        use /std/{Handle, Str, Map, Nat, Option, Lst};
-        let entries : Lst({Nat, Str}) =
+        use /std/{Handle, Str, Map, Nat, Option, List};
+        let entries : List({Nat, Str}) =
             [(0, "zero"), (1, "one"), (255, "ff"), (256, "big"), (65536, "bigger")];
         let m : Map(Str) = Map/of(entries);
         let at(n : Nat) -> Str = Option/unwrap_or(Map/get(m, n), "?");

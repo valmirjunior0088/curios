@@ -250,12 +250,12 @@ impl Semantics {
     pub fn sequence(operation: SequenceOp) -> LocalBehavior {
         use SequenceOp::*;
         match operation {
-            BinGet(_) | LstGet => LocalBehavior::trap(),
-            BinSlice(_) | LstSlice => LocalBehavior::trap().with_alloc(Allocation::Immutable),
-            BinAppend(_) | BinConcat(_) | LstAppend | LstConcat | LstBuild => {
+            BinGet(_) | ListGet => LocalBehavior::trap(),
+            BinSlice(_) | ListSlice => LocalBehavior::trap().with_alloc(Allocation::Immutable),
+            BinAppend(_) | BinConcat(_) | ListAppend | ListConcat | ListBuild => {
                 LocalBehavior::alloc(Allocation::Immutable)
             }
-            BinLen(_) | LstLen | BinEql(_) => LocalBehavior::pure(),
+            BinLen(_) | ListLen | BinEql(_) => LocalBehavior::pure(),
         }
     }
 
@@ -268,10 +268,10 @@ impl Semantics {
         }
     }
 
-    /// The node-local behavior of an intrinsic. `LstMap` allocates its result list; the mapper's own behavior is composed by the effect summary.
+    /// The node-local behavior of an intrinsic. `ListMap` allocates its result list; the mapper's own behavior is composed by the effect summary.
     pub fn intrinsic(intrinsic: Intrinsic) -> LocalBehavior {
         match intrinsic {
-            Intrinsic::LstMap => LocalBehavior::alloc(Allocation::Immutable),
+            Intrinsic::ListMap => LocalBehavior::alloc(Allocation::Immutable),
         }
     }
 
@@ -523,7 +523,7 @@ impl Semantics {
                             .collect::<Option<Vec<_>>>()?,
                     ),
                 ),
-                LstLen | LstGet | LstSlice | LstAppend | LstConcat | LstBuild => return None,
+                ListLen | ListGet | ListSlice | ListAppend | ListConcat | ListBuild => return None,
             }))
         };
         fold_outcome(compute())

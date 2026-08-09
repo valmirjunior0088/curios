@@ -2,7 +2,7 @@
 //!
 //! One rule per operation: what its operands must be, and what it produces. Nothing here is inferred or negotiated — an intrinsic's signature is fixed by the language, so this module is a table, and the table is the specification.
 //!
-//! The scalar families are monomorphic and read directly. The container operations carry their element type as an operand, which is what lets them be typed without inventing anything: `Lst/get` is `(T : Type, Lst(T), Nat) -> T`, with `T` present in the term. The one operation that does *not* carry its type is a bare list literal, and the rule for it is the only place here that has to look at an operand to decide a type.
+//! The scalar families are monomorphic and read directly. The container operations carry their element type as an operand, which is what lets them be typed without inventing anything: `List/get` is `(T : Type, List(T), Nat) -> T`, with `T` present in the term. The one operation that does *not* carry its type is a bare list literal, and the rule for it is the only place here that has to look at an operand to decide a type.
 
 use {
     super::{check, infer},
@@ -39,8 +39,8 @@ fn bin_type(grain: Grain) -> Term {
     Term::intrinsic(Intrinsic::BinType(grain))
 }
 
-fn lst_type(element: Term) -> Term {
-    Term::intrinsic(Intrinsic::LstType(element))
+fn list_type(element: Term) -> Term {
+    Term::intrinsic(Intrinsic::ListType(element))
 }
 
 fn cell_type(element: Term) -> Term {
@@ -73,7 +73,9 @@ pub(super) fn infer_intrinsic(
         | Intrinsic::HandleType => Ok(Term::type_ground()),
 
         // A parameterized former's sort is whatever `Sort::of` computes for it, asked here rather than restated: the element's own sort is *not* the answer, because a list or a cell of proofs has a length or an identity, and a description of proofs has an effect, so none of them is itself a proposition.
-        Intrinsic::LstType(element) | Intrinsic::CellType(element) | Intrinsic::IoType(element) => {
+        Intrinsic::ListType(element)
+        | Intrinsic::CellType(element)
+        | Intrinsic::IoType(element) => {
             let sort = sort_of_intrinsic(kernel, intrinsic)?;
             check_is_type(kernel, element)?;
 
@@ -212,55 +214,55 @@ pub(super) fn infer_intrinsic(
             Ok(bin_type(*grain))
         }
 
-        // A list literal carries its element type like every other `Lst` operation — `[]` included, which is the case that used to be refused for having no element to read a type from.
-        Intrinsic::Lst(element, elements) => {
+        // A list literal carries its element type like every other `List` operation — `[]` included, which is the case that used to be refused for having no element to read a type from.
+        Intrinsic::List(element, elements) => {
             let element = check_is_type(kernel, element)?;
             for entry in elements {
                 check(kernel, entry, &element)?;
             }
 
-            Ok(lst_type(element))
+            Ok(list_type(element))
         }
-        Intrinsic::LstLen(element, list) => {
+        Intrinsic::ListLen(element, list) => {
             let element = check_is_type(kernel, element)?;
-            check(kernel, list, &lst_type(element))?;
+            check(kernel, list, &list_type(element))?;
 
             Ok(nat_type())
         }
-        Intrinsic::LstGet(element, list, index) => {
+        Intrinsic::ListGet(element, list, index) => {
             let element = check_is_type(kernel, element)?;
-            check(kernel, list, &lst_type(element.clone()))?;
+            check(kernel, list, &list_type(element.clone()))?;
             check(kernel, index, &nat_type())?;
 
             Ok(element)
         }
-        Intrinsic::LstSlice(element, list, start, end) => {
+        Intrinsic::ListSlice(element, list, start, end) => {
             let element = check_is_type(kernel, element)?;
-            check(kernel, list, &lst_type(element.clone()))?;
+            check(kernel, list, &list_type(element.clone()))?;
             check(kernel, start, &nat_type())?;
             check(kernel, end, &nat_type())?;
 
-            Ok(lst_type(element))
+            Ok(list_type(element))
         }
-        Intrinsic::LstAppend(element, list, value) => {
+        Intrinsic::ListAppend(element, list, value) => {
             let element = check_is_type(kernel, element)?;
-            check(kernel, list, &lst_type(element.clone()))?;
+            check(kernel, list, &list_type(element.clone()))?;
             check(kernel, value, &element)?;
 
-            Ok(lst_type(element))
+            Ok(list_type(element))
         }
-        Intrinsic::LstConcat(element, operands) => {
+        Intrinsic::ListConcat(element, operands) => {
             let element = check_is_type(kernel, element)?;
             for operand in operands {
-                check(kernel, operand, &lst_type(element.clone()))?;
+                check(kernel, operand, &list_type(element.clone()))?;
             }
 
-            Ok(lst_type(element))
+            Ok(list_type(element))
         }
-        Intrinsic::LstMap(from, to, list, function) => {
+        Intrinsic::ListMap(from, to, list, function) => {
             let from = check_is_type(kernel, from)?;
             let to = check_is_type(kernel, to)?;
-            check(kernel, list, &lst_type(from.clone()))?;
+            check(kernel, list, &list_type(from.clone()))?;
 
             let binder = kernel.fresh(Some("x"));
             check(
@@ -269,7 +271,7 @@ pub(super) fn infer_intrinsic(
                 &Term::func_type([(binder, from)], to.clone()),
             )?;
 
-            Ok(lst_type(to))
+            Ok(list_type(to))
         }
 
         // A mutable cell. Its identity is what makes a `Cell` of proofs relevant — see `Sort::of`.

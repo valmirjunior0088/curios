@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, Lst, Map, Option, Result, Parse};
+use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, List, Map, Option, Result, Parse};
 use /std/Toml/{Toml, let Build};
 use /std/Toml/build/{apply_assign, apply_header, apply_aot, build_empty};
 use /std/Toml/scan/{byte_at_is, line_end, trivia, ws};
@@ -6,13 +6,13 @@ use /std/Toml/keys/{key_part};
 use /std/Toml/values/{value_scan};
 
 induct Stmt: Type
-| assign(path: Lst(Str), value: Toml)
-| table_header(Lst(Str))
-| array_header(Lst(Str))
+| assign(path: List(Str), value: Toml)
+| table_header(List(Str))
+| array_header(List(Str))
 end
 
 -- The statement layer is written as recursive scanners over positions: a recursive function applied to a symbolic input stays a residual application under type-level reduction, where an equivalent combinator constant would unfold its whole parser tree symbolically.
-rec key_path_scan(input: Bytes, cur: Nat, acc: Lst(Str)) -> Result({Nat, Lst(Str)}, Str) =
+rec key_path_scan(input: Bytes, cur: Nat, acc: List(Str)) -> Result({Nat, List(Str)}, Str) =
     match key_part.run(input, cur)
     | failure(msg) => Result/failure(msg)
     | success((c1, k)) =>
@@ -30,7 +30,7 @@ rec key_path_scan(input: Bytes, cur: Nat, acc: Lst(Str)) -> Result({Nat, Lst(Str
             end
         end
     end
-and header_scan(input: Bytes, cur: Nat, double: Bool) -> Result({Nat, Lst(Str)}, Str) =
+and header_scan(input: Bytes, cur: Nat, double: Bool) -> Result({Nat, List(Str)}, Str) =
     match ws.run(input, cur)
     | failure(msg) => Result/failure(msg)
     | success((c1, _)) =>
@@ -84,7 +84,7 @@ and stmt_scan(input: Bytes, cur: Nat) -> Result({Nat, Stmt}, Str) =
             end
         end
     end
-and stmts_scan(input: Bytes, cur: Nat, acc: Lst(Stmt)) -> Result(Lst(Stmt), Str) =
+and stmts_scan(input: Bytes, cur: Nat, acc: List(Stmt)) -> Result(List(Stmt), Str) =
     match trivia.run(input, cur)
     | failure(msg) => Result/failure(msg)
     | success((c1, _)) =>
@@ -107,7 +107,7 @@ pub let decode(source: Str) -> Result(Map(Toml), Str) =
     | failure(msg) => Result/failure(msg)
     | success(stmts) =>
         let start: Result(Build, Str) = Result/success(build_empty);
-        match Lst/fold(
+        match List/fold(
             stmts,
             start,
             (s, acc) =>

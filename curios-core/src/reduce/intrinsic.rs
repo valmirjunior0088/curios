@@ -9,7 +9,7 @@ use {
     std::cmp::Ordering,
 };
 
-/// Read an already-reduced `Nat` term as a concrete `usize` index — `None` when it is still symbolic or too large to fit. The shared decode behind the `Bin`/`Lst` `get`/`slice` bounds.
+/// Read an already-reduced `Nat` term as a concrete `usize` index — `None` when it is still symbolic or too large to fit. The shared decode behind the `Bin`/`List` `get`/`slice` bounds.
 fn as_index(term: &Term) -> Option<usize> {
     term.as_nat().and_then(|n| n.to_big_uint()?.to_usize())
 }
@@ -228,7 +228,7 @@ fn from_ordering(ordering: Ordering) -> Comparison {
     }
 }
 
-/// The `Nat` eliminator's structural comparison, specialized to the flat `BigUint` successor spine: the floors stand in for peeling successors, so no recursion is needed and two literals decide in one `BigUint` compare (the literal fold folds into the shared-inner shortcut). It decides ONLY where the answer is forced and is `Stuck` otherwise — a sound partial decision procedure, the shared body of the whole comparison family. (The `lt` partner of the `Unary` eliminator's successor peel; for `Bin`/`Lst` the same `Comparison` shape would recurse via `uncons`.)
+/// The `Nat` eliminator's structural comparison, specialized to the flat `BigUint` successor spine: the floors stand in for peeling successors, so no recursion is needed and two literals decide in one `BigUint` compare (the literal fold folds into the shared-inner shortcut). It decides ONLY where the answer is forced and is `Stuck` otherwise — a sound partial decision procedure, the shared body of the whole comparison family. (The `lt` partner of the `Unary` eliminator's successor peel; for `Bin`/`List` the same `Comparison` shape would recurse via `uncons`.)
 ///
 /// Returns the operands with their shared successor floor peeled off, so an *undecided* comparison still rebuilds a normalized neutral: `cmp(x + m, y + m)` and `cmp(x, y)` reduce to the same term, which conversion needs (e.g. `Lt(a, succ b) ≡ Lt(succ a, succ(succ b))`).
 fn compare_nat(
@@ -276,7 +276,7 @@ fn reduce_nat_compare(
     })
 }
 
-/// The free-monoid product structure of a reduced carrier value, the view a monoid homomorphism (`len`/`map`) distributes over: a literal run of generators `L` (bytes for `Bin`, elements for `Lst`), an n-ary `Concat` of operands to recurse on, an `Append` of a base and one appended generator, or an `Opaque` node (a variable / slice) the homomorphism leaves neutral. `Empty` is just `Literal(∅)`.
+/// The free-monoid product structure of a reduced carrier value, the view a monoid homomorphism (`len`/`map`) distributes over: a literal run of generators `L` (bytes for `Bin`, elements for `List`), an n-ary `Concat` of operands to recurse on, an `Append` of a base and one appended generator, or an `Opaque` node (a variable / slice) the homomorphism leaves neutral. `Empty` is just `Literal(∅)`.
 enum Shape<L> {
     Literal(Vec<L>),
     Concat(Vec<Term>),
@@ -305,12 +305,12 @@ fn bin_shape(grain: Grain, value: Term) -> Shape<u8> {
     }
 }
 
-/// Classify a reduced `Lst` value into its product shape (generators are elements).
-fn lst_shape(value: Term) -> Shape<Term> {
+/// Classify a reduced `List` value into its product shape (generators are elements).
+fn list_shape(value: Term) -> Shape<Term> {
     match Term::unwrap_or_clone(value) {
-        Subterm::Intrinsic(Intrinsic::Lst(_, elems)) => Shape::Literal(elems),
-        Subterm::Intrinsic(Intrinsic::LstConcat(_, operands)) => Shape::Concat(operands),
-        Subterm::Intrinsic(Intrinsic::LstAppend(_, base, elem)) => Shape::Append(base, elem),
+        Subterm::Intrinsic(Intrinsic::List(_, elems)) => Shape::Literal(elems),
+        Subterm::Intrinsic(Intrinsic::ListConcat(_, operands)) => Shape::Concat(operands),
+        Subterm::Intrinsic(Intrinsic::ListAppend(_, base, elem)) => Shape::Append(base, elem),
         other => Shape::Opaque(other.into()),
     }
 }
@@ -1271,24 +1271,24 @@ pub fn reduce_intrinsic(
                 _ => Intrinsic::BinAppend(Grain::B, bin, bit),
             }))
         }
-        Intrinsic::LstType(elem) => {
+        Intrinsic::ListType(elem) => {
             let elem = reducer.reduce(elem.clone())?;
-            Ok(Subterm::Intrinsic(Intrinsic::lst_type(elem)))
+            Ok(Subterm::Intrinsic(Intrinsic::list_type(elem)))
         }
-        Intrinsic::Lst(elem, elems) => {
+        Intrinsic::List(elem, elems) => {
             let elem = reducer.reduce(elem.clone())?;
             let elems = elems
                 .iter()
                 .map(|e| reducer.reduce(e.clone()))
                 .collect::<Result<Vec<_>, _>>()?;
-            Ok(Subterm::Intrinsic(Intrinsic::Lst(elem, elems)))
+            Ok(Subterm::Intrinsic(Intrinsic::List(elem, elems)))
         }
-        Intrinsic::LstLen(type_, list) => {
+        Intrinsic::ListLen(type_, list) => {
             let type_ = reducer.reduce(type_.clone())?;
             let list = reducer.reduce_forced(list.clone())?;
             reduce_homomorphism(
                 reducer,
-                lst_shape(list),
+                list_shape(list),
                 |run| Term::intrinsic(Intrinsic::Nat(Nat::new(run.len()))),
                 nat_sum,
                 |base_len, _| {
@@ -1297,27 +1297,27 @@ pub fn reduce_intrinsic(
                         base_len,
                     ))
                 },
-                |sub| Term::intrinsic(Intrinsic::lst_len(type_.clone(), sub)),
+                |sub| Term::intrinsic(Intrinsic::list_len(type_.clone(), sub)),
             )
         }
-        Intrinsic::LstGet(type_, list, index) => {
+        Intrinsic::ListGet(type_, list, index) => {
             let type_ = reducer.reduce(type_.clone())?;
             let list = reducer.reduce_forced(list.clone())?;
             let index_reduced = reducer.reduce_forced(index.clone())?;
             let i = as_index(&index_reduced);
             // A concrete index into a literal run.
-            if let (Subterm::Intrinsic(Intrinsic::Lst(_, elems)), Some(i)) = (&*list, i) {
+            if let (Subterm::Intrinsic(Intrinsic::List(_, elems)), Some(i)) = (&*list, i) {
                 let len = elems.len();
                 return match elems.get(i).cloned().map(Term::unwrap_or_clone) {
                     Some(elem) => Ok(elem),
-                    None => Err(ReduceError::LstGetOutOfBounds {
+                    None => Err(ReduceError::ListGetOutOfBounds {
                         len,
                         index: i,
                         span: index.span(),
                     }),
                 };
             }
-            // A get over a cons spine peels one element per `0`/`succ` index step, the `Lst` twin of `BinGet`'s byte peel: `get(cons(h, t), 0) = h`   and   `get(cons(h, t), succ k) = get(t, k)`.
+            // A get over a cons spine peels one element per `0`/`succ` index step, the `List` twin of `BinGet`'s byte peel: `get(cons(h, t), 0) = h`   and   `get(cons(h, t), succ k) = get(t, k)`.
             if let Some((head, tail)) = peel_first_elem(&list) {
                 match &*index_reduced {
                     Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => {
@@ -1327,34 +1327,34 @@ pub fn reduce_intrinsic(
                         let one = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
                         let prev = Term::intrinsic(Intrinsic::nat_sub(index_reduced.clone(), one));
                         return reducer
-                            .reduce(Term::intrinsic(Intrinsic::lst_get(type_, tail, prev)))
+                            .reduce(Term::intrinsic(Intrinsic::list_get(type_, tail, prev)))
                             .map(Term::unwrap_or_clone);
                     }
                     _ => {}
                 }
             }
-            Ok(Subterm::Intrinsic(Intrinsic::lst_get(
+            Ok(Subterm::Intrinsic(Intrinsic::list_get(
                 type_,
                 list,
                 index_reduced,
             )))
         }
-        Intrinsic::LstSlice(type_, list, start, end) => {
+        Intrinsic::ListSlice(type_, list, start, end) => {
             let type_ = reducer.reduce(type_.clone())?;
             let list = reducer.reduce_forced(list.clone())?;
             let start_reduced = reducer.reduce_forced(start.clone())?;
             let end_reduced = reducer.reduce_forced(end.clone())?;
-            // The full slice is the identity: `slice(a, 0, len a) = a`. Sound even for a symbolic `a` — `0..len` is always in range — the `Lst` twin of `BinSlice`'s full-window identity, letting a full-length `Lst/slice` reduce to its base instead of copying.
+            // The full slice is the identity: `slice(a, 0, len a) = a`. Sound even for a symbolic `a` — `0..len` is always in range — the `List` twin of `BinSlice`'s full-window identity, letting a full-length `List/slice` reduce to its base instead of copying.
             if matches!(
                 &*start_reduced,
                 Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero))
-            ) && matches!(&*end_reduced, Subterm::Intrinsic(Intrinsic::LstLen(_, whole)) if *whole == list)
+            ) && matches!(&*end_reduced, Subterm::Intrinsic(Intrinsic::ListLen(_, whole)) if *whole == list)
             {
                 return Ok(Term::unwrap_or_clone(list));
             }
-            // The empty slice is empty: `slice(a, i, i) = []`. Sound for a symbolic `a` — an empty range yields no elements regardless — and the base case the cons peel below bottoms out on (the `Lst` twin of `BinSlice`'s empty-slice identity).
+            // The empty slice is empty: `slice(a, i, i) = []`. Sound for a symbolic `a` — an empty range yields no elements regardless — and the base case the cons peel below bottoms out on (the `List` twin of `BinSlice`'s empty-slice identity).
             if start_reduced == end_reduced {
-                return Ok(Subterm::Intrinsic(Intrinsic::Lst(
+                return Ok(Subterm::Intrinsic(Intrinsic::List(
                     type_.clone(),
                     Vec::new(),
                 )));
@@ -1362,14 +1362,15 @@ pub fn reduce_intrinsic(
             let s = as_index(&start_reduced);
             let e = as_index(&end_reduced);
             // A concrete slice of a literal run.
-            if let (Subterm::Intrinsic(Intrinsic::Lst(_, elems)), Some(s), Some(e)) = (&*list, s, e)
+            if let (Subterm::Intrinsic(Intrinsic::List(_, elems)), Some(s), Some(e)) =
+                (&*list, s, e)
             {
                 return match elems.get(s..e) {
-                    Some(slice) => Ok(Subterm::Intrinsic(Intrinsic::Lst(
+                    Some(slice) => Ok(Subterm::Intrinsic(Intrinsic::List(
                         type_.clone(),
                         slice.to_vec(),
                     ))),
-                    None => Err(ReduceError::LstSliceOutOfRange {
+                    None => Err(ReduceError::ListSliceOutOfRange {
                         len: elems.len(),
                         start: s,
                         end: e,
@@ -1377,7 +1378,7 @@ pub fn reduce_intrinsic(
                     }),
                 };
             }
-            // A slice over a cons spine peels one element per `0`/`succ` boundary step, the `Lst` twin of `BinSlice`'s byte peel: `slice(cons(h, t), 0, succ e) = [h] ++ slice(t, 0, e)`  and `slice(cons(h, t), succ s, e) = slice(t, s, e - 1)`.
+            // A slice over a cons spine peels one element per `0`/`succ` boundary step, the `List` twin of `BinSlice`'s byte peel: `slice(cons(h, t), 0, succ e) = [h] ++ slice(t, 0, e)`  and `slice(cons(h, t), succ s, e) = slice(t, s, e - 1)`.
             if let Some((head, tail)) = peel_first_elem(&list) {
                 let dec = |n: &Term| {
                     let one = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
@@ -1389,20 +1390,20 @@ pub fn reduce_intrinsic(
                         Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(..))),
                     ) => {
                         let zero = Term::intrinsic(Intrinsic::Nat(Nat::Zero));
-                        let rest = Term::intrinsic(Intrinsic::lst_slice(
+                        let rest = Term::intrinsic(Intrinsic::list_slice(
                             type_.clone(),
                             tail,
                             zero,
                             dec(&end_reduced),
                         ));
                         let head_singleton: Term =
-                            Subterm::Intrinsic(Intrinsic::Lst(type_.clone(), vec![head])).into();
+                            Subterm::Intrinsic(Intrinsic::List(type_.clone(), vec![head])).into();
                         let consed =
-                            Term::intrinsic(Intrinsic::lst_concat(type_, [head_singleton, rest]));
+                            Term::intrinsic(Intrinsic::list_concat(type_, [head_singleton, rest]));
                         return reducer.reduce(consed).map(Term::unwrap_or_clone);
                     }
                     (Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(..))), _) => {
-                        let sliced = Term::intrinsic(Intrinsic::lst_slice(
+                        let sliced = Term::intrinsic(Intrinsic::list_slice(
                             type_,
                             tail,
                             dec(&start_reduced),
@@ -1413,35 +1414,35 @@ pub fn reduce_intrinsic(
                     _ => {}
                 }
             }
-            Ok(Subterm::Intrinsic(Intrinsic::lst_slice(
+            Ok(Subterm::Intrinsic(Intrinsic::list_slice(
                 type_,
                 list,
                 start_reduced,
                 end_reduced,
             )))
         }
-        Intrinsic::LstAppend(type_, list, elem) => {
+        Intrinsic::ListAppend(type_, list, elem) => {
             let type_ = reducer.reduce(type_.clone())?;
             let list = reducer.reduce_forced(list.clone())?;
             let elem = reducer.reduce(elem.clone())?;
             Ok(match Term::unwrap_or_clone(list) {
-                Subterm::Intrinsic(Intrinsic::Lst(lst_elem, mut elems)) => {
+                Subterm::Intrinsic(Intrinsic::List(list_elem, mut elems)) => {
                     elems.push(elem);
-                    Subterm::Intrinsic(Intrinsic::Lst(lst_elem, elems))
+                    Subterm::Intrinsic(Intrinsic::List(list_elem, elems))
                 }
-                list => Subterm::Intrinsic(Intrinsic::lst_append(type_, list, elem)),
+                list => Subterm::Intrinsic(Intrinsic::list_append(type_, list, elem)),
             })
         }
-        Intrinsic::LstConcat(type_, operands) => {
+        Intrinsic::ListConcat(type_, operands) => {
             let type_ = reducer.reduce(type_.clone())?;
             let reduced: Vec<Term> = operands
                 .iter()
                 .map(|e| reducer.reduce_forced(e.clone()))
                 .collect::<Result<_, _>>()?;
-            // The `Lst` twin of `BinConcat` normalisation: drop the empty list (so `concat([], a)`/`concat(a, [])` collapse to `a`), fuse an all-literal survivor set into one flattened literal, collapse a lone operand — the definitional partner of `peel_arr`'s `[]`-handling (`core::spine`); see `normalize_concat`.
+            // The `List` twin of `BinConcat` normalisation: drop the empty list (so `concat([], a)`/`concat(a, [])` collapse to `a`), fuse an all-literal survivor set into one flattened literal, collapse a lone operand — the definitional partner of `peel_arr`'s `[]`-handling (`core::spine`); see `normalize_concat`.
             fn literal(operand: &Term) -> Option<&Vec<Term>> {
                 match &**operand {
-                    Subterm::Intrinsic(Intrinsic::Lst(_, elems)) => Some(elems),
+                    Subterm::Intrinsic(Intrinsic::List(_, elems)) => Some(elems),
                     _ => None,
                 }
             }
@@ -1449,25 +1450,25 @@ pub fn reduce_intrinsic(
                 reduced,
                 literal,
                 |runs| {
-                    Subterm::Intrinsic(Intrinsic::Lst(
+                    Subterm::Intrinsic(Intrinsic::List(
                         type_.clone(),
                         runs.into_iter().flatten().cloned().collect(),
                     ))
                 },
-                |kept| Subterm::Intrinsic(Intrinsic::lst_concat(type_.clone(), kept)),
+                |kept| Subterm::Intrinsic(Intrinsic::list_concat(type_.clone(), kept)),
             ))
         }
         // `map`: the eliminator homomorphism. The literal case applies `f` elementwise; the spine cases distribute (`map f (concat segs) = concat (map f segs)`, `map f (append b x) = append (map f b) (f x)`) — the same normal form a structural `foldr (\x ih. f x :: ih) []` produces, so map-based proofs still reduce. A symbolic list stays neutral (the `Opaque` case), so there is no unfold of a variable.
-        Intrinsic::LstMap(a, b, lst, f) => {
+        Intrinsic::ListMap(a, b, list, f) => {
             let a = reducer.reduce(a.clone())?;
             let b = reducer.reduce(b.clone())?;
-            let lst = reducer.reduce_forced(lst.clone())?;
+            let list = reducer.reduce_forced(list.clone())?;
             let f = reducer.reduce(f.clone())?;
             reduce_homomorphism(
                 reducer,
-                lst_shape(lst),
+                list_shape(list),
                 |elems| {
-                    Term::intrinsic(Intrinsic::Lst(
+                    Term::intrinsic(Intrinsic::List(
                         b.clone(),
                         elems
                             .into_iter()
@@ -1475,15 +1476,15 @@ pub fn reduce_intrinsic(
                             .collect(),
                     ))
                 },
-                |images| Term::intrinsic(Intrinsic::lst_concat(b.clone(), images)),
+                |images| Term::intrinsic(Intrinsic::list_concat(b.clone(), images)),
                 |base_map, generator| {
-                    Term::intrinsic(Intrinsic::lst_append(
+                    Term::intrinsic(Intrinsic::list_append(
                         b.clone(),
                         base_map,
                         Term::apply(f.clone(), [generator]),
                     ))
                 },
-                |sub| Term::intrinsic(Intrinsic::lst_map(a.clone(), b.clone(), sub, f.clone())),
+                |sub| Term::intrinsic(Intrinsic::list_map(a.clone(), b.clone(), sub, f.clone())),
             )
         }
         // The handle type and handle tokens are inert values, like `Nat`/`Nat(_)`.

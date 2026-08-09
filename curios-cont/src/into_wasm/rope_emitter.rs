@@ -6,9 +6,9 @@
 //! - `$<carrier>/read` answers one element: off a leaf payload, *through* a view's window without forcing (the invariant above makes that O(1)), or via `force` on a node.
 //! - `$bits/force` performs the same iterative walk in logical bit units, filling a zeroed packed payload and memoizing it on an entry node.
 //! - `$bytes/eql` compares two `Bytes` ropes bytewise: unequal lengths answer without forcing, equal lengths force both payloads once and walk them.
-//! - `$lst/map` applies a unary closure to every element of the forced payload, filling a fresh leaf.
+//! - `$list/map` applies a unary closure to every element of the forced payload, filling a fresh leaf.
 //!
-//! The `lst/bytes` variants are the host boundary's deep forms: an `Lst(Bytes)` / `Lst(Handle)` wire value carries `Bytes`-shaped *elements*, which the host lifts and lowers as raw `$bytes` — so params force each element too, and results embed each element back.
+//! The `list/bytes` variants are the host boundary's deep forms: a `List(Bytes)` / `List(Handle)` wire value carries `Bytes`-shaped *elements*, which the host lifts and lowers as raw `$bytes` — so params force each element too, and results embed each element back.
 
 use super::{RopeData, Table};
 
@@ -918,7 +918,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// force(r)[i]                                     ;; node (memoized)
     /// ```
     ///
-    /// Binary-sequence elements are packed bytes (`array.get_u`, an `i32` result); `Lst` elements are the top type (`array.get`).
+    /// Binary-sequence elements are packed bytes (`array.get_u`, an `i32` result); `List` elements are the top type (`array.get`).
     pub(crate) fn emit_read_func(
         &mut self,
         rope: &RopeData,
@@ -1163,8 +1163,8 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$lst/bytes/force (ref $rope/lst) -> (ref $elems)`: force the outer rope, then force every element through `$bytes/force` into a *fresh* payload (the shallow force of a leaf answers its live payload, which must not be element-rewritten in place).
-    pub(crate) fn emit_lst_bytes_force_func(&mut self, func_name: curios_wasm::FuncName) {
+    /// `$list/bytes/force (ref $rope/list) -> (ref $elems)`: force the outer rope, then force every element through `$bytes/force` into a *fresh* payload (the shallow force of a leaf answers its live payload, which must not be element-rewritten in place).
+    pub(crate) fn emit_list_bytes_force_func(&mut self, func_name: curios_wasm::FuncName) {
         let elems = self.table.elems_type();
         let bin = self.table.bin_rope();
 
@@ -1188,7 +1188,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         let instrs = vec![
             get(&r),
             curios_wasm::Instr::Call {
-                func_name: self.table.lst_force_func(),
+                func_name: self.table.list_force_func(),
             },
             set(&flat),
             get(&flat),
@@ -1242,7 +1242,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
 
         self.add_helper(
             func_name,
-            vec![(r, concrete_val(self.table.lst_rope_type(), false))],
+            vec![(r, concrete_val(self.table.list_rope_type(), false))],
             concrete_val(elems, false),
             locals,
             instrs,
@@ -1456,7 +1456,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$lst/map (ref $rope/lst, ref $envr/1) -> (ref $rope/lst)`.
+    /// `$list/map (ref $rope/list, ref $envr/1) -> (ref $rope/list)`.
     ///
     /// ```wat
     /// selems := force(src); count := selems.len
@@ -1471,7 +1471,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         func_name: curios_wasm::FuncName,
         force_func: curios_wasm::FuncName,
     ) {
-        let rope = self.table.lst_rope();
+        let rope = self.table.list_rope();
         let envr_type = self.table.find_envr_type(1);
         let clsr_type = self.table.find_clsr_type(1);
         let special_field = self.table.special_field();
@@ -1597,11 +1597,11 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$lst/bytes/embed (ref $elems) -> (ref $rope/lst)`: embed each raw `$bytes` element into a `$rope/bin/leaf` in place — the host-built array is fresh, nothing else aliases it — then embed the outer array into a `$rope/lst/leaf`.
-    pub(crate) fn emit_lst_bytes_embed_func(&mut self, func_name: curios_wasm::FuncName) {
+    /// `$list/bytes/embed (ref $elems) -> (ref $rope/list)`: embed each raw `$bytes` element into a `$rope/bin/leaf` in place — the host-built array is fresh, nothing else aliases it — then embed the outer array into a `$rope/list/leaf`.
+    pub(crate) fn emit_list_bytes_embed_func(&mut self, func_name: curios_wasm::FuncName) {
         let elems = self.table.elems_type();
         let bin = self.table.bin_rope();
-        let lst = self.table.lst_rope();
+        let list = self.table.list_rope();
 
         let e = curios_wasm::LocalName::from("e");
         let idx = curios_wasm::LocalName::from("idx");
@@ -1669,14 +1669,14 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             get(&count),
             get(&e),
             curios_wasm::Instr::StructNew {
-                type_name: lst.leaf.clone(),
+                type_name: list.leaf.clone(),
             },
         ];
 
         self.add_helper(
             func_name,
             vec![(e, concrete_val(elems, false))],
-            concrete_val(lst.base.clone(), false),
+            concrete_val(list.base.clone(), false),
             locals,
             instrs,
         );

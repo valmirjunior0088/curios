@@ -15,17 +15,17 @@ use {
     std::collections::BTreeMap,
 };
 
-/// The `Lst`/`Bin` carrier a sequence fold eliminates: the carrier-specific reads, so the fold erasure stays carrier-agnostic.
+/// The `List`/`Bin` carrier a sequence fold eliminates: the carrier-specific reads, so the fold erasure stays carrier-agnostic.
 #[derive(Clone, Copy)]
 enum SeqCarrier<'a> {
-    Lst { element: &'a Term },
+    List { element: &'a Term },
     Bin { grain: Grain },
 }
 
 impl SeqCarrier<'_> {
     fn grain(self) -> curios_ersd::SequenceGrain {
         match self {
-            SeqCarrier::Lst { .. } => curios_ersd::SequenceGrain::List,
+            SeqCarrier::List { .. } => curios_ersd::SequenceGrain::List,
             SeqCarrier::Bin { grain } => curios_ersd::SequenceGrain::Bin(grain),
         }
     }
@@ -33,7 +33,7 @@ impl SeqCarrier<'_> {
     /// The type of the element the cons arm binds — the list element type, or the grain's own scalar shape for a packed binary.
     fn element_type(self) -> Term {
         match self {
-            SeqCarrier::Lst { element } => element.clone(),
+            SeqCarrier::List { element } => element.clone(),
             SeqCarrier::Bin { grain } => Term::intrinsic(match grain {
                 Grain::B => Intrinsic::BoolType,
                 Grain::X => Intrinsic::ByteType,
@@ -44,7 +44,9 @@ impl SeqCarrier<'_> {
     /// The empty sequence — the value the empty arm refines the scrutinee to.
     fn empty_value(self) -> Term {
         match self {
-            SeqCarrier::Lst { element } => Term::intrinsic(Intrinsic::Lst(element.clone(), vec![])),
+            SeqCarrier::List { element } => {
+                Term::intrinsic(Intrinsic::List(element.clone(), vec![]))
+            }
             SeqCarrier::Bin { grain } => Term::intrinsic(Intrinsic::Bin(grain, PackedBin::empty())),
         }
     }
@@ -52,10 +54,10 @@ impl SeqCarrier<'_> {
     /// The cons value `head :: tail` — the monoid operation on a singleton and the tail, the same shape elaboration checked the arm under, so the arm refines the scrutinee to the term it was elaborated against.
     fn cons_value(self, head: &Term, tail: &Term) -> Term {
         match self {
-            SeqCarrier::Lst { element } => Term::intrinsic(Intrinsic::LstConcat(
+            SeqCarrier::List { element } => Term::intrinsic(Intrinsic::ListConcat(
                 element.clone(),
                 vec![
-                    Term::intrinsic(Intrinsic::Lst(element.clone(), vec![head.clone()])),
+                    Term::intrinsic(Intrinsic::List(element.clone(), vec![head.clone()])),
                     tail.clone(),
                 ],
             )),
@@ -76,8 +78,8 @@ impl SeqCarrier<'_> {
     /// The length of `sequence` — the case-split peel's dispatch key.
     fn len(self, sequence: &Term) -> Term {
         match self {
-            SeqCarrier::Lst { element } => {
-                Term::intrinsic(Intrinsic::LstLen(element.clone(), sequence.clone()))
+            SeqCarrier::List { element } => {
+                Term::intrinsic(Intrinsic::ListLen(element.clone(), sequence.clone()))
             }
             SeqCarrier::Bin { grain } => {
                 Term::intrinsic(Intrinsic::BinLen(grain, sequence.clone()))
@@ -88,8 +90,8 @@ impl SeqCarrier<'_> {
     /// The element of `sequence` at `index`.
     fn get(self, sequence: &Term, index: Term) -> Term {
         match self {
-            SeqCarrier::Lst { element } => {
-                Term::intrinsic(Intrinsic::LstGet(element.clone(), sequence.clone(), index))
+            SeqCarrier::List { element } => {
+                Term::intrinsic(Intrinsic::ListGet(element.clone(), sequence.clone(), index))
             }
             SeqCarrier::Bin { grain } => {
                 Term::intrinsic(Intrinsic::BinGet(grain, sequence.clone(), index))
@@ -100,7 +102,7 @@ impl SeqCarrier<'_> {
     /// The sub-slice `sequence[lo .. hi]`.
     fn slice(self, sequence: &Term, lo: Term, hi: Term) -> Term {
         match self {
-            SeqCarrier::Lst { element } => Term::intrinsic(Intrinsic::LstSlice(
+            SeqCarrier::List { element } => Term::intrinsic(Intrinsic::ListSlice(
                 element.clone(),
                 sequence.clone(),
                 lo,
@@ -156,7 +158,7 @@ impl Lowering {
             } => self.erase_nat_fold(context, head, motive, empty_case, cons_case, hint),
             Cases::FreeMonoid {
                 carrier:
-                    Carrier::Lst {
+                    Carrier::List {
                         elem,
                         empty_case,
                         cons_case,
@@ -165,7 +167,7 @@ impl Lowering {
                 context,
                 head,
                 motive,
-                SeqCarrier::Lst { element: elem },
+                SeqCarrier::List { element: elem },
                 empty_case,
                 cons_case,
                 hint,
@@ -403,7 +405,7 @@ impl Lowering {
         ))
     }
 
-    /// A `Lst`/`Bin` free-monoid elimination: a cons arm that uses its hypothesis is a first-class `FoldSequence` whose step binds the element, the suffix, and the accumulator; one that ignores it is a case split, peeled to a length dispatch over `seq[0]` and `seq[1..]`.
+    /// A `List`/`Bin` free-monoid elimination: a cons arm that uses its hypothesis is a first-class `FoldSequence` whose step binds the element, the suffix, and the accumulator; one that ignores it is a case split, peeled to a length dispatch over `seq[0]` and `seq[1..]`.
     #[allow(clippy::too_many_arguments)]
     fn erase_seq_fold(
         &mut self,

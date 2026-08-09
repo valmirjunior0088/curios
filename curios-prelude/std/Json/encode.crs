@@ -1,4 +1,4 @@
-use /std/{Bytes, Byte, Str, Bool, Char, Flt, Option, Lst};
+use /std/{Bytes, Byte, Str, Bool, Char, Flt, Option, List};
 use /std/Json/{Json};
 
 let encode_num(n: Flt) -> Str =
@@ -38,14 +38,14 @@ pub rec encode(v: Json) -> Str =
     | bool(b) => Bool/to_str(b)
     | num(n) => encode_num(n)
     | str(s) => encode_str(s)
-    | arr(xs) => Str/concat(Str/concat("[", Str/join(",", Lst/map(xs, encode))), "]")
+    | arr(xs) => Str/concat(Str/concat("[", Str/join(",", List/map(xs, encode))), "]")
     | obj(ps) =>
         Str/concat(
             Str/concat(
                 "{",
                 Str/join(
                     ",",
-                    Lst/map(
+                    List/map(
                         ps,
                         (pair: {Str, Json}) =>
                             Str/concat(Str/concat(encode_str(pair.0), ":"), encode(pair.1))))),

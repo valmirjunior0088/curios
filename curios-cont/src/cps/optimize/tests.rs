@@ -1902,8 +1902,11 @@ fn cse_reuses_a_dominating_may_trap_result() {
 
 #[test]
 fn cse_keeps_allocating_ops_distinct() {
-    let (mut module, first_node, second_node, _) =
-        duplicate_pair_module(CpsIntrinsicOp::LstAppend, CpsIntrinsicOp::LstAppend, false);
+    let (mut module, first_node, second_node, _) = duplicate_pair_module(
+        CpsIntrinsicOp::ListAppend,
+        CpsIntrinsicOp::ListAppend,
+        false,
+    );
 
     assert!(!dedupe_intrinsics(&mut module));
     assert!(module.node(first_node).is_some());

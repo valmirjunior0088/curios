@@ -300,7 +300,7 @@ fn list_len() -> CpsModule {
     });
     let measure = module.add_node(CpsNode::LetIntrinsic {
         result: len,
-        op: CpsIntrinsicOp::LstLen,
+        op: CpsIntrinsicOp::ListLen,
         args: vec![CpsAtom::Value(list)],
         next: exit,
     });
@@ -325,7 +325,7 @@ fn list_len() -> CpsModule {
 #[test]
 fn list_literal_builds_a_rope_leaf() {
     let wat = wat(&list_len());
-    assert_contains(&wat, "struct.new $rope/lst/leaf");
+    assert_contains(&wat, "struct.new $rope/list/leaf");
     assert_contains(&wat, "array.new_fixed $elems");
 }
 
@@ -635,7 +635,7 @@ fn list_read() -> CpsModule {
     });
     let read = module.add_node(CpsNode::LetIntrinsic {
         result: elem,
-        op: CpsIntrinsicOp::LstGet,
+        op: CpsIntrinsicOp::ListGet,
         args: vec![CpsAtom::Value(list), nat(0)],
         next: exit,
     });
@@ -659,10 +659,10 @@ fn list_read() -> CpsModule {
 
 #[test]
 fn list_read_calls_the_list_read_helper() {
-    assert_contains(&wat(&list_read()), "call $lst/read");
+    assert_contains(&wat(&list_read()), "call $list/read");
 }
 
-/// Map a closure over a list literal — the `lst/map` intrinsic, which threads the mapping function through as a closure and services the fill via the shared helper.
+/// Map a closure over a list literal — the `list/map` intrinsic, which threads the mapping function through as a closure and services the fill via the shared helper.
 fn list_map() -> CpsModule {
     let mut module = CpsModule::new();
     let main = module.reserve_function();
@@ -695,7 +695,7 @@ fn list_map() -> CpsModule {
         body: exit,
     });
     let map = module.add_node(CpsNode::Intrinsic {
-        op: CpsIntrinsicCall::LstMap,
+        op: CpsIntrinsicCall::ListMap,
         args: vec![CpsAtom::Value(list), CpsAtom::Fun(mapper)],
         return_to: resume,
     });
@@ -728,7 +728,7 @@ fn list_map() -> CpsModule {
 
 #[test]
 fn list_map_calls_the_map_helper() {
-    assert_contains(&wat(&list_map()), "call $lst/map");
+    assert_contains(&wat(&list_map()), "call $list/map");
 }
 
 /// A long left-leaning chain of appends, each over the previous result — the compile-time analogue of the deleted deep-rope fixtures. Lowering must stay on the default test-thread stack (iterative, never widened), so the only assertion that matters is that `into_wasm` returns at all.

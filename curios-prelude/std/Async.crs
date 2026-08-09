@@ -1,4 +1,4 @@
-use /std/{Handle, Bytes, Nat, Int, Bool, Lst, Option, Result, Cell, Monad, Lift, Io};
+use /std/{Handle, Bytes, Nat, Int, Bool, List, Option, Result, Cell, Monad, Lift, Io};
 use /std/time/{Duration};
 
 -- Both are scheduler plumbing: their operations exist so this module and its descendants can drive a fiber, not so a program can complete someone else's future. The modules stay private and only the two type names are re-exported, which leaves `Future/fulfill` and friends reachable within `/std/Async` alone.
@@ -189,7 +189,7 @@ pub rec await(@A: Type, f: Future(A)) -> Async(A) =
 struct Job: Type {
     resume: Fiber,
     token: Token,
-    guards: Lst(Guard),
+    guards: List(Guard),
 }
 
 let Slot: Type =
@@ -200,17 +200,17 @@ struct Parked: Type {
     interest: Nat,
     resume: Fiber,
     token: Token,
-    guards: Lst(Guard),
+    guards: List(Guard),
 }
 
 struct Sleeper: Type {
     due: Duration,
     resume: Fiber,
     token: Token,
-    guards: Lst(Guard),
+    guards: List(Guard),
 }
 
-rec run_guards(gs: Lst(Guard)) -> Io({}) =
+rec run_guards(gs: List(Guard)) -> Io({}) =
     match gs
     | [] => Io/pure(())
     | [g, ..more] =>
@@ -218,7 +218,7 @@ rec run_guards(gs: Lst(Guard)) -> Io({}) =
         run_guards(more)
     end;
 
-rec release_guard(h: Handle, gs: Lst(Guard)) -> Io(Lst(Guard)) =
+rec release_guard(h: Handle, gs: List(Guard)) -> Io(List(Guard)) =
     match gs
     | [] => Io/pure([])
     | [g, ..more] =>
@@ -232,7 +232,7 @@ rec release_guard(h: Handle, gs: Lst(Guard)) -> Io(Lst(Guard)) =
         end
     end;
 
-rec drain_jobs(js: Lst(Job)) -> Io({}) =
+rec drain_jobs(js: List(Job)) -> Io({}) =
     match js
     | [] => Io/pure(())
     | [j, ..more] =>
@@ -240,7 +240,7 @@ rec drain_jobs(js: Lst(Job)) -> Io({}) =
         drain_jobs(more)
     end;
 
-rec drain_parked(ps: Lst(Parked)) -> Io({}) =
+rec drain_parked(ps: List(Parked)) -> Io({}) =
     match ps
     | [] => Io/pure(())
     | [p, ..more] =>
@@ -248,7 +248,7 @@ rec drain_parked(ps: Lst(Parked)) -> Io({}) =
         drain_parked(more)
     end;
 
-rec drain_sleeping(ss: Lst(Sleeper)) -> Io({}) =
+rec drain_sleeping(ss: List(Sleeper)) -> Io({}) =
     match ss
     | [] => Io/pure(())
     | [s, ..more] =>
@@ -256,7 +256,7 @@ rec drain_sleeping(ss: Lst(Sleeper)) -> Io({}) =
         drain_sleeping(more)
     end;
 
-rec drain_slots(ss: Lst(Slot)) -> Io({}) =
+rec drain_slots(ss: List(Slot)) -> Io({}) =
     match ss
     | [] => Io/pure(())
     | [s, ..more] =>
@@ -269,7 +269,7 @@ rec drain_slots(ss: Lst(Slot)) -> Io({}) =
         end
     end;
 
-rec sweep_parked(ss: Lst(Slot)) -> Io(Lst(Slot)) =
+rec sweep_parked(ss: List(Slot)) -> Io(List(Slot)) =
     match ss
     | [] => Io/pure([])
     | [s, ..more] =>
@@ -293,16 +293,16 @@ rec sweep_parked(ss: Lst(Slot)) -> Io(Lst(Slot)) =
 let is_ready(results: Nat, interest: Nat) -> Bool =
     Nat/and(results, Nat/or(Nat/or(interest, /sys/poll/err), /sys/poll/hup)) > 0;
 
-let poll_ready(blocked: Lst(Parked), timeout: Int) -> Io({Lst(Job), Lst(Parked)}) =
-    let handles = Lst/map(blocked, (p: Parked) => p.handle);
-    let events = Lst/map(blocked, (p: Parked) => p.interest);
+let poll_ready(blocked: List(Parked), timeout: Int) -> Io({List(Job), List(Parked)}) =
+    let handles = List/map(blocked, (p: Parked) => p.handle);
+    let events = List/map(blocked, (p: Parked) => p.interest);
     let results = /sys/Handle/poll(handles, events, timeout)!;
     rec walk(
-        rest: Lst(Parked),
+        rest: List(Parked),
         i: Nat,
-        woken: Lst(Job),
-        still: Lst(Parked),
-    ) -> Io({Lst(Job), Lst(Parked)}) =
+        woken: List(Job),
+        still: List(Parked),
+    ) -> Io({List(Job), List(Parked)}) =
         match rest
         | [] => Io/pure((woken, still))
         | [p, ..tail] =>
@@ -312,7 +312,7 @@ let poll_ready(blocked: Lst(Parked), timeout: Int) -> Io({Lst(Job), Lst(Parked)}
                 let _ = run_guards(p.guards)!;
                 walk(tail, i + 1, woken, still)
             | false =>
-                match is_ready(/sys/Lst/get(results, i), p.interest)
+                match is_ready(/sys/List/get(results, i), p.interest)
                 | true =>
                     walk(
                         tail,
@@ -325,8 +325,8 @@ let poll_ready(blocked: Lst(Parked), timeout: Int) -> Io({Lst(Job), Lst(Parked)}
         end;
     walk(blocked, 0, [], []);
 
-let sleep_timeout(sleeping: Lst(Sleeper)) -> Io(Int) =
-    rec earliest(rest: Lst(Sleeper), best: Option(Duration)) -> Option(Duration) =
+let sleep_timeout(sleeping: List(Sleeper)) -> Io(Int) =
+    rec earliest(rest: List(Sleeper), best: Option(Duration)) -> Option(Duration) =
         match rest
         | [] => best
         | [s, ..more] =>
@@ -352,13 +352,13 @@ let sleep_timeout(sleeping: Lst(Sleeper)) -> Io(Int) =
             end)
     end;
 
-let expire_sleepers(sleeping: Lst(Sleeper)) -> Io({Lst(Job), Lst(Sleeper)}) =
+let expire_sleepers(sleeping: List(Sleeper)) -> Io({List(Job), List(Sleeper)}) =
     let now = Duration/now()!;
     rec walk(
-        rest: Lst(Sleeper),
-        woken: Lst(Job),
-        still: Lst(Sleeper),
-    ) -> Io({Lst(Job), Lst(Sleeper)}) =
+        rest: List(Sleeper),
+        woken: List(Job),
+        still: List(Sleeper),
+    ) -> Io({List(Job), List(Sleeper)}) =
         match rest
         | [] => Io/pure((woken, still))
         | [s, ..tail] =>
@@ -497,7 +497,7 @@ pub let block_on(@A: Type, root: Async(A)) -> Io(Result(A, Deadlock)) =
                 let _ = Cell/set(parked, swept)!;
                 let b = Cell/get(blocked)!;
                 let s = Cell/get(sleeping)!;
-                match Lst/len(b) == 0 && Lst/len(s) == 0
+                match List/len(b) == 0 && List/len(s) == 0
                 | true =>
                     -- Deadlock: no runnable job, nothing blocked on a handle, and no sleeper — the root can never be fulfilled, so there is no `A` to return. Reported to the caller; terminating the process is `run`'s decision, not the scheduler's.
                     let _ = drain_all()!;
@@ -550,7 +550,7 @@ pub let join(@A: Type, task: Task(A)) -> Async(A) =
 pub let cancel(@A: Type, task: Task(A)) -> Io({}) =
     cancel_token(task.token);
 
-rec cancel_all(ts: Lst(Token)) -> Io({}) =
+rec cancel_all(ts: List(Token)) -> Io({}) =
     match ts
     | [] => Io/pure(())
     | [t, ..more] =>
@@ -558,22 +558,22 @@ rec cancel_all(ts: Lst(Token)) -> Io({}) =
         cancel_all(more)
     end;
 
-pub let join_all(@A: Type, tasks: Lst(Async(A))) -> Async(Lst(A)) =
-    rec go(i: Nat) -> Async(Lst(A)) =
-        match Nat/Lt/try(i, Lst/len(tasks))
+pub let join_all(@A: Type, tasks: List(Async(A))) -> Async(List(A)) =
+    rec go(i: Nat) -> Async(List(A)) =
+        match Nat/Lt/try(i, List/len(tasks))
         | none() => pure([])
         | some(ok) =>
-            let h = spawn(Lst/at(tasks, i, ok))!;
+            let h = spawn(List/at(tasks, i, ok))!;
             let rest = go(i + 1)!;
             let a = join(h)!;
             pure([a, ..rest])
         end;
     go(0);
 
-pub let select(@A: Type, tasks: Lst(Async(A))) -> Async({Nat, A}) =
+pub let select(@A: Type, tasks: List(Async(A))) -> Async({Nat, A}) =
     let winner = Future/new()!;
-    rec arm(i: Nat) -> Async(Lst(Token)) =
-        match Nat/Lt/try(i, Lst/len(tasks))
+    rec arm(i: Nat) -> Async(List(Token)) =
+        match Nat/Lt/try(i, List/len(tasks))
         | none() => pure([])
         | some(ok) =>
             let c = Cell/new(false)!;
@@ -582,7 +582,7 @@ pub let select(@A: Type, tasks: Lst(Async(A))) -> Async({Nat, A}) =
                 fork_with(
                     Async {
                         bind_raw(
-                            Lst/at(tasks, i, ok).0,
+                            List/at(tasks, i, ok).0,
                             (a) => bind(lift(Future/fulfill(winner, (i, a))), (_) => pure(())).0),
                     },
                     t)!;
@@ -594,7 +594,7 @@ pub let select(@A: Type, tasks: Lst(Async(A))) -> Async({Nat, A}) =
     let _ = cancel_all(tokens)!;
     pure(w);
 
-pub let race(@A: Type, tasks: Lst(Async(A))) -> Async(A) =
+pub let race(@A: Type, tasks: List(Async(A))) -> Async(A) =
     map(select(tasks), (w) => w.1);
 
 pub let timeout(@A: Type, d: Duration, body: Async(A)) -> Async(Option(A)) =

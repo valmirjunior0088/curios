@@ -7,7 +7,7 @@
 use {
     super::{History, ground},
     crate::{Kernel, KernelError},
-    curios_core::{Intrinsic, Peel, Term, Var, Visit, peel_bin, peel_lst, peel_nat},
+    curios_core::{Intrinsic, Peel, Term, Var, Visit, peel_bin, peel_list, peel_nat},
 };
 
 /// Whether `this` and `that` are the same intrinsic operation on convertible operands.
@@ -17,10 +17,10 @@ pub(super) fn convert_intrinsic(
     this: &Intrinsic,
     that: &Intrinsic,
 ) -> Result<bool, KernelError> {
-    // `Nat`, `Bin`, and `Lst` are free monoids, so two values of one are equal exactly when they agree after their longest common prefix is peeled off. This is shared spine algebra over the representation, not a rule: it decides `x + 2 ≡ y + 2` by comparing `x` with `y` rather than by comparing two opaque literals. `Stuck` falls through to the congruence below, which still compares like-shaped symbolic operands, so the peel can only ever strengthen conversion.
+    // `Nat`, `Bin`, and `List` are free monoids, so two values of one are equal exactly when they agree after their longest common prefix is peeled off. This is shared spine algebra over the representation, not a rule: it decides `x + 2 ≡ y + 2` by comparing `x` with `y` rather than by comparing two opaque literals. `Stuck` falls through to the congruence below, which still compares like-shaped symbolic operands, so the peel can only ever strengthen conversion.
     if let Some(peel) = peel_nat_pair(this, that)
         .or_else(|| peel_bin(this, that))
-        .or_else(|| peel_lst(this, that))
+        .or_else(|| peel_list(this, that))
     {
         match peel {
             Peel::Equal => return Ok(true),
@@ -47,7 +47,7 @@ pub(super) fn convert_intrinsic(
     Ok(true)
 }
 
-/// The free-monoid peel for two `Nat`s, which unlike `Bin`/`Lst` is spelled against the carrier rather than the intrinsic.
+/// The free-monoid peel for two `Nat`s, which unlike `Bin`/`List` is spelled against the carrier rather than the intrinsic.
 fn peel_nat_pair(this: &Intrinsic, that: &Intrinsic) -> Option<Peel> {
     match (this, that) {
         (Intrinsic::Nat(left), Intrinsic::Nat(right)) => Some(peel_nat(left, right)),

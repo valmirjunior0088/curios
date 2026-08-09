@@ -72,7 +72,7 @@ fn big_nat_div2_and_parity() {
 fn big_nat_bit_len_counts_binary_digits() {
     // `bit_len` is the numeral's length: zero has no bits, 1 is a single bit, and the 255 → 256 step is where the count grows from 8 to 9.
     let source = r#"
-        use /std/{Handle, Str, Nat, Lst, BigNat};
+        use /std/{Handle, Str, Nat, List, BigNat};
         /std/print(Str/join(",", [
             Nat/to_str(BigNat/bit_len(BigNat/zero)),
             Nat/to_str(BigNat/bit_len(BigNat/of_nat(1))),
@@ -146,7 +146,7 @@ fn flt_to_str_matches_rust_shortest_format() {
         .join(", ");
     let source = format!(
         r#"
-        use /std/{{Handle, Str, Flt, Lst}};
+        use /std/{{Handle, Str, Flt, List}};
         /std/print(Str/join("|", [{array}]))
         "#
     );

@@ -33,7 +33,7 @@ pub(super) fn parse_induct_match_branch<'a>() -> Parser<'a, MatrixArm> {
         .map(|(pattern, body)| MatrixArm { pattern, body })
 }
 
-// The `; ih` induction-hypothesis tail on a `Nat` succ or `Lst`/`Bin` cons leaf pattern: `;` sets the hypothesis apart from the scrutinee's shape. The hypothesis binds the *fold result*, not scrutinee shape, so it takes the same irrefutable pattern grammar a `let` binder does — `; ih` a plain name, `; (cur, live)` a destructuring. A plain case-split needs no hypothesis, so the tail may be omitted — `None`, not a placeholder; lowering mints a fresh internal name for it directly.
+// The `; ih` induction-hypothesis tail on a `Nat` succ or `List`/`Bin` cons leaf pattern: `;` sets the hypothesis apart from the scrutinee's shape. The hypothesis binds the *fold result*, not scrutinee shape, so it takes the same irrefutable pattern grammar a `let` binder does — `; ih` a plain name, `; (cur, live)` a destructuring. A plain case-split needs no hypothesis, so the tail may be omitted — `None`, not a placeholder; lowering mints a fresh internal name for it directly.
 pub(super) fn parse_cons_ih<'a>() -> Parser<'a, Option<Pattern>> {
     catch(parse_literal(";").and_keep(parse_pattern()))
         .map(Some)
@@ -101,7 +101,7 @@ pub(super) fn parse_choose<'a>() -> Parser<'a, Term> {
         .map(|(arms, default)| Subterm::Choose(Choose { arms, default }).into())
 }
 
-// A `match` is exactly one surface shape now: the general headed pattern matrix. Every headed carrier form — `Bool`, `Nat` (induction *and* literal dispatch), `Lst`, `Bin` — is just a matrix whose arm patterns are that carrier's leaves (see `parse_match_pattern`), lowered by `into_core::match_compile`'s `compile_bool`/`compile_nat`/`compile_lst`/`compile_bin`. The headless ladder is `choose` (`parse_choose`), parsed separately. Zero arms are legal: under inversion (Rung C) every impossible arm is silently omittable, and a scrutinee whose indices clash with *every* constructor's target eliminates with no arms at all.
+// A `match` is exactly one surface shape now: the general headed pattern matrix. Every headed carrier form — `Bool`, `Nat` (induction *and* literal dispatch), `List`, `Bin` — is just a matrix whose arm patterns are that carrier's leaves (see `parse_match_pattern`), lowered by `into_core::match_compile`'s `compile_bool`/`compile_nat`/`compile_list`/`compile_bin`. The headless ladder is `choose` (`parse_choose`), parsed separately. Zero arms are legal: under inversion (Rung C) every impossible arm is silently omittable, and a scrutinee whose indices clash with *every* constructor's target eliminates with no arms at all.
 pub(super) fn parse_match<'a>() -> Parser<'a, Term> {
     catch(parse_match_prefix())
         .and(many0(parse_induct_match_branch))

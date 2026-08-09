@@ -79,7 +79,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 is_nullable: false,
                 heap_type: curios_wasm::HeapType::Concrete(self.table.bytes_type()),
             }),
-            WireType::Lst(_) => curios_wasm::ValType::Ref(curios_wasm::RefType {
+            WireType::List(_) => curios_wasm::ValType::Ref(curios_wasm::RefType {
                 is_nullable: false,
                 heap_type: curios_wasm::HeapType::Concrete(self.table.elems_type()),
             }),
@@ -164,9 +164,9 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    /// The `Lst` mirror of [`emit_bin_rope_types`](Self::emit_bin_rope_types).
-    fn emit_lst_rope_types(&mut self) {
-        let rope = self.table.lst_rope();
+    /// The `List` mirror of [`emit_bin_rope_types`](Self::emit_bin_rope_types).
+    fn emit_list_rope_types(&mut self) {
+        let rope = self.table.list_rope();
 
         self.module
             .add_type(rope.payload.clone(), elems_sub_type(Table::top_type(true)));
@@ -436,7 +436,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             .push(curios_wasm::Instr::GlobalSet { global_name });
     }
 
-    /// Emit a module-level const. Every global is declared mutable so that aggregate (`Tpl`/`Lst`/`EmissionClosure`) consts can `global.get` their dependencies inside the start function — wasm constant expressions can only read immutable globals. Scalars (`Nat`/`Int`/`Flt`) keep a self-contained const initializer (mutability is harmless when the init is constant); `Bin` and aggregates declare a placeholder init and build the real value in the start function. `Bin` is special-cased via [`Self::emit_let_bin_data`] because its payload comes from a data segment.
+    /// Emit a module-level const. Every global is declared mutable so that aggregate (`Tpl`/`List`/`EmissionClosure`) consts can `global.get` their dependencies inside the start function — wasm constant expressions can only read immutable globals. Scalars (`Nat`/`Int`/`Flt`) keep a self-contained const initializer (mutability is harmless when the init is constant); `Bin` and aggregates declare a placeholder init and build the real value in the start function. `Bin` is special-cased via [`Self::emit_let_bin_data`] because its payload comes from a data segment.
     fn emit_let_data(&mut self, name: &'a EmissionValueName, value: &'a EmissionData) {
         match value {
             EmissionData::Bin(grain, value) => {
@@ -457,7 +457,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                     },
                 );
             }
-            EmissionData::Tpl(_) | EmissionData::Lst(_) | EmissionData::Closure(_, _) => {
+            EmissionData::Tpl(_) | EmissionData::List(_) | EmissionData::Closure(_, _) => {
                 let global_name = self.table.find_const(name);
 
                 let mut init_expr: curios_wasm::Expr = Default::default();
@@ -555,12 +555,12 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     fn emit_rope_funcs(&mut self) {
         let mut ropes = RopeEmitter::new(self.table, self.module);
 
-        if self.table.lst_bytes_force_used() {
-            ropes.emit_lst_bytes_force_func(self.table.lst_bytes_force_func());
+        if self.table.list_bytes_force_used() {
+            ropes.emit_list_bytes_force_func(self.table.list_bytes_force_func());
         }
 
-        if self.table.lst_bytes_embed_used() {
-            ropes.emit_lst_bytes_embed_func(self.table.lst_bytes_embed_func());
+        if self.table.list_bytes_embed_used() {
+            ropes.emit_list_bytes_embed_func(self.table.list_bytes_embed_func());
         }
 
         if self.table.bytes_eql_used() {
@@ -575,8 +575,8 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             ropes.emit_bits_eql_func(self.table.bits_eql_func(), self.table.bits_read_func());
         }
 
-        if self.table.lst_map_used() {
-            ropes.emit_map_func(self.table.lst_map_func(), self.table.lst_force_func());
+        if self.table.list_map_used() {
+            ropes.emit_map_func(self.table.list_map_func(), self.table.list_force_func());
         }
 
         if self.table.bytes_slice_used() {
@@ -595,11 +595,11 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             );
         }
 
-        if self.table.lst_slice_used() {
+        if self.table.list_slice_used() {
             ropes.emit_slice_func(
-                &self.table.lst_rope(),
-                self.table.lst_slice_func(),
-                self.table.lst_force_func(),
+                &self.table.list_rope(),
+                self.table.list_slice_func(),
+                self.table.list_force_func(),
             );
         }
 
@@ -615,11 +615,11 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             ropes.emit_bits_read_func(self.table.bits_read_func(), self.table.bits_force_func());
         }
 
-        if self.table.lst_read_used() {
+        if self.table.list_read_used() {
             ropes.emit_read_func(
-                &self.table.lst_rope(),
-                self.table.lst_read_func(),
-                self.table.lst_force_func(),
+                &self.table.list_rope(),
+                self.table.list_read_func(),
+                self.table.list_force_func(),
             );
         }
 
@@ -631,23 +631,23 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             ropes.emit_bits_force_func(self.table.bits_force_func());
         }
 
-        if self.table.lst_force_used() {
-            ropes.emit_force_func(&self.table.lst_rope(), self.table.lst_force_func());
+        if self.table.list_force_used() {
+            ropes.emit_force_func(&self.table.list_rope(), self.table.list_force_func());
         }
 
         if self.table.bytes_embed_used() {
             ropes.emit_embed_func(&self.table.bin_rope(), self.table.bytes_embed_func());
         }
 
-        if self.table.lst_embed_used() {
-            ropes.emit_embed_func(&self.table.lst_rope(), self.table.lst_embed_func());
+        if self.table.list_embed_used() {
+            ropes.emit_embed_func(&self.table.list_rope(), self.table.list_embed_func());
         }
     }
 
     pub(crate) fn emit_module(&mut self, module: &'a EmissionModule) {
         self.emit_flt_type();
         self.emit_bin_rope_types();
-        self.emit_lst_rope_types();
+        self.emit_list_rope_types();
         self.emit_cell_type();
         self.emit_tpl_types();
         self.emit_clsr_arity_types();

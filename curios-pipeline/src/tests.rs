@@ -25,18 +25,18 @@ fn entrypoint_type_is_used_as_expected_type() {
 
 #[test]
 fn an_entrypoint_type_may_apply_a_type_former() {
-    // The annotation is elaborated before it becomes the expectation (`elaborate_module_suffix`), so an application of a type former reduces to the intrinsic it denotes. Left raw it reached conversion as an `Apply` that no unfolding could reconcile with the inferred `Intrinsic::LstType`, and the mismatch was reported between two spellings of one type — `Lst Nat` against `Lst(Nat)`.
+    // The annotation is elaborated before it becomes the expectation (`elaborate_module_suffix`), so an application of a type former reduces to the intrinsic it denotes. Left raw it reached conversion as an `Apply` that no unfolding could reconcile with the inferred `Intrinsic::ListType`, and the mismatch was reported between two spellings of one type — `List Nat` against `List(Nat)`.
     let source = r#"
-        use /std/{Lst, Nat};
+        use /std/{List, Nat};
         [1]
     "#;
 
-    assert!(compile(source, Some("/std/Lst(/std/Nat)")).is_ok());
+    assert!(compile(source, Some("/std/List(/std/Nat)")).is_ok());
 }
 
 /// A fixture's entrypoint, stating its own type when the fixture is a bare *term* rather than a program.
 ///
-/// A program's tail describes doing something and yielding nothing, so an entrypoint carrying no type is checked against `Io({})` (`elaborate_and_zonk`). Most fixtures here are terms — they end in the `Nat` or `Lst` the feature under test produces — and stating the type is exactly the embedder path that contract leaves open, so each keeps compiling the term it was written to compile rather than acquiring a tail that would change what it measures.
+/// A program's tail describes doing something and yielding nothing, so an entrypoint carrying no type is checked against `Io({})` (`elaborate_and_zonk`). Most fixtures here are terms — they end in the `Nat` or `List` the feature under test produces — and stating the type is exactly the embedder path that contract leaves open, so each keeps compiling the term it was written to compile rather than acquiring a tail that would change what it measures.
 fn with_entrypoint_type(source: &str, type_: Option<&str>) -> Entrypoint {
     let entrypoint = source.parse::<Entrypoint>().unwrap();
 
@@ -1538,13 +1538,13 @@ fn indexed_inductive_targets_are_required_and_arity_checked() {
 
 #[test]
 fn lambda_argument_postpones_until_a_sibling_pins_its_domain() {
-    // `with((pair) => pair.0, xs)`: the inserted implicit `?A` is the lambda's domain *and* `xs`'s element type, but `xs : Lst(?A)` is checked after the lambda. Elaboration must postpone the lambda (its domain is an unsolved metavar, and its body projects `pair.0`) until `xs` pins `?A`, then re-check it. Guards the lambda-domain arm of `blocked_on_metavar`; without it this fails "projected from a non-tuple". Checked at the type-check level — the inference is the point, not lowering. (`with` is local: the std maps take their collection first, which would pin `?A` before the lambda and vacate the scenario.)
+    // `with((pair) => pair.0, xs)`: the inserted implicit `?A` is the lambda's domain *and* `xs`'s element type, but `xs : List(?A)` is checked after the lambda. Elaboration must postpone the lambda (its domain is an unsolved metavar, and its body projects `pair.0`) until `xs` pins `?A`, then re-check it. Guards the lambda-domain arm of `blocked_on_metavar`; without it this fails "projected from a non-tuple". Checked at the type-check level — the inference is the point, not lowering. (`with` is local: the std maps take their collection first, which would pin `?A` before the lambda and vacate the scenario.)
     let source = r#"
-        use /std/{Lst};
+        use /std/{List};
         use /std/{Nat};
-        let with(@A : Type, @B : Type, f : (A) -> B, xs : Lst(A)) -> Lst(B) =
-            Lst/map(xs, f);
-        let first(xs : Lst({ Nat, Nat })) -> Lst(Nat) =
+        let with(@A : Type, @B : Type, f : (A) -> B, xs : List(A)) -> List(B) =
+            List/map(xs, f);
+        let first(xs : List({ Nat, Nat })) -> List(Nat) =
             with((pair) => pair.0, xs);
         0
     "#;
@@ -1554,14 +1554,14 @@ fn lambda_argument_postpones_until_a_sibling_pins_its_domain() {
 
 #[test]
 fn empty_array_postpones_until_a_sibling_pins_its_element_type() {
-    // `pick([], cat)`: the inserted implicit `?A` is the empty array's type *and* `combine`'s domain. The empty-array literal `[]` borrows its element type from the expected (check-only intro), so against the bare metavar `?A` it cannot elaborate. Elaboration must postpone it until the sibling `cat` grounds `?A := Lst(?T)`, then re-check — at which point the `Lst(Nat)` result pins `?T`. Exercises the array arm of `blocked_on_metavar`; without it this fails "type mismatch" eagerly. `cat` is declared here rather than taken from `/std` because concatenation is literal syntax, which cannot be passed as a value.
+    // `pick([], cat)`: the inserted implicit `?A` is the empty array's type *and* `combine`'s domain. The empty-array literal `[]` borrows its element type from the expected (check-only intro), so against the bare metavar `?A` it cannot elaborate. Elaboration must postpone it until the sibling `cat` grounds `?A := List(?T)`, then re-check — at which point the `List(Nat)` result pins `?T`. Exercises the array arm of `blocked_on_metavar`; without it this fails "type mismatch" eagerly. `cat` is declared here rather than taken from `/std` because concatenation is literal syntax, which cannot be passed as a value.
     let source = r#"
-        use /std/{Lst};
+        use /std/{List};
         use /std/{Nat};
-        let cat(@T : Type, a : Lst(T), b : Lst(T)) -> Lst(T) = [..a, ..b];
+        let cat(@T : Type, a : List(T), b : List(T)) -> List(T) = [..a, ..b];
         let pick(@A : Type, fallback : A, combine : (A, A) -> A) -> A =
             combine(fallback, fallback);
-        let go : Lst(Nat) =
+        let go : List(Nat) =
             pick([], cat);
         0
     "#;
@@ -1570,7 +1570,7 @@ fn empty_array_postpones_until_a_sibling_pins_its_element_type() {
 
     // With no sibling to ground the element type and no result type to pin it, the postponed `[]` re-checks against a bare metavar and is rejected — graceful degradation, no new acceptance.
     let unpinned = r#"
-        use /std/{Lst};
+        use /std/{List};
         let id(@A : Type, x : A) -> A = x;
         let bad = id([]);
         0
@@ -1609,10 +1609,10 @@ fn continuation_postpones_until_the_result_type_pins_its_codomain() {
 fn closure_returning_a_bare_projection_lowers() {
     // A closure whose body *is* a tuple projection (`(pair) => pair.0`), handed to a higher-order function over an empty array, never constructs a tuple anywhere in the module — yet lowering must still emit the arity-1 tuple type the projection reads through. The wasm `Table` sizes its tuple types from the max arity it sees; scanning only tuple *constructions* missed this projection-only arity and panicked "`Table` lacks tuple type for arity `1`". Guards folding projection (`index + 1`) and prealloc arities into that scan.
     let source = r#"
-        use /std/{Lst};
+        use /std/{List};
         use /std/{Nat};
-        let mapped : Lst(Nat) = Lst/map(@{ Nat, Nat }, @Nat, [], (pair) => pair.0);
-        /std/print(/std/Nat/to_str(Lst/len(mapped)))
+        let mapped : List(Nat) = List/map(@{ Nat, Nat }, @Nat, [], (pair) => pair.0);
+        /std/print(/std/Nat/to_str(List/len(mapped)))
     "#;
 
     assert!(compile(source, None).is_ok());
@@ -1620,15 +1620,15 @@ fn closure_returning_a_bare_projection_lowers() {
 
 #[test]
 fn bare_polymorphic_function_inserts_implicits_in_value_position() {
-    // Passing a bare `cat : (@T, Lst T, Lst T) -> Lst T` where an explicit `(Lst Nat, Lst Nat) -> Lst Nat` is expected: the check turnaround (`insert_implicits_on_check`) inserts the implicit `@T` and eta-expands over the explicit binders, so no hand-written `(l, r) => cat(l, r)` wrapper is needed. Lowers end-to-end — the eta-expansion is an ordinary closure over a saturated call.
+    // Passing a bare `cat : (@T, List T, List T) -> List T` where an explicit `(List Nat, List Nat) -> List Nat` is expected: the check turnaround (`insert_implicits_on_check`) inserts the implicit `@T` and eta-expands over the explicit binders, so no hand-written `(l, r) => cat(l, r)` wrapper is needed. Lowers end-to-end — the eta-expansion is an ordinary closure over a saturated call.
     let source = r#"
-        use /std/{Lst};
+        use /std/{List};
         use /std/{Nat};
-        let cat(@T : Type, a : Lst(T), b : Lst(T)) -> Lst(T) = [..a, ..b];
-        let pairwise(f : (Lst(Nat), Lst(Nat)) -> Lst(Nat), a : Lst(Nat)) -> Lst(Nat) =
+        let cat(@T : Type, a : List(T), b : List(T)) -> List(T) = [..a, ..b];
+        let pairwise(f : (List(Nat), List(Nat)) -> List(Nat), a : List(Nat)) -> List(Nat) =
             f(a, a);
-        let result : Lst(Nat) = pairwise(cat, [1]);
-        /std/print(/std/Nat/to_str(Lst/len(result)))
+        let result : List(Nat) = pairwise(cat, [1]);
+        /std/print(/std/Nat/to_str(List/len(result)))
     "#;
 
     assert!(compile(source, None).is_ok());
@@ -1638,12 +1638,12 @@ fn bare_polymorphic_function_inserts_implicits_in_value_position() {
 fn polymorphic_value_assignment_keeps_its_implicit() {
     // The guard arm: when the *expected* type also leads with an implicit binder, implicit-eta must not fire — the polymorphic function is assigned as-is, implicit intact, and stays applicable at a chosen instance. Without the expected-not-implicit gate this would wrongly eta-expand and fail to convert against the implicit-leading annotation.
     let source = r#"
-        use /std/{Lst};
+        use /std/{List};
         use /std/{Nat};
-        let cat(@T : Type, a : Lst(T), b : Lst(T)) -> Lst(T) = [..a, ..b];
-        let g : (@T : Type, Lst(T), Lst(T)) -> Lst(T) = cat;
-        let result : Lst(Nat) = g(@Nat, [1], [2]);
-        /std/print(/std/Nat/to_str(Lst/len(result)))
+        let cat(@T : Type, a : List(T), b : List(T)) -> List(T) = [..a, ..b];
+        let g : (@T : Type, List(T), List(T)) -> List(T) = cat;
+        let result : List(Nat) = g(@Nat, [1], [2]);
+        /std/print(/std/Nat/to_str(List/len(result)))
     "#;
 
     assert!(compile(source, None).is_ok());

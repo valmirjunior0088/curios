@@ -1,4 +1,4 @@
-use /std/{Bytes, Byte, Str, Bool, Char, Flt, Nat, Parse, Result, Option, Lst};
+use /std/{Bytes, Byte, Str, Bool, Char, Flt, Nat, Parse, Result, Option, List};
 use /std/Json/{Json};
 
 let is_num_byte(byte: Byte) -> Bool =
@@ -95,7 +95,7 @@ let parse_str_escape: Parse(Bytes) =
 let parse_str_segment: Parse(Bytes) =
     Parse/take_while(is_not_string_special);
 
-let parse_str_body: Parse(Lst(Bytes)) =
+let parse_str_body: Parse(List(Bytes)) =
     Parse/many0(Parse/or(parse_str_escape, parse_str_segment));
 
 let parse_raw_str: Parse(Str) =

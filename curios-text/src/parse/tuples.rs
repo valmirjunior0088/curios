@@ -8,7 +8,7 @@ pub(super) fn parse_intrinsic<'a>() -> Parser<'a, Term> {
         .or(parse_num_lit())
         .or(parse_string_literal())
         .or(parse_bin_literal())
-        .or(parse_lst_literal())
+        .or(parse_list_literal())
 }
 
 pub(super) fn parse_parens<'a>() -> Parser<'a, Term> {

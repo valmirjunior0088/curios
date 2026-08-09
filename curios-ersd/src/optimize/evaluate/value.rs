@@ -20,7 +20,7 @@ pub(super) enum Value {
     Flt(Flt),
     Handle(u32),
     Bin(Grain, Rc<PackedBin>),
-    Lst(Rc<Vec<Value>>),
+    List(Rc<Vec<Value>>),
     /// A product value, in the schema's field order.
     Product(ProductId, Rc<Vec<Value>>),
     /// A variant value: its constructor and payload, in payload order.
@@ -46,7 +46,7 @@ impl Value {
             Value::Flt(value) => Constant::Flt(*value),
             Value::Handle(value) => Constant::Handle(*value),
             Value::Bin(grain, value) => Constant::Bin(*grain, value.as_ref().clone()),
-            Value::Lst(_) | Value::Product(..) | Value::Construct(..) | Value::Closure(_) => {
+            Value::List(_) | Value::Product(..) | Value::Construct(..) | Value::Closure(_) => {
                 return None;
             }
         })

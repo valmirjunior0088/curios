@@ -190,7 +190,7 @@ enum Op {
         scrutinee: Option<Free>,
         cons_case: Scope<Two>,
     },
-    /// The cons arm of a `Bin`/`Lst` eliminator, binding the generator, the tail, and the induction hypothesis.
+    /// The cons arm of a `Bin`/`List` eliminator, binding the generator, the tail, and the induction hypothesis.
     ElemCons {
         scrutinee: Option<Free>,
         carriers: Carriers,
@@ -330,11 +330,11 @@ impl<E: Env> Walk<'_, E> {
             ) => self.monoid_shape(FreeMonoid::Bin(*grain), term),
 
             Subterm::Intrinsic(
-                Intrinsic::Lst(..)
-                | Intrinsic::LstAppend(..)
-                | Intrinsic::LstConcat(..)
-                | Intrinsic::LstSlice(..),
-            ) => self.monoid_shape(FreeMonoid::Lst, term),
+                Intrinsic::List(..)
+                | Intrinsic::ListAppend(..)
+                | Intrinsic::ListConcat(..)
+                | Intrinsic::ListSlice(..),
+            ) => self.monoid_shape(FreeMonoid::List, term),
 
             // Arithmetic descent. Both operations are monotone and floor-like on Core's unbounded `Nat` — `NatDiv` folds through `BigUint` division and `NatSub` truncates at zero — so each is below its left operand whenever that operand is nonzero.
             Subterm::Intrinsic(Intrinsic::NatDiv(left, right)) => {
@@ -370,7 +370,7 @@ impl<E: Env> Walk<'_, E> {
 
     /// Decode a whole free-monoid prefix into one packed run over the shape of whatever stops the peel.
     ///
-    /// The run mirrors the carrier's own representation instead of re-expanding it: a `Nat`'s successor count is read wholesale off the packed spine, and a `Bin`/`Lst` prefix is peeled breadth-wise into one head vector. One node per layer would recurse — in construction and in every later comparison — as deep as the literal is large, and a `Nat` literal's value is unbounded by the source that spelled it.
+    /// The run mirrors the carrier's own representation instead of re-expanding it: a `Nat`'s successor count is read wholesale off the packed spine, and a `Bin`/`List` prefix is peeled breadth-wise into one head vector. One node per layer would recurse — in construction and in every later comparison — as deep as the literal is large, and a `Nat` literal's value is unbounded by the source that spelled it.
     fn monoid_shape(&mut self, carrier: FreeMonoid, term: &Term) -> Shape {
         let carriers = match carrier {
             FreeMonoid::Unary => {
@@ -385,7 +385,7 @@ impl<E: Env> Walk<'_, E> {
                 };
             }
             FreeMonoid::Bin(_) => Carriers::Bin,
-            FreeMonoid::Lst => Carriers::Lst,
+            FreeMonoid::List => Carriers::List,
         };
 
         let mut heads = Vec::new();
@@ -537,7 +537,7 @@ impl<E: Env> Walk<'_, E> {
         (binders, body)
     }
 
-    /// Open the `(head, tail, ih)` arm of the `Bin`/`Lst` eliminators.
+    /// Open the `(head, tail, ih)` arm of the `Bin`/`List` eliminators.
     fn open_three(&mut self, scope: &Scope<Three>) -> (Vec<Free>, Term) {
         let binders = self.binders(scope);
         let terms = binders.iter().map(Term::free_var).collect::<Vec<_>>();
@@ -880,16 +880,16 @@ fn arms(head: &Term, cases: &Cases, ops: &mut Vec<Op>) {
                     cons_case: cons_case.clone(),
                 });
             }
-            Carrier::Lst {
+            Carrier::List {
                 elem,
                 empty_case,
                 cons_case,
             } => {
                 ops.push(Op::Walk(elem.clone()));
-                ops.extend(empty_arm(&scrutinee, Carriers::Lst, empty_case));
+                ops.extend(empty_arm(&scrutinee, Carriers::List, empty_case));
                 ops.push(Op::ElemCons {
                     scrutinee,
-                    carriers: Carriers::Lst,
+                    carriers: Carriers::List,
                     cons_case: cons_case.clone(),
                 });
             }

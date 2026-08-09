@@ -277,13 +277,13 @@ fn str_trim_all_whitespace_is_empty() {
 #[test]
 fn char_of_nat_accepts_exact_unicode_scalar_boundaries() {
     let source = r#"
-        use /std/{Char, Nat, Str, Option, Lst, Handle};
+        use /std/{Char, Nat, Str, Option, List, Handle};
         let render(n : Nat) -> Str =
             match Char/of_nat(n)
             | some(c) => Nat/to_str(Char/to_nat(c))
             | none() => "x"
             end;
-        /std/print(Str/join(",", Lst/map(
+        /std/print(Str/join(",", List/map(
             [0, 0xD7FF, 0xD800, 0xDFFF, 0xE000, 0x10FFFF, 0x110000], render)))
         "#;
 
@@ -296,10 +296,10 @@ fn char_to_utf8_matches_rust_across_widths_and_boundaries() {
         0x0, 0x7f, 0x80, 0x3bb, 0x7ff, 0x800, 0xd7ff, 0xe000, 0xffff, 0x10000, 0x1f600, 0x10ffff,
     ];
     let source = r#"
-        use /std/{Char, Nat, Bytes, Option, Lst, Handle};
+        use /std/{Char, Nat, Bytes, Option, List, Handle};
         let encode(n : Nat) -> Bytes =
             Char/to_utf8(Option/unwrap_or(Char/of_nat(n), '?'));
-        let _ = Handle/write(Handle/stdout, Bytes/flatten(Lst/map(
+        let _ = Handle/write(Handle/stdout, Bytes/flatten(List/map(
             [0, 0x7F, 0x80, 0x3BB, 0x7FF, 0x800, 0xD7FF, 0xE000, 0xFFFF,
              0x10000, 0x1F600, 0x10FFFF], encode)))!;
         /std/Io/pure(())
@@ -343,13 +343,13 @@ fn str_logical_operations_use_certified_chars() {
 #[test]
 fn str_rejects_every_invalid_utf8_shape() {
     let source = r#"
-        use /std/{Str, Bool, Lst, Bytes, Handle};
+        use /std/{Str, Bool, List, Bytes, Handle};
         let rejected(bytes : Bytes) -> Bool =
             match Str/of_bytes(bytes)
             | some(_) => false
             | none() => true
             end;
-        /std/print(Bool/to_str(Lst/fold([
+        /std/print(Bool/to_str(List/fold([
             x[\c0, \af], x[\e0, \80, \80], x[\ed, \a0, \80], x[\f4, \90, \80, \80],
             x[\80], x[\c2], x[\e2, \82], x[\f0, \9f, \98]
         ], true, (bytes, ok) => ok && rejected(bytes))))

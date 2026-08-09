@@ -305,7 +305,7 @@ fn collect_labels(term: &Term, out: &mut BTreeSet<Free>) {
                             stack.push(empty_case);
                             scope(out, &mut stack, cons_case);
                         }
-                        Carrier::Lst {
+                        Carrier::List {
                             elem,
                             empty_case,
                             cons_case,
@@ -591,8 +591,8 @@ fn former_eta(telescope: &Telescope<Term>, plicities: &[Plicity]) -> Option<Form
         Subterm::Intrinsic(Intrinsic::IoType(payload)) => {
             bound_zero(payload).then_some(FormerEta::Intrinsic("Io"))
         }
-        Subterm::Intrinsic(Intrinsic::LstType(payload)) => {
-            bound_zero(payload).then_some(FormerEta::Intrinsic("Lst"))
+        Subterm::Intrinsic(Intrinsic::ListType(payload)) => {
+            bound_zero(payload).then_some(FormerEta::Intrinsic("List"))
         }
         Subterm::Intrinsic(Intrinsic::CellType(payload)) => {
             bound_zero(payload).then_some(FormerEta::Intrinsic("Cell"))
@@ -795,23 +795,23 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
                 pure(", ")
             }),
         ]),
-        Intrinsic::LstType(elem) => print_unary("Lst ", elem, frame),
-        Intrinsic::Lst(_, elems) => flat([
+        Intrinsic::ListType(elem) => print_unary("List ", elem, frame),
+        Intrinsic::List(_, elems) => flat([
             pure("["),
             sep_flat(elems.into_iter().map(move |e| sub(e, frame)), || pure(", ")),
             pure("]"),
         ]),
-        Intrinsic::LstLen(ty, list) => print_binary("Lst.len ", ty, list, frame),
-        Intrinsic::LstGet(ty, list, index) => flat([
-            pure("Lst.get "),
+        Intrinsic::ListLen(ty, list) => print_binary("List.len ", ty, list, frame),
+        Intrinsic::ListGet(ty, list, index) => flat([
+            pure("List.get "),
             sub(ty, frame),
             pure(" "),
             sub(list, frame),
             pure(" "),
             sub(index, frame),
         ]),
-        Intrinsic::LstSlice(ty, list, start, end) => flat([
-            pure("Lst.slice "),
+        Intrinsic::ListSlice(ty, list, start, end) => flat([
+            pure("List.slice "),
             sub(ty, frame),
             pure(" "),
             sub(list, frame),
@@ -820,29 +820,29 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             pure(" "),
             sub(end, frame),
         ]),
-        Intrinsic::LstAppend(ty, list, elem) => flat([
-            pure("Lst.append "),
+        Intrinsic::ListAppend(ty, list, elem) => flat([
+            pure("List.append "),
             sub(ty, frame),
             pure(" "),
             sub(list, frame),
             pure(" "),
             sub(elem, frame),
         ]),
-        Intrinsic::LstConcat(ty, operands) => flat([
-            pure("Lst.concat "),
+        Intrinsic::ListConcat(ty, operands) => flat([
+            pure("List.concat "),
             sub(ty, frame),
             pure(" "),
             sep_flat(operands.into_iter().map(move |e| sub(e, frame)), || {
                 pure(", ")
             }),
         ]),
-        Intrinsic::LstMap(a, b, lst, f) => flat([
-            pure("Lst.map "),
+        Intrinsic::ListMap(a, b, list, f) => flat([
+            pure("List.map "),
             sub(a, frame),
             pure(" "),
             sub(b, frame),
             pure(" "),
-            sub(lst, frame),
+            sub(list, frame),
             pure(" "),
             sub(f, frame),
         ]),
@@ -1221,7 +1221,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                 Cases::FreeMonoid { carrier } => match carrier {
                     Carrier::Nat { .. } => "Nat.fold ",
                     Carrier::Bin { .. } => "Bin.fold ",
-                    Carrier::Lst { .. } => "Lst.fold ",
+                    Carrier::List { .. } => "List.fold ",
                 },
             };
 
@@ -1310,7 +1310,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                     }
                 }
                 Cases::FreeMonoid { carrier } => {
-                    // The cons arm mirrors each carrier's own literal delimiters: `b[head, ..tail]; ih` for `Bin`, `[head, ..tail]; ih` for `Lst` — the same bracketed shape, told apart by the grain letter.
+                    // The cons arm mirrors each carrier's own literal delimiters: `b[head, ..tail]; ih` for `Bin`, `[head, ..tail]; ih` for `List` — the same bracketed shape, told apart by the grain letter.
                     let cons_bin = |grain: Grain, cons_case: Scope<Three>| {
                         let ((head_label, tail_label, ih_label), cons_case, inner) =
                             frame.open_three(cons_case);
@@ -1328,7 +1328,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                             indent(flat([sub(cons_case, inner), pure(";")])),
                         ])
                     };
-                    let cons_lst = |cons_case: Scope<Three>| {
+                    let cons_list = |cons_case: Scope<Three>| {
                         let ((head_label, tail_label, ih_label), cons_case, inner) =
                             frame.open_three(cons_case);
                         flat([
@@ -1343,7 +1343,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                         ])
                     };
 
-                    // Per carrier: the identity arm's literal, its body, and the cons arm — which binds `(predecessor, ih)` for the head-less unary `Nat`, and `(head, tail), ih` for `Bin`/`Lst`.
+                    // Per carrier: the identity arm's literal, its body, and the cons arm — which binds `(predecessor, ih)` for the head-less unary `Nat`, and `(head, tail), ih` for `Bin`/`List`.
                     let (empty_lit, empty_case, cons_arm) = match carrier {
                         Carrier::Nat {
                             empty_case,
@@ -1373,11 +1373,11 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                             empty_case,
                             cons_bin(grain, cons_case),
                         ),
-                        Carrier::Lst {
+                        Carrier::List {
                             empty_case,
                             cons_case,
                             ..
-                        } => ("\n| [] =>\n", empty_case, cons_lst(cons_case)),
+                        } => ("\n| [] =>\n", empty_case, cons_list(cons_case)),
                     };
                     flat([
                         pure(empty_lit),

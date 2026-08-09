@@ -462,12 +462,12 @@ fn a_proof_at_an_arm_binder_head_is_rejected() {
     );
 }
 
-// An intrinsic fold binder as the head. `Lst`'s cons arm takes its element type from the carrier rather than from any declaration, so this is a different source of binder types than the inductive arm above and fails independently.
+// An intrinsic fold binder as the head. `List`'s cons arm takes its element type from the carrier rather than from any declaration, so this is a different source of binder types than the inductive arm above and fails independently.
 #[test]
 fn a_proof_at_a_fold_binder_head_is_rejected() {
     rejected_as_a_proof(
         r#"
-        let apply_it(fs : /std/Lst((/std/False) -> /std/Nat)) -> /std/Nat =
+        let apply_it(fs : /std/List((/std/False) -> /std/Nat)) -> /std/Nat =
             match fs
             | [] => 0
             | [head, ..tail] => head(rec b : /std/False = b; b)

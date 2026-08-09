@@ -1,4 +1,4 @@
-use /std/{Bytes, Byte, Str, Nat, Bool, Lst, Parse, Result, Option, Handle, Async};
+use /std/{Bytes, Byte, Str, Nat, Bool, List, Parse, Result, Option, Handle, Async};
 use /std/tcp/{Settings, Socket};
 
 pub induct Method: pub Type
@@ -19,7 +19,7 @@ pub struct Request: pub Type {
     host: Str,
     port: Nat,
     path: Str,
-    headers: Lst({Str, Str}),
+    headers: List({Str, Str}),
     body: Bytes,
     settings: Settings,
 }
@@ -61,8 +61,8 @@ pub let post_tls(host: Str, port: Nat, path: Str, body: Bytes) -> Request =
 let until(target: Byte) -> (Byte) -> Bool =
     (byte) => Bool/not(byte == target);
 
-let header_lookup(headers: Lst({Str, Str}), name: Str) -> Option(Str) =
-    Option/map(Lst/find(headers, ((key, _)) => Str/eql_ascii_ci(key, name)), ((_, value)) => value);
+let header_lookup(headers: List({Str, Str}), name: Str) -> Option(Str) =
+    Option/map(List/find(headers, ((key, _)) => Str/eql_ascii_ci(key, name)), ((_, value)) => value);
 
 let is_ascii_digit(byte: Byte) -> Bool =
     Nat/in_range(Byte/to_nat(byte), 0x30, 0x39);
@@ -90,7 +90,7 @@ pub let render(request: Request) -> Bytes =
                     "\r\n",
                     "Connection: close\r\n",
                     content_length(request.body),
-                    Str/flatten(Lst/map(request.headers, render_header)),
+                    Str/flatten(List/map(request.headers, render_header)),
                     "\r\n"])),
         ..request.body];
 
@@ -117,7 +117,7 @@ pub let status_line: Parse(Status) =
 
 pub struct Response: pub Type {
     status: Status,
-    headers: Lst({Str, Str}),
+    headers: List({Str, Str}),
     body: Bytes,
 }
 
@@ -159,13 +159,13 @@ let take_n(n: Nat) -> Parse(Bytes) =
             Result/success((stop, Bytes/slice(input, pos, stop))),
     };
 
-let content_length_of(headers: Lst({Str, Str})) -> Option(Nat) =
+let content_length_of(headers: List({Str, Str})) -> Option(Nat) =
     match header_lookup(headers, "Content-Length")
     | some(value) => Nat/of_str(value)
     | none() => Option/none()
     end;
 
-let body_parser(headers: Lst({Str, Str})) -> Parse(Bytes) =
+let body_parser(headers: List({Str, Str})) -> Parse(Bytes) =
     match content_length_of(headers) | some(n) => take_n(n) | none() => rest end;
 
 pub let decode: Parse(Response) =

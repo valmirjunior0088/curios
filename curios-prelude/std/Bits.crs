@@ -1,5 +1,5 @@
 pub use /sys/Bits/{let Bits, len, eql, slice};
-use /std/{Lst, Nat, Bool, Option, Eq, Str, Eql, Show};
+use /std/{List, Nat, Bool, Option, Eq, Str, Eql, Show};
 
 pub let at(b: Bits, i: Nat, ok: Nat/Lt(i, len(b))) -> Bool =
     /sys/Bits/get(b, i);
@@ -7,8 +7,8 @@ pub let at(b: Bits, i: Nat, ok: Nat/Lt(i, len(b))) -> Bool =
 pub let get(b: Bits, i: Nat) -> Option(Bool) =
     match i < len(b) | true => Option/some(/sys/Bits/get(b, i)) | false => Option/none() end;
 
-pub let flatten(parts: Lst(Bits)) -> Bits =
-    Lst/fold(parts, b[], (bits, acc) => b[..acc, ..bits]);
+pub let flatten(parts: List(Bits)) -> Bits =
+    List/fold(parts, b[], (bits, acc) => b[..acc, ..bits]);
 
 pub let fold(@A: Type, b: Bits, init: A, f: (Bool, A) -> A) -> A =
     let n = len(b);

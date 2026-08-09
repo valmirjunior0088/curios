@@ -129,7 +129,7 @@ fn elaborate_nat_match(
     Ok((rebuilt, result_type))
 }
 
-fn elaborate_lst_match(
+fn elaborate_list_match(
     context: &mut Context,
     head: &Term,
     motive: &Scope<Many>,
@@ -138,12 +138,12 @@ fn elaborate_lst_match(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    // `Lst` carries an element type the eliminator must read off the scrutinee (unlike `Nat`, whose carrier is parameterless) — infer the head, then demand its type is `Lst(elem)`.
+    // `List` carries an element type the eliminator must read off the scrutinee (unlike `Nat`, whose carrier is parameterless) — infer the head, then demand its type is `List(elem)`.
     let (head_elaborated, head_type) = elaborate(context, head, Mode::Infer)?;
     let head_type = reduce_with(context, &head_type)?;
     let elem = match &*head_type {
-        Subterm::Intrinsic(Intrinsic::LstType(elem)) => elem.clone(),
-        _ => return Err(Error::not_lst_type(head_type)),
+        Subterm::Intrinsic(Intrinsic::ListType(elem)) => elem.clone(),
+        _ => return Err(Error::not_list_type(head_type)),
     };
 
     // The *rebuilt* motive throughout, as in `elaborate_nat_match`.
@@ -152,7 +152,7 @@ fn elaborate_lst_match(
     seed_motive(context, term, &motive, &head_elaborated, &mode)?;
 
     // Refine the scrutinee to its value in each arm (as `Nat`/`Bool`/`Switch` already do), so a hypothesis whose type mentions the scrutinee reduces at the arm's value without a hand-written convoy.
-    let empty_value: Term = Subterm::Intrinsic(Intrinsic::Lst(elem.clone(), vec![])).into();
+    let empty_value: Term = Subterm::Intrinsic(Intrinsic::List(elem.clone(), vec![])).into();
     let empty_elaborated = context.with_frame(|context| {
         refine_head(context, &head_elaborated, &empty_value)?;
         check(context, empty_case, motive.open(&[&empty_value]))
@@ -168,10 +168,10 @@ fn elaborate_lst_match(
         context.assume(&ih_label, &motive.open(&[&Term::free_var(&tail_label)]));
 
         // The cons value `head :: tail`, encoded as the monoid operation on a singleton and the tail (no separate prepend intrinsic).
-        let cons_value: Term = Subterm::Intrinsic(Intrinsic::LstConcat(
+        let cons_value: Term = Subterm::Intrinsic(Intrinsic::ListConcat(
             elem.clone(),
             vec![
-                Subterm::Intrinsic(Intrinsic::Lst(
+                Subterm::Intrinsic(Intrinsic::List(
                     elem.clone(),
                     vec![Term::free_var(&head_label)],
                 ))
@@ -200,7 +200,7 @@ fn elaborate_lst_match(
         head: head_elaborated,
         motive,
         cases: Cases::FreeMonoid {
-            carrier: Carrier::Lst {
+            carrier: Carrier::List {
                 elem,
                 empty_case: empty_elaborated,
                 cons_case: cons_elaborated,
@@ -222,7 +222,7 @@ fn elaborate_bin_match(
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
     let (empty_case, cons_case) = cases;
-    // `Bin` is a parameterless carrier (like `Nat`/`Bool`), so the scrutinee's type is just `Bin` — no element type to read off the head as `Lst` needs.
+    // `Bin` is a parameterless carrier (like `Nat`/`Bool`), so the scrutinee's type is just `Bin` — no element type to read off the head as `List` needs.
     let (head_elaborated, head_type) =
         elaborate_intrinsic_head(context, head, IntrinsicHead::Bin(grain))?;
 
@@ -391,12 +391,12 @@ pub(crate) fn elaborate_match(
         } => elaborate_nat_match(context, head, motive, empty_case, cons_case, term, mode),
         Cases::FreeMonoid {
             carrier:
-                Carrier::Lst {
+                Carrier::List {
                     empty_case,
                     cons_case,
                     ..
                 },
-        } => elaborate_lst_match(context, head, motive, empty_case, cons_case, term, mode),
+        } => elaborate_list_match(context, head, motive, empty_case, cons_case, term, mode),
         Cases::FreeMonoid {
             carrier:
                 Carrier::Bin {

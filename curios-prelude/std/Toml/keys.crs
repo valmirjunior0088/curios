@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, Lst, Map, Option, Result, Parse};
+use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, List, Map, Option, Result, Parse};
 use /std/Toml/scan/{is_bare_byte, ws};
 use /std/Toml/strings/{str_basic, str_literal};
 
@@ -28,7 +28,7 @@ let dot_part: Parse(Str) =
     let _ = ws!;
     key_part;
 
-pub let key_dotted: Parse(Lst(Str)) =
+pub let key_dotted: Parse(List(Str)) =
     let first = key_part!;
     let rest = Parse/many0(dot_part)!;
     Parse/pure([first, ..rest]);

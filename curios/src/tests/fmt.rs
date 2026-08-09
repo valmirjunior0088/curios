@@ -50,7 +50,7 @@ fn percent_slot_shows_scalar_witnesses() {
 #[test]
 fn percent_slot_shows_containers() {
     let source = r#"
-        use /std/{Fmt, Option, Lst};
+        use /std/{Fmt, Option, List};
         Fmt/print("list=% opt=%")([1, 2, 3])(Option/some(7))
     "#;
     assert_eq!(run(source), b"list=[1, 2, 3] opt=some(7)");

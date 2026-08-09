@@ -243,7 +243,7 @@ fn sort_of_binders<B: Bound>(
 
 /// The sort of an intrinsic type former.
 ///
-/// A closed intrinsic quantifies over nothing and sits at level 0. A parameterized one carries its parameter's level: `Lst : Type u -> Type u`, and pinning that at 0 would claim the type is smaller than it is — the unsound direction, and what would let a large type be stored in a small universe.
+/// A closed intrinsic quantifies over nothing and sits at level 0. A parameterized one carries its parameter's level: `List : Type u -> Type u`, and pinning that at 0 would claim the type is smaller than it is — the unsound direction, and what would let a large type be stored in a small universe.
 ///
 /// Reachable from [`infer_intrinsic`](super::infer::infer_intrinsic) as well, which types these formers rather than restating the rule: a second copy read the element's sort as the former's and typed a list of proofs at `Prop`.
 pub(crate) fn sort_of_intrinsic(
@@ -262,7 +262,9 @@ pub(crate) fn sort_of_intrinsic(
         // A list, cell, or description *of* proofs is not itself a proposition: it has a length, an identity, or an effect, so its inhabitants are distinguishable and irrelevance does not apply. It lands in `Type`, and `Prop : Type 0`.
         //
         // For `Io` that is load-bearing rather than tidy. Erasure is sort-driven, so a `Prop`-sorted `Io(P)` would be dropped as proof content and its host effect would vanish with it.
-        Intrinsic::LstType(element) | Intrinsic::CellType(element) | Intrinsic::IoType(element) => {
+        Intrinsic::ListType(element)
+        | Intrinsic::CellType(element)
+        | Intrinsic::IoType(element) => {
             let element = element.clone();
 
             Ok(match Sort::of(kernel, &element)? {

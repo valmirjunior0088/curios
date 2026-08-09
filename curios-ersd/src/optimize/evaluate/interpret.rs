@@ -2,7 +2,7 @@
 //!
 //! The interpreter walks blocks — statements then a terminator — so tail position, the only place an effect may residualize, is the statement whose result the block returns. ANF hoists every effect into a `Let`, so a `Foreign` feeding a block's `Return` is a tail-position effect and residualizes to a single host call — exactly the `Handle/write(<bytes>)` the `Fmt` collapse produces.
 //!
-//! Closedness and scope: a candidate call is evaluated from an empty frame; every atom it transitively reads must resolve to a constant, a module function, or a top-level item value (a CAF forced on demand and memoized), never a runtime binder. A function reference closes on demand against the current frame. Scalar and packed-binary operations fold through [`Semantics`] — the single source of truth under the numeric law — while list operations, closures, and `LstMap` are interpreted directly.
+//! Closedness and scope: a candidate call is evaluated from an empty frame; every atom it transitively reads must resolve to a constant, a module function, or a top-level item value (a CAF forced on demand and memoized), never a runtime binder. A function reference closes on demand against the current frame. Scalar and packed-binary operations fold through [`Semantics`] — the single source of truth under the numeric law — while list operations, closures, and `ListMap` are interpreted directly.
 
 use {
     super::{
@@ -383,7 +383,7 @@ impl<'m> Evaluator<'m> {
             // A cell operation's identity is its program point: never residualized, never folded.
             Rhs::Cell { .. } => Outcome::Bail(Bail::Effect),
             Rhs::Intrinsic {
-                intrinsic: Intrinsic::LstMap,
+                intrinsic: Intrinsic::ListMap,
                 operands,
             } => self.eval_map(operands, frame),
         }
@@ -469,7 +469,7 @@ impl<'m> Evaluator<'m> {
         };
         use SequenceOp::*;
         match operation {
-            LstLen | LstGet | LstSlice | LstAppend | LstConcat | LstBuild => {
+            ListLen | ListGet | ListSlice | ListAppend | ListConcat | ListBuild => {
                 outcome(interpret_list(operation, &operands))
             }
             _ => {
@@ -591,7 +591,7 @@ impl<'m> Evaluator<'m> {
             return Outcome::Bail(Bail::Arity);
         };
         let elements = match self.eval_atom(*source, frame) {
-            Ok(Value::Lst(elements)) => elements,
+            Ok(Value::List(elements)) => elements,
             Ok(_) => return Outcome::Bail(Bail::Unsupported),
             Err(bail) => return Outcome::Bail(bail),
         };
@@ -611,7 +611,7 @@ impl<'m> Evaluator<'m> {
                 Outcome::Bail(bail) => return Outcome::Bail(bail),
             }
         }
-        Outcome::Done(Value::Lst(Rc::new(mapped)))
+        Outcome::Done(Value::List(Rc::new(mapped)))
     }
 
     fn eval_operands(&mut self, atoms: &[Atom], frame: &mut Frame) -> Result<Vec<Value>, Bail> {
@@ -646,7 +646,7 @@ fn leaves(values: &[Value]) -> Option<Vec<Constant>> {
 /// The elements of a sequence value as the fold binds them: a list's own elements, or a packed binary's grains — byte grain as `Byte`, bit grain as `Bool`.
 fn fold_elements(grain: SequenceGrain, sequence: &Value) -> Result<Vec<Value>, Bail> {
     match (grain, sequence) {
-        (SequenceGrain::List, Value::Lst(elements)) => Ok(elements.as_ref().clone()),
+        (SequenceGrain::List, Value::List(elements)) => Ok(elements.as_ref().clone()),
         (SequenceGrain::Bin(expected), Value::Bin(found, packed)) if *found == expected => {
             let length = packed.len(expected);
             let mut elements = Vec::with_capacity(length);
@@ -669,7 +669,7 @@ fn fold_elements(grain: SequenceGrain, sequence: &Value) -> Result<Vec<Value>, B
 fn interpret_list(operation: SequenceOp, operands: &[Value]) -> Result<Value, Bail> {
     use SequenceOp::*;
     let list = |index: usize| match operands.get(index) {
-        Some(Value::Lst(elements)) => Ok(elements.clone()),
+        Some(Value::List(elements)) => Ok(elements.clone()),
         _ => Err(Bail::Unsupported),
     };
     let index = |position: usize| match operands.get(position) {
@@ -677,35 +677,35 @@ fn interpret_list(operation: SequenceOp, operands: &[Value]) -> Result<Value, Ba
         _ => Err(Bail::Unsupported),
     };
     match operation {
-        LstBuild => Ok(Value::Lst(Rc::new(operands.to_vec()))),
-        LstLen => Ok(Value::Nat(list(0)?.len() as u32)),
-        LstGet => match list(0)?.get(index(1)?) {
+        ListBuild => Ok(Value::List(Rc::new(operands.to_vec()))),
+        ListLen => Ok(Value::Nat(list(0)?.len() as u32)),
+        ListGet => match list(0)?.get(index(1)?) {
             Some(element) => Ok(element.clone()),
             None => Err(Bail::Trap),
         },
-        LstSlice => {
+        ListSlice => {
             let elements = list(0)?;
             let (start, end) = (index(1)?, index(2)?);
             if start <= end && end <= elements.len() {
-                Ok(Value::Lst(Rc::new(elements[start..end].to_vec())))
+                Ok(Value::List(Rc::new(elements[start..end].to_vec())))
             } else {
                 Err(Bail::Trap)
             }
         }
-        LstAppend => {
+        ListAppend => {
             let mut elements = list(0)?.as_ref().clone();
             match operands.get(1) {
                 Some(element) => elements.push(element.clone()),
                 None => return Err(Bail::Arity),
             }
-            Ok(Value::Lst(Rc::new(elements)))
+            Ok(Value::List(Rc::new(elements)))
         }
-        LstConcat => {
+        ListConcat => {
             let mut elements = Vec::new();
             for position in 0..operands.len() {
                 elements.extend(list(position)?.iter().cloned());
             }
-            Ok(Value::Lst(Rc::new(elements)))
+            Ok(Value::List(Rc::new(elements)))
         }
         BinLen(_) | BinGet(_) | BinSlice(_) | BinAppend(_) | BinConcat(_) | BinEql(_) => {
             unreachable!("packed-binary operations fold through the semantic contract")
@@ -716,7 +716,7 @@ fn interpret_list(operation: SequenceOp, operands: &[Value]) -> Result<Value, Ba
 /// The suffix a fold's step binder sees: the remaining list, or the remaining grains rebuilt into a binary.
 fn suffix_view(grain: SequenceGrain, remainder: &[Value]) -> Value {
     match grain {
-        SequenceGrain::List => Value::Lst(Rc::new(remainder.to_vec())),
+        SequenceGrain::List => Value::List(Rc::new(remainder.to_vec())),
         SequenceGrain::Bin(grain) => {
             let mut packed = PackedBin::from_bytes(Vec::new());
             for value in remainder {

@@ -257,7 +257,7 @@ fn an_arithmetic_decrease_is_inert_in_the_constructor_order() {
     let n = Free::local(1, None);
     let smaller = Shape::Smaller(n.clone());
     let tree = Shape::Node(Tag::Tuple, vec![smaller.clone(), Shape::Atom(n.clone())]);
-    let run = Shape::elem_run(Carriers::Lst, vec![smaller.clone()], Shape::Atom(n));
+    let run = Shape::elem_run(Carriers::List, vec![smaller.clone()], Shape::Atom(n));
 
     assert!(!smaller.same_as(&smaller));
     assert!(!smaller.proper_subterm_of(&tree));

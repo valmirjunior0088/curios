@@ -6,16 +6,16 @@ use crate::tests::cont_optm;
 #[test]
 fn concept_method_call_matches_direct_intrinsic_codegen() {
     let through_concept = r#"
-        use /std/{Nat, Lst, Handle, Str, Add, proc};
+        use /std/{Nat, List, Handle, Str, Add, proc};
         pub let bump(x : Nat) -> Nat = Add/add(x, 1);
-        let taint = Lst/len(proc/args!);
+        let taint = List/len(proc/args!);
         let n : Nat = taint;
         /std/print(Nat/to_str(bump(n)))
         "#;
     let direct = r#"
-        use /std/{Nat, Lst, Handle, Str, proc};
+        use /std/{Nat, List, Handle, Str, proc};
         pub let bump(x : Nat) -> Nat = Nat/add(x, 1);
-        let taint = Lst/len(proc/args!);
+        let taint = List/len(proc/args!);
         let n : Nat = taint;
         /std/print(Nat/to_str(bump(n)))
         "#;
@@ -26,12 +26,12 @@ fn concept_method_call_matches_direct_intrinsic_codegen() {
     );
 }
 
-/// `choose` desugars to exactly the nested boolean matches a user would hand-write: `choose | c0 => b0 | c1 => b1 | _ => d end` is `match c0 | true => b0 | false => match c1 | true => b1 | false => d end end`. Both lower through the same core `bool_match` nesting, so they emit the same intrinsic operations — the two forms mint metavars in a slightly different order, which only permutes the emission order of the top-level specialized closures (their bodies are identical), so `operations()` is the exact comparison. A runtime operand (`Lst/len(proc/args!)`) keeps the ladder from folding to a constant.
+/// `choose` desugars to exactly the nested boolean matches a user would hand-write: `choose | c0 => b0 | c1 => b1 | _ => d end` is `match c0 | true => b0 | false => match c1 | true => b1 | false => d end end`. Both lower through the same core `bool_match` nesting, so they emit the same intrinsic operations — the two forms mint metavars in a slightly different order, which only permutes the emission order of the top-level specialized closures (their bodies are identical), so `operations()` is the exact comparison. A runtime operand (`List/len(proc/args!)`) keeps the ladder from folding to a constant.
 #[test]
 fn choose_matches_hand_nested_bool_codegen() {
     let ladder = r#"
-        use /std/{Nat, Lst, Handle, Str, proc};
-        let taint = Lst/len(proc/args!);
+        use /std/{Nat, List, Handle, Str, proc};
+        let taint = List/len(proc/args!);
         let n : Nat = taint;
         let result =
             choose
@@ -42,8 +42,8 @@ fn choose_matches_hand_nested_bool_codegen() {
         /std/print(Nat/to_str(result))
         "#;
     let nested = r#"
-        use /std/{Nat, Lst, Handle, Str, proc};
-        let taint = Lst/len(proc/args!);
+        use /std/{Nat, List, Handle, Str, proc};
+        let taint = List/len(proc/args!);
         let n : Nat = taint;
         let result =
             match n <= 0
@@ -67,24 +67,24 @@ fn choose_matches_hand_nested_bool_codegen() {
 #[test]
 fn choose_bind_arm_matches_headed_catch_all_codegen() {
     let bind = r#"
-        use /std/{Option, Nat, Lst, Handle, Str, proc};
+        use /std/{Option, Nat, List, Handle, Str, proc};
         let f(o : Option(Nat)) -> Nat =
             choose
             | some(x) = o => x + 10
             | _ => 99
             end;
-        let taint = Lst/len(proc/args!);
+        let taint = List/len(proc/args!);
         let n : Nat = taint;
         /std/print(Nat/to_str(f(Option/some(n))))
         "#;
     let headed = r#"
-        use /std/{Option, Nat, Lst, Handle, Str, proc};
+        use /std/{Option, Nat, List, Handle, Str, proc};
         let f(o : Option(Nat)) -> Nat =
             match o
             | some(x) => x + 10
             | _ => 99
             end;
-        let taint = Lst/len(proc/args!);
+        let taint = List/len(proc/args!);
         let n : Nat = taint;
         /std/print(Nat/to_str(f(Option/some(n))))
         "#;
@@ -92,7 +92,7 @@ fn choose_bind_arm_matches_headed_catch_all_codegen() {
     assert_eq!(operations(&cont_optm(bind)), operations(&cont_optm(headed)),);
 }
 
-/// The instructions a cont dump emits, sorted — `NatAdd`, `TplGet(0)`, `BinLen(X)`, and the qualified `cell.Set` / `intrinsic.LstMap` forms — with the generated names that wire them together and the operands they read left out. Sorted because the two programs may emit their top-level closures in a different order while their bodies agree, which is the whole point of comparing operations rather than dumps.
+/// The instructions a cont dump emits, sorted — `NatAdd`, `TplGet(0)`, `BinLen(X)`, and the qualified `cell.Set` / `intrinsic.ListMap` forms — with the generated names that wire them together and the operands they read left out. Sorted because the two programs may emit their top-level closures in a different order while their bodies agree, which is the whole point of comparing operations rather than dumps.
 ///
 /// The dump arrives verbatim, never digit-normalized. Entropy-derived name counters (`~v37`, `~f26`) do differ between the compared programs, but the names are discarded entirely, and the digits that survive into an operation token — a projection's index, a concatenation's arity — are its semantics, so collapsing them would make `TplGet(0)` and `TplGet(1)` compare equal.
 ///
@@ -119,7 +119,7 @@ fn operations(dump: &str) -> Vec<String> {
 ///
 /// Position is what decides it, not the bracket: `apply Known(CpsFunId(13))[…]` and `apply Closure(CpsValueId(95))[…]` end in a bracketed operand list too, and their heads are entropy-derived ids that differ between any two compilations. Accepting those would compare the numbering rather than the code. So the head must sit where `curios_cont::CpsNode`'s `Display` puts an operation: after a `let` binding's `= `, or behind a `cell.`/`intrinsic.` qualifier.
 ///
-/// The qualifier is kept because it selects a different operation enum — `CpsIntrinsicOp::LstMap` and an intrinsic of the same name would otherwise read alike.
+/// The qualifier is kept because it selects a different operation enum — `CpsIntrinsicOp::ListMap` and an intrinsic of the same name would otherwise read alike.
 fn operation_ending_at(dump: &str, at: usize) -> Option<String> {
     let head = &dump[..at];
     // `TplGet(0)`, `BinLen(X)`, `BinConcat(X, 2)`: step over the parenthesized argument to reach the name.
@@ -150,16 +150,16 @@ fn operation_ending_at(dump: &str, at: usize) -> Option<String> {
 #[test]
 fn concept_comparison_matches_direct_intrinsic_codegen() {
     let through_concept = r#"
-        use /std/{Nat, Bool, Lst, Handle, Str, Cmp, proc};
+        use /std/{Nat, Bool, List, Handle, Str, Cmp, proc};
         pub let small(x : Nat) -> Bool = Cmp/lt(x, 10);
-        let taint = Lst/len(proc/args!);
+        let taint = List/len(proc/args!);
         let n : Nat = taint;
         /std/print(Bool/to_str(small(n)))
         "#;
     let direct = r#"
-        use /std/{Nat, Bool, Lst, Handle, Str, proc};
+        use /std/{Nat, Bool, List, Handle, Str, proc};
         pub let small(x : Nat) -> Bool = Nat/lt(x, 10);
-        let taint = Lst/len(proc/args!);
+        let taint = List/len(proc/args!);
         let n : Nat = taint;
         /std/print(Bool/to_str(small(n)))
         "#;

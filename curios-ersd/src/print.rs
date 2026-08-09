@@ -424,7 +424,7 @@ fn fields(row: &[Option<String>]) -> String {
 
 fn sequence_grain(grain: &super::SequenceGrain) -> &'static str {
     match grain {
-        super::SequenceGrain::List => "[lst]",
+        super::SequenceGrain::List => "[list]",
         super::SequenceGrain::Bin(Grain::B) => "[bin:b]",
         super::SequenceGrain::Bin(Grain::X) => "[bin:x]",
     }

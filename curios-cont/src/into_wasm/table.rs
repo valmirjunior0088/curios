@@ -39,7 +39,7 @@ impl FieldData {
     }
 }
 
-/// The name bundle for one internal rope carrier (`$rope/bin` or `$rope/lst`): the base struct the emitter casts carrier refs to, its `leaf`/`node`/`view` subtypes, the flat payload array, and every field name — one handle to thread through the op emitters so packed `Bits`/`Bytes` and `Lst` share their lowering code.
+/// The name bundle for one internal rope carrier (`$rope/bin` or `$rope/list`): the base struct the emitter casts carrier refs to, its `leaf`/`node`/`view` subtypes, the flat payload array, and every field name — one handle to thread through the op emitters so packed `Bits`/`Bytes` and `List` share their lowering code.
 #[derive(Debug, Clone)]
 pub(crate) struct RopeData {
     pub base: curios_wasm::TypeName,
@@ -248,34 +248,34 @@ pub(crate) struct Table<'a> {
     special_label: curios_wasm::LabelName,
     flt_type: curios_wasm::TypeName,
     bin_rope_type: curios_wasm::TypeName,
-    lst_rope_type: curios_wasm::TypeName,
+    list_rope_type: curios_wasm::TypeName,
     bytes_type: curios_wasm::TypeName,
     elems_type: curios_wasm::TypeName,
     bin_rope_leaf_type: curios_wasm::TypeName,
     bin_rope_node_type: curios_wasm::TypeName,
     bin_rope_view_type: curios_wasm::TypeName,
-    lst_rope_leaf_type: curios_wasm::TypeName,
-    lst_rope_node_type: curios_wasm::TypeName,
-    lst_rope_view_type: curios_wasm::TypeName,
+    list_rope_leaf_type: curios_wasm::TypeName,
+    list_rope_node_type: curios_wasm::TypeName,
+    list_rope_view_type: curios_wasm::TypeName,
     cell_type: curios_wasm::TypeName,
     exit: OnceCell<curios_wasm::FuncName>,
     // The shared rope helpers, minted lazily like `exit`: the first call site recorded during emission names the function, and the module emitter then adds exactly the recorded set after the program's own functions (see `emit_rope_funcs`).
     bytes_force: OnceCell<curios_wasm::FuncName>,
     bits_force: OnceCell<curios_wasm::FuncName>,
-    lst_force: OnceCell<curios_wasm::FuncName>,
-    lst_bytes_force: OnceCell<curios_wasm::FuncName>,
+    list_force: OnceCell<curios_wasm::FuncName>,
+    list_bytes_force: OnceCell<curios_wasm::FuncName>,
     bytes_embed: OnceCell<curios_wasm::FuncName>,
-    lst_embed: OnceCell<curios_wasm::FuncName>,
-    lst_bytes_embed: OnceCell<curios_wasm::FuncName>,
+    list_embed: OnceCell<curios_wasm::FuncName>,
+    list_bytes_embed: OnceCell<curios_wasm::FuncName>,
     bytes_slice: OnceCell<curios_wasm::FuncName>,
     bits_slice: OnceCell<curios_wasm::FuncName>,
-    lst_slice: OnceCell<curios_wasm::FuncName>,
+    list_slice: OnceCell<curios_wasm::FuncName>,
     bytes_read: OnceCell<curios_wasm::FuncName>,
     bits_read: OnceCell<curios_wasm::FuncName>,
-    lst_read: OnceCell<curios_wasm::FuncName>,
+    list_read: OnceCell<curios_wasm::FuncName>,
     bytes_eql: OnceCell<curios_wasm::FuncName>,
     bits_eql: OnceCell<curios_wasm::FuncName>,
-    lst_map: OnceCell<curios_wasm::FuncName>,
+    list_map: OnceCell<curios_wasm::FuncName>,
     // The foreign functions the emitted code calls, keyed by the minted internal name (see `host_func`). Same lazy used-tracking as the `exit` cell: the first call-site reference during emission records the function's row, and `emit_sys_imports` then declares exactly the recorded set (in minted-name order — wasmtime links by name, so import order is cosmetic).
     host_funcs: RefCell<BTreeMap<String, Arc<ForeignFunction>>>,
     tpl_types: BTreeMap<usize, curios_wasm::TypeName>,
@@ -319,33 +319,33 @@ impl<'a> Table<'a> {
             special_label: curios_wasm::LabelName::from("!"),
             flt_type: curios_wasm::TypeName::from("flt"),
             bin_rope_type: curios_wasm::TypeName::from("rope/bin"),
-            lst_rope_type: curios_wasm::TypeName::from("rope/lst"),
+            list_rope_type: curios_wasm::TypeName::from("rope/list"),
             bytes_type: curios_wasm::TypeName::from("bytes"),
             elems_type: curios_wasm::TypeName::from("elems"),
             bin_rope_leaf_type: curios_wasm::TypeName::from("rope/bin/leaf"),
             bin_rope_node_type: curios_wasm::TypeName::from("rope/bin/node"),
             bin_rope_view_type: curios_wasm::TypeName::from("rope/bin/view"),
-            lst_rope_leaf_type: curios_wasm::TypeName::from("rope/lst/leaf"),
-            lst_rope_node_type: curios_wasm::TypeName::from("rope/lst/node"),
-            lst_rope_view_type: curios_wasm::TypeName::from("rope/lst/view"),
+            list_rope_leaf_type: curios_wasm::TypeName::from("rope/list/leaf"),
+            list_rope_node_type: curios_wasm::TypeName::from("rope/list/node"),
+            list_rope_view_type: curios_wasm::TypeName::from("rope/list/view"),
             cell_type: curios_wasm::TypeName::from("cell"),
             exit: OnceCell::new(),
             bytes_force: OnceCell::new(),
             bits_force: OnceCell::new(),
-            lst_force: OnceCell::new(),
-            lst_bytes_force: OnceCell::new(),
+            list_force: OnceCell::new(),
+            list_bytes_force: OnceCell::new(),
             bytes_embed: OnceCell::new(),
-            lst_embed: OnceCell::new(),
-            lst_bytes_embed: OnceCell::new(),
+            list_embed: OnceCell::new(),
+            list_bytes_embed: OnceCell::new(),
             bytes_slice: OnceCell::new(),
             bits_slice: OnceCell::new(),
-            lst_slice: OnceCell::new(),
+            list_slice: OnceCell::new(),
             bytes_read: OnceCell::new(),
             bits_read: OnceCell::new(),
-            lst_read: OnceCell::new(),
+            list_read: OnceCell::new(),
             bytes_eql: OnceCell::new(),
             bits_eql: OnceCell::new(),
-            lst_map: OnceCell::new(),
+            list_map: OnceCell::new(),
             host_funcs: RefCell::new(BTreeMap::new()),
             tpl_types: {
                 let max = module
@@ -459,8 +459,8 @@ impl<'a> Table<'a> {
         self.bin_rope_type.clone()
     }
 
-    pub(crate) fn lst_rope_type(&self) -> curios_wasm::TypeName {
-        self.lst_rope_type.clone()
+    pub(crate) fn list_rope_type(&self) -> curios_wasm::TypeName {
+        self.list_rope_type.clone()
     }
 
     pub(crate) fn bytes_type(&self) -> curios_wasm::TypeName {
@@ -490,13 +490,13 @@ impl<'a> Table<'a> {
         }
     }
 
-    /// The `Lst` rope's name bundle.
-    pub(crate) fn lst_rope(&self) -> RopeData {
+    /// The `List` rope's name bundle.
+    pub(crate) fn list_rope(&self) -> RopeData {
         RopeData {
-            base: self.lst_rope_type.clone(),
-            leaf: self.lst_rope_leaf_type.clone(),
-            node: self.lst_rope_node_type.clone(),
-            view: self.lst_rope_view_type.clone(),
+            base: self.list_rope_type.clone(),
+            leaf: self.list_rope_leaf_type.clone(),
+            node: self.list_rope_node_type.clone(),
+            view: self.list_rope_view_type.clone(),
             payload: self.elems_type.clone(),
             tag_field: curios_wasm::FieldName::from("tag"),
             len_field: curios_wasm::FieldName::from("len"),
@@ -564,26 +564,26 @@ impl<'a> Table<'a> {
         self.bits_force.get().is_some()
     }
 
-    /// `$lst/force (ref $rope/lst) -> (ref $elems)`: the `Lst` mirror of [`bytes_force_func`](Self::bytes_force_func).
-    pub(crate) fn lst_force_func(&self) -> curios_wasm::FuncName {
-        self.lst_force
-            .get_or_init(|| curios_wasm::FuncName::from("lst/force"))
+    /// `$list/force (ref $rope/list) -> (ref $elems)`: the `List` mirror of [`bytes_force_func`](Self::bytes_force_func).
+    pub(crate) fn list_force_func(&self) -> curios_wasm::FuncName {
+        self.list_force
+            .get_or_init(|| curios_wasm::FuncName::from("list/force"))
             .clone()
     }
 
-    pub(crate) fn lst_force_used(&self) -> bool {
-        self.lst_force.get().is_some()
+    pub(crate) fn list_force_used(&self) -> bool {
+        self.list_force.get().is_some()
     }
 
-    /// `$lst/bytes/force (ref $rope/lst) -> (ref $elems)`: force an `Lst(Bytes)` / `Lst(Handle)` host argument *deeply* — the outer rope to a fresh payload whose every element is itself forced to `$bytes`, the element shape the host lifts.
-    pub(crate) fn lst_bytes_force_func(&self) -> curios_wasm::FuncName {
-        self.lst_bytes_force
-            .get_or_init(|| curios_wasm::FuncName::from("lst/bytes/force"))
+    /// `$list/bytes/force (ref $rope/list) -> (ref $elems)`: force a `List(Bytes)` / `List(Handle)` host argument *deeply* — the outer rope to a fresh payload whose every element is itself forced to `$bytes`, the element shape the host lifts.
+    pub(crate) fn list_bytes_force_func(&self) -> curios_wasm::FuncName {
+        self.list_bytes_force
+            .get_or_init(|| curios_wasm::FuncName::from("list/bytes/force"))
             .clone()
     }
 
-    pub(crate) fn lst_bytes_force_used(&self) -> bool {
-        self.lst_bytes_force.get().is_some()
+    pub(crate) fn list_bytes_force_used(&self) -> bool {
+        self.list_bytes_force.get().is_some()
     }
 
     /// `$bytes/embed (ref $bytes) -> (ref $rope/bin)`: embed a host-built flat payload into a fresh leaf on re-entry.
@@ -597,26 +597,26 @@ impl<'a> Table<'a> {
         self.bytes_embed.get().is_some()
     }
 
-    /// `$lst/embed (ref $elems) -> (ref $rope/lst)`: the `Lst` mirror of [`bytes_embed_func`](Self::bytes_embed_func), for scalar-element results.
-    pub(crate) fn lst_embed_func(&self) -> curios_wasm::FuncName {
-        self.lst_embed
-            .get_or_init(|| curios_wasm::FuncName::from("lst/embed"))
+    /// `$list/embed (ref $elems) -> (ref $rope/list)`: the `List` mirror of [`bytes_embed_func`](Self::bytes_embed_func), for scalar-element results.
+    pub(crate) fn list_embed_func(&self) -> curios_wasm::FuncName {
+        self.list_embed
+            .get_or_init(|| curios_wasm::FuncName::from("list/embed"))
             .clone()
     }
 
-    pub(crate) fn lst_embed_used(&self) -> bool {
-        self.lst_embed.get().is_some()
+    pub(crate) fn list_embed_used(&self) -> bool {
+        self.list_embed.get().is_some()
     }
 
-    /// `$lst/bytes/embed (ref $elems) -> (ref $rope/lst)`: embed an `Lst(Bytes)` host result *deeply* — each raw `$bytes` element into a leaf (in place; the host-built array is fresh), then the outer array.
-    pub(crate) fn lst_bytes_embed_func(&self) -> curios_wasm::FuncName {
-        self.lst_bytes_embed
-            .get_or_init(|| curios_wasm::FuncName::from("lst/bytes/embed"))
+    /// `$list/bytes/embed (ref $elems) -> (ref $rope/list)`: embed a `List(Bytes)` host result *deeply* — each raw `$bytes` element into a leaf (in place; the host-built array is fresh), then the outer array.
+    pub(crate) fn list_bytes_embed_func(&self) -> curios_wasm::FuncName {
+        self.list_bytes_embed
+            .get_or_init(|| curios_wasm::FuncName::from("list/bytes/embed"))
             .clone()
     }
 
-    pub(crate) fn lst_bytes_embed_used(&self) -> bool {
-        self.lst_bytes_embed.get().is_some()
+    pub(crate) fn list_bytes_embed_used(&self) -> bool {
+        self.list_bytes_embed.get().is_some()
     }
 
     /// `$bytes/slice (ref $rope/bin, i32, i32) -> (ref $rope/bin)`: the `Bytes` O(1) view constructor — bounds-check, answer the empty leaf or the whole rope on the trivial windows, collapse a view-of-view, and force an uncached node base so every `view` it builds reads through in O(1).
@@ -640,15 +640,15 @@ impl<'a> Table<'a> {
         self.bits_slice.get().is_some()
     }
 
-    /// `$lst/slice (ref $rope/lst, i32, i32) -> (ref $rope/lst)`: the `Lst` mirror of [`bytes_slice_func`](Self::bytes_slice_func).
-    pub(crate) fn lst_slice_func(&self) -> curios_wasm::FuncName {
-        self.lst_slice
-            .get_or_init(|| curios_wasm::FuncName::from("lst/slice"))
+    /// `$list/slice (ref $rope/list, i32, i32) -> (ref $rope/list)`: the `List` mirror of [`bytes_slice_func`](Self::bytes_slice_func).
+    pub(crate) fn list_slice_func(&self) -> curios_wasm::FuncName {
+        self.list_slice
+            .get_or_init(|| curios_wasm::FuncName::from("list/slice"))
             .clone()
     }
 
-    pub(crate) fn lst_slice_used(&self) -> bool {
-        self.lst_slice.get().is_some()
+    pub(crate) fn list_slice_used(&self) -> bool {
+        self.list_slice.get().is_some()
     }
 
     /// `$bytes/read (ref $rope/bin, i32) -> i32`: one byte read — straight off a leaf payload, through a `view`'s window without forcing, and via `$bytes/force` (memoized) on a node.
@@ -672,15 +672,15 @@ impl<'a> Table<'a> {
         self.bits_read.get().is_some()
     }
 
-    /// `$lst/read (ref $rope/lst, i32) -> anyref`: the `Lst` mirror of [`bytes_read_func`](Self::bytes_read_func).
-    pub(crate) fn lst_read_func(&self) -> curios_wasm::FuncName {
-        self.lst_read
-            .get_or_init(|| curios_wasm::FuncName::from("lst/read"))
+    /// `$list/read (ref $rope/list, i32) -> anyref`: the `List` mirror of [`bytes_read_func`](Self::bytes_read_func).
+    pub(crate) fn list_read_func(&self) -> curios_wasm::FuncName {
+        self.list_read
+            .get_or_init(|| curios_wasm::FuncName::from("list/read"))
             .clone()
     }
 
-    pub(crate) fn lst_read_used(&self) -> bool {
-        self.lst_read.get().is_some()
+    pub(crate) fn list_read_used(&self) -> bool {
+        self.list_read.get().is_some()
     }
 
     /// `$bytes/eql (ref $rope/bin, ref $rope/bin) -> i32`: whole-value byte equality — unequal rope lengths answer without forcing, equal lengths force both payloads once and compare bytewise.
@@ -704,15 +704,15 @@ impl<'a> Table<'a> {
         self.bits_eql.get().is_some()
     }
 
-    /// `$lst/map (ref $rope/lst, ref $envr/1) -> (ref $rope/lst)`: apply a unary closure to every element of the forced payload, filling a fresh leaf.
-    pub(crate) fn lst_map_func(&self) -> curios_wasm::FuncName {
-        self.lst_map
-            .get_or_init(|| curios_wasm::FuncName::from("lst/map"))
+    /// `$list/map (ref $rope/list, ref $envr/1) -> (ref $rope/list)`: apply a unary closure to every element of the forced payload, filling a fresh leaf.
+    pub(crate) fn list_map_func(&self) -> curios_wasm::FuncName {
+        self.list_map
+            .get_or_init(|| curios_wasm::FuncName::from("list/map"))
             .clone()
     }
 
-    pub(crate) fn lst_map_used(&self) -> bool {
-        self.lst_map.get().is_some()
+    pub(crate) fn list_map_used(&self) -> bool {
+        self.list_map.get().is_some()
     }
 
     pub(crate) fn tpl_types(&self) -> impl Iterator<Item = (usize, curios_wasm::TypeName)> {
@@ -838,7 +838,7 @@ mod tests {
         let module = EmissionModule::new();
         let table = Table::new(&module);
         let bin = table.bin_rope();
-        let lst = table.lst_rope();
+        let list = table.list_rope();
 
         assert_eq!(bin.base.as_str(), "rope/bin");
         assert_eq!(bin.leaf.as_str(), "rope/bin/leaf");
@@ -846,11 +846,11 @@ mod tests {
         assert_eq!(bin.view.as_str(), "rope/bin/view");
         assert_eq!(bin.payload.as_str(), "bytes");
 
-        assert_eq!(lst.base.as_str(), "rope/lst");
-        assert_eq!(lst.leaf.as_str(), "rope/lst/leaf");
-        assert_eq!(lst.node.as_str(), "rope/lst/node");
-        assert_eq!(lst.view.as_str(), "rope/lst/view");
-        assert_eq!(lst.payload.as_str(), "elems");
+        assert_eq!(list.base.as_str(), "rope/list");
+        assert_eq!(list.leaf.as_str(), "rope/list/leaf");
+        assert_eq!(list.node.as_str(), "rope/list/node");
+        assert_eq!(list.view.as_str(), "rope/list/view");
+        assert_eq!(list.payload.as_str(), "elems");
 
         assert_eq!(table.bits_force_func().as_str(), "bits/force");
         assert_eq!(table.bits_slice_func().as_str(), "bits/slice");
@@ -863,13 +863,13 @@ mod tests {
         assert_eq!(table.bytes_read_func().as_str(), "bytes/read");
         assert_eq!(table.bytes_eql_func().as_str(), "bytes/eql");
 
-        assert_eq!(table.lst_force_func().as_str(), "lst/force");
-        assert_eq!(table.lst_embed_func().as_str(), "lst/embed");
-        assert_eq!(table.lst_slice_func().as_str(), "lst/slice");
-        assert_eq!(table.lst_read_func().as_str(), "lst/read");
-        assert_eq!(table.lst_map_func().as_str(), "lst/map");
+        assert_eq!(table.list_force_func().as_str(), "list/force");
+        assert_eq!(table.list_embed_func().as_str(), "list/embed");
+        assert_eq!(table.list_slice_func().as_str(), "list/slice");
+        assert_eq!(table.list_read_func().as_str(), "list/read");
+        assert_eq!(table.list_map_func().as_str(), "list/map");
 
-        assert_eq!(table.lst_bytes_force_func().as_str(), "lst/bytes/force");
-        assert_eq!(table.lst_bytes_embed_func().as_str(), "lst/bytes/embed");
+        assert_eq!(table.list_bytes_force_func().as_str(), "list/bytes/force");
+        assert_eq!(table.list_bytes_embed_func().as_str(), "list/bytes/embed");
     }
 }

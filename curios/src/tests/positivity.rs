@@ -27,7 +27,7 @@ fn rejected_by(source: &str, diagnostic: &str) {
     );
 }
 
-// A description of an `X` is the delayed `X` its thunk erasure makes it, so `X` under `Io` stays strictly positive — the same reading as `Lst`, and for a stronger reason: `bind` never hands back the result except inside another `Io`, and there is no eliminator that does. This is the rule a suspension whose continuation is computed by performing an effect rests on.
+// A description of an `X` is the delayed `X` its thunk erasure makes it, so `X` under `Io` stays strictly positive — the same reading as `List`, and for a stronger reason: `bind` never hands back the result except inside another `Io`, and there is no eliminator that does. This is the rule a suspension whose continuation is computed by performing an effect rests on.
 #[test]
 fn an_io_payload_is_a_strictly_positive_occurrence() {
     let source = r#"
@@ -89,15 +89,15 @@ fn a_mutually_recursive_group_reaching_itself_through_a_thunk_is_admitted() {
     assert_eq!(run(source), b"mutual");
 }
 
-// `Json/arr(Lst(Json))`: a list is a finite product of its element, so the intrinsic is covariant and a strict occurrence stays strict. Without polarity on intrinsics this shape is rejected outright.
+// `Json/arr(List(Json))`: a list is a finite product of its element, so the intrinsic is covariant and a strict occurrence stays strict. Without polarity on intrinsics this shape is rejected outright.
 #[test]
 fn recursion_through_a_covariant_intrinsic_is_admitted() {
     let source = r#"
-        use /std/{Lst};
+        use /std/{List};
 
         induct Tree : pub Type
         | leaf()
-        | node(kids : Lst(Tree))
+        | node(kids : List(Tree))
         end
 
         let branch : Tree = Tree/node([Tree/leaf()]);
@@ -110,15 +110,15 @@ fn recursion_through_a_covariant_intrinsic_is_admitted() {
     assert_eq!(run(source), b"listed");
 }
 
-// `Json/obj(Lst({Str, Json}))`: polarity has to travel through an anonymous tuple type as well as the intrinsic, since a product is as positive as its factors.
+// `Json/obj(List({Str, Json}))`: polarity has to travel through an anonymous tuple type as well as the intrinsic, since a product is as positive as its factors.
 #[test]
 fn recursion_through_an_anonymous_tuple_is_admitted() {
     let source = r#"
-        use /std/{Lst, Nat};
+        use /std/{List, Nat};
 
         induct Doc : pub Type
         | atom(Nat)
-        | fields(Lst({Nat, Doc}))
+        | fields(List({Nat, Doc}))
         end
 
         match Doc/fields([])

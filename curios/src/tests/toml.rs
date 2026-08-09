@@ -5,7 +5,7 @@ use super::run;
 #[test]
 fn toml_scalar_documents_round_trip_deterministically() {
     let source = r#"
-        use /std/{Handle, Str, Toml, Result, Lst};
+        use /std/{Handle, Str, Toml, Result, List};
         let canon(input : Str) -> Str =
             match Toml/decode(input)
             | failure(msg) => Str/concat("reject:", msg)
@@ -37,7 +37,7 @@ fn toml_scalar_documents_round_trip_deterministically() {
 #[test]
 fn toml_string_forms_and_escapes_decode() {
     let source = r#"
-        use /std/{Handle, Str, Toml, Result, Lst};
+        use /std/{Handle, Str, Toml, Result, List};
         let canon(input : Str) -> Str =
             match Toml/decode(input)
             | failure(msg) => Str/concat("reject:", msg)
@@ -66,7 +66,7 @@ fn toml_string_forms_and_escapes_decode() {
 #[test]
 fn toml_date_times_cover_the_rfc3339_subset() {
     let source = r#"
-        use /std/{Handle, Str, Toml, Result, Lst};
+        use /std/{Handle, Str, Toml, Result, List};
         let canon(input : Str) -> Str =
             match Toml/decode(input)
             | failure(msg) => Str/concat("reject:", msg)
@@ -98,7 +98,7 @@ fn toml_date_times_cover_the_rfc3339_subset() {
 #[test]
 fn toml_integer_boundaries_hold_in_every_radix() {
     let source = r#"
-        use /std/{Handle, Str, Toml, Result, Lst, Bytes, Nat, rand};
+        use /std/{Handle, Str, Toml, Result, List, Bytes, Nat, rand};
         let taint = Bytes/len(rand/bytes(0)!);
         let opaque_n(n : Nat) -> Nat = (taint + 1) * n;
         rec run_of(ch : Str, k : Nat) -> Str =
@@ -143,7 +143,7 @@ fn toml_integer_boundaries_hold_in_every_radix() {
 #[test]
 fn toml_floats_pin_binary32_bit_patterns() {
     let source = r#"
-        use /std/{Handle, Str, Toml, Result, Lst, Map, Option, Byte, Bytes, Char, Nat, Flt};
+        use /std/{Handle, Str, Toml, Result, List, Map, Option, Byte, Bytes, Char, Nat, Flt};
         use /std/Toml/{flt};
         let hexs(b : Bytes) -> Str =
             Bytes/fold(b, "", (byte, acc) =>
@@ -183,7 +183,7 @@ fn toml_floats_pin_binary32_bit_patterns() {
 #[test]
 fn toml_malformed_numbers_and_escapes_reject() {
     let source = r#"
-        use /std/{Handle, Str, Toml, Result, Lst};
+        use /std/{Handle, Str, Toml, Result, List};
         let ok(input : Str) -> Str =
             match Toml/decode(input)
             | failure(_) => "reject"
@@ -207,7 +207,7 @@ fn toml_malformed_numbers_and_escapes_reject() {
 #[test]
 fn toml_table_construction_conflicts_reject() {
     let source = r#"
-        use /std/{Handle, Str, Toml, Result, Lst};
+        use /std/{Handle, Str, Toml, Result, List};
         let ok(input : Str) -> Str =
             match Toml/decode(input)
             | failure(_) => "reject"
@@ -240,7 +240,7 @@ fn toml_table_construction_conflicts_reject() {
 #[test]
 fn toml_arrays_and_inline_tables_nest_and_reach_a_fixpoint() {
     let source = r#"
-        use /std/{Handle, Str, Toml, Result, Lst, Bool};
+        use /std/{Handle, Str, Toml, Result, List, Bool};
         let canon(input : Str) -> Str =
             match Toml/decode(input)
             | failure(msg) => Str/concat("reject:", msg)
@@ -265,7 +265,7 @@ fn toml_arrays_and_inline_tables_nest_and_reach_a_fixpoint() {
 #[test]
 fn toml_decode_and_encode_execute_in_emitted_wasm() {
     let source = r#"
-        use /std/{Handle, Str, Toml, Result, Lst, Bytes, rand};
+        use /std/{Handle, Str, Toml, Result, List, Bytes, rand};
         let taint = Bytes/len(rand/bytes(0)!);
         let opaque(s : Str) -> Str = Str/slice(s, taint, Str/len(s));
         let canon(input : Str) -> Str =
@@ -308,7 +308,7 @@ fn toml_encode_rejects_a_non_utf8_key() {
 #[test]
 fn toml_comments_line_endings_and_trailing_input() {
     let source = r##"
-        use /std/{Handle, Str, Toml, Result, Lst};
+        use /std/{Handle, Str, Toml, Result, List};
         let ok(input : Str) -> Str =
             match Toml/decode(input)
             | failure(_) => "reject"

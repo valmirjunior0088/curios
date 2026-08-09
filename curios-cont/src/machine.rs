@@ -1085,24 +1085,24 @@ impl MachineModule {
                 verify_block_resume(function, *resume, 1)?
             }
             MachineTerminator::Intrinsic {
-                op: CpsIntrinsicCall::LstMap,
+                op: CpsIntrinsicCall::ListMap,
                 args,
                 resume,
             } => {
                 if args.len() != 2 {
                     return Err(MachineVerifyError(format!(
-                        "{owner} LstMap has the wrong operand count"
+                        "{owner} ListMap has the wrong operand count"
                     )));
                 }
                 verify_block_resume(function, *resume, 1)?;
             }
             MachineTerminator::TailIndirectCall { .. } => {}
             MachineTerminator::IntrinsicReturn {
-                op: CpsIntrinsicCall::LstMap,
+                op: CpsIntrinsicCall::ListMap,
                 args,
             } if args.len() != 2 => {
                 return Err(MachineVerifyError(format!(
-                    "{owner} tail LstMap has the wrong operand count"
+                    "{owner} tail ListMap has the wrong operand count"
                 )));
             }
             MachineTerminator::IntrinsicReturn { .. } => {}

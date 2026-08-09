@@ -205,17 +205,17 @@ function ~f0$dead() {
 #[test]
 fn sequences_transcribe_without_carrier_choices() {
     let mut context = context();
-    let lst = context.fresh(Some("lst"));
+    let list = context.fresh(Some("list"));
     let body = Term::let_(
-        &lst,
-        Term::intrinsic(Intrinsic::LstType(Term::intrinsic(Intrinsic::NatType))),
-        Term::intrinsic(Intrinsic::Lst(
+        &list,
+        Term::intrinsic(Intrinsic::ListType(Term::intrinsic(Intrinsic::NatType))),
+        Term::intrinsic(Intrinsic::List(
             Term::intrinsic(Intrinsic::NatType),
             vec![nat_lit(1), nat_lit(2)],
         )),
-        Term::intrinsic(Intrinsic::LstLen(
+        Term::intrinsic(Intrinsic::ListLen(
             Term::intrinsic(Intrinsic::NatType),
-            Term::free_var(&lst),
+            Term::free_var(&list),
         )),
     );
     let erased = erase(
@@ -227,8 +227,8 @@ fn sequences_transcribe_without_carrier_choices() {
         erased.to_string(),
         "\
 entry {
-    ~v0$lst = LstBuild(1, 2)
-    ~v1 = LstLen(~v0$lst)
+    ~v0$list = ListBuild(1, 2)
+    ~v1 = ListLen(~v0$list)
     return ~v1
 }
 "
@@ -674,22 +674,22 @@ entry {
 }
 
 #[test]
-fn a_live_hypothesis_lst_match_erases_to_a_sequence_fold() {
+fn a_live_hypothesis_list_match_erases_to_a_sequence_fold() {
     let mut context = context();
     let h = context.fresh(Some("h"));
     let t = context.fresh(Some("t"));
     let ih = context.fresh(Some("ih"));
     // match xs | [] => 0 | h :: t (ih) => ih + 1 — a length fold over a list.
-    let lst_ty = Term::intrinsic(Intrinsic::LstType(Term::intrinsic(Intrinsic::NatType)));
+    let list_ty = Term::intrinsic(Intrinsic::ListType(Term::intrinsic(Intrinsic::NatType)));
     let items = vec![definition(
         "xs",
-        lst_ty.clone(),
-        Term::intrinsic(Intrinsic::Lst(
+        list_ty.clone(),
+        Term::intrinsic(Intrinsic::List(
             Term::intrinsic(Intrinsic::NatType),
             vec![nat_lit(1)],
         )),
     )];
-    let body = Term::lst_match(
+    let body = Term::list_match(
         Term::free_var(&global("xs")),
         Term::intrinsic(Intrinsic::NatType),
         None,
@@ -708,9 +708,9 @@ fn a_live_hypothesis_lst_match_erases_to_a_sequence_fold() {
     assert_eq!(
         erased.to_string(),
         "\
-~v0$/xs = LstBuild(1)
+~v0$/xs = ListBuild(1)
 entry {
-    ~v5 = fold-seq[lst] ~v0$/xs {
+    ~v5 = fold-seq[list] ~v0$/xs {
         empty => {
             return 0
         }
