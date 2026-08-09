@@ -201,8 +201,8 @@ fn character_literal_is_not_a_natural_pattern() {
 
 #[test]
 fn a_long_operator_chain_parses_without_native_recursion() {
-    // One native frame nest per operator (plus an O(N²) left-spine clone) once made chain length a stack bound: the recursive spelling aborted at exactly this depth on the default test-thread stack, and the infix loop folds it by move with native depth bounded by the precedence table. A smaller linear residue remains somewhere in the shared parse machinery (threshold ~3k elements), recorded for a separate hunt.
-    let depth = 1_000;
+    // Chain length was a stack bound twice over: the recursive infix spelling nested one native frame per operator (aborting at 1k on the default test-thread stack), and after that went iterative, the packrat cache's per-success deep clone of the Box-backed tree still recursed per level (aborting near 3k). The infix loop folds by move and `Term` is Rc-backed now, so this depth exercises both cures.
+    let depth = 10_000;
     let source = "1".to_string() + &" + 1".repeat(depth);
     let mut term = source.parse::<Term>().unwrap();
     let mut count = 0;

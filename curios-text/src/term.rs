@@ -12,10 +12,12 @@ use {
 };
 
 /// The unit of the surface syntax tree: a [`Subterm`] plus an optional source span. The span is deliberately excluded from `PartialEq` — tests build spanless expected trees and compare structure — and is readable only crate-internally; `Deref<Target = Subterm>` lets consumers match on the structure directly.
+///
+/// `Rc`-backed like `curios-core`'s `Term`, and for the same reason: a clone must be a pointer bump, never a tree copy. The packrat cache stores a clone of every memoized success, so a `Box`-backed tree cloned once per cached offset — O(N²) over nested programs — and the root entry's clone of the whole program recursed once per level, which is what made deep operator chains overflow *after* the parser itself had gone iterative.
 #[derive(Debug, Clone)]
 pub struct Term {
     span: Option<Span>,
-    inner: Box<Subterm>,
+    inner: Rc<Subterm>,
 }
 
 impl Term {
@@ -33,7 +35,8 @@ impl Term {
     }
 
     pub(crate) fn into_subterm(self) -> Subterm {
-        *self.inner
+        // A uniquely held node moves out; a shared one (a packrat cache entry, a spread base) is copied one level — its own `Term` fields are `Rc` bumps, so the copy never recurses.
+        Rc::unwrap_or_clone(self.inner)
     }
 
     pub(crate) fn as_subterm(&self) -> &Subterm {
@@ -68,7 +71,7 @@ impl From<Subterm> for Term {
     fn from(subterm: Subterm) -> Self {
         Self {
             span: None,
-            inner: Box::new(subterm),
+            inner: Rc::new(subterm),
         }
     }
 }

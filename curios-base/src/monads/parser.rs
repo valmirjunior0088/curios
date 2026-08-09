@@ -295,7 +295,12 @@ where
 {
     MEMO.with(|memo| memo.borrow_mut().clear());
 
-    parser.parse(ParserState::new(source)).map(|(item, _)| item)
+    let result = parser.parse(ParserState::new(source)).map(|(item, _)| item);
+
+    // Clear on the way out too, not only on the next entry: cached entries share the parsed tree (`Rc`-backed values), and leaving them alive until the thread-local's own destructor would drop a deep tree at thread teardown, where the guard page is all the stack that's left.
+    MEMO.with(|memo| memo.borrow_mut().clear());
+
+    result
 }
 
 /// Succeeds with `a` without consuming input — the monadic return, for injecting an already-known value into a combinator chain.
