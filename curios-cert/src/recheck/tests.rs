@@ -2921,6 +2921,149 @@ fn a_proposition_carrying_a_computed_proof_is_still_accepted() {
     assert_eq!(recheck_module_verdicts(&module, 1_000_000), Vec::new());
 }
 
+/// Every position at which a term stands as a *type* reaches the judgment, not the classifier — asserted at each position rather than argued once.
+///
+/// This crate has two ways to answer what sort a type has, and only one of them checks anything: `infer_sort` types a former's parts, `Sort::of` classifies them. `curios-cert/README.md` says the lookup "is reached only where typing has already run", and that sentence is a grep rather than a claim — which is why the same defect has now arrived three times at three different positions, as a nominal occurrence's arguments, as a type former's parts, and as a `Prop`-sorted declaration's domains.
+///
+/// A stuck `match` is what tells the two apart, because it is the one shape in Core that *states* its own sort instead of having one derived: `Sort::of` reads the motive, and the motive is a claim the term makes about itself. Where the judgment runs, `infer` reaches `check_motive` and the arms are checked against the motive, so `match b : Prop | false => Nat | true => Nat end` is refused by the arm — `Nat` at `Type 0` against the `Prop` the motive claims. Where only the classifier runs, that same term reads as a proposition and carries a `Nat`, which is the forgery [`a_proposition_may_not_carry_a_computed_relevant_field`] derives `False` from.
+///
+/// So the table below is one probe per position, each refused by that arm mismatch and by nothing else. The diagnostic is asserted rather than the mere presence of a verdict, because most of these types are uninhabitable while the lie stands: a body-driven refusal would name the body's own type and would pass a test that only counted verdicts.
+///
+/// Mutation-checked, which is what separates this from a fixture that asserts nothing: replacing `infer_telescope`'s `infer_type` with `Sort::of` — the exact weakening the three historical defects were — makes "a lambda's domain annotation" come back with **zero** verdicts while every other row stays refused.
+///
+/// A declaration's own domains are the seventh position and are not repeated here; [`a_proposition_may_not_carry_a_computed_relevant_field`] holds that one, and holds it with the derivation rather than with the position alone.
+#[test]
+fn no_type_position_admits_a_lying_motive() {
+    for (position, module) in lying_type_positions() {
+        let verdicts = recheck_module_verdicts(&module, 1_000_000);
+
+        assert!(
+            verdicts.iter().any(|verdict| matches!(
+                &verdict.error,
+                KernelError::Mismatch { inferred, expected }
+                    if matches!(&***inferred, Subterm::Type(_))
+                        && matches!(&***expected, Subterm::Prop)
+            )),
+            "{position} classified a lying motive instead of typing it: {verdicts:?}",
+        );
+    }
+}
+
+/// A stuck `match` on `scrutinee` whose motive claims `Prop` while both arms inhabit `Nat` — the one shape in Core that states its own sort instead of having one derived.
+fn lying_type(scrutinee: &Free) -> Term {
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+
+    Term::bool_match(
+        Term::free_var(scrutinee),
+        None,
+        Term::prop(),
+        nat_type.clone(),
+        nat_type,
+    )
+}
+
+/// One module per position at which a term stands as a *type*, each carrying [`lying_motive`] at that position and nothing else wrong.
+fn lying_type_positions() -> Vec<(&'static str, Module)> {
+    let boolean = Term::intrinsic(Intrinsic::BoolType);
+    let unit_type = Term::tuple_type_unit();
+    let unit = Term::tuple(Vec::<Term>::new());
+    let zero = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
+    let truth = Term::intrinsic(Intrinsic::Bool(true));
+
+    let b = Free::local(300, Some("b"));
+    let x = Free::local(301, Some("x"));
+    let y = Free::local(302, Some("y"));
+    let lie = lying_type(&b);
+
+    let probe_module = |body: Term, type_: Term| Module {
+        items: vec![authored(
+            &Global::Authored(Qualifier::from(["probe"])),
+            type_,
+            body,
+        )],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::new(),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Term::intrinsic(Intrinsic::NatType),
+    };
+
+    vec![
+        // probe : (b : Bool, x : <lie>) -> {} = (b, x) => ()
+        (
+            "a function type's domain",
+            probe_module(
+                Term::func(
+                    [(b.clone(), boolean.clone()), (x.clone(), lie.clone())],
+                    unit.clone(),
+                ),
+                Term::func_type(
+                    [(b.clone(), boolean.clone()), (x.clone(), lie.clone())],
+                    unit_type.clone(),
+                ),
+            ),
+        ),
+        // probe : (b : Bool) -> <lie> = (b) => 0
+        (
+            "a function type's codomain",
+            probe_module(
+                Term::func([(b.clone(), boolean.clone())], zero.clone()),
+                Term::func_type([(b.clone(), boolean.clone())], lie.clone()),
+            ),
+        ),
+        // probe : (b : Bool) -> {<lie>} = (b) => (0)
+        (
+            "a tuple type's component",
+            probe_module(
+                Term::func([(b.clone(), boolean.clone())], Term::tuple([zero.clone()])),
+                Term::func_type(
+                    [(b.clone(), boolean.clone())],
+                    Term::tuple_type(vec![(y.clone(), lie.clone())]),
+                ),
+            ),
+        ),
+        // probe : {} = ((b : Bool, x : <lie>) => ())(true, 0)
+        (
+            "a lambda's domain annotation",
+            probe_module(
+                Term::apply(
+                    Term::func(
+                        [(b.clone(), boolean.clone()), (x.clone(), lie.clone())],
+                        unit.clone(),
+                    ),
+                    [truth.clone(), zero.clone()],
+                ),
+                unit_type.clone(),
+            ),
+        ),
+        // probe : (b : Bool) -> {} = (b) => let y : <lie> = 0; ()
+        (
+            "a let binding's declared type",
+            probe_module(
+                Term::func(
+                    [(b.clone(), boolean.clone())],
+                    Term::let_(&y, lie.clone(), zero.clone(), unit.clone()),
+                ),
+                Term::func_type([(b.clone(), boolean.clone())], unit_type.clone()),
+            ),
+        ),
+        // probe : (b : Bool) -> {} = (b) => (rec y : <lie> = 0; ())
+        (
+            "a rec member's declared type",
+            probe_module(
+                Term::func(
+                    [(b.clone(), boolean.clone())],
+                    Term::rec([(y.clone(), lie.clone(), zero.clone())], unit.clone()),
+                ),
+                Term::func_type([(b.clone(), boolean)], unit_type),
+            ),
+        ),
+    ]
+}
+
 /// `struct Wrap(b : Bool) : Prop { held : match b : Prop | false => .. | true => .. end }` — a structure whose field type is a stuck `match` claiming, through its motive, to be a proposition.
 fn computed_field_wrapper(false_case: Term, true_case: Term) -> StructDecl {
     let scrutinee = Free::local(60, Some("b"));
