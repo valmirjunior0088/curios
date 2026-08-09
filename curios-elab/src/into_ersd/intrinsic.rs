@@ -5,7 +5,7 @@
 use {
     super::{
         BigUint, Context, Error, Intrinsic, Lowering, Nat, Outcome, Subterm, Term, ToPrimitive,
-        emitted, reduce_with,
+        emitted,
     },
     curios_base::{Grain, Int},
 };
@@ -148,12 +148,11 @@ impl Lowering {
     }
 }
 
-/// Transcribe one intrinsic. `expected` is consumed only where a runtime shape must be read off the type — the element type of a list literal.
+/// Transcribe one intrinsic. Every arm reads its runtime shapes off the types the node itself carries — a list literal included, whose element-type slot elaboration already solved.
 pub(super) fn erase_intrinsic(
     lowering: &mut Lowering,
     context: &mut Context,
     intrinsic: &Intrinsic,
-    expected: &Term,
     hint: Option<&str>,
 ) -> Result<Outcome, Error> {
     /// One scalar-operation arm: each operand erased against one shared operand type.
@@ -352,12 +351,7 @@ pub(super) fn erase_intrinsic(
             )
         }
 
-        Intrinsic::List(_, elements) => {
-            // Elaborate already checked this literal against a list type; the element type is re-derived only to lower the elements.
-            let element_type = match Term::unwrap_or_clone(reduce_with(context, expected)?) {
-                Subterm::Intrinsic(Intrinsic::ListType(element_type)) => element_type,
-                _ => unreachable!("erase: list literal checked against non-list type"),
-            };
+        Intrinsic::List(element_type, elements) => {
             let pairs = elements
                 .iter()
                 .map(|element| (element, element_type.clone()))

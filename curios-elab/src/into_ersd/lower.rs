@@ -394,7 +394,7 @@ impl Lowering {
     ) -> Result<Outcome, Error> {
         match &**term {
             Subterm::Intrinsic(intrinsic) => {
-                intrinsic::erase_intrinsic(self, context, intrinsic, expected, hint)
+                intrinsic::erase_intrinsic(self, context, intrinsic, hint)
             }
             // A store-described host call: each operand erases against its wire type, read off the same signature elaboration checked it with.
             Subterm::Foreign(function, arguments) => {
