@@ -1,0 +1,49 @@
+[package]
+name = "curios-prelude-archive"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The build-scoped image of Curios's fixed /sys, /syn, and /std prelude: sources, elaboration, and the archive"
+build = "build.rs"
+
+[lints]
+workspace = true
+
+[features]
+profile = [
+    "curios-profile/enabled",
+    "curios-text/profile",
+    "curios-elab/profile",
+    "curios-ersd/profile",
+]
+
+[dependencies]
+curios-profile = { workspace = true }
+curios-abi = { workspace = true, features = ["archive"] }
+curios-base = { workspace = true, features = ["archive"] }
+curios-core = { workspace = true, features = ["archive"] }
+curios-text = { workspace = true, features = ["archive"] }
+curios-elab = { workspace = true, features = ["archive"] }
+curios-ersd = { workspace = true, features = ["archive"] }
+rkyv = { workspace = true }
+sha2 = "0.11.0"
+
+# Deliberately absent: `curios-cert`. Elaborating the prelude does not depend on
+# the kernel, and Cargo's rebuild granularity is the build script — so a crate
+# whose script needs both would re-elaborate the whole standard library for
+# every certifier edit. Certification lives in `curios-prelude`'s script, which
+# is what buys that separation. See
+# `documentation/roadmap/compiler/10_PRELUDE_ENVIRONMENT_SPEC.md`, M5.
+[build-dependencies]
+curios-abi = { workspace = true, features = ["archive"] }
+curios-base = { workspace = true, features = ["archive"] }
+curios-core = { workspace = true, features = ["archive"] }
+curios-elab = { workspace = true, features = ["archive"] }
+curios-ersd = { workspace = true, features = ["archive"] }
+curios-profile = { workspace = true }
+curios-text = { workspace = true, features = ["archive"] }
+rkyv = { workspace = true }
+sha2 = "0.11.0"
+
+[dev-dependencies]
+curios-cert = { workspace = true, features = ["archive"] }

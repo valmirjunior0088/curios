@@ -94,6 +94,7 @@ COPY curios-core curios-core
 COPY curios-cert curios-cert
 COPY curios-elab curios-elab
 COPY curios-prelude curios-prelude
+COPY curios-prelude-archive curios-prelude-archive
 COPY curios-text curios-text
 COPY curios-pipeline curios-pipeline
 COPY curios-profile curios-profile

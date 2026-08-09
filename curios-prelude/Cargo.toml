@@ -3,47 +3,25 @@ name = "curios-prelude"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The build-scoped archive of Curios's fixed /sys, /syn, and /std prelude"
+description = "Curios's fixed prelude, certified by the independent kernel as a condition of this crate building"
 build = "build.rs"
 
 [lints]
 workspace = true
 
 [features]
-profile = [
-    "curios-profile/enabled",
-    "curios-text/profile",
-    "curios-elab/profile",
-    "curios-ersd/profile",
-]
+profile = ["curios-profile/enabled", "curios-prelude-archive/profile"]
 
 [dependencies]
 curios-profile = { workspace = true }
-curios-abi = { workspace = true, features = ["archive"] }
-curios-base = { workspace = true, features = ["archive"] }
-curios-core = { workspace = true, features = ["archive"] }
-curios-text = { workspace = true, features = ["archive"] }
-curios-elab = { workspace = true, features = ["archive"] }
-curios-ersd = { workspace = true, features = ["archive"] }
-rkyv = { workspace = true }
-sha2 = "0.11.0"
+curios-prelude-archive = { workspace = true }
 
-# The kernel is a build-dependency because certifying the prelude is what the build script does. It is a dev-dependency as well, and only that, for the two ignored inventories in `src/restore.rs` that read the certifier's verdicts over the restored image rather than asserting them.
-[dev-dependencies]
-curios-cert = { workspace = true, features = ["archive"] }
-
+# The two halves of what used to be one build script. `curios-prelude-archive`
+# elaborates and serializes the image; this script restores it and runs the
+# kernel over it. They are separate crates because Cargo re-runs a build script
+# whenever *any* of its dependencies change, so a script holding both would
+# re-elaborate the whole standard library for every certifier edit.
 [build-dependencies]
-# The build script is where the fixed prelude is actually elaborated, so it is
-# same dependency in both kinds: the library's measurement points and the build
-# script's collector activate together through `curios-profile/enabled`.
-# the only place a capture can observe compiler spans for that work — hence the
-curios-abi = { workspace = true, features = ["archive"] }
-curios-base = { workspace = true, features = ["archive"] }
 curios-cert = { workspace = true, features = ["archive"] }
-curios-core = { workspace = true, features = ["archive"] }
-curios-elab = { workspace = true, features = ["archive"] }
-curios-ersd = { workspace = true, features = ["archive"] }
+curios-prelude-archive = { workspace = true }
 curios-profile = { workspace = true }
-curios-text = { workspace = true, features = ["archive"] }
-rkyv = { workspace = true }
-sha2 = "0.11.0"

@@ -585,6 +585,15 @@ dependencies = [
 name = "curios-prelude"
 version = "0.8.1"
 dependencies = [
+ "curios-cert",
+ "curios-prelude-archive",
+ "curios-profile",
+]
+
+[[package]]
+name = "curios-prelude-archive"
+version = "0.8.1"
+dependencies = [
  "curios-abi",
  "curios-base",
  "curios-cert",

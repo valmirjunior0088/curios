@@ -11,6 +11,7 @@ members = [
     "curios-elab",
     "curios-text",
     "curios-prelude",
+    "curios-prelude-archive",
     "curios-pipeline",
     "curios-profile",
     "curios-web",
@@ -44,6 +45,7 @@ curios-cert = { path = "curios-cert" }
 curios-elab = { path = "curios-elab" }
 curios-text = { path = "curios-text" }
 curios-prelude = { path = "curios-prelude" }
+curios-prelude-archive = { path = "curios-prelude-archive" }
 curios-pipeline = { path = "curios-pipeline" }
 curios-web = { path = "curios-web" }
 curios-binaryen = { path = "curios-binaryen" }
