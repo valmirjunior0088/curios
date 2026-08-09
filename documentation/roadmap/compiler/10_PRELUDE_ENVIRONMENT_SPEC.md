@@ -73,6 +73,8 @@ impl Globals {
 
 `verdicts_from` seeds from `Globals` and judges every item in `module.items` **whose declared names are not already in scope**. That deletes `checked_from`, `Prefix`, and the prefix parameters on `dependency_order`, `partial_definitions` and `derived_binder_floor_beyond`, and takes the index out of `curios-pipeline`'s public signature — without touching the producer.
 
+One dependency has to move with it. `derived_binder_floor_beyond` skips the prefix's *declarations* by name but its *items* by index, and it lives in `curios-core`, which cannot name `Globals`. It takes a membership predicate instead — `derived_binder_floor_outside(module, in_scope: impl Fn(&Global) -> bool)` — which makes the floor derivation identity-based like everything else here, and is the last thing holding a positional read in that function.
+
 Doing identity first is what makes the rest safe. It is semantics-preserving, since a `Global` is unique within a module and a user item cannot reuse a prelude name; it is independently gateable; and it removes the positional claim [SOUNDNESS.md](../../SOUNDNESS.md)'s *Prefix identification* row is about, ahead of the change that removes the position itself.
 
 ### M1b — the producer stops splicing
