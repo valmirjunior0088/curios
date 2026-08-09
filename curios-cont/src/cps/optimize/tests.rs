@@ -10,7 +10,8 @@ use {
         },
         simplify::{
             dissolve_rec_init, eliminate_dead_bindings, eliminate_dead_parameters,
-            forward_aggregate_projections, forward_continuations, rewrite_atoms, simplify_nodes,
+            fold_intrinsic_identities, forward_aggregate_projections, forward_continuations,
+            rewrite_atoms, simplify_nodes,
         },
         specialize::{specialize_call_patterns, specialize_scc_calls},
     },
@@ -1634,4 +1635,157 @@ fn specialization_peels_a_recursive_callee_into_the_general_function() {
         Some(consume),
         "the clone peels one level and recurses into the general function"
     );
+}
+
+/// One entry function `main(x)` binding `result = op(args)` and returning it — the smallest module exercising a single intrinsic fold.
+fn unary_intrinsic_module(op: CpsIntrinsicOp, args: Vec<CpsAtom>) -> (CpsModule, CpsNodeId) {
+    let mut module = CpsModule::new();
+    let entry = module.reserve_function();
+    let return_cont = module.reserve_continuation();
+    let x = module.add_value(Some("x".into()));
+    let result = module.add_value(Some("result".into()));
+    let return_node = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        target: return_cont,
+        args: vec![CpsAtom::Value(result)],
+    }));
+    let intrinsic = module.add_node(CpsNode::LetIntrinsic {
+        result,
+        op,
+        args,
+        next: return_node,
+    });
+    module.define_function(
+        entry,
+        CpsFunction {
+            debug_name: Some("main".into()),
+            params: vec![x],
+            return_cont,
+            body: intrinsic,
+        },
+    );
+    module.set_entry(entry);
+    (module, intrinsic)
+}
+
+#[test]
+fn identity_folds_forward_the_surviving_operand() {
+    let cases = [
+        (CpsIntrinsicOp::NatAdd, CpsLiteral::Nat(0), true),
+        (CpsIntrinsicOp::NatAdd, CpsLiteral::Nat(0), false),
+        (CpsIntrinsicOp::NatSub, CpsLiteral::Nat(0), true),
+        (CpsIntrinsicOp::NatMul, CpsLiteral::Nat(1), true),
+        (CpsIntrinsicOp::NatMul, CpsLiteral::Nat(1), false),
+        (CpsIntrinsicOp::NatDiv, CpsLiteral::Nat(1), true),
+        (CpsIntrinsicOp::NatOr, CpsLiteral::Nat(0), true),
+        (CpsIntrinsicOp::NatXor, CpsLiteral::Nat(0), false),
+        (CpsIntrinsicOp::NatShl, CpsLiteral::Nat(0), true),
+        (CpsIntrinsicOp::IntAdd, CpsLiteral::Int(0), false),
+        (CpsIntrinsicOp::IntSub, CpsLiteral::Int(0), true),
+        (CpsIntrinsicOp::IntMul, CpsLiteral::Int(1), true),
+        (CpsIntrinsicOp::IntShr, CpsLiteral::Int(0), true),
+    ];
+    for (op, literal, literal_on_right) in cases {
+        let x = CpsValueId(0);
+        let args = if literal_on_right {
+            vec![CpsAtom::Value(x), CpsAtom::Literal(literal.clone())]
+        } else {
+            vec![CpsAtom::Literal(literal.clone()), CpsAtom::Value(x)]
+        };
+        let (mut module, intrinsic) = unary_intrinsic_module(op, args);
+
+        assert!(
+            fold_intrinsic_identities(&mut module),
+            "{op:?} with {literal:?} must fold"
+        );
+        assert!(module.node(intrinsic).is_none(), "{op:?} binding survives");
+        let returns_x = module.nodes().iter().flatten().any(
+            |node| matches!(node, CpsNode::ApplyCont(edge) if edge.args == vec![CpsAtom::Value(x)]),
+        );
+        assert!(returns_x, "{op:?} must forward the surviving operand");
+        module.verify().unwrap();
+    }
+}
+
+#[test]
+fn identity_folds_pin_absorbing_results() {
+    let cases = [
+        (
+            CpsIntrinsicOp::NatMul,
+            CpsLiteral::Nat(0),
+            CpsLiteral::Nat(0),
+        ),
+        (
+            CpsIntrinsicOp::NatAnd,
+            CpsLiteral::Nat(0),
+            CpsLiteral::Nat(0),
+        ),
+        (
+            CpsIntrinsicOp::NatRem,
+            CpsLiteral::Nat(1),
+            CpsLiteral::Nat(0),
+        ),
+        (
+            CpsIntrinsicOp::IntMul,
+            CpsLiteral::Int(0),
+            CpsLiteral::Int(0),
+        ),
+        (
+            CpsIntrinsicOp::IntRem,
+            CpsLiteral::Int(1),
+            CpsLiteral::Int(0),
+        ),
+    ];
+    for (op, literal, expected) in cases {
+        let x = CpsValueId(0);
+        let args = vec![CpsAtom::Value(x), CpsAtom::Literal(literal.clone())];
+        let (mut module, intrinsic) = unary_intrinsic_module(op, args);
+
+        assert!(
+            fold_intrinsic_identities(&mut module),
+            "{op:?} with {literal:?} must fold"
+        );
+        assert!(
+            matches!(
+                module.node(intrinsic),
+                Some(CpsNode::LetValue {
+                    value: CpsValueExpr::Literal(pinned),
+                    ..
+                }) if *pinned == expected
+            ),
+            "{op:?} must pin {expected:?}"
+        );
+        module.verify().unwrap();
+    }
+}
+
+#[test]
+fn identity_folds_leave_traps_and_flt_untouched() {
+    let x = CpsValueId(0);
+    let cases = [
+        (
+            CpsIntrinsicOp::NatDiv,
+            vec![CpsAtom::Value(x), CpsAtom::Literal(CpsLiteral::Nat(0))],
+        ),
+        (
+            CpsIntrinsicOp::NatAdd,
+            vec![CpsAtom::Value(x), CpsAtom::Literal(CpsLiteral::Nat(2))],
+        ),
+        (
+            CpsIntrinsicOp::FltAdd,
+            vec![CpsAtom::Value(x), CpsAtom::Literal(CpsLiteral::Flt(0.0))],
+        ),
+        (
+            CpsIntrinsicOp::FltMul,
+            vec![CpsAtom::Value(x), CpsAtom::Literal(CpsLiteral::Flt(1.0))],
+        ),
+    ];
+    for (op, args) in cases {
+        let (mut module, intrinsic) = unary_intrinsic_module(op, args);
+
+        assert!(!fold_intrinsic_identities(&mut module), "{op:?} must stay");
+        assert!(
+            matches!(module.node(intrinsic), Some(CpsNode::LetIntrinsic { .. })),
+            "{op:?} binding must survive"
+        );
+    }
 }

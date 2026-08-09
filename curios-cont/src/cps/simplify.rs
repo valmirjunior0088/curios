@@ -216,6 +216,137 @@ pub(super) fn simplify_nodes(module: &mut CpsModule) -> bool {
     }
     changed
 }
+/// The two rewrite shapes an identity law produces: forward the surviving operand, or pin the absorbed result as a literal.
+enum IdentityFold {
+    Operand(CpsAtom),
+    Literal(CpsLiteral),
+}
+
+/// Match one `Nat`/`Int` identity or absorption law on a binary intrinsic with a literal neutral or absorbing operand: `x + 0`, `x - 0`, `x * 1`, `x * 0`, `x / 1`, `x % 1`, `x & 0`, `x | 0`, `x ^ 0`, and shifts or rotates by zero.
+///
+/// Trap discipline: `nat_add`/`nat_mul` wrap and `nat_sub` is monus, so the only runtime trap of the `MayTrap` members is the backend's i31 range check on the result. Every fold here returns either an operand that is already a live in-range value or a literal inside the envelope, and a `/ 1` or `% 1` divisor can never be the trapping zero, so no trap is added or dropped. `Flt` deliberately has no laws here: `x + 0.0` is not the identity on `-0.0`.
+fn identity_fold(op: CpsIntrinsicOp, args: &[CpsAtom]) -> Option<IdentityFold> {
+    let [left, right] = args else { return None };
+    let nat = |atom: &CpsAtom| match atom {
+        CpsAtom::Literal(CpsLiteral::Nat(value)) => Some(*value),
+        _ => None,
+    };
+    let int = |atom: &CpsAtom| match atom {
+        CpsAtom::Literal(CpsLiteral::Int(value)) => Some(*value),
+        _ => None,
+    };
+    let operand = |atom: &CpsAtom| Some(IdentityFold::Operand(atom.clone()));
+
+    match op {
+        CpsIntrinsicOp::NatAdd | CpsIntrinsicOp::NatOr | CpsIntrinsicOp::NatXor => {
+            if nat(right) == Some(0) {
+                operand(left)
+            } else if nat(left) == Some(0) {
+                operand(right)
+            } else {
+                None
+            }
+        }
+        CpsIntrinsicOp::IntAdd | CpsIntrinsicOp::IntOr | CpsIntrinsicOp::IntXor => {
+            if int(right) == Some(0) {
+                operand(left)
+            } else if int(left) == Some(0) {
+                operand(right)
+            } else {
+                None
+            }
+        }
+        CpsIntrinsicOp::NatSub
+        | CpsIntrinsicOp::NatShl
+        | CpsIntrinsicOp::NatShr
+        | CpsIntrinsicOp::NatRotl
+        | CpsIntrinsicOp::NatRotr => (nat(right) == Some(0)).then(|| operand(left)).flatten(),
+        CpsIntrinsicOp::IntSub
+        | CpsIntrinsicOp::IntShl
+        | CpsIntrinsicOp::IntShr
+        | CpsIntrinsicOp::IntRotl
+        | CpsIntrinsicOp::IntRotr => (int(right) == Some(0)).then(|| operand(left)).flatten(),
+        CpsIntrinsicOp::NatMul => {
+            if nat(right) == Some(1) {
+                operand(left)
+            } else if nat(left) == Some(1) {
+                operand(right)
+            } else if nat(right) == Some(0) || nat(left) == Some(0) {
+                Some(IdentityFold::Literal(CpsLiteral::Nat(0)))
+            } else {
+                None
+            }
+        }
+        CpsIntrinsicOp::IntMul => {
+            if int(right) == Some(1) {
+                operand(left)
+            } else if int(left) == Some(1) {
+                operand(right)
+            } else if int(right) == Some(0) || int(left) == Some(0) {
+                Some(IdentityFold::Literal(CpsLiteral::Int(0)))
+            } else {
+                None
+            }
+        }
+        CpsIntrinsicOp::NatDiv => (nat(right) == Some(1)).then(|| operand(left)).flatten(),
+        CpsIntrinsicOp::IntDiv => (int(right) == Some(1)).then(|| operand(left)).flatten(),
+        CpsIntrinsicOp::NatRem => {
+            (nat(right) == Some(1)).then_some(IdentityFold::Literal(CpsLiteral::Nat(0)))
+        }
+        CpsIntrinsicOp::IntRem => {
+            (int(right) == Some(1)).then_some(IdentityFold::Literal(CpsLiteral::Int(0)))
+        }
+        CpsIntrinsicOp::NatAnd => (nat(right) == Some(0) || nat(left) == Some(0))
+            .then_some(IdentityFold::Literal(CpsLiteral::Nat(0))),
+        CpsIntrinsicOp::IntAnd => (int(right) == Some(0) || int(left) == Some(0))
+            .then_some(IdentityFold::Literal(CpsLiteral::Int(0))),
+        _ => None,
+    }
+}
+
+/// Fold intrinsic identity and absorption laws with one literal operand, which all-literal folding (`evaluate`) cannot reach. An operand fold forwards the surviving value and deletes the binding; an absorption fold pins the result as a literal in place.
+pub(super) fn fold_intrinsic_identities(module: &mut CpsModule) -> bool {
+    let mut changed = false;
+    loop {
+        let selected = module.nodes.iter_live().find_map(|(id, node)| {
+            let CpsNode::LetIntrinsic {
+                result,
+                op,
+                args,
+                next,
+            } = node
+            else {
+                return None;
+            };
+            let folded = identity_fold(*op, args)?;
+            Some((id, *result, *next, folded))
+        });
+        let Some((node, result, next, folded)) = selected else {
+            break;
+        };
+
+        match folded {
+            IdentityFold::Operand(replacement) => {
+                rewrite_atoms(module, &BTreeMap::from([(result, replacement)]));
+                rewire_node(module, node, next);
+                module.nodes.remove(node);
+                module.values.remove(result);
+            }
+            IdentityFold::Literal(literal) => {
+                module.nodes.set(
+                    node,
+                    CpsNode::LetValue {
+                        result,
+                        value: CpsValueExpr::Literal(literal),
+                        next,
+                    },
+                );
+            }
+        }
+        changed = true;
+    }
+    changed
+}
 pub(super) fn forward_aggregate_projections(module: &mut CpsModule) -> bool {
     let mut changed = false;
     loop {
