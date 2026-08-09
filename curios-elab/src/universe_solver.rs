@@ -429,7 +429,8 @@ impl UniverseSolver {
         self.consistency = None;
     }
 
-    pub fn constraints(&self) -> &[UniverseConstraint] {
+    #[cfg(test)]
+    pub(crate) fn constraints(&self) -> &[UniverseConstraint] {
         self.constraints.as_slice()
     }
 
@@ -532,9 +533,7 @@ impl UniverseSolver {
         let (LevelHead::Meta(a), LevelHead::Meta(b)) = (**left_head, **right_head) else {
             return Ok(());
         };
-        let role =
-            |solver: &Self, meta: UniverseMetaId| solver.metas.get(meta.0).map(|entry| entry.role);
-        let (Some(role_a), Some(_)) = (role(self, a), role(self, b)) else {
+        let (Some(role_a), Some(_)) = (self.role(a), self.role(b)) else {
             return Ok(());
         };
         let (from, to) = match role_a {
@@ -548,7 +547,7 @@ impl UniverseSolver {
     ///
     /// It used to be: every insertion pushed, ran a full consistency check, and popped on refusal. That check is an incremental cycle detection over the difference graph — one relaxation pass per constraint — and it measured at 67 of the fixed prelude's 200 seconds of elaboration, across seventy-five thousand insertions at roughly a millisecond each. Nothing was buying that. The rendered diagnostic is `lower ≤ upper` plus a step count, both read off the *graph* by `inconsistency_from_path`, so a check taken later names the same cycle; the declaring item comes from `Error::in_declaration` at the item boundary, not from the insertion site; and every caller outside this module propagates the refusal with `?` rather than recovering from it, so no decision depended on learning it early.
     ///
-    /// What still decides consistency is what always used a *verdict* rather than a diagnostic: the speculative commit in `close_stalled_components`, and the declaration-boundary checks in `finalize`, `finalize_at_instance`, and `solve_flexible`. An inconsistent set can therefore exist between an insertion and the next of those, which is the price — the boundary refuses the declaration either way, and `curios-cert` validates the universes it archives independently.
+    /// What still decides consistency is what always used a *verdict* rather than a diagnostic: the speculative commit in `close_stalled_components`, and the declaration-boundary checks in `finalize`, `finalize_at_instance`, and `solve_flexible_in`. An inconsistent set can therefore exist between an insertion and the next of those, which is the price — the boundary refuses the declaration either way, and `curios-cert` validates the universes it archives independently.
     pub fn add_constraint(
         &mut self,
         mut constraint: UniverseConstraint,
@@ -573,8 +572,9 @@ impl UniverseSolver {
         Ok(())
     }
 
-    /// Minimize flexible metas from their current lower bounds. Repeating to a fixpoint handles classifier chains; unconstrained flexible metas become zero. Generalizable metas are left for declaration finalization.
-    pub fn solve_flexible(&mut self) -> Result<(), UniverseError> {
+    /// Minimize flexible metas from their current lower bounds. Repeating to a fixpoint handles classifier chains; unconstrained flexible metas become zero. Generalizable metas are left for declaration finalization. Production reaches minimization through [`UniverseSolver::solve_flexible_in`]; this whole-store form is test surface.
+    #[cfg(test)]
+    pub(crate) fn solve_flexible(&mut self) -> Result<(), UniverseError> {
         let metas = (0..self.metas.len())
             .map(UniverseMetaId)
             .collect::<BTreeSet<_>>();

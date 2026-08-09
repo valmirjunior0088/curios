@@ -91,7 +91,7 @@ impl ConstraintStore {
         position
     }
 
-    /// Drop the most recently pushed constraint. Only valid when nothing has rewritten it since, which is how the insertion path uses it: a constraint that fails its consistency check never survives to be substituted into.
+    /// Drop the most recently pushed constraint. Only valid when nothing has rewritten it since — which [`ConstraintStore::rollback`], its one caller, guarantees by unwinding the rewrite journal before truncating.
     pub(super) fn pop(&mut self) {
         if self.constraints.is_empty() {
             return;
