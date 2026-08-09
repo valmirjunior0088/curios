@@ -1,5 +1,9 @@
-use crate::*;
 use curios_core::*;
+use {
+    crate::*,
+    curios_base::{Qualifier, RootId},
+    curios_cert::{Kernel, carries_information},
+};
 
 #[test]
 fn display_unbound_variable() {
@@ -39,7 +43,7 @@ fn display_type_mismatch_shows_both_types() {
 #[test]
 fn both_checkers_decide_non_informativeness_alike() {
     let mut context = Context::new(100_000, crate::SYNTAX);
-    let mut kernel = curios_cert::Kernel::new(100_000);
+    let mut kernel = Kernel::new(100_000);
     kernel.set_local_floor(1_000);
 
     let nat = || Term::intrinsic(Intrinsic::NatType);
@@ -48,14 +52,14 @@ fn both_checkers_decide_non_informativeness_alike() {
     // A `Prop`-sorted family has to be declared: `Prop` itself is `Type`-sorted, so no closed
     // proposition can be built out of intrinsics and type formers alone. Registering it in both
     // checkers is the whole of the setup either one needs.
-    let held = Global::Authored(curios_base::Qualifier::from(["Held"]));
+    let held = Global::Authored(Qualifier::from(["Held"]));
     let declaration = InductDecl {
         universe_context: UniverseContext::default(),
         arity: Telescope::done(Telescope::done(())),
         constructors: Vec::new(),
         result_sort: Term::prop(),
-        module: curios_base::Qualifier::from(["Held"]),
-        root: curios_base::RootId::Entry,
+        module: Qualifier::from(["Held"]),
+        root: RootId::Entry,
         rep_public: true,
         polarities: Vec::new(),
     };
@@ -107,8 +111,8 @@ fn both_checkers_decide_non_informativeness_alike() {
     let mut verdicts = Vec::new();
     for (label, type_) in &types {
         let elaborator = is_prop(&mut context, type_).expect("the elaborator classifies it");
-        let kernel_says = !curios_cert::carries_information(&mut kernel, type_)
-            .expect("the kernel classifies it");
+        let kernel_says =
+            !carries_information(&mut kernel, type_).expect("the kernel classifies it");
 
         assert_eq!(
             elaborator,
