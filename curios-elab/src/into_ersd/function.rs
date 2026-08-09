@@ -158,20 +158,9 @@ impl Lowering {
         value: &Term,
         type_: &Term,
     ) -> Result<Outcome, Error> {
-        self.kept_operand_at(context, value, type_, None)
-    }
-
-    /// [`kept_operand`](Self::kept_operand) with a binding hint.
-    pub(super) fn kept_operand_at(
-        &mut self,
-        context: &mut Context,
-        value: &Term,
-        type_: &Term,
-        hint: Option<&str>,
-    ) -> Result<Outcome, Error> {
         match is_erasable(context, type_)? {
             true => Ok(Outcome::Emitted(self.unit())),
-            false => self.walk(context, value, type_, hint),
+            false => self.walk(context, value, type_, None),
         }
     }
 }
