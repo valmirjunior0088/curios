@@ -9,13 +9,10 @@ use {
     },
     crate::{validate_bound_universes, validate_universes},
     curios_core::{
-        ConceptDecl, Definition, Free, Global, InductParam, Item, Module, StructDecl,
+        ConceptDecl, Definition, Free, InductParam, Item, Module, StructDecl,
         project_erased_universes, wire_term,
     },
-    std::{
-        collections::{BTreeMap, BTreeSet},
-        sync::Arc,
-    },
+    std::{collections::BTreeSet, sync::Arc},
 };
 
 /// What one expression erased to. See the module documentation.
@@ -63,60 +60,6 @@ impl UniverseErased<Module> {
     pub(super) fn project_validated(module: &Module) -> Self {
         Self(project_module(module))
     }
-
-    /// Project a module whose scope `prefix` already covers, validating and projecting only what it adds.
-    ///
-    /// `module.items` are the entry's own, so they are validated and projected in full — there is nothing of the prefix's among them to walk twice. What the prefix still contributes is its *registries*: those are merged rather than carried per module, so the entries it already holds are split out by [`added`] and restored by [`merged`] instead of being re-validated on every compilation.
-    pub(super) fn project_extending(prefix: &Self, module: &Module) -> Result<Self, Error> {
-        let prefix = &prefix.0;
-        let residual = Module {
-            items: module.items.clone(),
-            universe_seeds: module.universe_seeds.clone(),
-            induct_decls: added(&module.induct_decls, &prefix.induct_decls),
-            struct_decls: added(&module.struct_decls, &prefix.struct_decls),
-            concepts: added(&module.concepts, &prefix.concepts),
-            witnesses: module.witnesses.clone(),
-            binder_floor: module.binder_floor,
-            type_: module.type_.clone(),
-            body: module.body.clone(),
-        };
-        validate_universes(&residual)?;
-        let residual = project_module(&residual);
-
-        Ok(Self(Module {
-            items: residual.items,
-            universe_seeds: residual.universe_seeds,
-            induct_decls: merged(&prefix.induct_decls, residual.induct_decls),
-            struct_decls: merged(&prefix.struct_decls, residual.struct_decls),
-            concepts: merged(&prefix.concepts, residual.concepts),
-            witnesses: residual.witnesses,
-            binder_floor: residual.binder_floor,
-            type_: residual.type_,
-            body: residual.body,
-        }))
-    }
-}
-
-/// The entries `module` declares that `prefix` does not — the user's own, given that the merged module's tables are the prelude's extended in place.
-fn added<T: Clone>(
-    module: &BTreeMap<Global, T>,
-    prefix: &BTreeMap<Global, T>,
-) -> BTreeMap<Global, T> {
-    module
-        .iter()
-        .filter(|(name, _)| !prefix.contains_key(*name))
-        .map(|(name, value)| (name.clone(), value.clone()))
-        .collect()
-}
-
-/// `prefix` extended by `added`, restoring what [`added`] split apart.
-fn merged<T: Clone>(
-    prefix: &BTreeMap<Global, T>,
-    added: BTreeMap<Global, T>,
-) -> BTreeMap<Global, T> {
-    let mut merged = prefix.clone();
-    merged.extend(added);
-    merged
 }
 
 fn project_definition(definition: &Definition) -> Definition {
@@ -548,12 +491,13 @@ pub fn erase_module_with_prelude(
     prefix: ErasedPrelude,
 ) -> Result<curios_ersd::Module, Error> {
     curios_profile::profile!("erase_module_with_prelude");
-    let prelude = UniverseErased::<Module>::project_validated(prelude);
-    let module = UniverseErased::<Module>::project_extending(&prelude, module)?.into_inner();
-    let prelude = prelude.into_inner();
+    let prelude = UniverseErased::<Module>::project_validated(prelude).into_inner();
+    let module = UniverseErased::<Module>::project(module)?.into_inner();
     let expected = UniverseErased::<Term>::project(expected)?.into_inner();
     // Re-derivation, not surface elaboration (see `erase_module`).
     context.with_suppressed_privacy(|context| {
+        // Both halves: `module` declares only its own, so the prelude's nominal entries reach the context from the prelude itself. They are disjoint by name — an entry program cannot reuse a prelude name — which is why `register_*` rejecting a duplicate key is not a constraint here.
+        seed_registries(context, &prelude)?;
         seed_registries(context, &module)?;
 
         // Re-seed the Core context with the prelude's definitions, mirroring the legacy replay: later items and the entrypoint reduce through them.

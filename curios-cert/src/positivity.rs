@@ -35,6 +35,12 @@ pub struct NotPositive {
     pub polarity: Polarity,
 }
 
+/// One pairing of the two nominal registries, as they are always held and passed together.
+type Registries<'a> = (
+    &'a BTreeMap<Global, InductDecl>,
+    &'a BTreeMap<Global, StructDecl>,
+);
+
 /// The declaration set an analysis runs over: what an environment already put in scope, plus what the unit in hand declares.
 ///
 /// **Both halves are analyzed, not merely consulted.** A module carries only its own declarations, so the two arrive in separate maps — but that is a fact about where the maps live, never about which of them is believed. Every vector this pass reports it recomputed, the base's included, which is what [`Coverage::Complete`] means and what keeps the kernel from inheriting a conclusion some other pass reached. Reading the base's carried [`InductDecl::polarities`] instead would be exactly the archived-vector trust the two coverage modes exist to keep apart.
@@ -42,11 +48,8 @@ pub struct NotPositive {
 /// A name in both halves resolves to the unit's own. That cannot arise on any path here — an entry program cannot reuse a prelude name — and the rule is stated so the type has an answer rather than a precondition.
 #[derive(Clone, Copy)]
 pub struct Declarations<'a> {
-    /// `None` when nothing is already in scope, which is not the same as empty maps only in that it needs no maps to point at: [`Term`] is `Rc`-backed and therefore not `Sync`, so there is no `static` empty registry to borrow.
-    base: Option<(
-        &'a BTreeMap<Global, InductDecl>,
-        &'a BTreeMap<Global, StructDecl>,
-    )>,
+    /// `None` when nothing is already in scope, which differs from empty maps only in needing no maps to point at: [`Term`] is `Rc`-backed and therefore not `Sync`, so there is no `static` empty registry to borrow.
+    base: Option<Registries<'a>>,
     inducts: &'a BTreeMap<Global, InductDecl>,
     structs: &'a BTreeMap<Global, StructDecl>,
 }

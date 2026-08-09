@@ -978,9 +978,9 @@ fn elaborate_module_suffix(
         }
     }
 
-    // The suffix's own keys, kept so the rebuilt entries can be pulled back out below. With no prefix every key is the suffix's, which is exactly what a from-scratch elaboration wants.
-    let induct_keys = suffix_keys(&module.induct_decls, prefix.map(|p| &p.induct_decls));
-    let struct_keys = suffix_keys(&module.struct_decls, prefix.map(|p| &p.struct_decls));
+    // Kept so the rebuilt entries can be pulled back out below. `module` declares only its own, prefix or no prefix, so this is every key it has.
+    let induct_keys = module.induct_decls.keys().cloned().collect::<Vec<_>>();
+    let struct_keys = module.struct_decls.keys().cloned().collect::<Vec<_>>();
 
     for name in &induct_keys {
         context.register_induct(name, module.induct_decls[name].clone())?;
@@ -990,9 +990,7 @@ fn elaborate_module_suffix(
     }
     // Concept metadata and witness markers, alongside — witness *table* entries register per item (`elaborate_module_let`), once the elaborated head exists. With every concept present, the superclass graph can be validated up front.
     for (name, concept) in &module.concepts {
-        if !prefix.is_some_and(|prefix| prefix.concepts.contains_key(name)) {
-            context.register_concept(name, concept.clone())?;
-        }
+        context.register_concept(name, concept.clone())?;
     }
     for name in &module.witnesses {
         context.mark_witness_declaration(name);
@@ -1096,7 +1094,6 @@ fn elaborate_module_suffix(
     let concepts = module
         .concepts
         .keys()
-        .filter(|name| !prefix.is_some_and(|prefix| prefix.concepts.contains_key(*name)))
         .map(|name| {
             (
                 name.clone(),
@@ -1107,12 +1104,7 @@ fn elaborate_module_suffix(
             )
         })
         .collect();
-    let witnesses = module
-        .witnesses
-        .iter()
-        .filter(|name| !prefix.is_some_and(|prefix| prefix.witnesses.contains(*name)))
-        .cloned()
-        .collect();
+    let witnesses = module.witnesses.clone();
 
     let module = Module {
         items,
@@ -1127,18 +1119,6 @@ fn elaborate_module_suffix(
     };
 
     Ok((module, body_type))
-}
-
-/// The keys `module` declares that `prefix` does not — every key when there is no prefix.
-fn suffix_keys<T>(
-    module: &BTreeMap<Global, T>,
-    prefix: Option<&BTreeMap<Global, T>>,
-) -> Vec<Global> {
-    module
-        .keys()
-        .filter(|name| !prefix.is_some_and(|prefix| prefix.contains_key(*name)))
-        .cloned()
-        .collect()
 }
 
 /// Finalize an elaborated module and run the **soundness perimeter** over it.
@@ -1283,26 +1263,12 @@ pub fn elaborate_and_zonk_with_prelude_reporting(
     let (suffix, body_type, obligations) =
         finalize_and_check(context, suffix, body_type, &inherited)?;
 
-    // The items are the entry's own and stay that way: what the prelude contributes is scope, and every consumer past this point is seeded from it rather than reading it off the front of this list. The registries below are still merged, because a whole-module pass — strict positivity above all — decides over the complete declaration set and a user declaration may reach a prelude one.
-    let mut induct_decls = prelude.induct_decls.clone();
-    induct_decls.extend(suffix.induct_decls);
-    let mut struct_decls = prelude.struct_decls.clone();
-    struct_decls.extend(suffix.struct_decls);
-    let mut concepts = prelude.concepts.clone();
-    concepts.extend(suffix.concepts);
-    let mut witnesses = prelude.witnesses.clone();
-    witnesses.extend(suffix.witnesses);
-
+    // Nothing is merged back in. The entry's items, the entry's declarations: what the prelude contributes is scope, and every consumer past this point takes it as such — `Globals` at the certifier, a replayed context at erasure. A whole-module pass that needs the complete declaration set gets it by being handed both halves (`curios_cert::Declarations`), not by being handed one map somebody concatenated.
+    //
+    // The binder floor is the exception, and it is a bound rather than a set: the entry's terms are elaborated against prelude terms whose binders were minted in an earlier compiler run, so the floor has to clear both. Combining by maximum can only ever widen.
     let module = Module {
-        items: suffix.items,
-        universe_seeds: suffix.universe_seeds,
-        induct_decls,
-        struct_decls,
-        concepts,
-        witnesses,
         binder_floor: prelude.binder_floor.max(suffix.binder_floor),
-        type_: suffix.type_,
-        body: suffix.body,
+        ..suffix
     };
 
     Ok((module, body_type, obligations))
