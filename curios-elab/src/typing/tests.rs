@@ -31,6 +31,16 @@ fn display_type_mismatch_shows_both_types() {
     assert!(s.contains("Bool"), "should contain expected Bool: {s}");
 }
 
+// A witness for a parameterless concept once reused `InvalidWitnessHead` at a fabricated position 0, telling the user "parameter 1" of a concept that has none; the dedicated variant states the actual rule — key on parameter heads, or supply the concept through a local `use` binder.
+#[test]
+fn display_parameterless_witness_concept_states_the_rule() {
+    let err = Error::parameterless_witness_concept("w", "Nothing");
+    assert_eq!(
+        err.to_string(),
+        "witness 'w' cannot be registered: concept 'Nothing' has no parameters to key on\n  a global witness keys on its concept's parameter heads; supply a parameterless concept through a local 'use' binder instead"
+    );
+}
+
 /// The predicate deciding what a `Prop` may carry is written twice, and this is where the two are put to each other.
 ///
 /// [`is_prop`] is this side's answer and `curios_cert::carries_information` is the kernel's. The large-elimination guard's singleton condition and the `Prop`-field rule both turn on one or the other, with the shared `pinned_by_targets` walk supplying the rest of each. The two disagreed once, in the direction that matters: the kernel additionally exempted a position whose *type is a universe* — a position holding a type — reasoning that erasure deletes a type either way, and a closed inhabitant of `False` followed. `curios-cert/src/recheck/tests.rs` holds that derivation.

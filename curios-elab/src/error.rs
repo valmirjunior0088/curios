@@ -366,6 +366,11 @@ pub enum Error {
         position: usize,
         head: Box<Term>,
     },
+    /// A witness for a parameterless concept: with no parameter heads there is nothing to key the global table entry on, so such a concept is supplied through a local `use` binder instead.
+    ParameterlessWitnessConcept {
+        witness: String,
+        concept: String,
+    },
     /// A witness's annotation does not elaborate to an application of a registered concept.
     NotAConcept {
         witness: String,
@@ -880,6 +885,16 @@ impl Error {
             witness: witness.into(),
             position,
             head: Box::new(head.into()),
+        }
+    }
+
+    pub(crate) fn parameterless_witness_concept<N: Into<String>, C: Into<String>>(
+        witness: N,
+        concept: C,
+    ) -> Self {
+        Self::ParameterlessWitnessConcept {
+            witness: witness.into(),
+            concept: concept.into(),
         }
     }
 
@@ -1726,6 +1741,12 @@ impl fmt::Display for Displayed<'_> {
                     f,
                     "witness '{witness}' cannot be keyed: its concept's parameter {n} reduces to {head}\n  every parameter's head must be an inductive, a struct, or an intrinsic type",
                     n = position + 1
+                )
+            }
+            Error::ParameterlessWitnessConcept { witness, concept } => {
+                write!(
+                    f,
+                    "witness '{witness}' cannot be registered: concept '{concept}' has no parameters to key on\n  a global witness keys on its concept's parameter heads; supply a parameterless concept through a local 'use' binder instead"
                 )
             }
             Error::NotAConcept { witness, found } => {

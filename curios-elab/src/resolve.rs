@@ -733,12 +733,11 @@ pub(crate) fn register_witness(
         return Err(Error::not_a_concept(name.symbol(), terminal.clone()));
     }
 
-    // Key on every parameter: each must reduce to a rigid, keyable head.
+    // Key on every parameter: each must reduce to a rigid, keyable head. A parameterless concept has no head to key on at all — it is supplied through a local `use` binder, never the global table.
     if params.is_empty() {
-        return Err(Error::invalid_witness_head(
+        return Err(Error::parameterless_witness_concept(
             name.symbol(),
-            0,
-            terminal.clone(),
+            concept_name.symbol(),
         ));
     }
     let mut heads = Vec::with_capacity(params.len());
