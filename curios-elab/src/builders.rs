@@ -15,8 +15,8 @@ use {
 
 /// Constructors for [`Intrinsic`] operations no judgment ever builds.
 pub trait IntrinsicBuilders {
-    /// An `HandleEql` node — handle identity, the one pure `Handle` operation — from anything term-shaped.
-    fn io_eql<F, S>(left: F, right: S) -> Self
+    /// A `HandleEql` node — handle identity, the one pure `Handle` operation — from anything term-shaped.
+    fn handle_eql<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>;
@@ -267,7 +267,7 @@ pub trait IntrinsicBuilders {
 }
 
 impl IntrinsicBuilders for Intrinsic {
-    fn io_eql<F, S>(left: F, right: S) -> Self
+    fn handle_eql<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
