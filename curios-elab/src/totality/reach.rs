@@ -13,7 +13,7 @@
 use {
     curios_core::{
         Bound, Definition, Enter, Func, FuncType, Global, Intrinsic, Item, Let, Match, Module, Rec,
-        Struct, Subterm, Telescope, Term, Variant,
+        Struct, Subterm, Telescope, Term, Totality, Variant,
     },
     std::collections::{BTreeMap, BTreeSet, HashSet},
 };
@@ -244,7 +244,7 @@ fn annotate_node(term: &Term, site: &str, positions: &mut Vec<Position>) -> Ente
 /// One reachability answer: which partial definitions the seeds reach.
 pub(crate) fn offenders(
     reached: &BTreeSet<Global>,
-    classified: &BTreeMap<Global, super::Totality>,
+    classified: &BTreeMap<Global, Totality>,
 ) -> Vec<Global> {
     reached
         .iter()
