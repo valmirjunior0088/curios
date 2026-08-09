@@ -9,6 +9,7 @@ use super::{
     CpsModule,
     analysis::known_values,
     contify::contify_calls,
+    cse::dedupe_intrinsics,
     inline::{inline_known_calls, inline_single_use_continuations},
     reachable::prune_unreachable,
     simplify::{
@@ -46,6 +47,7 @@ pub fn optimize(module: &mut CpsModule) {
         let changed = rewrite_atoms(module, &substitutions)
             | forward_continuations(module)
             | forward_aggregate_projections(module)
+            | dedupe_intrinsics(module)
             | simplify_nodes(module)
             | fold_intrinsic_identities(module)
             | eliminate_dead_bindings(module)

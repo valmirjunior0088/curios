@@ -239,8 +239,9 @@ impl CpsIntrinsicOp {
         )
     }
 
+    /// Whether a dominated duplicate of this op may reuse the dominating result. Every non-allocating op qualifies, `MayTrap` included: the ops are deterministic, and the dominating occurrence has already produced the identical value or already trapped, so the duplicate can neither observe a different result nor trap differently. Allocating ops are excluded to keep each construction's identity, even though nothing observes it today.
     pub fn cse_eligible(self) -> bool {
-        self.is_total() && !self.allocates()
+        !self.allocates()
     }
 
     pub fn loop_motion_eligible(self) -> bool {
@@ -1221,6 +1222,7 @@ pub(crate) fn visit_atoms_mut(node: &mut CpsNode, visitor: &mut impl FnMut(&mut 
 
 mod analysis;
 mod contify;
+mod cse;
 mod evaluate;
 mod inline;
 mod optimize;

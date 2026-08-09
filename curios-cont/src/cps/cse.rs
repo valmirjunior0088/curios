@@ -1,0 +1,171 @@
+//! Scoped common-subexpression elimination over deterministic intrinsics.
+//!
+//! In this CPS a binding's lexical scope is its dominance region: every use of a `LetIntrinsic` result sits inside the binder's subtree, and any jump into a `LetCont` member comes from within that subtree, after the bindings above it executed. Walking each function's node tree with a scoped table of `(op, operands)` therefore finds exactly the duplicates whose dominating occurrence already ran, which is what makes reusing its result sound even for `MayTrap` ops (see [`CpsIntrinsicOp::cse_eligible`]). The table never crosses a nested function definition: sharing across one would grow its closure environment, a size tradeoff this pass refuses.
+
+use {
+    super::simplify::{rewire_node, rewrite_atoms},
+    super::*,
+    curios_base::Grain,
+    std::collections::{BTreeMap, BTreeSet},
+};
+
+/// An operand under a total order, with `Flt` by bit pattern and packed data by canonical bytes, so commutative normalization can sort and the scope table can key deterministically.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+enum AtomKey {
+    Value(u32),
+    Fun(u32),
+    Nat(u32),
+    Int(i32),
+    Flt(u32),
+    Bin(u8, usize, Vec<u8>),
+}
+
+fn atom_key(atom: &CpsAtom) -> AtomKey {
+    match atom {
+        CpsAtom::Value(value) => AtomKey::Value(value.index() as u32),
+        CpsAtom::Fun(function) => AtomKey::Fun(function.index() as u32),
+        CpsAtom::Literal(CpsLiteral::Nat(value)) => AtomKey::Nat(*value),
+        CpsAtom::Literal(CpsLiteral::Int(value)) => AtomKey::Int(*value),
+        CpsAtom::Literal(CpsLiteral::Flt(value)) => AtomKey::Flt(value.to_bits()),
+        CpsAtom::Literal(CpsLiteral::Bin(grain, value)) => {
+            let bytes = match grain {
+                Grain::B => value.to_packed_bytes(),
+                Grain::X => value
+                    .to_bytes()
+                    .expect("X literals are always byte-aligned"),
+            };
+            let grain = match grain {
+                Grain::B => 0u8,
+                Grain::X => 1u8,
+            };
+            AtomKey::Bin(grain, bytes.len(), bytes)
+        }
+    }
+}
+
+fn intrinsic_key(op: CpsIntrinsicOp, args: &[CpsAtom]) -> (CpsIntrinsicOp, Vec<AtomKey>) {
+    let mut keys = args.iter().map(atom_key).collect::<Vec<_>>();
+    if op.is_commutative() {
+        keys.sort();
+    }
+    (op, keys)
+}
+
+/// One scope-walk work item: visit a node under the current table, or retract a key when its binder's subtree is done. The LIFO order makes retraction happen exactly between a `LetCont`'s sibling subtrees, which is what keeps one sibling's bindings invisible to the next.
+enum Task {
+    Visit(CpsNodeId),
+    Retract((CpsIntrinsicOp, Vec<AtomKey>)),
+}
+
+/// Remove every `LetIntrinsic` whose `(op, operands)` already has a binding in scope, rewriting its uses to the dominating result. One walk collects every duplicate — a duplicate of a duplicate resolves to the first binder because only the first occupies the table — and the rewrites apply as a batch afterwards.
+pub(super) fn dedupe_intrinsics(module: &mut CpsModule) -> bool {
+    debug_assert_single_owner(module);
+
+    let mut substitutions = BTreeMap::new();
+    let mut duplicates = Vec::new();
+    let functions = module.functions.live_ids().collect::<Vec<_>>();
+    for function in functions {
+        let mut table = BTreeMap::<(CpsIntrinsicOp, Vec<AtomKey>), CpsValueId>::new();
+        let mut work = vec![Task::Visit(module.function(function).unwrap().body)];
+        let mut visited = BTreeSet::new();
+        while let Some(task) = work.pop() {
+            let node_id = match task {
+                Task::Visit(node_id) => node_id,
+                Task::Retract(key) => {
+                    table.remove(&key);
+                    continue;
+                }
+            };
+            if !visited.insert(node_id) {
+                continue;
+            }
+            match module.node(node_id).unwrap() {
+                CpsNode::LetIntrinsic {
+                    result,
+                    op,
+                    args,
+                    next,
+                } => {
+                    if op.cse_eligible() {
+                        let key = intrinsic_key(*op, args);
+                        if let Some(&existing) = table.get(&key) {
+                            substitutions.insert(*result, CpsAtom::Value(existing));
+                            duplicates.push((node_id, *result, *next));
+                        } else {
+                            table.insert(key.clone(), *result);
+                            work.push(Task::Retract(key));
+                        }
+                    }
+                    work.push(Task::Visit(*next));
+                }
+                CpsNode::LetValue { next, .. } => work.push(Task::Visit(*next)),
+                CpsNode::LetFun { body, .. } | CpsNode::RecInit { body, .. } => {
+                    work.push(Task::Visit(*body))
+                }
+                CpsNode::LetCont {
+                    continuations,
+                    body,
+                } => {
+                    for continuation in continuations.iter().rev() {
+                        if let Some(continuation) = module.continuation(*continuation) {
+                            work.push(Task::Visit(continuation.body));
+                        }
+                    }
+                    work.push(Task::Visit(*body));
+                }
+                CpsNode::ApplyFun { .. }
+                | CpsNode::ApplyCont(_)
+                | CpsNode::Switch { .. }
+                | CpsNode::Foreign { .. }
+                | CpsNode::Cell { .. }
+                | CpsNode::Intrinsic { .. }
+                | CpsNode::Exit { .. }
+                | CpsNode::Unreachable => {}
+            }
+        }
+    }
+
+    if duplicates.is_empty() {
+        return false;
+    }
+    rewrite_atoms(module, &substitutions);
+    for (node, result, next) in duplicates {
+        rewire_node(module, node, next);
+        module.nodes.remove(node);
+        module.values.remove(result);
+    }
+    true
+}
+
+/// The scope-is-dominance argument requires the node graph to be a tree: every live node owned by exactly one of a function body, a continuation body, or a predecessor's `next`/`body` link (`RecInit`'s `ready` is an annotation into the body's own chain, not an ownership edge). No pass creates sharing today; this assertion is where that assumption fails loudly if one starts to.
+fn debug_assert_single_owner(module: &CpsModule) {
+    if cfg!(debug_assertions) {
+        let mut counts = BTreeMap::<CpsNodeId, usize>::new();
+        for (_, function) in module.functions.iter_live() {
+            *counts.entry(function.body).or_insert(0) += 1;
+        }
+        for (_, continuation) in module.continuations.iter_live() {
+            *counts.entry(continuation.body).or_insert(0) += 1;
+        }
+        for (_, node) in module.nodes.iter_live() {
+            match node {
+                CpsNode::LetValue { next, .. } | CpsNode::LetIntrinsic { next, .. } => {
+                    *counts.entry(*next).or_insert(0) += 1;
+                }
+                CpsNode::LetFun { body, .. }
+                | CpsNode::LetCont { body, .. }
+                | CpsNode::RecInit { body, .. } => {
+                    *counts.entry(*body).or_insert(0) += 1;
+                }
+                _ => {}
+            }
+        }
+        for (id, _) in module.nodes.iter_live() {
+            assert_eq!(
+                counts.get(&id).copied().unwrap_or(0),
+                1,
+                "{id} must have exactly one owning link for scoped CSE"
+            );
+        }
+    }
+}
