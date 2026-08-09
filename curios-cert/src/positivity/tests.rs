@@ -1,6 +1,5 @@
 use {
-    super::Coverage,
-    super::{Occurrences, close, positivity_vectors},
+    super::{Coverage, Occurrences, close, positivity_vectors},
     crate::Kernel,
     curios_base::{Plicity, Qualifier, RootId},
     curios_core::{
@@ -10,6 +9,12 @@ use {
     },
     std::collections::BTreeMap,
 };
+
+fn kernel() -> Kernel {
+    let mut kernel = Kernel::new(100_000);
+    kernel.set_local_floor(1_000);
+    kernel
+}
 
 /// A single-constructor family whose one payload is `payload_type`.
 fn single_payload(payload_type: Term, result_sort: Term) -> InductDecl {
@@ -36,8 +41,7 @@ fn single_payload(payload_type: Term, result_sort: Term) -> InductDecl {
 /// The four-line route to `False`, refused by the kernel running the shared analysis: `Bad`'s constructor takes `(Bad) -> False`, a negative self-occurrence.
 #[test]
 fn a_negative_self_occurrence_is_refused() {
-    let mut kernel = Kernel::new(100_000);
-    kernel.set_local_floor(1_000);
+    let mut kernel = kernel();
 
     let false_name = Global::Authored(Qualifier::from(["False"]));
     let bad_name = Global::Authored(Qualifier::from(["Bad"]));
@@ -71,8 +75,7 @@ fn a_negative_self_occurrence_is_refused() {
 /// A strictly positive self-occurrence — the payload *is* the family — is the ordinary recursive datatype and is admitted.
 #[test]
 fn a_strict_self_occurrence_is_admitted() {
-    let mut kernel = Kernel::new(100_000);
-    kernel.set_local_floor(1_000);
+    let mut kernel = kernel();
 
     let name = Global::Authored(Qualifier::from(["Chain"]));
     let self_type = Term::induct_type(name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
@@ -308,8 +311,7 @@ fn accepting_polarities_are_closed_under_join() {
 /// `InductDecl::polarities` is computed by `curios-elab` after elaboration and rides the prelude archive, so believing it would make this crate's positivity check a restatement of the other's. Here the vector *lies* — it claims the parameter is used strictly while the constructor stores a function out of it, which is the negative occurrence Cantor forbids — and the analysis must reach its own verdict from the telescopes regardless.
 #[test]
 fn a_carried_polarity_vector_is_recomputed_rather_than_believed() {
-    let mut kernel = Kernel::new(100_000);
-    kernel.set_local_floor(1_000);
+    let mut kernel = kernel();
 
     let false_name = Global::Authored(Qualifier::from(["False"]));
     let bad_name = Global::Authored(Qualifier::from(["Bad"]));
@@ -353,8 +355,7 @@ fn a_carried_polarity_vector_is_recomputed_rather_than_believed() {
 /// It was measured firing nowhere before this test. Across a kernel walk of the whole prelude every one of 124 lookups resolved from the computed map, and across `curios`'s whole test corpus 30,271 did, with the `Complete` fallback taken zero times and the `Partial` registry read taken 26. A change routing `Complete` to the registry the way `Partial` does would therefore have passed every test in the workspace while making the certifier believe a conclusion it did not establish.
 #[test]
 fn an_out_of_set_vector_is_believed_only_under_partial_coverage() {
-    let mut kernel = Kernel::new(100_000);
-    kernel.set_local_floor(1_000);
+    let mut kernel = kernel();
 
     let wrapper_name = Global::Authored(Qualifier::from(["Wrapper"]));
     let outer_name = Global::Authored(Qualifier::from(["Outer"]));
