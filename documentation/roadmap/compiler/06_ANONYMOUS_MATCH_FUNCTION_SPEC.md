@@ -396,15 +396,7 @@ Stage 1 is a contained `curios-text` feature: parser, printer, lowering, and tes
 
 ## Verification
 
-After each stage, run the repository's full done bar in order:
-
-```sh
-make curios/runtime
-cargo fmt --all -- --check
-cargo check --workspace --all-targets --all-features
-RUSTFLAGS="-Dwarnings" cargo clippy --workspace --all-targets --all-features
-cargo test --workspace --all-targets --all-features
-```
+After each stage, run the repository's full done bar in order — [CLAUDE.md](../../../CLAUDE.md), "Before handing off code changes", which owns the command list. It was copied here verbatim once and had drifted from it within the day.
 
 Because `curios-text` and `curios-elab` are both in the browser compiler's dependency graph, also run `make curios/web` with the exactly version-matched `wasm-bindgen-cli`.
 

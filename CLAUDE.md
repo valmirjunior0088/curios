@@ -149,17 +149,22 @@ cargo test --workspace --all-targets --all-features > /tmp/curios-tests.txt 2>&1
 
 ### Before handing off code changes
 
-Run the same gate as CI, in order. All commands must pass, and Clippy warnings are errors in CI.
+Run this gate, in order. All commands must pass, and Clippy warnings are errors in CI.
 
 ```sh
 make curios/runtime
 cargo fmt --all -- --check
-cargo check --workspace --all-targets --all-features
 cargo clippy --workspace --all-targets --all-features -- -Dwarnings
 cargo test --workspace --all-targets --all-features
 ```
 
-The Clippy denial is passed *after* `--`, not as `RUSTFLAGS`, and the difference is the whole cost of running this gate locally. `RUSTFLAGS` is a global fingerprint input, so setting it for one step forks every unit in the graph — including `curios-prelude`'s build script, which then re-elaborates and re-certifies the whole fixed prelude for that step alone. CI does not pay this, because its `check`, `clippy` and `test` jobs are separate jobs that never share a target directory; a local sequential run does. Measured on this workspace: three prelude builds per gate with `RUSTFLAGS`, two without. The pair that remains is `check`/`clippy` against `test` — the first two only type-check while the third compiles, so their build-script dependency closures differ and no flag merges them. Since `cargo test` subsumes what `cargo check` establishes, dropping the `check` step from a *local* run costs nothing but the diagnostics arriving later; CI keeps it as its own job.
+This is deliberately *not* CI's list of jobs. CI runs `check`, `clippy` and `test` as three separate jobs that never share a target directory, so it pays nothing for the overlap between them; a local sequential run pays for all of it. Two consequences, both measured on this workspace.
+
+`cargo check` is dropped because `cargo clippy` is the same compilation with more lints, and `cargo test` compiles for real — so `check` establishes nothing either of them misses, and it cost a full pass of its own (9m30s of a 30-minute gate). What it buys back is only that a type error surfaces a little earlier, which is not worth a third of the wall clock. CI keeps its own `check` job, where it is free.
+
+The Clippy denial is passed *after* `--` rather than as `RUSTFLAGS` for the same class of reason. `RUSTFLAGS` is a global fingerprint input, so setting it for one step forks every unit in the graph — including `curios-prelude`'s build script, which then re-elaborates and re-certifies the whole fixed prelude for that step alone. Three prelude builds per gate became two when it moved after the separator, and dropping `check` takes it to one.
+
+Expect the gate to be latency-bound rather than throughput-bound: the crate graph is a deep near-linear chain, so a 12-core machine runs it at roughly one and a half cores busy. Wall clock is the critical path, and more parallelism in the build does not shorten it.
 
 For the same reason, keep the feature set constant while iterating. `--all-features` enables `profile`, and a plain `cargo build --package curios` does not, so alternating between them maintains two archives that evict each other. Pick one for a work session.
 
