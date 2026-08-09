@@ -19,11 +19,12 @@ use {
     super::{
         Coverage, Erased, Kernel, KernelError, check_definition, check_entrypoint,
         check_induct_decl, check_positions, check_rec_group, check_struct_decl,
-        derived_binder_floor_beyond, partial_definitions, positivity_vectors, satisfiable,
+        partial_definitions, positivity_vectors, satisfiable,
     },
     curios_core::{
         Bound, Definition, Free, Global, InductDecl, Item, Level, MetaId, Module, StructDecl, Term,
-        UniverseContext, rewrite_universe_levels_scoped, universe_metas,
+        UniverseContext, derived_binder_floor_beyond, rewrite_universe_levels_scoped,
+        universe_metas,
     },
     std::collections::{BTreeSet, HashMap, HashSet},
 };

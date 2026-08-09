@@ -10,9 +10,9 @@ use syntax::SYNTAX;
 use {
     curios_abi::host_ops,
     curios_base::{Qualifier, RootId},
-    curios_cert::{derived_binder_floor, recheck_module_verdicts},
+    curios_cert::recheck_module_verdicts,
     curios_core::Item,
-    curios_core::{Global, Sharing},
+    curios_core::{Global, Sharing, derived_binder_floor},
     curios_elab::{
         Context, DEFAULT_STEP_BUDGET, Mode, elaborate_and_zonk_module, erase_prelude_prefix,
         validate_lowered_universe_seeds, validate_universes,

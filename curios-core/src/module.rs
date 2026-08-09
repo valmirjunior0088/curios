@@ -8,9 +8,9 @@
 
 use {
     super::{
-        Atom, ConceptDecl, Free, FuncType, Global, InductDecl, Many, RecGroup, RecMemberScopes,
-        Scope, Sharing, Spelling, StructDecl, Subterm, Term, UniverseContext, UniverseError,
-        UniverseSeed, build_shorten, project_erased_universes,
+        Atom, Bound, ConceptDecl, Free, FuncType, Global, InductDecl, Many, RecGroup,
+        RecMemberScopes, Scope, Sharing, Spelling, StructDecl, Subterm, Term, UniverseContext,
+        UniverseError, UniverseSeed, build_shorten, project_erased_universes,
     },
     curios_base::{Plicity, Qualifier, RootId},
     std::{
@@ -485,6 +485,81 @@ impl fmt::Display for Module {
     }
 }
 
+/// One above the highest local binder index any of `module`'s terms mentions — the lowest floor at which a binder a checker mints cannot alias one already in the program.
+///
+/// Derived rather than believed. [`Module::binder_floor`] carries the elaborator's answer, and nothing checks it, while capture-avoidance depends on it: a checker that opens binders of its own — eta, telescope comparison — and mints one that aliases a free local already in a term silently identifies two terms that differ. Since a floor is a *bound* rather than a verdict, a caller takes the maximum of the two: widening is always safe, so a gap in this walk degrades to the carried value rather than to something worse, and no refusal is needed.
+///
+/// It lives here by this module's own rule, the one stated at the top: it *describes* rather than judges. Reading the highest index a term mentions asks nothing of a kernel — no reduction, no conversion, no `Env` — so it is a property of the data, and a second implementation would be a second run of the same function rather than a second opinion. That is the standing `UniverseContext::is_closed` has for the same reason.
+///
+/// Every position that can hold a free local is covered, including ones that in practice never do: each item's type and body, every registry telescope and declared result sort, and the entrypoint's own type and body. Deciding a field cannot matter is the reasoning this walk exists to replace.
+pub fn derived_binder_floor(module: &Module) -> usize {
+    derived_binder_floor_beyond(module, None)
+}
+
+/// [`derived_binder_floor`] over only what `prefix` does not already cover — the items past its length and the declarations it does not declare.
+///
+/// The prefix's own floor is not re-derived here because it is a constant of the archive, computed by the build that established the prefix and carried beside it; the caller maximizes the two. This is the same widening argument the function above rests on, only with one of the two bounds read instead of walked: a floor is a bound, so combining by maximum is safe whatever either side covers.
+pub fn derived_binder_floor_beyond(module: &Module, prefix: Option<&Module>) -> usize {
+    let covered = prefix.map_or(0, |prefix| prefix.items.len());
+    let fresh_induct = |name: &Global| prefix.is_none_or(|p| !p.induct_decls.contains_key(name));
+    let fresh_struct = |name: &Global| prefix.is_none_or(|p| !p.struct_decls.contains_key(name));
+    let fresh_concept = |name: &Global| prefix.is_none_or(|p| !p.concepts.contains_key(name));
+    let mut highest: Option<u32> = None;
+    let mut consider = |free_vars: BTreeSet<Free>| {
+        for free in free_vars {
+            if let Some(index) = free.local_index() {
+                highest = Some(highest.map_or(index, |seen: u32| seen.max(index)));
+            }
+        }
+    };
+
+    for item in &module.items[covered..] {
+        for definition in item.definitions() {
+            consider(definition.type_.free_vars());
+            consider(definition.body.free_vars());
+        }
+    }
+
+    for declaration in module
+        .induct_decls
+        .iter()
+        .filter(|(name, _)| fresh_induct(name))
+        .map(|(_, declaration)| declaration)
+    {
+        consider(declaration.arity.free_vars());
+        consider(declaration.result_sort.free_vars());
+        for (_, constructor) in &declaration.constructors {
+            consider(constructor.telescope.free_vars());
+        }
+    }
+
+    for declaration in module
+        .struct_decls
+        .iter()
+        .filter(|(name, _)| fresh_struct(name))
+        .map(|(_, declaration)| declaration)
+    {
+        consider(declaration.arity.free_vars());
+        consider(declaration.result_sort.free_vars());
+    }
+
+    for concept in module
+        .concepts
+        .iter()
+        .filter(|(name, _)| fresh_concept(name))
+        .map(|(_, concept)| concept)
+    {
+        consider(concept.params.free_vars());
+    }
+
+    if let Some(type_) = &module.type_ {
+        consider(type_.free_vars());
+    }
+    consider(module.body.free_vars());
+
+    highest.map_or(0, |index| index as usize + 1)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -545,5 +620,38 @@ mod tests {
             .unwrap_err(),
             UniverseError::MismatchedRecursiveContexts,
         );
+    }
+
+    /// The floor must clear every local a module's terms mention, whatever `Module::binder_floor` claims.
+    ///
+    /// A binder the kernel mints while comparing under a telescope or eta-contracting aliases a free local the moment the floor is too low, and two terms that differ stop being distinguishable. The carried number is the elaborator's word and nothing checks it, so the walk derives its own and the caller takes the larger.
+    #[test]
+    fn the_floor_clears_every_local_a_term_mentions() {
+        let mentioned = Free::local(4_242, Some("y"));
+        let definition = Definition {
+            name: Global::Authored(Qualifier::from(["held"])),
+            kind: DefinitionKind::Authored,
+            universe_context: UniverseContext::empty(),
+            island: Qualifier::default(),
+            root: RootId::Entry,
+            totality: Totality::Total,
+            type_: Term::intrinsic(crate::Intrinsic::NatType),
+            body: Term::free_var(&mentioned),
+        };
+
+        let module = Module {
+            items: vec![Item::Let(definition)],
+            universe_seeds: Vec::new(),
+            induct_decls: BTreeMap::new(),
+            struct_decls: BTreeMap::new(),
+            concepts: BTreeMap::new(),
+            witnesses: BTreeSet::new(),
+            // The understated claim the walk must not believe.
+            binder_floor: 0,
+            type_: None,
+            body: Term::intrinsic(crate::Intrinsic::NatType),
+        };
+
+        assert_eq!(derived_binder_floor(&module), 4_243);
     }
 }
