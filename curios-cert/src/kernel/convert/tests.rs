@@ -1,7 +1,10 @@
 use {
     crate::{Kernel, KernelError, convert},
     curios_base::{Plicity, Qualifier, RootId},
-    curios_core::{Free, Global, InductDecl, Intrinsic, MetaId, Telescope, Term, UniverseContext},
+    curios_core::{
+        Free, Global, InductDecl, Intrinsic, MetaId, StructDecl, StructType, Subterm, Telescope,
+        Term, UniverseContext,
+    },
 };
 
 fn kernel() -> Kernel {
@@ -130,6 +133,40 @@ fn eta_makes_a_pair_converge_with_its_projections() {
         convert(&mut kernel, &pair_type, &Term::free_var(&p), &expanded),
         Ok(true),
     );
+}
+
+/// A struct literal with fewer fields than its declaration must not convert with a neutral inhabitant.
+///
+/// The eta walk is driven by the literal's fields, so a short literal used to run out before the declaration's telescope did and the vacuous remainder passed — equating a malformed literal with *any* neutral at the type, in the accepting direction. The walk now answers with whether it consumed the whole telescope.
+#[test]
+fn a_short_struct_literal_does_not_convert_with_a_neutral() {
+    let mut kernel = kernel();
+    let name = Global::Authored(Qualifier::from(["S"]));
+    kernel.declare_struct(
+        &name,
+        &StructDecl {
+            universe_context: UniverseContext::default(),
+            arity: Telescope::done(Telescope::build(
+                [(binder(8, "a"), nat_type()), (binder(9, "b"), nat_type())],
+                (),
+            )),
+            result_sort: Term::type_ground(),
+            module: Qualifier::from(["S"]),
+            root: RootId::Entry,
+            rep_public: true,
+            polarities: Vec::new(),
+        },
+    );
+
+    let type_ = Term::from(Subterm::StructType(StructType {
+        name: name.clone(),
+        universes: Vec::new(),
+        params: Vec::new(),
+    }));
+    let literal = Term::struct_(name, Vec::<Term>::new(), Vec::<Term>::new());
+    let neutral = Term::free_var(&binder(0, "s"));
+
+    assert_eq!(convert(&mut kernel, &type_, &literal, &neutral), Ok(false));
 }
 
 /// Proof irrelevance: at a `Prop`-sorted type any two terms convert, *without* either being examined. This is what licenses erasure to drop proofs wholesale.

@@ -530,7 +530,8 @@ fn struct_eta(
         }
     }
 
-    Ok(true)
+    // The walk is driven by the literal's fields, so a literal shorter than the declaration ends it early; whether the telescope was consumed is what says the walk covered the type. Anything left standing is a field the neutral was never asked about, and accepting there would equate a malformed literal with any neutral at all.
+    Ok(telescope.is_empty())
 }
 
 /// The last chance before a structural refusal: grant each side the one definitional unfolding `force` withheld, and hand the pair back for [`compare`]'s loop to compare on its next turn. A refusal when neither side has a folded recursive spelling to open.
