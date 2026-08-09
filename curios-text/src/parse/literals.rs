@@ -81,12 +81,8 @@ pub(super) fn parse_nat_digits<'a>() -> Parser<'a, NatLiteral> {
         .and_drop(parse_whitespace())
 }
 
-pub(super) fn parse_nat<'a>() -> Parser<'a, NatLiteral> {
-    parse_nat_digits()
-}
-
 pub(super) fn parse_nat_literal_u32<'a>() -> Parser<'a, u32> {
-    parse_nat().flat_map(|lit| {
+    parse_nat_digits().flat_map(|lit| {
         let NatLiteral(n, _) = lit;
         match n.to_u32() {
             Some(k) => pure(k),
