@@ -9,8 +9,9 @@ pub use error::*;
 
 #[cfg(feature = "archive")]
 mod archive;
+// A deliberate narrowing of the crate-root `pub use` convention: the module's items are archive plumbing with no consumer outside the crate.
 #[cfg(feature = "archive")]
-pub use archive::*;
+pub(crate) use archive::*;
 
 mod names;
 pub use names::*;
