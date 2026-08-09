@@ -89,6 +89,24 @@ After M1a this is a pure optimisation: 1052 items stop being cloned per compilat
 
 The provenance queries `Prefix::declares_*` exist to recover, per lookup, what a merged map threw away. Replace the merge with a base environment the unit adds to. `Coverage::Complete`/`Partial` already names the distinction the whole-module passes need, and those passes continue to see the complete set.
 
+### M2b — the lowerer names its scope
+
+Found while doing M2, and the reason M2 read as smaller than it was. `into_core_with_prelude` does not consult the prelude; it *rebuilds* it, once per namespace, on every compile:
+
+```rust
+table:      prepared.table.clone().into_iter().collect(),   // module graph
+public:     prepared.public.clone().into_iter().collect(),  // public interfaces
+induct_decls = prepared.core.induct_decls.clone();          // and struct_decls, concepts, witnesses
+```
+
+Seven collections, one move: clone the prelude's, extend with the entry's own, hand the merged thing forward. That is the splice, in a different container — and `PreparedPrelude` is already the Text-stage environment, consumed field by field instead of being asked.
+
+M2 removed four of the seven, because checking showed only one consumer ever needed the prelude's entries and it now asks for them: `audit_public_exposures` walks alias edges until one lands on something nominal — which may be a prelude type — and then reads that declaration's telescopes. It was correct only because somebody upstream had concatenated the prelude into the map it searched, with nothing stating that requirement; `NominalScope` states it. The dependency sort, the other supposed reason for merging, never needed it at all: `node_reference_names` looks a declaration up only for names an item itself declares.
+
+What remains is `table` and `public`, extended in place by `resolve` and `resolve_with_prelude`. Those are the module graph and the interface map — real scope, and the same unstated relation. They were left out of M2 deliberately: they are name resolution and the public-interface audit, the riskiest code in the lowerer, and they have nothing to do with which declarations a `Module` carries. `universe_seeds` is *not* in scope here — it is an index space, covered by the watermark exclusion below.
+
+The shape is the one `Globals` has: `PreparedPrelude` gains lookup, the lowerer resolves own-then-base, and nothing is copied to make a query answerable.
+
 ### M3 — elaboration names its environment
 
 M1b removes elaboration's positional assumption; what remains is that it still takes a bare `prefix: Option<&Module>` and re-seeds a context from it by hand. Give it the environment type its own stage deserves, so the prelude arrives as scope rather than as a module that happens to be consulted.
@@ -139,10 +157,11 @@ Whole-module passes never cache and re-run at link: positivity over the complete
 - M1: the kernel's verdicts over the whole corpus are unchanged, item for item, against the spliced walk it replaces — the migration's only real risk is a definition that silently stops being in scope.
 - M1: an environment lookup that misses refuses, with its own diagnostic, rather than panicking or skipping.
 - M2–M4: each stage's prose contract becomes an assertion or disappears; `erase_module_with_prelude`'s caller guarantee in particular has no test today.
+- M2b: a public entry aliasing a *prelude* nominal type is audited identically whether or not anything merged the registries — the property `exposed_nominal` rested on and nothing stated.
 - M5: an empty-cache build and a cache hit, following the `curios-binaryen` precedent — plus the case it exists for, a `curios-cert`-only edit that re-runs certification and **not** elaboration, asserted by the build script's own warning appearing once rather than twice. A stale or corrupted image must fail certification rather than be skipped.
 - M6: parallel verdicts equal serial verdicts, item for item and in order, over the whole prelude; `kernel_memo_parity`'s property survives per-item kernels.
 - M7: deferred to its own specification once M1–M6 have landed.
 
 ## Retirement criteria
 
-- Before this specification is deleted: the environment boundary is recorded in `curios-cert`'s and `curios-elab`'s crate documentation, replacing the prose caller contracts it removes; the cross-cutting decision — that a module is a compilation unit and the prelude an environment — is recorded in [DESIGN.md](../../DESIGN.md); [SOUNDNESS.md](../../SOUNDNESS.md)'s *Prefix identification* row is deleted with the mechanism it describes rather than re-graded, and erasure's matching contract is deleted with it rather than added as a row; the `curios-archive` keying discipline is recorded in that crate's documentation; and M7, if still pending, is carried out to a specification of its own.
+- Before this specification is deleted: the environment boundary is recorded in `curios-cert`'s, `curios-elab`'s and `curios-text`'s crate documentation, replacing the prose caller contracts it removes; the cross-cutting decision — that a module is a compilation unit and the prelude an environment — is recorded in [DESIGN.md](../../DESIGN.md); [SOUNDNESS.md](../../SOUNDNESS.md)'s *Prefix identification* row is deleted with the mechanism it describes rather than re-graded, and erasure's matching contract is deleted with it rather than added as a row; the `curios-archive` keying discipline is recorded in that crate's documentation; and M7, if still pending, is carried out to a specification of its own.

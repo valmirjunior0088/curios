@@ -19,8 +19,8 @@ mod tests;
 
 use {
     super::{
-        Coverage, Erased, Globals, Kernel, KernelError, check_definition, check_entrypoint,
-        check_induct_decl, check_positions, check_rec_group, check_struct_decl,
+        Coverage, Declarations, Erased, Globals, Kernel, KernelError, check_definition,
+        check_entrypoint, check_induct_decl, check_positions, check_rec_group, check_struct_decl,
         partial_definitions, positivity_vectors, satisfiable,
     },
     curios_core::{
@@ -473,8 +473,12 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, globals: &Globals) -> Vec<
     // Declaration acceptance, after the item walk rather than before it: a registry telescope may mention any top-level definition — a type alias, a type constructor's own `rec` group — and those names are only defined as the walk proceeds. Every item defines whether or not it checked, so by this point the environment is complete. Strict positivity runs over the *full* declaration set — the registries are merged even though the items are not, because a user declaration may reach a prelude one — so the analysis recomputes every vector rather than reading any from the archive; then the size condition, the clause the item walk cannot supply, because it computes each signature's sort and compares it to nothing.
     if let Err(refusal) = positivity_vectors(
         &mut kernel,
-        &module.induct_decls,
-        &module.struct_decls,
+        Declarations::extending(
+            globals.inducts(),
+            globals.structs(),
+            &module.induct_decls,
+            &module.struct_decls,
+        ),
         Coverage::Complete,
     ) {
         verdicts.push(Verdict {

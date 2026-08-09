@@ -14,7 +14,7 @@
 
 use {
     curios_core::{Free, Global, InductDecl, Item, Module, StructDecl, Term, UniverseContext},
-    std::collections::{BTreeSet, HashMap, HashSet},
+    std::collections::{BTreeMap, BTreeSet, HashMap, HashSet},
 };
 
 /// A top-level name's entry: what it is, and what it unfolds to if anything.
@@ -31,8 +31,9 @@ struct Definition {
 #[derive(Default, Clone)]
 pub struct Globals {
     definitions: HashMap<Free, Definition>,
-    inducts: HashMap<Global, InductDecl>,
-    structs: HashMap<Global, StructDecl>,
+    /// `BTreeMap` rather than `HashMap` because these are handed to strict positivity as the base of its declaration set, and that pass reports *the first refusal in name order*. A hashed base would make which refusal it reports depend on iteration order.
+    inducts: BTreeMap<Global, InductDecl>,
+    structs: BTreeMap<Global, StructDecl>,
     /// Concept names only. No judgment in this crate reads a concept's resolution metadata, so what is held is exactly what [`Globals::in_scope`] needs to answer for the namespace — the one query that had no home when it lived on a prefix descriptor.
     concepts: HashSet<Global>,
     /// The names in scope here that are *not* known to terminate, closed transitively already.
@@ -91,8 +92,8 @@ impl Globals {
 
         Self {
             definitions,
-            inducts: module.induct_decls.clone().into_iter().collect(),
-            structs: module.struct_decls.clone().into_iter().collect(),
+            inducts: module.induct_decls.clone(),
+            structs: module.struct_decls.clone(),
             concepts: module.concepts.keys().cloned().collect(),
             partial: module
                 .items
@@ -108,6 +109,16 @@ impl Globals {
     /// The names in scope here that are not known to terminate. See the field.
     pub(crate) fn partial(&self) -> &BTreeSet<Global> {
         &self.partial
+    }
+
+    /// The `induct` registry in scope here, as the base of a declaration set. See [`crate::Declarations`] on why the base is analyzed rather than believed.
+    pub(crate) fn inducts(&self) -> &BTreeMap<Global, InductDecl> {
+        &self.inducts
+    }
+
+    /// The `struct` registry in scope here. See [`Globals::inducts`].
+    pub(crate) fn structs(&self) -> &BTreeMap<Global, StructDecl> {
+        &self.structs
     }
 
     /// Whether `name` is already in scope here, in any of the namespaces this holds.

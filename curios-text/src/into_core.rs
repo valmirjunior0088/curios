@@ -1379,8 +1379,7 @@ fn flat_aliases(items: &[FlatItem]) -> HashMap<curios_core::Global, AliasEdge> {
 fn exposed_nominal(
     entry: &Entry,
     aliases: &HashMap<curios_core::Global, AliasEdge>,
-    induct_decls: &BTreeMap<curios_core::Global, curios_core::InductDecl>,
-    struct_decls: &BTreeMap<curios_core::Global, curios_core::StructDecl>,
+    scope: NominalScope<'_>,
 ) -> Option<(curios_core::Global, Vec<AliasEdge>)> {
     let mut current = curios_core::Global::Authored(
         entry
@@ -1393,7 +1392,7 @@ fn exposed_nominal(
     let mut traversed = Vec::new();
 
     loop {
-        if induct_decls.contains_key(&current) || struct_decls.contains_key(&current) {
+        if scope.declares(&current) {
             return Some((current, traversed));
         }
         if !seen.insert(current.clone()) {
@@ -1402,6 +1401,48 @@ fn exposed_nominal(
         let edge = aliases.get(&current)?.clone();
         current = edge.target.clone();
         traversed.push(edge);
+    }
+}
+
+/// Every nominal declaration an alias chain can land on: the entry's own, over the ones the prelude already made visible.
+///
+/// A *scope*, not a merged map. The audit walks alias edges until it reaches something nominal, and an alias may legitimately point at a prelude type — so the question crosses the boundary and is answered by asking both halves. Merging them upstream answers it too, and that is what this replaced: a map whose correctness here depended on somebody else having concatenated the prelude into it, with nothing saying so. See `documentation/DESIGN.md`, "A module is a compilation unit, and the prelude is an environment".
+#[derive(Clone, Copy)]
+struct NominalScope<'a> {
+    /// The already-lowered prelude, or `None` when lowering *is* the prelude and there is nothing beneath it.
+    base: Option<&'a curios_core::Module>,
+    induct_decls: &'a BTreeMap<curios_core::Global, curios_core::InductDecl>,
+    struct_decls: &'a BTreeMap<curios_core::Global, curios_core::StructDecl>,
+}
+
+impl<'a> NominalScope<'a> {
+    fn new(
+        base: Option<&'a curios_core::Module>,
+        induct_decls: &'a BTreeMap<curios_core::Global, curios_core::InductDecl>,
+        struct_decls: &'a BTreeMap<curios_core::Global, curios_core::StructDecl>,
+    ) -> Self {
+        Self {
+            base,
+            induct_decls,
+            struct_decls,
+        }
+    }
+
+    /// Whether `name` names an `induct` or a `struct` anywhere in scope.
+    fn declares(&self, name: &curios_core::Global) -> bool {
+        self.induct(name).is_some() || self.struct_(name).is_some()
+    }
+
+    fn induct(&self, name: &curios_core::Global) -> Option<&'a curios_core::InductDecl> {
+        self.induct_decls
+            .get(name)
+            .or_else(|| self.base.and_then(|base| base.induct_decls.get(name)))
+    }
+
+    fn struct_(&self, name: &curios_core::Global) -> Option<&'a curios_core::StructDecl> {
+        self.struct_decls
+            .get(name)
+            .or_else(|| self.base.and_then(|base| base.struct_decls.get(name)))
     }
 }
 
@@ -1504,8 +1545,7 @@ fn audit_public_exposures(
     public: &HashMap<Qualifier, PublicInterface>,
     table: &HashMap<Qualifier, ModuleInfo>,
     items: &[FlatItem],
-    induct_decls: &BTreeMap<curios_core::Global, curios_core::InductDecl>,
-    struct_decls: &BTreeMap<curios_core::Global, curios_core::StructDecl>,
+    scope: NominalScope<'_>,
 ) -> Result<(), Error> {
     let aliases = flat_aliases(items);
     let sources = alias_sources(&aliases);
@@ -1537,9 +1577,7 @@ fn audit_public_exposures(
 
     for (module, interface) in public {
         for (label, entry) in &interface.bindings {
-            let Some((nominal, traversed)) =
-                exposed_nominal(entry, &aliases, induct_decls, struct_decls)
-            else {
+            let Some((nominal, traversed)) = exposed_nominal(entry, &aliases, scope) else {
                 continue;
             };
             let item = module.with(label).join();
@@ -1551,7 +1589,7 @@ fn audit_public_exposures(
                 }
             }
 
-            if let Some(induct_decl) = induct_decls.get(&nominal) {
+            if let Some(induct_decl) = scope.induct(&nominal) {
                 let nominal_dependencies = globals(induct_decl.arity.free_vars());
                 audit_dependencies(&audiences, &sources, &exposure, &item, nominal_dependencies)?;
 
@@ -1569,7 +1607,7 @@ fn audit_public_exposures(
                         ),
                     )?;
                 }
-            } else if let Some(struct_decl) = struct_decls.get(&nominal) {
+            } else if let Some(struct_decl) = scope.struct_(&nominal) {
                 // The parameter domains alone: `arity.free_vars()` would reach the fields it terminates in, and the two are audited under different rules — parameters belong to the nominal type's public face, fields to its representation.
                 let mut walk = &struct_decl.arity;
                 let mut param_dependencies = Vec::new();
@@ -1661,7 +1699,12 @@ pub fn into_core(
         .transpose()?;
     let tail = lower.value(&entrypoint.tail)?;
 
-    audit_public_exposures(&public, &table, &flat_items, &induct_decls, &struct_decls)?;
+    audit_public_exposures(
+        &public,
+        &table,
+        &flat_items,
+        NominalScope::new(None, &induct_decls, &struct_decls),
+    )?;
 
     // Emit the program as a flat list of named top-level definitions rather than folding it into one N-deep nested `let`/`rec` term. Cross-references (and the references in the entrypoint `body` and its `type_` annotation) stay free `Var`s keyed by the definition's joined name; the core passes `define` each one into the `Context`, so both the body and its annotation reduce through those definitions and agree — no shared binder scope required.
     let items = order_flat_items(flat_items, &induct_decls, &struct_decls)
@@ -1744,7 +1787,12 @@ pub fn prepare_prelude(
         )?;
     }
 
-    audit_public_exposures(&public, &table, &flat_items, &induct_decls, &struct_decls)?;
+    audit_public_exposures(
+        &public,
+        &table,
+        &flat_items,
+        NominalScope::new(None, &induct_decls, &struct_decls),
+    )?;
     let items = order_flat_items(flat_items, &induct_decls, &struct_decls)
         .into_iter()
         .map(FlatItem::into_core)
@@ -1823,10 +1871,11 @@ pub fn into_core_with_prelude(
     }
 
     let mut flat_items = Vec::new();
-    let mut induct_decls = prepared.core.induct_decls.clone();
-    let mut struct_decls = prepared.core.struct_decls.clone();
-    let mut concepts = prepared.core.concepts.clone();
-    let mut witnesses = prepared.core.witnesses.clone();
+    // The entry's own, not the prelude's extended in place. What the prelude declares is *scope*, and the one pass here that asks a scope question — the public-exposure audit, whose alias walk may land on a prelude type — takes it as a base to query rather than as entries copied into these maps. The dependency sort below never needed it: it looks a declaration up only for names an item itself declares.
+    let mut induct_decls = BTreeMap::new();
+    let mut struct_decls = BTreeMap::new();
+    let mut concepts = BTreeMap::new();
+    let mut witnesses = BTreeSet::new();
     let mut foreigns = ForeignStore::new();
     process_items(
         &entrypoint.module.items,
@@ -1847,7 +1896,12 @@ pub fn into_core_with_prelude(
         .map(|type_| lower.term(type_))
         .transpose()?;
     let body = lower.value(&entrypoint.tail)?;
-    audit_public_exposures(&public, &table, &flat_items, &induct_decls, &struct_decls)?;
+    audit_public_exposures(
+        &public,
+        &table,
+        &flat_items,
+        NominalScope::new(Some(&prepared.core), &induct_decls, &struct_decls),
+    )?;
 
     // The entry's own items alone. The prelude reaches later stages as an *environment* they are seeded from — `Globals` at the certifier, a replayed context at elaboration and erasure — and copying its 1052 items into every compilation only ever existed so those stages could then skip them again by index. See `documentation/DESIGN.md`, "A module is a compilation unit, and the prelude is an environment".
     //

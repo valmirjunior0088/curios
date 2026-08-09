@@ -35,29 +35,106 @@ pub struct NotPositive {
     pub polarity: Polarity,
 }
 
-/// Analyze every declaration in `inducts` and `structs` for strict positivity modulo polarity, returning each declaration's parameter-polarity vector, or the first refusal in name order.
+/// The declaration set an analysis runs over: what an environment already put in scope, plus what the unit in hand declares.
 ///
-/// The maps are exactly the declaration set to analyze: the whole program when the kernel re-checks or the prelude is being built, and the user suffix alone when the elaborator replays a prelude. Anything the walk reaches outside them answers from the driver's registry ([`Env::induct_decl`] / [`Env::struct_decl`]), whose vector was computed when that declaration was — sound at the replay boundary because prelude items cannot mention user code, so every out-of-set declaration is a sink of the occurrence relation.
+/// **Both halves are analyzed, not merely consulted.** A module carries only its own declarations, so the two arrive in separate maps — but that is a fact about where the maps live, never about which of them is believed. Every vector this pass reports it recomputed, the base's included, which is what [`Coverage::Complete`] means and what keeps the kernel from inheriting a conclusion some other pass reached. Reading the base's carried [`InductDecl::polarities`] instead would be exactly the archived-vector trust the two coverage modes exist to keep apart.
+///
+/// A name in both halves resolves to the unit's own. That cannot arise on any path here — an entry program cannot reuse a prelude name — and the rule is stated so the type has an answer rather than a precondition.
+#[derive(Clone, Copy)]
+pub struct Declarations<'a> {
+    /// `None` when nothing is already in scope, which is not the same as empty maps only in that it needs no maps to point at: [`Term`] is `Rc`-backed and therefore not `Sync`, so there is no `static` empty registry to borrow.
+    base: Option<(
+        &'a BTreeMap<Global, InductDecl>,
+        &'a BTreeMap<Global, StructDecl>,
+    )>,
+    inducts: &'a BTreeMap<Global, InductDecl>,
+    structs: &'a BTreeMap<Global, StructDecl>,
+}
+
+impl<'a> Declarations<'a> {
+    /// Just these declarations, with nothing already in scope.
+    pub fn of(
+        inducts: &'a BTreeMap<Global, InductDecl>,
+        structs: &'a BTreeMap<Global, StructDecl>,
+    ) -> Self {
+        Self {
+            base: None,
+            inducts,
+            structs,
+        }
+    }
+
+    /// These declarations on top of a base an environment put in scope.
+    pub fn extending(
+        base_inducts: &'a BTreeMap<Global, InductDecl>,
+        base_structs: &'a BTreeMap<Global, StructDecl>,
+        inducts: &'a BTreeMap<Global, InductDecl>,
+        structs: &'a BTreeMap<Global, StructDecl>,
+    ) -> Self {
+        Self {
+            base: Some((base_inducts, base_structs)),
+            inducts,
+            structs,
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        self.inducts.is_empty()
+            && self.structs.is_empty()
+            && self
+                .base
+                .is_none_or(|(inducts, structs)| inducts.is_empty() && structs.is_empty())
+    }
+
+    /// Every name to analyze: the inductives in name order, then the structs. Grouped that way rather than globally sorted because the refusal reported is the first in this order, and adding a base should not change which refusal a set spanning both kinds reports.
+    fn names(&self) -> Vec<Global> {
+        let inducts = self
+            .base
+            .iter()
+            .flat_map(|(inducts, _)| inducts.keys())
+            .chain(self.inducts.keys())
+            .collect::<BTreeSet<_>>();
+        let structs = self
+            .base
+            .iter()
+            .flat_map(|(_, structs)| structs.keys())
+            .chain(self.structs.keys())
+            .collect::<BTreeSet<_>>();
+
+        inducts.into_iter().chain(structs).cloned().collect()
+    }
+
+    fn induct(&self, name: &Global) -> Option<&InductDecl> {
+        self.inducts
+            .get(name)
+            .or_else(|| self.base.and_then(|(inducts, _)| inducts.get(name)))
+    }
+
+    fn struct_(&self, name: &Global) -> Option<&StructDecl> {
+        self.structs
+            .get(name)
+            .or_else(|| self.base.and_then(|(_, structs)| structs.get(name)))
+    }
+}
+
+/// Analyze every declaration in `declarations` for strict positivity modulo polarity, returning each declaration's parameter-polarity vector, or the first refusal in name order.
+///
+/// The set is exactly what to analyze: the whole program when the kernel re-checks or the prelude is being built, and the unit's own declarations alone when the elaborator replays a prelude. Anything the walk reaches outside it answers from the driver's registry ([`Env::induct_decl`] / [`Env::struct_decl`]), whose vector was computed when that declaration was — sound at the replay boundary because prelude items cannot mention user code, so every out-of-set declaration is a sink of the occurrence relation.
 pub fn positivity_vectors<E: Env>(
     env: &mut E,
-    inducts: &BTreeMap<Global, InductDecl>,
-    structs: &BTreeMap<Global, StructDecl>,
+    declarations: Declarations<'_>,
     coverage: Coverage,
 ) -> Result<BTreeMap<Global, Vec<Polarity>>, NotPositive> {
     curios_profile::profile!("positivity_vectors");
-    if inducts.is_empty() && structs.is_empty() {
+    if declarations.is_empty() {
         return Ok(BTreeMap::new());
     }
 
     // Opening a telescope mints binders and is the expensive half of the pass, while the fixpoint below re-walks the same pieces several times — so split every declaration exactly once, up front.
-    let names = inducts
-        .keys()
-        .chain(structs.keys())
-        .cloned()
-        .collect::<Vec<_>>();
+    let names = declarations.names();
     let mut split = BTreeMap::new();
     for name in &names {
-        split.insert(name.clone(), Split::of(env, inducts, structs, name));
+        split.insert(name.clone(), Split::of(env, declarations, name));
     }
 
     let (vectors, closed) = fixpoint(env, &split, coverage);
@@ -91,13 +168,8 @@ struct Part {
 }
 
 impl Split {
-    fn of<E: Env>(
-        env: &mut E,
-        inducts: &BTreeMap<Global, InductDecl>,
-        structs: &BTreeMap<Global, StructDecl>,
-        name: &Global,
-    ) -> Self {
-        if let Some(declaration) = inducts.get(name) {
+    fn of<E: Env>(env: &mut E, declarations: Declarations<'_>, name: &Global) -> Self {
+        if let Some(declaration) = declarations.induct(name) {
             let params = binders(env, &declaration.arity);
             let arguments = params.iter().map(Term::free_var).collect::<Vec<_>>();
             let mut parts = Vec::new();
@@ -121,8 +193,8 @@ impl Split {
             return Self { params, parts };
         }
 
-        let declaration = structs
-            .get(name)
+        let declaration = declarations
+            .struct_(name)
             .expect("every analyzed name is an inductive or a struct");
         let params = binders(env, &declaration.arity);
         let arguments = params.iter().map(Term::free_var).collect::<Vec<_>>();

@@ -15,9 +15,8 @@ pub fn check_positivity(context: &mut Context, module: &mut Module) -> Result<()
     curios_profile::profile!("check_positivity");
     let vectors = positivity_vectors(
         context,
-        &module.induct_decls,
-        &module.struct_decls,
-        // At a replay this is the user suffix; the prelude prefix was analyzed when it was elaborated, and its vectors ride the archive.
+        curios_cert::Declarations::of(&module.induct_decls, &module.struct_decls),
+        // At a replay these are the entry's own; the prelude was analyzed when it was elaborated, and its vectors ride the archive.
         curios_cert::Coverage::Partial,
     )
     .map_err(|refusal| {
