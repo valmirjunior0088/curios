@@ -13,7 +13,7 @@
 //! A compile judges only the user's items, so the prelude's classification arrives on [`Definition::totality`] rather than being recomputed. That field is not taken on faith: the walk that runs when the archive is built starts from an empty environment, recomputes every flag, and refuses a definition whose recorded verdict is more generous than the kernel's own. Trusting it afterwards is trusting a verdict this crate already reached — the same structure as the rest of the archive-verdict pattern.
 
 use {
-    super::{Kernel, KernelError, Sort, group_totality},
+    super::{Globals, Kernel, KernelError, Sort, group_totality},
     curios_core::{Enter, Global, Intrinsic, Item, Module, Rec, Reducer, Subterm, Term, Totality},
     std::collections::{BTreeMap, BTreeSet, HashMap},
 };
@@ -61,7 +61,9 @@ fn locally_partial(kernel: &mut Kernel, term: &Term, memo: &mut HashMap<Term, bo
 
 /// Every definition in `module` that is not known to terminate, closed transitively over what each one mentions.
 ///
-/// An item `in_scope` already answers for arrived with an environment an earlier walk established: its flags are read from [`Definition::totality`] rather than recomputed, which is what keeps a compile from re-analyzing the standard library. That field is certified rather than believed — the walk from an empty environment recomputes every flag and refuses a definition whose recorded verdict is more generous than the kernel's own, so an archive that exists carries verdicts this crate reached.
+/// What `globals` already answers for is read rather than recomputed: its non-total set seeds the closure, and an item it declares has its flags read from [`Definition::totality`]. That is what keeps a compile from re-analyzing the standard library, and it is certified rather than believed — the walk from an empty environment recomputes every flag and refuses a definition whose recorded verdict is more generous than the kernel's own, so an archive that exists carries verdicts this crate reached.
+///
+/// **Seeding from the environment is load-bearing rather than an optimization.** The closure is over what a definition *mentions*, and once the already-judged items stop being carried inside `module` there is nothing left in this walk that knows `/std/Async/bind` is partial. A user proof reaching it would then close over a name absent from the set and read as total, which is exactly the identification (T) and (V) exist to prevent.
 ///
 /// The selection is by name for the same reason it is by name in [`recheck_module_verdicts`](crate::recheck_module_verdicts), and skipping is again the direction that needs the argument: an item declaring nothing is recomputed rather than passed over.
 ///
@@ -70,17 +72,17 @@ fn locally_partial(kernel: &mut Kernel, term: &Term, memo: &mut HashMap<Term, bo
 pub(crate) fn partial_definitions(
     kernel: &mut Kernel,
     module: &Module,
-    in_scope: impl Fn(&Global) -> bool,
+    globals: &Globals,
 ) -> (BTreeSet<Global>, Vec<(Global, KernelError)>) {
     let mut mentions: BTreeMap<Global, BTreeSet<Global>> = BTreeMap::new();
-    let mut partial: BTreeSet<Global> = BTreeSet::new();
+    let mut partial: BTreeSet<Global> = globals.partial().clone();
     let mut disagreements = Vec::new();
     let mut memo = HashMap::new();
 
     for item in &module.items {
         let definitions = item.definitions();
         let names = item.declared_names();
-        let carried = !names.is_empty() && names.into_iter().all(&in_scope);
+        let carried = !names.is_empty() && names.into_iter().all(|name| globals.in_scope(name));
         // A group that does not descend makes every member partial, whatever each body looks like on its own.
         let rejected = match item {
             Item::Rec(rec) if !carried => group_totality(kernel, &rec.group) == Totality::Partial,

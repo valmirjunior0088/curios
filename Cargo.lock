@@ -462,7 +462,6 @@ name = "curios"
 version = "0.8.1"
 dependencies = [
  "clap",
- "curios-base",
  "curios-binaryen",
  "curios-cert",
  "curios-cont",

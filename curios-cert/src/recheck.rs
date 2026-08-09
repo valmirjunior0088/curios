@@ -452,8 +452,7 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, globals: &Globals) -> Vec<
     }
 
     // Obligations (T) and (V), after the item walk for the same reason declaration acceptance runs there: the classification closes over what every definition mentions, and the environment is only complete once every item has been defined.
-    let (partial, disagreements) =
-        partial_definitions(&mut kernel, module, |name| globals.in_scope(name));
+    let (partial, disagreements) = partial_definitions(&mut kernel, module, globals);
     for (name, error) in disagreements {
         verdicts.push(Verdict {
             name: Some(name),
@@ -471,7 +470,7 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, globals: &Globals) -> Vec<
         }
     }
 
-    // Declaration acceptance, after the item walk rather than before it: a registry telescope may mention any top-level definition — a type alias, a type constructor's own `rec` group — and those names are only defined as the walk proceeds. Every item defines whether or not it checked, so by this point the environment is complete. Strict positivity runs over the *full* declaration set — the whole spliced program — so the analysis recomputes every vector rather than reading any from the archive; then the size condition, the clause the item walk cannot supply, because it computes each signature's sort and compares it to nothing.
+    // Declaration acceptance, after the item walk rather than before it: a registry telescope may mention any top-level definition — a type alias, a type constructor's own `rec` group — and those names are only defined as the walk proceeds. Every item defines whether or not it checked, so by this point the environment is complete. Strict positivity runs over the *full* declaration set — the registries are merged even though the items are not, because a user declaration may reach a prelude one — so the analysis recomputes every vector rather than reading any from the archive; then the size condition, the clause the item walk cannot supply, because it computes each signature's sort and compares it to nothing.
     if let Err(refusal) = positivity_vectors(
         &mut kernel,
         &module.induct_decls,

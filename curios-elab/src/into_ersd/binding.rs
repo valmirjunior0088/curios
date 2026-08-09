@@ -9,14 +9,15 @@ use {
 };
 
 impl Lowering {
-    /// Erase every top-level item from `start` on, in dominance order among themselves (see [`dominance_order`]); items before `start` are an already-erased prefix whose bindings the environment carries.
+    /// Erase every top-level item, in dominance order among themselves (see [`dominance_order`]).
+    ///
+    /// It took a `start` index until the prelude stopped being spliced into the module: an already-erased prefix used to sit at the front of `module.items`, and the count of it was what said where the entry's own began. A module now carries only its own items — what an earlier erasure established arrives as bindings the environment already holds — so there is no prefix here to start past.
     pub(super) fn erase_items(
         &mut self,
         context: &mut Context,
         module: &Module,
-        start: usize,
     ) -> Result<(), Error> {
-        for index in dominance_order(module, start) {
+        for index in dominance_order(module) {
             let item = &module.items[index];
             match item {
                 Item::Let(definition) => {
@@ -60,8 +61,8 @@ impl Lowering {
 /// The surface-to-core lowering already sorts the items it can see, but a witness reference is only spliced into its consumer during elaboration, after that sort has run — so a witness definition can sit after a consumer in the flat list. Eager erasure resolves every reference to an already-bound operand as it threads the chain, so it needs a true dominance order: the same Kahn sort, re-run over the elaborated terms whose free variables now include the spliced witness references. (The legacy path resolves top-level names lazily against one global environment and never needed this.)
 ///
 /// Independent items keep their flat order (lowest-index-ready tiebreak). A value cycle across top-level items is unexpressible, so the stall fallback that emits the lowest remaining item only guarantees termination.
-fn dominance_order(module: &Module, start: usize) -> Vec<usize> {
-    let items = &module.items[start..];
+fn dominance_order(module: &Module) -> Vec<usize> {
+    let items = &module.items;
     let count = items.len();
 
     let owner = items
@@ -74,7 +75,7 @@ fn dominance_order(module: &Module, start: usize) -> Vec<usize> {
         })
         .collect::<BTreeMap<Free, usize>>();
 
-    // A reference to an item before `start` is already bound and carries no edge; only references among the suffix items order the sort.
+    // A reference to something the environment already binds carries no edge; only references among these items order the sort.
     let dependencies = items
         .iter()
         .enumerate()
@@ -97,7 +98,7 @@ fn dominance_order(module: &Module, start: usize) -> Vec<usize> {
         emitted[ready] = true;
         order.push(ready);
     }
-    order.into_iter().map(|index| index + start).collect()
+    order
 }
 
 /// Every global name an item references: the free variables of its types and bodies, plus — for an item declaring a registered inductive or struct — the free variables of that registry entry's telescopes, whose field and index types live nowhere in the type former's own normal-form body.

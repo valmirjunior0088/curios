@@ -28,6 +28,10 @@ curios-ersd = { workspace = true, features = ["archive"] }
 rkyv = { workspace = true }
 sha2 = "0.11.0"
 
+# The kernel is a build-dependency because certifying the prelude is what the build script does. It is a dev-dependency as well, and only that, for the two ignored inventories in `src/restore.rs` that read the certifier's verdicts over the restored image rather than asserting them.
+[dev-dependencies]
+curios-cert = { workspace = true, features = ["archive"] }
+
 [build-dependencies]
 # The build script is where the fixed prelude is actually elaborated, so it is
 # same dependency in both kinds: the library's measurement points and the build

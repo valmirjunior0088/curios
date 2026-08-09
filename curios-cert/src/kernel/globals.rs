@@ -14,7 +14,7 @@
 
 use {
     curios_core::{Free, Global, InductDecl, Item, Module, StructDecl, Term, UniverseContext},
-    std::collections::{HashMap, HashSet},
+    std::collections::{BTreeSet, HashMap, HashSet},
 };
 
 /// A top-level name's entry: what it is, and what it unfolds to if anything.
@@ -35,6 +35,12 @@ pub struct Globals {
     structs: HashMap<Global, StructDecl>,
     /// Concept names only. No judgment in this crate reads a concept's resolution metadata, so what is held is exactly what [`Globals::in_scope`] needs to answer for the namespace — the one query that had no home when it lived on a prefix descriptor.
     concepts: HashSet<Global>,
+    /// The names in scope here that are *not* known to terminate, closed transitively already.
+    ///
+    /// Obligations (T) and (V) close over what an erased position reaches, and what it reaches runs out of this environment as readily as out of the module being walked. Held as the non-total set rather than a flag per definition because that is what a walk seeds from, and because it is the answer for names this crate will never see a body for.
+    ///
+    /// It is not believed. `Definition::totality` is recomputed by the walk that judges an item, which refuses a definition whose recorded verdict is more generous than the kernel's own — so a verdict arriving here is one this crate reached about those exact terms.
+    partial: BTreeSet<Global>,
     /// One above the highest binder index every term in scope here mentions, as derived by the walk that established this environment.
     ///
     /// Carried rather than re-derived because it is a constant of that walk, and re-deriving it means traversing every term in scope on every later walk. A floor is a bound rather than a verdict, so a caller combines it with its own by maximum and can only ever widen.
@@ -88,8 +94,20 @@ impl Globals {
             inducts: module.induct_decls.clone().into_iter().collect(),
             structs: module.struct_decls.clone().into_iter().collect(),
             concepts: module.concepts.keys().cloned().collect(),
+            partial: module
+                .items
+                .iter()
+                .flat_map(Item::definitions)
+                .filter(|definition| !definition.totality.is_total())
+                .map(|definition| definition.name)
+                .collect(),
             binder_floor: carried,
         }
+    }
+
+    /// The names in scope here that are not known to terminate. See the field.
+    pub(crate) fn partial(&self) -> &BTreeSet<Global> {
+        &self.partial
     }
 
     /// Whether `name` is already in scope here, in any of the namespaces this holds.

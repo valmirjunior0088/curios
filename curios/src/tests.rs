@@ -12,7 +12,6 @@ mod foreign;
 mod inference;
 mod io;
 mod io_monad;
-mod kernel;
 mod lift;
 mod map;
 mod matching;

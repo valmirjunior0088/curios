@@ -64,13 +64,13 @@ impl UniverseErased<Module> {
         Self(project_module(module))
     }
 
-    /// Project a module that extends an already-projected `prefix`, validating and projecting only what it adds.
+    /// Project a module whose scope `prefix` already covers, validating and projecting only what it adds.
     ///
-    /// `elaborate_module_with_prelude` returns the prelude's declarations concatenated with the user's, so the merged module's leading items *are* the prelude's — cloned, not re-elaborated. Projecting it whole therefore walked the entire standard library a second time to produce terms [`Lowering::erase_items`] then skips. Splicing the prefix back in keeps the item indices the skip count relies on while validating and rebuilding only the suffix.
+    /// `module.items` are the entry's own, so they are validated and projected in full — there is nothing of the prefix's among them to walk twice. What the prefix still contributes is its *registries*: those are merged rather than carried per module, so the entries it already holds are split out by [`added`] and restored by [`merged`] instead of being re-validated on every compilation.
     pub(super) fn project_extending(prefix: &Self, module: &Module) -> Result<Self, Error> {
         let prefix = &prefix.0;
         let residual = Module {
-            items: module.items[prefix.items.len()..].to_vec(),
+            items: module.items.clone(),
             universe_seeds: module.universe_seeds.clone(),
             induct_decls: added(&module.induct_decls, &prefix.induct_decls),
             struct_decls: added(&module.struct_decls, &prefix.struct_decls),
@@ -84,7 +84,7 @@ impl UniverseErased<Module> {
         let residual = project_module(&residual);
 
         Ok(Self(Module {
-            items: prefix.items.iter().cloned().chain(residual.items).collect(),
+            items: residual.items,
             universe_seeds: residual.universe_seeds,
             induct_decls: merged(&prefix.induct_decls, residual.induct_decls),
             struct_decls: merged(&prefix.struct_decls, residual.struct_decls),
@@ -267,7 +267,7 @@ pub fn erase_module(
         seed_registries(context, &module)?;
 
         let mut lowering = Lowering::default();
-        lowering.erase_items(context, &module, 0)?;
+        lowering.erase_items(context, &module)?;
 
         seal_entry(lowering, context, &module.body, &expected)
     })
@@ -527,7 +527,7 @@ pub fn erase_prelude_prefix(
     context.with_suppressed_privacy(|context| {
         seed_registries(context, &prelude)?;
         let mut lowering = Lowering::default();
-        lowering.erase_items(context, &prelude, 0)?;
+        lowering.erase_items(context, &prelude)?;
         Ok(ErasedPrelude {
             module: lowering.builder.into_module(),
             environment: lowering.environment,
@@ -535,9 +535,11 @@ pub fn erase_prelude_prefix(
     })
 }
 
-/// Replay an erased prelude prefix and erase only the user suffix and entrypoint body. The Core context is re-seeded with the prelude's definitions (so the suffix's re-derived types reduce through them), the builder resumes over the restored arenas, and the suffix items erase in dominance order among themselves — every prelude reference is already bound.
+/// Replay an erased prelude prefix and erase `module`'s own items and entrypoint body. The Core context is re-seeded with the prelude's definitions (so the module's re-derived types reduce through them), the builder resumes over the restored arenas, and the items erase in dominance order among themselves — every prelude reference is already bound.
 ///
-/// Two things about `prelude` are the caller's to guarantee, and both hold for the archived prelude that `curios-prelude` restores — the only prelude this is called with. Its universes are taken as already validated, at the restore boundary where the bytes became a `Module`; and `module` must be it extended in place, its items the prelude's own followed by the user's, which is what `elaborate_module_with_prelude` returns. Both are what let this skip re-deriving the standard library on every compilation.
+/// One thing about `prelude` is the caller's to guarantee, and it holds for the archived prelude that `curios-prelude` restores — the only prelude this is called with: its universes are taken as already validated, at the restore boundary where the bytes became a `Module`. That is what lets this skip re-deriving the standard library on every compilation.
+///
+/// What used to sit beside it was a second, unstated guarantee — that `module` was the prelude *extended in place*, its items the prelude's own followed by the user's — which nothing checked and which the item count below was an index into. `module` now carries only its own items, so the requirement has no content left to state.
 pub fn erase_module_with_prelude(
     context: &mut Context,
     prelude: &Module,
@@ -593,7 +595,7 @@ pub fn erase_module_with_prelude(
             dangled: Default::default(),
             owners: Default::default(),
         };
-        lowering.erase_items(context, &module, prelude.items.len())?;
+        lowering.erase_items(context, &module)?;
 
         seal_entry(lowering, context, &module.body, &expected)
     })

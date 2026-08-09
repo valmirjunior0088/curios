@@ -7,7 +7,7 @@ pub enum Stage<'a> {
     Text(&'a Entrypoint),
     /// Core as `curios_text::into_core` produced it: syntax that nothing has checked. It carries term metavariables, lowering-time universe seeds, and unresolved `Transient` nodes (`Infix`, `NumLit`), and its registries are unelaborated. Useful for debugging the lowering; not a typed program.
     Core(&'a curios_core::Module),
-    /// Core after elaboration and zonking, which is the module every later stage consumes. Metavariable-free by construction — `zonk_module` errors on an unsolved hole — with universes validated, positivity checked, totality recorded, and both erasure obligations gated. The prelude prefix is spliced back in from the archive.
+    /// Core after elaboration and zonking, which is the module every later stage consumes. Metavariable-free by construction — `zonk_module` errors on an unsolved hole — with universes validated, positivity checked, totality recorded, and both erasure obligations gated. It carries the entry's own items only; the prelude is scope every later stage is seeded from, not a run of items in front of them.
     ///
     /// The difference from [`Stage::Core`] is the absence of `Metavar` and every `Transient`, which is exactly what the independent kernel requires of an input: this is the stage `curios_cert::recheck_module` takes, and [`Stage::Core`] is not.
     CoreElab(&'a curios_core::Module),

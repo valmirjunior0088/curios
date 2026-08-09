@@ -120,7 +120,15 @@ pub fn with_prelude<R>(use_prelude: impl FnOnce(&Prelude) -> R) -> R {
 #[cfg(test)]
 mod tests {
     use {
-        super::*, crate::SYNTAX, curios_core::Global, curios_core::Item, std::collections::BTreeSet,
+        super::*,
+        crate::SYNTAX,
+        curios_cert::{
+            Globals, KernelError, recheck_module_verdicts, recheck_module_verdicts_uncached,
+        },
+        curios_core::Global,
+        curios_core::Item,
+        curios_elab::DEFAULT_STEP_BUDGET,
+        std::collections::{BTreeMap, BTreeSet},
     };
 
     #[test]
@@ -241,6 +249,102 @@ mod tests {
                     target.field
                 );
             }
+        });
+    }
+
+    /// A term's printed head, clipped — enough to tell one refusal's shape from another's without pasting a standard-library type into a tally.
+    fn head(term: &Term) -> String {
+        let rendered = format!("{term}");
+        let rendered = rendered.split_whitespace().collect::<Vec<_>>().join(" ");
+
+        match rendered.char_indices().nth(44) {
+            Some((cut, _)) => format!("{}…", &rendered[..cut]),
+            None => rendered,
+        }
+    }
+
+    /// The class a refusal is tallied under.
+    ///
+    /// Deliberately mechanical: the variant, plus for a mismatch the two sides' printed heads. Naming classes like "index inversion" here would be inventing categories from a heuristic, which is how this project's wrong answers get made — the point of the tally is to let the categories fall out of it.
+    fn class(error: &KernelError) -> String {
+        match error {
+            KernelError::Mismatch { inferred, expected } => {
+                format!("Mismatch  {}  vs  {}", head(inferred), head(expected))
+            }
+            other => {
+                let rendered = format!("{other:?}");
+
+                rendered
+                    .split(['(', ' ', '{'])
+                    .next()
+                    .unwrap_or("?")
+                    .to_string()
+            }
+        }
+    }
+
+    /// Every item the kernel refuses across the whole fixed prelude, tallied by class.
+    ///
+    /// Not an assertion — a measurement, run on demand. `recheck_module` stops at the first refusal and so says nothing about what lies past it; this walks to the end with each verdict independent of the others (see `recheck_module_verdicts`), which is what makes the classes countable rather than discovered one build at a time.
+    ///
+    /// # Why it lives here
+    ///
+    /// It used to sit in `curios/src/tests/kernel.rs` and reach the prelude by compiling a fixture, because a compiled module carried the standard library spliced in front of the user's items. It no longer does, so the subject has to be named directly — and the restored image is what the subject *is*. Walking it from an empty environment is not the path production takes, which is exactly why this is an inventory and not an assertion: what asserts the prelude is acceptable is `curios-prelude`'s own build script, which runs this same walk and panics on the first refusal.
+    ///
+    /// # It used to abort in a debug build, and that was the defect
+    ///
+    /// Judgment depth once scaled with a `Str` literal's *length* — 103 nested judgments at 40 bytes, 324 at 160, 494 at 640 — because a literal is one certified-UTF-8 link per scalar and `infer`/`check` descended two frames per link. At roughly 21.5KiB of stack per level in a debug build that exhausted a 2MiB thread partway through `/std/Toml`, and no reduction budget could prevent it: a budget bounds steps, and depth is not steps.
+    ///
+    /// `infer` now defers the child obligations of an application, a constructor, and a record onto a stack rather than descending into them, so depth is bounded by written nesting. Both profiles complete, and both report the same verdicts — which is the check that this was a restructuring rather than a change of rule.
+    ///
+    /// The measurement that found it is worth keeping: a backtrace at depth 300 showed the stack was 300 `infer` and 298 `check` frames and *nothing else*, which retired an earlier diagnosis naming four functions that were never on it. Stack size is not something to hide behind either: raising `RUST_MIN_STACK` would have concealed this rather than fixed it.
+    ///
+    /// An abort rather than a tally is a finding, not noise: nothing here is wrapped in a catch, because a kernel that aborts is a kernel to fix.
+    #[test]
+    #[ignore = "inventory: measures where the kernel disagrees rather than asserting"]
+    fn kernel_disagreements() {
+        with_prelude(|prelude| {
+            let verdicts =
+                recheck_module_verdicts(prelude.core(), DEFAULT_STEP_BUDGET, &Globals::default());
+
+            let mut tally: BTreeMap<String, usize> = BTreeMap::new();
+            for verdict in &verdicts {
+                *tally.entry(class(&verdict.error)).or_default() += 1;
+            }
+
+            println!(
+                "\n=== {} of {} prelude items refused ===",
+                verdicts.len(),
+                prelude.core().items.len()
+            );
+            for (class, count) in &tally {
+                println!("  {count:>4}  {class}");
+            }
+            for verdict in &verdicts {
+                let name = match &verdict.name {
+                    Some(name) => format!("{name}"),
+                    None => "<entrypoint>".to_string(),
+                };
+                println!("        {name}  —  {}", class(&verdict.error));
+            }
+        });
+    }
+
+    /// Memoization is an evaluation strategy exactly as long as switching it off changes nothing. This runs the whole-prelude walk both ways and requires the verdict lists identical — the same instrument that validated the defunctionalized judgment (identical counts across profiles).
+    ///
+    /// The prelude is the subject because the property needs a large body of real terms to mean anything, and this is the only one the workspace has. That it walks from an empty environment rather than production's is beside the point here: what is under test is the memo, which both walks use.
+    #[test]
+    #[ignore = "parity: runs the whole-prelude walk twice, the second time uncached"]
+    fn kernel_memo_parity() {
+        with_prelude(|prelude| {
+            assert_eq!(
+                recheck_module_verdicts(prelude.core(), DEFAULT_STEP_BUDGET, &Globals::default()),
+                recheck_module_verdicts_uncached(
+                    prelude.core(),
+                    DEFAULT_STEP_BUDGET,
+                    &Globals::default()
+                ),
+            );
         });
     }
 }

@@ -5,7 +5,6 @@
 //! The oracle is what makes this defensible. `curios-elab` cannot be asked about a mutated *Core* module, so a mutant carries no second opinion to compare against; the property therefore has to be one whose answer is known by construction. A definition declared at `Nat` whose body is `true`, or one declared at anything else whose body is `0`, is ill-typed for a reason that needs no checker to establish — so a kernel that accepts it has admitted something false, and one that refuses it has done its job whatever rule it used.
 
 use {
-    curios_base::RootId,
     curios_core::{Item, Module, Term},
     curios_pipeline::recheck,
     curios_text::{Entrypoint, RootSource},
@@ -59,17 +58,17 @@ fn foreign_body() -> Term {
     Term::type_ground()
 }
 
-/// Where `module`'s own `let` items sit — the entry program's, as against the prelude the compilation put in scope.
+/// Where `module`'s `let` items sit.
 ///
-/// Selected by [`RootId`], which lowering stamps on every definition, rather than by an index the prelude ends at. The subjects declare their items at the top level of an entry program, so `RootId::Entry` names exactly them however the prelude reaches the module.
-fn user_lets(module: &Module) -> Vec<usize> {
+/// Every item is the entry program's own: the prelude reaches a compilation as scope rather than as items copied in front of it, so there is nothing here to filter out.
+fn lets(module: &Module) -> Vec<usize> {
     module
         .items
         .iter()
         .enumerate()
         .filter_map(|(index, item)| match item {
-            Item::Let(definition) if definition.root == RootId::Entry => Some(index),
-            _ => None,
+            Item::Let(_) => Some(index),
+            Item::Rec(_) => None,
         })
         .collect()
 }
@@ -98,7 +97,7 @@ fn every_body_replaced_by_a_foreign_term_is_refused() {
             "{description}: the unmutated subject must be accepted, or every mutant passes for the wrong reason",
         );
 
-        for index in user_lets(&module) {
+        for index in lets(&module) {
             let Item::Let(definition) = &module.items[index] else {
                 unreachable!("the index came from a `let`");
             };
@@ -145,7 +144,7 @@ fn every_type_replaced_by_another_item_s_is_refused() {
         )
         .unwrap_or_else(|error| panic!("{description}: the subject type-checks:\n{error}"));
 
-        let declared = user_lets(&module)
+        let declared = lets(&module)
             .into_iter()
             .map(|index| match &module.items[index] {
                 Item::Let(definition) => (index, definition.type_.clone()),

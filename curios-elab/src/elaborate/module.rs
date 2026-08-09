@@ -1046,10 +1046,9 @@ fn elaborate_module_suffix(
     context.set_local_floor(module.binder_floor);
     context.seed_universes(&module.universe_seeds, universe_floor);
 
-    // Elaborate only what the prefix did not already cover.
-    let replayed = prefix.map_or(0, |prefix| prefix.items.len());
-    let mut items = Vec::with_capacity(module.items.len() - replayed);
-    for item in module.items.iter().skip(replayed) {
+    // Every item, because `module` carries only its own: the prefix arrived as scope through the replay above rather than as a run of leading items to skip.
+    let mut items = Vec::with_capacity(module.items.len());
+    for item in &module.items {
         items.push(elaborate_module_item(context, item)?);
     }
 
@@ -1232,7 +1231,7 @@ pub fn elaborate_and_zonk_module(
     )?)
 }
 
-/// Elaborate a [`Module`] whose `sys`/`syn`/`std` prelude prefix is already elaborated, reusing the cached result instead of re-type-checking it.
+/// Elaborate a [`Module`] against an already-elaborated `sys`/`syn`/`std` prelude, reusing the cached result instead of re-type-checking it.
 ///
 /// `prelude` is the elaborated + zonked prelude-only module — its `items` are the whole prelude in dependency order (its trivial `body`/`type_` are ignored). The lowered `module` still carries the *whole* program as `text::into_core` produced it, and the prelude is its **leading prefix**: with the prune gone every program lowers the same prelude, and since prelude items depend only on each other they always topologically sort ahead of the user items.
 ///
@@ -1284,8 +1283,7 @@ pub fn elaborate_and_zonk_with_prelude_reporting(
     let (suffix, body_type, obligations) =
         finalize_and_check(context, suffix, body_type, &inherited)?;
 
-    let mut items = prelude.items.clone();
-    items.extend(suffix.items);
+    // The items are the entry's own and stay that way: what the prelude contributes is scope, and every consumer past this point is seeded from it rather than reading it off the front of this list. The registries below are still merged, because a whole-module pass — strict positivity above all — decides over the complete declaration set and a user declaration may reach a prelude one.
     let mut induct_decls = prelude.induct_decls.clone();
     induct_decls.extend(suffix.induct_decls);
     let mut struct_decls = prelude.struct_decls.clone();
@@ -1296,7 +1294,7 @@ pub fn elaborate_and_zonk_with_prelude_reporting(
     witnesses.extend(suffix.witnesses);
 
     let module = Module {
-        items,
+        items: suffix.items,
         universe_seeds: suffix.universe_seeds,
         induct_decls,
         struct_decls,

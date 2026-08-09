@@ -1849,12 +1849,13 @@ pub fn into_core_with_prelude(
     let body = lower.value(&entrypoint.tail)?;
     audit_public_exposures(&public, &table, &flat_items, &induct_decls, &struct_decls)?;
 
-    let mut items = prepared.core.items.clone();
-    items.extend(
-        order_flat_items(flat_items, &induct_decls, &struct_decls)
-            .into_iter()
-            .map(FlatItem::into_core),
-    );
+    // The entry's own items alone. The prelude reaches later stages as an *environment* they are seeded from — `Globals` at the certifier, a replayed context at elaboration and erasure — and copying its 1052 items into every compilation only ever existed so those stages could then skip them again by index. See `documentation/DESIGN.md`, "A module is a compilation unit, and the prelude is an environment".
+    //
+    // The registries above are a different question and are still merged: a user declaration may reach a prelude one, so strict positivity and declaration sizing need the whole set, which is why they read a map rather than this list.
+    let items = order_flat_items(flat_items, &induct_decls, &struct_decls)
+        .into_iter()
+        .map(FlatItem::into_core)
+        .collect();
 
     Ok((
         curios_core::Module {
