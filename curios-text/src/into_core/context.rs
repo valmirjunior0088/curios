@@ -1,5 +1,6 @@
 use {
     super::PublicInterface,
+    super::Scoped,
     crate::{Error, Name},
     curios_base::{Entropy, Qualifier, RootId, Span, SyntaxRegistry},
     std::{
@@ -225,8 +226,8 @@ pub(super) struct Context<'a> {
     prefix: Qualifier,
     // The root this module's own subtree belongs to — set explicitly once, where a root is mounted (`Context::new`/`nested_root`), and inherited unchanged by ordinary nesting (`nested`). Never re-derived from `prefix`'s string content past that point.
     root: RootId,
-    table: &'a HashMap<Qualifier, ModuleInfo>,
-    public: &'a HashMap<Qualifier, PublicInterface>,
+    table: &'a Scoped<'a, ModuleInfo>,
+    public: &'a Scoped<'a, PublicInterface>,
     qualifiers: HashMap<String, Qualifier>,
     bindings: HashMap<String, Qualifier>,
     // Shared, program-global metavariable-id counter. The whole program folds into one `curios_core::Term`, so holes in different module bodies (each its own `Context` via `nested`) must draw from the same monotonic source. Shared by reference (like `table`/`public`) and `Cell`-backed so it survives `Lowerer`'s immutable `&Context` borrow.
@@ -245,8 +246,8 @@ pub(super) struct Context<'a> {
 impl<'a> Context<'a> {
     #[allow(clippy::too_many_arguments)]
     pub(super) fn new(
-        table: &'a HashMap<Qualifier, ModuleInfo>,
-        public: &'a HashMap<Qualifier, PublicInterface>,
+        table: &'a Scoped<'a, ModuleInfo>,
+        public: &'a Scoped<'a, PublicInterface>,
         root: RootId,
         metavars: &'a Entropy,
         universes: &'a Entropy,

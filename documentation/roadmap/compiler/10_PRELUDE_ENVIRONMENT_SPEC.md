@@ -107,6 +107,10 @@ What remains is `table` and `public`, extended in place by `resolve` and `resolv
 
 The shape is the one `Globals` has: `PreparedPrelude` gains lookup, the lowerer resolves own-then-base, and nothing is copied to make a query answerable.
 
+**What resolving them turned up.** These two are *not* the registries' shape. The registries were merged so a lookup would succeed; `table` and `public` are merged because the resolution algorithm computes over the union — `fixed_point` iterates `pub use` edges to stability, mutating as it goes. They are still layerable, and the reason is exact: **reads span both halves, writes are own-only.** Every write targets `use_.module`, and `pub_uses` are collected from the entry's own items, so nothing ever mutates a prelude interface.
+
+Two call sites then need a decision the type cannot make for them, and they go opposite ways. `Audiences::compute` iterates the **union** — a public entry may hand out a prelude type, so who-can-see-what crosses the boundary by nature. The exposure audit iterates the **entry's own**: `prepare_prelude` runs the same audit over the prelude when it builds it, so re-auditing `/std` against one program's imports re-answers a settled question. That second one is a behaviour change, in the direction of doing less, and it is sound exactly because the prelude's audit already ran.
+
 ### M3 — elaboration names its environment
 
 M1b removes elaboration's positional assumption; what remains is that it still takes a bare `prefix: Option<&Module>` and re-seeds a context from it by hand. Give it the environment type its own stage deserves, so the prelude arrives as scope rather than as a module that happens to be consulted.

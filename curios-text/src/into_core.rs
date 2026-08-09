@@ -11,6 +11,9 @@ use match_compile::*;
 mod interface;
 use interface::*;
 
+mod scoped;
+use scoped::*;
+
 #[cfg(test)]
 mod tests;
 
@@ -28,7 +31,7 @@ use {
 
 // Reject a reference that *resolves into* an internal root (`sys`) when the consuming module lies outside the privileged roots. `resolved` is the segments of the qualifier the reference resolved to — not the raw spelled path — so absolute and relative spellings are guarded identically. A non-internal target or a privileged consumer passes through.
 fn guard_internal_root(
-    table: &HashMap<Qualifier, ModuleInfo>,
+    table: &Scoped<'_, ModuleInfo>,
     consumer: &Qualifier,
     resolved: &[String],
 ) -> Result<(), Error> {
@@ -50,22 +53,23 @@ fn guard_internal_root(
 }
 
 // Whether `label` names an internal root: discoverable so the standard library can resolve it by absolute path, but unreachable from user code.
-fn is_internal_root(table: &HashMap<Qualifier, ModuleInfo>, label: &str) -> bool {
+fn is_internal_root(table: &Scoped<'_, ModuleInfo>, label: &str) -> bool {
     table
         .get(&Qualifier::from([label]))
         .is_some_and(|info| info.root.kind() == RootKind::Internal)
 }
 
 // Whether `consumer` is rooted in a privileged root (the standard library or an internal root itself), and so may reference internal roots.
-fn privileged(table: &HashMap<Qualifier, ModuleInfo>, consumer: &Qualifier) -> bool {
+fn privileged(table: &Scoped<'_, ModuleInfo>, consumer: &Qualifier) -> bool {
     table
         .get(consumer)
         .is_some_and(|info| info.root.kind().is_privileged())
 }
 
-struct Resolved {
+struct Resolved<'a> {
     modules: HashMap<Qualifier, Rc<Module>>,
-    table: HashMap<Qualifier, ModuleInfo>,
+    /// The entry's own module graph, over whatever a prepared prelude already established. Every insertion below targets a module the entry declares; reads cross the boundary, which is why this is layered rather than copied. See [`Scoped`].
+    table: Scoped<'a, ModuleInfo>,
 }
 
 /// Build-time source set for the fixed compilation roots. The prelude owner supplies already parsed modules keyed by canonical qualifier; `curios-text` retains no embedded `/syn` or `/std` source table.
@@ -175,11 +179,11 @@ impl PreparedPrelude {
     }
 }
 
-impl Resolved {
+impl Resolved<'_> {
     fn new() -> Self {
         Self {
             modules: HashMap::new(),
-            table: HashMap::new(),
+            table: Scoped::default(),
         }
     }
 
@@ -1542,8 +1546,8 @@ fn audit_dependencies(
 ///
 /// The declared type of every definition is audited here rather than during lowering: only the converged interface graph knows where a name ends up visible, so a signature naming an item re-exported out of a private child is accepted, while one naming something its own consumers cannot reach is not.
 fn audit_public_exposures(
-    public: &HashMap<Qualifier, PublicInterface>,
-    table: &HashMap<Qualifier, ModuleInfo>,
+    public: &Scoped<'_, PublicInterface>,
+    table: &Scoped<'_, ModuleInfo>,
     items: &[FlatItem],
     scope: NominalScope<'_>,
 ) -> Result<(), Error> {
@@ -1575,7 +1579,7 @@ fn audit_public_exposures(
         )?;
     }
 
-    for (module, interface) in public {
+    for (module, interface) in public.own() {
         for (label, entry) in &interface.bindings {
             let Some((nominal, traversed)) = exposed_nominal(entry, &aliases, scope) else {
                 continue;
@@ -1811,8 +1815,8 @@ pub fn prepare_prelude(
 
     Ok(PreparedPrelude {
         roots,
-        table: table.into_iter().collect(),
-        public: public.into_iter().collect(),
+        table: table.into_own().into_iter().collect(),
+        public: public.into_own().into_iter().collect(),
         core,
         metavariable_floor: metavars.count(),
         binder_floor: binders.count(),
@@ -1829,9 +1833,10 @@ pub fn into_core_with_prelude(
     syntax: &SyntaxRegistry,
 ) -> Result<(curios_core::Module, usize, usize, ForeignStore), Error> {
     curios_profile::profile!("into_core_with_prelude");
+    // Layered, not copied: the prelude's module graph is the base this resolution reads through and never writes to.
     let mut resolved = Resolved {
         modules: HashMap::new(),
-        table: prepared.table.clone().into_iter().collect(),
+        table: Scoped::over(&prepared.table),
     };
     resolved.resolve(entrypoint, loader, &prepared.roots)?;
     let Resolved { mut table, modules } = resolved;
@@ -1839,7 +1844,7 @@ pub fn into_core_with_prelude(
         entrypoint,
         &modules,
         &mut table,
-        prepared.public.clone().into_iter().collect(),
+        Scoped::over(&prepared.public),
     )?;
 
     let metavars = Entropy::<usize>::new();

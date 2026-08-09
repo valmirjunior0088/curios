@@ -1,5 +1,5 @@
 use {
-    super::ModuleInfo,
+    super::{ModuleInfo, Scoped},
     crate::{Entrypoint, Error, GroupItem, Module, Name, TopItem, UseGroup},
     curios_base::{Qualifier, RootId},
     std::{
@@ -74,14 +74,14 @@ pub(super) struct Audiences {
 
 impl Audiences {
     pub(super) fn compute(
-        public: &HashMap<Qualifier, PublicInterface>,
-        table: &HashMap<Qualifier, ModuleInfo>,
+        public: &Scoped<'_, PublicInterface>,
+        table: &Scoped<'_, ModuleInfo>,
     ) -> Self {
         let mut modules: HashMap<Qualifier, Vec<Qualifier>> = HashMap::new();
         // The compilation root is visible to the whole program.
         modules.insert(Qualifier::empty(), vec![Qualifier::empty()]);
 
-        for (module, info) in table {
+        for (module, info) in table.iter() {
             for (label, vis_pub) in info.children() {
                 if !vis_pub {
                     widen(&mut modules, module.with(label), module.clone());
@@ -91,7 +91,7 @@ impl Audiences {
 
         loop {
             let mut changed = false;
-            for (module, interface) in public {
+            for (module, interface) in public.iter() {
                 let exposure = modules.get(module).cloned().unwrap_or_default();
                 for entry in interface.children.values() {
                     for root in &exposure {
@@ -107,7 +107,7 @@ impl Audiences {
 
         let mut bindings: HashMap<Qualifier, Vec<Qualifier>> = HashMap::new();
 
-        for (module, info) in table {
+        for (module, info) in table.iter() {
             for (label, vis_pub) in info.bindings() {
                 if !vis_pub {
                     widen(&mut bindings, module.with(label), module.clone());
@@ -115,7 +115,7 @@ impl Audiences {
             }
         }
 
-        for (module, interface) in public {
+        for (module, interface) in public.iter() {
             let exposure = modules.get(module).cloned().unwrap_or_default();
             for entry in interface.bindings.values() {
                 for root in &exposure {
@@ -171,8 +171,8 @@ fn widen(
 
 /// The target of `parent`'s child module `label` as seen from `consumer`, or `None` when it is absent or out of view.
 pub(super) fn visible_child(
-    public: &HashMap<Qualifier, PublicInterface>,
-    table: &HashMap<Qualifier, ModuleInfo>,
+    public: &Scoped<'_, PublicInterface>,
+    table: &Scoped<'_, ModuleInfo>,
     consumer: &Qualifier,
     parent: &Qualifier,
     label: &str,
@@ -192,8 +192,8 @@ pub(super) fn visible_child(
 
 /// The target of `parent`'s binding `label` as seen from `consumer`, or `None` when it is absent or out of view.
 pub(super) fn visible_binding(
-    public: &HashMap<Qualifier, PublicInterface>,
-    table: &HashMap<Qualifier, ModuleInfo>,
+    public: &Scoped<'_, PublicInterface>,
+    table: &Scoped<'_, ModuleInfo>,
     consumer: &Qualifier,
     parent: &Qualifier,
     label: &str,
@@ -212,12 +212,12 @@ pub(super) fn visible_binding(
 }
 
 // Phase 2 + 3 entry point: seed direct public interfaces (including inductive constructor modules), then resolve every `pub use` to a fixed point. Also adds constructor modules to `table` (the direct-interface view) so phase 4 can classify private-vs-missing accesses through them. `seed` is a third parallel tree-walk (mirroring `discover`/`process_items`), so it needs the identical explicit-per-root treatment: it reads `table`'s already-correct root-level children (from `Resolved::resolve`'s explicit registration) but its own recursion only ever follows literal `TopItem::Mod` occurrences in the items it's handed — sys/syn/std no longer appear there, so their own content must be seeded from an explicit call, or `public["sys"]` etc. would never exist at all (not even empty), breaking every absolute reference into them.
-pub(super) fn resolve(
+pub(super) fn resolve<'a>(
     entrypoint: &Entrypoint,
     modules: &HashMap<Qualifier, Rc<Module>>,
-    table: &mut HashMap<Qualifier, ModuleInfo>,
-) -> Result<HashMap<Qualifier, PublicInterface>, Error> {
-    let mut public = HashMap::new();
+    table: &mut Scoped<'_, ModuleInfo>,
+) -> Result<Scoped<'a, PublicInterface>, Error> {
+    let mut public = Scoped::default();
     let mut pub_uses = Vec::new();
 
     seed(
@@ -235,12 +235,12 @@ pub(super) fn resolve(
     Ok(public)
 }
 
-pub(super) fn resolve_prelude(
+pub(super) fn resolve_prelude<'a>(
     roots: &[(String, RootId)],
     modules: &HashMap<Qualifier, Rc<Module>>,
-    table: &mut HashMap<Qualifier, ModuleInfo>,
-) -> Result<HashMap<Qualifier, PublicInterface>, Error> {
-    let mut public = HashMap::new();
+    table: &mut Scoped<'_, ModuleInfo>,
+) -> Result<Scoped<'a, PublicInterface>, Error> {
+    let mut public = Scoped::default();
     let mut pub_uses = Vec::new();
 
     // Seed the synthetic compilation root as well: its public children are the explicitly mounted `/sys`, `/syn`, and `/std` roots. Absolute references resolve through this interface even though it has no source items.
@@ -273,12 +273,12 @@ pub(super) fn resolve_prelude(
     Ok(public)
 }
 
-pub(super) fn resolve_with_prelude(
+pub(super) fn resolve_with_prelude<'a>(
     entrypoint: &Entrypoint,
     modules: &HashMap<Qualifier, Rc<Module>>,
-    table: &mut HashMap<Qualifier, ModuleInfo>,
-    prepared: HashMap<Qualifier, PublicInterface>,
-) -> Result<HashMap<Qualifier, PublicInterface>, Error> {
+    table: &mut Scoped<'_, ModuleInfo>,
+    prepared: Scoped<'a, PublicInterface>,
+) -> Result<Scoped<'a, PublicInterface>, Error> {
     let mut public = prepared;
     let mut pub_uses = Vec::new();
 
@@ -300,8 +300,8 @@ fn seed(
     items: &[TopItem],
     prefix: &Qualifier,
     modules: &HashMap<Qualifier, Rc<Module>>,
-    table: &mut HashMap<Qualifier, ModuleInfo>,
-    public: &mut HashMap<Qualifier, PublicInterface>,
+    table: &mut Scoped<'_, ModuleInfo>,
+    public: &mut Scoped<'_, PublicInterface>,
     pub_uses: &mut Vec<PubUse>,
 ) -> Result<(), Error> {
     let mut interface = PublicInterface::new();
@@ -446,8 +446,8 @@ fn seed(
 
 // Phase 3. Repeatedly resolve every `pub use` against the current interface graph, inserting whatever is resolvable, until a full round adds nothing.
 fn fixed_point(
-    public: &mut HashMap<Qualifier, PublicInterface>,
-    table: &HashMap<Qualifier, ModuleInfo>,
+    public: &mut Scoped<'_, PublicInterface>,
+    table: &Scoped<'_, ModuleInfo>,
     pub_uses: &[PubUse],
 ) -> Result<(), Error> {
     loop {
@@ -473,8 +473,8 @@ fn fixed_point(
 
 // The selectors of one `pub use` that resolve against the interfaces *as they currently stand*. Anything not yet present is skipped (deferred to a later round). Never errors — dead entries are classified after the fixed point.
 fn resolvable(
-    public: &HashMap<Qualifier, PublicInterface>,
-    table: &HashMap<Qualifier, ModuleInfo>,
+    public: &Scoped<'_, PublicInterface>,
+    table: &Scoped<'_, ModuleInfo>,
     use_: &PubUse,
 ) -> Vec<(Ns, String, Qualifier, Option<Qualifier>)> {
     let Some(provider) = provider(public, table, &use_.module, &use_.name) else {
@@ -542,8 +542,8 @@ fn resolvable(
 
 // The `Option` view of `resolve_provider`, for callers where non-resolution is benign: a selector that does not resolve *yet* during the fixed point, or a chain hop that simply does not exist. The terminal `classify_dead` pass calls `resolve_provider` directly to surface the precise error instead.
 fn provider(
-    public: &HashMap<Qualifier, PublicInterface>,
-    table: &HashMap<Qualifier, ModuleInfo>,
+    public: &Scoped<'_, PublicInterface>,
+    table: &Scoped<'_, ModuleInfo>,
     module: &Qualifier,
     name: &Name,
 ) -> Option<Qualifier> {
@@ -552,7 +552,7 @@ fn provider(
 
 // Insert one resolved entry into a slot. Returns whether the map changed.
 fn insert(
-    public: &mut HashMap<Qualifier, PublicInterface>,
+    public: &mut Scoped<'_, PublicInterface>,
     module: &Qualifier,
     ns: Ns,
     label: String,
@@ -577,8 +577,8 @@ fn insert(
 
 // Phase 3 post-pass. After convergence any selector still resolving to nothing is an error, classified by following its re-export chain: a chain that returns to a slot already seen is a cyclic re-export, otherwise the target is missing.
 fn classify_dead(
-    public: &HashMap<Qualifier, PublicInterface>,
-    table: &HashMap<Qualifier, ModuleInfo>,
+    public: &Scoped<'_, PublicInterface>,
+    table: &Scoped<'_, ModuleInfo>,
     pub_uses: &[PubUse],
 ) -> Result<(), Error> {
     for use_ in pub_uses {
@@ -626,8 +626,8 @@ fn classify_dead(
 
 // Walk the re-export chain for an unresolved `(module, ns, label)` to decide whether it is a cycle or a genuine miss.
 fn classify_label(
-    public: &HashMap<Qualifier, PublicInterface>,
-    table: &HashMap<Qualifier, ModuleInfo>,
+    public: &Scoped<'_, PublicInterface>,
+    table: &Scoped<'_, ModuleInfo>,
     pub_uses: &[PubUse],
     module: &Qualifier,
     ns: Ns,
@@ -657,8 +657,8 @@ fn classify_label(
 
 // The provider module of a `pub use` in `module` that would supply `label` in namespace `ns`, if any (named selector match, or a glob whose source is reachable). Used only by chain classification.
 fn producer(
-    public: &HashMap<Qualifier, PublicInterface>,
-    table: &HashMap<Qualifier, ModuleInfo>,
+    public: &Scoped<'_, PublicInterface>,
+    table: &Scoped<'_, ModuleInfo>,
     pub_uses: &[PubUse],
     module: &Qualifier,
     ns: Ns,
@@ -688,8 +688,8 @@ fn producer(
 
 // Walk a `use` source path to its provider module, following re-export targets. A relative path's first segment may be the current module's own child of any visibility (you are inside it, so its privacy does not apply to itself); every later segment, and every segment of an absolute path, must be a public child. Each resolved hop is guarded so a non-privileged consumer cannot follow a re-export into an internal root (`sys`) by any spelling. On failure, returns the precise error at the offending segment, using the direct-interface table to tell private from absent; `provider` is the `Option` view for callers where that is benign.
 fn resolve_provider(
-    public: &HashMap<Qualifier, PublicInterface>,
-    table: &HashMap<Qualifier, ModuleInfo>,
+    public: &Scoped<'_, PublicInterface>,
+    table: &Scoped<'_, ModuleInfo>,
     module: &Qualifier,
     name: &Name,
 ) -> Result<Qualifier, Error> {
@@ -735,11 +735,7 @@ fn resolve_provider(
     Ok(current)
 }
 
-fn segment_error(
-    table: &HashMap<Qualifier, ModuleInfo>,
-    module: &Qualifier,
-    segment: &str,
-) -> Error {
+fn segment_error(table: &Scoped<'_, ModuleInfo>, module: &Qualifier, segment: &str) -> Error {
     match table.get(module).and_then(|info| info.get_child(segment)) {
         Some(false) => Error::PrivateChildModule {
             segment: segment.to_string(),
