@@ -398,9 +398,11 @@ fn check_non_informative(kernel: &mut Kernel, declaration: &StructDecl) -> Resul
     )
 }
 
-/// Walk one declaration telescope, requiring each `Type`-sorted domain to sit at or below the declared result level — one rung higher for the leading `uniform` binders, which are the declaration's parameters.
+/// Walk one declaration telescope, typing each domain and requiring each `Type`-sorted one to sit at or below the declared result level — one rung higher for the leading `uniform` binders, which are the declaration's parameters.
 ///
-/// A `Prop`-sorted result imposes no condition: `Prop` is impredicative, and what keeps *that* sound is the large-elimination guard, not sizing. A `Prop`-sorted domain imposes none either — `Prop` sits below every level.
+/// A `Prop`-sorted result imposes no *size* condition: `Prop` is impredicative, and what keeps that sound is the large-elimination guard, not sizing. A `Prop`-sorted domain imposes none either — `Prop` sits below every level.
+///
+/// **Typing the domain is a separate clause from sizing it, and reading the two as one admitted a term.** `infer_type` used to run inside the size test, so a declaration whose `result_sort` is `Prop` had no domain typed at all — and nothing else covers them: `check_arity` reaches an `induct`'s parameters and indices but not its constructor telescopes, a `struct` has no `check_arity`, and `check_non_informative` only *classifies* each field with `Sort::of`. A field type that lies about its own sort therefore stood unexamined; see `recheck::tests::a_proposition_may_not_carry_a_computed_relevant_field`.
 fn check_signature<B: Bound + Clone>(
     kernel: &mut Kernel,
     telescope: &Telescope<B>,
@@ -420,8 +422,10 @@ fn check_signature<B: Bound + Clone>(
         let mut telescope = telescope.clone();
 
         while let Telescope::Cons(domain, rest) = telescope {
+            let sort = infer_type(kernel, &domain)?;
+
             if let Some((bound, raised)) = &sized
-                && let Sort::Type(level) = infer_type(kernel, &domain)?
+                && let Sort::Type(level) = sort
             {
                 let upper = if entries.len() < uniform {
                     raised

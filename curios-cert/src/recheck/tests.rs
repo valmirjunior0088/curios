@@ -2856,6 +2856,249 @@ fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
     );
 }
 
+/// A declaration's domains are typed whatever sort the declaration lands in, and until they were, a `Prop`-sorted one had none of them typed at all.
+///
+/// `check_signature` owes clause 6 two things — that every constructor or field domain is *well-sorted*, and that a `Type`-sorted one sits at or below the family's declared level — and it ran the first inside the second. The size half is vacuous at a `Prop`-sorted result, `Prop` being impredicative, so `infer_type` sat behind `if let Some(..) = &sized` and never ran for such a declaration. Nothing else covers those positions: `check_arity` reaches an `induct`'s parameters and indices but not its constructor telescopes, a `struct` reaches no `check_arity` at all, and `check_non_informative` only *classifies* each field with `Sort::of`, the lookup that reads a claim rather than checking one.
+///
+/// The claim it reads is what turns the gap into a forgery. `Sort::of` classifies a stuck type-valued `match` by its **motive** — the same reading the large-elimination guard was lied to through, closed there by `check_motive` typing the motive where `infer` meets the elimination. A field type is never met by `infer`, so the lie was available again: `struct Wrap(b : Bool) : Prop { held : match b : Prop | false => Nat | true => Nat end }` classifies `Prop`, so the non-informativeness rule excuses the field, while `Wrap(true)` really carries a `Nat`.
+///
+/// From there the derivation is the one `check_non_informative`'s own documentation predicts. `Wrap(true)` is `Prop`-sorted, so irrelevance identifies `Wrap(true){0}` with `Wrap(true){1}`, and `refl(Wrap(true), Wrap(true){0})` therefore inhabits `Eq(Wrap(true), Wrap(true){0}, Wrap(true){1})` — the indices being compared at a `Prop`-sorted domain, which is the rule working correctly. Transporting along it under the *honest* motive `(s, t, q) => (Held(s.0)) -> Held(t.0)` yields `(Held(0)) -> Held(1)`, and `Held`'s only constructor targets `0`, so the vacuous elimination coverage licenses proves `False`.
+///
+/// Verified while the hole was open: `recheck_module_verdicts` returned **zero** refusals for exactly this module, `let boom : False` included. No surface program reaches it, and the reason is that `curios-elab` keeps the two clauses apart where this crate had fused them: `check_telescope_entries` types every declaration domain through `check_is_sort`, and `add_declaration_sizing` is a separate walk that returns early at a non-`Type` result. So this is constructed by hand, and the second opinion was worth nothing here.
+///
+/// Its control is [`a_proposition_carrying_a_computed_proof_is_still_accepted`], the same computed field type with arms that really are propositions: a fix refusing every `Prop`-sorted declaration, or every field type it could not read off syntactically, would fail it.
+///
+/// The refusal is required to name `Wrap` and not merely to exist, because every later item in the derivation is built on the forged field and would mismatch for a downstream reason once anything at all went wrong. What has to be refused is the *declaration*, at the arm the motive lied about: a `Nat` at `Type 0` checked against the `Prop` the motive claims.
+#[test]
+fn a_proposition_may_not_carry_a_computed_relevant_field() {
+    let verdicts = recheck_module_verdicts(&computed_field_forgery(), 1_000_000);
+    let wrap = Global::Authored(Qualifier::from(["Wrap"]));
+
+    assert!(
+        verdicts
+            .iter()
+            .any(|verdict| verdict.name.as_ref() == Some(&wrap)
+                && matches!(verdict.error, KernelError::Mismatch { .. })),
+        "the kernel certified a closed inhabitant of `False`: {verdicts:?}",
+    );
+}
+
+/// The control: the same computed field type with `Prop`-sorted arms still declares, so the guard above refuses a motive that lies rather than every field a declaration has to reduce to read.
+#[test]
+fn a_proposition_carrying_a_computed_proof_is_still_accepted() {
+    let true_name = Global::Authored(Qualifier::from(["True"]));
+    let true_type = Term::induct_type(true_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let qed = Term::variant(
+        true_name.clone(),
+        Vec::<Term>::new(),
+        "qed",
+        Vec::<Term>::new(),
+    );
+    let true_decl = proposition(vec![(
+        Atom::from("qed"),
+        InductParam {
+            telescope: Telescope::done(Vec::new()),
+            plicities: Vec::new(),
+        },
+    )]);
+
+    let wrap_name = Global::Authored(Qualifier::from(["Wrap"]));
+    let module = Module {
+        items: vec![wrapped_at_true(&wrap_name, qed)],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::from([(true_name, true_decl)]),
+        struct_decls: BTreeMap::from([(
+            wrap_name,
+            computed_field_wrapper(true_type.clone(), true_type),
+        )]),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Term::intrinsic(Intrinsic::NatType),
+    };
+
+    assert_eq!(recheck_module_verdicts(&module, 1_000_000), Vec::new());
+}
+
+/// `struct Wrap(b : Bool) : Prop { held : match b : Prop | false => .. | true => .. end }` — a structure whose field type is a stuck `match` claiming, through its motive, to be a proposition.
+fn computed_field_wrapper(false_case: Term, true_case: Term) -> StructDecl {
+    let scrutinee = Free::local(60, Some("b"));
+    let field = Term::bool_match(
+        Term::free_var(&scrutinee),
+        None,
+        Term::prop(),
+        false_case,
+        true_case,
+    );
+
+    StructDecl {
+        universe_context: UniverseContext::empty(),
+        arity: Telescope::build(
+            [(scrutinee, Term::intrinsic(Intrinsic::BoolType))],
+            Telescope::build([(Free::local(61, Some("held")), field)], ()),
+        ),
+        result_sort: Term::prop(),
+        module: Qualifier::default(),
+        root: RootId::Entry,
+        rep_public: true,
+        polarities: Vec::new(),
+    }
+}
+
+/// `Wrap(true)`, the instance at which the field type above reduces to its true arm.
+fn wrap_at_true(wrap_name: &Global) -> Term {
+    Subterm::StructType(StructType {
+        name: wrap_name.clone(),
+        universes: Vec::new(),
+        params: vec![Term::intrinsic(Intrinsic::Bool(true))],
+    })
+    .into()
+}
+
+/// `wrapped : Wrap(true) = Wrap(true){held}`.
+fn wrapped_at_true(wrap_name: &Global, held: Term) -> Item {
+    authored(
+        &Global::Authored(Qualifier::from(["wrapped"])),
+        wrap_at_true(wrap_name),
+        Term::struct_(
+            wrap_name.clone(),
+            [Term::intrinsic(Intrinsic::Bool(true))],
+            [held],
+        ),
+    )
+}
+
+/// [`index_forgery`]'s transport, reached through a `Prop`-sorted structure that really carries a `Nat`.
+fn computed_field_forgery() -> Module {
+    let type_0 = Term::type_ground();
+    let nat_type = Term::intrinsic(Intrinsic::NatType);
+    let nat = |n: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
+
+    let false_name = Global::Authored(Qualifier::from(["False"]));
+    let equality_name = Global::Authored(Qualifier::from(["Eq"]));
+    let held_name = Global::Authored(Qualifier::from(["Held"]));
+    let wrap_name = Global::Authored(Qualifier::from(["Wrap"]));
+
+    let false_type = Term::induct_type(false_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let held_at = |index: Term| Term::induct_type(held_name.clone(), Vec::<Term>::new(), [index]);
+    let yes = Term::variant(
+        held_name.clone(),
+        Vec::<Term>::new(),
+        "yes",
+        Vec::<Term>::new(),
+    );
+    let wrap = wrap_at_true(&wrap_name);
+    let wrapping = |held: Term| {
+        Term::struct_(
+            wrap_name.clone(),
+            [Term::intrinsic(Intrinsic::Bool(true))],
+            [held],
+        )
+    };
+
+    let false_decl = proposition(Vec::new());
+    let held_decl = indexed_family(
+        Free::local(70, Some("n")),
+        nat_type.clone(),
+        nat(0),
+        type_0.clone(),
+    );
+
+    // forged : Eq(Wrap(true), Wrap(true){0}, Wrap(true){1}) = refl(Wrap(true), Wrap(true){0})
+    let forged_name = Global::Authored(Qualifier::from(["forged"]));
+    let forged = authored(
+        &forged_name,
+        Term::induct_type(
+            equality_name.clone(),
+            [wrap.clone()],
+            [wrapping(nat(0)), wrapping(nat(1))],
+        ),
+        Term::variant(equality_name.clone(), [wrap], "refl", [wrapping(nat(0))]),
+    );
+
+    // cast : (Held(0)) -> Held(1)
+    //   = match forged : (s, t, q) => (Held(s.0)) -> Held(t.0) | refl(z) => (w) => w end
+    let cast_name = Global::Authored(Qualifier::from(["cast"]));
+    let motive_left = Free::local(80, Some("s"));
+    let motive_right = Free::local(81, Some("t"));
+    let motive_proof = Free::local(82, Some("q"));
+    let arm_value = Free::local(83, Some("z"));
+    let carried = Free::local(84, Some("w"));
+    let identity = Free::local(85, Some("w"));
+    let cast = authored(
+        &cast_name,
+        Term::func_type([(carried.clone(), held_at(nat(0)))], held_at(nat(1))),
+        Term::induct_match_scoped_marked(
+            Term::free_var(&Free::from(&forged_name)),
+            Scope::close(
+                Many(3),
+                &[&motive_left, &motive_right, &motive_proof],
+                Term::func_type(
+                    [(
+                        carried,
+                        held_at(Term::proj(Term::free_var(&motive_left), 0)),
+                    )],
+                    held_at(Term::proj(Term::free_var(&motive_right), 0)),
+                ),
+            ),
+            [(
+                "refl",
+                vec![(Plicity::Explicit, arm_value.clone())],
+                Term::func(
+                    [(
+                        identity.clone(),
+                        held_at(Term::proj(Term::free_var(&arm_value), 0)),
+                    )],
+                    Term::free_var(&identity),
+                ),
+            )],
+            None,
+        ),
+    );
+
+    // held : Held(1) = cast(yes())
+    let held_value_name = Global::Authored(Qualifier::from(["held"]));
+    let held_value = authored(
+        &held_value_name,
+        held_at(nat(1)),
+        Term::apply(Term::free_var(&Free::from(&cast_name)), [yes]),
+    );
+
+    // boom : False = match held : (n, w) => False end
+    let boom_index = Free::local(90, Some("n"));
+    let boom_scrutinee = Free::local(91, Some("w"));
+    let boom = authored(
+        &Global::Authored(Qualifier::from(["boom"])),
+        false_type.clone(),
+        Term::induct_match_scoped_marked(
+            Term::free_var(&Free::from(&held_value_name)),
+            Scope::close(Many(2), &[&boom_index, &boom_scrutinee], false_type.clone()),
+            Vec::<(&str, Vec<(Plicity, Free)>, Term)>::new(),
+            None,
+        ),
+    );
+
+    Module {
+        items: vec![forged, cast, held_value, boom],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::from([
+            (false_name, false_decl),
+            (equality_name, equality_declaration()),
+            (held_name, held_decl),
+        ]),
+        struct_decls: BTreeMap::from([(
+            wrap_name,
+            computed_field_wrapper(nat_type.clone(), nat_type),
+        )]),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Term::intrinsic(Intrinsic::NatType),
+    }
+}
+
 /// A refusal names the types the way the program that produced them wrote them.
 ///
 /// `KernelError`'s own `Display` is faithful to Core — fully qualified paths, every parameter positional — which is right for a term printed in isolation and wrong for a message a reader has to recognize their own program in. `format_with` supplies the two axes that fix it: globals shortened against the module's symbol table, and a nominal family's implicit parameters marked from the type constructor's declared plicities.
