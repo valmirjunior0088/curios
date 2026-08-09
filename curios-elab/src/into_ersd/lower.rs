@@ -220,6 +220,38 @@ fn project_module(module: &Module) -> Module {
     }
 }
 
+/// Seed the erasure context's registries with `module`'s declarations — the re-derived types every item consults. The shared head of all three erasure entry points.
+fn seed_registries(context: &mut Context, module: &Module) -> Result<(), Error> {
+    for (name, induct_decl) in &module.induct_decls {
+        context.register_induct(name, induct_decl.clone())?;
+    }
+    for (name, struct_decl) in &module.struct_decls {
+        context.register_struct(name, struct_decl.clone())?;
+    }
+    Ok(())
+}
+
+/// Erase the entrypoint body into the entry block and finalize the arena — the shared tail of both whole-program entry points. The program's own body owns what it mints, the same way an item owns what its body mints: the entry is emitted as `func/main`, so that is the name its lifted lambdas descend from. The verifier is the rejection point for the recursion classes the language does not admit (a computed-only evaluation cycle); any other failure here is an erasure bug, indistinguishable at this boundary.
+fn seal_entry(
+    mut lowering: Lowering,
+    context: &mut Context,
+    body: &Term,
+    expected: &Term,
+) -> Result<curios_ersd::Module, Error> {
+    lowering.builder.open_block();
+    let outcome = lowering.with_owner("main".to_string(), |lowering| {
+        lowering.walk(context, body, expected, None)
+    })?;
+    let outcome = force_entry(&mut lowering, context, expected, outcome)?;
+    let entry = lowering.seal(outcome);
+    lowering.builder.set_entry(entry);
+
+    lowering
+        .builder
+        .finalize()
+        .map_err(|error| Error::erased_module_invalid(error.to_string()))
+}
+
 /// Erase a whole meta-free [`Module`] into a verified arena [`Module`]. Top-level items are erased in dominance order as the module's item chain; the entrypoint body becomes the entry block, checked against `expected`.
 pub fn erase_module(
     context: &mut Context,
@@ -232,30 +264,12 @@ pub fn erase_module(
     // Erasure is re-derivation of elaborated terms, never surface elaboration, so the representation-privacy checks are suppressed for the whole walk.
     context.with_suppressed_privacy(|context| {
         // Erasure runs with its own `Context`; seed the registries the re-derived types consult before any item does.
-        for (name, induct_decl) in &module.induct_decls {
-            context.register_induct(name, induct_decl.clone())?;
-        }
-        for (name, struct_decl) in &module.struct_decls {
-            context.register_struct(name, struct_decl.clone())?;
-        }
+        seed_registries(context, &module)?;
 
         let mut lowering = Lowering::default();
         lowering.erase_items(context, &module, 0)?;
 
-        lowering.builder.open_block();
-        // The program's own body owns what it mints, the same way an item owns what its body mints — the entry is emitted as `func/main`, so that is the name its lifted lambdas descend from.
-        let outcome = lowering.with_owner("main".to_string(), |lowering| {
-            lowering.walk(context, &module.body, &expected, None)
-        })?;
-        let outcome = force_entry(&mut lowering, context, &expected, outcome)?;
-        let entry = lowering.seal(outcome);
-        lowering.builder.set_entry(entry);
-
-        // The verifier is the rejection point for the recursion classes the language does not admit (a computed-only evaluation cycle); any other failure here is an erasure bug, indistinguishable at this boundary.
-        lowering
-            .builder
-            .finalize()
-            .map_err(|error| Error::erased_module_invalid(error.to_string()))
+        seal_entry(lowering, context, &module.body, &expected)
     })
 }
 
@@ -511,12 +525,7 @@ pub fn erase_prelude_prefix(
     let prelude = UniverseErased::<Module>::project(prelude)?.into_inner();
     // Re-derivation, not surface elaboration (see `erase_module`).
     context.with_suppressed_privacy(|context| {
-        for (name, induct_decl) in &prelude.induct_decls {
-            context.register_induct(name, induct_decl.clone())?;
-        }
-        for (name, struct_decl) in &prelude.struct_decls {
-            context.register_struct(name, struct_decl.clone())?;
-        }
+        seed_registries(context, &prelude)?;
         let mut lowering = Lowering::default();
         lowering.erase_items(context, &prelude, 0)?;
         Ok(ErasedPrelude {
@@ -543,12 +552,7 @@ pub fn erase_module_with_prelude(
     let expected = UniverseErased::<Term>::project(expected)?.into_inner();
     // Re-derivation, not surface elaboration (see `erase_module`).
     context.with_suppressed_privacy(|context| {
-        for (name, induct_decl) in &module.induct_decls {
-            context.register_induct(name, induct_decl.clone())?;
-        }
-        for (name, struct_decl) in &module.struct_decls {
-            context.register_struct(name, struct_decl.clone())?;
-        }
+        seed_registries(context, &module)?;
 
         // Re-seed the Core context with the prelude's definitions, mirroring the legacy replay: later items and the entrypoint reduce through them.
         for item in &prelude.items {
@@ -591,18 +595,6 @@ pub fn erase_module_with_prelude(
         };
         lowering.erase_items(context, &module, prelude.items.len())?;
 
-        lowering.builder.open_block();
-        // The program's own body owns what it mints, the same way an item owns what its body mints — the entry is emitted as `func/main`, so that is the name its lifted lambdas descend from.
-        let outcome = lowering.with_owner("main".to_string(), |lowering| {
-            lowering.walk(context, &module.body, &expected, None)
-        })?;
-        let outcome = force_entry(&mut lowering, context, &expected, outcome)?;
-        let entry = lowering.seal(outcome);
-        lowering.builder.set_entry(entry);
-
-        lowering
-            .builder
-            .finalize()
-            .map_err(|error| Error::erased_module_invalid(error.to_string()))
+        seal_entry(lowering, context, &module.body, &expected)
     })
 }
