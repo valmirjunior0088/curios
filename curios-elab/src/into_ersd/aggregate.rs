@@ -55,7 +55,7 @@ impl Lowering {
             .map(|(label, _)| label)
             .collect();
         // A single relevant field is a newtype: the bare field, no schema.
-        let schema = (relevant.len() != 1).then(|| {
+        let schema = (!ProductRow::collapses(relevant.len())).then(|| {
             self.builder.product(curios_ersd::ProductSchema {
                 debug_name: Some(name.to_string()),
                 fields: relevant,
@@ -157,7 +157,7 @@ impl Lowering {
             Err(diverged) => return Ok(diverged),
         };
 
-        if atoms.len() == 1 {
+        if ProductRow::collapses(atoms.len()) {
             return Ok(Outcome::Emitted(
                 atoms.into_iter().next().expect("one field"),
             ));
@@ -261,7 +261,8 @@ impl Lowering {
             Subterm::TupleType(TupleType { telescope }) => {
                 let mask = erasure_mask(context, telescope.clone())?;
                 let relevant = mask.iter().filter(|&&erased| !erased).count();
-                let schema = (relevant != 1).then(|| self.tuple_schema(relevant));
+                let schema =
+                    (!ProductRow::collapses(relevant)).then(|| self.tuple_schema(relevant));
                 (ProductRow { schema, mask }, telescope.len())
             }
             Subterm::StructType(StructType { name, .. }) => {

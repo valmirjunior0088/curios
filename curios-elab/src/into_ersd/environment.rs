@@ -32,6 +32,11 @@ pub(super) struct ProductRow {
 }
 
 impl ProductRow {
+    /// Whether a product of `relevant` surviving fields collapses to the bare field — the newtype rule. Construction, projection, and schema registration must all take the same branch, so the `== 1` lives here and nowhere else.
+    pub(super) fn collapses(relevant: usize) -> bool {
+        relevant == 1
+    }
+
     /// The runtime projection index of declared field `index`: the count of relevant fields before it.
     pub(super) fn relevant_before(&self, index: usize) -> u32 {
         self.mask[..index].iter().filter(|&&erased| !erased).count() as u32
