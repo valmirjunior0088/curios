@@ -7,7 +7,6 @@ use {
         Subterm, Syn, Term,
     },
     curios_base::{Grain, PackedBin, Plicity, Qualifier, Span, SyntaxName},
-    num_bigint::BigUint,
     num_traits::ToPrimitive,
     std::{cell::RefCell, sync::Arc},
 };
@@ -169,11 +168,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
 
     /// A Rust `char` is already a Unicode scalar, so the literal meta-emitter selects the corresponding `/syn/Char/Scalar` range constructor and supplies a closed reflected proof. The proof erases and the single relevant `code` field collapses to the ordinary Nat carrier.
     pub(super) fn char_literal(&self, character: char) -> curios_core::Term {
-        let code =
-            curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(curios_core::Nat::Succ(
-                BigUint::from(character as u32),
-                curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(curios_core::Nat::Zero)),
-            )));
+        let code = curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(
+            curios_core::Nat::new(character as u32),
+        ));
         let constructor = if (character as u32) < 0xD800 {
             self.context.syntax().character.scalar_below
         } else {
@@ -1358,11 +1355,12 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     }
 }
 
-/// The binder names a parameter list introduces — every leaf binder name in each parameter's pattern, flattened, all in scope across the body. These shadow like-named module bindings; the wildcard `_` rides along but is ignored by [`Lowerer::scoped`]. Whether a written binder name can be referred to. `_` and the empty label occupy a binder position but name nothing.
+/// Whether a written binder name can be referred to. `_` and the empty label occupy a binder position but name nothing.
 fn bindable(name: &str) -> bool {
     !(name.is_empty() || name == "_")
 }
 
+/// The binder names a parameter list introduces — every leaf binder name in each parameter's pattern, flattened, all in scope across the body. These shadow like-named module bindings; the wildcard `_` rides along but is ignored by [`Lowerer::bound`].
 fn param_names(params: &[FuncParam]) -> Vec<String> {
     params
         .iter()
