@@ -136,12 +136,11 @@ impl ConstraintStore {
     ///
     /// The delta is the same for every constraint touched — `head` leaves, `solution`'s heads arrive — so it is computed once. The previous form took an opaque rewriting closure, which hid exactly that fact, and so had to `unindex` then `index` each constraint: two BTree operations per head it *already* carried, against one removal plus one insertion per head the solution *adds*. That mattered because the carried width is the number that grows — a solution is a maximum, so every substitution widens the head sets of the constraints it lands in, and each later assignment then pays more.
     ///
-    /// Returns the positions that changed, which the caller uses to decide whether cached consistency survived.
     pub(super) fn substitute_head(
         &mut self,
         head: LevelHead,
         solution: &Level,
-    ) -> Result<Vec<usize>, super::UniverseError> {
+    ) -> Result<(), super::UniverseError> {
         curios_profile::profile!("universe::substitute");
         let positions = self.mentioning(head).collect::<Vec<_>>();
         let arrived = solution
@@ -150,7 +149,6 @@ impl ConstraintStore {
             .filter(|atom| *atom != head)
             .collect::<Vec<_>>();
 
-        let mut rewritten = Vec::with_capacity(positions.len());
         for position in positions {
             let rebuilt = {
                 let constraint = &self.constraints[position];
@@ -175,11 +173,10 @@ impl ConstraintStore {
             for atom in &arrived {
                 self.occurrences.entry(*atom).or_default().insert(position);
             }
-            rewritten.push(position);
         }
 
         // `head` is solved, so nothing mentions it any more — including the constraints the substitution left alone, which by definition did not mention it.
         self.occurrences.remove(&head);
-        Ok(rewritten)
+        Ok(())
     }
 }
