@@ -1,0 +1,111 @@
+# The prelude is an environment, not a prefix
+
+This document specifies removing the fixed prelude's *splice*: today every user compilation copies all 1052 prelude items into its own `Module` and then carries apparatus to ignore them again. Three stages hold that apparatus, each states the same contract in prose, and nothing checks any of it. The end state is the one Coq, GHC and Lean all reached independently — imports populate an environment, and a module contains only its own declarations.
+
+An earlier draft of this specification led with build invalidation, splitting the archive's keying so a `curios-cert` edit would stop re-elaborating the standard library. That remains worth doing and is M5 below, but it was a symptom taken for the disease: keying is awkward *because* the prelude is spliced, and a design that hardened the splice would have made the awkwardness permanent by making it comfortable.
+
+## Problem
+
+`curios-text`'s `into_core_with_prelude` builds the module as `prepared.core.items.clone()` extended with the entry's own items. The prelude is therefore materialized into every compilation, and every consumer past that point needs a way to say *ignore the first 1052 of these*.
+
+Three stages carry that apparatus, and all three state the same unchecked caller contract:
+
+- **The certifier.** `verdicts_from` takes `checked_from` as `prefix.module.items.len()` — a length off the archive — applies it as an index into the module it was handed, and defines everything below it into the kernel's environment at its declared type without typing it. `Prefix`'s own documentation says *"its items are `module.items[..prefix.module.items.len()]` of the module being judged"*, which is a contract on the caller expressed in prose. [SOUNDNESS.md](../../SOUNDNESS.md)'s *Prefix identification* row records it.
+- **Erasure.** `erase_module_with_prelude` states it outright: *"`module` must be it extended in place, its items the prelude's own followed by the user's"*. Same hazard, one stage over, and with no perimeter row of its own.
+- **Elaboration.** `elaborate_module_suffix` takes `prefix: Option<&Module>` beside the module it elaborates, for the same reason.
+
+The apparatus itself is the cost. `Prefix` and its three provenance queries (`declares_induct`, `declares_struct`, `declares_concept`); prefix parameters on `dependency_order`, `partial_definitions` and `derived_binder_floor_beyond`; four `recheck_*` entry points where there is one judgment; `erase_prelude_prefix` on the erasure side; and the index escaping the certifier entirely, since `typecheck_reporting` returns `(Module, usize, Vec<String>)` — a positional detail of the kernel's walk sitting in `curios-pipeline`'s public signature and in the test harness.
+
+`Module` shows why it invites this. Its registries are `BTreeMap<Global, _>` and its witness set a `BTreeSet<Global>` — content-keyed, order-free, mergeable — while `items` and `universe_seeds` are `Vec` and `binder_floor` is a watermark. Half the struct is a set and half is a list, and `Prefix` is the adapter between them: `declares_induct` queries the map side, `checked_from` indexes the vec side. A structure that needs a companion object to be interpretable is reporting that it serves two roles — here, the *unit of compilation* and the *complete program*.
+
+## Constraints, verified
+
+- **The environment-seeding loop already exists, three times, and runs on every compile.** `erase_module_with_prelude` walks `prelude.items` calling `context.define_assuming_scheme`; `verdicts_from` walks `module.items[..checked_from]` calling `kernel.define`; elaboration does the same for its prefix. Each stage *already builds an environment from the prelude* and then **additionally** requires those items to be physically at the front of the module it processes. The splice is redundant with the seeding, which is what makes this a deletion rather than a redesign.
+- `Kernel::define(&mut self, name: &Free, type_: &Term, value: &Term, universes: &UniverseContext)` is a plain method. Nothing structurally requires the prelude to be *inside* a module for the kernel to know it.
+- Per-item provenance already exists. `Definition` carries `root: RootId` and `island: Qualifier`, the prelude is rooted `Sys`/`Syn`/`Std` through `PreludeModules::insert_root`, user items are `RootId::Entry`, and `into_core` already tests `root != RootId::Entry`. The seam is derivable from the data without any length.
+- `Definition::totality` is the shape to copy: a per-item verdict, carried in the data, inherited across the archive, read by name. Nobody passes a `TotalityPrefix` with a length, and the asymmetry between it and `checked_from` is the whole finding.
+- The vocabulary is already here. `curios-cert`'s `Env`/`Judge` seam exists to draw exactly this line between what a shared analysis asks and what each checker supplies; `positivity`'s `Coverage::Complete`/`Partial` already distinguishes "the whole declaration set" from "a registry read"; and `UniverseErased::<Module>::project_extending` already types the prelude-extended-in-place relation.
+- The whole-module passes need the *complete declaration set*, not the items list: `check_positivity` runs over the spliced registries at `Coverage::Complete` precisely because a new declaration can reach an old one, and declaration sizing is the same shape. Those read the maps, which are already merged by name — so they are unaffected by removing the items splice, and this is the load-bearing distinction the design below rests on.
+- `check_definition` and `check_rec_group` both return **before** their `define` step, so an item is defined whether or not it checked. The environment is therefore a pure function of the module, which is what M6 needs.
+
+## Prior art
+
+Three mature systems reached the same shape independently, and **none of them splices**.
+
+Coq's `Require` loads a compiled library into the global environment; the file being checked contains only its own vernacular. GHC loads `.hi` interface files into the type environment, fingerprinting each interface *and each declaration within it*, and recompiles only when what a module actually depends on changed. Lean's checker is described in the words of this design: it *"replays the environment in a module, starting from the environment provided by its imports"*.
+
+Coq additionally ships the image/verdict split this document's M5 describes, as `-vos`/`-vok`: `-vos` produces everything except opaque proofs, `-vok` checks the proofs and emits a file with **empty contents** whose existence means the file compiled. Its documented cost — typechecking every definition twice, because stage two re-reads source — is one M5 does not pay, since the verdict half reads the serialized image.
+
+Lean takes the opposite branch on trust: imports are believed, and re-verification is an opt-in external pass. That is a coherent posture and deliberately not this project's, where the compile path runs the kernel on every build. Its documented weakness is instructive regardless — `lean4checker` reads `.olean` files without validating their format — and the archive's schema, source fingerprint and bytecheck on restore are what stand in that place here.
+
+## Design
+
+Each stage takes an **environment** plus the unit's own items. The archive is that environment's serialized form, which is what `.vo`, `.olean` and `.hi` already are — so the archive is not discarded, it finally plays the role it was shaped for.
+
+The house method is the one [SOUNDNESS.md](../../SOUNDNESS.md) records for the recursive-member defect: *closed by deleting the second spelling rather than by adding a second check*, which gave `curios-core` one recursion form where it had two. Here the two spellings are the compilation unit and the spliced complete program, and `Prefix` is the second check reconciling them. The apparatus goes because the thing that made it necessary goes.
+
+### M1 — the certifier takes an environment
+
+`recheck_module_suffix(module, budget, prefix)` becomes a walk over the unit's items against an environment seeded from the archive. `Prefix`, `checked_from`, and the prefix parameters on `dependency_order`, `partial_definitions` and `derived_binder_floor_beyond` are deleted; the four `recheck_*` entry points collapse toward one; and the index leaves `curios-pipeline`'s public signature. An environment lookup that misses is a refusal, where an out-of-range index today is a slice panic or a silent skip — so this moves the failure mode toward fail-closed, which is where the rest of this perimeter already sits.
+
+### M2 — registries as base plus additions
+
+The provenance queries `Prefix::declares_*` exist to recover, per lookup, what a merged map threw away. Replace the merge with a base environment the unit adds to. `Coverage::Complete`/`Partial` already names the distinction the whole-module passes need, and those passes continue to see the complete set.
+
+### M3 — elaboration follows
+
+`elaborate_module_suffix`'s `prefix: Option<&Module>` goes the same way. Elaboration already re-seeds a context from the prelude; only the additional positional assumption is removed.
+
+### M4 — erasure follows
+
+`erase_module_with_prelude`'s prose contract is discharged rather than documented, and `erase_prelude_prefix` retires. Erasure is the stage closest to correct already — it restores an archived erased prefix and erases only the suffix — so this is the smallest of the four.
+
+### M5 — split the archive's keying (`curios-archive`)
+
+Unblocked by the above rather than blocking it. `curios-prelude`'s build script does two separable things in one product: it elaborates and serializes the image, needing `curios-text`/`curios-elab`/`curios-ersd`; and it runs `recheck_module_verdicts`, needing `curios-cert`. Cargo's granularity is the build script, so either dependency set re-runs both halves — measured at 13 distinct build-script fingerprints, each with its own 7.3 MiB archive, with `deps`, `features` and `rustflags` the only varying inputs.
+
+A new crate `curios-archive` owns elaboration and the image with no certifier dependency. `curios-prelude` **keeps its name, its public API and every downstream dependency**, and gains a build script that restores the image and certifies it. The verdict is that crate's successful build, exactly as `.vok`'s existence is Coq's — nothing can reach the prelude except through it, so the invariant *an archive that exists is one whose every item the kernel accepted* holds by construction rather than by convention.
+
+One property improves: today the walk certifies `core` **before** hash-consing and serialization, so what is certified is not literally what is stored. After the split the kernel walks the restored image.
+
+Measure before building: the payoff is `elaborate / (elaborate + recheck + erase + serialize)`, and the build script already runs under `curios_profile::capture` behind its `profile` feature, writing `OUT_DIR/profile.tsv`. If the walk dominates, M5 buys a crate and little else.
+
+### M6 — parallel certification
+
+Split the walk into a serial define-all phase and a parallel check-all phase, one `Kernel` per item over a shared read-only environment, verdicts sorted by item index for determinism. Per-item kernels make the data independent and settle binder identity without arithmetic: each is seeded at the same derived floor, above every identity in the module, and two workers minting the same index never share a scope. A shared counter is ruled out — nondeterministic under work stealing, and the archive must stay byte-reproducible.
+
+This is Coq's `make -j vok`, reached independently. Any parallelism must be feature-gated native-only, because `curios-web` compiles `curios-pipeline` and therefore `curios-cert` to `wasm32-unknown-unknown`, which has no threads. Measure the memo cost first: `recheck_module_verdicts_uncached` exists for the memo-parity test, and its slowdown is the ceiling on what per-item kernels lose.
+
+### M7 — cached user modules
+
+With the environment in place, caching a module's elaborated Core and its verdict is the natural extension: the environment is built from N cached modules rather than one, and there is no seam to identify because there was never a prefix. Two things remain, and both are perimeter work: identities must survive splicing independently elaborated modules, which is what *Binder identity* is about and why it must be defended better than *argued* with one control first; and verdicts must be keyed on the exact terms and the certifier version, following GHC's per-declaration interface fingerprints rather than Cargo's per-crate granularity.
+
+Whole-module passes never cache and re-run at link: positivity over the complete declaration set, declaration sizing, and witness coherence, which is program-wide by definition since a violation is only visible where two modules meet. That bounds the win without removing it, since per-item typing is the expensive part.
+
+## Out of scope
+
+- **The identity-space watermarks** — `binder_floor`, `universe_floor`, `metavar_floor`, `witness_floor`. These partition *allocation spaces*, which is a problem a watermark is a reasonable answer to, and they are a separate concern from the items splice. `Entropy::seed` only raises, so combining is `max` and widening is always safe; that property is load-bearing for `derived_binder_floor` and is not to be lost by accident.
+- **Parallelising elaboration.** The shared monotonic counters are a serialization point by design.
+- **Making the archive a stable interchange format.** It stays scoped to one compiler build.
+- **Weakening the compile path's second opinion.** The kernel continues to judge the user's items on every compile.
+
+## Rejected
+
+- **Hardening `checked_from` with an identity check.** The obvious local fix — compare the prefix items against the archive's and fall back to judging everything on a mismatch — makes a spliced, positionally delimited module *safe to live with*. That is how a wart becomes permanent: it stops hurting, so nobody removes it. *Prefix identification* is left standing as the recorded symptom, to be deleted by M1 rather than patched.
+- **Moving `checked_from` onto `Module`.** It would become the elaborator's claim, and the kernel already refuses to believe `Module::binder_floor` for exactly that reason.
+- **Certification as a test.** Cheapest route to M5's build-time win, and it demotes the invariant from a build-time impossibility to a convention: an archive could exist, be compiled against, and never have been certified. Lean's posture, deliberately not this project's.
+- **Caching inside the existing build script.** Impossible: Cargo rebuilds the script binary whenever any build-dependency changes, and from inside the script no input distinguishes which one did.
+- **Naming the certifying crate rather than the image crate.** Putting the new name on the certifying half churns every downstream dependency and leaves consumers importing the prelude from something that does not sound like the prelude.
+
+## Tests
+
+- M1: the kernel's verdicts over the whole corpus are unchanged, item for item, against the spliced walk it replaces — the migration's only real risk is a definition that silently stops being in scope.
+- M1: an environment lookup that misses refuses, with its own diagnostic, rather than panicking or skipping.
+- M2–M4: each stage's prose contract becomes an assertion or disappears; `erase_module_with_prelude`'s caller guarantee in particular has no test today.
+- M5: an empty-cache build and a cache hit, following the `curios-binaryen` precedent — plus the case it exists for, a `curios-cert`-only edit that re-runs certification and **not** elaboration, asserted by the build script's own warning appearing once rather than twice. A stale or corrupted image must fail certification rather than be skipped.
+- M6: parallel verdicts equal serial verdicts, item for item and in order, over the whole prelude; `kernel_memo_parity`'s property survives per-item kernels.
+- M7: deferred to its own specification once M1–M6 have landed.
+
+## Retirement criteria
+
+- Before this specification is deleted: the environment boundary is recorded in `curios-cert`'s and `curios-elab`'s crate documentation, replacing the prose caller contracts it removes; the cross-cutting decision — that a module is a compilation unit and the prelude an environment — is recorded in [DESIGN.md](../../DESIGN.md); [SOUNDNESS.md](../../SOUNDNESS.md)'s *Prefix identification* row is deleted with the mechanism it describes rather than re-graded, and erasure's matching contract is deleted with it rather than added as a row; the `curios-archive` keying discipline is recorded in that crate's documentation; and M7, if still pending, is carried out to a specification of its own.
