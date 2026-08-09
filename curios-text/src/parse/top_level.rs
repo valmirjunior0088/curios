@@ -138,12 +138,16 @@ pub(super) fn parse_top_mod<'a>() -> Parser<'a, TopItem> {
     })
 }
 
-// Like `parse_name`, but additionally accepts an empty absolute path. The leading `/` is only consumed when followed by an identifier — so for `use /{X};` the path is empty-abs (consumes nothing) and `/` is left for `parse_use_group` to consume as its separator.
+// Like `parse_name`, but additionally accepts an empty absolute path. The leading `/` is only consumed when followed by an identifier — so for `use /{X};` the path is empty-abs (consumes nothing) and `/` is left for `parse_use_group` to consume as its separator. Raw segments, and no trailing-whitespace consumption at all: the group separator follows the path tightly, so `use /std /{X};` is refused like any other whitespace inside a path.
 pub(super) fn parse_use_path<'a>() -> Parser<'a, Name> {
     spanned(
-        catch(take_exact("/").and_keep(parse_identifier()).and(many0(|| {
-            catch(take_exact("/").and_keep(parse_identifier()))
-        })))
+        catch(
+            take_exact("/")
+                .and_keep(parse_identifier_raw())
+                .and(many0(|| {
+                    catch(take_exact("/").and_keep(parse_identifier_raw()))
+                })),
+        )
         .map(|(first, rest)| {
             Name::new(
                 true,
@@ -155,8 +159,8 @@ pub(super) fn parse_use_path<'a>() -> Parser<'a, Name> {
                 ),
             )
         })
-        .or(catch(parse_identifier().and(many0(|| {
-            catch(take_exact("/").and_keep(parse_identifier()))
+        .or(catch(parse_identifier_raw().and(many0(|| {
+            catch(take_exact("/").and_keep(parse_identifier_raw()))
         })))
         .map(|(first, rest)| {
             Name::new(

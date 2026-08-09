@@ -125,12 +125,13 @@ fn name_from_segments<'a>(is_abs: bool, segments: Vec<String>) -> Parser<'a, Nam
 }
 
 fn parse_name<'a>() -> Parser<'a, Name> {
+    // A path is whitespace-free: every separator touches both of its neighbors. That tightness is the whole disambiguation against division — the operator grammar requires whitespace on both sides of `/` (`parse_infix_op`), so `a/b` is only ever a path and `a / b` only ever a division, and the asymmetric spellings satisfy neither grammar. Trailing whitespace is consumed once, after the whole name, keeping the span tight.
     spanned(
         catch(take_exact("/"))
             .map(|()| true)
             .or(pure(false))
-            .and(parse_identifier().and(many0(|| {
-                catch(take_exact("/").and_keep(parse_identifier()))
+            .and(parse_identifier_raw().and(many0(|| {
+                catch(take_exact("/").and_keep(parse_identifier_raw()))
             })))
             .flat_map(|(is_abs, (first, rest))| {
                 let segments = iter::once(first)
@@ -142,6 +143,7 @@ fn parse_name<'a>() -> Parser<'a, Name> {
             }),
     )
     .map(|(span, name)| name.with_span(span))
+    .and_drop(parse_whitespace())
 }
 
 fn parse_qualified_name<'a>() -> Parser<'a, Name> {

@@ -43,7 +43,7 @@ Option/some         -- member of Option
 /sys/Handle         -- absolute intrinsic declaration
 ```
 
-Whitespace may appear around ordinary path separators. A packed `Bits` or `Bytes` literal glues its grain letter to the opening bracket and admits whitespace freely thereafter; see [Packed literals](#packed-literals).
+A path is whitespace-free: every separator touches both of its neighbors. Infix operators are the opposite — they require whitespace on both sides (see [Operators](#operators)) — so `a/b` is only ever the path and `a / b` only ever the division, and the asymmetric spellings `a/ b` and `a /b` satisfy neither grammar. A packed `Bits` or `Bytes` literal glues its grain letter to the opening bracket and admits whitespace freely thereafter; see [Packed literals](#packed-literals).
 
 ## Literals
 

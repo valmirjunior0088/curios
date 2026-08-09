@@ -200,6 +200,17 @@ fn character_literal_is_not_a_natural_pattern() {
 }
 
 #[test]
+fn a_path_admits_no_whitespace_and_division_requires_it() {
+    // Paths are whitespace-free and infix operators require whitespace on both sides (SYNTAX.md's lexical rule), so `a/b` is only ever the path, `a / b` only ever the division, and the asymmetric spellings satisfy neither grammar.
+    assert_eq!("a/b".parse::<Term>().unwrap().to_string(), "a/b");
+    assert_eq!("/std/Nat".parse::<Term>().unwrap().to_string(), "/std/Nat");
+    assert_eq!("a / b".parse::<Term>().unwrap().to_string(), "a / b");
+    assert!("a/ b".parse::<Term>().is_err());
+    assert!("a /b".parse::<Term>().is_err());
+    assert!("/ std".parse::<Term>().is_err());
+}
+
+#[test]
 fn parse_hex_literal_is_num_lit() {
     assert_eq!(
         "0xC2".parse::<Term>().unwrap(),
