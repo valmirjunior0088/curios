@@ -1,52 +1,7 @@
-use std::{
-    collections::{BTreeSet, hash_map::DefaultHasher},
-    hash::{Hash, Hasher},
-};
-use {
-    super::*,
-    curios_base::{Source, Span},
-};
+use {super::*, std::collections::BTreeSet};
 
 fn origin(label: &str) -> UniverseConstraintOrigin {
     UniverseConstraintOrigin::new(UniverseConstraintKind::Other(label.into()))
-}
-
-fn hash(value: &impl Hash) -> u64 {
-    let mut hasher = DefaultHasher::new();
-    value.hash(&mut hasher);
-    hasher.finish()
-}
-
-#[test]
-fn level_max_is_canonical() {
-    let u = Level::meta(UniverseMetaId(0));
-    let v = Level::meta(UniverseMetaId(1));
-    let left = Level::max([
-        Level::zero(),
-        u.clone(),
-        v.succ().unwrap(),
-        u.checked_add(3).unwrap(),
-    ]);
-    let right = Level::max([
-        u.checked_add(3).unwrap(),
-        Level::max([v.succ().unwrap(), u]),
-    ]);
-    assert_eq!(left, right);
-    assert_eq!(hash(&left), hash(&right));
-    assert_eq!(left.to_string(), "max(?u0+3,?u1+1)");
-}
-
-#[test]
-fn successor_distributes_and_overflow_is_checked() {
-    let level = Level::max([
-        Level::constant(2),
-        Level::param(UniverseParam(0)).checked_add(4).unwrap(),
-    ]);
-    assert_eq!(level.checked_add(3).unwrap().to_string(), "u+7");
-    assert_eq!(
-        Level::constant(u32::MAX).succ(),
-        Err(UniverseError::OffsetOverflow)
-    );
 }
 
 #[test]
@@ -340,29 +295,6 @@ fn a_mutually_bounded_cycle_closes_at_a_non_zero_floor() {
 }
 
 #[test]
-fn constraint_identity_ignores_diagnostic_provenance() {
-    let semantic = || UniverseConstraint {
-        lower: Level::param(UniverseParam(0)),
-        upper: Level::param(UniverseParam(1)),
-        origin: origin("first"),
-    };
-    let left = semantic();
-    let mut right = semantic();
-    right.origin = origin("second");
-    right.origin.span = Some(Span {
-        source: std::rc::Rc::new(Source {
-            path: None,
-            text: "Type".into(),
-        }),
-        start: 0,
-        end: 4,
-    });
-
-    assert_eq!(left, right);
-    assert_eq!(hash(&left), hash(&right));
-}
-
-#[test]
 fn flexible_dependency_chain_propagates_after_defaulting_its_floor() {
     let mut solver = UniverseSolver::new(0);
     let floor = solver.fresh(UniverseRole::Flexible, None);
@@ -516,24 +448,6 @@ fn generalization_rejects_a_constraint_mentioning_an_enclosing_parameter() {
         solver.finalize([outer], []),
         Err(UniverseError::EscapingLevel)
     ));
-}
-
-#[test]
-fn level_parameter_names_stay_alphabetic_past_the_sixth() {
-    let name = |index: usize| Level::param(UniverseParam(index)).to_string();
-    assert_eq!(name(0), "u");
-    assert_eq!(name(5), "z");
-    // `u + 6` is `{` in ASCII; a stepping scheme that runs off `z` prints punctuation where a level name belongs.
-    assert_eq!(name(6), "u1");
-    assert_eq!(name(8), "w1");
-    assert_eq!(name(12), "u2");
-    for index in 0..64 {
-        assert!(
-            name(index).chars().all(|c| c.is_ascii_alphanumeric()),
-            "level parameter {index} printed as {}",
-            name(index)
-        );
-    }
 }
 
 /// The two checkers decide universe-context validity separately, and this is where that decision is held to account.
