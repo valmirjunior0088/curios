@@ -1,9 +1,10 @@
 use {
-    crate::{Kernel, KernelError, check, infer},
+    crate::{Kernel, KernelError, check, check_definition, infer},
     curios_base::{Plicity, Qualifier, RootId},
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, Telescope, Term,
-        UniverseContext,
+        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, MetaId, Nat, Polarity,
+        StructDecl, StructType, Subterm, Telescope, Term, UniverseConstraint,
+        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseParam,
     },
 };
 
@@ -18,7 +19,7 @@ fn binder(index: u32, hint: &str) -> Free {
 }
 
 fn nat(n: usize) -> Term {
-    Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(n)))
+    Term::intrinsic(Intrinsic::Nat(Nat::new(n)))
 }
 
 fn nat_type() -> Term {
@@ -175,7 +176,7 @@ fn a_tuple_has_the_product_of_its_components_types() {
         Ok(nat_type()),
     );
     assert_eq!(infer(&mut kernel, &Term::proj(pair, 1)), Ok(bool_type()));
-    assert!(matches!(&*type_, curios_core::Subterm::TupleType(_)));
+    assert!(matches!(&*type_, Subterm::TupleType(_)));
 }
 
 #[test]
@@ -441,13 +442,6 @@ fn a_list_literal_checks_its_elements_against_its_carried_type() {
 /// A generic definition is checked *under* its own constraint set. `(x : Type.{u}) => x` inhabits `(x : Type.{u}) -> Type.{w}` exactly when `u ≤ w` is among the hypotheses — discarding them was the route by which a correct polymorphic definition was refused.
 #[test]
 fn a_definition_checks_under_its_own_constraints() {
-    use {
-        crate::check_definition,
-        curios_core::{
-            UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseParam,
-        },
-    };
-
     let (u, w) = (
         Level::param(UniverseParam(0)),
         Level::param(UniverseParam(1)),
@@ -489,10 +483,6 @@ fn a_definition_checks_under_its_own_constraints() {
 /// The other direction: an occurrence must *satisfy* the scheme it instantiates. A scheme declaring `u + 1 ≤ w` refuses the instance `{0, 0}` and admits `{0, 1}`.
 #[test]
 fn an_instance_must_satisfy_its_schemes_constraints() {
-    use curios_core::{
-        UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseParam,
-    };
-
     let u = Level::param(UniverseParam(0));
     let w = Level::param(UniverseParam(1));
     let name = binder(1, "bounded");
@@ -526,9 +516,6 @@ fn an_instance_must_satisfy_its_schemes_constraints() {
 /// The two-line route to `False`: a recursive proof assumed at its own type. Erasure deletes proofs, so a proof-typed `rec` member must descend — and `f = f` has a self-call that decreases on nothing.
 #[test]
 fn a_recursive_proof_that_does_not_descend_is_refused() {
-    use curios_base::{Qualifier, RootId};
-    use curios_core::{Global, InductDecl, UniverseContext};
-
     let mut kernel = kernel();
     let name = Global::Authored(Qualifier::from(["False"]));
     kernel.declare_induct(
@@ -744,7 +731,7 @@ fn a_list_or_cell_of_proofs_is_not_a_proposition() {
 fn elaboration_only_syntax_is_refused() {
     let mut kernel = kernel();
 
-    let metavar = Term::metavar(curios_core::MetaId::from(0usize));
+    let metavar = Term::metavar(MetaId::from(0usize));
     assert!(matches!(
         infer(&mut kernel, &metavar),
         Err(KernelError::NotCore(_)),
@@ -753,26 +740,14 @@ fn elaboration_only_syntax_is_refused() {
 
 /// A structure with one parameter and one field at that parameter's type — the shape an occurrence can state the wrong parameter count for.
 fn parameterized_struct(kernel: &mut Kernel) -> Global {
-    use curios_core::{Polarity, Scope, StructDecl};
-
     let name = Global::Authored(Qualifier::from(["Boxed"]));
     let param = binder(0, "A");
     let field = binder(1, "value");
 
-    let fields = Telescope::Cons(
-        Term::free_var(&param),
-        Scope::close(curios_core::One, &[&field], Telescope::Done(Box::new(()))),
-    );
+    let fields = Telescope::build([(field, Term::free_var(&param))], ());
     let declaration = StructDecl {
-        universe_context: UniverseContext::empty(),
-        arity: Telescope::Cons(
-            Term::type_ground(),
-            Scope::close(
-                curios_core::One,
-                &[&param],
-                Telescope::Done(Box::new(fields)),
-            ),
-        ),
+        universe_context: UniverseContext::default(),
+        arity: Telescope::build([(param, Term::type_ground())], fields),
         result_sort: Term::type_ground(),
         module: Qualifier::default(),
         root: RootId::Entry,
@@ -794,7 +769,7 @@ fn a_structure_occurrence_at_the_wrong_parameter_count_is_refused() {
     let mut kernel = kernel();
     let name = parameterized_struct(&mut kernel);
 
-    let short: Term = curios_core::Subterm::StructType(curios_core::StructType {
+    let short: Term = Subterm::StructType(StructType {
         name,
         universes: Vec::new(),
         params: Vec::new(),
@@ -829,7 +804,7 @@ fn a_structure_occurrence_at_its_declared_parameter_count_still_works() {
     let mut kernel = kernel();
     let name = parameterized_struct(&mut kernel);
 
-    let exact: Term = curios_core::Subterm::StructType(curios_core::StructType {
+    let exact: Term = Subterm::StructType(StructType {
         name,
         universes: Vec::new(),
         params: vec![nat_type()],
