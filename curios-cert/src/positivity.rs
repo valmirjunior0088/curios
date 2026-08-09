@@ -163,7 +163,7 @@ fn labelled<E: Env, B: Bound>(env: &mut E, telescope: Telescope<B>) -> Vec<(Stri
     entries
 }
 
-/// Every declaration's occurrences under the current parameter estimates.
+/// One declaration's occurrences under the current parameter estimates.
 fn sweep<E: Env>(env: &mut E, vectors: &Vectors, split: &Split) -> BTreeMap<Target, Polarity> {
     let mut found = BTreeMap::new();
     for part in &split.parts {
@@ -341,8 +341,6 @@ enum Target {
 /// At what polarity each declaration occurs inside each other declaration — `relation[owner][mentioned]`. Transient: it exists to answer the acceptance test and is discarded, which is why nothing persists it the way parameter polarities are persisted.
 type Occurrences = BTreeMap<Global, BTreeMap<Global, Polarity>>;
 
-/// Each analyzed declaration's parameter polarities as the fixpoint currently estimates them.
-///
 /// Whether the declarations handed to the analysis are every declaration the program has, or only a suffix of them.
 ///
 /// The distinction decides what an out-of-set name means. Under [`Coverage::Partial`] — the elaborator at a replay, holding the user suffix while the prelude prefix was analyzed when it was elaborated — a name from outside answers from the registry vector recorded then, which is that pass's own earlier result. Under [`Coverage::Complete`] there is no outside: every declaration is in hand, so a name not among them is one this analysis has no result for, and reading a carried vector would mean believing an answer some *other* pass computed. The kernel therefore takes the conservative value instead, which is the same one an unknown name has always taken.
@@ -354,6 +352,8 @@ pub enum Coverage {
     Partial,
 }
 
+/// Each analyzed declaration's parameter polarities as the fixpoint currently estimates them.
+///
 /// A name absent from the map is outside the set under analysis. What that means depends on [`Coverage`]; either way an unknown lookup is [`Polarity::Mixed`], never `Unused`.
 #[derive(Debug)]
 struct Vectors {
