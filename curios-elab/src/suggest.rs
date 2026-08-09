@@ -11,8 +11,8 @@ use {
         Context, Outcome, Probe, check, convert_outcome, probe_match, reduce_with,
         zonk_solved_term_metas,
     },
+    curios_analysis::{Invert, case_target_indices, invert_indices},
     curios_base::Plicity,
-    curios_cert::{Invert, case_target_indices, invert_indices},
     curios_core::{
         Free, FuncType, Global, InductType, Item, Module, StructType, Subterm, Telescope, Term, Var,
     },

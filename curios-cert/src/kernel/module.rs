@@ -17,7 +17,7 @@ use {
         convert::convert,
         infer::{check, infer, infer_type},
     },
-    crate::{group_totality, yields_a_sort},
+    curios_analysis::{group_totality, yields_a_sort},
     curios_core::{
         Bound, Free, InductDecl, RecGroup, Reducer, StructDecl, Subterm, Telescope, Term, Totality,
         UniverseContext,

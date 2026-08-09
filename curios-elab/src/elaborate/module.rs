@@ -7,8 +7,8 @@ use {
         record_totality, recorded_totality, reduce_with, register_witness,
         retry_deferred_witnesses, sort_term, zonk, zonk_arity, zonk_module, zonk_solved_term_metas,
     },
+    curios_analysis::group_totality,
     curios_base::Qualifier,
-    curios_cert::group_totality,
     curios_core::{
         Bound, ConceptDecl, Definition, DefinitionKind, Free, FuncType, Global, InductDecl,
         InductParam, Item, Level, Module, RecItem, SelfReference, StructDecl, Subterm, Telescope,
@@ -1263,7 +1263,7 @@ pub fn elaborate_and_zonk_with_prelude_reporting(
     let (suffix, body_type, obligations) =
         finalize_and_check(context, suffix, body_type, &inherited)?;
 
-    // Nothing is merged back in. The entry's items, the entry's declarations: what the prelude contributes is scope, and every consumer past this point takes it as such — `Globals` at the certifier, a replayed context at erasure. A whole-module pass that needs the complete declaration set gets it by being handed both halves (`curios_cert::Declarations`), not by being handed one map somebody concatenated.
+    // Nothing is merged back in. The entry's items, the entry's declarations: what the prelude contributes is scope, and every consumer past this point takes it as such — `Globals` at the certifier, a replayed context at erasure. A whole-module pass that needs the complete declaration set gets it by being handed both halves (`curios_analysis::Declarations`), not by being handed one map somebody concatenated.
     //
     // The binder floor is the exception, and it is a bound rather than a set: the entry's terms are elaborated against prelude terms whose binders were minted in an earlier compiler run, so the floor has to clear both. Combining by maximum can only ever widen.
     let module = Module {

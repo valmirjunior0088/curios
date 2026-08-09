@@ -4,8 +4,9 @@
 
 use {
     super::recheck_module_verdicts,
-    crate::{Erased, Globals, KernelError},
+    crate::{Globals, KernelError},
     curios_abi::{ForeignFunction, WireSignature, WireType},
+    curios_analysis::Erased,
     curios_base::{Plicity, Qualifier, RootId},
     curios_core::{
         Atom, Definition, DefinitionKind, Free, Func, FuncType, Global, InductDecl, InductParam,

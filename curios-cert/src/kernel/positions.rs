@@ -6,11 +6,7 @@
 //!
 //! Three things make that workable and all three are this component's rather than a caller's: sort-hood is memoized per *distinct type*, so classifying at every record site costs one question per type rather than one per position; a classification that could not be decided is kept and surfaced with the drain, since a recording site returns nothing and cannot report it; and the walk is re-entrancy guarded, because deciding a position's erased half types terms of its own and those must not be recorded as positions in turn.
 
-use {
-    super::{Erased, KernelError},
-    curios_core::Term,
-    std::collections::HashMap,
-};
+use {super::KernelError, curios_analysis::Erased, curios_core::Term, std::collections::HashMap};
 
 #[derive(Default)]
 pub(super) struct Positions {

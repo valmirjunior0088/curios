@@ -484,6 +484,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "curios-analysis"
+version = "0.8.1"
+dependencies = [
+ "curios-base",
+ "curios-cert",
+ "curios-core",
+ "curios-profile",
+ "num-bigint",
+]
+
+[[package]]
 name = "curios-base"
 version = "0.8.1"
 dependencies = [
@@ -508,6 +519,7 @@ name = "curios-cert"
 version = "0.8.1"
 dependencies = [
  "curios-abi",
+ "curios-analysis",
  "curios-base",
  "curios-core",
  "curios-profile",
@@ -543,6 +555,7 @@ name = "curios-elab"
 version = "0.8.1"
 dependencies = [
  "curios-abi",
+ "curios-analysis",
  "curios-base",
  "curios-cert",
  "curios-core",

@@ -19,10 +19,10 @@ mod tests;
 
 use {
     super::{
-        Coverage, Declarations, Erased, Globals, Kernel, KernelError, check_definition,
-        check_entrypoint, check_induct_decl, check_positions, check_rec_group, check_struct_decl,
-        partial_definitions, positivity_vectors, satisfiable,
+        Globals, Kernel, KernelError, check_definition, check_entrypoint, check_induct_decl,
+        check_positions, check_rec_group, check_struct_decl, partial_definitions,
     },
+    curios_analysis::{Coverage, Declarations, Erased, positivity_vectors, satisfiable},
     curios_core::{
         Bound, Definition, Free, Global, InductDecl, Item, Level, MetaId, Module, StructDecl, Term,
         UniverseContext, derived_binder_floor_outside, rewrite_universe_levels_scoped,

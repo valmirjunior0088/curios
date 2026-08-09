@@ -45,8 +45,8 @@ mod whnf;
 pub(crate) use whnf::*;
 
 use {
-    crate::{Env, Judge, entails},
-    crate::{Erased, erased_half},
+    crate::{entails, erased_half},
+    curios_analysis::{Env, Erased, Judge},
     curios_core::{
         Atom, Free, Global, InductDecl, Level, LevelHead, Module, Polarity, ReduceError, Reducer,
         Spelling, StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError,
@@ -103,7 +103,7 @@ pub enum KernelError {
     Oversized { domain: Level, bound: Level },
     /// A proof or a type that reaches something not known to terminate, or that is such a thing itself — an inline `rec` group that does not descend, or an `Intrinsic::ProcExit`. Erasure deletes both halves, so a proof that may not terminate proves anything and a type that may not terminate reties the negative knot positivity forbids. `reached` names the offending definition, or is absent when the position is partial in itself and there is no name to blame.
     NotTotal {
-        erased: crate::Erased,
+        erased: Erased,
         reached: Option<Global>,
     },
     /// A field of a `Prop`-sorted structure that is not a proof. Irrelevance identifies every inhabitant of a proposition, while projection reads a field back out without meeting any elimination guard, so an informative field hands two convertible values to the same projection — a type-valued field included.
@@ -514,7 +514,7 @@ impl Kernel {
     /// Open a binder: bring `name : type_` into scope for the walk in progress.
     ///
     /// Locals are a stack, and closing them is [`Kernel::scoped`]'s job rather than the caller's — it is the only bracket there is, so a binder opened here is closed on every path out of the walk that opened it.
-    pub(crate) fn assume(&mut self, name: &Free, type_: &Term) {
+    pub fn assume(&mut self, name: &Free, type_: &Term) {
         self.scope.assume(name, type_);
     }
 

@@ -13,26 +13,11 @@
 //! A compile judges only the user's items, so the prelude's classification arrives on [`Definition::totality`] rather than being recomputed. That field is not taken on faith: the walk that runs when the archive is built starts from an empty environment, recomputes every flag, and refuses a definition whose recorded verdict is more generous than the kernel's own. Trusting it afterwards is trusting a verdict this crate already reached — the same structure as the rest of the archive-verdict pattern.
 
 use {
-    super::{Globals, Kernel, KernelError, Sort, group_totality},
+    super::{Globals, Kernel, KernelError, Sort},
+    curios_analysis::{Erased, group_totality},
     curios_core::{Enter, Global, Intrinsic, Item, Module, Rec, Reducer, Subterm, Term, Totality},
     std::collections::{BTreeMap, BTreeSet, HashMap},
 };
-
-/// Which half of the erased program a position belongs to. Both are deleted, so both must terminate; the distinction is only what a diagnostic should call it.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Erased {
-    Proof,
-    Type,
-}
-
-impl std::fmt::Display for Erased {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Erased::Proof => write!(formatter, "proof"),
-            Erased::Type => write!(formatter, "type"),
-        }
-    }
-}
 
 /// Whether a term is partial *in itself*, with no name to blame: an inline `rec` group that does not descend, or an `Intrinsic::ProcExit`.
 ///

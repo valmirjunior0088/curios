@@ -43,7 +43,7 @@ Browser path:
   → curios-web         expose curios-pipeline through wasm-bindgen
 ```
 
-Data flows downward through the diagram, while Rust dependencies between compiler stages point in the opposite direction: lowering code depends on the representation it constructs. `curios-text` depends on `curios-elab`, which depends on `curios-ersd`, which depends on `curios-cont`, which depends on `curios-wasm`. Beside that chain, `curios-core` owns the term representation and `curios-cert` the trusted judgments over it: `curios-elab` depends on both, `curios-cert` on `curios-core`, and neither dependency ever reverses.
+Data flows downward through the diagram, while Rust dependencies between compiler stages point in the opposite direction: lowering code depends on the representation it constructs. `curios-text` depends on `curios-elab`, which depends on `curios-ersd`, which depends on `curios-cont`, which depends on `curios-wasm`. Beside that chain, `curios-core` owns the term representation, `curios-analysis` the rules both checkers run over it, and `curios-cert` the kernel that only one of them does: `curios-elab` depends on `curios-core` and `curios-analysis`, `curios-cert` on both, and none of those reverse. `curios-elab` takes `curios-cert` as a *dev*-dependency only, so nothing whose build script reaches elaboration reaches the kernel through it — which is what keeps a kernel edit from re-elaborating the fixed prelude.
 
 ### Ownership map
 
@@ -52,9 +52,11 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | Shared foundations | `curios-base` | Spans, names, entropy, parser/printer utilities, packed values, the `SyntaxRegistry` shape the `/syn`-emitting stages read, and other stage-independent intrinsics |
 | Host/guest contract | `curios-abi` | Wire constants and self-describing foreign-function rows shared by compiler and runtime |
 | Surface language | `curios-text` | Lexer, parser, surface AST, printer, module resolution, generated `/sys`, and lowering to core |
-| Fixed prelude | `curios-prelude` | Authored `/syn` and `/std` sources, canonical syntax names, and the compiler-build-scoped Text/Core/Ersd archive |
+| Prelude image | `curios-prelude-archive` | Authored `/syn` and `/std` sources, canonical syntax names, and the compiler-build-scoped Text/Core/Ersd archive. No certifier dependency: it elaborates, it does not judge |
+| Certified prelude | `curios-prelude` | The image above, plus a build script that walks it with the kernel and fails the build on a refusal. Its successful build *is* the verdict; every consumer depends on this crate, never on the image |
 | Term representation | `curios-core` | `Term` and its binder discipline, the intrinsic roster and folds, universe levels, registry entries, the finished-program `Module` both checkers walk, names, and the printer |
-| Trusted certifier | `curios-cert` | The independent kernel, the `Env`/`Judge` seam, and the shared inversion, positivity, totality, and entailment analyses |
+| Shared analyses | `curios-analysis` | The `Env`/`Judge` seam and the rules both checkers run behind it: index inversion, strict positivity, size-change totality, universe satisfiability |
+| Trusted certifier | `curios-cert` | The independent kernel, the whole-module walk that applies it, the erasure obligations, and level entailment |
 | Type theory | `curios-elab` | Elaboration, typing, conversion, reduction, inductives, structures, concepts, zonking, and erasure |
 | Erased optimization | `curios-ersd` | Post-erasure IR, compile-time evaluation and specialization, worker/wrapper transforms, and lowering to CPS |
 | Continuation IR | `curios-cont` | CPS optimization and WebAssembly emission |
@@ -73,7 +75,8 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | Surface grammar, syntax tree, or printing | `curios-text/src/parse*`, `module.rs`, `print.rs` | `into_core/`, parser tests, `documentation/SYNTAX.md` |
 | Surface-to-core lowering | `curios-text/src/into_core/` | Core constructors and cross-stage integration tests |
 | Elaboration, typing, or conversion | `curios-elab/src/` | Text lowering, erasure, diagnostics, and integration tests |
-| Kernel judgments or shared analyses | `curios-cert/src/` | `curios-core`'s representation, `curios-cert/src/recheck.rs`, and `documentation/DESIGN.md`'s perimeter |
+| Kernel judgments | `curios-cert/src/` | `curios-core`'s representation, `curios-cert/src/recheck.rs`, and `documentation/DESIGN.md`'s perimeter |
+| A shared analysis | `curios-analysis/src/` | Both drivers — `curios-cert`'s `Kernel` and `curios-elab`'s `Context` — plus `curios-analysis/tests/driven.rs`, where the checker-driven probes live |
 | Concepts or witness resolution | `curios-elab/src/concept.rs`, `resolve.rs` | Surface declarations, standard-library witnesses, and syntax documentation |
 | Type erasure | `curios-elab/src/into_ersd*` | `curios-ersd` representation and downstream tests |
 | Erased optimization | `curios-ersd/src/optimize/` | `into_cont.rs`, derived analyses, deep-input and specialization tests |
@@ -83,8 +86,8 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | Pipeline orchestration | `curios-pipeline/src/compile.rs`, `stage.rs` | Native and browser callers |
 | Runtime or bundle format | `curios-runtime/src/`, `curios/src/bundle.rs` | Slim-launcher dependency boundary and bundle integration tests |
 | CLI or native compile behavior | `curios/src/` | `README.md`, public helpers, and integration tests |
-| Standard or syntax library | `curios-prelude/std/`, `curios-prelude/syn/` | Module indices, canonical syntax registry, `SYNTAX.md`, and Curios integration tests |
-| Prelude archive or replay | `curios-prelude/build.rs`, `curios-prelude/src/` | Text preparation, Core elaboration/erasure replay APIs, pipeline integration, and archive validation tests |
+| Standard or syntax library | `curios-prelude-archive/std/`, `curios-prelude-archive/syn/` | Module indices, canonical syntax registry, `SYNTAX.md`, and Curios integration tests |
+| Prelude archive or replay | `curios-prelude-archive/build.rs`, `curios-prelude-archive/src/` | Text preparation, Core elaboration/erasure replay APIs, pipeline integration, and archive validation tests |
 | Browser compiler or harness | `curios-web/` | Host ABI, wasm32 build, wasm-bindgen version, and CI release steps |
 | Profiling instrumentation | `curios-profile/src/lib.rs` | Each consumer crate's `profile` feature fan-out, and `make curios/profile` |
 | Binaryen version, build, or FFI | `curios-binaryen/` | Shared cache behavior, native compiler linkage, and optimize round-trip tests |
@@ -98,7 +101,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 - The workspace uses crate boundaries, not Cargo features, to separate the compiler, runtime, and browser products.
 - `curios` and `curios-runtime` use the same workspace-pinned Wasmtime version so compiler-produced `.cwasm` modules match the runtime that deserializes them.
 - `curios-abi` is the source of truth for the host/guest wire contract. A host operation is incomplete until its ABI row, compiler use, native runtime implementation, and applicable JavaScript implementation agree.
-- `/std` and `/syn` are owned by `curios-prelude` and compiled into an rkyv image in that crate's `OUT_DIR`. Every source module must be registered in its Curios index; the build script discovers every `.crs` input, fingerprints it, and emits the matching Cargo rebuild directives.
+- `/std` and `/syn` are owned by `curios-prelude-archive` and compiled into an rkyv image in that crate's `OUT_DIR`. Every source module must be registered in its Curios index; the build script discovers every `.crs` input, fingerprints it, and emits the matching Cargo rebuild directives.
 - Production compilation has no fixed-prelude source fallback or cache-miss branch. Archive construction or restoration failure is a compiler invariant and fails loudly. The image is scoped to one compiler build and is not a stable interchange format.
 - `/syn` ownership — which names it holds, and why — is `curios-prelude/README.md`'s decision to state. The registry contract belongs to `curios-base`, below both stages that read it, and the erased runtime carriers for compiler-emitted literals remain `Nat` and packed `Bytes`. No crate below `curios-prelude` may spell a `/syn` name: the registry states slots, the prelude states spellings, and the prelude build checks every slot against the sources.
 - Binaryen is built from a verified source release. Its expensive C++ build is shared through the locked, target-specific cache under `target/binaryen`, not a Cargo fingerprint-specific `OUT_DIR`.

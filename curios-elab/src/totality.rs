@@ -13,10 +13,10 @@ mod tests;
 /// Which half of erasure an obligation guards — `curios-cert`'s type, re-exported rather than restated.
 ///
 /// The two obligations run one analysis over one partiality relation, seeded twice, and this says which seeding rejected: a type must be total or type formation may not terminate, a proof must be total or it proves anything. Both checkers state that same distinction and each carries it in its own diagnostic, so a second declaration of it was two vocabularies that could drift while describing one thing. The certifier's is the one that survives, because it is the half `KernelError::NotTotal` already exports.
-pub use curios_cert::Erased;
+pub use curios_analysis::Erased;
 use {
     super::{Context, Error, is_prop, zonk},
-    curios_cert::{group_totality, yields_a_sort},
+    curios_analysis::{group_totality, yields_a_sort},
     curios_core::{
         Definition, Enter, Global, Intrinsic, Item, Module, Rec, RecGroup, RecItem, Subterm, Term,
         Totality,

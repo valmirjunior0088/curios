@@ -1,0 +1,27 @@
+[package]
+name = "curios-analysis"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The analyses both Curios checkers run: the Env/Judge seam, index inversion, strict positivity, size-change totality, and universe satisfiability"
+
+[lints]
+workspace = true
+
+[features]
+profile = ["curios-profile/enabled", "curios-core/profile"]
+
+[dependencies]
+curios-profile = { workspace = true }
+curios-base = { workspace = true }
+curios-core = { workspace = true }
+num-bigint = { workspace = true }
+
+# The kernel, for the tests in `tests/` that drive these analyses through a real
+# checker. It is a cycle — `curios-cert` depends on this crate — and Cargo permits
+# it because dev-dependencies do not participate in the library build. It works for
+# *integration* tests only: a `#[cfg(test)]` module inside the lib compiles this
+# crate a second time, so `Kernel`'s `Judge` implementation would be against the
+# other copy and the bound would not hold.
+[dev-dependencies]
+curios-cert = { workspace = true }

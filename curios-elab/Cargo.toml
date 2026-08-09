@@ -9,16 +9,24 @@ description = "The Curios elaborator: elaboration, typing, conversion, universe 
 workspace = true
 
 [features]
-archive = ["dep:rkyv", "curios-abi/archive", "curios-base/archive", "curios-cert/archive", "curios-core/archive", "curios-ersd/archive"]
-profile = ["curios-profile/enabled", "curios-cert/profile"]
+archive = ["dep:rkyv", "curios-abi/archive", "curios-base/archive", "curios-core/archive", "curios-ersd/archive"]
+profile = ["curios-profile/enabled", "curios-analysis/profile"]
 
 [dependencies]
 curios-profile = { workspace = true }
 curios-abi = { workspace = true }
 curios-base = { workspace = true }
-curios-cert = { workspace = true }
+curios-analysis = { workspace = true }
 curios-core = { workspace = true }
 curios-ersd = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
 rkyv = { workspace = true, optional = true }
+
+# The kernel is a *dev*-dependency, and that is the point of the split rather than
+# an accident of it: three tests here put a fixture to both checkers, and a
+# dev-dependency does not propagate — so nothing whose build script reaches
+# elaboration reaches `curios-cert` through it. See
+# `documentation/roadmap/compiler/10_PRELUDE_ENVIRONMENT_SPEC.md`, M5.
+[dev-dependencies]
+curios-cert = { workspace = true }

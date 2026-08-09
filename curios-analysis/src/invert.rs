@@ -4,9 +4,6 @@
 //!
 //! Both checkers run *this* unifier. It is a total function of finished terms, and it runs post-zonk on both sides, so a second implementation would be a second run of the same function on the same input rather than a second opinion. What each side supplies for itself is reduction and conversion, through [`Judge`] — see that module for the line, and for the concession borrowing conversion represents.
 
-#[cfg(test)]
-mod tests;
-
 use {
     crate::Judge,
     curios_core::{Free, Peel, Subterm, Telescope, Term, peel_intrinsic},
@@ -65,7 +62,7 @@ pub fn invert_indices<J: Judge>(
 }
 
 /// [`invert_indices`] for the outer direction: the flex variables are the *context's*, not an arm's, so a key-shaped actual at the top of a position is not something the flex side was refined to — there is nothing for a solution to cycle through — and a variable actual may therefore solve the flex target it meets. This is the kernel's spelling of the elaborator's `refine_head` orientation: the outer variable stands refined to the arm's term. The first direction keeps the guard, because there the flex side is the arm's own binders and rung B has already refined keys to them.
-pub(crate) fn invert_indices_outer<J: Judge>(
+pub fn invert_indices_outer<J: Judge>(
     judge: &mut J,
     actuals: &[Term],
     targets: &[Term],

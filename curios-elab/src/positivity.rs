@@ -4,7 +4,7 @@
 
 use {
     super::{Context, Error},
-    curios_cert::positivity_vectors,
+    curios_analysis::positivity_vectors,
     curios_core::Module,
 };
 
@@ -15,9 +15,9 @@ pub fn check_positivity(context: &mut Context, module: &mut Module) -> Result<()
     curios_profile::profile!("check_positivity");
     let vectors = positivity_vectors(
         context,
-        curios_cert::Declarations::of(&module.induct_decls, &module.struct_decls),
+        curios_analysis::Declarations::of(&module.induct_decls, &module.struct_decls),
         // At a replay these are the entry's own; the prelude was analyzed when it was elaborated, and its vectors ride the archive.
-        curios_cert::Coverage::Partial,
+        curios_analysis::Coverage::Partial,
     )
     .map_err(|refusal| {
         Error::not_strictly_positive(
