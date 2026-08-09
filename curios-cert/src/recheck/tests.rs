@@ -2277,7 +2277,6 @@ fn a_binder_set_is_not_opened_at_a_count_the_term_supplied() {
 /// The control for the arm half: an arm binding exactly its constructor's payload still reduces, so the type position it computes is classified as it always was.
 #[test]
 fn an_arm_matching_its_payload_still_reduces() {
-    let three = Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(3usize)));
     let module = arm_module(vec![(Plicity::Explicit, Free::local(996, Some("a")))]);
 
     assert_eq!(
@@ -2285,7 +2284,6 @@ fn an_arm_matching_its_payload_still_reduces() {
         Vec::new(),
         "an arm binding exactly its payload was refused",
     );
-    let _ = three;
 }
 
 /// The three shapes: an arm over- and under-binding its payload, and a recursive application short of its member's binders.
