@@ -15,7 +15,7 @@ use {
     super::{
         Kernel, KernelError, Sort, carries_information,
         convert::convert,
-        infer::{check, infer_type},
+        infer::{check, infer, infer_type},
     },
     crate::{group_totality, yields_a_sort},
     curios_core::{
@@ -465,6 +465,6 @@ pub(crate) fn check_entrypoint(
             infer_type(kernel, type_)?;
             check(kernel, body, type_)
         }
-        None => super::infer::infer(kernel, body).map(|_| ()),
+        None => infer(kernel, body).map(|_| ()),
     }
 }
