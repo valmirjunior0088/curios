@@ -438,7 +438,7 @@ fn infer_node(
         }),
 
         // A polymorphic name at a stated instance: its scheme, substituted.
-        Subterm::UniverseInst(UniverseInst { head, levels }) => {
+        Subterm::UniverseInst(UniverseInst { head, .. }) => {
             // `synth_neutral` reads a projection's type off the group it carries, which is a lookup and must stay one — so the group is certified *here*, before the read, at the generic spelling the instance was taken from. Skipping this would leave the instance spelling as a way to type a member of a group nothing checked.
             if let Some((group, _)) = head.as_rec_proj() {
                 let group = group.clone();
@@ -447,10 +447,7 @@ fn infer_node(
 
             match synth_neutral(kernel, term)? {
                 Some(type_) => Ok(type_),
-                None => {
-                    let _ = (head, levels);
-                    Err(KernelError::Unclassified(term.clone()))
-                }
+                None => Err(KernelError::Unclassified(term.clone())),
             }
         }
 
