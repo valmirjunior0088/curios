@@ -477,18 +477,19 @@ pub(super) fn erase_intrinsic(
                 Ok(Outcome::Emitted(value))
             })
         }
-        // The description that performs `action`, then the description `continuation` computes from its result. Both forces are zero-argument applications of the closures the operands erased to.
+        // The description that performs `action`, then the description `continuation` computes from its result. The operands erase at the construction site like the rest of the roster (see `thunk`'s placement rule); the two forces and the continuation's application are the performance, and only they stay inside.
         Intrinsic::IoBind(from, to, action, continuation) => {
-            lowering.thunk(hint.or(Some("io/bind")), |lowering| {
-                let io_from: Term = Subterm::Intrinsic(Intrinsic::IoType(from.clone())).into();
-                let action_atom = emitted!(lowering.walk(context, action, &io_from, None)?);
-                let result = emitted!(lowering.force(action_atom));
+            let io_from: Term = Subterm::Intrinsic(Intrinsic::IoType(from.clone())).into();
+            let action_atom = emitted!(lowering.walk(context, action, &io_from, None)?);
 
-                let io_to: Term = Subterm::Intrinsic(Intrinsic::IoType(to.clone())).into();
-                let continuation_type =
-                    Term::func_type([(context.fresh(Some("x")), from.clone())], io_to);
-                let continuation_atom =
-                    emitted!(lowering.walk(context, continuation, &continuation_type, None)?);
+            let io_to: Term = Subterm::Intrinsic(Intrinsic::IoType(to.clone())).into();
+            let continuation_type =
+                Term::func_type([(context.fresh(Some("x")), from.clone())], io_to);
+            let continuation_atom =
+                emitted!(lowering.walk(context, continuation, &continuation_type, None)?);
+
+            lowering.thunk(hint.or(Some("io/bind")), move |lowering| {
+                let result = emitted!(lowering.force(action_atom));
                 let next = emitted!(lowering.bind(
                     None,
                     curios_ersd::Rhs::Apply {
