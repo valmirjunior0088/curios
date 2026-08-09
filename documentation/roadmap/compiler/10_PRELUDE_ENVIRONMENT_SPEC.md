@@ -44,21 +44,56 @@ Each stage takes an **environment** plus the unit's own items. The archive is th
 
 The house method is the one [SOUNDNESS.md](../../SOUNDNESS.md) records for the recursive-member defect: *closed by deleting the second spelling rather than by adding a second check*, which gave `curios-core` one recursion form where it had two. Here the two spellings are the compilation unit and the spliced complete program, and `Prefix` is the second check reconciling them. The apparatus goes because the thing that made it necessary goes.
 
-### M1 — the certifier takes an environment
+### The environment is `Globals`, promoted
 
-`recheck_module_suffix(module, budget, prefix)` becomes a walk over the unit's items against an environment seeded from the archive. `Prefix`, `checked_from`, and the prefix parameters on `dependency_order`, `partial_definitions` and `derived_binder_floor_beyond` are deleted; the four `recheck_*` entry points collapse toward one; and the index leaves `curios-pipeline`'s public signature. An environment lookup that misses is a refusal, where an out-of-range index today is a slice panic or a silent skip — so this moves the failure mode toward fail-closed, which is where the rest of this perimeter already sits.
+There is no new type. `curios-cert`'s `kernel::globals::Globals` already *is* this — its own documentation says so: *"What is in scope beyond the walk: top-level definitions, and the nominal registry… the one component that exists to answer with something other than the term in hand, which is exactly what a definition store is for."* It is `pub(super)`, so what the design needs is a promotion and two fields, not a structure.
+
+It must not be called `Env`. That name is taken in this crate by the analysis-facing *trait* — `force`, `assumption`, `fresh` — which says what a shared analysis may ask of whichever checker runs it. That is behaviour; this is data. Giving both one word would bury the seam's whole point, and `Globals` also avoids inventing a fourth term beside `Scope` (`curios-core`) and `Context` (`curios-elab`).
+
+Two fields make it absorb `Prefix` entirely. A `binder_floor`, stored as the maximum of the archive's carried value and the walk's own derivation — a floor is a bound rather than a verdict, so widening can only cost freshness, which is the discipline `recheck.rs` already applies and `derived_binder_floor` (now in `curios-core`) already supplies. And a set of concept *names*: `declares_induct` and `declares_struct` are already answerable from the maps `Globals` holds, and `declares_concept` was the only query with no home. With both, `Prefix` deletes rather than lingering.
+
+```rust
+pub struct Globals {
+    definitions: HashMap<Free, Definition>,
+    inducts: HashMap<Global, InductDecl>,
+    structs: HashMap<Global, StructDecl>,
+    concepts: HashSet<Global>,
+    binder_floor: usize,
+}
+
+impl Globals {
+    /// Everything `module` puts in scope: its definitions at their declared types with their real bodies, and its nominal registry.
+    pub fn of(module: &Module, carried: usize) -> Self { … }
+}
+```
+
+`recheck_module(module, budget, globals)` is then the single entry point, and a whole-module walk is `Globals::default()` — which is what `recheck_module_verdicts` means today, so four entry points become one.
+
+### M1a — the certifier skips by identity rather than position
+
+`verdicts_from` seeds from `Globals` and judges every item in `module.items` **whose declared names are not already in scope**. That deletes `checked_from`, `Prefix`, and the prefix parameters on `dependency_order`, `partial_definitions` and `derived_binder_floor_beyond`, and takes the index out of `curios-pipeline`'s public signature — without touching the producer.
+
+Doing identity first is what makes the rest safe. It is semantics-preserving, since a `Global` is unique within a module and a user item cannot reuse a prelude name; it is independently gateable; and it removes the positional claim [SOUNDNESS.md](../../SOUNDNESS.md)'s *Prefix identification* row is about, ahead of the change that removes the position itself.
+
+### M1b — the producer stops splicing
+
+`into_core_with_prelude` returns the unit's items alone, and elaboration and erasure stop expecting the prelude at the front of what they process. All three consumers already *receive* the prelude separately — `recheck_module_suffix(module, budget, prefix)`, `elaborate_module_suffix(context, prefix, module, …)`, `erase_module_with_prelude(context, prelude, module, …)` — so this is one producer change plus one deletion in each, with no new channel to build.
+
+After M1a this is a pure optimisation: 1052 items stop being cloned per compilation and nothing changes about what is judged.
+
+**These two are not independent, and an earlier draft of this document wrongly said the milestones below were.** M1b's producer change and the consumers' skip-logic must move together or the kernel double-defines; M1a is what makes that a mechanical step rather than a coordinated redesign. M2 onward genuinely can follow separately.
 
 ### M2 — registries as base plus additions
 
 The provenance queries `Prefix::declares_*` exist to recover, per lookup, what a merged map threw away. Replace the merge with a base environment the unit adds to. `Coverage::Complete`/`Partial` already names the distinction the whole-module passes need, and those passes continue to see the complete set.
 
-### M3 — elaboration follows
+### M3 — elaboration names its environment
 
-`elaborate_module_suffix`'s `prefix: Option<&Module>` goes the same way. Elaboration already re-seeds a context from the prelude; only the additional positional assumption is removed.
+M1b removes elaboration's positional assumption; what remains is that it still takes a bare `prefix: Option<&Module>` and re-seeds a context from it by hand. Give it the environment type its own stage deserves, so the prelude arrives as scope rather than as a module that happens to be consulted.
 
-### M4 — erasure follows
+### M4 — erasure names its environment
 
-`erase_module_with_prelude`'s prose contract is discharged rather than documented, and `erase_prelude_prefix` retires. Erasure is the stage closest to correct already — it restores an archived erased prefix and erases only the suffix — so this is the smallest of the four.
+The same for `erase_module_with_prelude`, whose prose contract M1b discharges: with the prelude arriving as scope, `erase_prelude_prefix` retires and the caller guarantee has nothing left to state. Erasure is the stage closest to correct already, since it restores an archived erased prefix and erases only the suffix, so this is the smallest of the four.
 
 ### M5 — split the archive's keying (`curios-archive`)
 
