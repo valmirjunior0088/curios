@@ -4,14 +4,14 @@
 
 use {
     super::recheck_module_verdicts,
-    crate::KernelError,
-    crate::derived_binder_floor,
+    crate::{Erased, KernelError, derived_binder_floor},
+    curios_abi::{ForeignFunction, WireSignature, WireType},
     curios_base::{Plicity, Qualifier, RootId},
     curios_core::{
-        Atom, Definition, DefinitionKind, Free, Global, InductDecl, InductParam, Intrinsic, Item,
-        Level, Many, Module, RecGroup, RecMemberScopes, Scope, Telescope, Term, Totality,
-        UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
-        UniverseMetaId, UniverseParam,
+        Atom, Definition, DefinitionKind, Free, Func, FuncType, Global, InductDecl, InductParam,
+        Intrinsic, Item, Level, Many, Module, Nat, RecGroup, RecMemberScopes, Scope, StructDecl,
+        StructType, Subterm, Telescope, Term, Totality, UniverseConstraint, UniverseConstraintKind,
+        UniverseConstraintOrigin, UniverseContext, UniverseMetaId, UniverseParam,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -74,7 +74,7 @@ fn an_unsatisfiable_universe_context_is_refused() {
         root: RootId::Entry,
         totality: Totality::Total,
         type_: Term::intrinsic(Intrinsic::NatType),
-        body: Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(0usize))),
+        body: Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
     };
 
     let module = Module {
@@ -118,7 +118,7 @@ fn a_constraint_naming_an_undeclared_parameter_is_refused() {
         root: RootId::Entry,
         totality: Totality::Total,
         type_: Term::intrinsic(Intrinsic::NatType),
-        body: Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(0usize))),
+        body: Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
     };
 
     let module = Module {
@@ -593,7 +593,7 @@ fn a_registry_index_target_is_checked_rather_than_believed() {
 /// The control for the fixture above: a registry entry whose index target is a real term stays accepted.
 #[test]
 fn a_registry_index_target_of_a_real_term_is_accepted() {
-    let target = Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(0usize)));
+    let target = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
 
     assert_eq!(
         recheck_module_verdicts(&indexed_module(target), 1_000_000),
@@ -1403,14 +1403,14 @@ fn a_forged_foreign_row_still_inhabits_its_wire_type() {
 
 /// `let held : claimed = <a forged host row returning one `Nat`>`, with `False` declared alongside.
 fn forged_foreign(claimed: &Term, false_name: &Global) -> Module {
-    let row = std::sync::Arc::new(curios_abi::ForeignFunction {
+    let row = std::sync::Arc::new(ForeignFunction {
         namespace: "ffi",
         name: "/forged".to_string(),
         subject: None,
         label: "forged".to_string(),
-        signature: curios_abi::WireSignature {
+        signature: WireSignature {
             params: Vec::new(),
-            results: vec![("value".to_string(), curios_abi::WireType::Nat)],
+            results: vec![("value".to_string(), WireType::Nat)],
         },
     });
 
@@ -1615,7 +1615,7 @@ fn an_honest_motive_still_refuses_the_large_elimination() {
 /// `extract : (p : P(0)) -> Nat`, eliminating the two-constructor proposition `P` under a motive whose inner switch states `sort` while every arm of it is `Nat`.
 fn lying_motive(sort: Term) -> Module {
     let family = Global::Authored(Qualifier::from(["P"]));
-    let zero = Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(0usize)));
+    let zero = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
 
     let nullary = |tag: &str| {
         (
@@ -1655,7 +1655,7 @@ fn lying_motive(sort: Term) -> Module {
     );
 
     let subject = Free::local(604, Some("p"));
-    let literal = |n: usize| Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(n)));
+    let literal = |n: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
     let extract = authored(
         &Global::Authored(Qualifier::from(["extract"])),
         Term::func_type(
@@ -1837,9 +1837,7 @@ fn an_occurrence_whose_arity_is_not_its_declarations_is_refused() {
 fn an_occurrence_at_its_declared_arity_is_accepted() {
     let module = occurrence_module(
         vec![Term::intrinsic(Intrinsic::NatType)],
-        vec![Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(
-            0usize,
-        )))],
+        vec![Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)))],
     );
 
     assert_eq!(
@@ -1851,7 +1849,7 @@ fn an_occurrence_at_its_declared_arity_is_accepted() {
 
 /// The three ways an occurrence of a one-parameter, one-index family can disagree with it.
 fn arity_cases() -> Vec<(&'static str, Vec<Term>, Vec<Term>)> {
-    let zero = Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(0usize)));
+    let zero = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
     vec![
         ("no parameters", Vec::new(), vec![zero.clone()]),
         (
@@ -1870,7 +1868,7 @@ fn arity_cases() -> Vec<(&'static str, Vec<Term>, Vec<Term>)> {
 /// `let held : Type = F(params)(indices)`, where `F(A : Type) : (i : Nat) -> Type` declares one of each.
 fn occurrence_module(params: Vec<Term>, indices: Vec<Term>) -> Module {
     let family = Global::Authored(Qualifier::from(["F"]));
-    let zero = Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(0usize)));
+    let zero = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
 
     let declaration = InductDecl {
         universe_context: UniverseContext::default(),
@@ -1983,7 +1981,7 @@ fn nominal_value_cases() -> Vec<(&'static str, Module)> {
 fn struct_value_module(params: Vec<Term>) -> Module {
     let name = Global::Authored(Qualifier::from(["S"]));
     let a = Free::local(980, Some("A"));
-    let declaration = curios_core::StructDecl {
+    let declaration = StructDecl {
         universe_context: UniverseContext::empty(),
         arity: Telescope::build(
             [(a.clone(), Term::type_ground())],
@@ -1996,7 +1994,7 @@ fn struct_value_module(params: Vec<Term>) -> Module {
         polarities: Vec::new(),
     };
 
-    let declared: Term = curios_core::Subterm::StructType(curios_core::StructType {
+    let declared: Term = Subterm::StructType(StructType {
         name: name.clone(),
         universes: Vec::new(),
         params: vec![Term::intrinsic(Intrinsic::NatType)],
@@ -2009,9 +2007,7 @@ fn struct_value_module(params: Vec<Term>) -> Module {
         Term::struct_(
             name.clone(),
             params,
-            [Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(
-                3usize,
-            )))],
+            [Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)))],
         ),
     );
 
@@ -2066,9 +2062,7 @@ fn variant_value_module(params: Vec<Term>) -> Module {
             family.clone(),
             params,
             "mk",
-            [Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(
-                3usize,
-            )))],
+            [Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)))],
         ),
     );
 
@@ -2119,13 +2113,13 @@ fn a_saturated_application_in_a_type_position_is_accepted() {
     let a = Free::local(990, Some("a"));
     let b = Free::local(991, Some("b"));
     let nat = Term::intrinsic(Intrinsic::NatType);
-    let three = Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(3usize)));
+    let three = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
     let former = Global::Authored(Qualifier::from(["f"]));
 
     let plicities = vec![Plicity::Explicit, Plicity::Explicit];
     let former_def = authored(
         &former,
-        curios_core::Subterm::FuncType(curios_core::FuncType {
+        Subterm::FuncType(FuncType {
             telescope: Telescope::build(
                 [(a.clone(), nat.clone()), (b.clone(), nat.clone())],
                 Term::type_ground(),
@@ -2133,7 +2127,7 @@ fn a_saturated_application_in_a_type_position_is_accepted() {
             plicities: plicities.clone(),
         })
         .into(),
-        curios_core::Subterm::Func(curios_core::Func {
+        Subterm::Func(Func {
             telescope: Telescope::build(
                 [(a.clone(), nat.clone()), (b.clone(), nat.clone())],
                 nat.clone(),
@@ -2150,7 +2144,7 @@ fn a_saturated_application_in_a_type_position_is_accepted() {
             Term::free_var(&Free::from(&former)),
             [
                 three.clone(),
-                Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(4usize))),
+                Term::intrinsic(Intrinsic::Nat(Nat::new(4usize))),
             ],
         ),
         three,
@@ -2181,7 +2175,7 @@ fn unsaturated_cases() -> Vec<(&'static str, Module)> {
     let b = Free::local(991, Some("b"));
     let g = Free::local(992, Some("g"));
     let nat = Term::intrinsic(Intrinsic::NatType);
-    let three = Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(3usize)));
+    let three = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
 
     let two_binder = |result: Term| {
         Telescope::build([(a.clone(), nat.clone()), (b.clone(), nat.clone())], result)
@@ -2203,12 +2197,12 @@ fn unsaturated_cases() -> Vec<(&'static str, Module)> {
     let plicities = vec![Plicity::Explicit, Plicity::Explicit];
     let former_def = authored(
         &former,
-        curios_core::Subterm::FuncType(curios_core::FuncType {
+        Subterm::FuncType(FuncType {
             telescope: two_binder(Term::type_ground()),
             plicities: plicities.clone(),
         })
         .into(),
-        curios_core::Subterm::Func(curios_core::Func {
+        Subterm::Func(Func {
             telescope: two_binder(nat.clone()),
             plicities,
         })
@@ -2221,14 +2215,14 @@ fn unsaturated_cases() -> Vec<(&'static str, Module)> {
     );
 
     // `held : (g : (a : Nat, b : Nat) -> Type) -> g(3)`, where `g`'s type carries no plicities at all.
-    let short_plicities: Term = curios_core::Subterm::FuncType(curios_core::FuncType {
+    let short_plicities: Term = Subterm::FuncType(FuncType {
         telescope: two_binder(Term::type_ground()),
         plicities: Vec::new(),
     })
     .into();
     let neutral = authored(
         &Global::Authored(Qualifier::from(["held"])),
-        curios_core::Subterm::FuncType(curios_core::FuncType {
+        Subterm::FuncType(FuncType {
             telescope: Telescope::build(
                 [(g.clone(), short_plicities)],
                 Term::apply(Term::free_var(&g), [three.clone()]),
@@ -2267,8 +2261,7 @@ fn unsaturated_cases() -> Vec<(&'static str, Module)> {
 #[test]
 fn a_binder_set_is_not_opened_at_a_count_the_term_supplied() {
     for (label, module) in unguarded_opener_cases() {
-        // The demonstrated defect is the *abort*: `recheck_module_verdicts` is documented as walking
-        // to the end with each verdict independent of the others, and a panic makes that false.
+        // The demonstrated defect is the *abort*: `recheck_module_verdicts` is documented as walking to the end with each verdict independent of the others, and a panic makes that false.
         let verdicts = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
             recheck_module_verdicts(&module, 1_000_000)
         }))
@@ -2318,7 +2311,7 @@ fn unguarded_opener_cases() -> Vec<(&'static str, Module)> {
 fn arm_module(binders: Vec<(Plicity, Free)>) -> Module {
     let family = Global::Authored(Qualifier::from(["F"]));
     let nat = Term::intrinsic(Intrinsic::NatType);
-    let three = Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(3usize)));
+    let three = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
 
     let declaration = InductDecl {
         universe_context: UniverseContext::default(),
@@ -2374,10 +2367,10 @@ fn rec_apply_module() -> Module {
     let b = Free::local(991, Some("b"));
     let f = Free::local(992, Some("f"));
     let nat = Term::intrinsic(Intrinsic::NatType);
-    let three = Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(3usize)));
+    let three = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
     let plicities = vec![Plicity::Explicit, Plicity::Explicit];
 
-    let member_type: Term = curios_core::Subterm::FuncType(curios_core::FuncType {
+    let member_type: Term = Subterm::FuncType(FuncType {
         telescope: Telescope::build(
             [(a.clone(), nat.clone()), (b.clone(), nat.clone())],
             Term::type_ground(),
@@ -2385,7 +2378,7 @@ fn rec_apply_module() -> Module {
         plicities: plicities.clone(),
     })
     .into();
-    let member_body: Term = curios_core::Subterm::Func(curios_core::Func {
+    let member_body: Term = Subterm::Func(Func {
         telescope: Telescope::build([(a.clone(), nat.clone()), (b.clone(), nat.clone())], nat),
         plicities,
     })
@@ -2425,7 +2418,7 @@ fn an_exit_inside_a_proof_is_refused_with_no_definition_to_blame() {
         verdicts.iter().any(|verdict| matches!(
             verdict.error,
             KernelError::NotTotal {
-                erased: crate::Erased::Proof,
+                erased: Erased::Proof,
                 reached: None,
             }
         )),
@@ -2470,7 +2463,7 @@ fn proof_carrying_unit(exiting: bool) -> Module {
 
     let payload = match exiting {
         true => Term::intrinsic(Intrinsic::ProcExit(Term::intrinsic(Intrinsic::Nat(
-            curios_core::Nat::new(0usize),
+            Nat::new(0usize),
         )))),
         false => Term::tuple(Vec::<Term>::new()),
     };
@@ -2557,7 +2550,7 @@ fn plicity_module(honest: bool, payload_count: usize) -> Module {
     };
 
     let payload = (0..payload_count)
-        .map(|_| Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(0usize))))
+        .map(|_| Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))))
         .collect::<Vec<_>>();
 
     let mut induct_decls = BTreeMap::new();
@@ -2604,7 +2597,7 @@ fn indexed_family(index: Free, nat_type: Term, zero: Term, result_sort: Term) ->
 fn index_forgery() -> Module {
     let type_0 = Term::type_ground();
     let nat_type = Term::intrinsic(Intrinsic::NatType);
-    let nat = |n: usize| Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(n)));
+    let nat = |n: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
 
     let true_name = Global::Authored(Qualifier::from(["True"]));
     let false_name = Global::Authored(Qualifier::from(["False"]));
@@ -2761,7 +2754,7 @@ fn an_indexed_occurrence_at_a_well_typed_index_is_accepted() {
     let held_decl = indexed_family(
         Free::local(70, Some("n")),
         Term::intrinsic(Intrinsic::NatType),
-        Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(0usize))),
+        Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
         Term::type_ground(),
     );
 
@@ -2770,9 +2763,7 @@ fn an_indexed_occurrence_at_a_well_typed_index_is_accepted() {
         Term::induct_type(
             held_name.clone(),
             Vec::<Term>::new(),
-            [Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(
-                0usize,
-            )))],
+            [Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)))],
         ),
         Term::variant(
             held_name.clone(),
@@ -2806,7 +2797,7 @@ fn an_indexed_occurrence_at_a_well_typed_index_is_accepted() {
 /// Verified while the hole was open: `recheck_module_verdicts` returned **zero** refusals for this module.
 #[test]
 fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
-    let nat = |n: usize| Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(n)));
+    let nat = |n: usize| Term::intrinsic(Intrinsic::Nat(Nat::new(n)));
 
     let true_name = Global::Authored(Qualifier::from(["True"]));
     let equality_name = Global::Authored(Qualifier::from(["Eq"]));
@@ -2898,7 +2889,7 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
         body: Term::intrinsic(Intrinsic::NatType),
     };
 
-    let applied: Term = curios_core::Subterm::StructType(curios_core::StructType {
+    let applied: Term = Subterm::StructType(StructType {
         name,
         universes: Vec::new(),
         params: vec![Term::intrinsic(Intrinsic::NatType)],
