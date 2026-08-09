@@ -115,15 +115,25 @@ M1b removes elaboration's positional assumption; what remains is that it still t
 
 The same for `erase_module_with_prelude`, whose prose contract M1b discharges: with the prelude arriving as scope, `erase_prelude_prefix` retires and the caller guarantee has nothing left to state. Erasure is the stage closest to correct already, since it restores an archived erased prefix and erases only the suffix, so this is the smallest of the four.
 
-### M5 — split the archive's keying (`curios-archive`)
+### M5 — split the archive's keying (`curios-prelude-archive`)
 
 Unblocked by the above rather than blocking it. `curios-prelude`'s build script does two separable things in one product: it elaborates and serializes the image, needing `curios-text`/`curios-elab`/`curios-ersd`; and it runs `recheck_module_verdicts`, needing `curios-cert`. Cargo's granularity is the build script, so either dependency set re-runs both halves — measured at 13 distinct build-script fingerprints, each with its own 7.3 MiB archive, with `deps`, `features` and `rustflags` the only varying inputs.
 
-A new crate `curios-archive` owns elaboration and the image with no certifier dependency. `curios-prelude` **keeps its name, its public API and every downstream dependency**, and gains a build script that restores the image and certifies it. The verdict is that crate's successful build, exactly as `.vok`'s existence is Coq's — nothing can reach the prelude except through it, so the invariant *an archive that exists is one whose every item the kernel accepted* holds by construction rather than by convention.
+A new crate `curios-prelude-archive` owns the authored `/sys`, `/syn` and `/std` sources, their elaboration, and the serialized image, with no certifier dependency. It composes with the rkyv facade rather than competing with it: [`curios-archive`](11_ARCHIVE_FACADE_SPEC.md) owns *archiving* as a capability, and this is *an archive, of the prelude* — the two are a leaf below `curios-base` and a crate above `curios-ersd` respectively, which is also why they cannot be one crate. `curios-prelude` **keeps its name, its public API and every downstream dependency**, and gains a build script that restores the image and certifies it. The verdict is that crate's successful build, exactly as `.vok`'s existence is Coq's — nothing can reach the prelude except through it, so the invariant *an archive that exists is one whose every item the kernel accepted* holds by construction rather than by convention.
 
 One property improves: today the walk certifies `core` **before** hash-consing and serialization, so what is certified is not literally what is stored. After the split the kernel walks the restored image.
 
-Measure before building: the payoff is `elaborate / (elaborate + recheck + erase + serialize)`, and the build script already runs under `curios_profile::capture` behind its `profile` feature, writing `OUT_DIR/profile.tsv`. If the walk dominates, M5 buys a crate and little else.
+**Measured, 2026-08-09.** The build script's own `OUT_DIR/profile.tsv`, from a debug `--all-features` build:
+
+```text
+469215 ms  elaborate_and_zonk_module
+  4516 ms  erase_prelude_prefix
+  1223 ms  zonk_module
+   536 ms  prepare_prelude
+    52 ms  positivity_vectors
+```
+
+Elaboration is 469 s of a prelude build that takes roughly 570 s wall, which bounds everything else — certification included — at about 100 s. The decision rule this paragraph used to state was *if the walk dominates, M5 buys a crate and little else*; it does not dominate, and is outweighed at least four to one. A `curios-cert`-only edit currently pays 469 s of elaboration for nothing, which is the cost this milestone removes. One caveat on the figure: `recheck_module_verdicts` carries no `profile_span!`, so certification is bounded by subtraction from wall clock rather than read directly.
 
 ### M6 — parallel certification
 
@@ -164,4 +174,4 @@ Whole-module passes never cache and re-run at link: positivity over the complete
 
 ## Retirement criteria
 
-- Before this specification is deleted: the environment boundary is recorded in `curios-cert`'s, `curios-elab`'s and `curios-text`'s crate documentation, replacing the prose caller contracts it removes; the cross-cutting decision — that a module is a compilation unit and the prelude an environment — is recorded in [DESIGN.md](../../DESIGN.md); [SOUNDNESS.md](../../SOUNDNESS.md)'s *Prefix identification* row is deleted with the mechanism it describes rather than re-graded, and erasure's matching contract is deleted with it rather than added as a row; the `curios-archive` keying discipline is recorded in that crate's documentation; and M7, if still pending, is carried out to a specification of its own.
+- Before this specification is deleted: the environment boundary is recorded in `curios-cert`'s, `curios-elab`'s and `curios-text`'s crate documentation, replacing the prose caller contracts it removes; the cross-cutting decision — that a module is a compilation unit and the prelude an environment — is recorded in [DESIGN.md](../../DESIGN.md); [SOUNDNESS.md](../../SOUNDNESS.md)'s *Prefix identification* row is deleted with the mechanism it describes rather than re-graded, and erasure's matching contract is deleted with it rather than added as a row; the `curios-prelude-archive` keying discipline is recorded in that crate's documentation; and M7, if still pending, is carried out to a specification of its own.
