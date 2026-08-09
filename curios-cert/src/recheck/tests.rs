@@ -196,10 +196,44 @@ fn proposition(constructors: Vec<(Atom, InductParam)>) -> InductDecl {
     }
 }
 
+/// `induct Eq(@A : Type 1) : (x : A, y : A) -> Prop | refl(z : A) : (z, z) end` — the equality the forgeries transport along.
+fn equality_declaration() -> InductDecl {
+    let type_1 = Term::type_at(Level::zero().succ().expect("level zero has a successor"));
+    let carrier = Free::local(20, Some("A"));
+    let left = Free::local(21, Some("x"));
+    let right = Free::local(22, Some("y"));
+    let value = Free::local(23, Some("z"));
+
+    let mut declaration = proposition(vec![(
+        Atom::from("refl"),
+        InductParam {
+            telescope: Telescope::build(
+                [
+                    (carrier.clone(), type_1.clone()),
+                    (value.clone(), Term::free_var(&carrier)),
+                ],
+                vec![Term::free_var(&value), Term::free_var(&value)],
+            ),
+            plicities: vec![Plicity::Implicit, Plicity::Explicit],
+        },
+    )]);
+    declaration.arity = Telescope::build(
+        [(carrier.clone(), type_1.clone())],
+        Telescope::build(
+            [
+                (left, Term::free_var(&carrier)),
+                (right, Term::free_var(&carrier)),
+            ],
+            (),
+        ),
+    );
+
+    declaration
+}
+
 /// The module the doc comment above describes: three declarations, and the five definitions that close on `False`.
 fn forgery() -> Module {
     let type_0 = Term::type_ground();
-    let type_1 = Term::type_at(Level::zero().succ().expect("level zero has a successor"));
 
     let false_name = Global::Authored(Qualifier::from(["False"]));
     let box_name = Global::Authored(Qualifier::from(["Box"]));
@@ -227,34 +261,7 @@ fn forgery() -> Module {
         },
     )]);
 
-    // induct Eq(A : Type 1) : (x : A, y : A) -> Prop | refl(z : A) : (z, z) end
-    let carrier = Free::local(20, Some("A"));
-    let left = Free::local(21, Some("x"));
-    let right = Free::local(22, Some("y"));
-    let value = Free::local(23, Some("z"));
-    let mut equality_decl = proposition(vec![(
-        Atom::from("refl"),
-        InductParam {
-            telescope: Telescope::build(
-                [
-                    (carrier.clone(), type_1.clone()),
-                    (value.clone(), Term::free_var(&carrier)),
-                ],
-                vec![Term::free_var(&value), Term::free_var(&value)],
-            ),
-            plicities: vec![Plicity::Implicit, Plicity::Explicit],
-        },
-    )]);
-    equality_decl.arity = Telescope::build(
-        [(carrier.clone(), type_1.clone())],
-        Telescope::build(
-            [
-                (left, Term::free_var(&carrier)),
-                (right, Term::free_var(&carrier)),
-            ],
-            (),
-        ),
-    );
+    let equality_decl = equality_declaration();
 
     // unbox : (Box) -> Type 0 = (b) => match b : (_) => Type 0 | mk(a) => a end
     let unbox_name = Global::Authored(Qualifier::from(["unbox"]));
@@ -2596,7 +2603,6 @@ fn indexed_family(index: Free, nat_type: Term, zero: Term, result_sort: Term) ->
 /// The module the doc comment below describes: four declarations, and the four definitions that close on `False`.
 fn index_forgery() -> Module {
     let type_0 = Term::type_ground();
-    let type_1 = Term::type_at(Level::zero().succ().expect("level zero has a successor"));
     let nat_type = Term::intrinsic(Intrinsic::NatType);
     let nat = |n: usize| Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(n)));
 
@@ -2637,34 +2643,7 @@ fn index_forgery() -> Module {
     )]);
     let false_decl = proposition(Vec::new());
 
-    // induct Eq(A : Type 1) : (x : A, y : A) -> Prop | refl(@z : A) : (z, z) end
-    let carrier = Free::local(20, Some("A"));
-    let left = Free::local(21, Some("x"));
-    let right = Free::local(22, Some("y"));
-    let value = Free::local(23, Some("z"));
-    let mut equality_decl = proposition(vec![(
-        Atom::from("refl"),
-        InductParam {
-            telescope: Telescope::build(
-                [
-                    (carrier.clone(), type_1.clone()),
-                    (value.clone(), Term::free_var(&carrier)),
-                ],
-                vec![Term::free_var(&value), Term::free_var(&value)],
-            ),
-            plicities: vec![Plicity::Implicit, Plicity::Explicit],
-        },
-    )]);
-    equality_decl.arity = Telescope::build(
-        [(carrier.clone(), type_1.clone())],
-        Telescope::build(
-            [
-                (left, Term::free_var(&carrier)),
-                (right, Term::free_var(&carrier)),
-            ],
-            (),
-        ),
-    );
+    let equality_decl = equality_declaration();
 
     let held_decl = indexed_family(
         Free::local(70, Some("n")),
@@ -2827,7 +2806,6 @@ fn an_indexed_occurrence_at_a_well_typed_index_is_accepted() {
 /// Verified while the hole was open: `recheck_module_verdicts` returned **zero** refusals for this module.
 #[test]
 fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
-    let type_1 = Term::type_at(Level::zero().succ().expect("level zero has a successor"));
     let nat = |n: usize| Term::intrinsic(Intrinsic::Nat(curios_core::Nat::new(n)));
 
     let true_name = Global::Authored(Qualifier::from(["True"]));
@@ -2848,33 +2826,7 @@ fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
         },
     )]);
 
-    let carrier = Free::local(20, Some("A"));
-    let left = Free::local(21, Some("x"));
-    let right = Free::local(22, Some("y"));
-    let value = Free::local(23, Some("z"));
-    let mut equality_decl = proposition(vec![(
-        Atom::from("refl"),
-        InductParam {
-            telescope: Telescope::build(
-                [
-                    (carrier.clone(), type_1.clone()),
-                    (value.clone(), Term::free_var(&carrier)),
-                ],
-                vec![Term::free_var(&value), Term::free_var(&value)],
-            ),
-            plicities: vec![Plicity::Implicit, Plicity::Explicit],
-        },
-    )]);
-    equality_decl.arity = Telescope::build(
-        [(carrier.clone(), type_1.clone())],
-        Telescope::build(
-            [
-                (left, Term::free_var(&carrier)),
-                (right, Term::free_var(&carrier)),
-            ],
-            (),
-        ),
-    );
+    let equality_decl = equality_declaration();
 
     // v : {Eq(True, 0, 1)} = (refl(True, qed()))
     let bogus = Term::induct_type(equality_name.clone(), [true_type.clone()], [nat(0), nat(1)]);
