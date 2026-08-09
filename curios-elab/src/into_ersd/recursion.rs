@@ -3,7 +3,7 @@
 //! Members are classified syntactically: a member whose body is a lambda is a function member (a reserved arena function), anything else is an eagerly computed member (a value with an initializer block). Every member is pre-bound before any body is erased, so mutual references resolve; source order is preserved as the eager initialization order. An all-function group erases to a `Functions` statement, a mixed or value-only group to a recursive group — and the representation's verifier owns the rejection of the recursion classes the language does not admit (a computed member evaluating itself or a later member), so no diagnostic is re-derived here.
 
 use {
-    super::{Context, Error, Lowering, Outcome, Rec, Subterm, Term},
+    super::{Context, Error, Lowering, Outcome, Rec, RecItem, Subterm, Term},
     curios_core::Free,
 };
 
@@ -58,7 +58,7 @@ impl Lowering {
     pub(super) fn erase_rec_item(
         &mut self,
         context: &mut Context,
-        rec: &super::RecItem,
+        rec: &RecItem,
     ) -> Result<(), Error> {
         let definitions = rec.definitions();
         for definition in &definitions {

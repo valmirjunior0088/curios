@@ -6,8 +6,9 @@
 
 use {
     super::{
-        Context, Error, Field, Lowering, Outcome, Proj, Struct, StructType, Subterm, Telescope,
-        Term, Tuple, TupleType, Variant, emitted, erasure_mask, reduce_with, signature_entries,
+        ConstructorRow, Context, Error, FamilyRow, Field, Lowering, Outcome, ProductRow, Proj,
+        Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, Variant, emitted,
+        erasure_mask, infer, reduce_with, signature_entries,
     },
     curios_core::Bound,
 };
@@ -35,7 +36,7 @@ impl Lowering {
         &mut self,
         context: &mut Context,
         name: &curios_core::Global,
-    ) -> Result<super::ProductRow, Error> {
+    ) -> Result<ProductRow, Error> {
         if let Some(row) = self.environment.struct_row(name) {
             return Ok(row.clone());
         }
@@ -60,7 +61,7 @@ impl Lowering {
                 fields: relevant,
             })
         });
-        let row = super::ProductRow { schema, mask };
+        let row = ProductRow { schema, mask };
         self.environment.register_struct_row(name, row.clone());
         Ok(row)
     }
@@ -70,7 +71,7 @@ impl Lowering {
         &mut self,
         context: &mut Context,
         name: &curios_core::Global,
-    ) -> Result<super::FamilyRow, Error> {
+    ) -> Result<FamilyRow, Error> {
         if let Some(row) = self.environment.induct_row(name) {
             return Ok(row.clone());
         }
@@ -106,9 +107,9 @@ impl Lowering {
             let id = self
                 .builder
                 .constructor(family, Some(tag.to_string()), relevant);
-            constructors.push(super::ConstructorRow { id, mask });
+            constructors.push(ConstructorRow { id, mask });
         }
-        let row = super::FamilyRow {
+        let row = FamilyRow {
             family,
             constructors,
         };
@@ -250,7 +251,7 @@ impl Lowering {
             unreachable!("unresolved label projection reached erasure");
         };
 
-        let head_type = super::infer(context, head)?;
+        let head_type = infer(context, head)?;
         let head_type = reduce_with(context, &head_type)?;
 
         // Projecting an *erased* field yields proof content only: the unit constant, never a runtime projection (the field has no slot).
@@ -261,7 +262,7 @@ impl Lowering {
                 let mask = erasure_mask(context, telescope.clone())?;
                 let relevant = mask.iter().filter(|&&erased| !erased).count();
                 let schema = (relevant != 1).then(|| self.tuple_schema(relevant));
-                (super::ProductRow { schema, mask }, telescope.len())
+                (ProductRow { schema, mask }, telescope.len())
             }
             Subterm::StructType(StructType { name, .. }) => {
                 let row = self.struct_row(context, name)?;

@@ -553,7 +553,7 @@ pub fn erase_module_with_prelude(
         // Re-seed the Core context with the prelude's definitions, mirroring the legacy replay: later items and the entrypoint reduce through them.
         for item in &prelude.items {
             match item {
-                super::Item::Let(definition) => {
+                Item::Let(definition) => {
                     context.define_assuming_scheme(
                         &Free::from(&definition.name),
                         &definition.type_,
@@ -562,7 +562,7 @@ pub fn erase_module_with_prelude(
                         definition.universe_context.clone(),
                     );
                 }
-                super::Item::Rec(rec) => {
+                Item::Rec(rec) => {
                     let definitions = rec.definitions();
                     for definition in &definitions {
                         let name = Free::from(&definition.name);

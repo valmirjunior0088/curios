@@ -12,8 +12,8 @@ use {
     super::{Context, Error, expect_intrinsic_head, infer, reduce_with, refine_head},
     curios_core::{
         Apply, Atom, Bound, Carrier, Cases, Field, Func, FuncType, InductArm, InductDecl,
-        InductType, Intrinsic, IntrinsicHead, Item, Let, Many, Match, Nat, Proj, Rec, RecItem,
-        Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Variant,
+        InductType, Intrinsic, IntrinsicHead, Let, Many, Match, Nat, Proj, Rec, RecItem, Scope,
+        Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Variant,
     },
     num_bigint::BigUint,
     num_traits::ToPrimitive,

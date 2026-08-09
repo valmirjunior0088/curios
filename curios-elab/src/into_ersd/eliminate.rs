@@ -7,11 +7,12 @@
 use {
     super::{
         Atom, Carrier, Cases, Context, Error, InductArm, InductDecl, InductType, Intrinsic,
-        IntrinsicHead, Lowering, Many, Match, Outcome, Scope, Subterm, Telescope, Term, Three, Two,
-        emitted, expect_intrinsic_head, infer, is_erasable, reduce_with, refine_head,
+        IntrinsicHead, Lowering, Many, Match, Nat, Outcome, Scope, Subterm, Telescope, Term, Three,
+        Two, emitted, expect_intrinsic_head, infer, is_erasable, reduce_with, refine_head,
     },
     curios_base::{Grain, PackedBin},
     curios_core::{Free, Level},
+    std::collections::BTreeMap,
 };
 
 /// The `Lst`/`Bin` carrier a sequence fold eliminates: the carrier-specific reads, so the fold erasure stays carrier-agnostic.
@@ -282,7 +283,7 @@ impl Lowering {
         context: &mut Context,
         head: &Term,
         motive: &Scope<Many>,
-        cases: &super::BTreeMap<u32, Term>,
+        cases: &BTreeMap<u32, Term>,
         default: &Term,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
@@ -291,7 +292,7 @@ impl Lowering {
 
         let mut nat_cases = Vec::with_capacity(cases.len());
         for (&key, body) in cases {
-            let value = Term::intrinsic(Intrinsic::Nat(super::Nat::new(key)));
+            let value = Term::intrinsic(Intrinsic::Nat(Nat::new(key)));
             let block = self.refined_arm(context, head, &value, motive, body)?;
             nat_cases.push(curios_ersd::NatCase { key, block });
         }
@@ -328,7 +329,7 @@ impl Lowering {
         let zero = self.refined_arm(
             context,
             &head,
-            &Term::intrinsic(Intrinsic::Nat(super::Nat::new(0usize))),
+            &Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
             motive,
             empty_case,
         )?;
@@ -337,10 +338,10 @@ impl Lowering {
         if !cons_case.uses(1) {
             let pred = Term::intrinsic(Intrinsic::nat_sub(
                 head.clone(),
-                Term::intrinsic(Intrinsic::Nat(super::Nat::new(1usize))),
+                Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
             ));
             // The hypothesis never appears, so any term serves its slot.
-            let dead_hypothesis = Term::intrinsic(Intrinsic::Nat(super::Nat::new(0usize)));
+            let dead_hypothesis = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
             let peeled = cons_case.open(&[&pred, &dead_hypothesis]);
             let expected = motive.open(&[&head]);
             let default = self.open_arm(context, &expected, &peeled)?;
@@ -378,7 +379,7 @@ impl Lowering {
 
             let successor = Term::intrinsic(Intrinsic::nat_add(
                 pred_var.clone(),
-                Term::intrinsic(Intrinsic::Nat(super::Nat::new(1usize))),
+                Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
             ));
             refine_head(context, &head, &successor)?;
 
@@ -433,17 +434,14 @@ impl Lowering {
                 None
             )?);
 
-            let element = carrier.get(
-                &head,
-                Term::intrinsic(Intrinsic::Nat(super::Nat::new(0usize))),
-            );
+            let element = carrier.get(&head, Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))));
             let suffix = carrier.slice(
                 &head,
-                Term::intrinsic(Intrinsic::Nat(super::Nat::new(1usize))),
+                Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
                 length.clone(),
             );
             // The hypothesis never appears, so any term serves its slot.
-            let dead_hypothesis = Term::intrinsic(Intrinsic::Nat(super::Nat::new(0usize)));
+            let dead_hypothesis = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
             let peeled = cons_case.open(&[&element, &suffix, &dead_hypothesis]);
             let expected = motive.open(&[&head]);
             let default = self.open_arm(context, &expected, &peeled)?;

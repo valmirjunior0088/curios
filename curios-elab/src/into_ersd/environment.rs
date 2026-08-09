@@ -3,8 +3,8 @@
 //! Opened binders receive globally fresh Core labels and top-level names are module-unique, so one flat value map is unambiguous without scope save/restore. The schema maps memoize the arena identities Core declarations lower to — registered lazily on first use, when the dominance-ordered item chain guarantees the declaration's dependencies are already defined — so a type constructed or matched at many sites shares one schema.
 
 use {
-    super::BTreeMap,
     curios_core::{Free, Global},
+    std::collections::BTreeMap,
 };
 
 /// What a Core name erases to.
