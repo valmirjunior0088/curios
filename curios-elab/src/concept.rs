@@ -35,8 +35,8 @@ pub(crate) struct Witness {
 )]
 pub struct WitnessKey(pub Vec<HeadKey>);
 
-impl std::fmt::Display for WitnessKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for WitnessKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.0.as_slice() {
             [single] => write!(f, "{single}"),
             heads => {
@@ -120,7 +120,6 @@ impl HeadKey {
 
     /// The key of an intrinsic type former, shared by the first-order and higher-kinded (`Func`-body) positions of [`of_whnf`](Self::of_whnf).
     fn of_intrinsic(intrinsic: &Intrinsic) -> Option<HeadKey> {
-        use curios_core::Intrinsic;
         match intrinsic {
             Intrinsic::NatType => Some(HeadKey::Nat),
             Intrinsic::ByteType => Some(HeadKey::Byte),
