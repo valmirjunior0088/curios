@@ -27,6 +27,6 @@ rkyv = { workspace = true, optional = true }
 # an accident of it: three tests here put a fixture to both checkers, and a
 # dev-dependency does not propagate — so nothing whose build script reaches
 # elaboration reaches `curios-cert` through it. See
-# `documentation/roadmap/compiler/10_PRELUDE_ENVIRONMENT_SPEC.md`, M5.
+# `curios-prelude-archive/README.md`, "Why this is not `curios-prelude`".
 [dev-dependencies]
 curios-cert = { workspace = true }

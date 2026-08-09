@@ -40,7 +40,7 @@ which is about what it costs today. The concentration of authority is the goal; 
 ## Rejected
 
 - **Folding the facade into `curios-base`.** It is the one crate that could host it without a cycle, and it is still wrong: the principle is *one crate is the authority for one external concern*, and `curios-base` would then own shared foundations and serialization. The same principle says `curios-profile` should not move into `curios-base` either.
-- **Giving this name to the prelude image producer.** `10_PRELUDE_ENVIRONMENT_SPEC.md`'s M5 creates a crate that elaborates and serializes the fixed prelude — *above* `curios-ersd`, where this one is a leaf below `curios-base`, so they cannot be one crate. The two compose instead of competing: this crate owns *archiving* as a capability, and M5's `curios-prelude-archive` is *an archive, of the prelude*. `PreludeArchive`, `archive.rs` and "archive-build time" keep meaning what they already mean.
+- **Giving this name to the prelude image producer.** `curios-prelude-archive` elaborates and serializes the fixed prelude and sits *above* `curios-ersd`, where this one is a leaf below `curios-base`, so they cannot be one crate. The two compose instead of competing: this crate owns *archiving* as a capability, and M5's `curios-prelude-archive` is *an archive, of the prelude*. `PreludeArchive`, `archive.rs` and "archive-build time" keep meaning what they already mean.
 
 ## Out of scope
 

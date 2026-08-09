@@ -33,7 +33,7 @@ sha2 = "0.11.0"
 # whose script needs both would re-elaborate the whole standard library for
 # every certifier edit. Certification lives in `curios-prelude`'s script, which
 # is what buys that separation. See
-# `documentation/roadmap/compiler/10_PRELUDE_ENVIRONMENT_SPEC.md`, M5.
+# this crate's README, "Why this is not `curios-prelude`".
 [build-dependencies]
 curios-abi = { workspace = true, features = ["archive"] }
 curios-base = { workspace = true, features = ["archive"] }
