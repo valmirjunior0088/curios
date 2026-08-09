@@ -10,6 +10,9 @@ pub(crate) use program::*;
 mod solutions;
 pub(crate) use solutions::*;
 
+#[cfg(test)]
+mod tests;
+
 use {
     super::{
         Error, HeadKey, UniverseMark, UniverseSolver, UniverseStateToken, Witness, WitnessKey,
