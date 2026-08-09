@@ -203,24 +203,29 @@ fn infer_node(
             let head_type = infer(kernel, head)?;
 
             match Term::unwrap_or_clone(kernel.reduce_forced(head_type.clone())?) {
-                Subterm::TupleType(TupleType { telescope }) => telescope
-                    .nth(*index, |j| Term::proj(head.clone(), j))
-                    .ok_or(KernelError::Arity {
-                        expected: *index,
-                        actual: 0,
-                    }),
+                Subterm::TupleType(TupleType { telescope }) => {
+                    let len = telescope.len();
+                    telescope
+                        .nth(*index, |j| Term::proj(head.clone(), j))
+                        .ok_or(KernelError::Arity {
+                            expected: *index + 1,
+                            actual: len,
+                        })
+                }
                 Subterm::StructType(StructType {
                     name,
                     universes,
                     params,
-                }) => kernel
-                    .struct_at(&name, &universes, &params)?
-                    .fields()
-                    .nth(*index, |j| Term::proj(head.clone(), j))
-                    .ok_or(KernelError::Arity {
-                        expected: *index,
-                        actual: 0,
-                    }),
+                }) => {
+                    let fields = kernel.struct_at(&name, &universes, &params)?.fields();
+                    let len = fields.len();
+                    fields
+                        .nth(*index, |j| Term::proj(head.clone(), j))
+                        .ok_or(KernelError::Arity {
+                            expected: *index + 1,
+                            actual: len,
+                        })
+                }
                 _ => Err(KernelError::NotATuple(head_type)),
             }
         }
