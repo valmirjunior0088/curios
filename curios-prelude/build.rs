@@ -10,7 +10,7 @@ use syntax::SYNTAX;
 use {
     curios_abi::host_ops,
     curios_base::{Qualifier, RootId},
-    curios_cert::recheck_module_verdicts,
+    curios_cert::{Globals, recheck_module_verdicts},
     curios_core::Item,
     curios_core::{Global, Sharing, derived_binder_floor},
     curios_elab::{
@@ -137,7 +137,7 @@ fn build() {
         .unwrap_or_else(|error| panic!("elaborated fixed prelude universes are invalid: {error}"));
 
     // The archive-verdict pattern's establishing half: per-compile rechecking defines this prefix on faith, and this walk is that faith's whole ground — an archive that exists is one whose every item the kernel accepted.
-    let refusals = recheck_module_verdicts(&core, DEFAULT_STEP_BUDGET);
+    let refusals = recheck_module_verdicts(&core, DEFAULT_STEP_BUDGET, &Globals::default());
     if let Some(verdict) = refusals.first() {
         panic!(
             "fixed prelude failed the kernel: {} of {} items refused, first: {}",

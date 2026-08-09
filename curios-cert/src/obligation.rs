@@ -8,9 +8,9 @@
 //!
 //! Deciding it here rather than believing the elaborator is the point. This is the one obligation the trusted base used to take on another crate's word, which made an elaborator-only analysis the single defense for a whole class of `False`.
 //!
-//! # The archived prefix
+//! # What is already in scope
 //!
-//! A compile judges only the user's items, so the prelude's classification arrives on [`Definition::totality`] rather than being recomputed. That field is not taken on faith: the full walk that runs when the archive is built recomputes every flag and refuses a definition whose recorded verdict is more generous than the kernel's own. Trusting it afterwards is trusting a verdict this crate already reached — the same structure as the rest of the archive-verdict pattern.
+//! A compile judges only the user's items, so the prelude's classification arrives on [`Definition::totality`] rather than being recomputed. That field is not taken on faith: the walk that runs when the archive is built starts from an empty environment, recomputes every flag, and refuses a definition whose recorded verdict is more generous than the kernel's own. Trusting it afterwards is trusting a verdict this crate already reached — the same structure as the rest of the archive-verdict pattern.
 
 use {
     super::{Kernel, KernelError, Sort, group_totality},
@@ -61,32 +61,34 @@ fn locally_partial(kernel: &mut Kernel, term: &Term, memo: &mut HashMap<Term, bo
 
 /// Every definition in `module` that is not known to terminate, closed transitively over what each one mentions.
 ///
-/// Items before `checked_from` are the archived prefix: their flags are read from [`Definition::totality`] rather than recomputed, which is what keeps a compile from re-analyzing the standard library. That field is certified rather than believed — the full walk below (`checked_from` of zero) recomputes every flag and refuses a definition whose recorded verdict is more generous than the kernel's own, so an archive that exists carries verdicts this crate reached.
+/// An item `in_scope` already answers for arrived with an environment an earlier walk established: its flags are read from [`Definition::totality`] rather than recomputed, which is what keeps a compile from re-analyzing the standard library. That field is certified rather than believed — the walk from an empty environment recomputes every flag and refuses a definition whose recorded verdict is more generous than the kernel's own, so an archive that exists carries verdicts this crate reached.
+///
+/// The selection is by name for the same reason it is by name in [`recheck_module_verdicts`](crate::recheck_module_verdicts), and skipping is again the direction that needs the argument: an item declaring nothing is recomputed rather than passed over.
 ///
 /// The closure iterates to a fixpoint rather than assuming one pass suffices: items are stored in binding order, and a definition may mention one stored after it.
 #[allow(clippy::mutable_key_type)]
 pub(crate) fn partial_definitions(
     kernel: &mut Kernel,
     module: &Module,
-    checked_from: usize,
+    in_scope: impl Fn(&Global) -> bool,
 ) -> (BTreeSet<Global>, Vec<(Global, KernelError)>) {
     let mut mentions: BTreeMap<Global, BTreeSet<Global>> = BTreeMap::new();
     let mut partial: BTreeSet<Global> = BTreeSet::new();
     let mut disagreements = Vec::new();
     let mut memo = HashMap::new();
 
-    for (index, item) in module.items.iter().enumerate() {
+    for item in &module.items {
         let definitions = item.definitions();
+        let names = item.declared_names();
+        let carried = !names.is_empty() && names.into_iter().all(&in_scope);
         // A group that does not descend makes every member partial, whatever each body looks like on its own.
         let rejected = match item {
-            Item::Rec(rec) if index >= checked_from => {
-                group_totality(kernel, &rec.group) == Totality::Partial
-            }
+            Item::Rec(rec) if !carried => group_totality(kernel, &rec.group) == Totality::Partial,
             _ => false,
         };
 
         for definition in definitions {
-            let local = if index < checked_from {
+            let local = if carried {
                 !definition.totality.is_total()
             } else {
                 let computed = rejected

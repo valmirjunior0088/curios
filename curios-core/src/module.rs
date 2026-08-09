@@ -493,17 +493,16 @@ impl fmt::Display for Module {
 ///
 /// Every position that can hold a free local is covered, including ones that in practice never do: each item's type and body, every registry telescope and declared result sort, and the entrypoint's own type and body. Deciding a field cannot matter is the reasoning this walk exists to replace.
 pub fn derived_binder_floor(module: &Module) -> usize {
-    derived_binder_floor_beyond(module, None)
+    derived_binder_floor_outside(module, |_| false)
 }
 
-/// [`derived_binder_floor`] over only what `prefix` does not already cover — the items past its length and the declarations it does not declare.
+/// [`derived_binder_floor`] over only what `in_scope` does not already answer for — the items whose every declared name it holds, and the declarations it names.
 ///
-/// The prefix's own floor is not re-derived here because it is a constant of the archive, computed by the build that established the prefix and carried beside it; the caller maximizes the two. This is the same widening argument the function above rests on, only with one of the two bounds read instead of walked: a floor is a bound, so combining by maximum is safe whatever either side covers.
-pub fn derived_binder_floor_beyond(module: &Module, prefix: Option<&Module>) -> usize {
-    let covered = prefix.map_or(0, |prefix| prefix.items.len());
-    let fresh_induct = |name: &Global| prefix.is_none_or(|p| !p.induct_decls.contains_key(name));
-    let fresh_struct = |name: &Global| prefix.is_none_or(|p| !p.struct_decls.contains_key(name));
-    let fresh_concept = |name: &Global| prefix.is_none_or(|p| !p.concepts.contains_key(name));
+/// A caller that already has an environment established by an earlier walk has that walk's floor beside it, as a constant computed where the environment was built; the caller maximizes the two. This is the same widening argument the function above rests on, only with one of the two bounds read instead of walked: a floor is a bound, so combining by maximum is safe whatever either side covers.
+///
+/// The predicate is over *names* rather than over a position, which is what lets one environment answer for four namespaces at once: a name identifies one top-level thing within a module, and an environment populates every namespace it holds from the same source. Skipping is the direction that needs the argument — including an item can only raise the floor, and a higher floor costs freshness rather than correctness — so an item is skipped only when *every* name it declares is already answered for.
+pub fn derived_binder_floor_outside(module: &Module, in_scope: impl Fn(&Global) -> bool) -> usize {
+    let covered = |names: Vec<&Global>| !names.is_empty() && names.into_iter().all(&in_scope);
     let mut highest: Option<u32> = None;
     let mut consider = |free_vars: BTreeSet<Free>| {
         for free in free_vars {
@@ -513,7 +512,11 @@ pub fn derived_binder_floor_beyond(module: &Module, prefix: Option<&Module>) -> 
         }
     };
 
-    for item in &module.items[covered..] {
+    for item in module
+        .items
+        .iter()
+        .filter(|item| !covered(item.declared_names()))
+    {
         for definition in item.definitions() {
             consider(definition.type_.free_vars());
             consider(definition.body.free_vars());
@@ -523,7 +526,7 @@ pub fn derived_binder_floor_beyond(module: &Module, prefix: Option<&Module>) -> 
     for declaration in module
         .induct_decls
         .iter()
-        .filter(|(name, _)| fresh_induct(name))
+        .filter(|(name, _)| !in_scope(name))
         .map(|(_, declaration)| declaration)
     {
         consider(declaration.arity.free_vars());
@@ -536,7 +539,7 @@ pub fn derived_binder_floor_beyond(module: &Module, prefix: Option<&Module>) -> 
     for declaration in module
         .struct_decls
         .iter()
-        .filter(|(name, _)| fresh_struct(name))
+        .filter(|(name, _)| !in_scope(name))
         .map(|(_, declaration)| declaration)
     {
         consider(declaration.arity.free_vars());
@@ -546,7 +549,7 @@ pub fn derived_binder_floor_beyond(module: &Module, prefix: Option<&Module>) -> 
     for concept in module
         .concepts
         .iter()
-        .filter(|(name, _)| fresh_concept(name))
+        .filter(|(name, _)| !in_scope(name))
         .map(|(_, concept)| concept)
     {
         consider(concept.params.free_vars());

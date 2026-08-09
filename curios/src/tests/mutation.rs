@@ -5,8 +5,9 @@
 //! The oracle is what makes this defensible. `curios-elab` cannot be asked about a mutated *Core* module, so a mutant carries no second opinion to compare against; the property therefore has to be one whose answer is known by construction. A definition declared at `Nat` whose body is `true`, or one declared at anything else whose body is `0`, is ill-typed for a reason that needs no checker to establish — so a kernel that accepts it has admitted something false, and one that refuses it has done its job whatever rule it used.
 
 use {
+    curios_base::RootId,
     curios_core::{Item, Module, Term},
-    curios_pipeline::recheck_suffix,
+    curios_pipeline::recheck,
     curios_text::{Entrypoint, RootSource},
 };
 
@@ -58,6 +59,21 @@ fn foreign_body() -> Term {
     Term::type_ground()
 }
 
+/// Where `module`'s own `let` items sit — the entry program's, as against the prelude the compilation put in scope.
+///
+/// Selected by [`RootId`], which lowering stamps on every definition, rather than by an index the prelude ends at. The subjects declare their items at the top level of an entry program, so `RootId::Entry` names exactly them however the prelude reaches the module.
+fn user_lets(module: &Module) -> Vec<usize> {
+    module
+        .items
+        .iter()
+        .enumerate()
+        .filter_map(|(index, item)| match item {
+            Item::Let(definition) if definition.root == RootId::Entry => Some(index),
+            _ => None,
+        })
+        .collect()
+}
+
 /// Every mutant of every subject must be refused, and each unmutated subject accepted.
 #[test]
 fn every_body_replaced_by_a_foreign_term_is_refused() {
@@ -67,7 +83,7 @@ fn every_body_replaced_by_a_foreign_term_is_refused() {
         let entrypoint = source
             .parse::<Entrypoint>()
             .unwrap_or_else(|error| panic!("{description}: the subject parses: {error:?}"));
-        let (module, checked_from, obligations) = curios_pipeline::typecheck_reporting(
+        let (module, obligations) = curios_pipeline::typecheck_reporting(
             crate::DEFAULT_STEP_BUDGET,
             &entrypoint,
             RootSource::none(),
@@ -78,13 +94,13 @@ fn every_body_replaced_by_a_foreign_term_is_refused() {
             "{description}: the subject carries an erasure obligation, so it is the wrong control",
         );
         assert!(
-            recheck_suffix(&module, crate::DEFAULT_STEP_BUDGET).is_empty(),
+            recheck(&module, crate::DEFAULT_STEP_BUDGET).is_empty(),
             "{description}: the unmutated subject must be accepted, or every mutant passes for the wrong reason",
         );
 
-        for index in checked_from..module.items.len() {
+        for index in user_lets(&module) {
             let Item::Let(definition) = &module.items[index] else {
-                continue;
+                unreachable!("the index came from a `let`");
             };
 
             let mut mutant: Module = module.clone();
@@ -94,7 +110,7 @@ fn every_body_replaced_by_a_foreign_term_is_refused() {
             target.body = foreign_body();
 
             assert!(
-                !recheck_suffix(&mutant, crate::DEFAULT_STEP_BUDGET).is_empty(),
+                !recheck(&mutant, crate::DEFAULT_STEP_BUDGET).is_empty(),
                 "{description}: the kernel accepted `{}` at `{}` with a body of another type entirely",
                 definition.name,
                 definition.type_,
@@ -122,21 +138,18 @@ fn every_type_replaced_by_another_item_s_is_refused() {
         let entrypoint = source
             .parse::<Entrypoint>()
             .unwrap_or_else(|error| panic!("{description}: the subject parses: {error:?}"));
-        let (module, checked_from, _) = curios_pipeline::typecheck_reporting(
+        let (module, _) = curios_pipeline::typecheck_reporting(
             crate::DEFAULT_STEP_BUDGET,
             &entrypoint,
             RootSource::none(),
         )
         .unwrap_or_else(|error| panic!("{description}: the subject type-checks:\n{error}"));
 
-        let declared = module
-            .items
-            .iter()
-            .enumerate()
-            .skip(checked_from)
-            .filter_map(|(index, item)| match item {
-                Item::Let(definition) => Some((index, definition.type_.clone())),
-                Item::Rec(_) => None,
+        let declared = user_lets(&module)
+            .into_iter()
+            .map(|index| match &module.items[index] {
+                Item::Let(definition) => (index, definition.type_.clone()),
+                Item::Rec(_) => unreachable!("the index came from a `let`"),
             })
             .collect::<Vec<_>>();
 
@@ -156,7 +169,7 @@ fn every_type_replaced_by_another_item_s_is_refused() {
                 target.type_ = replacement.clone();
 
                 assert!(
-                    !recheck_suffix(&mutant, crate::DEFAULT_STEP_BUDGET).is_empty(),
+                    !recheck(&mutant, crate::DEFAULT_STEP_BUDGET).is_empty(),
                     "{description}: the kernel accepted `{}` redeclared at `{replacement}`",
                     definition.name,
                 );
@@ -203,27 +216,27 @@ const GRAFTS: &[(&str, &str, &str)] = &[
     ),
 ];
 
-/// Elaborate `source` and return its module with the index its user items start at.
-fn elaborated(description: &str, source: &str) -> (Module, usize) {
+/// Elaborate `source` and return its module.
+fn elaborated(description: &str, source: &str) -> Module {
     let entrypoint = source
         .parse::<Entrypoint>()
         .unwrap_or_else(|error| panic!("{description}: the subject parses: {error:?}"));
-    let (module, checked_from, _) = curios_pipeline::typecheck_reporting(
+    let (module, _) = curios_pipeline::typecheck_reporting(
         crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
         RootSource::none(),
     )
     .unwrap_or_else(|error| panic!("{description}: the subject type-checks:\n{error}"));
 
-    (module, checked_from)
+    module
 }
 
 /// A body grafted from a program that differs only in an index must be refused by the host.
 #[test]
 fn a_body_grafted_across_an_index_is_refused() {
     for (description, donor_source, host_source) in GRAFTS {
-        let (donor, _) = elaborated(description, donor_source);
-        let (host, _) = elaborated(description, host_source);
+        let donor = elaborated(description, donor_source);
+        let host = elaborated(description, host_source);
 
         let donated = donor
             .items
@@ -237,7 +250,7 @@ fn a_body_grafted_across_an_index_is_refused() {
             .unwrap_or_else(|| panic!("{description}: the donor declares `subject`"));
 
         assert!(
-            recheck_suffix(&host, crate::DEFAULT_STEP_BUDGET).is_empty(),
+            recheck(&host, crate::DEFAULT_STEP_BUDGET).is_empty(),
             "{description}: the host must be accepted before anything is grafted into it",
         );
 
@@ -255,7 +268,7 @@ fn a_body_grafted_across_an_index_is_refused() {
         target.body = donated;
 
         assert!(
-            !recheck_suffix(&grafted, crate::DEFAULT_STEP_BUDGET).is_empty(),
+            !recheck(&grafted, crate::DEFAULT_STEP_BUDGET).is_empty(),
             "{description}: the kernel accepted a body whose index disagrees with its declaration",
         );
     }

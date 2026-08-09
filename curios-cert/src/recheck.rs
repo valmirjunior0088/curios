@@ -10,20 +10,22 @@
 //!
 //! # On the compile path
 //!
-//! Every compilation calls this. `compile_entrypoint` runs [`recheck_module_suffix`] and fails the build on a refusal, judging the user's items while the archived prelude prefix is defined on the archive's word — the ground for that word being `curios-prelude`'s build script, which runs the full [`recheck_module_verdicts`] walk when the archive is constructed and fails the build on any refusal. An archive that exists is one whose every item the kernel accepted.
+//! Every compilation calls this. `compile_entrypoint` runs [`recheck_module_verdicts`] with the archived prelude as its [`Globals`] and fails the build on a refusal, judging the user's items while the prelude's are in scope on the archive's word — the ground for that word being `curios-prelude`'s build script, which runs the same walk from an empty environment when the archive is constructed and fails the build on any refusal. An archive that exists is one whose every item the kernel accepted.
+//!
+//! What is *not* re-judged is decided by name. An item whose declared names the environment already answers for was judged by the walk that built the environment; every other item is judged here. Nothing reads a length, and nothing requires the already-judged items to sit anywhere in particular — which is the difference between an environment and a prefix.
 
 #[cfg(test)]
 mod tests;
 
 use {
     super::{
-        Coverage, Erased, Kernel, KernelError, check_definition, check_entrypoint,
+        Coverage, Erased, Globals, Kernel, KernelError, check_definition, check_entrypoint,
         check_induct_decl, check_positions, check_rec_group, check_struct_decl,
         partial_definitions, positivity_vectors, satisfiable,
     },
     curios_core::{
         Bound, Definition, Free, Global, InductDecl, Item, Level, MetaId, Module, StructDecl, Term,
-        UniverseContext, derived_binder_floor_beyond, rewrite_universe_levels_scoped,
+        UniverseContext, derived_binder_floor_outside, rewrite_universe_levels_scoped,
         universe_metas,
     },
     std::collections::{BTreeSet, HashMap, HashSet},
@@ -33,11 +35,12 @@ use {
 ///
 /// The kernel checks items in sequence, defining each as it goes, so an item that mentions a name defined later is `Unbound`. `Module::items` is *not* in that order. `into_core` does sort topologically, but it sorts the surface program — and a concept-dispatched call names a *method*, not the witness that satisfies it. `/syn/Char/Below` uses `<` at `Nat`, and the edge to the witness carrying that `Cmp` instance is created by witness resolution during elaboration, long after the lowering sort could have seen it. So the sort has to be redone here, over the elaborated module, where the edge exists.
 ///
+/// `judged` names the items to order, as indices into `module.items`; it is expected in ascending order, which is what makes the tie-break below the lowest-index one.
+///
 /// Deterministic: the lowest-index ready item goes first. On a cycle the lowest remaining item breaks the deadlock, matching `into_core`'s sort — the kernel then refuses it as `Unbound`, which is the correct outcome for a genuinely circular non-recursive item and needs no separate error.
-fn dependency_order(module: &Module, checked_from: usize) -> Vec<usize> {
-    let judged = checked_from..module.items.len();
+fn dependency_order(module: &Module, judged: &[usize]) -> Vec<usize> {
     let mut owner: HashMap<&Global, usize> = HashMap::new();
-    for index in judged.clone() {
+    for &index in judged {
         for name in module.items[index].declared_names() {
             owner.insert(name, index);
         }
@@ -45,8 +48,8 @@ fn dependency_order(module: &Module, checked_from: usize) -> Vec<usize> {
 
     // A recursive group mentions its own members; that is what makes it a group, not a dependency on something earlier.
     let dependencies = judged
-        .clone()
-        .map(|index| {
+        .iter()
+        .map(|&index| {
             let item = &module.items[index];
             let names: BTreeSet<Global> = match item {
                 Item::Let(definition) => definition.mentions(),
@@ -57,27 +60,35 @@ fn dependency_order(module: &Module, checked_from: usize) -> Vec<usize> {
                     .collect(),
             };
 
-            names
+            let targets = names
                 .iter()
                 .filter_map(|name| owner.get(name).copied())
                 .filter(|&target| target != index)
-                .collect::<HashSet<usize>>()
+                .collect::<HashSet<usize>>();
+
+            (index, targets)
         })
-        .collect::<Vec<_>>();
+        .collect::<HashMap<usize, HashSet<usize>>>();
 
     let mut emitted: HashSet<usize> = HashSet::with_capacity(judged.len());
     let mut order = Vec::with_capacity(judged.len());
 
     while order.len() < judged.len() {
         let ready = judged
-            .clone()
+            .iter()
+            .copied()
             .find(|index| {
                 !emitted.contains(index)
-                    && dependencies[index - checked_from]
+                    && dependencies[index]
                         .iter()
                         .all(|target| emitted.contains(target))
             })
-            .or_else(|| judged.clone().find(|index| !emitted.contains(index)))
+            .or_else(|| {
+                judged
+                    .iter()
+                    .copied()
+                    .find(|index| !emitted.contains(index))
+            })
             .expect("an item remains while the order is incomplete");
 
         emitted.insert(ready);
@@ -85,27 +96,6 @@ fn dependency_order(module: &Module, checked_from: usize) -> Vec<usize> {
     }
 
     order
-}
-
-/// The module prefix a caller already holds a verdict for.
-///
-/// [`recheck_module_suffix`] exists because the archive was built by a full [`recheck_module_verdicts`] walk that failed the build on any refusal, so every fact about a prefix item is already established. Carrying the prefix itself rather than only its item count is what lets *every* pass of the walk act on that, instead of only the judgment loop: the boundary scans skip prefix items and prefix declarations, and the binder floor is read rather than re-derived over the prefix.
-pub struct Prefix<'a> {
-    /// The prefix module. Its items are `module.items[..prefix.module.items.len()]` of the module being judged, and its declarations are the ones the suffix did not add.
-    pub module: &'a Module,
-    /// `derived_binder_floor` over `module`, computed by the build that established it. A floor is a bound, so this is combined by maximum with the suffix's own and can only ever widen.
-    pub binder_floor: usize,
-}
-
-impl Prefix<'_> {
-    /// Whether `name` is declared by the suffix rather than covered by the prefix.
-    fn declares_induct(&self, name: &Global) -> bool {
-        self.module.induct_decls.contains_key(name)
-    }
-
-    fn declares_struct(&self, name: &Global) -> bool {
-        self.module.struct_decls.contains_key(name)
-    }
 }
 
 /// One item the kernel refused.
@@ -116,11 +106,14 @@ pub struct Verdict {
     pub error: KernelError,
 }
 
-/// Re-check `module` with the independent kernel.
+/// Re-check `module` with the independent kernel, with `globals` already in scope.
 ///
-/// `budget` is the reduction allowance each item gets, the same figure the elaborator's own `Context` is built with.
-pub fn recheck_module(module: &Module, budget: u64) -> Result<(), KernelError> {
-    match recheck_module_verdicts(module, budget).into_iter().next() {
+/// `budget` is the reduction allowance each item gets, the same figure the elaborator's own `Context` is built with. [`Globals::default()`] is the whole-module walk: nothing in scope, so every item is judged.
+pub fn recheck_module(module: &Module, budget: u64, globals: &Globals) -> Result<(), KernelError> {
+    match recheck_module_verdicts(module, budget, globals)
+        .into_iter()
+        .next()
+    {
         Some(verdict) => Err(verdict.error),
         None => Ok(()),
     }
@@ -141,24 +134,25 @@ pub fn recheck_module(module: &Module, budget: u64) -> Result<(), KernelError> {
 /// # What it does not tell you
 ///
 /// The count is per *item*, not per disagreement: an item stops at its own first refusal, so one item with three problems reports one. Good for classifying what is missing, wrong for estimating how much is left.
-pub fn recheck_module_verdicts(module: &Module, budget: u64) -> Vec<Verdict> {
-    verdicts_from(Kernel::new(budget), module, None)
-}
-
-/// [`recheck_module_verdicts`] judging only the items at index `checked_from` and later, defining every earlier item on the archive's word.
 ///
-/// The prefix is the archive-replayed prelude, and the faith placed in it is in the archive's *construction*, not in any per-compile claim: the prelude build runs the full walk over exactly this prefix and fails the build on any refusal, so an archive that exists is one whose items the kernel accepted. Re-judging them per compile would re-answer a settled question at ~24× the cost of the whole rest of the pipeline.
+/// # What `globals` buys, and what it does not excuse
 ///
-/// Everything module-wide still runs unconditionally — the entrypoint check, strict positivity, and declaration sizing — because the registry is spliced and those passes cost milliseconds; only the per-item typing judgment honors the boundary.
-pub fn recheck_module_suffix(module: &Module, budget: u64, prefix: Prefix<'_>) -> Vec<Verdict> {
-    verdicts_from(Kernel::new(budget), module, Some(prefix))
+/// An item whose declared names `globals` already answers for is defined and not judged. On the compile path that environment is the archived prelude, and the faith placed in it is in the archive's *construction*, not in any per-compile claim: the prelude build runs this same walk from an empty environment and fails the build on any refusal, so an archive that exists is one whose items the kernel accepted. Re-judging them per compile would re-answer a settled question at ~24× the cost of the whole rest of the pipeline.
+///
+/// Everything module-wide still runs unconditionally — the entrypoint check, strict positivity, and declaration sizing — because a new declaration can reach an old one and those passes cost milliseconds; only the per-item typing judgment consults the environment.
+pub fn recheck_module_verdicts(module: &Module, budget: u64, globals: &Globals) -> Vec<Verdict> {
+    verdicts_from(Kernel::new(budget), module, globals)
 }
 
 /// [`recheck_module_verdicts`] with the kernel's evaluation memos off.
 ///
 /// Exists for one purpose: asserting that memoization changes no verdict — the property that makes a memo an evaluation strategy rather than a store.
-pub fn recheck_module_verdicts_uncached(module: &Module, budget: u64) -> Vec<Verdict> {
-    verdicts_from(Kernel::uncached(budget), module, None)
+pub fn recheck_module_verdicts_uncached(
+    module: &Module,
+    budget: u64,
+    globals: &Globals,
+) -> Vec<Verdict> {
+    verdicts_from(Kernel::uncached(budget), module, globals)
 }
 
 /// One item's erased positions, carried with the name a refusal should be reported against.
@@ -266,38 +260,42 @@ fn struct_residue(declaration: &StructDecl) -> Option<KernelError> {
 
 // Safety: the memos below are keyed on `Term`, whose `OnceCell` scalar caches trip Clippy's interior-mutability warning. The logical value is immutable, and hashing and equality stay stable across those caches filling.
 #[allow(clippy::mutable_key_type)]
-fn verdicts_from(mut kernel: Kernel, module: &Module, prefix: Option<Prefix<'_>>) -> Vec<Verdict> {
+fn verdicts_from(mut kernel: Kernel, module: &Module, globals: &Globals) -> Vec<Verdict> {
     let mut verdicts = Vec::new();
-    let checked_from = prefix.as_ref().map_or(0, |p| p.module.items.len());
-    let fresh_induct = |name: &Global| prefix.as_ref().is_none_or(|p| !p.declares_induct(name));
-    let fresh_struct = |name: &Global| prefix.as_ref().is_none_or(|p| !p.declares_struct(name));
+    // What this walk has to decide for itself: the names `globals` does not already answer for. A name identifies one top-level thing within a module, so an item every one of whose declared names is in scope was judged by the walk that built the environment, and one that declares anything new is judged here. Skipping is the direction that needs the argument, so an item declaring nothing at all is judged rather than passed over.
+    let fresh = |name: &Global| !globals.in_scope(name);
+    let covered = |names: Vec<&Global>| !names.is_empty() && !names.into_iter().any(fresh);
+    let judged = module
+        .items
+        .iter()
+        .enumerate()
+        .filter(|(_, item)| !covered(item.declared_names()))
+        .map(|(index, _)| index)
+        .collect::<Vec<_>>();
     // What each item's check recorded, kept per item so a refusal names the item it came from. Classified as it drains rather than retained whole: only the positions the obligations are about survive, and sort-hood is asked once per distinct type.
     let mut positions: Vec<ItemPositions> = Vec::new();
 
+    // The environment is the kernel's starting scope, not something consulted beside it: an item already in scope is defined exactly as a refused item is — at its declared type, with its real body — so every judged item downstream sees what a walk that judged everything would have shown it.
+    kernel.seed(globals);
+
     // Binder identities are one space shared across the lowerer, the elaborator, and the archived prelude. Seeding above the module's high-water mark is what keeps a binder the kernel mints — while comparing under a telescope, or eta-contracting — from aliasing one already in a term, which would be a capture.
     //
-    // The mark is derived here rather than taken from `Module::binder_floor`, which nothing checks. The two are combined by maximum because a floor is a bound and not a verdict: widening can never refuse a module that was fine, so a position this walk fails to reach degrades to the carried value instead of to a capture.
-    kernel.set_local_floor(
-        module
-            .binder_floor
-            .max(prefix.as_ref().map_or(0, |p| p.binder_floor))
-            .max(derived_binder_floor_beyond(
-                module,
-                prefix.as_ref().map(|p| p.module),
-            )),
-    );
+    // The mark is derived here rather than taken from `Module::binder_floor`, which nothing checks. The three are combined by maximum because a floor is a bound and not a verdict: widening can never refuse a module that was fine, so a position this walk fails to reach degrades to a carried value instead of to a capture.
+    kernel.set_local_floor(module.binder_floor.max(globals.binder_floor()).max(
+        derived_binder_floor_outside(module, |name| globals.in_scope(name)),
+    ));
 
     // Every universe context this walk will assume, decided before any of it is assumed. An unsatisfiable set makes `entails` answer anything, so a later refusal would be reported against whichever item happened to ask a level question first rather than against the declaration that carries the contradiction.
     let contexts = module
         .induct_decls
         .iter()
-        .filter(|(name, _)| fresh_induct(name))
+        .filter(|(name, _)| fresh(name))
         .map(|(name, declaration)| (name.clone(), &declaration.universe_context))
         .chain(
             module
                 .struct_decls
                 .iter()
-                .filter(|(name, _)| fresh_struct(name))
+                .filter(|(name, _)| fresh(name))
                 .map(|(name, declaration)| (name.clone(), &declaration.universe_context)),
         )
         .collect::<Vec<_>>();
@@ -309,7 +307,7 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, prefix: Option<Prefix<'_>>
             });
         }
     }
-    for item in &module.items[checked_from..] {
+    for item in judged.iter().map(|&index| &module.items[index]) {
         for definition in item.definitions() {
             if let Some(error) = universe_verdict(&definition.universe_context) {
                 verdicts.push(Verdict {
@@ -321,11 +319,7 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, prefix: Option<Prefix<'_>>
     }
 
     // A registry entry is data that no judgment in this walk types. `check_sizing` walks a constructor telescope's *domains* and stops at the terminal, so the index targets a constructor states reach index inversion and the arm rule without ever having been checked, and `check_induct_decl` leaves them to the `rec` group a declaration lowers to — a lowering nothing here confirms exists. `infer` and `convert` refuse an elaboration-only node wherever a judgment meets one; this is the boundary pass that decides the same thing for the positions no judgment visits, so that "no unsolved metavariable survives" is this walk's own verdict rather than the elaborator's word.
-    for (name, declaration) in module
-        .induct_decls
-        .iter()
-        .filter(|(name, _)| fresh_induct(name))
-    {
+    for (name, declaration) in module.induct_decls.iter().filter(|(name, _)| fresh(name)) {
         if let Some(error) = induct_residue(declaration) {
             verdicts.push(Verdict {
                 name: Some(name.clone()),
@@ -333,11 +327,7 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, prefix: Option<Prefix<'_>>
             });
         }
     }
-    for (name, declaration) in module
-        .struct_decls
-        .iter()
-        .filter(|(name, _)| fresh_struct(name))
-    {
+    for (name, declaration) in module.struct_decls.iter().filter(|(name, _)| fresh(name)) {
         if let Some(error) = struct_residue(declaration) {
             verdicts.push(Verdict {
                 name: Some(name.clone()),
@@ -346,7 +336,7 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, prefix: Option<Prefix<'_>>
         }
     }
     // An item's own terms are walked, so a `Metavar` node in one is refused where a judgment meets it. A level is not: the walk types `Type(?u)` without objecting, so the same boundary decides it here.
-    for item in &module.items[checked_from..] {
+    for item in judged.iter().map(|&index| &module.items[index]) {
         for definition in item.definitions() {
             let count = definition.universe_context.parameter_count;
             if let Some(error) = universe_residue(&definition.type_)
@@ -386,32 +376,7 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, prefix: Option<Prefix<'_>>
         kernel.declare_struct(name, declaration);
     }
 
-    // A prefix item enters the environment exactly as a refused item would — defined at its declared type with its real body — so every judged item downstream sees what a fully judged walk would have shown it. Stored order suffices: these are defined and never judged, and `define` records rather than checks, so nothing among them depends on being reached in dependency order.
-    for item in &module.items[..checked_from] {
-        match item {
-            Item::Let(definition) => {
-                kernel.define(
-                    &Free::from(&definition.name),
-                    &definition.type_,
-                    &definition.body,
-                    &definition.universe_context,
-                );
-            }
-            Item::Rec(rec) => {
-                let universes = rec.group.universe_context().clone();
-                for (member, name) in item.declared_names().into_iter().enumerate() {
-                    kernel.define(
-                        &Free::from(name),
-                        &rec.group.member_type(member),
-                        &Term::rec_proj(rec.group.clone(), member),
-                        &universes,
-                    );
-                }
-            }
-        }
-    }
-
-    for index in dependency_order(module, checked_from) {
+    for index in dependency_order(module, &judged) {
         let item = &module.items[index];
         let item_name = item.declared_names().first().map(|&name| name.clone());
 
@@ -487,7 +452,8 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, prefix: Option<Prefix<'_>>
     }
 
     // Obligations (T) and (V), after the item walk for the same reason declaration acceptance runs there: the classification closes over what every definition mentions, and the environment is only complete once every item has been defined.
-    let (partial, disagreements) = partial_definitions(&mut kernel, module, checked_from);
+    let (partial, disagreements) =
+        partial_definitions(&mut kernel, module, |name| globals.in_scope(name));
     for (name, error) in disagreements {
         verdicts.push(Verdict {
             name: Some(name),
@@ -521,11 +487,7 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, prefix: Option<Prefix<'_>>
             },
         });
     }
-    for (name, declaration) in module
-        .induct_decls
-        .iter()
-        .filter(|(name, _)| fresh_induct(name))
-    {
+    for (name, declaration) in module.induct_decls.iter().filter(|(name, _)| fresh(name)) {
         if let Err(error) = check_induct_decl(&mut kernel, declaration) {
             verdicts.push(Verdict {
                 name: Some(name.clone()),
@@ -533,11 +495,7 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, prefix: Option<Prefix<'_>>
             });
         }
     }
-    for (name, declaration) in module
-        .struct_decls
-        .iter()
-        .filter(|(name, _)| fresh_struct(name))
-    {
+    for (name, declaration) in module.struct_decls.iter().filter(|(name, _)| fresh(name)) {
         if let Err(error) = check_struct_decl(&mut kernel, declaration) {
             verdicts.push(Verdict {
                 name: Some(name.clone()),

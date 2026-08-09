@@ -3,7 +3,7 @@
 use {
     super::Stage,
     curios_abi::ForeignStore,
-    curios_cert::{Prefix, Verdict, recheck_module_suffix},
+    curios_cert::{Globals, Verdict, recheck_module_verdicts},
     curios_cont::{into_wasm, optimize},
     curios_core::{Intrinsic, Term},
     curios_elab::{
@@ -49,18 +49,15 @@ impl From<CompileError> for String {
     }
 }
 
-/// Put `module`'s user suffix to the independent kernel, defining the archived prelude prefix on the archive's word.
+/// Put `module` to the independent kernel with the archived prelude already in scope, so only what the prelude does not already answer for is judged — the prelude's own items resting on the archive's word.
 ///
-/// The [`Prefix`] descriptor is assembled here because it borrows the restored prelude, which exists only inside `with_prelude`'s scope — so every caller that wants the compile path's rechecking gets the same prefix rather than reconstructing one.
-pub fn recheck_suffix(module: &curios_core::Module, budget: u64) -> Vec<Verdict> {
+/// The [`Globals`] environment is assembled here because it is built from the restored prelude, which exists only inside `with_prelude`'s scope — so every caller that wants the compile path's rechecking gets the same environment rather than reconstructing one.
+pub fn recheck(module: &curios_core::Module, budget: u64) -> Vec<Verdict> {
     with_prelude(|prelude| {
-        recheck_module_suffix(
+        recheck_module_verdicts(
             module,
             budget,
-            Prefix {
-                module: prelude.core(),
-                binder_floor: prelude.binder_floor(),
-            },
+            &Globals::of(prelude.core(), prelude.binder_floor()),
         )
     })
 }
@@ -69,12 +66,12 @@ pub fn recheck_suffix(module: &curios_core::Module, budget: u64) -> Vec<Verdict>
 ///
 /// The elaborated module comes back even when this stage's own (T)/(V) verdicts refuse it, which is what lets one fixture be put to *both* checkers: `curios-cert` decides the same two obligations independently, and a program only this side refuses would otherwise yield no module for the kernel to judge — leaving the most consequential disagreement, the trusted base resting on an elaborator-only analysis, unobservable. Nothing else about type-checking is relaxed; every other error still short-circuits.
 ///
-/// The verdicts are rendered against the lowered module, so they read as they would on the compile path. The returned index is where the archived prelude prefix ends, so a caller can put the suffix to the kernel exactly as `compile_entrypoint` does rather than re-walking the standard library.
+/// The verdicts are rendered against the lowered module, so they read as they would on the compile path. A caller that wants the kernel's opinion on the result puts it to [`recheck`], which supplies the same environment `compile_entrypoint` does rather than re-walking the standard library.
 pub fn typecheck_reporting(
     budget: u64,
     entrypoint: &Entrypoint,
     loader: RootSource,
-) -> Result<(curios_core::Module, usize, Vec<String>), CompileError> {
+) -> Result<(curios_core::Module, Vec<String>), CompileError> {
     let (lowered, metavars, universe_floor, _foreigns) = with_prelude(|prelude| {
         into_core_with_prelude(entrypoint, &loader, prelude.prepared(), &SYNTAX)
     })
@@ -104,9 +101,7 @@ pub fn typecheck_reporting(
         .map(|error| error.format_with(&lowered))
         .collect();
 
-    let checked_from = with_prelude(|prelude| prelude.core().items.len());
-
-    Ok((module, checked_from, obligations))
+    Ok((module, obligations))
 }
 
 /// The type-checking prologue of [`compile_entrypoint`] (and the tests' typecheck-only path): lower to core, elaborate (checking against the entrypoint's type when it carries one, else synthesizing), then zonk metavariable solutions in so the module is meta-free — the `elaborate → zonk` half of the `elaborate → zonk → erase` data flow. Elaboration is authoritative: it returns a rebuilt module (lambda domains solved, binders re-closed), and it is *that* module — not the lowered one — that zonk makes meta-free. `zonk` is also where an unsolved hole is rejected, so a program that merely *type-checks* is fully validated by the time this returns. Elaboration and zonking share one context (the solutions live in its `MetaStore`); the returned module is self-contained, so the caller's `erase` runs over a fresh one.
@@ -203,10 +198,10 @@ where
     let (module, core_type, foreigns) =
         elaborate_and_zonk(budget, entrypoint, loader, &mut observe)?;
 
-    // The independent kernel's second opinion, on the compile path: the archive-replayed prelude prefix was walked when the archive was built, so only the entry suffix is judged here — a refusal fails the compile.
+    // The independent kernel's second opinion, on the compile path: the archive-replayed prelude was walked when the archive was built and arrives here as scope, so only what it does not already answer for is judged — a refusal fails the compile.
     {
-        curios_profile::profile!("recheck_suffix");
-        if let Some(verdict) = recheck_suffix(&module, budget).into_iter().next() {
+        curios_profile::profile!("recheck");
+        if let Some(verdict) = recheck(&module, budget).into_iter().next() {
             let refusal = verdict.error.format_with(&module);
             return Err(CompileError::Failure(match &verdict.name {
                 Some(name) => format!("the kernel refused {name}: {refusal}"),

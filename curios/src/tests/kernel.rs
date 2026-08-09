@@ -2,7 +2,7 @@
 //!
 //! These are the only tests that ask the second opinion about *real* elaborated output rather than a hand-built fixture, so they are where a disagreement between the two checkers actually shows up. A failure here is a question, not a verdict: the kernel is incomplete in known places (coverage is unverified, free-monoid elimination arms are unchecked, several conversion positions compare syntactically), and each of those refuses valid programs. See `curios-cert/src/recheck.rs`.
 //!
-//! What these assert is stronger than what a compilation already does. `compile_entrypoint` runs `recheck_module_suffix`, judging the user's items while the archived prelude prefix is defined on the archive's word; `recheck` here runs `recheck_module` over the whole elaborated module, so every prelude item is re-derived rather than read from a verdict recorded when the archive was built.
+//! What these assert is stronger than what a compilation already does. `compile_entrypoint` runs `recheck_module_verdicts` with the archived prelude as its environment, judging the user's items while the prelude's are in scope on the archive's word; `recheck` here runs `recheck_module` over the whole elaborated module, so every prelude item is re-derived rather than read from a verdict recorded when the archive was built.
 //!
 //! # What these found, and what the previous notes got wrong
 //!
@@ -16,7 +16,9 @@
 
 use {
     curios_cert::KernelError,
-    curios_cert::{recheck_module, recheck_module_verdicts, recheck_module_verdicts_uncached},
+    curios_cert::{
+        Globals, recheck_module, recheck_module_verdicts, recheck_module_verdicts_uncached,
+    },
     curios_core::Module,
     curios_core::Term,
     curios_pipeline::{Stage, compile_entrypoint},
@@ -46,7 +48,11 @@ fn elaborated(source: &str) -> Module {
 
 /// Compile `source` and hand the elaborated module to the kernel.
 fn recheck(source: &str) -> Result<(), KernelError> {
-    recheck_module(&elaborated(source), crate::DEFAULT_STEP_BUDGET)
+    recheck_module(
+        &elaborated(source),
+        crate::DEFAULT_STEP_BUDGET,
+        &Globals::default(),
+    )
 }
 
 /// A term's printed head, clipped — enough to tell one refusal's shape from another's without pasting a standard-library type into a tally.
@@ -112,7 +118,8 @@ fn kernel_disagreements() {
 
     for (label, source) in fixtures {
         let module = elaborated(source);
-        let verdicts = recheck_module_verdicts(&module, crate::DEFAULT_STEP_BUDGET);
+        let verdicts =
+            recheck_module_verdicts(&module, crate::DEFAULT_STEP_BUDGET, &Globals::default());
 
         let mut tally: BTreeMap<String, usize> = BTreeMap::new();
         for verdict in &verdicts {
@@ -144,8 +151,8 @@ fn kernel_memo_parity() {
     let module = elaborated("()");
 
     assert_eq!(
-        recheck_module_verdicts(&module, crate::DEFAULT_STEP_BUDGET),
-        recheck_module_verdicts_uncached(&module, crate::DEFAULT_STEP_BUDGET),
+        recheck_module_verdicts(&module, crate::DEFAULT_STEP_BUDGET, &Globals::default()),
+        recheck_module_verdicts_uncached(&module, crate::DEFAULT_STEP_BUDGET, &Globals::default()),
     );
 }
 

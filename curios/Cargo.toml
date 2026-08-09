@@ -27,6 +27,7 @@ clap = { version = "4.6.1", features = ["derive"] }
 
 # The cross-stage suites in `src/tests` reach into individual pipeline stages; the product code never does.
 [dev-dependencies]
+curios-base = { workspace = true }
 curios-cert = { workspace = true }
 curios-core = { workspace = true }
 curios-cont = { workspace = true }

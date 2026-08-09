@@ -17,7 +17,7 @@ mod convert;
 pub use convert::*;
 
 mod globals;
-use globals::Globals;
+pub use globals::*;
 
 mod infer;
 pub use infer::*;
@@ -339,6 +339,13 @@ impl Kernel {
             globals: Globals::default(),
             assumed: Vec::new(),
         }
+    }
+
+    /// Start this kernel's environment from `globals` — the scope an earlier walk established — rather than from nothing.
+    ///
+    /// Set wholesale where [`Kernel::define`] has to report an overwrite, because a kernel is seeded before it has judged anything: there are no remembered reducts yet for a replaced name to invalidate.
+    pub(crate) fn seed(&mut self, globals: &Globals) {
+        self.globals = globals.clone();
     }
 
     /// A kernel whose evaluation memos are off — every reduction re-derived from scratch. Exists for one purpose: asserting that memoization changes no verdict.
