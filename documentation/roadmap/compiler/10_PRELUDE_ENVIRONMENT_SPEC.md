@@ -117,7 +117,18 @@ The same for `erase_module_with_prelude`, whose prose contract M1b discharges: w
 
 ### M5 — split the archive's keying (`curios-prelude-archive`)
 
-Unblocked by the above rather than blocking it. `curios-prelude`'s build script does two separable things in one product: it elaborates and serializes the image, needing `curios-text`/`curios-elab`/`curios-ersd`; and it runs `recheck_module_verdicts`, needing `curios-cert`. Cargo's granularity is the build script, so either dependency set re-runs both halves — measured at 13 distinct build-script fingerprints, each with its own 7.3 MiB archive, with `deps`, `features` and `rustflags` the only varying inputs.
+Unblocked by the above rather than blocking it. `curios-prelude`'s build script does two things in one product: it elaborates and serializes the image, needing `curios-text`/`curios-elab`/`curios-ersd`; and it runs `recheck_module_verdicts`, needing `curios-cert`. Cargo's granularity is the build script, so either dependency set re-runs both halves — measured at 13 distinct build-script fingerprints, each with its own 7.3 MiB archive, with `deps`, `features` and `rustflags` the only varying inputs.
+
+**Those two sets are not disjoint, and this document asserted they were.** `curios-elab` depends on `curios-cert`, so the elaborating half already reached the certifier transitively. Splitting the crate was therefore necessary and *not sufficient*, which the split's own experiment showed: with `curios-prelude-archive` carrying no `curios-cert` build-dependency, touching `curios-cert/src/lib.rs` still produced
+
+```text
+Compiling curios-prelude-archive
+warning: fixed prelude hash-consed to 23964 distinct structures    ← re-elaborated anyway
+Compiling curios-prelude
+warning: fixed prelude certified: 1079 items accepted by the kernel
+```
+
+What closes it is splitting `curios-cert` in turn. `curios-elab` needs the *shared analyses* — the `Env`/`Judge` seam, inversion, positivity, totality, satisfiability — and needs no kernel: every production use of `Kernel`, `carries_information` and `satisfiable` in that crate is in a test. So the analyses become `curios-analysis`, `curios-cert` keeps the kernel and the module walk, and `curios-elab` takes `curios-cert` as a **dev**-dependency, which does not propagate. `cargo tree -p curios-prelude-archive --edges build` then contains no `curios-cert` at all, and the re-elaboration cannot recur. See [DESIGN.md](../../DESIGN.md), "An independent kernel re-checks what the elaborator accepts".
 
 A new crate `curios-prelude-archive` owns the authored `/sys`, `/syn` and `/std` sources, their elaboration, and the serialized image, with no certifier dependency. It composes with the rkyv facade rather than competing with it: [`curios-archive`](11_ARCHIVE_FACADE_SPEC.md) owns *archiving* as a capability, and this is *an archive, of the prelude* — the two are a leaf below `curios-base` and a crate above `curios-ersd` respectively, which is also why they cannot be one crate. `curios-prelude` **keeps its name, its public API and every downstream dependency**, and gains a build script that restores the image and certifies it. The verdict is that crate's successful build, exactly as `.vok`'s existence is Coq's — nothing can reach the prelude except through it, so the invariant *an archive that exists is one whose every item the kernel accepted* holds by construction rather than by convention.
 
@@ -168,7 +179,7 @@ Whole-module passes never cache and re-run at link: positivity over the complete
 - M1: an environment lookup that misses refuses, with its own diagnostic, rather than panicking or skipping.
 - M2–M4: each stage's prose contract becomes an assertion or disappears; `erase_module_with_prelude`'s caller guarantee in particular has no test today.
 - M2b: a public entry aliasing a *prelude* nominal type is audited identically whether or not anything merged the registries — the property `exposed_nominal` rested on and nothing stated.
-- M5: an empty-cache build and a cache hit, following the `curios-binaryen` precedent — plus the case it exists for, a `curios-cert`-only edit that re-runs certification and **not** elaboration, asserted by the build script's own warning appearing once rather than twice. A stale or corrupted image must fail certification rather than be skipped.
+- M5: an empty-cache build and a cache hit, following the `curios-binaryen` precedent — plus the case it exists for, a `curios-cert`-only edit that re-runs certification and **not** elaboration, asserted by the build script's own warning appearing once rather than twice. That test is what caught the crate split being insufficient on its own, and it is worth keeping executable rather than leaving as a claim. A stale or corrupted image must fail certification rather than be skipped.
 - M6: parallel verdicts equal serial verdicts, item for item and in order, over the whole prelude; `kernel_memo_parity`'s property survives per-item kernels.
 - M7: deferred to its own specification once M1–M6 have landed.
 
