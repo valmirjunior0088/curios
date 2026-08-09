@@ -550,38 +550,74 @@ impl UniverseSolver {
             .and_then(|entry| entry.solution.as_ref())
     }
 
+    /// Substitute every solved metavariable in `level`, and in whatever those solutions name, to a fixed point.
+    ///
+    /// Walked on an explicit stack rather than natively. The depth here is the length of a chain of metavariables each solved to a level naming the next, which the fixed prelude drives deep enough that this was the tallest native recursion in the whole build — deep enough to leave the elaborator within about a megabyte of the default stack, so any frame added anywhere else in the crate overflowed it.
+    ///
+    /// The cycle guard stays *path*-scoped, exactly as the recursion had it: a metavariable already open on the current path resolves to itself, unsubstituted. That is what forbids memoizing a completed level and reusing it elsewhere — off that path the same metavariable does substitute, so a shared answer would be wrong.
+    ///
+    /// Each frame rebuilds its level through [`Level::substitute`] once its children have landed, so the offset, `max`, and constant arithmetic stays in one place and this walk only decides *what* each head resolves to.
     pub fn zonk(&self, level: &Level) -> Result<Level, UniverseError> {
-        fn go(
-            solver: &UniverseSolver,
-            level: &Level,
-            visiting: &mut BTreeSet<UniverseMetaId>,
-        ) -> Result<Level, UniverseError> {
-            // The substitution closure can only answer with a level or not at all, so a nested failure parks here and re-raises outside — quietly leaving the head unsubstituted would hand back a level that still names a solved meta, violating the store's normalized invariant.
-            let mut failure = None;
-            let zonked = level.substitute(|head| match head {
-                LevelHead::Param(_) => None,
-                LevelHead::Meta(meta) => {
-                    let solution = solver.solution(meta)?.clone();
-                    if !visiting.insert(meta) {
-                        return None;
-                    }
-                    let zonked = match go(solver, &solution, visiting) {
-                        Ok(zonked) => Some(zonked),
-                        Err(error) => {
-                            failure = Some(error);
-                            None
-                        }
-                    };
-                    visiting.remove(&meta);
-                    zonked
-                }
-            });
-            match failure {
-                Some(error) => Err(error),
-                None => zonked,
+        /// One level being rebuilt: the heads still to visit, the substitutions its children have supplied, and the metavariable it was entered through — which leaves the path when the frame pops.
+        struct Frame {
+            level: Level,
+            pending: std::vec::IntoIter<LevelHead>,
+            resolved: BTreeMap<LevelHead, Level>,
+            entered: Option<UniverseMetaId>,
+        }
+
+        fn frame(level: Level, entered: Option<UniverseMetaId>) -> Frame {
+            let pending = level
+                .atoms()
+                .map(|(head, _)| head)
+                .collect::<Vec<_>>()
+                .into_iter();
+
+            Frame {
+                level,
+                pending,
+                resolved: BTreeMap::new(),
+                entered,
             }
         }
-        go(self, level, &mut BTreeSet::new())
+
+        let mut visiting = BTreeSet::new();
+        let mut stack = vec![frame(level.clone(), None)];
+        let mut folded: Option<(LevelHead, Level)> = None;
+
+        loop {
+            let next = {
+                let top = stack.last_mut().expect("the root frame outlives the walk");
+                if let Some((head, zonked)) = folded.take() {
+                    top.resolved.insert(head, zonked);
+                }
+                top.pending.next()
+            };
+
+            // A head with nothing to resolve to — a parameter, an unsolved metavariable, or one already on the path — records no substitution, and the rebuild below leaves it standing as itself.
+            if let Some(head) = next {
+                if let LevelHead::Meta(meta) = head
+                    && !visiting.contains(&meta)
+                    && let Some(solution) = self.solution(meta)
+                {
+                    let solution = solution.clone();
+                    visiting.insert(meta);
+                    stack.push(frame(solution, Some(meta)));
+                }
+                continue;
+            }
+
+            let done = stack.pop().expect("the frame was just inspected");
+            if let Some(meta) = done.entered {
+                visiting.remove(&meta);
+            }
+            let resolved = done.resolved;
+            let rebuilt = done.level.substitute(|head| resolved.get(&head).cloned())?;
+            match done.entered {
+                Some(meta) => folded = Some((LevelHead::Meta(meta), rebuilt)),
+                None => return Ok(rebuilt),
+            }
+        }
     }
 
     pub fn add_leq(
