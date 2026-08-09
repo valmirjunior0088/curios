@@ -16,10 +16,13 @@ Each results file is a single-sitting snapshot with its own commentary:
 | [01 — This is what growing a language looks like](01_RESULTS.md) | 2026-07-16 |
 | [02 — The debt got paid back, with interest](02_RESULTS.md)      | 2026-07-20 |
 | [03 — Nothing moved, and that was the point](03_RESULTS.md)      | 2026-07-31 |
+| [04 — The run that had to fix the compiler first](04_RESULTS.md) | 2026-08-09 |
 
 ### Curios across runs
 
 Mean ± std dev in milliseconds from each run's results file, one row appended per capture; `× 00` compares against run 00's mean and `× prev` against the previous run's mean, in the same column.
+
+The workload and the execution setup are fixed across runs, but the *toolchains* are not: each capture installs current versions, so the wasm engine under both Curios columns has changed between some rows. A row-to-row move is therefore Curios plus its engine, not Curios alone — run 04's `trees` improvement landed alongside a wasmtime major bump and is explicitly left unattributed for that reason.
 
 #### `lcg`
 
@@ -75,6 +78,15 @@ Mean ± std dev in milliseconds from each run's results file, one row appended p
       <td align="right">438.4 ± 1.7</td>
       <td align="right">0.99×</td>
       <td align="right">1.00×</td>
+    </tr>
+    <tr>
+      <td>04</td>
+      <td align="right">435.1 ± 1.8</td>
+      <td align="right">0.98×</td>
+      <td align="right">1.00×</td>
+      <td align="right">435.7 ± 2.9</td>
+      <td align="right">0.98×</td>
+      <td align="right">0.99×</td>
     </tr>
   </tbody>
 </table>
@@ -133,6 +145,15 @@ Mean ± std dev in milliseconds from each run's results file, one row appended p
       <td align="right">260.0 ± 9.2</td>
       <td align="right">0.81×</td>
       <td align="right">1.06×</td>
+    </tr>
+    <tr>
+      <td>04</td>
+      <td align="right">241.9 ± 1.8</td>
+      <td align="right">0.77×</td>
+      <td align="right">0.94×</td>
+      <td align="right">244.5 ± 2.3</td>
+      <td align="right">0.76×</td>
+      <td align="right">0.94×</td>
     </tr>
   </tbody>
 </table>
