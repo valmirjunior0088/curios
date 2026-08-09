@@ -35,11 +35,14 @@ use {
         Apply, Bang, Bound, Field, Free, Func, FuncType, ImplicitOrigin, InductType, Infix,
         Intrinsic, Let, MetaId, Metavar, MetavarOrigin, Nat, NumLit, One, Proj, Rec, Scope, Struct,
         StructDecl, StructEntry, StructType, Subterm, Telescope, Term, Transient, Tuple, TupleType,
-        Variant, WitnessOrigin, instantiate_universe_levels_scoped,
+        Variant, WitnessOrigin, instantiate_universe_levels_scoped, wire_term,
     },
     num_bigint::BigInt,
     num_traits::ToPrimitive,
-    std::collections::{BTreeSet, VecDeque},
+    std::{
+        collections::{BTreeSet, VecDeque},
+        sync::Arc,
+    },
 };
 
 /// The elaboration mode. `Infer` synthesizes a type; `Check(expected)` drives the term against a known type, hitting `expect` at each synthesizable node's turnaround and consuming `expected` directly at naturally-checked nodes (`Func`, `Tuple`, `Metavar`).
@@ -186,29 +189,24 @@ fn elaborate_subterm(
 
             let mut elaborated = Vec::with_capacity(args.len());
             for (arg, (_, wire_type)) in args.iter().zip(&signature.params) {
-                elaborated.push(
-                    elaborate(context, arg, Mode::Check(curios_core::wire_term(wire_type)))?.0,
-                );
+                elaborated.push(elaborate(context, arg, Mode::Check(wire_term(wire_type)))?.0);
             }
 
             let result = match signature.results.as_slice() {
                 [] => Term::tuple_type_unit(),
-                [(_, wire_type)] => curios_core::wire_term(wire_type),
+                [(_, wire_type)] => wire_term(wire_type),
                 results => Term::tuple_type(
                     results
                         .iter()
                         .map(|(label, wire_type)| {
-                            (
-                                context.fresh(Some(label)),
-                                curios_core::wire_term(wire_type),
-                            )
+                            (context.fresh(Some(label)), wire_term(wire_type))
                         })
                         .collect::<Vec<_>>(),
                 ),
             };
 
             (
-                Term::foreign(std::sync::Arc::clone(function), elaborated),
+                Term::foreign(Arc::clone(function), elaborated),
                 Term::intrinsic(Intrinsic::io_type(result)),
             )
         }
