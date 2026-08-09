@@ -452,18 +452,30 @@ impl UniverseSolver {
             level: &Level,
             visiting: &mut BTreeSet<UniverseMetaId>,
         ) -> Result<Level, UniverseError> {
-            level.substitute(|head| match head {
+            // The substitution closure can only answer with a level or not at all, so a nested failure parks here and re-raises outside — quietly leaving the head unsubstituted would hand back a level that still names a solved meta, violating the store's normalized invariant.
+            let mut failure = None;
+            let zonked = level.substitute(|head| match head {
                 LevelHead::Param(_) => None,
                 LevelHead::Meta(meta) => {
                     let solution = solver.solution(meta)?.clone();
                     if !visiting.insert(meta) {
                         return None;
                     }
-                    let zonked = go(solver, &solution, visiting).ok();
+                    let zonked = match go(solver, &solution, visiting) {
+                        Ok(zonked) => Some(zonked),
+                        Err(error) => {
+                            failure = Some(error);
+                            None
+                        }
+                    };
                     visiting.remove(&meta);
                     zonked
                 }
-            })
+            });
+            match failure {
+                Some(error) => Err(error),
+                None => zonked,
+            }
         }
         go(self, level, &mut BTreeSet::new())
     }
