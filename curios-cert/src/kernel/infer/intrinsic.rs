@@ -75,7 +75,7 @@ pub(super) fn infer_intrinsic(
         // A parameterized former's sort is whatever `Sort::of` computes for it, asked here rather than restated: the element's own sort is *not* the answer, because a list or a cell of proofs has a length or an identity, and a description of proofs has an effect, so none of them is itself a proposition.
         Intrinsic::LstType(element) | Intrinsic::CellType(element) | Intrinsic::IoType(element) => {
             let sort = sort_of_intrinsic(kernel, intrinsic)?;
-            let _ = check_is_type(kernel, element)?;
+            check_is_type(kernel, element)?;
 
             Ok(sort.term())
         }
