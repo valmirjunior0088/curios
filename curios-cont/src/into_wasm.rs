@@ -29,6 +29,9 @@ use structure::*;
 mod expr_emitter;
 use expr_emitter::*;
 
+mod hoist;
+use hoist::*;
+
 mod module_emitter;
 use module_emitter::*;
 
@@ -45,7 +48,8 @@ mod tests;
 pub fn into_wasm(module: &CpsModule) -> curios_wasm::Module {
     curios_profile::profile!("into_wasm");
     let machine = lower(module);
-    let structured = structurize(&machine);
+    let mut structured = structurize(&machine);
+    hoist_consts(&mut structured);
     let mut wasm_module = curios_wasm::Module::new("module");
     ModuleEmitter::new(&Table::new(&structured), &mut wasm_module).emit_module(&structured);
 

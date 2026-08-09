@@ -903,3 +903,149 @@ fn an_irreducible_component_uses_exactly_one_localized_dispatcher() {
         "expected exactly one localized dispatcher",
     );
 }
+
+/// Two bindings of the same constant tuple, the second projected — the hoister must intern both to one global.
+fn constant_tuple_pair() -> CpsModule {
+    let mut module = CpsModule::new();
+    let main = module.reserve_function();
+    let return_cont = module.reserve_continuation();
+    let first = module.add_value(Some("first".into()));
+    let second = module.add_value(Some("second".into()));
+    let got = module.add_value(Some("got".into()));
+    let exit = module.add_node(CpsNode::Exit {
+        value: Some(CpsAtom::Value(got)),
+    });
+    let project = module.add_node(CpsNode::LetIntrinsic {
+        result: got,
+        op: CpsIntrinsicOp::TplGet(0),
+        args: vec![CpsAtom::Value(second)],
+        next: exit,
+    });
+    let build_second = module.add_node(CpsNode::LetValue {
+        result: second,
+        value: CpsValueExpr::Tuple(vec![nat(2)]),
+        next: project,
+    });
+    let build_first = module.add_node(CpsNode::LetValue {
+        result: first,
+        value: CpsValueExpr::Tuple(vec![nat(2)]),
+        next: build_second,
+    });
+    module.define_function(
+        main,
+        CpsFunction {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont,
+            body: build_first,
+        },
+    );
+    module.set_entry(main);
+    module
+}
+
+#[test]
+fn constant_tuples_hoist_to_one_interned_global() {
+    let wat = wat(&constant_tuple_pair());
+    // One construction in the start function serves both bindings; the projection reads it back through the const global.
+    assert_eq!(count(&wat, "struct.new $tpl/1"), 1);
+    assert_contains(&wat, "global.set $const/");
+    assert_contains(&wat, "global.get $const/");
+}
+
+/// A tuple over a computed element — not constant, so it must stay an inline allocation.
+fn runtime_tuple() -> CpsModule {
+    let mut module = CpsModule::new();
+    let main = module.reserve_function();
+    let return_cont = module.reserve_continuation();
+    let sum = module.add_value(Some("sum".into()));
+    let tuple = module.add_value(Some("tuple".into()));
+    let got = module.add_value(Some("got".into()));
+    let exit = module.add_node(CpsNode::Exit {
+        value: Some(CpsAtom::Value(got)),
+    });
+    let project = module.add_node(CpsNode::LetIntrinsic {
+        result: got,
+        op: CpsIntrinsicOp::TplGet(0),
+        args: vec![CpsAtom::Value(tuple)],
+        next: exit,
+    });
+    let build = module.add_node(CpsNode::LetValue {
+        result: tuple,
+        value: CpsValueExpr::Tuple(vec![CpsAtom::Value(sum)]),
+        next: project,
+    });
+    let compute = module.add_node(CpsNode::LetIntrinsic {
+        result: sum,
+        op: CpsIntrinsicOp::NatAdd,
+        args: vec![nat(1), nat(2)],
+        next: build,
+    });
+    module.define_function(
+        main,
+        CpsFunction {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont,
+            body: compute,
+        },
+    );
+    module.set_entry(main);
+    module
+}
+
+#[test]
+fn runtime_tuples_stay_inline() {
+    let wat = wat(&runtime_tuple());
+    assert_contains(&wat, "struct.new $tpl/1");
+    assert_absent(&wat, "const/");
+}
+
+#[test]
+fn constant_bin_literals_hoist_into_a_start_initialized_global() {
+    let wat = wat(&bin_len());
+    assert_contains(&wat, "global.set $const/");
+    assert_contains(&wat, "global.get $const/");
+    assert_eq!(count(&wat, "array.new_data"), 1);
+}
+
+/// A tuple over an i31-overflowing scalar — its materialization is a trap, which must stay at its execution point instead of failing validation inside a global initializer.
+fn overflowing_tuple() -> CpsModule {
+    let mut module = CpsModule::new();
+    let main = module.reserve_function();
+    let return_cont = module.reserve_continuation();
+    let tuple = module.add_value(Some("tuple".into()));
+    let got = module.add_value(Some("got".into()));
+    let exit = module.add_node(CpsNode::Exit {
+        value: Some(CpsAtom::Value(got)),
+    });
+    let project = module.add_node(CpsNode::LetIntrinsic {
+        result: got,
+        op: CpsIntrinsicOp::TplGet(0),
+        args: vec![CpsAtom::Value(tuple)],
+        next: exit,
+    });
+    let build = module.add_node(CpsNode::LetValue {
+        result: tuple,
+        value: CpsValueExpr::Tuple(vec![nat(0x8000_0000)]),
+        next: project,
+    });
+    module.define_function(
+        main,
+        CpsFunction {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont,
+            body: build,
+        },
+    );
+    module.set_entry(main);
+    module
+}
+
+#[test]
+fn overflowing_scalars_and_their_aggregates_stay_inline() {
+    let wat = wat(&overflowing_tuple());
+    assert_absent(&wat, "const/");
+    assert_traps(&wat);
+}

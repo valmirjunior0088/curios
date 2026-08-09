@@ -408,7 +408,7 @@ impl<'a> Table<'a> {
                 .map(|(const_name, _)| {
                     (
                         const_name,
-                        curios_wasm::GlobalName::from(format!("${}", const_name)),
+                        curios_wasm::GlobalName::from(const_name.as_string()),
                     )
                 })
                 .collect(),
