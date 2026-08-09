@@ -154,7 +154,7 @@ fn reduce_inductive_match_present_tag_ignores_default() {
 }
 
 #[test]
-fn reduce_nat_fold_zero_is_not_true() {
+fn reduce_nat_fold_zero_takes_the_zero_case() {
     let mut context = context();
     let m = context.fresh(Some("m"));
     let pred = context.fresh(Some("pred"));
@@ -170,9 +170,9 @@ fn reduce_nat_fold_zero_is_not_true() {
         Term::intrinsic(Intrinsic::Bool(true)),
     );
 
-    assert_ne!(
-        reduce(&mut context, term.clone()),
-        Ok(Term::intrinsic(Intrinsic::Bool(true)))
+    assert_eq!(
+        reduce(&mut context, term),
+        Ok(Term::intrinsic(Intrinsic::Bool(false)))
     );
 }
 
