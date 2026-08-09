@@ -126,7 +126,7 @@ pub(super) fn inline_single_use_continuations(module: &mut CpsModule) -> bool {
     changed
 }
 /// Index every continuation to the nodes that transfer control to it, one entry per referencing node in ascending node order. Building this once per rewrite pass keeps single-use detection linear instead of rescanning every node for each continuation.
-fn continuation_transfers(module: &CpsModule) -> BTreeMap<CpsContId, Vec<CpsNodeId>> {
+pub(super) fn continuation_transfers(module: &CpsModule) -> BTreeMap<CpsContId, Vec<CpsNodeId>> {
     let mut transfers: BTreeMap<CpsContId, Vec<CpsNodeId>> = BTreeMap::new();
     let mut targets = BTreeSet::new();
     for (id, node) in module.nodes.iter_live() {

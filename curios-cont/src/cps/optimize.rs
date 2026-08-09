@@ -17,7 +17,7 @@ use super::{
         fold_intrinsic_identities, forward_aggregate_projections, forward_continuations,
         rewrite_atoms, simplify_nodes,
     },
-    specialize::{specialize_call_patterns, specialize_scc_calls},
+    specialize::{specialize_call_patterns, specialize_jump_patterns, specialize_scc_calls},
 };
 
 pub(super) const MULTI_SITE_INLINE_LIMIT: usize = 8;
@@ -25,6 +25,7 @@ pub(super) const BRANCH_SPECIALIZATION_GROWTH_LIMIT: usize = 24;
 pub(super) const SCC_CLONE_LIMIT: usize = 64;
 pub(super) const SCC_CLONE_NODE_LIMIT: usize = 256;
 pub(super) const BRANCH_CLONE_LIMIT: usize = 64;
+pub(super) const JUMP_CLONE_LIMIT: usize = 64;
 
 /// How many times the pass sequence may be re-run before the fixpoint gives up.
 ///
@@ -41,6 +42,7 @@ pub fn optimize(module: &mut CpsModule) {
 
     let mut scc_clone_budget = SCC_CLONE_LIMIT;
     let mut branch_clone_budget = BRANCH_CLONE_LIMIT;
+    let mut jump_clone_budget = JUMP_CLONE_LIMIT;
     let mut converged = false;
     for _ in 0..ROUND_LIMIT {
         let substitutions = known_values(module);
@@ -57,6 +59,7 @@ pub fn optimize(module: &mut CpsModule) {
             | contify_calls(module)
             | specialize_scc_calls(module, &mut scc_clone_budget)
             | specialize_call_patterns(module, &mut branch_clone_budget)
+            | specialize_jump_patterns(module, &mut jump_clone_budget)
             | dissolve_rec_init(module)
             | prune_unreachable(module);
         if !changed {

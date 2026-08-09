@@ -14,7 +14,7 @@ use {
             fold_intrinsic_identities, forward_aggregate_projections, forward_continuations,
             rewrite_atoms, simplify_nodes,
         },
-        specialize::{specialize_call_patterns, specialize_scc_calls},
+        specialize::{specialize_call_patterns, specialize_jump_patterns, specialize_scc_calls},
     },
     crate::{
         CpsAtom, CpsCallee, CpsContId, CpsContinuation, CpsEdge, CpsFunId, CpsFunction,
@@ -2020,4 +2020,215 @@ fn cse_reaches_a_dominated_continuation_but_not_a_sibling() {
     });
     assert!(forwards, "the merged use forwards the dominating result");
     module.verify().unwrap();
+}
+
+/// The option-join shape: `main(x)` builds `some(x)` or `none()` in two predecessors, both jumping one join continuation whose body switches on the tuple's tag — the allocation-then-rescrutinize shape jump-pattern specialization exists to collapse.
+fn tagged_join() -> (CpsModule, CpsContId, CpsNodeId, CpsNodeId, CpsValueId) {
+    let mut module = CpsModule::new();
+    let entry = module.reserve_function();
+    let return_cont = module.reserve_continuation();
+    let x = module.add_value(Some("x".into()));
+
+    // join(p): switch TplGet(0)[p] { 0 => return TplGet(1)[p], 1 => return 7 }.
+    let p = module.add_value(Some("p".into()));
+    let tag = module.add_value(Some("tag".into()));
+    let payload = module.add_value(Some("payload".into()));
+    let join = module.reserve_continuation();
+    let some_arm = module.reserve_continuation();
+    let none_arm = module.reserve_continuation();
+    let some_return = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        target: return_cont,
+        args: vec![CpsAtom::Value(payload)],
+    }));
+    let some_body = module.add_node(CpsNode::LetIntrinsic {
+        result: payload,
+        op: CpsIntrinsicOp::TplGet(1),
+        args: vec![CpsAtom::Value(p)],
+        next: some_return,
+    });
+    module.define_continuation(
+        some_arm,
+        CpsContinuation {
+            debug_name: Some("some arm".into()),
+            params: vec![],
+            body: some_body,
+        },
+    );
+    let none_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        target: return_cont,
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(7))],
+    }));
+    module.define_continuation(
+        none_arm,
+        CpsContinuation {
+            debug_name: Some("none arm".into()),
+            params: vec![],
+            body: none_body,
+        },
+    );
+    let dispatch = module.add_node(CpsNode::Switch {
+        scrutinee: CpsAtom::Value(tag),
+        cases: BTreeMap::from([
+            (
+                0,
+                CpsEdge {
+                    target: some_arm,
+                    args: vec![],
+                },
+            ),
+            (
+                1,
+                CpsEdge {
+                    target: none_arm,
+                    args: vec![],
+                },
+            ),
+        ]),
+        default: None,
+    });
+    let read_tag = module.add_node(CpsNode::LetIntrinsic {
+        result: tag,
+        op: CpsIntrinsicOp::TplGet(0),
+        args: vec![CpsAtom::Value(p)],
+        next: dispatch,
+    });
+    let join_body = module.add_node(CpsNode::LetCont {
+        continuations: vec![some_arm, none_arm],
+        body: read_tag,
+    });
+    module.define_continuation(
+        join,
+        CpsContinuation {
+            debug_name: Some("join".into()),
+            params: vec![p],
+            body: join_body,
+        },
+    );
+
+    // Predecessors: build some(x) / none() and jump the join.
+    let some_value = module.add_value(Some("some value".into()));
+    let none_value = module.add_value(Some("none value".into()));
+    let to_some = module.reserve_continuation();
+    let to_none = module.reserve_continuation();
+    let some_jump = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        target: join,
+        args: vec![CpsAtom::Value(some_value)],
+    }));
+    let build_some = module.add_node(CpsNode::LetValue {
+        result: some_value,
+        value: CpsValueExpr::Tuple(vec![
+            CpsAtom::Literal(CpsLiteral::Nat(0)),
+            CpsAtom::Value(x),
+        ]),
+        next: some_jump,
+    });
+    module.define_continuation(
+        to_some,
+        CpsContinuation {
+            debug_name: Some("to some".into()),
+            params: vec![],
+            body: build_some,
+        },
+    );
+    let none_jump = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        target: join,
+        args: vec![CpsAtom::Value(none_value)],
+    }));
+    let build_none = module.add_node(CpsNode::LetValue {
+        result: none_value,
+        value: CpsValueExpr::Tuple(vec![CpsAtom::Literal(CpsLiteral::Nat(1))]),
+        next: none_jump,
+    });
+    module.define_continuation(
+        to_none,
+        CpsContinuation {
+            debug_name: Some("to none".into()),
+            params: vec![],
+            body: build_none,
+        },
+    );
+
+    let pick = module.add_node(CpsNode::Switch {
+        scrutinee: CpsAtom::Value(x),
+        cases: BTreeMap::from([(
+            0,
+            CpsEdge {
+                target: to_some,
+                args: vec![],
+            },
+        )]),
+        default: Some(CpsEdge {
+            target: to_none,
+            args: vec![],
+        }),
+    });
+    let body = module.add_node(CpsNode::LetCont {
+        continuations: vec![join, to_some, to_none],
+        body: pick,
+    });
+    module.define_function(
+        entry,
+        CpsFunction {
+            debug_name: Some("main".into()),
+            params: vec![x],
+            return_cont,
+            body,
+        },
+    );
+    module.set_entry(entry);
+    (module, join, some_jump, none_jump, x)
+}
+
+#[test]
+fn jump_specialization_threads_a_known_tag_edge_through_its_join() {
+    let (mut module, join, some_jump, none_jump, x) = tagged_join();
+    let mut budget = 4;
+
+    assert!(specialize_jump_patterns(&mut module, &mut budget));
+    // The some-edge repoints to a clone carrying the payload directly; the none-edge is a different (tag, arity) pattern and waits its turn.
+    let Some(CpsNode::ApplyCont(some_edge)) = module.node(some_jump) else {
+        panic!("some jump survives as a jump")
+    };
+    assert_ne!(some_edge.target, join);
+    assert_eq!(some_edge.args, vec![CpsAtom::Value(x)]);
+    let Some(CpsNode::ApplyCont(none_edge)) = module.node(none_jump) else {
+        panic!("none jump survives as a jump")
+    };
+    assert_eq!(none_edge.target, join);
+    module.verify().unwrap();
+
+    // Repointing the some-edge left the join single-transfer, which is the inliner's territory: a second invocation deliberately finds nothing.
+    assert!(!specialize_jump_patterns(&mut module, &mut budget));
+    module.verify().unwrap();
+    assert_eq!(budget, 3);
+}
+
+#[test]
+fn jump_specialization_respects_its_budget() {
+    let (mut module, _, _, _, _) = tagged_join();
+    let mut budget = 0;
+    assert!(!specialize_jump_patterns(&mut module, &mut budget));
+}
+
+#[test]
+fn optimization_collapses_the_tagged_join_outright() {
+    let (mut module, _, _, _, _) = tagged_join();
+    optimize(&mut module);
+
+    // The whole allocate-then-rescrutinize shape dissolves: no tuple is built and no projection or tag dispatch survives.
+    for node in module.nodes().iter().flatten() {
+        assert!(
+            !matches!(
+                node,
+                CpsNode::LetValue {
+                    value: CpsValueExpr::Tuple(_),
+                    ..
+                } | CpsNode::LetIntrinsic {
+                    op: CpsIntrinsicOp::TplGet(_),
+                    ..
+                }
+            ),
+            "expected the join's tuples and projections to collapse, found {node:?}"
+        );
+    }
 }

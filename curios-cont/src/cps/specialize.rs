@@ -1,7 +1,8 @@
 use {
     super::*,
     super::{
-        analysis::{CallAnalysis, analyze_calls, function_nodes, resolve_atom},
+        analysis::{CallAnalysis, analyze_calls, function_nodes, nodes_from, resolve_atom},
+        inline::continuation_transfers,
         optimize::{BRANCH_SPECIALIZATION_GROWTH_LIMIT, SCC_CLONE_NODE_LIMIT},
     },
     std::collections::{BTreeMap, BTreeSet},
@@ -673,6 +674,370 @@ pub(super) fn clone_scc(
         module.define_function(id, function);
     }
     Some(functions)
+}
+/// SpecConstr for continuation joins — the join-point analogue of [`specialize_call_patterns`]. When an edge jumps a statically-known tagged tuple into a multi-transfer continuation that deconstructs it, clone the continuation with the constructor rebuilt at its entry and its dynamic fields threaded as parameters, so the existing aggregate-projection and known-switch simplifications collapse the deconstruction — and usually the allocation and the branch — on a later iteration. Every edge sharing the `(target, index, tag, arity)` pattern repoints to the single clone. Single-transfer joins are excluded: `inline_single_use_continuations` already collapses them outright. Bounded by `BRANCH_SPECIALIZATION_GROWTH_LIMIT` cloned live nodes and the module-wide clone-count `budget`.
+pub(super) fn specialize_jump_patterns(module: &mut CpsModule, budget: &mut usize) -> bool {
+    if *budget == 0 {
+        return false;
+    }
+    let constructors = tagged_tuple_values(module);
+    if constructors.is_empty() {
+        return false;
+    }
+    let transfers = continuation_transfers(module);
+
+    // The first specializable pattern in deterministic (node, then edge, then argument) order.
+    let mut chosen: Option<(CpsContId, usize, u32, usize)> = None;
+    'search: for (_, node) in module.nodes.iter_live() {
+        let edges: Vec<&CpsEdge> = match node {
+            CpsNode::ApplyCont(edge) => vec![edge],
+            CpsNode::Switch { cases, default, .. } => {
+                cases.values().chain(default.iter()).collect()
+            }
+            _ => continue,
+        };
+        for edge in edges {
+            let Some(continuation) = module.continuation(edge.target) else {
+                continue;
+            };
+            if transfers
+                .get(&edge.target)
+                .is_none_or(|sites| sites.len() < 2)
+            {
+                continue;
+            }
+            for (index, arg) in edge.args.iter().enumerate() {
+                let CpsAtom::Value(value) = arg else { continue };
+                let Some((tag, fields)) = constructors.get(value) else {
+                    continue;
+                };
+                let Some(&param) = continuation.params.get(index) else {
+                    continue;
+                };
+                if !continuation_projects(module, edge.target, param) {
+                    continue;
+                }
+                if introducing_letcont(module, edge.target).is_none() {
+                    continue;
+                }
+                let body = nodes_from(module, continuation.body);
+                let unclonable = body.iter().any(|&id| {
+                    matches!(
+                        module.node(id),
+                        Some(CpsNode::LetFun { .. } | CpsNode::RecInit { .. })
+                    )
+                });
+                if unclonable || body.len() + 1 > BRANCH_SPECIALIZATION_GROWTH_LIMIT {
+                    continue;
+                }
+                chosen = Some((edge.target, index, *tag, fields.len()));
+                break 'search;
+            }
+        }
+    }
+    let Some((target, index, tag, arity)) = chosen else {
+        return false;
+    };
+
+    let intro = introducing_letcont(module, target).unwrap();
+    let Some(clone) = clone_continuation(module, target) else {
+        return false;
+    };
+
+    // Rebuild the constructor at the clone entry, threading its dynamic fields as fresh parameters in place of the specialized parameter.
+    let clone_definition = module.continuation(clone).unwrap();
+    let mut params = clone_definition.params.clone();
+    let clone_body = clone_definition.body;
+    let old_param = params[index];
+    let field_params: Vec<CpsValueId> = (1..arity)
+        .map(|field| module.add_value(Some(format!("field#{field}"))))
+        .collect();
+    let mut rebuilt = Vec::with_capacity(arity);
+    rebuilt.push(CpsAtom::Literal(CpsLiteral::Nat(tag)));
+    rebuilt.extend(field_params.iter().map(|&p| CpsAtom::Value(p)));
+    let entry = module.add_node(CpsNode::LetValue {
+        result: old_param,
+        value: CpsValueExpr::Tuple(rebuilt),
+        next: clone_body,
+    });
+    params.splice(index..=index, field_params);
+    let clone_definition = module.continuations.get_mut(clone).unwrap();
+    clone_definition.params = params;
+    clone_definition.body = entry;
+
+    // Introduce the clone beside the original, so it shares the original's lexical scope.
+    if let Some(CpsNode::LetCont { continuations, .. }) = module.nodes.get_mut(intro) {
+        continuations.push(clone);
+    }
+
+    // Repoint every edge sharing the pattern, splicing each edge's own constructor fields in place of the tuple argument.
+    let repoint =
+        |edge: &mut CpsEdge, constructors: &BTreeMap<CpsValueId, (u32, Vec<CpsAtom>)>| -> bool {
+            if edge.target != target {
+                return false;
+            }
+            let Some(CpsAtom::Value(value)) = edge.args.get(index) else {
+                return false;
+            };
+            let Some((site_tag, site_fields)) = constructors.get(value) else {
+                return false;
+            };
+            if *site_tag != tag || site_fields.len() != arity {
+                return false;
+            }
+            let spliced = site_fields[1..].to_vec();
+            edge.target = clone;
+            edge.args.splice(index..=index, spliced);
+            true
+        };
+    for node_index in 0..module.nodes.len() {
+        let node_id = CpsNodeId(node_index as u32);
+        let Some(node) = module.nodes.get_mut(node_id) else {
+            continue;
+        };
+        match node {
+            CpsNode::ApplyCont(edge) => {
+                repoint(edge, &constructors);
+            }
+            CpsNode::Switch { cases, default, .. } => {
+                for edge in cases.values_mut().chain(default.iter_mut()) {
+                    repoint(edge, &constructors);
+                }
+            }
+            _ => {}
+        }
+    }
+
+    *budget -= 1;
+    true
+}
+/// Whether `continuation`'s body projects a field out of `param` — the profitability gate matching [`deconstructs_param`], over a continuation body.
+pub(super) fn continuation_projects(
+    module: &CpsModule,
+    continuation: CpsContId,
+    param: CpsValueId,
+) -> bool {
+    nodes_from(module, module.continuation(continuation).unwrap().body)
+        .iter()
+        .any(|&id| {
+            matches!(
+                module.node(id),
+                Some(CpsNode::LetIntrinsic {
+                    op: CpsIntrinsicOp::TplGet(_),
+                    args,
+                    ..
+                }) if args.first() == Some(&CpsAtom::Value(param))
+            )
+        })
+}
+/// The `LetCont` node introducing `continuation`. Every live local continuation has exactly one (the verifier's lexical-binding check), so `None` only means the module is mid-rewrite.
+pub(super) fn introducing_letcont(
+    module: &CpsModule,
+    continuation: CpsContId,
+) -> Option<CpsNodeId> {
+    module.nodes.iter_live().find_map(|(id, node)| {
+        matches!(
+            node,
+            CpsNode::LetCont { continuations, .. } if continuations.contains(&continuation)
+        )
+        .then_some(id)
+    })
+}
+/// Verbatim-clone one continuation's body subtree into a fresh continuation with fresh parameters, owned values, nested continuations, and nodes. External values, functions, and continuations — including the owning function's return — are shared. Returns `None` if the body nests a function definition, which this verbatim clone does not reproduce.
+pub(super) fn clone_continuation(module: &mut CpsModule, target: CpsContId) -> Option<CpsContId> {
+    let definition = module.continuation(target).unwrap().clone();
+    let node_ids = nodes_from(module, definition.body);
+    let node_defs: BTreeMap<CpsNodeId, CpsNode> = node_ids
+        .iter()
+        .map(|&id| (id, module.node(id).unwrap().clone()))
+        .collect();
+    if node_defs
+        .values()
+        .any(|node| matches!(node, CpsNode::LetFun { .. } | CpsNode::RecInit { .. }))
+    {
+        return None;
+    }
+
+    let cont_ids: BTreeSet<CpsContId> = node_defs
+        .values()
+        .filter_map(|node| match node {
+            CpsNode::LetCont { continuations, .. } => Some(continuations.clone()),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    let cont_defs: BTreeMap<CpsContId, CpsContinuation> = cont_ids
+        .iter()
+        .map(|&id| (id, module.continuation(id).unwrap().clone()))
+        .collect();
+
+    // Mint fresh owned values: the continuation's own parameters, let-bound results, and nested continuation parameters. Values defined outside the body are shared.
+    let mut values: BTreeMap<CpsValueId, CpsValueId> = BTreeMap::new();
+    let mut owned: Vec<CpsValueId> = definition.params.clone();
+    for node in node_defs.values() {
+        if let CpsNode::LetValue { result, .. } | CpsNode::LetIntrinsic { result, .. } = node {
+            owned.push(*result);
+        }
+    }
+    for cont in cont_defs.values() {
+        owned.extend(cont.params.iter().copied());
+    }
+    for old in owned {
+        let value_definition = module.values.get(old).unwrap().clone();
+        let fresh = module.add_value(value_definition.debug_name);
+        values.insert(old, fresh);
+    }
+
+    let mut conts: BTreeMap<CpsContId, CpsContId> = BTreeMap::new();
+    for &id in cont_defs.keys() {
+        conts.insert(id, module.reserve_continuation());
+    }
+    let mut nodes: BTreeMap<CpsNodeId, CpsNodeId> = BTreeMap::new();
+    for &id in node_defs.keys() {
+        nodes.insert(id, module.reserve_node());
+    }
+
+    let map_value = |value: CpsValueId| values.get(&value).copied().unwrap_or(value);
+    let map_atom = |atom: &CpsAtom| match atom {
+        CpsAtom::Value(value) => CpsAtom::Value(map_value(*value)),
+        CpsAtom::Fun(function) => CpsAtom::Fun(*function),
+        CpsAtom::Literal(literal) => CpsAtom::Literal(literal.clone()),
+    };
+    let map_cont = |target: CpsContId| conts.get(&target).copied().unwrap_or(target);
+    let map_edge = |edge: &CpsEdge| CpsEdge {
+        target: map_cont(edge.target),
+        args: edge.args.iter().map(&map_atom).collect(),
+    };
+    let map_callee = |callee: &CpsCallee| match callee {
+        CpsCallee::Known(function) => CpsCallee::Known(*function),
+        CpsCallee::Closure(value) => CpsCallee::Closure(map_value(*value)),
+    };
+
+    let mut cloned_nodes: Vec<(CpsNodeId, CpsNode)> = Vec::new();
+    for (&old, node) in &node_defs {
+        let cloned = match node {
+            CpsNode::LetValue {
+                result,
+                value,
+                next,
+            } => CpsNode::LetValue {
+                result: map_value(*result),
+                value: match value {
+                    CpsValueExpr::Literal(literal) => CpsValueExpr::Literal(literal.clone()),
+                    CpsValueExpr::List(atoms) => {
+                        CpsValueExpr::List(atoms.iter().map(&map_atom).collect())
+                    }
+                    CpsValueExpr::Tuple(atoms) => {
+                        CpsValueExpr::Tuple(atoms.iter().map(&map_atom).collect())
+                    }
+                },
+                next: nodes[next],
+            },
+            CpsNode::LetIntrinsic {
+                result,
+                op,
+                args,
+                next,
+            } => CpsNode::LetIntrinsic {
+                result: map_value(*result),
+                op: *op,
+                args: args.iter().map(&map_atom).collect(),
+                next: nodes[next],
+            },
+            CpsNode::LetCont {
+                continuations: members,
+                body,
+            } => CpsNode::LetCont {
+                continuations: members.iter().map(|id| conts[id]).collect(),
+                body: nodes[body],
+            },
+            CpsNode::ApplyFun {
+                callee,
+                args,
+                return_to,
+            } => CpsNode::ApplyFun {
+                callee: map_callee(callee),
+                args: args.iter().map(&map_atom).collect(),
+                return_to: map_cont(*return_to),
+            },
+            CpsNode::ApplyCont(edge) => CpsNode::ApplyCont(map_edge(edge)),
+            CpsNode::Switch {
+                scrutinee,
+                cases,
+                default,
+            } => CpsNode::Switch {
+                scrutinee: map_atom(scrutinee),
+                cases: cases
+                    .iter()
+                    .map(|(tag, edge)| (*tag, map_edge(edge)))
+                    .collect(),
+                default: default.as_ref().map(map_edge),
+            },
+            CpsNode::Foreign {
+                function,
+                args,
+                return_to,
+            } => CpsNode::Foreign {
+                function: function.clone(),
+                args: args.iter().map(&map_atom).collect(),
+                return_to: map_cont(*return_to),
+            },
+            CpsNode::Cell {
+                op,
+                args,
+                return_to,
+            } => CpsNode::Cell {
+                op: *op,
+                args: args.iter().map(&map_atom).collect(),
+                return_to: map_cont(*return_to),
+            },
+            CpsNode::Intrinsic {
+                op,
+                args,
+                return_to,
+            } => CpsNode::Intrinsic {
+                op: *op,
+                args: args.iter().map(&map_atom).collect(),
+                return_to: map_cont(*return_to),
+            },
+            CpsNode::Exit { value } => CpsNode::Exit {
+                value: value.as_ref().map(&map_atom),
+            },
+            CpsNode::Unreachable => CpsNode::Unreachable,
+            // The pre-minting check above already rejected bodies nesting function definitions, and bailing here would leak the minted values and reserved slots.
+            CpsNode::LetFun { .. } | CpsNode::RecInit { .. } => unreachable!(),
+        };
+        cloned_nodes.push((nodes[&old], cloned));
+    }
+
+    let mut cloned_conts: Vec<(CpsContId, CpsContinuation)> = Vec::new();
+    for (&old, cont) in &cont_defs {
+        cloned_conts.push((
+            conts[&old],
+            CpsContinuation {
+                debug_name: cont.debug_name.clone(),
+                params: cont.params.iter().map(|&p| map_value(p)).collect(),
+                body: nodes[&cont.body],
+            },
+        ));
+    }
+
+    let clone = module.reserve_continuation();
+    for (id, node) in cloned_nodes {
+        module.nodes.define(id, node);
+    }
+    for (id, cont) in cloned_conts {
+        module.continuations.define(id, cont);
+    }
+    module.define_continuation(
+        clone,
+        CpsContinuation {
+            debug_name: definition.debug_name.clone(),
+            params: definition.params.iter().map(|&p| map_value(p)).collect(),
+            body: nodes[&definition.body],
+        },
+    );
+    Some(clone)
 }
 pub(super) fn merge_inputs(inputs: &mut [Knowledge], args: Option<&[CpsAtom]>) {
     for (index, input) in inputs.iter_mut().enumerate() {
