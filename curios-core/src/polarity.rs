@@ -8,10 +8,7 @@ use std::fmt;
 ///
 /// Five points, ordered `Unused ⊑ Strict ⊑ Pos ⊑ Mixed` and `Unused ⊑ Neg ⊑ Mixed`, with `Strict` and `Neg` incomparable. Only `Strict` and `Unused` are accepting; the middle grades exist because composition has to distinguish them (`Neg ∘ Neg = Pos`) and because "occurs negatively" and "occurs positively but not strictly" are different user errors.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub enum Polarity {
     /// The parameter does not occur.
     Unused,

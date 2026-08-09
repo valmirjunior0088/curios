@@ -13,10 +13,7 @@ use {
 
 /// One registered witness: the qualified name of its backing definition and that definition's elaborated type `∀ tele. C(t₁, …)`. Resolution instantiates the telescope fresh at every use.
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub(crate) struct Witness {
     pub name: Global,
     /// The module this witness was declared in, carried from its definition's `island`. Witnesses are anonymous, so this — not `name` — is the coordinate a coherence diagnostic reports; recovering it by splitting the compiler-minted `name` would re-derive what the declaration already knew.
@@ -29,10 +26,7 @@ pub(crate) struct Witness {
 
 /// The tuple of rigid heads a witness is keyed on: one [`HeadKey`] per concept parameter, in declaration order. Displays bare for arity one (`Nat`) and as a tuple otherwise (`(Nat, Str)`).
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct WitnessKey(pub Vec<HeadKey>);
 
 impl fmt::Display for WitnessKey {
@@ -55,10 +49,7 @@ impl fmt::Display for WitnessKey {
 
 /// One rigid head inside a [`WitnessKey`]: the nominal (inductive or struct) qualified name, or an intrinsic type constructor. Parameters past the heads are checked by unification at resolution time, not by the key.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub enum HeadKey {
     Nominal(Global),
     Nat,

@@ -9,10 +9,7 @@ use {
 
 /// An atomic operand: a lexically bound value, a bound function used as a value, or an interned constant.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub enum Atom {
     Value(ValueId),
     Function(FunctionId),
@@ -23,10 +20,7 @@ pub enum Atom {
 ///
 /// Identity is exact and bitwise: `Nat`/`Int` are the full 32-bit domains, `Flt` compares by bit pattern (NaN payloads and signed zeros included), and `Bin` compares by logical bit content independent of its backing window. Interning in the module's constant arena keys on this identity, so equal constants share one [`ConstantId`]. There are no aggregate constants: products, variants, and lists with constant elements are built by construction statements over these leaves.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub enum Constant {
     /// The unit value — the value of a retained-but-erased slot.
     Unit,

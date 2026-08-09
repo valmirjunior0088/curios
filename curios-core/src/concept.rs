@@ -9,10 +9,7 @@ use {
 
 /// One concept declaration's registry entry.
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct ConceptDecl {
     pub universe_context: UniverseContext,
     /// The declaration's parameter telescope, e.g. `(A : Type)` for `concept Show(A : Type)`. Ends in `()` like a `StructDecl`'s.

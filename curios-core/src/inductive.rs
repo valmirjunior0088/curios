@@ -9,10 +9,7 @@ use {
 ///
 /// Erasure is sort-driven: `erase` drops a payload field whose type is a proof or a type — no per-payload mark is stored.
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct InductParam {
     pub telescope: Telescope<Vec<Term>>,
     /// One plicity mark per telescope binder — the value constructor's calling convention: every leading declaration parameter is `Implicit` (a value constructor infers them), each payload keeps its declared mark. Parallels `telescope`; `plicities.len()` equals `telescope.len()`.
@@ -23,10 +20,7 @@ pub struct InductParam {
 ///
 /// The elaborator consults this when checking an inductive match: each arm's binders are typed directly from the matching constructor's telescope (instantiated at the scrutinee type's parameters), and the arm's binder count is arity-checked against that telescope statically. `erase` consults it again to type constructor payloads and order runtime tags.
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct InductDecl {
     pub universe_context: UniverseContext,
     /// The declaration's parameters, terminating in its index telescope: `induct Vec(T : Type) : (n : Nat)` is `(T : Type)` ending in `(n : Nat)` ending in `()`.

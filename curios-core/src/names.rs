@@ -27,10 +27,7 @@ impl WitnessId {
 ///
 /// The index alone is the identity. The hint is display metadata, excluded from equality, ordering, and hashing exactly as a [`Term`](crate::Term)'s span and a [`Scope`](crate::Scope)'s binder names already are — so a hint can neither make two binders collide nor split one binder in two. Carrying it on the identity rather than only at the binding site means a diagnostic can name a variable wherever the occurrence turns up, instead of recovering the written name by cutting a minted spelling apart.
 #[derive(Debug, Clone)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct Mint {
     index: u32,
     hint: Option<String>,
@@ -87,10 +84,7 @@ impl hash::Hash for Mint {
 ///
 /// The two cases are a sum rather than a qualifier with an optional disambiguator, because a witness's declaring module is not its name. Folding both into one field would make [`Qualifier`] mean "module plus the item's own name" for one case and "the declaring module alone" for the other — one field with two readings, which is the defect this vocabulary exists to remove.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 #[cfg_attr(
     feature = "archive",
     rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))
@@ -123,10 +117,7 @@ impl Global {
 ///
 /// The distinction is a discriminant rather than a spelling convention. Asking "is this a local?" is a `matches!` — exact, and impossible to get wrong the way a marker character in a string could be.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 #[cfg_attr(
     feature = "archive",
     rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))

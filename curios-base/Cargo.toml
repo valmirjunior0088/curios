@@ -9,9 +9,9 @@ description = "Foundational utilities shared across every Curios stage: spans, n
 workspace = true
 
 [features]
-archive = ["dep:rkyv"]
+archive = ["curios-archive/enabled"]
 
 [dependencies]
+curios-archive = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
-rkyv = { workspace = true, optional = true }

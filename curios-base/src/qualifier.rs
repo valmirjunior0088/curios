@@ -18,10 +18,7 @@ use std::{
 ///
 /// The segments are shared behind an `Rc`, so cloning a qualifier is a refcount bump rather than one allocation per segment. That matters because a qualifier is copied and compared far more often than it is built: every free variable in every Core term names one, and the free-variable set memoized on every node is keyed by them, so an owned clone put the cost on the kernel's hottest structure. Sharing also gives equality and ordering a pointer-identity fast path, which fires whenever two occurrences came from the same resolution — the common case, since references resolve through one table entry.
 #[derive(Clone)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 #[cfg_attr(
     feature = "archive",
     rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))
@@ -200,7 +197,7 @@ pub struct Interned;
 mod interned {
     use {
         super::{Interned, Rc},
-        rkyv::{
+        curios_archive::rkyv::{
             Archive, Deserialize, Place, Serialize,
             rancor::Fallible,
             with::{ArchiveWith, DeserializeWith, SerializeWith},

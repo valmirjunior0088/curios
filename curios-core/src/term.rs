@@ -43,16 +43,13 @@ pub enum HeadTag<'a> {
 
 /// A core-calculus term: an `Rc`-shared `Node` — a [`Subterm`] plus its lazily-cached, span-independent derivations (a structural hash, `reach`, the free-variable set, and the `has_local_free`/`has_metavar` bits) — with an optional per-occurrence source span. Clones are pointer bumps that share the node's cache, so a subterm shared across occurrences memoizes each derivation once, not once per occurrence. Equality short-circuits first on pointer identity, then on the cached hashes, before falling back to structural comparison — which is what keeps conversion and the reduction memo affordable on heavily shared trees. The span is identity-irrelevant: hash and equality look only at the node, so re-spanning a term never splits a cache.
 #[derive(Debug, Clone)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 #[cfg_attr(
     feature = "archive",
     rkyv(
-        serialize_bounds(__S: rkyv::ser::Writer + rkyv::ser::Allocator + rkyv::ser::Sharing, __S::Error: rkyv::rancor::Source),
-        deserialize_bounds(__D: rkyv::de::Pooling, __D::Error: rkyv::rancor::Source),
-        bytecheck(bounds(__C: rkyv::validation::ArchiveContext + rkyv::validation::SharedContext, __C::Error: rkyv::rancor::Source))
+        serialize_bounds(__S: curios_archive::rkyv::ser::Writer + curios_archive::rkyv::ser::Allocator + curios_archive::rkyv::ser::Sharing, __S::Error: curios_archive::rkyv::rancor::Source),
+        deserialize_bounds(__D: curios_archive::rkyv::de::Pooling, __D::Error: curios_archive::rkyv::rancor::Source),
+        bytecheck(bounds(__C: curios_archive::rkyv::validation::ArchiveContext + curios_archive::rkyv::validation::SharedContext, __C::Error: curios_archive::rkyv::rancor::Source))
     )
 )]
 pub struct Term {
@@ -62,16 +59,13 @@ pub struct Term {
 }
 
 /// A [`Subterm`] together with its memoized, span-independent derivations. One per distinct node, behind the shared `Rc` every occurrence bumps, so each derivation fills at most once across the whole DAG. The caches are filled lazily by an iterative post-order walk over the node's descendants (`Term::warm_scalars`/`Term::get_or_init_free_vars`) rather than by native recursion, so a data-shaped spine of any depth memoizes on a bounded stack: filling one node reads its children's already-filled caches in O(children).
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 struct Node {
     /// The eager derivations — hash, `reach`, and the containment flags — packed behind one filled bit; see [`ScalarCache`].
-    #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
+    #[cfg_attr(feature = "archive", rkyv(with = curios_archive::rkyv::with::Skip))]
     scalars: ScalarCache,
     /// The one derivation left lazy. A `BTreeSet<Free>` per node would dominate the archive it is stored in, and unlike the scalars it is wanted by a minority of nodes on a given compilation.
-    #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
+    #[cfg_attr(feature = "archive", rkyv(with = curios_archive::rkyv::with::Skip))]
     frees: FreeCache,
     subterm: Subterm,
 }
@@ -1570,10 +1564,7 @@ impl Term {
 
 /// An unresolved infix application `left <op> right`. Elaboration infers a shared operand type for the two sides and rebuilds the node as a concept method call (`a + b` ≙ `Add/add(a, b)`; `&&`/`||` alone are hardcoded on `Bool` — see `elaborate_infix`); the node never survives elaboration.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct Infix {
     pub op: NumOp,
     pub left: Term,
@@ -1582,10 +1573,7 @@ pub struct Infix {
 
 /// A polymorphic numeric literal: an integer `magnitude` with an optional written sign. Resolved to a concrete `Nat`/`Int`/`Flt` intrinsic by `elaborate_numlit` once the expected type is known (or defaulted by shape). Decimal literals are *not* `NumLit` — they parse straight to `Intrinsic::Flt`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct NumLit {
     #[cfg_attr(feature = "archive", rkyv(with = BigUintBytes))]
     pub magnitude: BigUint,
@@ -1597,10 +1585,7 @@ pub struct NumLit {
 
 /// A postfix `!` sequencing site, already hoisted by lowering: `action` is the sequenced description, `continuation` the rest of its region as an ordinary one-parameter function (domain a lowering-minted hole). Consumed by `elaborate_bang`, which replaces it with the `/syn/Monad/bind` application the lowerer once spelled directly — the construction moved behind elaboration so the sequencing survives to the stage that can make type-directed decisions about it.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct Bang {
     pub action: Term,
     pub continuation: Term,
@@ -1608,10 +1593,7 @@ pub struct Bang {
 
 /// A lowering-born constructor consumed by elaboration: born in `into_core`, eliminated by `elaborate`, never legitimate in reduced, converted, zonked, or erased terms, and refused at the kernel boundary. Grouping the members under one `Subterm` variant lets every post-elaboration consumer dismiss the class wholesale — one refusal arm at the kernel, one `unreachable!` in each downstream stage — so a future transient extends lowering, elaboration, and display without touching them. `Metavar` is deliberately not a member: conversion parks on metavariables and zonk consumes them, so its lifecycle is elaboration-internal rather than pre-elaboration.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub enum Transient {
     /// An unresolved infix operator application; consumed by `elaborate_infix`.
     Infix(Infix),
@@ -1657,10 +1639,7 @@ impl Transient {
 
 /// `plicities` parallels the telescope, one mark per binder; the builder asserts the lengths agree. `Telescope` itself is unchanged. Erasure is sort-driven (a proof or a type erases), so a function type carries no runtime-multiplicity marks of its own.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct FuncType {
     pub telescope: Telescope<Term>,
     pub plicities: Vec<Plicity>,
@@ -1670,10 +1649,7 @@ pub struct FuncType {
 ///
 /// Erasure ignores `plicities`; its keep/drop decisions come from the checked function type and sort information.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct Func {
     pub telescope: Telescope<Term>,
     pub plicities: Vec<Plicity>,
@@ -1681,10 +1657,7 @@ pub struct Func {
 
 /// `plicities` parallels `params`, one mark per argument — the call-site `@` marks. Core must carry them (rather than `into_core` resolving them) because `into_core` is type-blind: only the elaborator, holding the head's function type, can decide which binder an `@`-argument fills.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct Apply {
     pub head: Term,
     pub params: Vec<Term>,
@@ -1695,10 +1668,7 @@ pub struct Apply {
 ///
 /// Unlike binder hints elsewhere, field labels are the target of `.label` resolution during elaboration, so they are part of the type's identity: `Eq`/`Hash` reassert them on top of the label-blind [`Telescope`] identity. Otherwise the reduction memo could hand elaboration a twin type whose labels differ, and a well-typed projection would fail to resolve.
 #[derive(Debug, Clone, Eq)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct TupleType {
     pub telescope: Telescope<()>,
 }
@@ -1718,10 +1688,7 @@ impl Hash for TupleType {
 
 /// `names` carries the literal's written field names (`(status = 0, …)`) from `into_core` to elaboration, which checks them against the expected tuple type's labels and rebuilds the literal name-free. Empty means "no names written" — the invariant for every internally-built and post-elaboration tuple.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct Tuple {
     pub fields: Vec<Term>,
     pub names: Vec<Option<String>>,
@@ -1729,10 +1696,7 @@ pub struct Tuple {
 
 /// A projection's field is positional in every post-elaboration term; the `Label` form exists only between `into_core` and `elaborate`, which resolves it against the head's tuple type and rebuilds it as `Index`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub enum Field {
     Index(usize),
     Label(String),
@@ -1740,10 +1704,7 @@ pub enum Field {
 
 /// A projection out of a tuple. See [`Field`] for why the field is positional in every post-elaboration term.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct Proj {
     pub head: Term,
     pub field: Field,
@@ -1753,10 +1714,7 @@ pub struct Proj {
 ///
 /// `params` are uniform across constructors; `indices` are the per-case constrained binders — each constructor's registry terminal states its own index expressions. Use sites never distinguish them (`Vec(Bin, 3)` is one flat application of the type-constructor function); the split lives here and in the registry.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct InductType {
     pub name: Global,
     pub universes: Vec<Level>,
@@ -1768,10 +1726,7 @@ pub struct InductType {
 ///
 /// `name` and `params` are recoverable from the term's inferred type; they are stored redundantly on purpose, so `convert` stays purely structural (no context lookups mid-comparison).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct Variant {
     pub name: Global,
     pub universes: Vec<Level>,
@@ -1782,10 +1737,7 @@ pub struct Variant {
 
 /// A struct type as an intrinsic normal form (cf. [`InductType`], no indices). Built inside the generated type-former's body; users write `Pair(A, B)` and the former reduces to this. Convertible iff same `name` and pointwise-convertible `params`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct StructType {
     pub name: Global,
     pub universes: Vec<Level>,
@@ -1794,10 +1746,7 @@ pub struct StructType {
 
 /// One written struct-literal entry, parallel to [`Struct::fields`]: a plain positional field carrying its optional written label, an explicit `use <term>` fill that pairs with the concept's next `use`-marked field position, or a `..base` spread whose paired term is the base to copy the unwritten fields from (riding in `fields` keeps it visible to every term traversal). A `Spread`, if present, is `entries[0]` — enforced at elaboration, not by construction. Pre-elaboration metadata only, like written field names on [`Tuple`]; elaboration rebuilds the value entry-free.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub enum StructEntry {
     Field(Option<String>),
     Use,
@@ -1808,10 +1757,7 @@ pub enum StructEntry {
 ///
 /// `entries` carries the literal's written entry shapes from `into_core`: elaboration checks plain fields positionally against the declared labels, pairs `use` entries with the concept's `use`-marked positions, and rebuilds the value entry-free. Empty means "all plain, no names written" — the invariant for every internally-built and post-elaboration struct.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct Struct {
     pub name: Global,
     pub universes: Vec<Level>,
@@ -1826,10 +1772,7 @@ pub struct Struct {
 ///
 /// Before elaboration the motive is instead the *written term*, carried in an arity-0 scope — see `Term::match_motive_written`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct Match {
     pub head: Term,
     pub motive: Scope<Many>,
@@ -1838,10 +1781,7 @@ pub struct Match {
 
 /// One enumerated arm of a [`Cases::Induct`]: the arm body closed over its payload binders, plus a plicity vector paralleling those binders one mark per slot. `plicities.len()` equals `body.arity()`. Before elaboration the marks are the written constructor-pattern plicities; after elaboration they are the constructor's canonical payload plicities. Reduction and erasure open the body positionally and never read the marks; conversion compares them alongside the bodies. Kept beside the body (rather than in a second map) so the two can never drift apart.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct InductArm {
     pub body: Scope<Many>,
     pub plicities: Vec<Plicity>,
@@ -1884,10 +1824,7 @@ impl InductArm {
 
 /// The arm payload of a [`Match`] — the only part that differs between the elimination forms (the scrutinee and motive live on `Match` itself). Which variant a match carries decides both its reduction rule and how erasure lowers it.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub enum Cases {
     /// Dependent elimination of `Bool`: a false arm and a true arm.
     Bool { false_case: Term, true_case: Term },
@@ -1908,10 +1845,7 @@ pub enum Cases {
 
 /// The native free-monoid intrinsic a `Cases::FreeMonoid` eliminates, with its type parameters and its two eliminator arms. `Nat` is the free monoid on one (payload-less) generator; `Bin` carries none; `List` carries its element type. Each variant pairs an identity arm (`empty_case`) with a cons arm whose arity is fixed by the carrier — `Scope<Two>` for `Nat` (predecessor, ih), `Scope<Three>` for `Bin`/`List` (head, tail, ih).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub enum Carrier {
     Nat {
         empty_case: Term,
@@ -1931,10 +1865,7 @@ pub enum Carrier {
 
 /// A straight-line block of `let` bindings: `bindings` in written order, then a `tail` continuation in scope of all of them. Binding `i` is stored under the `i` binders before it — its `type_` and `value` may reference bindings `0..i` but never binding `i` itself; a `let` is non-recursive, self- and mutual reference is [`Rec`]'s job. A whole run of source `let`s is one `Let`, not a nest, so every walk over it (`traverse`/`reach`/`reduce`/ `erase`/`elaborate`) is a loop over `bindings` rather than one native stack frame per binding — which is what keeps a long local `let` sequence from overflowing the stack.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct Let {
     pub bindings: Vec<LetBinding>,
     pub tail: Scope<Many>,
@@ -1944,10 +1875,7 @@ pub struct Let {
 ///
 /// A local binding is monomorphic. Universe polymorphism is a property of *declarations*, which are frozen into the prelude archive and re-instantiated by later programs; a local binding has no such use sites, and cumulativity already admits the uses a local scheme once served — for `let id : (@A : Type, A) -> A` applied to both `Prop` and `Type 0`, a single `A : Type 1` accepts both, and the level order is linear so a sup always exists.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct LetBinding {
     type_: Term,
     value: Term,
@@ -1973,10 +1901,7 @@ impl LetBinding {
 
 /// One member of a recursive group as the knot stores it. Both scopes are closed over the whole group, so any member may reference any other.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct RecMemberScopes {
     pub type_: Scope<Many>,
     pub body: Scope<Many>,
@@ -1984,10 +1909,7 @@ pub struct RecMemberScopes {
 
 /// The shared knot of a mutually-recursive group. Every member type and body is scoped over the full group. `Rc` sharing is an implementation detail; equality and hashing remain structural through the scoped items.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct RecGroup {
     scheme: UniverseScheme<Rc<Vec<RecMemberScopes>>>,
 }
@@ -2131,10 +2053,7 @@ impl RecGroup {
 ///
 /// This is the *only* recursion form. A demanded member occurrence is this same node with a tail that selects one member — see [`Term::rec_proj`] — rather than a form of its own, so the rule that checks a group is the rule that checks an occurrence of it. A self-describing occurrence node was the earlier design, and what it cost is worth recording: a node that is well-formed standing alone is a node no scope gates, and the kernel typed one from the group it carried without ever checking that group.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct Rec {
     pub group: RecGroup,
     pub tail: Scope<Many>,
@@ -2153,10 +2072,7 @@ impl Rec {
 
 /// Provenance of an inserted implicit argument: the applied function (`func`) had no `@`-argument for its implicit binder `binder` at some call site, so the elaborator filled the slot with a fresh metavariable.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct ImplicitOrigin {
     pub func: String,
     pub binder: String,
@@ -2164,10 +2080,7 @@ pub struct ImplicitOrigin {
 
 /// Provenance of an inserted witness argument: the applied function (`func`) had no `use`-argument for its witness binder `binder` at some call site, so the elaborator filled the slot with a fresh metavariable and registered a resolution goal for it. An occurrence still unsolved at zonk reports as a missing witness (naming the goal type from the birth record) rather than an uninferred implicit.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct WitnessOrigin {
     pub func: String,
     pub binder: String,
@@ -2175,10 +2088,7 @@ pub struct WitnessOrigin {
 
 /// Provenance of a marked metavariable — which mechanism created it, deciding how zonk reports it: an unsolved `Implicit`/`Witness` survivor names the binder it filled, while a `Goal` is reported unconditionally.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub enum MetavarOrigin {
     Implicit(ImplicitOrigin),
     Witness(WitnessOrigin),
@@ -2188,10 +2098,7 @@ pub enum MetavarOrigin {
 
 /// A metavariable's identity: a dense index into the `Context`'s `MetaStore`, minted monotonically by an `Entropy`(Entropy). A newtype so it can never be confused with the other `usize`-shaped notions the kernel juggles (de Bruijn indices, telescope arities, variant tags, `Nat` magnitudes).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 #[cfg_attr(
     feature = "archive",
     rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))
@@ -2224,10 +2131,7 @@ impl fmt::Display for MetaId {
 ///
 /// The spine is `Rc`-shared: every meta born under the same Γ shares one identity-spine allocation (see `Context::identity_snapshot`), which is what keeps minting metavariables O(1) instead of O(|Γ|).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct Metavar {
     pub id: MetaId,
     pub spine: Rc<Vec<Term>>,
@@ -2236,10 +2140,7 @@ pub struct Metavar {
 
 /// An internal, occurrence-specific instantiation of a universe-polymorphic binding. The ordinary term binder structure remains entirely in `head`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct UniverseInst {
     pub head: Term,
     pub levels: Vec<Level>,
@@ -2247,10 +2148,7 @@ pub struct UniverseInst {
 
 /// The actual node of the core term language — one variant per term former. [`Term`] wraps a `Subterm` in an `Rc` with cached hash/reach and an optional span, and `Deref`s here, so pattern matches are written against `Subterm` while construction goes through `Term`'s smart constructors. The final variant groups the elaboration-transient constructors under [`Transient`]: born in `into_core`, consumed by `elaborate`, never seen by reduce/convert/zonk/erase.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub enum Subterm {
     Type(Level),
     Prop,

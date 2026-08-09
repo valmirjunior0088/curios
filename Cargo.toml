@@ -2,6 +2,8 @@
 resolver = "2"
 members = [
     "curios-abi",
+    "curios-archive",
+    "curios-archive-derive",
     "curios-base",
     "curios-wasm",
     "curios-cont",
@@ -36,6 +38,8 @@ unused_self = "warn"
 [workspace.dependencies]
 curios = { path = "curios" }
 curios-abi = { path = "curios-abi" }
+curios-archive = { path = "curios-archive" }
+curios-archive-derive = { path = "curios-archive-derive" }
 curios-profile = { path = "curios-profile" }
 curios-base = { path = "curios-base" }
 curios-wasm = { path = "curios-wasm" }
@@ -55,4 +59,3 @@ curios-runtime = { path = "curios-runtime" }
 num-bigint = { version = "0.5.1" }
 num-traits = { version = "0.2.19" }
 wasmtime = { version = "46.0.1", default-features = false, features = ["runtime", "gc", "gc-copying", "std"] }
-rkyv = { version = "0.8.16", default-features = false, features = ["alloc", "bytecheck", "little_endian", "pointer_width_32", "std", "unaligned"] }

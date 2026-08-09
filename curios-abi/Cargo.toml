@@ -9,8 +9,8 @@ description = "The host/guest wire contract shared by the Curios compiler and ru
 workspace = true
 
 [features]
-archive = ["dep:rkyv"]
+archive = ["curios-archive/enabled"]
 
 [dependencies]
+curios-archive = { workspace = true }
 num-bigint = { workspace = true }
-rkyv = { workspace = true, optional = true }

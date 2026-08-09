@@ -49,6 +49,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 
 | Area | Owner | Responsibility |
 | --- | --- | --- |
+| Zero-copy archiving | `curios-archive` | The workspace's only rkyv dependency: the pin, the feature set, the re-exported derives, and the `archived` attribute macro (in the `curios-archive-derive` companion, since a proc-macro crate can export nothing else) |
 | Shared foundations | `curios-base` | Spans, names, entropy, parser/printer utilities, packed values, the `SyntaxRegistry` shape the `/syn`-emitting stages read, and other stage-independent intrinsics |
 | Host/guest contract | `curios-abi` | Wire constants and self-describing foreign-function rows shared by compiler and runtime |
 | Surface language | `curios-text` | Lexer, parser, surface AST, printer, module resolution, generated `/sys`, and lowering to core |

@@ -1,7 +1,7 @@
 //! Deterministic rkyv adapters for resolver maps.
 
 use {
-    rkyv::{
+    curios_archive::rkyv::{
         Archive, Archived, Deserialize, Place, Resolver, Serialize,
         rancor::Fallible,
         with::{ArchiveWith, DeserializeWith, SerializeWith},

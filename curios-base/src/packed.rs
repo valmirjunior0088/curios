@@ -6,10 +6,7 @@ use std::{hash::Hash, sync::Arc};
 
 /// The closed logical grain of a packed binary sequence.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub enum Grain {
     /// One logical atom per bit.
     B,
@@ -28,10 +25,7 @@ impl Grain {
 
 /// An immutable logical bit window over shared packed bytes.
 #[derive(Debug, Clone)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct PackedBin {
     bytes: Arc<[u8]>,
     bit_offset: usize,

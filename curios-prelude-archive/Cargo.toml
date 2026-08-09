@@ -25,7 +25,7 @@ curios-core = { workspace = true, features = ["archive"] }
 curios-text = { workspace = true, features = ["archive"] }
 curios-elab = { workspace = true, features = ["archive"] }
 curios-ersd = { workspace = true, features = ["archive"] }
-rkyv = { workspace = true }
+curios-archive = { workspace = true, features = ["enabled"] }
 sha2 = "0.11.0"
 
 # Deliberately absent: `curios-cert`. Elaborating the prelude does not depend on
@@ -42,7 +42,7 @@ curios-elab = { workspace = true, features = ["archive"] }
 curios-ersd = { workspace = true, features = ["archive"] }
 curios-profile = { workspace = true }
 curios-text = { workspace = true, features = ["archive"] }
-rkyv = { workspace = true }
+curios-archive = { workspace = true, features = ["enabled"] }
 sha2 = "0.11.0"
 
 [dev-dependencies]

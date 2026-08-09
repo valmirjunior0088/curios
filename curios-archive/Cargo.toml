@@ -1,0 +1,30 @@
+[package]
+name = "curios-archive"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Zero-copy archiving for the Curios workspace: the one crate that names rkyv"
+
+[lints]
+workspace = true
+
+[features]
+enabled = ["dep:rkyv"]
+
+# The one place in the workspace rkyv is named, so the pin and the feature set
+# live here rather than in the workspace table. A row in `[workspace.dependencies]`
+# shares configuration; it does not concentrate authority, because any crate may
+# still add `rkyv = { workspace = true }` without anyone deciding it should.
+[dependencies]
+# Always present, never optional: the annotation is unconditional at each call site and
+# its *expansion* is what the feature gates. A macro that vanished with the feature
+# would make every annotated type a compile error in a build with archiving off.
+curios-archive-derive = { workspace = true }
+rkyv = { version = "0.8.16", default-features = false, features = [
+    "alloc",
+    "bytecheck",
+    "little_endian",
+    "pointer_width_32",
+    "std",
+    "unaligned",
+], optional = true }

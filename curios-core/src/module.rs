@@ -24,10 +24,7 @@ use {
 ///
 /// `Partial` is "not proven total", never "proven divergent": a productive corecursive definition and a genuine infinite loop are both `Partial`, and both remain legal wherever erasure keeps them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub enum Totality {
     /// Every recursive group this definition contains descends, it does not mention `Intrinsic::ProcExit`, and neither does anything it reaches.
     Total,
@@ -48,10 +45,7 @@ impl Totality {
 ///
 /// A generated member names its origin in full: `InductiveConstructor` carries both the inductive it belongs to *and* which constructor it is, so the registry correspondence is read off the pair rather than re-synthesized by joining an owner and a tag into a name and looking that name up.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub enum DefinitionKind {
     Authored,
     InductiveType,
@@ -66,10 +60,7 @@ pub enum DefinitionKind {
 ///
 /// A standalone top-level `let` uses free `Var`s keyed by `name`. A definition returned by [`RecItem::definitions`] is the opened view of a scoped recursive member and likewise uses the group's export names; the authoritative recursive type and body remain in [`RecItem::group`].
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct Definition {
     pub name: Global,
     pub kind: DefinitionKind,
@@ -88,10 +79,7 @@ pub struct Definition {
 
 /// Export metadata for one member of a flat top-level recursive group. The member's type and body live only in [`RecItem::group`], scoped over every export in the group.
 #[derive(Debug, Clone, PartialEq, Eq)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct RecDefinition {
     pub name: Global,
     pub kind: DefinitionKind,
@@ -103,10 +91,7 @@ pub struct RecDefinition {
 
 /// A flat top-level recursive item backed by the same structural fixed-point representation as a local [`super::Rec`]. Keeping the export metadata separate preserves the module's flat architecture without retaining a second, free-name copy of each recursive type and body.
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct RecItem {
     pub definitions: Vec<RecDefinition>,
     pub group: RecGroup,
@@ -230,10 +215,7 @@ impl Definition {
 
 /// A top-level item: a single `let` definition, or a `rec` group of mutually-recursive definitions (which may reference each other by `name`).
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub enum Item {
     Let(Definition),
     Rec(RecItem),
@@ -291,10 +273,7 @@ impl Item {
 ///
 /// This replaces the single, N-deep nested `Subterm::Let`/`Rec` term that `text::into_core` used to fold the entire prelude into — the construction (`Scope::close` over the whole accumulator at each step) and every pass that recursed along its `.tail` spine were both O(N) in stack and overflowed at prelude depth. `Subterm::Let`/`Rec` remain for genuine *local*, in-expression bindings, which are shallow.
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct Module {
     pub items: Vec<Item>,
     /// Lowering-time metadata for every universe metavariable id in this module. Finalized, zonked modules clear this vector.

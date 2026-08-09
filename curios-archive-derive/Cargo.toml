@@ -1,0 +1,16 @@
+[package]
+name = "curios-archive-derive"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The attribute macro behind curios-archive; not depended on directly"
+
+[lints]
+workspace = true
+
+[lib]
+proc-macro = true
+
+# No dependencies, deliberately. This macro prepends attributes and does not read
+# the item it decorates, so it needs neither `syn` nor `quote` — token
+# concatenation is the whole implementation.

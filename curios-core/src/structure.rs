@@ -7,10 +7,7 @@ use {
 ///
 /// A struct is a nominal record — there is no value-constructor function and no tag — so this is an [`InductDecl`](super::InductDecl) minus the indices and the per-constructor map, plus the privacy metadata the representation boundary needs. Elaboration consults it to check a struct literal's fields and to type a projection; `erase` consults it to lower the fields.
 #[derive(Debug, Clone, PartialEq)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct StructDecl {
     pub universe_context: UniverseContext,
     /// The declaration's parameters, terminating in its field telescope: `struct Pair(A : Type, B : Type) { fst : A, snd : B }` is `(A : Type, B : Type)` ending in `(fst : A, snd : B)` ending in `()`.

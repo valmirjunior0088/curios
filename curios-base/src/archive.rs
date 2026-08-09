@@ -1,12 +1,12 @@
 //! rkyv adapters for arbitrary-precision integers.
 
 use {
-    num_bigint::{BigInt, BigUint},
-    rkyv::{
+    curios_archive::rkyv::{
         Archive, Archived, Deserialize, Place, Resolver, Serialize,
         rancor::Fallible,
         with::{ArchiveWith, DeserializeWith, SerializeWith},
     },
+    num_bigint::{BigInt, BigUint},
 };
 
 /// Declares one with-adapter archiving `$int` as the little-endian byte vector `$to` produces and `$from` reads back. The twins below differ only in these parameters, so a change to the adapter shape reaches both.

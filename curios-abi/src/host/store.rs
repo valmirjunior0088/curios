@@ -16,10 +16,7 @@ use std::{
 
 /// The element type of a wire [`WireType::List`] — the same vocabulary minus `List` itself, so a list of lists is unrepresentable rather than merely unchecked. Codegen's host-boundary force and embed steps handle exactly one level of nesting (a deep force for `Bytes`/`Handle` elements, a shallow one for scalars), and the runtime's uniform `List` load cannot distinguish layers, so a second level would silently hand the host rope structs where flat arrays belong. This type is what makes that unwritable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub enum WireLeaf {
     Nat,
     Int,
@@ -32,10 +29,7 @@ pub enum WireLeaf {
 ///
 /// The scalar cases matter to codegen: a `Nat`/`Bool` operand is unboxed from its i31 carrier *unsigned* (`i31.get_u`) and crosses as a raw wasm `i32`, while `Int` is unboxed *signed* (`i31.get_s`) — `poll`'s timeout keeps the `poll(2)` sign convention. Scalar results re-enter pre-boxed as i31 refs. `Bytes` is the byte grain alone: `Bits` and `Byte` are guest types with no wire spelling.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub enum WireType {
     Nat,
     Int,
@@ -60,10 +54,7 @@ impl From<WireLeaf> for WireType {
 
 /// The signature of one foreign function: named operands and named results. The result count fixes the guest-facing shape — `0` is the unit value, `1` is the bare result forwarded through, `2..` is a record of the named fields (the labels are load-bearing: the standard library projects `.status`, `.secs_hi`, …).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct WireSignature {
     pub params: Vec<(String, WireType)>,
     pub results: Vec<(String, WireType)>,
@@ -71,10 +62,7 @@ pub struct WireSignature {
 
 /// One foreign (host-provided) function. `namespace`/`name` is the wasm import pair — the wire ABI shared by the wasm emitter and the runtime linker; never change one without changing what the other end expects (the unit tests snapshot the builtin set). `namespace` is `sys` for a builtin and `ffi` for a user's `foreign` declaration, whose `name` is its fully qualified name (leading `/`). `label` is the binding name the function surfaces under in the guest, and `subject` the module that binding sits in: `Some` for a builtin, whose placement the [`host_ops!`](super::host_ops) table states, and `None` for a user's `foreign` declaration, which the guest already places by writing it where it wants it. The two are independent of the wire pair — a row moves in the module tree without the import moving.
 #[derive(Debug, Clone)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct ForeignFunction {
     #[cfg_attr(feature = "archive", rkyv(with = crate::Namespace))]
     pub namespace: &'static str,
@@ -102,10 +90,7 @@ impl Hash for ForeignFunction {
 
 /// The foreign functions one compilation declares, in declaration order — the order the prelude surfaces them under `/sys`. Rows are `Arc`ed so the IR nodes share them; cloning a store is a handful of reference bumps.
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct ForeignStore {
     functions: Vec<Arc<ForeignFunction>>,
 }

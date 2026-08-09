@@ -74,8 +74,11 @@ fn validate_bytes<'bytes>(
     schema: u32,
     fingerprint: &str,
 ) -> Result<&'bytes ArchivedPreludeArchive, String> {
-    let image = rkyv::access::<ArchivedPreludeArchive, rkyv::rancor::Error>(bytes)
-        .map_err(|error| format!("invalid archived prelude: {error}"))?;
+    let image = curios_archive::rkyv::access::<
+        ArchivedPreludeArchive,
+        curios_archive::rkyv::rancor::Error,
+    >(bytes)
+    .map_err(|error| format!("invalid archived prelude: {error}"))?;
 
     if image.schema.to_native() != schema {
         return Err(format!(
@@ -103,8 +106,10 @@ fn archived() -> &'static ArchivedPreludeArchive {
 /// The universe invariants are *not* re-checked here. They are asserted once by `build.rs`, on the value it is about to serialize, and [`validate_bytes`] establishes that these bytes are exactly the bytes written from that value: bytecheck confirms the archived graph is structurally sound, and the schema and source fingerprint reject an image from any other build. Walking the whole standard library again per compilation to re-derive an answer already settled cost ~175 ms of a ~680 ms release compile of a one-line program.
 fn restore_archive() -> PreludeArchive {
     curios_profile::profile!("restore_archive");
-    rkyv::deserialize::<PreludeArchive, rkyv::rancor::Error>(archived())
-        .unwrap_or_else(|error| panic!("validated archived prelude failed to restore: {error}"))
+    curios_archive::rkyv::deserialize::<PreludeArchive, curios_archive::rkyv::rancor::Error>(
+        archived(),
+    )
+    .unwrap_or_else(|error| panic!("validated archived prelude failed to restore: {error}"))
 }
 
 fn hex(bytes: &[u8]) -> String {

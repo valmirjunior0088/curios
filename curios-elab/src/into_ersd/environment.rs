@@ -9,10 +9,7 @@ use {
 
 /// What a Core name erases to.
 #[derive(Debug, Clone, Copy)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub(super) enum Binding {
     /// The operand holding the name's erased value.
     Atom(curios_ersd::Atom),
@@ -22,10 +19,7 @@ pub(super) enum Binding {
 
 /// A registered structure's layout. The mask is the declaration's opaque signature mask (one flag per declared field, `true` where the field is erased), computed once with the parameters abstract, so construction and projection agree on the relevant-field arithmetic at every instantiation. `schema` is `None` for a newtype — a single relevant field collapses to its bare value, with no product node.
 #[derive(Debug, Clone)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub(super) struct ProductRow {
     pub(super) schema: Option<curios_ersd::ProductId>,
     pub(super) mask: Vec<bool>,
@@ -45,10 +39,7 @@ impl ProductRow {
 
 /// A registered constructor: its arena identity and the declaration's opaque signature mask over its payload fields (`true` where a field is erased).
 #[derive(Debug, Clone)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub(super) struct ConstructorRow {
     pub(super) id: curios_ersd::ConstructorId,
     pub(super) mask: Vec<bool>,
@@ -56,20 +47,14 @@ pub(super) struct ConstructorRow {
 
 /// A registered inductive: its variant family and its constructors in runtime-tag (registry) order.
 #[derive(Debug, Clone)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub(super) struct FamilyRow {
     pub(super) family: curios_ersd::FamilyId,
     pub(super) constructors: Vec<ConstructorRow>,
 }
 
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub(super) struct Environment {
     values: BTreeMap<Free, Binding>,
     struct_decls: BTreeMap<Global, ProductRow>,

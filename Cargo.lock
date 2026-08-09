@@ -479,8 +479,8 @@ dependencies = [
 name = "curios-abi"
 version = "0.8.1"
 dependencies = [
+ "curios-archive",
  "num-bigint",
- "rkyv",
 ]
 
 [[package]]
@@ -495,12 +495,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "curios-archive"
+version = "0.8.1"
+dependencies = [
+ "curios-archive-derive",
+ "rkyv",
+]
+
+[[package]]
+name = "curios-archive-derive"
+version = "0.8.1"
+
+[[package]]
 name = "curios-base"
 version = "0.8.1"
 dependencies = [
+ "curios-archive",
  "num-bigint",
  "num-traits",
- "rkyv",
 ]
 
 [[package]]
@@ -520,12 +532,12 @@ version = "0.8.1"
 dependencies = [
  "curios-abi",
  "curios-analysis",
+ "curios-archive",
  "curios-base",
  "curios-core",
  "curios-profile",
  "num-bigint",
  "num-traits",
- "rkyv",
 ]
 
 [[package]]
@@ -543,11 +555,11 @@ name = "curios-core"
 version = "0.8.1"
 dependencies = [
  "curios-abi",
+ "curios-archive",
  "curios-base",
  "curios-profile",
  "num-bigint",
  "num-traits",
- "rkyv",
 ]
 
 [[package]]
@@ -556,6 +568,7 @@ version = "0.8.1"
 dependencies = [
  "curios-abi",
  "curios-analysis",
+ "curios-archive",
  "curios-base",
  "curios-cert",
  "curios-core",
@@ -563,7 +576,6 @@ dependencies = [
  "curios-profile",
  "num-bigint",
  "num-traits",
- "rkyv",
 ]
 
 [[package]]
@@ -571,11 +583,11 @@ name = "curios-ersd"
 version = "0.8.1"
 dependencies = [
  "curios-abi",
+ "curios-archive",
  "curios-base",
  "curios-cont",
  "curios-profile",
  "num-bigint",
- "rkyv",
 ]
 
 [[package]]
@@ -608,6 +620,7 @@ name = "curios-prelude-archive"
 version = "0.8.1"
 dependencies = [
  "curios-abi",
+ "curios-archive",
  "curios-base",
  "curios-cert",
  "curios-core",
@@ -615,7 +628,6 @@ dependencies = [
  "curios-ersd",
  "curios-profile",
  "curios-text",
- "rkyv",
  "sha2 0.11.0",
 ]
 
@@ -647,13 +659,13 @@ name = "curios-text"
 version = "0.8.1"
 dependencies = [
  "curios-abi",
+ "curios-archive",
  "curios-base",
  "curios-core",
  "curios-elab",
  "curios-profile",
  "num-bigint",
  "num-traits",
- "rkyv",
 ]
 
 [[package]]

@@ -1,9 +1,6 @@
 /// Whether a binder/argument participates in implicit-argument insertion. An elaboration directive only: conversion ignores plicity entirely, so erasing the marks yields exactly the unmarked system.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub enum Plicity {
     Explicit,
     Implicit,

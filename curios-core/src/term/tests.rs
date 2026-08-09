@@ -27,8 +27,11 @@ fn archive_resets_caches_and_preserves_rc_sharing() {
     assert!(term.inner.scalars.is_filled());
     assert!(term.inner.frees.is_filled());
 
-    let bytes = rkyv::to_bytes::<rkyv::rancor::Error>(&term).unwrap();
-    let restored = rkyv::from_bytes::<Term, rkyv::rancor::Error>(&bytes).unwrap();
+    let bytes =
+        curios_archive::rkyv::to_bytes::<curios_archive::rkyv::rancor::Error>(&term).unwrap();
+    let restored =
+        curios_archive::rkyv::from_bytes::<Term, curios_archive::rkyv::rancor::Error>(&bytes)
+            .unwrap();
     assert!(!restored.inner.scalars.is_filled());
     assert!(!restored.inner.frees.is_filled());
 

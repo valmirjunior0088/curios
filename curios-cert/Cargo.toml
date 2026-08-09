@@ -9,7 +9,7 @@ description = "The Curios certifier: the independent kernel deciding, from a fin
 workspace = true
 
 [features]
-archive = ["dep:rkyv", "curios-base/archive", "curios-core/archive"]
+archive = ["curios-archive/enabled", "curios-base/archive", "curios-core/archive"]
 profile = ["curios-profile/enabled", "curios-analysis/profile", "curios-core/profile"]
 
 # Tests only. `curios-abi` is already inside this crate's normal graph through `curios-core` — DESIGN.md's enumeration of the trusted base names it — so this adds nothing to what `cargo tree -p curios-cert -e normal` reaches. It is here so a fixture can forge an ABI row by hand.
@@ -17,10 +17,10 @@ profile = ["curios-profile/enabled", "curios-analysis/profile", "curios-core/pro
 curios-abi = { workspace = true }
 
 [dependencies]
+curios-archive = { workspace = true }
 curios-profile = { workspace = true }
 curios-analysis = { workspace = true }
 curios-base = { workspace = true }
 curios-core = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
-rkyv = { workspace = true, optional = true }

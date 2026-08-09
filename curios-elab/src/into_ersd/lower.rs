@@ -438,15 +438,11 @@ impl Lowering {
 
 /// A replayable prefix: the fixed prelude erased into an unfinished arena module (items only, no entry), together with the erasure environment that maps prelude Core names to their arena operands. Archived by `curios-prelude` behind the `archive` feature and restored there once per thread; every production compile consumes an owned clone, so the prelude is never re-erased from source.
 #[derive(Debug, Clone)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize),
-    rkyv(
-        serialize_bounds(__S: rkyv::ser::Writer + rkyv::ser::Allocator + rkyv::ser::Sharing, __S::Error: rkyv::rancor::Source),
-        deserialize_bounds(__D: rkyv::de::Pooling, __D::Error: rkyv::rancor::Source),
-        bytecheck(bounds(__C: rkyv::validation::ArchiveContext + rkyv::validation::shared::SharedContext, __C::Error: rkyv::rancor::Source))
-    )
-)]
+#[curios_archive::archived(
+        serialize_bounds(__S: curios_archive::rkyv::ser::Writer + curios_archive::rkyv::ser::Allocator + curios_archive::rkyv::ser::Sharing, __S::Error: curios_archive::rkyv::rancor::Source),
+        deserialize_bounds(__D: curios_archive::rkyv::de::Pooling, __D::Error: curios_archive::rkyv::rancor::Source),
+        bytecheck(bounds(__C: curios_archive::rkyv::validation::ArchiveContext + curios_archive::rkyv::validation::shared::SharedContext, __C::Error: curios_archive::rkyv::rancor::Source))
+    )]
 pub struct ErasedPrelude {
     #[cfg_attr(feature = "archive", rkyv(omit_bounds))]
     module: curios_ersd::Module,

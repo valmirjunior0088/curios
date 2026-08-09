@@ -6,10 +6,7 @@ use curios_base::Grain;
 
 /// A packed-binary or list operation. Operand order is documented per variant; [`arity`](SequenceOp::arity) is the single authoritative operand contract.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub enum SequenceOp {
     /// `(bin) -> Nat`: the element count.
     BinLen(Grain),
@@ -64,10 +61,7 @@ impl SequenceOp {
 
 /// The sequence kind a fold eliminates — a homogeneous list or a packed binary of a given grain — enough to recover exact element and suffix behavior.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub enum SequenceGrain {
     List,
     Bin(Grain),

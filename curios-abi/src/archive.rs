@@ -1,6 +1,6 @@
 //! rkyv adapters for validated host-import namespaces.
 
-use rkyv::{
+use curios_archive::rkyv::{
     Archive, Archived, Deserialize, Place, Resolver, Serialize,
     rancor::{Fallible, Source},
     with::{ArchiveWith, DeserializeWith, SerializeWith},

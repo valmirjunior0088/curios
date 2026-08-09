@@ -92,10 +92,7 @@ impl FlatItem {
 
 // The direct interface of a module: every declared label (public *and* private) in each namespace, with its visibility. This is the per-module body view used for lexical scope during elaboration, and to tell private from absent when a public lookup misses.
 #[derive(Clone, Copy)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 enum ChildInfo {
     Ordinary { vis_pub: bool },
     InductConstructors { vis_pub: bool, rep_pub: bool },
@@ -115,10 +112,7 @@ impl ChildInfo {
 }
 
 #[derive(Clone)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub(super) struct ModuleInfo {
     pub(super) root: RootId,
     #[cfg_attr(feature = "archive", rkyv(with = crate::OrderedMap))]

@@ -4,10 +4,7 @@
 
 /// A scalar intrinsic operation. [`arity`](Operation::arity) is the single authoritative operand count; the verifier and every later consumer delegate to it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub enum Operation {
     BoolAnd,
     BoolOr,

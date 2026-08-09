@@ -32,10 +32,7 @@ pub trait Arity: Copy {
 
 /// The static one-binder arity — `let` tails, telescope links, single-scrutinee motives.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct One;
 
 impl One {
@@ -53,10 +50,7 @@ impl Arity for One {
 
 /// The static two-binder arity — the `(pred, ih)` successor arm of the `Nat` eliminator.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct Two;
 
 impl Two {
@@ -74,10 +68,7 @@ impl Arity for Two {
 
 /// The static three-binder arity — the `(head, tail, ih)` cons arms of the `Bin`/`List` eliminators.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct Three;
 
 impl Three {
@@ -95,10 +86,7 @@ impl Arity for Three {
 
 /// A runtime-chosen binder count, for scopes whose arity is data-dependent (inductive-match arms over constructor payloads, `Rec` blocks, motives). `close`/`open` fall back to slices and assert the length instead of getting it checked at compile time.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct Many(pub usize);
 
 impl Arity for Many {
@@ -112,10 +100,7 @@ impl Arity for Many {
 // === Var =====================================================================
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 enum VarType {
     Free(Free),
     Bound(usize),
@@ -123,10 +108,7 @@ enum VarType {
 
 /// A locally-nameless variable: free (a [`Free`] identity naming a Γ assumption or global definition) or bound (a de Bruijn index into enclosing [`Scope`]s). The bound form and its accessors are crate-internal — outside code builds free variables and lets the scope machinery convert them.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct Var {
     type_: VarType,
 }
@@ -404,10 +386,7 @@ pub fn stamp_declaration_instance<B: Bound>(
 // === Scope ===================================================================
 
 /// A body abstracted over `A::arity()` binders, locally nameless: the body stores de Bruijn indices, while `names` remembers the [`Free`] identities it was closed over, for printing and for the hints later rebuilds re-mint from (`None` for a `constant` scope that never had binders written). Like a [`Term`]'s span, `names` is irrelevant to identity: `Eq`/`Hash` compare arity and body only, so scopes differing solely in binder names are equal — term equality is α-equivalence. The one place binder *hints* are semantic rather than decoration — tuple-type fields, the target of `.label` resolution — reasserts them in its own node identity (see `TupleType` in `term.rs`). Built by `close` (which captures free occurrences of those identities) and eliminated by `open` (which substitutes terms for the indices); entering a `Scope` is the only place a [`Visit`]'s depth changes, so this type is the unit of binding for the whole crate.
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct Scope<A: Arity, B: Bound = Term> {
     arity: A,
     names: Option<Vec<Free>>,
@@ -587,16 +566,13 @@ impl<A: Arity + Hash, B: Bound> Hash for Scope<A, B> {
 // === Telescope ===============================================================
 
 /// A dependent context: a chain of entry types where each `Cons` tail is a one-binder [`Scope`], so every later entry — and the final `Done` payload — may mention the binders before it. Function types, function literals, and tuple types all reuse it and differ only in the payload: a `Term` (the return type or body) for Π/λ, `()` for Σ, where the fields themselves are the point.
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 #[cfg_attr(
     feature = "archive",
     rkyv(
-        serialize_bounds(__S: rkyv::ser::Writer + rkyv::ser::Allocator + rkyv::ser::Sharing, __S::Error: rkyv::rancor::Source),
-        deserialize_bounds(__D: rkyv::de::Pooling, __D::Error: rkyv::rancor::Source),
-        bytecheck(bounds(__C: rkyv::validation::ArchiveContext + rkyv::validation::SharedContext, __C::Error: rkyv::rancor::Source))
+        serialize_bounds(__S: curios_archive::rkyv::ser::Writer + curios_archive::rkyv::ser::Allocator + curios_archive::rkyv::ser::Sharing, __S::Error: curios_archive::rkyv::rancor::Source),
+        deserialize_bounds(__D: curios_archive::rkyv::de::Pooling, __D::Error: curios_archive::rkyv::rancor::Source),
+        bytecheck(bounds(__C: curios_archive::rkyv::validation::ArchiveContext + curios_archive::rkyv::validation::SharedContext, __C::Error: curios_archive::rkyv::rancor::Source))
     )
 )]
 pub enum Telescope<B: Bound> {

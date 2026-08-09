@@ -7,10 +7,7 @@ mod tests;
 
 /// A compilation's four roots. `Sys`/`Syn`/`Std` are the embedded standard library; `Entry` is the program being compiled.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub enum RootId {
     Sys,
     Syn,
@@ -41,10 +38,7 @@ impl RootId {
 
 /// A root's privilege tier — replaces the old `INTERNAL_ROOTS`/`PRIVILEGED_ROOTS` string-literal allowlists with a field carried on the root itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub enum RootKind {
     /// Reachable only from a privileged root — `sys` today. Discoverable (so the standard library can resolve it by absolute path) but rejected when referenced from an ordinary consumer.
     Internal,

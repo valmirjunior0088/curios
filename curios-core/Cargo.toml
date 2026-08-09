@@ -9,13 +9,13 @@ description = "The Curios core language: the term representation and the indepen
 workspace = true
 
 [features]
-archive = ["dep:rkyv", "curios-abi/archive", "curios-base/archive"]
+archive = ["curios-archive/enabled", "curios-abi/archive", "curios-base/archive"]
 profile = ["curios-profile/enabled"]
 
 [dependencies]
+curios-archive = { workspace = true }
 curios-profile = { workspace = true }
 curios-abi = { workspace = true }
 curios-base = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
-rkyv = { workspace = true, optional = true }

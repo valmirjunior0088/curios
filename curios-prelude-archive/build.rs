@@ -166,9 +166,9 @@ fn build() {
         body_type,
         ersd,
     };
-    let first = rkyv::to_bytes::<rkyv::rancor::Error>(&image)
+    let first = curios_archive::rkyv::to_bytes::<curios_archive::rkyv::rancor::Error>(&image)
         .expect("fixed prelude archive serialization failed");
-    let second = rkyv::to_bytes::<rkyv::rancor::Error>(&image)
+    let second = curios_archive::rkyv::to_bytes::<curios_archive::rkyv::rancor::Error>(&image)
         .expect("fixed prelude archive repeat serialization failed");
     assert_eq!(
         first.as_slice(),

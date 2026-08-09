@@ -20,10 +20,7 @@ pub trait ArenaId: Copy + Display {
 
 /// A tombstoning slot arena over one entity kind. See the module documentation for the identity contract.
 #[derive(Debug, Clone)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct Arena<I, T> {
     slots: Vec<Option<T>>,
     id: PhantomData<I>,

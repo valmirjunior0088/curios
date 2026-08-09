@@ -131,10 +131,7 @@ impl Default for PreludeModules {
 
 /// Opaque fixed Text state restored from the build-scoped prelude artifact.
 #[derive(Clone)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct PreparedPrelude {
     roots: Vec<(String, RootId)>,
     table: BTreeMap<Qualifier, ModuleInfo>,

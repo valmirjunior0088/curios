@@ -10,10 +10,7 @@ use {
 
 // The export view of a module: public names only, each pointing at the canonical declaration site. Built to a fixed point before any body is elaborated.
 #[derive(Clone)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub(super) struct PublicInterface {
     #[cfg_attr(feature = "archive", rkyv(with = crate::OrderedMap))]
     pub children: HashMap<String, Entry>,
@@ -31,10 +28,7 @@ impl PublicInterface {
 }
 
 #[derive(Clone)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub(super) struct Entry {
     pub target: Qualifier,
     /// The nominal declaration whose representation this export exposes. Kept distinct from `target` so re-exports cannot manufacture representation visibility and aliases can inherit it during the post-lowering audit.

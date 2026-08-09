@@ -17,10 +17,7 @@ use {
 
 /// A lowering- or elaboration-minted universe metavariable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 #[cfg_attr(
     feature = "archive",
     rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))
@@ -47,10 +44,7 @@ impl fmt::Display for UniverseMetaId {
 
 /// A declaration-local, de Bruijn-indexed universe parameter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 #[cfg_attr(
     feature = "archive",
     rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))
@@ -59,10 +53,7 @@ pub struct UniverseParam(pub usize);
 
 /// The head of one non-constant level atom.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 #[cfg_attr(
     feature = "archive",
     rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))
@@ -76,10 +67,7 @@ pub enum LevelHead {
 ///
 /// The value denotes `max(constant, head₁ + offset₁, …)`. A `BTreeMap` provides deterministic atom ordering; construction coalesces duplicate heads at their greatest offset, making equality, hashing, and archival independent of the expression's original association and ordering.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct Level {
     pub constant: u32,
     pub atoms: BTreeMap<LevelHead, u32>,
@@ -291,10 +279,7 @@ impl fmt::Display for Level {
 
 /// Whether an unsolved level is an input eligible for generalization or an inferred output/classifier that should be minimized.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub enum UniverseRole {
     Generalizable,
     Flexible,
@@ -304,10 +289,7 @@ pub enum UniverseRole {
 ///
 /// The role controls finalization, while the origin survives the Text/Core boundary so a later constraint failure can still point at the written `Type` that introduced the level.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct UniverseSeed {
     pub role: UniverseRole,
     pub origin: Option<UniverseConstraintOrigin>,
@@ -315,10 +297,7 @@ pub struct UniverseSeed {
 
 /// The semantic reason a universe inequality was introduced.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub enum UniverseConstraintKind {
     WrittenType,
     Cumulativity,
@@ -334,10 +313,7 @@ pub enum UniverseConstraintKind {
 
 /// User-facing provenance for one universe constraint.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct UniverseConstraintOrigin {
     pub span: Option<Span>,
     pub kind: UniverseConstraintKind,
@@ -358,10 +334,7 @@ impl UniverseConstraintOrigin {
 
 /// One normalized inequality `lower ≤ upper`.
 #[derive(Debug, Clone)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct UniverseConstraint {
     pub lower: Level,
     pub upper: Level,
@@ -386,10 +359,7 @@ impl Hash for UniverseConstraint {
 
 /// A closed, declaration-local residual universe context.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Default)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct UniverseContext {
     pub parameter_count: usize,
     pub constraints: Vec<UniverseConstraint>,
@@ -444,10 +414,7 @@ impl UniverseContext {
 
 /// One value under a shared universe context.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub(crate) struct UniverseScheme<T> {
     pub(crate) context: UniverseContext,
     pub(crate) value: T,

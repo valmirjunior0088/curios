@@ -6,10 +6,7 @@ use super::{ConstructorId, FamilyId};
 
 /// The post-erasure field row of a structure (or tuple). Field names are debug metadata only; identity and layout are positional.
 #[derive(Debug, Clone)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct ProductSchema {
     pub debug_name: Option<String>,
     /// One entry per relevant field, in declaration order; the entry is the field's optional debug name.
@@ -25,10 +22,7 @@ impl ProductSchema {
 
 /// The post-erasure shape of an inductive type: its constructors in declaration order. A constructor's index in this list is its discriminant.
 #[derive(Debug, Clone)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct VariantFamily {
     pub debug_name: Option<String>,
     pub constructors: Vec<ConstructorId>,
@@ -36,10 +30,7 @@ pub struct VariantFamily {
 
 /// One constructor of a [`VariantFamily`]: its payload row and a back-link to its family. The discriminant is the constructor's position in the family's list, not stored here.
 #[derive(Debug, Clone)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct Constructor {
     pub debug_name: Option<String>,
     pub family: FamilyId,

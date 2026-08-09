@@ -9,10 +9,7 @@ use {
 
 /// A type-level integer. Unbounded — the type level pretends ℤ, the way `Nat`'s `BigUint` pretends ℕ; the runtime's 31-bit range is enforced only where a literal must materialize (`erase`'s narrowing) and by the runtime's own overflow traps.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct Int {
     #[cfg_attr(feature = "archive", rkyv(with = crate::BigIntBytes))]
     value: BigInt,

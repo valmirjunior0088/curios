@@ -86,6 +86,8 @@ RUN npm install -g assemblyscript \
 WORKDIR /curios
 COPY Cargo.toml Cargo.lock Makefile ./
 COPY curios-abi curios-abi
+COPY curios-archive curios-archive
+COPY curios-archive-derive curios-archive-derive
 COPY curios-base curios-base
 COPY curios-wasm curios-wasm
 COPY curios-cont curios-cont

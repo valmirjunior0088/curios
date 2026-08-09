@@ -9,19 +9,21 @@ use {
 
 pub(crate) const SCHEMA: u32 = 23;
 
-#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+// Unconditional rather than `#[curios_archive::archived]`: this crate always archives, so there is no feature to gate on and nothing for the macro to do but forward bounds.
+#[derive(curios_archive::Archive, curios_archive::Serialize, curios_archive::Deserialize)]
 #[rkyv(
+    crate = curios_archive::rkyv,
     serialize_bounds(
-        __S: rkyv::ser::Writer + rkyv::ser::Allocator + rkyv::ser::Sharing,
-        __S::Error: rkyv::rancor::Source
+        __S: curios_archive::rkyv::ser::Writer + curios_archive::rkyv::ser::Allocator + curios_archive::rkyv::ser::Sharing,
+        __S::Error: curios_archive::rkyv::rancor::Source
     ),
     deserialize_bounds(
-        __D: rkyv::de::Pooling,
-        __D::Error: rkyv::rancor::Source
+        __D: curios_archive::rkyv::de::Pooling,
+        __D::Error: curios_archive::rkyv::rancor::Source
     ),
     bytecheck(bounds(
-        __C: rkyv::validation::ArchiveContext + rkyv::validation::SharedContext,
-        __C::Error: rkyv::rancor::Source
+        __C: curios_archive::rkyv::validation::ArchiveContext + curios_archive::rkyv::validation::SharedContext,
+        __C::Error: curios_archive::rkyv::rancor::Source
     ))
 )]
 pub(crate) struct PreludeArchive {

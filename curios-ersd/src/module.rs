@@ -20,10 +20,7 @@ use {
 
 /// A value's definition record. Uses, shape, and freeness are derived by analysis; only the optional debug name is stored, and it never affects identity or behavior.
 #[derive(Debug, Clone)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)
-)]
+#[curios_archive::archived]
 pub struct ValueDef {
     pub debug_name: Option<String>,
 }
@@ -32,15 +29,11 @@ pub struct ValueDef {
 ///
 /// Archived (behind the `archive` feature) as the fixed prelude's replayable prefix. The constant interning index is skipped — it is exactly the inverse of the `constants` arena, rebuilt by `reindex_constants` on restore — so the serialized bytes stay deterministic (a hash map's iteration order is not).
 #[derive(Debug, Clone, Default)]
-#[cfg_attr(
-    feature = "archive",
-    derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize),
-    rkyv(
-        serialize_bounds(__S: rkyv::ser::Writer + rkyv::ser::Allocator + rkyv::ser::Sharing, __S::Error: rkyv::rancor::Source),
-        deserialize_bounds(__D: rkyv::de::Pooling, __D::Error: rkyv::rancor::Source),
-        bytecheck(bounds(__C: rkyv::validation::ArchiveContext + rkyv::validation::shared::SharedContext, __C::Error: rkyv::rancor::Source))
-    )
-)]
+#[curios_archive::archived(
+        serialize_bounds(__S: curios_archive::rkyv::ser::Writer + curios_archive::rkyv::ser::Allocator + curios_archive::rkyv::ser::Sharing, __S::Error: curios_archive::rkyv::rancor::Source),
+        deserialize_bounds(__D: curios_archive::rkyv::de::Pooling, __D::Error: curios_archive::rkyv::rancor::Source),
+        bytecheck(bounds(__C: curios_archive::rkyv::validation::ArchiveContext + curios_archive::rkyv::validation::shared::SharedContext, __C::Error: curios_archive::rkyv::rancor::Source))
+    )]
 pub struct Module {
     values: Arena<ValueId, ValueDef>,
     functions: Arena<FunctionId, Function>,
@@ -55,7 +48,7 @@ pub struct Module {
     foreigns: Vec<Arc<ForeignFunction>>,
     items: Vec<StatementId>,
     entry: Option<BlockId>,
-    #[cfg_attr(feature = "archive", rkyv(with = rkyv::with::Skip))]
+    #[cfg_attr(feature = "archive", rkyv(with = curios_archive::rkyv::with::Skip))]
     constant_index: HashMap<Constant, ConstantId>,
 }
 
