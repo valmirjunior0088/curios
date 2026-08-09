@@ -196,9 +196,21 @@ impl ConstraintStore {
             .filter(|atom| *atom != head)
             .collect::<Vec<_>>();
 
+        // Temporary instrumentation: does this walk cost what it does because it touches many constraints, because each is wide, or because the solution it splices in is itself wide? Remove once answered.
+        curios_profile::sample!("universe::substitute_positions", positions.len());
+        curios_profile::sample!(
+            "universe::substitute_solution_atoms",
+            solution.atoms().count()
+        );
+        curios_profile::sample!("universe::store_len", self.constraints.len());
+
         for position in positions {
             let rebuilt = {
                 let constraint = &self.constraints[position];
+                curios_profile::sample!(
+                    "universe::rewritten_level_atoms",
+                    constraint.lower.atoms().count() + constraint.upper.atoms().count()
+                );
                 let lower = constraint
                     .lower
                     .substitute(|found| (found == head).then(|| solution.clone()))?;
