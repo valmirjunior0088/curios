@@ -44,6 +44,73 @@ pub(super) fn elaborate_tuple_type(
     Ok((rebuilt, sort))
 }
 
+pub(super) fn elaborate_tuple(
+    context: &mut Context,
+    tuple: &Tuple,
+    term: &Term,
+    mode: Mode,
+) -> Result<(Term, Term), Error> {
+    let Tuple { fields, names } = tuple;
+
+    let expected = match mode {
+        Mode::Check(expected) => expected,
+        // Synthesis position: infer each field independently and form the *non-dependent* product. No field type can mention an earlier field (each is inferred in isolation), so the telescope is non-dependent — a dependent Σ-type only ever arises from a checking expectation. This is what lets an un-annotated `let (a, b) = (x, y)` infer `{ typeof x, typeof y }` instead of demanding an annotation.
+        Mode::Infer => {
+            let mut elaborated = Vec::with_capacity(fields.len());
+            let mut field_types = Vec::with_capacity(fields.len());
+            for field in fields {
+                let (field, field_type) = elaborate(context, field, Mode::Infer)?;
+                elaborated.push(field);
+                field_types.push((context.fresh(None), field_type));
+            }
+            return Ok((Term::tuple(elaborated), Term::tuple_type(field_types)));
+        }
+    };
+
+    let type_telescope = match Term::unwrap_or_clone(reduce_with(context, &expected)?) {
+        Subterm::TupleType(TupleType { telescope }) => telescope,
+        // `()` determines its own type: with no fields there is no dependency for an expectation to supply, so `{}` is the only thing it can be. Parking would wait for information the literal already has — and where parking is suppressed the arm below would refuse a well-typed term outright. Synthesizing and reconciling solves the metavariable instead. Non-empty literals still park: a dependent telescope can only come from the expectation, so committing to the non-dependent product there would be a guess.
+        Subterm::Metavar(_) if fields.is_empty() => {
+            let (rebuilt, inferred) = elaborate_tuple(context, tuple, term, Mode::Infer)?;
+            expect(context, term, &inferred, &expected)?;
+            return Ok((rebuilt, inferred));
+        }
+        Subterm::Metavar(_) if !context.parking_suppressed() => {
+            return park_checking(context, term, &expected);
+        }
+        _ => {
+            return Err(Error::not_a_tuple_type(expected.clone()));
+        }
+    };
+
+    if fields.len() != type_telescope.len() {
+        return Err(Error::tuple_arity_mismatch(
+            type_telescope.len(),
+            fields.len(),
+        ));
+    }
+
+    // Written field names are checked positionally against the expected type's labels and then dropped — the rebuilt literal is name-free. Reordering is deliberately not supported: in a dependent telescope the written order is the checking order.
+    let labels = type_telescope.labels();
+    for (position, name) in names.iter().enumerate() {
+        let Some(name) = name else { continue };
+        let expected_label = labels.get(position).copied().unwrap_or_default();
+        if expected_label != name {
+            return Err(Error::tuple_field_name_mismatch(
+                name.clone(),
+                expected_label.to_string(),
+                position,
+            ));
+        }
+    }
+
+    let sources: Vec<FieldSource> = fields.iter().map(FieldSource::Written).collect();
+    let mut elaborated = Vec::with_capacity(fields.len());
+    check_dependent_fields(context, type_telescope, &sources, term, &mut elaborated)?;
+
+    Ok((Term::tuple(elaborated), expected))
+}
+
 pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term, Term), Error> {
     let Proj { head, field } = proj;
 
@@ -124,6 +191,20 @@ pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term
         .expect("index in range");
 
     Ok((Term::proj(head, index), field_type))
+}
+
+/// Check `args` pointwise against the dependent telescope `signature` — each arg under the earlier ones — collecting the rebuilt args and returning the telescope's terminal, opened at those args. The caller checks arity first; the arity error differs by site. The given-args counterpart to `check_telescope_entries`.
+pub(super) fn check_args_against<B: Bound>(
+    context: &mut Context,
+    signature: Telescope<B>,
+    args: &[Term],
+) -> Result<(Vec<Term>, B), Error> {
+    let mut elaborated = Vec::with_capacity(args.len());
+    let terminal = signature.walk(args, |_, arg, ty| -> Result<(), Error> {
+        elaborated.push(check(context, arg, ty.clone())?);
+        Ok(())
+    })?;
+    Ok((elaborated, terminal))
 }
 
 /// Type an intrinsic inductive type against its registry entry: the parameters are checked pointwise (dependently) through the declaration's arity, then the indices through the telescope that arity terminates in, and the whole node is a `Type`.
