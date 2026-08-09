@@ -67,6 +67,8 @@ Counting deserves particular weight. Every defect this design has produced was f
 
 Attacking a row and finding nothing is a result, not a wasted iteration: it is the difference between *unprobed* and *probed*. Commit the probe and the Status it updates — that entry's Status in `documentation/SOUNDNESS.md` is this hunt's only memory across runs, so an unrecorded null result will be re-attacked. In interactive mode, propose it and wait.
 
+**A null's gate is everything below except the suite** — `cargo fmt --all -- --check`, `cargo check`, and `clippy`, plus `make curios/runtime` if a witness was run. Clear those and commit. The reason the suite is missing is the reason it is present for a fix: it is there to catch a rule that now over-refuses, and a probe leaves every rule exactly as it found it — that is what makes it a null. The compiler decides the same thing after the commit as before, so there is nothing for the suite to catch, and running it costs minutes per iteration to confirm an answer it cannot change.
+
 ## Recording a find
 
 The deliverable is a Rust regression test, and it is **never committed ignored and never committed alone**. A test that asserts a rejection no rule performs is a red build with an excuse attached; an `#[ignore]` on it is that excuse. Either the fix is unambiguous and the two land in one commit, or nothing is committed at all — see "The fix gate".
@@ -85,7 +87,7 @@ A certifier dependency on elaborator output is the one finding with no natural f
 
 ## The fix gate
 
-Run all of it, in order, and read the output:
+A fix changes what the compiler decides, so it clears all of this, in order, and you read the output:
 
 ```sh
 make curios/runtime
@@ -95,14 +97,14 @@ RUSTFLAGS="-Dwarnings" cargo clippy --workspace --all-targets --all-features
 cargo test --workspace --all-targets --all-features > /tmp/curios-hunt.txt 2>&1
 ```
 
-Every command must pass, and the witness must now be rejected by the diagnostic it names.
+Every command must pass, and the witness must now be rejected by the diagnostic it names. The suite is in this list for one reason, and it is the same reason a null skips it: making a rule stricter always looks safe given that incompleteness is the safe direction, and it is not — a stricter rule may reject valid programs, and the standard library plus the whole corpus compiling is the only thing that catches one which now over-refuses.
 
 **Do not run the ignored `kernel_disagreements`.** It is a measurement, not an assertion — it prints a per-class tally and never fails, so a green run of it establishes nothing. What pins the disagreement count at zero is already inside the suite above: `curios/src/tests/kernel.rs`'s `a_trivial_program_rechecks` and `arithmetic_rechecks` hand the *whole* elaborated module to `recheck_module`, re-deriving every prelude item from the terms rather than reading the verdict the archive recorded, and assert `Ok(())`; and every `.crs` fixture compiles through `compile_entrypoint`, which runs `recheck_module_suffix` on the compile path. Note which of these carries it rather than re-running the tally. (The prelude *build* is not what covers this — `curios-prelude/build.rs` produces the archive, and an ordinary compile judges the user suffix while the archived prefix rides on verdicts recorded at archive-build time.)
 
 Two conditions the script cannot check, which are judgments and are named as such:
 
 - **The control test passes.** A witness alone proves the hole is shut, not that you shut it with something other than a brick; the guard fix shipped with `an_unmentioned_payload_binder_is_not_forced` precisely to prove it had not closed the hole by rejecting every indexed proposition. If the fix has no control, it is not ready.
-- **The fix diff is additive or corrective only.** No deleted assertion, no loosened bound, no `#[ignore]` anywhere, no edited expectation on an existing test. Making a rule stricter always looks safe given that incompleteness is the safe direction, and it is not: a stricter rule may reject valid programs, which is what the prelude compiling and the whole-module recheck exist to catch.
+- **The fix diff is additive or corrective only.** No deleted assertion, no loosened bound, no `#[ignore]` anywhere, no edited expectation on an existing test. Each of those is a way to make the suite green without making the rule right, which is exactly what the over-refusal check above cannot see.
 
 Clear all of it and the test and the fix go in one commit, and the hunt continues.
 
