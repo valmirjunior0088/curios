@@ -27,6 +27,9 @@ pub use layout::*;
 mod manifest;
 pub use manifest::*;
 
+mod new;
+pub use new::*;
+
 mod run;
 pub use run::*;
 

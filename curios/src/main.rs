@@ -12,7 +12,7 @@ use pipeline::*;
 use {
     clap::Parser,
     curios::{run_wasm, to_cwasm},
-    curios_package::{Governing, materialize, reconcile},
+    curios_package::{Governing, materialize, reconcile, scaffold},
     curios_pipeline::CompileError,
     curios_runtime::{ForeignBindings, OsHost},
     curios_text::Formatted,
@@ -107,6 +107,11 @@ fn dispatch() -> Result<(), Failure> {
             let cwasm = to_cwasm(&module)?;
 
             emit_exe(&cwasm, &output)?;
+        }
+        Mode::New { directory, lib } => {
+            scaffold(&directory, lib)?;
+
+            println!("started {}", directory.display());
         }
         Mode::Curate => {
             let directory = std::env::current_dir().map_err(|error| error.to_string())?;

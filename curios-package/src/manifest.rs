@@ -364,7 +364,7 @@ fn table(
 /// The canonical name `written` states, refused when no path could spell it.
 ///
 /// A name is an atom: its segments are spelling, not structure, and `myorg` in `myorg/json` denotes nothing on its own. What the segments must survive is being written as a path, because that is how every consumer reaches the mount.
-fn canonical(written: &str, what: &str) -> Result<Qualifier, String> {
+pub(crate) fn canonical(written: &str, what: &str) -> Result<Qualifier, String> {
     let refuse = |reason: String| {
         format!(
             "the {what} {written:?} is no name a path could spell: {reason}. A name's segments are separated by `/`, and each is a Curios identifier — no dashes, and no keyword."

@@ -51,6 +51,22 @@ pub(crate) enum Mode {
     #[command(about = "Materialize what the manifests reference, and report what nothing uses")]
     Curate,
 
+    /// Last of the machinery rather than first: it writes what everything else reads, so it can only be right once there is something for it to be right about.
+    #[command(about = "Start a package in DIR, named after it")]
+    New {
+        #[arg(
+            value_name = "DIR",
+            help = "The directory to create; its name is the package's"
+        )]
+        directory: PathBuf,
+
+        #[arg(
+            long,
+            help = "Start a library rather than a program (a package is one or the other until it declares otherwise)"
+        )]
+        lib: bool,
+    },
+
     #[command(about = "Format .crs files canonically, in place")]
     Format {
         #[arg(
