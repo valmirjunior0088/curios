@@ -3,7 +3,13 @@
 #[cfg(test)]
 mod tests;
 
-use std::fmt;
+use {
+    sha2::{Digest, Sha256},
+    std::{
+        fmt, fs,
+        path::{Path, PathBuf},
+    },
+};
 
 /// The scheme this compiler computes and verifies.
 const SCHEME: &str = "c1:";
@@ -40,6 +46,89 @@ impl TreeHash {
             )),
         }
     }
+
+    /// The scheme and the digest, apart.
+    ///
+    /// The store files a tree under its scheme as a directory of its own, which is what lets a successor scheme sit beside `c1` during a transition rather than replacing it. Splitting here rather than at the store keeps the spelling's shape this type's business.
+    pub fn split(&self) -> (&str, &str) {
+        self.0
+            .split_once(':')
+            .expect("a well-formed hash carries its scheme")
+    }
+
+    /// The hash of the tree rooted at `directory`.
+    ///
+    /// **What goes into it, exactly.** Every regular file the tree holds, sorted by relative path, each contributing its path and then its contents. Paths are spelled with `/` whatever the platform, so a tree delivered to Windows hashes as it did on the machine that published it. Nothing else exists for the scheme: not permissions, not timestamps, not directories — an empty one leaves no trace, because a tree is its files.
+    ///
+    /// **Both halves are length-framed**, which the scheme has to do and this is where it is said: without it a file `ab` holding `c` and a file `a` holding `bc` feed the digest identical bytes, and two different trees would share a store key. The frame is the byte length as a little-endian `u64` before each half.
+    ///
+    /// A symlink is refused rather than followed or recorded. Following one lets a delivered tree reach outside itself; recording one puts a path in the hash whose meaning depends on where it is unpacked. Neither is a criterion a delivery can be accepted against.
+    pub fn of(directory: &Path) -> Result<Self, String> {
+        let mut files = Vec::new();
+        collect(directory, &mut PathBuf::new(), &mut files)?;
+        files.sort();
+
+        let mut digest = Sha256::new();
+        for (path, contents) in &files {
+            digest.update((path.len() as u64).to_le_bytes());
+            digest.update(path.as_bytes());
+            digest.update((contents.len() as u64).to_le_bytes());
+            digest.update(contents);
+        }
+
+        Ok(Self(format!(
+            "{SCHEME}{}",
+            digest
+                .finalize()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        )))
+    }
+}
+
+/// Every regular file under `directory`, as its `/`-spelled path relative to the tree root and its contents.
+fn collect(
+    directory: &Path,
+    at: &mut PathBuf,
+    files: &mut Vec<(String, Vec<u8>)>,
+) -> Result<(), String> {
+    let entries =
+        fs::read_dir(directory).map_err(|error| format!("{}: {error}", directory.display()))?;
+
+    for entry in entries {
+        let entry = entry.map_err(|error| format!("{}: {error}", directory.display()))?;
+        let path = entry.path();
+
+        // `symlink_metadata` rather than `metadata`, because the question is what the entry *is*, not what it points at.
+        let kind = fs::symlink_metadata(&path)
+            .map_err(|error| format!("{}: {error}", path.display()))?
+            .file_type();
+
+        at.push(entry.file_name());
+
+        if kind.is_symlink() {
+            return Err(format!(
+                "{} is a symlink, and a delivered tree may hold none: following one reaches outside the tree, and recording one hashes a path whose meaning depends on where it is unpacked",
+                path.display()
+            ));
+        }
+
+        match kind.is_dir() {
+            true => collect(&path, at, files)?,
+            false => files.push((
+                at.components()
+                    .map(|component| component.as_os_str().to_string_lossy())
+                    .collect::<Vec<_>>()
+                    .join("/"),
+                fs::read(&path).map_err(|error| format!("{}: {error}", path.display()))?,
+            )),
+        }
+
+        at.pop();
+    }
+
+    Ok(())
 }
 
 impl fmt::Display for TreeHash {

@@ -157,6 +157,42 @@ fn a_file_argument_needs_no_project() {
     fs::remove_dir_all(root).unwrap();
 }
 
+/// A declared executable's binary lands in the governing root's store, nested under the package that declares it.
+#[test]
+fn a_declared_executable_builds_into_the_store() {
+    let root = tree(
+        "run-output",
+        &[
+            ("curios.toml", "members = [\"json\"]\n"),
+            (
+                "json/curios.toml",
+                "name = \"myorg/json\"\n\n[[executables]]\nname = \"serve\"\n",
+            ),
+            ("json/lib.crs", ""),
+            ("json/serve.crs", ""),
+        ],
+    );
+
+    let target = Target::of(None, None, &root.join("json")).expect("an enumerated member");
+
+    // The umbrella governs, so the store is its own — but the path *within* the store names the package, so it would not move if the member left.
+    assert!(
+        target.output().ends_with(".curios/bin/myorg/json/serve"),
+        "{}",
+        target.output().display()
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+/// A bare file has no project, hence no store: its build lands beside the working directory under its own stem.
+#[test]
+fn a_bare_file_builds_beside_itself() {
+    let target = Target::of(Some("hello.crs"), None, Path::new(".")).expect("a file argument");
+
+    assert_eq!(target.output(), PathBuf::from("hello"));
+}
+
 /// A package of nothing but programs compiles them against its dependencies alone — there is no library of its own to put last.
 #[test]
 fn a_package_of_programs_alone_runs_them() {

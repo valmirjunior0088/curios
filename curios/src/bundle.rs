@@ -18,6 +18,14 @@ pub(crate) fn emit_exe(cwasm: &[u8], output: &Path) -> Result<(), String> {
 
     append_payload(&mut bytes, cwasm);
 
+    // A declared executable lands inside the store, nested under its package, so the directories below it are this write's to create — nothing else has had reason to.
+    if let Some(directory) = output.parent()
+        && !directory.as_os_str().is_empty()
+    {
+        fs::create_dir_all(directory)
+            .map_err(|error| format!("failed to create {}: {error}", directory.display()))?;
+    }
+
     fs::write(output, &bytes)
         .map_err(|error| format!("failed to write {}: {error}", output.display()))?;
 

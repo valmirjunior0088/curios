@@ -602,6 +602,7 @@ dependencies = [
  "curios-base",
  "curios-text",
  "serde",
+ "sha2 0.11.0",
  "toml",
 ]
 

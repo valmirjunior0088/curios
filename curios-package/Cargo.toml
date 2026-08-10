@@ -14,6 +14,7 @@ workspace = true
 [dependencies]
 curios-base = { workspace = true }
 curios-text = { workspace = true }
+sha2 = "0.11.0"
 serde = { version = "1.0.228", features = ["derive"] }
 toml = { version = "0.9.12", default-features = false, features = [
     "parse",

@@ -23,3 +23,6 @@ pub use manifest::*;
 
 mod run;
 pub use run::*;
+
+mod store;
+pub use store::*;

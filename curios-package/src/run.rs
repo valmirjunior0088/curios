@@ -8,7 +8,7 @@
 mod tests;
 
 use {
-    crate::{Executable, Governing, Package, order, spelling},
+    crate::{Executable, Governing, Package, bin, order, spelling},
     curios_text::RootSource,
     std::path::{Path, PathBuf},
 };
@@ -21,6 +21,8 @@ pub enum Target {
     Executable {
         name: String,
         entry: PathBuf,
+        /// Where a native build of it is written, under the governing root's store.
+        output: PathBuf,
         units: Vec<RootSource>,
     },
 }
@@ -34,11 +36,13 @@ impl Target {
         }
     }
 
-    /// What a native executable built from this target is called by default: whatever was asked for — a declared executable by its name, a file by its stem.
+    /// Where a native build of this target is written by default.
+    ///
+    /// A declared executable goes into the governing root's store, nested under the package that declares it. A bare file has no project, hence no governing root and no store, so it lands beside the working directory under its own stem — the same declared-artifact-versus-bare-file split as everywhere else.
     pub fn output(&self) -> PathBuf {
         match self {
             Self::File(path) => PathBuf::from(path.file_stem().unwrap_or(path.as_os_str())),
-            Self::Executable { name, .. } => PathBuf::from(name),
+            Self::Executable { output, .. } => output.clone(),
         }
     }
 
@@ -67,6 +71,7 @@ impl Target {
         };
 
         Ok(Self::Executable {
+            output: bin(&governing.root, &governing.package.name, &executable.name),
             name: executable.name.clone(),
             entry: governing.directory.join(&executable.path),
             units: order(&governing)?,
