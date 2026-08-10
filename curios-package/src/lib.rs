@@ -6,6 +6,9 @@
 //!
 //! Every refusal here fires before elaboration and names both parties. A manifest declaring two modes, a name no path could spell, a dependency row missing the pin its source requires: each is diagnosed against the file somebody wrote, never surfaced downstream as an unbound name.
 
+mod compiler;
+pub use compiler::*;
+
 mod curate;
 pub use curate::*;
 
