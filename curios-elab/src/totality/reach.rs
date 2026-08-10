@@ -15,21 +15,26 @@ use {
         Bound, Definition, Enter, Func, FuncType, Global, Intrinsic, Item, Let, Match, Module, Rec,
         Struct, Subterm, Telescope, Term, Totality, Variant,
     },
-    std::collections::{BTreeMap, BTreeSet, HashSet},
+    std::{
+        collections::{BTreeMap, BTreeSet, HashSet},
+        rc::Rc,
+    },
 };
 
 /// A term the erased half of the program must be total in, and what a diagnostic should call it.
 ///
 /// The obligations are stated over *terms*, not over the names those terms mention, because a `rec` written inline in an erased position mentions no name at all. Reporting the reached definitions alone would let `rec Bad : Type = Sink(Bad)`, written as a local binding, satisfy every closure while retying exactly the knot the closure exists to forbid.
+///
+/// The site is shared rather than owned, which matters because there is one position per *annotated node* and a passing build reads none of them: `report` renders a message only when a fault is found, so an owned label would be an allocation per node built and dropped on every successful compile. One walk carries one site — [`annotations`] says so where it deduplicates — so the label is minted once per call and every position it pushes clones a refcount. This is the shape [`Context::record_checked`](crate::Context) already stores its own sites in.
 pub(crate) struct Position {
     pub(crate) term: Term,
-    pub(crate) site: String,
+    pub(crate) site: Rc<str>,
 }
 
-fn push(positions: &mut Vec<Position>, site: &str, term: &Term) {
+fn push(positions: &mut Vec<Position>, site: &Rc<str>, term: &Term) {
     positions.push(Position {
         term: term.clone(),
-        site: site.to_string(),
+        site: Rc::clone(site),
     });
 }
 
@@ -41,48 +46,40 @@ pub(crate) fn type_positions(module: &Module) -> Vec<Position> {
 
     for definition in definitions(module) {
         let name = definition.name.to_string();
-        push(
-            &mut positions,
-            &format!("the type of '{name}'"),
-            &definition.type_,
-        );
+        let of_type: Rc<str> = format!("the type of '{name}'").into();
+        let own: Rc<str> = format!("'{name}'").into();
+        push(&mut positions, &of_type, &definition.type_);
         if ends_in_sort(&definition.type_) {
-            push(
-                &mut positions,
-                &format!("the body of '{name}'"),
-                &definition.body,
-            );
+            let of_body: Rc<str> = format!("the body of '{name}'").into();
+            push(&mut positions, &of_body, &definition.body);
         }
-        annotations(&definition.body, &format!("'{name}'"), &mut positions);
-        annotations(
-            &definition.type_,
-            &format!("the type of '{name}'"),
-            &mut positions,
-        );
+        annotations(&definition.body, &own, &mut positions);
+        annotations(&definition.type_, &of_type, &mut positions);
     }
 
     // The entrypoint expression and its annotation are not items, so nothing above reaches them. An exploit needs only a local `rec` and one construction, both of which fit in the trailing expression.
     if let Some(type_) = &module.type_ {
-        push(&mut positions, "the entrypoint's type", type_);
-        annotations(type_, "the entrypoint's type", &mut positions);
+        let site: Rc<str> = "the entrypoint's type".into();
+        push(&mut positions, &site, type_);
+        annotations(type_, &site, &mut positions);
     }
     if let Some(body) = &module.body {
-        annotations(body, "the entrypoint", &mut positions);
+        annotations(body, &"the entrypoint".into(), &mut positions);
     }
 
     // A declaration's telescopes are types by construction, and its parameter and field types can name anything.
     for (name, declaration) in &module.induct_decls {
-        let site = format!("a parameter of '{name}'");
+        let site: Rc<str> = format!("a parameter of '{name}'").into();
         entries(&declaration.arity, &site, &mut positions);
         for (tag, constructor) in &declaration.constructors {
-            let site = format!("the payload of '{name}/{tag}'");
+            let site: Rc<str> = format!("the payload of '{name}/{tag}'").into();
             entries(&constructor.telescope, &site, &mut positions);
         }
     }
     for (name, declaration) in &module.struct_decls {
-        let site = format!("a parameter of '{name}'");
+        let site: Rc<str> = format!("a parameter of '{name}'").into();
         entries(&declaration.arity, &site, &mut positions);
-        let site = format!("a field of '{name}'");
+        let site: Rc<str> = format!("a field of '{name}'").into();
         entries(declaration.fields(), &site, &mut positions);
     }
 
@@ -145,7 +142,7 @@ fn mark(term: &Term, seeds: &mut BTreeSet<Global>) {
 }
 
 /// Take every entry of a telescope.
-fn entries<B: Bound>(telescope: &Telescope<B>, site: &str, positions: &mut Vec<Position>) {
+fn entries<B: Bound>(telescope: &Telescope<B>, site: &Rc<str>, positions: &mut Vec<Position>) {
     let mut telescope = telescope;
     while let Telescope::Cons(entry, rest) = telescope {
         push(positions, site, entry);
@@ -176,7 +173,7 @@ fn ends_in_sort(type_: &Term) -> bool {
 
 /// Walk a term and mark every type written inside it: binder annotations, match motives, `let` and `rec` declared types, nominal and intrinsic type formers.
 #[allow(clippy::mutable_key_type)]
-fn annotations(term: &Term, site: &str, positions: &mut Vec<Position>) {
+fn annotations(term: &Term, site: &Rc<str>, positions: &mut Vec<Position>) {
     // On the shared `Term::walk` driver, deduplicated on node identity, for one reason each. A string literal's UTF-8 derivation threads its scanner state forwards, so link `i` carries a `step(bᵢ₋₁, … step(b₀, lead))` of depth `i`: the chain is `O(n)` distinct nodes but `O(n²)` *paths* through them, and a walk that revisits shared nodes pays the square while recursing one native frame per link. Both were measured — 2.5s of a 3.5s compile at 12KiB, and a stack overflow above 16KiB.
     //
     // Deduplicating is site-preserving because `site` is fixed for the whole walk: every position this pushes carries the site it was called with, so a node reached twice would only ever push the same position twice.
@@ -194,7 +191,7 @@ fn annotations(term: &Term, site: &str, positions: &mut Vec<Position>) {
 }
 
 /// One node's contribution to [`annotations`], and whether the walk descends below it.
-fn annotate_node(term: &Term, site: &str, positions: &mut Vec<Position>) -> Enter<()> {
+fn annotate_node(term: &Term, site: &Rc<str>, positions: &mut Vec<Position>) -> Enter<()> {
     match &**term {
         // A type former stands for its whole self; nothing inside it is a value position the aggressive reading would treat differently.
         Subterm::FuncType(_)

@@ -225,7 +225,7 @@ fn faults(
     let mut memo = LocalMemo::new();
     for position in positions {
         if locally_partial(context, &position.term, &mut memo) {
-            faults.push((position.site.clone(), Fault::Inline));
+            faults.push((position.site.to_string(), Fault::Inline));
         }
     }
     // One named fault per offending definition, attributed to the first position that names it. The closure is over the union of the seeds, so the exact position is a best effort; which definition is partial is not.
@@ -240,7 +240,7 @@ fn faults(
                     .filter_map(|free| free.as_global())
                     .any(|global| *global == name)
             })
-            .map(|position| position.site.clone())
+            .map(|position| position.site.to_string())
             .unwrap_or_else(|| "a position reached from here".to_string());
         faults.push((site, Fault::Named(name)));
     }
@@ -268,10 +268,19 @@ pub fn check_type_totality(
 /// The two seedings are **incomparable**, not nested, which a count of each obscured: the walk sees definition bodies whose type ends in a sort, and no typing judgment classifies those as type positions; this sees type arguments, which no syntactic walk can find without re-deriving the head's telescope — the re-derivation that cost (V) six defects. Taking the union costs one pass over already-recorded terms and needs neither.
 fn checked_type_positions(context: &mut Context) -> Result<Vec<Position>, Error> {
     let settled = context.checked().to_vec();
+    let mut zonked: HashMap<Term, Term> = HashMap::new();
     let mut positions = Vec::new();
 
     for (term, type_, site) in settled {
-        let type_ = zonk(context, &type_)?;
+        // Once per distinct recorded type rather than once per recorded term — see `checked_proof_positions`, which memoizes the same call for the same reason. This walk reads `checked` rather than draining it, because (V)'s seeding still needs it.
+        let type_ = match zonked.get(&type_) {
+            Some(done) => done.clone(),
+            None => {
+                let done = zonk(context, &type_)?;
+                zonked.insert(type_, done.clone());
+                done
+            }
+        };
         // The term *is* a type exactly when its own type is a sort. A universe instance wraps one without changing that.
         let sort = match &*type_ {
             Subterm::Type(_) | Subterm::Prop => true,
@@ -283,7 +292,7 @@ fn checked_type_positions(context: &mut Context) -> Result<Vec<Position>, Error>
         if sort {
             positions.push(Position {
                 term: zonk(context, &term)?,
-                site: format!("a type in {site}"),
+                site: format!("a type in {site}").into(),
             });
         }
     }
@@ -315,11 +324,22 @@ pub fn check_proof_totality(
 #[allow(clippy::mutable_key_type)]
 fn checked_proof_positions(context: &mut Context) -> Result<Vec<Position>, Error> {
     let checked = context.take_checked();
+    let mut zonked: HashMap<Term, Term> = HashMap::new();
     let mut memo: HashMap<Term, bool> = HashMap::new();
     let mut positions = Vec::new();
 
     for (term, type_, site) in checked {
-        let type_ = zonk(context, &type_)?;
+        // Two memos, keyed on the two different terms, because they save two different things. `memo` answers `is_prop` once per *zonked* type, as the doc above says. `zonked` answers the zonk once per *raw* type, which is the coarser question and the one that was being re-asked: a recorded type is the type elaboration wrote down, and thousands of terms are checked against the same one — 185,271 entries over the prelude, measured before this memo existed. Keying the outer memo on the raw type rather than folding both into one map is what keeps `is_prop`'s dedup exactly as wide as it was — raw types that differ but zonk alike still share a verdict.
+        //
+        // Sound because zonk is a pure function of the solution set, and the solution set is final here: `zonk_module` has run, and `is_prop` sees only zonked — hence metavariable-free — types, so it cannot solve anything that would make an earlier answer stale.
+        let type_ = match zonked.get(&type_) {
+            Some(done) => done.clone(),
+            None => {
+                let done = zonk(context, &type_)?;
+                zonked.insert(type_, done.clone());
+                done
+            }
+        };
         let prop = match memo.get(&type_) {
             Some(prop) => *prop,
             None => {
@@ -331,7 +351,7 @@ fn checked_proof_positions(context: &mut Context) -> Result<Vec<Position>, Error
         if prop {
             positions.push(Position {
                 term: zonk(context, &term)?,
-                site: format!("a proof in {site}"),
+                site: format!("a proof in {site}").into(),
             });
         }
     }
