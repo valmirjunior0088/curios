@@ -27,7 +27,7 @@ mod environment;
 use environment::*;
 
 mod lower;
-pub use lower::{ErasedPrelude, erase_module, erase_module_with_prelude, erase_prelude_prefix};
+pub use lower::{ErasedUnit, erase_module, erase_unit};
 
 mod resumed;
 use lower::{Lowering, Outcome};

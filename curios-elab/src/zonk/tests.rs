@@ -24,7 +24,7 @@ fn lowered_module(body: Term, universe_seeds: Vec<UniverseSeed>) -> Module {
         witnesses: Default::default(),
         binder_floor: 0,
         type_: None,
-        body,
+        body: Some(body),
     }
 }
 

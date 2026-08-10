@@ -243,7 +243,17 @@ Delete `RootId`, `RootId::of_segment` and `Qualifier::root_segment`. Delete the 
 
 ### A3 — `Unit`, `Scope`, and one spelling per stage
 
+**Landing in two commits.** The first is below and has landed; the second creates the crate.
+
 Create `curios-unit`. `PreparedPrelude`, `ErasedPrelude` and `PreludeArchive`'s payload collapse into `Unit`. Collapse the three lowerings into one, the two erasures into one, and give `elaborate_and_zonk_with_prelude` an `Established` rather than a `&Module`. `curios-prelude-archive`'s build script calls `elaborate_unit` + `erase_unit`; `curios-prelude`'s build script still judges the restored unit.
+
+**Being the entry means having an entrypoint, and that turned out to be the erasure collapse rather than a separate cleanup.** `Module::body` is now `Option<Term>`; `erase_prelude_prefix` and `erase_module_with_prelude` are one `erase_unit`, which seals an entry when the unit has one and leaves the arena open when it does not. The two spellings differed by that condition and by nothing else, so making the asymmetry representable *is* what merged them. `ErasedPrelude` becomes `ErasedUnit` and gains `Default`, which is the empty scope — sound because `ErsdBuilder::resume` over an empty module reindexes nothing and yields exactly a fresh builder, so "erase the first unit" and "erase a later one" are one call.
+
+Three consequences worth recording:
+
+- **`erase_unit` asserts that a body and its expected type arrive together.** Nothing previously stopped a caller pairing one with the other's absence.
+- **The archive's `body_type` is deleted.** It was computed by `build.rs`, stored, exposed through an accessor, and read by nothing — an entrypoint type for a unit with no entrypoint. Elaboration's body type is now `Option<Term>` all the way out, which is what made the dead field visible.
+- **The kernel no longer certifies a dummy.** `check_entrypoint` runs only where there is a body, so the prelude's `Nat::Zero` stopped being judged because it stopped existing.
 
 *Must not change:* any verdict, and not the archive's determinism — `build.rs` already serializes twice and compares, and that assertion stays.
 

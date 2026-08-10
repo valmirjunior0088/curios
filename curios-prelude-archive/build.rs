@@ -13,7 +13,7 @@ use {
     curios_core::Item,
     curios_core::{Global, Sharing, derived_binder_floor},
     curios_elab::{
-        Context, Mode, elaborate_and_zonk_module, erase_prelude_prefix,
+        Context, ErasedUnit, Mode, Resumed, elaborate_and_zonk_module, erase_unit,
         validate_lowered_universe_seeds, validate_universes,
     },
     curios_text::{Module, PreludeModules, prepare_prelude, sys_module},
@@ -125,7 +125,7 @@ fn build() {
 
     let lowered = prepared.core().clone();
     let mut context = Context::with_default_budget(SYNTAX);
-    let (core, body_type) = elaborate_and_zonk_module(
+    let (core, _body_type) = elaborate_and_zonk_module(
         &mut context,
         &lowered,
         prepared.metavariable_floor(),
@@ -143,13 +143,19 @@ fn build() {
     validate_universes(&core)
         .unwrap_or_else(|error| panic!("elaborated fixed prelude universes are invalid: {error}"));
 
-    let ersd = erase_prelude_prefix(&mut Context::with_default_budget(SYNTAX), &core)
-        .unwrap_or_else(|error| {
-            panic!(
-                "fixed prelude failed to erase into the arena prefix: {}",
-                error.format_with(&core, None)
-            )
-        });
+    // No entrypoint, so nothing to seal: this unit's arena stays open, which is what its successors resume over.
+    let ersd = erase_unit(
+        &mut Context::with_default_budget(SYNTAX),
+        Resumed::of(&[], ErasedUnit::default()),
+        &core,
+        None,
+    )
+    .unwrap_or_else(|error| {
+        panic!(
+            "fixed prelude failed to erase into the arena prefix: {}",
+            error.format_with(&core, None)
+        )
+    });
 
     // Hash-cons every archived Core snapshot against one table, so structurally equal subterms collapse onto a single allocation across the lowered and elaborated views as well as within each. Elaboration builds the same types, telescopes, and proof spines independently in definition after definition and nothing deduplicates them, because `Rc` sharing only ever arises from cloning: two definitions that build the same type build it twice. rkyv shares by pointer address, so collapsing them here is also what lets the archive store each distinct structure once.
     //
@@ -157,7 +163,6 @@ fn build() {
     let sharing = Sharing::new();
     let prepared = prepared.shared(&sharing);
     let core = core.shared(&sharing);
-    let body_type = sharing.share(&body_type);
     println!(
         "cargo:warning=fixed prelude hash-consed to {} distinct structures",
         sharing.structures()
@@ -171,7 +176,6 @@ fn build() {
         prepared,
         core,
         binder_floor,
-        body_type,
         ersd,
     };
     let first = curios_archive::rkyv::to_bytes::<curios_archive::rkyv::rancor::Error>(&image)

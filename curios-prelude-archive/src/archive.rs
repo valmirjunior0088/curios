@@ -2,12 +2,9 @@
 //!
 //! This is deliberately not a stable interchange format. The schema only distinguishes incompatible compiler builds; Cargo regenerates the image in this crate's `OUT_DIR` whenever its inputs change.
 
-use {
-    curios_core::Module, curios_core::Term, curios_elab::ErasedPrelude,
-    curios_text::PreparedPrelude,
-};
+use {curios_core::Module, curios_elab::ErasedUnit, curios_text::PreparedPrelude};
 
-pub(crate) const SCHEMA: u32 = 24;
+pub(crate) const SCHEMA: u32 = 25;
 
 // Unconditional rather than `#[curios_archive::archived]`: this crate always archives, so there is no feature to gate on and nothing for the macro to do but forward bounds.
 #[derive(curios_archive::Archive, curios_archive::Serialize, curios_archive::Deserialize)]
@@ -33,6 +30,5 @@ pub(crate) struct PreludeArchive {
     pub(crate) core: Module,
     /// `curios_core::derived_binder_floor` over `core`, computed by the build that established this image. Carried so per-compile rechecking reads this floor instead of re-deriving it over every archived term — the same "already checked" argument the environment rests on, applied to a bound rather than a verdict.
     pub(crate) binder_floor: usize,
-    pub(crate) body_type: Term,
-    pub(crate) ersd: ErasedPrelude,
+    pub(crate) ersd: ErasedUnit,
 }

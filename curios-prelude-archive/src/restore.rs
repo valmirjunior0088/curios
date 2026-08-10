@@ -3,8 +3,7 @@
 use {
     crate::{ArchivedPreludeArchive, PreludeArchive, SCHEMA},
     curios_core::Module,
-    curios_core::Term,
-    curios_elab::ErasedPrelude,
+    curios_elab::ErasedUnit,
     curios_text::PreparedPrelude,
     std::{cell::LazyCell, sync::OnceLock},
 };
@@ -19,8 +18,7 @@ pub struct Prelude {
     prepared: PreparedPrelude,
     core: Module,
     binder_floor: usize,
-    body_type: Term,
-    ersd: ErasedPrelude,
+    ersd: ErasedUnit,
 }
 
 impl Prelude {
@@ -37,12 +35,8 @@ impl Prelude {
         self.binder_floor
     }
 
-    pub fn body_type(&self) -> &Term {
-        &self.body_type
-    }
-
     /// The arena prelude prefix — the erased module and environment production replay resumes over. Returned as an owned clone because replay consumes it by value, so a compile's mutation of its copy can never poison a later one.
-    pub fn ersd(&self) -> ErasedPrelude {
+    pub fn ersd(&self) -> ErasedUnit {
         self.ersd.clone()
     }
 }
@@ -55,7 +49,6 @@ thread_local! {
             prepared: image.prepared,
             core: image.core,
             binder_floor: image.binder_floor,
-            body_type: image.body_type,
             ersd: image.ersd,
         }
     });
@@ -132,6 +125,7 @@ mod tests {
         },
         curios_core::Global,
         curios_core::Item,
+        curios_core::Term,
         curios_elab::DEFAULT_STEP_BUDGET,
         std::collections::{BTreeMap, BTreeSet},
     };

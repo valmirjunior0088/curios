@@ -58,7 +58,7 @@ fn an_unsatisfiable_universe_context_is_refused() {
         witnesses: BTreeSet::new(),
         binder_floor: 0,
         type_: None,
-        body: Term::intrinsic(Intrinsic::NatType),
+        body: Some(Term::intrinsic(Intrinsic::NatType)),
     };
 
     assert!(
@@ -102,7 +102,7 @@ fn a_constraint_naming_an_undeclared_parameter_is_refused() {
         witnesses: BTreeSet::new(),
         binder_floor: 0,
         type_: None,
-        body: Term::intrinsic(Intrinsic::NatType),
+        body: Some(Term::intrinsic(Intrinsic::NatType)),
     };
 
     assert!(
@@ -419,7 +419,7 @@ fn forgery() -> Module {
         binder_floor: 1_000,
         // The module as a whole is a closed program of type `False`.
         type_: Some(false_type),
-        body: Term::free_var(&Free::from(&forged_name)),
+        body: Some(Term::free_var(&Free::from(&forged_name))),
     }
 }
 
@@ -499,7 +499,7 @@ fn a_member_of_a_legal_group_is_still_accepted() {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::tuple(Vec::<Term>::new()),
+        body: Some(Term::tuple(Vec::<Term>::new())),
     };
 
     assert_eq!(
@@ -539,7 +539,9 @@ fn selection_module(body: Term) -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: Some(absurd),
-        body: Term::free_var(&Free::from(&Global::Authored(Qualifier::from(["bad"])))),
+        body: Some(Term::free_var(&Free::from(&Global::Authored(
+            Qualifier::from(["bad"]),
+        )))),
     }
 }
 
@@ -617,7 +619,7 @@ fn indexed_module(target: Term) -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::tuple(Vec::<Term>::new()),
+        body: Some(Term::tuple(Vec::<Term>::new())),
     }
 }
 
@@ -688,7 +690,7 @@ fn level_definition(level: &Level) -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::tuple(Vec::<Term>::new()),
+        body: Some(Term::tuple(Vec::<Term>::new())),
     }
 }
 
@@ -715,7 +717,7 @@ fn level_registry(level: &Level) -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::tuple(Vec::<Term>::new()),
+        body: Some(Term::tuple(Vec::<Term>::new())),
     }
 }
 
@@ -811,7 +813,7 @@ fn indexed_by_proof(diverging: bool) -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::tuple(Vec::<Term>::new()),
+        body: Some(Term::tuple(Vec::<Term>::new())),
     }
 }
 
@@ -960,7 +962,7 @@ fn aliased_sort_forgery() -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: Some(false_type),
-        body: Term::free_var(&Free::from(&forged_name)),
+        body: Some(Term::free_var(&Free::from(&forged_name))),
     }
 }
 
@@ -1013,7 +1015,7 @@ fn relevant_index_control() -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::tuple(Vec::<Term>::new()),
+        body: Some(Term::tuple(Vec::<Term>::new())),
     }
 }
 
@@ -1142,7 +1144,7 @@ fn shadowed_constructor(tags: [&str; 2]) -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::tuple(Vec::<Term>::new()),
+        body: Some(Term::tuple(Vec::<Term>::new())),
     }
 }
 
@@ -1228,7 +1230,7 @@ fn scheme_definition(level: &Level, parameter_count: usize) -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::tuple(Vec::<Term>::new()),
+        body: Some(Term::tuple(Vec::<Term>::new())),
     }
 }
 
@@ -1258,7 +1260,7 @@ fn scheme_registry(level: &Level, parameter_count: usize) -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::tuple(Vec::<Term>::new()),
+        body: Some(Term::tuple(Vec::<Term>::new())),
     }
 }
 
@@ -1340,7 +1342,7 @@ fn instance_of_width(width: usize) -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::tuple(Vec::<Term>::new()),
+        body: Some(Term::tuple(Vec::<Term>::new())),
     }
 }
 
@@ -1424,7 +1426,7 @@ fn forged_foreign(claimed: &Term, false_name: &Global) -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::tuple(Vec::<Term>::new()),
+        body: Some(Term::tuple(Vec::<Term>::new())),
     }
 }
 
@@ -1503,7 +1505,7 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::tuple(Vec::<Term>::new()),
+        body: Some(Term::tuple(Vec::<Term>::new())),
     };
 
     let verdicts = recheck_module_verdicts(&module, 1_000_000, &Globals::default());
@@ -1562,7 +1564,7 @@ fn disagreeing_schemes(registry: usize, definition: usize) -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::tuple(Vec::<Term>::new()),
+        body: Some(Term::tuple(Vec::<Term>::new())),
     }
 }
 
@@ -1682,7 +1684,7 @@ fn lying_motive(sort: Term) -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::tuple(Vec::<Term>::new()),
+        body: Some(Term::tuple(Vec::<Term>::new())),
     }
 }
 
@@ -1792,7 +1794,7 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::tuple(Vec::<Term>::new()),
+        body: Some(Term::tuple(Vec::<Term>::new())),
     };
 
     let verdicts = recheck_module_verdicts(&module, 1_000_000, &Globals::default());
@@ -1914,7 +1916,7 @@ fn occurrence_module(params: Vec<Term>, indices: Vec<Term>) -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::tuple(Vec::<Term>::new()),
+        body: Some(Term::tuple(Vec::<Term>::new())),
     }
 }
 
@@ -2028,7 +2030,7 @@ fn struct_value_module(params: Vec<Term>) -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::tuple(Vec::<Term>::new()),
+        body: Some(Term::tuple(Vec::<Term>::new())),
     }
 }
 
@@ -2083,7 +2085,7 @@ fn variant_value_module(params: Vec<Term>) -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::tuple(Vec::<Term>::new()),
+        body: Some(Term::tuple(Vec::<Term>::new())),
     }
 }
 
@@ -2168,7 +2170,7 @@ fn a_saturated_application_in_a_type_position_is_accepted() {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::tuple(Vec::<Term>::new()),
+        body: Some(Term::tuple(Vec::<Term>::new())),
     };
 
     assert_eq!(
@@ -2199,7 +2201,7 @@ fn unsaturated_cases() -> Vec<(&'static str, Module)> {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::tuple(Vec::<Term>::new()),
+        body: Some(Term::tuple(Vec::<Term>::new())),
     };
 
     // `f : (a : Nat, b : Nat) -> Type`, applied to one argument in a type position.
@@ -2367,7 +2369,7 @@ fn arm_module(binders: Vec<(Plicity, Free)>) -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::tuple(Vec::<Term>::new()),
+        body: Some(Term::tuple(Vec::<Term>::new())),
     }
 }
 
@@ -2410,7 +2412,7 @@ fn rec_apply_module() -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::tuple(Vec::<Term>::new()),
+        body: Some(Term::tuple(Vec::<Term>::new())),
     }
 }
 
@@ -2496,7 +2498,7 @@ fn proof_carrying_unit(exiting: bool) -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 0,
         type_: None,
-        body: Term::intrinsic(Intrinsic::NatType),
+        body: Some(Term::intrinsic(Intrinsic::NatType)),
     }
 }
 
@@ -2582,7 +2584,7 @@ fn plicity_module(honest: bool, payload_count: usize) -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::intrinsic(Intrinsic::NatType),
+        body: Some(Term::intrinsic(Intrinsic::NatType)),
     }
 }
 
@@ -2737,7 +2739,7 @@ fn index_forgery() -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::intrinsic(Intrinsic::NatType),
+        body: Some(Term::intrinsic(Intrinsic::NatType)),
     }
 }
 
@@ -2796,7 +2798,7 @@ fn an_indexed_occurrence_at_a_well_typed_index_is_accepted() {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::intrinsic(Intrinsic::NatType),
+        body: Some(Term::intrinsic(Intrinsic::NatType)),
     };
 
     assert_eq!(
@@ -2859,7 +2861,7 @@ fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::intrinsic(Intrinsic::NatType),
+        body: Some(Term::intrinsic(Intrinsic::NatType)),
     };
 
     let verdicts = recheck_module_verdicts(&module, 1_000_000, &Globals::default());
@@ -2931,7 +2933,7 @@ fn a_proposition_carrying_a_computed_proof_is_still_accepted() {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::intrinsic(Intrinsic::NatType),
+        body: Some(Term::intrinsic(Intrinsic::NatType)),
     };
 
     assert_eq!(
@@ -3008,7 +3010,7 @@ fn lying_type_positions() -> Vec<(&'static str, Module)> {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::intrinsic(Intrinsic::NatType),
+        body: Some(Term::intrinsic(Intrinsic::NatType)),
     };
 
     vec![
@@ -3258,7 +3260,7 @@ fn computed_field_forgery() -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
         type_: None,
-        body: Term::intrinsic(Intrinsic::NatType),
+        body: Some(Term::intrinsic(Intrinsic::NatType)),
     }
 }
 
@@ -3296,7 +3298,7 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
         witnesses: BTreeSet::new(),
         binder_floor: 0,
         type_: None,
-        body: Term::intrinsic(Intrinsic::NatType),
+        body: Some(Term::intrinsic(Intrinsic::NatType)),
     };
 
     let applied: Term = Subterm::StructType(StructType {

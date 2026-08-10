@@ -157,7 +157,7 @@ fn project_module(module: &Module) -> Module {
         witnesses: module.witnesses.clone(),
         binder_floor: module.binder_floor,
         type_: module.type_.as_ref().map(project_erased_universes),
-        body: project_erased_universes(&module.body),
+        body: module.body.as_ref().map(project_erased_universes),
     }
 }
 
@@ -178,7 +178,7 @@ fn seal_entry(
     context: &mut Context,
     body: &Term,
     expected: &Term,
-) -> Result<curios_ersd::Module, Error> {
+) -> Result<ErasedUnit, Error> {
     lowering.builder.open_block();
     let outcome = lowering.with_owner("main".to_string(), |lowering| {
         lowering.walk(context, body, expected, None)
@@ -187,10 +187,18 @@ fn seal_entry(
     let entry = lowering.seal(outcome);
     lowering.builder.set_entry(entry);
 
-    lowering
-        .builder
-        .finalize()
-        .map_err(|error| Error::erased_module_invalid(error.to_string()))
+    let Lowering {
+        builder,
+        environment,
+        ..
+    } = lowering;
+
+    Ok(ErasedUnit {
+        module: builder
+            .finalize()
+            .map_err(|error| Error::erased_module_invalid(error.to_string()))?,
+        environment,
+    })
 }
 
 /// Erase a whole meta-free [`Module`] into a verified arena [`Module`]. Top-level items are erased in dominance order as the module's item chain; the entrypoint body becomes the entry block, checked against `expected`.
@@ -210,7 +218,12 @@ pub fn erase_module(
         let mut lowering = Lowering::default();
         lowering.erase_items(context, &module)?;
 
-        seal_entry(lowering, context, &module.body, &expected)
+        let body = module
+            .body
+            .as_ref()
+            .expect("erase_module is for a whole module with an entrypoint");
+
+        Ok(seal_entry(lowering, context, body, &expected)?.module)
     })
 }
 
@@ -433,58 +446,57 @@ impl Lowering {
     }
 }
 
-/// A replayable prefix: the fixed prelude erased into an unfinished arena module (items only, no entry), together with the erasure environment that maps prelude Core names to their arena operands. Archived by `curios-prelude` behind the `archive` feature and restored there once per thread; every production compile consumes an owned clone, so the prelude is never re-erased from source.
-#[derive(Debug, Clone)]
+/// What one unit's erasure provides to its successors: its items in an arena module, together with the environment mapping its Core names to arena operands. Archived behind the `archive` feature and restored once per thread; every production compile consumes an owned clone, so a stored unit is never re-erased from source.
+///
+/// `Default` is the empty scope, and it is what makes "erase the first unit" the same call as "erase a later one": `ErsdBuilder::resume` over an empty module reindexes nothing and yields exactly a fresh builder.
+#[derive(Debug, Clone, Default)]
 #[curios_archive::archived(
         serialize_bounds(__S: curios_archive::rkyv::ser::Writer + curios_archive::rkyv::ser::Allocator + curios_archive::rkyv::ser::Sharing, __S::Error: curios_archive::rkyv::rancor::Source),
         deserialize_bounds(__D: curios_archive::rkyv::de::Pooling, __D::Error: curios_archive::rkyv::rancor::Source),
         bytecheck(bounds(__C: curios_archive::rkyv::validation::ArchiveContext + curios_archive::rkyv::validation::shared::SharedContext, __C::Error: curios_archive::rkyv::rancor::Source))
     )]
-pub struct ErasedPrelude {
+pub struct ErasedUnit {
     #[cfg_attr(feature = "archive", rkyv(omit_bounds))]
     module: curios_ersd::Module,
     environment: Environment,
 }
 
-impl ErasedPrelude {
-    /// Whether the prefix holds any erased items — the freshness probe the archive tests use.
+impl ErasedUnit {
+    /// Whether this holds any erased items — the freshness probe the archive tests use.
     pub fn is_empty(&self) -> bool {
         self.module.items().is_empty()
     }
+
+    /// The finished arena module, for a unit whose entrypoint was sealed — what the back half of the pipeline lowers. A unit without one is a scope rather than a program, and its arena is resumed over instead.
+    pub fn into_module(self) -> curios_ersd::Module {
+        self.module
+    }
 }
 
-/// Erase the fixed prelude's items into a replayable prefix. The prelude module carries no entrypoint of its own; only its item chain is erased.
-pub fn erase_prelude_prefix(
-    context: &mut Context,
-    prelude: &Module,
-) -> Result<ErasedPrelude, Error> {
-    curios_profile::profile!("erase_prelude_prefix");
-    let prelude = UniverseErased::<Module>::project(prelude)?.into_inner();
-    // Re-derivation, not surface elaboration (see `erase_module`).
-    context.with_suppressed_privacy(|context| {
-        seed_registries(context, &prelude)?;
-        let mut lowering = Lowering::default();
-        lowering.erase_items(context, &prelude)?;
-        Ok(ErasedPrelude {
-            module: lowering.builder.into_module(),
-            environment: lowering.environment,
-        })
-    })
-}
-
-/// Replay an erased prelude prefix and erase `module`'s own items and entrypoint body. The Core context is re-seeded with the prelude's definitions (so the module's re-derived types reduce through them), the builder resumes over the restored arenas, and the items erase in dominance order among themselves — every prelude reference is already bound.
+/// Erase one unit's items onto what its scope already erased, sealing an entrypoint when the unit has one.
 ///
-/// Nothing here is the caller's to guarantee any more, which is the point. Two contracts used to sit on this signature and neither was checked: that `module` was the prelude *extended in place*, discharged when the unit stopped carrying the prelude's items; and that the Core prelude and the erased arena described the same program, discharged by [`Resumed`] pairing them. What survives is a property of the archive rather than of a caller — its universes were validated at the restore boundary, where untrusted bytes became a `Module`.
-pub fn erase_module_with_prelude(
+/// The Core context is re-seeded with the scope's definitions (so the unit's re-derived types reduce through them), the builder resumes over the restored arenas, and the items erase in dominance order among themselves — every reference into the scope is already bound.
+///
+/// **`expected` is `Some` exactly when `module` has a body, and that is the whole of what used to be two functions.** One erased the fixed prelude's item chain with no entry to seal; the other erased a program and sealed one. Being the entry *is* having an entrypoint, so the two spellings differed by a condition rather than by a procedure, and a caller could pair a body with no expectation or an expectation with no body with nothing to say so.
+///
+/// Nothing here is the caller's to guarantee any more, which is the point. Two contracts used to sit on this signature and neither was checked: that `module` was the prelude *extended in place*, discharged when the unit stopped carrying the prelude's items; and that the scope's Core and its erased arena described the same program, discharged by [`Resumed`] pairing them. What survives is a property of the archive rather than of a caller — its universes were validated at the restore boundary, where untrusted bytes became a `Module`.
+pub fn erase_unit(
     context: &mut Context,
     resumed: Resumed<'_>,
     module: &Module,
-    expected: &Term,
-) -> Result<curios_ersd::Module, Error> {
-    curios_profile::profile!("erase_module_with_prelude");
+    expected: Option<&Term>,
+) -> Result<ErasedUnit, Error> {
+    curios_profile::profile!("erase_unit");
+    assert_eq!(
+        module.body.is_some(),
+        expected.is_some(),
+        "an entrypoint body and the type it is checked against arrive together or not at all",
+    );
     let scope = resumed.projected_cores();
     let module = UniverseErased::<Module>::project(module)?.into_inner();
-    let expected = UniverseErased::<Term>::project(expected)?.into_inner();
+    let expected = expected
+        .map(|expected| Ok::<_, Error>(UniverseErased::<Term>::project(expected)?.into_inner()))
+        .transpose()?;
     // Re-derivation, not surface elaboration (see `erase_module`).
     context.with_suppressed_privacy(|context| {
         // Every half: `module` declares only its own, so each scope unit's nominal entries reach the context from that unit itself. They are disjoint by mount — no unit can reuse another's name — which is why `register_*` rejecting a duplicate key is not a constraint here.
@@ -535,6 +547,13 @@ pub fn erase_module_with_prelude(
         };
         lowering.erase_items(context, &module)?;
 
-        seal_entry(lowering, context, &module.body, &expected)
+        match (&module.body, &expected) {
+            (Some(body), Some(expected)) => seal_entry(lowering, context, body, expected),
+            // No entrypoint: the arena stays open, which is exactly what a successor resumes over.
+            _ => Ok(ErasedUnit {
+                module: lowering.builder.into_module(),
+                environment: lowering.environment,
+            }),
+        }
     })
 }

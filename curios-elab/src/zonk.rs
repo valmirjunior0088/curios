@@ -118,7 +118,11 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
         .map(|item| zonk_item(context, item))
         .collect::<Result<Vec<_>, Error>>()?;
 
-    let body = zonk_term(context, &module.body)?;
+    let body = module
+        .body
+        .as_ref()
+        .map(|body| zonk_term(context, body))
+        .transpose()?;
 
     let type_ = module
         .type_
@@ -505,7 +509,9 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
             | DefinitionKind::Witness => {}
         }
     }
-    validate!(&module.body, "module body")?;
+    if let Some(body) = &module.body {
+        validate!(body, "module body")?;
+    }
     if let Some(type_) = &module.type_ {
         validate!(type_, "module body annotation")?;
     }
@@ -596,7 +602,9 @@ pub fn validate_universes(module: &Module) -> Result<(), Error> {
             &format!("concept {name} parameters"),
         )?;
     }
-    validate_bound_universes(&module.body, 0, "module body")?;
+    if let Some(body) = &module.body {
+        validate_bound_universes(body, 0, "module body")?;
+    }
     if let Some(type_) = &module.type_ {
         validate_bound_universes(type_, 0, "module body annotation")?;
     }
@@ -649,7 +657,9 @@ pub fn validate_lowered_universe_seeds(module: &Module, floor: usize) -> Result<
     for concept in module.concepts.values() {
         collect!(&concept.params);
     }
-    collect!(&module.body);
+    if let Some(body) = &module.body {
+        collect!(body);
+    }
     if let Some(type_) = &module.type_ {
         collect!(type_);
     }
@@ -748,7 +758,9 @@ pub(crate) fn collect_goal_reports(context: &mut Context, module: &Module) -> Ve
             Item::Rec(rec) => rec.definitions().iter().for_each(&mut scan_definition),
         }
     }
-    scan(&module.body, None, &goals, &seen_goals, &referenced);
+    if let Some(body) = &module.body {
+        scan(body, None, &goals, &seen_goals, &referenced);
+    }
     if let Some(type_) = &module.type_ {
         scan(type_, None, &goals, &seen_goals, &referenced);
     }

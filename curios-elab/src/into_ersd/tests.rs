@@ -46,7 +46,7 @@ fn module(items: Vec<Item>, body: Term) -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 0,
         type_: None,
-        body,
+        body: Some(body),
     }
 }
 
@@ -293,7 +293,7 @@ fn universe_erasure_is_a_validated_structural_projection() {
         panic!("expected nominal type")
     };
     assert!(induct.universes.is_empty());
-    assert_eq!(projected.body, Term::free_var(&global("poly")));
+    assert_eq!(projected.body, Some(Term::free_var(&global("poly"))));
 
     let invalid = module(Vec::new(), Term::type_at(Level::meta(UniverseMetaId(0))));
     assert!(super::lower::UniverseErased::<Module>::project(&invalid).is_err());
@@ -467,7 +467,7 @@ fn a_variant_constructs_with_its_registered_schema() {
             witnesses: BTreeSet::new(),
             binder_floor: 0,
             type_: None,
-            body,
+            body: Some(body),
         },
         &opt_type(),
     )
@@ -756,7 +756,7 @@ fn a_variant_match_binds_payload_without_projections() {
             witnesses: BTreeSet::new(),
             binder_floor: 0,
             type_: None,
-            body,
+            body: Some(body),
         },
         &Term::intrinsic(Intrinsic::NatType),
     )

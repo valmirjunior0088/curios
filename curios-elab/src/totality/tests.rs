@@ -33,7 +33,7 @@ fn module(items: Vec<Item>) -> Module {
         witnesses: BTreeSet::new(),
         binder_floor: 0,
         type_: None,
-        body: Term::intrinsic(Intrinsic::Nat(Nat::new(0u32))),
+        body: Some(Term::intrinsic(Intrinsic::Nat(Nat::new(0u32)))),
     }
 }
 

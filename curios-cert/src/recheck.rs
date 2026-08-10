@@ -356,14 +356,19 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, globals: &Globals) -> Vec<
         .type_
         .as_ref()
         .and_then(universe_residue)
-        .or_else(|| universe_residue(&module.body))
+        .or_else(|| module.body.as_ref().and_then(universe_residue))
         .or_else(|| {
             module
                 .type_
                 .as_ref()
                 .and_then(|type_| universe_escape(type_, 0))
         })
-        .or_else(|| universe_escape(&module.body, 0))
+        .or_else(|| {
+            module
+                .body
+                .as_ref()
+                .and_then(|body| universe_escape(body, 0))
+        })
     {
         verdicts.push(Verdict { name: None, error });
     }
@@ -441,7 +446,10 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, globals: &Globals) -> Vec<
         }
     }
 
-    if let Err(error) = check_entrypoint(&mut kernel, &module.body, module.type_.as_ref()) {
+    // A unit with no entrypoint has nothing here to judge — being the entry is what having one *means*, and a scope unit is not it. The prelude used to carry a dummy body and have this walk certify it.
+    if let Some(body) = &module.body
+        && let Err(error) = check_entrypoint(&mut kernel, body, module.type_.as_ref())
+    {
         verdicts.push(Verdict { name: None, error });
     }
 

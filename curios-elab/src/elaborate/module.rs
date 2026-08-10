@@ -950,7 +950,7 @@ fn elaborate_module_suffix(
     metavar_floor: usize,
     universe_floor: usize,
     mode: Mode,
-) -> Result<(Module, Term), Error> {
+) -> Result<(Module, Option<Term>), Error> {
     curios_profile::profile!("elaborate_module_suffix");
     // What is already in scope goes in before any item is checked; `register_*` rejects a duplicate key, and the unit declares only its own, so the two cannot collide.
     established.seed_registries(context)?;
@@ -1003,11 +1003,20 @@ fn elaborate_module_suffix(
         }
         Mode::Infer => (Mode::Infer, None),
     };
-    let (body, body_type) = elaborate(context, &module.body, mode)?;
+    // A unit with no entrypoint has none to elaborate and no type for one — the two are the same fact, which is why they travel together from here to the kernel.
+    let (body, body_type) = match &module.body {
+        Some(body) => {
+            let (body, body_type) = elaborate(context, body, mode)?;
+            (Some(body), Some(body_type))
+        }
+        None => (None, None),
+    };
     // The whole program has elaborated: a witness goal still deferred will never find a table entry — report it now.
     finish_deferred_witnesses(context)?;
     context.drain_parked()?;
-    let body_type = reduce_with(context, &body_type)?;
+    let body_type = body_type
+        .map(|body_type| reduce_with(context, &body_type))
+        .transpose()?;
 
     // The output carries the *rebuilt* registry entries (pulled back from the context, where the per-group rebuild re-registered them), so `zonk_module` and `erase` see elaborated telescopes. An entry whose declaring item was pruned keeps its lowered form — nothing consults it.
     let induct_decls = induct_keys
@@ -1075,24 +1084,32 @@ fn elaborate_module_suffix(
 fn finalize_and_check(
     context: &mut Context,
     mut module: Module,
-    body_type: Term,
+    body_type: Option<Term>,
     inherited: &BTreeMap<Global, Totality>,
-) -> Result<(Module, Term, Vec<Error>), Error> {
+) -> Result<(Module, Option<Term>, Vec<Error>), Error> {
     curios_profile::profile!("finalize_and_check");
-    let mut entry_terms = vec![module.body.clone()];
+    let mut entry_terms = Vec::new();
+    let has_body = module.body.is_some();
     let has_annotation = module.type_.is_some();
+    if let Some(body) = &module.body {
+        entry_terms.push(body.clone());
+    }
     if let Some(type_) = &module.type_ {
         entry_terms.push(type_.clone());
     }
-    entry_terms.push(body_type);
+    if let Some(body_type) = body_type {
+        entry_terms.push(body_type);
+    }
     let mut entry_terms = context
         .default_universes(&entry_terms.iter().collect::<Vec<_>>())?
         .into_iter();
-    module.body = entry_terms.next().expect("entry body was finalized");
+    if has_body {
+        module.body = Some(entry_terms.next().expect("entry body was finalized"));
+    }
     if has_annotation {
         module.type_ = Some(entry_terms.next().expect("entry annotation was finalized"));
     }
-    let body_type = entry_terms.next().expect("entry body type was finalized");
+    let body_type = entry_terms.next();
 
     // Written goals report as one complete batch before zonking: collection meets exactly the set strict zonk would (committed solutions included), so a goal-bearing program fails with every goal located rather than with the first (`collect_goal_reports`).
     let goal_reports = collect_goal_reports(context, &module);
@@ -1101,7 +1118,9 @@ fn finalize_and_check(
     }
 
     let mut module = zonk_module(context, &module)?;
-    let body_type = zonk(context, &body_type)?;
+    let body_type = body_type
+        .map(|body_type| zonk(context, &body_type))
+        .transpose()?;
     context.restore_budget();
 
     // Positivity gates the zonked registries rather than running inside elaboration: the telescopes it reads are final here, and meta-free, so an unsolved hole reports as an unsolved hole instead of as an unseeable occurrence. At a replay the module in hand is the suffix alone, which is what this must see — the replayed prefix carries the vectors its archive was built with, and since prefix items cannot mention the suffix they are sinks of the occurrence relation, so no cycle crosses the boundary.
@@ -1121,7 +1140,7 @@ fn finalize_and_check(
 }
 
 /// The first erasure-obligation verdict, as an error — how every caller but the two-checker fixture harness consumes [`finalize_and_check`]'s report.
-fn raise(outcome: (Module, Term, Vec<Error>)) -> Result<(Module, Term), Error> {
+fn raise(outcome: (Module, Option<Term>, Vec<Error>)) -> Result<(Module, Option<Term>), Error> {
     let (module, body_type, obligations) = outcome;
     match obligations.into_iter().next() {
         Some(error) => Err(error),
@@ -1138,7 +1157,7 @@ pub fn elaborate_and_zonk_module(
     metavar_floor: usize,
     universe_floor: usize,
     mode: Mode,
-) -> Result<(Module, Term), Error> {
+) -> Result<(Module, Option<Term>), Error> {
     curios_profile::profile!("elaborate_and_zonk_module");
     let (module, body_type) = elaborate_module_suffix(
         context,
@@ -1171,7 +1190,7 @@ pub fn elaborate_and_zonk_with_prelude(
     metavar_floor: usize,
     universe_floor: usize,
     mode: Mode,
-) -> Result<(Module, Term), Error> {
+) -> Result<(Module, Option<Term>), Error> {
     let (module, body_type, obligations) = elaborate_and_zonk_with_prelude_reporting(
         context,
         prelude,
@@ -1194,7 +1213,7 @@ pub fn elaborate_and_zonk_with_prelude_reporting(
     metavar_floor: usize,
     universe_floor: usize,
     mode: Mode,
-) -> Result<(Module, Term, Vec<Error>), Error> {
+) -> Result<(Module, Option<Term>, Vec<Error>), Error> {
     curios_profile::profile!("elaborate_and_zonk_with_prelude");
     let established = Established::over(from_ref(&prelude));
     let (suffix, body_type) = elaborate_module_suffix(

@@ -66,7 +66,9 @@ pub(crate) fn type_positions(module: &Module) -> Vec<Position> {
         push(&mut positions, "the entrypoint's type", type_);
         annotations(type_, "the entrypoint's type", &mut positions);
     }
-    annotations(&module.body, "the entrypoint", &mut positions);
+    if let Some(body) = &module.body {
+        annotations(body, "the entrypoint", &mut positions);
+    }
 
     // A declaration's telescopes are types by construction, and its parameter and field types can name anything.
     for (name, declaration) in &module.induct_decls {

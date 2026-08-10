@@ -1703,7 +1703,7 @@ pub fn into_core(
             witnesses,
             binder_floor: binders.count(),
             type_,
-            body: tail,
+            body: Some(tail),
         },
         metavars.count(),
         universes.count(),
@@ -1787,7 +1787,8 @@ pub fn prepare_prelude(
         witnesses,
         binder_floor: binders.count(),
         type_: None,
-        body: curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(curios_core::Nat::Zero)),
+        // No entrypoint, which is what makes this not the entry. It used to store a `Nat::Zero` the prelude's build then certified.
+        body: None,
     };
 
     Ok(PreparedPrelude {
@@ -1915,7 +1916,7 @@ pub fn into_core_with_prelude(
             witnesses,
             binder_floor: binders.count(),
             type_,
-            body,
+            body: Some(body),
         },
         metavars.count(),
         universes.count(),

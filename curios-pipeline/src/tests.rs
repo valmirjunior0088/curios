@@ -2,7 +2,7 @@
 
 use {
     super::*,
-    curios_elab::{Context, Resumed, erase_module_with_prelude},
+    curios_elab::{Context, Resumed, erase_unit},
     curios_ersd::Analysis,
     curios_prelude::{SYNTAX, with_prelude},
     curios_text::{Entrypoint, RootSource},
@@ -1916,14 +1916,15 @@ fn erase_to_ir(source: &str, type_: Option<&str>) -> curios_ersd::Module {
     )
     .unwrap();
     with_prelude(|prelude| {
-        erase_module_with_prelude(
+        erase_unit(
             &mut Context::with_default_budget(SYNTAX),
             Resumed::of(from_ref(&prelude.core()), prelude.ersd()),
             &module,
-            &core_type,
+            Some(&core_type),
         )
     })
     .expect("the elaborated module erases into a verified arena module")
+    .into_module()
 }
 
 #[test]

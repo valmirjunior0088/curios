@@ -122,8 +122,9 @@ fn elaboration_paths(src: &str) -> (curios_core::Module, curios_core::Module) {
     lowered_prefix.concepts.clear();
     lowered_prefix.witnesses.clear();
     lowered_prefix.type_ = None;
-    lowered_prefix.body =
-        curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(curios_core::Nat::Zero));
+    lowered_prefix.body = Some(curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(
+        curios_core::Nat::Zero,
+    )));
     let prelude = curios_elab::elaborate_and_zonk_module(
         &mut curios_elab::Context::with_default_budget(SYNTAX),
         &lowered_prefix,
@@ -272,7 +273,8 @@ fn a_polymorphic_definition_instantiates_at_prop_and_type() {
         .unwrap();
     assert_eq!(definition.universe_context.parameter_count, 1);
 
-    let curios_core::Subterm::Tuple(tuple) = &*module.body else {
+    let body = module.body.as_ref().expect("the entrypoint has a body");
+    let curios_core::Subterm::Tuple(tuple) = &**body else {
         panic!("the entrypoint is a tuple");
     };
     let levels = tuple

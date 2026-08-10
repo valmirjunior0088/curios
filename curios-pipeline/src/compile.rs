@@ -8,7 +8,7 @@ use {
     curios_core::{Intrinsic, Term},
     curios_elab::{
         Context, Mode, Resumed, elaborate_and_zonk_with_prelude,
-        elaborate_and_zonk_with_prelude_reporting, erase_module_with_prelude,
+        elaborate_and_zonk_with_prelude_reporting, erase_unit,
     },
     curios_ersd::{lower_to_cont, optimize_ir},
     curios_prelude::{SYNTAX, with_prelude},
@@ -160,6 +160,9 @@ where
 
     observe(Stage::CoreElab(&module));
 
+    // The entry is the unit with an entrypoint, and `elaborate_and_zonk` is only ever asked for one.
+    let core_type = core_type.expect("the entrypoint's type comes back with its body");
+
     Ok((module, core_type, user_foreigns))
 }
 
@@ -222,12 +225,13 @@ where
     }
 
     let ersd_module = with_prelude(|prelude| {
-        erase_module_with_prelude(
+        erase_unit(
             &mut Context::new(budget, SYNTAX),
             Resumed::of(from_ref(&prelude.core()), prelude.ersd()),
             &module,
-            &core_type,
+            Some(&core_type),
         )
+        .map(|erased| erased.into_module())
     })
     .map_err(|error| {
         CompileError::Failure(with_prelude(|prelude| {

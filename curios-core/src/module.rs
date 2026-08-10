@@ -290,7 +290,10 @@ pub struct Module {
     /// Binder identities are one space shared with `Context::fresh`, so elaboration seeds its counter here (`Context::set_local_floor`). The archived prelude carries its own high-water mark for the same reason: a replayed term's binders were minted in an earlier compiler run, and a fresh mint that aliased one of them would silently capture.
     pub binder_floor: usize,
     pub type_: Option<Term>,
-    pub body: Term,
+    /// The entrypoint expression, for the one unit in a compilation that has one.
+    ///
+    /// `None` is what makes a unit *not* the entry, and it is the only thing that does: a unit with no successors owns the entrypoint, and every other unit is a scope its successors are compiled against. The prelude used to store `Nat::Zero` here and have its build certify that dummy — a value standing in for "there is none", the same shape `RootId::Entry` had before it became a mount.
+    pub body: Option<Term>,
 }
 
 impl Module {
@@ -352,16 +355,20 @@ impl Module {
             witnesses: self.witnesses.clone(),
             binder_floor: self.binder_floor,
             type_: self.type_.as_ref().map(|type_| sharing.share(type_)),
-            body: sharing.share(&self.body),
+            body: self.body.as_ref().map(|body| sharing.share(body)),
         }
     }
 
     /// Re-fold the flat module into the legacy nested `Let`/`Rec` `Term` it replaced (items are already in binding order). Test-only: lets the `into_core`/`erase` suites keep asserting against the historical shape — and keep feeding a single `Term` to `erase` — without rewriting every expectation. Drops `type_` (the old `run` helper only returned the term). Not `#[cfg(test)]`: its callers live in `curios`'s test suite, a different crate, where that cfg would never activate.
     pub fn into_nested_term(self) -> Term {
+        let body = self
+            .body
+            .expect("into_nested_term is for a module with an entrypoint");
+
         self.items
             .into_iter()
             .rev()
-            .fold(self.body, |acc, item| match item {
+            .fold(body, |acc, item| match item {
                 Item::Let(def) => Term::let_(&Free::from(&def.name), def.type_, def.body, acc),
                 Item::Rec(rec) => Term::rec(
                     rec.definitions()
@@ -452,7 +459,9 @@ impl fmt::Display for Module {
             }
         }
 
-        write!(formatter, "{}", self.body.spelled(&spelling))?;
+        if let Some(body) = &self.body {
+            write!(formatter, "{}", body.spelled(&spelling))?;
+        }
 
         if let Some(type_) = &self.type_ {
             write!(formatter, "\n: {}", type_.spelled(&spelling))?;
@@ -535,7 +544,9 @@ pub fn derived_binder_floor_outside(module: &Module, in_scope: impl Fn(&Global) 
     if let Some(type_) = &module.type_ {
         consider(type_.free_vars());
     }
-    consider(module.body.free_vars());
+    if let Some(body) = &module.body {
+        consider(body.free_vars());
+    }
 
     highest.map_or(0, |index| index as usize + 1)
 }
@@ -628,7 +639,7 @@ mod tests {
             // The understated claim the walk must not believe.
             binder_floor: 0,
             type_: None,
-            body: Term::intrinsic(crate::Intrinsic::NatType),
+            body: Some(Term::intrinsic(crate::Intrinsic::NatType)),
         };
 
         assert_eq!(derived_binder_floor(&module), 4_243);
