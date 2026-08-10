@@ -1,4 +1,8 @@
 //! Where a unit's module bodies come from.
+//!
+//! **The layout rule:** `mod x` declared in a namespace's header resolves to `x.crs` in that namespace's directory, and a header's namespace directory is its stem directory. `mod util` in `<dir>/main.crs` reads `<dir>/main/util.crs`, and `util`'s own children read from `<dir>/main/util/`. One rule governs every file in the language, so the file handed to `run` is a header like any other and declaring a file never changes what its `mod`s mean.
+//!
+//! A stem is never part of a name. `<dir>` and `main` are spelling, and `/util` is the qualifier — which is why [`RootSource::mounted`] takes the header and the directory as two arguments rather than deriving one from the other: a package's library header sits beside its manifest while its namespace *is* the manifest's directory, and that exception is the manifest's to state, not this crate's to guess. See `curios-project`'s `layout` module.
 
 use {
     super::{Error, Module},
@@ -33,18 +37,23 @@ impl RootSource {
     /// The entry program with no filesystem: every `mod` it declares must carry an inline body. Used by tests exercising resolution in isolation, and by embedders (`curios-web`) with no filesystem at all.
     pub fn none() -> Self {
         Self {
-            bases: vec![(entry(), Base::Supplied(BTreeMap::new()))],
+            bases: vec![(entry_mount(), Base::Supplied(BTreeMap::new()))],
         }
     }
 
-    /// The entry program's own modules, read from `directory`: qualifier `a/b/c` is `directory/a/b/c.crs`.
-    pub fn file_system(directory: impl Into<PathBuf>) -> Self {
+    /// The entry program written in `header`, its own modules under that header's stem directory: `mod util` in `<dir>/main.crs` reads `<dir>/main/util.crs`.
+    ///
+    /// `header` is never read — the entry's own body is its [`Entrypoint`](crate::Entrypoint), which the caller already has — so the path is here for the directory it names, and an entrypoint parsed from a string can still be given one.
+    pub fn entry(header: &Path) -> Self {
         Self {
             bases: vec![(
-                entry(),
+                entry_mount(),
                 Base::Disk {
                     header: None,
-                    directory: directory.into(),
+                    directory: header
+                        .parent()
+                        .unwrap_or(Path::new("."))
+                        .join(header.file_stem().unwrap_or_default()),
                 },
             )],
         }
@@ -106,7 +115,7 @@ impl RootSource {
     }
 
     /// The prefixes this source claims.
-    pub(crate) fn mounts(&self) -> Vec<Mount> {
+    pub fn mounts(&self) -> Vec<Mount> {
         self.bases.iter().map(|(mount, _)| mount.clone()).collect()
     }
 
@@ -161,7 +170,7 @@ impl Default for RootSource {
 }
 
 /// The entry program's mount: the empty prefix, which is what makes it the entry.
-fn entry() -> Mount {
+fn entry_mount() -> Mount {
     Mount::new(Qualifier::empty(), RootKind::Ordinary)
 }
 

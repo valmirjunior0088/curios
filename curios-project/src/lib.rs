@@ -9,5 +9,8 @@
 mod hash;
 pub use hash::*;
 
+mod layout;
+pub use layout::*;
+
 mod manifest;
 pub use manifest::*;

@@ -1,11 +1,10 @@
 //! Driving the compile pipeline for the CLI, with the `--print` stage dump wired in. `stage_printer` is the single owner of how each IR stage is selected and rendered.
 
 use {
-    crate::cli::parse_unit,
-    curios::{compile_with_units, load, load_unit},
+    curios::{compile_with_units, load},
     curios_pipeline::{CompileError, Stage},
     curios_wasm::Module,
-    std::path::Path,
+    std::path::{Path, PathBuf},
 };
 
 /// Build the observer closure that prints each requested IR stage to stderr. `print` is the comma-separated stage list from `--print`; empty segments are dropped (the flag's absence arrives as `""`), and an unknown stage name is an error rather than a silently empty selection.
@@ -33,7 +32,7 @@ fn stage_printer(print: &str) -> Result<impl Fn(Stage<'_>) + '_, String> {
 pub(crate) fn compile_file(
     budget: u64,
     print: &str,
-    units: &[String],
+    units: &[PathBuf],
     input_path: &Path,
 ) -> Result<Module, CompileError> {
     let printer = stage_printer(print).map_err(CompileError::Failure)?;
@@ -45,13 +44,14 @@ pub(crate) fn compile_file(
         .map(|(module, _foreigns)| module)
 }
 
-/// Load every `--unit PREFIX=PATH` in the order written, which is the order they are compiled in.
-pub(crate) fn load_units(units: &[String]) -> Result<Vec<curios_text::RootSource>, CompileError> {
+/// Read every `--unit DIR`'s manifest in the order written, which is the order they are compiled in.
+pub(crate) fn load_units(units: &[PathBuf]) -> Result<Vec<curios_text::RootSource>, CompileError> {
     units
         .iter()
-        .map(|unit| {
-            let (prefix, path) = parse_unit(unit).map_err(CompileError::Failure)?;
-            Ok(load_unit(&prefix, &path))
+        .map(|directory| {
+            curios_project::package_at(directory)
+                .map(|(_, source)| source)
+                .map_err(CompileError::Failure)
         })
         .collect()
 }

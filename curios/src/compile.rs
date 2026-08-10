@@ -98,25 +98,6 @@ pub(crate) fn run_entrypoint<H: HostOps + Send + Sync + 'static>(
     run_wasm(&module, host, ForeignBindings::empty()).map(|_| ())
 }
 
-/// A unit mounted at `prefix`, declared in `path` and holding its modules in `path`'s stem directory.
-///
-/// Nothing is read here. A mounted unit used to arrive as an eagerly materialized map, because discovery of a unit already in scope was assumed to have no filesystem to reach — but a resolver is what it always needed, and `curios-web` keeps compiling because *supplying* the bodies is one base among several rather than the only shape a mounted unit has. So this hands back the two paths the layout rule relates, and `curios-text` reads each header exactly when discovery asks for it, with the same diagnostics the entry program's own modules get.
-///
-/// [`RootKind::Ordinary`](curios_base::RootKind::Ordinary) is passed here and nowhere else, which is what makes "no package can exempt itself from the orphan rule" structural: a manifest has no path to this argument.
-pub fn load_unit(prefix: &str, path: &Path) -> curios_text::RootSource {
-    let directory = path
-        .parent()
-        .unwrap_or(Path::new("."))
-        .join(path.file_stem().unwrap_or_default());
-
-    curios_text::RootSource::mounted(
-        curios_base::Qualifier::from([prefix]),
-        curios_base::RootKind::Ordinary,
-        path,
-        directory,
-    )
-}
-
 /// Lower and type-check `entrypoint` against the fixed prelude, reporting the erasure obligations rather than raising them. See [`curios_pipeline::typecheck_reporting`].
 pub fn typecheck_with_prelude(
     budget: u64,
@@ -160,10 +141,9 @@ pub(crate) fn run_text<H: HostOps + Send + Sync + 'static>(
     run_entrypoint(&entrypoint, RootSource::none(), host)
 }
 
-/// Open a `.crs` entrypoint at `path`, paired with a [`curios_text::RootSource::file_system`] rooted at its parent directory — the standard way to resolve a program's imports relative to the file it lives in.
+/// Open a `.crs` entrypoint at `path`, paired with the [`curios_text::RootSource::entry`] its own stem directory anchors — a bare file is a header like any other, so `mod util` in `main.crs` reads `main/util.crs`.
 pub fn load(path: &Path) -> Result<(Entrypoint, RootSource), String> {
     let entrypoint = Entrypoint::from_path(path).map_err(|error| error.format())?;
-    let loader = RootSource::file_system(path.parent().unwrap_or(Path::new(".")).to_path_buf());
 
-    Ok((entrypoint, loader))
+    Ok((entrypoint, RootSource::entry(path)))
 }

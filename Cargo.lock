@@ -472,6 +472,7 @@ dependencies = [
  "curios-pipeline",
  "curios-prelude",
  "curios-profile",
+ "curios-project",
  "curios-runtime",
  "curios-text",
  "curios-unit",
@@ -651,6 +652,7 @@ name = "curios-project"
 version = "0.8.1"
 dependencies = [
  "curios-base",
+ "curios-text",
  "serde",
  "toml",
 ]

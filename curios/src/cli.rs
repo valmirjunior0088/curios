@@ -88,23 +88,14 @@ pub(crate) struct Cli {
     )]
     pub(crate) print: Option<String>,
 
+    /// The order these arrive in *is* the dependency order — nothing here resolves or sorts, which is what keeps this a hand-written stand-in for the manifest rather than a small one. What the flag deliberately does *not* take is a prefix: the directory holds the package's own `curios.toml`, and a package's name is declared there and nowhere else.
     #[arg(
         long = "unit",
-        value_name = "PREFIX=PATH",
-        help = "Mount a compilation unit before the entry program; repeat for more, in dependency order"
+        value_name = "DIR",
+        help = "Mount the package in DIR before the entry program; repeat for more, in dependency order"
     )]
-    pub(crate) units: Vec<String>,
+    pub(crate) units: Vec<PathBuf>,
 
     #[command(subcommand)]
     pub(crate) mode: Mode,
-}
-
-/// Split one `--unit PREFIX=PATH` value. The order these arrive in *is* the dependency order — nothing here resolves or sorts, which is what keeps this a hand-written stand-in for the manifest rather than a small one.
-pub(crate) fn parse_unit(value: &str) -> Result<(String, std::path::PathBuf), String> {
-    match value.split_once('=') {
-        Some((prefix, path)) if !prefix.is_empty() && !path.is_empty() => {
-            Ok((prefix.to_string(), std::path::PathBuf::from(path)))
-        }
-        _ => Err(format!("--unit expects PREFIX=PATH, got {value:?}")),
-    }
 }

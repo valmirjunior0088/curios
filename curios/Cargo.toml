@@ -24,6 +24,7 @@ curios-cert = { workspace = true }
 curios-core = { workspace = true }
 curios-pipeline = { workspace = true }
 curios-prelude = { workspace = true }
+curios-project = { workspace = true }
 curios-unit = { workspace = true }
 curios-binaryen = { workspace = true }
 curios-runtime = { workspace = true }

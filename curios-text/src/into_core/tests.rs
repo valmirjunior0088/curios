@@ -1926,18 +1926,21 @@ fn use_glob_on_dual_existence_imports_once() {
     "#);
 }
 
+/// The entry is a header like any other, so its own modules live in its stem directory: `main.crs` declaring `mod A` reads `main/A.crs`, never a sibling `A.crs`.
 #[test]
-fn file_loader_prepares_sibling_modules_before_to_core() {
-    let base = temp_dir("sibling-order");
+fn the_entry_reads_its_modules_from_its_stem_directory() {
+    let base = temp_dir("stem-directory");
     write_module(
         &base,
-        "A.crs",
+        "main/A.crs",
         r#"
             use /B/{x};
             pub let y : Type = x;
         "#,
     );
-    write_module(&base, "B.crs", "pub let x : Type = Type;");
+    write_module(&base, "main/B.crs", "pub let x : Type = Type;");
+    // A sibling of the entry, which nothing may resolve to now that one rule governs every file.
+    write_module(&base, "A.crs", "pub let wrong : Type = Type;");
 
     let entrypoint = r#"
             pub mod A;
@@ -1946,7 +1949,7 @@ fn file_loader_prepares_sibling_modules_before_to_core() {
         "#
     .parse::<Entrypoint>()
     .unwrap();
-    let loader = RootSource::file_system(base.clone());
+    let loader = RootSource::entry(&base.join("main.crs"));
 
     super::into_core(&entrypoint, &loader, syntax()).unwrap();
 
