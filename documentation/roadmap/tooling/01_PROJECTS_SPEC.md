@@ -123,6 +123,8 @@ The prelude archive is build-scoped and deliberately not an interchange format; 
 
 Both were raised and deliberately left unsettled. They are recorded here as questions with their alternatives, because writing down a decision nobody made is worse than an acknowledged gap.
 
+**Partly answered since**, in [the raw notes below](#raw-notes-the-package-management-story-start-to-finish): a project is a file, the manifest is `Curios.toml`, and the store is `.curios/` over a shared content-addressed cache. This section has not been rewritten around those answers yet.
+
 ### Is a manifest named, or discovered?
 
 Everything C1 and C2 need works with a manifest that is *named*: parse it, resolve each dependency to bytes, topologically sort, refuse a cycle, refuse a conflict. Discovery is a separate, purely additive layer — and it is the thing that makes "is this file part of a project?" a question at all.
@@ -141,6 +143,78 @@ B3 settles the key and the trust. It does not settle the location, and the two a
 - **Under the existing `target/`**, which this repository already treats as a hand-pruned cache that survives `cargo clean` only by never being given it.
 
 This wants deciding against a real dependency graph rather than against the single hand-passed unit `--unit` allows today, which is the reason the caching half is sequenced after C1 rather than before it.
+
+## Raw notes: the package-management story, start to finish
+
+**Unrefined, and deliberately so.** These are the decisions and findings from one design conversation, recorded before they are rewritten into the sections above. Several of them answer the two open questions immediately preceding this one; where they do, the open section is stale rather than wrong, and the rewrite is what reconciles them. Nothing here has been checked against the rest of the document for consistency of voice or ordering.
+
+### Decided in conversation
+
+- **The file is the unit of the project.** A root `.crs` file enumerates its own children; there is no project directory delimiting membership. A unit and a project are the same thing.
+- **The manifest is `Curios.toml`**, a fixed name rather than one derived from the root file's stem.
+- **Everything generated goes under `.curios/`.** The root directory holds user files and nothing else — no build products, no caches, no lock artifacts loose beside the sources.
+- **A lockfile, if one is ever needed, is `Curios.lock`.** Reserving the name costs nothing even though [exact pins](#a-dependency-is-pinned-exactly-so-there-is-nothing-to-solve) mean a manifest already is one.
+- **The package name must be a valid name in the language**, because the name *is* the mount prefix. This is the constraint that ties the manifest to the module system rather than leaving them as two naming schemes that agree by convention.
+- **`curios curate` is `uv sync`** — make the local state match what the manifest declares, rather than resolve anything.
+- **`curios new` comes last**, after the machinery that reads a manifest and acts on it exists. Scaffolding a format still in flux is work done twice.
+- **`curios run` keeps working on a bare file**, with no manifest and no project, exactly as it does today.
+
+### What the naming rule actually costs
+
+`documentation/SYNTAX.md` states it: *"An identifier is a nonempty sequence of Unicode alphanumeric characters and `_`."* So, concretely:
+
+- **No dashes.** `my_package`, never `my-package` — a deliberate break from npm and Cargo convention, and the first thing anyone coming from those will trip over.
+- **Unicode alphanumerics are admitted**, so `café` is a legal package name. A registry would need a normalization rule; a local-only ecosystem does not.
+- **`Type`, `Prop`, `concept`, `satisfy` are all legal path segments** and therefore legal package names. Confusing rather than broken, and worth a refusal at manifest-parse time rather than a surprise at resolution.
+
+### A defect this conversation turned up
+
+**The entry and a mounted unit resolve their file-backed modules by different rules, and one of them documents the other's.**
+
+| | base | `mod bar` inside `foo.crs` reads |
+| --- | --- | --- |
+| Entry (`curios/src/compile.rs`, `RootSource::file_system`) | `path.parent()` | `<dir>/bar.crs` — **sibling** |
+| Mounted unit (`curios/src/compile.rs`, `load_unit`) | `parent().join(file_stem())` | `foo/bar.crs` — **nested** |
+
+`load_unit`'s doc comment claims it resolves *"exactly as the entry program's own file-backed modules resolve"*. It does not. That sentence was written under A5 and is false.
+
+**This matters for the file-as-project decision**, because the nested rule is the one that generalizes: if `foo.crs` owns `foo/` for its children, the entry should nest too. Adopting it means `curios run main.crs` looks for `main/bar.crs` rather than `bar.crs`, which **breaks every existing program with a file-backed module**. Cheap now, expensive later, and it is a decision rather than a cleanup. Left open.
+
+### The seam, and how little of it is new
+
+`curios_pipeline::compile_units` already takes a scope and a `&[UnitSource]` in dependency order. So the whole of the manifest work is a function feeding that slice:
+
+```text
+Curios.toml → [(canonical name, revision, source)] → resolver → [UnitSource] → compile_units
+```
+
+Everything below that arrow exists and is tested. What is genuinely new:
+
+- a manifest parser, Rust-side — `/std`'s TOML codec is a guest library and cannot serve the driver;
+- a resolver trait, one method, identifier to module tree — `RootSource` generalizes to one base per mount, with the filesystem as one implementation and `curios-web`'s inline supplier as another;
+- a topological sort over declared dependencies, and a cycle refusal;
+- the revision-conflict refusal.
+
+What is **not** new: mounts and their kinds, the orphan rule across units, the foreign-row union, the mount-collision diagnostic, `load_unit`'s eager materialization, and `--unit`, which survives underneath as the already-resolved form a manifest entry becomes once its revision is bytes.
+
+### Where the store lives, resolved
+
+The file-as-project decision appeared to leave nowhere project-local for a cache, since `foo/` is taken by modules. `.curios/` resolves it, and the shape is uv's two layers: **`.curios/` is this project's materialized dependency set, and a shared content-addressed cache sits above it** so two projects pinning one revision compile it once. That upper layer is exactly what [B3](#b3--what-replaces-cargo-and-what-the-compiler-starts-believing)'s content-derived keys exist to make safe — a path-keyed store could never have been shared.
+
+### What `curate` is, and the free win inside it
+
+Two jobs wear the name, and only the first is `uv sync`:
+
+- **Materialize** — resolve every pin to bytes and place them where the resolver finds them; drop what the manifest no longer names. With exact pins and no solver there is nothing to resolve, only to realize.
+- **Reconcile** — report a dependency declared but never named, or named but never declared.
+
+The second is nearly free here and is not free in Cargo: the compiler already knows precisely which mounted prefixes a unit resolved against, so *"you declared `/json` and no module ever names it"* is a fact the mount table hands over. Worth taking even if it starts as a warning.
+
+**Open:** whether `curate` may reach the network itself, or is strictly a local materializer with fetching layered above it. The second keeps the compiler's "a revision identifier is opaque" property intact all the way out to the tool.
+
+### Sequencing
+
+C1 and C2 before any tooling. The manifest, the resolver, the dependency order and the conflict refusal are what make a package boundary real; `new` and `curate` are convenience over a thing that must already work.
 
 ## The caching half
 
