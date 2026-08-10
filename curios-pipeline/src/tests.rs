@@ -2001,3 +2001,136 @@ fn arena_erasure_handles_deep_input_on_the_default_stack() {
     let printed = module.to_string();
     assert!(printed.contains("NatAdd"));
 }
+
+// --- The unit boundary ----------------------------------------------------
+//
+// These are the tests the specification insists come in a pair. A unit boundary is not packaging: it is where
+// coherence is enforced, so the same three declarations are *refused* across units and *accepted* across modules
+// of one unit. Either half alone proves nothing — the first could pass because the fixture is malformed, the
+// second because the rule never ran.
+
+/// Compile `sources` as units in order, then `entrypoint` as the entry against all of them.
+fn compile_with_units(
+    sources: &[(&str, &str)],
+    entrypoint: &str,
+) -> Result<curios_wasm::Module, String> {
+    let parsed = sources
+        .iter()
+        .map(|(prefix, source)| {
+            let mut modules = curios_text::PreludeModules::new();
+            modules.insert_root(
+                *prefix,
+                curios_base::RootKind::Ordinary,
+                source
+                    .parse::<curios_text::Module>()
+                    .expect("a unit parses"),
+            );
+            modules
+        })
+        .collect::<Vec<_>>();
+    let entry = with_entrypoint_type(entrypoint, None);
+
+    with_prelude(|prelude| {
+        let sources = parsed
+            .iter()
+            .map(curios_text::UnitSource::Mounted)
+            .collect::<Vec<_>>();
+        let produced = compile_units(
+            DEFAULT_STEP_BUDGET,
+            Scope::over(from_ref(&prelude)),
+            &SYNTAX,
+            &sources,
+        )?;
+        let scope = std::iter::once(prelude)
+            .chain(produced.iter())
+            .collect::<Vec<_>>();
+
+        compile_entrypoint(
+            DEFAULT_STEP_BUDGET,
+            Scope::over(&scope),
+            &SYNTAX,
+            &entry,
+            RootSource::none(),
+            |_| {},
+        )
+        .map(|(module, _foreigns)| module)
+    })
+    .map_err(String::from)
+}
+
+/// Two ordinary units mounting one prefix is refused where the registry knows both, naming the prefix.
+#[test]
+fn two_units_claiming_one_prefix_is_diagnosed() {
+    let error = compile_with_units(
+        &[
+            ("dup", "pub let a : /std/Nat = 1;"),
+            ("dup", "pub let b : /std/Nat = 2;"),
+        ],
+        "0",
+    )
+    .expect_err("one prefix cannot belong to two units");
+
+    assert!(
+        error.contains("dup") && error.contains("exactly one unit"),
+        "unexpected error: {error}"
+    );
+}
+
+/// A unit mounted at `/lib` and an entry declaring its own `mod lib` are the same collision seen from the other side, and the entry loses: the mount was there first.
+///
+/// This is also what keeps `ffi` import names disjoint. A row's name is its declaration's fully qualified name, so `/lib/…` from a mounted unit and `/lib/…` from an entry module are the one shape that could collide in a namespace neither owns — and it is refused here rather than at the link.
+#[test]
+fn an_entry_module_colliding_with_a_mount_is_diagnosed() {
+    let error = compile_with_units(
+        &[("lib", "pub let a : /std/Nat = 1;")],
+        "mod lib\n    pub let b : /std/Nat = 2;\nend\n/std/print(/std/Nat/to_str(0))",
+    )
+    .expect_err("an entry cannot declare a module a unit already mounts");
+
+    assert!(error.contains("lib"), "unexpected error: {error}");
+}
+
+/// A unit's names resolve from the entry, which is the whole point of mounting one.
+#[test]
+fn an_entry_reaches_a_mounted_units_public_name() {
+    compile_with_units(
+        &[("lib", "pub let answer : /std/Nat = 42;")],
+        "/std/print(/std/Nat/to_str(/lib/answer))",
+    )
+    .expect("a mounted unit's public name resolves from the entry");
+}
+
+/// The unit boundary **is** semantic, and this pair is what says so.
+///
+/// A witness declared in ordinary unit `A` for a concept declared in ordinary unit `B` over a type declared in
+/// ordinary unit `C` is an orphan: no unit involved owns the pair, and two unrelated authors could otherwise each
+/// `satisfy` it and collide unfixably once both are linked. Written as modules of one unit the same three
+/// declarations are accepted, because one unit owns all of them.
+///
+/// Either half alone proves nothing. The refusal could come from a malformed fixture; the acceptance could come
+/// from a rule that never runs. Only together do they say the boundary is where coherence is enforced — which is
+/// why the earlier claim that N units compile identically to N modules was exactly backwards.
+#[test]
+fn the_orphan_rule_fires_across_units_and_not_across_modules() {
+    let concept = "pub concept Show(A: Type): pub Type {\n    show(A) -> /std/Nat,\n}";
+    let type_ = "pub struct Widget: pub Type {\n    tag: /std/Nat,\n}";
+    let witness = "satisfy /b/Show(/c/Widget) {\n    show = (w) => 0,\n}";
+
+    let across = compile_with_units(
+        &[("b", concept), ("c", type_), ("a", witness)],
+        "/std/print(/std/Nat/to_str(0))",
+    )
+    .expect_err("a third unit may not satisfy another's concept at another's type");
+    assert!(
+        across.contains("orphan"),
+        "expected an orphan refusal, got: {across}"
+    );
+
+    // The control. One unit owning all three is the sanctioned shape, and it must still compile — otherwise the
+    // refusal above would only show that the fixture is broken.
+    let together = format!(
+        "pub mod b\n{concept}\nend\npub mod c\n{type_}\nend\npub mod a\nsatisfy /one/b/Show(/one/c/Widget) {{\n    show = (w) => 0,\n}}\nend"
+    );
+    compile_with_units(&[("one", &together)], "/std/print(/std/Nat/to_str(0))")
+        .expect("one unit may satisfy its own concept at its own type");
+}

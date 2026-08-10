@@ -121,6 +121,21 @@ impl ForeignStore {
     pub fn iter(&self) -> impl Iterator<Item = &Arc<ForeignFunction>> {
         self.functions.iter()
     }
+
+    /// Take on every row of `other`, in its order — the union a compilation of several units hands its embedder.
+    ///
+    /// A duplicate stays a construction bug, and the reason is structural rather than hopeful: an `ffi` row's import name is its declaration's fully qualified name, so a unit mounted at `/a` contributes only `/a/…`, and mount prefixes are checked disjoint before any of this is reached. The one shape that could collide — a mounted `/foo` beside an entry's own `mod foo` — is refused as a mount collision, upstream of here.
+    pub fn absorb(&mut self, other: &ForeignStore) {
+        for function in other.iter() {
+            assert!(
+                self.get(&function.name).is_none(),
+                "foreign function '{}' is declared by two units; their mount prefixes were not disjoint",
+                function.name
+            );
+
+            self.functions.push(Arc::clone(function));
+        }
+    }
 }
 
 #[cfg(test)]

@@ -26,6 +26,11 @@ pub enum Error {
     InternalRootModule {
         segment: String,
     },
+    /// Two units claim one prefix, or a unit claims a prefix the entry program already declares as a module. Both are the same collision seen from either side, and both name every claimant: a reader has to know which two things to change, and only the mount table knows both.
+    MountCollision {
+        prefix: String,
+        claimants: Vec<String>,
+    },
     BindingNotFound {
         binding: String,
     },
@@ -138,6 +143,11 @@ impl fmt::Display for Error {
             Error::InternalRootModule { segment } => write!(
                 f,
                 "`{segment}` is internal to the standard library; use the corresponding `/std` module"
+            ),
+            Error::MountCollision { prefix, claimants } => write!(
+                f,
+                "`{prefix}` is claimed by {}; a prefix belongs to exactly one unit",
+                claimants.join(" and ")
             ),
             Error::BindingNotFound { binding } => write!(f, "binding not found: {binding}"),
             Error::PrivateBinding { binding } => write!(f, "private binding: {binding}"),

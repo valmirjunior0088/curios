@@ -1,6 +1,9 @@
 //! What earlier units established, as the thing a later one is compiled against.
 
-use {crate::Unit, curios_core::Module, curios_elab::ErasedUnit, curios_text::PreparedPrelude};
+use {
+    crate::Unit, curios_abi::ForeignStore, curios_core::Module, curios_elab::ErasedUnit,
+    curios_text::PreparedPrelude,
+};
 
 /// The units already compiled, in dependency order.
 ///
@@ -43,6 +46,16 @@ impl<'a> Scope<'a> {
     /// The elaborated module of each unit in scope, for `curios-elab`'s `Established` and for the kernel's environment.
     pub fn cores(&self) -> Vec<&'a Module> {
         self.units.iter().map(|unit| unit.core()).collect()
+    }
+
+    /// Every `foreign` row the units in scope declare, in dependency order — the union an embedder binds against.
+    pub fn foreigns(&self) -> ForeignStore {
+        let mut foreigns = ForeignStore::new();
+        for unit in self.units {
+            foreigns.absorb(unit.foreigns());
+        }
+
+        foreigns
     }
 
     /// The arena every erasure so far has accumulated — **one** value, not one per unit, because each unit's erasure resumes over what the previous one produced. An empty scope yields the empty arena, which `ErsdBuilder::resume` reduces to a fresh builder.

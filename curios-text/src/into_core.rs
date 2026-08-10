@@ -240,15 +240,18 @@ impl Resolved<'_> {
     fn for_mounted<'b>(
         input: &PreludeModules,
         scope: &'b [&'b BTreeMap<Qualifier, ModuleInfo>],
+        scope_mounts: &[Mount],
     ) -> Result<(Resolved<'b>, Vec<Mount>), Error> {
         let mut resolved = Resolved {
             modules: HashMap::new(),
             table: Scoped::over(scope),
         };
         let mounts = input.mounts();
-        // The synthetic compilation root: it belongs to no unit, which is why it is built here rather than scanned from anyone's items. Its children are exactly the mounted prefixes.
+        // The synthetic compilation root belongs to no unit, which is why it is built here rather than scanned from anyone's items — and why its children are *every* mounted prefix rather than only this unit's.
+        //
+        // Writing it lands in this unit's own layer, which shadows whatever the scope's layer said, so listing only `own` here silently hides the scope's mounts from a unit being compiled against them. That is what made `/std` unreachable from a mounted unit, and the test that says a unit reaches a mounted name is what caught it.
         let mut root_info = ModuleInfo::new();
-        for mount in &mounts {
+        for mount in scope_mounts.iter().chain(&mounts) {
             root_info.insert_child(mount.prefix.head().to_string(), true)?;
         }
         resolved.table.insert(Qualifier::empty(), root_info);
@@ -1629,6 +1632,14 @@ pub enum UnitSource<'a> {
 }
 
 impl UnitSource<'_> {
+    /// The prefixes this source claims. The entry claims the empty one and nothing else, which is what makes it the entry.
+    fn mounts(&self) -> Vec<Mount> {
+        match self {
+            UnitSource::Entry { .. } => vec![Mount::new(Qualifier::empty(), RootKind::Ordinary)],
+            UnitSource::Mounted(input) => input.mounts(),
+        }
+    }
+
     /// The entrypoint this source carries, for the one unit that has one.
     fn entrypoint(&self) -> Option<&Entrypoint> {
         match self {
@@ -1657,6 +1668,24 @@ pub fn into_core_unit(
         .flat_map(|unit| unit.mounts.iter().cloned())
         .collect::<Vec<_>>();
 
+    // A prefix belongs to exactly one unit, and this is decided before discovery — otherwise the collision surfaces from `insert_child` as an ordinary duplicate declaration, which names the label but not what else claimed it.
+    //
+    // Mount-set disjointness is what `Scoped`'s shadowing rule, the registries' duplicate-key rejection and the `ffi` import namespace all rest on, so it is checked once here rather than assumed three times.
+    for mount in source.mounts() {
+        if scope_mounts
+            .iter()
+            .any(|earlier| earlier.prefix == mount.prefix)
+        {
+            return Err(Error::MountCollision {
+                prefix: mount.prefix.join(),
+                claimants: vec![
+                    "a unit already in scope".to_string(),
+                    "the unit being compiled".to_string(),
+                ],
+            });
+        }
+    }
+
     // Discovery, and the prefixes this unit claims. The entry claims the empty one and nothing else; a mounted unit claims what it declares.
     let (Resolved { mut table, modules }, own) = match source {
         UnitSource::Entry { entrypoint, loader } => {
@@ -1670,7 +1699,7 @@ pub fn into_core_unit(
                 vec![Mount::new(Qualifier::empty(), RootKind::Ordinary)],
             )
         }
-        UnitSource::Mounted(input) => Resolved::for_mounted(input, &scope_tables)?,
+        UnitSource::Mounted(input) => Resolved::for_mounted(input, &scope_tables, &scope_mounts)?,
     };
 
     // Every prefix this compilation mounts — the scope's, then this unit's. Resolution asks the whole set; the lowered module records only `own`, because a module states what its own unit provides.
@@ -1702,12 +1731,12 @@ pub fn into_core_unit(
     witness_ids.seed(floor(PreparedPrelude::witness_floor));
 
     let universe_role = Cell::new(curios_core::UniverseRole::Flexible);
-    // The scope's seed table, in dependency order: each unit allocated above the last, so concatenating keeps every `UniverseMetaId` at its own index.
+    // The scope's seed table. A module carries the *cumulative* table from index zero rather than its own slice — `universe_floor` is asserted equal to its length — so the scope's table is the last unit's, already containing every earlier one. Concatenating them counts each predecessor once per successor, which is what the floor assertion catches.
     let universe_seeds = RefCell::new(
         scope_cores
-            .iter()
-            .flat_map(|core| core.universe_seeds.iter().cloned())
-            .collect::<Vec<_>>(),
+            .last()
+            .map(|core| core.universe_seeds.clone())
+            .unwrap_or_default(),
     );
     let universe_allocations = RefCell::new(HashMap::new());
 

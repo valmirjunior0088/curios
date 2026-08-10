@@ -302,5 +302,9 @@ where
     .map(|erased| erased.into_module())
     .map_err(|error| CompileError::Failure(error.format_with(&module, &cores)))?;
 
-    Ok((lower_from_ersd(ersd_module, &mut observe), foreigns))
+    // Every unit's rows, not the entry's alone: an embedder binds one registry, and a dependency that declares a `foreign` row has to reach it. Disjoint by mount, so the union cannot collide.
+    let mut all_foreigns = scope.foreigns();
+    all_foreigns.absorb(&foreigns);
+
+    Ok((lower_from_ersd(ersd_module, &mut observe), all_foreigns))
 }
