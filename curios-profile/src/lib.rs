@@ -4,6 +4,7 @@
 //!
 //! - [`profile!`] as the first statement of a function times the whole function, the successor of the retired `#[cfg_attr(feature = "profile", tracing::instrument(…))]` attribute — which could not survive re-export, because its expansion requires a crate literally named `tracing` in the invoking crate's extern prelude.
 //! - [`profile_span!`] wraps one expression, for the per-step breakdown of a loop where timing the stepped function would aggregate every call.
+//! - [`profile_group!`] times a function like [`profile!`] but aggregates each distinct group separately, which is how a per-item span answers *which item* rather than *how long in total*.
 //! - [`capture`] runs a closure under a thread-local subscriber and returns aggregate per-span timings, without touching the process-global subscriber. It is the only consumer; profiling is configured where it is used, in code — there is deliberately no environment-variable switch, because a measurement is already specified at its call sites and a second, out-of-band specification could only disagree with the first.
 //! - [`sample!`] records a *magnitude* — how many, how wide, how deep — and the report returns that site's count, total, min, max, and mean.
 //! - [`CountingAllocator`] adds the memory half of that report. A binary installs it as its `#[global_allocator]` under its own `profile` feature and every span gains what it retained and what it allocated; a binary that installs nothing still gets its timings, with the memory columns reading zero.
@@ -44,6 +45,26 @@ macro_rules! profile_span {
         let __profile_span_guard = $crate::tracing::trace_span!($name).entered();
         $expr
     }};
+}
+
+/// Time an entire function, aggregating each distinct `group` as its own row — the per-item sibling of [`profile!`].
+///
+/// [`profile!`] answers "how long does this pass take"; this answers "which *item* did it spend that on". Elapsed time, allocations and retained bytes all report per group, so a pass dominated by one declaration reads as one row far above the rest instead of as an average that hides it.
+///
+/// ```text
+/// fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Item, Error> {
+///     curios_profile::profile_group!("declaration", item.describe());
+///     …
+/// }
+/// ```
+///
+/// **One report row per distinct group value**, so this is for a bounded set — top-level declarations, stages, passes — and never for a span that runs per node. The group is also formatted into a string at *every* span creation, not once per distinct value, which is the same depth discipline [`sample!`] carries and for the same reason.
+#[macro_export]
+macro_rules! profile_group {
+    ($name:literal, $group:expr) => {
+        #[cfg(feature = "profile")]
+        let __profile_guard = $crate::tracing::trace_span!($name, group = %$group).entered();
+    };
 }
 
 /// Record one observation of a magnitude under `name` — the sibling of [`profile!`] for *how big* rather than *how long*.

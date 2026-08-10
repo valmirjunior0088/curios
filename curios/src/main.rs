@@ -135,7 +135,7 @@ fn dispatch() -> Result<(), Failure> {
             );
             for summary in &report.summaries {
                 println!(
-                    "{:.3}\t{}\t{:.3}\t{:.3}\t{:.1}\t{:.1}\t{}\t{}\t{}",
+                    "{:.3}\t{}\t{:.3}\t{:.3}\t{:.1}\t{:.1}\t{}\t{}\t{}\t{}",
                     summary.total.as_secs_f64() * 1_000.0,
                     summary.calls,
                     summary.min.as_secs_f64() * 1_000.0,
@@ -145,6 +145,7 @@ fn dispatch() -> Result<(), Failure> {
                     summary.allocations,
                     summary.target,
                     summary.name,
+                    summary.group.as_deref().unwrap_or(""),
                 );
             }
 

@@ -214,12 +214,6 @@ impl Context {
         self.remaining.set(self.budget);
     }
 
-    /// Steps spent in the current declaration.
-    #[cfg(feature = "profile")]
-    pub(crate) fn spent(&self) -> u64 {
-        self.budget - self.remaining.get()
-    }
-
     /// The read half of the reduction cache. The reducer probes it wherever a term's reduction begins — at entry, and at the scrutinee stack's frame push, where a warm scrutinee dispatches in place instead of framing.
     pub(crate) fn cached_reduced(&self, term: &Term) -> Option<Term> {
         if term.has_universe_meta() {

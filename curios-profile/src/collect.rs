@@ -65,6 +65,8 @@ pub struct ProfileSummary {
     pub target: &'static str,
     /// The static span name.
     pub name: &'static str,
+    /// The group this row aggregates, for a span that declared one — the value of its `group` field. `None` for every ungrouped span, which is all of them unless [`profile_group!`](crate::profile_group) was used.
+    pub group: Option<Arc<str>>,
     /// Number of completed spans included in the aggregate.
     pub calls: u64,
     /// Sum of the time for which the spans were entered.
@@ -93,11 +95,15 @@ pub fn capture<T>(operation: impl FnOnce() -> T) -> (T, ProfileReport) {
     (result, report)
 }
 
-type Key = (&'static str, &'static str);
+/// What a span aggregates under: its target, its static name, and — for a span carrying one — the group it declared.
+type SpanKey = (&'static str, &'static str, Option<Arc<str>>);
 
-type Aggregates = Arc<Mutex<BTreeMap<Key, Aggregate>>>;
+/// What an event aggregates under. Deliberately not grouped: an event carries a magnitude, and grouping one is a second design rather than the same one.
+type SampleKey = (&'static str, &'static str);
 
-type Samples = Arc<Mutex<BTreeMap<Key, SampleAggregate>>>;
+type Aggregates = Arc<Mutex<BTreeMap<SpanKey, Aggregate>>>;
+
+type Samples = Arc<Mutex<BTreeMap<SampleKey, SampleAggregate>>>;
 
 #[derive(Default)]
 struct SampleAggregate {
@@ -123,6 +129,31 @@ impl SampleAggregate {
             total: self.total,
             min: self.min.unwrap_or_default(),
             max: self.max,
+        }
+    }
+}
+
+/// Reads the `group` field off a span's creation attributes, ignoring anything else it carries.
+///
+/// **Both arms are load-bearing.** A group written as `group = %name` is a `Display` value, and `tracing` records those through [`Visit::record_debug`] rather than [`Visit::record_str`] — so a visitor implementing only the latter compiles, runs, and silently captures nothing. That is exactly how [`SampleValue`] below reads its own field and why its `record_debug` is a deliberate no-op rather than an oversight.
+#[derive(Default)]
+struct GroupValue(Option<Arc<str>>);
+
+impl GroupValue {
+    const FIELD: &'static str = "group";
+}
+
+impl Visit for GroupValue {
+    fn record_str(&mut self, field: &Field, value: &str) {
+        if field.name() == Self::FIELD {
+            self.0 = Some(Arc::from(value));
+        }
+    }
+
+    fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
+        // Formatted only on a name match: this runs at every span creation, and a group is a string allocation per span.
+        if field.name() == Self::FIELD {
+            self.0 = Some(Arc::from(format!("{value:?}").as_str()));
         }
     }
 }
@@ -181,10 +212,16 @@ impl Aggregate {
         self.allocations = self.allocations.saturating_add(timing.allocations);
     }
 
-    fn summary(&self, target: &'static str, name: &'static str) -> ProfileSummary {
+    fn summary(
+        &self,
+        target: &'static str,
+        name: &'static str,
+        group: Option<Arc<str>>,
+    ) -> ProfileSummary {
         ProfileSummary {
             target,
             name,
+            group,
             calls: self.calls,
             total: self.total,
             min: self.min.unwrap_or_default(),
@@ -206,6 +243,7 @@ struct Entry {
 
 struct SpanTiming {
     metadata: &'static Metadata<'static>,
+    group: Option<Arc<str>>,
     entered: Vec<Entry>,
     elapsed: Duration,
     retained: i64,
@@ -214,9 +252,10 @@ struct SpanTiming {
 }
 
 impl SpanTiming {
-    fn new(metadata: &'static Metadata<'static>) -> Self {
+    fn new(metadata: &'static Metadata<'static>, group: Option<Arc<str>>) -> Self {
         Self {
             metadata,
+            group,
             entered: Vec::new(),
             elapsed: Duration::ZERO,
             retained: 0,
@@ -243,8 +282,12 @@ impl SpanTiming {
         }
     }
 
-    fn key(&self) -> Key {
-        (self.metadata.target(), self.metadata.name())
+    fn key(&self) -> SpanKey {
+        (
+            self.metadata.target(),
+            self.metadata.name(),
+            self.group.clone(),
+        )
     }
 
     fn elapsed(&self) -> Duration {
@@ -305,8 +348,10 @@ where
         context: Context<'_, S>,
     ) {
         if let Some(span) = context.span(id) {
+            let mut group = GroupValue::default();
+            attributes.record(&mut group);
             span.extensions_mut()
-                .insert(SpanTiming::new(attributes.metadata()));
+                .insert(SpanTiming::new(attributes.metadata(), group.0));
         }
     }
 
@@ -361,7 +406,7 @@ fn finish_report(aggregates: &Aggregates, samples: &Samples) -> ProfileReport {
 
     let mut summaries = aggregates
         .iter()
-        .map(|(&(target, name), aggregate)| aggregate.summary(target, name))
+        .map(|((target, name, group), aggregate)| aggregate.summary(target, name, group.clone()))
         .collect::<Vec<_>>();
 
     summaries.sort_by(|left, right| {
@@ -370,6 +415,7 @@ fn finish_report(aggregates: &Aggregates, samples: &Samples) -> ProfileReport {
             .cmp(&left.total)
             .then_with(|| left.target.cmp(right.target))
             .then_with(|| left.name.cmp(right.name))
+            .then_with(|| left.group.cmp(&right.group))
     });
 
     ProfileReport {

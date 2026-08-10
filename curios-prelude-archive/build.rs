@@ -36,11 +36,12 @@ fn main() {
     {
         let ((), report) = curios_profile::capture(build);
         let out = PathBuf::from(env::var_os("OUT_DIR").unwrap()).join("profile.tsv");
-        let mut rendered =
-            String::from("total_ms\tcalls\tretained_mb\tallocated_mb\tallocs\ttarget\tname\n");
+        let mut rendered = String::from(
+            "total_ms\tcalls\tretained_mb\tallocated_mb\tallocs\ttarget\tname\tgroup\n",
+        );
         for summary in &report.summaries {
             rendered.push_str(&format!(
-                "{:.3}\t{}\t{:.1}\t{:.1}\t{}\t{}\t{}\n",
+                "{:.3}\t{}\t{:.1}\t{:.1}\t{}\t{}\t{}\t{}\n",
                 summary.total.as_secs_f64() * 1_000.0,
                 summary.calls,
                 summary.retained as f64 / (1024.0 * 1024.0),
@@ -48,6 +49,7 @@ fn main() {
                 summary.allocations,
                 summary.target,
                 summary.name,
+                summary.group.as_deref().unwrap_or(""),
             ));
         }
         if !report.samples.is_empty() {

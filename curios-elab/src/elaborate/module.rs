@@ -905,15 +905,10 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Item, Err
     context.set_island(item_module);
 
     let item_names = item.describe();
-    // One span per top-level item is the natural unit for the fixed prelude: its close event attributes elapsed time to a declaration by name, which is the breakdown a whole-module timing cannot give. `steps` reports what the declaration spent of its budget.
-    #[cfg(feature = "profile")]
-    let _declaration = curios_profile::tracing::info_span!(
-        target: "curios_elab::declaration",
-        "declaration",
-        name = %item_names,
-        steps = curios_profile::tracing::field::Empty,
-    )
-    .entered();
+    // One span per top-level item, aggregated per item rather than across all of them: the fixed prelude is 1079 declarations whose costs differ by three orders of magnitude, and a single averaged row cannot say which one a pass is actually spending on.
+    //
+    // This used to be a hand-rolled span carrying `name` and `steps` as fields, on the belief that its close event attributed elapsed time by name. It did not: `capture`'s collector keeps a span's *metadata* and discards its attribute values, implements no `on_record` at all, and visits exactly one event field — so both were written and dropped on every one of those 1079 declarations. `profile_group!` is that attribution actually implemented.
+    curios_profile::profile_group!("declaration", item_names);
 
     // The step budget is per declaration, so it is restored here rather than drained across the module: whether this item typechecks must not depend on how much the items before it happened to spend.
     context.restore_budget();
@@ -928,9 +923,6 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Item, Err
     retry_deferred_witnesses(context)?;
     context.drain_parked()?;
     context.finish_universe_transaction();
-
-    #[cfg(feature = "profile")]
-    _declaration.record("steps", context.spent());
 
     Ok(elaborated)
 }
