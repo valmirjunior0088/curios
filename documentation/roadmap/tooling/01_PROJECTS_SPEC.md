@@ -1,241 +1,187 @@
-# A project names what it depends on, and a unit is compiled once
+# Identity is declared once, and a unit is compiled once
 
-## Two objectives, and why they are one document
+This is the Curios way to do packages and projects: how a program depends on code it does not contain, and how a unit compiled by one compilation is consumed by another so that depending on N packages does not cost N elaborations per build. The two halves are one document because the coupling runs both ways — packages ship source, so the boundary is unusable at scale without the cache, and the cache's location and keys are facts about what a project is.
 
-**A program can depend on code it does not contain, without vendoring it.** That decomposes into how a dependency is *named*, how it is *located*, how the compilation is *ordered*, and what the boundary *means*.
+## The four laws
 
-**A unit compiled by one compilation can be consumed by another**, so that depending on N packages does not cost N elaborations per build.
+Every decision below derives from one of these, and cites it.
 
-These were specified as two phases of one compilation-units document, in that order, and separating them is what showed the order was wrong. The second is not merely less urgent than the first — it is **downstream** of it. A cache has to live somewhere, and where it lives, how it is laid out, and whether it is shared between projects are all functions of what a project *is*, which is the first objective's question. The earlier document called storage "ordinary engineering", which is true of the mechanism and false of the location.
-
-They are one document because the coupling runs both ways. The first is unusable at scale without the second — packages ship source, so every consumer elaborates every dependency — and the second cannot be designed before the first. Two documents would each have to state the other's constraints.
+1. **Declaration decides; location never does.** Modules exist because a header declares `mod`, artifacts because the manifest declares them, members because the umbrella enumerates them. A file nothing names is inert, wherever it sits.
+2. **Identity is declared exactly once, by its owner.** A package names itself, and the filesystem spells structure, never names. Nothing positional — no identity meaningful only in the compilation that assigned it — is ever stored.
+3. **Membership organizes; dependency compiles.** The membership tree places stores and scopes tooling; only declared dependencies order compilation. Neither implies the other.
+4. **A refusal fires early and names both parties.** Conflicts, collisions, cycles, and missing obligations are diagnosed before elaboration, never surfaced as an unbound name or a conversion failure holding no span.
 
 ## What is already in place
 
-The compiler no longer knows structurally that there is *a prelude* and *a program*. A compilation is a set of units folded over a dependency order, and this specification builds on that rather than restating it. The landed vocabulary, which every section below names rather than re-derives:
+The compiler no longer knows structurally that there is *a prelude* and *a program*. A compilation is a set of units folded over a dependency order; this specification builds on that vocabulary rather than restating it.
 
 | Thing | What it is |
 | --- | --- |
 | `curios_unit::Unit` | One compiled unit: its resolution state, its elaborated `Module`, its erased arena, and its binder floor |
-| `curios_unit::Scope` | Every predecessor, borrowed in dependency order — never merged, because merging copies the standard library into every compilation |
+| `curios_unit::Scope` | Every predecessor, borrowed in dependency order — never merged |
 | `curios_base::Mount` | A claimed prefix and its `RootKind`; lookup is longest-match, and mount sets are pairwise disjoint |
-| `curios_text::UnitSource` | The seam a unit arrives through: the entry with its loader, or a mounted tree |
+| `curios_text::UnitSource` | The seam a unit arrives through today; its own documentation promises the resolver that replaces both arms |
 | `curios_pipeline::compile_units` | The fold — each source compiled against the base and everything before it, judged by the kernel between elaboration and erasure |
 | `curios_core::validate_stored_identities` | The refusal at the one seam a unit is written today |
-| `--unit <PREFIX>=<PATH>` | Repeatable, argument order *is* dependency order |
+| `--unit <PREFIX>=<PATH>` | Repeatable, argument order *is* dependency order; survives beneath everything as the already-resolved form a manifest entry becomes |
 
-Three properties that matter here, all of them enforced rather than assumed. The orphan rule fires between two ordinary units and not between two modules of one unit, which is what makes the unit boundary the place coherence is decided. Two units claiming one prefix is refused at mount, naming both claimants, and an entry `mod foo` beside a unit at `/foo` is that same refusal. Every unit's `foreign` rows reach the store the driver returns, unioned, disjoint by mount.
+Three properties are enforced rather than assumed: the orphan rule fires between two ordinary units and not between two modules of one unit; two units claiming one prefix is refused at mount; every unit's `foreign` rows reach the returned store, unioned, disjoint by mount. Two further facts are structural and this design leans on them. An executable is an `Entrypoint` — a module *plus a tail expression* — while a library is a `Module` with neither, so the artifact distinction below is enforced by type, not convention. And the entry loader (`curios_text::RootSource`) already resolves a root's children as siblings in its base directory with stem-nesting below, which is exactly the layout rule this document states; the mounted loader differs only by prepending the root file's stem, and closing that gap is a deletion.
 
-## Prior art
+## The manifest
 
-**Coq** binds a logical prefix to a physical directory with `-Q dir Lib`, which is where mounts come from. It does not key coherence on the prefix, which is why it can let the *consumer* choose the name and this design cannot — see below.
+A manifest is `Curios.toml`: declarative TOML, no code escape. Lake ended up making declarative TOML the default with its Lean DSL as a rarely-needed escape, and Swift's code-as-manifest is the documented failure mode — unanalyzable without execution. If a computed configuration is ever genuinely needed, that is a new decision, not a latent capability.
 
-**Lean** stores a pre-elaborated environment per module and unions imports before checking, with `lean4checker` as a separate re-checker over the result. Its trust posture — a stored verdict believed on the strength of the file it came in — is the one this specification declines to inherit silently, and states as an entry instead.
+Every manifest is in exactly one of two modes, and the modes are mutually exclusive — a manifest that declares both refuses to parse:
 
-**GHC** splits its scope in two: a `HomePackageTable` for what is being built now and an `ExternalPackageState` for what is already built. That split arrives here as the *provenance* of a unit — cached or live — not as a second scope type. It also fingerprints each declaration's interface, which is the granularity argument the key section rests on.
+- **A package** — a namespace for definitions: `name`, `[dependencies]`, `[[executables]]`, optional `default`.
+- **An umbrella** — a namespace for packages: nameless, `members`, `[catalog]`.
 
-**rustc** assigns crate numbers per compilation and therefore needs `cnum_map` to remap them on load. Every identity decision below is downstream of refusing that.
+A manifest is optional. A bare `.crs` file compiles with no manifest, no dependencies, and no project — exactly as today. `Curios.lock` is reserved as a name even though a manifest of exact pins already is a lockfile.
 
-**OCaml with Dune** wraps a library by prefixing every module with the library name, precisely because top-level compilation-unit names must be unique at link. Prefix-as-identity, arrived at independently. Its *packed modules* alternative is the shape the erased artifact deliberately takes.
+There is no privilege field in either mode and there never will be one: a mounted package is `Ordinary` structurally — the loader hands `RootKind::Ordinary` to `insert_root` and the manifest parser has no path to that argument — so no package can exempt itself from the orphan rule in the file its own author writes. **Reinstate only if** a package must ever reference an internal root, and split reach from exemption before doing it.
 
-**Cargo** supplies four things to the prelude's cache today — storage, key, invalidation, enforcement — and this specification is largely the story of replacing them one at a time.
-
-## The order, which is not the order these were written in
-
-**C1 → C2 → B1 → B3 → B4 → B6.** The identities are kept from the document these came from, because they are referenced by commits and by the task list, and because renumbering an identity to match a position is the mistake this whole design exists to refuse.
-
-- **C1** — the manifest, and the resolver behind its source column. Nothing depends on it; everything else does.
-- **C2** — dependency order and the conflict refusal. Needs a manifest to have something to conflict.
-- **B1** — a witness is identified by its mount. Independent of both, and a precondition for storing more than one unit.
-- **B3** — what replaces Cargo, and what the compiler starts believing. Needs C1, because the store's location is a fact about projects.
-- **B4** — the erased artifact is keyed on the prefix, not on the unit. Needs B3's key.
-- **B6** — what never caches, and what only looks like it. An audit; last because it is about what B3 and B4 built.
-
-## Decided: the package boundary
+The manifest, the governance walk, the resolver, and the store are one subsystem with one owner: **`curios-project`**, a new crate beside `curios-pipeline` and below `curios`, with the CLI's subcommands as thin wrappers over it. The pipeline stays pure and never learns it exists; `curios-web` never touches it. It is also the workspace's only TOML dependency — the pattern `curios-archive` sets for rkyv — because `/std`'s TOML codec is a guest library and cannot serve the driver.
 
 ### A package names itself
 
-> **A package chooses its own mount prefix, and every consumer refers to it by that name.**
+> **A package declares its own canonical name, the name is its mount prefix, and every consumer refers to it by that name.**
 
-The reason is version coexistence being declined, reached from the other side. If a *consumer* chose the prefix, then when packages `X` and `Y` both depend on `D`, each mounts `D` where it likes, `D` compiles twice under two prefixes, and its types become two nominally distinct families spelled the same. `Show(D/Foo)` through `X` and `Show(D/Foo)` through `Y` are then different keys, so the orphan rule never fires between them and they silently fail to interoperate — the exact failure that decision exists to prevent, arriving through the prefix rather than through the version. Package-chosen naming is what makes a diamond *share* instead of duplicate.
+If a consumer chose the name, a diamond dependency would compile twice under two prefixes and its types would become two nominally distinct families spelled the same — the interoperation failure that declining version coexistence exists to prevent. Package-chosen naming is what makes a diamond share instead of duplicate (law 2).
 
-B1 sharpens it: a mount would scope witness identities too, so a prefix becomes load-bearing identity throughout a stored unit rather than a spelling convenience.
+Names are **multi-segment from day one**: `name = "myorg/json"` mounts `/myorg/json`. Each segment is a legal Curios identifier, so no dashes, Unicode alphanumerics admitted, and a segment spelling a keyword (`Type`, `concept`, `satisfy`, …) is refused at manifest parse. Single-segment names stay legal for local work. Every first-generation flat registry — npm, PyPI, crates.io — is a documented squatting and typosquatting regret, and every second-generation one made namespacing mandatory (JSR scopes, Packagist vendors, Go domains); the separator is reserved before anything exists because retrofitting one costs an ecosystem migration. The name is self-declared, never conferred: an umbrella contributes nothing to any member's name, so reorganizing a tree renames nothing (law 2).
 
-**The cost, stated rather than discovered.** Two unrelated packages that each call themselves `/json` are permanently incompatible, and no consumer can repair it. That is rustc's position before namespacing; it is survivable with no ecosystem, and both escapes are additive — a namespace convention inside the canonical name, or reference-level aliasing, which `Context::insert_scope` already supports.
+**A name is an atom: its segments are spelling, not structure.** `myorg` in `myorg/json` denotes nothing on its own, exactly as the scope in a JSR name denotes nothing importable. Reference resolution finds the owning mount by longest match over a reference's leading segments — `Mount::owning`'s algorithm, promoted from ownership queries to name resolution — and resolves the remainder inside that unit; a single-segment mount resolves exactly as it does today, so the atom rule subsumes the current mechanism rather than replacing it. What it sharpens is disjointness: with prefixes of different lengths, pairwise distinctness is no longer enough, because an entry's `mod myorg` beside a mount at `/myorg/json` makes `myorg/json/parse` ambiguous. **No claimed prefix may lie within another claimed subtree, and the entry's top-level module names claim their stems for this purpose** — a refusal naming both claimants, the same shape as the mount collision (law 4).
 
-**This is not what `--unit` does today.** `--unit <PREFIX>=<PATH>` lets the *consumer* pick the prefix for any source, which is exactly the duplication this decision forbids. Benign while there is one consumer and no ecosystem, and closed by C1 when the manifest supplies the name. Recorded so C1 does not rediscover it as a surprise.
+### The library and the executables
 
-**Rejected: Coq's `-Q dir Lib`, where the consumer names the library.** It is where this design's mounts come from and it is right for Coq, which does not key coherence on the prefix. Here it duplicates every shared dependency.
+`name` obligates a library: `lib.crs` beside the manifest, and its absence is a refusal, never a "no library then". The filesystem never decides semantics; it is obligated by them (law 1). There is no `library` key — the name is the declaration and the fixed header file is its obligation.
 
-### A dependency is pinned exactly, so there is nothing to solve
+Executables are enumerated, never discovered:
 
-> **A dependency names a canonical name and one exact revision. There is no requirement language.**
+```toml
+name = "myorg/json"
 
-No ranges, so no solver. No lockfile, because a manifest of exact pins is one. The order the fold consumes is a topological sort over the declared dependencies, and a cycle is refused.
+[[executables]]
+name = "serve"                 # runs serve.crs beside the manifest
 
-**The revision identifier is opaque to the compiler.** It is compared for equality and never interpreted, so the compiler needs no notion of a registry, a version scheme, or a hash. A resolver turns an identifier into bytes; that is the entire contract, and it is what makes fetching genuinely separable rather than nominally so.
-
-`--unit <prefix>=<path>` survives underneath all of this as the already-resolved form: it names a mount and a location, which is what a manifest entry becomes once its revision has been resolved to bytes.
-
-**The cost.** Exact pinning conflicts on any difference, including compatible ones, so a deep graph grows annoying sooner than Cargo's would. The named successor is Go's minimal version selection, which needs only a total order on revisions rather than a constraint language, and which *produces* the pins this design already consumes — an additive layer rather than a redesign.
-
-### A conflict is a refusal, and this specification owns it
-
-Declining coexistence is what makes a version conflict a refusal rather than a resolution, and under exact pins the refusal is a comparison: two units in the graph pin different revisions of one canonical name. It names both dependents and both revisions, before any of them elaborates.
-
-It cannot wait. Unowned, a conflict reaches the compiler as an unbound name, or as a nominal conversion failure raised by the certifier — which holds no span for the other revision. That is the diagnostic class declining coexistence was meant to avoid.
-
-### What a manifest holds, and what it cannot
-
-- The unit's **canonical name**, which is its mount. Absent for the entry, which owns the empty prefix precisely because it is the unit with no successors.
-- Its **dependencies**: a canonical name, an exact revision, and a source, each.
-- Nothing else. No privilege tier and no second prefix, per the two decisions below.
-
-**A manifest is optional.** A program depending on nothing needs none, and compiling a bare `.crs` file keeps working exactly as it does today: no manifest means no dependencies, not a missing file.
-
-The format is a Rust-side choice with no reuse available from the standard library: `/std`'s TOML codec is a guest library and cannot serve the compiler driver.
-
-### Decided: a package is ordinary, and the manifest cannot say otherwise
-
-`RootKind` fuses two powers into one tier: may reference an internal root, and — through the orphan rule's "the declaring root is unprivileged" condition — is exempt from the refusal that stops two authors colliding on one `(concept, key)` pair. Depending on someone else's code needs neither. A manifest that may declare its own tier hands a package the power to exempt itself from the one rule the unit boundary exists to enforce, spelled in the file the package's own author writes.
-
-So a mounted package is `Ordinary`, the manifest has no tier field, and the privileged tier stays the compiler's own. **Reinstate if** a package is ever wanted that must reference an internal root — and split the tier in two before doing it, because reach and exemption are different powers and only the first would be being asked for.
-
-### Decided: one prefix per manifest
-
-The prelude mounts three because `/syn` and `/std` are mutually dependent and no order exists over them. Nothing else has that shape. `Unit`'s mounts are already a list, so the day something does, lifting this is additive and nothing archived changes. Refusing it now is what keeps a package's name and its mount the same word.
-
-### A source is a resolver, not a path
-
-`RootSource` is the whole logical-to-physical mapping today, and it is one optional directory: qualifier `a/b/c` reads `base/a/b/c.crs`. Generalizing it to one base per mount is small. What must not follow the directory into the format is the assumption that a source *is* a directory — `curios-web` compiles with no filesystem at all and supplies every module body inline, so a manifest whose source column can only spell a path excludes a shipped product. The column names a resolver; the filesystem is one of them.
-
-### Packages ship source, not artifacts
-
-The prelude archive is build-scoped and deliberately not an interchange format; generalizing "one artifact per package" would quietly make it one. Rust ships source and rebuilds, which keeps that constraint honest and keeps the caching half about *local* caching rather than distribution. It also means every consumer elaborates every dependency, which is the coupling that puts caching in this document rather than in a later one.
-
-### What this does not touch
-
-**The prelude is not a package.** Every compilation depends on it implicitly, no manifest names it, and its privileged mounts stay the compiler's own — which is *a package is ordinary*, seen from the other side.
-
-**No surface syntax changes.** `use /foo/Bar` already reaches a mounted prefix, so [SYNTAX.md](../../SYNTAX.md) is untouched and no `.crs` file spells a dependency. A package boundary is invisible to the grammar and visible only to coherence, visibility, and the mount table.
-
-## Open: two decisions this specification must make and has not
-
-Both were raised and deliberately left unsettled. They are recorded here as questions with their alternatives, because writing down a decision nobody made is worse than an acknowledged gap.
-
-**Partly answered since**, in [the raw notes below](#raw-notes-the-package-management-story-start-to-finish): a project is a file, the manifest is `Curios.toml`, and the store is `.curios/` over a shared content-addressed cache. This section has not been rewritten around those answers yet.
-
-### Is a manifest named, or discovered?
-
-Everything C1 and C2 need works with a manifest that is *named*: parse it, resolve each dependency to bytes, topologically sort, refuse a cycle, refuse a conflict. Discovery is a separate, purely additive layer — and it is the thing that makes "is this file part of a project?" a question at all.
-
-- **Implicit, walking up from the file or the working directory** — Cargo's rule. A project works from anywhere inside it. The cost is the scratch file: a throwaway `.crs` inside a project directory becomes a project member without saying so, compiled against its dependencies and refused by its conflicts. "Standalone" then depends on where a file happens to sit.
-- **Explicit, a flag or an argument.** A bare file is always a bare file, wherever it sits; a project costs one flag, or a wrapper grown later. Never surprising, more typing.
-
-Until this is decided, **every file is standalone** and nothing on disk is implicitly part of anything, which is also the state the compiler is in today.
-
-### Where does a store live?
-
-B3 settles the key and the trust. It does not settle the location, and the two are not independent: content-derived keys are what make a store shareable between projects at all, and a path-keyed one could only ever be local.
-
-- **Project-local**, beside whatever a project turns out to be.
-- **Shared and content-addressed**, so two projects depending on one package at one revision pay for it once — the diamond argument, applied to build time rather than to coherence.
-- **Under the existing `target/`**, which this repository already treats as a hand-pruned cache that survives `cargo clean` only by never being given it.
-
-This wants deciding against a real dependency graph rather than against the single hand-passed unit `--unit` allows today, which is the reason the caching half is sequenced after C1 rather than before it.
-
-## Raw notes: the package-management story, start to finish
-
-**Unrefined, and deliberately so.** These are the decisions and findings from one design conversation, recorded before they are rewritten into the sections above. Several of them answer the two open questions immediately preceding this one; where they do, the open section is stale rather than wrong, and the rewrite is what reconciles them. Nothing here has been checked against the rest of the document for consistency of voice or ordering.
-
-### Decided in conversation
-
-- **The file is the unit of the project.** A root `.crs` file enumerates its own children; there is no project directory delimiting membership. A unit and a project are the same thing.
-- **The manifest is `Curios.toml`**, a fixed name rather than one derived from the root file's stem.
-- **Everything generated goes under `.curios/`.** The root directory holds user files and nothing else — no build products, no caches, no lock artifacts loose beside the sources.
-- **A lockfile, if one is ever needed, is `Curios.lock`.** Reserving the name costs nothing even though [exact pins](#a-dependency-is-pinned-exactly-so-there-is-nothing-to-solve) mean a manifest already is one.
-- **The package name must be a valid name in the language**, because the name *is* the mount prefix. This is the constraint that ties the manifest to the module system rather than leaving them as two naming schemes that agree by convention.
-- **`curios curate` is `uv sync`** — make the local state match what the manifest declares, rather than resolve anything.
-- **`curios new` comes last**, after the machinery that reads a manifest and acts on it exists. Scaffolding a format still in flux is work done twice.
-- **`curios run` keeps working on a bare file**, with no manifest and no project, exactly as it does today.
-
-### What the naming rule actually costs
-
-`documentation/SYNTAX.md` states it: *"An identifier is a nonempty sequence of Unicode alphanumeric characters and `_`."* So, concretely:
-
-- **No dashes.** `my_package`, never `my-package` — a deliberate break from npm and Cargo convention, and the first thing anyone coming from those will trip over.
-- **Unicode alphanumerics are admitted**, so `café` is a legal package name. A registry would need a normalization rule; a local-only ecosystem does not.
-- **`Type`, `Prop`, `concept`, `satisfy` are all legal path segments** and therefore legal package names. Confusing rather than broken, and worth a refusal at manifest-parse time rather than a surprise at resolution.
-
-### A defect this conversation turned up
-
-**The entry and a mounted unit resolve their file-backed modules by different rules, and one of them documents the other's.**
-
-| | base | `mod bar` inside `foo.crs` reads |
-| --- | --- | --- |
-| Entry (`curios/src/compile.rs`, `RootSource::file_system`) | `path.parent()` | `<dir>/bar.crs` — **sibling** |
-| Mounted unit (`curios/src/compile.rs`, `load_unit`) | `parent().join(file_stem())` | `foo/bar.crs` — **nested** |
-
-`load_unit`'s doc comment claims it resolves *"exactly as the entry program's own file-backed modules resolve"*. It does not. That sentence was written under A5 and is false.
-
-**This matters for the file-as-project decision**, because the nested rule is the one that generalizes: if `foo.crs` owns `foo/` for its children, the entry should nest too. Adopting it means `curios run main.crs` looks for `main/bar.crs` rather than `bar.crs`, which **breaks every existing program with a file-backed module**. Cheap now, expensive later, and it is a decision rather than a cleanup. Left open.
-
-### The seam, and how little of it is new
-
-`curios_pipeline::compile_units` already takes a scope and a `&[UnitSource]` in dependency order. So the whole of the manifest work is a function feeding that slice:
-
-```text
-Curios.toml → [(canonical name, revision, source)] → resolver → [UnitSource] → compile_units
+[[executables]]
+name = "bench"
+path = "tools/bench.crs"       # explicit path overrides the default
 ```
 
-Everything below that arrow exists and is tested. What is genuinely new:
+An executable's `name` is a single legal identifier; the default path is `<name>.crs` in the package root and `path` overrides it. Deriving a path from a declared name is not disk discovery — declaration still decides existence — and disk discovery is the refused thing: Cargo's target auto-discovery accumulated enough misfires to grow `autobins`/`autolib` off-switches, and explicit targets are its escape hatch from convention. Here explicit is the only mode. `default = "<name>"` selects which executable a bare `curios run` means when there is more than one. An executable compiles against the package's full scope — its library and its dependencies — as the entry, owning the empty prefix.
 
-- a manifest parser, Rust-side — `/std`'s TOML codec is a guest library and cannot serve the driver;
-- a resolver trait, one method, identifier to module tree — `RootSource` generalizes to one base per mount, with the filesystem as one implementation and `curios-web`'s inline supplier as another;
-- a topological sort over declared dependencies, and a cycle refusal;
-- the revision-conflict refusal.
+**Rejected: a target abstraction.** The library is not one target among several — it *is* the package, the thing the name names and the mount serves; executables are entry roots compiled onto it, outside its namespace. Swift PM's products/targets split exists so one package can vend several libraries, which one-prefix-per-manifest deliberately rules out.
 
-What is **not** new: mounts and their kinds, the orphan rule across units, the foreign-row union, the mount-collision diagnostic, `load_unit`'s eager materialization, and `--unit`, which survives underneath as the already-resolved form a manifest entry becomes once its revision is bytes.
+## The layout: the tree reads as the namespace
 
-### Where the store lives, resolved
+The package directory is the object; its on-disk name is free; identity lives only in the manifest (law 2).
 
-The file-as-project decision appeared to leave nowhere project-local for a cache, since `foo/` is taken by modules. `.curios/` resolves it, and the shape is uv's two layers: **`.curios/` is this project's materialized dependency set, and a shared content-addressed cache sits above it** so two projects pinning one revision compile it once. That upper layer is exactly what [B3](#b3--what-replaces-cargo-and-what-the-compiler-starts-believing)'s content-derived keys exist to make safe — a path-keyed store could never have been shared.
+```text
+json/                ← directory name is free; identity is `name = "myorg/json"`
+  Curios.toml
+  lib.crs            ← library header: /myorg/json's own definitions, plus `mod parse`, `mod render`
+  parse.crs          ← /myorg/json/parse
+  parse/
+    lexer.crs        ← /myorg/json/parse/lexer
+  render.crs         ← /myorg/json/render
+  serve.crs          ← executable "serve": an entry, not a module of the package
+  serve/
+    cli.crs          ← serve's private module
+```
 
-### What `curate` is, and the free win inside it
+**The resolution rule, stated once:** `mod x` declared in a namespace's header resolves to `x.crs` in that namespace's directory; every header's namespace directory is its stem directory — except the package's library header, whose namespace directory is the manifest's. The exception is forced by law 2: directory names are semantics-free, so no stem could mark the package root; the manifest names that namespace, so the manifest anchors it. A file's stem never enters any qualified name — `lib` appears in no path a consumer can spell.
 
-Two jobs wear the name, and only the first is `uv sync`:
+Consequences, owned here:
 
-- **Materialize** — resolve every pin to bytes and place them where the resolver finds them; drop what the manifest no longer names. With exact pins and no solver there is nothing to resolve, only to realize.
-- **Reconcile** — report a dependency declared but never named, or named but never declared.
+- **The package root has one stem space.** `lib`, executable names, and module names enumerated by `lib.crs` all claim stems in the manifest's directory; a double claim — an executable named `parse` beside `mod parse` — is a refusal naming both claimants, the same shape as the mount collision (law 4).
+- **An unenumerated `.crs` file is inert.** Not compiled, not a member, wherever it sits — the scratch-file freedom, preserved by construction. `curate` reports it ("`parse2.crs` sits in the package and nothing names it") rather than the compiler guessing. Python's src-layout doctrine exists to approximate this property by directory convention; enumeration delivers it structurally.
+- **Bare files stem-nest too.** A bare `scratch.crs` handed to `run` is its own header: `mod util` reads `scratch/util.crs`. This is a breaking change to the entry's current first-level sibling rule, taken deliberately: it closes the recorded entry-versus-mounted resolution defect, makes one rule govern every file in the language, and never lets declaring a file change what its `mod`s mean. Migration is mechanical file moves, applied to the corpus in M1.
+- **Disk mirrors the namespace below the root.** `/myorg/json/parse/lexer` lives at `parse/lexer.crs` inside the package directory — a qualified name's tail and its path are the same string; only the name's head maps to the manifest instead of to a spelled directory.
 
-The second is nearly free here and is not free in Cargo: the compiler already knows precisely which mounted prefixes a unit resolved against, so *"you declared `/json` and no module ever names it"* is a fact the mount table hands over. Worth taking even if it starts as a warning.
+**Rejected: a root file named after the package** (`json/json.crs`). It makes the filesystem restate the declaration — the name spelled in the manifest, the root file, and the stem directory, three spellings to keep synchronized — and produces Python's `foo/foo/` stutter. **Rejected: per-directory index files** (`mod.rs`, `__init__.py`): the repository's own Rust conventions refused the pattern, and the fixed header here is one thin file per package, not one per directory.
 
-**Open:** whether `curate` may reach the network itself, or is strictly a local materializer with fetching layered above it. The second keeps the compiler's "a revision identifier is opaque" property intact all the way out to the tool.
+## A dependency names a resolver and an exact pin
 
-### Sequencing
+Every dependency row is a table — there is no string shorthand, because revisions are opaque strings and `json = "umbrella"` colliding with a revision literally spelled `umbrella` is the kind of ambiguity a grammar should make unrepresentable. Each row carries a `source` naming its resolver, plus the fields that resolver requires:
 
-C1 and C2 before any tooling. The manifest, the resolver, the dependency order and the conflict refusal are what make a package boundary real; `new` and `curate` are convenience over a thing that must already work.
+```toml
+[dependencies]
+json       = { source = "member" }                                              # a live member of my umbrella
+toml_parse = { source = "catalog" }                                             # the umbrella's [catalog] row
+http       = { source = "git", url = "https://…", rev = "abc123", hash = "…" }  # pinned directly
+tools      = { source = "path", path = "../tools" }                             # live sibling, umbrella-less
+```
+
+- **`rev` is the fetch instruction** — the thing a remote can be asked for. It is opaque to the compiler: compared for equality, never interpreted, so the compiler needs no notion of a registry, a version scheme, or a VCS.
+- **`hash` is the acceptance criterion and the store key** — this toolchain's own hash over the materialized source tree, transport-independent. It is what makes a pin exact when tags move, what "same revision" actually rests on when upstream force-pushes, and the key the shared store files everything under, uniformly across source kinds. The scheme is named here because a hash outlives any implementation: `c1:` prefixes SHA-256 over the delivered tree's regular files, sorted by relative path, each contributing its path and its contents — permissions and timestamps do not exist for it, and a symlink in a delivered tree is refused. A future scheme is `c2:`, and the prefix is what lets both verify during a transition. This is Go's `go.mod`-version/`go.sum`-hash split with its `h1:` dirhash, and Zig's `url`+`hash` pair — the ecosystems that thought hardest about registry-less integrity landed on both columns and a versioned scheme. Nobody hand-writes a hash: `curate` computes it on first materialization and the wrong-or-missing hash's refusal states the correct one.
+- Fetchable sources require both `rev` and `hash`; `member`, `catalog`, and `path` forbid both, because live code has no pin. Making the acceptance of a full commit SHA stand in for `hash` would require interpreting `rev` (refused: opacity), pin integrity to SHA-1, and fork the store's keying per source kind.
+- **`path` exists for umbrella-less siblings** — the shape Elixir's community calls a poncho project — with the recorded consequence that a path cannot travel if publishing ever exists, which is Cargo's position too.
+
+Exact pins mean no requirement language and no solver; a manifest of exact pins is its own lockfile. The order the fold consumes is a topological sort over declared dependencies; a cycle is refused. A conflict — two units in one compilation graph pinning different `rev` or `hash` for one canonical name — is refused naming both dependents and both pins, before any of the three elaborates (law 4). The named successor for selection is Go's minimal version selection, which needs only a total order on revisions and *produces* the pins this design already consumes — an additive layer, not a redesign.
+
+A source is a resolver, never an assumed filesystem: `curios-web` compiles with no filesystem at all and supplies every module body inline, and it keeps compiling. That constraint is what keeps fetching genuinely separable — a resolver turns an identifier into a module tree, and that is the entire contract.
+
+## The umbrella
+
+An umbrella is a nameless manifest that enumerates packages: those it contains, and those it refers to.
+
+```toml
+members = ["json", "http_client", "tools/cli"]   # packages inside the tree: live, unpinned
+
+[catalog]                                        # shared rows members reference: pinned, hashed
+toml_parse = { source = "git", url = "https://…", rev = "abc123", hash = "…" }
+```
+
+- **`members` enumerates by path**, and the paths may point deep (`"tools/cli"`), which delivers deep directory organization with flat manifest structure. **Umbrellas do not nest.** Every mature toolchain converged on flat workspaces — Cargo forbids nesting, uv's nested members misbehave, `go.work` is a flat list — and the one ecosystem that shipped deep shared-everything umbrellas watched its community retreat to plain sibling projects. Nothing archived depends on flatness, so lifting it later is additive; refusing it now is what keeps governance a single-step question.
+- **The umbrella contributes nothing to any name** (law 2). Its tree is the membership graph, not the dependency graph (law 3): enumerating a member creates no dependency edge, and members depend on each other only by declaring it.
+- **A member's canonical name is always answered by the live member.** There is no override or patch table; `source = "member"` in a dependent's row resolves through the governing umbrella to the enumerated package, live, unpinned. `source = "catalog"` resolves to the umbrella's `[catalog]` row. Each marker names exactly the umbrella-side list that answers it — `members` answers `"member"`, `[catalog]` answers `"catalog"` — and each mismatch is its own refusal naming both sides: a `"member"` row whose name no governing umbrella enumerates, a `"catalog"` row absent from the catalog, a `"catalog"` row whose name *is* a member, and a direct row — fetchable or `path` — pinning a name the governing umbrella enumerates, because the live member is the only answer for that name inside its tree. The last two catch a promotion that half-happened, in either direction. The stated cost of these exact ties: promoting a catalog entry to a live member edits each consuming member's marker, and the mismatch refusal is what makes the edit impossible to forget.
+- **A catalog row does not fetch anything by itself.** The real dependency graph is the union of what members' `[dependencies]` reference; `curate` materializes that, and a catalog entry no member references is a reconcile report, not a download. Activation lives in the package that names it (law 1). Catalog rows name fetchable sources or `path`, never `member` or `catalog`.
+- **Pin agreement is reported, not forced.** Members referencing the catalog cannot drift by construction. Members pinning the same name directly can, and that drift is a `curate` report; the hard refusal fires only where two disagreeing graphs meet in one compilation. Cargo's workspace-wide forced agreement is also what makes its staged migrations painful; here the catalog is the carrot and the meet-point refusal the backstop.
+
+**Rejected: auto-propagating umbrella dependencies into members** — the umbrella injecting edges nobody declared is the implicit coupling that soured Elixir on umbrellas, and it would make member manifests lie when read alone. **Rejected: a dual-role manifest** that is both package and umbrella — it adds no expressive power (an umbrella with that package as first member is one directory away) and it is the overload behind Cargo's virtual-versus-root-manifest warts. **Rejected: umbrella-conferred name prefixes** — position-derived identity is the consumer-chosen-prefix duplication failure arriving one level up, and it would make reorganizing a monorepo a renaming event.
+
+## The store
+
+`.curios/` sits beside the governing root — the umbrella's manifest when the invocation is governed by one, the package's otherwise — and it is the only generated directory in the tree: member directories hold user files and nothing else. Above it sits the shared content-addressed cache, keyed by the same `hash` column the manifest carries, so two projects pinning one revision materialize and compile it once. This is the two-layer shape every modern toolchain converged on — pnpm's content-addressable store under per-project virtual stores, uv's cache under venvs, Go's module cache, Zig's global cache — and content-derived keys are what make the upper layer shareable at all; a path-keyed store could only ever have been local. The store holds both halves: materialized source trees keyed by their manifest `hash`, and compiled units keyed by the terms-and-certifier key B3 states — one layout, two key families.
+
+`curios curate` is the store's tool, and it does two jobs:
+
+- **Materialize** — resolve every referenced pin to bytes, verify each against its `hash`, place the results where the resolver finds them, and drop what nothing references any longer. With exact pins there is nothing to solve, only to realize.
+- **Reconcile** — report a dependency declared but never named by any module, a name resolved against no declaration, a catalog entry no member references, and a `.crs` file nothing enumerates. The compiler's mount table already knows precisely which prefixes a unit resolved against, so these are facts handed over, not analyses built.
+
+**`curate` is the toolchain's only network actor.** Opacity is a compiler property — the compiler compares `rev` and never interprets it — and the tool is exactly where interpretation belongs, because something must run a transport to turn a `rev` into bytes. This is a decision rather than a concession, because acceptance is by `hash`: any transport may deliver the bytes, an untrusted one included, and a delivery that fails the hash is refused regardless of who fetched it. A separate fetcher layered above `curate` would double the tooling for zero integrity gain. The compiler itself never fetches.
+
+## The command line
+
+`curios run` has three forms, and dispatch between them is lexical, never probed — an argument ending in `.crs` or containing a path separator is a file, anything else is an executable name, and the two spaces cannot overlap because executable names are identifiers:
+
+- **`curios run`** — the governing package's default executable: the sole one, or the one `default` names; otherwise a refusal listing the candidates. No reserved names, no magic filenames.
+- **`curios run <name>`** — the governing package's declared executable of that name.
+- **`curios run <file>.crs`** — a bare file, standalone, *everywhere* — today's semantics, unconditionally. No manifest ever captures a file argument.
+
+**Discovery, decided:** only the no-argument and name forms walk — upward from the working directory to the nearest package manifest, which is the governing package; the walk then continues upward, and an umbrella governs the invocation only if it enumerates that package, directly or through a path. Enumeration bounds the walk (law 1), which is exactly the ambiguity Cargo's unconditional walk never resolved. A file argument triggers no walk at all, so project scope is reachable only through declared artifacts — the scratch-file hazard is not mitigated but unconstructible, at the price of one `[[executables]]` line when a scratch program wants the library. `--manifest` is the explicit override for scripting. The governed forms materialize what the manifest references before compiling, through the same machinery `curate` exposes standalone — the uv and Cargo convergence — and a refuse-instead flag for CI is additive, later.
+
+`curios new` comes last, after the machinery that reads a manifest and acts on it exists. `--unit <PREFIX>=<PATH>` survives beneath all of this as the already-resolved form: a mount and a location, which is what a manifest entry becomes once its `rev` has been resolved to verified bytes.
 
 ## The caching half
 
-**It does not introduce verdict caching. It removes Cargo from underneath the one that already exists.** The prelude is a cached unit today — `verdicts_from` skips an item every one of whose declared names the environment already answers for, so the archive's items are never re-judged on the compile path, and what makes that sound is that the only crate handing the image out is one whose build script walked it with the kernel first. Cargo supplies four things there: storage (`OUT_DIR` and `include_bytes!`), the key (a schema constant and a source fingerprint), invalidation (the build script's own dependency graph), and enforcement (a crate that does not compile). A unit that is not a crate has none of them. Three are engineering. The fourth is a change to what the compiler believes, and it is stated in B3 rather than inherited.
+**It does not introduce verdict caching. It removes Cargo from underneath the one that already exists.** The prelude is a cached unit today — `verdicts_from` skips an item every one of whose declared names the environment already answers for — and what makes that sound is that the only crate handing the image out is one whose build script walked it with the kernel first. Cargo supplies four things there: storage (`OUT_DIR` and `include_bytes!`), the key (a schema constant and a source fingerprint), invalidation (the build script's dependency graph), and enforcement (a crate that does not compile). Three are engineering. The fourth is a change to what the compiler believes, and it is stated in B3 rather than inherited.
 
 ### The rule a stored unit is checked against
 
-> **A unit may be stored only if it carries no positional identity.**
+> **A unit may be stored only if it carries no positional identity** (law 2).
 
-A positional identity is one meaningful solely in the compilation that assigned it. Storing one is how rustc came to need `cnum_map`, and it is the one property that decides whether a stored unit is portable. Measured against the stored prelude — 1079 items, 1094 definitions, release build:
+Measured against the stored prelude — 1079 items, 1094 definitions, release build:
 
 | Identity | In a stored unit | Established by |
 | --- | --- | --- |
-| Term metavariable | none — zonking substitutes every solution and refuses an unsolved hole | `validate_stored_identities`, on the value the archive build serializes |
-| Universe metavariable | none — a level holding one is not closed over its declaration's parameters | `validate_bound_universes`, which names it in as many words |
-| Free local binder | none — `derived_binder_floor` over items *and* registries is **0**, against a lowering watermark of 6684 | `validate_stored_identities` |
+| Term metavariable | none — zonking substitutes every solution and refuses an unsolved hole | `validate_stored_identities` |
+| Universe metavariable | none — a level holding one is not closed over its declaration's parameters | `validate_bound_universes` |
+| Free local binder | none — `derived_binder_floor` over items and registries is **0**, against a lowering watermark of 6684 | `validate_stored_identities` |
 | Witness | **75, densely 0..74, 34 of them referenced from terms** | nothing; B1 |
 
-**The precondition this rests on today, stated because nothing checks it:** at most one unit in a compilation is restored from storage. Dense witness identities are safe only because there is exactly one storer and it always sits first. A second stored unit would land on `0..74` and silently rebind coherence entries. B1 is what removes the precondition; until then it is load-bearing and unenforced, and enforcing it needs a `Unit` to know whether it was stored or elaborated — GHC's home/external split, which belongs with the store that could violate it rather than ahead of it.
-
-Of the four monotonic counters — metavariable, binder, witness, universe — exactly one mints an identity that reaches a stored unit. The other three leave watermarks, which combine by maximum and cannot alias. This makes **no claim on [SOUNDNESS.md](../../SOUNDNESS.md)'s *Binder identity* row**: that row is about a checker's own fresh mints aliasing identities in a live scope, which is a within-compilation property.
+Of the four monotonic counters, three leave watermarks, which combine by maximum and cannot alias; the witness counter alone mints dense identities that reach a stored unit. One further predecessor-dependence must be named beside it: a unit's lowering copies the *cumulative universe-seed table* from its last predecessor, so a stored unit's bytes depend on its predecessors — covered so long as B3's key covers the closure, and stated here so nobody discovers it as a surprise. The precondition load-bearing today, unenforced: at most one unit in a compilation is restored from storage, and it always sits first. B1 removes it.
 
 The fold changes shape, and this is the whole of it:
 
@@ -268,77 +214,79 @@ let ersd = erase_onto(prefix, &entry, budget)?;
 
 ### B1 — a witness is identified by its mount
 
-`Global::Witness(WitnessId)` is minted from one program-global counter, and it is the only name in a stored unit that carries no prefix. Two units elaborated in separate compilations both mint from zero, and `curios-core`'s own note states the consequence: *"aliasing one would silently rebind a coherence-table entry."* That admits rather than crashes, and the prelude's 75 dense identities are exactly what a second unit would land on.
+`Global::Witness(WitnessId)` is minted from one program-global counter, and it is the only name in a stored unit that carries no prefix. Two units elaborated in separate compilations both mint from zero, and aliasing one would silently rebind a coherence-table entry. The identity gains its declaring mount: a pair — mount and ordinal — is disjoint by the same argument mount disjointness carries everywhere else. The production surface is three files — the mint in `curios-text`'s `into_core`, the counter beside `fresh_binder`, and the variant with its `Display` in `curios-core` — and the archive schema bumps. It is also what makes a unit cacheable at all: a witness identity seeded at `witness_floor` takes different values depending on where the unit sat, so the witness counter is the only thing tying a stored unit to its position, and a per-mount ordinal is what lets B3's key be content-derived rather than content-and-position. `PreparedPrelude::witness_floor` becomes vestigial once each mount numbers its own.
 
-The identity gains its declaring mount. The production surface is three files — the mint in `curios-text`'s `into_core`, the counter beside `fresh_binder`, and the variant with its `Display` in `curios-core` — and at the mint site the declaring mount is one lookup away on the same context. The archive schema bumps.
-
-**This does not contradict the note that warns about it.** That note refuses a bare per-module *ordinal*, on the grounds that two modules' `witness#0` would alias. A pair — mount and ordinal — is disjoint by the same argument mount disjointness already carries everywhere else.
-
-**It is also what makes a unit cacheable at all, which is the stronger reason.** A witness identity is minted from a counter seeded at `witness_floor`, so the same package takes ids 75 and up when compiled after the prelude and 0 and up when compiled alone — different bytes from identical source. Everything else in the table is already position-independent, so the witness counter is the *only* thing tying a stored unit to where it sat, and a per-mount ordinal is what lets B3's key be content-derived rather than content-and-position. Record the consequence so nobody preserves it: `PreparedPrelude::witness_floor` becomes vestigial once each mount numbers its own.
-
-*Must not change:* what any program means. A witness is anonymous and reached only through resolution, so scoping its identity renames nothing a programmer wrote.
-
-*Verified by:* the full gate over a corpus that runs identically, and the prelude re-certifying at 0 refusals against the bumped schema.
-
-**Rejected: renumbering witnesses as a unit is restored.** `cnum_map`, refused again.
+*Must not change:* what any program means — a witness is anonymous and reached only through resolution. *Verified by:* the full gate over a corpus that runs identically, and the prelude re-certifying at 0 refusals against the bumped schema. **Rejected: renumbering witnesses as a unit is restored** — `cnum_map`, refused again.
 
 ### B3 — what replaces Cargo, and what the compiler starts believing
 
-Storage and invalidation are ordinary engineering as *mechanisms*; where the store lives is [an open decision above](#where-does-a-store-live). The key and the enforcement are one question — *what makes a cached verdict unforgeable and unstale* — and answering it turns the verdict from a build artifact into a recorded claim, which is exactly what `curios-prelude`'s documentation says the present design is not.
+The key and the enforcement are one question — *what makes a cached verdict unforgeable and unstale* — and answering it turns the verdict from a build artifact into a recorded claim. That is not a reason to refuse it; it is a reason to write it down. **A cached verdict is a rule that admits, so it earns an entry in [SOUNDNESS.md](../../SOUNDNESS.md) — its assumption, its grade, and the evidence behind it — and no unit's verdict is cached before that entry exists.**
 
-That is not a reason to refuse it. It is a reason to write it down. **A cached verdict is a rule that admits, so it earns an entry in [SOUNDNESS.md](../../SOUNDNESS.md) — its assumption, its grade, and the evidence behind it — and no unit's verdict is cached before that entry exists.**
-
-The key must say *these terms, this certifier*, never a path and never a timestamp. There are two ways to get a key wrong and they have different consequences. An **over-broad** key invalidates more than it must and costs time: Cargo's granularity is the crate, which is what made a kernel edit re-elaborate the standard library until `curios-analysis` was split out, and GHC avoids it by fingerprinting each declaration's interface. An **imprecise** key — a path, a timestamp, a number someone must remember to bump — fails to invalidate when it should, and a verdict that survives the change it should not have survived *admits*. Only the second is a soundness question, and it is the one this decision is about.
-
-The terms half is a content fingerprint. For the certifier half the mechanism already exists one crate over: the prelude's source fingerprint is a build script hashing authored sources into an `env!`, and the same over `curios-cert` and `curios-analysis` yields a certifier fingerprint that is *derived* rather than remembered. The archive's hand-bumped schema constant is what the alternative looks like — a number describing a layout and nothing about the kernel's decisions — and a key that must be remembered is one that eventually is not. **State the limit beside the mechanism:** a source fingerprint moves when those sources move, and a dependency bump changes what the certifier decides without touching them, so either the key covers that closure or it is conservative by construction.
+The key says *these terms, this certifier* — never a path, never a timestamp. An **over-broad** key invalidates too much and costs time (Cargo's crate-granularity, which made a kernel edit re-elaborate the standard library until `curios-analysis` was split out). An **imprecise** key fails to invalidate, and a verdict surviving a change it should not have survived *admits* — the only soundness question of the two. The terms half is the same content fingerprint the store is keyed by. The certifier half is derived, not remembered: the prelude's build script already hashes authored sources into an `env!`, and the same mechanism over `curios-cert` and `curios-analysis` yields a certifier fingerprint. The limit, stated beside the mechanism: a source fingerprint moves when those sources move, and a dependency bump changes what the certifier decides without touching them — so either the key covers that closure or it is conservative by construction.
 
 ### B4 — the erased artifact is keyed on the prefix, not on the unit
 
-Re-erasing one unit costs **608 ms**, measured over the stored prelude in release, against a ~680 ms release compile of a one-line program. So a dependant cannot re-erase its predecessors per compile.
-
-It does not follow that each unit's erased form is stored on its own. `curios_ersd::Module` is five arenas plus five positional `Vec`s, its `Environment` maps a name to bindings holding arena atoms, and two independently erased units both number from zero — so per-unit erased artifacts need a relocation pass, which is `cnum_map` once more.
-
-Store the erased artifact against the **ordered set of predecessors** instead. That is today's mechanism unchanged, because the prelude *is* that set while there is one unit, and `Resumed` already borrows a core per unit and threads exactly one arena. Core and verdict cache per unit, where elaboration's cost is; the erased prefix caches per dependency set. Two artifacts, two keys, both content-derived. Adding a dependency pays one erasure; compiling under an unchanged set pays none.
-
-**This is what keeps "there is no link step at the erased level" true.** That holds unconditionally while every unit is erased in one process in dependency order, which is where the compiler is today. Under caching it holds only because of the decision above; per-unit erased artifacts would invent one.
-
-**It also makes one field of `curios_unit::Unit` provisional**, which its own documentation already records: the erased half moves off the unit and onto the prefix.
+Re-erasing one unit costs **608 ms**, measured over the stored prelude in release, against a ~680 ms release compile of a one-line program — so a dependant cannot re-erase its predecessors per compile. It does not follow that each unit's erased form is stored alone: two independently erased arenas both number from zero, so per-unit erased artifacts need a relocation pass, which is `cnum_map` once more. Store the erased artifact against the **ordered set of predecessors** — today's mechanism unchanged, because the prelude *is* that set while there is one unit. Core and verdict cache per unit, where elaboration's cost is; the erased prefix caches per dependency set. Adding a dependency pays one erasure; compiling under an unchanged set pays none. This is what keeps "there is no link step at the erased level" true, and it is why `curios_unit::Unit`'s erased half is documented as provisional: it moves off the unit and onto the prefix.
 
 ### B6 — what never caches, and what only looks like it
 
-**Genuinely program-wide:** witness coherence and the visibility fixed point. A coherence violation is only visible where two units meet, and `Audiences::compute` runs over the union of scope and unit. Neither is decidable inside a unit, so neither caches.
-
-**Stable under extension, and so cacheable exactly when the key already covers the predecessors:** strict positivity over the declaration set, declaration sizing, and concept-registry validation. Mounts are disjoint and units are ordered, so nothing later can add a constructor to an earlier unit's inductive or a field to its structure — an earlier unit's answer cannot be falsified by what comes after it. Decide each rather than the group, and move any of them into the paragraph above if it turns out to read something a successor can change.
-
-Either way the win is bounded rather than removed, because per-item typing is the expensive part.
-
-### Out of the caching half
-
-- **Restoring lazily.** Idris 2 stores a TTC entry as a blob and deserializes on first lookup. Measured in release, the whole Curios image — bytecheck, plus deserializing the prepared Text state, the Core and the erased prefix — restores in **34.4 ms**, and the erased clone taken per compile is 1.4 ms. The analogy holds and the lever does not.
-- **Incrementality *within* a unit.** A different objective, recorded in the appendix.
+**Genuinely program-wide:** witness coherence and the visibility fixed point. A coherence violation is only visible where two units meet, and `Audiences::compute` runs over the union of scope and unit. Neither is decidable inside a unit, so neither caches. **Stable under extension, and so cacheable exactly when the key covers the predecessors:** strict positivity, declaration sizing, and concept-registry validation — mounts are disjoint and units are ordered, so nothing later can add a constructor to an earlier unit's inductive. Decide each rather than the group. Either way the win is bounded rather than removed, because per-item typing is the expensive part. The entry never caches: it is what you are editing, and it erases onto the prefix.
 
 ## Out of scope
 
-- **Parallelising elaboration.** The shared monotonic counters are a serialization point by design.
-- **A third visibility level.** Package-privacy is subtree containment, which the audience model already expresses. `Audiences` computes who-can-see-what as sets of subtree roots, and a package is a subtree — Rust needed `pub(crate)` because its module tree and crate boundary are different things, and here they coincide.
-- **Making the prelude archive a stable interchange format.**
-- **Version coexistence**, per the decision above.
-- **Selecting versions, and fetching.** A dependency is pinned exactly, so this document owns the conflict *refusal* and chooses nothing; minimal version selection and a fetcher are additive layers after it.
+- **Version coexistence** — a conflict is a refusal, and everything above depends on it staying one.
+- **Selecting versions, fetching, publishing, and a registry** — minimal version selection and a fetcher are additive layers that produce and deliver what this design consumes.
+- **Parallelising elaboration** — the shared monotonic counters are a serialization point by design.
+- **A third visibility level** — package-privacy is subtree containment, which the audience model already expresses; the module tree and the package boundary coincide here, so `pub(crate)`'s reason to exist does not arise.
+- **The prelude as a package** — every compilation depends on it implicitly, no manifest names it, and its privileged mounts stay the compiler's own.
+- **The archive as a stable interchange format** — it is scoped to one compiler build, and packages ship source.
+- **Incrementality within a unit** — per-declaration fingerprinting answers a question about editing your own code that nothing here asks; this document needs a unit reused whole or recompiled whole.
+- **Surface syntax** — `use /foo/Bar` already reaches a mounted prefix; [SYNTAX.md](../../SYNTAX.md) is untouched and no `.crs` file spells a dependency.
+
+## Prior art
+
+- **Cargo** — took: workspace-inherited rows (RFC 2906) as `[catalog]`'s precedent, explicit targets. Refused: target auto-discovery, dual-role root manifests, workspace-forced pin agreement, the crate-granularity cache key.
+- **Go** — took: the `go.mod`/`go.sum` split of resolution from integrity, MVS as the named successor, domain-namespaced naming's lesson. Refused: nothing it offers here.
+- **uv and pnpm** — took: the two-layer store (shared content-addressed cache under per-project materialization), flat workspaces with one lock's coherence argument; pnpm's catalogs are `[catalog]`'s nearest ancestor.
+- **Zig** — took: exact pins plus content hashes with no registry as a working existence proof, and the tool-computes-the-hash flow. Its transitive-hash defect is the caution B3's closure rule answers.
+- **JSR** — took: namespaced names mandatory from day one, because every flat first-generation registry is a squatting regret.
+- **Swift PM** — took: executability as a declared statement of purpose (SE-0294 retired inferring it from `main.swift`). Refused: the products/targets split, via one-prefix-per-manifest.
+- **Lake** — took: declarative TOML as the only manifest mode.
+- **Elixir** — took: the poncho lesson — explicit path dependencies beat implicit umbrella coupling — as the reason members declare their edges and `path` exists.
+- **Gleam** — its convention of self-prefixing modules under `src/<name>/` is what mounts enforce structurally; kept as the validation that prefix-as-identity is the load-bearing piece.
+- **Coq** — mounts come from `-Q dir Lib`; refused the consumer naming the library, because Coq does not key coherence on the prefix and this design does.
+- **Lean** — stores pre-elaborated environments per module; its trust posture — a stored verdict believed on the strength of the file it came in — is what B3 declines to inherit silently.
+- **GHC** — the home/external split arrives as the provenance of a unit, cached or live; its per-declaration interface fingerprints are the granularity argument B3 leans on.
+- **rustc** — assigns crate numbers per compilation and pays `cnum_map` to remap them on load; every identity decision here is downstream of refusing that.
+
+## Milestones
+
+The B identities are kept from the predecessor document because commits and the task list reference them; C1 and C2 are recorded as M1 and M2's prior names. Renumbering an identity to match a position is the mistake this design exists to refuse.
+
+- **M1** *(was C1)* — the package manifest and the resolver, in the new `curios-project` crate: parse `Curios.toml`'s package mode; generalize `RootSource` to one base per mount and replace both `UnitSource` arms with the resolver its documentation promises; implement the layout rule, including deleting `load_unit`'s stem-prepend, moving the bare-file base to its stem directory, migrating the corpus, and refusing stem collisions; thread real package names into the mount-collision diagnostic; and resolve names against mounts by longest match with the prefix-containment refusal, which is the whole of multi-segment support.
+- **M2** *(was C2)* — the graph: dependency order from declared dependencies; cycle and conflict refusals; the umbrella mode with `members` and `[catalog]`; the `member`/`catalog` markers and their mismatch refusals; the governance walk; the `run` trichotomy.
+- **M3** — the store: `.curios/`, the shared content-addressed cache, hash verification on materialization, and `curate`'s materialize and reconcile jobs.
+- **M4** — the caching half, in order: B1, B3, B4, B6.
+- **M5** — `curios new` scaffolding, over machinery that already works.
 
 ## Tests
 
-- **The diamond:** two packages depending on one package at the same revision compile it once, and a witness declared in it resolves identically through both. This is what consumer-chosen prefixes would silently have duplicated.
-- **The conflict:** two dependents pinning different revisions of one canonical name is refused naming both dependents and both revisions, before any of the three elaborates.
-- **The cycle:** a dependency cycle is refused; and a manifest declaring a prefix another manifest in the graph already claims is the mount collision already diagnosed at mount.
-- **The bare file:** a `.crs` file with no manifest compiles exactly as it does today. No manifest means no dependencies, not a missing file.
+- **The diamond:** two packages depending on one package at the same pin compile it once, and a witness declared in it resolves identically through both.
+- **The conflict:** two dependents pinning different `rev` or `hash` of one canonical name is refused naming both dependents and both pins, before any of the three elaborates.
+- **The cycle:** a dependency cycle is refused; a manifest claiming a prefix another manifest in the graph claims is the mount collision, now naming real packages; and a prefix lying within another claimed subtree — an entry's `mod myorg` beside a mount at `/myorg/json` — is the containment refusal, naming both claimants.
+- **The bare file:** a `.crs` file with no manifest compiles with no dependencies and no project, and its modules stem-nest.
+- **The layout:** the library header resolves children as manifest-directory siblings while every other header stem-nests; a stem double-claim is refused naming both claimants; an unenumerated file is inert and reported by reconcile.
 - **The resolver:** a source that is not a directory resolves, so the format cannot quietly assume a filesystem — the property that keeps `curios-web` compiling.
-- **The storage check** refuses an unscoped witness, once B1 gives "scoped" a meaning. It already refuses a free local and a metavariable of either kind.
+- **The hash:** a delivered tree verifies under `c1:`, a tampered byte is refused stating the computed hash, and a symlink in a delivered tree is refused.
+- **The umbrella:** an umbrella governs only what it enumerates; a `member` row with no governing umbrella, a `catalog` row absent from the catalog, a `catalog` row naming a member, and a direct pin of a member's name are four distinct refusals; a catalog row no member references materializes nothing.
+- **The dispatch:** `run`'s three forms dispatch lexically, and a file argument is never captured by any manifest.
+- **The storage check** refuses an unscoped witness once B1 gives "scoped" a meaning; it already refuses a free local and a metavariable of either kind.
 - **Two units elaborated in separate compilations**, each declaring witnesses, resolve to their own — the collision B1 removes, written as the fixture that would have caught it.
 - **A cached unit and a freshly elaborated one produce the same program**, and changing either half of the key — the terms or the certifier — invalidates.
 
 ## Retirement criteria
 
-Before this specification is deleted: a manifest names a unit and its exact dependencies and is parsed by the driver; a source column names a resolver rather than a path, with the filesystem as one implementation and `curios-web` still compiling; dependency order comes from declared dependencies rather than from argument position; a cycle and a revision conflict are each refused with a diagnostic naming both parties; no stored unit carries a positional identity, witnesses included, and the check enforcing that runs at every seam a unit is written; every cached verdict carries its [SOUNDNESS.md](../../SOUNDNESS.md) entry with a grade and evidence; the store's location and layout are decided and documented where the store lives; and the manifest-discovery question above is answered rather than deferred again.
+Before this specification is deleted: both manifest modes parse and are mutually exclusive; a package's name is its mount, multi-segment names included; the layout rule is implemented with the bare-file break migrated; dependency order comes from declarations, with cycle and conflict refusals naming their parties; a source column names a resolver, with the filesystem as one implementation and `curios-web` still compiling; the `member` and `catalog` markers resolve through a governing umbrella with all four mismatch refusals; `run`'s three forms dispatch lexically and discovery walks only for declared artifacts; the store lives at `.curios/` under the shared content-addressed cache with hashes verified under the `c1:` scheme on materialization; `curate` fetches, materializes, and reconciles as the toolchain's only network actor; no stored unit carries a positional identity, witnesses included, with the check running at every seam a unit is written; and every cached verdict carries its [SOUNDNESS.md](../../SOUNDNESS.md) entry with a grade and evidence.
 
 **The appendix is not deleted with this file.** Its measurements are the only record of how they were taken, and its findings outlive the work that turned them up.
 
@@ -346,7 +294,7 @@ Before this specification is deleted: a manifest names a unit and its exact depe
 
 ### Measurements
 
-Every figure this document leans on, with its date, its **profile**, and how to retake it. Two items in the predecessor document were designed against unattributed numbers and both were wrong: a 471 ms eager restore that is 34.4 ms, and parallel certification's estimated 60–70 s win over an operation that takes 11.8 s. A number in prose with no method decays quietly and is then designed against, which is what this section exists to stop.
+Every figure this document leans on, with its date, its **profile**, and how to retake it. Two items in a predecessor document were designed against unattributed numbers and both were wrong: a 471 ms eager restore that is 34.4 ms, and parallel certification's estimated 60–70 s win over an operation that takes 11.8 s. A number in prose with no method decays quietly and is then designed against, which is what this section exists to stop.
 
 Taken **2026-08-09**, **release** profile, over the stored prelude. These four need a probe, which is a throwaway test in `curios-prelude-archive` and is **not in-tree**, so retaking them means writing it again — `with_prelude` for the restore, `Prelude::ersd` for the clone, `erase_unit` over `Prelude::core` for the erasure, and `recheck_module_verdicts` from a default `Globals` for the certification. They are the figures taken over the *stored* image, which nothing on the build path recomputes.
 
@@ -361,7 +309,7 @@ Shape of the stored prelude, same run: 1079 items and 1094 definitions; 75 witne
 
 **Landing the probe is itself an item**, for those four. The figures are cited by this document and by work outside it, and the only thing keeping them honest is a test nobody has written.
 
-**The elaboration figures need no probe, and the predecessor document was wrong to imply they did.** `curios-prelude-archive`'s build script already wraps its whole run in `curios_profile::capture` and writes per-span times, call counts, retained and allocated bytes, allocation counts, and every `sample!` magnitude to `OUT_DIR/profile.tsv`, announcing the path and the peak RSS in a build warning. Retaking them is one command:
+**The elaboration figures need no probe.** `curios-prelude-archive`'s build script already wraps its whole run in `curios_profile::capture` and writes per-span times, call counts, retained and allocated bytes, allocation counts, and every `sample!` magnitude to `OUT_DIR/profile.tsv`, announcing the path and the peak RSS in a build warning. Retaking them is one command:
 
 ```sh
 cargo build --release --package curios-prelude --features profile
@@ -371,7 +319,7 @@ Profile is part of that command rather than a footnote: Cargo builds a build scr
 
 **Two inherited figures are now confirmed, and then superseded — in one day.** They were carried as *undated, profile unrecorded*: "469 s of a ~570 s prelude build in elaboration, and 204 s of that in universe finalization". Retaken **2026-08-10, release**, they were right: `elaborate_and_zonk_module` at **474.5 s** and `universe::finalize` at **204.6 s**. Solver work in the same session then moved them to **288.4 s** and **92.4 s** — the level substitution rebuilding its input per atom, and both totality obligations re-zonking a recorded type per checked term rather than per distinct type.
 
-That is this section's own thesis arriving faster than expected. A number is not wrong because it was badly taken; it is wrong because the code moved. **Any figure here older than the last change to the pass it measures is a claim about history**, which is why the date and the profile sit beside each one. The certification figure below is the live example: 11.8 s was taken before the kernel's level substitution changed, and the kernel calls it, so that number is owed a retake before anything is designed against it.
+That is this section's own thesis arriving faster than expected. A number is not wrong because it was badly taken; it is wrong because the code moved. **Any figure here older than the last change to the pass it measures is a claim about history**, which is why the date and the profile sit beside each one. The certification figure above is the live example: 11.8 s was taken before the kernel's level substitution changed, and the kernel calls it, so that number is owed a retake before anything is designed against it.
 
 ### Findings whose triggers fire inside this specification
 
