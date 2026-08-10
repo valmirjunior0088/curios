@@ -21,6 +21,7 @@ mod tests;
 use {
     crate::TreeHash,
     curios_base::Qualifier,
+    sha2::{Digest, Sha256},
     std::path::{Path, PathBuf},
 };
 
@@ -51,4 +52,34 @@ pub fn src(root: &Path, hash: &TreeHash) -> PathBuf {
 /// Where a compiled unit is filed, under the key its terms and the certifier decide.
 pub fn unit(root: &Path, key: &str) -> PathBuf {
     root.join(STORE).join("unit").join(key)
+}
+
+/// What a unit compiled from `terms`, by `compiler`, after `predecessors`, is filed under.
+///
+/// **Three parts, and each is load-bearing.** The terms are what was judged. The compiler is who judged it — see [`compiler`](crate::compiler), and note that a key naming no compiler would be believed on behalf of any. The predecessors are the part easiest to leave out and the reason this takes a list at all: a unit's lowering copies the *cumulative universe-seed table* from the unit before it, so the same source compiled after a different prefix is a different unit, byte for byte. A key covering only terms and compiler would hand one of them back for the other.
+///
+/// Ordered, not a set: the predecessors are a fold order, and two orders of one set are two different lowerings.
+///
+/// Every part is length-framed, for the reason [`TreeHash::of`](crate::TreeHash::of) frames its own — without it, moving a boundary between two parts feeds the digest identical bytes, and two different keys collapse into one.
+pub fn unit_key(compiler: &str, predecessors: &[String], terms: &TreeHash) -> String {
+    let mut digest = Sha256::new();
+
+    feed(&mut digest, compiler);
+    feed(&mut digest, &predecessors.len().to_string());
+    for predecessor in predecessors {
+        feed(&mut digest, predecessor);
+    }
+    feed(&mut digest, &terms.to_string());
+
+    digest
+        .finalize()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+/// One length-framed part of a key.
+fn feed(digest: &mut Sha256, part: &str) {
+    digest.update((part.len() as u64).to_le_bytes());
+    digest.update(part.as_bytes());
 }

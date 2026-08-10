@@ -2040,6 +2040,7 @@ fn compile_with_units(
             Scope::over(from_ref(&prelude)),
             &SYNTAX,
             &sources,
+            None,
         )?;
         let scope = std::iter::once(prelude)
             .chain(produced.iter())

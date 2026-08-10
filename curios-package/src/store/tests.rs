@@ -49,3 +49,50 @@ fn the_families_do_not_share_a_namespace() {
     assert!(!tree.starts_with(root.join(STORE).join("bin")));
     assert!(!unit(root, "key").starts_with(root.join(STORE).join("bin")));
 }
+
+/// A key is a function of all three parts, and of the *order* of the third — which is what the universe-seed table forces: the same source lowered after a different prefix is a different unit.
+#[test]
+fn every_part_of_a_key_changes_it() {
+    let terms = TreeHash::parse(&format!("c1:{}", "a".repeat(64))).unwrap();
+    let other = TreeHash::parse(&format!("c1:{}", "b".repeat(64))).unwrap();
+    let before = ["one".to_string(), "two".to_string()];
+
+    let key = unit_key("compiler", &before, &terms);
+
+    assert_eq!(
+        key,
+        unit_key("compiler", &before, &terms),
+        "and it is a function"
+    );
+    assert_ne!(
+        key,
+        unit_key("another", &before, &terms),
+        "the compiler is in it"
+    );
+    assert_ne!(
+        key,
+        unit_key("compiler", &before, &other),
+        "the terms are in it"
+    );
+    assert_ne!(
+        key,
+        unit_key("compiler", &["one".to_string()], &terms),
+        "the predecessors are in it"
+    );
+    assert_ne!(
+        key,
+        unit_key("compiler", &["two".to_string(), "one".to_string()], &terms),
+        "and their order is, because two orders of one set are two lowerings"
+    );
+}
+
+/// Framing, for the reason the tree hash frames its own: without it, moving a boundary between two parts feeds the digest identical bytes.
+#[test]
+fn a_moved_boundary_is_a_different_key() {
+    let terms = TreeHash::parse(&format!("c1:{}", "c".repeat(64))).unwrap();
+
+    assert_ne!(
+        unit_key("ab", &["c".to_string()], &terms),
+        unit_key("a", &["bc".to_string()], &terms)
+    );
+}
