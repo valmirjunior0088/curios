@@ -1,11 +1,11 @@
 use {
     super::{Context, Error, Mode, check, elaborate},
     crate::{
-        Established, check_concept_registry, check_is_sort, check_positivity, check_proof_totality,
-        check_rec_item_totality, check_type_totality, check_written_type_totality,
-        collect_goal_reports, finish_deferred_witnesses, is_prop, record_definition_totality,
-        record_totality, reduce_with, register_witness, retry_deferred_witnesses, sort_term, zonk,
-        zonk_arity, zonk_module, zonk_solved_term_metas,
+        Established, ZonkedTypes, check_concept_registry, check_is_sort, check_positivity,
+        check_proof_totality, check_rec_item_totality, check_type_totality,
+        check_written_type_totality, collect_goal_reports, finish_deferred_witnesses, is_prop,
+        record_definition_totality, record_totality, reduce_with, register_witness,
+        retry_deferred_witnesses, sort_term, zonk, zonk_arity, zonk_module, zonk_solved_term_metas,
     },
     curios_analysis::group_totality,
     curios_base::Qualifier,
@@ -1127,9 +1127,13 @@ fn finalize_and_check(
     record_totality(context, &mut module, inherited);
 
     // Reported rather than raised. `curios-cert` decides these same two obligations independently, and a fixture this checker refuses must still be able to reach it — a short circuit here would return no module at all, leaving "would the kernel have caught it?" unobservable, which is exactly the quadrant the trusted base most needs to see. The public entry points raise the first verdict, so nothing on the compile path is weakened.
+    // One cache across both: they are seeded from the same recorded entries, so a cache each zonks every distinct recorded type twice.
+    // Safety: the cache is keyed on `Term`, which carries `OnceCell` scalar caches and so trips Clippy's interior-mutability warning. The logical value is fully immutable, and hashing and equality stay stable across those caches filling — the caveat every `Term`-keyed map in this module carries.
+    #[allow(clippy::mutable_key_type)]
+    let mut zonked = ZonkedTypes::default();
     let obligations = [
-        check_type_totality(context, &module, inherited),
-        check_proof_totality(context, &module, inherited),
+        check_type_totality(context, &module, inherited, &mut zonked),
+        check_proof_totality(context, &module, inherited, &mut zonked),
     ]
     .into_iter()
     .filter_map(Result::err)

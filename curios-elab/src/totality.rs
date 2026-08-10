@@ -252,17 +252,27 @@ fn faults(
     faults
 }
 
+/// The zonked form of every recorded type, shared across both erased-half obligations.
+///
+/// Not an optimization detail but a contract between them. (T) and (V) are seeded from the *same* [`Context::record_checked`](crate::Context) entries and each needs the zonked type of each entry, so a memo local to either means the same distinct types are zonked twice per compilation. Measured over the prelude: 185,271 entries collapse to 31,955 distinct recorded types, and zonking them cost 27.6 s in one pass and 27.3 s in the other — the same work, to three digits, done twice.
+///
+/// Sharing is sound for the same reason either pass could memoize alone: zonk is a pure function of the solution set, and the solution set is final once `zonk_module` has run. The cache is threaded rather than the two walks being merged, because the questions stay separate — (T) reads a type position syntactically and (V) cannot be re-derived that way at all.
+pub type ZonkedTypes = HashMap<Term, Term>;
+
 /// Obligation **(T)**: everything a type position reaches must be total.
 ///
 /// A divergent type breaks type formation, and — through `rec Bad : Type = Sink(Bad)` — ties the negative knot strict positivity exists to forbid without ever writing an `induct`. Runs post-zonk, after [`record_totality`], whose flags it reads.
+// Safety: the cache is keyed on `Term`, which carries `OnceCell` scalar caches and so trips Clippy's interior-mutability warning. The logical value is fully immutable, and hashing and equality stay stable across those caches filling — the caveat every `Term`-keyed map in this module carries.
+#[allow(clippy::mutable_key_type)]
 pub fn check_type_totality(
     context: &mut Context,
     module: &Module,
     inherited: &BTreeMap<Global, Totality>,
+    zonked: &mut ZonkedTypes,
 ) -> Result<(), Error> {
     curios_profile::profile!("check_type_totality");
     let mut positions = type_positions(module);
-    positions.extend(checked_type_positions(context)?);
+    positions.extend(checked_type_positions(context, zonked)?);
     report(context, module, &positions, inherited, Erased::Type)
 }
 
@@ -273,9 +283,11 @@ pub fn check_type_totality(
 /// The two seedings are **incomparable**, not nested, which a count of each obscured: the walk sees definition bodies whose type ends in a sort, and no typing judgment classifies those as type positions; this sees type arguments, which no syntactic walk can find without re-deriving the head's telescope — the re-derivation that cost (V) six defects. Taking the union costs one pass over already-recorded terms and needs neither.
 // Safety: the zonk memo is keyed on `Term`, which carries `OnceCell` scalar caches and so trips Clippy's interior-mutability warning. The logical value is fully immutable, and hashing and equality stay stable across those caches filling — the same caveat `checked_proof_positions` carries for the same map.
 #[allow(clippy::mutable_key_type)]
-fn checked_type_positions(context: &mut Context) -> Result<Vec<Position>, Error> {
+fn checked_type_positions(
+    context: &mut Context,
+    zonked: &mut ZonkedTypes,
+) -> Result<Vec<Position>, Error> {
     let settled = context.checked().to_vec();
-    let mut zonked: HashMap<Term, Term> = HashMap::new();
     // One label per elaboration site, not per position: `Context::record_checked` already stores an `Rc<str>` site, and many recorded terms share one.
     let mut sites: HashMap<Rc<str>, Rc<str>> = HashMap::new();
     let mut positions = Vec::new();
@@ -311,6 +323,8 @@ fn checked_type_positions(context: &mut Context) -> Result<Vec<Position>, Error>
         }
     }
 
+    curios_profile::sample!("totality::type_distinct_raw", zonked.len());
+    curios_profile::sample!("totality::type_sites", sites.len());
     curios_profile::sample!("totality::checked_type_positions", positions.len());
     Ok(positions)
 }
@@ -318,13 +332,16 @@ fn checked_type_positions(context: &mut Context) -> Result<Vec<Position>, Error>
 /// Obligation **(V)**: everything a `Prop`-checked term reaches must be total.
 ///
 /// A divergent proof proves anything, and erasure deletes it — so an `exit` behind a proposition never fires and the program continues with a forged invariant. Independent of [`check_type_totality`]: neither obligation subsumes the other.
+// Safety: the cache is keyed on `Term`, which carries `OnceCell` scalar caches and so trips Clippy's interior-mutability warning. The logical value is fully immutable, and hashing and equality stay stable across those caches filling — the caveat every `Term`-keyed map in this module carries.
+#[allow(clippy::mutable_key_type)]
 pub fn check_proof_totality(
     context: &mut Context,
     module: &Module,
     inherited: &BTreeMap<Global, Totality>,
+    zonked: &mut ZonkedTypes,
 ) -> Result<(), Error> {
     curios_profile::profile!("check_proof_totality");
-    let positions = checked_proof_positions(context)?;
+    let positions = checked_proof_positions(context, zonked)?;
     report(context, module, &positions, inherited, Erased::Proof)
 }
 
@@ -337,9 +354,11 @@ pub fn check_proof_totality(
 /// Sort-hood is decided here rather than at the hook because a type may still carry unsolved metavariables while elaborating. Post-zonk every solution is materialized, so [`is_prop`](crate::is_prop) is asked once per *distinct* type, and hash-consing keeps that set far smaller than the term count.
 // Safety: the memo is keyed on `Term`, which carries `OnceCell` scalar caches and so trips Clippy's interior-mutability warning. The logical value is fully immutable, and hashing and equality stay stable across those caches filling.
 #[allow(clippy::mutable_key_type)]
-fn checked_proof_positions(context: &mut Context) -> Result<Vec<Position>, Error> {
+fn checked_proof_positions(
+    context: &mut Context,
+    zonked: &mut ZonkedTypes,
+) -> Result<Vec<Position>, Error> {
     let checked = context.take_checked();
-    let mut zonked: HashMap<Term, Term> = HashMap::new();
     // One label per elaboration site, not per position: `Context::record_checked` already stores an `Rc<str>` site, and many recorded terms share one.
     let mut sites: HashMap<Rc<str>, Rc<str>> = HashMap::new();
     let mut memo: HashMap<Term, bool> = HashMap::new();
@@ -360,7 +379,8 @@ fn checked_proof_positions(context: &mut Context) -> Result<Vec<Position>, Error
         let prop = match memo.get(&type_) {
             Some(prop) => *prop,
             None => {
-                let prop = is_prop(context, &type_)?;
+                let prop =
+                    curios_profile::profile_span!("totality::is_prop", is_prop(context, &type_))?;
                 memo.insert(type_, prop);
                 prop
             }
@@ -377,6 +397,9 @@ fn checked_proof_positions(context: &mut Context) -> Result<Vec<Position>, Error
         }
     }
 
+    curios_profile::sample!("totality::proof_distinct_raw", zonked.len());
+    curios_profile::sample!("totality::proof_distinct_zonked", memo.len());
+    curios_profile::sample!("totality::proof_sites", sites.len());
     curios_profile::sample!("totality::checked_proof_positions", positions.len());
     Ok(positions)
 }
