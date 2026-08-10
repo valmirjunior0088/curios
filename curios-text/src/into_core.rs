@@ -26,7 +26,6 @@ use {
         cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         rc::Rc,
-        slice::from_ref,
     },
 };
 
@@ -177,20 +176,6 @@ impl PreparedPrelude {
 }
 
 impl Resolved<'_> {
-    fn new() -> Self {
-        Self {
-            modules: HashMap::new(),
-            table: Scoped::default(),
-        }
-    }
-
-    fn for_entrypoint(entrypoint: &Entrypoint, loader: &RootSource) -> Result<Self, Error> {
-        let mut resolved = Self::new();
-        resolved.resolve(entrypoint, loader, &[])?;
-
-        Ok(resolved)
-    }
-
     // No synthesized `mod sys;`-style declarations here: the entry program's own `ModuleInfo` is built directly from its own raw items, then every mounted prefix is registered as its child *explicitly* — a deliberate fact, not something recovered later by pattern-matching a qualifier's leading string segment. `insert_child` (hardened to reject any collision, not just pub/pub) is what catches a user's own `mod std` colliding with this registration, in either direction.
     fn resolve(
         &mut self,
@@ -252,8 +237,14 @@ impl Resolved<'_> {
         Ok(())
     }
 
-    fn for_prelude(input: &PreludeModules) -> Result<(Self, Vec<Mount>), Error> {
-        let mut resolved = Self::new();
+    fn for_mounted<'b>(
+        input: &PreludeModules,
+        scope: &'b [&'b BTreeMap<Qualifier, ModuleInfo>],
+    ) -> Result<(Resolved<'b>, Vec<Mount>), Error> {
+        let mut resolved = Resolved {
+            modules: HashMap::new(),
+            table: Scoped::over(scope),
+        };
         let mounts = input.mounts();
         // The synthetic compilation root: it belongs to no unit, which is why it is built here rather than scanned from anyone's items. Its children are exactly the mounted prefixes.
         let mut root_info = ModuleInfo::new();
@@ -1624,115 +1615,102 @@ fn audit_public_exposures(
     Ok(())
 }
 
-/// Lower an [`Entrypoint`] to a [`curios_core::Module`]. Also returns how many metavariable ids were minted for the module's holes: the floor `elaborate_module` needs so the ids it mints for implicit-argument insertion never collide with these.
-pub fn into_core(
-    entrypoint: &Entrypoint,
-    loader: &RootSource,
-    syntax: &SyntaxRegistry,
-) -> Result<(curios_core::Module, usize, usize, ForeignStore), Error> {
-    curios_profile::profile!("into_core");
-    let Resolved { mut table, modules } = Resolved::for_entrypoint(entrypoint, loader)?;
-    // The entry program alone, at the empty prefix — which is what makes it the entry. No scope, so nothing else is mounted.
-    let mounts = vec![Mount::new(Qualifier::empty(), RootKind::Ordinary)];
-    let public = interface::resolve(entrypoint, &modules, &mut table, &mounts)?;
-    let metavars = Entropy::<usize>::new();
-    let universes = Entropy::<usize>::new();
-    let universe_role = Cell::new(curios_core::UniverseRole::Flexible);
-    let universe_seeds = RefCell::new(Vec::new());
-    let universe_allocations = RefCell::new(HashMap::new());
-    let binders = Entropy::<usize>::new();
-    let witness_ids = Entropy::<usize>::new();
-
-    let mut context = Context::new(
-        &table,
-        &public,
-        &mounts,
-        &metavars,
-        &universes,
-        &universe_role,
-        &universe_seeds,
-        &universe_allocations,
-        &binders,
-        &witness_ids,
-        syntax,
-    );
-
-    let mut flat_items = Vec::new();
-    let mut induct_decls = BTreeMap::new();
-    let mut struct_decls = BTreeMap::new();
-    // Concept resolution metadata and witness registration markers, populated as `concept`/`witness` items lower.
-    let mut concepts = BTreeMap::new();
-    let mut witnesses = BTreeSet::new();
-    // `foreign` declarations found anywhere in this compilation's module graph (discovery above is already exhaustive over it) — separate from, and never merged with, the built-in `host_ops()` store the caller's prelude loader was built from.
-    let mut foreigns = ForeignStore::new();
-
-    process_items(
-        &entrypoint.module.items,
-        &mut context,
-        &mut flat_items,
-        &mut induct_decls,
-        &mut struct_decls,
-        &mut concepts,
-        &mut witnesses,
-        &mut foreigns,
-        &modules,
-    )?;
-
-    let lower = Lowerer::new(&context);
-    let type_ = entrypoint
-        .type_
-        .as_ref()
-        .map(|type_| lower.term(type_))
-        .transpose()?;
-    let tail = lower.value(&entrypoint.tail)?;
-
-    audit_public_exposures(
-        &public,
-        &table,
-        &flat_items,
-        NominalScope::new(&[], &induct_decls, &struct_decls),
-    )?;
-
-    // Emit the program as a flat list of named top-level definitions rather than folding it into one N-deep nested `let`/`rec` term. Cross-references (and the references in the entrypoint `body` and its `type_` annotation) stay free `Var`s keyed by the definition's joined name; the core passes `define` each one into the `Context`, so both the body and its annotation reduce through those definitions and agree — no shared binder scope required.
-    let items = order_flat_items(flat_items, &mounts, &induct_decls, &struct_decls)
-        .into_iter()
-        .map(FlatItem::into_core)
-        .collect();
-
-    Ok((
-        curios_core::Module {
-            items,
-            mounts: mounts.clone(),
-            universe_seeds: universe_seeds.into_inner(),
-            induct_decls,
-            struct_decls,
-            concepts,
-            witnesses,
-            binder_floor: binders.count(),
-            type_,
-            body: Some(tail),
-        },
-        metavars.count(),
-        universes.count(),
-        foreigns,
-    ))
+/// What a unit is lowered from: its own module tree, however that tree was obtained.
+///
+/// The two arms are the two ways a tree arrives today — parsed from a file graph as the entry program is, or handed over already parsed as the fixed prelude is — and they differ in nothing else. A later phase replaces both with one resolver; until then this names the difference instead of duplicating a lowering per side of it.
+pub enum UnitSource<'a> {
+    /// The entry program: its module tree resolved through `loader`, mounted at the empty prefix — which is what makes it the entry.
+    Entry {
+        entrypoint: &'a Entrypoint,
+        loader: &'a RootSource,
+    },
+    /// A unit supplied already parsed, under the prefixes it declares.
+    Mounted(&'a PreludeModules),
 }
 
-/// Resolve and lower the fixed roots once for build-time archival.
-pub fn prepare_prelude(
-    input: &PreludeModules,
+impl UnitSource<'_> {
+    /// The entrypoint this source carries, for the one unit that has one.
+    fn entrypoint(&self) -> Option<&Entrypoint> {
+        match self {
+            UnitSource::Entry { entrypoint, .. } => Some(entrypoint),
+            UnitSource::Mounted(_) => None,
+        }
+    }
+}
+
+/// Lower one unit against the units already lowered.
+///
+/// **This is the whole of what used to be three functions.** They differed in where their items sat, whether anything was already in scope, and where four counters started — every one of which is an argument here. `into_core` was the no-scope entry spelling, kept for `curios-text`'s own tests; `prepare_prelude` was the no-scope mounted spelling; `into_core_with_prelude` was the entry spelling with one predecessor. Three copies of one walk agreed by being read, which is the shape every configuration-dependent defect in this stage has had.
+///
+/// `scope` is in dependency order. Reads span it and the unit's own; writes only ever touch the unit's own, which is what makes a layer sufficient where a copy was used.
+pub fn into_core_unit(
+    source: &UnitSource<'_>,
+    scope: &[&PreparedPrelude],
     syntax: &SyntaxRegistry,
 ) -> Result<PreparedPrelude, Error> {
-    curios_profile::profile!("prepare_prelude");
-    let (Resolved { mut table, modules }, mounts) = Resolved::for_prelude(input)?;
-    let public = interface::resolve_prelude(&mounts, &modules, &mut table)?;
+    curios_profile::profile!("into_core_unit");
+    let scope_tables = scope.iter().map(|unit| &unit.table).collect::<Vec<_>>();
+    let scope_public = scope.iter().map(|unit| &unit.public).collect::<Vec<_>>();
+    let scope_cores = scope.iter().map(|unit| &unit.core).collect::<Vec<_>>();
+    let scope_mounts = scope
+        .iter()
+        .flat_map(|unit| unit.mounts.iter().cloned())
+        .collect::<Vec<_>>();
+
+    // Discovery, and the prefixes this unit claims. The entry claims the empty one and nothing else; a mounted unit claims what it declares.
+    let (Resolved { mut table, modules }, own) = match source {
+        UnitSource::Entry { entrypoint, loader } => {
+            let mut resolved = Resolved {
+                modules: HashMap::new(),
+                table: Scoped::over(&scope_tables),
+            };
+            resolved.resolve(entrypoint, loader, &scope_mounts)?;
+            (
+                resolved,
+                vec![Mount::new(Qualifier::empty(), RootKind::Ordinary)],
+            )
+        }
+        UnitSource::Mounted(input) => Resolved::for_mounted(input, &scope_tables)?,
+    };
+
+    // Every prefix this compilation mounts — the scope's, then this unit's. Resolution asks the whole set; the lowered module records only `own`, because a module states what its own unit provides.
+    let mounts = scope_mounts
+        .iter()
+        .cloned()
+        .chain(own.iter().cloned())
+        .collect::<Vec<_>>();
+
+    let public = interface::resolve_unit(
+        source,
+        &own,
+        &modules,
+        &mut table,
+        &mounts,
+        Scoped::over(&scope_public),
+    )?;
+
+    // Each counter resumes above every predecessor's, so an identity minted here can alias none already in scope. A floor is a bound: combining by maximum can only widen.
+    let floor =
+        |of: fn(&PreparedPrelude) -> usize| scope.iter().copied().map(of).max().unwrap_or(0);
     let metavars = Entropy::<usize>::new();
+    metavars.seed(floor(PreparedPrelude::metavariable_floor));
     let universes = Entropy::<usize>::new();
-    let universe_role = Cell::new(curios_core::UniverseRole::Flexible);
-    let universe_seeds = RefCell::new(Vec::new());
-    let universe_allocations = RefCell::new(HashMap::new());
+    universes.seed(floor(PreparedPrelude::universe_floor));
     let binders = Entropy::<usize>::new();
+    binders.seed(floor(PreparedPrelude::binder_floor));
     let witness_ids = Entropy::<usize>::new();
+    witness_ids.seed(floor(PreparedPrelude::witness_floor));
+
+    let universe_role = Cell::new(curios_core::UniverseRole::Flexible);
+    // The scope's seed table, in dependency order: each unit allocated above the last, so concatenating keeps every `UniverseMetaId` at its own index.
+    let universe_seeds = RefCell::new(
+        scope_cores
+            .iter()
+            .flat_map(|core| core.universe_seeds.iter().cloned())
+            .collect::<Vec<_>>(),
+    );
+    let universe_allocations = RefCell::new(HashMap::new());
+
     let mut context = Context::new(
         &table,
         &public,
@@ -1746,24 +1724,25 @@ pub fn prepare_prelude(
         &witness_ids,
         syntax,
     );
+    // Every named prefix in the compilation resolves by its own name. The entry's is the empty one, which has no name to bind.
     for mount in &mounts {
-        context.insert_scope(mount.prefix.head().to_string(), mount.prefix.clone())?;
+        if !mount.prefix.is_root() {
+            context.insert_scope(mount.prefix.head().to_string(), mount.prefix.clone())?;
+        }
     }
 
     let mut flat_items = Vec::new();
+    // This unit's own, never the scope's extended in place. What the scope declares is *scope*, and the one pass here that asks a scope question — the public-exposure audit, whose alias walk may land on a predecessor's type — takes it as a base to query rather than as entries copied into these maps. The dependency sort below never needed it: it looks a declaration up only for names an item itself declares.
     let mut induct_decls = BTreeMap::new();
     let mut struct_decls = BTreeMap::new();
     let mut concepts = BTreeMap::new();
     let mut witnesses = BTreeSet::new();
     let mut foreigns = ForeignStore::new();
 
-    for mount in &mounts {
-        let content = modules
-            .get(&mount.prefix)
-            .expect("prelude root loaded during discovery");
-        process_items(
-            &content.items,
-            &mut context.nested(mount.prefix.head()),
+    match source {
+        UnitSource::Entry { entrypoint, .. } => process_items(
+            &entrypoint.module.items,
+            &mut context,
             &mut flat_items,
             &mut induct_decls,
             &mut struct_decls,
@@ -1771,150 +1750,60 @@ pub fn prepare_prelude(
             &mut witnesses,
             &mut foreigns,
             &modules,
-        )?;
+        )?,
+        UnitSource::Mounted(_) => {
+            for mount in &own {
+                let content = modules
+                    .get(&mount.prefix)
+                    .expect("a mounted prefix was loaded during discovery");
+                process_items(
+                    &content.items,
+                    &mut context.nested(mount.prefix.head()),
+                    &mut flat_items,
+                    &mut induct_decls,
+                    &mut struct_decls,
+                    &mut concepts,
+                    &mut witnesses,
+                    &mut foreigns,
+                    &modules,
+                )?;
+            }
+        }
     }
+
+    // The entrypoint, for the one unit that has one.
+    let lower = Lowerer::new(&context);
+    let (type_, body) = match source.entrypoint() {
+        Some(entrypoint) => (
+            entrypoint
+                .type_
+                .as_ref()
+                .map(|type_| lower.term(type_))
+                .transpose()?,
+            Some(lower.value(&entrypoint.tail)?),
+        ),
+        None => (None, None),
+    };
 
     audit_public_exposures(
         &public,
         &table,
         &flat_items,
-        NominalScope::new(&[], &induct_decls, &struct_decls),
+        NominalScope::new(&scope_cores, &induct_decls, &struct_decls),
     )?;
+
+    // This unit's own items alone. A predecessor reaches later stages as an *environment* they are seeded from — `Globals` at the certifier, a replayed context at elaboration and erasure — and copying its items into every compilation only ever existed so those stages could then skip them again by index. See `documentation/DESIGN.md`, "A module is a compilation unit, and the prelude is an environment".
     let items = order_flat_items(flat_items, &mounts, &induct_decls, &struct_decls)
         .into_iter()
         .map(FlatItem::into_core)
         .collect();
-    let core = curios_core::Module {
-        items,
-        mounts: mounts.clone(),
-        universe_seeds: universe_seeds.into_inner(),
-        induct_decls,
-        struct_decls,
-        concepts,
-        witnesses,
-        binder_floor: binders.count(),
-        type_: None,
-        // No entrypoint, which is what makes this not the entry. It used to store a `Nat::Zero` the prelude's build then certified.
-        body: None,
-    };
 
     Ok(PreparedPrelude {
-        mounts,
+        mounts: own.clone(),
         foreigns,
         table: table.into_own().into_iter().collect(),
         public: public.into_own().into_iter().collect(),
-        core,
-        metavariable_floor: metavars.count(),
-        binder_floor: binders.count(),
-        witness_floor: witness_ids.count(),
-        universe_floor: universes.count(),
-    })
-}
-
-/// Lower only entry-owned modules and merge them onto a restored fixed prefix.
-pub fn into_core_with_prelude(
-    entrypoint: &Entrypoint,
-    loader: &RootSource,
-    prepared: &PreparedPrelude,
-    syntax: &SyntaxRegistry,
-) -> Result<(curios_core::Module, usize, usize, ForeignStore), Error> {
-    curios_profile::profile!("into_core_with_prelude");
-    // Layered, not copied: the prelude's module graph is the base this resolution reads through and never writes to.
-    let table_base = &prepared.table;
-    let mut resolved = Resolved {
-        modules: HashMap::new(),
-        table: Scoped::over(from_ref(&table_base)),
-    };
-    resolved.resolve(entrypoint, loader, &prepared.mounts)?;
-    let Resolved { mut table, modules } = resolved;
-    // The entry claims the empty prefix and nothing else — that claim alone is what the lowered module carries, since a module records what its own unit provides. Resolution needs the whole compilation's, so `mounts` below is the scope's plus this one.
-    let own = vec![Mount::new(Qualifier::empty(), RootKind::Ordinary)];
-    let mounts = prepared
-        .mounts
-        .iter()
-        .cloned()
-        .chain(own.iter().cloned())
-        .collect::<Vec<_>>();
-    let public_base = &prepared.public;
-    let public = interface::resolve_with_prelude(
-        entrypoint,
-        &modules,
-        &mut table,
-        &mounts,
-        Scoped::over(from_ref(&public_base)),
-    )?;
-
-    let metavars = Entropy::<usize>::new();
-    metavars.seed(prepared.metavariable_floor);
-    let universes = Entropy::<usize>::new();
-    universes.seed(prepared.universe_floor);
-    let universe_role = Cell::new(curios_core::UniverseRole::Flexible);
-    let universe_seeds = RefCell::new(prepared.core.universe_seeds.clone());
-    let universe_allocations = RefCell::new(HashMap::new());
-    let binders = Entropy::<usize>::new();
-    binders.seed(prepared.binder_floor);
-    let witness_ids = Entropy::<usize>::new();
-    witness_ids.seed(prepared.witness_floor);
-    let mut context = Context::new(
-        &table,
-        &public,
-        &mounts,
-        &metavars,
-        &universes,
-        &universe_role,
-        &universe_seeds,
-        &universe_allocations,
-        &binders,
-        &witness_ids,
-        syntax,
-    );
-    for mount in &prepared.mounts {
-        context.insert_scope(mount.prefix.head().to_string(), mount.prefix.clone())?;
-    }
-
-    let mut flat_items = Vec::new();
-    // The entry's own, not the prelude's extended in place. What the prelude declares is *scope*, and the one pass here that asks a scope question — the public-exposure audit, whose alias walk may land on a prelude type — takes it as a base to query rather than as entries copied into these maps. The dependency sort below never needed it: it looks a declaration up only for names an item itself declares.
-    let mut induct_decls = BTreeMap::new();
-    let mut struct_decls = BTreeMap::new();
-    let mut concepts = BTreeMap::new();
-    let mut witnesses = BTreeSet::new();
-    let mut foreigns = ForeignStore::new();
-    process_items(
-        &entrypoint.module.items,
-        &mut context,
-        &mut flat_items,
-        &mut induct_decls,
-        &mut struct_decls,
-        &mut concepts,
-        &mut witnesses,
-        &mut foreigns,
-        &modules,
-    )?;
-
-    let lower = Lowerer::new(&context);
-    let type_ = entrypoint
-        .type_
-        .as_ref()
-        .map(|type_| lower.term(type_))
-        .transpose()?;
-    let body = lower.value(&entrypoint.tail)?;
-    audit_public_exposures(
-        &public,
-        &table,
-        &flat_items,
-        NominalScope::new(&[&prepared.core], &induct_decls, &struct_decls),
-    )?;
-
-    // The entry's own items alone. The prelude reaches later stages as an *environment* they are seeded from — `Globals` at the certifier, a replayed context at elaboration and erasure — and copying its 1052 items into every compilation only ever existed so those stages could then skip them again by index. See `documentation/DESIGN.md`, "A module is a compilation unit, and the prelude is an environment".
-    //
-    // The registries above are a different question and are still merged: a user declaration may reach a prelude one, so strict positivity and declaration sizing need the whole set, which is why they read a map rather than this list.
-    let items = order_flat_items(flat_items, &mounts, &induct_decls, &struct_decls)
-        .into_iter()
-        .map(FlatItem::into_core)
-        .collect();
-
-    Ok((
-        curios_core::Module {
+        core: curios_core::Module {
             items,
             mounts: own,
             universe_seeds: universe_seeds.into_inner(),
@@ -1924,10 +1813,52 @@ pub fn into_core_with_prelude(
             witnesses,
             binder_floor: binders.count(),
             type_,
-            body: Some(body),
+            body,
         },
-        metavars.count(),
-        universes.count(),
-        foreigns,
+        metavariable_floor: metavars.count(),
+        binder_floor: binders.count(),
+        witness_floor: witness_ids.count(),
+        universe_floor: universes.count(),
+    })
+}
+
+/// Lower a whole [`Entrypoint`] with nothing in scope, as `curios-text`'s own stage tests do.
+pub fn into_core(
+    entrypoint: &Entrypoint,
+    loader: &RootSource,
+    syntax: &SyntaxRegistry,
+) -> Result<(curios_core::Module, usize, usize, ForeignStore), Error> {
+    let unit = into_core_unit(&UnitSource::Entry { entrypoint, loader }, &[], syntax)?;
+
+    Ok((
+        unit.core,
+        unit.metavariable_floor,
+        unit.universe_floor,
+        unit.foreigns,
+    ))
+}
+
+/// Resolve and lower the fixed roots once for build-time archival.
+pub fn prepare_prelude(
+    input: &PreludeModules,
+    syntax: &SyntaxRegistry,
+) -> Result<PreparedPrelude, Error> {
+    into_core_unit(&UnitSource::Mounted(input), &[], syntax)
+}
+
+/// Lower the entry program against the units already lowered.
+pub fn into_core_with_prelude(
+    entrypoint: &Entrypoint,
+    loader: &RootSource,
+    scope: &[&PreparedPrelude],
+    syntax: &SyntaxRegistry,
+) -> Result<(curios_core::Module, usize, usize, ForeignStore), Error> {
+    let unit = into_core_unit(&UnitSource::Entry { entrypoint, loader }, scope, syntax)?;
+
+    Ok((
+        unit.core,
+        unit.metavariable_floor,
+        unit.universe_floor,
+        unit.foreigns,
     ))
 }

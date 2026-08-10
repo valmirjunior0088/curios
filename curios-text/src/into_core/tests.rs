@@ -190,7 +190,7 @@ fn lower_with_prelude(src: &str) -> Result<(), String> {
     super::into_core_with_prelude(
         &src.parse::<Entrypoint>().unwrap(),
         &RootSource::none(),
-        &prepared,
+        std::slice::from_ref(&&prepared),
         syntax(),
     )
     .map(|_| ())

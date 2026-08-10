@@ -1,6 +1,6 @@
 use {
     super::{ModuleInfo, Scoped},
-    crate::{Entrypoint, Error, GroupItem, Module, Name, TopItem, UseGroup},
+    crate::{Error, GroupItem, Module, Name, TopItem, UseGroup},
     curios_base::{Mount, Qualifier},
     std::{
         collections::{HashMap, HashSet},
@@ -206,85 +206,55 @@ pub(super) fn visible_binding(
 }
 
 // Phase 2 + 3 entry point: seed direct public interfaces (including inductive constructor modules), then resolve every `pub use` to a fixed point. Also adds constructor modules to `table` (the direct-interface view) so phase 4 can classify private-vs-missing accesses through them. `seed` is a third parallel tree-walk (mirroring `discover`/`process_items`), so it needs the identical explicit-per-root treatment: it reads `table`'s already-correct root-level children (from `Resolved::resolve`'s explicit registration) but its own recursion only ever follows literal `TopItem::Mod` occurrences in the items it's handed — sys/syn/std no longer appear there, so their own content must be seeded from an explicit call, or `public["sys"]` etc. would never exist at all (not even empty), breaking every absolute reference into them.
-pub(super) fn resolve<'a>(
-    entrypoint: &Entrypoint,
+/// Seed this unit's interfaces over its scope's, then resolve every `pub use` to a fixed point.
+///
+/// **One resolution where there were three.** They differed in exactly which items were seeded at which prefix: the entry's at the empty qualifier, a mounted unit's under each prefix it claims — with the synthetic compilation root seeded empty in that case, since absolute references resolve through it even though it has no source items of its own.
+pub(super) fn resolve_unit<'a>(
+    source: &super::UnitSource<'_>,
+    own: &[Mount],
     modules: &HashMap<Qualifier, Rc<Module>>,
     table: &mut Scoped<'_, ModuleInfo>,
     mounts: &[Mount],
+    scope: Scoped<'a, PublicInterface>,
 ) -> Result<Scoped<'a, PublicInterface>, Error> {
-    let mut public = Scoped::default();
+    let mut public = scope;
     let mut pub_uses = Vec::new();
 
-    seed(
-        &entrypoint.module.items,
-        &Qualifier::empty(),
-        modules,
-        table,
-        &mut public,
-        &mut pub_uses,
-    )?;
-
-    fixed_point(&mut public, table, mounts, &pub_uses)?;
-    classify_dead(&public, table, mounts, &pub_uses)?;
-
-    Ok(public)
-}
-
-pub(super) fn resolve_prelude<'a>(
-    mounts: &[Mount],
-    modules: &HashMap<Qualifier, Rc<Module>>,
-    table: &mut Scoped<'_, ModuleInfo>,
-) -> Result<Scoped<'a, PublicInterface>, Error> {
-    let mut public = Scoped::default();
-    let mut pub_uses = Vec::new();
-
-    // Seed the synthetic compilation root as well: its public children are the explicitly mounted `/sys`, `/syn`, and `/std` roots. Absolute references resolve through this interface even though it has no source items.
-    seed(
-        &[],
-        &Qualifier::empty(),
-        modules,
-        table,
-        &mut public,
-        &mut pub_uses,
-    )?;
-
-    for mount in mounts {
-        let content = modules
-            .get(&mount.prefix)
-            .expect("prelude root loaded during discovery");
-        seed(
-            &content.items,
-            &mount.prefix,
+    match source {
+        super::UnitSource::Entry { entrypoint, .. } => seed(
+            &entrypoint.module.items,
+            &Qualifier::empty(),
             modules,
             table,
             &mut public,
             &mut pub_uses,
-        )?;
+        )?,
+        super::UnitSource::Mounted(_) => {
+            // The synthetic compilation root, which belongs to no unit: its public children are the mounted prefixes.
+            seed(
+                &[],
+                &Qualifier::empty(),
+                modules,
+                table,
+                &mut public,
+                &mut pub_uses,
+            )?;
+            for mount in own {
+                let content = modules
+                    .get(&mount.prefix)
+                    .expect("a mounted prefix was loaded during discovery");
+                seed(
+                    &content.items,
+                    &mount.prefix,
+                    modules,
+                    table,
+                    &mut public,
+                    &mut pub_uses,
+                )?;
+            }
+        }
     }
 
-    fixed_point(&mut public, table, mounts, &pub_uses)?;
-    classify_dead(&public, table, mounts, &pub_uses)?;
-    Ok(public)
-}
-
-pub(super) fn resolve_with_prelude<'a>(
-    entrypoint: &Entrypoint,
-    modules: &HashMap<Qualifier, Rc<Module>>,
-    table: &mut Scoped<'_, ModuleInfo>,
-    mounts: &[Mount],
-    prepared: Scoped<'a, PublicInterface>,
-) -> Result<Scoped<'a, PublicInterface>, Error> {
-    let mut public = prepared;
-    let mut pub_uses = Vec::new();
-
-    seed(
-        &entrypoint.module.items,
-        &Qualifier::empty(),
-        modules,
-        table,
-        &mut public,
-        &mut pub_uses,
-    )?;
     fixed_point(&mut public, table, mounts, &pub_uses)?;
     classify_dead(&public, table, mounts, &pub_uses)?;
     Ok(public)

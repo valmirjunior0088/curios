@@ -262,6 +262,15 @@ Three consequences worth recording:
 
 **And the foreign rows stopped being discarded.** `PreparedPrelude` now carries what `prepare_prelude` collects, so `Unit::foreigns` delegates rather than storing an empty store the build never computed. That was going to be an A5 gap; landing it here was cheaper than writing a stand-in and deleting it later.
 
+**Three lowerings became one, and three interface resolutions with them.** `into_core_unit` takes a [`UnitSource`] — an entrypoint with its loader, or a set of already-parsed modules under the prefixes they claim — and a scope, and every difference between the three walks is one of its arguments. `interface::resolve_unit` collapses the same way: the three differed only in which items were seeded at which prefix. The old names survive as four-line adapters, which is what lets a later milestone delete them without touching the walk.
+
+Two rules the merge had to state that no single walk had needed:
+
+- **The counters seed from the maximum across every predecessor**, not from one. With a single scope unit the two readings coincide, which is why nothing had to choose before.
+- **The universe seed table is the scope's, concatenated in dependency order.** Each unit allocated above the last, so concatenation keeps every `UniverseMetaId` at its own index — a merge that sorted or deduplicated would not.
+
+The collapse also reported its own completeness: `Resolved::new`, `Resolved::for_entrypoint` and a `from_ref` import went dead the moment the three walks became one, and deleting them is the whole of what the dead-code warning asked for.
+
 *Must not change:* any verdict, and not the archive's determinism — `build.rs` already serializes twice and compares, and that assertion stays.
 
 *Verified by:* the full gate, plus `cargo tree` on both edge rules above, plus the empirical check that a `curios-cert` edit rebuilds `curios-cert` and `curios-prelude` and nothing else.

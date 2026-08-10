@@ -73,7 +73,7 @@ pub fn typecheck_reporting(
     loader: RootSource,
 ) -> Result<(curios_core::Module, Vec<String>), CompileError> {
     let (lowered, metavars, universe_floor, _foreigns) = with_prelude(|prelude| {
-        into_core_with_prelude(entrypoint, &loader, prelude.text(), &SYNTAX)
+        into_core_with_prelude(entrypoint, &loader, from_ref(&prelude.text()), &SYNTAX)
     })
     .map_err(|error| CompileError::Failure(error.format()))?;
 
@@ -125,7 +125,7 @@ where
     observe(Stage::Text(entrypoint));
 
     let (lowered, metavars, universe_floor, user_foreigns) = with_prelude(|prelude| {
-        into_core_with_prelude(entrypoint, &loader, prelude.text(), &SYNTAX)
+        into_core_with_prelude(entrypoint, &loader, from_ref(&prelude.text()), &SYNTAX)
     })
     .map_err(|error| CompileError::Failure(error.format()))?;
 
