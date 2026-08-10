@@ -172,6 +172,84 @@ fn a_dependency_with_no_library_is_refused() {
     fs::remove_dir_all(root).unwrap();
 }
 
+/// **The conflict**, over exact pins: two dependents pinning one canonical name two ways is refused naming both dependents and both pins.
+///
+/// This needed M3 before it could be written at all — a `git` row could not be located, so no second one was ever reached. It needs only *one* materialized tree even now, and that is the property under test as much as the refusal is: the pin is read off the row before anything is located, so the disagreement is caught whether or not the second delivery exists. "Before any of the three elaborates" has to mean that.
+#[test]
+fn two_dependents_pinning_one_name_two_ways_is_refused() {
+    let root = tree(
+        "graph-pin-conflict",
+        &[
+            ("curios.toml", "members = [\"app\", \"left\", \"right\"]\n"),
+            ("app/lib.crs", ""),
+            ("left/lib.crs", ""),
+            ("right/lib.crs", ""),
+        ],
+    );
+
+    // One delivery, in the store, under the hash it actually hashes to.
+    let delivered = root.join("delivered");
+    fs::create_dir_all(&delivered).unwrap();
+    fs::write(delivered.join("curios.toml"), "name = \"http\"\n").unwrap();
+    fs::write(delivered.join("lib.crs"), "").unwrap();
+    let hash = TreeHash::of(&delivered).unwrap();
+
+    let placed = crate::Store::at(root.clone()).src(&hash);
+    fs::create_dir_all(placed.parent().unwrap()).unwrap();
+    fs::rename(&delivered, &placed).unwrap();
+
+    let row = |rev: &str, hash: &TreeHash| {
+        format!(
+            "http = {{ source = \"git\", url = \"https://example/http\", rev = \"{rev}\", hash = \"{hash}\" }}"
+        )
+    };
+    let member = |name: &str, dependency: String| {
+        format!("name = \"{name}\"\n\n[dependencies]\n{dependency}\n")
+    };
+
+    fs::write(
+        root.join("app/curios.toml"),
+        "name = \"app\"\n\n[dependencies]\nleft = { source = \"member\" }\nright = { source = \"member\" }\n",
+    )
+    .unwrap();
+
+    // Same tree, two revisions: what "same revision" rests on when a tag moves is the hash, and disagreeing about the instruction is still a disagreement.
+    fs::write(
+        root.join("left/curios.toml"),
+        member("left", row("abc123", &hash)),
+    )
+    .unwrap();
+    fs::write(
+        root.join("right/curios.toml"),
+        member("right", row("def456", &hash)),
+    )
+    .unwrap();
+
+    let refusal = mounts(&root.join("app")).expect_err("one name, two pins");
+    assert!(refusal.contains("pinned two ways"), "{refusal}");
+    assert!(
+        refusal.contains("abc123") && refusal.contains("def456"),
+        "{refusal}"
+    );
+    assert!(
+        refusal.contains("\"left\"") && refusal.contains("\"right\""),
+        "both dependents are named: {refusal}"
+    );
+
+    // And the other half the specification names: one revision, two criteria. The second hash was never delivered, which is the point — the disagreement is caught before anything is looked for.
+    let absent = TreeHash::parse(&format!("c1:{}", "e".repeat(64))).unwrap();
+    fs::write(
+        root.join("right/curios.toml"),
+        member("right", row("abc123", &absent)),
+    )
+    .unwrap();
+
+    let refusal = mounts(&root.join("app")).expect_err("one name, two hashes");
+    assert!(refusal.contains("pinned two ways"), "{refusal}");
+
+    fs::remove_dir_all(root).unwrap();
+}
+
 /// **The cycle.** A dependency cycle is refused naming the chain.
 #[test]
 fn a_dependency_cycle_is_refused() {
