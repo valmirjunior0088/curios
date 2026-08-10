@@ -274,7 +274,7 @@ Before this specification is deleted: a manifest names a unit and its exact depe
 
 Every figure this document leans on, with its date, its **profile**, and how to retake it. Two items in the predecessor document were designed against unattributed numbers and both were wrong: a 471 ms eager restore that is 34.4 ms, and parallel certification's estimated 60–70 s win over an operation that takes 11.8 s. A number in prose with no method decays quietly and is then designed against, which is what this section exists to stop.
 
-Taken **2026-08-09**, **release** profile, over the stored prelude. The probe was a throwaway test in `curios-prelude-archive` and is **not in-tree**, so retaking these means writing it again — `with_prelude` for the restore, `Prelude::ersd` for the clone, `erase_unit` over `Prelude::core` for the erasure, and `recheck_module_verdicts` from a default `Globals` for the certification.
+Taken **2026-08-09**, **release** profile, over the stored prelude. These four need a probe, which is a throwaway test in `curios-prelude-archive` and is **not in-tree**, so retaking them means writing it again — `with_prelude` for the restore, `Prelude::ersd` for the clone, `erase_unit` over `Prelude::core` for the erasure, and `recheck_module_verdicts` from a default `Globals` for the certification. They are the figures taken over the *stored* image, which nothing on the build path recomputes.
 
 | What | Measured |
 | --- | --- |
@@ -285,9 +285,19 @@ Taken **2026-08-09**, **release** profile, over the stored prelude. The probe wa
 
 Shape of the stored prelude, same run: 1079 items and 1094 definitions; 75 witnesses at identities 0..74 with no gaps, 34 of them referenced from terms; 31 inductives, 46 structures, 14 concepts; `derived_binder_floor` **0**, against a lowering watermark of 6684.
 
-**Landing the probe is itself an item.** These figures are cited by this document and by work outside it, and the only thing keeping them honest is a test nobody has written. In-tree they become `cargo test`-retakeable and every reader cites rather than copies.
+**Landing the probe is itself an item**, for those four. The figures are cited by this document and by work outside it, and the only thing keeping them honest is a test nobody has written.
 
-**Inherited, undated, profile unrecorded.** Kept because they are load-bearing elsewhere, labelled because nothing here can check them: 469 s of a ~570 s prelude build in elaboration, and 204 s of that in universe finalization. Cargo builds a build script in the profile of the build that triggers it, so a dev iteration loop and a release measurement are not comparable — which is why profile is part of the method above and not a footnote.
+**The elaboration figures need no probe, and the predecessor document was wrong to imply they did.** `curios-prelude-archive`'s build script already wraps its whole run in `curios_profile::capture` and writes per-span times, call counts, retained and allocated bytes, allocation counts, and every `sample!` magnitude to `OUT_DIR/profile.tsv`, announcing the path and the peak RSS in a build warning. Retaking them is one command:
+
+```sh
+cargo build --release --package curios-prelude --features profile
+```
+
+Profile is part of that command rather than a footnote: Cargo builds a build script in the profile of the build that triggers it, so a dev iteration loop and a release measurement are not comparable. Alternating the two also evicts one archive with the other, so a measuring session and a testing session pay for each other.
+
+**Two inherited figures are now confirmed, and then superseded — in one day.** They were carried as *undated, profile unrecorded*: "469 s of a ~570 s prelude build in elaboration, and 204 s of that in universe finalization". Retaken **2026-08-10, release**, they were right: `elaborate_and_zonk_module` at **474.5 s** and `universe::finalize` at **204.6 s**. Solver work in the same session then moved them to **288.4 s** and **92.4 s** — the level substitution rebuilding its input per atom, and both totality obligations re-zonking a recorded type per checked term rather than per distinct type.
+
+That is this section's own thesis arriving faster than expected. A number is not wrong because it was badly taken; it is wrong because the code moved. **Any figure here older than the last change to the pass it measures is a claim about history**, which is why the date and the profile sit beside each one. The certification figure below is the live example: 11.8 s was taken before the kernel's level substitution changed, and the kernel calls it, so that number is owed a retake before anything is designed against it.
 
 ### Findings whose triggers fire inside this specification
 
