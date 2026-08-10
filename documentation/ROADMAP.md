@@ -126,6 +126,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Recursive-SCC known-argument propagation, specialization, and branch specialization
   - [x] Structured Wasm control flow by SCC condensation (blocks, loops, and one localized dispatcher for irreducible scopes)
   - [x] Region-optimizer late passes measured redundant in the new pipeline and removed (common-subexpression elimination, pure-call evaluation, literal hoisting, tag/callee threading, loop-invariant motion, list-map simplification, and slice forwarding)
+- [ ] [A dataflow substrate for `curios-cont`, and unboxed scalar locals as its first payoff](roadmap/compiler/10_CONT_DATAFLOW_SPEC.md) (the lattice and SCC fixpoint welded to the specializer extracted into a shared solver that builds the call graph once per round instead of four times; then the per-operand representation demand lifted from 130 emitter sites onto the intrinsic roster, and scalars kept in registers across a function body — which also retires the 64-bit multiply the `i31` overflow check forces into every hot loop)
 - [x] Wasm-emission optimizations
   - [x] `struct.new` construction with immutable fields
   - [x] Direct `br` for single-target regions
