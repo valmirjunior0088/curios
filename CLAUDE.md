@@ -87,7 +87,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | Wasm representation or encoding | `curios-wasm/src/` | Continuation emission and parser/round-trip tests |
 | Host operations or foreign calls | `curios-abi/src/` | Core validation, Wasm imports, runtime bindings, and the JavaScript harness |
 | Pipeline orchestration | `curios-pipeline/src/compile.rs`, `stage.rs` | Native and browser callers |
-| Manifests, dependency resolution, or the store | `curios-package/src/` | `documentation/roadmap/tooling/01_PROJECTS_SPEC.md`, the CLI subcommands that wrap it, and `curios-base`'s `Qualifier`/`Mount` |
+| Manifests, dependency resolution, or the store | `curios-package/src/` | The CLI subcommands that wrap it, `curios-base`'s `Qualifier`/`Mount`, and `documentation/SOUNDNESS.md`'s *Cached verdicts* when the store's keys are involved |
 | Runtime or bundle format | `curios-runtime/src/`, `curios/src/bundle.rs` | Slim-launcher dependency boundary and bundle integration tests |
 | CLI or native compile behavior | `curios/src/` | `README.md`, public helpers, and integration tests |
 | Standard or syntax library | `curios-prelude-archive/std/`, `curios-prelude-archive/syn/` | Module indices, canonical syntax registry, `SYNTAX.md`, and Curios integration tests |
@@ -198,6 +198,10 @@ make curios/profile CURIOS_PROFILE_SOURCE=programs/hello_world.crs
 ```
 
 It builds the `curios` binary with `--features profile` — which is the only build in which the `profile` subcommand exists — and prints per-span aggregate timings sorted by total time descending. The instrumentation mechanics — `profile!` and `profile_span!`, the per-crate `profile` feature fan-out, the `capture` collector, and the temporary-instrumentation norm — are documented in the `curios-profile` crate, the one place in the workspace that names `tracing`.
+
+**Record a figure with its date and its profile, or do not record it.** A number in prose with no method decays quietly and is then designed against, which has happened here twice: a 471 ms restore that is 34.4 ms, and an estimated 60–70 s saving on an operation that takes twelve seconds. Any figure older than the last change to the pass it measures is a claim about history, and the date beside it is what lets a reader notice. This generalizes "measure a step, name the step" above — that rule says what to compare, this one says what a comparison is worth later.
+
+Where a figure has a probe that reproduces it, keep the two together rather than in a document that cites them. `curios-prelude-archive`'s `stored_prelude_measurements` is the pattern: an ignored test carrying both the command and what it last printed, so a number cannot drift from the thing that would check it.
 
 ## Documentation ownership
 

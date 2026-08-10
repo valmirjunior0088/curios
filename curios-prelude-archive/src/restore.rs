@@ -337,7 +337,26 @@ mod tests {
     /// cargo test --release --package curios-prelude-archive -- --ignored --nocapture stored_prelude_measurements
     /// ```
     ///
-    /// It asserts nothing and cannot fail — a measurement that fails is a measurement with an opinion. What it does not cover is stated where it prints: the elaboration figures come from the build script's own `profile.tsv` and need no probe, and the witness inventory B1 turns on is a term walk this does not do.
+    /// It asserts nothing and cannot fail — a measurement that fails is a measurement with an opinion. What it does not cover is stated where it prints: the elaboration figures come from the build script's own `profile.tsv` and need no probe, and the witness inventory is a term walk this does not do.
+    ///
+    /// # What it last printed
+    ///
+    /// Taken **2026-08-10**, **release**, immediately after the erased arena gained its compaction pass. Kept here rather than in a document that cites this test, so a number cannot drift from the thing that would check it.
+    ///
+    /// | What | Measured | Against |
+    /// | --- | --- | --- |
+    /// | Cold restore — bytecheck, then deserializing the prepared Text state, the Core and the erased prefix | 34.1–35.3 ms | 34.4 ms — confirmed |
+    /// | Erased-prefix clone, taken once per compile | 2.0–2.1 ms, mean of 100 | 1.4 ms — see below |
+    /// | Re-erasing one whole unit over the stored Core | 661–682 ms | 608 ms — up, partly spread |
+    /// | Certifying one whole unit, from an empty environment | 11.9–12.0 s, 0 refusals | 11.8 s — confirmed |
+    ///
+    /// Shape, same run: 1091 items and 1107 definitions; 75 witnesses; 31 inductives, 47 structures, 14 concepts; `derived_binder_floor` **0** against a lowering watermark of 6748.
+    ///
+    /// **Ranges, not points**, because those are two runs and the spread between them is part of what the figure is: the re-erasure alone moved 21 ms between consecutive readings, which is half of what separates it from the number it replaces. Nobody should read 608 → 682 as a 12% regression on that evidence.
+    ///
+    /// **The clone's old figure was a single sample, and that was the defect.** Taken once the same way it read 3.7 ms, which would have looked like a 2.6× regression from the compaction pass; averaged over 100 it is 2.0 ms. At one-to-four milliseconds the noise band swallows the signal, which is why this one is averaged and the others are not. The 1.4 ms it replaces was never wrong so much as never repeated.
+    ///
+    /// **The certification figure was owed a retake and got one.** It was taken before the kernel's level substitution changed, and the kernel calls it — so the doubt was right to raise, and the answer is that nothing moved. Roughly twelve seconds is what a whole-unit certification costs, and it is the number the caching half is designed against.
     #[test]
     #[ignore = "measurement: reports timings over the stored image rather than asserting"]
     fn stored_prelude_measurements() {
