@@ -8,10 +8,10 @@
 mod tests;
 
 use {
-    super::super::{
-        Atom, BlockId, FunctionId, Module, RecGroupId, Statement, StatementId, Terminator, ValueId,
+    crate::{
+        Analysis, Atom, BlockId, FunctionId, Module, RecGroupId, Statement, StatementId, Summary,
+        Terminator, ValueId,
     },
-    crate::{Analysis, Summary},
     std::collections::{BTreeMap, BTreeSet},
 };
 

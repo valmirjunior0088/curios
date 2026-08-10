@@ -1,4 +1,4 @@
-use super::super::{Entrypoint, Error, PreludeModules, RootSource};
+use crate::{Entrypoint, Error, PreludeModules, RootSource};
 use curios_abi::{WireType, host_ops};
 use curios_base::{
     CharacterSyntax, ConceptField, LiftSyntax, MonadSyntax, OperatorSyntax, ProofSyntax, Qualifier,

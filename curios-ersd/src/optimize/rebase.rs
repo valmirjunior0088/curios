@@ -14,7 +14,7 @@
 mod tests;
 
 use {
-    super::super::{
+    crate::{
         Atom, Block, BlockId, Constant, Function, FunctionId, Module, Operation, Rhs, Statement,
         StatementId, Terminator, walk::control_blocks,
     },

@@ -305,11 +305,11 @@ fn structure_set(
 #[cfg(test)]
 mod tests {
     use {
-        super::super::{
+        super::{LayoutItem, RegionCfg, region_layout},
+        crate::{
             EmissionBlock, EmissionBlockName, EmissionBody, EmissionJumpTarget,
             EmissionMatchTarget, EmissionTail, EmissionValueName,
         },
-        super::{LayoutItem, RegionCfg, region_layout},
     };
 
     fn body(tail: EmissionTail) -> EmissionBody {

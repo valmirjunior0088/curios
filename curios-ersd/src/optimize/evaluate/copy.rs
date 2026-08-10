@@ -3,11 +3,11 @@
 //! Both partial-evaluation drivers reproduce a function's body under fresh identities: closure reification copies a lambda with its resolved captures wired in, and the spine specializer mints a specialized copy with one parameter bound to a literal. A copy is not a structural clone: it mints a fresh identity for every block, statement, value, function, and recursive group the region owns, and rewrites every reference through the old→new maps. References that leave the region — top-level identities and constants — are rewritten by the caller's substitution or kept verbatim.
 
 use {
-    super::super::super::walk::control_blocks,
     crate::{
         Atom, Block, BlockId, Function, FunctionId, Module, RecGroup, RecGroupId, RecValue,
         Statement, StatementId, ValueId,
         remap::{Remap, lookup},
+        walk::control_blocks,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
