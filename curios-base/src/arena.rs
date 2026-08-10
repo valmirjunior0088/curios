@@ -7,7 +7,11 @@
 #[cfg(test)]
 mod tests;
 
-use std::{collections::BTreeSet, fmt::Display, marker::PhantomData};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    fmt::Display,
+    marker::PhantomData,
+};
 
 /// A `u32`-backed arena identity, implemented by every [`id!`](crate::id) newtype. `from_index` is the arena's minting intrinsic — loud on exhaustion, never wrapping — and not meant to be called outside an arena, which is what keeps "identities are minted by their owning arena" a discipline with one door.
 pub trait ArenaId: Copy + Display {
@@ -132,6 +136,28 @@ impl<I: ArenaId, T> Arena<I, T> {
 
     pub fn is_empty(&self) -> bool {
         self.slots.is_empty()
+    }
+
+    /// Drop every tombstone, packing the live entries into a dense prefix, and report where each identity moved.
+    ///
+    /// **Slots move.** Every other operation here promises they never do, and the identity discipline rests on that — so this is the one pass that invalidates outstanding identities. A consumer must rewrite every identity it stores through the returned map, including any held outside this arena, and the map is *total* over live identities: a lookup that misses is a gap in the caller's walk, not an identity from elsewhere. That distinction matters because the failure is silent — a stale index still addresses a live slot, just the wrong one.
+    ///
+    /// Only valid on a *finished* arena. A reserved-but-undefined slot is indistinguishable from a tombstone here (see the module documentation), so compacting mid-construction drops pending reservations without saying so.
+    pub fn compact(&mut self) -> BTreeMap<I, I>
+    where
+        I: Ord,
+    {
+        let mut moved = BTreeMap::new();
+        let mut packed = Vec::with_capacity(self.live_count());
+
+        for (index, slot) in std::mem::take(&mut self.slots).into_iter().enumerate() {
+            let Some(value) = slot else { continue };
+            moved.insert(I::from_index(index), I::from_index(packed.len()));
+            packed.push(Some(value));
+        }
+
+        self.slots = packed;
+        moved
     }
 
     pub fn live_count(&self) -> usize {
