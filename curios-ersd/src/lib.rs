@@ -47,5 +47,7 @@ pub use semantics::*;
 mod summary;
 pub use summary::*;
 
+mod remap;
+
 mod optimize;
 pub use optimize::optimize;

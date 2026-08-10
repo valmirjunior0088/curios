@@ -64,6 +64,35 @@ pub(super) struct Environment {
 }
 
 impl Environment {
+    /// Rewrite every bound atom through a module compaction.
+    ///
+    /// The environment is the one thing outside the module that holds arena identities, and it is archived beside it — so a compaction that does not reach here leaves the stored image self-inconsistent in a way nothing would report: a stale index still addresses a live slot, just the wrong entity.
+    ///
+    /// An identity missing from the compaction is a *bug*, not a dead binding: this runs where nothing has been pruned, so every bound atom names something live. Failing loudly is the point — the alternative is passing the stale identity through.
+    pub(super) fn remap(&mut self, compaction: &curios_ersd::Compaction) {
+        for binding in self.values.values_mut() {
+            let Binding::Atom(atom) = binding else {
+                continue;
+            };
+            *atom = match *atom {
+                curios_ersd::Atom::Value(value) => curios_ersd::Atom::Value(
+                    *compaction
+                        .values
+                        .get(&value)
+                        .unwrap_or_else(|| panic!("compaction dropped bound value {value}")),
+                ),
+                curios_ersd::Atom::Function(function) => curios_ersd::Atom::Function(
+                    *compaction
+                        .functions
+                        .get(&function)
+                        .unwrap_or_else(|| panic!("compaction dropped bound function {function}")),
+                ),
+                // Constants are interned in a plain vector that compaction never touches.
+                constant => constant,
+            };
+        }
+    }
+
     pub(super) fn bind(&mut self, name: &Free, atom: curios_ersd::Atom) {
         self.values.insert(name.clone(), Binding::Atom(atom));
     }

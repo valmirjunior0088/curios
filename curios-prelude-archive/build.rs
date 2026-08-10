@@ -151,7 +151,7 @@ fn build() {
     });
 
     // No entrypoint, so nothing to seal: this unit's arena stays open, which is what its successors resume over.
-    let ersd = erase_unit(
+    let mut ersd = erase_unit(
         &mut Context::with_default_budget(SYNTAX),
         Resumed::of(&[], ErasedUnit::default()),
         &core,
@@ -163,6 +163,9 @@ fn build() {
             error.format_with(&core, &[])
         )
     });
+
+    // Erasure tombstones as it goes, and the image is restored and walked by every compilation that follows — so the dead slots are compacted out here rather than serialized and stepped over forever after.
+    ersd.compact();
 
     // Hash-cons every archived Core snapshot against one table, so structurally equal subterms collapse onto a single allocation across the lowered and elaborated views as well as within each. Elaboration builds the same types, telescopes, and proof spines independently in definition after definition and nothing deduplicates them, because `Rc` sharing only ever arises from cloning: two definitions that build the same type build it twice. rkyv shares by pointer address, so collapsing them here is also what lets the archive store each distinct structure once.
     //

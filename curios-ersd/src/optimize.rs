@@ -19,6 +19,7 @@ pub fn optimize(module: &mut Module) {
     let analysis = Analysis::analyze(module);
     let proven_pure = evaluate::prove_eager_groups_pure(module, &analysis);
     prune::prune_unreachable(module, &proven_pure, &analysis);
+    compact(module);
     // A curried chain folds one application per round; eight rounds cover any corpus chain with room to spare, and the shared pass budget caps the total work regardless.
     for _ in 0..8 {
         if !evaluate::evaluate_closed_terms(module) {
@@ -30,4 +31,17 @@ pub fn optimize(module: &mut Module) {
     let analysis = Analysis::analyze(module);
     let proven_pure = evaluate::prove_eager_groups_pure(module, &analysis);
     prune::prune_unreachable(module, &proven_pure, &analysis);
+    compact(module);
+}
+
+/// Compact after a prune, and check the result.
+///
+/// Pruning tombstones; every later walk then steps over the dead slots, and both the verifier and the analysis walk the whole arena. Measured over one program before this existed: 22,477 live slots on entry against 721 live in 29,153 at exit, with nine verifications and eight analyses in between.
+///
+/// The verification is not belt-and-braces. A compaction that misses an identity rewrites nothing and reports nothing — the stale index still addresses a live slot, just the wrong entity — so this is the one call site where the structural check is the only thing standing between a remap gap and silent miscompilation.
+fn compact(module: &mut Module) {
+    module.compact();
+    module
+        .verify()
+        .expect("compaction preserves the representation contract");
 }

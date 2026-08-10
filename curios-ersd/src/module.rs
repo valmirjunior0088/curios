@@ -18,6 +18,15 @@ use {
     std::{collections::HashMap, sync::Arc},
 };
 
+/// Where compaction moved the identities a caller outside the module may still hold.
+///
+/// Only the two an [`Atom`](crate::Atom) can carry. A consumer that stored atoms — `curios-elab`'s erased environment is the one that does — must rewrite them through these before using the module again.
+#[derive(Debug, Clone)]
+pub struct Compaction {
+    pub values: std::collections::BTreeMap<ValueId, ValueId>,
+    pub functions: std::collections::BTreeMap<FunctionId, FunctionId>,
+}
+
 /// A value's definition record. Uses, shape, and freeness are derived by analysis; only the optional debug name is stored, and it never affects identity or behavior.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
@@ -250,6 +259,77 @@ impl Module {
     }
 
     /// Tombstone every function outside `keep`. Identities are never reused.
+    /// Drop every tombstone from every arena and rewrite each stored identity to where it moved.
+    ///
+    /// The one pass that invalidates identities, so it reports the two spaces anything *outside* a module can hold: [`Atom`](crate::Atom) carries a `ValueId`, a `FunctionId`, or a `ConstantId`, and constants are interned in a plain vector this never touches. Blocks, statements and recursive groups are named only from within, so they are compacted and not reported.
+    ///
+    /// Valid only on a finished module — a reserved-but-undefined slot reads as a tombstone here and would be dropped. Callers verify afterwards: a remap gap rewrites nothing and says nothing, and a stale index still addresses a live slot, so the walk cannot be trusted to fail loudly on its own.
+    pub fn compact(&mut self) -> Compaction {
+        // Every map first, before any content is rewritten: a node's identities may name any arena, so a rewrite needs all five settled.
+        let values = self.values.compact();
+        let functions = self.functions.compact();
+        let blocks = self.blocks.compact();
+        let statements = self.statements.compact();
+        let rec_groups = self.rec_groups.compact();
+
+        let remap = crate::remap::Remap {
+            values: &values,
+            blocks: &blocks,
+            functions: &functions,
+            rec_groups: &rec_groups,
+            statements: &statements,
+            substitution: &std::collections::BTreeMap::new(),
+            redirect: None,
+        };
+
+        // The arenas hold their entries at fresh indices now; their *contents* still name the old ones.
+        let rewritten: Vec<_> = self
+            .statements
+            .iter_live()
+            .map(|(id, statement)| (id, remap.statement(statement)))
+            .collect();
+        for (id, statement) in rewritten {
+            self.statements.set(id, statement);
+        }
+
+        let rewritten: Vec<_> = self
+            .blocks
+            .iter_live()
+            .map(|(id, block)| (id, remap.block_body(block)))
+            .collect();
+        for (id, block) in rewritten {
+            self.blocks.set(id, block);
+        }
+
+        let rewritten: Vec<_> = self
+            .functions
+            .iter_live()
+            .map(|(id, function)| (id, remap.function(function)))
+            .collect();
+        for (id, function) in rewritten {
+            self.functions.set(id, function);
+        }
+
+        let rewritten: Vec<_> = self
+            .rec_groups
+            .iter_live()
+            .map(|(id, group)| (id, remap.rec_group(group)))
+            .collect();
+        for (id, group) in rewritten {
+            self.rec_groups.set(id, group);
+        }
+
+        // `ValueDef` holds only a debug name, so the values arena needs no content rewrite.
+        self.items = self
+            .items
+            .iter()
+            .map(|&item| remap.statement_id(item))
+            .collect();
+        self.entry = self.entry.map(|entry| remap.block(entry));
+
+        Compaction { values, functions }
+    }
+
     pub(crate) fn retain_functions(&mut self, keep: &std::collections::BTreeSet<FunctionId>) {
         self.functions.retain(keep);
     }

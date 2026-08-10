@@ -467,6 +467,14 @@ impl ErasedUnit {
         self.module.items().is_empty()
     }
 
+    /// Compact the erased arena, rewriting the environment that indexes into it.
+    ///
+    /// Both halves move together or neither does: the module owns the arenas and the environment owns the only identities held outside them, and they are archived as one value. Run before serialization so a stored image never carries tombstones a consumer would then walk on every compile.
+    pub fn compact(&mut self) {
+        let compaction = self.module.compact();
+        self.environment.remap(&compaction);
+    }
+
     /// The finished arena module, for a unit whose entrypoint was sealed — what the back half of the pipeline lowers. A unit without one is a scope rather than a program, and its arena is resumed over instead.
     pub fn into_module(self) -> curios_ersd::Module {
         self.module
