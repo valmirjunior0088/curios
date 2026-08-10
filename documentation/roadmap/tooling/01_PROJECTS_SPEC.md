@@ -189,16 +189,16 @@ Separated because the alternative re-invites the collision the nesting below rem
 
 > **A unit may be stored only if it carries no positional identity** (law 2).
 
-Measured against the stored prelude — 1079 items, 1094 definitions, release build:
+Measured against the stored prelude — 1091 items, 1107 definitions, release build:
 
 | Identity | In a stored unit | Established by |
 | --- | --- | --- |
 | Term metavariable | none — zonking substitutes every solution and refuses an unsolved hole | `validate_stored_identities` |
 | Universe metavariable | none — a level holding one is not closed over its declaration's parameters | `validate_bound_universes` |
-| Free local binder | none — `derived_binder_floor` over items and registries is **0**, against a lowering watermark of 6684 | `validate_stored_identities` |
-| Witness | **75, densely 0..74, 34 of them referenced from terms** | nothing; B1 |
+| Free local binder | none — `derived_binder_floor` over items and registries is **0**, against a lowering watermark of 6748 | `validate_stored_identities` |
+| Witness | none — every one is scoped to a mount its own unit claims | `validate_stored_identities`, since B1 |
 
-Of the four monotonic counters, three leave watermarks, which combine by maximum and cannot alias; the witness counter alone mints dense identities that reach a stored unit. One further predecessor-dependence must be named beside it: a unit's lowering copies the *cumulative universe-seed table* from its last predecessor, so a stored unit's bytes depend on its predecessors — covered so long as B3's key covers the closure, and stated here so nobody discovers it as a surprise. The precondition load-bearing today, unenforced: at most one unit in a compilation is restored from storage, and it always sits first. B1 removes it.
+All four classes are now refused rather than three. Of the monotonic counters, the ones that remain leave watermarks, which combine by maximum and cannot alias; the witness counter was the one minting dense identities that reached a stored unit, and it is gone. One further predecessor-dependence must be named beside them: a unit's lowering copies the *cumulative universe-seed table* from its last predecessor, so a stored unit's bytes depend on its predecessors — covered so long as B3's key covers the closure, and stated here so nobody discovers it as a surprise. The precondition that was load-bearing and unenforced — at most one unit in a compilation is restored from storage, and it always sits first — is what B1 removed.
 
 The fold changes shape, and this is the whole of it:
 
@@ -315,6 +315,9 @@ Updated as each piece lands, and deleted with this document. What the code corre
   - *Decided while implementing:* fetch, verify, **then** place. The tree is hashed where it lands temporarily and moved into the store only once accepted, so an interrupted fetch cannot leave a directory the store would later read as verified. Losing a placement race costs only the work: content-addressed means the tree already there is the same tree.
   - *Deferred, with its reason:* two of reconcile's four reports. "A dependency declared but never named by any module" and "a name resolved against no declaration" both need the compiler's mount table, which knows precisely which prefixes a unit resolved against but hands that over to nothing. The two answerable from manifests alone — a catalog entry no member references, and a `.crs` file nothing enumerates — are done. **The handover is the work those two are waiting on**, and it is a compiler-side seam rather than anything in this crate.
   - *Tested further than expected:* the fetch path is exercised end to end against a `file://` remote this machine serves, so init, fetch, checkout, dropping the repository metadata, hashing and placing are all covered without a network. What remains unexercised is authentication against a *remote* host over https or ssh. `curios-project` was this document's word and the author's first pick; `curios-package` was chosen over it on the second look, and over `curios-manifest`, which under-describes a crate that will own a content-addressed store and the toolchain's only network actor.
+- **M4-B1, a witness is identified by its mount** — landed. `WitnessId` is the declaring mount and an ordinal within it, the seeded floor is *deleted* rather than left vestigial, and the display is mount-qualified. The prelude re-certified at **1091 items, zero refusals** under the bumped schema, and no program changed — which is the prediction this document made and the reason it held: a witness is anonymous and reached only through resolution, so what backs the identity was never observable.
+  - *Confirmed by accident:* two of this workspace's own diagnostics already spelled a witness `sys/witness@0` while the identity behind it was a bare counter rendering as `witness0`. The doc comments were describing the design rather than the code, and B1 makes them true.
+  - *The refusal grew, and asks a different question than the other two.* This document parked the storage check here — "witness identities are the fourth class, are not scoped to their mount yet, and are where this refusal grows when they are" — and the shape it grew into is not the obvious one. A metavariable or a free local is disqualifying **anywhere in a module's terms**; a witness *reference* is not, because a stored unit legitimately names witnesses its predecessors declared, scoped to their mounts. Every unit compiled against `/std` does. So the check is over `Module::witnesses` — what this module **declares** — and deliberately not through the position walk. Reading it off the terms would refuse every unit in the workspace.
 
 ## Tests
 
