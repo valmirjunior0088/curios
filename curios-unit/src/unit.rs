@@ -16,7 +16,9 @@ pub struct Unit {
     text: PreparedPrelude,
     /// Elaborated and zonked. This is what the kernel judges and what a successor's elaboration replays.
     core: Module,
-    /// **Provisional in shape, not in content.** While every unit is erased in one process in dependency order, one erased artifact per unit is right. Once erased artifacts are *stored*, they belong to the ordered set of predecessors instead — two independently erased units both number their arenas from zero, so per-unit artifacts would need a relocation pass. Expect this half to move off the unit and onto the prefix; nothing else here moves with it.
+    /// **Not per-unit, despite sitting on a unit.** Each unit's erasure resumes over the previous one's arena — see [`Scope::arena`](crate::Scope::arena) — so what this holds is the whole prefix's artifact, cumulative from the first unit forward, and never an independent arena numbered from zero.
+    ///
+    /// That is what lets a unit be stored whole. The worry it answers was real: two *independently* erased arenas both start at zero, so per-unit artifacts would need a relocation pass, which is `cnum_map` again. They are not independent, and a stored unit's key names its exact ordered predecessors, so the arena a restored unit carries always matches the prefix it is restored into.
     ersd: ErasedUnit,
     /// `curios_core::derived_binder_floor` over `core`, computed by the walk that established this unit.
     ///
