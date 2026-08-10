@@ -136,6 +136,102 @@ pub enum CpsIntrinsicOp {
     TplGet(usize),
 }
 
+/// The representation a value is read or produced at — the carrier, not the type.
+///
+/// This is the vocabulary the backend's `LoadAs`/`WrapAs` coercions translate: `Nat`, `Int`, and `Flt` name raw machine carriers a Wasm register can hold, and the rest name references. Stated here, on the IR, rather than in the emitter, because the *optimizer* has to be able to ask what an operation demands of its operands without running codegen to find out — and because an emitter that restates the demand at every use site is an emitter that can disagree with the analysis.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Repr {
+    /// A raw unsigned 32-bit carrier.
+    Nat,
+    /// A raw signed 32-bit carrier.
+    Int,
+    /// A raw binary32 carrier.
+    Flt,
+    /// A binary rope reference.
+    Bytes,
+    /// A list rope reference.
+    List,
+    /// The tuple heap type of the given arity.
+    Tpl(usize),
+    /// An opaque reference: nothing is read of it, so nothing constrains it.
+    Ref,
+}
+
+impl CpsIntrinsicOp {
+    /// The representation this operation reads its `index`-th operand at.
+    ///
+    /// Indexed rather than returning a sequence because the concatenations are variadic and every operand of one shares a representation, so a list would allocate to say what a match arm already says.
+    pub fn operand_repr(&self, index: usize) -> Repr {
+        use CpsIntrinsicOp::*;
+
+        match (self, index) {
+            // The sequence operations are the only ones whose operands differ from one another: a rope first, then positions.
+            (BinGet(_) | BinSlice(_) | BinAppend(_), 0) => Repr::Bytes,
+            (BinGet(_) | BinSlice(_) | BinAppend(_), _) => Repr::Nat,
+            (ListGet | ListSlice | ListAppend, 0) => Repr::List,
+            (ListGet | ListSlice, _) => Repr::Nat,
+            // A list element is carried, never interpreted — unlike a `Bytes` element, which is a `Nat` grain.
+            (ListAppend, _) => Repr::Ref,
+            (BinConcat(_, _), _) | (BinEql(_) | BinLen(_), _) | (FltOfLeBytes, _) => Repr::Bytes,
+            (ListConcat(_) | ListLen, _) => Repr::List,
+            (TplGet(index), _) => Repr::Tpl(index + 1),
+
+            (
+                NatEql | NatNeq | NatAdd | NatSub | NatMul | NatLt | NatDiv | NatRem | NatGt
+                | NatLte | NatGte | NatAnd | NatOr | NatXor | NatShl | NatShr | NatRotl | NatRotr
+                | NatClz | NatCtz | NatPopcnt | NatEqz | NatToInt | NatToFlt,
+                _,
+            ) => Repr::Nat,
+
+            (
+                IntEql | IntNeq | IntAdd | IntSub | IntMul | IntDiv | IntRem | IntLt | IntGt
+                | IntLte | IntGte | IntAnd | IntOr | IntXor | IntShl | IntShr | IntRotl | IntRotr
+                | IntClz | IntCtz | IntPopcnt | IntEqz | IntToNat | IntToFlt,
+                _,
+            ) => Repr::Int,
+
+            (
+                FltAdd | FltSub | FltMul | FltDiv | FltRem | FltEql | FltNeq | FltLt | FltGt
+                | FltLte | FltGte | FltMin | FltMax | FltNeg | FltAbs | FltSqrt | FltFloor
+                | FltCeil | FltTrunc | FltNearest | FltCopysign | FltToNat | FltToLeBytes
+                | FltToInt,
+                _,
+            ) => Repr::Flt,
+        }
+    }
+
+    /// The representation this operation produces.
+    pub fn result_repr(&self) -> Repr {
+        use CpsIntrinsicOp::*;
+
+        match self {
+            // Every comparison and predicate answers a `Bool`, whose carrier is a `Nat`.
+            NatEql | NatNeq | NatLt | NatGt | NatLte | NatGte | NatEqz | IntEql | IntNeq
+            | IntLt | IntGt | IntLte | IntGte | IntEqz | FltEql | FltNeq | FltLt | FltGt
+            | FltLte | FltGte | BinEql(_) => Repr::Nat,
+
+            NatAdd | NatSub | NatMul | NatDiv | NatRem | NatAnd | NatOr | NatXor | NatShl
+            | NatShr | NatRotl | NatRotr | NatClz | NatCtz | NatPopcnt | IntToNat | FltToNat
+            | BinLen(_) | ListLen => Repr::Nat,
+
+            IntAdd | IntSub | IntMul | IntDiv | IntRem | IntAnd | IntOr | IntXor | IntShl
+            | IntShr | IntRotl | IntRotr | IntClz | IntCtz | IntPopcnt | NatToInt | FltToInt => {
+                Repr::Int
+            }
+
+            FltAdd | FltSub | FltMul | FltDiv | FltRem | FltMin | FltMax | FltNeg | FltAbs
+            | FltSqrt | FltFloor | FltCeil | FltTrunc | FltNearest | FltCopysign | NatToFlt
+            | IntToFlt | FltOfLeBytes => Repr::Flt,
+
+            BinGet(_) => Repr::Nat,
+            BinSlice(_) | BinAppend(_) | BinConcat(_, _) | FltToLeBytes => Repr::Bytes,
+            ListSlice | ListAppend | ListConcat(_) => Repr::List,
+            // A list read and a tuple projection both yield whatever was stored, uninterpreted.
+            ListGet | TplGet(_) => Repr::Ref,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CpsIntrinsicEffect {
     Total,

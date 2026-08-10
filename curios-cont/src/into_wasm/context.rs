@@ -4,6 +4,7 @@ use {
         EmissionFunctionName, EmissionHostTarget, EmissionJumpTarget, EmissionMatchTarget,
         EmissionTail, EmissionValueName, FieldData, Frame, FuncData, LocalData, Table,
     },
+    crate::Repr,
     curios_abi::{WireLeaf, WireType},
     curios_base::Entropy,
     std::{
@@ -726,6 +727,25 @@ pub(crate) enum LoadAs {
     Flt,
     Bytes,
     List,
+}
+
+impl LoadAs {
+    /// The load that realises a representation the IR states.
+    ///
+    /// This is the whole of the translation between [`Repr`] — what an operation declares it reads — and the instructions that deliver it. Every operand load in the emitter resolves through here rather than naming a `LoadAs` directly, so the demand has one statement (the intrinsic roster) and one realisation (this function), and the two cannot drift apart.
+    ///
+    /// `Repr::Ref` maps to `Null` rather than `NonNull`: an uninterpreted operand is passed along exactly as stored, and asserting non-nullness of a value nothing reads would emit an instruction for no reader.
+    pub(crate) fn of(repr: &Repr, table: &Table) -> Self {
+        match repr {
+            Repr::Nat => Self::Nat,
+            Repr::Int => Self::Int,
+            Repr::Flt => Self::Flt,
+            Repr::Bytes => Self::Bytes,
+            Repr::List => Self::List,
+            Repr::Tpl(arity) => Self::Concrete(table.find_tpl_type(*arity)),
+            Repr::Ref => Self::Null,
+        }
+    }
 }
 
 /// How a host-import operand of the given wire type is loaded at the call site: `Nat`/`Bool` unbox their i31 carrier unsigned to a raw i32, `Int` unboxes signed (the `poll(2)` timeout convention), and the reference shapes cast to their rope base type (a handle is its `Bytes` token) — the force step to the flat wire payload follows in `wire_force_instrs`.
