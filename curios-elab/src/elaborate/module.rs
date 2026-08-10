@@ -19,6 +19,7 @@ use {
         cell::RefCell,
         collections::{BTreeMap, BTreeSet},
         rc::Rc,
+        slice::from_ref,
     },
 };
 
@@ -1195,7 +1196,7 @@ pub fn elaborate_and_zonk_with_prelude_reporting(
     mode: Mode,
 ) -> Result<(Module, Term, Vec<Error>), Error> {
     curios_profile::profile!("elaborate_and_zonk_with_prelude");
-    let established = Established::of(prelude);
+    let established = Established::over(from_ref(&prelude));
     let (suffix, body_type) = elaborate_module_suffix(
         context,
         established,

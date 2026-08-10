@@ -26,6 +26,7 @@ use {
         cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
         rc::Rc,
+        slice::from_ref,
     },
 };
 
@@ -1375,25 +1376,25 @@ fn exposed_nominal(
     }
 }
 
-/// Every nominal declaration an alias chain can land on: the entry's own, over the ones the prelude already made visible.
+/// Every nominal declaration an alias chain can land on: the unit's own, over the ones its scope already made visible.
 ///
-/// A *scope*, not a merged map. The audit walks alias edges until it reaches something nominal, and an alias may legitimately point at a prelude type — so the question crosses the boundary and is answered by asking both halves. Merging them upstream answers it too, and that is what this replaced: a map whose correctness here depended on somebody else having concatenated the prelude into it, with nothing saying so. See `documentation/DESIGN.md`, "A module is a compilation unit, and the prelude is an environment".
+/// A *scope*, not a merged map. The audit walks alias edges until it reaches something nominal, and an alias may legitimately point at a type from an earlier unit — so the question crosses the boundary and is answered by asking every half. Merging them upstream answers it too, and that is what this replaced: a map whose correctness here depended on somebody else having concatenated the prelude into it, with nothing saying so. See `documentation/DESIGN.md`, "A module is a compilation unit, and the prelude is an environment".
 #[derive(Clone, Copy)]
 struct NominalScope<'a> {
-    /// The already-lowered prelude, or `None` when lowering *is* the prelude and there is nothing beneath it.
-    base: Option<&'a curios_core::Module>,
+    /// The units already lowered, in dependency order. Empty when this lowering *is* the first and there is nothing beneath it.
+    bases: &'a [&'a curios_core::Module],
     induct_decls: &'a BTreeMap<curios_core::Global, curios_core::InductDecl>,
     struct_decls: &'a BTreeMap<curios_core::Global, curios_core::StructDecl>,
 }
 
 impl<'a> NominalScope<'a> {
     fn new(
-        base: Option<&'a curios_core::Module>,
+        bases: &'a [&'a curios_core::Module],
         induct_decls: &'a BTreeMap<curios_core::Global, curios_core::InductDecl>,
         struct_decls: &'a BTreeMap<curios_core::Global, curios_core::StructDecl>,
     ) -> Self {
         Self {
-            base,
+            bases,
             induct_decls,
             struct_decls,
         }
@@ -1405,15 +1406,21 @@ impl<'a> NominalScope<'a> {
     }
 
     fn induct(&self, name: &curios_core::Global) -> Option<&'a curios_core::InductDecl> {
-        self.induct_decls
-            .get(name)
-            .or_else(|| self.base.and_then(|base| base.induct_decls.get(name)))
+        self.induct_decls.get(name).or_else(|| {
+            self.bases
+                .iter()
+                .rev()
+                .find_map(|base| base.induct_decls.get(name))
+        })
     }
 
     fn struct_(&self, name: &curios_core::Global) -> Option<&'a curios_core::StructDecl> {
-        self.struct_decls
-            .get(name)
-            .or_else(|| self.base.and_then(|base| base.struct_decls.get(name)))
+        self.struct_decls.get(name).or_else(|| {
+            self.bases
+                .iter()
+                .rev()
+                .find_map(|base| base.struct_decls.get(name))
+        })
     }
 }
 
@@ -1676,7 +1683,7 @@ pub fn into_core(
         &public,
         &table,
         &flat_items,
-        NominalScope::new(None, &induct_decls, &struct_decls),
+        NominalScope::new(&[], &induct_decls, &struct_decls),
     )?;
 
     // Emit the program as a flat list of named top-level definitions rather than folding it into one N-deep nested `let`/`rec` term. Cross-references (and the references in the entrypoint `body` and its `type_` annotation) stay free `Var`s keyed by the definition's joined name; the core passes `define` each one into the `Context`, so both the body and its annotation reduce through those definitions and agree — no shared binder scope required.
@@ -1764,7 +1771,7 @@ pub fn prepare_prelude(
         &public,
         &table,
         &flat_items,
-        NominalScope::new(None, &induct_decls, &struct_decls),
+        NominalScope::new(&[], &induct_decls, &struct_decls),
     )?;
     let items = order_flat_items(flat_items, &mounts, &induct_decls, &struct_decls)
         .into_iter()
@@ -1804,9 +1811,10 @@ pub fn into_core_with_prelude(
 ) -> Result<(curios_core::Module, usize, usize, ForeignStore), Error> {
     curios_profile::profile!("into_core_with_prelude");
     // Layered, not copied: the prelude's module graph is the base this resolution reads through and never writes to.
+    let table_base = &prepared.table;
     let mut resolved = Resolved {
         modules: HashMap::new(),
-        table: Scoped::over(&prepared.table),
+        table: Scoped::over(from_ref(&table_base)),
     };
     resolved.resolve(entrypoint, loader, &prepared.mounts)?;
     let Resolved { mut table, modules } = resolved;
@@ -1818,12 +1826,13 @@ pub fn into_core_with_prelude(
         .cloned()
         .chain(own.iter().cloned())
         .collect::<Vec<_>>();
+    let public_base = &prepared.public;
     let public = interface::resolve_with_prelude(
         entrypoint,
         &modules,
         &mut table,
         &mounts,
-        Scoped::over(&prepared.public),
+        Scoped::over(from_ref(&public_base)),
     )?;
 
     let metavars = Entropy::<usize>::new();
@@ -1884,7 +1893,7 @@ pub fn into_core_with_prelude(
         &public,
         &table,
         &flat_items,
-        NominalScope::new(Some(&prepared.core), &induct_decls, &struct_decls),
+        NominalScope::new(&[&prepared.core], &induct_decls, &struct_decls),
     )?;
 
     // The entry's own items alone. The prelude reaches later stages as an *environment* they are seeded from — `Globals` at the certifier, a replayed context at elaboration and erasure — and copying its 1052 items into every compilation only ever existed so those stages could then skip them again by index. See `documentation/DESIGN.md`, "A module is a compilation unit, and the prelude is an environment".

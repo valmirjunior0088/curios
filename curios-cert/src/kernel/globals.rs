@@ -106,6 +106,27 @@ impl Globals {
         }
     }
 
+    /// Add everything a second `module` puts in scope, at the binder floor its own walk derived.
+    ///
+    /// For a compilation whose scope is several units. Names are disjoint by mount, so this cannot overwrite — and it is asserted rather than reported, unlike [`Globals::insert`], for a second reason: mounting happens before any walk, so there are no remembered reducts for an overwrite to invalidate. A collision here is a driver that mounted one prefix twice, which is a construction bug and not a program's fault.
+    ///
+    /// The floor combines by maximum, which can only widen: a bound is not a verdict, and a walk seeded above every identity in scope cannot capture one.
+    pub fn mount(&mut self, module: &Module, carried: usize) {
+        let added = Self::of(module, carried);
+
+        for (name, definition) in added.definitions {
+            assert!(
+                self.definitions.insert(name, definition).is_none(),
+                "a mounted unit redeclared a name already in scope"
+            );
+        }
+        self.inducts.extend(added.inducts);
+        self.structs.extend(added.structs);
+        self.concepts.extend(added.concepts);
+        self.partial.extend(added.partial);
+        self.binder_floor = self.binder_floor.max(carried);
+    }
+
     /// The names in scope here that are not known to terminate. See the field.
     pub(crate) fn partial(&self) -> &BTreeSet<Global> {
         &self.partial

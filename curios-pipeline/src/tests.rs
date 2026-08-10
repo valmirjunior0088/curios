@@ -7,6 +7,7 @@ use {
     curios_prelude::{SYNTAX, with_prelude},
     curios_text::{Entrypoint, RootSource},
     curios_wasm::to_bytes,
+    std::slice::from_ref,
 };
 
 #[test]
@@ -1917,7 +1918,7 @@ fn erase_to_ir(source: &str, type_: Option<&str>) -> curios_ersd::Module {
     with_prelude(|prelude| {
         erase_module_with_prelude(
             &mut Context::with_default_budget(SYNTAX),
-            Resumed::of(prelude.core(), prelude.ersd()),
+            Resumed::of(from_ref(&prelude.core()), prelude.ersd()),
             &module,
             &core_type,
         )

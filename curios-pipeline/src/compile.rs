@@ -13,7 +13,7 @@ use {
     curios_ersd::{lower_to_cont, optimize_ir},
     curios_prelude::{SYNTAX, with_prelude},
     curios_text::{Entrypoint, RootSource, into_core_with_prelude},
-    std::fmt,
+    std::{fmt, slice::from_ref},
 };
 
 /// A compile failure, split for process-level reporting: a written-goal batch is *incomplete* development state, everything else a hard *failure*. The CLI maps the two to distinct exit codes — 2 for incomplete, 1 for failure — so tooling can distinguish "here is your goal batch" from "something is wrong" without parsing stderr. Both carry the fully formatted report; an embedder that does not care converts to it via `Display` or the `String` conversion.
@@ -224,7 +224,7 @@ where
     let ersd_module = with_prelude(|prelude| {
         erase_module_with_prelude(
             &mut Context::new(budget, SYNTAX),
-            Resumed::of(prelude.core(), prelude.ersd()),
+            Resumed::of(from_ref(&prelude.core()), prelude.ersd()),
             &module,
             &core_type,
         )

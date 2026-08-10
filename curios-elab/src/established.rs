@@ -16,42 +16,40 @@ use {
 /// The modules already elaborated, as scope for elaborating another.
 #[derive(Default, Clone, Copy)]
 pub struct Established<'a> {
-    /// `None` for a from-scratch elaboration, where the unit defines every name it mentions.
-    module: Option<&'a Module>,
+    /// The units already elaborated, in dependency order. Empty for a from-scratch elaboration, where the unit defines every name it mentions.
+    ///
+    /// Borrowed per unit rather than merged into one module: merging would copy every predecessor's items into every compilation, which is the cost retiring the splice removed.
+    modules: &'a [&'a Module],
 }
 
 impl<'a> Established<'a> {
     /// Nothing in scope: the unit is elaborated whole, against itself alone.
     pub fn nothing() -> Self {
-        Self { module: None }
+        Self { modules: &[] }
     }
 
-    /// Everything `module` established, as scope.
-    pub fn of(module: &'a Module) -> Self {
-        Self {
-            module: Some(module),
-        }
+    /// Everything `modules` established, in dependency order, as scope.
+    pub fn over(modules: &'a [&'a Module]) -> Self {
+        Self { modules }
     }
 
     /// The nominal registries and the recorded totality verdicts, before any item is checked.
     ///
     /// An inductive's type-constructor and value-constructor definitions reference their own registry entry, and `elaborate_struct`/`elaborate_proj` consult the struct registry — so these go in ahead of the unit's own. The totality flags were settled when this scope's archive was built, which is what lets a written type be refused against them before it reduces.
     pub(crate) fn seed_registries(&self, context: &mut Context) -> Result<(), Error> {
-        let Some(module) = self.module else {
-            return Ok(());
-        };
-
-        // Before the registries, because a mount is what a privilege question is answered out of and the unit's own items may ask one while they elaborate. What this scope mounted is what it declares its prefixes to be — the elaborator never derives a mount from a name.
-        context.mount(&module.mounts);
-        context.seed_totality(&recorded_totality(module));
-        for (name, induct_decl) in &module.induct_decls {
-            context.register_induct(name, induct_decl.clone())?;
-        }
-        for (name, struct_decl) in &module.struct_decls {
-            context.register_struct(name, struct_decl.clone())?;
-        }
-        for (name, concept) in &module.concepts {
-            context.register_concept(name, concept.clone())?;
+        for module in self.modules {
+            // Before the registries, because a mount is what a privilege question is answered out of and the unit's own items may ask one while they elaborate. What this scope mounted is what it declares its prefixes to be — the elaborator never derives a mount from a name.
+            context.mount(&module.mounts);
+            context.seed_totality(&recorded_totality(module));
+            for (name, induct_decl) in &module.induct_decls {
+                context.register_induct(name, induct_decl.clone())?;
+            }
+            for (name, struct_decl) in &module.struct_decls {
+                context.register_struct(name, struct_decl.clone())?;
+            }
+            for (name, concept) in &module.concepts {
+                context.register_concept(name, concept.clone())?;
+            }
         }
 
         Ok(())
@@ -61,43 +59,41 @@ impl<'a> Established<'a> {
     ///
     /// `define_assuming_scheme` reproduces exactly the state `elaborate_module_let`/`_rec` leave behind — assume the type, define the body — with no re-checking, because these terms are already elaborated. A witness additionally re-registers its already-elaborated signature, since the witness table is per-elaboration state and is not carried on a module.
     pub(crate) fn replay_definitions(&self, context: &mut Context) -> Result<(), Error> {
-        let Some(module) = self.module else {
-            return Ok(());
-        };
-
-        for item in &module.items {
-            match item {
-                Item::Let(def) => {
-                    context.define_assuming_scheme(
-                        &Free::from(&def.name),
-                        &def.type_,
-                        &def.body,
-                        Some(&def.kind),
-                        def.universe_context.clone(),
-                    );
-                    if module.witnesses.contains(&def.name) {
-                        register_witness(
-                            context,
-                            &def.name,
+        for module in self.modules {
+            for item in &module.items {
+                match item {
+                    Item::Let(def) => {
+                        context.define_assuming_scheme(
+                            &Free::from(&def.name),
                             &def.type_,
+                            &def.body,
+                            Some(&def.kind),
                             def.universe_context.clone(),
-                            &def.island,
-                        )?;
+                        );
+                        if module.witnesses.contains(&def.name) {
+                            register_witness(
+                                context,
+                                &def.name,
+                                &def.type_,
+                                def.universe_context.clone(),
+                                &def.island,
+                            )?;
+                        }
                     }
-                }
-                Item::Rec(rec) => {
-                    for (index, definition) in rec.definitions.iter().enumerate() {
-                        let name = Free::from(&definition.name);
-                        context.assume(&name, &rec.group.member_type(index));
-                        context.set_assumption_universe_context(
-                            &name,
-                            rec.group.universe_context().clone(),
-                        );
-                        context.define(
-                            &name,
-                            &Term::rec_proj(rec.group.clone(), index),
-                            Some(&definition.kind),
-                        );
+                    Item::Rec(rec) => {
+                        for (index, definition) in rec.definitions.iter().enumerate() {
+                            let name = Free::from(&definition.name);
+                            context.assume(&name, &rec.group.member_type(index));
+                            context.set_assumption_universe_context(
+                                &name,
+                                rec.group.universe_context().clone(),
+                            );
+                            context.define(
+                                &name,
+                                &Term::rec_proj(rec.group.clone(), index),
+                                Some(&definition.kind),
+                            );
+                        }
                     }
                 }
             }
@@ -107,9 +103,14 @@ impl<'a> Established<'a> {
     }
 
     /// The totality verdicts this scope recorded, which the erasure obligations inherit rather than recompute.
+    ///
+    /// Flattened across every unit in scope. Names are disjoint by mount, so the order of the merge cannot decide a verdict.
     pub(crate) fn recorded_totality(
         &self,
     ) -> std::collections::BTreeMap<curios_core::Global, curios_core::Totality> {
-        self.module.map(recorded_totality).unwrap_or_default()
+        self.modules
+            .iter()
+            .flat_map(|module| recorded_totality(module))
+            .collect()
     }
 }

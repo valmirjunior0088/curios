@@ -106,16 +106,18 @@ One decision, applied uniformly, so no site invents its own answer:
 
 | Holder | Today | Phase A | Why |
 | --- | --- | --- | --- |
-| `Scoped<'a, V>` (text) | `base: Option<&'a BTreeMap>` | `base: &'a [&'a BTreeMap]` | Borrowed; merging would copy every mount's resolution table per compilation |
-| `NominalScope<'a>` (text) | `base: Option<&'a Module>` | `base: &'a [&'a Module]` | Same; the alias walk asks each in turn |
+| `Scoped<'a, V>` (text) | `base: Option<&'a BTreeMap>` | `bases: &'a [&'a BTreeMap]` | Borrowed; merging would copy every mount's resolution table per compilation |
+| `NominalScope<'a>` (text) | `base: Option<&'a Module>` | `bases: &'a [&'a Module]` | Same; the alias walk asks each in turn |
 | `Established<'a>` (elab) | `module: Option<&'a Module>` | `modules: &'a [&'a Module]` | Its own documentation already names this as the intended extension; stays `Copy` |
 | `Resumed<'a>` (elab) | `core: &'a Module` + one arena | `cores: &'a [&'a Module]` + one arena | The cores are borrowed per unit; the **arena is threaded**, because each erasure resumes over the last |
-| `Globals` (cert) | `of(module, floor)` | `of` plus `mount(&Unit)` | It already *owns* copied registries, so accumulation is its shape; mounts are disjoint, so `mount` asserts rather than diagnoses |
+| `Globals` (cert) | `of(module, floor)` | `of` plus `mount(module, floor)` | It already *owns* copied registries, so accumulation is its shape; mounts are disjoint, so `mount` asserts rather than diagnoses |
 | `Declarations<'a>` (analysis) | `base: Option<Registries>` | **unchanged** | Its base is whatever `Globals`/`Context` accumulated, which is already one pair of maps |
 | `Context` (elab) | seeded per scope | **unchanged** | Accumulates by construction; `Established::seed_*` runs once per scope module |
 | `ForeignStore` (abi) | per-compilation, discarded for the prelude | carried on `Unit`, unioned by the fold | See *The real gaps* |
 
-`Established::nothing()`, `Scoped::default()` and `NominalScope::new(None, …)` all become the empty slice, which is the from-scratch case with no second implementation.
+`Established::nothing()`, `Scoped::default()` and `NominalScope::new(&[], …)` all become the empty slice, which is the from-scratch case with no second implementation. Reading latest-first is what makes the nearest half win, which is the same shadowing rule stated in each type and unreachable while mount sets stay disjoint.
+
+**A one-element slice needs something to borrow from.** Every caller that had one predecessor now writes `from_ref(&base)` over a *bound* reference rather than `&[&base]`, because the latter is a temporary that dies at the end of the statement. It is a small thing and it is where all four call sites first failed to compile.
 
 **Rejected: merging predecessors into one `Module` and keeping every holder single-based.** It would leave four types untouched and is wrong for the reason the splice was wrong: it copies the standard library into a per-compilation value, which is the cost the prelude-environment work removed.
 
@@ -201,7 +203,11 @@ It also removes a cycle that the "build the prelude through `curios-pipeline`" p
 
 Five, in order. Each is a separate commit or run of commits, each clears the full gate on its own, and A1 through A4 must not change what the compiler decides about any program.
 
+**Where this stands.** A1 and A2 have landed. A3, A4 and A5 are pending, and no part of Phase B or C has started. Each milestone below records what actually landed under it, including where the implementation differed from what this section specified — a milestone whose entry says nothing landed exactly as written.
+
 ### A1 — A root is a mounted prefix
+
+**Landed**, in two commits: deleting `of_segment` turned out to be separable from deleting the stamps, and gating it alone is cheap where the stamp deletion costs a prelude rebuild.
 
 Delete `RootId`, `RootId::of_segment` and `Qualifier::root_segment`. Delete the `root` stamps from `Definition`, `RecDefinition`, `InductDecl`, `StructDecl` and `ConceptDecl`, and bump the archive schema. Introduce `Mount`, and the mount table on `curios-text`'s resolution and on `curios-elab`'s `Context`. `RootId::Entry` stops standing in for the synthetic compilation root: the empty qualifier's `ModuleInfo` and `PublicInterface` become scope-owned, built by the mount registration rather than by any unit's own scan.
 
@@ -211,13 +217,29 @@ Delete `RootId`, `RootId::of_segment` and `Qualifier::root_segment`. Delete the 
 
 *Moves together with the deletion, and cannot be split from it:* the two `of_segment` call sites, `Context::root()`'s twelve write sites in `into_core.rs`, `zonk.rs`'s two copies, `established.rs`'s replay, `root_of_head`, and the orphan-rule comparison.
 
+**Five differences between what landed and the paragraphs above.** Each is the specification being corrected by the implementation, not the other way round.
+
+- **There was a sixth stamp.** `curios-elab`'s own `Witness` carried a `root` that was written at registration and read nowhere — the orphan rule used the parameter beside it. It is gone too.
+- **The mount list lives on `curios_core::Module`**, one per module, not threaded separately. `Established` and the elaborator's `Program` both need kind lookups and `Module` is already what crosses that boundary carrying `induct_decls`, `concepts`, `witnesses` and `binder_floor` — so `Unit` carries the mounts by carrying the module. The kernel reads neither, so `Globals` is untouched.
+- **`Module::mounts` is the unit's own claim, not the compilation's.** Lowering an entry against a scope needs every mount for privilege checks and records only `[empty → Ordinary]` on the module. Conflating the two would have made every entry module claim `/sys`, `/syn` and `/std`.
+- **`ModuleInfo` lost `root` outright**, so the parent-inherited root the first commit introduced was deleted by the second. The synthetic root is scope-owned on the prelude path as specified; on the entry path the empty qualifier's `ModuleInfo` *is* the entry's own scan, which is not an exception but the definition of the unit that mounts the empty prefix.
+- **`root_of_head` became `mount_of_head`**, returning `Option<&Mount>`. `None` means "claimed by no authored mount", which no declaring mount equals — exactly what the `RootId::Sys` fallback achieved by never being matched.
+
 ### A2 — The scope holds N predecessors
+
+**Landed.** 1645 tests pass, none fail.
 
 `Scoped`, `NominalScope`, `Established` and `Resumed` take slices per the table above; `Globals` gains `mount`. Nothing yet passes more than one.
 
 *Must not change:* any verdict. Every caller passes a one-element slice.
 
 *Verified by:* the full gate. This milestone is where a mistake is cheapest, because the one-element case is the whole corpus.
+
+**Three differences between what landed and the table above.**
+
+- **`Scoped::iter` needed a rule the table did not state.** `get` is a lookup and stops at the first hit; `iter` yields *every* entry in scope and so must drop what a nearer half shadows — the unit's own, then each base against every later base. The two now answer by one rule, which is what the table's "borrowed, not merged" costs and what a merged map would have hidden.
+- **`Globals::mount` takes a module and a floor, not a `&Unit`.** `Unit` does not exist until A3, and inventing it early would have made A2 depend on the milestone after it.
+- **`Established::of` became `Established::over`**, and `Resumed::projected_core` became `projected_cores`, because both now take the plural. `Established::nothing()` survives as the empty slice, which is the from-scratch case with no second implementation — as specified.
 
 ### A3 — `Unit`, `Scope`, and one spelling per stage
 

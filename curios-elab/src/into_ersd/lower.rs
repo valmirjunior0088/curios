@@ -482,17 +482,19 @@ pub fn erase_module_with_prelude(
     expected: &Term,
 ) -> Result<curios_ersd::Module, Error> {
     curios_profile::profile!("erase_module_with_prelude");
-    let prelude = resumed.projected_core();
+    let scope = resumed.projected_cores();
     let module = UniverseErased::<Module>::project(module)?.into_inner();
     let expected = UniverseErased::<Term>::project(expected)?.into_inner();
     // Re-derivation, not surface elaboration (see `erase_module`).
     context.with_suppressed_privacy(|context| {
-        // Both halves: `module` declares only its own, so the prelude's nominal entries reach the context from the prelude itself. They are disjoint by name — an entry program cannot reuse a prelude name — which is why `register_*` rejecting a duplicate key is not a constraint here.
-        seed_registries(context, &prelude)?;
+        // Every half: `module` declares only its own, so each scope unit's nominal entries reach the context from that unit itself. They are disjoint by mount — no unit can reuse another's name — which is why `register_*` rejecting a duplicate key is not a constraint here.
+        for unit in &scope {
+            seed_registries(context, unit)?;
+        }
         seed_registries(context, &module)?;
 
-        // Re-seed the Core context with the prelude's definitions, mirroring the legacy replay: later items and the entrypoint reduce through them.
-        for item in &prelude.items {
+        // Re-seed the Core context with the scope's definitions, in dependency order: later items and the entrypoint reduce through them.
+        for item in scope.iter().flat_map(|unit| &unit.items) {
             match item {
                 Item::Let(definition) => {
                     context.define_assuming_scheme(
