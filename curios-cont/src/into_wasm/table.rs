@@ -812,10 +812,7 @@ impl<'a> Table<'a> {
             .clone()
     }
 
-    pub(crate) fn clsrs(&self) -> impl Iterator<Item = &ClsrData<'a>> {
-        self.clsrs.values()
-    }
-
+    /// Deliberately no iterating accessor: these are `HashMap`s, so iteration order varies per process, and every consumer here emits into the module — where order is load-bearing for a reproducible build. Walk [`EmissionModule`]'s own ordered sequence and resolve each name through this index instead, which is what `curios-base`'s `name!` means by carrying an explicit sequence where the order matters.
     pub(crate) fn find_clsr(&self, clsr_name: &EmissionClosureName) -> &ClsrData<'a> {
         self.clsrs
             .get(clsr_name)

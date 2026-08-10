@@ -278,8 +278,12 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    fn emit_clsr_types(&mut self) {
-        for data in self.table.clsrs() {
+    fn emit_clsr_types(&mut self, module: &'a EmissionModule) {
+        for data in module
+            .clsrs()
+            .iter()
+            .map(|(name, _)| self.table.find_clsr(name))
+        {
             self.module.add_type(
                 data.envr_type(),
                 curios_wasm::SubType {
@@ -338,8 +342,12 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    fn emit_clsr_named_types(&mut self) {
-        for data in self.table.clsrs() {
+    fn emit_clsr_named_types(&mut self, module: &'a EmissionModule) {
+        for data in module
+            .clsrs()
+            .iter()
+            .map(|(name, _)| self.table.find_clsr(name))
+        {
             self.module.add_type(
                 data.clsr_type(),
                 curios_wasm::SubType {
@@ -651,9 +659,9 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         self.emit_cell_type();
         self.emit_tpl_types();
         self.emit_clsr_arity_types();
-        self.emit_clsr_named_types();
+        self.emit_clsr_named_types(module);
         self.emit_envr_arity_types();
-        self.emit_clsr_types();
+        self.emit_clsr_types(module);
         self.emit_func_types();
 
         for (name, value) in module.consts() {
