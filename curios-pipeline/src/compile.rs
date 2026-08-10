@@ -5,14 +5,14 @@ use {
     curios_abi::ForeignStore,
     curios_base::SyntaxRegistry,
     curios_cert::{Globals, Verdict, recheck_module_verdicts},
-    curios_cont::{into_wasm, optimize},
+    curios_cont::into_wasm,
     curios_core::derived_binder_floor,
     curios_core::{Intrinsic, Term},
     curios_elab::{
         Context, Established, Mode, Resumed, elaborate_and_zonk_unit,
         elaborate_and_zonk_unit_reporting, erase_unit,
     },
-    curios_ersd::{lower_to_cont, optimize_ir},
+    curios_ersd::lower_to_cont,
     curios_text::{Entrypoint, RootSource, UnitSource, into_core_unit, into_core_with_prelude},
     curios_unit::{Scope, Unit},
     std::fmt,
@@ -168,8 +168,8 @@ where
     curios_profile::profile!("lower_from_ersd");
     observe(Stage::Ersd(&ersd_module));
 
-    // Shrink before lowering: drop the items the program neither reaches nor runs for effect, so Cont's whole-module fixpoint sees only the live slice (see `curios_ersd::optimize_ir`).
-    optimize_ir(&mut ersd_module);
+    // Shrink before lowering: drop the items the program neither reaches nor runs for effect, so Cont's whole-module fixpoint sees only the live slice (see `curios_ersd::optimize`).
+    curios_ersd::optimize(&mut ersd_module);
 
     observe(Stage::ErsdOptm(&ersd_module));
 
@@ -178,7 +178,7 @@ where
     observe(Stage::Cont(&cont_module));
 
     let mut cont_optm_module = cont_module;
-    optimize(&mut cont_optm_module);
+    curios_cont::optimize(&mut cont_optm_module);
 
     observe(Stage::ContOptm(&cont_optm_module));
 

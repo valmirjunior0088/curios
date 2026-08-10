@@ -11,7 +11,7 @@ mod rebase;
 use super::{Analysis, Module};
 
 /// Run the arena transformations in place: prune, evaluate, specialize, and prune again (evaluation and specialization strand the code they collapse). The module must verify on entry; the final prune re-verifies on exit. Taking a match arm during specialization orphans the untaken arms' values until that final prune tombstones them, so no intermediate verify runs after specialization.
-pub fn optimize_ir(module: &mut Module) {
+pub fn optimize(module: &mut Module) {
     module
         .verify()
         .expect("a module entering optimization verifies");

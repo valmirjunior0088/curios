@@ -40,7 +40,7 @@ fn keeps_reached_and_effectful_items_and_drops_the_pure_rest() {
     builder.set_entry(entry);
     let mut module = builder.finalize().expect("verifies");
 
-    optimize_ir(&mut module);
+    optimize(&mut module);
 
     let printed = module.to_string();
     assert!(!printed.contains("pure_unused"), "{printed}");
@@ -98,7 +98,7 @@ fn drops_dead_function_webs_and_keeps_reached_groups_whole() {
     builder.set_entry(entry);
     let mut module = builder.finalize().expect("verifies");
 
-    optimize_ir(&mut module);
+    optimize(&mut module);
 
     let printed = module.to_string();
     assert!(!printed.contains("dead_a"), "{printed}");
@@ -122,7 +122,7 @@ fn pruning_is_deterministic() {
         let entry = builder.seal_block(Terminator::Return(Atom::Constant(one)));
         builder.set_entry(entry);
         let mut module = builder.finalize().expect("verifies");
-        optimize_ir(&mut module);
+        optimize(&mut module);
         module.to_string()
     };
     assert_eq!(build(), build());

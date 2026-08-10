@@ -83,7 +83,7 @@ fn a_monoid_deferred_recursion_gains_a_worker() {
     builder.set_entry(entry);
     let mut module = builder.finalize().expect("verifies");
 
-    optimize_ir(&mut module);
+    optimize(&mut module);
     let printed = module.to_string();
     assert!(printed.contains("count@w"), "{printed}");
 }
