@@ -335,18 +335,28 @@ Before this specification is deleted: both manifest modes parse and are mutually
 
 Every figure this document leans on, with its date, its **profile**, and how to retake it. Two items in a predecessor document were designed against unattributed numbers and both were wrong: a 471 ms eager restore that is 34.4 ms, and parallel certification's estimated 60–70 s win over an operation that takes 11.8 s. A number in prose with no method decays quietly and is then designed against, which is what this section exists to stop.
 
-Taken **2026-08-09**, **release** profile, over the stored prelude. These four need a probe, which is a throwaway test in `curios-prelude-archive` and is **not in-tree**, so retaking them means writing it again — `with_prelude` for the restore, `Prelude::ersd` for the clone, `erase_unit` over `Prelude::core` for the erasure, and `recheck_module_verdicts` from a default `Globals` for the certification. They are the figures taken over the *stored* image, which nothing on the build path recomputes.
+**The probe is in-tree.** It is `stored_prelude_measurements` in `curios-prelude-archive`, ignored because a measurement with an opinion is an assertion, and it takes every figure below in one run:
 
-| What | Measured |
-| --- | --- |
-| Cold restore — bytecheck, then deserializing the prepared Text state, the Core and the erased prefix | 34.4 ms |
-| Erased-prefix clone, taken once per compile | 1.4 ms |
-| Re-erasing one whole unit over the stored Core | 608 ms |
-| Certifying one whole unit — `recheck_module_verdicts` from an empty environment | 11.8 s, 0 refusals |
+```sh
+cargo test --release --package curios-prelude-archive -- --ignored --nocapture stored_prelude_measurements
+```
 
-Shape of the stored prelude, same run: 1079 items and 1094 definitions; 75 witnesses at identities 0..74 with no gaps, 34 of them referenced from terms; 31 inductives, 46 structures, 14 concepts; `derived_binder_floor` **0**, against a lowering watermark of 6684.
+`--release` is not a footnote: these are figures over the *stored* image, and a debug build measures a different program.
 
-**Landing the probe is itself an item**, for those four. The figures are cited by this document and by work outside it, and the only thing keeping them honest is a test nobody has written.
+Taken **2026-08-10**, **release**, immediately after the erased arena gained its compaction pass — which is why two of them moved:
+
+| What | Measured | Against |
+| --- | --- | --- |
+| Cold restore — bytecheck, then deserializing the prepared Text state, the Core and the erased prefix | 34.1–35.3 ms | 34.4 ms — confirmed |
+| Erased-prefix clone, taken once per compile | 2.0–2.1 ms, mean of 100 | 1.4 ms — see below |
+| Re-erasing one whole unit over the stored Core | 661–682 ms | 608 ms — up, partly spread |
+| Certifying one whole unit — `recheck_module_verdicts` from an empty environment | 11.9–12.0 s, 0 refusals | 11.8 s — **confirmed** |
+
+Shape, same run: 1091 items and 1107 definitions; 75 witnesses; 31 inductives, 47 structures, 14 concepts; `derived_binder_floor` **0**, against a lowering watermark of 6748. (The witness *inventory* B1 turns on — identities dense at 0..74, 34 of them referenced from terms — is a term walk the probe does not do. Recorded 2026-08-09; the count is unchanged.)
+
+Ranges, not points, because these are two runs and the spread between them is part of what the figure is: the re-erasure alone moved 21 ms between consecutive readings, which is half of what separates it from the number it replaces. Nobody should read "608 to 682" as a 12% regression on that evidence.
+
+**The clone's old figure was a single sample, and that was the defect.** Taken once again the same way it read 3.7 ms, which would have looked like a 2.6× regression from the compaction pass; averaged over 100 it is 2.0 ms. At one-to-four milliseconds the noise band swallows the signal, so the probe averages this one and reports the others once — which is the difference between a number and a reading. The 1.4 ms it replaces was never wrong so much as never repeated.
 
 **The elaboration figures need no probe.** `curios-prelude-archive`'s build script already wraps its whole run in `curios_profile::capture` and writes per-span times, call counts, retained and allocated bytes, allocation counts, and every `sample!` magnitude to `OUT_DIR/profile.tsv`, announcing the path and the peak RSS in a build warning. Retaking them is one command:
 
@@ -358,7 +368,9 @@ Profile is part of that command rather than a footnote: Cargo builds a build scr
 
 **Two inherited figures are now confirmed, and then superseded — in one day.** They were carried as *undated, profile unrecorded*: "469 s of a ~570 s prelude build in elaboration, and 204 s of that in universe finalization". Retaken **2026-08-10, release**, they were right: `elaborate_and_zonk_module` at **474.5 s** and `universe::finalize` at **204.6 s**. Solver work in the same session then moved them to **288.4 s** and **92.4 s** — the level substitution rebuilding its input per atom, and both totality obligations re-zonking a recorded type per checked term rather than per distinct type.
 
-That is this section's own thesis arriving faster than expected. A number is not wrong because it was badly taken; it is wrong because the code moved. **Any figure here older than the last change to the pass it measures is a claim about history**, which is why the date and the profile sit beside each one. The certification figure above is the live example: 11.8 s was taken before the kernel's level substitution changed, and the kernel calls it, so that number is owed a retake before anything is designed against it.
+That is this section's own thesis arriving faster than expected. A number is not wrong because it was badly taken; it is wrong because the code moved. **Any figure here older than the last change to the pass it measures is a claim about history**, which is why the date and the profile sit beside each one.
+
+The certification figure was this section's live example — 11.8 s taken before the kernel's level substitution changed, and the kernel calls it — and the retake it was owed says **12.0 s**. Unchanged. That is worth stating rather than quietly swapping, because the doubt was correct to raise and the answer is that nothing moved: B3 and B4 may design against roughly twelve seconds, and the reason to believe it is a command anyone can run rather than a number somebody remembers.
 
 ### Findings whose triggers fire inside this specification
 
