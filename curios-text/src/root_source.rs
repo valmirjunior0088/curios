@@ -116,6 +116,19 @@ impl RootSource {
         );
     }
 
+    /// The directories this source reads its modules from.
+    ///
+    /// For a caller that needs to know what a unit's content *is* — a cache keying a stored unit on its terms hashes exactly these. Empty for a source supplied already parsed: there is nothing on disk to hash, which is why the fixed prelude has an archive of its own rather than a place in such a store.
+    pub fn directories(&self) -> Vec<&Path> {
+        self.bases
+            .iter()
+            .filter_map(|(_, base)| match base {
+                Base::Disk { directory, .. } => Some(directory.as_path()),
+                Base::Supplied(_) => None,
+            })
+            .collect()
+    }
+
     /// The prefixes this source claims.
     pub fn mounts(&self) -> Vec<Mount> {
         self.bases.iter().map(|(mount, _)| mount.clone()).collect()

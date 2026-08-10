@@ -4,7 +4,7 @@ Every rule that can admit a term, what it assumes, and how far it has been check
 
 Each entry names what it assumes and how far it has been checked, and the vocabulary is deliberate: **probed** means an adversarial program was written and the compiler rejected it; **argued** means a written justification exists; **auditable only** means no surface program can exercise the rule, so reading the implementation is the only available evidence. An entry may be probed and unargued, or argued and unprobed; they are independent.
 
-The perimeter has two halves, and they differ in how coverage is obtained. The **whole-module passes** run once over a module: the elaborator's from `finalize_and_check` in `curios-elab/src/elaborate/module.rs` — the single site every entry point that produces an elaborated module comes through, which is what keeps a check from reaching one configuration and not the other. The **per-term rules** run during elaboration, so their coverage follows from the elaborator visiting every term rather than from a pass enumerating positions.
+The perimeter has three parts. Two are halves of the same thing and differ only in how coverage is obtained; the third is different in kind, and is a rule about *not* running the other two. The **whole-module passes** run once over a module: the elaborator's from `finalize_and_check` in `curios-elab/src/elaborate/module.rs` — the single site every entry point that produces an elaborated module comes through, which is what keeps a check from reaching one configuration and not the other. The **per-term rules** run during elaboration, so their coverage follows from the elaborator visiting every term rather than from a pass enumerating positions.
 
 An entry earns its place by *assuming* something, not merely by admitting. The discriminator is whether the rule rests on anything beyond the shape of the term in front of it — a declaration, a carried number, a cached verdict, an equation stated elsewhere. A rule that only destructures inherits its correctness from the representation and is not listed; `Var`, `Let`, the bare `Func` rule and the `Type`/`Prop` head rules are the ones that fall the other side of that line, and they inherit [Telescope instantiation](#telescope-instantiation) and [Binder identity](#binder-identity) rather than earning rows.
 
@@ -43,6 +43,26 @@ Grades only. Each entry's evidence is the section it links to.
 | [Telescope instantiation](#telescope-instantiation) | A dependent telescope is opened at the actuals already checked, in order, and plicity is part of a function type's identity | **probed** incidentally, never directly |
 | [Binder identity](#binder-identity) | No minted identity aliases an existing one, so opening a binder instantiates exactly the intended occurrences | **argued** |
 | [A type is a pure term](#a-type-is-a-pure-term) | Nothing at the type level performs an effect | **argued** |
+
+| Admission without judgment | Assumes | Grade |
+| --- | --- | --- |
+| [Cached verdicts](#cached-verdicts) | A unit recorded under a key naming its terms, the compiler binary that judged it, and the ordered keys of its predecessors may be admitted without judging it again | **argued** |
+
+## Admission without judgment
+
+### Cached verdicts
+
+**Assumes.** A unit recorded under a key naming its terms, the compiler binary that judged it, and the ordered keys of its predecessors may be admitted without judging it again
+
+**Status.** **argued**, and the only entry here that admits by *declining to run* the rest of this document rather than by deciding something. It is stated rather than inherited: verdict caching already existed for the fixed prelude, where Cargo supplied the key, the invalidation and the enforcement — and what makes *that* sound is that the only crate handing the image out is one whose build script walked it with the kernel first, so the enforcement is a crate that does not compile. Nothing like that is available for a package, so the key has to carry the argument alone.
+
+**What the key covers, and why each part is there.** The *terms* are the `c1:` hash of every directory the unit reads from, which is what a unit's content is under the layout rule — a header and its stem directory, nothing outside it. The *compiler* is a content digest of the running binary, memoized against its size and modification time; a version string was rejected because it does not move while a compiler is being developed, which is the direction that admits, and a per-build nonce was rejected because it discards every hit a reproducible rebuild should keep. The *predecessors* are the part easiest to omit and the reason the key takes an ordered list: a unit's lowering copies the cumulative universe-seed table from the unit before it, so one source after two different prefixes is two different units, byte for byte. Observed rather than assumed — a two-package project stores four records across two edits of its dependency, because the dependant's key moves when its dependency's does even though its own source never changed.
+
+**What it rests on.** That a stored unit carries no identity meaningful only in the compilation that made it, which is what `curios_core::validate_stored_identities` refuses at the one seam a unit is written, and is **probed**: all four classes — term metavariable, universe metavariable, free local, witness — are refused, the last of them only since witnesses gained their declaring mount. That the prelude and the `/syn` registry are inside the binary the digest covers, so a unit compiled against a changed standard library gets a changed key for free. And that nothing outside the binary and the source directories changes what the kernel decides.
+
+**What it deliberately does not cover.** The reduction budget. A verdict reached under one budget is reused under another, including a smaller one — which is admitting something the current invocation could not itself have verified. The argument is that a budget bounds *effort* rather than stating a rule: exhausting it is a refusal to answer, never an acceptance, so a verdict reached with more of it is still a verdict the kernel reached. Recorded because it is the one place a reader might expect the key to be stricter than it is.
+
+**Where it is weakest.** The compiler's identity is the *running* binary, which is exactly the compiler for the CLI and is somebody's whole application for a library embedder — so an embedder's verdicts invalidate whenever they rebuild, which is over-invalidation and safe, and cannot be narrowed from here because nothing can point at the compiler-shaped part of another program. Failure to identify the binary at all disables caching entirely rather than falling back to a default key.
 
 ## Whole-module passes
 

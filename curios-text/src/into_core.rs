@@ -1607,6 +1607,11 @@ impl<'a> UnitSource<'a> {
         }
     }
 
+    /// The directories this unit's modules are read from. See [`RootSource::directories`].
+    pub fn directories(&self) -> Vec<&std::path::Path> {
+        self.source.directories()
+    }
+
     /// The entrypoint this source carries, for the one unit that has one.
     fn entrypoint(&self) -> Option<&Entrypoint> {
         self.entrypoint

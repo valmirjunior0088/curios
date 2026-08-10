@@ -23,6 +23,8 @@ pub enum Target {
         entry: PathBuf,
         /// Where a native build of it is written, under the governing root's store.
         output: PathBuf,
+        /// The governing root, which is where the store sits. Carried because what a compilation may reuse is a fact about the project it is in, and only the walk knows which project that is.
+        root: PathBuf,
         units: Vec<RootSource>,
     },
 }
@@ -69,6 +71,7 @@ impl Target {
 
         Ok(Self::Executable {
             output: bin(&governing.root, &governing.package.name, &executable.name),
+            root: governing.root.clone(),
             name: executable.name.clone(),
             entry: governing.directory.join(&executable.path),
             units: order(&governing)?,

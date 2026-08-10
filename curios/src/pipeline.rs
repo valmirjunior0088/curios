@@ -1,8 +1,9 @@
 //! Driving the compile pipeline for the CLI, with the `--print` stage dump wired in. `stage_printer` is the single owner of how each IR stage is selected and rendered.
 
 use {
-    curios::{compile_with_units, load},
+    curios::{Verdicts, compile_with_units, load},
     curios_package::Target,
+    curios_pipeline::Cache,
     curios_pipeline::{CompileError, Stage},
     curios_wasm::Module,
     std::path::{Path, PathBuf},
@@ -47,16 +48,25 @@ pub(crate) fn compile_target(
 ) -> Result<Module, CompileError> {
     let mut scope = load_units(units)?;
 
-    let entry = match target {
-        Target::File(path) => path,
-        Target::Executable { entry, units, .. } => {
+    // A bare file has no project, so it has no store to consult: what it may reuse is a fact about the project it is in, and it is in none.
+    let (entry, cache) = match target {
+        Target::File(path) => (path, None),
+        Target::Executable {
+            entry, units, root, ..
+        } => {
             scope.extend(units);
 
-            entry
+            (entry, Some(Verdicts::at(root)))
         }
     };
 
-    compile_entry(budget, print, scope, &entry)
+    compile_entry(
+        budget,
+        print,
+        scope,
+        &entry,
+        cache.as_ref().map(|cache| cache as &dyn Cache),
+    )
 }
 
 /// Compile `entry` against `units` in the order given, printing any requested IR stages along the way.
@@ -65,12 +75,13 @@ pub(crate) fn compile_entry(
     print: &str,
     units: Vec<curios_text::RootSource>,
     entry: &Path,
+    cache: Option<&dyn Cache>,
 ) -> Result<Module, CompileError> {
     let printer = stage_printer(print).map_err(CompileError::Failure)?;
     let (entrypoint, loader) = load(entry).map_err(CompileError::Failure)?;
 
     // The CLI doesn't yet expose a way to supply `foreign` implementations, so its `ForeignStore` is dropped here.
-    compile_with_units(budget, &units, &entrypoint, loader, printer)
+    compile_with_units(budget, &units, &entrypoint, loader, cache, printer)
         .map(|(module, _foreigns)| module)
 }
 

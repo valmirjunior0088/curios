@@ -78,6 +78,27 @@ pub fn unit_key(compiler: &str, predecessors: &[String], terms: &TreeHash) -> St
         .collect()
 }
 
+/// The one hash a unit's terms come to, over every directory it reads from.
+///
+/// A unit is usually one directory — a package — and folding rather than special-casing that keeps the key's third part one well-formed hash whatever the unit's shape. `None` when any directory cannot be hashed, which means the unit has no terms to be keyed by and so may not be stored.
+pub fn terms(directories: &[&Path]) -> Option<TreeHash> {
+    let mut digest = Sha256::new();
+
+    for directory in directories {
+        feed(&mut digest, &TreeHash::of(directory).ok()?.to_string());
+    }
+
+    TreeHash::parse(&format!(
+        "c1:{}",
+        digest
+            .finalize()
+            .iter()
+            .map(|byte| format!("{byte:02x}"))
+            .collect::<String>()
+    ))
+    .ok()
+}
+
 /// One length-framed part of a key.
 fn feed(digest: &mut Sha256, part: &str) {
     digest.update((part.len() as u64).to_le_bytes());

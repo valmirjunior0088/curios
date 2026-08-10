@@ -23,7 +23,7 @@ pub fn compile_with_prelude<O>(
 where
     O: FnMut(Stage<'_>),
 {
-    compile_with_units(budget, &[], entrypoint, loader, observe)
+    compile_with_units(budget, &[], entrypoint, loader, None, observe)
 }
 
 /// Compile `units` in the order given, then `entrypoint` against all of them and the prelude.
@@ -34,6 +34,7 @@ pub fn compile_with_units<O>(
     units: &[RootSource],
     entrypoint: &Entrypoint,
     loader: RootSource,
+    cache: Option<&dyn curios_pipeline::Cache>,
     observe: O,
 ) -> Result<(Module, curios_abi::ForeignStore), CompileError>
 where
@@ -49,7 +50,7 @@ where
             Scope::over(from_ref(&prelude)),
             &SYNTAX,
             &sources,
-            None,
+            cache,
         )?;
         let scope = std::iter::once(prelude)
             .chain(produced.iter())
