@@ -2019,7 +2019,7 @@ fn compile_with_units(
         .map(|(prefix, source)| {
             let mut modules = curios_text::RootSource::supplied();
             modules.insert_root(
-                *prefix,
+                prefix.split('/'),
                 curios_base::RootKind::Ordinary,
                 source
                     .parse::<curios_text::Module>()
@@ -2088,6 +2088,44 @@ fn an_entry_module_colliding_with_a_mount_is_diagnosed() {
     .expect_err("an entry cannot declare a module a unit already mounts");
 
     assert!(error.contains("lib"), "unexpected error: {error}");
+}
+
+/// A name is an atom: `myorg` in `myorg/json` denotes nothing on its own, and resolution finds the owning mount by longest match over a reference's leading segments.
+#[test]
+fn a_multi_segment_mount_resolves_by_longest_match() {
+    compile_with_units(
+        &[("myorg/json", "pub let answer : /std/Nat = 42;")],
+        "/std/print(/std/Nat/to_str(/myorg/json/answer))",
+    )
+    .expect("a multi-segment prefix resolves");
+}
+
+/// Two packages sharing a leading segment both imply the namespace it names, and neither declares it — so the namespace holds both rather than whichever was compiled last.
+#[test]
+fn two_mounts_sharing_a_head_are_both_reachable() {
+    compile_with_units(
+        &[
+            ("myorg/json", "pub let a : /std/Nat = 1;"),
+            ("myorg/http", "pub let b : /std/Nat = 2;"),
+        ],
+        "/std/print(/std/Nat/to_str(/std/Nat/add(/myorg/json/a, /myorg/http/b)))",
+    )
+    .expect("two packages under one head");
+}
+
+/// With prefixes of different lengths, pairwise distinctness stops being enough: an entry's `mod myorg` beside a mount at `/myorg/json` makes `/myorg/json/a` two answers, so the containment is refused naming both claimants.
+#[test]
+fn a_prefix_within_another_claimed_subtree_is_refused() {
+    let error = compile_with_units(
+        &[("myorg/json", "pub let a : /std/Nat = 1;")],
+        "mod myorg\n    pub let b : /std/Nat = 2;\nend\n/std/print(/std/Nat/to_str(0))",
+    )
+    .expect_err("an entry cannot declare a module containing a mounted prefix");
+
+    assert!(
+        error.contains("mod myorg") && error.contains("/myorg/json"),
+        "unexpected error: {error}"
+    );
 }
 
 /// A unit's names resolve from the entry, which is the whole point of mounting one.

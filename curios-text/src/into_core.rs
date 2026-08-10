@@ -61,6 +61,48 @@ fn is_internal_root(mounts: &[Mount], label: &str) -> bool {
         .any(|mount| mount.prefix == prefix && mount.kind == RootKind::Internal)
 }
 
+/// Every namespace the prefixes in `mounts` imply, and the children each implies, from the compilation root down.
+///
+/// A multi-segment prefix names namespaces nobody declares: `/myorg` in a mount at `/myorg/json` is a namespace that exists only because the mount lies within it. The pairs are deduplicated, because two packages sharing a leading segment both imply it and neither declared it — a set, not a sequence of declarations, which is the difference between an implied namespace and a written one.
+fn implied_namespaces<'m>(
+    mounts: impl Iterator<Item = &'m Mount>,
+) -> BTreeMap<Qualifier, BTreeSet<String>> {
+    let mut implied: BTreeMap<Qualifier, BTreeSet<String>> = BTreeMap::new();
+
+    for mount in mounts {
+        let mut at = Qualifier::empty();
+        for segment in mount.prefix.iter() {
+            implied
+                .entry(at.clone())
+                .or_default()
+                .insert(segment.to_string());
+            at = at.with(segment);
+        }
+    }
+
+    implied
+}
+
+/// Everything the unit being compiled claims a prefix for, each paired with how a refusal should name it.
+///
+/// Its mounts, and — when it is the entry — the top-level modules it declares, because `mod myorg` claims `/myorg` against every other unit exactly as a mount would. The entry's own mount is the empty prefix, which claims nothing: every name lies within the compilation root.
+fn claims(source: &UnitSource<'_>, own: &[Mount]) -> Vec<(String, Qualifier)> {
+    let mounts = own
+        .iter()
+        .filter(|mount| !mount.prefix.is_root())
+        .map(|mount| (format!("`{}`", mount.prefix.join()), mount.prefix.clone()));
+
+    let modules = source.root_items().iter().filter_map(|item| match item {
+        TopItem::Mod(declaration) => Some((
+            format!("`mod {}` in the entry program", declaration.label),
+            Qualifier::from([declaration.label.clone()]),
+        )),
+        _ => None,
+    });
+
+    mounts.chain(modules).collect()
+}
+
 struct Resolved<'a> {
     modules: HashMap<Qualifier, Rc<Module>>,
     /// The entry's own module graph, over whatever a prepared prelude already established. Every insertion below targets a module the entry declares; reads cross the boundary, which is why this is layered rather than copied. See [`Scoped`].
@@ -141,13 +183,22 @@ impl<'a> Resolved<'a> {
         // The compilation root: the entry's own module when the entry is what is being lowered, and otherwise a synthetic one belonging to no unit — which is why its children are *every* mounted prefix rather than only this unit's.
         //
         // Writing it lands in this unit's own layer, which shadows whatever the scope's layer said, so listing only `own` here silently hides the scope's mounts from a unit being compiled against them. That is what made `/std` unreachable from a mounted unit, and the test that says a unit reaches a mounted name is what caught it.
+        let implied = implied_namespaces(scope_mounts.iter().chain(own));
+
         let mut root_info = scan_module_info(source.root_items())?;
-        for mount in scope_mounts.iter().chain(own) {
-            if !mount.prefix.is_root() {
-                root_info.insert_child(mount.prefix.head().to_string(), true)?;
-            }
+        for child in implied.get(&Qualifier::empty()).into_iter().flatten() {
+            root_info.insert_child(child.clone(), true)?;
         }
         resolved.table.insert(Qualifier::empty(), root_info);
+
+        // The namespaces a multi-segment prefix implies but nobody declares: `/myorg` exists only because `/myorg/json` is mounted, and `/myorg/json/parse` cannot resolve unless it does.
+        for (prefix, children) in implied.iter().filter(|(prefix, _)| !prefix.is_root()) {
+            let mut info = ModuleInfo::new();
+            for child in children {
+                info.insert_child(child.clone(), true)?;
+            }
+            resolved.table.insert(prefix.clone(), info);
+        }
 
         // The entry's children hang off the root, whose `ModuleInfo` was just built by hand; a mounted unit has no root items, so this recurses over nothing for it.
         resolved.discover_children(source.root_items(), &Qualifier::empty(), source)?;
@@ -1596,20 +1647,20 @@ pub fn into_core_unit(
     // The prefixes this unit claims. The entry claims the empty one and nothing else; a mounted unit claims what its source does.
     let own = source.mounts();
 
-    // A prefix belongs to exactly one unit, and this is decided before discovery — otherwise the collision surfaces from `insert_child` as an ordinary duplicate declaration, which names the label but not what else claimed it.
+    // Claimed prefixes must be pairwise *disjoint*, not merely distinct, and this is decided before discovery — otherwise the collision surfaces from `insert_child` as an ordinary duplicate declaration, which names the label but not what else claimed it.
+    //
+    // Distinctness stopped being enough when prefixes gained different lengths: a mount at `/myorg/json` beneath one at `/myorg` makes `/myorg/json/parse` two answers, and the entry's own `mod myorg` claims `/myorg` for exactly this purpose. The empty prefix takes no part — every name lies within the compilation root by construction, which is what makes it the root.
     //
     // Mount-set disjointness is what `Scoped`'s shadowing rule, the registries' duplicate-key rejection and the `ffi` import namespace all rest on, so it is checked once here rather than assumed three times.
-    for mount in &own {
-        if scope_mounts
-            .iter()
-            .any(|earlier| earlier.prefix == mount.prefix)
-        {
+    for (claim, prefix) in claims(source, &own) {
+        if let Some(earlier) = scope_mounts.iter().find(|earlier| {
+            !earlier.prefix.is_root()
+                && (prefix.is_within(&earlier.prefix) || earlier.prefix.is_within(&prefix))
+        }) {
             return Err(Error::MountCollision {
-                prefix: mount.prefix.join(),
-                claimants: vec![
-                    "a unit already in scope".to_string(),
-                    "the unit being compiled".to_string(),
-                ],
+                claim,
+                claimed: earlier.prefix.join(),
+                claimant: "a unit already in scope".to_string(),
             });
         }
     }
@@ -1667,10 +1718,14 @@ pub fn into_core_unit(
         &witness_ids,
         syntax,
     );
-    // Every named prefix in the compilation resolves by its own name. The entry's is the empty one, which has no name to bind.
+    // Every named prefix in the compilation resolves by its own head, and a head names the namespace it heads rather than the whole prefix: `myorg` in a mount at `/myorg/json` names `/myorg`, inside which `json` is a child. Two packages sharing a head therefore bind it once. The entry's prefix is the empty one, which has no name to bind.
+    let mut heads = BTreeSet::new();
     for mount in &mounts {
-        if !mount.prefix.is_root() {
-            context.insert_scope(mount.prefix.head().to_string(), mount.prefix.clone())?;
+        if !mount.prefix.is_root() && heads.insert(mount.prefix.head().to_string()) {
+            context.insert_scope(
+                mount.prefix.head().to_string(),
+                Qualifier::from([mount.prefix.head()]),
+            )?;
         }
     }
 
@@ -1699,9 +1754,16 @@ pub fn into_core_unit(
         let content = modules
             .get(&mount.prefix)
             .expect("a mounted prefix was loaded during discovery");
+
+        // Through every segment, not only the head: a mount at `/myorg/json` lowers its items under that whole prefix, and each intervening namespace is a level the context has to be inside.
+        let mut nested = context.nested(mount.prefix.head());
+        for segment in mount.prefix.iter().skip(1) {
+            nested = nested.nested(segment);
+        }
+
         process_items(
             &content.items,
-            &mut context.nested(mount.prefix.head()),
+            &mut nested,
             &mut flat_items,
             &mut induct_decls,
             &mut struct_decls,

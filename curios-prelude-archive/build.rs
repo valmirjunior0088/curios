@@ -96,14 +96,14 @@ fn build() {
     );
 
     let mut modules = RootSource::supplied();
-    modules.insert_root("sys", RootKind::Internal, sys_module(&host_ops()));
+    modules.insert_root(["sys"], RootKind::Internal, sys_module(&host_ops()));
     modules.insert_root(
-        "syn",
+        ["syn"],
         RootKind::Privileged,
         parse_module(manifest.join("syn.crs")),
     );
     modules.insert_root(
-        "std",
+        ["std"],
         RootKind::Privileged,
         parse_module(manifest.join("std.crs")),
     );

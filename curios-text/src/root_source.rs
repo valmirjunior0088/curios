@@ -84,9 +84,11 @@ impl RootSource {
         Self { bases: Vec::new() }
     }
 
-    /// Claim `name` as a supplied root, `module` being the header it is declared in.
-    pub fn insert_root(&mut self, name: impl Into<String>, kind: RootKind, module: Module) {
-        let prefix = Qualifier::from([name.into()]);
+    /// Claim `prefix` as a supplied root, `module` being the header it is declared in.
+    ///
+    /// A whole qualifier rather than a segment, because a package's canonical name may be multi-segment and the prefix it mounts at *is* that name.
+    pub fn insert_root(&mut self, prefix: impl Into<Qualifier>, kind: RootKind, module: Module) {
+        let prefix = prefix.into();
         assert!(
             !self.bases.iter().any(|(mount, _)| mount.prefix == prefix),
             "root '{}' is already claimed",

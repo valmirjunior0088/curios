@@ -230,6 +230,13 @@ pub(super) fn resolve_unit<'a>(
         &mut pub_uses,
     )?;
 
+    // The namespaces a multi-segment prefix implies, seeded empty for the same reason the compilation root is: an absolute reference resolves *through* `/myorg` on its way to `/myorg/json`, and it can only do that if `/myorg` has a public interface.
+    for prefix in super::implied_namespaces(mounts.iter()).keys() {
+        if !prefix.is_root() {
+            seed(&[], prefix, modules, table, &mut public, &mut pub_uses)?;
+        }
+    }
+
     for mount in own.iter().filter(|mount| !mount.prefix.is_root()) {
         let content = modules
             .get(&mount.prefix)
