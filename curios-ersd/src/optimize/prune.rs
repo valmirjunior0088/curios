@@ -45,6 +45,7 @@ pub(super) fn prune_unreachable(
     proven_pure: &std::collections::BTreeSet<StatementId>,
     analysis: &Analysis,
 ) {
+    curios_profile::profile!("prune_unreachable");
     let Some(entry) = module.entry() else { return };
     let items = module.items().to_vec();
 

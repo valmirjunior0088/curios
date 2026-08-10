@@ -33,6 +33,7 @@ impl std::error::Error for VerifyError {}
 impl Module {
     /// Check the module against the representation contract, reporting the first violation. Deterministic: the same module always reports the same diagnostic.
     pub fn verify(&self) -> Result<(), VerifyError> {
+        curios_profile::profile!("verify_module");
         Verifier::new(self).run()
     }
 }

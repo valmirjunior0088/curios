@@ -35,6 +35,7 @@ struct Region {
 impl Analysis {
     /// Analyze the module's current state.
     pub fn analyze(module: &Module) -> Self {
+        curios_profile::profile!("analyze_module");
         let mut value_uses = vec![0usize; module.values().len()];
 
         // Walk the top level and every live function as separate regions. The top level contributes use counts but is not itself a function region.
