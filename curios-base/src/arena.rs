@@ -167,4 +167,18 @@ impl<I: ArenaId, T> Arena<I, T> {
     pub fn tombstone_count(&self) -> usize {
         self.slots.iter().filter(|slot| slot.is_none()).count()
     }
+
+    /// Assert that no tombstone remains, naming the arena in the failure.
+    ///
+    /// A postcondition, not a safety net, and worth stating because it is easy to read as more than it is. [`Arena::compact`] packs by construction and [`Arena::set`] refuses a dead slot, so on the code as written this cannot fail; what it guards is the next edit — a compaction that grows a case it does not pack, or a consumer that compacts some of its arenas and forgets one.
+    ///
+    /// It does *not* catch the failure compaction actually risks. A missed identity leaves the arena exactly this dense and still addresses a live slot, just the wrong one; the structural walk that owns that question is the caller's own verifier.
+    pub fn assert_packed(&self, what: &str) {
+        assert_eq!(
+            self.tombstone_count(),
+            0,
+            "the {what} arena carries tombstones across its {} slots, where it must be packed",
+            self.slots.len(),
+        );
+    }
 }

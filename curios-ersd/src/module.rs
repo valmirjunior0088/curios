@@ -327,6 +327,13 @@ impl Module {
             .collect();
         self.entry = self.entry.map(|entry| remap.block(entry));
 
+        // Named one by one rather than folded into a loop: the list is the claim. A sixth arena added to this module and not compacted above is the shape this catches, and it catches it only by being written out here too.
+        self.values.assert_packed("values");
+        self.functions.assert_packed("functions");
+        self.blocks.assert_packed("blocks");
+        self.statements.assert_packed("statements");
+        self.rec_groups.assert_packed("recursive group");
+
         Compaction { values, functions }
     }
 
