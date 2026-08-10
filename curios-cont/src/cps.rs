@@ -1223,6 +1223,7 @@ pub(crate) fn visit_atoms_mut(node: &mut CpsNode, visitor: &mut impl FnMut(&mut 
 mod analysis;
 mod contify;
 mod cse;
+mod dataflow;
 mod evaluate;
 mod inline;
 mod optimize;

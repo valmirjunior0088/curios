@@ -24,8 +24,16 @@ impl Knowledge {
             (Self::Known(_), Some(_)) => *self = Self::Conflict,
         }
     }
+}
 
-    /// Lattice join for the SCC-invariant fixpoint, ordered `Unknown < Known(_) < Conflict`. Unlike `merge`, `Unknown` is the identity (not-yet-resolved), so a forwarded parameter still resolving to `Unknown` contributes nothing rather than forcing a conflict.
+/// Ordered `Unknown < Known(_) < Conflict`.
+///
+/// Note how this differs from [`Knowledge::merge`], which is *not* this join and must not be confused with it: `merge` reads its `None` as "a caller I cannot observe" and lets that force a `Conflict`, whereas here `Unknown` is the identity, so a forwarded parameter still resolving to `Unknown` contributes nothing rather than poisoning the result. The two disagree on exactly one case — `merge` leaves `(Unknown, None)` at `Unknown` — and that case is why the observation step and the fixpoint cannot share one operation.
+impl dataflow::Lattice for Knowledge {
+    fn bottom() -> Self {
+        Knowledge::Unknown
+    }
+
     fn join(&mut self, incoming: Knowledge) {
         *self = match (std::mem::replace(self, Knowledge::Unknown), incoming) {
             (Knowledge::Conflict, _) | (_, Knowledge::Conflict) => Knowledge::Conflict,
@@ -102,13 +110,7 @@ pub(super) fn invariant_fixpoint(
     constraints: &[(CpsFunId, Vec<CpsAtom>)],
     known_literals: &BTreeMap<CpsValueId, CpsAtom>,
 ) -> BTreeMap<CpsValueId, Knowledge> {
-    let mut class: BTreeMap<CpsValueId, Knowledge> = params_of
-        .values()
-        .flatten()
-        .map(|&param| (param, Knowledge::Unknown))
-        .collect();
-    loop {
-        let mut changed = false;
+    dataflow::solve(params_of.values().flatten().copied(), |solver| {
         for (callee, args) in constraints {
             let Some(params) = params_of.get(callee) else {
                 continue;
@@ -117,20 +119,11 @@ pub(super) fn invariant_fixpoint(
                 let Some(&param) = params.get(index) else {
                     continue;
                 };
-                let incoming = resolve_atom(arg, &class, known_literals);
-                let mut updated = class[&param].clone();
-                updated.join(incoming);
-                if updated != class[&param] {
-                    class.insert(param, updated);
-                    changed = true;
-                }
+                let incoming = resolve_atom(arg, solver.facts(), known_literals);
+                solver.join(param, incoming);
             }
         }
-        if !changed {
-            break;
-        }
-    }
-    class
+    })
 }
 /// Extract the parameters resolved to a single literal or function reference.
 pub(super) fn useful_knowns(
