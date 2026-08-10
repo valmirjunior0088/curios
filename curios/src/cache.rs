@@ -6,7 +6,7 @@
 
 use {
     curios_archive::rkyv,
-    curios_package::{compiler, terms, unit, unit_key},
+    curios_package::{Store, compiler, terms, unit_key},
     curios_pipeline::Cache,
     curios_text::UnitSource,
     curios_unit::Unit,
@@ -18,7 +18,7 @@ const STORED: &str = "unit.rkyv";
 
 /// The store, as the fold sees it.
 pub struct Verdicts {
-    root: PathBuf,
+    store: Store,
     /// `None` when the compiler cannot identify itself — in which case nothing is read and nothing is written, because a verdict recorded under an identity nobody can reproduce would later be believed on behalf of a different compiler.
     compiler: Option<String>,
     /// The keys placed so far, in fold order. A unit's key covers them, because its lowering copies their cumulative universe-seed table — so the same source after a different prefix is a different unit.
@@ -28,9 +28,11 @@ pub struct Verdicts {
 impl Verdicts {
     /// The store beside `root`.
     pub fn at(root: PathBuf) -> Self {
+        let store = Store::at(root);
+
         Self {
-            compiler: compiler(&root),
-            root,
+            compiler: compiler(&store),
+            store,
             placed: RefCell::new(Vec::new()),
         }
     }
@@ -57,7 +59,7 @@ impl Verdicts {
 impl Cache for Verdicts {
     fn get(&self, source: &UnitSource<'_>) -> Option<Unit> {
         let key = self.key(source)?;
-        let bytes = fs::read(unit(&self.root, &key).join(STORED)).ok()?;
+        let bytes = fs::read(self.store.unit(&key).join(STORED)).ok()?;
 
         // A stored unit that will not read back is a store to ignore, never a compile to fail: the source it was made from is still there, and recompiling costs time rather than correctness.
         let restored = rkyv::from_bytes::<Unit, rkyv::rancor::Error>(&bytes).ok()?;
@@ -72,7 +74,12 @@ impl Cache for Verdicts {
             return;
         };
 
-        let directory = unit(&self.root, &key);
+        // The rule a stored unit is checked against, at the second seam a unit is written — the first being the prelude's build script. An identity meaningful only in the compilation that made it has no safe direction to degrade in: restored beside a unit whose own counters hand out the same index, it aliases silently rather than failing, which admits. Storing nothing is always safe, so a unit that would carry one is dropped rather than refused: the compilation it came from is correct, and only the record is withheld.
+        if curios_core::validate_stored_identities(unit_.core()).is_err() {
+            return;
+        }
+
+        let directory = self.store.unit(&key);
         let written = rkyv::to_bytes::<rkyv::rancor::Error>(unit_)
             .ok()
             .and_then(|bytes| {

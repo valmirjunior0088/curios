@@ -28,30 +28,64 @@ use {
 /// The generated directory itself.
 pub const STORE: &str = ".curios";
 
-/// Where a native executable is written: nested under the package that declares it.
+/// Where a project's generated things go: one family beside it, two in a cache it shares with every other project.
 ///
-/// A package's name is the one identity in a compilation that cannot collide (law 2), so nesting by it removes the collision by construction — two members of one umbrella may both declare `serve` and nothing has to refuse it. Nesting also keeps the path stable: flat, a package's binary would move when it joined an umbrella, since only the governing root changed. A name is already a path, so its segments nest exactly as the layout rule maps a qualified name onto a file.
-pub fn bin(root: &Path, package: &Qualifier, executable: &str) -> PathBuf {
-    package
-        .iter()
-        .fold(root.join(STORE).join("bin"), |path, segment| {
-            path.join(segment)
-        })
-        .join(executable)
+/// **The split is not arbitrary, and it follows from the keys.** A materialized tree is named by its `c1:` hash and a judged unit by a key over its terms, its compiler and its predecessors — neither says anything about *which* project asked, so both name the same thing wherever they are computed and both are shareable. A built executable is named by the package that declared it and belongs to the project that built it, so it stays local. Content-derived keys are what make an upper layer possible at all; a path-keyed store could only ever have been local.
+pub struct Store {
+    /// The governing root — the umbrella's directory when one governs, the package's otherwise.
+    project: PathBuf,
+    /// The cache shared across projects.
+    shared: PathBuf,
 }
 
-/// Where a materialized source tree is placed, keyed by the hash it was accepted against.
-///
-/// The scheme is a directory of its own rather than part of the leaf name, which is what lets a successor scheme sit beside `c1` during a transition instead of replacing it.
-pub fn src(root: &Path, hash: &TreeHash) -> PathBuf {
-    let (scheme, digest) = hash.split();
+impl Store {
+    /// The store a project at `project` uses, sharing whatever this machine offers.
+    pub fn at(project: PathBuf) -> Self {
+        Self {
+            shared: shared().unwrap_or_else(|| project.join(STORE)),
+            project,
+        }
+    }
 
-    root.join(STORE).join("src").join(scheme).join(digest)
+    /// Where a native executable is written: nested under the package that declares it, beside the project.
+    ///
+    /// A package's name is the one identity in a compilation that cannot collide (law 2), so nesting by it removes the collision by construction — two members of one umbrella may both declare `serve` and nothing has to refuse it. Nesting also keeps the path stable: flat, a package's binary would move when it joined an umbrella, since only the governing root changed. A name is already a path, so its segments nest exactly as the layout rule maps a qualified name onto a file.
+    pub fn bin(&self, package: &Qualifier, executable: &str) -> PathBuf {
+        package
+            .iter()
+            .fold(self.project.join(STORE).join("bin"), |path, segment| {
+                path.join(segment)
+            })
+            .join(executable)
+    }
+
+    /// Where a materialized source tree is placed, keyed by the hash it was accepted against.
+    ///
+    /// The scheme is a directory of its own rather than part of the leaf name, which is what lets a successor scheme sit beside `c1` during a transition instead of replacing it.
+    pub fn src(&self, hash: &TreeHash) -> PathBuf {
+        let (scheme, digest) = hash.split();
+
+        self.shared.join("src").join(scheme).join(digest)
+    }
+
+    /// Where a compiled unit is filed, under the key its terms and the certifier decide.
+    pub fn unit(&self, key: &str) -> PathBuf {
+        self.shared.join("unit").join(key)
+    }
+
+    /// Where this machine's memo of its compiler's digest lives — a fact about the machine, so it belongs beside the things every project shares.
+    pub fn compiler(&self) -> PathBuf {
+        self.shared.join("compiler")
+    }
 }
 
-/// Where a compiled unit is filed, under the key its terms and the certifier decide.
-pub fn unit(root: &Path, key: &str) -> PathBuf {
-    root.join(STORE).join("unit").join(key)
+/// The cache shared across projects, when something said where to put one.
+///
+/// **`CURIOS_CACHE` and nothing else — there is deliberately no divined default.** A toolchain that writes into a home directory nobody pointed it at is doing something the person who ran it did not ask for, and `.curios/` beside the project is the one generated directory this design admits to. So sharing is opt in: unset, every project keeps its own store, which costs a re-fetch and a re-certification per project and surprises nobody. Set, two projects pinning one revision materialize and compile it once.
+///
+/// It also makes every test hermetic without asking for anything: nothing in a suite sets the variable, so nothing in a suite can reach past the directory it made.
+fn shared() -> Option<PathBuf> {
+    std::env::var_os("CURIOS_CACHE").map(PathBuf::from)
 }
 
 /// What a unit compiled from `terms`, by `compiler`, after `predecessors`, is filed under.

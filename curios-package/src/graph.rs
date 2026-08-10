@@ -9,7 +9,7 @@ mod tests;
 
 use {
     crate::{
-        Dependency, Governing, MANIFEST, Manifest, Package, TreeHash, package_source, spelling, src,
+        Dependency, Governing, MANIFEST, Manifest, Package, TreeHash, package_source, spelling,
     },
     curios_base::Qualifier,
     curios_text::RootSource,
@@ -286,7 +286,7 @@ impl Walk<'_> {
 
             // The store is where a fetchable dependency lives, and being *in* it is what "materialized" means — the hash it is filed under is the hash it was accepted against, so finding it there is the verification, already done.
             Dependency::Git { url, rev, hash } => {
-                let placed = src(&self.governing.root, hash);
+                let placed = self.governing.store().src(hash);
 
                 match placed.is_dir() {
                     true => Ok(placed),

@@ -8,7 +8,7 @@
 mod tests;
 
 use {
-    crate::{MANIFEST, Manifest, Package, Umbrella},
+    crate::{MANIFEST, Manifest, Package, Store, Umbrella},
     std::path::{Path, PathBuf},
 };
 
@@ -25,6 +25,11 @@ pub struct Governing {
 }
 
 impl Governing {
+    /// Where this project's generated things go — its own beside it, and the shared ones in the cache every project uses.
+    pub fn store(&self) -> Store {
+        Store::at(self.root.clone())
+    }
+
     /// What governs an invocation, by the manifest it named when it named one and by the walk otherwise.
     pub fn found(manifest: Option<&Path>, directory: &Path) -> Result<Self, String> {
         match manifest {

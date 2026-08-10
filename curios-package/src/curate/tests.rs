@@ -36,9 +36,9 @@ fn a_delivery_matching_its_pin_is_placed() {
         hash: hash.clone(),
     };
 
-    accept(&scratch, &root, &pin).expect("a delivery matching its pin");
+    accept(&scratch, &Store::at(root.clone()), &pin).expect("a delivery matching its pin");
 
-    let placed = src(&root, &hash);
+    let placed = Store::at(root.clone()).src(&hash);
     assert!(placed.join("lib.crs").is_file(), "{}", placed.display());
     assert!(!scratch.exists(), "the scratch directory is consumed");
 
@@ -61,12 +61,13 @@ fn a_delivery_failing_its_pin_is_refused_stating_what_arrived() {
         hash: TreeHash::parse(&format!("c1:{}", "a".repeat(64))).unwrap(),
     };
 
-    let refusal = accept(&scratch, &root, &pin).expect_err("a tampered delivery");
+    let refusal =
+        accept(&scratch, &Store::at(root.clone()), &pin).expect_err("a tampered delivery");
 
     assert!(refusal.contains("not what it is pinned to"), "{refusal}");
     assert!(refusal.contains(&delivered.to_string()), "{refusal}");
     assert!(
-        !src(&root, &pin.hash).exists(),
+        !Store::at(root.clone()).src(&pin.hash).exists(),
         "nothing is placed under a hash it does not have"
     );
 
@@ -198,9 +199,9 @@ fn a_fetched_revision_is_verified_and_placed() {
         hash: expected.clone(),
     };
 
-    fetch(&root, &pin).expect("a revision this machine is serving");
+    fetch(&Store::at(root.clone()), &pin).expect("a revision this machine is serving");
 
-    let placed = src(&root, &expected);
+    let placed = Store::at(root.clone()).src(&expected);
     assert!(placed.join("lib.crs").is_file(), "{}", placed.display());
     assert!(
         !placed.join(".git").exists(),

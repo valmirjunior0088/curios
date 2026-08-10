@@ -10,7 +10,7 @@
 mod tests;
 
 use {
-    crate::{Dependency, Governing, MANIFEST, Manifest, Package, TreeHash, spelling, src},
+    crate::{Dependency, Governing, MANIFEST, Manifest, Package, Store, TreeHash, spelling},
     curios_base::Qualifier,
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -45,13 +45,14 @@ impl fmt::Display for Pin {
 ///
 /// Iterated to a fixed point rather than walked once, because a dependency's own dependencies cannot be read until it is there: each round materializes what the manifests currently reachable declare, and the next round sees further. A round that fetches nothing new is the end of it — and a round that fetches without revealing anything is impossible, since a fetched tree either has a manifest or is refused for having none.
 pub fn materialize(governing: &Governing) -> Result<Vec<Pin>, String> {
+    let store = governing.store();
     let mut fetched = Vec::new();
 
     loop {
         let wanted = pins(governing)?;
         let absent = wanted
             .into_iter()
-            .filter(|pin| !src(&governing.root, &pin.hash).is_dir())
+            .filter(|pin| !store.src(&pin.hash).is_dir())
             .collect::<Vec<_>>();
 
         if absent.is_empty() {
@@ -59,7 +60,7 @@ pub fn materialize(governing: &Governing) -> Result<Vec<Pin>, String> {
         }
 
         for pin in absent {
-            fetch(&governing.root, &pin)?;
+            fetch(&store, &pin)?;
             fetched.push(pin);
         }
     }
@@ -88,7 +89,7 @@ fn pins(governing: &Governing) -> Result<BTreeSet<Pin>, String> {
                         hash: hash.clone(),
                     });
 
-                    src(&governing.root, hash)
+                    governing.store().src(hash)
                 }
                 Dependency::Path { path } => directory.join(path),
                 // A marker resolves through the umbrella, which is on disk already: `order` is what refuses a mismatched one, and this walk only needs somewhere further to look.
@@ -113,7 +114,7 @@ fn reachable(governing: &Governing, name: &Qualifier, row: &Dependency) -> Optio
 
     match row {
         Dependency::Catalog => match umbrella.catalog.get(name)? {
-            Dependency::Git { hash, .. } => Some(src(&governing.root, hash)),
+            Dependency::Git { hash, .. } => Some(governing.store().src(hash)),
             Dependency::Path { path } => Some(governing.root.join(path)),
             _ => None,
         },
@@ -133,13 +134,13 @@ fn reachable(governing: &Governing, name: &Qualifier, row: &Dependency) -> Optio
 /// Fetch `pin`, verify it, and place it — in that order, and only in that order.
 ///
 /// The tree is hashed where it lands temporarily and moved into the store only once it has been accepted, so a failed or interrupted fetch cannot leave a directory the store would later read as a verified delivery.
-fn fetch(root: &Path, pin: &Pin) -> Result<(), String> {
-    let scratch = src(root, &pin.hash).with_extension("fetching");
+fn fetch(store: &Store, pin: &Pin) -> Result<(), String> {
+    let scratch = store.src(&pin.hash).with_extension("fetching");
     let _ = fs::remove_dir_all(&scratch);
     fs::create_dir_all(&scratch)
         .map_err(|error| format!("failed to create {}: {error}", scratch.display()))?;
 
-    let outcome = deliver(&scratch, pin).and_then(|()| accept(&scratch, root, pin));
+    let outcome = deliver(&scratch, pin).and_then(|()| accept(&scratch, store, pin));
 
     if outcome.is_err() {
         let _ = fs::remove_dir_all(&scratch);
@@ -172,7 +173,7 @@ fn deliver(scratch: &Path, pin: &Pin) -> Result<(), String> {
 }
 
 /// Verify the delivery and move it into the store.
-fn accept(scratch: &Path, root: &Path, pin: &Pin) -> Result<(), String> {
+fn accept(scratch: &Path, store: &Store, pin: &Pin) -> Result<(), String> {
     let delivered = TreeHash::of(scratch)?;
 
     if delivered != pin.hash {
@@ -185,7 +186,7 @@ fn accept(scratch: &Path, root: &Path, pin: &Pin) -> Result<(), String> {
         ));
     }
 
-    let placed = src(root, &pin.hash);
+    let placed = store.src(&pin.hash);
     if let Some(parent) = placed.parent() {
         fs::create_dir_all(parent)
             .map_err(|error| format!("failed to create {}: {error}", parent.display()))?;

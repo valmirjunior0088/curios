@@ -8,7 +8,7 @@
 mod tests;
 
 use {
-    crate::{Executable, Governing, Package, bin, order, spelling},
+    crate::{Executable, Governing, Package, order, spelling},
     curios_text::RootSource,
     std::path::{Path, PathBuf},
 };
@@ -70,7 +70,9 @@ impl Target {
         };
 
         Ok(Self::Executable {
-            output: bin(&governing.root, &governing.package.name, &executable.name),
+            output: governing
+                .store()
+                .bin(&governing.package.name, &executable.name),
             root: governing.root.clone(),
             name: executable.name.clone(),
             entry: governing.directory.join(&executable.path),

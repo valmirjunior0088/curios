@@ -3,23 +3,23 @@ use super::*;
 /// A binary nests under the package that declares it, segment by segment — so two members of one umbrella declaring `serve` cannot collide, and nothing has to refuse it.
 #[test]
 fn a_binary_nests_under_its_package() {
-    let root = Path::new("/w/u");
+    let store = Store::at(PathBuf::from("/w/u"));
 
     assert_eq!(
-        bin(root, &Qualifier::from(["myorg", "json"]), "serve"),
+        store.bin(&Qualifier::from(["myorg", "json"]), "serve"),
         PathBuf::from("/w/u/.curios/bin/myorg/json/serve")
     );
     assert_ne!(
-        bin(root, &Qualifier::from(["myorg", "json"]), "serve"),
-        bin(root, &Qualifier::from(["other"]), "serve")
+        store.bin(&Qualifier::from(["myorg", "json"]), "serve"),
+        store.bin(&Qualifier::from(["other"]), "serve")
     );
 }
 
 /// The path inside `.curios/` does not depend on what encloses the package, so a binary does not move when its package joins an umbrella — only the root it hangs from changes.
 #[test]
 fn joining_an_umbrella_moves_only_the_root() {
-    let alone = bin(Path::new("/w/json"), &Qualifier::from(["json"]), "serve");
-    let enclosed = bin(Path::new("/w/u"), &Qualifier::from(["json"]), "serve");
+    let alone = Store::at(PathBuf::from("/w/json")).bin(&Qualifier::from(["json"]), "serve");
+    let enclosed = Store::at(PathBuf::from("/w/u")).bin(&Qualifier::from(["json"]), "serve");
 
     assert!(alone.ends_with(".curios/bin/json/serve"));
     assert!(enclosed.ends_with(".curios/bin/json/serve"));
@@ -31,7 +31,7 @@ fn a_materialized_tree_files_under_its_scheme() {
     let hash = TreeHash::parse(&format!("c1:{}", "a".repeat(64))).unwrap();
 
     assert_eq!(
-        src(Path::new("/w/u"), &hash),
+        Store::at(PathBuf::from("/w/u")).src(&hash),
         PathBuf::from(format!("/w/u/.curios/src/c1/{}", "a".repeat(64)))
     );
 }
@@ -39,15 +39,16 @@ fn a_materialized_tree_files_under_its_scheme() {
 /// The three families never share a namespace, so a package named `c1` cannot land on a scheme's directory.
 #[test]
 fn the_families_do_not_share_a_namespace() {
-    let root = Path::new("/w/u");
+    let root = PathBuf::from("/w/u");
+    let store = Store::at(root.clone());
     let hash = TreeHash::parse(&format!("c1:{}", "b".repeat(64))).unwrap();
 
-    let binary = bin(root, &Qualifier::from(["c1"]), "tool");
-    let tree = src(root, &hash);
+    let binary = store.bin(&Qualifier::from(["c1"]), "tool");
+    let tree = store.src(&hash);
 
     assert!(!binary.starts_with(tree.parent().unwrap()));
     assert!(!tree.starts_with(root.join(STORE).join("bin")));
-    assert!(!unit(root, "key").starts_with(root.join(STORE).join("bin")));
+    assert!(!store.unit("key").starts_with(root.join(STORE).join("bin")));
 }
 
 /// A key is a function of all three parts, and of the *order* of the third — which is what the universe-seed table forces: the same source lowered after a different prefix is a different unit.
