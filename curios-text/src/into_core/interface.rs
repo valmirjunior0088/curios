@@ -220,39 +220,28 @@ pub(super) fn resolve_unit<'a>(
     let mut public = scope;
     let mut pub_uses = Vec::new();
 
-    match source {
-        super::UnitSource::Entry { entrypoint, .. } => seed(
-            &entrypoint.module.items,
-            &Qualifier::empty(),
+    // The compilation root: the entry's own items, or — for a unit that carries no entrypoint — a root belonging to no unit, seeded empty because absolute references resolve through it regardless, its public children being the mounted prefixes.
+    seed(
+        source.root_items(),
+        &Qualifier::empty(),
+        modules,
+        table,
+        &mut public,
+        &mut pub_uses,
+    )?;
+
+    for mount in own.iter().filter(|mount| !mount.prefix.is_root()) {
+        let content = modules
+            .get(&mount.prefix)
+            .expect("a mounted prefix was loaded during discovery");
+        seed(
+            &content.items,
+            &mount.prefix,
             modules,
             table,
             &mut public,
             &mut pub_uses,
-        )?,
-        super::UnitSource::Mounted(_) => {
-            // The synthetic compilation root, which belongs to no unit: its public children are the mounted prefixes.
-            seed(
-                &[],
-                &Qualifier::empty(),
-                modules,
-                table,
-                &mut public,
-                &mut pub_uses,
-            )?;
-            for mount in own {
-                let content = modules
-                    .get(&mount.prefix)
-                    .expect("a mounted prefix was loaded during discovery");
-                seed(
-                    &content.items,
-                    &mount.prefix,
-                    modules,
-                    table,
-                    &mut public,
-                    &mut pub_uses,
-                )?;
-            }
-        }
+        )?;
     }
 
     fixed_point(&mut public, table, mounts, &pub_uses)?;

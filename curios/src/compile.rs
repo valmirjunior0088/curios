@@ -31,7 +31,7 @@ where
 /// The order *is* the dependency order — there is no manifest yet to derive one from, and none is invented here. A unit naming a prefix mounted after it fails as an unbound name, which is what a positional order costs and what Phase C's declared dependencies replace.
 pub fn compile_with_units<O>(
     budget: u64,
-    units: &[curios_text::PreludeModules],
+    units: &[RootSource],
     entrypoint: &Entrypoint,
     loader: RootSource,
     observe: O,
@@ -42,7 +42,7 @@ where
     with_prelude(|prelude| {
         let sources = units
             .iter()
-            .map(curios_text::UnitSource::Mounted)
+            .map(curios_text::UnitSource::mounted)
             .collect::<Vec<_>>();
         let produced = curios_pipeline::compile_units(
             budget,
@@ -98,56 +98,23 @@ pub(crate) fn run_entrypoint<H: HostOps + Send + Sync + 'static>(
     run_wasm(&module, host, ForeignBindings::empty()).map(|_| ())
 }
 
-/// Load a unit mounted at `prefix` from `path`, materializing its whole module tree.
+/// A unit mounted at `prefix`, declared in `path` and holding its modules in `path`'s stem directory.
 ///
-/// A mounted unit's modules arrive as a map rather than through a loader, because discovery of a unit already in scope has no file system to reach — `curios-web` supplies every body inline and compiles with none at all. So the tree is walked eagerly here, at the one boundary that does have a file system: `mod foo;` inside `lib.crs` reads `lib/foo.crs`, exactly as the entry program's own file-backed modules resolve.
-pub fn load_unit(prefix: &str, path: &Path) -> Result<curios_text::PreludeModules, String> {
-    fn materialize(
-        modules: &mut curios_text::PreludeModules,
-        module: &curios_text::Module,
-        at: &curios_base::Qualifier,
-        base: &Path,
-    ) -> Result<(), String> {
-        for item in &module.items {
-            let curios_text::TopItem::Mod(declaration) = item else {
-                continue;
-            };
-            let here = at.with(&declaration.label);
-
-            let child = match &declaration.module {
-                // Written inline: discovery reads it out of the parent, so nothing is loaded.
-                Some(_) => continue,
-                None => {
-                    let file = base.join(format!("{}.crs", declaration.label));
-                    curios_text::Module::from_path(&file)
-                        .map_err(|error| format!("{}: {error:?}", file.display()))?
-                }
-            };
-
-            materialize(modules, &child, &here, &base.join(&declaration.label))?;
-            modules.insert_module(here, child);
-        }
-
-        Ok(())
-    }
-
-    let root = curios_text::Module::from_path(path)
-        .map_err(|error| format!("{}: {error:?}", path.display()))?;
+/// Nothing is read here. A mounted unit used to arrive as an eagerly materialized map, because discovery of a unit already in scope was assumed to have no filesystem to reach — but a resolver is what it always needed, and `curios-web` keeps compiling because *supplying* the bodies is one base among several rather than the only shape a mounted unit has. So this hands back the two paths the layout rule relates, and `curios-text` reads each header exactly when discovery asks for it, with the same diagnostics the entry program's own modules get.
+///
+/// [`RootKind::Ordinary`](curios_base::RootKind::Ordinary) is passed here and nowhere else, which is what makes "no package can exempt itself from the orphan rule" structural: a manifest has no path to this argument.
+pub fn load_unit(prefix: &str, path: &Path) -> curios_text::RootSource {
     let directory = path
         .parent()
         .unwrap_or(Path::new("."))
         .join(path.file_stem().unwrap_or_default());
 
-    let mut modules = curios_text::PreludeModules::new();
-    materialize(
-        &mut modules,
-        &root,
-        &curios_base::Qualifier::from([prefix]),
-        &directory,
-    )?;
-    modules.insert_root(prefix, curios_base::RootKind::Ordinary, root);
-
-    Ok(modules)
+    curios_text::RootSource::mounted(
+        curios_base::Qualifier::from([prefix]),
+        curios_base::RootKind::Ordinary,
+        path,
+        directory,
+    )
 }
 
 /// Lower and type-check `entrypoint` against the fixed prelude, reporting the erasure obligations rather than raising them. See [`curios_pipeline::typecheck_reporting`].

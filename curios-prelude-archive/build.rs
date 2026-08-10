@@ -16,7 +16,7 @@ use {
         Context, ErasedUnit, Mode, Resumed, elaborate_and_zonk_module, erase_unit,
         validate_lowered_universe_seeds, validate_universes,
     },
-    curios_text::{Module, PreludeModules, prepare_prelude, sys_module},
+    curios_text::{Module, RootSource, prepare_prelude, sys_module},
     sha2::{Digest, Sha256},
     std::{
         collections::BTreeSet,
@@ -95,7 +95,7 @@ fn build() {
         hex(&fingerprint)
     );
 
-    let mut modules = PreludeModules::new();
+    let mut modules = RootSource::supplied();
     modules.insert_root("sys", RootKind::Internal, sys_module(&host_ops()));
     modules.insert_root(
         "syn",

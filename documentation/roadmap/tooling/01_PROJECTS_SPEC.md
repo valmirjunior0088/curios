@@ -20,7 +20,7 @@ The compiler no longer knows structurally that there is *a prelude* and *a progr
 | `curios_unit::Unit` | One compiled unit: its resolution state, its elaborated `Module`, its erased arena, and its binder floor |
 | `curios_unit::Scope` | Every predecessor, borrowed in dependency order — never merged |
 | `curios_base::Mount` | A claimed prefix and its `RootKind`; lookup is longest-match, and mount sets are pairwise disjoint |
-| `curios_text::UnitSource` | The seam a unit arrives through today; its own documentation promises the resolver that replaces both arms |
+| `curios_text::UnitSource` | The seam a unit arrives through: a resolver, plus the entrypoint the one unit that has one carries. `curios_text::RootSource` is that resolver — one base per mount, a base being a directory or a tree already in memory |
 | `curios_pipeline::compile_units` | The fold — each source compiled against the base and everything before it, judged by the kernel between elaboration and erasure |
 | `curios_core::validate_stored_identities` | The refusal at the one seam a unit is written today |
 | `--unit <PREFIX>=<PATH>` | Repeatable, argument order *is* dependency order; survives beneath everything as the already-resolved form a manifest entry becomes |
@@ -29,14 +29,14 @@ Three properties are enforced rather than assumed: the orphan rule fires between
 
 ## The manifest
 
-A manifest is `Curios.toml`: declarative TOML, no code escape. Lake ended up making declarative TOML the default with its Lean DSL as a rarely-needed escape, and Swift's code-as-manifest is the documented failure mode — unanalyzable without execution. If a computed configuration is ever genuinely needed, that is a new decision, not a latent capability.
+A manifest is `curios.toml`: declarative TOML, no code escape. Lake ended up making declarative TOML the default with its Lean DSL as a rarely-needed escape, and Swift's code-as-manifest is the documented failure mode — unanalyzable without execution. If a computed configuration is ever genuinely needed, that is a new decision, not a latent capability.
 
 Every manifest is in exactly one of two modes, and the modes are mutually exclusive — a manifest that declares both refuses to parse:
 
 - **A package** — a namespace for definitions: `name`, `[dependencies]`, `[[executables]]`, optional `default`.
 - **An umbrella** — a namespace for packages: nameless, `members`, `[catalog]`.
 
-A manifest is optional. A bare `.crs` file compiles with no manifest, no dependencies, and no project — exactly as today. `Curios.lock` is reserved as a name even though a manifest of exact pins already is a lockfile.
+A manifest is optional. A bare `.crs` file compiles with no manifest, no dependencies, and no project — exactly as today. `curios.lock` is reserved as a name even though a manifest of exact pins already is a lockfile.
 
 There is no privilege field in either mode and there never will be one: a mounted package is `Ordinary` structurally — the loader hands `RootKind::Ordinary` to `insert_root` and the manifest parser has no path to that argument — so no package can exempt itself from the orphan rule in the file its own author writes. **Reinstate only if** a package must ever reference an internal root, and split reach from exemption before doing it.
 
@@ -79,7 +79,7 @@ The package directory is the object; its on-disk name is free; identity lives on
 
 ```text
 json/                ← directory name is free; identity is `name = "myorg/json"`
-  Curios.toml
+  curios.toml
   lib.crs            ← library header: /myorg/json's own definitions, plus `mod parse`, `mod render`
   parse.crs          ← /myorg/json/parse
   parse/
@@ -263,7 +263,7 @@ Re-erasing one unit costs **608 ms**, measured over the stored prelude in releas
 
 The B identities are kept from the predecessor document because commits and the task list reference them; C1 and C2 are recorded as M1 and M2's prior names. Renumbering an identity to match a position is the mistake this design exists to refuse.
 
-- **M1** *(was C1)* — the package manifest and the resolver, in the new `curios-project` crate: parse `Curios.toml`'s package mode; generalize `RootSource` to one base per mount and replace both `UnitSource` arms with the resolver its documentation promises; implement the layout rule, including deleting `load_unit`'s stem-prepend, moving the bare-file base to its stem directory, migrating the corpus, and refusing stem collisions; thread real package names into the mount-collision diagnostic; and resolve names against mounts by longest match with the prefix-containment refusal, which is the whole of multi-segment support.
+- **M1** *(was C1)* — the package manifest and the resolver, in the new `curios-project` crate: parse `curios.toml`'s package mode; generalize `RootSource` to one base per mount and replace both `UnitSource` arms with the resolver its documentation promises; implement the layout rule, including deleting `load_unit`'s stem-prepend, moving the bare-file base to its stem directory, migrating the corpus, and refusing stem collisions; thread real package names into the mount-collision diagnostic; and resolve names against mounts by longest match with the prefix-containment refusal, which is the whole of multi-segment support.
 - **M2** *(was C2)* — the graph: dependency order from declared dependencies; cycle and conflict refusals; the umbrella mode with `members` and `[catalog]`; the `member`/`catalog` markers and their mismatch refusals; the governance walk; the `run` trichotomy.
 - **M3** — the store: `.curios/`, the shared content-addressed cache, hash verification on materialization, and `curate`'s materialize and reconcile jobs.
 - **M4** — the caching half, in order: B1, B3, B4, B6.
@@ -273,9 +273,12 @@ The B identities are kept from the predecessor document because commits and the 
 
 Updated as each piece lands, and deleted with this document. What the code corrected is recorded beside what it implemented, because a specification nobody amends is a specification nobody read.
 
-- **M1, the manifest** — landed. `curios-project` exists, holding `Curios.toml` and the `c1:` scheme; both modes parse and are mutually exclusive, a name is refused where no path could spell it, every dependency row is a table whose source's fields are required and whose other fields are refused by name, executables are enumerated against the package root's one stem space, and a hash is verified for scheme and shape where it is written rather than where it is used. The umbrella *mode* parses here too — it is one file and one parser, so splitting it would have meant writing it twice — while everything the umbrella *means* stays M2.
+- **M1, the manifest** — landed. `curios-project` exists, holding `curios.toml` and the `c1:` scheme; both modes parse and are mutually exclusive, a name is refused where no path could spell it, every dependency row is a table whose source's fields are required and whose other fields are refused by name, executables are enumerated against the package root's one stem space, and a hash is verified for scheme and shape where it is written rather than where it is used. The umbrella *mode* parses here too — it is one file and one parser, so splitting it would have meant writing it twice — while everything the umbrella *means* stays M2.
   - *Corrected:* the reserved segments are `let match choose rec mod use pub end false true induct struct foreign`, and not `Type`, `concept`, `satisfy` or `and`, which this document named as examples. Those four are grammar words the parser reads through `parse_keyword`, but the surface grammar admits all of them as path segments, so refusing them in a manifest would refuse a mount that resolves. The manifest refuses exactly what a path refuses, against one list rather than a copy of it — which is why the two spelling rules moved down to `curios-base`, beside the `Qualifier` whose segments they govern, rather than being exported from the lexer.
   - *Landed with it:* a `rev` is a `String` and a hash is a `TreeHash`. Opacity is a property of what the compiler does with a revision — compare it — and a newtype restating that would be mechanism over data; the hash's newtype earns itself by validating a scheme.
+- **M1, the resolver** — landed. `RootSource` is one base per mount, and a base is a directory or a tree already in memory; lookup is longest-match over the claimed prefixes. `UnitSource`'s two arms are gone, and with them `PreludeModules`, which was a resolver over supplied bodies all along — what survives of the distinction is the one genuine difference, that an executable carries a tail expression and owns the empty prefix.
+  - *Corrected:* the two discovery walks were not two configurations of one walk, they were one walk twice. Unifying them needed exactly one new idea — that the compilation root's items are the entry's own and nothing otherwise — and everything else fell out: the same three passes (`discover`, `seed`, `process_items`) each lost their arm-match for a filter over the unit's own non-root mounts.
+  - *Also landed:* `load_unit` no longer materializes a mounted unit's tree eagerly. The spec's premise that "a mounted unit reaches this stage as an already-materialized tree" was true of the code and false of the requirement — eager materialization was there because the mounted arm had no loader, not because it needed one. A mounted module now reports a parse failure with the span-carrying diagnostic the entry's modules always got, and `--unit` reads nothing until discovery asks.
 
 ## Tests
 

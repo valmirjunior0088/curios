@@ -2017,7 +2017,7 @@ fn compile_with_units(
     let parsed = sources
         .iter()
         .map(|(prefix, source)| {
-            let mut modules = curios_text::PreludeModules::new();
+            let mut modules = curios_text::RootSource::supplied();
             modules.insert_root(
                 *prefix,
                 curios_base::RootKind::Ordinary,
@@ -2033,7 +2033,7 @@ fn compile_with_units(
     with_prelude(|prelude| {
         let sources = parsed
             .iter()
-            .map(curios_text::UnitSource::Mounted)
+            .map(curios_text::UnitSource::mounted)
             .collect::<Vec<_>>();
         let produced = compile_units(
             DEFAULT_STEP_BUDGET,

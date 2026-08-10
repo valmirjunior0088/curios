@@ -67,60 +67,6 @@ struct Resolved<'a> {
     table: Scoped<'a, ModuleInfo>,
 }
 
-/// Build-time source set for the fixed compilation roots. The prelude owner supplies already parsed modules keyed by canonical qualifier; `curios-text` retains no embedded `/syn` or `/std` source table.
-pub struct PreludeModules {
-    mounts: Vec<Mount>,
-    modules: BTreeMap<Qualifier, Module>,
-}
-
-impl PreludeModules {
-    pub fn new() -> Self {
-        Self {
-            mounts: Vec::new(),
-            modules: BTreeMap::new(),
-        }
-    }
-
-    pub fn insert_root(&mut self, name: impl Into<String>, kind: RootKind, module: Module) {
-        let prefix = Qualifier::from([name.into()]);
-        assert!(
-            !self.mounts.iter().any(|mount| mount.prefix == prefix),
-            "prelude root '{}' is already registered",
-            prefix.join()
-        );
-        self.modules.insert(prefix.clone(), module);
-        self.mounts.push(Mount::new(prefix, kind));
-    }
-
-    pub fn insert_module(&mut self, path: Qualifier, module: Module) {
-        assert!(!path.is_root(), "a prelude module path cannot be the root");
-        assert!(
-            self.modules.insert(path.clone(), module).is_none(),
-            "prelude module '{}' is already registered",
-            path.join()
-        );
-    }
-
-    fn mounts(&self) -> Vec<Mount> {
-        self.mounts.clone()
-    }
-
-    fn load(&self, qualifier: &Qualifier) -> Result<Module, Error> {
-        self.modules
-            .get(qualifier)
-            .cloned()
-            .ok_or_else(|| Error::ModuleNotFound {
-                path: qualifier.join(),
-            })
-    }
-}
-
-impl Default for PreludeModules {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// Opaque fixed Text state restored from the build-scoped prelude artifact.
 #[derive(Clone)]
 #[curios_archive::archived]
@@ -175,23 +121,46 @@ impl PreparedPrelude {
     }
 }
 
-impl Resolved<'_> {
-    // No synthesized `mod sys;`-style declarations here: the entry program's own `ModuleInfo` is built directly from its own raw items, then every mounted prefix is registered as its child *explicitly* — a deliberate fact, not something recovered later by pattern-matching a qualifier's leading string segment. `insert_child` (hardened to reject any collision, not just pub/pub) is what catches a user's own `mod std` colliding with this registration, in either direction.
-    fn resolve(
-        &mut self,
-        entrypoint: &Entrypoint,
-        loader: &RootSource,
-        mounted: &[Mount],
-    ) -> Result<(), Error> {
-        let mut root_info = scan_module_info(&entrypoint.module.items)?;
+impl<'a> Resolved<'a> {
+    /// Discover every module `source` declares, over what `scope` already established.
+    ///
+    /// **One walk, where the entry and a mounted unit each had their own.** They differed in where a root's items came from and in which prefixes the compilation root lists as children, both of which are answered below rather than duplicated: two copies of a tree walk agree by being read, which is the shape every configuration-dependent defect in this stage has had.
+    ///
+    /// No synthesized `mod sys;`-style declarations here: the compilation root's own `ModuleInfo` is built from the entry's raw items, then every mounted prefix is registered as its child *explicitly* — a deliberate fact, not something recovered later by pattern-matching a qualifier's leading string segment. `insert_child` (hardened to reject any collision, not just pub/pub) is what catches a user's own `mod std` colliding with that registration, in either direction.
+    fn of(
+        source: &UnitSource<'_>,
+        scope: &'a [&'a BTreeMap<Qualifier, ModuleInfo>],
+        scope_mounts: &[Mount],
+        own: &[Mount],
+    ) -> Result<Self, Error> {
+        let mut resolved = Resolved {
+            modules: HashMap::new(),
+            table: Scoped::over(scope),
+        };
 
-        for mount in mounted {
-            root_info.insert_child(mount.prefix.head().to_string(), true)?;
+        // The compilation root: the entry's own module when the entry is what is being lowered, and otherwise a synthetic one belonging to no unit — which is why its children are *every* mounted prefix rather than only this unit's.
+        //
+        // Writing it lands in this unit's own layer, which shadows whatever the scope's layer said, so listing only `own` here silently hides the scope's mounts from a unit being compiled against them. That is what made `/std` unreachable from a mounted unit, and the test that says a unit reaches a mounted name is what caught it.
+        let mut root_info = scan_module_info(source.root_items())?;
+        for mount in scope_mounts.iter().chain(own) {
+            if !mount.prefix.is_root() {
+                root_info.insert_child(mount.prefix.head().to_string(), true)?;
+            }
+        }
+        resolved.table.insert(Qualifier::empty(), root_info);
+
+        // The entry's children hang off the root, whose `ModuleInfo` was just built by hand; a mounted unit has no root items, so this recurses over nothing for it.
+        resolved.discover_children(source.root_items(), &Qualifier::empty(), source)?;
+
+        for mount in own.iter().filter(|mount| !mount.prefix.is_root()) {
+            let header = Rc::new(source.source.load(&mount.prefix)?);
+            resolved
+                .modules
+                .insert(mount.prefix.clone(), Rc::clone(&header));
+            resolved.discover(&header.items, &mount.prefix, source)?;
         }
 
-        self.table.insert(Qualifier::empty(), root_info);
-
-        self.discover_children(&entrypoint.module.items, &Qualifier::empty(), loader)
+        Ok(resolved)
     }
 
     // `mod` declarations only name children, so the module graph is a tree: every qualifier is reached exactly once and no cycles are possible. Hence the walk needs neither a visited-set nor a cache hit-check — just load each file module once and recurse.
@@ -199,100 +168,40 @@ impl Resolved<'_> {
         &mut self,
         items: &[TopItem],
         prefix: &Qualifier,
-        loader: &RootSource,
+        source: &UnitSource<'_>,
     ) -> Result<(), Error> {
         self.table.insert(prefix.clone(), scan_module_info(items)?);
-        self.discover_children(items, prefix, loader)
+        self.discover_children(items, prefix, source)
     }
 
-    // The child-recursion half of `discover`, split out so `resolve` can build the entry root's `ModuleInfo` itself (with every mounted prefix pre-registered as a child) and recurse into its children without a second, unconditional `scan_module_info` call clobbering that registration.
+    // The child-recursion half of `discover`, split out so `of` can build the compilation root's `ModuleInfo` itself (with every mounted prefix pre-registered as a child) and recurse into its children without a second, unconditional `scan_module_info` call clobbering that registration.
     fn discover_children(
         &mut self,
         items: &[TopItem],
         prefix: &Qualifier,
-        loader: &RootSource,
+        source: &UnitSource<'_>,
     ) -> Result<(), Error> {
         for item in items {
             if let TopItem::Mod(module_item) = item {
                 let path = prefix.with(&module_item.label);
 
                 match &module_item.module {
-                    Some(module) => self.discover(&module.items, &path, loader)?,
+                    Some(module) => self.discover(&module.items, &path, source)?,
                     None => {
-                        let module =
-                            Rc::new(loader.load(&path).map_err(
-                                |error| match &module_item.span {
-                                    Some(span) => error.at(span.clone()),
-                                    None => error,
-                                },
-                            )?);
+                        let module = Rc::new(source.source.load(&path).map_err(|error| {
+                            match &module_item.span {
+                                Some(span) => error.at(span.clone()),
+                                None => error,
+                            }
+                        })?);
 
                         self.modules.insert(path.clone(), Rc::clone(&module));
-                        self.discover(&module.items, &path, loader)?;
+                        self.discover(&module.items, &path, source)?;
                     }
                 }
             }
         }
 
-        Ok(())
-    }
-
-    fn for_mounted<'b>(
-        input: &PreludeModules,
-        scope: &'b [&'b BTreeMap<Qualifier, ModuleInfo>],
-        scope_mounts: &[Mount],
-    ) -> Result<(Resolved<'b>, Vec<Mount>), Error> {
-        let mut resolved = Resolved {
-            modules: HashMap::new(),
-            table: Scoped::over(scope),
-        };
-        let mounts = input.mounts();
-        // The synthetic compilation root belongs to no unit, which is why it is built here rather than scanned from anyone's items — and why its children are *every* mounted prefix rather than only this unit's.
-        //
-        // Writing it lands in this unit's own layer, which shadows whatever the scope's layer said, so listing only `own` here silently hides the scope's mounts from a unit being compiled against them. That is what made `/std` unreachable from a mounted unit, and the test that says a unit reaches a mounted name is what caught it.
-        let mut root_info = ModuleInfo::new();
-        for mount in scope_mounts.iter().chain(&mounts) {
-            root_info.insert_child(mount.prefix.head().to_string(), true)?;
-        }
-        resolved.table.insert(Qualifier::empty(), root_info);
-
-        for mount in &mounts {
-            let content = Rc::new(input.load(&mount.prefix)?);
-            resolved
-                .modules
-                .insert(mount.prefix.clone(), Rc::clone(&content));
-            resolved.discover_input(&content.items, &mount.prefix, input)?;
-        }
-
-        Ok((resolved, mounts))
-    }
-
-    fn discover_input(
-        &mut self,
-        items: &[TopItem],
-        prefix: &Qualifier,
-        input: &PreludeModules,
-    ) -> Result<(), Error> {
-        self.table.insert(prefix.clone(), scan_module_info(items)?);
-        for item in items {
-            if let TopItem::Mod(module_item) = item {
-                let path = prefix.with(&module_item.label);
-                match &module_item.module {
-                    Some(module) => self.discover_input(&module.items, &path, input)?,
-                    None => {
-                        let module =
-                            Rc::new(input.load(&path).map_err(
-                                |error| match &module_item.span {
-                                    Some(span) => error.at(span.clone()),
-                                    None => error,
-                                },
-                            )?);
-                        self.modules.insert(path.clone(), Rc::clone(&module));
-                        self.discover_input(&module.items, &path, input)?;
-                    }
-                }
-            }
-        }
         Ok(())
     }
 }
@@ -1618,34 +1527,50 @@ fn audit_public_exposures(
     Ok(())
 }
 
-/// What a unit is lowered from: its own module tree, however that tree was obtained.
+/// What a unit is lowered from: the modules under the prefixes it claims, and — for the one unit that has one — its entrypoint.
 ///
-/// The two arms are the two ways a tree arrives today — parsed from a file graph as the entry program is, or handed over already parsed as the fixed prelude is — and they differ in nothing else. A later phase replaces both with one resolver; until then this names the difference instead of duplicating a lowering per side of it.
-pub enum UnitSource<'a> {
-    /// The entry program: its module tree resolved through `loader`, mounted at the empty prefix — which is what makes it the entry.
-    Entry {
-        entrypoint: &'a Entrypoint,
-        loader: &'a RootSource,
-    },
-    /// A unit supplied already parsed, under the prefixes it declares.
-    Mounted(&'a PreludeModules),
+/// **One resolver, where there were two arms.** The two ways a tree used to arrive here — parsed from a file graph as the entry program is, handed over already parsed as the fixed prelude is — differed in nothing but where a module body came from, which is exactly the question a [`RootSource`] answers. What survives is the one genuine difference: an executable carries a tail expression and owns the empty prefix, and a library does neither.
+pub struct UnitSource<'a> {
+    entrypoint: Option<&'a Entrypoint>,
+    source: &'a RootSource,
 }
 
-impl UnitSource<'_> {
-    /// The prefixes this source claims. The entry claims the empty one and nothing else, which is what makes it the entry.
+impl<'a> UnitSource<'a> {
+    /// The entry program, its own modules resolved through `source`.
+    pub fn entry(entrypoint: &'a Entrypoint, source: &'a RootSource) -> Self {
+        Self {
+            entrypoint: Some(entrypoint),
+            source,
+        }
+    }
+
+    /// A unit with no entrypoint, under the prefixes `source` claims.
+    pub fn mounted(source: &'a RootSource) -> Self {
+        Self {
+            entrypoint: None,
+            source,
+        }
+    }
+
+    /// The prefixes this source claims.
+    ///
+    /// The entry claims the empty one and nothing else, and that is stated here rather than read off the resolver: owning the empty prefix is what *makes* a unit the entry, so it cannot be something the way its files were found decided.
     fn mounts(&self) -> Vec<Mount> {
-        match self {
-            UnitSource::Entry { .. } => vec![Mount::new(Qualifier::empty(), RootKind::Ordinary)],
-            UnitSource::Mounted(input) => input.mounts(),
+        match self.entrypoint {
+            Some(_) => vec![Mount::new(Qualifier::empty(), RootKind::Ordinary)],
+            None => self.source.mounts(),
         }
     }
 
     /// The entrypoint this source carries, for the one unit that has one.
     fn entrypoint(&self) -> Option<&Entrypoint> {
-        match self {
-            UnitSource::Entry { entrypoint, .. } => Some(entrypoint),
-            UnitSource::Mounted(_) => None,
-        }
+        self.entrypoint
+    }
+
+    /// The items of the compilation root: the entry's own, and none for a unit with no entrypoint — whose headers sit under its own prefixes, the root belonging to no unit at all.
+    fn root_items(&self) -> &'a [TopItem] {
+        self.entrypoint
+            .map_or(&[], |entrypoint| &entrypoint.module.items)
     }
 }
 
@@ -1668,10 +1593,13 @@ pub fn into_core_unit(
         .flat_map(|unit| unit.mounts.iter().cloned())
         .collect::<Vec<_>>();
 
+    // The prefixes this unit claims. The entry claims the empty one and nothing else; a mounted unit claims what its source does.
+    let own = source.mounts();
+
     // A prefix belongs to exactly one unit, and this is decided before discovery — otherwise the collision surfaces from `insert_child` as an ordinary duplicate declaration, which names the label but not what else claimed it.
     //
     // Mount-set disjointness is what `Scoped`'s shadowing rule, the registries' duplicate-key rejection and the `ffi` import namespace all rest on, so it is checked once here rather than assumed three times.
-    for mount in source.mounts() {
+    for mount in &own {
         if scope_mounts
             .iter()
             .any(|earlier| earlier.prefix == mount.prefix)
@@ -1686,21 +1614,7 @@ pub fn into_core_unit(
         }
     }
 
-    // Discovery, and the prefixes this unit claims. The entry claims the empty one and nothing else; a mounted unit claims what it declares.
-    let (Resolved { mut table, modules }, own) = match source {
-        UnitSource::Entry { entrypoint, loader } => {
-            let mut resolved = Resolved {
-                modules: HashMap::new(),
-                table: Scoped::over(&scope_tables),
-            };
-            resolved.resolve(entrypoint, loader, &scope_mounts)?;
-            (
-                resolved,
-                vec![Mount::new(Qualifier::empty(), RootKind::Ordinary)],
-            )
-        }
-        UnitSource::Mounted(input) => Resolved::for_mounted(input, &scope_tables, &scope_mounts)?,
-    };
+    let Resolved { mut table, modules } = Resolved::of(source, &scope_tables, &scope_mounts, &own)?;
 
     // Every prefix this compilation mounts — the scope's, then this unit's. Resolution asks the whole set; the lowered module records only `own`, because a module states what its own unit provides.
     let mounts = scope_mounts
@@ -1768,10 +1682,26 @@ pub fn into_core_unit(
     let mut witnesses = BTreeSet::new();
     let mut foreigns = ForeignStore::new();
 
-    match source {
-        UnitSource::Entry { entrypoint, .. } => process_items(
-            &entrypoint.module.items,
-            &mut context,
+    // The compilation root's own items — the entry's, and none for a unit with no entrypoint — then one pass per prefix this unit claims. Exactly one of the two does any work, because owning the empty prefix is what makes a unit the entry.
+    process_items(
+        source.root_items(),
+        &mut context,
+        &mut flat_items,
+        &mut induct_decls,
+        &mut struct_decls,
+        &mut concepts,
+        &mut witnesses,
+        &mut foreigns,
+        &modules,
+    )?;
+
+    for mount in own.iter().filter(|mount| !mount.prefix.is_root()) {
+        let content = modules
+            .get(&mount.prefix)
+            .expect("a mounted prefix was loaded during discovery");
+        process_items(
+            &content.items,
+            &mut context.nested(mount.prefix.head()),
             &mut flat_items,
             &mut induct_decls,
             &mut struct_decls,
@@ -1779,25 +1709,7 @@ pub fn into_core_unit(
             &mut witnesses,
             &mut foreigns,
             &modules,
-        )?,
-        UnitSource::Mounted(_) => {
-            for mount in &own {
-                let content = modules
-                    .get(&mount.prefix)
-                    .expect("a mounted prefix was loaded during discovery");
-                process_items(
-                    &content.items,
-                    &mut context.nested(mount.prefix.head()),
-                    &mut flat_items,
-                    &mut induct_decls,
-                    &mut struct_decls,
-                    &mut concepts,
-                    &mut witnesses,
-                    &mut foreigns,
-                    &modules,
-                )?;
-            }
-        }
+        )?;
     }
 
     // The entrypoint, for the one unit that has one.
@@ -1857,7 +1769,7 @@ pub fn into_core(
     loader: &RootSource,
     syntax: &SyntaxRegistry,
 ) -> Result<(curios_core::Module, usize, usize, ForeignStore), Error> {
-    let unit = into_core_unit(&UnitSource::Entry { entrypoint, loader }, &[], syntax)?;
+    let unit = into_core_unit(&UnitSource::entry(entrypoint, loader), &[], syntax)?;
 
     Ok((
         unit.core,
@@ -1869,10 +1781,10 @@ pub fn into_core(
 
 /// Resolve and lower the fixed roots once for build-time archival.
 pub fn prepare_prelude(
-    input: &PreludeModules,
+    input: &RootSource,
     syntax: &SyntaxRegistry,
 ) -> Result<PreparedPrelude, Error> {
-    into_core_unit(&UnitSource::Mounted(input), &[], syntax)
+    into_core_unit(&UnitSource::mounted(input), &[], syntax)
 }
 
 /// Lower the entry program against the units already lowered.
@@ -1882,7 +1794,7 @@ pub fn into_core_with_prelude(
     scope: &[&PreparedPrelude],
     syntax: &SyntaxRegistry,
 ) -> Result<(curios_core::Module, usize, usize, ForeignStore), Error> {
-    let unit = into_core_unit(&UnitSource::Entry { entrypoint, loader }, scope, syntax)?;
+    let unit = into_core_unit(&UnitSource::entry(entrypoint, loader), scope, syntax)?;
 
     Ok((
         unit.core,

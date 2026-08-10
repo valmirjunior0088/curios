@@ -46,14 +46,12 @@ pub(crate) fn compile_file(
 }
 
 /// Load every `--unit PREFIX=PATH` in the order written, which is the order they are compiled in.
-pub(crate) fn load_units(
-    units: &[String],
-) -> Result<Vec<curios_text::PreludeModules>, CompileError> {
+pub(crate) fn load_units(units: &[String]) -> Result<Vec<curios_text::RootSource>, CompileError> {
     units
         .iter()
         .map(|unit| {
             let (prefix, path) = parse_unit(unit).map_err(CompileError::Failure)?;
-            load_unit(&prefix, &path).map_err(CompileError::Failure)
+            Ok(load_unit(&prefix, &path))
         })
         .collect()
 }
