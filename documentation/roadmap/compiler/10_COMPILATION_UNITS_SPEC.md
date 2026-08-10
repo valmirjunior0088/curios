@@ -44,15 +44,15 @@ Eight systems, and the differences are the useful part. Four were already record
 
 **Lean** loads dependencies' `.olean` files and constructs a pre-environment containing the union of the dependencies' environments — `Established` with N inputs, reached independently. It also splits a serialized environment into private, public and server parts, and does not propagate extension state across imports unless a persistent extension is registered: two answers to *what crosses a boundary*, decided per item rather than wholesale. Its trust posture is **not** taken — imports are believed and re-verification is an opt-in external pass (`lean4checker`), where Curios runs the kernel on the compile path and, since the crate split, can afford to.
 
-**Idris 2** stores a TTC entry as either a binary blob or a processed definition and deserializes only on first lookup, because converting binary to a definition is costly and imported definitions are often never used. Curios restores its whole prelude eagerly and, on the strength of a 471 ms figure, this specification once made that a Phase B item. Re-measured in release it is **34.4 ms** for the whole image and 1.4 ms for the erased clone taken per compile, so the analogy holds and the lever does not; see [Out of this phase](#out-of-this-phase).
+**Idris 2** stores a TTC entry as either a binary blob or a processed definition and deserializes only on first lookup, because converting binary to a definition is costly and imported definitions are often never used. Curios restores its whole prelude eagerly and, on the strength of a 471 ms figure, this specification once made that a phase item of its own. Re-measured in release it is **34.4 ms** for the whole image and 1.4 ms for the erased clone taken per compile, so the analogy holds and the lever does not; see [Out of the caching phase](#out-of-the-caching-phase).
 
 **Agda** stores interface files under `_build/VERSION` so that switching versions does not discard them. Curios keys its archive on a schema plus a source fingerprint instead, which is the same idea without the path.
 
 **rustc** is the direct warning. Crate `B`'s metadata refers to crate `C` by *B's own* `CrateNum`, so when `A` loads `B` it must translate through a `cnum_map` in `B`'s `CrateMetadata`. That table exists because unit identity is a per-unit index. Curios's `Global::Authored(Qualifier)` is a global path and pays nothing for this — and the one place the same mistake is currently available is `RootId`, which the roots-redesign sketch proposed making a `Vec` index. **Do not.** An index stamped into an archived declaration is a `cnum_map` waiting to be written; see *Decided: a root is a prefix* below.
 
-**GHC** splits its scope in two: a `HomePackageTable` per home unit for what is being built now (collected across units in a `HomeUnitGraph`), and a global `ExternalPackageState` for what is already built. Curios has one tier in Phase A because every unit is compiled in one process. The split arrives with Phase B, and it is a **provenance** question — cached or live — not a new scope type. Nothing in Phase A should anticipate it.
+**GHC** splits its scope in two: a `HomePackageTable` per home unit for what is being built now (collected across units in a `HomeUnitGraph`), and a global `ExternalPackageState` for what is already built. Curios has one tier in Phase A because every unit is compiled in one process. The split arrives with the [deferred caching phase](#deferred--the-caching-phase), and it is a **provenance** question — cached or live — not a new scope type. Nothing in Phase A should anticipate it.
 
-**OCaml with Dune** wraps a library by prefixing every module with the library name, precisely because top-level compilation-unit names must be unique at link, and gives the short names back through module aliases plus `-open`. That is prefix-as-identity and `Context::insert_scope` aliasing, arrived at independently. Its *packed modules* alternative is the shape Phase B's erased prefix deliberately takes — referring to one module brings the whole pack — which is affordable here only because the pack is restored in 34.4 ms and is keyed on the dependency set that produced it.
+**OCaml with Dune** wraps a library by prefixing every module with the library name, precisely because top-level compilation-unit names must be unique at link, and gives the short names back through module aliases plus `-open`. That is prefix-as-identity and `Context::insert_scope` aliasing, arrived at independently. Its *packed modules* alternative is the shape the deferred caching phase's erased prefix deliberately takes — referring to one module brings the whole pack — which is affordable here only because the pack is restored in 34.4 ms and is keyed on the dependency set that produced it.
 
 **Swift** made the opposite choice on collisions: a local or imported declaration that collides with a module name resolves by precedence, consulting the declaration and falling back to qualified lookup. It then needed dedicated `::` module-selector syntax in 6.3 to say what was previously unsayable. That is the cost of resolving a mount collision instead of refusing it, and it is why *two units claiming one prefix is an error* below is an error rather than a precedence rule.
 
@@ -82,7 +82,7 @@ This also deletes `RootId::of_segment` and `Qualifier::root_segment`. `of_segmen
 
 **Rejected: making `RootId` a stable interned name and keeping the stamps.** It fixes the archive-portability half and leaves the redundancy: a field that restates the first segment of a name held beside it. Kind still needs the mount table at every site that asks, so the stamp saves one `O(1)` derivation and nothing else.
 
-**Rejected: making `RootId` an index into the compilation's root list**, as the July roots sketch proposed. That is rustc's `cnum_map` reinvented — an identity meaningful only in the compilation that assigned it, stamped into an artifact another compilation reads. It survives Phase A only by an unwritten invariant that seeded roots always sort first, and Phase B breaks it.
+**Rejected: making `RootId` an index into the compilation's root list**, as the July roots sketch proposed. That is rustc's `cnum_map` reinvented — an identity meaningful only in the compilation that assigned it, stamped into an artifact another compilation reads. It survives Phase A only by an unwritten invariant that seeded roots always sort first, and storing a unit breaks it.
 
 ### Two units claiming one prefix is diagnosed at mount
 
@@ -162,7 +162,7 @@ pub fn erase_unit(scope: Scope<'_>, elaborated: Elaborated, budget: u64)
     -> Result<Unit, Error>;
 ```
 
-**One field is provisional, and A3 should land it knowing so.** `ersd` reads as one erased artifact per unit, which is right while every unit is erased in one process in dependency order. [B4](#b4--the-erased-artifact-is-keyed-on-the-prefix-not-on-the-unit) decides that a *stored* erased artifact belongs to the ordered set of predecessors instead, because per-unit arenas would need a relocation pass. With one unit the two readings coincide — the prelude is the prefix — so A3 looks correct either way and its gate cannot tell them apart. Write it so the erased half can move off `Unit` without disturbing the rest.
+**One field is provisional, and A3 landed it knowing so.** `ersd` reads as one erased artifact per unit, which is right while every unit is erased in one process in dependency order. The deferred [B4](#b4--the-erased-artifact-is-keyed-on-the-prefix-not-on-the-unit) decides that a *stored* erased artifact belongs to the ordered set of predecessors instead, because per-unit arenas would need a relocation pass. With one unit the two readings coincide — the prelude is the prefix — so A3 looks correct either way and its gate cannot tell them apart. It is written so the erased half can move off `Unit` without disturbing the rest.
 
 And the fold, in `curios-pipeline`:
 
@@ -202,7 +202,7 @@ It also removes a cycle that the "build the prelude through `curios-pipeline`" p
 
 Five, in order. Each is a separate commit or run of commits, each clears the full gate on its own, and A1 through A4 must not change what the compiler decides about any program.
 
-**Where this stands.** A1 and A2 have landed. A3, A4 and A5 are pending, and no part of Phase B or C has started. Each milestone below records what actually landed under it, including where the implementation differed from what this section specified — a milestone whose entry says nothing landed exactly as written.
+**Where this stands.** All five have landed and Phase A is on `main`. Phase B has since been narrowed to [the two milestones that check something today](#phase-b--the-invariant-half); the four that only pay off once bytes are stored are [deferred to the appendix](#deferred--the-caching-phase). No part of Phase C has started. Each milestone below records what actually landed under it, including where the implementation differed from what this section specified — a milestone whose entry says nothing landed exactly as written.
 
 ### A1 — A root is a mounted prefix
 
@@ -242,7 +242,7 @@ Delete `RootId`, `RootId::of_segment` and `Qualifier::root_segment`. Delete the 
 
 ### A3 — `Unit`, `Scope`, and one spelling per stage
 
-**Landing in three commits**, because it turned out to be three ideas rather than one. The entrypoint and the erasure collapse (landed), the crate and the artifact (landed), and the lowering collapse (pending).
+**Landed**, in three commits, because it turned out to be three ideas rather than one: the entrypoint and the erasure collapse, the crate and the artifact, and the lowering collapse.
 
 Create `curios-unit`. `PreparedPrelude`, `ErasedPrelude` and `PreludeArchive`'s payload collapse into `Unit`. Collapse the three lowerings into one, the two erasures into one, and give `elaborate_and_zonk_with_prelude` an `Established` rather than a `&Module`. `curios-prelude-archive`'s build script calls `elaborate_unit` + `erase_unit`; `curios-prelude`'s build script still judges the restored unit.
 
@@ -313,9 +313,9 @@ The `--unit` flag, the mount-collision diagnostic, the foreign-store union, the 
 
 ## What composes free, and costs nothing
 
-**Identity.** Four monotonic counters — metavariable, binder, witness, universe — each seeded from its predecessor's final count, and `Entropy::seed` only raises. A topological order seeds each unit from the running maximum, which is exactly what prelude→entry does today. That is the whole of it *within* one compilation. Across compilations only the witness counter matters, for the reason [B1](#b1--a-witness-is-identified-by-its-mount) gives; the other three are measured against a stored unit in [the rule Phase B is checked against](#the-rule-this-phase-is-checked-against), and none of them reaches one.
+**Identity.** Four monotonic counters — metavariable, binder, witness, universe — each seeded from its predecessor's final count, and `Entropy::seed` only raises. A topological order seeds each unit from the running maximum, which is exactly what prelude→entry does today. That is the whole of it *within* one compilation. Across compilations only the witness counter matters, for the reason the deferred [B1](#b1--a-witness-is-identified-by-its-mount) gives; the other three are measured against a stored unit under [the rule the storage check is written against](#the-rule-the-storage-check-is-written-against), and none of them reaches one.
 
-**Erasure.** `Resumed` restores an arena and erases a unit's items onto it; N units compose by threading it, and there is no link step to invent at the erased level — *while every unit is erased in one process in dependency order*, which is Phase A. [B4](#b4--the-erased-artifact-is-keyed-on-the-prefix-not-on-the-unit) is what keeps it true once erased artifacts are stored.
+**Erasure.** `Resumed` restores an arena and erases a unit's items onto it; N units compose by threading it, and there is no link step to invent at the erased level — *while every unit is erased in one process in dependency order*, which is Phase A and is what the compiler does today. The deferred [B4](#b4--the-erased-artifact-is-keyed-on-the-prefix-not-on-the-unit) is what would keep it true once erased artifacts are stored.
 
 **Visibility, which was expected to be the sweep and is not.** `Audiences` computes who-can-see-what as *sets of subtree roots* — a declaration is visible to consumer `C` when `C` lies within any of them — and `pub` inside a private module reaches exactly that module's audience and no further. A package is a subtree, so a package's internals under a non-`pub` submodule are already package-scoped. Rust needed `pub(crate)` because its module tree and crate boundary are different things; here they coincide. Visibility stays a `bool` on two axes (`vis_pub` for the name, `rep_pub` for the representation) and gains no third level.
 
@@ -329,15 +329,17 @@ The `--unit` flag, the mount-collision diagnostic, the foreign-store union, the 
 
 **A forward reference deserves its own diagnostic.** With the order supplied by the caller, a unit naming a later unit's prefix fails as an ordinary unbound name. The mount table knows every prefix before any unit compiles, so the driver can upgrade that refusal to name the ordering: *`/b` is mounted after `/a`; a unit may only reference units before it*. This is a diagnostic refinement over an existing refusal, not a change to resolution.
 
-**The visibility fixed point is already whole-scope, per compilation.** `Audiences::compute` iterates `Scoped::iter` — the union of scope and unit — and runs to a fixed point, and `audit_public_exposures` calls it on every compile. That is `O(everything in scope)` today and becomes `O(all units)`. It is correct, it is not new, and it is the whole-scope pass most worth measuring before Phase B decides what to cache. Measure it; do not assume it.
+**The visibility fixed point is already whole-scope, per compilation.** `Audiences::compute` iterates `Scoped::iter` — the union of scope and unit — and runs to a fixed point, and `audit_public_exposures` calls it on every compile. That is `O(everything in scope)` today and becomes `O(all units)`. It is correct, it is not new, and it is the whole-scope pass most worth measuring before anything decides what to cache. Measure it; do not assume it.
 
-## Phase B — cached units
+## Phase B — the invariant half
 
-**The objective is that a unit compiled by one compilation can be consumed by another**, so that depending on N packages does not cost N elaborations per build. That is the whole of it. This phase is scaffolding for [Phase C](#phase-c--the-package-boundary) and takes on nothing C does not need. An earlier draft carried three further items: measurement removed two of them outright, and the third is recorded in [the appendix](#appendix--measurements-and-findings-that-belong-to-no-phase) with the rest of what belongs to no phase.
+**The objective is that what a unit is trusted to carry is checked where the unit is produced, rather than assumed by whoever later reads it.** Two milestones, B2 and B5. The numbering has gaps because the four that are missing are deferred rather than renumbered — an identity is not a position, which is the argument this specification makes about everything else it names.
 
-**It does not introduce verdict caching. It removes Cargo from underneath the one that already exists.** The prelude is a cached unit today — `verdicts_from` skips an item every one of whose declared names the environment already answers for, so the archive's items are never re-judged on the compile path, and what makes that sound is that the only crate handing the image out is one whose build script walked it with the kernel first. Cargo supplies four things there: storage (`OUT_DIR` and `include_bytes!`), the key (a schema constant and a source fingerprint), invalidation (the build script's own dependency graph), and enforcement (a crate that does not compile). A unit that is not a crate has none of them. Three are engineering. The fourth is a change to what the compiler believes, and it is stated in B3 rather than inherited. GHC's home/external split arrives as the provenance of a unit — cached or live — not as a second scope type.
+**What was deferred, and why.** This phase was specified as *cached units*: a unit compiled by one compilation consumed by another, so that depending on N packages does not cost N elaborations per build. That objective is intact and its specification survives whole, in [the appendix](#deferred--the-caching-phase). It is deferred because a cache before [Phase C](#phase-c--the-package-boundary) has almost nothing to cache. The prelude is the only unit a compilation does not author, and Cargo already caches it; every other unit is one the programmer named on the command line and is presently editing. Designing a store's location, layout and invalidation against that case is designing against a one-package guess, and the store's shape is the part this specification is least able to settle without a real dependency graph in front of it. C1 and C2 need no cache in order to be correct — uncached, they re-elaborate every dependency per build, which is a cost statement rather than a correctness one, and it is the same statement [Packages ship source](#packages-ship-source-not-artifacts) already makes about C at scale.
 
-### The rule this phase is checked against
+**What survives is what more than one unit made checkable now.** [A5](#a5--more-than-one-unit) put N units in a compilation, and two properties that were vacuous under a single predecessor stopped being vacuous: what an archive is trusted to carry, and what "all the names in the program" means. Neither waits on storage, and neither is verdict-preserving by construction, so each states its own obligation rather than inheriting one from [the milestones](#the-milestones).
+
+### The rule the storage check is written against
 
 > **A unit may be stored only if it carries no positional identity.**
 
@@ -348,110 +350,33 @@ A positional identity is one meaningful solely in the compilation that assigned 
 | Term metavariable | none — zonking substitutes every solution and refuses an unsolved hole | zonk's contract, not a check on the archived value |
 | Universe metavariable | none — a level holding one is not closed over its declaration's parameters, and `validate_bound_universes` refuses it by that name | `validate_universes`, asserted on the value `build.rs` serializes |
 | Free local binder | none — `derived_binder_floor` over items *and* registries is **0**, against a lowering watermark of 6684 | nothing yet; B2 |
-| Witness | **75, densely 0..74, 34 of them referenced from terms** | nothing; B1 |
+| Witness | **75, densely 0..74, 34 of them referenced from terms** | nothing; [deferred B1](#deferred--the-caching-phase) |
 
-Two consequences, both stated because an earlier draft assumed otherwise. Of the four monotonic counters under [What composes free](#what-composes-free-and-costs-nothing), exactly one mints an identity that reaches a stored unit — the witness counter, which B1 scopes; the other three leave watermarks, which combine by maximum and cannot alias. And this phase makes **no claim on [SOUNDNESS.md](../../SOUNDNESS.md)'s *Binder identity* row**: that row is about a checker's own fresh mints aliasing identities in a live scope, which is a within-compilation property, and nothing a stored unit carries participates in it.
+Two consequences, both stated because an earlier draft assumed otherwise. Of the four monotonic counters under [What composes free](#what-composes-free-and-costs-nothing), exactly one mints an identity that reaches a stored unit — the witness counter, which the deferred B1 scopes; the other three leave watermarks, which combine by maximum and cannot alias. And this phase makes **no claim on [SOUNDNESS.md](../../SOUNDNESS.md)'s *Binder identity* row**: that row is about a checker's own fresh mints aliasing identities in a live scope, which is a within-compilation property, and nothing a stored unit carries participates in it.
 
-**The order is the numbering, and it is a dependency rather than a preference.** B2 cannot refuse an unscoped witness before B1 says what scoped means; B3 settles the key and the trust before B4 stores anything under one. B5 and B6 are audits, independent of the other four and of each other. Unlike [the milestones](#the-milestones), these are not verdict-preserving by construction — they change what the compiler *stores* — so each states its own obligation instead of inheriting one.
-
-The fold changes shape, and this is the whole of it:
-
-```rust
-// curios-pipeline, with this phase in place. Compare the Phase A fold above.
-let mut units: Vec<Unit> = Vec::new();
-let mut globals = Globals::default();
-
-for source in sources {                              // dependency order
-    let unit = match store.unit(source.key()) {      // key: its content, and the certifier
-        Some(unit) => unit,                          // already judged; nothing re-runs
-        None => {
-            let elaborated = elaborate_unit(Scope::over(&units), source, budget)?;
-            judge(&elaborated, &globals)?;           // curios-cert
-            store.put_unit(source.key(), elaborated)? // refuses a positional identity
-        }
-    };
-    globals.mount(&unit);
-    units.push(unit);
-}
-
-// One erased artifact for the whole prefix, keyed on the ordered set above — never per unit.
-let prefix = store
-    .prefix(units.keys())
-    .unwrap_or_else(|| store.put_prefix(units.keys(), erase_prefix(&units, budget)?))?;
-
-// The entry is what you are editing, so it is never cached: it erases onto the prefix, as today.
-let ersd = erase_onto(prefix, &entry, budget)?;
-```
-
-### B1 — a witness is identified by its mount
-
-`Global::Witness(WitnessId)` is minted from one program-global counter, and it is the only name in a stored unit that carries no prefix. Two units elaborated in separate compilations both mint from zero, and `curios-core`'s own note states the consequence: *"aliasing one would silently rebind a coherence-table entry."* That admits rather than crashes, and the prelude's 75 dense identities are exactly what a second unit would land on.
-
-The identity gains its declaring mount. The production surface is three files — the mint in `curios-text`'s `into_core`, the counter beside `fresh_binder`, and the variant with its `Display` in `curios-core` — and at the mint site the declaring mount is one lookup away on the same context, from the table [A1](#a1--a-root-is-a-mounted-prefix) puts there. The archive schema bumps.
-
-**This does not contradict the note that warns about it.** That note refuses a bare per-module *ordinal*, on the grounds that two modules' `witness#0` would alias. A pair — mount and ordinal — is disjoint by exactly the argument [What a unit is](#what-a-unit-is-and-what-a-root-is) already rests on three times.
-
-**It is also what makes a unit cacheable at all, which is the stronger reason.** A witness identity is minted from a counter seeded at `witness_floor`, so the same package takes ids 75 and up when compiled after the prelude and 0 and up when compiled alone — different bytes from identical source. Everything else in the table is already position-independent: no free locals, no metavariable of either kind, and a de Bruijn index carries no identity at all. The witness counter is therefore the *only* thing tying a stored unit to where it sat, and a per-mount ordinal is what lets [B3](#b3--what-replaces-cargo-and-what-the-compiler-starts-believing)'s key be content-derived rather than content-and-position. Record the consequence so nobody preserves it: `Unit::witness_floor` becomes vestigial once each mount numbers its own.
-
-*Must not change:* what any program means. A witness is anonymous and reached only through resolution, so scoping its identity renames nothing a programmer wrote — the claim [A1](#a1--a-root-is-a-mounted-prefix) makes about the root stamps, in the one namespace A1 leaves alone.
-
-*Verified by:* the full gate over a corpus that runs identically, and the prelude re-certifying at 0 refusals against the bumped schema.
-
-**Rejected: renumbering witnesses as a unit is restored.** `cnum_map`, refused here for the third time.
+**B2 and B5 are independent of each other, and B2 is deliberately short of its third row.** Only the witness row waits on scoped witness identities, which is deferred; a check that refuses two of the three today and gains the third when a witness carries its mount is a documented gap rather than a broken precondition, and the alternative — waiting — leaves the two rows nothing watches unwatched for the sake of symmetry.
 
 ### B2 — the rule is checked where a unit is stored
 
-The three `none` rows above are an observation about today's output, and this phase needs them as an invariant. Exactly **one** of them is asserted where an archive is written — `validate_universes`, on the value `build.rs` serializes. The other two are contracts of the passes that produced the value rather than checks on it: zonk refuses an unsolved hole, and nothing whatever watches free locals. `derived_binder_floor` exists precisely because the number a module carries is untrusted; `recheck.rs` says of `Module::binder_floor`, "which nothing checks".
+The three `none` rows above are an observation about today's output, and the rule needs them as an invariant. Exactly **one** of them is asserted where an archive is written — `validate_universes`, on the value `build.rs` serializes. The other two are contracts of the passes that produced the value rather than checks on it: zonk refuses an unsolved hole, and nothing whatever watches free locals. `derived_binder_floor` exists precisely because the number a module carries is untrusted; `recheck.rs` says of `Module::binder_floor`, "which nothing checks".
 
-So the rule becomes one function, called at the one seam where a unit is stored, refusing a unit that carries a free local, a metavariable of either kind, or an unscoped witness. A later change that begins leaving identities in stored output then fails at the boundary that cares, instead of aliasing silently in whatever compilation restores two such units together.
+So the rule becomes one function, refusing a unit that carries a free local or a metavariable of either kind, called at the one seam where a unit is stored — which today is `curios-prelude-archive`'s build script, joining the universe check already standing there. A later change that begins leaving identities in stored output then fails at the boundary that cares, instead of aliasing silently in whatever compilation restores two such units together.
 
-### B3 — what replaces Cargo, and what the compiler starts believing
+The witness row is the same function's third refusal, and it arrives with the [deferred B1](#deferred--the-caching-phase). Writing the function now is what makes that a line rather than a second search for the seam.
 
-Storage and invalidation are ordinary engineering and want no argument here. The key and the enforcement are one question — *what makes a cached verdict unforgeable and unstale* — and answering it turns the verdict from a build artifact into a recorded claim, which is exactly what `curios-prelude`'s documentation says the present design is not, and a step toward the trust posture the prior-art section declines from Lean.
-
-That is not a reason to refuse it. It is a reason to write it down. **A cached verdict is a rule that admits, so it earns an entry in [SOUNDNESS.md](../../SOUNDNESS.md) — its assumption, its grade, and the evidence behind it — and no unit's verdict is cached before that entry exists.**
-
-The key must say *these terms, this certifier*, never a path and never a timestamp. There are two ways to get a key wrong and they have different consequences, which an earlier draft ran together. An **over-broad** key invalidates more than it must and costs time: Cargo's granularity is the crate, which is what made a kernel edit re-elaborate the standard library until `curios-analysis` was split out, and GHC avoids it by fingerprinting each declaration's interface. An **imprecise** key — a path, a timestamp, a number someone must remember to bump — fails to invalidate when it should, and a verdict that survives the change it should not have survived *admits*. Only the second is a soundness question, and it is the one this decision is about.
-
-The terms half is a content fingerprint. For the certifier half the mechanism already exists one crate over: the prelude's source fingerprint is a build script hashing authored sources into an `env!`, and the same over `curios-cert` and `curios-analysis` yields a certifier fingerprint that is *derived* rather than remembered. The archive's hand-bumped schema constant is what the alternative looks like — a number describing a layout and nothing about the kernel's decisions — and a key that must be remembered is one that eventually is not. **State the limit beside the mechanism:** a source fingerprint moves when those sources move, and a dependency bump changes what the certifier decides without touching them, so either the key covers that closure or it is conservative by construction.
-
-### B4 — the erased artifact is keyed on the prefix, not on the unit
-
-Re-erasing one unit costs **608 ms**, measured over the stored prelude in release, against a ~680 ms release compile of a one-line program. So a dependant cannot re-erase its predecessors per compile.
-
-It does not follow that each unit's erased form is stored on its own. `curios_ersd::Module` is five arenas plus five positional `Vec`s, its `Environment` maps a name to bindings holding arena atoms, and two independently erased units both number from zero — so per-unit erased artifacts need a relocation pass, which is `cnum_map` once more and a second way for arena identities to be assigned.
-
-Store the erased artifact against the **ordered set of predecessors** instead. That is today's mechanism unchanged, because the prelude *is* that set while there is one unit, and [A2](#a2--the-scope-holds-n-predecessors) already has the shape: `Resumed` borrows a core per unit and threads exactly one arena. Core and verdict cache per unit, where elaboration's cost is; the erased prefix caches per dependency set. Two artifacts, two keys, both content-derived. Adding a dependency pays one erasure; compiling under an unchanged set pays none.
-
-**This supersedes a sentence under [What composes free](#what-composes-free-and-costs-nothing)** — *"there is no link step to invent at the erased level."* That holds for units erased in one process in dependency order, which is Phase A. Under caching it holds only because of the decision above; per-unit erased artifacts would invent one.
-
-**It also makes one field of [`Unit`](#the-api-stated-so-it-is-not-invented-twice) provisional**, which A3 should know before it writes it: the erased half moves off the unit and onto the prefix.
+*Its obligation:* the refusals are the test. A check that only ever meets conforming input asserts nothing, so each refusal needs a unit built to trip it; the prelude passing is the control, not the evidence.
 
 ### B5 — every "all the names in the program" site becomes a scope question
 
-Retiring the splice broke two such sites — strict positivity's declaration set, and `build_shorten`'s abbreviation table, which also starved `nominal_plicities` beside it. Both were found by a test rather than by inspection. Before caching multiplies what "in scope" can mean, search for `module_symbols`, `nominal_plicities`, bare `items.iter()` and registry iteration, and decide each deliberately.
+Retiring the splice broke two such sites — strict positivity's declaration set, and `build_shorten`'s abbreviation table, which also starved `nominal_plicities` beside it. Both were found by a test rather than by inspection, which is why this is an audit and not a fix: the failure mode is a site nobody thought to look at. [A5](#a5--more-than-one-unit) has already multiplied what "in scope" can mean, so search for `module_symbols`, `nominal_plicities`, bare `items.iter()` and registry iteration, and decide each deliberately.
 
-A first pass says the diagnostic sites in `curios-cert` and `curios-elab` already union the scope's symbols with the module's, and that the one which does not is `curios_core::Module`'s own `Display`, shortening against its own symbols alone. Decide whether that is correct for a value printing itself, rather than inheriting it as an answer.
+A first pass says the diagnostic sites in `curios-cert` and `curios-elab` already union the scope's symbols with the module's — [A4](#a4--the-driver-stops-naming-the-standard-library) made `format_with` N-ary in both for exactly this reason, arriving there rather than here — and that the one which does not is `curios_core::Module`'s own `Display`, shortening against its own symbols alone. Decide whether that is correct for a value printing itself, rather than inheriting it as an answer.
 
-### B6 — what never caches, and what only looks like it
-
-Two of these are link-time by definition and three are not. An earlier draft listed all five together as though one argument covered them.
-
-**Genuinely program-wide:** witness coherence and the visibility fixed point. A coherence violation is only visible where two units meet, and `Audiences::compute` runs over the union of scope and unit. Neither is decidable inside a unit, so neither caches.
-
-**Stable under extension, and so cacheable exactly when the key already covers the predecessors:** strict positivity over the declaration set, declaration sizing, and concept-registry validation. Mounts are disjoint and units are ordered, so nothing later can add a constructor to an earlier unit's inductive or a field to its structure — an earlier unit's answer cannot be falsified by what comes after it. Decide each rather than the group, and move any of them into the paragraph above if it turns out to read something a successor can change.
-
-Either way the win is bounded rather than removed, because per-item typing is the expensive part.
-
-### Out of this phase
-
-- **Restoring lazily.** An earlier draft made Idris 2's blob-until-first-lookup an item of its own, against a recorded 471 ms eager restore. Measured in release, the whole image — bytecheck, plus deserializing the prepared Text state, the Core and the erased prefix — restores in **34.4 ms**, and the erased clone taken per compile is 1.4 ms. There is no lever there, and the prior-art paragraph carrying that figure is corrected.
-- **Containing `/std/Async/block_on`'s constraint graph**, and **parallel per-item certification**. Both are real and neither is unit work; they are recorded in [the appendix](#appendix--measurements-and-findings-that-belong-to-no-phase) with their evidence.
-- **Incrementality *within* a unit.** A different objective. Phase C needs a unit reused whole or recompiled whole, and nothing finer.
+*Its obligation:* every site the audit reaches is recorded with its decision. A site left unchanged because the audit judged it correct is a different outcome from one the audit never reached, and only the record tells them apart.
 
 ## Phase C — the package boundary
 
-**The objective is that a program can depend on code it does not contain, without vendoring it.** That decomposes into how a dependency is *named*, how it is *located*, how the fold is *ordered*, and what the boundary *means*. Phase A answered the naming and most of the meaning, and ordered positionally; Phase B made the second build of a dependency cheap. What is left is smaller than "a manifest" suggests, which is why this phase is no longer named after the file.
+**The objective is that a program can depend on code it does not contain, without vendoring it.** That decomposes into how a dependency is *named*, how it is *located*, how the fold is *ordered*, and what the boundary *means*. Phase A answered the naming and most of the meaning, and ordered positionally. What is left is smaller than "a manifest" suggests, which is why this phase is no longer named after the file. It does not wait on the [deferred caching phase](#deferred--the-caching-phase): uncached, every consumer elaborates every dependency on every build, which is the cost [Packages ship source](#packages-ship-source-not-artifacts) already names and is what makes caching worth doing once there is a dependency graph to do it against.
 
 **A manifest maps a name to a source, and the name becomes a mount.** Binding a logical name to a physical location is Coq's `-Q dir Lib`, which [Prior art](#prior-art) already records as where mounts come from; *who chooses the name* is a separate question that `-Q` answers one way and the section below answers the other. A manifest also declares the unit's dependencies, which is what supplies the fold's order in place of `--unit`'s positional one.
 
@@ -461,7 +386,7 @@ Either way the win is bounded rather than removed, because per-item typing is th
 
 The reason is [Version coexistence is declined](#version-coexistence-is-declined), reached from the other side. If a *consumer* chose the prefix, then when packages `X` and `Y` both depend on `D`, each mounts `D` where it likes, `D` compiles twice under two prefixes, and its types become two nominally distinct families spelled the same. `Show(D/Foo)` through `X` and `Show(D/Foo)` through `Y` are then different keys, so the orphan rule never fires between them and they silently fail to interoperate — the exact failure that decision exists to prevent, arriving through the prefix rather than through the version. Package-chosen naming is what makes a diamond *share* instead of duplicate.
 
-[B1](#b1--a-witness-is-identified-by-its-mount) sharpens it: a mount now scopes witness identities too, so a prefix is load-bearing identity throughout a stored unit rather than a spelling convenience.
+The deferred [B1](#b1--a-witness-is-identified-by-its-mount) sharpens it: a mount would scope witness identities too, so a prefix becomes load-bearing identity throughout a stored unit rather than a spelling convenience.
 
 **The cost, stated rather than discovered.** Two unrelated packages that each call themselves `/json` are permanently incompatible, and no consumer can repair it. That is rustc's position before namespacing; it is survivable with no ecosystem, and both escapes are additive — a namespace convention inside the canonical name, or reference-level aliasing, which `Context::insert_scope` already supports and which the coexistence decision already names.
 
@@ -517,7 +442,7 @@ The prelude mounts three because `/syn` and `/std` are mutually dependent and no
 
 ### Packages ship source, not artifacts
 
-The archive is build-scoped and deliberately not an interchange format; generalizing "one artifact per package" would quietly make it one. Rust ships source and rebuilds, which keeps that constraint honest and keeps Phase B about *local* caching rather than distribution. It also means every consumer elaborates every dependency, so C is unusable at any scale without B: separable in design, coupled in cost.
+The archive is build-scoped and deliberately not an interchange format; generalizing "one artifact per package" would quietly make it one. Rust ships source and rebuilds, which keeps that constraint honest and keeps the [deferred caching phase](#deferred--the-caching-phase) about *local* caching rather than distribution. It also means every consumer elaborates every dependency, so C is correct without a cache and unpleasant at scale without one: separable in design, coupled in cost, and that coupling is what says which of the two comes first.
 
 ## Out of scope
 
@@ -539,19 +464,118 @@ The property an earlier draft asserted here — that N units compile identically
 - **A5:** two units each declaring a `foreign` row surface both in the store `compile_entrypoint` returns, under their own qualified names, and an embedder can bind both.
 - **A5:** a unit referencing a prefix mounted after it is refused by the ordering diagnostic, not by a bare unbound name.
 - **A5:** a unit's `pub` item exposing a dependency's non-`pub` type is refused by the existing audit, with no new rule.
-- **Phase B:** the storage check refuses a unit carrying a free local, a metavariable of either kind, or an unscoped witness, and accepts the prelude — whose derived binder floor is 0 and whose witnesses each carry a mount. The refusals are the test; a check that only ever meets conforming input asserts nothing.
-- **Phase B:** two units elaborated in separate compilations, each declaring witnesses, resolve to their own — the collision B1 removes, written as the fixture that would have caught it.
+- **B2:** the storage check refuses a unit carrying a free local and one carrying a metavariable of either kind, and accepts the prelude, whose derived binder floor is 0. The refusals are the test; a check that only ever meets conforming input asserts nothing. The witness refusal joins them with the deferred B1.
+- **B5:** whatever the audit changes carries the test for the site it changed, and a site it judges already correct carries none — the record is the deliverable there, not a fixture.
+- **Deferred, with the caching phase:** the storage check refuses an unscoped witness; and two units elaborated in separate compilations, each declaring witnesses, resolve to their own — the collision B1 removes, written as the fixture that would have caught it.
 - **Phase C:** two packages depending on one package at the same revision compile it once, and a witness declared in it resolves identically through both. This is the diamond, and it is what consumer-chosen prefixes would silently have duplicated.
 - **Phase C:** two dependents pinning different revisions of one canonical name is refused naming both dependents and both revisions, before any of the three elaborates.
 - **Phase C:** a dependency cycle is refused, and a manifest declaring a prefix another manifest in the graph already claims is the mount collision A5 already diagnoses.
 
 ## Retirement criteria
 
-Before this specification is deleted: `curios-pipeline` names no crate specific to the standard library outside `[dev-dependencies]`; `RootId`, `of_segment` and `root_segment` are gone and no stage derives or stores a root beside the name that determines it; `Unit` is the only artifact a unit produces and `PreludeArchive` is its serialized form; the fold and the `Unit` boundary are recorded in `curios-pipeline`'s and `curios-unit`'s crate documentation, and the mount table's logical-to-physical mapping in `curios-text`'s; no stored unit carries a positional identity and the check enforcing that runs where units are stored, if any part of Phase B has landed, with any cached verdict carrying the [SOUNDNESS.md](../../SOUNDNESS.md) entry B3 requires; and Phase C's manifest, resolver, dependency order and conflict refusal are in place or explicitly abandoned.
+Before this specification is deleted: `curios-pipeline` names no crate specific to the standard library outside `[dev-dependencies]`; `RootId`, `of_segment` and `root_segment` are gone and no stage derives or stores a root beside the name that determines it; `Unit` is the only artifact a unit produces and `PreludeArchive` is its serialized form; the fold and the `Unit` boundary are recorded in `curios-pipeline`'s and `curios-unit`'s crate documentation, and the mount table's logical-to-physical mapping in `curios-text`'s; the storage check runs at every seam a unit is written, refusing the two identity classes nothing watches today; every site B5's audit reached carries its decision; and Phase C's manifest, resolver, dependency order and conflict refusal are in place or explicitly abandoned.
 
-**The appendix is not deleted with this file.** On retirement it becomes a specification of its own: its measurements are the only record of how they were taken, and its findings outlive the unit work that turned them up.
+**Nothing here is owed by the deferred caching phase**, which is not part of this specification's scope any more. Its own criterion travels with it: no stored unit carries a positional identity, and no verdict is cached before the [SOUNDNESS.md](../../SOUNDNESS.md) entry B3 requires exists.
 
-## Appendix — measurements, and findings that belong to no phase
+**The appendix is not deleted with this file.** On retirement it becomes a specification of its own: it carries the caching phase whole, its measurements are the only record of how they were taken, and its findings outlive the unit work that turned them up.
+
+## Appendix — what outlives this specification
+
+### Deferred — the caching phase
+
+**The objective is that a unit compiled by one compilation can be consumed by another**, so that depending on N packages does not cost N elaborations per build. That is the whole of it. It is scaffolding for [Phase C](#phase-c--the-package-boundary) and takes on nothing C does not need.
+
+**Deferred rather than abandoned**, for the reason stated where it left: a cache before Phase C has almost nothing to cache but the prelude, which Cargo already caches. What follows is the specification as it stood, moved rather than rewritten, so that picking it up is reading rather than reconstruction. Every figure it rests on is under [Measurements](#measurements) with its method.
+
+**It does not introduce verdict caching. It removes Cargo from underneath the one that already exists.** The prelude is a cached unit today — `verdicts_from` skips an item every one of whose declared names the environment already answers for, so the archive's items are never re-judged on the compile path, and what makes that sound is that the only crate handing the image out is one whose build script walked it with the kernel first. Cargo supplies four things there: storage (`OUT_DIR` and `include_bytes!`), the key (a schema constant and a source fingerprint), invalidation (the build script's own dependency graph), and enforcement (a crate that does not compile). A unit that is not a crate has none of them. Three are engineering. The fourth is a change to what the compiler believes, and it is stated in B3 rather than inherited. GHC's home/external split arrives as the provenance of a unit — cached or live — not as a second scope type.
+
+**The order is the numbering, and it is a dependency rather than a preference.** B3 settles the key and the trust before B4 stores anything under one; B1 must say what a scoped witness is before [B2](#b2--the-rule-is-checked-where-a-unit-is-stored) — which has landed without it — can refuse an unscoped one. B6 is an audit, independent of the other three.
+
+**One decision is open, and it is deliberately not made here.** Where a Curios store lives, how it is laid out, and whether it is project-local or shared across projects. B3 calls storage and invalidation "ordinary engineering", which is true of the mechanism and untrue of the location: content-derived keys are what make a shared store workable at all, so the key and the location are not independent choices. Deferring the phase is what lets that one be made against a real dependency graph rather than against the single hand-passed unit `--unit` allows today.
+
+The fold changes shape, and this is the whole of it:
+
+```rust
+// curios-pipeline, with this phase in place. Compare the Phase A fold above.
+let mut units: Vec<Unit> = Vec::new();
+let mut globals = Globals::default();
+
+for source in sources {                              // dependency order
+    let unit = match store.unit(source.key()) {      // key: its content, and the certifier
+        Some(unit) => unit,                          // already judged; nothing re-runs
+        None => {
+            let elaborated = elaborate_unit(Scope::over(&units), source, budget)?;
+            judge(&elaborated, &globals)?;           // curios-cert
+            store.put_unit(source.key(), elaborated)? // refuses a positional identity
+        }
+    };
+    globals.mount(&unit);
+    units.push(unit);
+}
+
+// One erased artifact for the whole prefix, keyed on the ordered set above — never per unit.
+let prefix = store
+    .prefix(units.keys())
+    .unwrap_or_else(|| store.put_prefix(units.keys(), erase_prefix(&units, budget)?))?;
+
+// The entry is what you are editing, so it is never cached: it erases onto the prefix, as today.
+let ersd = erase_onto(prefix, &entry, budget)?;
+```
+
+#### B1 — a witness is identified by its mount
+
+`Global::Witness(WitnessId)` is minted from one program-global counter, and it is the only name in a stored unit that carries no prefix. Two units elaborated in separate compilations both mint from zero, and `curios-core`'s own note states the consequence: *"aliasing one would silently rebind a coherence-table entry."* That admits rather than crashes, and the prelude's 75 dense identities are exactly what a second unit would land on.
+
+The identity gains its declaring mount. The production surface is three files — the mint in `curios-text`'s `into_core`, the counter beside `fresh_binder`, and the variant with its `Display` in `curios-core` — and at the mint site the declaring mount is one lookup away on the same context, from the table [A1](#a1--a-root-is-a-mounted-prefix) puts there. The archive schema bumps.
+
+**This does not contradict the note that warns about it.** That note refuses a bare per-module *ordinal*, on the grounds that two modules' `witness#0` would alias. A pair — mount and ordinal — is disjoint by exactly the argument [What a unit is](#what-a-unit-is-and-what-a-root-is) already rests on three times.
+
+**It is also what makes a unit cacheable at all, which is the stronger reason.** A witness identity is minted from a counter seeded at `witness_floor`, so the same package takes ids 75 and up when compiled after the prelude and 0 and up when compiled alone — different bytes from identical source. Everything else in the table is already position-independent: no free locals, no metavariable of either kind, and a de Bruijn index carries no identity at all. The witness counter is therefore the *only* thing tying a stored unit to where it sat, and a per-mount ordinal is what lets [B3](#b3--what-replaces-cargo-and-what-the-compiler-starts-believing)'s key be content-derived rather than content-and-position. Record the consequence so nobody preserves it: `Unit::witness_floor` becomes vestigial once each mount numbers its own.
+
+*Must not change:* what any program means. A witness is anonymous and reached only through resolution, so scoping its identity renames nothing a programmer wrote — the claim [A1](#a1--a-root-is-a-mounted-prefix) makes about the root stamps, in the one namespace A1 leaves alone.
+
+*Verified by:* the full gate over a corpus that runs identically, and the prelude re-certifying at 0 refusals against the bumped schema.
+
+**Rejected: renumbering witnesses as a unit is restored.** `cnum_map`, refused here for the third time.
+
+#### B3 — what replaces Cargo, and what the compiler starts believing
+
+Storage and invalidation are ordinary engineering and want no argument here. The key and the enforcement are one question — *what makes a cached verdict unforgeable and unstale* — and answering it turns the verdict from a build artifact into a recorded claim, which is exactly what `curios-prelude`'s documentation says the present design is not, and a step toward the trust posture the prior-art section declines from Lean.
+
+That is not a reason to refuse it. It is a reason to write it down. **A cached verdict is a rule that admits, so it earns an entry in [SOUNDNESS.md](../../SOUNDNESS.md) — its assumption, its grade, and the evidence behind it — and no unit's verdict is cached before that entry exists.**
+
+The key must say *these terms, this certifier*, never a path and never a timestamp. There are two ways to get a key wrong and they have different consequences, which an earlier draft ran together. An **over-broad** key invalidates more than it must and costs time: Cargo's granularity is the crate, which is what made a kernel edit re-elaborate the standard library until `curios-analysis` was split out, and GHC avoids it by fingerprinting each declaration's interface. An **imprecise** key — a path, a timestamp, a number someone must remember to bump — fails to invalidate when it should, and a verdict that survives the change it should not have survived *admits*. Only the second is a soundness question, and it is the one this decision is about.
+
+The terms half is a content fingerprint. For the certifier half the mechanism already exists one crate over: the prelude's source fingerprint is a build script hashing authored sources into an `env!`, and the same over `curios-cert` and `curios-analysis` yields a certifier fingerprint that is *derived* rather than remembered. The archive's hand-bumped schema constant is what the alternative looks like — a number describing a layout and nothing about the kernel's decisions — and a key that must be remembered is one that eventually is not. **State the limit beside the mechanism:** a source fingerprint moves when those sources move, and a dependency bump changes what the certifier decides without touching them, so either the key covers that closure or it is conservative by construction.
+
+#### B4 — the erased artifact is keyed on the prefix, not on the unit
+
+Re-erasing one unit costs **608 ms**, measured over the stored prelude in release, against a ~680 ms release compile of a one-line program. So a dependant cannot re-erase its predecessors per compile.
+
+It does not follow that each unit's erased form is stored on its own. `curios_ersd::Module` is five arenas plus five positional `Vec`s, its `Environment` maps a name to bindings holding arena atoms, and two independently erased units both number from zero — so per-unit erased artifacts need a relocation pass, which is `cnum_map` once more and a second way for arena identities to be assigned.
+
+Store the erased artifact against the **ordered set of predecessors** instead. That is today's mechanism unchanged, because the prelude *is* that set while there is one unit, and [A2](#a2--the-scope-holds-n-predecessors) already has the shape: `Resumed` borrows a core per unit and threads exactly one arena. Core and verdict cache per unit, where elaboration's cost is; the erased prefix caches per dependency set. Two artifacts, two keys, both content-derived. Adding a dependency pays one erasure; compiling under an unchanged set pays none.
+
+**This supersedes a sentence under [What composes free](#what-composes-free-and-costs-nothing)** — *"there is no link step to invent at the erased level."* That holds for units erased in one process in dependency order, which is Phase A. Under caching it holds only because of the decision above; per-unit erased artifacts would invent one.
+
+**It also makes one field of [`Unit`](#the-api-stated-so-it-is-not-invented-twice) provisional**, which A3 landed knowing: the erased half moves off the unit and onto the prefix.
+
+#### B6 — what never caches, and what only looks like it
+
+Two of these are link-time by definition and three are not. An earlier draft listed all five together as though one argument covered them.
+
+**Genuinely program-wide:** witness coherence and the visibility fixed point. A coherence violation is only visible where two units meet, and `Audiences::compute` runs over the union of scope and unit. Neither is decidable inside a unit, so neither caches.
+
+**Stable under extension, and so cacheable exactly when the key already covers the predecessors:** strict positivity over the declaration set, declaration sizing, and concept-registry validation. Mounts are disjoint and units are ordered, so nothing later can add a constructor to an earlier unit's inductive or a field to its structure — an earlier unit's answer cannot be falsified by what comes after it. Decide each rather than the group, and move any of them into the paragraph above if it turns out to read something a successor can change.
+
+Either way the win is bounded rather than removed, because per-item typing is the expensive part.
+
+#### Out of the caching phase
+
+- **Restoring lazily.** An earlier draft made Idris 2's blob-until-first-lookup an item of its own, against a recorded 471 ms eager restore. Measured in release, the whole image — bytecheck, plus deserializing the prepared Text state, the Core and the erased prefix — restores in **34.4 ms**, and the erased clone taken per compile is 1.4 ms. There is no lever there, and the prior-art paragraph carrying that figure is corrected.
+- **Containing `/std/Async/block_on`'s constraint graph**, and **parallel per-item certification**. Both are real and neither is unit work; they are recorded under [Findings that belong to no phase](#findings-that-belong-to-no-phase) with their evidence.
+- **Incrementality *within* a unit.** A different objective. Phase C needs a unit reused whole or recompiled whole, and nothing finer.
+
 
 ### Measurements
 
@@ -576,8 +600,8 @@ Shape of the stored prelude, same run: 1079 items and 1094 definitions; 75 witne
 
 **Parallel per-item certification.** Split the certifier's walk into a serial define-all phase and a parallel check-all phase, one `Kernel` per item over a shared read-only environment, verdicts sorted by item index for determinism. Per-item kernels settle binder identity without arithmetic: each is seeded at the same derived floor, above every identity in the module, so two workers minting the same index never share a scope. A shared counter is ruled out — nondeterministic under work stealing, and the archive must stay byte-reproducible. Any parallelism must be feature-gated native-only, because `curios-web` compiles `curios-cert` to `wasm32-unknown-unknown`, which has no threads.
 
-*Declined on the measurement above, not merely parked.* The original estimate — a 60–70 s win against a ~100 s loop — cannot be right, because certifying a whole unit takes 11.8 s and nothing can save 60 s of it. What the measurement changes is not the size of the prize but who pays: Phase B caches a verdict against its terms and its certifier, so a dependency is certified once when it is stored and never again while both hold. Spending concurrency **inside the trusted base** — where *parallel verdicts equal serial verdicts* becomes something to prove — to speed up a once-per-dependency cost is the wrong trade. **Revisit if** first-build latency for a dependency, or a compiler upgrade re-certifying every cached dependency at once, becomes the complaint; and try narrowing what an upgrade invalidates before reaching for threads, since that is sequential and outside the trusted base.
+*Declined on the measurement above, not merely parked.* The original estimate — a 60–70 s win against a ~100 s loop — cannot be right, because certifying a whole unit takes 11.8 s and nothing can save 60 s of it. What the measurement changes is not the size of the prize but who pays: the deferred caching phase caches a verdict against its terms and its certifier, so a dependency is certified once when it is stored and never again while both hold. Spending concurrency **inside the trusted base** — where *parallel verdicts equal serial verdicts* becomes something to prove — to speed up a once-per-dependency cost is the wrong trade. **Revisit if** first-build latency for a dependency, or a compiler upgrade re-certifying every cached dependency at once, becomes the complaint; and try narrowing what an upgrade invalidates before reaching for threads, since that is sequential and outside the trusted base.
 
-**The `O(scope)` per-compile prologues.** `erase_module_with_prelude` projects the whole predecessor Core and re-seeds the elaboration context with every one of its definitions, and `Globals::of` copies every registry and builds a map of every definition — both on every compile, today, with one predecessor. Read from the code and **not measured**. Recorded because Phase C multiplies each by the number of dependencies, and because measuring before designing is what removed three items from Phase B.
+**The `O(scope)` per-compile prologues.** `erase_module_with_prelude` projects the whole predecessor Core and re-seeds the elaboration context with every one of its definitions, and `Globals::of` copies every registry and builds a map of every definition — both on every compile, today, with one predecessor. Read from the code and **not measured**. Recorded because Phase C multiplies each by the number of dependencies, and because measuring before designing is what removed three items from the caching phase.
 
 **Incrementality within a unit.** Not declined on the merits — a different objective. Phase C needs a unit reused whole or recompiled whole; per-declaration fingerprinting, which is GHC's model, answers a question about editing your own code that nothing in these phases asks.
