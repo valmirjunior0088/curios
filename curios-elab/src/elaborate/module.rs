@@ -1,7 +1,7 @@
 use {
     super::{Context, Error, Mode, check, elaborate},
     crate::{
-        Established, ZonkedTypes, check_concept_registry, check_is_sort, check_positivity,
+        Established, Zonked, check_concept_registry, check_is_sort, check_positivity,
         check_proof_totality, check_rec_item_totality, check_type_totality,
         check_written_type_totality, collect_goal_reports, finish_deferred_witnesses, is_prop,
         record_definition_totality, record_totality, reduce_with, register_witness,
@@ -1130,7 +1130,7 @@ fn finalize_and_check(
     // One cache across both: they are seeded from the same recorded entries, so a cache each zonks every distinct recorded type twice.
     // Safety: the cache is keyed on `Term`, which carries `OnceCell` scalar caches and so trips Clippy's interior-mutability warning. The logical value is fully immutable, and hashing and equality stay stable across those caches filling — the caveat every `Term`-keyed map in this module carries.
     #[allow(clippy::mutable_key_type)]
-    let mut zonked = ZonkedTypes::default();
+    let mut zonked = Zonked::default();
     let obligations = [
         check_type_totality(context, &module, inherited, &mut zonked),
         check_proof_totality(context, &module, inherited, &mut zonked),

@@ -252,12 +252,29 @@ fn faults(
     faults
 }
 
-/// The zonked form of every recorded type, shared across both erased-half obligations.
+/// Every term either erased-half obligation has zonked, shared across both of them and across both the types they test and the terms they keep.
 ///
-/// Not an optimization detail but a contract between them. (T) and (V) are seeded from the *same* [`Context::record_checked`](crate::Context) entries and each needs the zonked type of each entry, so a memo local to either means the same distinct types are zonked twice per compilation. Measured over the prelude: 185,271 entries collapse to 31,955 distinct recorded types, and zonking them cost 27.6 s in one pass and 27.3 s in the other — the same work, to three digits, done twice.
+/// Not an optimization detail but a contract. (T) and (V) are seeded from the *same* [`Context::record_checked`](crate::Context) entries, and each needs the zonked type of every entry plus the zonked term of every entry it keeps — so a cache local to either does the same work twice. Measured over the prelude: 185,271 entries collapse to 31,955 distinct recorded types, zonked at 27.6 s in one pass and 27.3 s in the other, the same work to three digits; and 59,818 kept positions collapse to 17,051 distinct terms.
 ///
-/// Sharing is sound for the same reason either pass could memoize alone: zonk is a pure function of the solution set, and the solution set is final once `zonk_module` has run. The cache is threaded rather than the two walks being merged, because the questions stay separate — (T) reads a type position syntactically and (V) cannot be re-derived that way at all.
-pub type ZonkedTypes = HashMap<Term, Term>;
+/// One map serves types and terms alike because zonk is a *function of its argument*: a term appearing in both populations has one zonked form, and sharing the entry is correct rather than merely convenient. Sound to share across the passes for the reason either could memoize alone — the solution set is final once `zonk_module` has run.
+///
+/// The cost is memory. This is held across both obligations rather than dropped between them, and the prelude's peak rose 52 MiB when it started spanning them. That is the trade; the cache is not free, it is cheaper than the work it removes.
+pub type Zonked = HashMap<Term, Term>;
+
+/// `term` zonked, through `cache`.
+///
+/// The four call sites that need this are two types and two terms across the two obligations; before this they were four copies of the same match, two of which had no cache at all.
+// Safety: the cache is keyed on `Term`, which carries `OnceCell` scalar caches and so trips Clippy's interior-mutability warning. The logical value is fully immutable, and hashing and equality stay stable across those caches filling — the caveat every `Term`-keyed map in this module carries.
+#[allow(clippy::mutable_key_type)]
+fn zonked(context: &Context, cache: &mut Zonked, term: &Term) -> Result<Term, Error> {
+    if let Some(done) = cache.get(term) {
+        return Ok(done.clone());
+    }
+
+    let done = zonk(context, term)?;
+    cache.insert(term.clone(), done.clone());
+    Ok(done)
+}
 
 /// Obligation **(T)**: everything a type position reaches must be total.
 ///
@@ -268,11 +285,11 @@ pub fn check_type_totality(
     context: &mut Context,
     module: &Module,
     inherited: &BTreeMap<Global, Totality>,
-    zonked: &mut ZonkedTypes,
+    cache: &mut Zonked,
 ) -> Result<(), Error> {
     curios_profile::profile!("check_type_totality");
     let mut positions = type_positions(module);
-    positions.extend(checked_type_positions(context, zonked)?);
+    positions.extend(checked_type_positions(context, cache)?);
     report(context, module, &positions, inherited, Erased::Type)
 }
 
@@ -285,7 +302,7 @@ pub fn check_type_totality(
 #[allow(clippy::mutable_key_type)]
 fn checked_type_positions(
     context: &mut Context,
-    zonked: &mut ZonkedTypes,
+    cache: &mut Zonked,
 ) -> Result<Vec<Position>, Error> {
     let settled = context.checked().to_vec();
     // One label per elaboration site, not per position: `Context::record_checked` already stores an `Rc<str>` site, and many recorded terms share one.
@@ -295,14 +312,7 @@ fn checked_type_positions(
 
     for (term, type_, site) in settled {
         // Once per distinct recorded type rather than once per recorded term — see `checked_proof_positions`, which memoizes the same call for the same reason. This walk reads `checked` rather than draining it, because (V)'s seeding still needs it.
-        let type_ = match zonked.get(&type_) {
-            Some(done) => done.clone(),
-            None => {
-                let done = zonk(context, &type_)?;
-                zonked.insert(type_, done.clone());
-                done
-            }
-        };
+        let type_ = zonked(context, cache, &type_)?;
         // The term *is* a type exactly when its own type is a sort. A universe instance wraps one without changing that.
         let sort = match &*type_ {
             Subterm::Type(_) | Subterm::Prop => true,
@@ -313,7 +323,7 @@ fn checked_type_positions(
         };
         if sort {
             positions.push(Position {
-                term: zonk(context, &term)?,
+                term: zonked(context, cache, &term)?,
                 site: Rc::clone(
                     sites
                         .entry(site.clone())
@@ -323,7 +333,7 @@ fn checked_type_positions(
         }
     }
 
-    curios_profile::sample!("totality::type_distinct_raw", zonked.len());
+    curios_profile::sample!("totality::type_distinct_raw", cache.len());
     curios_profile::sample!("totality::type_sites", sites.len());
     curios_profile::sample!("totality::checked_type_positions", positions.len());
     Ok(positions)
@@ -338,10 +348,10 @@ pub fn check_proof_totality(
     context: &mut Context,
     module: &Module,
     inherited: &BTreeMap<Global, Totality>,
-    zonked: &mut ZonkedTypes,
+    cache: &mut Zonked,
 ) -> Result<(), Error> {
     curios_profile::profile!("check_proof_totality");
-    let positions = checked_proof_positions(context, zonked)?;
+    let positions = checked_proof_positions(context, cache)?;
     report(context, module, &positions, inherited, Erased::Proof)
 }
 
@@ -356,7 +366,7 @@ pub fn check_proof_totality(
 #[allow(clippy::mutable_key_type)]
 fn checked_proof_positions(
     context: &mut Context,
-    zonked: &mut ZonkedTypes,
+    cache: &mut Zonked,
 ) -> Result<Vec<Position>, Error> {
     let checked = context.take_checked();
     // One label per elaboration site, not per position: `Context::record_checked` already stores an `Rc<str>` site, and many recorded terms share one.
@@ -368,14 +378,7 @@ fn checked_proof_positions(
         // Two memos, keyed on the two different terms, because they save two different things. `memo` answers `is_prop` once per *zonked* type, as the doc above says. `zonked` answers the zonk once per *raw* type, which is the coarser question and the one that was being re-asked: a recorded type is the type elaboration wrote down, and thousands of terms are checked against the same one — 185,271 entries over the prelude, measured before this memo existed. Keying the outer memo on the raw type rather than folding both into one map is what keeps `is_prop`'s dedup exactly as wide as it was — raw types that differ but zonk alike still share a verdict.
         //
         // Sound because zonk is a pure function of the solution set, and the solution set is final here: `zonk_module` has run, and `is_prop` sees only zonked — hence metavariable-free — types, so it cannot solve anything that would make an earlier answer stale.
-        let type_ = match zonked.get(&type_) {
-            Some(done) => done.clone(),
-            None => {
-                let done = zonk(context, &type_)?;
-                zonked.insert(type_, done.clone());
-                done
-            }
-        };
+        let type_ = zonked(context, cache, &type_)?;
         let prop = match memo.get(&type_) {
             Some(prop) => *prop,
             None => {
@@ -387,7 +390,7 @@ fn checked_proof_positions(
         };
         if prop {
             positions.push(Position {
-                term: zonk(context, &term)?,
+                term: zonked(context, cache, &term)?,
                 site: Rc::clone(
                     sites
                         .entry(site.clone())
@@ -397,7 +400,7 @@ fn checked_proof_positions(
         }
     }
 
-    curios_profile::sample!("totality::proof_distinct_raw", zonked.len());
+    curios_profile::sample!("totality::proof_distinct_raw", cache.len());
     curios_profile::sample!("totality::proof_distinct_zonked", memo.len());
     curios_profile::sample!("totality::proof_sites", sites.len());
     curios_profile::sample!("totality::checked_proof_positions", positions.len());
