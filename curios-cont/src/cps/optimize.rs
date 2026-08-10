@@ -36,6 +36,7 @@ pub(super) const ROUND_LIMIT: usize = 1024;
 
 /// Run the verifier-delimited, FIFO high-CPS simplifier. Phase analyses are rebuilt at deterministic boundaries instead of being kept as shadow state.
 pub fn optimize(module: &mut CpsModule) {
+    curios_profile::profile!("cont_optimize");
     module
         .verify()
         .expect("invalid high CPS before optimization");
