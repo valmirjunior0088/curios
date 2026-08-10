@@ -97,7 +97,7 @@ mod tests {
         curios_core::Global,
         curios_core::Item,
         curios_core::Term,
-        curios_elab::DEFAULT_STEP_BUDGET,
+        curios_elab::{Context, DEFAULT_STEP_BUDGET, ErasedUnit, Resumed, erase_unit},
         std::collections::{BTreeMap, BTreeSet},
     };
 
@@ -314,6 +314,102 @@ mod tests {
                     DEFAULT_STEP_BUDGET,
                     &Globals::default()
                 ),
+            );
+        });
+    }
+
+    /// Every figure the projects specification's appendix leans on, taken over the stored image.
+    ///
+    /// # Why it is in-tree
+    ///
+    /// That appendix exists because two items in a predecessor document were designed against unattributed numbers and both were wrong — a 471 ms eager restore that is 34.4 ms, and an estimated 60–70 s saving on an operation that takes 11.8 s. Its own remedy was to record the date, the profile, and how to retake each figure; but "how to retake it" was a throwaway probe nobody kept, so retaking meant writing it again, and a figure nobody can cheaply reproduce is a figure that quietly decays into a claim about history. This is that probe, kept.
+    ///
+    /// # How to read it
+    ///
+    /// Numbers are only comparable to the recorded ones in `--release`, because these are the figures taken over the *stored* image and a debug build measures a different program:
+    ///
+    /// ```sh
+    /// cargo test --release --package curios-prelude-archive -- --ignored --nocapture stored_prelude_measurements
+    /// ```
+    ///
+    /// It asserts nothing and cannot fail — a measurement that fails is a measurement with an opinion. What it does not cover is stated where it prints: the elaboration figures come from the build script's own `profile.tsv` and need no probe, and the witness inventory B1 turns on is a term walk this does not do.
+    #[test]
+    #[ignore = "measurement: reports timings over the stored image rather than asserting"]
+    fn stored_prelude_measurements() {
+        // A restore happens once per thread, so a *cold* one needs a thread that has not had one — measuring it on this thread would measure a thread-local read.
+        let cold = std::thread::spawn(|| {
+            let start = std::time::Instant::now();
+            with_prelude(|_| ());
+
+            start.elapsed()
+        })
+        .join()
+        .expect("the restoring thread");
+
+        with_prelude(|prelude| {
+            let core = prelude.core();
+
+            let start = std::time::Instant::now();
+            drop(prelude.ersd());
+            let clone = start.elapsed();
+
+            let start = std::time::Instant::now();
+            erase_unit(
+                &mut Context::new(DEFAULT_STEP_BUDGET, SYNTAX),
+                Resumed::of(&[], ErasedUnit::default()),
+                core,
+                None,
+            )
+            .expect("the stored prelude re-erases");
+            let erasure = start.elapsed();
+
+            let start = std::time::Instant::now();
+            let verdicts = recheck_module_verdicts(core, DEFAULT_STEP_BUDGET, &Globals::default());
+            let certification = start.elapsed();
+
+            let definitions: usize = core
+                .items
+                .iter()
+                .map(|item| match item {
+                    Item::Let(_) => 1,
+                    Item::Rec(rec) => rec.definitions().len(),
+                })
+                .sum();
+
+            println!("\n=== timings, over the stored image ===");
+            println!("  cold restore                 {:>10.1?}", cold);
+            println!("  erased-prefix clone          {:>10.1?}", clone);
+            println!("  re-erasing one whole unit    {:>10.1?}", erasure);
+            println!(
+                "  certifying one whole unit    {:>10.1?}  ({} refusals)",
+                certification,
+                verdicts.len()
+            );
+
+            println!("\n=== shape ===");
+            println!("  items                        {:>10}", core.items.len());
+            println!("  definitions                  {definitions:>10}");
+            println!(
+                "  witnesses                    {:>10}",
+                core.witnesses.len()
+            );
+            println!(
+                "  inductives                   {:>10}",
+                core.induct_decls.len()
+            );
+            println!(
+                "  structures                   {:>10}",
+                core.struct_decls.len()
+            );
+            println!("  concepts                     {:>10}", core.concepts.len());
+            println!(
+                "  derived binder floor         {:>10}   (lowering watermark {})",
+                curios_core::derived_binder_floor(core),
+                core.binder_floor
+            );
+
+            println!(
+                "\nNot measured here: the elaboration figures, which the build script already writes to `OUT_DIR/profile.tsv` (retake with `cargo build --release --package curios-prelude --features profile`), and the witness inventory B1 needs, which is a term walk.\n"
             );
         });
     }
