@@ -1,9 +1,9 @@
 [package]
-name = "curios-project"
+name = "curios-package"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Curios projects: the manifest, the governance walk, the resolver, and the store"
+description = "Curios packages: the manifest, the governance walk, the dependency resolver, and the store"
 
 [lints]
 workspace = true

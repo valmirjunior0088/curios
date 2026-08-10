@@ -469,10 +469,10 @@ dependencies = [
  "curios-cont",
  "curios-core",
  "curios-elab",
+ "curios-package",
  "curios-pipeline",
  "curios-prelude",
  "curios-profile",
- "curios-project",
  "curios-runtime",
  "curios-text",
  "curios-unit",
@@ -596,6 +596,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "curios-package"
+version = "0.8.1"
+dependencies = [
+ "curios-base",
+ "curios-text",
+ "serde",
+ "toml",
+]
+
+[[package]]
 name = "curios-pipeline"
 version = "0.8.1"
 dependencies = [
@@ -645,16 +655,6 @@ version = "0.8.1"
 dependencies = [
  "tracing",
  "tracing-subscriber",
-]
-
-[[package]]
-name = "curios-project"
-version = "0.8.1"
-dependencies = [
- "curios-base",
- "curios-text",
- "serde",
- "toml",
 ]
 
 [[package]]

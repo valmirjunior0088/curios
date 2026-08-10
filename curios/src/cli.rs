@@ -11,10 +11,14 @@ static NAMES: LazyLock<String> = LazyLock::new(|| Stage::NAMES.join(","));
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Mode {
-    #[command(about = "Compile and execute the entrypoint")]
+    /// Three forms, dispatched lexically: no argument is the governing package's default executable, an identifier is one it declares by name, and anything ending in `.crs` or holding a path separator is a bare file — standalone everywhere, captured by no manifest.
+    #[command(about = "Compile and execute an executable, or a .crs file")]
     Run {
-        #[arg(value_name = "PATH", help = "Path to the .crs entrypoint file")]
-        input_path: PathBuf,
+        #[arg(
+            value_name = "TARGET",
+            help = "A declared executable's name, or a path to a .crs file (default: the governing package's sole or `default` executable)"
+        )]
+        target: Option<String>,
 
         #[arg(
             trailing_var_arg = true,
@@ -25,16 +29,20 @@ pub(crate) enum Mode {
         args: Vec<String>,
     },
 
-    #[command(about = "Compile the entrypoint to a native executable")]
+    /// The same three forms `run` dispatches, for the same reason: what a bare invocation means inside a package should not depend on which subcommand asked.
+    #[command(about = "Compile an executable, or a .crs file, to a native executable")]
     Compile {
-        #[arg(value_name = "PATH", help = "Path to the .crs entrypoint file")]
-        input_path: PathBuf,
+        #[arg(
+            value_name = "TARGET",
+            help = "A declared executable's name, or a path to a .crs file (default: the governing package's sole or `default` executable)"
+        )]
+        target: Option<String>,
 
         #[arg(
             short = 'o',
             long = "output",
             value_name = "PATH",
-            help = "Write the executable to PATH (default: the input file stem)"
+            help = "Write the executable to PATH (default: the executable's declared name, or the input file's stem)"
         )]
         output_path: Option<PathBuf>,
     },
@@ -95,6 +103,14 @@ pub(crate) struct Cli {
         help = "Mount the package in DIR before the entry program; repeat for more, in dependency order"
     )]
     pub(crate) units: Vec<PathBuf>,
+
+    /// The explicit override for scripting. It overrides exactly the search: which umbrella governs is still enumeration's answer, because a manifest cannot declare itself governed.
+    #[arg(
+        long = "manifest",
+        value_name = "PATH",
+        help = "Use this curios.toml as the governing package's, instead of walking upward for one"
+    )]
+    pub(crate) manifest: Option<PathBuf>,
 
     #[command(subcommand)]
     pub(crate) mode: Mode,

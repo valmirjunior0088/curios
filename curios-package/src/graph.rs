@@ -1,0 +1,287 @@
+//! The order a compilation folds its units in.
+//!
+//! **Membership organizes; dependency compiles** (law 3). The umbrella's tree decides where the store goes and what a marker may resolve to; only declared dependencies order compilation, and enumerating a member creates no edge. What comes out of here is a topological sort over the edges packages declared for themselves, with the governing package last.
+//!
+//! Exact pins mean there is nothing to solve, only to realize: a name resolves to one place or the resolution is refused. Every refusal names both parties — both dependents and both pins for a conflict, the whole chain for a cycle — and all of them fire before any package involved elaborates (law 4).
+
+#[cfg(test)]
+mod tests;
+
+use {
+    crate::{
+        Dependency, Governing, MANIFEST, Manifest, Package, TreeHash, package_source, spelling,
+    },
+    curios_base::Qualifier,
+    curios_text::RootSource,
+    std::{
+        collections::BTreeMap,
+        path::{Path, PathBuf},
+    },
+};
+
+/// Every unit the governing package reaches, in the order a compilation folds them: each package after everything it depends on, and the governing package itself last.
+pub fn order(governing: &Governing) -> Result<Vec<RootSource>, String> {
+    let mut walk = Walk {
+        members: members(governing)?,
+        governing,
+        placed: BTreeMap::new(),
+        open: Vec::new(),
+        order: Vec::new(),
+    };
+
+    let source = walk.enter(&governing.package, &governing.directory)?;
+    walk.order.push(source);
+
+    Ok(walk.order)
+}
+
+/// Each member's declared name, and the directory its manifest sits in.
+///
+/// Read once, because every marker in the graph is answered against it: a `member` row asks whether this name is enumerated, and a direct pin asks the same question in order to be told it may not answer it itself.
+fn members(governing: &Governing) -> Result<BTreeMap<Qualifier, PathBuf>, String> {
+    let Some(umbrella) = &governing.umbrella else {
+        return Ok(BTreeMap::new());
+    };
+
+    let mut members = BTreeMap::new();
+
+    for member in &umbrella.members {
+        let directory = governing.root.join(member);
+
+        let Manifest::Package(package) = Manifest::from_path(&directory.join(MANIFEST))? else {
+            return Err(format!(
+                "the member {} declares an umbrella, and umbrellas do not nest",
+                member.display()
+            ));
+        };
+
+        if let Some(earlier) = members.insert(package.name.clone(), directory.clone()) {
+            return Err(format!(
+                "two members declare the name {:?}: {} and {}",
+                spelling(&package.name),
+                earlier.display(),
+                directory.display()
+            ));
+        }
+    }
+
+    Ok(members)
+}
+
+/// A depth-first walk over declared dependencies, accumulating the fold order behind it.
+struct Walk<'a> {
+    governing: &'a Governing,
+    /// The umbrella's members by declared name — empty when no umbrella governs, which is what makes every marker a mismatch there.
+    members: BTreeMap<Qualifier, PathBuf>,
+    /// Where each canonical name resolved, and who said so. Both halves are the conflict refusal.
+    placed: BTreeMap<Qualifier, Placed>,
+    /// The names on the walk's own stack, which is the cycle.
+    open: Vec<Qualifier>,
+    /// The fold order, predecessors first.
+    order: Vec<RootSource>,
+}
+
+/// Where one canonical name resolved, and what resolved it.
+struct Placed {
+    directory: PathBuf,
+    /// The pin that fixed it, for a fetchable source. Live code has no pin, so two live rows agree only by resolving to one place.
+    pin: Option<Pin>,
+    /// The package whose manifest said so.
+    dependent: Qualifier,
+}
+
+/// An exact pin: the instruction that fetches it, and the criterion that accepts it.
+#[derive(PartialEq, Eq)]
+struct Pin {
+    rev: String,
+    hash: TreeHash,
+}
+
+impl Walk<'_> {
+    /// Resolve everything `package` depends on into the order behind it, and hand back its own resolver.
+    fn enter(&mut self, package: &Package, directory: &Path) -> Result<RootSource, String> {
+        self.open.push(package.name.clone());
+
+        for (name, row) in &package.dependencies {
+            self.edge(package, directory, name, row)?;
+        }
+
+        self.open.pop();
+
+        package_source(package, directory)
+    }
+
+    /// Follow one declared edge: check it against every other claim on that name, locate what it names, and walk it.
+    fn edge(
+        &mut self,
+        dependent: &Package,
+        from: &Path,
+        name: &Qualifier,
+        row: &Dependency,
+    ) -> Result<(), String> {
+        // The pin is read off the row, before anything is located: two dependents disagreeing about one name is refused whether or not either has been materialized, which is what "before any of the three elaborates" has to mean.
+        let pin = match row {
+            Dependency::Git { rev, hash, .. } => Some(Pin {
+                rev: rev.clone(),
+                hash: hash.clone(),
+            }),
+            _ => None,
+        };
+
+        if let Some(earlier) = self.placed.get(name) {
+            if let (Some(earlier_pin), Some(pin)) = (&earlier.pin, &pin) {
+                return match earlier_pin == pin {
+                    // A diamond shares its point rather than duplicating it, which is the whole reason a package names itself.
+                    true => Ok(()),
+                    false => Err(format!(
+                        "the dependency {:?} is pinned two ways: {} by {:?}, and {} by {:?}",
+                        spelling(name),
+                        describe(earlier_pin),
+                        spelling(&earlier.dependent),
+                        describe(&pin),
+                        spelling(&dependent.name)
+                    )),
+                };
+            }
+
+            let directory = self.locate(dependent, from, name, row)?;
+
+            return match earlier.directory == directory {
+                true => Ok(()),
+                false => Err(format!(
+                    "the dependency {:?} resolves two ways: {} by {:?}, and {} by {:?}",
+                    spelling(name),
+                    earlier.directory.display(),
+                    spelling(&earlier.dependent),
+                    directory.display(),
+                    spelling(&dependent.name)
+                )),
+            };
+        }
+
+        if self.open.contains(name) {
+            return Err(format!(
+                "the dependencies cycle: {} depends on {:?} again",
+                self.open
+                    .iter()
+                    .map(|open| format!("{:?}", spelling(open)))
+                    .collect::<Vec<_>>()
+                    .join(" depends on "),
+                spelling(name)
+            ));
+        }
+
+        let directory = self.locate(dependent, from, name, row)?;
+
+        self.placed.insert(
+            name.clone(),
+            Placed {
+                directory: directory.clone(),
+                pin,
+                dependent: dependent.name.clone(),
+            },
+        );
+
+        let Manifest::Package(package) = Manifest::from_path(&directory.join(MANIFEST))? else {
+            return Err(format!(
+                "the dependency {:?} resolves to {}, which declares an umbrella; a dependency is a package",
+                spelling(name),
+                directory.display()
+            ));
+        };
+
+        // A package names itself and every consumer refers to it by that name (law 2). A row keyed by anything else would be the consumer choosing the prefix, which is exactly what makes a diamond duplicate instead of share.
+        if &package.name != name {
+            return Err(format!(
+                "the dependency {:?} resolves to {}, which declares itself {:?}; a package is referred to by the name it declares",
+                spelling(name),
+                directory.display(),
+                spelling(&package.name)
+            ));
+        }
+
+        let source = self.enter(&package, &directory)?;
+        self.order.push(source);
+
+        Ok(())
+    }
+
+    /// Where `row` points, as the filesystem names it.
+    ///
+    /// Canonical rather than as written, because a location is compared: `../left/../base` and `../right/../base` are one package, and a diamond that read them as two would compile its point twice and hand out two nominally distinct families spelled the same.
+    fn locate(
+        &self,
+        dependent: &Package,
+        from: &Path,
+        name: &Qualifier,
+        row: &Dependency,
+    ) -> Result<PathBuf, String> {
+        let subject = format!(
+            "the dependency {:?} of {:?}",
+            spelling(name),
+            spelling(&dependent.name)
+        );
+
+        let directory = self.point(dependent, from, name, row, &subject)?;
+
+        directory
+            .canonicalize()
+            .map_err(|error| format!("{subject} resolves to {}: {error}", directory.display()))
+    }
+
+    /// The place `row` names, before the filesystem has been asked to agree it is one.
+    fn point(
+        &self,
+        dependent: &Package,
+        from: &Path,
+        name: &Qualifier,
+        row: &Dependency,
+        subject: &str,
+    ) -> Result<PathBuf, String> {
+        match row {
+            Dependency::Member => match self.members.get(name) {
+                Some(directory) => Ok(directory.clone()),
+                None => Err(format!(
+                    "{subject} is `source = \"member\"`, and no governing umbrella enumerates a member declaring that name"
+                )),
+            },
+
+            Dependency::Catalog => {
+                if self.members.contains_key(name) {
+                    return Err(format!(
+                        "{subject} is `source = \"catalog\"`, but that name is a live member of the governing umbrella; a member is the only answer for its own name inside its tree"
+                    ));
+                }
+
+                let entry = self
+                    .governing
+                    .umbrella
+                    .as_ref()
+                    .and_then(|umbrella| umbrella.catalog.get(name))
+                    .ok_or_else(|| {
+                        format!(
+                            "{subject} is `source = \"catalog\"`, and no governing umbrella's `[catalog]` holds that name"
+                        )
+                    })?;
+
+                self.locate(dependent, &self.governing.root, name, entry)
+            }
+
+            // A direct row is the consumer answering for a name its own umbrella already answers for. Refused in both directions, because a promotion that only half happened is the shape that compiles two of one package.
+            _ if self.members.contains_key(name) => Err(format!(
+                "{subject} is pinned directly, but that name is a live member of the governing umbrella; a member is the only answer for its own name inside its tree"
+            )),
+
+            Dependency::Path { path } => Ok(from.join(path)),
+
+            Dependency::Git { url, rev, hash } => Err(format!(
+                "{subject} is fetched from {url} at {rev}, and nothing has materialized it; run `curios curate`\n  the delivered tree must hash to {hash}"
+            )),
+        }
+    }
+}
+
+/// A pin as a refusal spells it.
+fn describe(pin: &Pin) -> String {
+    format!("`{}` ({})", pin.rev, pin.hash)
+}

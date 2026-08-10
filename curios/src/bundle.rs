@@ -12,11 +12,6 @@ use {
 /// The slim `curios-runtime` launcher stub, embedded at build time. Produced by `make curios/runtime` (an isolated `--package curios-runtime` build, kept Cranelift/Binaryen-free) under Cargo's target directory. If the file is absent this `include_bytes!` fails the build — run `make`. So `compile` needs no launcher lookup at runtime.
 const LAUNCHER: &[u8] = include_bytes!(env!("CURIOS_RUNTIME_BIN"));
 
-/// Default executable name: the input's file stem, no extension.
-pub(crate) fn exe_output_path(input_path: &Path) -> PathBuf {
-    PathBuf::from(input_path.file_stem().unwrap_or(input_path.as_os_str()))
-}
-
 /// Build a self-contained executable: the embedded launcher stub with the `.cwasm` payload and its footer appended to the tail (see [`curios_runtime::append_payload`]).
 pub(crate) fn emit_exe(cwasm: &[u8], output: &Path) -> Result<(), String> {
     let mut bytes = LAUNCHER.to_vec();

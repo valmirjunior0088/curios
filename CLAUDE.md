@@ -35,7 +35,7 @@ Curios is a functional, dependently typed language implemented in Rust 2024. It 
   → curios-pipeline   drive the pure compiler pipeline
 
 Native compiler path:
-  → curios-project    read the manifest, resolve dependencies, and file units in the store
+  → curios-package    read the manifest, resolve dependencies, and file units in the store
   → curios-binaryen   optimize emitted WebAssembly
   → curios            precompile with Wasmtime, run, or bundle
   → curios-runtime         deserialize and execute the precompiled module
@@ -64,7 +64,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | Continuation IR | `curios-cont` | CPS optimization and WebAssembly emission |
 | WebAssembly model | `curios-wasm` | Wasm AST, parser, encoder, and binary writer |
 | Pure compiler driver | `curios-pipeline` | `compile_entrypoint`, `Stage`, and orchestration without runtime, Binaryen, or CLI dependencies |
-| Projects and packages | `curios-project` | The workspace's only TOML dependency: the `curios.toml` manifest, the governance walk, the dependency resolver, and the store. Beside the pipeline, never under it |
+| Packages and projects | `curios-package` | The workspace's only TOML dependency: the `curios.toml` manifest, the governance walk, the dependency resolver, and the store. Beside the pipeline, never under it |
 | Binaryen integration | `curios-binaryen` | Binaryen source build, static FFI, and Wasm optimization |
 | Runtime | `curios-runtime` | Wasmtime engine, host bindings, `.cwasm` deserialization, bundle payload format, and slim launcher |
 | Native product | `curios` | Public compile/run helpers, CLI, Binaryen optimization, Wasmtime precompilation, and executable bundling |
@@ -87,7 +87,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | Wasm representation or encoding | `curios-wasm/src/` | Continuation emission and parser/round-trip tests |
 | Host operations or foreign calls | `curios-abi/src/` | Core validation, Wasm imports, runtime bindings, and the JavaScript harness |
 | Pipeline orchestration | `curios-pipeline/src/compile.rs`, `stage.rs` | Native and browser callers |
-| Manifests, dependency resolution, or the store | `curios-project/src/` | `documentation/roadmap/tooling/01_PROJECTS_SPEC.md`, the CLI subcommands that wrap it, and `curios-base`'s `Qualifier`/`Mount` |
+| Manifests, dependency resolution, or the store | `curios-package/src/` | `documentation/roadmap/tooling/01_PROJECTS_SPEC.md`, the CLI subcommands that wrap it, and `curios-base`'s `Qualifier`/`Mount` |
 | Runtime or bundle format | `curios-runtime/src/`, `curios/src/bundle.rs` | Slim-launcher dependency boundary and bundle integration tests |
 | CLI or native compile behavior | `curios/src/` | `README.md`, public helpers, and integration tests |
 | Standard or syntax library | `curios-prelude-archive/std/`, `curios-prelude-archive/syn/` | Module indices, canonical syntax registry, `SYNTAX.md`, and Curios integration tests |
@@ -100,7 +100,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 
 - Compiler stages own their representations. A lowering belongs to the crate holding the source representation and depends on the crate holding the destination representation.
 - `curios-pipeline` is the pure compiler boundary. It must not depend on Binaryen, Wasmtime, the runtime, or the CLI.
-- `curios-project` sits beside that boundary, never under it. The driver folds its stages over whatever scope it is handed; *deciding* that scope is a product's job, so `curios-pipeline` must not depend on `curios-project` and `curios-web` must not touch it. It is also the workspace's only TOML dependency.
+- `curios-package` sits beside that boundary, never under it. The driver folds its stages over whatever scope it is handed; *deciding* that scope is a product's job, so `curios-pipeline` must not depend on `curios-package` and `curios-web` must not touch it. It is also the workspace's only TOML dependency.
 - `curios-runtime` is the runtime-only boundary. It must not depend on `curios`, Binaryen, or Wasmtime's Cranelift compiler.
 - `curios` is the only workspace crate that combines Binaryen with Cranelift-enabled Wasmtime.
 - The workspace uses crate boundaries, not Cargo features, to separate the compiler, runtime, and browser products.

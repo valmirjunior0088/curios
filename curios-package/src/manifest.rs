@@ -393,6 +393,6 @@ fn canonical(written: &str, what: &str) -> Result<Qualifier, String> {
 }
 
 /// A canonical name as a manifest spells it: segments separated by `/`, with no leading one.
-fn spelling(name: &Qualifier) -> String {
+pub(crate) fn spelling(name: &Qualifier) -> String {
     name.segments().join("/")
 }
