@@ -175,12 +175,9 @@ pub(super) fn parse_use_path<'a>() -> Parser<'a, Name> {
         }))
         .or(pure(Name::new(true, Qualifier::empty())))
         .flat_map(|name| {
-            match name
-                .qualifier()
-                .segments()
-                .iter()
-                .any(|segment| KEYWORDS.contains(&segment.as_str()))
-            {
+            let segments = name.qualifier().segments();
+
+            match segments.iter().any(|segment| is_keyword(segment)) {
                 true => fail(format!(
                     "path '{}' contains a reserved keyword",
                     name.qualifier().join()

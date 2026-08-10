@@ -269,6 +269,14 @@ The B identities are kept from the predecessor document because commits and the 
 - **M4** — the caching half, in order: B1, B3, B4, B6.
 - **M5** — `curios new` scaffolding, over machinery that already works.
 
+### Status
+
+Updated as each piece lands, and deleted with this document. What the code corrected is recorded beside what it implemented, because a specification nobody amends is a specification nobody read.
+
+- **M1, the manifest** — landed. `curios-project` exists, holding `Curios.toml` and the `c1:` scheme; both modes parse and are mutually exclusive, a name is refused where no path could spell it, every dependency row is a table whose source's fields are required and whose other fields are refused by name, executables are enumerated against the package root's one stem space, and a hash is verified for scheme and shape where it is written rather than where it is used. The umbrella *mode* parses here too — it is one file and one parser, so splitting it would have meant writing it twice — while everything the umbrella *means* stays M2.
+  - *Corrected:* the reserved segments are `let match choose rec mod use pub end false true induct struct foreign`, and not `Type`, `concept`, `satisfy` or `and`, which this document named as examples. Those four are grammar words the parser reads through `parse_keyword`, but the surface grammar admits all of them as path segments, so refusing them in a manifest would refuse a mount that resolves. The manifest refuses exactly what a path refuses, against one list rather than a copy of it — which is why the two spelling rules moved down to `curios-base`, beside the `Qualifier` whose segments they govern, rather than being exported from the lexer.
+  - *Landed with it:* a `rev` is a `String` and a hash is a `TreeHash`. Opacity is a property of what the compiler does with a revision — compare it — and a newtype restating that would be mechanism over data; the hash's newtype earns itself by validating a scheme.
+
 ## Tests
 
 - **The diamond:** two packages depending on one package at the same pin compile it once, and a witness declared in it resolves identically through both.
