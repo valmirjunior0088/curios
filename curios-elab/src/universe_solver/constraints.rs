@@ -181,7 +181,11 @@ impl ConstraintStore {
 
     /// Replace `head` by `solution` in every constraint mentioning it, moving the index by the *delta* the substitution makes rather than rebuilding each rewritten constraint's whole entry.
     ///
-    /// The delta is the same for every constraint touched — `head` leaves, `solution`'s heads arrive — so it is computed once. The previous form took an opaque rewriting closure, which hid exactly that fact, and so had to `unindex` then `index` each constraint: two BTree operations per head it *already* carried, against one removal plus one insertion per head the solution *adds*. That mattered because the carried width is the number that grows — a solution is a maximum, so every substitution widens the head sets of the constraints it lands in, and each later assignment then pays more.
+    /// The delta is the same for every constraint touched — `head` leaves, `solution`'s heads arrive — so it is computed once. The previous form took an opaque rewriting closure, which hid exactly that fact, and so had to `unindex` then `index` each constraint: two BTree operations per head it *already* carried, against one removal plus one insertion per head the solution *adds*.
+    ///
+    /// **Widening is rare per substitution and was pervasive in aggregate**, which is what the discharge below exists to stop. A solution carries a mean of **0.7** atoms against a max of 219, so almost every individual substitution splices in a constant or a single head and widens nothing — which reads like a refutation of the widening argument and is not one, because the thin tail *compounds*: a widened constraint is then the input to every later substitution landing in it. Sampled directly around finalization over the prelude, the store used to enter with 151,367 level atoms and leave with **402,442**, a 2.66× inflation, 4.6× for the declaration holding most of the constraints. Discharging tautologies takes that to **1.03×**, and with it `check_consistent` from 34.6 s to 1.2 s and the whole prelude's peak footprint from 1665 MiB to 878 MiB — the peak being the difference graph that a full consistency check builds over the store at its largest.
+    ///
+    /// Worth separating from the defect it is *not*. Rebuilding each level per atom was an implementation fault inside `Level::substitute`, and is fixed there. Inflating the store is a property of materialising substitutions at all, and the standing alternative remains recording `meta := level` and dereferencing lazily — which this compiler already does for term metavariables, where a solution lives in a table and nothing is substituted until `zonk` runs. That change is no longer motivated by these numbers; it would have to earn its way in on the read side, which nothing has measured.
     ///
     pub(super) fn substitute_head(
         &mut self,
@@ -196,21 +200,9 @@ impl ConstraintStore {
             .filter(|atom| *atom != head)
             .collect::<Vec<_>>();
 
-        // Temporary instrumentation: does this walk cost what it does because it touches many constraints, because each is wide, or because the solution it splices in is itself wide? Remove once answered.
-        curios_profile::sample!("universe::substitute_positions", positions.len());
-        curios_profile::sample!(
-            "universe::substitute_solution_atoms",
-            solution.atoms().count()
-        );
-        curios_profile::sample!("universe::store_len", self.constraints.len());
-
         for position in positions {
             let rebuilt = {
                 let constraint = &self.constraints[position];
-                curios_profile::sample!(
-                    "universe::rewritten_level_atoms",
-                    constraint.lower.atoms().count() + constraint.upper.atoms().count()
-                );
                 let lower = constraint
                     .lower
                     .substitute(|found| (found == head).then(|| solution.clone()))?;
@@ -220,10 +212,20 @@ impl ConstraintStore {
                 if lower == constraint.lower && upper == constraint.upper {
                     continue;
                 }
-                UniverseConstraint {
-                    lower,
-                    upper,
-                    origin: constraint.origin.clone(),
+                // A substitution can leave a constraint *trivially* true, and most of them do: a solution carries a mean of 0.7 atoms, so it is usually a constant, and the level algebra alone proves `0 ≤ anything`. Such a row imposes nothing on any solution that follows it — but kept, it is walked by every remaining pass and widened again by every later substitution that lands in it, which is what turns a thin tail of wide solutions into a store that grows over its own solving.
+                //
+                // Discharging it to `0 ≤ 0` rather than removing it keeps every position stable, so the occurrence index needs no rebuild. Leaving it indexed is harmless for the same reason the index is already an over-approximation: a later substitution reaches it, rewrites nothing, and takes the no-op path above. `structurally_leq` is the right predicate and not an approximation of one — it is true exactly when the constraint is provable without any surrounding constraint, so dropping it cannot make an inconsistent system look consistent, and cannot move a least solution.
+                match lower.structurally_leq(&upper) {
+                    true => UniverseConstraint {
+                        lower: Level::zero(),
+                        upper: Level::zero(),
+                        origin: constraint.origin.clone(),
+                    },
+                    false => UniverseConstraint {
+                        lower,
+                        upper,
+                        origin: constraint.origin.clone(),
+                    },
                 }
             };
 
