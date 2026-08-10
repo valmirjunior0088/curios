@@ -113,7 +113,7 @@ pub fn classify_module(
         .map(|(name, _)| name.clone())
         .collect();
 
-    // A name neither defined here nor inherited is treated as total. Every `Global` a zonked module mentions is defined either in it or in the prelude it was elaborated against, so that case is unreachable rather than an approximation.
+    // A name neither defined here nor inherited is treated as total. Every `Global` a zonked module mentions is defined either in it or in one of the units it was elaborated against, and `inherited` is flattened over all of them — so that case is unreachable rather than an approximation, whatever the scope holds.
     let reaches_partial = |partial: &BTreeSet<Global>, reached: &BTreeSet<Global>| {
         reached.iter().any(|other| {
             partial.contains(other)

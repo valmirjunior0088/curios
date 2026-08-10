@@ -10,7 +10,7 @@ use {
 
 /// Reject every `induct` and `struct` declaration in `module` that is not strictly positive, and record each surviving declaration's parameter polarities on its registry entry.
 ///
-/// Runs on zonked Core, so the telescopes the analysis reads are final and meta-free. `module` is exactly the declaration set to analyze; anything the walk reaches outside it is a replayed prelude declaration, whose vector was computed once at archive-build time and answers from this context's registry — sound because prelude items cannot mention user code, so no cycle crosses the boundary.
+/// Runs on zonked Core, so the telescopes the analysis reads are final and meta-free. `module` is exactly the declaration set to analyze; anything the walk reaches outside it belongs to a predecessor unit, whose vector was computed when that unit was analyzed and answers from this context's registry. Sound because a predecessor cannot mention a successor — mounts are disjoint and the fold is a dependency order — so no cycle crosses the boundary, which is the same argument the archived prelude rested on before there was more than one unit to make it of.
 pub fn check_positivity(context: &mut Context, module: &mut Module) -> Result<(), Error> {
     curios_profile::profile!("check_positivity");
     let vectors = positivity_vectors(

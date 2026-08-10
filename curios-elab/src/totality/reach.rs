@@ -116,7 +116,7 @@ pub(crate) fn reachable(module: &Module, seeds: BTreeSet<Global>) -> BTreeSet<Gl
     let mut frontier = reached.iter().cloned().collect::<Vec<_>>();
     while let Some(name) = frontier.pop() {
         let Some(named) = bodies.get(&name) else {
-            // Outside the module under analysis: a replayed prelude definition, whose own closure was settled when the archive was built.
+            // Outside the module under analysis, which means some predecessor unit declares it — the archived prelude, or a unit compiled earlier in this same fold. Either way its own closure was settled when *it* was checked, and `Definition::totality` already folds that closure into the flag the caller reads: partial means something partial is reachable. So not following it is the same answer, not a gap.
             continue;
         };
         for next in named {

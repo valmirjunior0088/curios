@@ -418,7 +418,7 @@ type Occurrences = BTreeMap<Global, BTreeMap<Global, Polarity>>;
 
 /// Whether the declarations handed to the analysis are every declaration the program has, or only a suffix of them.
 ///
-/// The distinction decides what an out-of-set name means. Under [`Coverage::Partial`] — the elaborator at a replay, holding the user suffix while the prelude prefix was analyzed when it was elaborated — a name from outside answers from the registry vector recorded then, which is that pass's own earlier result. Under [`Coverage::Complete`] there is no outside: every declaration is in hand, so a name not among them is one this analysis has no result for, and reading a carried vector would mean believing an answer some *other* pass computed. The kernel therefore takes the conservative value instead, which is the same one an unknown name has always taken.
+/// The distinction decides what an out-of-set name means. Under [`Coverage::Partial`] — the elaborator holding one unit while every predecessor was analyzed as it was elaborated — a name from outside answers from the registry vector recorded then, which is that pass's own earlier result rather than another's. Under [`Coverage::Complete`] there is no outside: every declaration is in hand, so a name not among them is one this analysis has no result for, and reading a carried vector would mean believing an answer some *other* pass computed. The kernel therefore takes the conservative value instead, which is the same one an unknown name has always taken.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Coverage {
     /// Every declaration the program has.
