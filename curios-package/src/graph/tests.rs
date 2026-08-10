@@ -201,6 +201,42 @@ fn a_dependency_cycle_is_refused() {
     fs::remove_dir_all(root).unwrap();
 }
 
+/// A cycle *through an already-placed name* is still a cycle.
+///
+/// `app` places `b` on its way in, so when `c` names `b` again the agreement branch would answer "already placed, and it agrees" and return — leaving `c` emitted before the `b` it depends on. A wrong fold order rather than a refusal is what a cycle looks like when the check runs second.
+#[test]
+fn a_cycle_reached_through_a_placed_name_is_refused() {
+    let root = tree(
+        "graph-cycle-placed",
+        &[
+            (
+                "app/curios.toml",
+                "name = \"app\"\n\n[dependencies]\nb = { source = \"path\", path = \"../b\" }\n",
+            ),
+            ("app/lib.crs", ""),
+            (
+                "b/curios.toml",
+                "name = \"b\"\n\n[dependencies]\nc = { source = \"path\", path = \"../c\" }\n",
+            ),
+            ("b/lib.crs", ""),
+            (
+                "c/curios.toml",
+                "name = \"c\"\n\n[dependencies]\nb = { source = \"path\", path = \"../b\" }\n",
+            ),
+            ("c/lib.crs", ""),
+        ],
+    );
+
+    let refusal = mounts(&root.join("app")).expect_err("b and c cycle");
+    assert!(refusal.contains("cycle"), "{refusal}");
+    assert!(
+        refusal.contains("\"b\"") && refusal.contains("\"c\""),
+        "{refusal}"
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
 /// A package is referred to by the name it declares, so a row keyed by anything else is refused.
 #[test]
 fn a_row_keyed_by_the_wrong_name_is_refused() {

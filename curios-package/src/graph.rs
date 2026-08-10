@@ -129,6 +129,19 @@ impl Walk<'_> {
             _ => None,
         };
 
+        // Asked before anything else, because a name on the walk's own stack is a cycle *whether or not* it has already been placed. Checking it second let `b → c → b` past: `b` was placed on the way in, so the agreement branch below returned early and the walk emitted `c` before the `b` it depends on — a wrong fold order rather than a refusal, which is the shape a cycle takes when nobody looks for it.
+        if self.open.contains(name) {
+            return Err(format!(
+                "the dependencies cycle: {} depends on {:?} again",
+                self.open
+                    .iter()
+                    .map(|open| format!("{:?}", spelling(open)))
+                    .collect::<Vec<_>>()
+                    .join(" depends on "),
+                spelling(name)
+            ));
+        }
+
         if let Some(earlier) = self.placed.get(name) {
             if let (Some(earlier_pin), Some(pin)) = (&earlier.pin, &pin) {
                 return match earlier_pin == pin {
@@ -158,18 +171,6 @@ impl Walk<'_> {
                     spelling(&dependent.name)
                 )),
             };
-        }
-
-        if self.open.contains(name) {
-            return Err(format!(
-                "the dependencies cycle: {} depends on {:?} again",
-                self.open
-                    .iter()
-                    .map(|open| format!("{:?}", spelling(open)))
-                    .collect::<Vec<_>>()
-                    .join(" depends on "),
-                spelling(name)
-            ));
         }
 
         let directory = self.locate(dependent, from, name, row)?;
