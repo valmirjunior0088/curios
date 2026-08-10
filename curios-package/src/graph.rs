@@ -9,7 +9,7 @@ mod tests;
 
 use {
     crate::{
-        Dependency, Governing, MANIFEST, Manifest, Package, TreeHash, package_source, spelling,
+        Dependency, Governing, MANIFEST, Manifest, Package, TreeHash, package_source, spelling, src,
     },
     curios_base::Qualifier,
     curios_text::RootSource,
@@ -152,7 +152,7 @@ impl Walk<'_> {
                         spelling(name),
                         describe(earlier_pin),
                         spelling(&earlier.dependent),
-                        describe(&pin),
+                        describe(pin),
                         spelling(&dependent.name)
                     )),
                 };
@@ -284,9 +284,17 @@ impl Walk<'_> {
 
             Dependency::Path { path } => Ok(from.join(path)),
 
-            Dependency::Git { url, rev, hash } => Err(format!(
-                "{subject} is fetched from {url} at {rev}, and nothing has materialized it; run `curios curate`\n  the delivered tree must hash to {hash}"
-            )),
+            // The store is where a fetchable dependency lives, and being *in* it is what "materialized" means — the hash it is filed under is the hash it was accepted against, so finding it there is the verification, already done.
+            Dependency::Git { url, rev, hash } => {
+                let placed = src(&self.governing.root, hash);
+
+                match placed.is_dir() {
+                    true => Ok(placed),
+                    false => Err(format!(
+                        "{subject} is fetched from {url} at {rev}, and nothing has materialized it; run `curios curate`\n  the delivered tree must hash to {hash}"
+                    )),
+                }
+            }
         }
     }
 }

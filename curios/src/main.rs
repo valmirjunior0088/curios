@@ -12,6 +12,7 @@ use pipeline::*;
 use {
     clap::Parser,
     curios::{run_wasm, to_cwasm},
+    curios_package::{Governing, materialize, reconcile},
     curios_pipeline::CompileError,
     curios_runtime::{ForeignBindings, OsHost},
     curios_text::Formatted,
@@ -106,6 +107,18 @@ fn dispatch() -> Result<(), Failure> {
             let cwasm = to_cwasm(&module)?;
 
             emit_exe(&cwasm, &output)?;
+        }
+        Mode::Curate => {
+            let directory = std::env::current_dir().map_err(|error| error.to_string())?;
+            let governing = Governing::found(manifest.as_deref(), &directory)?;
+
+            for pin in materialize(&governing)? {
+                println!("fetched {pin}");
+            }
+
+            for report in reconcile(&governing)? {
+                println!("{report}");
+            }
         }
         Mode::Format { paths, check } => {
             // The formatter is pure and reports changedness in its result; whether a `Changed` verdict fails the run (`--check`) or rewrites the file is this loop's policy. The formatter refuses internally when its output would not reparse to the same program, so nothing corrupt is ever written.

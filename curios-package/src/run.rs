@@ -60,10 +60,7 @@ impl Target {
             return Ok(Self::File(PathBuf::from(argument)));
         }
 
-        let governing = match manifest {
-            Some(path) => Governing::at(path)?,
-            None => Governing::of(directory)?,
-        };
+        let governing = Governing::found(manifest, directory)?;
 
         let executable = match argument {
             Some(name) => named(&governing.package, name)?,

@@ -4,7 +4,6 @@ use {
     curios_pipeline::Stage,
     curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
-    std::path::Path,
 };
 
 #[test]

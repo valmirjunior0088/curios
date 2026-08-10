@@ -2,11 +2,7 @@
 
 use {
     curios_runtime::append_payload,
-    std::{
-        fs,
-        os::unix::fs::PermissionsExt,
-        path::{Path, PathBuf},
-    },
+    std::{fs, os::unix::fs::PermissionsExt, path::Path},
 };
 
 /// The slim `curios-runtime` launcher stub, embedded at build time. Produced by `make curios/runtime` (an isolated `--package curios-runtime` build, kept Cranelift/Binaryen-free) under Cargo's target directory. If the file is absent this `include_bytes!` fails the build — run `make`. So `compile` needs no launcher lookup at runtime.

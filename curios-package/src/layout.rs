@@ -67,14 +67,16 @@ fn stems(package: &Package, library: &Module) -> Result<(), String> {
     });
 
     // An executable whose path leaves the package root claims a stem somewhere else, and somewhere else is not this stem space.
-    let executables = package.executables.iter().filter_map(|executable| {
-        (executable.path.parent() == Some(Path::new(""))).then(|| {
+    let executables = package
+        .executables
+        .iter()
+        .filter(|executable| executable.path.parent() == Some(Path::new("")))
+        .map(|executable| {
             (
                 stem(&executable.path),
                 format!("the executable {:?}", executable.name),
             )
-        })
-    });
+        });
 
     let mut claimed = BTreeMap::from([(
         stem(Path::new(LIBRARY)),

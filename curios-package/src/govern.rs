@@ -25,6 +25,14 @@ pub struct Governing {
 }
 
 impl Governing {
+    /// What governs an invocation, by the manifest it named when it named one and by the walk otherwise.
+    pub fn found(manifest: Option<&Path>, directory: &Path) -> Result<Self, String> {
+        match manifest {
+            Some(path) => Self::at(path),
+            None => Self::of(directory),
+        }
+    }
+
     /// What governs an invocation started in `directory`.
     pub fn of(directory: &Path) -> Result<Self, String> {
         let directory = directory
