@@ -64,7 +64,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | Continuation IR | `curios-cont` | CPS optimization and WebAssembly emission |
 | WebAssembly model | `curios-wasm` | Wasm AST, parser, encoder, and binary writer |
 | Pure compiler driver | `curios-pipeline` | `compile_entrypoint`, `Stage`, and orchestration without runtime, Binaryen, or CLI dependencies |
-| Projects and packages | `curios-project` | The workspace's only TOML dependency: the `Curios.toml` manifest, the governance walk, the dependency resolver, and the store. Beside the pipeline, never under it |
+| Projects and packages | `curios-project` | The workspace's only TOML dependency: the `curios.toml` manifest, the governance walk, the dependency resolver, and the store. Beside the pipeline, never under it |
 | Binaryen integration | `curios-binaryen` | Binaryen source build, static FFI, and Wasm optimization |
 | Runtime | `curios-runtime` | Wasmtime engine, host bindings, `.cwasm` deserialization, bundle payload format, and slim launcher |
 | Native product | `curios` | Public compile/run helpers, CLI, Binaryen optimization, Wasmtime precompilation, and executable bundling |

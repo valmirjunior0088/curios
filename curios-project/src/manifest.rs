@@ -1,4 +1,4 @@
-//! `Curios.toml`: the two modes a manifest is in, and the refusals it earns before anything is compiled.
+//! `curios.toml`: the two modes a manifest is in, and the refusals it earns before anything is compiled.
 //!
 //! Reading one is two passes over a file. The first is TOML's, into a [`Document`] whose every field is optional — *presence* decides the mode, so a manifest declaring both modes is a refusal this crate writes rather than a deserialization failure naming whichever shape happened to be tried second. The second pass is [`Document::classify`]: it turns present fields into the modes below, refusing a name no path could spell, a row missing the pin its source requires, and an executable claiming a stem that is already spoken for.
 //!
@@ -20,7 +20,7 @@ use {
 };
 
 /// The file a project is declared in.
-pub const MANIFEST: &str = "Curios.toml";
+pub const MANIFEST: &str = "curios.toml";
 
 /// The library header a package's `name` obligates, beside the manifest. Its stem enters no qualified name: the manifest names that namespace, so `lib` is a spelling nothing can refer to.
 pub const LIBRARY: &str = "lib.crs";
@@ -28,7 +28,7 @@ pub const LIBRARY: &str = "lib.crs";
 /// The extension every Curios source file carries, which is what makes an executable's declared name enough to locate it.
 pub const SOURCE: &str = "crs";
 
-/// A parsed `Curios.toml`, in exactly one of two mutually exclusive modes.
+/// A parsed `curios.toml`, in exactly one of two mutually exclusive modes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Manifest {
     /// A namespace for definitions.
