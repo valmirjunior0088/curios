@@ -358,13 +358,21 @@ Two consequences, both stated because an earlier draft assumed otherwise. Of the
 
 ### B2 — the rule is checked where a unit is stored
 
+**Landed.** `curios_core::validate_stored_identities` refuses a free local and a surviving metavariable, called from `curios-prelude-archive`'s build script beside `validate_universes`. Four tests: three refusals and one control.
+
 The three `none` rows above are an observation about today's output, and the rule needs them as an invariant. Exactly **one** of them is asserted where an archive is written — `validate_universes`, on the value `build.rs` serializes. The other two are contracts of the passes that produced the value rather than checks on it: zonk refuses an unsolved hole, and nothing whatever watches free locals. `derived_binder_floor` exists precisely because the number a module carries is untrusted; `recheck.rs` says of `Module::binder_floor`, "which nothing checks".
 
-So the rule becomes one function, refusing a unit that carries a free local or a metavariable of either kind, called at the one seam where a unit is stored — which today is `curios-prelude-archive`'s build script, joining the universe check already standing there. A later change that begins leaving identities in stored output then fails at the boundary that cares, instead of aliasing silently in whatever compilation restores two such units together.
+So the rule becomes one function, called at the one seam where a unit is stored — which today is `curios-prelude-archive`'s build script, joining the universe check already standing there. A later change that begins leaving identities in stored output then fails at the boundary that cares, instead of aliasing silently in whatever compilation restores two such units together.
 
-The witness row is the same function's third refusal, and it arrives with the [deferred B1](#deferred--the-caching-phase). Writing the function now is what makes that a line rather than a second search for the seam.
+The witness row is the same function's next refusal, and it arrives with the [deferred B1](#deferred--the-caching-phase). Writing the function now is what makes that a line rather than a second search for the seam.
 
 *Its obligation:* the refusals are the test. A check that only ever meets conforming input asserts nothing, so each refusal needs a unit built to trip it; the prelude passing is the control, not the evidence.
+
+**Three differences between what landed and the paragraphs above.**
+
+- **The rule is two calls at that seam, not one, and the paragraphs above overstated its reach.** "A metavariable of either kind" was wrong about what needed writing: `validate_bound_universes` already refuses an unsolved *universe* metavariable and names it in as many words, at this very seam. Restating it would be a second implementation of one predicate rather than a second opinion about it — the standing `UniverseContext::is_closed` records, in the same crate, for the same reason. So the new function refuses the two rows nothing watches, and the seam calls both.
+- **The positions are enumerated once and read twice.** The check needed the same list `derived_binder_floor` walks, and that walk's own contract is that *"deciding a field cannot matter is the reasoning this walk exists to replace"* — which a second copy of the list would defeat on the day a position is added to one and not the other. `module_positions` is now that list, offering each position to a collector; the floor takes the highest local index, the check takes the first identity it may not carry. Behaviour-preserving for the floor, and the reason the entrypoint — the position belonging to no declared name, and so the one a hand-written list drops — has a test of its own.
+- **It lives in `curios-core`, beside the floor, not in `curios-unit`.** The alternative reading is that "what a stored unit may carry" belongs to the crate that owns `Unit`. Against it: the walk it shares is here, `curios-unit` is not a build-dependency of the archive crate and would have to become one for a single function, and every future store depends on `curios-core` already. It describes rather than judges by this module's own rule — whether a node is a metavariable, and whether a variable is local, are properties of the representation — and it refuses rather than reports only because an identity, unlike a bound, has no safe direction to degrade in.
 
 ### B5 — every "all the names in the program" site becomes a scope question
 

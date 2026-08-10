@@ -11,7 +11,7 @@ use {
     curios_abi::host_ops,
     curios_base::{Qualifier, RootKind},
     curios_core::Item,
-    curios_core::{Global, Sharing, derived_binder_floor},
+    curios_core::{Global, Sharing, derived_binder_floor, validate_stored_identities},
     curios_elab::{
         Context, ErasedUnit, Mode, Resumed, elaborate_and_zonk_module, erase_unit,
         validate_lowered_universe_seeds, validate_universes,
@@ -142,6 +142,11 @@ fn build() {
     // Every universe invariant the archive is trusted to satisfy is asserted here, on the value about to be serialized, and nowhere else. Restoration establishes that the bytes it reads are exactly the bytes written from this value — schema, source fingerprint, and bytecheck — so re-deriving the invariants per compilation only re-answers a question already settled. `erase_prelude_prefix` below happens to project through the same check, but inheriting the guarantee from an unrelated call is not the same as stating it.
     validate_universes(&core)
         .unwrap_or_else(|error| panic!("elaborated fixed prelude universes are invalid: {error}"));
+
+    // This is the seam a unit is stored at, so it is where the rule about what a stored unit may carry is enforced: no identity meaningful only in the compilation that assigned it. Two calls rather than one, because the universe half of that rule is what the line above already refuses — an unsolved universe metavariable, named as such — and a rule stated twice is a copy rather than a second opinion.
+    validate_stored_identities(&core).unwrap_or_else(|found| {
+        panic!("elaborated fixed prelude carries a positional identity: {found}")
+    });
 
     // No entrypoint, so nothing to seal: this unit's arena stays open, which is what its successors resume over.
     let ersd = erase_unit(

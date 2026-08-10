@@ -471,13 +471,149 @@ impl fmt::Display for Module {
     }
 }
 
+/// One question a walk asks of whatever sits at a module position.
+///
+/// A [`Bound`] behind a trait object rather than a generic parameter, so [`module_positions`] can offer one list of positions to more than one collector. Two reads, because two identities are findable by looking at a term: the local binder indices it mentions, and whether a metavariable node survives in it.
+trait Carried {
+    fn free_vars(&self) -> BTreeSet<Free>;
+    fn has_metavar(&self) -> bool;
+}
+
+impl<B: Bound> Carried for B {
+    fn free_vars(&self) -> BTreeSet<Free> {
+        Bound::free_vars(self)
+    }
+
+    fn has_metavar(&self) -> bool {
+        Bound::has_metavar(self)
+    }
+}
+
+/// Every position in `module` that can hold a bound value, offered to `visit` with the top-level name owning it, skipping whatever `in_scope` already answers for.
+///
+/// One list, read by every walk that asks what a module carries — the floor below it and the storage refusal beside that. A second copy is how a position quietly stops being covered, which is the failure the enumeration exists to prevent, so a new question about a module's contents is a new `visit` and never a new walk. `None` is the entrypoint, which belongs to the module rather than to any name it declares.
+fn module_positions(
+    module: &Module,
+    in_scope: impl Fn(&Global) -> bool,
+    mut visit: impl FnMut(Option<&Global>, &dyn Carried),
+) {
+    let covered = |names: Vec<&Global>| !names.is_empty() && names.into_iter().all(&in_scope);
+
+    for item in module
+        .items
+        .iter()
+        .filter(|item| !covered(item.declared_names()))
+    {
+        for definition in item.definitions() {
+            visit(Some(&definition.name), &definition.type_);
+            visit(Some(&definition.name), &definition.body);
+        }
+    }
+
+    for (name, declaration) in module
+        .induct_decls
+        .iter()
+        .filter(|(name, _)| !in_scope(name))
+    {
+        visit(Some(name), &declaration.arity);
+        visit(Some(name), &declaration.result_sort);
+        for (_, constructor) in &declaration.constructors {
+            visit(Some(name), &constructor.telescope);
+        }
+    }
+
+    for (name, declaration) in module
+        .struct_decls
+        .iter()
+        .filter(|(name, _)| !in_scope(name))
+    {
+        visit(Some(name), &declaration.arity);
+        visit(Some(name), &declaration.result_sort);
+    }
+
+    for (name, concept) in module.concepts.iter().filter(|(name, _)| !in_scope(name)) {
+        visit(Some(name), &concept.params);
+    }
+
+    if let Some(type_) = &module.type_ {
+        visit(None, type_);
+    }
+    if let Some(body) = &module.body {
+        visit(None, body);
+    }
+}
+
+/// An identity a stored unit may not carry: one meaningful only in the compilation that assigned it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Positional {
+    /// A free local binder. Its index came from one compilation's binder counter, and a compilation restoring the unit seeds its own counter from a floor — so a local surviving into stored output is an index two compilations can both hand out.
+    FreeLocal { owner: Option<Global>, index: u32 },
+    /// A term metavariable. Zonking is contracted to substitute every solution and to refuse an unsolved hole, so one reaching here is that contract broken rather than a hole still to be solved.
+    Metavar { owner: Option<Global> },
+}
+
+impl fmt::Display for Positional {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let (owner, carried) = match self {
+            Positional::FreeLocal { owner, index } => (owner, format!("free local binder {index}")),
+            Positional::Metavar { owner } => (owner, "an unsolved metavariable".to_string()),
+        };
+
+        match owner {
+            Some(name) => write!(formatter, "{name} carries {carried}"),
+            None => write!(formatter, "the entrypoint carries {carried}"),
+        }
+    }
+}
+
+/// Refuse `module` if it carries an identity meaningful only in the compilation that produced it.
+///
+/// **A unit may be stored only if it carries no positional identity.** Storing one is how rustc came to need `cnum_map` — an index another compilation reads and then has to remap — and it is the property deciding whether a stored unit is portable at all.
+///
+/// Two of the classes are refused here. The third, an unsolved universe metavariable, is refused at the same seam by `curios-elab`'s `validate_universes`, which names it in as many words; restating it would be a second implementation of one predicate rather than a second opinion about it, which is the standing [`UniverseContext::is_closed`] holds for the same reason. Witness identities are the fourth class, are not scoped to their mount yet, and are where this refusal grows when they are.
+///
+/// It refuses where [`derived_binder_floor`] reports, over the same positions, and the difference is what each answer is for. A floor is a bound, so a gap in that walk degrades to a wider floor and to nothing worse. An identity reaching a stored unit has no safe direction to degrade in: it aliases silently in whatever compilation restores two such units together, which admits rather than crashes. It still *describes* rather than judges by this module's rule — whether a node is a metavariable, and whether a variable is local, are properties of the representation, taking no reduction, no conversion and no `Env`.
+pub fn validate_stored_identities(module: &Module) -> Result<(), Positional> {
+    let mut found: Option<Positional> = None;
+
+    module_positions(
+        module,
+        |_| false,
+        |owner, carried| {
+            if found.is_some() {
+                return;
+            }
+
+            if carried.has_metavar() {
+                found = Some(Positional::Metavar {
+                    owner: owner.cloned(),
+                });
+                return;
+            }
+
+            if let Some(index) = carried
+                .free_vars()
+                .into_iter()
+                .find_map(|free| free.local_index())
+            {
+                found = Some(Positional::FreeLocal {
+                    owner: owner.cloned(),
+                    index,
+                });
+            }
+        },
+    );
+
+    found.map_or(Ok(()), Err)
+}
+
 /// One above the highest local binder index any of `module`'s terms mentions — the lowest floor at which a binder a checker mints cannot alias one already in the program.
 ///
 /// Derived rather than believed. [`Module::binder_floor`] carries the elaborator's answer, and nothing checks it, while capture-avoidance depends on it: a checker that opens binders of its own — eta, telescope comparison — and mints one that aliases a free local already in a term silently identifies two terms that differ. Since a floor is a *bound* rather than a verdict, a caller takes the maximum of the two: widening is always safe, so a gap in this walk degrades to the carried value rather than to something worse, and no refusal is needed.
 ///
 /// It lives here by this module's own rule, the one stated at the top: it *describes* rather than judges. Reading the highest index a term mentions asks nothing of a kernel — no reduction, no conversion, no `Env` — so it is a property of the data, and a second implementation would be a second run of the same function rather than a second opinion. That is the standing `UniverseContext::is_closed` has for the same reason.
 ///
-/// Every position that can hold a free local is covered, including ones that in practice never do: each item's type and body, every registry telescope and declared result sort, and the entrypoint's own type and body. Deciding a field cannot matter is the reasoning this walk exists to replace.
+/// Every position that can hold a free local is covered, including ones that in practice never do: each item's type and body, every registry telescope and declared result sort, and the entrypoint's own type and body. Deciding a field cannot matter is the reasoning this walk exists to replace, which is why the positions are enumerated once in [`module_positions`] and read from there rather than listed again here.
 pub fn derived_binder_floor(module: &Module) -> usize {
     derived_binder_floor_outside(module, |_| false)
 }
@@ -488,65 +624,15 @@ pub fn derived_binder_floor(module: &Module) -> usize {
 ///
 /// The predicate is over *names* rather than over a position, which is what lets one environment answer for four namespaces at once: a name identifies one top-level thing within a module, and an environment populates every namespace it holds from the same source. Skipping is the direction that needs the argument — including an item can only raise the floor, and a higher floor costs freshness rather than correctness — so an item is skipped only when *every* name it declares is already answered for.
 pub fn derived_binder_floor_outside(module: &Module, in_scope: impl Fn(&Global) -> bool) -> usize {
-    let covered = |names: Vec<&Global>| !names.is_empty() && names.into_iter().all(&in_scope);
     let mut highest: Option<u32> = None;
-    let mut consider = |free_vars: BTreeSet<Free>| {
-        for free in free_vars {
+
+    module_positions(module, in_scope, |_, carried| {
+        for free in carried.free_vars() {
             if let Some(index) = free.local_index() {
                 highest = Some(highest.map_or(index, |seen: u32| seen.max(index)));
             }
         }
-    };
-
-    for item in module
-        .items
-        .iter()
-        .filter(|item| !covered(item.declared_names()))
-    {
-        for definition in item.definitions() {
-            consider(definition.type_.free_vars());
-            consider(definition.body.free_vars());
-        }
-    }
-
-    for declaration in module
-        .induct_decls
-        .iter()
-        .filter(|(name, _)| !in_scope(name))
-        .map(|(_, declaration)| declaration)
-    {
-        consider(declaration.arity.free_vars());
-        consider(declaration.result_sort.free_vars());
-        for (_, constructor) in &declaration.constructors {
-            consider(constructor.telescope.free_vars());
-        }
-    }
-
-    for declaration in module
-        .struct_decls
-        .iter()
-        .filter(|(name, _)| !in_scope(name))
-        .map(|(_, declaration)| declaration)
-    {
-        consider(declaration.arity.free_vars());
-        consider(declaration.result_sort.free_vars());
-    }
-
-    for concept in module
-        .concepts
-        .iter()
-        .filter(|(name, _)| !in_scope(name))
-        .map(|(_, concept)| concept)
-    {
-        consider(concept.params.free_vars());
-    }
-
-    if let Some(type_) = &module.type_ {
-        consider(type_.free_vars());
-    }
-    if let Some(body) = &module.body {
-        consider(body.free_vars());
-    }
+    });
 
     highest.map_or(0, |index| index as usize + 1)
 }
@@ -643,5 +729,91 @@ mod tests {
         };
 
         assert_eq!(derived_binder_floor(&module), 4_243);
+    }
+
+    /// A module carrying `body` in its one definition, and `entrypoint` as the program's own body.
+    fn stored(body: Term, entrypoint: Term) -> Module {
+        Module {
+            items: vec![Item::Let(Definition {
+                name: Global::Authored(Qualifier::from(["held"])),
+                kind: DefinitionKind::Authored,
+                universe_context: UniverseContext::empty(),
+                island: Qualifier::default(),
+                totality: Totality::Total,
+                type_: Term::intrinsic(crate::Intrinsic::NatType),
+                body,
+            })],
+            mounts: Vec::new(),
+            universe_seeds: Vec::new(),
+            induct_decls: BTreeMap::new(),
+            struct_decls: BTreeMap::new(),
+            concepts: BTreeMap::new(),
+            witnesses: BTreeSet::new(),
+            binder_floor: 0,
+            type_: None,
+            body: Some(entrypoint),
+        }
+    }
+
+    /// The refusals are the whole of the check's value: one that only ever meets conforming input asserts nothing about what it would do with the other kind.
+    ///
+    /// Each of these is an identity minted by one compilation's counter. Stored, it is read by a compilation that mints from its own counter and would hand the same index out again — which aliases silently rather than crashing, and is why the seam that writes a unit refuses rather than reports.
+    #[test]
+    fn a_stored_unit_may_not_carry_a_free_local() {
+        let module = stored(
+            Term::free_var(&Free::local(7, Some("y"))),
+            Term::intrinsic(crate::Intrinsic::NatType),
+        );
+
+        assert_eq!(
+            validate_stored_identities(&module),
+            Err(Positional::FreeLocal {
+                owner: Some(Global::Authored(Qualifier::from(["held"]))),
+                index: 7,
+            })
+        );
+    }
+
+    #[test]
+    fn a_stored_unit_may_not_carry_a_metavariable() {
+        let module = stored(
+            Term::metavar(crate::MetaId::from(3)),
+            Term::intrinsic(crate::Intrinsic::NatType),
+        );
+
+        assert_eq!(
+            validate_stored_identities(&module),
+            Err(Positional::Metavar {
+                owner: Some(Global::Authored(Qualifier::from(["held"]))),
+            })
+        );
+    }
+
+    /// Every position the floor walk covers is a position this one covers, because both read the same list. The entrypoint is the position most easily left out of a hand-written list: it belongs to no declared name, so it is the one a walk over `items` misses.
+    #[test]
+    fn a_stored_unit_may_not_carry_one_in_its_entrypoint() {
+        let module = stored(
+            Term::intrinsic(crate::Intrinsic::NatType),
+            Term::free_var(&Free::local(1, None)),
+        );
+
+        assert_eq!(
+            validate_stored_identities(&module),
+            Err(Positional::FreeLocal {
+                owner: None,
+                index: 1,
+            })
+        );
+    }
+
+    /// The control. A free *global* is how one definition names another and is in every stored unit there has ever been, so a check that refused it would refuse the prelude — which is what makes this the test that the refusals above are aimed at something narrower than "a free variable".
+    #[test]
+    fn a_stored_unit_may_carry_a_global_it_names() {
+        let module = stored(
+            Term::free_var(&Free::global(Qualifier::from(["elsewhere"]))),
+            Term::free_var(&Free::global(Qualifier::from(["elsewhere"]))),
+        );
+
+        assert_eq!(validate_stored_identities(&module), Ok(()));
     }
 }
