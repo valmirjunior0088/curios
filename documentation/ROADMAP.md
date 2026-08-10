@@ -94,7 +94,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Crate-boundary split isolating the Cranelift/Binaryen-free launcher (`curios-runtime`) from the JIT-capable compiler
 - [x] Pure pipeline driver crate (`curios-pipeline`) decoupled from runtime/Binaryen/CLI, enabling a wasm32 (browser) build
 - [x] Build-scoped archived prelude and replay (`curios-prelude` compiles and validates fixed Text/Core/Ersd state in `OUT_DIR`; production compilations restore it with no source fallback and lower/elaborate/erase only the user suffix)
-- [ ] [A compilation is units folded over a dependency order](roadmap/compiler/10_COMPILATION_UNITS_SPEC.md) (the compiler stops structurally knowing there is a prelude and a program: every stage taking a scope of N units, a root becoming the mount prefix that determines it rather than a stamp carried beside the name, `RootId` and `of_segment` deleted rather than extended, and `curios-pipeline` losing its `curios-prelude` edge — then cached units, then a manifest)
+- [ ] [A compilation is units folded over a dependency order](roadmap/compiler/10_COMPILATION_UNITS_SPEC.md) (the compiler stops structurally knowing there is a prelude and a program: every stage taking a scope of N units, a root becoming the mount prefix that determines it rather than a stamp carried beside the name, `RootId` and `of_segment` deleted rather than extended, and `curios-pipeline` losing its `curios-prelude` edge; cached units and the package boundary moved to [the projects specification](roadmap/tooling/01_PROJECTS_SPEC.md))
 - [x] Configurable type-checker reduction budget (the CLI's `--budget`, default 1,000,000 steps, restored per declaration; counting steps rather than elapsed time makes acceptance reproducible across machines, so the browser build needs no clock shim)
 - [x] Elaboration and per-node memoization bounded by written binder nesting, never data length (the `elaborate → elaborate_apply → check` cycle defunctionalized onto a frame stack for ground, all-explicit applications; each term's cached derivations carried on the shared `Rc` node and filled by an iterative post-order walk — so a literal or generated spine of any size compiles on a default 2MB stack, the ceiling now being the reduction deadline and memory)
 - [x] Elaboration transients grouped under one core variant (`Transient`: `Infix`, `NumLit`, and `Bang` — postfix `!` carried into core unresolved and desugared by `elaborate_bang`, where the type-directed lift decision lives; refused wholesale at the kernel boundary)
@@ -157,6 +157,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Bare written goals (`?`) report their local scope, expected type, and optional inferred solution
 - [x] Complete written-goal batches: one elaboration reports every reached goal, located by file, line, and column, tolerantly materialized, with operator witness projections folded back to infix and terms rendered within a fixed width through the printer's width-aware document layer _(labels and a typed incomplete checking outcome remain possible extensions)_
 - [x] Goal suggestions (`? ≈`): sandboxed local and application candidate fits in goal reports — complete candidates verified to compile when pasted, capped at three, with goal-bearing programs exiting 2 so tooling distinguishes incomplete from erroneous
+- [ ] Goal suggestions reach what a program has not already mentioned: candidate pools are bounded by *reachability* today — a definition from the standard library or a mounted unit can only be offered if the program references it somewhere else already, so nothing unused is ever suggested. Two parts, and the second is the real one: the reference walk collects each item's type and body and the entrypoint's body but not the entrypoint's *type*, losing candidates for no reason anyone chose; and ranking by type shape — indexing the scope's definitions by instantiated result head, so a goal of type `Foo` reaches the functions producing a `Foo` — is what turns the pool from reachability-bounded into relevance-bounded, against the 128-attempt cap that makes "every definition in scope" untenable
 
 ## Standard Library
 
@@ -226,8 +227,8 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Code formatter (`curios format`, in-place with `--check`: canonical width-100/indent-4 style over the comment-capturing parse product and the width-aware printing algebra, verified by reparse before anything is written; the prelude stands formatted as the style corpus)
   - [ ] Terminal REPL
   - [ ] Language server (hover, go-to-definition, highlighting)
-  - [ ] Package manager
-  - [ ] Project manifest & discovery
+  - [ ] [Package manager](roadmap/tooling/01_PROJECTS_SPEC.md) (a manifest of exactly pinned dependencies resolved to bytes by a resolver rather than a path, topologically ordered, with a revision conflict refused naming both dependents; and the local unit cache that makes depending on one affordable — keyed on its terms and its certifier, never on a path)
+  - [ ] [Project manifest & discovery](roadmap/tooling/01_PROJECTS_SPEC.md) (a package names itself and every consumer refers to it by that name, which is what makes a diamond share instead of duplicate; whether a manifest is named or discovered is the open question that decides when a bare `.crs` file stops being standalone)
   - [ ] `curios new` scaffolding
   - [ ] Linter
   - [ ] Test runner
