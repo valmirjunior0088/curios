@@ -463,6 +463,7 @@ version = "0.8.1"
 dependencies = [
  "clap",
  "curios-abi",
+ "curios-base",
  "curios-binaryen",
  "curios-cert",
  "curios-cont",

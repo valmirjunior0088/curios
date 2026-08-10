@@ -23,7 +23,7 @@ use {
 
 #[cfg(feature = "profile")]
 use {
-    curios::{compile_with_prelude, load},
+    curios::{compile_with_units, load},
     curios_profile::capture,
 };
 
@@ -57,6 +57,7 @@ fn dispatch() -> Result<(), Failure> {
     let Cli {
         budget,
         print,
+        units,
         mode,
     } = Cli::parse();
 
@@ -64,7 +65,7 @@ fn dispatch() -> Result<(), Failure> {
 
     match mode {
         Mode::Run { input_path, args } => {
-            let module = compile_file(budget, &print, &input_path)?;
+            let module = compile_file(budget, &print, &units, &input_path)?;
 
             let code = run_wasm(
                 &module,
@@ -96,7 +97,7 @@ fn dispatch() -> Result<(), Failure> {
                 )));
             }
 
-            let module = compile_file(budget, &print, &input_path)?;
+            let module = compile_file(budget, &print, &units, &input_path)?;
             let cwasm = to_cwasm(&module)?;
 
             emit_exe(&cwasm, &output)?;
@@ -124,8 +125,9 @@ fn dispatch() -> Result<(), Failure> {
         #[cfg(feature = "profile")]
         Mode::Profile { input_path } => {
             let (entrypoint, loader) = load(&input_path)?;
-            let (compilation, report) =
-                capture(|| compile_with_prelude(budget, &entrypoint, loader, |_| {}));
+            let (compilation, report) = capture(|| {
+                compile_with_units(budget, &load_units(&units)?, &entrypoint, loader, |_| {})
+            });
 
             println!(
                 "total_ms\tcalls\tmin_ms\tmax_ms\tretained_mb\tallocated_mb\tallocs\ttarget\tname\t(peak {:.1} MiB)",

@@ -1,7 +1,8 @@
 //! Driving the compile pipeline for the CLI, with the `--print` stage dump wired in. `stage_printer` is the single owner of how each IR stage is selected and rendered.
 
 use {
-    curios::{compile_with_prelude, load},
+    crate::cli::parse_unit,
+    curios::{compile_with_units, load, load_unit},
     curios_pipeline::{CompileError, Stage},
     curios_wasm::Module,
     std::path::Path,
@@ -32,11 +33,27 @@ fn stage_printer(print: &str) -> Result<impl Fn(Stage<'_>) + '_, String> {
 pub(crate) fn compile_file(
     budget: u64,
     print: &str,
+    units: &[String],
     input_path: &Path,
 ) -> Result<Module, CompileError> {
     let printer = stage_printer(print).map_err(CompileError::Failure)?;
     let (entrypoint, loader) = load(input_path).map_err(CompileError::Failure)?;
+    let units = load_units(units)?;
 
     // The CLI doesn't yet expose a way to supply `foreign` implementations, so its `ForeignStore` is dropped here.
-    compile_with_prelude(budget, &entrypoint, loader, printer).map(|(module, _foreigns)| module)
+    compile_with_units(budget, &units, &entrypoint, loader, printer)
+        .map(|(module, _foreigns)| module)
+}
+
+/// Load every `--unit PREFIX=PATH` in the order written, which is the order they are compiled in.
+pub(crate) fn load_units(
+    units: &[String],
+) -> Result<Vec<curios_text::PreludeModules>, CompileError> {
+    units
+        .iter()
+        .map(|unit| {
+            let (prefix, path) = parse_unit(unit).map_err(CompileError::Failure)?;
+            load_unit(&prefix, &path).map_err(CompileError::Failure)
+        })
+        .collect()
 }

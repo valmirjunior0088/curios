@@ -294,9 +294,22 @@ Two things A4 forced that were scheduled elsewhere:
 
 ### A5 — More than one unit
 
+**Landed**, in three commits: the fold, the refusals and the union, then the flag. `curios --unit lib=lib.crs run main.crs` compiles and runs a two-unit program.
+
 The `--unit` flag, the mount-collision diagnostic, the foreign-store union, the forward-reference diagnostic, and the orphan rule firing between two ordinary units. This is the first milestone that changes what the compiler accepts, and it only adds refusals.
 
 *Verified by:* the tests below.
+
+**Writing the tests found a real defect, which is the argument for writing them.** A mounted unit could not see `/std`: `Resolved::for_mounted` rebuilt the synthetic compilation root's children from its *own* mounts, and because that write lands in the unit's own layer it shadowed the scope's — so the standard library disappeared from every unit except the entry. The root belongs to the scope, as stated above; only half of that was implemented. Nothing but a second unit could have shown it.
+
+**Two corrections to earlier milestones fell out of the same tests:**
+
+- **A3c's universe-seed concatenation was wrong.** A module carries the *cumulative* seed table from index zero — `universe_floor` is asserted equal to its length — so the scope's table is the last unit's, already containing every earlier one. Concatenating counted each predecessor once per successor. The assertion caught it on the first three-unit compile.
+- **The mount check has to run before discovery.** Left after it, `insert_child` reports the collision first as a duplicate declaration, which names the label but not what else claimed it.
+
+**The `ffi` namespace needs no new rule**, as predicted: an import name is its declaration's fully qualified name, so mount disjointness makes the union disjoint, and `ForeignStore::absorb` asserts rather than diagnoses. The one shape that could collide — a mounted `/foo` beside an entry's own `mod foo` — is the mount collision, refused upstream.
+
+**A mounted unit's tree is materialized eagerly**, by `curios`'s `load_unit`, because discovery of a unit in scope has no loader to reach: `curios-web` supplies every body inline and compiles with no file system at all. The walk lives at the one boundary that does have one.
 
 ## What composes free, and costs nothing
 
