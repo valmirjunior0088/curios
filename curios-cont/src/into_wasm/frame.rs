@@ -109,6 +109,11 @@ impl<'a> BlockData<'a> {
         }
     }
 
+    /// The values this block binds on entry, in the order a branch pushes them. A branch reads them to load each argument the way the parameter it feeds is held.
+    pub(crate) fn params(&self) -> &[(&'a EmissionValueName, LocalData)] {
+        &self.params
+    }
+
     pub(crate) fn bind(&self, arity: usize) -> Vec<curios_wasm::Instr> {
         assert_eq!(
             self.params.len(),

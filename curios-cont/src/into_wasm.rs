@@ -1,9 +1,12 @@
 use {
-    crate::{CpsIntrinsicOp, CpsModule, machine::lower, machine::structurize},
+    crate::{
+        CpsIntrinsicOp, CpsModule, Repr, cps::represent, machine::lower, machine::structurize,
+        machine::value_id, machine::value_name,
+    },
     curios_abi::ForeignFunction,
     curios_base::{Grain, PackedBin},
     std::{
-        collections::{BTreeMap, BTreeSet},
+        collections::{BTreeMap, BTreeSet, HashMap},
         sync::Arc,
     },
 };
@@ -47,13 +50,28 @@ mod tests;
 /// Lower an optimized CPS module to a wasm-GC module — the pipeline's final stage. The private machine CFG is built and its reducible control structurized into blocks and loops, then a `Table` is computed over the whole module (the name maps, the closure type per `clsr_arities` arity, tuple arities, rope helpers) and `ModuleEmitter` declares the host imports and emits every const, closure, and function, exporting the entry under its emitted name (`func/main` — the entry is always `main`).
 pub fn into_wasm(module: &CpsModule) -> curios_wasm::Module {
     curios_profile::profile!("into_wasm");
+    let raw = raw_locals(module);
     let machine = lower(module);
     let mut structured = structurize(&machine);
     hoist_consts(&mut structured);
     let mut wasm_module = curios_wasm::Module::new("module");
-    ModuleEmitter::new(&Table::new(&structured), &mut wasm_module).emit_module(&structured);
+    ModuleEmitter::new(&Table::new(&structured, &raw), &mut wasm_module).emit_module(&structured);
 
     wasm_module
+}
+
+/// The emission names the representation analysis decided to hold raw, and at which carrier.
+///
+/// Translated here rather than threaded through the lowerings because both hops are total functions of an index: a machine value *is* its CPS value, and its emission name is that index spelled. Nothing has to be carried along to reconstruct it. A name codegen mints for itself — a hoisted literal, a wrapper argument, a closure shell — is not a CPS value, is therefore absent, and is held behind a reference, which is the correct default.
+fn raw_locals(module: &CpsModule) -> HashMap<EmissionValueName, Repr> {
+    represent::storage(module)
+        .into_iter()
+        .filter_map(|(value, storage)| {
+            storage
+                .raw_carrier()
+                .map(|carrier| (value_name(value_id(value)), carrier))
+        })
+        .collect()
 }
 
 /// A constructed value: the scalar immediates, packed `Bits`/`Bytes`, `List`/`Tpl` aggregates, and `EmissionClosure` naming its definition plus the captures filling its environment. Aggregates are flat — elements are names of already-bound values, never nested `EmissionData` — so constructing one is a single allocation. `EmissionData` is also the payload of module consts, where codegen materialises it into a wasm global.

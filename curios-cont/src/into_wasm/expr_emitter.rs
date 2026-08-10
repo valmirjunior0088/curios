@@ -2,7 +2,7 @@ use {
     super::{
         BlockData, CodeEmitter, Context, EmissionBlockName, EmissionBody, EmissionClosureName,
         EmissionData, EmissionValue, EmissionValueName, Frame, LayoutItem, LoadAs, LocalData,
-        Table, region_layout,
+        region_layout,
     },
     curios_base::Grain,
     std::collections::{BTreeMap, HashMap, HashSet},
@@ -192,8 +192,32 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         });
     }
 
+    /// Bind a constructed value to its local, materialising it in a register where that local is one.
+    ///
+    /// The range checks survive being moved onto this path, and that is deliberate: they are what keeps every register-held `Nat` inside the i31 envelope, so *boxing* one later — at a call argument, a constructor field, a jump to a boxed parameter — is a bare `ref.i31` that never has to re-check. Dropping them here would move the trap to the boxing coercion and change which programs trap.
     fn emit_let_pure(&mut self, value_name: &'a EmissionValueName, value: &'a EmissionData) {
-        self.emit_data(value_name, value);
+        match (self.context.table().raw_carrier(value_name), value) {
+            (Some(_), &EmissionData::Nat(value)) => match value >> 31 {
+                0 => self.emit_instr(curios_wasm::Instr::I32Const {
+                    value: value as i32,
+                }),
+                _ => self.emit_instr(curios_wasm::Instr::Unreachable),
+            },
+            (Some(_), &EmissionData::Int(value)) => match value >> 30 == value >> 31 {
+                true => self.emit_instr(curios_wasm::Instr::I32Const { value }),
+                false => self.emit_instr(curios_wasm::Instr::Unreachable),
+            },
+            (Some(_), &EmissionData::Flt(value)) => {
+                self.emit_instr(curios_wasm::Instr::F32Const { value })
+            }
+            // No other shape is ever offered a register, so this arm builds the reference and reads it straight back down. It exists to keep the match total rather than to be taken.
+            (Some(carrier), value) => {
+                self.emit_data(value_name, value);
+                let load = LoadAs::of(&carrier, self.context.table());
+                self.emit_instrs(self.context.load_as_instrs(load, false));
+            }
+            (None, value) => self.emit_data(value_name, value),
+        }
 
         self.emit_instr(curios_wasm::Instr::LocalSet {
             local_name: self
@@ -243,9 +267,8 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
 
     /// Allocate a fresh wasm local for `value_name` and record it in the current frame, so subsequent `find_local` lookups resolve to it. Called at the point a name is introduced — a shell or a fresh value — never for a fill, whose local its shell already owns.
     fn declare_local(&mut self, value_name: &'a EmissionValueName) {
-        let local_name = self
-            .context
-            .push_local(value_name.as_str(), Table::top_type(true));
+        let val_type = self.context.table().local_type(value_name);
+        let local_name = self.context.push_local(value_name.as_str(), val_type);
 
         self.context
             .this_frame()
@@ -338,9 +361,8 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     .params
                     .iter()
                     .map(|name| {
-                        let local_name = self
-                            .context
-                            .push_local(name.as_str(), Table::top_type(true));
+                        let val_type = self.context.table().local_type(name);
+                        let local_name = self.context.push_local(name.as_str(), val_type);
                         (name, LocalData::new(local_name, true))
                     })
                     .collect()

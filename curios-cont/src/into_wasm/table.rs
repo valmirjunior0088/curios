@@ -4,7 +4,7 @@ use {
         EmissionData, EmissionFunction, EmissionFunctionName, EmissionModule, EmissionValue,
         EmissionValueName,
     },
-    crate::CpsIntrinsicOp,
+    crate::{CpsIntrinsicOp, Repr},
     curios_abi::ForeignFunction,
     std::{
         cell::{OnceCell, RefCell},
@@ -288,10 +288,15 @@ pub(crate) struct Table<'a> {
     // Closures that are ever shell'd as a recursive shell — their `envr` fields are back-patched (`struct.set`), so those fields must stay mutable. Every other aggregate field is immutable. `cyclic_clsr_arities` carries the same fact at arity granularity, for the shared `envr/N` special field (which must agree across all its subtypes).
     cyclic_clsrs: HashSet<EmissionClosureName>,
     cyclic_clsr_arities: BTreeSet<usize>,
+    /// The values the representation analysis decided to hold in a register, and at which carrier. A name absent here is held behind a reference, which is every synthetic name codegen mints for itself.
+    raw: &'a HashMap<EmissionValueName, Repr>,
 }
 
 impl<'a> Table<'a> {
-    pub(crate) fn new(module: &'a EmissionModule) -> Self {
+    pub(crate) fn new(
+        module: &'a EmissionModule,
+        raw: &'a HashMap<EmissionValueName, Repr>,
+    ) -> Self {
         let mut cyclic_clsrs = HashSet::new();
         for (_, clsr) in module.clsrs() {
             collect_cyclic_clsrs(&clsr.region, &mut cyclic_clsrs);
@@ -314,6 +319,7 @@ impl<'a> Table<'a> {
         Self {
             cyclic_clsrs,
             cyclic_clsr_arities,
+            raw,
             special_field: curios_wasm::FieldName::from("!"),
             special_local: curios_wasm::LocalName::from("!"),
             special_label: curios_wasm::LabelName::from("!"),
@@ -813,6 +819,24 @@ impl<'a> Table<'a> {
     }
 
     /// Deliberately no iterating accessor: these are `HashMap`s, so iteration order varies per process, and every consumer here emits into the module — where order is load-bearing for a reproducible build. Walk [`EmissionModule`]'s own ordered sequence and resolve each name through this index instead, which is what `curios-base`'s `name!` means by carrying an explicit sequence where the order matters.
+    /// The carrier this value is held at in a register, or `None` when it is held behind a reference.
+    pub(crate) fn raw_carrier(&self, value_name: &EmissionValueName) -> Option<Repr> {
+        self.raw.get(value_name).copied()
+    }
+
+    /// The wasm type this value's local is declared at: the machine type of its carrier when it is held in a register, and the top reference type otherwise.
+    ///
+    /// The reference arms are unreachable — the analysis only ever answers a scalar carrier, since those are the only ones a register holds — and they answer `top_type` rather than panicking because a representation that cannot be held raw and a value that was never offered one are the same fact, and this function's job is to state it once.
+    pub(crate) fn local_type(&self, value_name: &EmissionValueName) -> curios_wasm::ValType {
+        match self.raw_carrier(value_name) {
+            Some(Repr::Nat | Repr::Int) => curios_wasm::ValType::Num(curios_wasm::NumType::I32),
+            Some(Repr::Flt) => curios_wasm::ValType::Num(curios_wasm::NumType::F32),
+            Some(Repr::Bytes | Repr::List | Repr::Tpl(_) | Repr::Ref) | None => {
+                Table::top_type(true)
+            }
+        }
+    }
+
     pub(crate) fn find_clsr(&self, clsr_name: &EmissionClosureName) -> &ClsrData<'a> {
         self.clsrs
             .get(clsr_name)
@@ -828,12 +852,16 @@ impl<'a> Table<'a> {
 
 #[cfg(test)]
 mod tests {
-    use {super::super::EmissionModule, super::Table};
+    use {
+        super::{EmissionModule, Table},
+        std::collections::HashMap,
+    };
 
     #[test]
     fn rope_names_match_the_wasm_vocabulary() {
         let module = EmissionModule::new();
-        let table = Table::new(&module);
+        let raw = HashMap::new();
+        let table = Table::new(&module, &raw);
         let bin = table.bin_rope();
         let list = table.list_rope();
 

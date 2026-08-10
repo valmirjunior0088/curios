@@ -139,7 +139,7 @@ pub enum CpsIntrinsicOp {
 /// The representation a value is read or produced at — the carrier, not the type.
 ///
 /// This is the vocabulary the backend's `LoadAs`/`WrapAs` coercions translate: `Nat`, `Int`, and `Flt` name raw machine carriers a Wasm register can hold, and the rest name references. Stated here, on the IR, rather than in the emitter, because the *optimizer* has to be able to ask what an operation demands of its operands without running codegen to find out — and because an emitter that restates the demand at every use site is an emitter that can disagree with the analysis.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Repr {
     /// A raw unsigned 32-bit carrier.
     Nat,
@@ -1324,8 +1324,10 @@ mod evaluate;
 mod inline;
 mod optimize;
 mod reachable;
+pub(crate) mod represent;
 mod simplify;
 mod specialize;
+pub(crate) use dataflow::*;
 pub use optimize::optimize;
 
 impl fmt::Display for CpsModule {

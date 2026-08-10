@@ -372,6 +372,20 @@ fn lcg_loop_is_scalar_no_closure_no_indirect() {
     );
 }
 
+/// L5: the loop carries its scalars in registers, so a back edge moves a register to a register. `ref.as_non_null` is the tell: every edge argument used to be loaded with it, and a parameter the representation analysis holds raw is loaded at its carrier instead — a bare `local.get`. Zero of them in the kernel is the loop-carried decision the `cps::represent` fixpoint exists to produce, and it is the one count that went to zero.
+///
+/// The casts do *not* go to zero and asserting that they do would be wrong: 4 `ref.cast`/`i31.get_u` pairs survive on values the loop reads from outside itself, where the coercion is correct and is the cheaper side of the trade. Nor does the `i64` widening go away — see `i64.mul` in [`lcg_loop_is_scalar_no_closure_no_indirect`] — because a `Nat` product leaving the i31 envelope must trap and `i32.mul` wraps rather than trapping, which no storage decision changes.
+#[test]
+fn lcg_loop_carries_its_scalars_in_registers() {
+    let wat = wat(LCG);
+    let kernel = loop_containing(&wat, "65537");
+
+    assert!(
+        !kernel.contains("ref.as_non_null"),
+        "no edge argument in the hot loop is reboxed to cross it: {kernel}"
+    );
+}
+
 // -- trees ------------------------------------------------------------------
 
 /// T1: build and sum retain direct recursive code. `sum` is the function carrying the `1000003` modulus; `build` is the other user function with two direct self calls (the recursive `to_str` prelude helper has one). Both recurse through direct `call`/`return_call`, and — since the whole module emits no `call_ref` (see [`trees_hot_arithmetic_has_no_indirect_calls`]) — that recursion is direct.
@@ -455,6 +469,23 @@ fn trees_ordinary_recursion_has_no_shells() {
     assert!(envs.is_empty(), "no environment allocation: {envs:?}");
     let shells = user_lines(&wat, "struct.new_default");
     assert!(shells.is_empty(), "no closure shell: {shells:?}");
+}
+
+/// T5: constructor payloads are untouched, which is what makes the locals-only scope *observable* rather than merely intended. A `Tree/node` carries its `Nat` in a `$tpl/…` field, and every such field stays `(ref null any)` — the representation analysis reaches locals and block parameters, never a heap layout, because a field is a contract between an allocation site and every reader of it rather than one function's private decision. Widening this is the successor's subject; until then a scalar field appearing here means the scope leaked.
+#[test]
+fn trees_constructor_payloads_stay_boxed() {
+    let wat = wat(TREES);
+
+    let scalar_fields = wat
+        .lines()
+        .filter(|line| line.contains("(type $tpl/") || line.trim().starts_with("(field "))
+        .filter(|line| line.contains("(field $") && !line.contains("(ref null any)"))
+        .collect::<Vec<_>>();
+
+    assert!(
+        scalar_fields.is_empty(),
+        "tuple payloads are uniformly boxed: {scalar_fields:?}"
+    );
 }
 
 // -- general corpus ---------------------------------------------------------

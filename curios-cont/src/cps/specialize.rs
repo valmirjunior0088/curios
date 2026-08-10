@@ -29,7 +29,7 @@ impl Knowledge {
 /// Ordered `Unknown < Known(_) < Conflict`.
 ///
 /// Note how this differs from [`Knowledge::merge`], which is *not* this join and must not be confused with it: `merge` reads its `None` as "a caller I cannot observe" and lets that force a `Conflict`, whereas here `Unknown` is the identity, so a forwarded parameter still resolving to `Unknown` contributes nothing rather than poisoning the result. The two disagree on exactly one case — `merge` leaves `(Unknown, None)` at `Unknown` — and that case is why the observation step and the fixpoint cannot share one operation.
-impl dataflow::Lattice for Knowledge {
+impl Lattice for Knowledge {
     fn bottom() -> Self {
         Knowledge::Unknown
     }
@@ -110,7 +110,7 @@ pub(super) fn invariant_fixpoint(
     constraints: &[(CpsFunId, Vec<CpsAtom>)],
     known_literals: &BTreeMap<CpsValueId, CpsAtom>,
 ) -> BTreeMap<CpsValueId, Knowledge> {
-    dataflow::solve(params_of.values().flatten().copied(), |solver| {
+    Solver::solve(params_of.values().flatten().copied(), |solver| {
         for (callee, args) in constraints {
             let Some(params) = params_of.get(callee) else {
                 continue;

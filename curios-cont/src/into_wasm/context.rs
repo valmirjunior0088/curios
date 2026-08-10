@@ -202,7 +202,11 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    fn load_as_instrs(&self, load_as: LoadAs, is_nullable: bool) -> Vec<curios_wasm::Instr> {
+    pub(crate) fn load_as_instrs(
+        &self,
+        load_as: LoadAs,
+        is_nullable: bool,
+    ) -> Vec<curios_wasm::Instr> {
         match load_as {
             LoadAs::Null => vec![],
             LoadAs::NonNull => match is_nullable {
@@ -266,6 +270,46 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
+    /// Coerce a value already on the stack in the register carrier its local is declared at, to what the reading position demands.
+    ///
+    /// The positions the analysis decided the carrier *for* want exactly what the register holds, and cost nothing — that is the whole point of deciding it. Every other position boxes the value back and then reads it the ordinary way, which is the "coercion at the disagreeing use" the analysis is built around: one `ref.i31` or one `struct.new`, set against the `ref.cast` plus `i31.get_u` that holding it boxed would have cost at *every* arithmetic use.
+    fn raw_as_instrs(&self, carrier: Repr, load_as: LoadAs) -> Vec<curios_wasm::Instr> {
+        match (carrier, &load_as) {
+            (Repr::Nat, LoadAs::Nat) | (Repr::Int, LoadAs::Int) | (Repr::Flt, LoadAs::Flt) => {
+                vec![]
+            }
+            _ => box_instr(&carrier, self.table())
+                .into_iter()
+                .chain(self.load_as_instrs(load_as, false))
+                .collect(),
+        }
+    }
+
+    /// How a value must sit on the stack to be stored into `param`'s local: in its register carrier when that local is one, and as a reference otherwise.
+    fn param_load(&self, param: &EmissionValueName) -> LoadAs {
+        match self.table().raw_carrier(param) {
+            Some(carrier) => LoadAs::of(&carrier, self.table()),
+            None => LoadAs::NonNull,
+        }
+    }
+
+    /// Enter a resume block with `arity` values already on the stack as references.
+    ///
+    /// A resume block's parameters are held boxed by construction: the representation analysis withdraws the offer on every continuation a call, a host import or a cell operation returns to, precisely because the emitter hands those results over as references and has no cheaper store to make. The assert states that rather than trusting it — a violation is a broken analysis, and it would otherwise surface as a wasm validation failure with nothing pointing back here.
+    fn resume_instrs(&self, resume: &EmissionBlockName, arity: usize) -> Vec<curios_wasm::Instr> {
+        let block_data = self.find_block(resume);
+
+        debug_assert!(
+            block_data
+                .params()
+                .iter()
+                .all(|(name, _)| self.table().raw_carrier(name).is_none()),
+            "resume block `{resume}` holds a parameter in a register, where a result arrives as a reference",
+        );
+
+        block_data.enter(arity)
+    }
+
     pub(crate) fn load_value_instrs(
         &self,
         value_name: &'a EmissionValueName,
@@ -296,7 +340,11 @@ impl<'a, 'b> Context<'a, 'b> {
                 local_name: local_data.local_name,
             });
 
-            output.extend(self.load_as_instrs(load_as, local_data.is_nullable));
+            // Only a local can be held in a register. A closure field, a module const and a function parameter each arrive through a position that is a reference by declaration, which is what the representation analysis withholds its offer on.
+            match self.table().raw_carrier(value_name) {
+                Some(carrier) => output.extend(self.raw_as_instrs(carrier, load_as)),
+                None => output.extend(self.load_as_instrs(load_as, local_data.is_nullable)),
+            }
         } else {
             output.push(curios_wasm::Instr::GlobalGet {
                 global_name: self.table().find_const(value_name),
@@ -311,24 +359,34 @@ impl<'a, 'b> Context<'a, 'b> {
     pub(crate) fn jump_instrs(&self, target: &'a EmissionJumpTarget) -> Vec<curios_wasm::Instr> {
         let mut output = Vec::new();
 
-        for value_name in &target.params {
-            output.extend(self.load_value_instrs(value_name, LoadAs::NonNull));
-        }
-
+        // The bare-forwarder sentinel is the function's own `anyref` return, so what it carries leaves boxed however it was held.
         if self.is_resume(&target.target) {
-            if target.params.len() != 1 {
+            let [value_name] = &target.params[..] else {
                 panic!(
                     "resume block `{}` expects 1 param, got {}",
                     target.target,
                     target.params.len(),
                 );
-            }
+            };
 
+            output.extend(self.load_value_instrs(value_name, LoadAs::NonNull));
             output.push(curios_wasm::Instr::Return);
-        } else {
-            let block_data = self.find_block(&target.target);
-            output.extend(block_data.enter(target.params.len()));
+
+            return output;
         }
+
+        // Each argument is loaded the way the parameter it feeds is held, so an edge between two register-held parameters moves a register to a register. That is what carries a decision around a loop: without it the back edge would box on the way out and unbox on the way in, every iteration.
+        let block_data = self.find_block(&target.target);
+        for (index, value_name) in target.params.iter().enumerate() {
+            let load = match block_data.params().get(index) {
+                Some((param, _)) => self.param_load(param),
+                None => LoadAs::NonNull,
+            };
+
+            output.extend(self.load_value_instrs(value_name, load));
+        }
+
+        output.extend(block_data.enter(target.params.len()));
 
         output
     }
@@ -484,7 +542,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 func_name: self.table().find_func(target).func_name(),
             });
 
-            output.extend(self.find_block(resume).enter(1));
+            output.extend(self.resume_instrs(resume, 1));
         }
 
         output
@@ -525,8 +583,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 type_name: clsr_type,
             });
 
-            let block_data = self.find_block(resume);
-            output.extend(block_data.enter(1));
+            output.extend(self.resume_instrs(resume, 1));
         }
 
         output
@@ -563,7 +620,7 @@ impl<'a, 'b> Context<'a, 'b> {
             !self.is_resume(resume),
             "multi-result host resume cannot be the sentinel"
         );
-        output.extend(self.find_block(resume).enter(results));
+        output.extend(self.resume_instrs(resume, results));
     }
 
     /// Resume after a host op whose single result already matches the function's anyref return shape: return it directly on the sentinel, else enter the resume block with one value.
@@ -571,7 +628,7 @@ impl<'a, 'b> Context<'a, 'b> {
         if self.is_resume(resume) {
             output.push(curios_wasm::Instr::Return);
         } else {
-            output.extend(self.find_block(resume).enter(1));
+            output.extend(self.resume_instrs(resume, 1));
         }
     }
 
@@ -583,7 +640,7 @@ impl<'a, 'b> Context<'a, 'b> {
             });
             output.push(curios_wasm::Instr::Return);
         } else {
-            output.extend(self.find_block(resume).enter(0));
+            output.extend(self.resume_instrs(resume, 0));
         }
     }
 
@@ -729,6 +786,19 @@ pub(crate) enum LoadAs {
     Flt,
     Bytes,
     List,
+}
+
+/// How a value in its register carrier is boxed back into a reference: an `i31ref` for the scalar carriers, the `Flt` struct for `f32`, and nothing at all for a representation that already names one.
+///
+/// The dual of [`LoadAs::of`], and the reason this reads a [`Repr`] rather than a dedicated two-variant enum: a projection or a list read yields whatever was stored, so "no boxing" is a representation rather than a missing one.
+pub(crate) fn box_instr(repr: &Repr, table: &Table) -> Option<curios_wasm::Instr> {
+    match repr {
+        Repr::Nat | Repr::Int => Some(curios_wasm::Instr::RefI31),
+        Repr::Flt => Some(curios_wasm::Instr::StructNew {
+            type_name: table.flt_type(),
+        }),
+        Repr::Bytes | Repr::List | Repr::Tpl(_) | Repr::Ref => None,
+    }
 }
 
 impl LoadAs {

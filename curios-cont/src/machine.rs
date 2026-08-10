@@ -17,7 +17,7 @@ use {
 };
 
 mod structurize;
-pub(crate) use structurize::structurize;
+pub(crate) use structurize::{structurize, value_name};
 
 // Sigils follow the naming scheme shared with `curios-ersd` and `curios-wasm` — see "One naming scheme for compiler identities" in `documentation/DESIGN.md`.
 id!(MachineBlockId, "~b", mint);
@@ -799,7 +799,7 @@ impl<'a> MachineFunctionLowerer<'a> {
     }
 }
 
-fn value_id(value: CpsValueId) -> MachineValueId {
+pub(crate) fn value_id(value: CpsValueId) -> MachineValueId {
     MachineValueId(value.index() as u32)
 }
 

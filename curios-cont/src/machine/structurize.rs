@@ -615,7 +615,7 @@ fn hinted(index: usize, hint: Option<&str>) -> String {
         None => index.to_string(),
     }
 }
-fn value_name(value: MachineValueId) -> EmissionValueName {
+pub(crate) fn value_name(value: MachineValueId) -> EmissionValueName {
     EmissionValueName::from(format!("m{}", value.0))
 }
 fn direct_name(machine: &MachineModule, function: CpsFunId) -> EmissionFunctionName {
