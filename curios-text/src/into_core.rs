@@ -121,7 +121,6 @@ pub struct PreparedPrelude {
     core: curios_core::Module,
     metavariable_floor: usize,
     binder_floor: usize,
-    witness_floor: usize,
     universe_floor: usize,
 }
 
@@ -151,11 +150,6 @@ impl PreparedPrelude {
 
     pub fn binder_floor(&self) -> usize {
         self.binder_floor
-    }
-
-    /// One past the highest witness identity the fixed prelude minted. Entry lowering resumes strictly above it: a replayed witness's identity was fixed in an earlier compiler run, and a fresh mint that aliased one would silently rebind a coherence-table entry.
-    pub fn witness_floor(&self) -> usize {
-        self.witness_floor
     }
 
     pub fn universe_floor(&self) -> usize {
@@ -1692,8 +1686,8 @@ pub fn into_core_unit(
     universes.seed(floor(PreparedPrelude::universe_floor));
     let binders = Entropy::<usize>::new();
     binders.seed(floor(PreparedPrelude::binder_floor));
-    let witness_ids = Entropy::<usize>::new();
-    witness_ids.seed(floor(PreparedPrelude::witness_floor));
+    // No floor: an ordinal is scoped to its mount now, and this unit's mounts are disjoint from every predecessor's, so nothing it mints can collide with anything already stored.
+    let witness_ids = RefCell::new(BTreeMap::new());
 
     let universe_role = Cell::new(curios_core::UniverseRole::Flexible);
     // The scope's seed table. A module carries the *cumulative* table from index zero rather than its own slice — `universe_floor` is asserted equal to its length — so the scope's table is the last unit's, already containing every earlier one. Concatenating them counts each predecessor once per successor, which is what the floor assertion catches.
@@ -1820,7 +1814,6 @@ pub fn into_core_unit(
         },
         metavariable_floor: metavars.count(),
         binder_floor: binders.count(),
-        witness_floor: witness_ids.count(),
         universe_floor: universes.count(),
     })
 }

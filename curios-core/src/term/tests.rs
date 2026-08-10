@@ -189,7 +189,13 @@ fn has_local_free_flags_locals_not_globals() {
     assert!(!global(["std", "Nat"]).has_local_free());
 
     // A compiler-generated *global* is not context dependent and must not set the bit. This used to be a search for a marker character, so a witness that spelled itself `witness#N` misfired on every term mentioning one, silently disabling three elaboration caches. No spelling can do that now.
-    assert!(!Term::free_var(&Free::Global(Global::Witness(WitnessId(0)))).has_local_free());
+    assert!(
+        !Term::free_var(&Free::Global(Global::Witness(WitnessId::new(
+            Qualifier::from(["std"]),
+            0,
+        ))))
+        .has_local_free()
+    );
     assert!(!global(["std", "Nat"]).has_local_free());
 
     // The bit is structural: a minted name anywhere in the tree sets it.
