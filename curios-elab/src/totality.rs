@@ -21,7 +21,10 @@ use {
         Definition, Enter, Global, Intrinsic, Item, Module, Rec, RecGroup, RecItem, Subterm, Term,
         Totality,
     },
-    std::collections::{BTreeMap, BTreeSet, HashMap},
+    std::{
+        collections::{BTreeMap, BTreeSet, HashMap},
+        rc::Rc,
+    },
 };
 
 /// Every top-level definition's totality.
@@ -215,8 +218,10 @@ fn faults(
     positions: &[Position],
     inherited: &BTreeMap<Global, Totality>,
 ) -> Vec<(String, Fault)> {
+    curios_profile::sample!("totality::faults_positions", positions.len());
     let seeded = seeds(positions);
     let reached = reachable(module, seeded);
+    curios_profile::sample!("totality::reached", reached.len());
     let settled = settled(module, inherited);
     let named = offenders(&reached, &settled);
 
@@ -269,7 +274,10 @@ pub fn check_type_totality(
 fn checked_type_positions(context: &mut Context) -> Result<Vec<Position>, Error> {
     let settled = context.checked().to_vec();
     let mut zonked: HashMap<Term, Term> = HashMap::new();
+    // One label per elaboration site, not per position: `Context::record_checked` already stores an `Rc<str>` site, and many recorded terms share one.
+    let mut sites: HashMap<Rc<str>, Rc<str>> = HashMap::new();
     let mut positions = Vec::new();
+    curios_profile::sample!("totality::checked_entries", settled.len());
 
     for (term, type_, site) in settled {
         // Once per distinct recorded type rather than once per recorded term — see `checked_proof_positions`, which memoizes the same call for the same reason. This walk reads `checked` rather than draining it, because (V)'s seeding still needs it.
@@ -292,11 +300,16 @@ fn checked_type_positions(context: &mut Context) -> Result<Vec<Position>, Error>
         if sort {
             positions.push(Position {
                 term: zonk(context, &term)?,
-                site: format!("a type in {site}").into(),
+                site: Rc::clone(
+                    sites
+                        .entry(site.clone())
+                        .or_insert_with(|| Rc::from(format!("a type in {site}"))),
+                ),
             });
         }
     }
 
+    curios_profile::sample!("totality::checked_type_positions", positions.len());
     Ok(positions)
 }
 
@@ -325,6 +338,8 @@ pub fn check_proof_totality(
 fn checked_proof_positions(context: &mut Context) -> Result<Vec<Position>, Error> {
     let checked = context.take_checked();
     let mut zonked: HashMap<Term, Term> = HashMap::new();
+    // One label per elaboration site, not per position: `Context::record_checked` already stores an `Rc<str>` site, and many recorded terms share one.
+    let mut sites: HashMap<Rc<str>, Rc<str>> = HashMap::new();
     let mut memo: HashMap<Term, bool> = HashMap::new();
     let mut positions = Vec::new();
 
@@ -351,11 +366,16 @@ fn checked_proof_positions(context: &mut Context) -> Result<Vec<Position>, Error
         if prop {
             positions.push(Position {
                 term: zonk(context, &term)?,
-                site: format!("a proof in {site}").into(),
+                site: Rc::clone(
+                    sites
+                        .entry(site.clone())
+                        .or_insert_with(|| Rc::from(format!("a proof in {site}"))),
+                ),
             });
         }
     }
 
+    curios_profile::sample!("totality::checked_proof_positions", positions.len());
     Ok(positions)
 }
 

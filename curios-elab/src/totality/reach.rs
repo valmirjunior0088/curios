@@ -83,6 +83,8 @@ pub(crate) fn type_positions(module: &Module) -> Vec<Position> {
         entries(declaration.fields(), &site, &mut positions);
     }
 
+    // Temporary instrumentation: (T)'s two seedings and (V)'s one are the inputs both obligations walk, and nothing has ever counted them. Remove once answered.
+    curios_profile::sample!("totality::type_positions", positions.len());
     positions
 }
 
@@ -99,10 +101,12 @@ pub(crate) fn seeds(positions: &[Position]) -> BTreeSet<Global> {
 pub(crate) fn reachable(module: &Module, seeds: BTreeSet<Global>) -> BTreeSet<Global> {
     let bodies = definitions(module)
         .map(|definition| {
-            let mut named = definition.type_.free_vars();
-            named.extend(definition.body.free_vars());
-            let named = named
+            // Both halves borrowed and filtered straight into the result, rather than cloned, unioned, and filtered — three sets per definition where one suffices, over every definition, once per obligation.
+            let named = definition
+                .type_
+                .free_vars_shared()
                 .iter()
+                .chain(definition.body.free_vars_shared())
                 .filter_map(|free| free.as_global().cloned())
                 .collect::<BTreeSet<_>>();
             (definition.name.clone(), named)
@@ -133,8 +137,9 @@ fn definitions(module: &Module) -> impl Iterator<Item = Definition> + '_ {
 
 /// Record every definition this term names.
 fn mark(term: &Term, seeds: &mut BTreeSet<Global>) {
+    // Borrowed, not owned: this runs once per position, and (T) seeds 68,947 of them over the prelude. Taking the owned set would deep-copy every `Free` — each global carrying its qualifier's segments — to read it once and drop it.
     seeds.extend(
-        term.free_vars()
+        term.free_vars_shared()
             .iter()
             .filter_map(|free| free.as_global())
             .cloned(),

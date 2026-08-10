@@ -1528,6 +1528,13 @@ impl Term {
         );
     }
 
+    /// The cached free-variable set, borrowed.
+    ///
+    /// [`Bound::free_vars`] hands back an owned clone, which is what a caller that mutates or stores the set wants. A caller that only *reads* it — extending another set, testing membership — pays a deep copy of every [`Free`] for nothing, and a `Free::Global` drags a [`Qualifier`](curios_base::Qualifier) of owned segments behind it. The set is already behind an `Rc` precisely so it need not be copied; this is the accessor that keeps that promise.
+    pub fn free_vars_shared(&self) -> &BTreeSet<Free> {
+        self.get_or_init_free_vars()
+    }
+
     fn get_or_init_free_vars(&self) -> &Rc<BTreeSet<Free>> {
         self.warm_frees();
         self.inner
