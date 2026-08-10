@@ -1,0 +1,42 @@
+[package]
+name = "curios-unit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The Curios compilation unit: what one unit provides to its successors, and the stages that produce it without judging it"
+
+[lints]
+workspace = true
+
+[features]
+archive = [
+    "curios-archive/enabled",
+    "curios-abi/archive",
+    "curios-base/archive",
+    "curios-core/archive",
+    "curios-elab/archive",
+    "curios-ersd/archive",
+    "curios-text/archive",
+]
+profile = [
+    "curios-profile/enabled",
+    "curios-elab/profile",
+    "curios-ersd/profile",
+    "curios-text/profile",
+]
+
+# Deliberately absent: `curios-cert`. A unit is produced here and judged elsewhere,
+# because Cargo's rebuild granularity is the build script — and `curios-prelude-archive`'s
+# script constructs a `Unit`, so a kernel dependency reaching this crate would
+# re-elaborate the whole standard library for every certifier edit. That is the
+# regression `curios-analysis` was split out to fix, arriving through another door.
+# Checkable: `cargo tree -p curios-unit --edges normal` must not contain `curios-cert`.
+[dependencies]
+curios-abi = { workspace = true }
+curios-archive = { workspace = true }
+curios-base = { workspace = true }
+curios-core = { workspace = true }
+curios-elab = { workspace = true }
+curios-ersd = { workspace = true }
+curios-profile = { workspace = true }
+curios-text = { workspace = true }

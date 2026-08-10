@@ -628,6 +628,7 @@ dependencies = [
  "curios-ersd",
  "curios-profile",
  "curios-text",
+ "curios-unit",
  "sha2 0.11.0",
 ]
 
@@ -666,6 +667,20 @@ dependencies = [
  "curios-profile",
  "num-bigint",
  "num-traits",
+]
+
+[[package]]
+name = "curios-unit"
+version = "0.8.1"
+dependencies = [
+ "curios-abi",
+ "curios-archive",
+ "curios-base",
+ "curios-core",
+ "curios-elab",
+ "curios-ersd",
+ "curios-profile",
+ "curios-text",
 ]
 
 [[package]]

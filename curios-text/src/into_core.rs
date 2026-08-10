@@ -127,6 +127,8 @@ impl Default for PreludeModules {
 #[curios_archive::archived]
 pub struct PreparedPrelude {
     mounts: Vec<Mount>,
+    /// The `foreign` rows this unit declares. Collected by the same walk that lowers its items, and carried here rather than dropped: a unit that declares one has to reach the link, and the prelude declaring none is a fact about the prelude, not about the shape.
+    foreigns: ForeignStore,
     table: BTreeMap<Qualifier, ModuleInfo>,
     public: BTreeMap<Qualifier, PublicInterface>,
     core: curios_core::Module,
@@ -139,6 +141,11 @@ pub struct PreparedPrelude {
 impl PreparedPrelude {
     pub fn core(&self) -> &curios_core::Module {
         &self.core
+    }
+
+    /// The `foreign` rows this unit declares.
+    pub fn foreigns(&self) -> &ForeignStore {
+        &self.foreigns
     }
 
     /// This prepared prelude with its lowered module hash-consed against `sharing`. Pass the same table used for the elaborated module so equal structures collapse across the two snapshots, not merely within each.
@@ -1793,6 +1800,7 @@ pub fn prepare_prelude(
 
     Ok(PreparedPrelude {
         mounts,
+        foreigns,
         table: table.into_own().into_iter().collect(),
         public: public.into_own().into_iter().collect(),
         core,

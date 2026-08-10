@@ -136,17 +136,16 @@ A new crate, `curios-unit`, owns the unit and the two stages that do not judge.
 pub struct Mount { pub prefix: Qualifier, pub kind: RootKind }
 
 /// What one unit provides to its successors. `PreludeArchive` becomes this type's serialized form.
+///
+/// One opaque artifact per stage, not their fields flattened: `curios-text`'s resolution tables
+/// and `curios-elab`'s arena stay private to those crates, so what this type adds is the pairing —
+/// the halves describe *one* unit, and nothing else says so. The foreign rows and the four
+/// watermarks ride inside the lowered half, which is what produced them.
 pub struct Unit {
-    mounts: Vec<Mount>,
-    table: BTreeMap<Qualifier, ModuleInfo>,   // resolution
-    public: BTreeMap<Qualifier, PublicInterface>,
-    core: curios_core::Module,                 // elaborated and zonked
-    ersd: ErasedUnit,                          // arena + environment
-    foreigns: ForeignStore,
-    metavariable_floor: usize,
-    binder_floor: usize,
-    witness_floor: usize,
-    universe_floor: usize,
+    text: curios_text::PreparedPrelude,   // mounts, resolution, interfaces, foreigns, watermarks
+    core: curios_core::Module,            // elaborated and zonked
+    ersd: curios_elab::ErasedUnit,        // arena + environment
+    binder_floor: usize,                  // derived over `core` by the walk that built this
 }
 
 /// The units already compiled, in dependency order.
@@ -243,7 +242,7 @@ Delete `RootId`, `RootId::of_segment` and `Qualifier::root_segment`. Delete the 
 
 ### A3 — `Unit`, `Scope`, and one spelling per stage
 
-**Landing in two commits.** The first is below and has landed; the second creates the crate.
+**Landing in three commits**, because it turned out to be three ideas rather than one. The entrypoint and the erasure collapse (landed), the crate and the artifact (landed), and the lowering collapse (pending).
 
 Create `curios-unit`. `PreparedPrelude`, `ErasedPrelude` and `PreludeArchive`'s payload collapse into `Unit`. Collapse the three lowerings into one, the two erasures into one, and give `elaborate_and_zonk_with_prelude` an `Established` rather than a `&Module`. `curios-prelude-archive`'s build script calls `elaborate_unit` + `erase_unit`; `curios-prelude`'s build script still judges the restored unit.
 
@@ -254,6 +253,14 @@ Three consequences worth recording:
 - **`erase_unit` asserts that a body and its expected type arrive together.** Nothing previously stopped a caller pairing one with the other's absence.
 - **The archive's `body_type` is deleted.** It was computed by `build.rs`, stored, exposed through an accessor, and read by nothing — an entrypoint type for a unit with no entrypoint. Elaboration's body type is now `Option<Term>` all the way out, which is what made the dead field visible.
 - **The kernel no longer certifies a dummy.** `check_entrypoint` runs only where there is a body, so the prelude's `Nat::Zero` stopped being judged because it stopped existing.
+
+**`curios-unit` exists and the restored prelude *is* a `Unit`.** Both edge rules were checked rather than assumed: neither `cargo tree -p curios-unit --edges normal` nor `cargo tree -p curios-prelude-archive --edges build` contains `curios-cert`. Three corrections to the API block above, all forced by encapsulation:
+
+- **`Unit` composes one opaque artifact per stage**, as [the API block](#the-api-stated-so-it-is-not-invented-twice) now shows. `ModuleInfo` and `PublicInterface` are `pub(super)` inside `curios-text`; holding them on `Unit` directly would have exported a resolver's internals for no consumer.
+- **`Scope` hands each stage a slice of *that stage's* type** — `Vec<&PreparedPrelude>` to the lowerer, `Vec<&Module>` to elaboration and the kernel — and each builds its own view. It cannot construct a `Scoped` itself, for the same reason.
+- **The arena is one value on `Scope`, not one per unit**, mirroring `Resumed`: `Scope::arena` returns the last unit's, because each erasure resumes over what the previous one produced. An empty scope yields `ErasedUnit::default()`.
+
+**And the foreign rows stopped being discarded.** `PreparedPrelude` now carries what `prepare_prelude` collects, so `Unit::foreigns` delegates rather than storing an empty store the build never computed. That was going to be an A5 gap; landing it here was cheaper than writing a stand-in and deleting it later.
 
 *Must not change:* any verdict, and not the archive's determinism — `build.rs` already serializes twice and compares, and that assertion stays.
 

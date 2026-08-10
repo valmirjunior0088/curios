@@ -2,9 +2,7 @@
 
 use {
     crate::{ArchivedPreludeArchive, PreludeArchive, SCHEMA},
-    curios_core::Module,
-    curios_elab::ErasedUnit,
-    curios_text::PreparedPrelude,
+    curios_unit::Unit,
     std::{cell::LazyCell, sync::OnceLock},
 };
 
@@ -13,44 +11,17 @@ const EXPECTED_FINGERPRINT: &str = env!("CURIOS_PRELUDE_FINGERPRINT");
 
 static ARCHIVE: OnceLock<Result<&'static ArchivedPreludeArchive, String>> = OnceLock::new();
 
-/// The reusable, restored fixed prelude. Fields stay private so callers cannot mutate compiler-global state between invocations.
-pub struct Prelude {
-    prepared: PreparedPrelude,
-    core: Module,
-    binder_floor: usize,
-    ersd: ErasedUnit,
-}
-
-impl Prelude {
-    pub fn prepared(&self) -> &PreparedPrelude {
-        &self.prepared
-    }
-
-    pub fn core(&self) -> &Module {
-        &self.core
-    }
-
-    /// The binder floor derived over [`core`](Self::core) when this image was built.
-    pub fn binder_floor(&self) -> usize {
-        self.binder_floor
-    }
-
-    /// The arena prelude prefix — the erased module and environment production replay resumes over. Returned as an owned clone because replay consumes it by value, so a compile's mutation of its copy can never poison a later one.
-    pub fn ersd(&self) -> ErasedUnit {
-        self.ersd.clone()
-    }
-}
-
 thread_local! {
-    static PRELUDE: LazyCell<Prelude> = LazyCell::new(|| {
+    /// The reusable, restored fixed prelude, as the unit it is. Held behind [`with_prelude`] so callers cannot mutate compiler-global state between invocations.
+    static PRELUDE: LazyCell<Unit> = LazyCell::new(|| {
         let image = restore_archive();
 
-        Prelude {
-            prepared: image.prepared,
-            core: image.core,
-            binder_floor: image.binder_floor,
-            ersd: image.ersd,
-        }
+        Unit::new(
+            image.prepared,
+            image.core,
+            image.ersd,
+            image.binder_floor,
+        )
     });
 }
 
@@ -109,8 +80,8 @@ fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
-/// Borrow this thread's reusable restored Text/Core prelude.
-pub fn with_prelude<R>(use_prelude: impl FnOnce(&Prelude) -> R) -> R {
+/// Borrow this thread's reusable restored prelude unit.
+pub fn with_prelude<R>(use_prelude: impl FnOnce(&Unit) -> R) -> R {
     curios_profile::profile!("with_prelude");
     PRELUDE.with(|prelude| use_prelude(prelude))
 }
