@@ -97,8 +97,13 @@ mod tests {
         curios_core::Global,
         curios_core::Item,
         curios_core::Term,
+        curios_core::derived_binder_floor,
         curios_elab::{Context, DEFAULT_STEP_BUDGET, ErasedUnit, Resumed, erase_unit},
-        std::collections::{BTreeMap, BTreeSet},
+        std::{
+            collections::{BTreeMap, BTreeSet},
+            thread,
+            time::Instant,
+        },
     };
 
     #[test]
@@ -337,8 +342,8 @@ mod tests {
     #[ignore = "measurement: reports timings over the stored image rather than asserting"]
     fn stored_prelude_measurements() {
         // A restore happens once per thread, so a *cold* one needs a thread that has not had one — measuring it on this thread would measure a thread-local read.
-        let cold = std::thread::spawn(|| {
-            let start = std::time::Instant::now();
+        let cold = thread::spawn(|| {
+            let start = Instant::now();
             with_prelude(|_| ());
 
             start.elapsed()
@@ -349,11 +354,15 @@ mod tests {
         with_prelude(|prelude| {
             let core = prelude.core();
 
-            let start = std::time::Instant::now();
-            drop(prelude.ersd());
-            let clone = start.elapsed();
+            // Averaged, because a single shot at this magnitude is not a measurement: the other three take long enough that one sample says something, and this one does not.
+            const CLONES: u32 = 100;
+            let start = Instant::now();
+            for _ in 0..CLONES {
+                drop(prelude.ersd());
+            }
+            let clone = start.elapsed() / CLONES;
 
-            let start = std::time::Instant::now();
+            let start = Instant::now();
             erase_unit(
                 &mut Context::new(DEFAULT_STEP_BUDGET, SYNTAX),
                 Resumed::of(&[], ErasedUnit::default()),
@@ -363,7 +372,7 @@ mod tests {
             .expect("the stored prelude re-erases");
             let erasure = start.elapsed();
 
-            let start = std::time::Instant::now();
+            let start = Instant::now();
             let verdicts = recheck_module_verdicts(core, DEFAULT_STEP_BUDGET, &Globals::default());
             let certification = start.elapsed();
 
@@ -378,7 +387,10 @@ mod tests {
 
             println!("\n=== timings, over the stored image ===");
             println!("  cold restore                 {:>10.1?}", cold);
-            println!("  erased-prefix clone          {:>10.1?}", clone);
+            println!(
+                "  erased-prefix clone          {:>10.1?}   (mean of {CLONES})",
+                clone
+            );
             println!("  re-erasing one whole unit    {:>10.1?}", erasure);
             println!(
                 "  certifying one whole unit    {:>10.1?}  ({} refusals)",
@@ -404,7 +416,7 @@ mod tests {
             println!("  concepts                     {:>10}", core.concepts.len());
             println!(
                 "  derived binder floor         {:>10}   (lowering watermark {})",
-                curios_core::derived_binder_floor(core),
+                derived_binder_floor(core),
                 core.binder_floor
             );
 
