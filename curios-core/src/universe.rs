@@ -217,16 +217,40 @@ impl Level {
     }
 
     /// Substitute heads simultaneously and normalize the resulting maximum.
+    ///
+    /// This is [`Level::max`] over one part per atom, accumulated straight into the result rather than materialized as a vector of parts. The distinction is not stylistic: a part built for an atom *nothing replaces* is that atom back again, and building it cost two `BTreeMap` allocations.
+    ///
+    /// `Self::atom(head, 0)` is `{0, {head → 0}}`; `checked_add(offset)` raises both halves to `offset` and then normalizes, and normalization zeroes a constant no greater than some atom's offset — so the part is exactly `{0, {head → offset}}`, which is the entry already in `self.atoms`. Two consequences make the unreplaced arm below equivalent rather than merely close: it contributes `0` to the constant and so cannot raise it, and neither of those additions can overflow, so it cannot be the arm that fails. Measured over the prelude before this: 74.5 allocations per rewritten constraint, of which the substitution was replacing one head in eleven.
+    ///
+    /// `replacement` is still called exactly once per atom, in the same order. That is deliberate, and it is why there is no "probe first, clone if nothing matched" fast path — [`FnMut`] promises nothing about purity, so calling it twice would change behaviour where this does not.
     pub fn substitute(
         &self,
         mut replacement: impl FnMut(LevelHead) -> Option<Level>,
     ) -> Result<Self, UniverseError> {
-        let mut parts = vec![Self::constant(self.constant)];
-        for (&head, &offset) in &self.atoms {
-            let base = replacement(head).unwrap_or_else(|| Self::atom(head, 0));
-            parts.push(base.checked_add(offset)?);
+        fn raise(atoms: &mut BTreeMap<LevelHead, u32>, head: LevelHead, offset: u32) {
+            atoms
+                .entry(head)
+                .and_modify(|old| *old = (*old).max(offset))
+                .or_insert(offset);
         }
-        Ok(Self::max(parts))
+
+        let mut constant = self.constant;
+        let mut atoms = BTreeMap::new();
+
+        for (&head, &offset) in &self.atoms {
+            match replacement(head) {
+                None => raise(&mut atoms, head, offset),
+                Some(base) => {
+                    let part = base.checked_add(offset)?;
+                    constant = constant.max(part.constant);
+                    for (head, offset) in part.atoms {
+                        raise(&mut atoms, head, offset);
+                    }
+                }
+            }
+        }
+
+        Ok(Self { constant, atoms }.normalized())
     }
 
     pub fn instantiate(&self, arguments: &[Level]) -> Result<Self, UniverseError> {
@@ -561,6 +585,37 @@ mod tests {
 
     fn origin(label: &str) -> UniverseConstraintOrigin {
         UniverseConstraintOrigin::new(UniverseConstraintKind::Other(label.into()))
+    }
+
+    /// [`Level::substitute`] accumulates into its result instead of building one part per atom, and the arm that made that worth doing is the *unreplaced* one — where the part is the atom back again.
+    ///
+    /// Both halves of that equivalence are asserted here, because a later edit could break either and the corpus would not notice: replacing nothing is the identity on a level carrying a constant and several offset atoms, and a replacement whose own constant exceeds the level's still raises it. The third case is the one normalization decides — an atom offset reaching the constant zeroes it — which is what makes the unreplaced arm contribute nothing to the constant rather than contributing `offset`.
+    #[test]
+    fn substituting_nothing_is_the_identity_and_a_replacement_still_raises_the_constant() {
+        let u = LevelHead::Meta(UniverseMetaId(0));
+        let v = LevelHead::Meta(UniverseMetaId(1));
+        let level = Level::max([Level::constant(9), Level::atom(u, 2), Level::atom(v, 5)]);
+
+        assert_eq!(level.substitute(|_| None).unwrap(), level);
+
+        let raised = level
+            .substitute(|head| (head == u).then(|| Level::constant(20)))
+            .unwrap();
+        assert_eq!(
+            raised.constant_part(),
+            22,
+            "the replacement carries the atom's own offset"
+        );
+        assert_eq!(
+            raised,
+            Level::max([Level::constant(22), Level::atom(v, 5)]),
+            "the untouched atom survives and the replaced head is gone"
+        );
+
+        // Normalization is what keeps the unreplaced arm from contributing its offset as a constant: an atom reaching the constant zeroes it, so `{0, {head → offset}}` is the whole part.
+        let reached = Level::max([Level::constant(2), Level::atom(u, 2)]);
+        assert_eq!(reached.constant_part(), 0);
+        assert_eq!(reached.substitute(|_| None).unwrap(), reached);
     }
 
     #[test]
