@@ -157,6 +157,41 @@ fn a_file_argument_needs_no_project() {
     fs::remove_dir_all(root).unwrap();
 }
 
+/// A package of nothing but programs compiles them against its dependencies alone — there is no library of its own to put last.
+#[test]
+fn a_package_of_programs_alone_runs_them() {
+    let root = tree(
+        "run-programs-only",
+        &[
+            (
+                "app/curios.toml",
+                "name = \"app\"\n\n[dependencies]\nbase = { source = \"path\", path = \"../base\" }\n\n[[executables]]\nname = \"serve\"\n",
+            ),
+            ("app/serve.crs", ""),
+            ("base/curios.toml", "name = \"base\"\n"),
+            ("base/lib.crs", ""),
+        ],
+    );
+
+    let Target::Executable { entry, units, .. } =
+        Target::of(None, None, &root.join("app")).expect("a package with no library")
+    else {
+        panic!("a declared name is not a file");
+    };
+
+    assert_eq!(entry, root.join("app/serve.crs"));
+    assert_eq!(
+        units
+            .iter()
+            .flat_map(|source| source.mounts())
+            .map(|mount| mount.prefix.join())
+            .collect::<Vec<_>>(),
+        vec!["/base".to_string()]
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
 /// An executable compiles against its package's full scope: its own library last, everything it depends on before that.
 #[test]
 fn an_executable_compiles_against_its_package_and_its_dependencies() {

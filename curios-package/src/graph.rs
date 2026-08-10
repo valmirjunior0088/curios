@@ -29,8 +29,9 @@ pub fn order(governing: &Governing) -> Result<Vec<RootSource>, String> {
         order: Vec::new(),
     };
 
-    let source = walk.enter(&governing.package, &governing.directory)?;
-    walk.order.push(source);
+    if let Some(source) = walk.enter(&governing.package, &governing.directory)? {
+        walk.order.push(source);
+    }
 
     Ok(walk.order)
 }
@@ -98,8 +99,8 @@ struct Pin {
 }
 
 impl Walk<'_> {
-    /// Resolve everything `package` depends on into the order behind it, and hand back its own resolver.
-    fn enter(&mut self, package: &Package, directory: &Path) -> Result<RootSource, String> {
+    /// Resolve everything `package` depends on into the order behind it, and hand back its own resolver — `None` when it has no library, since then it contributes no unit and only its programs exist.
+    fn enter(&mut self, package: &Package, directory: &Path) -> Result<Option<RootSource>, String> {
         self.open.push(package.name.clone());
 
         for (name, row) in &package.dependencies {
@@ -200,7 +201,15 @@ impl Walk<'_> {
             ));
         }
 
-        let source = self.enter(&package, &directory)?;
+        // A dependency is something to import from, so a package with no library is nothing to depend *on* — refused here rather than surfacing as every one of its names being unbound.
+        let Some(source) = self.enter(&package, &directory)? else {
+            return Err(format!(
+                "the dependency {:?} resolves to {}, which has no library; there is nothing there to import",
+                spelling(name),
+                directory.display()
+            ));
+        };
+
         self.order.push(source);
 
         Ok(())

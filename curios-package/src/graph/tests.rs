@@ -147,6 +147,31 @@ fn two_dependents_resolving_one_name_two_ways_is_refused() {
     fs::remove_dir_all(root).unwrap();
 }
 
+/// A package of nothing but programs is nothing to depend *on*, and saying so beats every one of its names arriving unbound.
+#[test]
+fn a_dependency_with_no_library_is_refused() {
+    let root = tree(
+        "graph-libraryless-dependency",
+        &[
+            (
+                "app/curios.toml",
+                "name = \"app\"\n\n[dependencies]\ntool = { source = \"path\", path = \"../tool\" }\n",
+            ),
+            ("app/lib.crs", ""),
+            (
+                "tool/curios.toml",
+                "name = \"tool\"\n\n[[executables]]\nname = \"tool\"\n",
+            ),
+            ("tool/tool.crs", ""),
+        ],
+    );
+
+    let refusal = mounts(&root.join("app")).expect_err("nothing to import");
+    assert!(refusal.contains("has no library"), "{refusal}");
+
+    fs::remove_dir_all(root).unwrap();
+}
+
 /// **The cycle.** A dependency cycle is refused naming the chain.
 #[test]
 fn a_dependency_cycle_is_refused() {

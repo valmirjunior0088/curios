@@ -50,22 +50,47 @@ fn a_package_mounts_its_declared_name_over_its_manifest_directory() {
 
     assert_eq!(package.name, Qualifier::from(["myorg", "json"]));
     assert_eq!(
-        source.mounts().first().map(|mount| mount.prefix.clone()),
+        source
+            .expect("a package with a library header")
+            .mounts()
+            .first()
+            .map(|mount| mount.prefix.clone()),
         Some(Qualifier::from(["myorg", "json"]))
     );
 
     fs::remove_dir_all(directory).unwrap();
 }
 
-/// `name` obligates a library, so its absence is a refusal rather than a package with no library.
+/// A package of nothing but programs has no body, and no vestigial file to write saying so.
 #[test]
-fn a_package_with_no_library_header_is_refused() {
-    let directory = package("layout-headerless", "name = \"json\"\n", &[]);
+fn a_package_with_no_library_header_has_no_library() {
+    let directory = package(
+        "layout-headerless",
+        "name = \"json\"\n\n[[executables]]\nname = \"serve\"\n",
+        &[("serve.crs", "")],
+    );
+
+    let (package, source) = package_at(&directory).expect("a package of programs alone");
+
+    assert!(source.is_none());
+    assert_eq!(package.executables.len(), 1);
+
+    fs::remove_dir_all(directory).unwrap();
+}
+
+/// Only the header's *absence* is an answer: one that fails to parse is still a refusal.
+#[test]
+fn an_unparsable_library_header_is_refused() {
+    let directory = package(
+        "layout-broken-header",
+        "name = \"json\"\n",
+        &[("lib.crs", "pub let x : = ;")],
+    );
 
     let refusal = package_at(&directory)
         .map(|_| ())
-        .expect_err("a package with no library header");
-    assert!(refusal.contains("obligates a library header"), "{refusal}");
+        .expect_err("a header that does not parse");
+    assert!(refusal.contains("lib.crs"), "{refusal}");
 
     fs::remove_dir_all(directory).unwrap();
 }

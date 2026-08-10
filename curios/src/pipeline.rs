@@ -79,9 +79,15 @@ pub(crate) fn load_units(units: &[PathBuf]) -> Result<Vec<curios_text::RootSourc
     units
         .iter()
         .map(|directory| {
-            curios_package::package_at(directory)
-                .map(|(_, source)| source)
-                .map_err(CompileError::Failure)
+            let (_, source) =
+                curios_package::package_at(directory).map_err(CompileError::Failure)?;
+
+            source.ok_or_else(|| {
+                CompileError::Failure(format!(
+                    "{} has no library, so mounting it would mount nothing",
+                    directory.display()
+                ))
+            })
         })
         .collect()
 }
