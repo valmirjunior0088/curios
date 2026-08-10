@@ -271,6 +271,8 @@ pub fn check_type_totality(
 /// This is the half [`type_positions`] structurally cannot reach. That walk is a syntactic reading of where types are *written*: an annotation, a motive, a declaration telescope, a definition whose type ends in a sort. A type passed as an *argument* is written nowhere it looks — `annotations` has no case for an application's parameters — so `ignore(@Shape(inf), 5)` handed a partial value to a type-level function with nothing seeded, while the same type in an annotation was rejected.
 ///
 /// The two seedings are **incomparable**, not nested, which a count of each obscured: the walk sees definition bodies whose type ends in a sort, and no typing judgment classifies those as type positions; this sees type arguments, which no syntactic walk can find without re-deriving the head's telescope — the re-derivation that cost (V) six defects. Taking the union costs one pass over already-recorded terms and needs neither.
+// Safety: the zonk memo is keyed on `Term`, which carries `OnceCell` scalar caches and so trips Clippy's interior-mutability warning. The logical value is fully immutable, and hashing and equality stay stable across those caches filling — the same caveat `checked_proof_positions` carries for the same map.
+#[allow(clippy::mutable_key_type)]
 fn checked_type_positions(context: &mut Context) -> Result<Vec<Position>, Error> {
     let settled = context.checked().to_vec();
     let mut zonked: HashMap<Term, Term> = HashMap::new();
