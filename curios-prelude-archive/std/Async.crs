@@ -383,141 +383,175 @@ let expire_sleepers(sleeping: List(Sleeper)) -> Io({List(Job), List(Sleeper)}) =
 -- No runnable job, nothing blocked on a handle, and no sleeper: the root can never be fulfilled. Nominal and empty — it records that the fact occurred, and leaves room to carry a diagnostic later without changing how callers match.
 pub struct Deadlock: pub Type {}
 
+-- The scheduler's four work queues, named together rather than threaded as loose cells through one closure. The root's result cell is deliberately *not* a field: it is the only piece that knows the answer type, so keeping it out leaves every function that merely moves fibers around monomorphic.
+struct Queues: Type {
+    runq: Cell(List(Job)),
+    blocked: Cell(List(Parked)),
+    sleeping: Cell(List(Sleeper)),
+    parked: Cell(List(Slot)),
+}
+
+let enqueue(q: Queues, j: Job) -> Io({}) =
+    let current = Cell/get(q.runq)!;
+    Cell/set(q.runq, [j, ..current]);
+
+let block_on_handle(q: Queues, job: Job, h: Handle, interest: Nat) -> Io({}) =
+    let current = Cell/get(q.blocked)!;
+    Cell/set(
+        q.blocked,
+        [
+            Parked {
+                handle = h,
+                interest = interest,
+                resume = job.resume,
+                token = job.token,
+                guards = job.guards,
+            },
+            ..current]);
+
+let sleep_until(q: Queues, job: Job, d: Duration) -> Io({}) =
+    let now = Duration/now()!;
+    let current = Cell/get(q.sleeping)!;
+    Cell/set(
+        q.sleeping,
+        [
+            Sleeper {
+                due = Duration/add(now, d),
+                resume = job.resume,
+                token = job.token,
+                guards = job.guards,
+            },
+            ..current]);
+
+let park_on_waker(q: Queues, job: Job, register: (Waker) -> Io({})) -> Io({}) =
+    let slot = Cell/new(Option/some(job))!;
+    let current = Cell/get(q.parked)!;
+    let _ = Cell/set(q.parked, [slot, ..current])!;
+    -- Built with explicit `bind`, not `!`: the waker is a description the scheduler runs when the
+    -- slot is woken, and a `!` here would hoist the reads into *this* region and perform them now.
+    -- Emptying the slot before enqueueing is what makes a second wake a no-op.
+    let waker =
+        Io/bind(
+            Cell/get(slot),
+            (held) =>
+                match held
+                | none() => Io/pure(())
+                | some(j) => Io/bind(Cell/set(slot, Option/none()), (_) => enqueue(q, j))
+                end);
+    register(Waker/new(waker));
+
+-- Run one fiber until it suspends, finishes, or is found cancelled. A cancelled or finished fiber releases its guards and is not requeued; a suspended one is handed to `resume_after` with the continuation that will resume it.
+rec serve(q: Queues, job: Job) -> Io({}) =
+    let dead = is_cancelled(job.token)!;
+    match dead
+    | true => run_guards(job.guards)
+    | false =>
+        let state = job.resume.0!;
+        match state
+        | done(_) => run_guards(job.guards)
+        | step(pause, next) => resume_after(q, job, pause, next)
+        end
+    end
+
+-- Where each suspension reason decides what becomes of the fiber. `resumed` is the same job with its continuation in place — every arm needs it, so it is built once here rather than six times below.
+and resume_after(q: Queues, job: Job, pause: Pause, next: Io(Step({}))) -> Io({}) =
+    let resumed = Job { ..job, resume = Async { next } };
+    match pause
+    | wait(h, interest) => block_on_handle(q, resumed, h, interest)
+    | sleep(d) => sleep_until(q, resumed, d)
+    | fork(child, child_token) =>
+        let _ = enqueue(q, resumed)!;
+        enqueue(q, Job { resume = Async { child }, token = child_token, guards = [] })
+    | park(register) => park_on_waker(q, resumed, register)
+    -- Acquiring and releasing a guard are bookkeeping, not suspension: the fiber is served again immediately rather than going back through the queue.
+    | acquire(h, release) =>
+        serve(q, Job { ..resumed, guards = [Guard { handle = h, release = release }, ..job.guards] })
+    | release(h) =>
+        let remaining = release_guard(h, job.guards)!;
+        serve(q, Job { ..resumed, guards = remaining })
+    | yield_now() => enqueue(q, resumed)
+    end;
+
+-- Release every guard still held anywhere in the scheduler. Runs on both exits — the root finishing and the deadlock — so a handle opened by a fiber that never resumes is still closed.
+let release_everything(q: Queues) -> Io({}) =
+    let runnable = Cell/get(q.runq)!;
+    let _ = drain_jobs(runnable)!;
+    let blocked = Cell/get(q.blocked)!;
+    let _ = drain_parked(blocked)!;
+    let sleeping = Cell/get(q.sleeping)!;
+    let _ = drain_sleeping(sleeping)!;
+    let parked = Cell/get(q.parked)!;
+    drain_slots(parked);
+
+let forget_cancelled_wakers(q: Queues) -> Io({}) =
+    let slots = Cell/get(q.parked)!;
+    let live = sweep_parked(slots)!;
+    Cell/set(q.parked, live);
+
+-- Nothing runnable and nothing that could become runnable: no handle to poll and no timer to expire. This is the deadlock condition.
+let is_stalled(q: Queues) -> Io(Bool) =
+    let blocked = Cell/get(q.blocked)!;
+    let sleeping = Cell/get(q.sleeping)!;
+    Io/pure(List/len(blocked) == 0 && List/len(sleeping) == 0);
+
+-- Block until a handle is ready or the earliest timer is due, then move everything woken onto the run queue.
+let wake_ready(q: Queues) -> Io({}) =
+    let sleeping = Cell/get(q.sleeping)!;
+    let timeout = sleep_timeout(sleeping)!;
+    let blocked = Cell/get(q.blocked)!;
+    let polled = poll_ready(blocked, timeout)!;
+    let expired = expire_sleepers(sleeping)!;
+    let _ = Cell/set(q.runq, [..polled.0, ..expired.0])!;
+    let _ = Cell/set(q.blocked, polled.1)!;
+    Cell/set(q.sleeping, expired.1);
+
+-- The root fiber, wrapped so that finishing it records the answer where `drive` will find it. This is the only place the answer type appears in the scheduler.
+let root_job(@A: Type, root: Async(A), answer: Cell(Option(A)), token: Token) -> Job =
+    Job {
+        resume = bind(root, (a) => bind(lift(Cell/set(answer, Option/some(a))), (_) => pure(()))),
+        token = token,
+        guards = [],
+    };
+
+-- The scheduler loop: serve whatever is runnable, and when nothing is, either wait for the host or report that nothing ever will be.
+rec drive(@A: Type, q: Queues, answer: Cell(Option(A))) -> Io(Result(A, Deadlock)) =
+    let finished = Cell/get(answer)!;
+    match finished
+    | some(a) =>
+        let _ = release_everything(q)!;
+        Io/pure(Result/success(a))
+    | none() =>
+        let runnable = Cell/get(q.runq)!;
+        match runnable
+        | [] =>
+            let _ = forget_cancelled_wakers(q)!;
+            let stalled = is_stalled(q)!;
+            match stalled
+            | true =>
+                -- Reported to the caller rather than fatal: terminating the process is `run`'s decision, not the scheduler's.
+                let _ = release_everything(q)!;
+                Io/pure(Result/failure(Deadlock {}))
+            | false =>
+                let _ = wake_ready(q)!;
+                drive(q, answer)
+            end
+        | [job, ..rest] =>
+            let _ = Cell/set(q.runq, rest)!;
+            let _ = serve(q, job)!;
+            drive(q, answer)
+        end
+    end;
+
 pub let block_on(@A: Type, root: Async(A)) -> Io(Result(A, Deadlock)) =
-    let runq = Cell/new([])!;
-    let blocked = Cell/new([])!;
-    let sleeping = Cell/new([])!;
-    let parked = Cell/new([])!;
-    let result = Cell/new(Option/none())!;
-    let enqueue(j: Job) -> Io({}) =
-        let current = Cell/get(runq)!;
-        Cell/set(runq, [j, ..current]);
-    let root_token_cell = Cell/new(false)!;
-    let _ =
-        enqueue(
-            Job {
-                resume =
-                    bind(
-                        root,
-                        (a) => bind(lift(Cell/set(result, Option/some(a))), (_) => pure(()))),
-                token = Token { root_token_cell },
-                guards = [],
-            })!;
-    rec serve(job: Job) -> Io({}) =
-        let dead = is_cancelled(job.token)!;
-        match dead
-        | true => run_guards(job.guards)
-        | false =>
-            let s = job.resume.0!;
-            match s
-            | done(_) => run_guards(job.guards)
-            | step(p, k) =>
-                match p
-                | wait(h, ev) =>
-                    let current = Cell/get(blocked)!;
-                    Cell/set(
-                        blocked,
-                        [
-                            Parked {
-                                handle = h,
-                                interest = ev,
-                                resume = Async { k },
-                                token = job.token,
-                                guards = job.guards,
-                            },
-                            ..current])
-                | sleep(d) =>
-                    let now = Duration/now()!;
-                    let current = Cell/get(sleeping)!;
-                    Cell/set(
-                        sleeping,
-                        [
-                            Sleeper {
-                                due = Duration/add(now, d),
-                                resume = Async { k },
-                                token = job.token,
-                                guards = job.guards,
-                            },
-                            ..current])
-                | fork(child, ct) =>
-                    let _ = enqueue(Job { ..job, resume = Async { k } })!;
-                    enqueue(Job { resume = Async { child }, token = ct, guards = [] })
-                | park(reg) =>
-                    let slot = Cell/new(Option/some(Job { ..job, resume = Async { k } }))!;
-                    let current = Cell/get(parked)!;
-                    let _ = Cell/set(parked, [slot, ..current])!;
-                    -- Built with explicit `bind`, not `!`: the waker is a description the scheduler
-                    -- runs when the slot is woken, and a `!` here would hoist the reads into *this*
-                    -- region and perform them now.
-                    let waker =
-                        Io/bind(
-                            Cell/get(slot),
-                            (held) =>
-                                match held
-                                | none() => Io/pure(())
-                                | some(j) =>
-                                    Io/bind(Cell/set(slot, Option/none()), (_) => enqueue(j))
-                                end);
-                    reg(Waker/new(waker))
-                | acquire(h, fin) =>
-                    serve(
-                        Job {
-                            ..job,
-                            resume = Async { k },
-                            guards = [Guard { handle = h, release = fin }, ..job.guards],
-                        })
-                | release(h) =>
-                    let gs = release_guard(h, job.guards)!;
-                    serve(Job { ..job, resume = Async { k }, guards = gs })
-                | yield_now() => enqueue(Job { ..job, resume = Async { k } })
-                end
-            end
-        end;
-    let drain_all() -> Io({}) =
-        let q = Cell/get(runq)!;
-        let _ = drain_jobs(q)!;
-        let b = Cell/get(blocked)!;
-        let _ = drain_parked(b)!;
-        let s = Cell/get(sleeping)!;
-        let _ = drain_sleeping(s)!;
-        let p = Cell/get(parked)!;
-        drain_slots(p);
-    rec drive() -> Io(Result(A, Deadlock)) =
-        let done = Cell/get(result)!;
-        match done
-        | some(a) =>
-            let _ = drain_all()!;
-            Io/pure(Result/success(a))
-        | none() =>
-            let q = Cell/get(runq)!;
-            match q
-            | [] =>
-                let ps = Cell/get(parked)!;
-                let swept = sweep_parked(ps)!;
-                let _ = Cell/set(parked, swept)!;
-                let b = Cell/get(blocked)!;
-                let s = Cell/get(sleeping)!;
-                match List/len(b) == 0 && List/len(s) == 0
-                | true =>
-                    -- Deadlock: no runnable job, nothing blocked on a handle, and no sleeper — the root can never be fulfilled, so there is no `A` to return. Reported to the caller; terminating the process is `run`'s decision, not the scheduler's.
-                    let _ = drain_all()!;
-                    Io/pure(Result/failure(Deadlock {}))
-                | false =>
-                    let timeout = sleep_timeout(s)!;
-                    let split = poll_ready(b, timeout)!;
-                    let woken = expire_sleepers(s)!;
-                    let _ = Cell/set(runq, [..split.0, ..woken.0])!;
-                    let _ = Cell/set(blocked, split.1)!;
-                    let _ = Cell/set(sleeping, woken.1)!;
-                    drive()
-                end
-            | [job, ..rest] =>
-                let _ = Cell/set(runq, rest)!;
-                let _ = serve(job)!;
-                drive()
-            end
-        end;
-    drive();
+    let runq: Cell(List(Job)) = Cell/new([])!;
+    let blocked: Cell(List(Parked)) = Cell/new([])!;
+    let sleeping: Cell(List(Sleeper)) = Cell/new([])!;
+    let parked: Cell(List(Slot)) = Cell/new([])!;
+    let q = Queues { runq = runq, blocked = blocked, sleeping = sleeping, parked = parked };
+    let answer: Cell(Option(A)) = Cell/new(Option/none())!;
+    let root_cancelled: Cell(Bool) = Cell/new(false)!;
+    let _ = enqueue(q, root_job(root, answer, Token { root_cancelled }))!;
+    drive(q, answer);
 
 pub let run(main: Async({})) -> Io({}) =
     let outcome = block_on(main)!;
