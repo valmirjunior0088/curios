@@ -6,9 +6,32 @@ use {
     curios_ersd::Analysis,
     curios_prelude::{SYNTAX, with_prelude},
     curios_text::{Entrypoint, RootSource},
+    curios_unit::Scope,
     curios_wasm::to_bytes,
     std::slice::from_ref,
 };
+
+/// Compile against the fixed prelude, which is the scope this crate's own fixtures are programs against. The driver itself names no standard library — `curios-prelude` is a dev-dependency precisely so that stays true of everything but these tests.
+fn compile_fixture<O>(
+    budget: u64,
+    entrypoint: &Entrypoint,
+    loader: RootSource,
+    observe: O,
+) -> Result<(curios_wasm::Module, curios_abi::ForeignStore), CompileError>
+where
+    O: FnMut(Stage<'_>),
+{
+    with_prelude(|prelude| {
+        compile_entrypoint(
+            budget,
+            Scope::over(from_ref(prelude)),
+            &SYNTAX,
+            entrypoint,
+            loader,
+            observe,
+        )
+    })
+}
 
 #[test]
 fn entrypoint_type_is_used_as_expected_type() {
@@ -17,7 +40,7 @@ fn entrypoint_type_is_used_as_expected_type() {
         .unwrap()
         .with_type("/std/Bool".parse().unwrap());
 
-    let error = compile_entrypoint(DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none(), |_| {})
+    let error = compile_fixture(DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none(), |_| {})
         .map_err(String::from)
         .unwrap_err();
 
@@ -50,7 +73,7 @@ fn with_entrypoint_type(source: &str, type_: Option<&str>) -> Entrypoint {
 fn compile(source: &str, type_: Option<&str>) -> Result<curios_wasm::Module, String> {
     let entrypoint = with_entrypoint_type(source, type_);
 
-    compile_entrypoint(DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none(), |_| {})
+    compile_fixture(DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none(), |_| {})
         .map(|(module, _foreigns)| module)
         .map_err(String::from)
 }
@@ -60,13 +83,13 @@ fn a_goal_batch_classifies_as_incomplete_and_a_hard_error_as_failure() {
     // The typed split the CLI's exit codes rest on: a written-goal batch is incomplete development state, a type mismatch a hard failure.
     let goals = with_entrypoint_type("let m : /std/Nat = ?; m", Some("/std/Nat"));
     assert!(matches!(
-        compile_entrypoint(DEFAULT_STEP_BUDGET, &goals, RootSource::none(), |_| {}),
+        compile_fixture(DEFAULT_STEP_BUDGET, &goals, RootSource::none(), |_| {}),
         Err(CompileError::Incomplete(_))
     ));
 
     let mismatch = with_entrypoint_type("let bad : /std/Nat = true; bad", Some("/std/Nat"));
     assert!(matches!(
-        compile_entrypoint(DEFAULT_STEP_BUDGET, &mismatch, RootSource::none(), |_| {}),
+        compile_fixture(DEFAULT_STEP_BUDGET, &mismatch, RootSource::none(), |_| {}),
         Err(CompileError::Failure(_))
     ));
 }
@@ -247,7 +270,7 @@ fn every_stage_is_observed_once_in_names_order() {
     let entrypoint = with_entrypoint_type("/std/Nat/add(20, 22)", Some("/std/Nat"));
     let mut seen = Vec::new();
 
-    compile_entrypoint(
+    compile_fixture(
         DEFAULT_STEP_BUDGET,
         &entrypoint,
         RootSource::none(),
@@ -316,7 +339,7 @@ fn compile_printed_stages(source: &str, type_: Option<&str>) -> Result<(String, 
     let mut ersd = String::new();
     let mut cont = String::new();
 
-    compile_entrypoint(
+    compile_fixture(
         DEFAULT_STEP_BUDGET,
         &entrypoint,
         RootSource::none(),
@@ -1704,12 +1727,16 @@ fn bare_typeless_let_closure_cannot_be_inferred() {
 
 fn typecheck(source: &str, type_: Option<&str>) -> Result<(), String> {
     let entrypoint = with_entrypoint_type(source, type_);
-    super::elaborate_and_zonk(
-        DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        RootSource::none(),
-        &mut |_| {},
-    )
+    with_prelude(|prelude| {
+        super::elaborate_and_zonk(
+            DEFAULT_STEP_BUDGET,
+            Scope::over(from_ref(prelude)),
+            &SYNTAX,
+            &entrypoint,
+            RootSource::none(),
+            &mut |_| {},
+        )
+    })
     .map(|_| ())
     .map_err(String::from)
 }
@@ -1908,12 +1935,16 @@ fn dead_user_definition_is_still_typechecked() {
 /// It used to erase *fresh*, passing the whole module to `erase_module`, which worked only because a compiled module carried the prelude spliced into its items. It no longer does, and a from-scratch erasure of the entry alone leaves every prelude name unbound. Replaying is also the path production takes, so what these tests exercise is what actually runs; erasing the prelude fresh is `erase_prelude_prefix`'s job at archive-build time, where a failure panics the build.
 fn erase_to_ir(source: &str, type_: Option<&str>) -> curios_ersd::Module {
     let entrypoint = with_entrypoint_type(source, type_);
-    let (module, core_type, _foreigns) = super::elaborate_and_zonk(
-        DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        RootSource::none(),
-        &mut |_| {},
-    )
+    let (module, core_type, _foreigns) = with_prelude(|prelude| {
+        super::elaborate_and_zonk(
+            DEFAULT_STEP_BUDGET,
+            Scope::over(from_ref(prelude)),
+            &SYNTAX,
+            &entrypoint,
+            RootSource::none(),
+            &mut |_| {},
+        )
+    })
     .unwrap();
     with_prelude(|prelude| {
         erase_unit(

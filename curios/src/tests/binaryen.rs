@@ -1,7 +1,7 @@
 use {
     crate::DEFAULT_STEP_BUDGET,
+    crate::compile_with_prelude,
     curios_binaryen::optimize,
-    curios_pipeline::compile_entrypoint,
     curios_text::{Entrypoint, RootSource},
     curios_wasm::to_bytes,
 };
@@ -24,7 +24,7 @@ fn optimizes_to_a_smaller_valid_module() {
         .expect("failed to parse source");
 
     let (module, _foreigns) =
-        compile_entrypoint(DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none(), |_| {})
+        compile_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none(), |_| {})
             .expect("expected wasm module");
 
     let bytes = to_bytes(&module);

@@ -462,15 +462,18 @@ name = "curios"
 version = "0.8.1"
 dependencies = [
  "clap",
+ "curios-abi",
  "curios-binaryen",
  "curios-cert",
  "curios-cont",
  "curios-core",
  "curios-elab",
  "curios-pipeline",
+ "curios-prelude",
  "curios-profile",
  "curios-runtime",
  "curios-text",
+ "curios-unit",
  "curios-wasm",
  "wasmtime",
 ]
@@ -595,6 +598,7 @@ name = "curios-pipeline"
 version = "0.8.1"
 dependencies = [
  "curios-abi",
+ "curios-base",
  "curios-cert",
  "curios-cont",
  "curios-core",
@@ -603,6 +607,7 @@ dependencies = [
  "curios-prelude",
  "curios-profile",
  "curios-text",
+ "curios-unit",
  "curios-wasm",
 ]
 
@@ -697,8 +702,10 @@ dependencies = [
  "curios-abi",
  "curios-cont",
  "curios-pipeline",
+ "curios-prelude",
  "curios-runtime",
  "curios-text",
+ "curios-unit",
  "curios-wasm",
  "js-sys",
  "wasm-bindgen",

@@ -33,7 +33,8 @@ mod toml;
 mod universes;
 
 use {
-    curios_pipeline::{Stage, compile_entrypoint},
+    crate::compile_with_prelude,
+    curios_pipeline::Stage,
     curios_runtime::MockHost,
     curios_text::{Entrypoint, RootSource},
 };
@@ -50,7 +51,7 @@ fn typecheck(source: &str) -> Result<(), String> {
         .parse::<Entrypoint>()
         .expect("failed to parse source");
 
-    compile_entrypoint(
+    compile_with_prelude(
         crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
         RootSource::none(),
@@ -74,7 +75,7 @@ fn cont_optm(source: &str) -> String {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
 
     let mut printed = String::new();
-    compile_entrypoint(
+    compile_with_prelude(
         crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
         RootSource::none(),

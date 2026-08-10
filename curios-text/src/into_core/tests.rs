@@ -144,9 +144,9 @@ fn elaboration_paths(src: &str) -> (curios_core::Module, curios_core::Module) {
     )
     .unwrap()
     .0;
-    let cached = curios_elab::elaborate_and_zonk_with_prelude(
+    let cached = curios_elab::elaborate_and_zonk_unit(
         &mut curios_elab::Context::with_default_budget(SYNTAX),
-        &prelude,
+        curios_elab::Established::over(std::slice::from_ref(&&prelude)),
         &lowered,
         metavar_floor,
         universe_floor,

@@ -22,7 +22,10 @@ use {
 };
 
 #[cfg(feature = "profile")]
-use {curios::load, curios_pipeline::compile_entrypoint, curios_profile::capture};
+use {
+    curios::{compile_with_prelude, load},
+    curios_profile::capture,
+};
 
 // Only the `profile` build installs it, so the ordinary CLI keeps the system allocator untouched and pays nothing for counters no mode would read.
 #[cfg(feature = "profile")]
@@ -122,7 +125,7 @@ fn dispatch() -> Result<(), Failure> {
         Mode::Profile { input_path } => {
             let (entrypoint, loader) = load(&input_path)?;
             let (compilation, report) =
-                capture(|| compile_entrypoint(budget, &entrypoint, loader, |_| {}));
+                capture(|| compile_with_prelude(budget, &entrypoint, loader, |_| {}));
 
             println!(
                 "total_ms\tcalls\tmin_ms\tmax_ms\tretained_mb\tallocated_mb\tallocs\ttarget\tname\t(peak {:.1} MiB)",

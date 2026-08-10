@@ -1,6 +1,7 @@
 use {
     super::{error, run},
-    curios_pipeline::{Stage, compile_entrypoint},
+    crate::compile_with_prelude,
+    curios_pipeline::Stage,
     curios_text::{Entrypoint, RootSource},
 };
 
@@ -108,7 +109,7 @@ fn char_and_str_certificates_erase_to_their_existing_carriers() {
     let entrypoint = source.parse::<Entrypoint>().expect("source parses");
     let mut ersd = None;
 
-    compile_entrypoint(
+    compile_with_prelude(
         crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
         RootSource::none(),

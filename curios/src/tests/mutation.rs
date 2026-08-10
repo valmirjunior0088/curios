@@ -5,8 +5,8 @@
 //! The oracle is what makes this defensible. `curios-elab` cannot be asked about a mutated *Core* module, so a mutant carries no second opinion to compare against; the property therefore has to be one whose answer is known by construction. A definition declared at `Nat` whose body is `true`, or one declared at anything else whose body is `0`, is ill-typed for a reason that needs no checker to establish — so a kernel that accepts it has admitted something false, and one that refuses it has done its job whatever rule it used.
 
 use {
+    crate::recheck_with_prelude as recheck,
     curios_core::{Item, Module, Term},
-    curios_pipeline::recheck,
     curios_text::{Entrypoint, RootSource},
 };
 
@@ -82,7 +82,7 @@ fn every_body_replaced_by_a_foreign_term_is_refused() {
         let entrypoint = source
             .parse::<Entrypoint>()
             .unwrap_or_else(|error| panic!("{description}: the subject parses: {error:?}"));
-        let (module, obligations) = curios_pipeline::typecheck_reporting(
+        let (module, obligations) = crate::typecheck_with_prelude(
             crate::DEFAULT_STEP_BUDGET,
             &entrypoint,
             RootSource::none(),
@@ -137,7 +137,7 @@ fn every_type_replaced_by_another_item_s_is_refused() {
         let entrypoint = source
             .parse::<Entrypoint>()
             .unwrap_or_else(|error| panic!("{description}: the subject parses: {error:?}"));
-        let (module, _) = curios_pipeline::typecheck_reporting(
+        let (module, _) = crate::typecheck_with_prelude(
             crate::DEFAULT_STEP_BUDGET,
             &entrypoint,
             RootSource::none(),
@@ -220,12 +220,9 @@ fn elaborated(description: &str, source: &str) -> Module {
     let entrypoint = source
         .parse::<Entrypoint>()
         .unwrap_or_else(|error| panic!("{description}: the subject parses: {error:?}"));
-    let (module, _) = curios_pipeline::typecheck_reporting(
-        crate::DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        RootSource::none(),
-    )
-    .unwrap_or_else(|error| panic!("{description}: the subject type-checks:\n{error}"));
+    let (module, _) =
+        crate::typecheck_with_prelude(crate::DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none())
+            .unwrap_or_else(|error| panic!("{description}: the subject type-checks:\n{error}"));
 
     module
 }

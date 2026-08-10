@@ -102,6 +102,17 @@ impl<'a> Established<'a> {
         Ok(())
     }
 
+    /// The highest binder floor any unit in scope carries.
+    ///
+    /// A bound rather than a verdict: the unit's own terms are elaborated against terms whose binders were minted by earlier walks, so its floor has to clear every one of them. Combining by maximum can only ever widen, and widening cannot refuse a module that was fine.
+    pub(crate) fn binder_floor(&self) -> usize {
+        self.modules
+            .iter()
+            .map(|module| module.binder_floor)
+            .max()
+            .unwrap_or(0)
+    }
+
     /// The totality verdicts this scope recorded, which the erasure obligations inherit rather than recompute.
     ///
     /// Flattened across every unit in scope. Names are disjoint by mount, so the order of the merge cannot decide a verdict.

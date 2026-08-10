@@ -1,6 +1,6 @@
 use {
     super::run,
-    curios_pipeline::compile_entrypoint,
+    crate::compile_with_prelude,
     curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
 };
@@ -220,7 +220,7 @@ fn proc_exit_halts_with_code() {
     .parse::<Entrypoint>()
     .expect("failed to parse source");
 
-    let (module, _foreigns) = compile_entrypoint(
+    let (module, _foreigns) = compile_with_prelude(
         crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
         RootSource::none(),
@@ -251,7 +251,7 @@ fn proc_exit_in_local_binding_halts() {
     .parse::<Entrypoint>()
     .expect("failed to parse source");
 
-    let (module, _foreigns) = compile_entrypoint(
+    let (module, _foreigns) = compile_with_prelude(
         crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
         RootSource::none(),

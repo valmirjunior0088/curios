@@ -26,6 +26,13 @@ impl<'a> Scope<'a> {
         self.units.is_empty()
     }
 
+    /// The units themselves, in dependency order.
+    ///
+    /// For a consumer that needs more than one projection at a time — the kernel's environment is built from each unit's module *and* its carried binder floor together, and this crate cannot build it itself without depending on the kernel it is defined to stay below.
+    pub fn units(&self) -> &'a [Unit] {
+        self.units
+    }
+
     /// The resolution state of each unit in scope, for `curios-text`.
     ///
     /// A slice of that crate's own opaque type, not of anything unpacked here — which is what lets its tables stay private while still being layered rather than copied.

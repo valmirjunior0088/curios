@@ -3,8 +3,8 @@
 //! Emitted function names are `$func/<N>` ids — a module-wide monotonic index over every reachable function, prelude included — optionally suffixed with the source hint as `$func/<N>$hint`. The index carries identity; the hint is only origin annotation. Hot kernels are still located by a distinctive literal constant baked into their arithmetic (`65537` for LCG, `1000003` for trees) or by name-independent structure (self-recursion, the shared `$func/<N>`/`$clsr/<N>` index of a function used both directly and as a closure), never by a source name. A genuine irreducible-cycle dispatcher is the `loop $$dispatch/<anchor>` the emitter names in `into_wasm::expr_emitter`; an ordinary constructor-tag `switch` lowers to a `br_table` over `$case$N`/`$tail` labels and is not a dispatcher.
 
 use {
+    crate::compile_with_prelude,
     crate::tests::cont_optm,
-    curios_pipeline::compile_entrypoint,
     curios_runtime::{ForeignBindings, MockHost, run_bytes, shared_engine},
     curios_text::{Entrypoint, RootSource},
     curios_wasm::{Module, to_bytes},
@@ -109,7 +109,7 @@ const MUTUAL_RECURSION: &str = r#"
 fn compile_raw(source: &str) -> Module {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
 
-    let (module, _foreigns) = compile_entrypoint(
+    let (module, _foreigns) = compile_with_prelude(
         crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
         RootSource::none(),

@@ -1,6 +1,7 @@
 use {
     super::{error, run},
-    curios_pipeline::{Stage, compile_entrypoint},
+    crate::compile_with_prelude,
+    curios_pipeline::Stage,
     curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
     std::path::Path,
@@ -200,7 +201,7 @@ fn folds_constant_arg_through_let_function() {
     let entrypoint = source.parse::<Entrypoint>().unwrap();
 
     let mut optimized = None;
-    compile_entrypoint(
+    compile_with_prelude(
         crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
         RootSource::none(),
@@ -247,7 +248,7 @@ fn fmt_print_partial_evaluation_reduces_residual() {
 
     let mut cont_optm = None;
 
-    let (wasm_module, _foreigns) = compile_entrypoint(
+    let (wasm_module, _foreigns) = compile_with_prelude(
         crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
         RootSource::none(),
@@ -295,7 +296,7 @@ fn fmt_print_runtime_args_specializes_spine() {
 
     let mut ersd_optm = None;
 
-    let (wasm_module, _foreigns) = compile_entrypoint(
+    let (wasm_module, _foreigns) = compile_with_prelude(
         crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
         RootSource::none(),
@@ -352,7 +353,7 @@ fn fmt_print_constant_args_collapses_at_ersd() {
     let mut ersd_optm = None;
     let mut cont_optm = None;
 
-    let (wasm_module, _foreigns) = compile_entrypoint(
+    let (wasm_module, _foreigns) = compile_with_prelude(
         crate::DEFAULT_STEP_BUDGET,
         &entrypoint,
         RootSource::none(),

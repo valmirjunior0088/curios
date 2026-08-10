@@ -1,5 +1,5 @@
 use {
-    curios_pipeline::compile_entrypoint,
+    crate::compile_with_prelude,
     curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
 };
@@ -16,7 +16,7 @@ fn foreign_declaration_runs_through_supplied_bindings() {
     .parse::<Entrypoint>()
     .expect("failed to parse source");
 
-    let (module, foreigns) = compile_entrypoint(
+    let (module, foreigns) = compile_with_prelude(
         crate::DEFAULT_STEP_BUDGET,
         &source,
         RootSource::none(),

@@ -3,17 +3,18 @@
 use {
     super::Stage,
     curios_abi::ForeignStore,
+    curios_base::SyntaxRegistry,
     curios_cert::{Globals, Verdict, recheck_module_verdicts},
     curios_cont::{into_wasm, optimize},
     curios_core::{Intrinsic, Term},
     curios_elab::{
-        Context, Mode, Resumed, elaborate_and_zonk_with_prelude,
-        elaborate_and_zonk_with_prelude_reporting, erase_unit,
+        Context, Established, Mode, Resumed, elaborate_and_zonk_unit,
+        elaborate_and_zonk_unit_reporting, erase_unit,
     },
     curios_ersd::{lower_to_cont, optimize_ir},
-    curios_prelude::{SYNTAX, with_prelude},
     curios_text::{Entrypoint, RootSource, into_core_with_prelude},
-    std::{fmt, slice::from_ref},
+    curios_unit::Scope,
+    std::fmt,
 };
 
 /// A compile failure, split for process-level reporting: a written-goal batch is *incomplete* development state, everything else a hard *failure*. The CLI maps the two to distinct exit codes — 2 for incomplete, 1 for failure — so tooling can distinguish "here is your goal batch" from "something is wrong" without parsing stderr. Both carry the fully formatted report; an embedder that does not care converts to it via `Display` or the `String` conversion.
@@ -49,17 +50,21 @@ impl From<CompileError> for String {
     }
 }
 
-/// Put `module` to the independent kernel with the archived prelude already in scope, so only what the prelude does not already answer for is judged — the prelude's own items resting on the archive's word.
+/// Put `module` to the independent kernel with `scope` already in scope, so only what its units do not already answer for is judged — their own items resting on the verdict recorded when each was built.
 ///
-/// The [`Globals`] environment is assembled here because it is built from the restored prelude, which exists only inside `with_prelude`'s scope — so every caller that wants the compile path's rechecking gets the same environment rather than reconstructing one.
-pub fn recheck(module: &curios_core::Module, budget: u64) -> Vec<Verdict> {
-    with_prelude(|prelude| {
-        recheck_module_verdicts(
-            module,
-            budget,
-            &Globals::of(prelude.core(), prelude.binder_floor()),
-        )
-    })
+/// The [`Globals`] environment is assembled here rather than in `curios-unit`, because a unit is defined to stay below the kernel and cannot name it. Every caller that wants the compile path's rechecking gets this one rather than reconstructing it.
+pub fn recheck(module: &curios_core::Module, budget: u64, scope: Scope<'_>) -> Vec<Verdict> {
+    recheck_module_verdicts(module, budget, &globals(scope))
+}
+
+/// The kernel's environment for `scope`: every unit mounted, at the binder floor its own walk derived.
+fn globals(scope: Scope<'_>) -> Globals {
+    let mut globals = Globals::default();
+    for unit in scope.units() {
+        globals.mount(unit.core(), unit.binder_floor());
+    }
+
+    globals
 }
 
 /// Lower and type-check `entrypoint`, reporting the erasure obligations rather than raising them.
@@ -69,41 +74,35 @@ pub fn recheck(module: &curios_core::Module, budget: u64) -> Vec<Verdict> {
 /// The verdicts are rendered against the lowered module, so they read as they would on the compile path. A caller that wants the kernel's opinion on the result puts it to [`recheck`], which supplies the same environment `compile_entrypoint` does rather than re-walking the standard library.
 pub fn typecheck_reporting(
     budget: u64,
+    scope: Scope<'_>,
+    syntax: &SyntaxRegistry,
     entrypoint: &Entrypoint,
     loader: RootSource,
 ) -> Result<(curios_core::Module, Vec<String>), CompileError> {
-    let (lowered, metavars, universe_floor, _foreigns) = with_prelude(|prelude| {
-        into_core_with_prelude(entrypoint, &loader, from_ref(&prelude.text()), &SYNTAX)
-    })
-    .map_err(|error| CompileError::Failure(error.format()))?;
+    let text = scope.text();
+    let cores = scope.cores();
+    let (lowered, metavars, universe_floor, _foreigns) =
+        into_core_with_prelude(entrypoint, &loader, &text, syntax)
+            .map_err(|error| CompileError::Failure(error.format()))?;
 
     let core_mode = match &lowered.type_ {
         Some(type_) => Mode::Check(type_.clone()),
         None => Mode::Infer,
     };
 
-    let (module, _core_type, obligations) = with_prelude(|prelude| {
-        let mut context = Context::new(budget, SYNTAX);
-
-        elaborate_and_zonk_with_prelude_reporting(
-            &mut context,
-            prelude.core(),
-            &lowered,
-            metavars,
-            universe_floor,
-            core_mode,
-        )
-    })
-    .map_err(|error| {
-        CompileError::of(
-            &error,
-            with_prelude(|prelude| error.format_with(&lowered, Some(prelude.core()))),
-        )
-    })?;
+    let (module, _core_type, obligations) = elaborate_and_zonk_unit_reporting(
+        &mut Context::new(budget, *syntax),
+        Established::over(&cores),
+        &lowered,
+        metavars,
+        universe_floor,
+        core_mode,
+    )
+    .map_err(|error| CompileError::of(&error, error.format_with(&lowered, &cores)))?;
 
     let obligations = obligations
         .into_iter()
-        .map(|error| with_prelude(|prelude| error.format_with(&lowered, Some(prelude.core()))))
+        .map(|error| error.format_with(&lowered, &cores))
         .collect();
 
     Ok((module, obligations))
@@ -114,6 +113,8 @@ pub fn typecheck_reporting(
 /// The `sys`/`syn`/`std` prelude is neither lowered nor elaborated per call: prepared Text state is merged with the user graph, then the archived Core prelude is replayed into the elaboration context and only the entry's own items are type-checked.
 pub(crate) fn elaborate_and_zonk<O>(
     budget: u64,
+    scope: Scope<'_>,
+    syntax: &SyntaxRegistry,
     entrypoint: &Entrypoint,
     loader: RootSource,
     observe: &mut O,
@@ -124,10 +125,11 @@ where
     curios_profile::profile!("elaborate_and_zonk");
     observe(Stage::Text(entrypoint));
 
-    let (lowered, metavars, universe_floor, user_foreigns) = with_prelude(|prelude| {
-        into_core_with_prelude(entrypoint, &loader, from_ref(&prelude.text()), &SYNTAX)
-    })
-    .map_err(|error| CompileError::Failure(error.format()))?;
+    let text = scope.text();
+    let cores = scope.cores();
+    let (lowered, metavars, universe_floor, user_foreigns) =
+        into_core_with_prelude(entrypoint, &loader, &text, syntax)
+            .map_err(|error| CompileError::Failure(error.format()))?;
 
     observe(Stage::Core(&lowered));
 
@@ -139,24 +141,15 @@ where
         None => Mode::Check(Term::intrinsic(Intrinsic::io_type(Term::tuple_type_unit()))),
     };
 
-    let (module, core_type) = with_prelude(|prelude| {
-        let mut context = Context::new(budget, SYNTAX);
-
-        elaborate_and_zonk_with_prelude(
-            &mut context,
-            prelude.core(),
-            &lowered,
-            metavars,
-            universe_floor,
-            core_mode,
-        )
-    })
-    .map_err(|error| {
-        CompileError::of(
-            &error,
-            with_prelude(|prelude| error.format_with(&lowered, Some(prelude.core()))),
-        )
-    })?;
+    let (module, core_type) = elaborate_and_zonk_unit(
+        &mut Context::new(budget, *syntax),
+        Established::over(&cores),
+        &lowered,
+        metavars,
+        universe_floor,
+        core_mode,
+    )
+    .map_err(|error| CompileError::of(&error, error.format_with(&lowered, &cores)))?;
 
     observe(Stage::CoreElab(&module));
 
@@ -200,6 +193,8 @@ where
 /// Production runs the arena erased representation: the archived erased prelude is restored and replayed, only the entry's own items erase, the arena transformations shrink and rebase the module, and the lowering into Cont makes every encoding decision once (see `curios_ersd::lower_to_cont`).
 pub fn compile_entrypoint<O>(
     budget: u64,
+    scope: Scope<'_>,
+    syntax: &SyntaxRegistry,
     entrypoint: &Entrypoint,
     loader: RootSource,
     mut observe: O,
@@ -209,14 +204,14 @@ where
 {
     curios_profile::profile!("compile_entrypoint");
     let (module, core_type, foreigns) =
-        elaborate_and_zonk(budget, entrypoint, loader, &mut observe)?;
+        elaborate_and_zonk(budget, scope, syntax, entrypoint, loader, &mut observe)?;
+    let cores = scope.cores();
 
-    // The independent kernel's second opinion, on the compile path: the archive-replayed prelude was walked when the archive was built and arrives here as scope, so only what it does not already answer for is judged — a refusal fails the compile.
+    // The independent kernel's second opinion, on the compile path: each unit in scope was walked when it was built and arrives here as environment, so only what it does not already answer for is judged — a refusal fails the compile.
     {
         curios_profile::profile!("recheck");
-        if let Some(verdict) = recheck(&module, budget).into_iter().next() {
-            let refusal =
-                with_prelude(|prelude| verdict.error.format_with(&module, Some(prelude.core())));
+        if let Some(verdict) = recheck(&module, budget, scope).into_iter().next() {
+            let refusal = verdict.error.format_with(&module, &cores);
             return Err(CompileError::Failure(match &verdict.name {
                 Some(name) => format!("the kernel refused {name}: {refusal}"),
                 None => format!("the kernel refused the entrypoint: {refusal}"),
@@ -224,20 +219,14 @@ where
         }
     }
 
-    let ersd_module = with_prelude(|prelude| {
-        erase_unit(
-            &mut Context::new(budget, SYNTAX),
-            Resumed::of(from_ref(&prelude.core()), prelude.ersd()),
-            &module,
-            Some(&core_type),
-        )
-        .map(|erased| erased.into_module())
-    })
-    .map_err(|error| {
-        CompileError::Failure(with_prelude(|prelude| {
-            error.format_with(&module, Some(prelude.core()))
-        }))
-    })?;
+    let ersd_module = erase_unit(
+        &mut Context::new(budget, *syntax),
+        Resumed::of(&cores, scope.arena()),
+        &module,
+        Some(&core_type),
+    )
+    .map(|erased| erased.into_module())
+    .map_err(|error| CompileError::Failure(error.format_with(&module, &cores)))?;
 
     Ok((lower_from_ersd(ersd_module, &mut observe), foreigns))
 }

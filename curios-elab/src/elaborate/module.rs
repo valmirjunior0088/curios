@@ -19,7 +19,6 @@ use {
         cell::RefCell,
         collections::{BTreeMap, BTreeSet},
         rc::Rc,
-        slice::from_ref,
     },
 };
 
@@ -1183,17 +1182,17 @@ pub fn elaborate_and_zonk_module(
 /// Sound because the prelude is program-independent: its items never see user code, and — since top-level definitions are excluded from a metavariable's Γ (`Context::identity_snapshot`) — a user item elaborates against the identical local context it would with no prefix at all, so the solutions (and the zonked output) are identical.
 ///
 /// The returned module keeps that shape: its items are `prelude`'s own, cloned unchanged and in order, followed by the user's, and its registries are `prelude`'s extended in place. That is a contract, not an artifact of how the splice happens to be written — [`crate::erase_module_with_prelude`] skips the prefix by `prelude.items.len()` and reuses the prelude's already projected terms for it rather than re-deriving the standard library on every compilation.
-pub fn elaborate_and_zonk_with_prelude(
+pub fn elaborate_and_zonk_unit(
     context: &mut Context,
-    prelude: &Module,
+    established: Established<'_>,
     module: &Module,
     metavar_floor: usize,
     universe_floor: usize,
     mode: Mode,
 ) -> Result<(Module, Option<Term>), Error> {
-    let (module, body_type, obligations) = elaborate_and_zonk_with_prelude_reporting(
+    let (module, body_type, obligations) = elaborate_and_zonk_unit_reporting(
         context,
-        prelude,
+        established,
         module,
         metavar_floor,
         universe_floor,
@@ -1206,16 +1205,15 @@ pub fn elaborate_and_zonk_with_prelude(
 /// [`elaborate_and_zonk_with_prelude`] with the erasure obligations *reported* rather than raised.
 ///
 /// Elaboration is no less checked: everything that decides whether the program is well-typed still short-circuits. What is handed back instead of thrown is the pair of obligations `curios-cert` also decides — (T) and (V) — and the reason is that a fixture this checker refuses must still be able to reach the kernel. Raising leaves no module, so whether the kernel would have refused the same program is unobservable, and that is precisely the disagreement worth seeing: an obligation only this side enforces is the trusted base resting on an elaborator-only analysis. The two-checker fixture harness in `curios` is the caller; every other caller wants [`elaborate_and_zonk_with_prelude`].
-pub fn elaborate_and_zonk_with_prelude_reporting(
+pub fn elaborate_and_zonk_unit_reporting(
     context: &mut Context,
-    prelude: &Module,
+    established: Established<'_>,
     module: &Module,
     metavar_floor: usize,
     universe_floor: usize,
     mode: Mode,
 ) -> Result<(Module, Option<Term>, Vec<Error>), Error> {
     curios_profile::profile!("elaborate_and_zonk_with_prelude");
-    let established = Established::over(from_ref(&prelude));
     let (suffix, body_type) = elaborate_module_suffix(
         context,
         established,
@@ -1233,7 +1231,7 @@ pub fn elaborate_and_zonk_with_prelude_reporting(
     //
     // The binder floor is the exception, and it is a bound rather than a set: the entry's terms are elaborated against prelude terms whose binders were minted in an earlier compiler run, so the floor has to clear both. Combining by maximum can only ever widen.
     let module = Module {
-        binder_floor: prelude.binder_floor.max(suffix.binder_floor),
+        binder_floor: established.binder_floor().max(suffix.binder_floor),
         ..suffix
     };
 

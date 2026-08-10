@@ -12,20 +12,29 @@ workspace = true
 profile = [
     "curios-profile/enabled",
     "curios-text/profile",
-    "curios-prelude/profile",
+    "curios-unit/profile",
     "curios-elab/profile",
     "curios-ersd/profile",
     "curios-cont/profile",
 ]
 
+# Deliberately absent: `curios-prelude`. The driver folds stages over a scope of
+# units and does not know which of them is the standard library — that is the
+# caller's to supply, exactly as the `/syn` registry already is. It reappears
+# below as a dev-dependency, because the driver's own fixtures are programs and a
+# program needs a prelude to compile against.
 [dependencies]
 curios-abi = { workspace = true }
+curios-base = { workspace = true }
 curios-cert = { workspace = true }
 curios-cont = { workspace = true }
 curios-core = { workspace = true }
 curios-elab = { workspace = true }
 curios-ersd = { workspace = true }
-curios-prelude = { workspace = true }
 curios-profile = { workspace = true }
 curios-text = { workspace = true }
+curios-unit = { workspace = true }
 curios-wasm = { workspace = true }
+
+[dev-dependencies]
+curios-prelude = { workspace = true }

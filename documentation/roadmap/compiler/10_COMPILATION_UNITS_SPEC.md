@@ -277,7 +277,16 @@ The collapse also reported its own completeness: `Resolved::new`, `Resolved::for
 
 ### A4 — The driver stops naming the standard library
 
+**Landed.** All three edge rules check clean, and `make curios/web` passes.
+
 `curios-pipeline` drops `curios-prelude` from `[dependencies]` and picks it up in `[dev-dependencies]`. `compile_entrypoint` takes a scope. `curios` and `curios-web` restore the prelude unit and pass it, exactly as they already pass nothing and let the pipeline import `SYNTAX`.
+
+**A product names its standard library; the driver has no way to.** `curios` gained `compile_with_prelude`, `typecheck_with_prelude` and `recheck_with_prelude` — every CLI path, embedder helper and integration fixture goes through them, so one place answers "what does a Curios program get for free". `curios-web` does the same inline, and `curios-pipeline`'s own 97 fixtures go through a `compile_fixture` helper backed by the dev-dependency. `SYNTAX` became a parameter beside the scope for the same reason it always should have been: the driver knows *that* a registry is needed and not *which*.
+
+Two things A4 forced that were scheduled elsewhere:
+
+- **`format_with` is N-ary in both checkers.** `Option<&Module>` became `&[&Module]` in `curios-elab` and `curios-cert` alike, because the driver has no single module to hand it. That is [B5](#b5--every-all-the-names-in-the-program-site-becomes-a-scope-question)'s site, and it arrived here rather than there.
+- **`Scope::units()` exists because `curios-unit` cannot build a `Globals`.** The kernel's environment needs each unit's module *and* its carried binder floor together, and the crate is defined to stay below `curios-cert` — so the driver iterates and mounts. The boundary held under the first real pull on it.
 
 *Must not change:* any verdict, and not the public shape of `curios::compile`/`run`, which keeps supplying the prelude itself.
 

@@ -8,7 +8,7 @@
 
 use {
     super::run,
-    curios_pipeline::recheck,
+    crate::recheck_with_prelude as recheck,
     curios_runtime::MockHost,
     curios_text::{Entrypoint, RootSource},
 };
@@ -1152,11 +1152,8 @@ fn both_checkers(source: &str) -> (Verdict, Verdict) {
         Err(error) => return (Verdict::Refuses(format!("{error:?}")), Verdict::NotAsked),
     };
 
-    match curios_pipeline::typecheck_reporting(
-        crate::DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        RootSource::none(),
-    ) {
+    match crate::typecheck_with_prelude(crate::DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none())
+    {
         // Refused before a module existed: type-checking proper, not an erasure obligation.
         Err(error) => (Verdict::Refuses(error.into()), Verdict::NotAsked),
         Ok((module, obligations)) => {
