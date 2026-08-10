@@ -6,14 +6,15 @@ use {
     curios_base::SyntaxRegistry,
     curios_cert::{Globals, Verdict, recheck_module_verdicts},
     curios_cont::{into_wasm, optimize},
+    curios_core::derived_binder_floor,
     curios_core::{Intrinsic, Term},
     curios_elab::{
         Context, Established, Mode, Resumed, elaborate_and_zonk_unit,
         elaborate_and_zonk_unit_reporting, erase_unit,
     },
     curios_ersd::{lower_to_cont, optimize_ir},
-    curios_text::{Entrypoint, RootSource, into_core_with_prelude},
-    curios_unit::Scope,
+    curios_text::{Entrypoint, RootSource, UnitSource, into_core_unit, into_core_with_prelude},
+    curios_unit::{Scope, Unit},
     std::fmt,
 };
 
@@ -186,6 +187,79 @@ where
     observe(Stage::Wasm(&wasm_module));
 
     wasm_module
+}
+
+/// Compile one unit against `scope`: lower, elaborate, judge, erase.
+///
+/// **The judgment sits between elaboration and erasure and that ordering is the point.** A module the kernel refuses never reaches erasure's budget, and a refusal reads as a refusal rather than as whatever erasure made of an ill-typed term. It is also why this is a fold step rather than one operation: the producer of a stored unit runs the same sequence *without* the judge, because the crate that writes an image deliberately cannot reach the kernel.
+pub fn compile_unit(
+    budget: u64,
+    scope: Scope<'_>,
+    syntax: &SyntaxRegistry,
+    source: &UnitSource<'_>,
+) -> Result<Unit, CompileError> {
+    curios_profile::profile!("compile_unit");
+    let text = scope.text();
+    let cores = scope.cores();
+
+    let lowered = into_core_unit(source, &text, syntax)
+        .map_err(|error| CompileError::Failure(error.format()))?;
+
+    let (core, _body_type) = elaborate_and_zonk_unit(
+        &mut Context::new(budget, *syntax),
+        Established::over(&cores),
+        lowered.core(),
+        lowered.metavariable_floor(),
+        lowered.universe_floor(),
+        Mode::Infer,
+    )
+    .map_err(|error| CompileError::of(&error, error.format_with(lowered.core(), &cores)))?;
+
+    if let Some(verdict) = recheck(&core, budget, scope).into_iter().next() {
+        let refusal = verdict.error.format_with(&core, &cores);
+        return Err(CompileError::Failure(match &verdict.name {
+            Some(name) => format!("the kernel refused {name}: {refusal}"),
+            None => format!("the kernel refused a unit: {refusal}"),
+        }));
+    }
+
+    let ersd = erase_unit(
+        &mut Context::new(budget, *syntax),
+        Resumed::of(&cores, scope.arena()),
+        &core,
+        None,
+    )
+    .map_err(|error| CompileError::Failure(error.format_with(&core, &cores)))?;
+
+    let binder_floor = derived_binder_floor(&core);
+
+    Ok(Unit::new(lowered, core, ersd, binder_floor))
+}
+
+/// Compile `sources` in dependency order, each against `base` and everything before it — the fold this whole design is named for.
+///
+/// Returns the units it produced, not the ones it was given: the caller owns `base` and this cannot take it. A scope is rebuilt per step from pointers to both, which is free.
+pub fn compile_units<'a>(
+    budget: u64,
+    base: Scope<'a>,
+    syntax: &SyntaxRegistry,
+    sources: &[UnitSource<'_>],
+) -> Result<Vec<Unit>, CompileError> {
+    let mut produced: Vec<Unit> = Vec::new();
+
+    for source in sources {
+        let scope = base
+            .units()
+            .iter()
+            .copied()
+            .chain(produced.iter())
+            .collect::<Vec<_>>();
+
+        let unit = compile_unit(budget, Scope::over(&scope), syntax, source)?;
+        produced.push(unit);
+    }
+
+    Ok(produced)
 }
 
 /// Compile a parsed entrypoint through the full pipeline to a wasm module, feeding every [`Stage`] to `observe` in order. The result pairs the module with the [`ForeignStore`] harvested from the program's own `foreign` declarations — an embedder that will run the module builds its `ffi`-tier bindings (`curios-runtime`'s `ForeignBindings`) from exactly this store, or drops it when the program declares none. Binaryen optimization and Cranelift precompilation are deliberately *not* here — they live downstream in the `curios` crate (`to_cwasm`), keeping this crate free of native backends.

@@ -39,7 +39,7 @@ pub fn compile(source: &str) -> Result<Uint8Array, String> {
     let (module, _foreigns) = with_prelude(|prelude| {
         compile_entrypoint(
             BUDGET,
-            Scope::over(std::slice::from_ref(prelude)),
+            Scope::over(std::slice::from_ref(&prelude)),
             &SYNTAX,
             &entrypoint,
             RootSource::none(),

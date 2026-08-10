@@ -7,7 +7,7 @@ use {crate::Unit, curios_core::Module, curios_elab::ErasedUnit, curios_text::Pre
 /// Borrowed rather than merged, and re-derived per fold step rather than held across one: a slice borrow is free to rebuild, and the driver needs its vector back to push the unit it just produced.
 #[derive(Clone, Copy)]
 pub struct Scope<'a> {
-    units: &'a [Unit],
+    units: &'a [&'a Unit],
 }
 
 impl<'a> Scope<'a> {
@@ -17,7 +17,7 @@ impl<'a> Scope<'a> {
     }
 
     /// Everything `units` established, in dependency order.
-    pub fn over(units: &'a [Unit]) -> Self {
+    pub fn over(units: &'a [&'a Unit]) -> Self {
         Self { units }
     }
 
@@ -29,7 +29,7 @@ impl<'a> Scope<'a> {
     /// The units themselves, in dependency order.
     ///
     /// For a consumer that needs more than one projection at a time — the kernel's environment is built from each unit's module *and* its carried binder floor together, and this crate cannot build it itself without depending on the kernel it is defined to stay below.
-    pub fn units(&self) -> &'a [Unit] {
+    pub fn units(&self) -> &'a [&'a Unit] {
         self.units
     }
 
@@ -37,17 +37,20 @@ impl<'a> Scope<'a> {
     ///
     /// A slice of that crate's own opaque type, not of anything unpacked here — which is what lets its tables stay private while still being layered rather than copied.
     pub fn text(&self) -> Vec<&'a PreparedPrelude> {
-        self.units.iter().map(Unit::text).collect()
+        self.units.iter().map(|unit| unit.text()).collect()
     }
 
     /// The elaborated module of each unit in scope, for `curios-elab`'s `Established` and for the kernel's environment.
     pub fn cores(&self) -> Vec<&'a Module> {
-        self.units.iter().map(Unit::core).collect()
+        self.units.iter().map(|unit| unit.core()).collect()
     }
 
     /// The arena every erasure so far has accumulated — **one** value, not one per unit, because each unit's erasure resumes over what the previous one produced. An empty scope yields the empty arena, which `ErsdBuilder::resume` reduces to a fresh builder.
     pub fn arena(&self) -> ErasedUnit {
-        self.units.last().map(Unit::ersd).unwrap_or_default()
+        self.units
+            .last()
+            .map(|unit| unit.ersd())
+            .unwrap_or_default()
     }
 }
 

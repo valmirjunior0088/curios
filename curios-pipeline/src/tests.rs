@@ -24,7 +24,7 @@ where
     with_prelude(|prelude| {
         compile_entrypoint(
             budget,
-            Scope::over(from_ref(prelude)),
+            Scope::over(from_ref(&prelude)),
             &SYNTAX,
             entrypoint,
             loader,
@@ -1730,7 +1730,7 @@ fn typecheck(source: &str, type_: Option<&str>) -> Result<(), String> {
     with_prelude(|prelude| {
         super::elaborate_and_zonk(
             DEFAULT_STEP_BUDGET,
-            Scope::over(from_ref(prelude)),
+            Scope::over(from_ref(&prelude)),
             &SYNTAX,
             &entrypoint,
             RootSource::none(),
@@ -1938,7 +1938,7 @@ fn erase_to_ir(source: &str, type_: Option<&str>) -> curios_ersd::Module {
     let (module, core_type, _foreigns) = with_prelude(|prelude| {
         super::elaborate_and_zonk(
             DEFAULT_STEP_BUDGET,
-            Scope::over(from_ref(prelude)),
+            Scope::over(from_ref(&prelude)),
             &SYNTAX,
             &entrypoint,
             RootSource::none(),

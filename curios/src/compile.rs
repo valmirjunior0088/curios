@@ -26,7 +26,7 @@ where
     with_prelude(|prelude| {
         compile_entrypoint(
             budget,
-            Scope::over(from_ref(prelude)),
+            Scope::over(from_ref(&prelude)),
             &SYNTAX,
             entrypoint,
             loader,
@@ -77,7 +77,7 @@ pub fn typecheck_with_prelude(
     with_prelude(|prelude| {
         curios_pipeline::typecheck_reporting(
             budget,
-            Scope::over(from_ref(prelude)),
+            Scope::over(from_ref(&prelude)),
             &SYNTAX,
             entrypoint,
             loader,
@@ -90,7 +90,9 @@ pub fn recheck_with_prelude(
     module: &curios_core::Module,
     budget: u64,
 ) -> Vec<curios_cert::Verdict> {
-    with_prelude(|prelude| curios_pipeline::recheck(module, budget, Scope::over(from_ref(prelude))))
+    with_prelude(|prelude| {
+        curios_pipeline::recheck(module, budget, Scope::over(from_ref(&prelude)))
+    })
 }
 
 /// The default reduction budget, re-exported beside the compile helpers that take it.
