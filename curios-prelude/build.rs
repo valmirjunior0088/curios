@@ -27,8 +27,9 @@ fn main() {
             );
         }
 
+        // Plain stdout rather than `cargo:warning=`, for the same reason as the archive's metric — and because the verdict is not this line. The panic above is: a refusal fails the build, so a build that finished has already certified. What this adds is the count, which changes only when the prelude does.
         println!(
-            "cargo:warning=fixed prelude certified: {} items accepted by the kernel",
+            "fixed prelude certified: {} items accepted by the kernel",
             core.items.len(),
         );
     });

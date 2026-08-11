@@ -173,8 +173,9 @@ fn build() {
     let sharing = Sharing::new();
     let prepared = prepared.shared(&sharing);
     let core = core.shared(&sharing);
+    // Plain stdout, not `cargo:warning=`: this is a metric nobody acts on during a build, and a line that shouts on every build of every consumer teaches readers to skim `warning:` — which is the habit that loses a real one later. Cargo captures it to `target/<profile>/build/<pkg>-<hash>/output`, where `-vv` or a reader who went looking will find it.
     println!(
-        "cargo:warning=fixed prelude hash-consed to {} distinct structures",
+        "fixed prelude hash-consed to {} distinct structures",
         sharing.structures()
     );
 
