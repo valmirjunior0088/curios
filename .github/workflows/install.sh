@@ -54,7 +54,7 @@ trap 'rm -rf "$work" "$staged"' EXIT INT TERM
 
 base="$REPO/releases/download/release/$VERSION"
 
-echo "downloading curios $VERSION ($asset)"
+echo "Downloading Curios $VERSION ($asset)"
 fetch "$base/$asset" "$work/curios" || die "could not download $base/$asset"
 fetch "$base/checksums.txt" "$work/checksums.txt" || die "could not download $base/checksums.txt"
 
@@ -71,12 +71,22 @@ chmod +x "$work/curios"
 version=$("$work/curios" --version 2> /dev/null) ||
     die "the downloaded binary does not run on this system (usually an older glibc than the release was built against); build from source with: cargo build --release --package curios"
 
+# Read before the rename overwrites it. An install that silently replaces a working toolchain is one the reader cannot audit afterwards, and "which one did I have?" is exactly the question a version bump makes urgent.
+previous=""
+if [ -x "$BIN_DIR/curios" ]; then
+    previous=$("$BIN_DIR/curios" --version 2> /dev/null) || previous="an existing binary that does not run"
+fi
+
 # Staged inside the destination so the final step is a rename within one filesystem: an interrupted install leaves either the old binary or the new one, never half of either.
 mkdir -p "$BIN_DIR"
 cp "$work/curios" "$staged"
 mv "$staged" "$BIN_DIR/curios"
 
-echo "$version installed to $BIN_DIR/curios"
+if [ -n "$previous" ]; then
+    echo "$version installed to $BIN_DIR/curios, replacing $previous"
+else
+    echo "$version installed to $BIN_DIR/curios"
+fi
 
 case ":$PATH:" in
     *":$BIN_DIR:"*) ;;
