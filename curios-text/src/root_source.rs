@@ -6,10 +6,12 @@
 
 use {
     super::{Error, Module},
-    curios_base::{Mount, Qualifier, RootKind, is_identifier},
+    curios_base::{Mount, Qualifier, RootKind, Source, is_identifier},
     std::{
+        cell::RefCell,
         collections::BTreeMap,
         path::{Path, PathBuf},
+        rc::Rc,
     },
 };
 
@@ -20,6 +22,10 @@ use {
 /// Lookup is longest-match over the claimed prefixes, exactly as [`Mount::owning`] is everywhere else, and the mounts of one source are pairwise disjoint because a unit claims each of its prefixes once.
 pub struct RootSource {
     bases: Vec<(Mount, Base)>,
+    /// Every file this source has read, by the canonical path it was read from. See [`RootSource::reads`].
+    ///
+    /// Interior mutability because resolution is a `&self` operation everywhere above this, and recording what was read is not a reason to thread `&mut` through the lowering. Nothing here was ever `Send` — a module holds `Rc<Source>` spans — so this costs no bound that was not already spent.
+    reads: RefCell<BTreeMap<PathBuf, Rc<Source>>>,
 }
 
 /// Where one mount's modules are.
@@ -36,27 +42,23 @@ enum Base {
 impl RootSource {
     /// The entry program with no filesystem: every `mod` it declares must carry an inline body. Used by tests exercising resolution in isolation, and by embedders (`curios-web`) with no filesystem at all.
     pub fn none() -> Self {
-        Self {
-            bases: vec![(entry_mount(), Base::Supplied(BTreeMap::new()))],
-        }
+        Self::over(vec![(entry_mount(), Base::Supplied(BTreeMap::new()))])
     }
 
     /// The entry program written in `header`, its own modules under that header's stem directory: `mod util` in `<dir>/main.crs` reads `<dir>/main/util.crs`.
     ///
     /// `header` is never read — the entry's own body is its [`Entrypoint`](crate::Entrypoint), which the caller already has — so the path is here for the directory it names, and an entrypoint parsed from a string can still be given one.
     pub fn entry(header: &Path) -> Self {
-        Self {
-            bases: vec![(
-                entry_mount(),
-                Base::Disk {
-                    header: None,
-                    directory: header
-                        .parent()
-                        .unwrap_or(Path::new("."))
-                        .join(header.file_stem().unwrap_or_default()),
-                },
-            )],
-        }
+        Self::over(vec![(
+            entry_mount(),
+            Base::Disk {
+                header: None,
+                directory: header
+                    .parent()
+                    .unwrap_or(Path::new("."))
+                    .join(header.file_stem().unwrap_or_default()),
+            },
+        )])
     }
 
     /// A unit mounted at `prefix`, declared in `header` and holding its modules under `directory`.
@@ -68,20 +70,26 @@ impl RootSource {
         header: impl Into<PathBuf>,
         directory: impl Into<PathBuf>,
     ) -> Self {
-        Self {
-            bases: vec![(
-                Mount::new(Qualifier::from([prefix]), kind),
-                Base::Disk {
-                    header: Some(header.into()),
-                    directory: directory.into(),
-                },
-            )],
-        }
+        Self::over(vec![(
+            Mount::new(Qualifier::from([prefix]), kind),
+            Base::Disk {
+                header: Some(header.into()),
+                directory: directory.into(),
+            },
+        )])
     }
 
     /// A unit's modules supplied already parsed, claiming nothing until [`insert_root`](Self::insert_root) says so. Nothing is read, which is what lets a build script or an embedder hand a whole unit over.
     pub fn supplied() -> Self {
-        Self { bases: Vec::new() }
+        Self::over(Vec::new())
+    }
+
+    /// A source over `bases`, having read nothing yet.
+    fn over(bases: Vec<(Mount, Base)>) -> Self {
+        Self {
+            bases,
+            reads: RefCell::new(BTreeMap::new()),
+        }
     }
 
     /// Claim `prefix` as a supplied root, `module` being the header it is declared in.
@@ -122,9 +130,24 @@ impl RootSource {
         );
     }
 
+    /// Every file this source has read so far, by canonical path, with the text that was parsed from it.
+    ///
+    /// **This is a unit's input set, and it is closed.** A file can only join it by being declared `mod x` in a header, and that header is itself a read — so nothing can enter the set without changing something already in it. Cross-unit references read nothing at all: [`owning`](Self::owning) claims only qualifiers inside this source's own mounts, so `use /json/Value` resolves against a compiled predecessor rather than a file. Together those are why a cache can verify a stored unit by re-reading exactly this list and needs no record of what was *looked for and not found*.
+    ///
+    /// Empty until something is resolved, and empty forever for a source supplied already parsed — which is why the fixed prelude has an archive of its own rather than a place in such a store.
+    ///
+    /// Canonical paths, so the same file reached through a relative invocation and an absolute one is one entry. The consequence is that moving a project invalidates its records, which costs one recompile and then re-records.
+    pub fn reads(&self) -> Vec<(PathBuf, Rc<Source>)> {
+        self.reads
+            .borrow()
+            .iter()
+            .map(|(path, source)| (path.clone(), Rc::clone(source)))
+            .collect()
+    }
+
     /// The directories this source reads its modules from.
     ///
-    /// For a caller that needs to know what a unit's content *is* — a cache keying a stored unit on its terms hashes exactly these. Empty for a source supplied already parsed: there is nothing on disk to hash, which is why the fixed prelude has an archive of its own rather than a place in such a store.
+    /// Empty for a source supplied already parsed: there is nothing on disk, which is why the fixed prelude has an archive of its own.
     pub fn directories(&self) -> Vec<&Path> {
         self.bases
             .iter()
@@ -158,10 +181,18 @@ impl RootSource {
                     false => file(directory, qualifier, mount.prefix.segments().len()),
                 };
 
-                Module::from_path(&path).map_err(|cause| Error::ModuleLoadFailed {
-                    label: qualifier.join(),
-                    cause: Box::new(cause),
-                })
+                let (module, source) =
+                    Module::read(&path).map_err(|cause| Error::ModuleLoadFailed {
+                        label: qualifier.join(),
+                        cause: Box::new(cause),
+                    })?;
+
+                // Recorded after the read succeeded and canonicalized against the file that answered it, so the record names something that existed and names it the one way. A path that will not canonicalize was read anyway, so it is recorded as given rather than dropped: a record short one entry would let a cache confirm a unit against less than it was compiled from.
+                self.reads
+                    .borrow_mut()
+                    .insert(path.canonicalize().unwrap_or(path), source);
+
+                Ok(module)
             }
         }
     }

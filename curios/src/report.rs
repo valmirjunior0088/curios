@@ -80,6 +80,8 @@ headings! {
     Fetching => "Fetching",
     /// The handover to the program itself.
     Running => "Running",
+    /// Work that could not be done and was not required — never a failure, always a reason.
+    Skipped => "Skipped",
     /// The whole invocation, summarized by what it produced.
     Finished => "Finished",
     /// One file or directory scaffolding produced.

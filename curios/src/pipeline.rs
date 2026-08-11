@@ -55,14 +55,21 @@ pub(crate) fn compile_target(
         }
     };
 
-    compile_entry(
+    let compiled = compile_entry(
         budget,
         print,
         scope,
         &entry,
         &subject,
         cache.as_ref().map(|cache| cache as &dyn Cache),
-    )
+    );
+
+    // After the fold rather than during it: one unwritable store refuses every unit for the same reason, so this is one line however many units went past it. Reported even when the compilation failed, because a store nobody can write is true either way and the next run pays for it either way.
+    if let Some(refusal) = cache.as_ref().and_then(Verdicts::refused) {
+        fact(Heading::Skipped, format!("storing units; {refusal}"));
+    }
+
+    compiled
 }
 
 /// What a target is reported as — the name that was asked for, never the file it resolved to.

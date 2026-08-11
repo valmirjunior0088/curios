@@ -9,7 +9,7 @@ use {
 ///
 /// Composed of one opaque artifact per stage rather than flattened into their fields. `curios-text`'s resolution tables and `curios-elab`'s erased arena are that crate's business, and widening them to `pub` so this struct could hold them directly would export a resolver's internals for no consumer. What this type adds is the pairing: the four halves describe *one* unit, and nothing else says so.
 ///
-/// The serialized form of this is a stored unit — what `curios-prelude-archive` writes and every consumer restores, and what a store files under a key covering its terms and the compiler that judged them.
+/// The serialized form of this is a stored unit — what `curios-prelude-archive` writes and every consumer restores, and what a store files under an address covering its mounts, its predecessors and the compiler that judged them, beside a record of the files it was compiled from.
 #[derive(Clone)]
 #[curios_archive::archived]
 pub struct Unit {

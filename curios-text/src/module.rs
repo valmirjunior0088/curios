@@ -225,13 +225,21 @@ impl Module {
 
     /// Read and parse a standalone module while retaining its source path for diagnostics. The prelude artifact builder uses this for `/syn` and `/std`; ordinary compilation reaches file-backed modules through [`RootSource`](crate::RootSource).
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, LoadError> {
-        let path = path.as_ref();
+        Self::read(path.as_ref()).map(|(module, _)| module)
+    }
+
+    /// [`Module::from_path`], additionally handing back the [`Source`] it parsed.
+    ///
+    /// For [`RootSource`](crate::RootSource), which records what it read so a cache can verify a stored unit against the exact text that produced it. Handing the source back rather than the file's bytes is what keeps that record free: the parsed module's spans already hold this `Rc`, so retaining it costs a refcount.
+    pub(crate) fn read(path: &Path) -> Result<(Self, Rc<Source>), LoadError> {
         let source = Source::read(path).map_err(|error| LoadError::Read {
             path: path.into(),
             error,
         })?;
 
-        Module::parse(&source).map_err(LoadError::Parse)
+        Module::parse(&source)
+            .map(|module| (module, source))
+            .map_err(LoadError::Parse)
     }
 }
 

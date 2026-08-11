@@ -1589,6 +1589,16 @@ impl<'a> UnitSource<'a> {
         self.source.directories()
     }
 
+    /// Every file this unit has read. See [`RootSource::reads`].
+    pub fn reads(&self) -> Vec<(std::path::PathBuf, std::rc::Rc<curios_base::Source>)> {
+        self.source.reads()
+    }
+
+    /// The prefixes this unit claims, which decide how its names are spelled and so which unit it is.
+    pub fn claims(&self) -> Vec<Mount> {
+        self.mounts()
+    }
+
     /// The prefix this unit claims, as a name to report it by — `/json` for a mounted package.
     ///
     /// The root for the entry, which owns the empty prefix: a caller that wants to *name* the entry knows what was asked for and this does not, so it supplies its own.
