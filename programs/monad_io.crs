@@ -1,0 +1,31 @@
+-- The `Io` arm of the four-monad comparison begun in `state_monad.crs`. `Io` is
+-- not a library struct at all but a compiler intrinsic (`Io.pure`/`Io.bind`), so
+-- its carrier is erasure's choice rather than a written one — and it is the
+-- monad every Curios program's tail is written in, which makes it the arm that
+-- matters most if the per-`bind` cost turns out to be general.
+-- N is read from stdin so the loop survives constant folding; output is 3N.
+use /std/{Str, Nat, Option, Io};
+
+rec loop(n: Nat, acc: Nat) -> Io(Nat) =
+    match n: (_) => Io(Nat)
+    | 0 => Io/pure(acc)
+    | m + 1 =>
+        let a = Io/pure(acc + 3)!;
+        loop(m, a)
+    end;
+
+let input = /std/read()!;
+match input: (_) => Io({})
+| some(bytes) =>
+    match Str/of_bytes(bytes): (_) => Io({})
+    | some(s) =>
+        match Nat/of_str(Str/trim(s)): (_) => Io({})
+        | some(n) =>
+            let total = loop(n, 0)!;
+            /std/print(Str/concat(Nat/to_str(total), "\n"))
+        | none() => /std/print("bad input\n")
+        end
+    | none() => /std/print("invalid utf-8\n")
+    end
+| none() => /std/print("no input\n")
+end

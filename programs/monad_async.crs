@@ -1,0 +1,39 @@
+-- The `Async` arm of the four-monad comparison begun in `state_monad.crs`.
+-- `Async(A)` wraps `Io(Step(A))`, so it is a function carrier one level down --
+-- the arm that says whether the cost follows the written carrier or the one
+-- erasure ends up with.
+--
+-- The fiber is its own item rather than an argument written inline at the
+-- `Async/run` call: a call argument does not begin a sequencing region, so a `!`
+-- written there would belong to the enclosing `Io` region and ask for a
+-- `Lift(Async, Io)` that does not and should not exist. An item's value body is
+-- a region, which is what gives the `!`s below their `Async`.
+-- N is read from stdin so the loop survives constant folding; output is 3N.
+use /std/{Str, Nat, Option, Async, Io};
+
+rec loop(n: Nat, acc: Nat) -> Async(Nat) =
+    match n: (_) => Async(Nat)
+    | 0 => Async/pure(acc)
+    | m + 1 =>
+        let a = Async/pure(acc + 3)!;
+        loop(m, a)
+    end;
+
+let fiber(n: Nat) -> Async({}) =
+    let total = loop(n, 0)!;
+    let _ = /std/print(Str/concat(Nat/to_str(total), "\n"))!;
+    Async/pure(());
+
+let input = /std/read()!;
+match input: (_) => Io({})
+| some(bytes) =>
+    match Str/of_bytes(bytes): (_) => Io({})
+    | some(s) =>
+        match Nat/of_str(Str/trim(s)): (_) => Io({})
+        | some(n) => Async/run(fiber(n))
+        | none() => /std/print("bad input\n")
+        end
+    | none() => /std/print("invalid utf-8\n")
+    end
+| none() => /std/print("no input\n")
+end
