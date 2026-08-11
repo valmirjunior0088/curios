@@ -7,6 +7,8 @@ use {
 };
 
 /// A tree of `(relative path, contents)` pairs, rooted at a fresh directory nothing else is using.
+///
+/// **Canonical, because everything it is compared against is.** `Governing::of` canonicalizes the directory it walks from and `Walk::locate` canonicalizes every resolution it returns — deliberately, since a location is compared and two spellings of one directory would compile a diamond's point twice. So an expectation built from an *uncanonical* root tests the platform's symlinks rather than anything this crate decided: on macOS `std::env::temp_dir()` is `/var/…`, which is really `/private/var/…`, and every path assertion here failed on that difference alone.
 fn tree(name: &str, files: &[(&str, &str)]) -> PathBuf {
     let millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -20,7 +22,8 @@ fn tree(name: &str, files: &[(&str, &str)]) -> PathBuf {
         fs::write(path, source).unwrap();
     }
 
-    root
+    root.canonicalize()
+        .expect("the tree was just written, so it resolves")
 }
 
 /// The entry file `argument` resolves to inside `directory`, or the refusal it earns.
