@@ -1,8 +1,8 @@
 //! What one unit provides to its successors.
 
 use {
-    curios_abi::ForeignStore, curios_base::Mount, curios_core::Module, curios_elab::ErasedUnit,
-    curios_text::PreparedPrelude,
+    curios_abi::ForeignStore, curios_base::Mount, curios_core::Module, curios_elab::ErasedArena,
+    curios_text::PreparedText,
 };
 
 /// One compiled unit: everything a later unit needs in order to be compiled against it.
@@ -13,13 +13,13 @@ use {
 #[derive(Clone)]
 #[curios_archive::archived]
 pub struct Unit {
-    text: PreparedPrelude,
+    text: PreparedText,
     /// Elaborated and zonked. This is what the kernel judges and what a successor's elaboration replays.
     core: Module,
-    /// **Not per-unit, despite sitting on a unit.** Each unit's erasure resumes over the previous one's arena — see [`Scope::arena`](crate::Scope::arena) — so what this holds is the whole prefix's artifact, cumulative from the first unit forward, and never an independent arena numbered from zero.
+    /// **Not per-unit, despite sitting on a unit** — which is why it is named for what it is rather than for the stage that made it. Each unit's erasure resumes over the previous one's arena — see [`Prefix::arena`](crate::Prefix::arena) — so what this holds is the whole prefix's artifact, cumulative from the first unit forward, and never an independent arena numbered from zero.
     ///
     /// That is what lets a unit be stored whole. The worry it answers was real: two *independently* erased arenas both start at zero, so per-unit artifacts would need a relocation pass, which is `cnum_map` again. They are not independent, and a stored unit's key names its exact ordered predecessors, so the arena a restored unit carries always matches the prefix it is restored into.
-    ersd: ErasedUnit,
+    arena: ErasedArena,
     /// `curios_core::derived_binder_floor` over `core`, computed by the walk that established this unit.
     ///
     /// Carried rather than re-derived because it is a constant of that walk, and re-deriving it means traversing every term in scope on every later one. A floor is a bound rather than a verdict, so a consumer combines it with its own by maximum and can only ever widen.
@@ -28,11 +28,11 @@ pub struct Unit {
 
 impl Unit {
     /// Assemble a unit from what each stage produced for it.
-    pub fn new(text: PreparedPrelude, core: Module, ersd: ErasedUnit, binder_floor: usize) -> Self {
+    pub fn new(text: PreparedText, core: Module, arena: ErasedArena, binder_floor: usize) -> Self {
         Self {
             text,
             core,
-            ersd,
+            arena,
             binder_floor,
         }
     }
@@ -48,7 +48,7 @@ impl Unit {
     }
 
     /// This unit's resolution state, as the scope a later unit's names resolve against.
-    pub fn text(&self) -> &PreparedPrelude {
+    pub fn text(&self) -> &PreparedText {
         &self.text
     }
 
@@ -58,8 +58,8 @@ impl Unit {
     }
 
     /// This unit's erased arena and environment, as an owned clone: replay consumes it by value, so one compile's mutation of its copy can never poison a later one.
-    pub fn ersd(&self) -> ErasedUnit {
-        self.ersd.clone()
+    pub fn arena(&self) -> ErasedArena {
+        self.arena.clone()
     }
 
     /// The `foreign` rows this unit declares. Disjoint from every other unit's by mount, because an `ffi` import name is the declaration's fully qualified name — so the fold unions them without a collision to resolve.

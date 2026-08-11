@@ -14,10 +14,10 @@
 //!
 //! # What a scope hands to each stage
 //!
-//! Not one merged value. Each stage receives every predecessor *borrowed*, because merging would copy the standard library into every compilation — the cost retiring the splice removed. And each receives them as its own opaque type rather than as anything this crate unpacks: `curios-text`'s resolution state and `curios-elab`'s erased arena keep their fields private, so [`Scope`] hands each stage a slice of the type that stage owns and lets it build its own view.
+//! Not one merged value. Each stage receives every predecessor *borrowed*, because merging would copy the standard library into every compilation — the cost retiring the splice removed. And each receives them as its own opaque type rather than as anything this crate unpacks: `curios-text`'s resolution state and `curios-elab`'s erased arena keep their fields private, so [`Prefix`] hands each stage a slice of the type that stage owns and lets it build its own view.
 
-mod scope;
-pub use scope::*;
+mod prefix;
+pub use prefix::*;
 
 mod unit;
 pub use unit::*;

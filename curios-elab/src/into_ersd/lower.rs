@@ -178,7 +178,7 @@ fn seal_entry(
     context: &mut Context,
     body: &Term,
     expected: &Term,
-) -> Result<ErasedUnit, Error> {
+) -> Result<ErasedArena, Error> {
     lowering.builder.open_block();
     let outcome = lowering.with_owner("main".to_string(), |lowering| {
         lowering.walk(context, body, expected, None)
@@ -193,7 +193,7 @@ fn seal_entry(
         ..
     } = lowering;
 
-    Ok(ErasedUnit {
+    Ok(ErasedArena {
         module: builder
             .finalize()
             .map_err(|error| Error::erased_module_invalid(error.to_string()))?,
@@ -455,13 +455,13 @@ impl Lowering {
         deserialize_bounds(__D: curios_archive::rkyv::de::Pooling, __D::Error: curios_archive::rkyv::rancor::Source),
         bytecheck(bounds(__C: curios_archive::rkyv::validation::ArchiveContext + curios_archive::rkyv::validation::shared::SharedContext, __C::Error: curios_archive::rkyv::rancor::Source))
     )]
-pub struct ErasedUnit {
+pub struct ErasedArena {
     #[cfg_attr(feature = "archive", rkyv(omit_bounds))]
     module: curios_ersd::Module,
     environment: Environment,
 }
 
-impl ErasedUnit {
+impl ErasedArena {
     /// Whether this holds any erased items — the freshness probe the archive tests use.
     pub fn is_empty(&self) -> bool {
         self.module.items().is_empty()
@@ -493,7 +493,7 @@ pub fn erase_unit(
     resumed: Resumed<'_>,
     module: &Module,
     expected: Option<&Term>,
-) -> Result<ErasedUnit, Error> {
+) -> Result<ErasedArena, Error> {
     curios_profile::profile!("erase_unit");
     assert_eq!(
         module.body.is_some(),
@@ -558,7 +558,7 @@ pub fn erase_unit(
         match (&module.body, &expected) {
             (Some(body), Some(expected)) => seal_entry(lowering, context, body, expected),
             // No entrypoint: the arena stays open, which is exactly what a successor resumes over.
-            _ => Ok(ErasedUnit {
+            _ => Ok(ErasedArena {
                 module: lowering.builder.into_module(),
                 environment: lowering.environment,
             }),

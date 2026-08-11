@@ -100,7 +100,7 @@ struct Resolved<'a> {
 /// Opaque fixed Text state restored from the build-scoped prelude artifact.
 #[derive(Clone)]
 #[curios_archive::archived]
-pub struct PreparedPrelude {
+pub struct PreparedText {
     mounts: Vec<Mount>,
     /// The `foreign` rows this unit declares. Collected by the same walk that lowers its items, and carried here rather than dropped: a unit that declares one has to reach the link, and the prelude declaring none is a fact about the prelude, not about the shape.
     foreigns: ForeignStore,
@@ -112,7 +112,7 @@ pub struct PreparedPrelude {
     universe_floor: usize,
 }
 
-impl PreparedPrelude {
+impl PreparedText {
     pub fn core(&self) -> &curios_core::Module {
         &self.core
     }
@@ -124,7 +124,7 @@ impl PreparedPrelude {
 
     /// This prepared prelude with its lowered module hash-consed against `sharing`. Pass the same table used for the elaborated module so equal structures collapse across the two snapshots, not merely within each.
     ///
-    /// The rest of a `PreparedPrelude` is resolution metadata and floors — no terms — so the lowered module is the whole of what there is to share.
+    /// The rest of a `PreparedText` is resolution metadata and floors — no terms — so the lowered module is the whole of what there is to share.
     pub fn shared(self, sharing: &curios_core::Sharing) -> Self {
         Self {
             core: self.core.shared(sharing),
@@ -1608,9 +1608,9 @@ impl<'a> UnitSource<'a> {
 /// `scope` is in dependency order. Reads span it and the unit's own; writes only ever touch the unit's own, which is what makes a layer sufficient where a copy was used.
 pub fn into_core_unit(
     source: &UnitSource<'_>,
-    scope: &[&PreparedPrelude],
+    scope: &[&PreparedText],
     syntax: &SyntaxRegistry,
-) -> Result<PreparedPrelude, Error> {
+) -> Result<PreparedText, Error> {
     curios_profile::profile!("into_core_unit");
     let scope_tables = scope.iter().map(|unit| &unit.table).collect::<Vec<_>>();
     let scope_public = scope.iter().map(|unit| &unit.public).collect::<Vec<_>>();
@@ -1660,14 +1660,13 @@ pub fn into_core_unit(
     )?;
 
     // Each counter resumes above every predecessor's, so an identity minted here can alias none already in scope. A floor is a bound: combining by maximum can only widen.
-    let floor =
-        |of: fn(&PreparedPrelude) -> usize| scope.iter().copied().map(of).max().unwrap_or(0);
+    let floor = |of: fn(&PreparedText) -> usize| scope.iter().copied().map(of).max().unwrap_or(0);
     let metavars = Entropy::<usize>::new();
-    metavars.seed(floor(PreparedPrelude::metavariable_floor));
+    metavars.seed(floor(PreparedText::metavariable_floor));
     let universes = Entropy::<usize>::new();
-    universes.seed(floor(PreparedPrelude::universe_floor));
+    universes.seed(floor(PreparedText::universe_floor));
     let binders = Entropy::<usize>::new();
-    binders.seed(floor(PreparedPrelude::binder_floor));
+    binders.seed(floor(PreparedText::binder_floor));
     // No floor: an ordinal is scoped to its mount now, and this unit's mounts are disjoint from every predecessor's, so nothing it mints can collide with anything already stored.
     let witness_ids = RefCell::new(BTreeMap::new());
 
@@ -1769,7 +1768,7 @@ pub fn into_core_unit(
         .map(FlatItem::into_core)
         .collect();
 
-    Ok(PreparedPrelude {
+    Ok(PreparedText {
         mounts: own.clone(),
         foreigns,
         table: table.into_own().into_iter().collect(),
@@ -1809,10 +1808,7 @@ pub fn into_core(
 }
 
 /// Resolve and lower the fixed roots once for build-time archival.
-pub fn prepare_prelude(
-    input: &RootSource,
-    syntax: &SyntaxRegistry,
-) -> Result<PreparedPrelude, Error> {
+pub fn prepare_prelude(input: &RootSource, syntax: &SyntaxRegistry) -> Result<PreparedText, Error> {
     into_core_unit(&UnitSource::mounted(input), &[], syntax)
 }
 
@@ -1820,7 +1816,7 @@ pub fn prepare_prelude(
 pub fn into_core_with_prelude(
     entrypoint: &Entrypoint,
     loader: &RootSource,
-    scope: &[&PreparedPrelude],
+    scope: &[&PreparedText],
     syntax: &SyntaxRegistry,
 ) -> Result<(curios_core::Module, usize, usize, ForeignStore), Error> {
     let unit = into_core_unit(&UnitSource::entry(entrypoint, loader), scope, syntax)?;

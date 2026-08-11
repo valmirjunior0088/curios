@@ -38,7 +38,7 @@ where
             .collect::<Vec<_>>();
         let produced = curios_pipeline::compile_units(
             budget,
-            curios_unit::Scope::over(from_ref(&prelude)),
+            curios_unit::Prefix::over(from_ref(&prelude)),
             &curios_prelude::SYNTAX,
             &sources,
             cache,
@@ -49,7 +49,7 @@ where
 
         curios_pipeline::compile_entrypoint(
             budget,
-            curios_unit::Scope::over(&scope),
+            curios_unit::Prefix::over(&scope),
             &curios_prelude::SYNTAX,
             entrypoint,
             loader,
@@ -114,7 +114,7 @@ pub fn typecheck_with_prelude(
     curios_prelude::with_prelude(|prelude| {
         curios_pipeline::typecheck_reporting(
             budget,
-            curios_unit::Scope::over(from_ref(&prelude)),
+            curios_unit::Prefix::over(from_ref(&prelude)),
             &curios_prelude::SYNTAX,
             entrypoint,
             loader,
@@ -128,7 +128,11 @@ pub fn recheck_with_prelude(
     budget: u64,
 ) -> Vec<curios_cert::Verdict> {
     curios_prelude::with_prelude(|prelude| {
-        curios_pipeline::recheck(module, budget, curios_unit::Scope::over(from_ref(&prelude)))
+        curios_pipeline::recheck(
+            module,
+            budget,
+            curios_unit::Prefix::over(from_ref(&prelude)),
+        )
     })
 }
 

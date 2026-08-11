@@ -6,7 +6,7 @@ use {
     curios_ersd::Analysis,
     curios_prelude::{SYNTAX, with_prelude},
     curios_text::{Entrypoint, RootSource},
-    curios_unit::Scope,
+    curios_unit::Prefix,
     curios_wasm::to_bytes,
     std::slice::from_ref,
 };
@@ -24,7 +24,7 @@ where
     with_prelude(|prelude| {
         compile_entrypoint(
             budget,
-            Scope::over(from_ref(&prelude)),
+            Prefix::over(from_ref(&prelude)),
             &SYNTAX,
             entrypoint,
             loader,
@@ -1730,7 +1730,7 @@ fn typecheck(source: &str, type_: Option<&str>) -> Result<(), String> {
     with_prelude(|prelude| {
         super::elaborate_and_zonk(
             DEFAULT_STEP_BUDGET,
-            Scope::over(from_ref(&prelude)),
+            Prefix::over(from_ref(&prelude)),
             &SYNTAX,
             &entrypoint,
             RootSource::none(),
@@ -1938,7 +1938,7 @@ fn erase_to_ir(source: &str, type_: Option<&str>) -> curios_ersd::Module {
     let (module, core_type, _foreigns) = with_prelude(|prelude| {
         super::elaborate_and_zonk(
             DEFAULT_STEP_BUDGET,
-            Scope::over(from_ref(&prelude)),
+            Prefix::over(from_ref(&prelude)),
             &SYNTAX,
             &entrypoint,
             RootSource::none(),
@@ -1949,7 +1949,7 @@ fn erase_to_ir(source: &str, type_: Option<&str>) -> curios_ersd::Module {
     with_prelude(|prelude| {
         erase_unit(
             &mut Context::with_default_budget(SYNTAX),
-            Resumed::of(from_ref(&prelude.core()), prelude.ersd()),
+            Resumed::of(from_ref(&prelude.core()), prelude.arena()),
             &module,
             Some(&core_type),
         )
@@ -2037,7 +2037,7 @@ fn compile_with_units(
             .collect::<Vec<_>>();
         let produced = compile_units(
             DEFAULT_STEP_BUDGET,
-            Scope::over(from_ref(&prelude)),
+            Prefix::over(from_ref(&prelude)),
             &SYNTAX,
             &sources,
             None,
@@ -2048,7 +2048,7 @@ fn compile_with_units(
 
         compile_entrypoint(
             DEFAULT_STEP_BUDGET,
-            Scope::over(&scope),
+            Prefix::over(&scope),
             &SYNTAX,
             &entry,
             RootSource::none(),

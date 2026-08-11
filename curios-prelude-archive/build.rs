@@ -13,7 +13,7 @@ use {
     curios_core::Item,
     curios_core::{Global, Sharing, derived_binder_floor, validate_stored_identities},
     curios_elab::{
-        Context, ErasedUnit, Mode, Resumed, elaborate_and_zonk_module, erase_unit,
+        Context, ErasedArena, Mode, Resumed, elaborate_and_zonk_module, erase_unit,
         validate_lowered_universe_seeds, validate_universes,
     },
     curios_text::{Module, RootSource, prepare_prelude, sys_module},
@@ -153,7 +153,7 @@ fn build() {
     // No entrypoint, so nothing to seal: this unit's arena stays open, which is what its successors resume over.
     let mut ersd = erase_unit(
         &mut Context::with_default_budget(SYNTAX),
-        Resumed::of(&[], ErasedUnit::default()),
+        Resumed::of(&[], ErasedArena::default()),
         &core,
         None,
     )

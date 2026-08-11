@@ -98,7 +98,7 @@ mod tests {
         curios_core::Item,
         curios_core::Term,
         curios_core::derived_binder_floor,
-        curios_elab::{Context, DEFAULT_STEP_BUDGET, ErasedUnit, Resumed, erase_unit},
+        curios_elab::{Context, DEFAULT_STEP_BUDGET, ErasedArena, Resumed, erase_unit},
         std::{
             collections::{BTreeMap, BTreeSet},
             thread,
@@ -181,10 +181,10 @@ mod tests {
     #[test]
     fn ersd_clones_are_fresh() {
         with_prelude(|prelude| {
-            let first = prelude.ersd();
+            let first = prelude.arena();
             assert!(!first.is_empty());
             drop(first);
-            assert!(!prelude.ersd().is_empty());
+            assert!(!prelude.arena().is_empty());
         });
     }
 
@@ -377,14 +377,14 @@ mod tests {
             const CLONES: u32 = 100;
             let start = Instant::now();
             for _ in 0..CLONES {
-                drop(prelude.ersd());
+                drop(prelude.arena());
             }
             let clone = start.elapsed() / CLONES;
 
             let start = Instant::now();
             erase_unit(
                 &mut Context::new(DEFAULT_STEP_BUDGET, SYNTAX),
-                Resumed::of(&[], ErasedUnit::default()),
+                Resumed::of(&[], ErasedArena::default()),
                 core,
                 None,
             )

@@ -14,7 +14,7 @@ use {
     },
     curios_ersd::lower_to_cont,
     curios_text::{Entrypoint, RootSource, UnitSource, into_core_unit, into_core_with_prelude},
-    curios_unit::{Scope, Unit},
+    curios_unit::{Prefix, Unit},
     std::fmt,
 };
 
@@ -54,12 +54,12 @@ impl From<CompileError> for String {
 /// Put `module` to the independent kernel with `scope` already in scope, so only what its units do not already answer for is judged — their own items resting on the verdict recorded when each was built.
 ///
 /// The [`Globals`] environment is assembled here rather than in `curios-unit`, because a unit is defined to stay below the kernel and cannot name it. Every caller that wants the compile path's rechecking gets this one rather than reconstructing it.
-pub fn recheck(module: &curios_core::Module, budget: u64, scope: Scope<'_>) -> Vec<Verdict> {
+pub fn recheck(module: &curios_core::Module, budget: u64, scope: Prefix<'_>) -> Vec<Verdict> {
     recheck_module_verdicts(module, budget, &globals(scope))
 }
 
 /// The kernel's environment for `scope`: every unit mounted, at the binder floor its own walk derived.
-fn globals(scope: Scope<'_>) -> Globals {
+fn globals(scope: Prefix<'_>) -> Globals {
     let mut globals = Globals::default();
     for unit in scope.units() {
         globals.mount(unit.core(), unit.binder_floor());
@@ -75,7 +75,7 @@ fn globals(scope: Scope<'_>) -> Globals {
 /// The verdicts are rendered against the lowered module, so they read as they would on the compile path. A caller that wants the kernel's opinion on the result puts it to [`recheck`], which supplies the same environment `compile_entrypoint` does rather than re-walking the standard library.
 pub fn typecheck_reporting(
     budget: u64,
-    scope: Scope<'_>,
+    scope: Prefix<'_>,
     syntax: &SyntaxRegistry,
     entrypoint: &Entrypoint,
     loader: RootSource,
@@ -114,7 +114,7 @@ pub fn typecheck_reporting(
 /// The `sys`/`syn`/`std` prelude is neither lowered nor elaborated per call: prepared Text state is merged with the user graph, then the archived Core prelude is replayed into the elaboration context and only the entry's own items are type-checked.
 pub(crate) fn elaborate_and_zonk<O>(
     budget: u64,
-    scope: Scope<'_>,
+    scope: Prefix<'_>,
     syntax: &SyntaxRegistry,
     entrypoint: &Entrypoint,
     loader: RootSource,
@@ -194,7 +194,7 @@ where
 /// **The judgment sits between elaboration and erasure and that ordering is the point.** A module the kernel refuses never reaches erasure's budget, and a refusal reads as a refusal rather than as whatever erasure made of an ill-typed term. It is also why this is a fold step rather than one operation: the producer of a stored unit runs the same sequence *without* the judge, because the crate that writes an image deliberately cannot reach the kernel.
 pub fn compile_unit(
     budget: u64,
-    scope: Scope<'_>,
+    scope: Prefix<'_>,
     syntax: &SyntaxRegistry,
     source: &UnitSource<'_>,
 ) -> Result<Unit, CompileError> {
@@ -256,7 +256,7 @@ pub trait Cache {
 /// A `cache` short-circuits the step entirely: a recorded unit was judged when it was recorded, so neither elaboration nor the kernel re-runs for it. `None` compiles everything, which is what every caller without a project does.
 pub fn compile_units<'a>(
     budget: u64,
-    base: Scope<'a>,
+    base: Prefix<'a>,
     syntax: &SyntaxRegistry,
     sources: &[UnitSource<'_>],
     cache: Option<&dyn Cache>,
@@ -276,7 +276,7 @@ pub fn compile_units<'a>(
             .chain(produced.iter())
             .collect::<Vec<_>>();
 
-        let unit = compile_unit(budget, Scope::over(&scope), syntax, source)?;
+        let unit = compile_unit(budget, Prefix::over(&scope), syntax, source)?;
 
         if let Some(cache) = cache {
             cache.put(source, &unit);
@@ -293,7 +293,7 @@ pub fn compile_units<'a>(
 /// Production runs the arena erased representation: the archived erased prelude is restored and replayed, only the entry's own items erase, the arena transformations shrink and rebase the module, and the lowering into Cont makes every encoding decision once (see `curios_ersd::lower_to_cont`).
 pub fn compile_entrypoint<O>(
     budget: u64,
-    scope: Scope<'_>,
+    scope: Prefix<'_>,
     syntax: &SyntaxRegistry,
     entrypoint: &Entrypoint,
     loader: RootSource,

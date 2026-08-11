@@ -2,7 +2,7 @@
 //!
 //! This is deliberately not a stable interchange format. The schema only distinguishes incompatible compiler builds; Cargo regenerates the image in this crate's `OUT_DIR` whenever its inputs change.
 
-use {curios_core::Module, curios_elab::ErasedUnit, curios_text::PreparedPrelude};
+use {curios_core::Module, curios_elab::ErasedArena, curios_text::PreparedText};
 
 pub(crate) const SCHEMA: u32 = 26;
 
@@ -26,9 +26,9 @@ pub(crate) const SCHEMA: u32 = 26;
 pub(crate) struct PreludeArchive {
     pub(crate) schema: u32,
     pub(crate) fingerprint: [u8; 32],
-    pub(crate) prepared: PreparedPrelude,
+    pub(crate) prepared: PreparedText,
     pub(crate) core: Module,
     /// `curios_core::derived_binder_floor` over `core`, computed by the build that established this image. Carried so per-compile rechecking reads this floor instead of re-deriving it over every archived term — the same "already checked" argument the environment rests on, applied to a bound rather than a verdict.
     pub(crate) binder_floor: usize,
-    pub(crate) ersd: ErasedUnit,
+    pub(crate) ersd: ErasedArena,
 }
