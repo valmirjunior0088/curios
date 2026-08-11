@@ -117,7 +117,9 @@ Everything generated goes under `.curios/`, beside the governing manifest: built
 
 Packages developed together sit under an umbrella, which declares `members` rather than a `name`, and may declare a `catalog` of pins its members draw on. An umbrella governs a package only if it enumerates it, so a directory nothing enumerates is governed by nothing above it, however deep it sits.
 
-Two flags apply to every subcommand: `--manifest <PATH>` overrides the upward walk for the governing manifest, and `--unit <DIR>` mounts a package ahead of the entry program without a manifest edge, repeated in dependency order.
+The governing package is the one whose `curios.toml` sits in the working directory — there is no search above it, so what a command compiles is whatever an `ls` shows. Only the umbrella is looked for further up, and only an umbrella that enumerates you governs you.
+
+Two flags apply to every subcommand: `--manifest <PATH>` names the governing package's manifest instead of using the working directory's, and `--unit <DIR>` mounts a package ahead of the entry program without a manifest edge, repeated in dependency order.
 
 ## Build from source
 

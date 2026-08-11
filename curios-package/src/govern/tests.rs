@@ -46,9 +46,11 @@ fn a_lone_package_governs_itself() {
     fs::remove_dir_all(root).unwrap();
 }
 
-/// The walk starts at the working directory and goes up, so a subdirectory of a package is inside it.
+/// **A subdirectory of a package is not that package.** There is no search above the working directory, so a directory holding modules rather than a manifest is governed by nothing — the refusal names the directory looked in, since the fix is a `cd` and the reader has to know where to.
+///
+/// This is the one thing the rule costs, and it is deliberate: a walk would make a directory's meaning depend on what sits above it, which is exactly the ambiguity the umbrella rule refuses one level up.
 #[test]
-fn a_subdirectory_is_governed_by_the_package_above_it() {
+fn a_subdirectory_of_a_package_is_governed_by_nothing() {
     let root = tree(
         "govern-subdirectory",
         &[
@@ -58,9 +60,14 @@ fn a_subdirectory_is_governed_by_the_package_above_it() {
         ],
     );
 
-    let governing =
-        Governing::of(&root.join("parse")).expect("the package above the working directory");
+    let refusal = Governing::of(&root.join("parse"))
+        .map(|_| ())
+        .expect_err("a subdirectory holds no manifest of its own");
+    assert!(refusal.contains("no `curios.toml` in"), "{refusal}");
+    assert!(refusal.contains("parse"), "{refusal}");
 
+    // The package it sits in still governs its own directory, which is where the manifest is.
+    let governing = Governing::of(&root).expect("the directory the manifest is in");
     assert_eq!(governing.package.name, "json");
 
     fs::remove_dir_all(root).unwrap();
@@ -129,10 +136,8 @@ fn an_umbrella_root_is_governed_by_no_package() {
     let refusal = Governing::of(&root)
         .map(|_| ())
         .expect_err("an umbrella root declares no package");
-    assert!(
-        refusal.contains("no `curios.toml` declaring a package"),
-        "{refusal}"
-    );
+    // A manifest *is* there, so the refusal names what it declares rather than reporting one missing.
+    assert!(refusal.contains("declares an umbrella"), "{refusal}");
 
     fs::remove_dir_all(root).unwrap();
 }

@@ -50,7 +50,7 @@ impl Target {
 
     /// What `argument` names, and everything needed to compile it.
     ///
-    /// `manifest` is the explicit override for scripting; without one the governing package is found by walking upward from `directory`.
+    /// `manifest` is the explicit override for scripting; without one the governing package is the one `directory`'s own manifest declares.
     pub fn of(
         argument: Option<&str>,
         manifest: Option<&Path>,

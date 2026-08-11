@@ -12,7 +12,7 @@ static NAMES: LazyLock<String> = LazyLock::new(|| Stage::NAMES.join(","));
 #[derive(Debug, Subcommand)]
 pub(crate) enum Mode {
     /// Three forms, dispatched lexically: no argument is the governing package's default executable, an identifier is one it declares by name, and anything ending in `.crs` or holding a path separator is a bare file — standalone everywhere, captured by no manifest.
-    #[command(about = "Compile and execute an executable, or a .crs file")]
+    #[command(about = "Execute an executable, or a .crs file")]
     Run {
         #[arg(
             value_name = "TARGET",
@@ -124,11 +124,11 @@ pub(crate) struct Cli {
     )]
     pub(crate) units: Vec<PathBuf>,
 
-    /// The explicit override for scripting. It overrides exactly the search: which umbrella governs is still enumeration's answer, because a manifest cannot declare itself governed.
+    /// The explicit override for scripting. It overrides exactly which manifest is the package's: which umbrella governs is still enumeration's answer, because a manifest cannot declare itself governed.
     #[arg(
         long = "manifest",
         value_name = "PATH",
-        help = "Use this curios.toml as the governing package's, instead of walking upward for one"
+        help = "Use this curios.toml as the governing package's, instead of the working directory's"
     )]
     pub(crate) manifest: Option<PathBuf>,
 
