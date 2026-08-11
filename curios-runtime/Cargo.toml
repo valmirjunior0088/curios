@@ -12,6 +12,10 @@ workspace = true
 # Declares no compile-ish feature and never names Cranelift or Binaryen: building
 # `-p curios-runtime` yields a slim, runtime-only launcher.
 
+[features]
+# Emit a perf map for the guest, so a sampling profiler can name emitted wasm functions. Carries no dependency: the whole feature is one `Config` call, and it is spelled as a feature rather than an environment variable so profiling is a property of the build like every other `profile` in this workspace.
+profile = []
+
 [dependencies]
 curios-abi = { workspace = true }        # for the host<->guest wire ABI constants
 wasmtime = { workspace = true }          # runtime baseline only (no cranelift)

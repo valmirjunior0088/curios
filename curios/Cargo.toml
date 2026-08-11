@@ -12,6 +12,7 @@ workspace = true
 profile = [
     "curios-profile/enabled",
     "curios-pipeline/profile",
+    "curios-runtime/profile",
 ]
 
 [dependencies]

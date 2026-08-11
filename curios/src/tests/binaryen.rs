@@ -29,7 +29,7 @@ fn optimizes_to_a_smaller_valid_module() {
 
     let bytes = to_bytes(&module);
     // `optimize` validates the result internally (asserting on an invalid module).
-    let optimized = optimize(bytes.clone());
+    let optimized = optimize(bytes.clone(), false);
 
     assert!(optimized.starts_with(b"\0asm"));
     assert!(
@@ -37,5 +37,16 @@ fn optimizes_to_a_smaller_valid_module() {
         "expected the optimized module ({} bytes) to be smaller than the input ({} bytes)",
         optimized.len(),
         bytes.len()
+    );
+
+    // The `names` flag is the difference between a profile that reads `$func/<N>$hint` and one that reads bare addresses, and it is off for shipped binaries — so what pins it is that asking for names produces a *larger* module than not asking. Binaryen drops the section by default, which is what made every runtime profile of a Curios program unreadable until this was threaded through.
+    let named = optimize(bytes, true);
+
+    assert!(named.starts_with(b"\0asm"));
+    assert!(
+        named.len() > optimized.len(),
+        "expected the named module ({} bytes) to retain the name section the unnamed one ({} bytes) drops",
+        named.len(),
+        optimized.len()
     );
 }

@@ -52,6 +52,9 @@ unsafe extern "C" {
     /// Applies to all modules, globally.
     pub(crate) fn BinaryenSetClosedWorld(on: bool);
 
+    /// Whether the writer preserves the name section. Applies to all modules, globally, and defaults to *off* — which silently discards the names `curios-wasm` emitted, and with them any hope of a readable runtime profile.
+    pub(crate) fn BinaryenSetDebugInfo(on: bool);
+
     pub(crate) fn BinaryenModuleOptimize(module: BinaryenModuleRef);
 
     pub(crate) fn BinaryenModuleValidate(module: BinaryenModuleRef) -> bool;

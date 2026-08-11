@@ -73,7 +73,8 @@ fn validate(bytes: &[u8]) {
 pub fn to_cwasm(module: &curios_wasm::Module) -> Result<Vec<u8>, String> {
     let raw = curios_wasm::to_bytes(module);
     validate(&raw);
-    let bytes = curios_binaryen::optimize(raw);
+    // Keep the name section only when this build is a profiling one: it is what lets a sampling profiler name emitted wasm functions, and it is dead weight in a shipped binary. Same flag as the guest-side perf map in `curios-runtime` and the compiler spans in `curios-profile`, so one feature makes a whole compile-and-run legible.
+    let bytes = curios_binaryen::optimize(raw, cfg!(feature = "profile"));
 
     curios_runtime::shared_engine()
         .precompile_module(&bytes)

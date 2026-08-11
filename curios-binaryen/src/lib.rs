@@ -7,7 +7,7 @@ mod sys;
 use std::{ptr, slice, sync::Mutex};
 
 /// Run Binaryen's whole-module optimizer over serialized module bytes (optimize level 2, shrink level 1, closed world) and return the re-encoded binary. The feature set is pinned to exactly what the emitter produces and Wasmtime's engine enables, so the optimizer can never introduce a post-GC proposal the runtime rejects. Safe to call concurrently — Binaryen's settings are process-global and its optimizer is not thread-safe, so calls serialize behind an internal lock — but `bytes` must be a well-formed module: Binaryen aborts the process on malformed input instead of returning an error, which is acceptable only because the input always comes from `wasm::to_bytes`.
-pub fn optimize(mut bytes: Vec<u8>) -> Vec<u8> {
+pub fn optimize(mut bytes: Vec<u8>, names: bool) -> Vec<u8> {
     static LOCK: Mutex<()> = Mutex::new(());
     let _guard = LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
 
@@ -29,6 +29,8 @@ pub fn optimize(mut bytes: Vec<u8>) -> Vec<u8> {
         sys::BinaryenSetClosedWorld(true);
         sys::BinaryenSetOptimizeLevel(2);
         sys::BinaryenSetShrinkLevel(1);
+        // Off by default, and deliberately: the name section is 22 KB on a program the size of `binary_trees`, which a shipped binary should not carry. But dropping it is what left every runtime profile of a Curios program showing bare addresses, so the caller that is profiling asks for it back.
+        sys::BinaryenSetDebugInfo(names);
 
         sys::BinaryenModuleOptimize(module);
 

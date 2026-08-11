@@ -26,6 +26,12 @@ pub fn shared_engine() -> &'static Engine {
         config.wasm_tail_call(true);
         // The collector is left at `Collector::Auto`: the workspace `wasmtime` dependency compiles in only `gc-copying`, so `Auto` resolves to the copying (semi-space) collector — bump-allocation with an in-wasm fast path, so `struct.new`/`array.new` no longer round-trip through the `gc_alloc_raw` libcall the deferred-reference-counting collector requires.
 
+        // Under the `profile` feature, symbolicate emitted code for a sampling profiler: wasmtime writes `/tmp/perf-<pid>.map`, which `samply` and `perf` read to attribute samples to the `$func/<N>$hint` names `curios-cont` emitted. Without it every sample landing in emitted wasm resolves to a bare address — which is what made the first runtime profile of a Curios program unreadable, its two largest buckets symbolicating into an unrelated host function's prologue.
+        //
+        // This is the guest-side half of the same flag `curios-profile` uses for the compiler, so one feature profiles both ends of a compile-and-run. It selects how compiled code is registered with the host rather than how it is compiled, so a `.cwasm` produced without it still deserializes against an engine built with it.
+        #[cfg(feature = "profile")]
+        config.profiler(wasmtime::ProfilingStrategy::PerfMap);
+
         Engine::new(&config).expect("failed to create wasm engine")
     });
 
