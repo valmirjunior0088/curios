@@ -49,7 +49,15 @@ Curios includes:
 
 The [browser playground](https://valmirjunior0088.github.io/curios/playground) runs the same compiler pipeline as the native CLI, entirely in your browser.
 
-To use the CLI, download a binary from the [releases page](https://github.com/valmirjunior0088/curios/releases), then save this as `hello.crs`:
+To use the CLI, install it into `~/.local/bin`:
+
+```sh
+curl -fsSL https://github.com/valmirjunior0088/curios/releases/latest/download/install.sh | sh
+```
+
+The installer takes no options and installs the release it shipped with, verifying the download against that release's `checksums.txt`. Prebuilt binaries exist for Linux x86-64, Linux aarch64, and Apple Silicon; anywhere else, [build from source](#build-from-source). Every binary is also on the [releases page](https://github.com/valmirjunior0088/curios/releases) if you would rather place one yourself.
+
+Then save this as `hello.crs`:
 
 ```crs
 /std/print("Hello, world!\n")

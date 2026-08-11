@@ -151,6 +151,12 @@ jobs:
           mv artifacts/curios-web/curios-web.tar.gz curios-web.tar.gz
           mv artifacts/curios-docs/curios-docs.tar.gz curios-docs.tar.gz
 
+      # The installer's version is baked in here rather than discovered at run time, so the script a release ships installs that release's binary and a pinned URL stays pinned.
+      - name: Prepare installer
+        run: |
+          sha256sum curios-linux-x86_64 curios-linux-aarch64 curios-macos-aarch64 > checksums.txt
+          sed -i "s/@VERSION@/${GITHUB_REF_NAME#release/}/" install.sh
+
       - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -162,4 +168,6 @@ jobs:
             curios-linux-aarch64 \
             curios-macos-aarch64 \
             curios-web.tar.gz \
-            curios-docs.tar.gz
+            curios-docs.tar.gz \
+            checksums.txt \
+            install.sh
