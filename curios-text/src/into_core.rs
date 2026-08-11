@@ -1589,6 +1589,16 @@ impl<'a> UnitSource<'a> {
         self.source.directories()
     }
 
+    /// The prefix this unit claims, as a name to report it by — `/json` for a mounted package.
+    ///
+    /// Empty for the entry, which owns the empty prefix: a caller that wants to *name* the entry knows what was asked for and this does not, so it supplies its own.
+    pub fn prefix(&self) -> String {
+        self.mounts()
+            .first()
+            .map(|mount| mount.prefix.join())
+            .unwrap_or_default()
+    }
+
     /// The entrypoint this source carries, for the one unit that has one.
     fn entrypoint(&self) -> Option<&Entrypoint> {
         self.entrypoint

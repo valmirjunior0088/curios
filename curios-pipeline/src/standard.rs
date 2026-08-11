@@ -5,13 +5,15 @@
 //! It used to be written three times. The native product, the browser product and this crate's own test suite each spelled `with_prelude(|prelude| … Prefix::over(from_ref(&prelude)), &SYNTAX, …)` by hand, under the reading that naming the standard library is a product's decision. That reading survives — a product may still hand the fold any prefix it likes — but three callers deciding it identically is a missing function rather than a policy, and the third of them was not a product at all.
 
 use {
-    crate::{Cache, CompileError, Stage, compile_entrypoint, compile_units, recheck},
+    crate::{Cache, CompileError, Progress, Stage, compile_entrypoint, compile_units, recheck},
     curios_prelude::{SYNTAX, with_prelude},
     curios_unit::Prefix,
     std::slice::from_ref,
 };
 
 /// Compile `entrypoint` against the fixed prelude — the one unit every product path puts in scope.
+///
+/// Reports no progress. Every caller of this one is a test, an embedder or the browser, none of which has a terminal to narrate to; the CLI takes [`compile_with_units`] instead.
 pub fn compile_with_prelude<O>(
     budget: u64,
     entrypoint: &curios_text::Entrypoint,
@@ -21,22 +23,24 @@ pub fn compile_with_prelude<O>(
 where
     O: FnMut(Stage<'_>),
 {
-    compile_with_units(budget, &[], entrypoint, loader, None, observe)
+    compile_with_units(budget, &[], entrypoint, loader, None, observe, |_| {})
 }
 
 /// Compile `units` in the order given, then `entrypoint` against all of them and the prelude.
 ///
 /// The order *is* the dependency order — nothing here resolves or sorts one, because deciding a scope is still the caller's job and only the shape of the standard prefix is settled here. A unit naming a prefix mounted after it fails as an unbound name, which is what a positional order costs and what a manifest's declared dependencies replace.
-pub fn compile_with_units<O>(
+pub fn compile_with_units<O, P>(
     budget: u64,
     units: &[curios_text::RootSource],
     entrypoint: &curios_text::Entrypoint,
     loader: curios_text::RootSource,
     cache: Option<&dyn Cache>,
     observe: O,
+    mut progress: P,
 ) -> Result<(curios_wasm::Module, curios_abi::ForeignStore), CompileError>
 where
     O: FnMut(Stage<'_>),
+    P: FnMut(Progress<'_>),
 {
     with_prelude(|prelude| {
         let sources = units
@@ -49,19 +53,25 @@ where
             &SYNTAX,
             &sources,
             cache,
+            &mut progress,
         )?;
         let scope = std::iter::once(prelude)
             .chain(produced.iter())
             .collect::<Vec<_>>();
 
-        compile_entrypoint(
+        // The entry is announced here rather than inside `compile_entrypoint`, which stays free of the concern: it is the last step of this fold, and bracketing it costs one event where threading a second callback down would cost a signature.
+        progress(Progress::Entry);
+        let compiled = compile_entrypoint(
             budget,
             Prefix::over(&scope),
             &SYNTAX,
             entrypoint,
             loader,
             observe,
-        )
+        );
+        progress(Progress::Compiled);
+
+        compiled
     })
 }
 

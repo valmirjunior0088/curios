@@ -25,6 +25,9 @@ pub const MANIFEST: &str = "curios.toml";
 /// The library header a package's `name` obligates, beside the manifest. Its stem enters no qualified name: the manifest names that namespace, so `lib` is a spelling nothing can refer to.
 pub const LIBRARY: &str = "lib.crs";
 
+/// The package's own executable, found beside the manifest when no `[[executables]]` row claims the package's name. Like [`LIBRARY`], presence is the declaration and the stem enters no qualified name.
+pub const EXECUTABLE: &str = "exe.crs";
+
 /// The extension every Curios source file carries, which is what makes an executable's declared name enough to locate it.
 pub const EXTENSION: &str = "crs";
 
@@ -38,14 +41,23 @@ pub enum Manifest {
 }
 
 impl Manifest {
-    /// The manifest `path` holds, with every refusal named against that file.
+    /// The manifest `path` holds, with every refusal named against that file — and the package's own executable, when `exe.crs` sits beside it.
+    ///
+    /// Discovery happens here rather than in [`FromStr`], because only this spelling knows where the manifest *is*. The text alone can be parsed without a filesystem, which is what the tests and the umbrella walk rely on.
     pub fn from_path(path: &Path) -> Result<Self, String> {
         let source =
             fs::read_to_string(path).map_err(|error| format!("{}: {error}", path.display()))?;
 
-        source
+        let manifest: Self = source
             .parse()
-            .map_err(|refusal| format!("{}: {refusal}", path.display()))
+            .map_err(|refusal| format!("{}: {refusal}", path.display()))?;
+
+        Ok(match (manifest, path.parent()) {
+            (Self::Package(package), Some(directory)) => {
+                Self::Package(package.discovered(directory))
+            }
+            (manifest, _) => manifest,
+        })
     }
 }
 
@@ -72,6 +84,29 @@ pub struct Package {
     pub executables: Vec<Executable>,
 }
 
+impl Package {
+    /// This package, plus its own executable when `exe.crs` sits in `directory` and no row already claims that name.
+    ///
+    /// **Presence is the declaration, exactly as it is for `lib.crs`.** A package's own program and its own library are the two things it *is*, and neither should cost a manifest entry to admit to. The asymmetry this crate used to state — that a vanished executable "fails by silently not being there" — does not survive contact: deleting `exe.crs` makes `curios run` say the package declares no executable, which is a refusal naming the problem rather than a silence.
+    ///
+    /// A row wins over the file: somebody who wrote `[[executables]]` for this name meant the path they gave.
+    fn discovered(mut self, directory: &Path) -> Self {
+        let claimed = self
+            .executables
+            .iter()
+            .any(|executable| executable.name == self.name);
+
+        if !claimed && directory.join(EXECUTABLE).is_file() {
+            self.executables.push(Executable {
+                name: self.name.clone(),
+                path: PathBuf::from(EXECUTABLE),
+            });
+        }
+
+        self
+    }
+}
+
 /// A namespace for packages: the ones inside its tree, and the pinned rows those may share.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Umbrella {
@@ -86,7 +121,7 @@ pub struct Umbrella {
 pub struct Executable {
     /// A single legal identifier, which is what keeps `curios run <name>` and `curios run <file>.crs` two spaces that cannot overlap.
     pub name: String,
-    /// `<name>.crs` beside the manifest, unless the row stated one. Deriving a path from a declared name is not disk discovery: declaration still decides existence.
+    /// `<name>.crs` beside the manifest, unless the row stated one — or `exe.crs` for the package's own executable, which is found rather than declared. Deriving a path from a declared name is not disk discovery: for a row, declaration still decides existence.
     pub path: PathBuf,
 }
 
@@ -337,6 +372,7 @@ impl ExecutableRow {
             ));
         }
 
+        // One rule for every row, including the package's own: a declared executable is compiled from the file named after it. `exe.crs` is not a default here — it is what `Package::discovered` finds when *no* row claims the package's name, so writing a row always means what it says and never silently redirects an existing package's file.
         let path = path.map_or_else(
             || PathBuf::from(format!("{name}.{EXTENSION}")),
             PathBuf::from,

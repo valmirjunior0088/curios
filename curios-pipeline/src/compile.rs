@@ -254,20 +254,28 @@ pub trait Cache {
 /// Returns the units it produced, not the ones it was given: the caller owns `base` and this cannot take it. A scope is rebuilt per step from pointers to both, which is free.
 ///
 /// A `cache` short-circuits the step entirely: a recorded unit was judged when it was recorded, so neither elaboration nor the kernel re-runs for it. `None` compiles everything, which is what every caller without a project does.
-pub fn compile_units<'a>(
+pub fn compile_units<'a, P>(
     budget: u64,
     base: Prefix<'a>,
     syntax: &SyntaxRegistry,
     sources: &[UnitSource<'_>],
     cache: Option<&dyn Cache>,
-) -> Result<Vec<Unit>, CompileError> {
+    mut progress: P,
+) -> Result<Vec<Unit>, CompileError>
+where
+    P: FnMut(Progress<'_>),
+{
     let mut produced: Vec<Unit> = Vec::new();
 
     for source in sources {
+        // Announced *after* the cache is consulted and *before* the work, so a reported operation is one that is actually about to happen and its timing starts where it does.
         if let Some(unit) = cache.and_then(|cache| cache.get(source)) {
+            progress(Progress::Reused(&source.prefix()));
             produced.push(unit);
             continue;
         }
+
+        progress(Progress::Compiling(&source.prefix()));
 
         let scope = base
             .units()
@@ -277,6 +285,7 @@ pub fn compile_units<'a>(
             .collect::<Vec<_>>();
 
         let unit = compile_unit(budget, Prefix::over(&scope), syntax, source)?;
+        progress(Progress::Compiled);
 
         if let Some(cache) = cache {
             cache.put(source, &unit);
@@ -286,6 +295,22 @@ pub fn compile_units<'a>(
     }
 
     Ok(produced)
+}
+
+/// What the fold is doing, for a caller that reports it.
+///
+/// Sequential by construction — the fold compiles one unit at a time — so [`Progress::Reused`] and [`Progress::Compiled`] refer to whichever subject was announced last and need not name it again.
+///
+/// Deliberately separate from the [`Stage`] observer, which belongs to `--print`: one reports *what is happening* and the other *what was produced*, and a caller wants either without the other.
+pub enum Progress<'a> {
+    /// A mounted unit is about to be compiled, named by the prefix it claims.
+    Compiling(&'a str),
+    /// The entry program is about to be compiled. Unnamed: it owns the empty prefix, so only the caller knows what was asked for.
+    Entry,
+    /// A mounted unit came from the store instead; nothing is compiled for it, and no [`Progress::Compiled`] follows.
+    Reused(&'a str),
+    /// The subject just announced finished.
+    Compiled,
 }
 
 /// Compile a parsed entrypoint through the full pipeline to a wasm module, feeding every [`Stage`] to `observe` in order. The result pairs the module with the [`ForeignStore`] harvested from the program's own `foreign` declarations — an embedder that will run the module builds its `ffi`-tier bindings (`curios-runtime`'s `ForeignBindings`) from exactly this store, or drops it when the program declares none. Binaryen optimization and Cranelift precompilation are deliberately *not* here — they live downstream in the `curios` crate (`to_cwasm`), keeping this crate free of native backends.

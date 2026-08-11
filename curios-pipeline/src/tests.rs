@@ -2019,6 +2019,7 @@ fn compile_with_units(
             &SYNTAX,
             &sources,
             None,
+            |_| {},
         )?;
         let scope = std::iter::once(prelude)
             .chain(produced.iter())

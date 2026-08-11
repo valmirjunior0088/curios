@@ -1,9 +1,10 @@
 //! Driving the compile pipeline for the CLI, with the `--print` stage dump wired in. `stage_printer` is the single owner of how each IR stage is selected and rendered.
 
 use {
+    crate::report::{Heading, Line},
     curios::Verdicts,
     curios_package::Target,
-    curios_pipeline::{Cache, CompileError, Stage, compile_with_units},
+    curios_pipeline::{Cache, CompileError, Progress, Stage, compile_with_units},
     curios_text::Entrypoint,
     curios_wasm::Module,
     std::path::{Path, PathBuf},
@@ -42,6 +43,7 @@ pub(crate) fn compile_target(
     let mut scope = load_units(units)?;
 
     // A bare file has no project, so it has no store to consult: what it may reuse is a fact about the project it is in, and it is in none.
+    let asked = target.asked();
     let (entry, cache) = match target {
         Target::File(path) => (path, None),
         Target::Executable {
@@ -58,6 +60,7 @@ pub(crate) fn compile_target(
         print,
         scope,
         &entry,
+        &asked,
         cache.as_ref().map(|cache| cache as &dyn Cache),
     )
 }
@@ -68,14 +71,54 @@ pub(crate) fn compile_entry(
     print: &str,
     units: Vec<curios_text::RootSource>,
     entry: &Path,
+    asked: &str,
     cache: Option<&dyn Cache>,
 ) -> Result<Module, CompileError> {
     let printer = stage_printer(print).map_err(CompileError::Failure)?;
     let (entrypoint, loader) = Entrypoint::opened(entry).map_err(CompileError::Failure)?;
 
+    // The entry is the one subject the fold cannot name — it owns the empty prefix — so it is reported under the name the caller was asked for.
+    let mut line: Option<Line> = None;
+
     // The CLI doesn't yet expose a way to supply `foreign` implementations, so its `ForeignStore` is dropped here.
-    compile_with_units(budget, &units, &entrypoint, loader, cache, printer)
-        .map(|(module, _foreigns)| module)
+    compile_with_units(
+        budget,
+        &units,
+        &entrypoint,
+        loader,
+        cache,
+        printer,
+        |progress| report(&mut line, asked, progress),
+    )
+    .map(|(module, _foreigns)| module)
+}
+
+/// Fold one [`Progress`] event onto the open status line, opening and closing lines as subjects begin and end.
+///
+/// The line outlives each event, which is why it is threaded rather than owned here: `Processing /hello` and the `; compiling... done 1.4s` that completes it are three separate writes to one line.
+fn report(line: &mut Option<Line>, asked: &str, progress: Progress<'_>) {
+    match progress {
+        Progress::Compiling(prefix) => *line = Some(opened(Heading::Processing, prefix)),
+        Progress::Entry => *line = Some(opened(Heading::Processing, asked)),
+        Progress::Reused(prefix) => {
+            Line::open(Heading::Processing, prefix).outcome("reused");
+            eprintln!();
+        }
+        Progress::Compiled => {
+            if let Some(mut open) = line.take() {
+                open.done();
+                eprintln!();
+            }
+        }
+    }
+}
+
+/// A line opened for `subject` with its `compiling` step already announced, so the clock starts where the work does.
+fn opened(heading: Heading, subject: &str) -> Line {
+    let mut line = Line::open(heading, subject);
+    line.step("compiling");
+
+    line
 }
 
 /// Read every `--unit DIR`'s manifest in the order written, which is the order they are compiled in.

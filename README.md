@@ -32,8 +32,8 @@ That length is not a comment, and nobody has to remember to check it. Try tellin
 ```crs
 use /std/{Nat, Vec};
 
-let empty : Vec(Nat, 0) = Vec/nil();
-let single : Vec(Nat, 1) = empty;
+let empty: Vec(Nat, 0) = Vec/nil();
+let single: Vec(Nat, 1) = empty;
 ```
 
 ```text
@@ -42,9 +42,9 @@ type mismatch
   inferred: Vec(Nat, 0)
   expected: Vec(Nat, 1)
 
-   --> vector.crs:4:28
-    4 | let single : Vec(Nat, 1) = empty;
-      |                            ^^^^^
+   --> vector.crs:4:27
+    4 | let single: Vec(Nat, 1) = empty;
+      |                           ^^^^^
 ```
 
 `Vec(Nat, 0)` and `Vec(Nat, 1)` are simply different types, so the off-by-one never reaches the generated program — there is nothing to test for, because there is nothing to run. And the `@m` that made that work does its thinking at compile time and then goes home: none of it survives into the WebAssembly.
@@ -69,7 +69,7 @@ For the CLI, this drops it into `~/.local/bin`:
 curl -fsSL https://github.com/valmirjunior0088/curios/releases/latest/download/install.sh | sh
 ```
 
-The installer takes no options and installs the release it shipped with, verified against that release's `checksums.txt` before it lands. Prebuilt binaries exist for Linux x86-64, Linux aarch64, and Apple Silicon; anywhere else, [build from source](#build-from-source). Every binary is on the [releases page](https://github.com/valmirjunior0088/curios/releases) too, if you would rather place one yourself.
+No options, and it checks what it downloaded against the release's `checksums.txt` before installing it. Linux x86-64, Linux aarch64, and Apple Silicon have prebuilt binaries — anywhere else, [build from source](#build-from-source).
 
 Then save this as `hello.crs`:
 
@@ -90,8 +90,6 @@ curios compile hello.crs -o hello
 ./hello
 ```
 
-Exit codes, the formatter, and the rest of the command line are in [Usage](documentation/USAGE.md).
-
 ## When one file is not enough
 
 A `.crs` file is standalone wherever it sits: it needs no manifest, and no manifest above it captures it. A package is what you write once a program outgrows that.
@@ -102,18 +100,26 @@ cd hello
 curios run
 ```
 
-`curios new` names the package after its directory — checked before anything is written — and writes the smallest thing that runs: a `curios.toml`, and a `hello.crs` beside it. With `--lib` you get a `lib.crs` and no executable instead; a package is a program or a library until it says otherwise.
+That gives you a whole package, and the manifest is one line — `name = "hello"`. Everything else is found rather than declared: `lib.crs` is the library, `exe.crs` is the program.
 
-```toml
-name = "hello"
+```crs
+-- lib.crs
+use /std/{Str};
 
-[[executables]]
-name = "hello"
+pub let message: Str =
+    "Hello, world!";
+```
+```crs
+-- exe.crs
+use /std/{Fmt};
+use /hello/{message};
+
+Fmt/print("%\n")(message)
 ```
 
-From there, `run` and `compile` mean the same three things: with no argument, the package's sole executable; with an identifier, the one declared under that name; with a path, that file, standalone. The governing package is whichever one's `curios.toml` sits in the working directory — there is no searching around above you.
+Note what the program imports. `lib` and `exe` are spellings nothing can refer to, so `/hello` is unambiguously the *mount* — a package's own name never has to mean two things at once. Delete either file and the package is happily just the other one.
 
-Dependencies are pinned exactly and accepted by hash, `curios curate` is the only part of the toolchain that touches the network, and packages developed together sit under an umbrella. All of that lives in [Usage](documentation/USAGE.md).
+Dependencies, umbrellas, extra executables, and the rest of the command line live in [Usage](documentation/USAGE.md).
 
 ## Build from source
 

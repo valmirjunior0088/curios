@@ -4,7 +4,9 @@
 //!
 //! The consequence enforced below is that **the package root has one stem space**: the library header holds a stem in it, so does every module that header enumerates, and so does every executable compiled from a file directly inside it. A stem claimed twice is a refusal naming both claimants (law 4).
 //!
-//! **A package has a library when `lib.crs` sits beside its manifest, and none when it does not.** This is the one place location decides rather than declaration, and it is deliberate: a library is not an artifact a package opts into, it is the package's own body, and a package of nothing but programs has none to declare. What makes the exception safe is that the failure is loud — a library that stops existing takes its whole mount with it, so every reference in every dependent stops resolving at once. The same reasoning does not extend to executables: a default executable that stops existing fails by silently not being there, which is why those stay enumerated.
+//! **A package has a library when `lib.crs` sits beside its manifest, and its own executable when `exe.crs` does.** These are the two places location decides rather than declaration, and both are deliberate: neither is an artifact a package opts into, they are the two things a package *is*, and a manifest entry admitting to either would be ceremony. `[[executables]]` remains for everything else — a second program, or one compiled from a path of its own — and a row always wins over the file.
+//!
+//! This crate used to argue the executable half the other way, on the grounds that a vanished default "fails by silently not being there". That does not survive contact: delete `exe.crs` and `curios run` refuses, naming the package and saying it declares no executable. Both failures are loud; they are merely loud in different places.
 
 #[cfg(test)]
 mod tests;

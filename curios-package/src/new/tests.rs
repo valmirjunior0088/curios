@@ -20,10 +20,12 @@ fn temp_dir(name: &str) -> PathBuf {
 }
 
 /// What `new` writes, the rest of this crate accepts — which is the only claim scaffolding can honestly make.
+///
+/// Both halves, in one package: the library header resolves and the declared executable exists, so neither part of a package is something a beginner has to discover a flag to get.
 #[test]
-fn a_scaffolded_program_is_a_package_this_crate_reads() {
-    let root = temp_dir("scaffold_program");
-    scaffold(&root, false).expect("a fresh directory");
+fn a_scaffolded_package_is_one_this_crate_reads() {
+    let root = temp_dir("scaffold");
+    scaffold(&root).expect("a fresh directory");
 
     let (package, source) = package_at(&root).expect("what was written parses and resolves");
 
@@ -34,23 +36,7 @@ fn a_scaffolded_program_is_a_package_this_crate_reads() {
     );
     assert!(root.join(package.executables[0].path.clone()).is_file());
 
-    // A package of nothing but a program has no library, and no empty file pretending otherwise.
-    assert!(source.is_none());
-    assert!(!root.join(LIBRARY).exists());
-
-    fs::remove_dir_all(root).unwrap();
-}
-
-/// And the other direction: a library package gets a header and no program.
-#[test]
-fn a_scaffolded_library_is_a_package_this_crate_reads() {
-    let root = temp_dir("scaffold_library");
-    scaffold(&root, true).expect("a fresh directory");
-
-    let (package, source) = package_at(&root).expect("what was written parses and resolves");
-
-    assert!(package.executables.is_empty());
-    assert!(source.is_some());
+    assert!(source.is_some(), "the library header resolves");
     assert!(root.join(LIBRARY).is_file());
 
     fs::remove_dir_all(root).unwrap();
@@ -61,7 +47,7 @@ fn a_scaffolded_library_is_a_package_this_crate_reads() {
 fn a_name_no_path_could_spell_is_refused_before_writing() {
     let root = temp_dir("scaffold_bad_name").join("not-a-name");
 
-    let refusal = scaffold(&root, false).expect_err("a dash is no identifier");
+    let refusal = scaffold(&root).expect_err("a dash is no identifier");
     assert!(refusal.contains("no name a path could spell"), "{refusal}");
     assert!(!root.exists(), "nothing is left behind");
 }
@@ -70,10 +56,10 @@ fn a_name_no_path_could_spell_is_refused_before_writing() {
 #[test]
 fn an_existing_package_is_not_overwritten() {
     let root = temp_dir("scaffold_occupied");
-    scaffold(&root, false).expect("a fresh directory");
+    scaffold(&root).expect("a fresh directory");
     let written = fs::read_to_string(root.join(MANIFEST)).unwrap();
 
-    let refusal = scaffold(&root, true).expect_err("a directory that already holds a package");
+    let refusal = scaffold(&root).expect_err("a directory that already holds a package");
     assert!(refusal.contains("already holds a package"), "{refusal}");
     assert_eq!(
         fs::read_to_string(root.join(MANIFEST)).unwrap(),
@@ -88,7 +74,7 @@ fn an_existing_package_is_not_overwritten() {
 #[test]
 fn a_scaffolded_manifest_declares_a_package() {
     let root = temp_dir("scaffold_mode");
-    scaffold(&root, false).expect("a fresh directory");
+    scaffold(&root).expect("a fresh directory");
 
     let manifest = fs::read_to_string(root.join(MANIFEST)).unwrap();
     assert!(

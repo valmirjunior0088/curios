@@ -16,6 +16,51 @@ The dispatch is lexical and never probes the disk: an executable's name is a sin
 
 A file argument brings no project with it — no manifest, no dependencies, not even the library of the package you are standing in. That is deliberate: project scope is reachable only through something a manifest declares, so a scratch file cannot quietly acquire one. When a scratch program does want the library, one `[[executables]]` line gives it one.
 
+## What a package is made of
+
+Two files are found by *presence* rather than declared, because they are the two things a package is rather than artifacts it opts into:
+
+| File | Is |
+| --- | --- |
+| `lib.crs` | the package's library, mounted at its declared `name` |
+| `exe.crs` | the package's own executable, run by that same name |
+
+So the smallest complete package is one line of manifest:
+
+```toml
+name = "hello"
+```
+
+Neither stem enters a qualified name — `lib` and `exe` are spellings nothing can refer to, exactly so a package's own name never means two things at once. `lib.crs`'s modules load from the manifest's directory (`pub mod parse;` reads `parse.crs`), which is the one place a header's namespace is not its stem directory.
+
+Everything else is declared. A second program needs a row, and its file is named after it:
+
+```toml
+name = "hello"
+
+[[executables]]
+name = "bench"          # compiled from bench.crs
+
+[[executables]]
+name = "serve"
+path = "tools/serve.crs"  # unless the row says otherwise
+```
+
+A row always wins over the file, so `[[executables]] name = "hello"` with a `path` overrides the `exe.crs` convention for the package's own program.
+
+With more than one executable and no `default`, a bare `curios run` refuses rather than guessing:
+
+```toml
+name = "hello"
+default = "bench"
+```
+
+**The package root has one stem space.** `lib.crs`, every module it enumerates, and every executable compiled from a file directly beside the manifest all claim a stem there, and a stem claimed twice is refused naming both claimants:
+
+```
+the package root claims the stem `hello` twice: `mod hello` in `lib.crs` and the executable "hello"
+```
+
 ## Exit codes
 
 Exit status is a tri-state, so tooling can tell "here is your goal batch" from "something is wrong" without parsing stderr.

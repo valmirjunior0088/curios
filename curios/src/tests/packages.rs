@@ -54,6 +54,7 @@ fn cached(directory: &Path, target: Option<&str>, cache: Option<&dyn Cache>) -> 
         loader,
         cache,
         |_| {},
+        |_| {},
     )
     .expect("the package compiles");
 
@@ -205,6 +206,7 @@ fn a_file_argument_compiles_standalone_inside_a_package() {
             &entrypoint,
             loader,
             None,
+            |_| {},
             |_| {}
         )
         .is_err(),

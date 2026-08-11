@@ -59,12 +59,6 @@ pub(crate) enum Mode {
             help = "The directory to create; its name is the package's"
         )]
         directory: PathBuf,
-
-        #[arg(
-            long,
-            help = "Start a library rather than a program (a package is one or the other until it declares otherwise)"
-        )]
-        lib: bool,
     },
 
     #[command(about = "Format .crs files canonically, in place")]
