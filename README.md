@@ -80,6 +80,45 @@ Exit codes are a tri-state: `0` means the program compiled and (for `run`) exite
 
 `curios format <files…>` rewrites sources into the one canonical style, in place; `--check` writes nothing and exits nonzero when any file would change. Formatting is verified before anything is written — the output must reparse to exactly the same program, with every comment preserved — so a formatter defect refuses rather than corrupts.
 
+## Packages
+
+A `.crs` file is standalone wherever it sits: it needs no manifest, and no manifest above it captures it. A package is what you write once a program outgrows that.
+
+```sh
+curios new hello
+cd hello
+curios run
+```
+
+`curios new` names the package after its directory — checked before anything is written — and writes the smallest thing that runs: a `curios.toml`, and a `hello.crs` beside it. With `--lib` it writes a `lib.crs` and declares no executable instead; a package is a program or a library until it says otherwise.
+
+```toml
+name = "hello"
+
+[[executables]]
+name = "hello"
+```
+
+`run` and `compile` take the same three forms, so what a bare invocation means never depends on which one you asked. With no argument, the governing package's sole executable — or the one `default` names, when it declares several. With an identifier, the executable declared under that name. With anything ending in `.crs` or holding a path separator, that file, standalone.
+
+A dependency is pinned exactly, and its name is how every consumer refers to it: a package named `json` mounts at `/json`, and no consumer may rename it, which is what lets two dependents on one package share it instead of duplicating it. A `git` row requires all three of `url`, `rev` and `hash`; a `path` row requires only `path`.
+
+```toml
+name = "app"
+
+[dependencies]
+json = { source = "git", url = "https://github.com/you/json", rev = "…", hash = "c1:…" }
+shape = { source = "path", path = "../shape" }
+```
+
+`curios curate` materializes what the manifests reference and reports what nothing uses. It is the only part of the toolchain that reaches the network — the compiler itself never fetches — and a delivered tree is accepted against its `hash` whatever transport produced it, so a mirror is no weaker than the origin.
+
+Everything generated goes under `.curios/`, beside the governing manifest: built executables, materialized sources, and compiled units. It is the only directory the toolchain writes into.
+
+Packages developed together sit under an umbrella, which declares `members` rather than a `name`, and may declare a `catalog` of pins its members draw on. An umbrella governs a package only if it enumerates it, so a directory nothing enumerates is governed by nothing above it, however deep it sits.
+
+Two flags apply to every subcommand: `--manifest <PATH>` overrides the upward walk for the governing manifest, and `--unit <DIR>` mounts a package ahead of the entry program without a manifest edge, repeated in dependency order.
+
 ## Build from source
 
 Building requires Rust, a C++ toolchain, and CMake. The first build compiles Binaryen from a verified source release and may take several minutes.
