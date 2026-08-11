@@ -5,29 +5,29 @@
 -- D is read from stdin; output is the payload sum mod 1000003 (bounded to i31).
 use /std/{Str, Nat, Option, Io};
 
-induct Tree : Type
+induct Tree: Type
 | leaf(Nat)
 | node(Nat, Tree, Tree)
 end
 
-rec build(d : Nat, v : Nat) -> Tree =
-    match d : (_) => Tree
+rec build(d: Nat, v: Nat) -> Tree =
+    match d: (_) => Tree
     | 0 => Tree/leaf(v)
     | dp + 1; ih => Tree/node(v, build(dp, v * 2), build(dp, v * 2 + 1))
     end;
 
-rec sum(t : Tree) -> Nat =
-    match t : (_) => Nat
+rec sum(t: Tree) -> Nat =
+    match t: (_) => Nat
     | leaf(n) => n % 1000003
     | node(n, l, r) => (n + sum(l) + sum(r)) % 1000003
     end;
 
 let input = /std/read()!;
-match input : (_) => Io({})
+match input: (_) => Io({})
 | some(bytes) =>
-    match Str/of_bytes(bytes) : (_) => Io({})
+    match Str/of_bytes(bytes): (_) => Io({})
     | some(s) =>
-        match Nat/of_str(Str/trim(s)) : (_) => Io({})
+        match Nat/of_str(Str/trim(s)): (_) => Io({})
         | some(d) => /std/print(Str/concat(Nat/to_str(sum(build(d, 1))), "\n"))
         | none() => /std/print("bad input\n")
         end
