@@ -80,16 +80,6 @@ impl Target {
         })
     }
 
-    /// What this target is reported as — the name that was asked for, never the file it resolved to.
-    ///
-    /// A declared executable resolves to an absolute path somewhere under the governing root, and echoing that back fills a status line with what the reader already knew. A bare file *is* what was asked for, so it reports as written.
-    pub fn asked(&self) -> String {
-        match self {
-            Self::File(path) => path.display().to_string(),
-            Self::Executable { name, .. } => name.clone(),
-        }
-    }
-
     /// What `argument` names, resolved against whatever governs the directory the process is standing in.
     pub fn here(argument: Option<&str>, manifest: Option<&Path>) -> Result<Self, String> {
         let directory = std::env::current_dir().map_err(|error| error.to_string())?;
