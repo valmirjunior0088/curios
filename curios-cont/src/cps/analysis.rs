@@ -182,7 +182,13 @@ pub(super) fn nodes_from(module: &CpsModule, body: CpsNodeId) -> Vec<CpsNodeId> 
     }
     found.into_iter().collect()
 }
-pub(super) fn owned_values(module: &CpsModule, function: CpsFunId) -> BTreeSet<CpsValueId> {
+/// The values `function` binds, and the values it mentions — from one walk of its body.
+///
+/// The two are collected together because the pair *is* the content of both callers below: free is `used \ owned` and available is `owned ∪ used`. Computing them apart cost three walks to answer a question one walk holds, and made `available_values` derive `owned` twice — once directly and once inside the `free_values` it called.
+fn owned_and_used(
+    module: &CpsModule,
+    function: CpsFunId,
+) -> (BTreeSet<CpsValueId>, BTreeSet<CpsValueId>) {
     let mut owned = module
         .function(function)
         .unwrap()
@@ -190,8 +196,12 @@ pub(super) fn owned_values(module: &CpsModule, function: CpsFunId) -> BTreeSet<C
         .iter()
         .copied()
         .collect::<BTreeSet<_>>();
+    let mut used = BTreeSet::new();
+
     for node_id in function_nodes(module, function) {
-        match module.node(node_id).unwrap() {
+        let node = module.node(node_id).unwrap();
+
+        match node {
             CpsNode::LetValue { result, .. } | CpsNode::LetIntrinsic { result, .. } => {
                 owned.insert(*result);
             }
@@ -207,36 +217,41 @@ pub(super) fn owned_values(module: &CpsModule, function: CpsFunId) -> BTreeSet<C
                     );
                 }
             }
+            // A closure callee is a value the body reads, and it is the one such read that is not an operand atom.
+            CpsNode::ApplyFun {
+                callee: CpsCallee::Closure(value),
+                ..
+            } => {
+                used.insert(*value);
+            }
             _ => {}
         }
-    }
-    owned
-}
-pub(super) fn free_values(module: &CpsModule, function: CpsFunId) -> BTreeSet<CpsValueId> {
-    let owned = owned_values(module, function);
-    let mut used = BTreeSet::new();
-    for node_id in function_nodes(module, function) {
-        let node = module.node(node_id).unwrap();
+
         for atom in atoms(node) {
             if let CpsAtom::Value(value) = atom {
                 used.insert(*value);
             }
         }
-        if let CpsNode::ApplyFun {
-            callee: CpsCallee::Closure(value),
-            ..
-        } = node
-        {
-            used.insert(*value);
-        }
     }
+
+    (owned, used)
+}
+
+/// The values `function` mentions without binding — what lowering must carry into it.
+pub(super) fn free_values(module: &CpsModule, function: CpsFunId) -> BTreeSet<CpsValueId> {
+    let (owned, used) = owned_and_used(module, function);
     used.difference(&owned).copied().collect()
 }
+
+/// Everything in scope in `function`: what it binds, plus what it inherits.
+///
+/// Stated as `owned ∪ used` rather than `owned ∪ free`, which is the same set — `free` is `used \ owned`, so the old spelling subtracted `owned` only to add it straight back.
 pub(super) fn available_values(module: &CpsModule, function: CpsFunId) -> BTreeSet<CpsValueId> {
-    let mut available = owned_values(module, function);
-    available.extend(free_values(module, function));
+    let (mut available, used) = owned_and_used(module, function);
+    available.extend(used);
     available
 }
+
 pub(super) fn known_values(module: &CpsModule) -> BTreeMap<CpsValueId, CpsAtom> {
     let mut known = BTreeMap::new();
 
