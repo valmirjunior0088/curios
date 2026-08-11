@@ -15,5 +15,8 @@ pub use stage::*;
 mod compile;
 pub use compile::*;
 
+mod standard;
+pub use standard::*;
+
 /// The default reduction budget, re-exported so every caller of [`compile_entrypoint`] can name it without depending on `curios-elab`.
 pub use curios_elab::DEFAULT_STEP_BUDGET;

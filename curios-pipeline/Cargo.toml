@@ -35,6 +35,6 @@ curios-profile = { workspace = true }
 curios-text = { workspace = true }
 curios-unit = { workspace = true }
 curios-wasm = { workspace = true }
-
-[dev-dependencies]
+# The standard prefix, for `standard.rs` alone: the fold itself never names it, and the boundary this
+# crate keeps is against Binaryen, Wasmtime, the runtime and the CLI — none of which this is.
 curios-prelude = { workspace = true }

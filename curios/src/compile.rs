@@ -1,62 +1,6 @@
-//! Compile, precompile, and run-from-source helpers, reused by the `curios` binary and the integration suite. `curios` is the only crate that links Cranelift (via wasmtime) and Binaryen (via `curios-binaryen`); `curios-runtime` stays slim.
-
-use std::{path::Path, slice::from_ref};
-
-/// Compile `entrypoint` against the fixed prelude — the one unit every product path puts in scope.
-///
-/// **This is where the standard library is named, and the driver is where it no longer is.** `curios-pipeline` folds its stages over whatever scope it is handed and cannot tell which unit is `/std`; deciding that is a product's job, exactly as supplying the `/syn` registry already was. Everything the CLI, the embedder helpers and the integration suite compile comes through here, so there is one place that answers "what does a Curios program get for free".
-pub fn compile_with_prelude<O>(
-    budget: u64,
-    entrypoint: &curios_text::Entrypoint,
-    loader: curios_text::RootSource,
-    observe: O,
-) -> Result<(curios_wasm::Module, curios_abi::ForeignStore), curios_pipeline::CompileError>
-where
-    O: FnMut(curios_pipeline::Stage<'_>),
-{
-    compile_with_units(budget, &[], entrypoint, loader, None, observe)
-}
-
-/// Compile `units` in the order given, then `entrypoint` against all of them and the prelude.
-///
-/// The order *is* the dependency order — there is no manifest yet to derive one from, and none is invented here. A unit naming a prefix mounted after it fails as an unbound name, which is what a positional order costs and what Phase C's declared dependencies replace.
-pub fn compile_with_units<O>(
-    budget: u64,
-    units: &[curios_text::RootSource],
-    entrypoint: &curios_text::Entrypoint,
-    loader: curios_text::RootSource,
-    cache: Option<&dyn curios_pipeline::Cache>,
-    observe: O,
-) -> Result<(curios_wasm::Module, curios_abi::ForeignStore), curios_pipeline::CompileError>
-where
-    O: FnMut(curios_pipeline::Stage<'_>),
-{
-    curios_prelude::with_prelude(|prelude| {
-        let sources = units
-            .iter()
-            .map(curios_text::UnitSource::mounted)
-            .collect::<Vec<_>>();
-        let produced = curios_pipeline::compile_units(
-            budget,
-            curios_unit::Prefix::over(from_ref(&prelude)),
-            &curios_prelude::SYNTAX,
-            &sources,
-            cache,
-        )?;
-        let scope = std::iter::once(prelude)
-            .chain(produced.iter())
-            .collect::<Vec<_>>();
-
-        curios_pipeline::compile_entrypoint(
-            budget,
-            curios_unit::Prefix::over(&scope),
-            &curios_prelude::SYNTAX,
-            entrypoint,
-            loader,
-            observe,
-        )
-    })
-}
+//! Optimize, precompile and run — the native back end, and the reason this crate exists.
+//!
+//! `curios` is the only crate that links Cranelift (via wasmtime) and Binaryen (via `curios-binaryen`); `curios-runtime` stays slim, and `curios-pipeline` stays clear of both. Everything here is downstream of a `curios_wasm::Module` and indifferent to where one came from — the compiling half, which used to sit in this file, is `curios_pipeline::compile_with_prelude` and its siblings, next to the fold it configures.
 
 /// Reject a malformed module before Binaryen is handed it.
 ///
@@ -88,42 +32,4 @@ pub fn run_wasm<H: curios_runtime::HostOps + Send + Sync + 'static>(
     bindings: curios_runtime::ForeignBindings,
 ) -> Result<i32, String> {
     curios_runtime::run_bytes(&to_cwasm(module)?, host, bindings)
-}
-
-/// Lower and type-check `entrypoint` against the fixed prelude, reporting the erasure obligations rather than raising them. See [`curios_pipeline::typecheck_reporting`].
-pub fn typecheck_with_prelude(
-    budget: u64,
-    entrypoint: &curios_text::Entrypoint,
-    loader: curios_text::RootSource,
-) -> Result<(curios_core::Module, Vec<String>), curios_pipeline::CompileError> {
-    curios_prelude::with_prelude(|prelude| {
-        curios_pipeline::typecheck_reporting(
-            budget,
-            curios_unit::Prefix::over(from_ref(&prelude)),
-            &curios_prelude::SYNTAX,
-            entrypoint,
-            loader,
-        )
-    })
-}
-
-/// Put `module` to the independent kernel with the fixed prelude in scope. See [`curios_pipeline::recheck`].
-pub fn recheck_with_prelude(
-    module: &curios_core::Module,
-    budget: u64,
-) -> Vec<curios_cert::Verdict> {
-    curios_prelude::with_prelude(|prelude| {
-        curios_pipeline::recheck(
-            module,
-            budget,
-            curios_unit::Prefix::over(from_ref(&prelude)),
-        )
-    })
-}
-
-/// Open a `.crs` entrypoint at `path`, paired with the [`curios_text::RootSource::entry`] its own stem directory anchors — a bare file is a header like any other, so `mod util` in `main.crs` reads `main/util.crs`.
-pub fn load(path: &Path) -> Result<(curios_text::Entrypoint, curios_text::RootSource), String> {
-    let entrypoint = curios_text::Entrypoint::from_path(path).map_err(|error| error.format())?;
-
-    Ok((entrypoint, curios_text::RootSource::entry(path)))
 }

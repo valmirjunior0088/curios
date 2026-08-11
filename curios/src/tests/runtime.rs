@@ -1,7 +1,7 @@
 use {
     super::{error, run, run_entrypoint, run_text},
-    crate::compile_with_prelude,
     curios_pipeline::Stage,
+    curios_pipeline::compile_with_prelude,
     curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
 };

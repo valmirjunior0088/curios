@@ -3,10 +3,11 @@
 //! Everything below `Target::of` is already covered where it lives — the manifest's refusals in `curios-package`, the layout rule in `curios-text`, the fold in `curios-pipeline`. What no other test reaches is the whole chain at once: a manifest on disk deciding what to compile, a governance walk deciding what governs it, a dependency graph deciding the order, and a program that actually runs at the end of it. A wiring mistake anywhere in that chain passes every unit test and fails here.
 
 use {
-    crate::{Verdicts, compile_with_units, load, run_wasm},
+    crate::{Verdicts, run_wasm},
     curios_package::Target,
-    curios_pipeline::{Cache, DEFAULT_STEP_BUDGET},
+    curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, compile_with_units},
     curios_runtime::{ForeignBindings, MockHost},
+    curios_text::Entrypoint,
     std::{
         fs,
         path::{Path, PathBuf},
@@ -45,7 +46,7 @@ fn cached(directory: &Path, target: Option<&str>, cache: Option<&dyn Cache>) -> 
         Target::File(path) => (path, Vec::new()),
     };
 
-    let (entrypoint, loader) = load(&entry).expect("the entry parses");
+    let (entrypoint, loader) = Entrypoint::opened(&entry).expect("the entry parses");
     let (module, _foreigns) = compile_with_units(
         DEFAULT_STEP_BUDGET,
         &units,
@@ -196,7 +197,7 @@ fn a_file_argument_compiles_standalone_inside_a_package() {
     };
     assert!(units.is_empty(), "a file argument mounts nothing");
 
-    let (entrypoint, loader) = load(&entry).expect("the entry parses");
+    let (entrypoint, loader) = Entrypoint::opened(&entry).expect("the entry parses");
     assert!(
         compile_with_units(
             DEFAULT_STEP_BUDGET,

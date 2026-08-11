@@ -11,28 +11,6 @@ use {
     std::slice::from_ref,
 };
 
-/// Compile against the fixed prelude, which is the scope this crate's own fixtures are programs against. The driver itself names no standard library — `curios-prelude` is a dev-dependency precisely so that stays true of everything but these tests.
-fn compile_fixture<O>(
-    budget: u64,
-    entrypoint: &Entrypoint,
-    loader: RootSource,
-    observe: O,
-) -> Result<(curios_wasm::Module, curios_abi::ForeignStore), CompileError>
-where
-    O: FnMut(Stage<'_>),
-{
-    with_prelude(|prelude| {
-        compile_entrypoint(
-            budget,
-            Prefix::over(from_ref(&prelude)),
-            &SYNTAX,
-            entrypoint,
-            loader,
-            observe,
-        )
-    })
-}
-
 #[test]
 fn entrypoint_type_is_used_as_expected_type() {
     let entrypoint = "0"
@@ -40,7 +18,7 @@ fn entrypoint_type_is_used_as_expected_type() {
         .unwrap()
         .with_type("/std/Bool".parse().unwrap());
 
-    let error = compile_fixture(DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none(), |_| {})
+    let error = compile_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none(), |_| {})
         .map_err(String::from)
         .unwrap_err();
 
@@ -73,7 +51,7 @@ fn with_entrypoint_type(source: &str, type_: Option<&str>) -> Entrypoint {
 fn compile(source: &str, type_: Option<&str>) -> Result<curios_wasm::Module, String> {
     let entrypoint = with_entrypoint_type(source, type_);
 
-    compile_fixture(DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none(), |_| {})
+    compile_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none(), |_| {})
         .map(|(module, _foreigns)| module)
         .map_err(String::from)
 }
@@ -83,13 +61,13 @@ fn a_goal_batch_classifies_as_incomplete_and_a_hard_error_as_failure() {
     // The typed split the CLI's exit codes rest on: a written-goal batch is incomplete development state, a type mismatch a hard failure.
     let goals = with_entrypoint_type("let m : /std/Nat = ?; m", Some("/std/Nat"));
     assert!(matches!(
-        compile_fixture(DEFAULT_STEP_BUDGET, &goals, RootSource::none(), |_| {}),
+        compile_with_prelude(DEFAULT_STEP_BUDGET, &goals, RootSource::none(), |_| {}),
         Err(CompileError::Incomplete(_))
     ));
 
     let mismatch = with_entrypoint_type("let bad : /std/Nat = true; bad", Some("/std/Nat"));
     assert!(matches!(
-        compile_fixture(DEFAULT_STEP_BUDGET, &mismatch, RootSource::none(), |_| {}),
+        compile_with_prelude(DEFAULT_STEP_BUDGET, &mismatch, RootSource::none(), |_| {}),
         Err(CompileError::Failure(_))
     ));
 }
@@ -270,7 +248,7 @@ fn every_stage_is_observed_once_in_names_order() {
     let entrypoint = with_entrypoint_type("/std/Nat/add(20, 22)", Some("/std/Nat"));
     let mut seen = Vec::new();
 
-    compile_fixture(
+    compile_with_prelude(
         DEFAULT_STEP_BUDGET,
         &entrypoint,
         RootSource::none(),
@@ -339,7 +317,7 @@ fn compile_printed_stages(source: &str, type_: Option<&str>) -> Result<(String, 
     let mut ersd = String::new();
     let mut cont = String::new();
 
-    compile_fixture(
+    compile_with_prelude(
         DEFAULT_STEP_BUDGET,
         &entrypoint,
         RootSource::none(),

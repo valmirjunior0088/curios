@@ -1,7 +1,7 @@
 use {
     super::{
-        FuncSugarParam, FuncType, FuncTypeParam, LetSignature, LoadError, Name, Subterm, Term,
-        TupleTypeParam, print_module_items, print_term,
+        FuncSugarParam, FuncType, FuncTypeParam, LetSignature, LoadError, Name, RootSource,
+        Subterm, Term, TupleTypeParam, print_module_items, print_term,
     },
     crate::parse::{
         clear_comments, parse_optional_term, parse_term, parse_top_item, parse_whitespace,
@@ -339,6 +339,15 @@ impl Entrypoint {
         })?;
 
         Entrypoint::parse(&source).map_err(LoadError::Parse)
+    }
+
+    /// Reads `path` as an entrypoint, paired with the [`RootSource`](crate::RootSource) its own stem directory anchors — a bare file is a header like any other, so `mod util` in `main.crs` reads `main/util.crs`.
+    ///
+    /// The pairing is the point: [`from_path`](Self::from_path) leaves a parsed entrypoint's file-backed `mod` declarations unresolved, and every caller that opens a file then has to know which `RootSource` goes with it. That is one answer, not a caller's choice, so it lives beside the two calls it makes.
+    pub fn opened(path: &Path) -> Result<(Self, RootSource), String> {
+        let entrypoint = Self::from_path(path).map_err(|error| error.format())?;
+
+        Ok((entrypoint, RootSource::entry(path)))
     }
 }
 

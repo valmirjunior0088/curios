@@ -32,7 +32,7 @@ Curios is a functional, dependently typed language implemented in Rust 2024. It 
   → curios-ersd       optimize erased terms and lower them to continuations
   → curios-cont       optimize continuation IR and emit WebAssembly
   → curios-wasm       model, parse, and encode WebAssembly modules
-  → curios-pipeline   drive the pure compiler pipeline
+  → curios-pipeline   drive the compiler pipeline, and supply the fixed prelude
 
 Native compiler path:
   → curios-package    read the manifest, resolve dependencies, and file units in the store
@@ -63,11 +63,11 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | Erased optimization | `curios-ersd` | Post-erasure IR, compile-time evaluation and specialization, worker/wrapper transforms, and lowering to CPS |
 | Continuation IR | `curios-cont` | CPS optimization and WebAssembly emission |
 | WebAssembly model | `curios-wasm` | Wasm AST, parser, encoder, and binary writer |
-| Pure compiler driver | `curios-pipeline` | `compile_entrypoint`, `Stage`, and orchestration without runtime, Binaryen, or CLI dependencies |
+| Compiler driver | `curios-pipeline` | `compile_entrypoint`, `Stage`, and orchestration without runtime, Binaryen, or CLI dependencies — plus, in `standard.rs`, the same fold with the fixed prelude supplied |
 | Packages and projects | `curios-package` | The workspace's only TOML dependency: the `curios.toml` manifest, the governance walk, the dependency resolver, and the store. Beside the pipeline, never under it |
 | Binaryen integration | `curios-binaryen` | Binaryen source build, static FFI, and Wasm optimization |
 | Runtime | `curios-runtime` | Wasmtime engine, host bindings, `.cwasm` deserialization, bundle payload format, and slim launcher |
-| Native product | `curios` | Public compile/run helpers, CLI, Binaryen optimization, Wasmtime precompilation, and executable bundling |
+| Native product | `curios` | The native back end — Binaryen optimization, Wasmtime precompilation, in-process running — plus the CLI, the unit cache, executable bundling, and the cross-stage test corpus. Compiling itself is `curios-pipeline`'s |
 | Browser product | `curios-web` | wasm-bindgen compiler exports and JavaScript execution harness |
 | Profiling | `curios-profile` | The workspace's only `tracing` dependency: `profile!`/`profile_span!` span macros and the `capture` aggregate-timing subscriber, gated per-crate on a `profile` feature |
 
@@ -86,7 +86,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | CPS optimization or Wasm emission | `curios-cont/src/` | `curios-wasm`, codegen tests, and runtime behavior |
 | Wasm representation or encoding | `curios-wasm/src/` | Continuation emission and parser/round-trip tests |
 | Host operations or foreign calls | `curios-abi/src/` | Core validation, Wasm imports, runtime bindings, and the JavaScript harness |
-| Pipeline orchestration | `curios-pipeline/src/compile.rs`, `stage.rs` | Native and browser callers |
+| Pipeline orchestration | `curios-pipeline/src/compile.rs`, `stage.rs`, `standard.rs` | Native and browser callers |
 | Manifests, dependency resolution, or the store | `curios-package/src/` | The CLI subcommands that wrap it, `curios-base`'s `Qualifier`/`Mount`, and `documentation/SOUNDNESS.md`'s *Cached verdicts* when the store's keys are involved |
 | Runtime or bundle format | `curios-runtime/src/`, `curios/src/bundle.rs` | Slim-launcher dependency boundary and bundle integration tests |
 | CLI or native compile behavior | `curios/src/` | `README.md`, public helpers, and integration tests |
@@ -99,7 +99,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 ## Architectural invariants
 
 - Compiler stages own their representations. A lowering belongs to the crate holding the source representation and depends on the crate holding the destination representation.
-- `curios-pipeline` is the pure compiler boundary. It must not depend on Binaryen, Wasmtime, the runtime, or the CLI.
+- `curios-pipeline` is the compiler boundary. It must not depend on Binaryen, Wasmtime, the runtime, or the CLI. It *may* name the fixed prelude, and does so in `standard.rs` alone: `compile_entrypoint` still takes a scope and still cannot tell which unit is `/std`, and nothing in the fold calls the layer above it. That layer exists because the native product, the browser product and this crate's own fixtures each wrote the same prelude wiring by hand — three callers agreeing is a missing function, not a policy, and the third was not a product at all.
 - `curios-package` sits beside that boundary, never under it. The driver folds its stages over whatever scope it is handed; *deciding* that scope is a product's job, so `curios-pipeline` must not depend on `curios-package` and `curios-web` must not touch it. It is also the workspace's only TOML dependency.
 - `curios-runtime` is the runtime-only boundary. It must not depend on `curios`, Binaryen, or Wasmtime's Cranelift compiler.
 - `curios` is the only workspace crate that combines Binaryen with Cranelift-enabled Wasmtime.

@@ -13,10 +13,8 @@ pub use harness::run;
 mod tests;
 
 use {
-    curios_pipeline::{DEFAULT_STEP_BUDGET, compile_entrypoint},
-    curios_prelude::{SYNTAX, with_prelude},
+    curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
-    curios_unit::Prefix,
     curios_wasm::to_bytes,
     js_sys::{Object, Reflect, Uint8Array},
     wasm_bindgen::prelude::*,
@@ -36,16 +34,8 @@ pub fn compile(source: &str) -> Result<Uint8Array, String> {
         .parse::<Entrypoint>()
         .map_err(|error| error.format())?;
 
-    let (module, _foreigns) = with_prelude(|prelude| {
-        compile_entrypoint(
-            BUDGET,
-            Prefix::over(std::slice::from_ref(&prelude)),
-            &SYNTAX,
-            &entrypoint,
-            RootSource::none(),
-            |_| {},
-        )
-    })?;
+    let (module, _foreigns) =
+        compile_with_prelude(BUDGET, &entrypoint, RootSource::none(), |_| {})?;
 
     Ok(Uint8Array::from(to_bytes(&module).as_slice()))
 }

@@ -34,8 +34,8 @@ mod toml;
 mod universes;
 
 use {
-    crate::{compile_with_prelude, run_wasm},
-    curios_pipeline::{DEFAULT_STEP_BUDGET, Stage},
+    crate::run_wasm,
+    curios_pipeline::{DEFAULT_STEP_BUDGET, Stage, compile_with_prelude},
     curios_runtime::{ForeignBindings, HostOps, MockHost},
     curios_text::{Entrypoint, RootSource},
 };

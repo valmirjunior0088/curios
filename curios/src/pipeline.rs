@@ -1,10 +1,10 @@
 //! Driving the compile pipeline for the CLI, with the `--print` stage dump wired in. `stage_printer` is the single owner of how each IR stage is selected and rendered.
 
 use {
-    curios::{Verdicts, compile_with_units, load},
+    curios::Verdicts,
     curios_package::Target,
-    curios_pipeline::Cache,
-    curios_pipeline::{CompileError, Stage},
+    curios_pipeline::{Cache, CompileError, Stage, compile_with_units},
+    curios_text::Entrypoint,
     curios_wasm::Module,
     std::path::{Path, PathBuf},
 };
@@ -71,7 +71,7 @@ pub(crate) fn compile_entry(
     cache: Option<&dyn Cache>,
 ) -> Result<Module, CompileError> {
     let printer = stage_printer(print).map_err(CompileError::Failure)?;
-    let (entrypoint, loader) = load(entry).map_err(CompileError::Failure)?;
+    let (entrypoint, loader) = Entrypoint::opened(entry).map_err(CompileError::Failure)?;
 
     // The CLI doesn't yet expose a way to supply `foreign` implementations, so its `ForeignStore` is dropped here.
     compile_with_units(budget, &units, &entrypoint, loader, cache, printer)

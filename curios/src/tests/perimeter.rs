@@ -8,7 +8,7 @@
 
 use {
     super::{run, run_text},
-    crate::recheck_with_prelude as recheck,
+    curios_pipeline::recheck_with_prelude as recheck,
     curios_runtime::MockHost,
     curios_text::{Entrypoint, RootSource},
 };
@@ -1152,7 +1152,7 @@ fn both_checkers(source: &str) -> (Verdict, Verdict) {
         Err(error) => return (Verdict::Refuses(format!("{error:?}")), Verdict::NotAsked),
     };
 
-    match crate::typecheck_with_prelude(
+    match curios_pipeline::typecheck_with_prelude(
         curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
         RootSource::none(),

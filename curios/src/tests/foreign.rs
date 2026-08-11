@@ -1,5 +1,5 @@
 use {
-    crate::compile_with_prelude,
+    curios_pipeline::compile_with_prelude,
     curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
 };
