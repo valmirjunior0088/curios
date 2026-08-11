@@ -97,7 +97,7 @@ pub(crate) enum Mode {
 pub(crate) struct Cli {
     #[arg(
         long,
-        default_value_t = curios::DEFAULT_STEP_BUDGET,
+        default_value_t = curios_pipeline::DEFAULT_STEP_BUDGET,
         value_name = "STEPS",
         help = "Reduction steps each declaration may spend while type checking"
     )]

@@ -1,5 +1,5 @@
 use {
-    super::{error, run},
+    super::{error, run, run_text},
     curios_runtime::MockHost,
 };
 
@@ -52,7 +52,7 @@ fn bool_eql_executes() {
 fn nat_bitwise_ops_execute() {
     // The first input byte is `A` (65); reading it from the host keeps the operand opaque to the optimizer, so each op is lowered to its WebAssembly instruction and executed for real rather than folded at compile time. The shift stays inside the i31 envelope — an overflowing `shl` traps at the backend boundary (see the numeric envelope gates).
     let (system, io) = MockHost::builder().stdin_lines(["A"]).build();
-    crate::run_text(
+    run_text(
         r#"
         use /std/{Handle, Byte, Bytes, Nat, Str, Option};
         let bytes = match Handle/read(Handle/stdin, 16)! : (_) => Bytes
@@ -82,7 +82,7 @@ fn nat_bitwise_ops_execute() {
 fn int_bitwise_ops_execute() {
     // `x` is the host byte `A` (65) read as an `Int`, kept opaque to the optimizer so each op lowers to its WebAssembly instruction. This exercises the Int-distinctive behaviors: an arithmetic (sign-preserving) `shr` on a negative operand (-65 >> 1 = -33) and the `xor`-based `not` (-x - 1). The shift stays inside the signed i31 envelope — an overflowing `shl` traps at the backend boundary (see the numeric envelope gates).
     let (system, io) = MockHost::builder().stdin_lines(["A"]).build();
-    crate::run_text(
+    run_text(
         r#"
         use /std/{Handle, Byte, Bytes, Nat, Int, Str, Option};
         let bytes = match Handle/read(Handle/stdin, 16)! : (_) => Bytes

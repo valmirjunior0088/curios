@@ -6,12 +6,14 @@
 //!
 //! Each rejection asserts the *diagnostic*, not merely that compilation failed. A soundness test that accepts any error is worthless: a typo in the fixture would pass it while the hole stayed open.
 
-use {super::run, curios_runtime::MockHost};
+use {
+    super::{run, run_text},
+    curios_runtime::MockHost,
+};
 
 fn rejected(source: &str) {
     let (system, _io) = MockHost::builder().build();
-    let error =
-        crate::run_text(source, system).expect_err("expected the erased position to be rejected");
+    let error = run_text(source, system).expect_err("expected the erased position to be rejected");
     assert!(
         error.contains("not known to terminate") || error.contains("does not terminate"),
         "rejected, but not by the totality gate:\n{error}",
@@ -23,8 +25,7 @@ fn rejected(source: &str) {
 /// Which gate fires is the whole claim of a (V)-only fixture: (T) runs first, so a fixture that accidentally put a partial definition in a type position would pass `rejected` while proving nothing about proof positions.
 fn rejected_as_a_proof(source: &str) {
     let (system, _io) = MockHost::builder().build();
-    let error =
-        crate::run_text(source, system).expect_err("expected the proof position to be rejected");
+    let error = run_text(source, system).expect_err("expected the proof position to be rejected");
     assert!(
         error.contains("is a proof position"),
         "rejected, but not as a proof position:\n{error}",
@@ -36,8 +37,7 @@ fn rejected_as_a_proof(source: &str) {
 /// The mirror of [`rejected_as_a_proof`]: a fixture that means to pin a type position proves nothing if a stray proof position is what actually fired.
 fn rejected_as_a_type(source: &str) {
     let (system, _io) = MockHost::builder().build();
-    let error =
-        crate::run_text(source, system).expect_err("expected the type position to be rejected");
+    let error = run_text(source, system).expect_err("expected the type position to be rejected");
     assert!(
         error.contains("is a type position"),
         "rejected, but not as a type position:\n{error}",

@@ -4,12 +4,15 @@
 //!
 //! Every shape here is one the standard library already relies on. The prelude build exercises them through the from-scratch elaboration path, so it fails loudly on a regression; these run the same shapes through the prelude-replay path a user program actually takes, where the analysis sees only the user suffix and reads the prelude's polarity vectors back from the archive.
 
-use {super::run, curios_runtime::MockHost};
+use {
+    super::{run, run_text},
+    curios_runtime::MockHost,
+};
 
 fn rejected(source: &str) {
     let (system, _io) = MockHost::builder().build();
     assert!(
-        crate::run_text(source, system).is_err(),
+        run_text(source, system).is_err(),
         "expected the declaration to be rejected",
     );
 }
@@ -19,8 +22,7 @@ fn rejected(source: &str) {
 /// A bare `is_err` passes on a typo in the fixture, which is worth guarding wherever the shape under test is one a future relaxation of `occurrences` could plausibly start admitting.
 fn rejected_by(source: &str, diagnostic: &str) {
     let (system, _io) = MockHost::builder().build();
-    let error =
-        crate::run_text(source, system).expect_err("expected the declaration to be rejected");
+    let error = run_text(source, system).expect_err("expected the declaration to be rejected");
     assert!(
         error.contains(diagnostic),
         "rejected, but not by '{diagnostic}':\n{error}",

@@ -1,6 +1,9 @@
 //! The numeric envelope gates: every constant folder computes in exact `u32`/`i32` (the numeric law), and the i31 backend boundary appears only as a trap in emitted Wasm — an overflowing computation traps, and a folded literal the carrier cannot box traps at its materialization point. The differential half runs each scalar expression twice — fully constant (folded at compile time) and with a runtime-zero perturbation (executed by the emitted Wasm) — and demands identical output, pinning the folders and the backend to one semantics.
 
-use {super::run, curios_runtime::MockHost};
+use {
+    super::{run, run_text},
+    curios_runtime::MockHost,
+};
 
 /// Wrap `body` (an expression over the runtime-zero binder `n`, and its `Int`-carrier twin `i`) in a program that reads `n` from the host so the optimizer cannot fold it.
 fn tainted(body: &str) -> String {
@@ -33,7 +36,7 @@ fn closed(body: &str) -> String {
 
 fn run_tainted(body: &str) -> Result<Vec<u8>, String> {
     let (system, io) = MockHost::builder().stdin_lines(["A"]).build();
-    crate::run_text(&tainted(body), system)?;
+    run_text(&tainted(body), system)?;
     Ok(io.output().to_vec())
 }
 

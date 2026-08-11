@@ -7,7 +7,7 @@
 //! Each rejection asserts its *own* diagnostic, following `tests::soundness`. A perimeter test that accepts any error is worse than none: an invalid fixture passes it while the rule it names goes unchecked. That is not hypothetical — the first draft of these probes "passed" on `unbound variable`, having never reached the check at all.
 
 use {
-    super::run,
+    super::{run, run_text},
     crate::recheck_with_prelude as recheck,
     curios_runtime::MockHost,
     curios_text::{Entrypoint, RootSource},
@@ -16,8 +16,8 @@ use {
 /// Reject `source`, and by the diagnostic naming the rule under test.
 fn rejected_by(source: &str, diagnostic: &str) {
     let (system, _io) = MockHost::builder().build();
-    let error = crate::run_text(source, system)
-        .expect_err("expected the perimeter rule to reject this program");
+    let error =
+        run_text(source, system).expect_err("expected the perimeter rule to reject this program");
     assert!(
         error.contains(diagnostic),
         "rejected, but not by '{diagnostic}':\n{error}",
@@ -1152,8 +1152,11 @@ fn both_checkers(source: &str) -> (Verdict, Verdict) {
         Err(error) => return (Verdict::Refuses(format!("{error:?}")), Verdict::NotAsked),
     };
 
-    match crate::typecheck_with_prelude(crate::DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none())
-    {
+    match crate::typecheck_with_prelude(
+        curios_pipeline::DEFAULT_STEP_BUDGET,
+        &entrypoint,
+        RootSource::none(),
+    ) {
         // Refused before a module existed: type-checking proper, not an erasure obligation.
         Err(error) => (Verdict::Refuses(error.into()), Verdict::NotAsked),
         Ok((module, obligations)) => {
@@ -1162,7 +1165,7 @@ fn both_checkers(source: &str) -> (Verdict, Verdict) {
                 None => Verdict::Accepts,
             };
             // Exactly as the compile path judges it: the archived prelude arrives as scope on the archive's word rather than being re-walked, which is both what production does and what keeps a fixture cheap.
-            let kernel = match recheck(&module, crate::DEFAULT_STEP_BUDGET)
+            let kernel = match recheck(&module, curios_pipeline::DEFAULT_STEP_BUDGET)
                 .into_iter()
                 .next()
             {

@@ -1,7 +1,7 @@
 use {
-    crate::DEFAULT_STEP_BUDGET,
     crate::compile_with_prelude,
     curios_binaryen::optimize,
+    curios_pipeline::DEFAULT_STEP_BUDGET,
     curios_text::{Entrypoint, RootSource},
     curios_wasm::to_bytes,
 };

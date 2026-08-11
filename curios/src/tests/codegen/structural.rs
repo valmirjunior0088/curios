@@ -110,7 +110,7 @@ fn compile_raw(source: &str) -> Module {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
 
     let (module, _foreigns) = compile_with_prelude(
-        crate::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
         RootSource::none(),
         |_| {},

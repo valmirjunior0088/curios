@@ -1,4 +1,7 @@
-use {super::run, curios_runtime::MockHost};
+use {
+    super::{run, run_text},
+    curios_runtime::MockHost,
+};
 
 #[test]
 fn task_scheduler_parks_polls_and_resumes() {
@@ -20,7 +23,7 @@ fn task_scheduler_parks_polls_and_resumes() {
 fn task_bind_reads_and_echoes() {
     // The monad surface: a `with`-bind do-block over `Async/bind`, sequencing the `read` leaf (which completes without parking under the mock) into `write`, driven to its value by `block_on`. Exercises `bind`, the leaf actions, and do-notation against the new module.
     let (system, io) = MockHost::builder().stdin_lines(["hello"]).build();
-    crate::run_text(
+    run_text(
         r#"
         use /std/{Async, Handle};
         let prog : Async({}) =
@@ -142,7 +145,7 @@ fn block_on_drops_a_parked_child_when_root_done() {
 fn constructing_a_leaf_task_performs_no_effect() {
     // Async values are inert until served. Building a `Async/read` and discarding it must not touch stdin — the syscall is wrapped in `defer`, so it fires only when the scheduler forces it. We construct (and drop) a read of stdin, then read stdin directly: the direct read still sees "hello" because the discarded Async never ran. Before leaves were deferred, constructing the Async ate stdin eagerly and the direct read saw EOF.
     let (system, io) = MockHost::builder().stdin_lines(["hello"]).build();
-    crate::run_text(
+    run_text(
         r#"
         use /std/{Async, Handle, Str};
         let discarded : Async(Handle/Read) = Async/read(Handle/stdin, 100);
@@ -241,7 +244,7 @@ fn heterogeneous_existential_task_list_through_a_generic_map() {
 fn sleep_parks_until_the_clock_passes_the_deadline() {
     // The timer half of the poll contract: the root sleeps five seconds, so the scheduler parks it in the `sleeping` registry and drives `Handle/poll` with a finite timeout instead of `-1`. The mock's poll returns instantly and each `clock_mono` reading pops one scripted value, so the fiber resumes exactly when the scripted ramp passes the deadline — no readiness event involved.
     let (system, io) = MockHost::builder().mono((0..40u32).map(|s| (s, 0))).build();
-    crate::run_text(
+    run_text(
         r#"
         use /std/{Async, Handle, Str};
         use /std/time/{Duration};
@@ -261,7 +264,7 @@ fn sleep_parks_until_the_clock_passes_the_deadline() {
 fn sleepers_wake_in_deadline_order() {
     // Two spawned children sleep three and six seconds; the scheduler must pick the earliest deadline for each poll timeout and expire the timers in due order even though the six-second child was pushed onto `sleeping` later.
     let (system, io) = MockHost::builder().mono((0..40u32).map(|s| (s, 0))).build();
-    crate::run_text(
+    run_text(
         r#"
         use /std/{Async, Handle, Str};
         use /std/time/{Duration};
@@ -286,7 +289,7 @@ fn sleepers_wake_in_deadline_order() {
 fn timeout_returns_some_when_the_body_finishes_first() {
     // The body completes synchronously, so `select` resolves before the deadline fiber's timer matters; the cancelled timer is reclaimed on exit without ever waking. The result carries the body's value through `some`.
     let (system, io) = MockHost::builder().mono((0..40u32).map(|s| (s, 0))).build();
-    crate::run_text(r#"
+    run_text(r#"
         use /std/{Async, Handle, Str, Nat};
         use /std/time/{Duration};
         let main : Async({}) =
@@ -307,7 +310,7 @@ fn timeout_returns_some_when_the_body_finishes_first() {
 fn timeout_returns_none_and_runs_the_cancelled_bodys_finalizer() {
     // The deadline elapses first: the two-second timer wakes, wins the `select`, and the fifty-second body — which holds a resource via `using` — is cancelled while still sleeping. Its finalizer runs when the scheduler reclaims it on exit, after the root has already reported `none`.
     let (system, io) = MockHost::builder().mono((0..40u32).map(|s| (s, 0))).build();
-    crate::run_text(r#"
+    run_text(r#"
         use /std/{Async, Handle, Str, Nat};
         use /std/time/{Duration};
         let main : Async({}) =
@@ -332,7 +335,7 @@ fn timeout_returns_none_and_runs_the_cancelled_bodys_finalizer() {
 fn race_of_two_sleeps_wakes_the_earlier_and_reclaims_the_later() {
     // Pure timer race: both branches sleep, so both land in `sleeping` and the poll timeout must track the earlier deadline. The two-second branch wakes, writes, and wins with 1; the sixty-second loser is cancelled and its `using` finalizer fires on reclamation — its body never runs.
     let (system, io) = MockHost::builder().mono((0..40u32).map(|s| (s, 0))).build();
-    crate::run_text(
+    run_text(
         r#"
         use /std/{Async, Handle, Str, Nat};
         use /std/time/{Duration};
@@ -360,7 +363,7 @@ fn race_of_two_sleeps_wakes_the_earlier_and_reclaims_the_later() {
 fn block_on_drops_a_sleeping_child_when_root_done() {
     // The sleeping counterpart of the parked-child drop: a fire-and-forget child holds a resource and sleeps far past the test, but the root finishes immediately. `block_on` must return without waiting out the timer, running the child's finalizer as it drains the `sleeping` registry.
     let (system, io) = MockHost::builder().mono((0..40u32).map(|s| (s, 0))).build();
-    crate::run_text(
+    run_text(
         r#"
         use /std/{Async, Handle, Str};
         use /std/time/{Duration};

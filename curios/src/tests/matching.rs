@@ -1,5 +1,5 @@
 use {
-    super::{error, run},
+    super::{error, run, run_text},
     curios_runtime::MockHost,
 };
 
@@ -26,7 +26,7 @@ fn a_fold_hypothesis_destructures_directly() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
+    run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"11");
 }
 
@@ -469,7 +469,7 @@ fn effectful_match_scrutinee_runs_once() {
         "#;
 
     let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
+    run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"ok");
     assert_eq!(io.file(b"log.txt"), Some(b"x".to_vec()));
 }

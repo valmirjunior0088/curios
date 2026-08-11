@@ -1,5 +1,5 @@
 use {
-    super::{error, run},
+    super::{error, run, run_entrypoint, run_text},
     crate::compile_with_prelude,
     curios_pipeline::Stage,
     curios_runtime::{ForeignBindings, MockHost},
@@ -152,7 +152,7 @@ fn bang_std_parse_threads_bangs_left_to_right() {
     let loader = RootSource::none();
 
     let (system, io) = MockHost::builder().build();
-    crate::run_entrypoint(&entrypoint, loader, system).expect("expected result");
+    run_entrypoint(&entrypoint, loader, system).expect("expected result");
     assert_eq!(io.output(), b"1");
 }
 
@@ -184,7 +184,7 @@ fn bang_region_mixes_action_types() {
     let loader = RootSource::none();
 
     let (system, io) = MockHost::builder().build();
-    crate::run_entrypoint(&entrypoint, loader, system).expect("expected result");
+    run_entrypoint(&entrypoint, loader, system).expect("expected result");
     assert_eq!(io.output(), b"AB");
 }
 
@@ -201,7 +201,7 @@ fn folds_constant_arg_through_let_function() {
 
     let mut optimized = None;
     compile_with_prelude(
-        crate::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
         RootSource::none(),
         |stage| {
@@ -248,7 +248,7 @@ fn fmt_print_partial_evaluation_reduces_residual() {
     let mut cont_optm = None;
 
     let (wasm_module, _foreigns) = compile_with_prelude(
-        crate::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
         RootSource::none(),
         |stage| {
@@ -296,7 +296,7 @@ fn fmt_print_runtime_args_specializes_spine() {
     let mut ersd_optm = None;
 
     let (wasm_module, _foreigns) = compile_with_prelude(
-        crate::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
         RootSource::none(),
         |stage| {
@@ -353,7 +353,7 @@ fn fmt_print_constant_args_collapses_at_ersd() {
     let mut cont_optm = None;
 
     let (wasm_module, _foreigns) = compile_with_prelude(
-        crate::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
         RootSource::none(),
         |stage| match stage {
@@ -564,7 +564,7 @@ fn clock_diff_of_two_distinct_now_readings() {
     let (system, io) = MockHost::builder()
         .wall([(1, 100, 500), (1, 130, 900)])
         .build();
-    crate::run_text(r#"
+    run_text(r#"
         let a = /std/time/Instant/now()!;
         let b = /std/time/Instant/now()!;
         let d = /std/time/Instant/diff(b, a);
@@ -581,7 +581,7 @@ fn clock_diff_of_two_distinct_now_readings() {
 #[test]
 fn clock_mono_reads_scripted_elapsed() {
     let (system, io) = MockHost::builder().mono([(2, 7)]).build();
-    crate::run_text(r#"
+    run_text(r#"
         let e = /std/time/Duration/now()!;
         let _ = std/Handle/write(std/Handle/stdout, /std/Str/to_bytes(/std/Nat/to_str(/std/time/Duration/secs(e))))!;
         /std/Io/pure(())

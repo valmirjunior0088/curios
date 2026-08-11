@@ -90,21 +90,6 @@ pub fn run_wasm<H: curios_runtime::HostOps + Send + Sync + 'static>(
     curios_runtime::run_bytes(&to_cwasm(module)?, host, bindings)
 }
 
-/// Compile an already-parsed entrypoint under `loader` and run it.
-///
-/// Drops any `foreign` declarations' `ForeignStore` — this is the fused compile-and-run convenience path with no point to hand it back to the caller; an embedder with `foreign` declarations to satisfy calls [`curios_pipeline::compile_entrypoint`] directly instead, building [`curios_runtime::ForeignBindings`] from the returned store and calling [`run_wasm`] itself.
-#[cfg(test)]
-pub(crate) fn run_entrypoint<H: curios_runtime::HostOps + Send + Sync + 'static>(
-    entrypoint: &curios_text::Entrypoint,
-    loader: curios_text::RootSource,
-    host: H,
-) -> Result<(), String> {
-    let (module, _foreigns) =
-        compile_with_prelude(DEFAULT_STEP_BUDGET, entrypoint, loader, |_| {})?;
-
-    run_wasm(&module, host, curios_runtime::ForeignBindings::empty()).map(|_| ())
-}
-
 /// Lower and type-check `entrypoint` against the fixed prelude, reporting the erasure obligations rather than raising them. See [`curios_pipeline::typecheck_reporting`].
 pub fn typecheck_with_prelude(
     budget: u64,
@@ -134,22 +119,6 @@ pub fn recheck_with_prelude(
             curios_unit::Prefix::over(from_ref(&prelude)),
         )
     })
-}
-
-/// The default reduction budget, re-exported beside the compile helpers that take it.
-pub use curios_pipeline::DEFAULT_STEP_BUDGET;
-
-/// Parse `source` (no external modules) and run it.
-#[cfg(test)]
-pub(crate) fn run_text<H: curios_runtime::HostOps + Send + Sync + 'static>(
-    source: &str,
-    host: H,
-) -> Result<(), String> {
-    let entrypoint = source
-        .parse::<curios_text::Entrypoint>()
-        .map_err(|error| error.format())?;
-
-    run_entrypoint(&entrypoint, curios_text::RootSource::none(), host)
 }
 
 /// Open a `.crs` entrypoint at `path`, paired with the [`curios_text::RootSource::entry`] its own stem directory anchors — a bare file is a header like any other, so `mod util` in `main.crs` reads `main/util.crs`.

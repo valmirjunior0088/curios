@@ -17,7 +17,7 @@ fn foreign_declaration_runs_through_supplied_bindings() {
     .expect("failed to parse source");
 
     let (module, foreigns) = compile_with_prelude(
-        crate::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_STEP_BUDGET,
         &source,
         RootSource::none(),
         |_| {},

@@ -34,15 +34,38 @@ mod toml;
 mod universes;
 
 use {
-    crate::compile_with_prelude,
-    curios_pipeline::Stage,
-    curios_runtime::MockHost,
+    crate::{compile_with_prelude, run_wasm},
+    curios_pipeline::{DEFAULT_STEP_BUDGET, Stage},
+    curios_runtime::{ForeignBindings, HostOps, MockHost},
     curios_text::{Entrypoint, RootSource},
 };
 
+/// Compile an already-parsed entrypoint under `loader` and run it.
+///
+/// Drops any `foreign` declarations' `ForeignStore` — this is the fused compile-and-run path the suites want, with no point to hand it back; a test that has `foreign` declarations to satisfy calls [`compile_with_prelude`] itself, builds [`ForeignBindings`] from the returned store, and calls [`run_wasm`].
+fn run_entrypoint<H: HostOps + Send + Sync + 'static>(
+    entrypoint: &Entrypoint,
+    loader: RootSource,
+    host: H,
+) -> Result<(), String> {
+    let (module, _foreigns) =
+        compile_with_prelude(DEFAULT_STEP_BUDGET, entrypoint, loader, |_| {})?;
+
+    run_wasm(&module, host, ForeignBindings::empty()).map(|_| ())
+}
+
+/// Parse `source` (no external modules) and run it.
+fn run_text<H: HostOps + Send + Sync + 'static>(source: &str, host: H) -> Result<(), String> {
+    let entrypoint = source
+        .parse::<Entrypoint>()
+        .map_err(|error| error.format())?;
+
+    run_entrypoint(&entrypoint, RootSource::none(), host)
+}
+
 fn run(source: &str) -> Vec<u8> {
     let (system, io) = MockHost::builder().build();
-    crate::run_text(source, system).expect("expected result");
+    run_text(source, system).expect("expected result");
     io.output().to_vec()
 }
 
@@ -52,20 +75,15 @@ fn typecheck(source: &str) -> Result<(), String> {
         .parse::<Entrypoint>()
         .expect("failed to parse source");
 
-    compile_with_prelude(
-        crate::DEFAULT_STEP_BUDGET,
-        &entrypoint,
-        RootSource::none(),
-        |_| {},
-    )
-    .map(|_| ())
-    .map_err(|error| error.to_string())
+    compile_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none(), |_| {})
+        .map(|_| ())
+        .map_err(|error| error.to_string())
 }
 
 /// Run expecting failure, returning the diagnostic.
 fn error(source: &str) -> String {
     let (system, _io) = MockHost::builder().build();
-    match crate::run_text(source, system) {
+    match run_text(source, system) {
         Ok(_) => panic!("expected an error, program succeeded"),
         Err(error) => error.to_string(),
     }
@@ -77,7 +95,7 @@ fn cont_optm(source: &str) -> String {
 
     let mut printed = String::new();
     compile_with_prelude(
-        crate::DEFAULT_STEP_BUDGET,
+        DEFAULT_STEP_BUDGET,
         &entrypoint,
         RootSource::none(),
         |stage| {

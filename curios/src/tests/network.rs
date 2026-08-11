@@ -1,4 +1,7 @@
-use {super::run, curios_runtime::MockHost};
+use {
+    super::{run, run_text},
+    curios_runtime::MockHost,
+};
 
 #[test]
 fn net_call_round_trips_a_scripted_endpoint() {
@@ -19,7 +22,7 @@ fn net_call_round_trips_a_scripted_endpoint() {
     let (system, io) = MockHost::builder()
         .net([("example.com:80", "HTTP/1.0 200 OK\r\n\r\nhello")])
         .build();
-    crate::run_text(source, system).expect("expected result");
+    run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"HTTP/1.0 200 OK\r\n\r\nhello");
 }
 
@@ -84,7 +87,7 @@ fn net_with_custom_timeout_config_reads_response() {
     let (system, io) = MockHost::builder()
         .net([("db.internal:5432", "PONG")])
         .build();
-    crate::run_text(source, system).expect("expected result");
+    run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"PONG");
 }
 
@@ -112,7 +115,7 @@ fn net_serve_handles_a_scripted_inbound_connection() {
         "#;
 
     let (system, io) = MockHost::builder().inbound(["ping"]).build();
-    crate::run_text(source, system).expect("expected result");
+    run_text(source, system).expect("expected result");
     assert_eq!(io.captures(), vec![b"echo: ping".to_vec()]);
 }
 
@@ -148,7 +151,7 @@ fn net_with_tls_upgrades_and_reads() {
     let (system, io) = MockHost::builder()
         .net([("secure.example:443", "SECURE-PONG")])
         .build();
-    crate::run_text(source, system).expect("expected result");
+    run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"SECURE-PONG");
 }
 
@@ -176,7 +179,7 @@ fn net_serve_tls_handles_a_scripted_inbound_connection() {
         "#;
 
     let (system, io) = MockHost::builder().inbound(["ping"]).build();
-    crate::run_text(source, system).expect("expected result");
+    run_text(source, system).expect("expected result");
     assert_eq!(io.captures(), vec![b"tls: ping".to_vec()]);
 }
 
@@ -213,6 +216,6 @@ fn http_perform_parses_a_scripted_response() {
             "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 5\r\n\r\nhello AND MORE",
         )])
         .build();
-    crate::run_text(source, system).expect("expected result");
+    run_text(source, system).expect("expected result");
     assert_eq!(io.output(), b"200 text/plain hello");
 }

@@ -83,7 +83,7 @@ fn every_body_replaced_by_a_foreign_term_is_refused() {
             .parse::<Entrypoint>()
             .unwrap_or_else(|error| panic!("{description}: the subject parses: {error:?}"));
         let (module, obligations) = crate::typecheck_with_prelude(
-            crate::DEFAULT_STEP_BUDGET,
+            curios_pipeline::DEFAULT_STEP_BUDGET,
             &entrypoint,
             RootSource::none(),
         )
@@ -93,7 +93,7 @@ fn every_body_replaced_by_a_foreign_term_is_refused() {
             "{description}: the subject carries an erasure obligation, so it is the wrong control",
         );
         assert!(
-            recheck(&module, crate::DEFAULT_STEP_BUDGET).is_empty(),
+            recheck(&module, curios_pipeline::DEFAULT_STEP_BUDGET).is_empty(),
             "{description}: the unmutated subject must be accepted, or every mutant passes for the wrong reason",
         );
 
@@ -109,7 +109,7 @@ fn every_body_replaced_by_a_foreign_term_is_refused() {
             target.body = foreign_body();
 
             assert!(
-                !recheck(&mutant, crate::DEFAULT_STEP_BUDGET).is_empty(),
+                !recheck(&mutant, curios_pipeline::DEFAULT_STEP_BUDGET).is_empty(),
                 "{description}: the kernel accepted `{}` at `{}` with a body of another type entirely",
                 definition.name,
                 definition.type_,
@@ -138,7 +138,7 @@ fn every_type_replaced_by_another_item_s_is_refused() {
             .parse::<Entrypoint>()
             .unwrap_or_else(|error| panic!("{description}: the subject parses: {error:?}"));
         let (module, _) = crate::typecheck_with_prelude(
-            crate::DEFAULT_STEP_BUDGET,
+            curios_pipeline::DEFAULT_STEP_BUDGET,
             &entrypoint,
             RootSource::none(),
         )
@@ -168,7 +168,7 @@ fn every_type_replaced_by_another_item_s_is_refused() {
                 target.type_ = replacement.clone();
 
                 assert!(
-                    !recheck(&mutant, crate::DEFAULT_STEP_BUDGET).is_empty(),
+                    !recheck(&mutant, curios_pipeline::DEFAULT_STEP_BUDGET).is_empty(),
                     "{description}: the kernel accepted `{}` redeclared at `{replacement}`",
                     definition.name,
                 );
@@ -220,9 +220,12 @@ fn elaborated(description: &str, source: &str) -> Module {
     let entrypoint = source
         .parse::<Entrypoint>()
         .unwrap_or_else(|error| panic!("{description}: the subject parses: {error:?}"));
-    let (module, _) =
-        crate::typecheck_with_prelude(crate::DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none())
-            .unwrap_or_else(|error| panic!("{description}: the subject type-checks:\n{error}"));
+    let (module, _) = crate::typecheck_with_prelude(
+        curios_pipeline::DEFAULT_STEP_BUDGET,
+        &entrypoint,
+        RootSource::none(),
+    )
+    .unwrap_or_else(|error| panic!("{description}: the subject type-checks:\n{error}"));
 
     module
 }
@@ -246,7 +249,7 @@ fn a_body_grafted_across_an_index_is_refused() {
             .unwrap_or_else(|| panic!("{description}: the donor declares `subject`"));
 
         assert!(
-            recheck(&host, crate::DEFAULT_STEP_BUDGET).is_empty(),
+            recheck(&host, curios_pipeline::DEFAULT_STEP_BUDGET).is_empty(),
             "{description}: the host must be accepted before anything is grafted into it",
         );
 
@@ -264,7 +267,7 @@ fn a_body_grafted_across_an_index_is_refused() {
         target.body = donated;
 
         assert!(
-            !recheck(&grafted, crate::DEFAULT_STEP_BUDGET).is_empty(),
+            !recheck(&grafted, curios_pipeline::DEFAULT_STEP_BUDGET).is_empty(),
             "{description}: the kernel accepted a body whose index disagrees with its declaration",
         );
     }

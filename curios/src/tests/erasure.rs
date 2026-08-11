@@ -110,7 +110,7 @@ fn char_and_str_certificates_erase_to_their_existing_carriers() {
     let mut ersd = None;
 
     compile_with_prelude(
-        crate::DEFAULT_STEP_BUDGET,
+        curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
         RootSource::none(),
         |stage| {
