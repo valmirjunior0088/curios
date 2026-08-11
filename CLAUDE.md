@@ -209,7 +209,8 @@ Document each fact at the narrowest authoritative level and link to it elsewhere
 
 | Location | Owns |
 | --- | --- |
-| `README.md` | Public introduction, setup, CLI usage, and repository overview |
+| `README.md` | Public introduction: what Curios is, the happy path to running one, and where to go next. Reference detail belongs in `documentation/USAGE.md`, not here |
+| `documentation/USAGE.md` | Complete command-line and package reference — every subcommand, exit codes, dependencies, umbrellas, and the global flags |
 | `CLAUDE.md` | Contributor behavior, ownership boundaries, durable invariants, and validation |
 | `documentation/SYNTAX.md` | Complete Curios surface-language reference |
 | `documentation/ROADMAP.md` | Implemented capabilities and pending specifications |
