@@ -5,8 +5,7 @@ use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Eql, Show};
 
 -- The scan-witness machinery every operation below rests on.
 pub mod utf8;
-use utf8/{
-    check, concat_closed, drop_width, drop_valid, take_valid, peel_byte, certify_decoded,
+use utf8/{check, concat_closed, drop_width, drop_valid, take_valid, peel_byte, certify_decoded,
     decode_head, count_scalars, lte_succ_of_lt};
 
 pub let to_bytes(s: Str) -> Bytes =

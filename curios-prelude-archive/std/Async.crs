@@ -452,7 +452,6 @@ rec serve(q: Queues, job: Job) -> Io({}) =
         | step(pause, next) => resume_after(q, job, pause, next)
         end
     end
-
 -- Where each suspension reason decides what becomes of the fiber. `resumed` is the same job with its continuation in place — every arm needs it, so it is built once here rather than six times below.
 and resume_after(q: Queues, job: Job, pause: Pause, next: Io(Step({}))) -> Io({}) =
     let resumed = Job { ..job, resume = Async { next } };
@@ -463,9 +462,11 @@ and resume_after(q: Queues, job: Job, pause: Pause, next: Io(Step({}))) -> Io({}
         let _ = enqueue(q, resumed)!;
         enqueue(q, Job { resume = Async { child }, token = child_token, guards = [] })
     | park(register) => park_on_waker(q, resumed, register)
-    -- Acquiring and releasing a guard are bookkeeping, not suspension: the fiber is served again immediately rather than going back through the queue.
     | acquire(h, release) =>
-        serve(q, Job { ..resumed, guards = [Guard { handle = h, release = release }, ..job.guards] })
+        -- Acquiring and releasing a guard are bookkeeping, not suspension: the fiber is served again immediately rather than going back through the queue.
+        serve(
+            q,
+            Job { ..resumed, guards = [Guard { handle = h, release = release }, ..job.guards] })
     | release(h) =>
         let remaining = release_guard(h, job.guards)!;
         serve(q, Job { ..resumed, guards = remaining })

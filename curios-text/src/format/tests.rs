@@ -59,6 +59,26 @@ fn a_comment_above_a_later_let_binding_stays_above_it() {
     assert_eq!(formatted(source), source);
 }
 
+/// A clause joined by `and` records no span of its own, so a comment leading one used to fall to the first *descendant* that had one — printing between a parameter and its type. That relocation reparsed as a leading comment somewhere new, so the next run moved it again: the one shape in which this formatter failed to converge. Each fixture below is already canonical, so equality pins the placement and the fixed point at once.
+#[test]
+fn a_comment_above_a_rec_clause_stays_above_and() {
+    let source = "rec even(n: /std/Nat) -> /std/Bool =\n    odd(n)\n-- what the second clause is for\nand odd(n: /std/Nat) -> /std/Bool =\n    even(n);\n";
+    assert_eq!(formatted(source), source);
+}
+
+#[test]
+fn a_comment_above_a_local_rec_clause_stays_above_and() {
+    let source = "let main(n: /std/Nat) -> /std/Bool =\n    rec a(x: /std/Nat) -> /std/Bool = b(x)\n    -- the local second clause\n    and b(x: /std/Nat) -> /std/Bool = a(x);\n    a(n);\n";
+    assert_eq!(formatted(source), source);
+}
+
+#[test]
+fn a_comment_above_an_induct_clause_stays_above_and() {
+    // This clause has neither parameters nor indices, and a sort parses spanless, so its head carries no offset at all and the claim falls back to the first case's payload.
+    let source = "induct Even: Type\n| zero()\n| from_odd(Odd)\n-- what the second family is for\nand Odd: Type\n| from_even(Even)\nend\n";
+    assert_eq!(formatted(source), source);
+}
+
 #[test]
 fn an_interior_comment_survives_and_forces_a_break() {
     // The comment claims into the argument's document; its hard break keeps the call broken. `f` is unbound as far as formatting cares — formatting is syntax-only — so this must format, conserve the comment, and reparse.

@@ -279,7 +279,13 @@ let plains(names: List(Str)) -> List(Seg) =
     List/map(names, (n) => Seg/plain(n));
 
 pub let apply_assign(b: Build, path: List(Str), v: Toml) -> Result(Build, Str) =
-    match walk(b.root, b.side, x[], [..b.scope, ..plains(path)], List/len(b.scope), Act/act_value(v))
+    match walk(
+        b.root,
+        b.side,
+        x[],
+        [..b.scope, ..plains(path)],
+        List/len(b.scope),
+        Act/act_value(v))
     | success((root2, side2, _)) =>
         Result/success(Build { root = root2, side = side2, scope = b.scope })
     | failure(msg) => Result/failure(msg)

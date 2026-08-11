@@ -5,8 +5,8 @@ use {
     super::{
         Apply, BinPattern, BinSegment, Choose, ChooseArm, ChooseTest, ConceptField, Field, Func,
         FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, Intrinsic, Let,
-        LetBinding, LetSignature, ListEntry, ListPattern, Match, MatchPattern, MatchPatternField,
-        Nat, NatLiteral, NatPattern, NumLit, Pattern, PatternField, Proj, Radix, Rec, StructLit,
+        LetSignature, ListEntry, ListPattern, Match, MatchPattern, MatchPatternField, Nat,
+        NatLiteral, NatPattern, NumLit, Pattern, PatternField, Proj, Radix, Rec, StructLit,
         StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem,
         TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType,
         TupleTypeParam, UseGroup, WitnessEntry,
@@ -70,9 +70,11 @@ fn listed_block(open: impl Into<String>, items: Vec<Printer>, close: &'static st
     ]))
 }
 
-/// The wrapping counterpart to [`listed`], for a bracketed run of short interchangeable atoms: flat when the whole run fits, otherwise broken open with the items *filled* across lines at the next indent.
+/// The wrapping counterpart to [`listed`], for a bracketed run of short interchangeable atoms: the items begin on the opening delimiter's own line and wrap across as many lines as they need, each continuation at the next indent.
 ///
-/// [`listed`] is the right shape for a structure — when one part needs its own line they all take one. A run of names is not a structure, and giving an import that treatment spends a line per name. Items arrive as plain strings and their commas are attached here, so the fill inserts only the gap between them.
+/// [`listed`] is the right shape for a structure — when one part needs its own line they all take one. A run of names is not a structure, and giving an import that treatment spends a line per name.
+///
+/// No enclosing `group`, and that absence *is* the layout. A group asks whether the whole run fits on one line, which is the wrong question to put to content that would rather wrap: answering no broke a `soft_line` after the delimiter and spent a line on nothing but the delimiter itself. A fill needs no such permission, deciding each gap for itself, so the first name rides the delimiter and only the wraps are indented. Items arrive as plain strings and their commas are attached here, so the fill inserts only the gap between them.
 fn filled(open: &'static str, items: Vec<String>, close: &'static str) -> Printer {
     if items.is_empty() {
         return pure(format!("{open}{close}"));
@@ -86,11 +88,7 @@ fn filled(open: &'static str, items: Vec<String>, close: &'static str) -> Printe
             false => pure(format!("{item},")),
         })
         .collect::<Vec<_>>();
-    group(flat([
-        pure(open),
-        indent(flat([soft_line(), fill(entries)])),
-        pure(close),
-    ]))
+    flat([pure(open), indent(fill(entries)), pure(close)])
 }
 
 /// The one shape every call takes: flat when it fits, otherwise the head on its own line and each argument on its own, with the closing bracket *riding* the last one.
@@ -696,9 +694,11 @@ fn claimed_before(offset: Option<usize>, build: impl FnOnce() -> Printer) -> Pri
     flat(parts)
 }
 
-/// Where a `let` binding claims its leading comments: the start of its earliest spanned component, since neither the `let` keyword nor the binder pattern records a span. A comment above the `let` precedes all of these, so any of them bounds the claim; taking the earliest keeps comments written inside the signature with the component they lead.
-fn binding_claim_offset(binding: &LetBinding) -> Option<usize> {
-    let earliest = match &binding.signature {
+/// Where a `let` binding or a `rec` clause claims its leading comments: the start of its earliest spanned component, since none of the introducer keyword, the binder pattern, and the clause label records a span. A comment above the binding precedes all of these, so any of them bounds the claim; taking the earliest keeps comments written inside the signature with the component they lead.
+///
+/// A clause that does not claim at its own head does not thereby keep its comment: the first *descendant* with a span claims it instead, which is how a comment above an `and` clause once surfaced between a parameter and its type. It then reparsed as a leading comment somewhere new, so the next format run moved it again — the one way this formatter can fail to converge.
+fn signature_claim_offset(signature: &LetSignature) -> Option<usize> {
+    let earliest = match signature {
         LetSignature::Name {
             type_: Some(type_), ..
         } => type_,
@@ -906,7 +906,7 @@ fn print_term_inner(term: Term) -> Printer {
             let bindings = bindings
                 .into_iter()
                 .map(|binding| {
-                    claimed_before(binding_claim_offset(&binding), || {
+                    claimed_before(signature_claim_offset(&binding.signature), || {
                         flat([
                             pure("let "),
                             print_pattern(binding.binder),
@@ -920,16 +920,28 @@ fn print_term_inner(term: Term) -> Printer {
             flat(bindings.into_iter().chain([print_term(tail)]))
         }
         Subterm::Rec(Rec { items, tail }) => {
-            let bindings = items
-                .into_iter()
-                .map(|item| flat([pure(item.label), print_let_signature(item.signature, false)]));
-            flat([
-                pure("rec "),
-                sep_flat(bindings, || flat([hard_line(), pure("and ")])),
-                pure(";"),
-                hard_line(),
-                print_term(tail),
-            ])
+            // Every clause after the first claims at its own head, for the reason the `let` arm above states. That moves `and` inside the claim: a separator carrying the keyword would print it before the comment the clause is claiming, which is the mangling this exists to prevent. The first clause needs none — a comment above the block precedes `rec` itself, which the enclosing `print_term` has already claimed.
+            let mut parts = Vec::from([pure("rec ")]);
+            for (index, item) in items.into_iter().enumerate() {
+                if index == 0 {
+                    parts.push(flat([
+                        pure(item.label),
+                        print_let_signature(item.signature, false),
+                    ]));
+                    continue;
+                }
+                let claim = signature_claim_offset(&item.signature);
+                parts.push(hard_line());
+                parts.push(claimed_before(claim, || {
+                    flat([
+                        pure("and "),
+                        pure(item.label),
+                        print_let_signature(item.signature, false),
+                    ])
+                }));
+            }
+            parts.extend([pure(";"), hard_line(), print_term(tail)]);
+            flat(parts)
         }
         Subterm::Bang(term) => flat([print_suffix_head(term), pure("!")]),
         // An overflowing operator chain breaks with the operator leading the continuation line.
@@ -1111,13 +1123,19 @@ fn print_top_rec(items: Vec<TopLet>) -> Printer {
         flat(
             rest.into_iter()
                 .map(|item| {
+                    let claim = signature_claim_offset(&item.signature);
+                    // The separator stays outside the claim, so a comment leading this clause opens a line of its own above `and` rather than running on from the previous clause's last character.
                     flat([
                         hard_line(),
-                        // `pub` precedes `and`, which is the spelling the grammar accepts and the one the `induct` group beside this already emits. Reversed, a `pub` member of a `rec` group printed as `and pub f` and would not reparse — the formatter's verify gate refused the file rather than writing it, which is why `/std/Toml/values.crs` had never been formatted.
-                        print_pub(item.vis_pub),
-                        pure("and "),
-                        pure(item.label),
-                        print_let_signature(item.signature, true),
+                        claimed_before(claim, || {
+                            flat([
+                                // `pub` precedes `and`, which is the spelling the grammar accepts and the one the `induct` group beside this already emits. Reversed, a `pub` member of a `rec` group printed as `and pub f` and would not reparse — the formatter's verify gate refused the file rather than writing it, which is why `/std/Toml/values.crs` had never been formatted.
+                                print_pub(item.vis_pub),
+                                pure("and "),
+                                pure(item.label),
+                                print_let_signature(item.signature, true),
+                            ])
+                        }),
                     ])
                 })
                 .collect::<Vec<_>>(),
@@ -1224,6 +1242,28 @@ fn print_top_induct_arity(
     ])
 }
 
+/// [`signature_claim_offset`] for an `induct` clause, over the components an inductive head has: its parameters, then its index telescope, then its result sort, then the first payload or target its cases carry.
+///
+/// The label is spanless like a `let`'s binder, so a clause that did not claim here would leave its leading comment to the first spanned descendant. The cases are the fallback because a *sort* is spanless too — `parse_type` and `parse_prop` build their term from a bare `Subterm` — so `and Odd : Type` has no located component in its head at all. Any offset within the clause bounds the claim equally well: only the clause's own text lies between its head and its first case, and a comment written in there is one this hoists above `and` rather than one it misplaces.
+fn induct_claim_offset(item: &TopInduct) -> Option<usize> {
+    let head = match (item.params.first(), item.indices.first()) {
+        (Some((_, _, type_)), _) => Some(type_),
+        (None, Some((_, index))) => Some(index),
+        (None, None) => None,
+    };
+    let case_component = || {
+        let case = item.cases.first()?;
+        match case.payload.first() {
+            Some(param) => Some(&param.type_),
+            None => case.target.as_ref()?.first(),
+        }
+    };
+    head.or(Some(&item.result_sort))
+        .into_iter()
+        .chain(case_component())
+        .find_map(|term| term.span().map(|span| span.start))
+}
+
 fn print_top_induct(group: Vec<TopInduct>) -> Printer {
     let mut iter = group.into_iter();
     let first = iter.next().unwrap();
@@ -1245,19 +1285,24 @@ fn print_top_induct(group: Vec<TopInduct>) -> Printer {
         flat(
             rest.into_iter()
                 .map(|u| {
+                    let claim = induct_claim_offset(&u);
                     flat([
                         hard_line(),
-                        print_pub(u.vis_pub),
-                        pure("and "),
-                        pure(u.label),
-                        print_top_induct_params(u.params),
-                        print_top_induct_arity(u.indices, u.rep_pub, u.result_sort),
-                        flat(
-                            u.cases
-                                .into_iter()
-                                .map(print_top_induct_case)
-                                .collect::<Vec<_>>(),
-                        ),
+                        claimed_before(claim, || {
+                            flat([
+                                print_pub(u.vis_pub),
+                                pure("and "),
+                                pure(u.label),
+                                print_top_induct_params(u.params),
+                                print_top_induct_arity(u.indices, u.rep_pub, u.result_sort),
+                                flat(
+                                    u.cases
+                                        .into_iter()
+                                        .map(print_top_induct_case)
+                                        .collect::<Vec<_>>(),
+                                ),
+                            ])
+                        }),
                     ])
                 })
                 .collect::<Vec<_>>(),

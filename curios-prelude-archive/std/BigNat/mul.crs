@@ -1,9 +1,8 @@
 use /std/{Nat, Bool, Bits, Str, Order, Eq, False, True, Eql, Cmp, Add, Sub, Mul, Show, Ord};
 use /std/Bool/{false_neq_true};
 use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
-use /std/BigNat/{
-    BigNat, combine, cong_combine, dbl, dbl_raw, eq, maj3, of_bits, of_nat, refl_at, trim,
-    trim_is_trimmed, trim_of_trimmed, xor3, mod add};
+use /std/BigNat/{BigNat, combine, cong_combine, dbl, dbl_raw, eq, maj3, of_bits, of_nat, refl_at,
+    trim, trim_is_trimmed, trim_of_trimmed, xor3, mod add};
 
 pub rec raw(x: Bits, y: Bits) -> Bits =
     match x
