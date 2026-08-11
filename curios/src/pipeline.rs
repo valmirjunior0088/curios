@@ -1,7 +1,7 @@
 //! Driving the compile pipeline for the CLI, with the `--print` stage dump wired in. `stage_printer` is the single owner of how each IR stage is selected and rendered.
 
 use {
-    crate::report::{Heading, Line},
+    crate::{Heading, Line, Subject, fact},
     curios::Verdicts,
     curios_package::Target,
     curios_pipeline::{Cache, CompileError, Progress, Stage, compile_with_units},
@@ -43,7 +43,7 @@ pub(crate) fn compile_target(
     let mut scope = load_units(units)?;
 
     // A bare file has no project, so it has no store to consult: what it may reuse is a fact about the project it is in, and it is in none.
-    let asked = target.asked();
+    let subject = subject_of(&target);
     let (entry, cache) = match target {
         Target::File(path) => (path, None),
         Target::Executable {
@@ -60,9 +60,19 @@ pub(crate) fn compile_target(
         print,
         scope,
         &entry,
-        &asked,
+        &subject,
         cache.as_ref().map(|cache| cache as &dyn Cache),
     )
+}
+
+/// What a target is reported as — the name that was asked for, never the file it resolved to.
+///
+/// A declared executable resolves to an absolute path somewhere under the governing root, and echoing that back fills a status line with what the reader already knew. A bare file *is* what was asked for, so it reports as written.
+pub(crate) fn subject_of(target: &Target) -> Subject {
+    match target {
+        Target::File(path) => Subject::File(path.clone()),
+        Target::Executable { name, .. } => Subject::Executable(name.clone()),
+    }
 }
 
 /// Compile `entry` against `units` in the order given, printing any requested IR stages along the way.
@@ -71,11 +81,18 @@ pub(crate) fn compile_entry(
     print: &str,
     units: Vec<curios_text::RootSource>,
     entry: &Path,
-    asked: &str,
+    subject: &Subject,
     cache: Option<&dyn Cache>,
 ) -> Result<Module, CompileError> {
     let printer = stage_printer(print).map_err(CompileError::Failure)?;
     let (entrypoint, loader) = Entrypoint::opened(entry).map_err(CompileError::Failure)?;
+
+    // Having a scope to show is what makes this a group: with units to nest, the target heads them and its own compile closes that header, and with none the header *is* that compile's line. A group of one line under a heading naming the same work twice is worse than the plain line it replaces.
+    let grouped = !units.is_empty();
+
+    if grouped {
+        fact(Heading::Building, subject);
+    }
 
     // The entry is the one subject the fold cannot name — it owns the empty prefix — so it is reported under the name the caller was asked for.
     let mut line: Option<Line> = None;
@@ -88,20 +105,30 @@ pub(crate) fn compile_entry(
         loader,
         cache,
         printer,
-        |progress| report(&mut line, asked, progress),
+        |progress| report(&mut line, subject, grouped, progress),
     )
     .map(|(module, _foreigns)| module)
 }
 
 /// Fold one [`Progress`] event onto the open status line, opening and closing lines as subjects begin and end.
 ///
-/// The line outlives each event, which is why it is threaded rather than owned here: `Processing /hello` and the `; compiling... done 1.4s` that completes it are three separate writes to one line.
-fn report(line: &mut Option<Line>, asked: &str, progress: Progress<'_>) {
+/// The line outlives each event, which is why it is threaded rather than owned here: `↳ Processing /hello` and the `; compiling... done 1.4s` that completes it are three separate writes to one line.
+fn report(line: &mut Option<Line>, target: &Subject, grouped: bool, progress: Progress<'_>) {
     match progress {
-        Progress::Compiling(prefix) => *line = Some(opened(Heading::Processing, prefix)),
-        Progress::Entry => *line = Some(opened(Heading::Processing, asked)),
+        Progress::Compiling(prefix) => {
+            *line = Some(opened(Line::nested(
+                Heading::Processing,
+                &Subject::Mounted(prefix.clone()),
+            )));
+        }
+        // The entry program *is* the target, so a group that has already named it has nothing to add: its compile finishes the header rather than standing among the units as another step. Ungrouped there is no header yet, and this is it.
+        Progress::Entry => {
+            if !grouped {
+                *line = Some(opened(Line::open(Heading::Building, target)));
+            }
+        }
         Progress::Reused(prefix) => {
-            Line::open(Heading::Processing, prefix).outcome("reused");
+            Line::nested(Heading::Processing, &Subject::Mounted(prefix.clone())).outcome("reused");
             eprintln!();
         }
         Progress::Compiled => {
@@ -113,9 +140,8 @@ fn report(line: &mut Option<Line>, asked: &str, progress: Progress<'_>) {
     }
 }
 
-/// A line opened for `subject` with its `compiling` step already announced, so the clock starts where the work does.
-fn opened(heading: Heading, subject: &str) -> Line {
-    let mut line = Line::open(heading, subject);
+/// `line` with its `compiling` step already announced, so the clock starts where the work does.
+fn opened(mut line: Line) -> Line {
     line.step("compiling");
 
     line

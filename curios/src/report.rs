@@ -1,64 +1,98 @@
 //! What the CLI says while it works.
 //!
-//! One fixed heading column, then either a complete fact or a subject that accrues operations as they happen:
+//! One fixed heading column, then either a complete fact or a subject that accrues operations as they happen. A line marked with `↳` is a step of the line above it:
 //!
 //! ```text
-//! Processing   /hello; compiling... done 1.4s
-//! Written      .curios/bin/hello/hello
+//! Building       hello
+//! ↳ Processing   /hello; compiling... done 1.4s
+//! Finished       .curios/bin/hello/hello; done 1.6s
 //! ```
 //!
 //! **Everything here goes to stderr.** `curios run` hands stdout to the program it executes, so a status line written there would corrupt `curios run report.crs > report.json`.
 //!
 //! **A subject's line is built by unterminated writes.** The prefix reaches the reader *before* the work it announces rather than after, which is the whole point — and a compiler that dies mid-operation leaves the line unterminated, so the last thing on screen is exactly how far it got. Rust's stderr is unbuffered, so this needs no flushing of its own. It also needs no cursor control, no repainting and no terminal detection: the bytes are the same in a pipe, a log file and a CI transcript as they are on a terminal.
+//!
+//! **A group's header is the one line terminated before its work is done.** Nesting costs that much of the rule above: `Building hello` has to close so the `↳` lines can follow it, and the group ends by dedent rather than by a closing line of its own. What the rule protects survives and sharpens — the unterminated line is now the innermost one, so an interrupted compile names the step it died in rather than the group around it.
 
-use std::time::Instant;
+use {
+    curios_base::Qualifier,
+    std::{fmt, path::PathBuf, time::Instant},
+};
 
-/// Every word that can head a status line.
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Heading {
-    /// A unit being folded into the compilation.
-    Processing,
-    /// A dependency being brought into the store.
-    Fetching,
-    /// The handover to the program itself.
-    Running,
-    /// An artifact that landed on disk.
-    Written,
-    /// The whole invocation, summarized.
-    Finished,
-    /// One file or directory scaffolding produced.
-    Created,
-    /// The command to run next.
-    Try,
+/// What a status line is about.
+///
+/// Three namespaces, and only the first is the program's — which is where a leading `/` comes from, and the only place one is ever written. A mount prefix is a name a program can spell, an executable's is an identifier its manifest chose, and a file's is whatever was typed or wherever it landed. Rendering all three through one type is what keeps a print site from spelling a slash it did not derive.
+pub(crate) enum Subject {
+    /// A unit, by the prefix it mounts.
+    Mounted(Qualifier),
+    /// A declared executable, by the name its manifest row gives it.
+    Executable(String),
+    /// A file, as it was written on the command line or as it landed on disk.
+    File(PathBuf),
 }
 
-impl Heading {
-    /// The word itself. An exhaustive `match` rather than an index into [`HEADINGS`]: a new variant does not compile until it is spelled here, where an index would compile and then panic.
-    pub(crate) const fn text(self) -> &'static str {
+impl Subject {
+    /// The subject a package is reported as. Its declared name *is* its mount prefix, so it is reported as one — which keeps the slash derived here as it is everywhere else instead of written by the caller.
+    pub(crate) fn package(name: &str) -> Self {
+        Self::Mounted(Qualifier::empty().with(name))
+    }
+}
+
+impl fmt::Display for Subject {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Processing => "Processing",
-            Self::Fetching => "Fetching",
-            Self::Running => "Running",
-            Self::Written => "Written",
-            Self::Finished => "Finished",
-            Self::Created => "Created",
-            Self::Try => "Try",
+            Self::Mounted(prefix) => formatter.write_str(&prefix.join()),
+            Self::Executable(name) => formatter.write_str(name),
+            Self::File(path) => write!(formatter, "{}", path.display()),
         }
     }
 }
 
-/// Every heading, so the column below is measured rather than kept by hand.
-///
-/// This is the one hand-kept list, and the compiler cannot check it: a variant missing here only makes the column too narrow, which the first line of output shows.
-const HEADINGS: [Heading; 7] = [
-    Heading::Processing,
-    Heading::Fetching,
-    Heading::Running,
-    Heading::Written,
-    Heading::Finished,
-    Heading::Created,
-    Heading::Try,
-];
+/// Declare every heading once — the variant, its documentation, and the word it prints — so the enum and the list the column is measured from cannot drift apart. The list used to be kept by hand beside the enum, where the compiler could not check it and a missing entry only made the column too narrow.
+macro_rules! headings {
+    ($($(#[$note:meta])* $variant:ident => $word:literal,)+) => {
+        /// Every word that can head a status line.
+        #[derive(Clone, Copy, PartialEq, Eq)]
+        pub(crate) enum Heading {
+            $($(#[$note])* $variant,)+
+        }
+
+        impl Heading {
+            /// The word itself.
+            const fn text(self) -> &'static str {
+                match self {
+                    $(Self::$variant => $word,)+
+                }
+            }
+        }
+
+        /// Every heading, so the column below is measured rather than kept by hand.
+        const HEADINGS: &[Heading] = &[$(Heading::$variant,)+];
+    };
+}
+
+headings! {
+    /// The target being produced, and the header of the steps that produce it.
+    Building => "Building",
+    /// A unit being folded into the compilation.
+    Processing => "Processing",
+    /// A dependency being brought into the store.
+    Fetching => "Fetching",
+    /// The handover to the program itself.
+    Running => "Running",
+    /// The whole invocation, summarized by what it produced.
+    Finished => "Finished",
+    /// One file or directory scaffolding produced.
+    Created => "Created",
+    /// The command to run next.
+    Try => "Try",
+}
+
+/// The marker a nested line wears, in the columns a top-level line leaves empty in front of its heading.
+const NESTED: &str = "↳ ";
+
+/// How many columns [`NESTED`] occupies. Written out rather than measured: `str::len` counts the arrow's three UTF-8 bytes, and it prints in one.
+const NESTED_WIDTH: usize = 2;
 
 /// The widest heading in `headings`.
 const fn widest(headings: &[Heading]) -> usize {
@@ -77,12 +111,19 @@ const fn widest(headings: &[Heading]) -> usize {
     max
 }
 
-/// The heading column: the widest heading, plus the three spaces every line keeps to its right.
-pub(crate) const HEADING_WIDTH: usize = widest(&HEADINGS) + 3;
+/// The heading column: the widest heading, the columns a nested line's marker takes in front of it, and the three spaces every line keeps to its right.
+pub(crate) const HEADING_WIDTH: usize = widest(HEADINGS) + NESTED_WIDTH + 3;
+
+/// A line's heading column, padded out to where its subject begins. `marker` is [`NESTED`] for a step of the group above and empty for a line of its own.
+///
+/// Padded once here rather than at each write site, and after the marker is joined on: `{:<}` measures characters, so the arrow counts for the one column it prints in whatever its byte length.
+fn head(marker: &str, heading: Heading) -> String {
+    format!("{:<HEADING_WIDTH$}", format!("{marker}{}", heading.text()))
+}
 
 /// One complete fact, on a line of its own.
-pub(crate) fn fact(heading: Heading, detail: &str) {
-    eprintln!("{:<HEADING_WIDTH$}{detail}", heading.text());
+pub(crate) fn fact(heading: Heading, detail: impl fmt::Display) {
+    eprintln!("{}{detail}", head("", heading));
 }
 
 /// A subject being worked on, whose operations arrive one at a time.
@@ -94,9 +135,18 @@ pub(crate) struct Line {
 }
 
 impl Line {
-    /// Open a line for `subject` — `Processing   /hello` — leaving it unterminated.
-    pub(crate) fn open(heading: Heading, subject: &str) -> Self {
-        eprint!("{:<HEADING_WIDTH$}{subject}", heading.text());
+    /// Open a line for `subject` — `Building   hello` — leaving it unterminated.
+    pub(crate) fn open(heading: Heading, subject: &Subject) -> Self {
+        Self::marked("", heading, subject)
+    }
+
+    /// Open a line for a step of the group above it — `↳ Processing   /hello`.
+    pub(crate) fn nested(heading: Heading, subject: &Subject) -> Self {
+        Self::marked(NESTED, heading, subject)
+    }
+
+    fn marked(marker: &str, heading: Heading, subject: &Subject) -> Self {
+        eprint!("{}{subject}", head(marker, heading));
 
         Self { started: None }
     }

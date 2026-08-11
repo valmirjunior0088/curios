@@ -1591,11 +1591,13 @@ impl<'a> UnitSource<'a> {
 
     /// The prefix this unit claims, as a name to report it by — `/json` for a mounted package.
     ///
-    /// Empty for the entry, which owns the empty prefix: a caller that wants to *name* the entry knows what was asked for and this does not, so it supplies its own.
-    pub fn prefix(&self) -> String {
+    /// The root for the entry, which owns the empty prefix: a caller that wants to *name* the entry knows what was asked for and this does not, so it supplies its own.
+    ///
+    /// A [`Qualifier`] rather than the text of one, so a reporting caller renders the leading `/` where every other name renders it instead of receiving it already spelled.
+    pub fn prefix(&self) -> Qualifier {
         self.mounts()
             .first()
-            .map(|mount| mount.prefix.join())
+            .map(|mount| mount.prefix.clone())
             .unwrap_or_default()
     }
 

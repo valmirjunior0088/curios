@@ -10,7 +10,7 @@ mod pipeline;
 use pipeline::*;
 
 mod report;
-use report::{Heading, fact};
+use report::*;
 
 use {
     clap::Parser,
@@ -70,10 +70,10 @@ fn dispatch() -> Result<(), Failure> {
         Mode::Run { target, args } => {
             let target = Target::here(target.as_deref(), manifest.as_deref())?;
             let entry = target.entry().to_path_buf();
-            let asked = target.asked();
+            let subject = subject_of(&target);
             let module = compile_target(budget, &print, &units, target)?;
 
-            fact(Heading::Running, &asked);
+            fact(Heading::Running, &subject);
 
             let code = run_wasm(
                 &module,
@@ -113,31 +113,30 @@ fn dispatch() -> Result<(), Failure> {
 
             emit_exe(&cwasm, &output)?;
 
-            fact(Heading::Written, &output.display().to_string());
-            fact(
-                Heading::Finished,
-                &format!("in {:.1}s", started.elapsed().as_secs_f64()),
-            );
+            // Where it landed rather than what it was called: that is the one fact a finished build is read for, and the group above already named the target twice.
+            let mut line = Line::open(Heading::Finished, &Subject::File(output));
+            line.outcome(&format!("done {:.1}s", started.elapsed().as_secs_f64()));
+            eprintln!();
         }
         Mode::New { directory } => {
             for written in scaffold(&directory)? {
                 // A trailing separator is what tells a reader the first line is the directory the other two landed in.
                 match written.is_dir() {
-                    true => fact(Heading::Created, &format!("{}/", written.display())),
-                    false => fact(Heading::Created, &written.display().to_string()),
+                    true => fact(Heading::Created, format!("{}/", written.display())),
+                    false => fact(Heading::Created, written.display()),
                 }
             }
 
             fact(
                 Heading::Try,
-                &format!("cd {} && curios run", directory.display()),
+                format!("cd {} && curios run", directory.display()),
             );
         }
         Mode::Curate => {
             let governing = Governing::here(manifest.as_deref())?;
 
             for acquisition in curate(&governing)? {
-                fact(Heading::Fetching, &format!("/{}", acquisition.name));
+                fact(Heading::Fetching, Subject::package(&acquisition.name));
             }
         }
         Mode::Format { paths, check } => {
@@ -163,9 +162,9 @@ fn dispatch() -> Result<(), Failure> {
         #[cfg(feature = "profile")]
         Mode::Profile { input_path } => {
             let scope = load_units(&units)?;
-            let asked = input_path.display().to_string();
+            let subject = Subject::File(input_path.clone());
             let (compilation, report) =
-                capture(|| compile_entry(budget, &print, scope, &input_path, &asked, None));
+                capture(|| compile_entry(budget, &print, scope, &input_path, &subject, None));
 
             println!(
                 "total_ms\tcalls\tmin_ms\tmax_ms\tretained_mb\tallocated_mb\tallocs\ttarget\tname\t(peak {:.1} MiB)",

@@ -3,7 +3,7 @@
 use {
     super::Stage,
     curios_abi::ForeignStore,
-    curios_base::SyntaxRegistry,
+    curios_base::{Qualifier, SyntaxRegistry},
     curios_cert::{Globals, Verdict, recheck_module_verdicts},
     curios_cont::into_wasm,
     curios_core::derived_binder_floor,
@@ -304,11 +304,11 @@ where
 /// Deliberately separate from the [`Stage`] observer, which belongs to `--print`: one reports *what is happening* and the other *what was produced*, and a caller wants either without the other.
 pub enum Progress<'a> {
     /// A mounted unit is about to be compiled, named by the prefix it claims.
-    Compiling(&'a str),
+    Compiling(&'a Qualifier),
     /// The entry program is about to be compiled. Unnamed: it owns the empty prefix, so only the caller knows what was asked for.
     Entry,
     /// A mounted unit came from the store instead; nothing is compiled for it, and no [`Progress::Compiled`] follows.
-    Reused(&'a str),
+    Reused(&'a Qualifier),
     /// The subject just announced finished.
     Compiled,
 }
