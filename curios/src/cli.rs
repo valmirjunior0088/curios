@@ -93,7 +93,17 @@ pub(crate) enum Mode {
 }
 
 #[derive(Debug, Parser)]
-#[command(version, about)]
+// The stock template omits the version, so `--help` and `--version` answer different questions and a bug report quoting help output says nothing about which build produced it. Naming it here puts it on the one page anybody reads first.
+#[command(
+    version,
+    about,
+    help_template = "\
+{name} {version}
+{about-with-newline}
+{usage-heading} {usage}
+
+{all-args}{after-help}"
+)]
 pub(crate) struct Cli {
     #[arg(
         long,
