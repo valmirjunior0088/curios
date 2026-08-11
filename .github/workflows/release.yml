@@ -155,7 +155,7 @@ jobs:
       - name: Prepare installer
         run: |
           sha256sum curios-linux-x86_64 curios-linux-aarch64 curios-macos-aarch64 > checksums.txt
-          sed -i "s/@VERSION@/${GITHUB_REF_NAME#release/}/" install.sh
+          sed -i "s/@VERSION@/${GITHUB_REF_NAME#release/}/" .github/workflows/install.sh
 
       - name: Create release
         env:
@@ -170,4 +170,4 @@ jobs:
             curios-web.tar.gz \
             curios-docs.tar.gz \
             checksums.txt \
-            install.sh
+            .github/workflows/install.sh
