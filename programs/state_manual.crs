@@ -1,0 +1,26 @@
+-- The control for `state_monad.crs`: the same counter threaded through N steps
+-- by hand, with the state as an ordinary accumulator parameter. Same input,
+-- same output, no monad — so a diff of the two emitted IRs is a measurement of
+-- what `State` costs after the optimizer has had its say.
+-- N is read from stdin so the loop survives constant folding; output is 3N.
+use /std/{Str, Nat, Option, Io};
+
+rec loop(n: Nat, s: Nat) -> Nat =
+    match n: (_) => Nat | 0 => s | m + 1 => loop(m, s + 3) end;
+
+let total(n: Nat) -> Nat =
+    loop(n, 0);
+
+let input = /std/read()!;
+match input: (_) => Io({})
+| some(bytes) =>
+    match Str/of_bytes(bytes): (_) => Io({})
+    | some(s) =>
+        match Nat/of_str(Str/trim(s)): (_) => Io({})
+        | some(n) => /std/print(Str/concat(Nat/to_str(total(n)), "\n"))
+        | none() => /std/print("bad input\n")
+        end
+    | none() => /std/print("invalid utf-8\n")
+    end
+| none() => /std/print("no input\n")
+end
