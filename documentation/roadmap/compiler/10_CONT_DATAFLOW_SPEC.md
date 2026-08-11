@@ -69,6 +69,15 @@ Scope is **locals only**. Nothing crosses a function boundary, so the closure ty
 
   **The invariant is checked on the emitted bytes, not in `verify` — _changed from the plan._** A `verify` rule can only check a CPS-level proxy for what the emitter will do; wasmtime validates what the emitter actually did. `curios::compile::validate` runs it before Binaryen is handed the module, which also fixes a diagnostic problem this milestone paid for in full: Binaryen answers a malformed module with a C++ `assert`, aborting the process, so a `cargo test` run reports *no* failing test name and loses every other result with it. It is the same validator that Cranelift-compiles the module three lines later, so it costs one linear pass and names the function and offset.
 
+  **Measured at runtime, which no acceptance criterion here asked for and should have.** Instruction counts are a proxy; these are the benchmark programs, same machine, same engine, M3's decision suppressed in the control by having `raw_locals` answer an empty map — so the two arms differ in nothing else. Twelve interleaved samples each, min-of-N:
+
+  | | M3 off | M3 on | |
+  | --- | ---: | ---: | ---: |
+  | `lcg`, N = 100,000,000 | 468 ms *(468–475)* | **319 ms** *(319–327)* | **−31.8%** |
+  | `trees`, D = 21 | 676 ms *(676–719)* | 674 ms *(674–704)* | −0.3% |
+
+  On `lcg` the two arms share no sample — every M3 run beat every control run. Set against `benchmarks/04_RESULTS.md`, where that number moved 2.5% across five runs and 416 commits, this is the first thing to move it. On `trees` the samples interleave completely: allocation-bound work is untouched, which is what the locals-only scope predicts and what `trees_constructor_payloads_stay_boxed` pins structurally. The two halves confirm each other, and the second is what makes the first a representation result rather than a coincidence. *(x86-64 Linux, so these are comparable to each other and not to `04_RESULTS.md`'s arm64 figures.)*
+
   *Acceptance, met: whole corpus green — 532 + 101 tests, `binary_trees`/`dependent_vectors`/`hello_world` all run. Not met, and withdrawn as unmeetable: "no 64-bit widening", for the reason recorded in the premise above; 5 `i64` instructions remain and belong to the multiply's overflow check.*
 - **M4 — demand analysis.** Reproducing `eliminate_dead_parameters`, then extending it.
 
