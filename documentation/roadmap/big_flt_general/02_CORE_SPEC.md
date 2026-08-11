@@ -1,6 +1,6 @@
 # General `BigFlt` core representation and operations
 
-Post-Wonder implementation specification for extending private dyadic `BigFlt` into a canonical reduced rational type. This work consumes the landed `/std/BigNat` Euclidean arithmetic layer and preserves the existing abstract API established by the dyadic core.
+Post-program-analysis implementation specification for extending private dyadic `BigFlt` into a canonical reduced rational type. This work consumes the landed `/std/BigNat` Euclidean arithmetic layer and preserves the existing abstract API established by the dyadic core.
 
 ## Objective
 

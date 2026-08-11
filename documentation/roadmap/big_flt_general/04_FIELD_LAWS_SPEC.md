@@ -1,6 +1,6 @@
 # General `BigFlt` division and field laws
 
-Post-Wonder implementation specification for the division-specific API and theorem corpus over canonical nonzero rational `BigFlt` values. This work follows the core and general ring/order laws rather than blocking their delivery.
+Post-program-analysis implementation specification for the division-specific API and theorem corpus over canonical nonzero rational `BigFlt` values. This work follows the core and general ring/order laws rather than blocking their delivery.
 
 ## Objective
 

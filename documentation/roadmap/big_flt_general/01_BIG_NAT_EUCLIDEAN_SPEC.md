@@ -1,6 +1,6 @@
 # `BigNat` Euclidean arithmetic
 
-Post-Wonder implementation specification for the reusable Euclidean foundation required by general rational `BigFlt`. This is an independent `/std/BigNat` capability rather than float-owned helper code.
+Post-program-analysis implementation specification for the reusable Euclidean foundation required by general rational `BigFlt`. This is an independent `/std/BigNat` capability rather than float-owned helper code.
 
 ## Objective
 
@@ -90,7 +90,7 @@ Do not expose implementation-specific quotient-digit state in public theorem sta
 
 - Signed Euclidean division conventions for `BigInt`.
 - Extended GCD or Bézout coefficients unless a proof route demonstrates they are necessary.
-- Intrinsice factorization, primality, modular exponentiation, or cryptographic constant-time behavior.
+- Integer factorization, primality, modular exponentiation, or cryptographic constant-time behavior.
 - Rational storage or any `BigFlt` representation change.
 - Native `Nat`, `Int`, or `Flt` arithmetic laws.
 

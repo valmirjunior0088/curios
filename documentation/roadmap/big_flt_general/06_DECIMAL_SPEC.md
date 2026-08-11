@@ -1,6 +1,6 @@
 # General `BigFlt` exact decimal interop
 
-Post-Wonder implementation specification for exact decimal parsing and explicit decimal presentation over canonical rational `BigFlt`. This is the final planned general-number layer and follows the general core, laws, field laws, and binary32 boundaries.
+Post-program-analysis implementation specification for exact decimal parsing and explicit decimal presentation over canonical rational `BigFlt`. This is the final planned general-number layer and follows the general core, laws, field laws, and binary32 boundaries.
 
 ## Objective
 

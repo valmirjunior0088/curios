@@ -95,7 +95,7 @@ PascalCase is reserved for these proposition-valued interfaces; executable predi
 
 ## Module and witness placement
 
-`curios-prelude/std/BigFlt.crs` is registered after `BigNat` and `BigInt` in `curios-prelude/std.crs`:
+`curios-prelude-archive/std/BigFlt.crs` is registered after `BigNat` and `BigInt` in `curios-prelude-archive/std.crs`:
 
 ```crs
 pub mod BigFlt;

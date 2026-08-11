@@ -32,6 +32,7 @@ Curios is a functional, dependently typed language implemented in Rust 2024. It 
   → curios-ersd       optimize erased terms and lower them to continuations
   → curios-cont       optimize continuation IR and emit WebAssembly
   → curios-wasm       model, parse, and encode WebAssembly modules
+  → curios-unit       name what one unit hands its successors, below the kernel
   → curios-pipeline   drive the compiler pipeline, and supply the fixed prelude
 
 Native compiler path:
@@ -53,6 +54,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | Zero-copy archiving | `curios-archive` | The workspace's only rkyv dependency: the pin, the feature set, the re-exported derives, and the `archived` attribute macro (in the `curios-archive-derive` companion, since a proc-macro crate can export nothing else) |
 | Shared foundations | `curios-base` | Spans, names, entropy, parser/printer utilities, packed values, the `SyntaxRegistry` shape the `/syn`-emitting stages read, and other stage-independent intrinsics |
 | Host/guest contract | `curios-abi` | Wire constants and self-describing foreign-function rows shared by compiler and runtime |
+| Compilation unit | `curios-unit` | `Unit` — what one unit hands its successors, one opaque artifact per stage — and the `Prefix` of borrowed predecessors each stage is compiled against. No certifier dependency, for the reason `curios-prelude-archive` states for itself: a unit is produced here and judged by the driver above |
 | Surface language | `curios-text` | Lexer, parser, surface AST, printer, module resolution, generated `/sys`, and lowering to core |
 | Prelude image | `curios-prelude-archive` | Authored `/syn` and `/std` sources, canonical syntax names, and the compiler-build-scoped Text/Core/Ersd archive. No certifier dependency: it elaborates, it does not judge |
 | Certified prelude | `curios-prelude` | The image above, plus a build script that walks it with the kernel and fails the build on a refusal. Its successful build *is* the verdict; every consumer depends on this crate, never on the image |
@@ -86,6 +88,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | CPS optimization or Wasm emission | `curios-cont/src/` | `curios-wasm`, codegen tests, and runtime behavior |
 | Wasm representation or encoding | `curios-wasm/src/` | Continuation emission and parser/round-trip tests |
 | Host operations or foreign calls | `curios-abi/src/` | Core validation, Wasm imports, runtime bindings, and the JavaScript harness |
+| What a unit hands its successors | `curios-unit/src/` | Every stage whose artifact `Unit` holds, `curios-pipeline`'s fold, and the store's stored-unit format |
 | Pipeline orchestration | `curios-pipeline/src/compile.rs`, `stage.rs`, `standard.rs` | Native and browser callers |
 | Manifests, dependency resolution, or the store | `curios-package/src/` | The CLI subcommands that wrap it, `curios-base`'s `Qualifier`/`Mount`, and `documentation/SOUNDNESS.md`'s *Cached verdicts* when the store's keys are involved |
 | Runtime or bundle format | `curios-runtime/src/`, `curios/src/bundle.rs` | Slim-launcher dependency boundary and bundle integration tests |
@@ -101,6 +104,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 - Compiler stages own their representations. A lowering belongs to the crate holding the source representation and depends on the crate holding the destination representation.
 - `curios-pipeline` is the compiler boundary. It must not depend on Binaryen, Wasmtime, the runtime, or the CLI. It *may* name the fixed prelude, and does so in `standard.rs` alone: `compile_entrypoint` still takes a scope and still cannot tell which unit is `/std`, and nothing in the fold calls the layer above it. That layer exists because the native product, the browser product and this crate's own fixtures each wrote the same prelude wiring by hand — three callers agreeing is a missing function, not a policy, and the third was not a product at all.
 - `curios-package` sits beside that boundary, never under it. The driver folds its stages over whatever scope it is handed; *deciding* that scope is a product's job, so `curios-pipeline` must not depend on `curios-package` and `curios-web` must not touch it. It is also the workspace's only TOML dependency.
+- `curios-unit` sits below the kernel and must stay there: `cargo tree -p curios-unit --edges normal` must not contain `curios-cert`. A unit is *produced* by stages that do not judge and *judged* by the driver above, because `curios-prelude-archive`'s build script constructs a `Unit`, and a build script that reaches the certifier re-elaborates the whole standard library on every kernel edit.
 - `curios-runtime` is the runtime-only boundary. It must not depend on `curios`, Binaryen, or Wasmtime's Cranelift compiler.
 - `curios` is the only workspace crate that combines Binaryen with Cranelift-enabled Wasmtime.
 - The workspace uses crate boundaries, not Cargo features, to separate the compiler, runtime, and browser products.
@@ -108,7 +112,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 - `curios-abi` is the source of truth for the host/guest wire contract. A host operation is incomplete until its ABI row, compiler use, native runtime implementation, and applicable JavaScript implementation agree.
 - `/std` and `/syn` are owned by `curios-prelude-archive` and compiled into an rkyv image in that crate's `OUT_DIR`. Every source module must be registered in its Curios index; the build script discovers every `.crs` input, fingerprints it, and emits the matching Cargo rebuild directives.
 - Production compilation has no fixed-prelude source fallback or cache-miss branch. Archive construction or restoration failure is a compiler invariant and fails loudly. The image is scoped to one compiler build and is not a stable interchange format.
-- `/syn` ownership — which names it holds, and why — is `curios-prelude/README.md`'s decision to state. The registry contract belongs to `curios-base`, below both stages that read it, and the erased runtime carriers for compiler-emitted literals remain `Nat` and packed `Bytes`. No crate below `curios-prelude` may spell a `/syn` name: the registry states slots, the prelude states spellings, and the prelude build checks every slot against the sources.
+- `/syn` ownership — which names it holds, and why — is `curios-prelude-archive/README.md`'s decision to state. The registry contract belongs to `curios-base`, below both stages that read it, and the erased runtime carriers for compiler-emitted literals remain `Nat` and packed `Bytes`. No crate below `curios-prelude-archive` may spell a `/syn` name: `curios-base` states slots, `curios-prelude-archive/src/syntax.rs` states spellings, and the prelude build checks every slot against the sources.
 - Binaryen is built from a verified source release. Its expensive C++ build is shared through the locked, target-specific cache under `target/binaryen`, not a Cargo fingerprint-specific `OUT_DIR`.
 - Recursive lowering and packed-value interpretation must work on the default test-thread stack. Do not use `RUST_MIN_STACK` to hide a regression.
 - Generated `.wasm` files and other build products are not source. Do not commit them. `Cargo.lock` is source and must remain synchronized with dependency changes.
@@ -128,8 +132,8 @@ Data flows downward through the diagram, while Rust dependencies between compile
 
 - Read [SYNTAX.md](documentation/SYNTAX.md) in full before editing any `.crs` file. It is the normative surface-language reference; `curios-text/src/parse.rs` implements the contract.
 - The surface grammar's syntax forms are closed: a new type never gets its own operator or keyword. It opts into an existing form (`+`, `==`, postfix `!`, …) by writing a `satisfy` witness against the form's `/syn` concept. See "Syntax forms are closed, semantics extend by witness" in `documentation/DESIGN.md` before proposing hardcoded syntax for a type.
-- Use `curios-prelude/std/` as the reference for idiomatic code.
-- Register a new `curios-prelude/std/Foo.crs` module in `curios-prelude/std.crs`. Apply the corresponding rule to `curios-prelude/syn/` and `curios-prelude/syn.crs`; update `curios-prelude/src/syntax.rs` only when Rust directly emits the new `/syn` name — from lowering, or from a type-directed feature in `curios-elab`.
+- Use `curios-prelude-archive/std/` as the reference for idiomatic code.
+- Register a new `curios-prelude-archive/std/Foo.crs` module in `curios-prelude-archive/std.crs`. Apply the corresponding rule to `curios-prelude-archive/syn/` and `curios-prelude-archive/syn.crs`; update `curios-prelude-archive/src/syntax.rs` only when Rust directly emits the new `/syn` name — from lowering, or from a type-directed feature in `curios-elab`.
 - Remember that names use `/` qualification, `{}` is the unit type, `()` is the unit value, and visibility of a nominal name is independent from visibility of its representation. Consult `SYNTAX.md` for the full rules rather than extending this reminder list.
 - Run Curios programs through the native CLI: `cargo run --package curios -- run <file.crs>`.
 
@@ -166,15 +170,15 @@ cargo clippy --workspace --all-targets --all-features -- -Dwarnings
 cargo test --workspace --all-targets --all-features
 ```
 
-This is deliberately *not* CI's list of jobs. CI runs `check`, `clippy` and `test` as three separate jobs that never share a target directory, so it pays nothing for the overlap between them; a local sequential run pays for all of it. Two consequences, both measured on this workspace.
+This is deliberately *not* CI's list of jobs. CI runs `check`, `clippy` and `test` as three separate jobs that never share a target directory, so it pays nothing for the overlap between them; a local sequential run pays for all of it. Two consequences.
 
-`cargo check` is dropped because `cargo clippy` is the same compilation with more lints, and `cargo test` compiles for real — so `check` establishes nothing either of them misses, while costing a full pass of its own: 9m30s of a 35m56s gate, plus one prelude rebuild. What it buys back is only that a type error surfaces a little earlier. CI keeps its own `check` job, where it is free.
+`cargo check` is dropped because `cargo clippy` is the same compilation with more lints, and `cargo test` compiles for real — so `check` establishes nothing either of them misses, while costing a full pass of its own. What it buys back is only that a type error surfaces a little earlier. CI keeps its own `check` job, where it is free.
 
-The Clippy denial is passed *after* `--` rather than as `RUSTFLAGS` for the same class of reason. `RUSTFLAGS` is a global fingerprint input, so setting it for one step forks every unit in the graph — including `curios-prelude`'s build script, which then re-elaborates and re-certifies the whole fixed prelude for that step alone. Measured per step rather than as a total: with the denial after the separator, the `clippy` step rebuilds the prelude **zero** times, reusing what ran before it.
+The Clippy denial is passed *after* `--` rather than as `RUSTFLAGS` for the same class of reason. `RUSTFLAGS` is a global fingerprint input, so setting it for one step forks every unit in the graph — including `curios-prelude`'s build script, which then re-elaborates and re-certifies the whole fixed prelude for that step alone. With the denial after the separator, the `clippy` step rebuilds no prelude at all, reusing what ran before it.
 
-Do not quote a whole-gate rebuild total. That number was stated here twice and was wrong twice, because a run measured with one test invocation was compared against a run measured with another — the suite step's own count depends on `--all-targets`, not on either change above. Measure a step, name the step.
+Do not quote a whole-gate rebuild total. One was stated here twice and was wrong twice, because a run measured with one test invocation was compared against a run measured with another — the suite step's own count depends on `--all-targets`, not on either change above. Measure a step, name the step.
 
-Expect the gate to be latency-bound rather than throughput-bound: the crate graph is a deep near-linear chain, so a 12-core machine runs it at roughly one and a half cores busy. Wall clock is the critical path, and more parallelism in the build does not shorten it.
+Expect the gate to be latency-bound rather than throughput-bound: the crate graph is a deep near-linear chain, so most cores sit idle. Wall clock is the critical path, and more parallelism in the build does not shorten it.
 
 For the same reason, keep the feature set constant while iterating. `--all-features` enables `profile`, and a plain `cargo build --package curios` does not, so alternating between them maintains two archives that evict each other. Pick one for a work session.
 
@@ -199,9 +203,9 @@ make curios/profile CURIOS_PROFILE_SOURCE=programs/hello_world.crs
 
 It builds the `curios` binary with `--features profile` — which is the only build in which the `profile` subcommand exists — and prints per-span aggregate timings sorted by total time descending. The instrumentation mechanics — `profile!` and `profile_span!`, the per-crate `profile` feature fan-out, the `capture` collector, and the temporary-instrumentation norm — are documented in the `curios-profile` crate, the one place in the workspace that names `tracing`.
 
-**Record a figure with its date and its profile, or do not record it.** A number in prose with no method decays quietly and is then designed against, which has happened here twice: a 471 ms restore that is 34.4 ms, and an estimated 60–70 s saving on an operation that takes twelve seconds. Any figure older than the last change to the pass it measures is a claim about history, and the date beside it is what lets a reader notice. This generalizes "measure a step, name the step" above — that rule says what to compare, this one says what a comparison is worth later.
+**Keep a figure beside the probe that reproduces it, or do not record it.** A number in prose with no method decays quietly and is then designed against — which has happened here twice, once by an order of magnitude and once by claiming a saving larger than the whole operation costs. Prose cannot check a figure, so prose is the wrong place for one. `curios-prelude-archive`'s `stored_prelude_measurements` is the pattern: an ignored test carrying the command, the date, the profile, and what it last printed, so a number cannot drift from the thing that would check it.
 
-Where a figure has a probe that reproduces it, keep the two together rather than in a document that cites them. `curios-prelude-archive`'s `stored_prelude_measurements` is the pattern: an ignored test carrying both the command and what it last printed, so a number cannot drift from the thing that would check it.
+This generalizes "measure a step, name the step" above — that rule says what to compare, this one says where the comparison belongs. Documentation states what a measurement *decided*; the measurement itself lives with the code.
 
 ## Documentation ownership
 

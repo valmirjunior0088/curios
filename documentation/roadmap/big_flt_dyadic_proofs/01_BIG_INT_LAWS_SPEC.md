@@ -4,7 +4,7 @@ Post-bootstrap implementation specification for completing the reusable theorem 
 
 ## Objective
 
-Establish `BigInt` as a certified ordered commutative ring with executable comparison and reusable power-of-two operations. Every theorem belongs beside the operation it describes in `curios-prelude/std/BigInt.crs`, uses the established snake_case naming convention, and erases completely.
+Establish `BigInt` as a certified ordered commutative ring with executable comparison and reusable power-of-two operations. Every theorem belongs beside the operation it describes in `curios-prelude-archive/std/BigInt.crs`, uses the established snake_case naming convention, and erases completely.
 
 The existing `BigInt` representation and executable operations remain authoritative. This project adds the missing laws, structural helpers, and focused tests; it does not redesign the sign representation.
 

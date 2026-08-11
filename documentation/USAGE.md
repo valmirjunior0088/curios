@@ -61,6 +61,16 @@ default = "bench"
 the package root claims the stem `hello` twice: `mod hello` in `lib.crs` and the executable "hello"
 ```
 
+## Starting one
+
+```sh
+curios new <DIR>
+```
+
+The directory's name is the package's, and it is checked before anything is written — so a name the manifest could not hold fails with an empty disk rather than half a package.
+
+It writes every part a package has: the manifest, `lib.crs`, and `exe.crs`. There is deliberately no flag asking for only one of them. A package may be a library alone or a program alone — deleting either file says so, and the manifest decides — but *starting* one is not the moment to be asked, and a flag asking would only be answerable by somebody who already knows what the two are.
+
 ## Exit codes
 
 Exit status is a tri-state, so tooling can tell "here is your goal batch" from "something is wrong" without parsing stderr.

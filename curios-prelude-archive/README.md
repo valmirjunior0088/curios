@@ -1,10 +1,10 @@
 # curios-prelude-archive
 
-Build-scoped archived ownership of Curios's fixed `/sys`, `/syn`, and `/std` prelude: the authored `.crs` sources, the canonical registry of compiler-emitted `/syn` names, and the build script that compiles them into the rkyv image production compilation replays. The archive and replay APIs belong to the crate rustdoc; every source module must be registered in its Curios index.
+Build-scoped archived ownership of Curios's fixed `/sys`, `/syn`, and `/std` prelude: the authored `/syn` and `/std` sources, the canonical registry of compiler-emitted `/syn` names, and the build script that compiles all three roots into the rkyv image production compilation replays. `/sys` is the one root with no `.crs` here — it is generated from `curios-abi`'s host store by `curios-text`'s `sys_module` and mounted alongside the authored two, which is what the mirror below is about. The archive and replay APIs belong to the crate rustdoc; every authored source module must be registered in its Curios index.
 
 ## Why this is not `curios-prelude`
 
-Cargo's rebuild granularity is the build script. This crate's script elaborates and serializes; `curios-prelude`'s restores that image and certifies it with `curios-cert`. While both lived in one script, either dependency set re-ran both halves — so every edit to the kernel re-elaborated the whole standard library, measured at 469 s of a ~570 s build for work no kernel rule can affect.
+Cargo's rebuild granularity is the build script. This crate's script elaborates and serializes; `curios-prelude`'s restores that image and certifies it with `curios-cert`. While both lived in one script, either dependency set re-ran both halves — so every edit to the kernel re-elaborated the whole standard library, which was most of that build, for work no kernel rule can affect.
 
 **So this crate must never gain a `curios-cert` dependency, in any dependency kind that propagates.** That is the whole of the keying discipline, and it is checkable: `cargo tree -p curios-prelude-archive --edges build` must not contain `curios-cert`. Splitting the crate was necessary and not sufficient — `curios-elab` depended on the kernel, so the certifier arrived transitively anyway, and what closed it was separating `curios-analysis` from `curios-cert` and making `curios-elab`'s dependency on the latter a *dev*-dependency, which does not propagate.
 

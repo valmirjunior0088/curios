@@ -1,6 +1,6 @@
 # General `BigFlt` binary32 boundaries
 
-Post-Wonder implementation specification for extending the established binary32 conversion API and proofs from dyadic inputs to every canonical rational `BigFlt`.
+Post-program-analysis implementation specification for extending the established binary32 conversion API and proofs from dyadic inputs to every canonical rational `BigFlt`.
 
 ## Objective
 

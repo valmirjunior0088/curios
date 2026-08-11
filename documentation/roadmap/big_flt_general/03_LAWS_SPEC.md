@@ -1,6 +1,6 @@
 # General `BigFlt` canonical, ring, and order laws
 
-Post-Wonder implementation specification for lifting the dyadic theorem corpus across the landed reduced rational `BigFlt` representation.
+Post-program-analysis implementation specification for lifting the dyadic theorem corpus across the landed reduced rational `BigFlt` representation.
 
 ## Objective
 
