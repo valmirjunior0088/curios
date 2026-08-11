@@ -6,7 +6,7 @@
 
 use {
     super::{Error, Module},
-    curios_base::{Mount, Qualifier, RootKind},
+    curios_base::{Mount, Qualifier, RootKind, is_identifier},
     std::{
         collections::BTreeMap,
         path::{Path, PathBuf},
@@ -63,14 +63,14 @@ impl RootSource {
     ///
     /// The two paths are separate because the layout rule relates them rather than deriving one from the other: a package's library header sits beside its manifest while its namespace *is* the manifest's directory, and every other header's namespace is its stem directory.
     pub fn mounted(
-        prefix: Qualifier,
+        prefix: &str,
         kind: RootKind,
         header: impl Into<PathBuf>,
         directory: impl Into<PathBuf>,
     ) -> Self {
         Self {
             bases: vec![(
-                Mount::new(prefix, kind),
+                Mount::new(Qualifier::from([prefix]), kind),
                 Base::Disk {
                     header: Some(header.into()),
                     directory: directory.into(),
@@ -86,9 +86,15 @@ impl RootSource {
 
     /// Claim `prefix` as a supplied root, `module` being the header it is declared in.
     ///
-    /// A whole qualifier rather than a segment, because a package's canonical name may be multi-segment and the prefix it mounts at *is* that name.
-    pub fn insert_root(&mut self, prefix: impl Into<Qualifier>, kind: RootKind, module: Module) {
-        let prefix = prefix.into();
+    /// One segment, because a root's name is one word: a mount prefix is an atom, and a name with segments in it would imply namespaces nobody declared. Only the entry's mount is shorter — it claims the empty prefix, which is what makes it the entry.
+    pub fn insert_root(&mut self, prefix: &str, kind: RootKind, module: Module) {
+        // A caller's broken contract, not a program's: `Qualifier::from(["a/b"])` would build one segment spelling two, and every path derived from it would then be wrong in a way no later check looks for.
+        assert!(
+            is_identifier(prefix),
+            "a root's name is one identifier, and '{prefix}' is not"
+        );
+
+        let prefix = Qualifier::from([prefix]);
         assert!(
             !self.bases.iter().any(|(mount, _)| mount.prefix == prefix),
             "root '{}' is already claimed",

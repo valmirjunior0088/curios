@@ -2019,7 +2019,7 @@ fn compile_with_units(
         .map(|(prefix, source)| {
             let mut modules = curios_text::RootSource::supplied();
             modules.insert_root(
-                prefix.split('/'),
+                prefix,
                 curios_base::RootKind::Ordinary,
                 source
                     .parse::<curios_text::Module>()
@@ -2091,40 +2091,40 @@ fn an_entry_module_colliding_with_a_mount_is_diagnosed() {
     assert!(error.contains("lib"), "unexpected error: {error}");
 }
 
-/// A name is an atom: `myorg` in `myorg/json` denotes nothing on its own, and resolution finds the owning mount by longest match over a reference's leading segments.
+/// A mount wins over the entry's empty prefix, which is the whole of what longest match decides now that a prefix is one segment: `/json/answer` is the mounted unit's, not a name the entry failed to declare.
 #[test]
-fn a_multi_segment_mount_resolves_by_longest_match() {
+fn a_mount_wins_over_the_entrys_empty_prefix() {
     compile_with_units(
-        &[("myorg/json", "pub let answer : /std/Nat = 42;")],
-        "/std/print(/std/Nat/to_str(/myorg/json/answer))",
+        &[("json", "pub let answer : /std/Nat = 42;")],
+        "/std/print(/std/Nat/to_str(/json/answer))",
     )
-    .expect("a multi-segment prefix resolves");
+    .expect("a mounted prefix resolves");
 }
 
-/// Two packages sharing a leading segment both imply the namespace it names, and neither declares it — so the namespace holds both rather than whichever was compiled last.
+/// Two mounted units are both reachable from one entry: the compilation root holds a child per mount, so neither shadows the other and the second does not replace the first.
 #[test]
-fn two_mounts_sharing_a_head_are_both_reachable() {
+fn two_mounts_are_both_reachable() {
     compile_with_units(
         &[
-            ("myorg/json", "pub let a : /std/Nat = 1;"),
-            ("myorg/http", "pub let b : /std/Nat = 2;"),
+            ("json", "pub let a : /std/Nat = 1;"),
+            ("http", "pub let b : /std/Nat = 2;"),
         ],
-        "/std/print(/std/Nat/to_str(/std/Nat/add(/myorg/json/a, /myorg/http/b)))",
+        "/std/print(/std/Nat/to_str(/std/Nat/add(/json/a, /http/b)))",
     )
-    .expect("two packages under one head");
+    .expect("two mounted packages");
 }
 
-/// With prefixes of different lengths, pairwise distinctness stops being enough: an entry's `mod myorg` beside a mount at `/myorg/json` makes `/myorg/json/a` two answers, so the containment is refused naming both claimants.
+/// An entry's `mod json` beside a mount at `/json` makes `/json/a` two answers, so the claim is refused naming both claimants. A prefix is one segment, so this is the only shape a collision has — but it is still decided here rather than surfacing later as an ordinary duplicate declaration, which would name the label without naming what else claimed it.
 #[test]
-fn a_prefix_within_another_claimed_subtree_is_refused() {
+fn a_prefix_claimed_twice_is_refused() {
     let error = compile_with_units(
-        &[("myorg/json", "pub let a : /std/Nat = 1;")],
-        "mod myorg\n    pub let b : /std/Nat = 2;\nend\n/std/print(/std/Nat/to_str(0))",
+        &[("json", "pub let a : /std/Nat = 1;")],
+        "mod json\n    pub let b : /std/Nat = 2;\nend\n/std/print(/std/Nat/to_str(0))",
     )
-    .expect_err("an entry cannot declare a module containing a mounted prefix");
+    .expect_err("an entry cannot declare a module a mount already claims");
 
     assert!(
-        error.contains("mod myorg") && error.contains("/myorg/json"),
+        error.contains("mod json") && error.contains("/json"),
         "unexpected error: {error}"
     );
 }

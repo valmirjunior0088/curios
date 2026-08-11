@@ -166,7 +166,7 @@ fn a_declared_executable_builds_into_the_store() {
             ("curios.toml", "members = [\"json\"]\n"),
             (
                 "json/curios.toml",
-                "name = \"myorg/json\"\n\n[[executables]]\nname = \"serve\"\n",
+                "name = \"json\"\n\n[[executables]]\nname = \"serve\"\n",
             ),
             ("json/lib.crs", ""),
             ("json/serve.crs", ""),
@@ -177,7 +177,7 @@ fn a_declared_executable_builds_into_the_store() {
 
     // The umbrella governs, so the store is its own — but the path *within* the store names the package, so it would not move if the member left.
     assert!(
-        target.output().ends_with(".curios/bin/myorg/json/serve"),
+        target.output().ends_with(".curios/bin/json/serve"),
         "{}",
         target.output().display()
     );

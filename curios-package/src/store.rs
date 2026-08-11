@@ -6,7 +6,7 @@
 //!
 //! ```text
 //! .curios/
-//!   bin/    myorg/json/serve      what `curios compile` emits
+//!   bin/    json/serve            what `curios compile` emits
 //!   src/    c1/<digest>/          materialized source trees, keyed by their manifest hash
 //!   unit/   <key>/                compiled units, keyed by their terms and the certifier
 //! ```
@@ -20,7 +20,6 @@ mod tests;
 
 use {
     crate::TreeHash,
-    curios_base::Qualifier,
     sha2::{Digest, Sha256},
     std::path::{Path, PathBuf},
 };
@@ -49,13 +48,12 @@ impl Store {
 
     /// Where a native executable is written: nested under the package that declares it, beside the project.
     ///
-    /// A package's name is the one identity in a compilation that cannot collide (law 2), so nesting by it removes the collision by construction — two members of one umbrella may both declare `serve` and nothing has to refuse it. Nesting also keeps the path stable: flat, a package's binary would move when it joined an umbrella, since only the governing root changed. A name is already a path, so its segments nest exactly as the layout rule maps a qualified name onto a file.
-    pub fn bin(&self, package: &Qualifier, executable: &str) -> PathBuf {
-        package
-            .iter()
-            .fold(self.project.join(STORE).join("bin"), |path, segment| {
-                path.join(segment)
-            })
+    /// A package's name is the one identity in a compilation that cannot collide (law 2), so nesting by it removes the collision by construction — two members of one umbrella may both declare `serve` and nothing has to refuse it. Nesting also keeps the path stable: flat, a package's binary would move when it joined an umbrella, since only the governing root changed.
+    pub fn bin(&self, package: &str, executable: &str) -> PathBuf {
+        self.project
+            .join(STORE)
+            .join("bin")
+            .join(package)
             .join(executable)
     }
 

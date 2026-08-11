@@ -30,7 +30,7 @@ fn a_delivery_matching_its_pin_is_placed() {
 
     let hash = TreeHash::of(&scratch).unwrap();
     let pin = Pin {
-        name: Qualifier::from(["http"]),
+        name: "http".to_string(),
         url: "https://example/http".to_string(),
         rev: "abc123".to_string(),
         hash: hash.clone(),
@@ -55,7 +55,7 @@ fn a_delivery_failing_its_pin_is_refused_stating_what_arrived() {
 
     let delivered = TreeHash::of(&scratch).unwrap();
     let pin = Pin {
-        name: Qualifier::from(["http"]),
+        name: "http".to_string(),
         url: "https://example/http".to_string(),
         rev: "abc123".to_string(),
         hash: TreeHash::parse(&format!("c1:{}", "a".repeat(64))).unwrap(),
@@ -193,7 +193,7 @@ fn a_fetched_revision_is_verified_and_placed() {
 
     let root = tree("curate-fetch", &[("curios.toml", "name = \"app\"\n")]);
     let pin = Pin {
-        name: Qualifier::from(["http"]),
+        name: "http".to_string(),
         url: format!("file://{}", origin.display()),
         rev: revision,
         hash: expected.clone(),

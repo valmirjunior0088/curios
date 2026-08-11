@@ -14,16 +14,16 @@ fn refuse(source: &str) -> String {
         .expect_err("a manifest this test states is refused")
 }
 
-/// The package mode, whole: a multi-segment name, one row of every source, two executables, and a default.
+/// The package mode, whole: one row of every source, two executables, and a default.
 #[test]
 fn a_package_parses() {
     let Manifest::Package(package) = parse(&format!(
         r#"
-            name = "myorg/json"
+            name = "json"
             default = "serve"
 
             [dependencies]
-            "myorg/base" = {{ source = "member" }}
+            base = {{ source = "member" }}
             toml_parse = {{ source = "catalog" }}
             http = {{ source = "git", url = "https://example/http", rev = "abc123", hash = "c1:{digest}" }}
             tools = {{ source = "path", path = "../tools" }}
@@ -40,7 +40,7 @@ fn a_package_parses() {
         panic!("a manifest declaring `name` is a package");
     };
 
-    assert_eq!(package.name, Qualifier::from(["myorg", "json"]));
+    assert_eq!(package.name, "json");
     assert_eq!(package.default.as_deref(), Some("serve"));
 
     // A declared name locates its file; an explicit path overrides it.
@@ -60,29 +60,18 @@ fn a_package_parses() {
 
     assert_eq!(
         package.dependencies.keys().collect::<Vec<_>>(),
-        vec![
-            &Qualifier::from(["http"]),
-            &Qualifier::from(["myorg", "base"]),
-            &Qualifier::from(["toml_parse"]),
-            &Qualifier::from(["tools"]),
-        ]
+        vec!["base", "http", "toml_parse", "tools"]
     );
+    assert_eq!(package.dependencies["base"], Dependency::Member);
+    assert_eq!(package.dependencies["toml_parse"], Dependency::Catalog);
     assert_eq!(
-        package.dependencies[&Qualifier::from(["myorg", "base"])],
-        Dependency::Member
-    );
-    assert_eq!(
-        package.dependencies[&Qualifier::from(["toml_parse"])],
-        Dependency::Catalog
-    );
-    assert_eq!(
-        package.dependencies[&Qualifier::from(["tools"])],
+        package.dependencies["tools"],
         Dependency::Path {
             path: PathBuf::from("../tools")
         }
     );
     assert!(matches!(
-        &package.dependencies[&Qualifier::from(["http"])],
+        &package.dependencies["http"],
         Dependency::Git { url, rev, .. } if url == "https://example/http" && rev == "abc123"
     ));
 }
@@ -94,7 +83,7 @@ fn a_name_alone_is_a_package() {
         panic!("a manifest declaring `name` is a package");
     };
 
-    assert_eq!(package.name, Qualifier::from(["json"]));
+    assert_eq!(package.name, "json");
     assert!(package.dependencies.is_empty());
     assert!(package.executables.is_empty());
 }
@@ -159,13 +148,13 @@ fn a_nameless_package_is_refused() {
     assert!(refusal.contains("declares none"), "{refusal}");
 }
 
-/// A dash is the ordinary way to spell a package name elsewhere, and the one this language cannot resolve.
+/// A dash is the ordinary way to spell a package name elsewhere, and the one this language cannot resolve. A `/` is the other: a name is one word, so the segments that would have made `myorg/json` a namespace are refused by the same identifier check rather than by a rule of their own.
 #[test]
 fn a_name_no_path_could_spell_is_refused() {
     for (written, reason) in [
-        ("my-org/json", "no identifier"),
-        ("myorg//json", "empty segment"),
-        ("myorg/struct", "is a keyword"),
+        ("my-org", "no identifier"),
+        ("myorg/json", "no identifier"),
+        ("struct", "is a keyword"),
         ("", "it is empty"),
     ] {
         let refusal = refuse(&format!("name = {written:?}"));
@@ -181,7 +170,7 @@ fn a_dependency_named_by_no_path_is_refused() {
             name = "json"
 
             [dependencies]
-            "my-org/base" = { source = "member" }
+            "my-org" = { source = "member" }
         "#,
     );
 

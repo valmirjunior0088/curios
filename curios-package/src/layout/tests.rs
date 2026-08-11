@@ -38,7 +38,7 @@ fn package(name: &str, manifest: &str, files: &[(&str, &str)]) -> PathBuf {
 fn a_package_mounts_its_declared_name_over_its_manifest_directory() {
     let directory = package(
         "layout-package",
-        "name = \"myorg/json\"\n",
+        "name = \"json\"\n",
         &[
             ("lib.crs", "pub mod parse;"),
             ("parse.crs", "pub mod lexer;"),
@@ -48,14 +48,14 @@ fn a_package_mounts_its_declared_name_over_its_manifest_directory() {
 
     let (package, source) = package_at(&directory).expect("a package with a library header");
 
-    assert_eq!(package.name, Qualifier::from(["myorg", "json"]));
+    assert_eq!(package.name, "json");
     assert_eq!(
         source
             .expect("a package with a library header")
             .mounts()
             .first()
             .map(|mount| mount.prefix.clone()),
-        Some(Qualifier::from(["myorg", "json"]))
+        Some(Qualifier::from(["json"]))
     );
 
     fs::remove_dir_all(directory).unwrap();

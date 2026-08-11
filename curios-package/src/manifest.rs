@@ -9,7 +9,7 @@ mod tests;
 
 use {
     crate::TreeHash,
-    curios_base::{Qualifier, is_identifier, is_keyword},
+    curios_base::{is_identifier, is_keyword},
     serde::Deserialize,
     std::{
         collections::BTreeMap,
@@ -63,11 +63,11 @@ impl FromStr for Manifest {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Package {
     /// The canonical name, which is this package's mount prefix and the only way any consumer refers to it. Declared here and nowhere else — no umbrella contributes to it, so reorganizing a tree renames nothing.
-    pub name: Qualifier,
+    pub name: String,
     /// Which executable a bare `curios run` means. `None` when there is at most one for it to mean.
     pub default: Option<String>,
     /// What this package depends on, by the canonical name each dependency declares for itself.
-    pub dependencies: BTreeMap<Qualifier, Dependency>,
+    pub dependencies: BTreeMap<String, Dependency>,
     /// The entry programs this package declares, in the order written.
     pub executables: Vec<Executable>,
 }
@@ -78,7 +78,7 @@ pub struct Umbrella {
     /// Where each member's own manifest sits, relative to this one. A member may lie arbitrarily deep on disk; umbrellas themselves do not nest.
     pub members: Vec<PathBuf>,
     /// The rows a member reaches by declaring `source = "catalog"`. A row here fetches nothing by itself — activation lives in the package that names it.
-    pub catalog: BTreeMap<Qualifier, Dependency>,
+    pub catalog: BTreeMap<String, Dependency>,
 }
 
 /// One declared entry program: a name to run it by, and the file it is compiled from.
@@ -191,8 +191,7 @@ impl Document {
             .find(|(_, row)| matches!(row, Dependency::Member | Dependency::Catalog))
         {
             return Err(format!(
-                "the catalog entry {:?} names a marker source; a catalog row names a fetchable source or `path`",
-                spelling(name)
+                "the catalog entry {name:?} names a marker source; a catalog row names a fetchable source or `path`"
             ));
         }
 
@@ -347,10 +346,7 @@ fn declared(keys: &[(&'static str, bool)]) -> String {
 }
 
 /// Every row of one table, by the canonical name each is filed under.
-fn table(
-    rows: BTreeMap<String, Row>,
-    what: &str,
-) -> Result<BTreeMap<Qualifier, Dependency>, String> {
+fn table(rows: BTreeMap<String, Row>, what: &str) -> Result<BTreeMap<String, Dependency>, String> {
     rows.into_iter()
         .map(|(written, row)| {
             Ok((
@@ -361,38 +357,21 @@ fn table(
         .collect()
 }
 
-/// The canonical name `written` states, refused when no path could spell it.
+/// The canonical name `written` states, refused when it is not one.
 ///
-/// A name is an atom: its segments are spelling, not structure, and `myorg` in `myorg/json` denotes nothing on its own. What the segments must survive is being written as a path, because that is how every consumer reaches the mount.
-pub(crate) fn canonical(written: &str, what: &str) -> Result<Qualifier, String> {
-    let refuse = |reason: String| {
+/// **A name is one word, and that is the whole rule.** It is the prefix the package mounts at, and a prefix is an atom: `myorg` in a hypothetical `myorg/json` would denote nothing on its own, so admitting segments here would make every package silently declare namespaces nobody wrote. A segment of names is a real thing to want, but it belongs to a package's own modules, where somebody declares each one.
+pub(crate) fn canonical(written: &str, what: &str) -> Result<String, String> {
+    let refuse = |reason: &str| {
         format!(
-            "the {what} {written:?} is no name a path could spell: {reason}. A name's segments are separated by `/`, and each is a Curios identifier — no dashes, and no keyword."
+            "the {what} {written:?} is no name a path could spell: {reason}. A name is a single Curios identifier — no dashes, no `/`, and no keyword."
         )
     };
 
-    if written.is_empty() {
-        return Err(refuse("it is empty".to_string()));
+    match written {
+        "" => Err(refuse("it is empty")),
+        // `is_identifier` rejects a `/` along with everything else a segment could not be, so the one-word rule needs no separate check for it.
+        _ if !is_identifier(written) => Err(refuse("it is no identifier")),
+        _ if is_keyword(written) => Err(refuse("it is a keyword")),
+        _ => Ok(written.to_string()),
     }
-
-    for segment in written.split('/') {
-        if segment.is_empty() {
-            return Err(refuse("it has an empty segment".to_string()));
-        }
-
-        if !is_identifier(segment) {
-            return Err(refuse(format!("the segment {segment:?} is no identifier")));
-        }
-
-        if is_keyword(segment) {
-            return Err(refuse(format!("the segment {segment:?} is a keyword")));
-        }
-    }
-
-    Ok(Qualifier::from(written.split('/')))
-}
-
-/// A canonical name as a manifest spells it: segments separated by `/`, with no leading one.
-pub(crate) fn spelling(name: &Qualifier) -> String {
-    name.segments().join("/")
 }

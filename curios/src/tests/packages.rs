@@ -89,26 +89,6 @@ fn a_package_runs_its_sole_executable() {
     fs::remove_dir_all(root).unwrap();
 }
 
-/// A multi-segment name mounts every segment, and the executable reaches through all of them.
-#[test]
-fn a_multi_segment_package_mounts_its_whole_name() {
-    let root = tree(
-        "e2e-multi",
-        &[
-            (
-                "curios.toml",
-                "name = \"myorg/json\"\n\n[[executables]]\nname = \"dump\"\n",
-            ),
-            ("lib.crs", "pub let tag : /std/Str = \"myorg/json\";\n"),
-            ("dump.crs", "/std/print(/myorg/json/tag)\n"),
-        ],
-    );
-
-    assert_eq!(run(&root, None), b"myorg/json");
-
-    fs::remove_dir_all(root).unwrap();
-}
-
 /// The layout rule, through a real compilation: `mod` in the library header reads a sibling of the manifest, and that module's own children stem-nest below it.
 #[test]
 fn a_librarys_modules_read_from_the_manifests_directory() {

@@ -170,9 +170,9 @@ fn run_err(src: &str) -> String {
 // Lower against the real prelude (so `sys` and `std` are served and rooted), returning only success/error — the lens for the internal-root gate.
 fn lower_with_prelude(src: &str) -> Result<(), String> {
     let mut modules = RootSource::supplied();
-    modules.insert_root(["sys"], RootKind::Internal, crate::sys_module(&host_ops()));
+    modules.insert_root("sys", RootKind::Internal, crate::sys_module(&host_ops()));
     modules.insert_root(
-        ["std"],
+        "std",
         RootKind::Privileged,
         r#"
             pub mod Str
@@ -1981,14 +1981,14 @@ fn a_supplied_source_and_a_directory_resolve_alike() {
     const INNER: &str = "pub let x : Type = Type;";
 
     let mut supplied = RootSource::supplied();
-    supplied.insert_root(["pkg"], RootKind::Ordinary, HEADER.parse().unwrap());
+    supplied.insert_root("pkg", RootKind::Ordinary, HEADER.parse().unwrap());
     supplied.insert_module(Qualifier::from(["pkg", "Inner"]), INNER.parse().unwrap());
 
     let base = temp_dir("supplied-versus-disk");
     write_module(&base, "pkg.crs", HEADER);
     write_module(&base, "pkg/Inner.crs", INNER);
     let disk = RootSource::mounted(
-        Qualifier::from(["pkg"]),
+        "pkg",
         RootKind::Ordinary,
         base.join("pkg.crs"),
         base.join("pkg"),

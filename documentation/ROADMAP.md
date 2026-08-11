@@ -228,7 +228,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [ ] Terminal REPL
   - [ ] Language server (hover, go-to-definition, highlighting)
   - [x] Package manager (a manifest of exactly pinned dependencies — an opaque `rev` to fetch, a `c1:` hash to accept — resolved to bytes by a resolver rather than a path, topologically ordered, with a conflict refused naming both dependents and `curate` as the toolchain's only network actor over the two-layer content-addressed store; and the unit cache that makes depending on a package affordable — keyed on its terms and its certifier, never on a path)
-  - [x] Project manifest & discovery (identity is declared once: a package names itself with an atomic multi-segment name and every consumer refers to it by that name, which is what makes a diamond share instead of duplicate; a manifest is exclusively a package or an umbrella; and discovery is decided — project scope is reachable only through declared artifacts, so a bare `.crs` file stays standalone everywhere)
+  - [x] Project manifest & discovery (identity is declared once: a package names itself with a single-word name and every consumer refers to it by that name, which is what makes a diamond share instead of duplicate; a manifest is exclusively a package or an umbrella; and discovery is decided — project scope is reachable only through declared artifacts, so a bare `.crs` file stays standalone everywhere)
   - [x] `curios new` scaffolding (a package named after its directory, with a program or `--lib` a library; the name checked before anything is written, and what it writes is what the rest of the toolchain already reads)
   - [ ] Linter
   - [ ] Test runner

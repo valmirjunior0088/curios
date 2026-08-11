@@ -8,7 +8,7 @@
 mod tests;
 
 use {
-    crate::{Executable, Governing, Package, order, spelling},
+    crate::{Executable, Governing, Package, order},
     curios_text::RootSource,
     std::path::{Path, PathBuf},
 };
@@ -97,7 +97,7 @@ fn named<'a>(package: &'a Package, name: &str) -> Result<&'a Executable, String>
         .ok_or_else(|| {
             format!(
                 "{:?} declares no executable named {name:?}{}",
-                spelling(&package.name),
+                package.name,
                 candidates(package)
             )
         })
@@ -113,11 +113,11 @@ fn sole(package: &Package) -> Result<&Executable, String> {
         [executable] => Ok(executable),
         [] => Err(format!(
             "{:?} declares no executable; `run` a `.crs` file by name, or declare one with `[[executables]]`",
-            spelling(&package.name)
+            package.name
         )),
         _ => Err(format!(
             "{:?} declares more than one executable and no `default`, so a bare `run` means nothing in particular{}",
-            spelling(&package.name),
+            package.name,
             candidates(package)
         )),
     }

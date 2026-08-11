@@ -8,10 +8,7 @@
 mod tests;
 
 use {
-    crate::{
-        Dependency, Governing, MANIFEST, Manifest, Package, TreeHash, package_source, spelling,
-    },
-    curios_base::Qualifier,
+    crate::{Dependency, Governing, MANIFEST, Manifest, Package, TreeHash, package_source},
     curios_text::RootSource,
     std::{
         collections::BTreeMap,
@@ -39,7 +36,7 @@ pub fn order(governing: &Governing) -> Result<Vec<RootSource>, String> {
 /// Each member's declared name, and the directory its manifest sits in.
 ///
 /// Read once, because every marker in the graph is answered against it: a `member` row asks whether this name is enumerated, and a direct pin asks the same question in order to be told it may not answer it itself.
-fn members(governing: &Governing) -> Result<BTreeMap<Qualifier, PathBuf>, String> {
+fn members(governing: &Governing) -> Result<BTreeMap<String, PathBuf>, String> {
     let Some(umbrella) = &governing.umbrella else {
         return Ok(BTreeMap::new());
     };
@@ -59,7 +56,7 @@ fn members(governing: &Governing) -> Result<BTreeMap<Qualifier, PathBuf>, String
         if let Some(earlier) = members.insert(package.name.clone(), directory.clone()) {
             return Err(format!(
                 "two members declare the name {:?}: {} and {}",
-                spelling(&package.name),
+                package.name,
                 earlier.display(),
                 directory.display()
             ));
@@ -73,11 +70,11 @@ fn members(governing: &Governing) -> Result<BTreeMap<Qualifier, PathBuf>, String
 struct Walk<'a> {
     governing: &'a Governing,
     /// The umbrella's members by declared name — empty when no umbrella governs, which is what makes every marker a mismatch there.
-    members: BTreeMap<Qualifier, PathBuf>,
+    members: BTreeMap<String, PathBuf>,
     /// Where each canonical name resolved, and who said so. Both halves are the conflict refusal.
-    placed: BTreeMap<Qualifier, Placed>,
+    placed: BTreeMap<String, Placed>,
     /// The names on the walk's own stack, which is the cycle.
-    open: Vec<Qualifier>,
+    open: Vec<String>,
     /// The fold order, predecessors first.
     order: Vec<RootSource>,
 }
@@ -88,7 +85,7 @@ struct Placed {
     /// The pin that fixed it, for a fetchable source. Live code has no pin, so two live rows agree only by resolving to one place.
     pin: Option<Pin>,
     /// The package whose manifest said so.
-    dependent: Qualifier,
+    dependent: String,
 }
 
 /// An exact pin: the instruction that fetches it, and the criterion that accepts it.
@@ -117,7 +114,7 @@ impl Walk<'_> {
         &mut self,
         dependent: &Package,
         from: &Path,
-        name: &Qualifier,
+        name: &str,
         row: &Dependency,
     ) -> Result<(), String> {
         // The pin is read off the row, before anything is located: two dependents disagreeing about one name is refused whether or not either has been materialized, which is what "before any of the three elaborates" has to mean.
@@ -130,15 +127,15 @@ impl Walk<'_> {
         };
 
         // Asked before anything else, because a name on the walk's own stack is a cycle *whether or not* it has already been placed. Checking it second let `b → c → b` past: `b` was placed on the way in, so the agreement branch below returned early and the walk emitted `c` before the `b` it depends on — a wrong fold order rather than a refusal, which is the shape a cycle takes when nobody looks for it.
-        if self.open.contains(name) {
+        if self.open.iter().any(|open| open == name) {
             return Err(format!(
                 "the dependencies cycle: {} depends on {:?} again",
                 self.open
                     .iter()
-                    .map(|open| format!("{:?}", spelling(open)))
+                    .map(|open| format!("{open:?}"))
                     .collect::<Vec<_>>()
                     .join(" depends on "),
-                spelling(name)
+                name
             ));
         }
 
@@ -149,11 +146,11 @@ impl Walk<'_> {
                     true => Ok(()),
                     false => Err(format!(
                         "the dependency {:?} is pinned two ways: {} by {:?}, and {} by {:?}",
-                        spelling(name),
+                        name,
                         describe(earlier_pin),
-                        spelling(&earlier.dependent),
+                        earlier.dependent,
                         describe(pin),
-                        spelling(&dependent.name)
+                        dependent.name
                     )),
                 };
             }
@@ -164,11 +161,11 @@ impl Walk<'_> {
                 true => Ok(()),
                 false => Err(format!(
                     "the dependency {:?} resolves two ways: {} by {:?}, and {} by {:?}",
-                    spelling(name),
+                    name,
                     earlier.directory.display(),
-                    spelling(&earlier.dependent),
+                    earlier.dependent,
                     directory.display(),
-                    spelling(&dependent.name)
+                    dependent.name
                 )),
             };
         }
@@ -176,7 +173,7 @@ impl Walk<'_> {
         let directory = self.locate(dependent, from, name, row)?;
 
         self.placed.insert(
-            name.clone(),
+            name.to_string(),
             Placed {
                 directory: directory.clone(),
                 pin,
@@ -187,18 +184,18 @@ impl Walk<'_> {
         let Manifest::Package(package) = Manifest::from_path(&directory.join(MANIFEST))? else {
             return Err(format!(
                 "the dependency {:?} resolves to {}, which declares an umbrella; a dependency is a package",
-                spelling(name),
+                name,
                 directory.display()
             ));
         };
 
         // A package names itself and every consumer refers to it by that name (law 2). A row keyed by anything else would be the consumer choosing the prefix, which is exactly what makes a diamond duplicate instead of share.
-        if &package.name != name {
+        if package.name != name {
             return Err(format!(
                 "the dependency {:?} resolves to {}, which declares itself {:?}; a package is referred to by the name it declares",
-                spelling(name),
+                name,
                 directory.display(),
-                spelling(&package.name)
+                package.name
             ));
         }
 
@@ -206,7 +203,7 @@ impl Walk<'_> {
         let Some(source) = self.enter(&package, &directory)? else {
             return Err(format!(
                 "the dependency {:?} resolves to {}, which has no library; there is nothing there to import",
-                spelling(name),
+                name,
                 directory.display()
             ));
         };
@@ -223,14 +220,10 @@ impl Walk<'_> {
         &self,
         dependent: &Package,
         from: &Path,
-        name: &Qualifier,
+        name: &str,
         row: &Dependency,
     ) -> Result<PathBuf, String> {
-        let subject = format!(
-            "the dependency {:?} of {:?}",
-            spelling(name),
-            spelling(&dependent.name)
-        );
+        let subject = format!("the dependency {:?} of {:?}", name, dependent.name);
 
         let directory = self.point(dependent, from, name, row, &subject)?;
 
@@ -244,7 +237,7 @@ impl Walk<'_> {
         &self,
         dependent: &Package,
         from: &Path,
-        name: &Qualifier,
+        name: &str,
         row: &Dependency,
         subject: &str,
     ) -> Result<PathBuf, String> {

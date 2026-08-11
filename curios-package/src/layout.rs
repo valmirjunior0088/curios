@@ -1,6 +1,6 @@
 //! How a package on disk becomes the unit the compiler lowers.
 //!
-//! [`curios_text::RootSource`] states the layout rule every header obeys — a header's namespace directory is its stem directory. **This module owns its one exception:** a package's library header sits beside the manifest, and its namespace directory is the manifest's, not `lib/`. That is forced by law 2, because directory names are semantics-free and so no stem on disk could mark the package root; the manifest is what names that namespace, so the manifest is what anchors it. `lib` therefore enters no qualified name, and `/myorg/json/parse/lexer` is `parse/lexer.crs` inside the package directory — a qualified name's tail and its path are the same string, and only the head maps to the manifest instead of to a spelled directory.
+//! [`curios_text::RootSource`] states the layout rule every header obeys — a header's namespace directory is its stem directory. **This module owns its one exception:** a package's library header sits beside the manifest, and its namespace directory is the manifest's, not `lib/`. That is forced by law 2, because directory names are semantics-free and so no stem on disk could mark the package root; the manifest is what names that namespace, so the manifest is what anchors it. `lib` therefore enters no qualified name, and `/json/parse/lexer` is `parse/lexer.crs` inside the package directory — a qualified name's tail and its path are the same string, and only the head maps to the manifest instead of to a spelled directory.
 //!
 //! The consequence enforced below is that **the package root has one stem space**: the library header holds a stem in it, so does every module that header enumerates, and so does every executable compiled from a file directly inside it. A stem claimed twice is a refusal naming both claimants (law 4).
 //!
@@ -49,7 +49,7 @@ pub fn package_source(package: &Package, directory: &Path) -> Result<Option<Root
     stems(package, &library)?;
 
     Ok(Some(RootSource::mounted(
-        package.name.clone(),
+        &package.name,
         RootKind::Ordinary,
         header,
         directory,

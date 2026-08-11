@@ -1,25 +1,22 @@
 use super::*;
 
-/// A binary nests under the package that declares it, segment by segment — so two members of one umbrella declaring `serve` cannot collide, and nothing has to refuse it.
+/// A binary nests under the package that declares it — so two members of one umbrella declaring `serve` cannot collide, and nothing has to refuse it.
 #[test]
 fn a_binary_nests_under_its_package() {
     let store = Store::at(PathBuf::from("/w/u"));
 
     assert_eq!(
-        store.bin(&Qualifier::from(["myorg", "json"]), "serve"),
-        PathBuf::from("/w/u/.curios/bin/myorg/json/serve")
+        store.bin("json", "serve"),
+        PathBuf::from("/w/u/.curios/bin/json/serve")
     );
-    assert_ne!(
-        store.bin(&Qualifier::from(["myorg", "json"]), "serve"),
-        store.bin(&Qualifier::from(["other"]), "serve")
-    );
+    assert_ne!(store.bin("json", "serve"), store.bin("other", "serve"));
 }
 
 /// The path inside `.curios/` does not depend on what encloses the package, so a binary does not move when its package joins an umbrella — only the root it hangs from changes.
 #[test]
 fn joining_an_umbrella_moves_only_the_root() {
-    let alone = Store::at(PathBuf::from("/w/json")).bin(&Qualifier::from(["json"]), "serve");
-    let enclosed = Store::at(PathBuf::from("/w/u")).bin(&Qualifier::from(["json"]), "serve");
+    let alone = Store::at(PathBuf::from("/w/json")).bin("json", "serve");
+    let enclosed = Store::at(PathBuf::from("/w/u")).bin("json", "serve");
 
     assert!(alone.ends_with(".curios/bin/json/serve"));
     assert!(enclosed.ends_with(".curios/bin/json/serve"));
@@ -43,7 +40,7 @@ fn the_families_do_not_share_a_namespace() {
     let store = Store::at(root.clone());
     let hash = TreeHash::parse(&format!("c1:{}", "b".repeat(64))).unwrap();
 
-    let binary = store.bin(&Qualifier::from(["c1"]), "tool");
+    let binary = store.bin("c1", "tool");
     let tree = store.src(&hash);
 
     assert!(!binary.starts_with(tree.parent().unwrap()));

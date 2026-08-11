@@ -10,8 +10,7 @@
 mod tests;
 
 use {
-    crate::{Dependency, Governing, MANIFEST, Manifest, Package, Store, TreeHash, spelling},
-    curios_base::Qualifier,
+    crate::{Dependency, Governing, MANIFEST, Manifest, Package, Store, TreeHash},
     std::{
         collections::{BTreeMap, BTreeSet},
         fmt, fs,
@@ -23,7 +22,7 @@ use {
 /// One pin to realize: where to get it, and what to accept.
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub struct Pin {
-    pub name: Qualifier,
+    pub name: String,
     pub url: String,
     pub rev: String,
     pub hash: TreeHash,
@@ -31,13 +30,7 @@ pub struct Pin {
 
 impl fmt::Display for Pin {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            formatter,
-            "{} from {} at {}",
-            spelling(&self.name),
-            self.url,
-            self.rev
-        )
+        write!(formatter, "{} from {} at {}", self.name, self.url, self.rev)
     }
 }
 
@@ -109,7 +102,7 @@ fn pins(governing: &Governing) -> Result<BTreeSet<Pin>, String> {
 }
 
 /// Where a marker points, when the umbrella that answers it says so.
-fn reachable(governing: &Governing, name: &Qualifier, row: &Dependency) -> Option<PathBuf> {
+fn reachable(governing: &Governing, name: &str, row: &Dependency) -> Option<PathBuf> {
     let umbrella = governing.umbrella.as_ref()?;
 
     match row {
@@ -125,7 +118,7 @@ fn reachable(governing: &Governing, name: &Qualifier, row: &Dependency) -> Optio
             .find(|directory| {
                 matches!(
                     Manifest::from_path(&directory.join(MANIFEST)),
-                    Ok(Manifest::Package(package)) if &package.name == name
+                    Ok(Manifest::Package(package)) if package.name == name
                 )
             }),
     }
@@ -179,10 +172,7 @@ fn accept(scratch: &Path, store: &Store, pin: &Pin) -> Result<(), String> {
     if delivered != pin.hash {
         return Err(format!(
             "the dependency {:?} was fetched from {} at {}, and what arrived is not what it is pinned to\n  expected {}\n  delivered {delivered}",
-            spelling(&pin.name),
-            pin.url,
-            pin.rev,
-            pin.hash
+            pin.name, pin.url, pin.rev, pin.hash
         ));
     }
 
@@ -250,7 +240,7 @@ pub fn reconcile(governing: &Governing) -> Result<Vec<String>, String> {
             if !referenced.contains(name) {
                 reports.push(format!(
                     "the catalog entry {:?} is referenced by no member, so nothing materializes it — activation lives in the package that names it",
-                    spelling(name)
+                    name
                 ));
             }
         }

@@ -30,11 +30,11 @@ fn witnesses_sharing_a_module_stay_distinct() {
 #[test]
 fn one_ordinal_under_two_mounts_is_two_witnesses() {
     let here = Global::Witness(WitnessId::new(Qualifier::from(["std"]), 0));
-    let there = Global::Witness(WitnessId::new(Qualifier::from(["myorg", "json"]), 0));
+    let there = Global::Witness(WitnessId::new(Qualifier::from(["json"]), 0));
 
     assert_ne!(here, there);
     assert_eq!(here.to_string(), "/std/witness@0");
-    assert_eq!(there.to_string(), "/myorg/json/witness@0");
+    assert_eq!(there.to_string(), "/json/witness@0");
 }
 
 // A global and a local are different kinds of thing, not two spellings — the distinction `has_local_free` used to draw by testing for a marker character, and which a marker collision has already broken once.

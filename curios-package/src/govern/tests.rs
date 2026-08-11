@@ -1,6 +1,5 @@
 use {
     super::*,
-    curios_base::Qualifier,
     std::{
         fs,
         time::{SystemTime, UNIX_EPOCH},
@@ -40,7 +39,7 @@ fn a_lone_package_governs_itself() {
 
     let governing = Governing::of(&root).expect("a package governs the directory it is in");
 
-    assert_eq!(governing.package.name, Qualifier::from(["json"]));
+    assert_eq!(governing.package.name, "json");
     assert!(governing.umbrella.is_none());
     assert!(same_directory(&governing.root, &root));
 
@@ -62,7 +61,7 @@ fn a_subdirectory_is_governed_by_the_package_above_it() {
     let governing =
         Governing::of(&root.join("parse")).expect("the package above the working directory");
 
-    assert_eq!(governing.package.name, Qualifier::from(["json"]));
+    assert_eq!(governing.package.name, "json");
 
     fs::remove_dir_all(root).unwrap();
 }
@@ -85,7 +84,7 @@ fn an_umbrella_governs_a_member_it_enumerates() {
     for (member, name) in [("json", "json"), ("tools/cli", "cli")] {
         let governing = Governing::of(&root.join(member)).expect("an enumerated member");
 
-        assert_eq!(governing.package.name, Qualifier::from([name]));
+        assert_eq!(governing.package.name, name);
         assert!(governing.umbrella.is_some(), "{member} is enumerated");
         assert!(same_directory(&governing.root, &root), "{member}");
     }
