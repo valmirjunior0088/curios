@@ -12,7 +12,7 @@ fn authored(segments: [&str; 2]) -> Global {
 #[test]
 fn a_witness_is_not_the_definition_named_after_its_module() {
     let module_definition = authored(["std", "Nat"]);
-    let witness_declared_there = Global::Witness(WitnessId(0));
+    let witness_declared_there = Global::Witness(WitnessId::new(Qualifier::from(["std"]), 0));
 
     assert_ne!(module_definition, witness_declared_there);
 }
@@ -20,9 +20,21 @@ fn a_witness_is_not_the_definition_named_after_its_module() {
 // Two witnesses in one module are distinct without either carrying a manufactured name to tell them apart. `/std/Nat` declares nine `satisfy` blocks, which is the situation that forced the `witness@N` spelling.
 #[test]
 fn witnesses_sharing_a_module_stay_distinct() {
-    let witnesses = (0..9).map(|n| Free::Global(Global::Witness(WitnessId(n))));
+    let mount = Qualifier::from(["std"]);
+    let witnesses = (0..9).map(|n| Free::Global(Global::Witness(WitnessId::new(mount.clone(), n))));
 
     assert_eq!(witnesses.collect::<HashSet<_>>().len(), 9);
+}
+
+// The collision B1 exists to remove: two units elaborated in separate compilations both mint from zero, so the ordinal alone cannot tell their witnesses apart. The mount is what does.
+#[test]
+fn one_ordinal_under_two_mounts_is_two_witnesses() {
+    let here = Global::Witness(WitnessId::new(Qualifier::from(["std"]), 0));
+    let there = Global::Witness(WitnessId::new(Qualifier::from(["json"]), 0));
+
+    assert_ne!(here, there);
+    assert_eq!(here.to_string(), "/std/witness@0");
+    assert_eq!(there.to_string(), "/json/witness@0");
 }
 
 // A global and a local are different kinds of thing, not two spellings — the distinction `has_local_free` used to draw by testing for a marker character, and which a marker collision has already broken once.

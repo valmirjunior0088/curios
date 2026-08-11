@@ -97,8 +97,13 @@ mod tests {
         curios_core::Global,
         curios_core::Item,
         curios_core::Term,
-        curios_elab::DEFAULT_STEP_BUDGET,
-        std::collections::{BTreeMap, BTreeSet},
+        curios_core::derived_binder_floor,
+        curios_elab::{Context, DEFAULT_STEP_BUDGET, ErasedUnit, Resumed, erase_unit},
+        std::{
+            collections::{BTreeMap, BTreeSet},
+            thread,
+            time::Instant,
+        },
     };
 
     #[test]
@@ -314,6 +319,128 @@ mod tests {
                     DEFAULT_STEP_BUDGET,
                     &Globals::default()
                 ),
+            );
+        });
+    }
+
+    /// Every figure the projects specification's appendix leans on, taken over the stored image.
+    ///
+    /// # Why it is in-tree
+    ///
+    /// That appendix exists because two items in a predecessor document were designed against unattributed numbers and both were wrong — a 471 ms eager restore that is 34.4 ms, and an estimated 60–70 s saving on an operation that takes 11.8 s. Its own remedy was to record the date, the profile, and how to retake each figure; but "how to retake it" was a throwaway probe nobody kept, so retaking meant writing it again, and a figure nobody can cheaply reproduce is a figure that quietly decays into a claim about history. This is that probe, kept.
+    ///
+    /// # How to read it
+    ///
+    /// Numbers are only comparable to the recorded ones in `--release`, because these are the figures taken over the *stored* image and a debug build measures a different program:
+    ///
+    /// ```sh
+    /// cargo test --release --package curios-prelude-archive -- --ignored --nocapture stored_prelude_measurements
+    /// ```
+    ///
+    /// It asserts nothing and cannot fail — a measurement that fails is a measurement with an opinion. What it does not cover is stated where it prints: the elaboration figures come from the build script's own `profile.tsv` and need no probe, and the witness inventory is a term walk this does not do.
+    ///
+    /// # What it last printed
+    ///
+    /// Taken **2026-08-10**, **release**, immediately after the erased arena gained its compaction pass. Kept here rather than in a document that cites this test, so a number cannot drift from the thing that would check it.
+    ///
+    /// | What | Measured | Against |
+    /// | --- | --- | --- |
+    /// | Cold restore — bytecheck, then deserializing the prepared Text state, the Core and the erased prefix | 34.1–35.3 ms | 34.4 ms — confirmed |
+    /// | Erased-prefix clone, taken once per compile | 2.0–2.1 ms, mean of 100 | 1.4 ms — see below |
+    /// | Re-erasing one whole unit over the stored Core | 661–682 ms | 608 ms — up, partly spread |
+    /// | Certifying one whole unit, from an empty environment | 11.9–12.0 s, 0 refusals | 11.8 s — confirmed |
+    ///
+    /// Shape, same run: 1091 items and 1107 definitions; 75 witnesses; 31 inductives, 47 structures, 14 concepts; `derived_binder_floor` **0** against a lowering watermark of 6748.
+    ///
+    /// **Ranges, not points**, because those are two runs and the spread between them is part of what the figure is: the re-erasure alone moved 21 ms between consecutive readings, which is half of what separates it from the number it replaces. Nobody should read 608 → 682 as a 12% regression on that evidence.
+    ///
+    /// **The clone's old figure was a single sample, and that was the defect.** Taken once the same way it read 3.7 ms, which would have looked like a 2.6× regression from the compaction pass; averaged over 100 it is 2.0 ms. At one-to-four milliseconds the noise band swallows the signal, which is why this one is averaged and the others are not. The 1.4 ms it replaces was never wrong so much as never repeated.
+    ///
+    /// **The certification figure was owed a retake and got one.** It was taken before the kernel's level substitution changed, and the kernel calls it — so the doubt was right to raise, and the answer is that nothing moved. Roughly twelve seconds is what a whole-unit certification costs, and it is the number the caching half is designed against.
+    #[test]
+    #[ignore = "measurement: reports timings over the stored image rather than asserting"]
+    fn stored_prelude_measurements() {
+        // A restore happens once per thread, so a *cold* one needs a thread that has not had one — measuring it on this thread would measure a thread-local read.
+        let cold = thread::spawn(|| {
+            let start = Instant::now();
+            with_prelude(|_| ());
+
+            start.elapsed()
+        })
+        .join()
+        .expect("the restoring thread");
+
+        with_prelude(|prelude| {
+            let core = prelude.core();
+
+            // Averaged, because a single shot at this magnitude is not a measurement: the other three take long enough that one sample says something, and this one does not.
+            const CLONES: u32 = 100;
+            let start = Instant::now();
+            for _ in 0..CLONES {
+                drop(prelude.ersd());
+            }
+            let clone = start.elapsed() / CLONES;
+
+            let start = Instant::now();
+            erase_unit(
+                &mut Context::new(DEFAULT_STEP_BUDGET, SYNTAX),
+                Resumed::of(&[], ErasedUnit::default()),
+                core,
+                None,
+            )
+            .expect("the stored prelude re-erases");
+            let erasure = start.elapsed();
+
+            let start = Instant::now();
+            let verdicts = recheck_module_verdicts(core, DEFAULT_STEP_BUDGET, &Globals::default());
+            let certification = start.elapsed();
+
+            let definitions: usize = core
+                .items
+                .iter()
+                .map(|item| match item {
+                    Item::Let(_) => 1,
+                    Item::Rec(rec) => rec.definitions().len(),
+                })
+                .sum();
+
+            println!("\n=== timings, over the stored image ===");
+            println!("  cold restore                 {:>10.1?}", cold);
+            println!(
+                "  erased-prefix clone          {:>10.1?}   (mean of {CLONES})",
+                clone
+            );
+            println!("  re-erasing one whole unit    {:>10.1?}", erasure);
+            println!(
+                "  certifying one whole unit    {:>10.1?}  ({} refusals)",
+                certification,
+                verdicts.len()
+            );
+
+            println!("\n=== shape ===");
+            println!("  items                        {:>10}", core.items.len());
+            println!("  definitions                  {definitions:>10}");
+            println!(
+                "  witnesses                    {:>10}",
+                core.witnesses.len()
+            );
+            println!(
+                "  inductives                   {:>10}",
+                core.induct_decls.len()
+            );
+            println!(
+                "  structures                   {:>10}",
+                core.struct_decls.len()
+            );
+            println!("  concepts                     {:>10}", core.concepts.len());
+            println!(
+                "  derived binder floor         {:>10}   (lowering watermark {})",
+                derived_binder_floor(core),
+                core.binder_floor
+            );
+
+            println!(
+                "\nNot measured here: the elaboration figures, which the build script already writes to `OUT_DIR/profile.tsv` (retake with `cargo build --release --package curios-prelude --features profile`), and the witness inventory B1 needs, which is a term walk.\n"
             );
         });
     }

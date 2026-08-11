@@ -1,4 +1,4 @@
-use crate::{Entrypoint, Error, PreludeModules, RootSource};
+use crate::{Entrypoint, Error, RootSource};
 use curios_abi::{WireType, host_ops};
 use curios_base::{
     CharacterSyntax, ConceptField, LiftSyntax, MonadSyntax, OperatorSyntax, ProofSyntax, Qualifier,
@@ -169,7 +169,7 @@ fn run_err(src: &str) -> String {
 
 // Lower against the real prelude (so `sys` and `std` are served and rooted), returning only success/error — the lens for the internal-root gate.
 fn lower_with_prelude(src: &str) -> Result<(), String> {
-    let mut modules = PreludeModules::new();
+    let mut modules = RootSource::supplied();
     modules.insert_root("sys", RootKind::Internal, crate::sys_module(&host_ops()));
     modules.insert_root(
         "std",
@@ -1926,18 +1926,21 @@ fn use_glob_on_dual_existence_imports_once() {
     "#);
 }
 
+/// The entry is a header like any other, so its own modules live in its stem directory: `main.crs` declaring `mod A` reads `main/A.crs`, never a sibling `A.crs`.
 #[test]
-fn file_loader_prepares_sibling_modules_before_to_core() {
-    let base = temp_dir("sibling-order");
+fn the_entry_reads_its_modules_from_its_stem_directory() {
+    let base = temp_dir("stem-directory");
     write_module(
         &base,
-        "A.crs",
+        "main/A.crs",
         r#"
             use /B/{x};
             pub let y : Type = x;
         "#,
     );
-    write_module(&base, "B.crs", "pub let x : Type = Type;");
+    write_module(&base, "main/B.crs", "pub let x : Type = Type;");
+    // A sibling of the entry, which nothing may resolve to now that one rule governs every file.
+    write_module(&base, "A.crs", "pub let wrong : Type = Type;");
 
     let entrypoint = r#"
             pub mod A;
@@ -1946,7 +1949,7 @@ fn file_loader_prepares_sibling_modules_before_to_core() {
         "#
     .parse::<Entrypoint>()
     .unwrap();
-    let loader = RootSource::file_system(base.clone());
+    let loader = RootSource::entry(&base.join("main.crs"));
 
     super::into_core(&entrypoint, &loader, syntax()).unwrap();
 
@@ -1967,6 +1970,44 @@ fn file_backed_module_missing_from_loader_is_module_not_found() {
         Error::Located { error, .. }
             if matches!(error.as_ref(), Error::ModuleNotFound { path } if path == "/A")
     ));
+}
+
+/// A source that is not a directory resolves, and resolves to the same unit one that is does.
+///
+/// The whole resolver contract is a qualifier in and a module out, and nothing above it may assume a filesystem: `curios-web` supplies every body inline and compiles with none at all, and a package fetched from anywhere arrives as bytes somebody else placed. So the two bases are written here against one another rather than each against itself — one of them being wrong is the interesting failure, not either of them being broken.
+#[test]
+fn a_supplied_source_and_a_directory_resolve_alike() {
+    const HEADER: &str = "pub mod Inner;";
+    const INNER: &str = "pub let x : Type = Type;";
+
+    let mut supplied = RootSource::supplied();
+    supplied.insert_root("pkg", RootKind::Ordinary, HEADER.parse().unwrap());
+    supplied.insert_module(Qualifier::from(["pkg", "Inner"]), INNER.parse().unwrap());
+
+    let base = temp_dir("supplied-versus-disk");
+    write_module(&base, "pkg.crs", HEADER);
+    write_module(&base, "pkg/Inner.crs", INNER);
+    let disk = RootSource::mounted(
+        "pkg",
+        RootKind::Ordinary,
+        base.join("pkg.crs"),
+        base.join("pkg"),
+    );
+
+    let names = |source: &RootSource| {
+        super::prepare_prelude(source, syntax())
+            .expect("a mounted unit lowers")
+            .core()
+            .items
+            .iter()
+            .map(curios_core::Item::describe)
+            .collect::<Vec<_>>()
+    };
+
+    assert_eq!(names(&supplied), vec!["/pkg/Inner/x".to_string()]);
+    assert_eq!(names(&supplied), names(&disk));
+
+    fs::remove_dir_all(base).unwrap();
 }
 
 #[test]

@@ -236,18 +236,39 @@ pub fn compile_unit(
     Ok(Unit::new(lowered, core, ersd, binder_floor))
 }
 
+/// Where a judged unit is kept between compilations.
+///
+/// Declared here and implemented in `curios-package`, because the fold is what consults one and this crate must never learn what a project is. What crosses the boundary is a unit — never a path, never a manifest, and never a key this crate would have to know how to build.
+///
+/// **A unit handed back is one that was judged when it was recorded, and taking it is taking that on trust.** That is a change to what the compiler believes rather than an optimization of what it does, which is why the argument for it lives in [SOUNDNESS.md](../../documentation/SOUNDNESS.md) under *Cached verdicts* rather than here: the implementation chooses the key, and the key is the whole of what the argument rests on.
+pub trait Cache {
+    /// The unit already recorded for `source`, if one is.
+    fn get(&self, source: &UnitSource<'_>) -> Option<Unit>;
+
+    /// Record what `source` compiled to. Best effort — a store that cannot be written costs the next compilation the work, and nothing else.
+    fn put(&self, source: &UnitSource<'_>, unit: &Unit);
+}
+
 /// Compile `sources` in dependency order, each against `base` and everything before it — the fold this whole design is named for.
 ///
 /// Returns the units it produced, not the ones it was given: the caller owns `base` and this cannot take it. A scope is rebuilt per step from pointers to both, which is free.
+///
+/// A `cache` short-circuits the step entirely: a recorded unit was judged when it was recorded, so neither elaboration nor the kernel re-runs for it. `None` compiles everything, which is what every caller without a project does.
 pub fn compile_units<'a>(
     budget: u64,
     base: Scope<'a>,
     syntax: &SyntaxRegistry,
     sources: &[UnitSource<'_>],
+    cache: Option<&dyn Cache>,
 ) -> Result<Vec<Unit>, CompileError> {
     let mut produced: Vec<Unit> = Vec::new();
 
     for source in sources {
+        if let Some(unit) = cache.and_then(|cache| cache.get(source)) {
+            produced.push(unit);
+            continue;
+        }
+
         let scope = base
             .units()
             .iter()
@@ -256,6 +277,11 @@ pub fn compile_units<'a>(
             .collect::<Vec<_>>();
 
         let unit = compile_unit(budget, Scope::over(&scope), syntax, source)?;
+
+        if let Some(cache) = cache {
+            cache.put(source, &unit);
+        }
+
         produced.push(unit);
     }
 

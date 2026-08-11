@@ -8,18 +8,44 @@
 mod tests;
 
 use {
-    curios_base::{Qualifier, id, name},
+    curios_base::{Qualifier, name},
     std::{cmp::Ordering, fmt, hash},
 };
 
 name!(Atom; archive);
 
-id!(WitnessId, "witness"; archive);
+/// A witness's identity: the mount that declares it, and its ordinal within that mount.
+///
+/// **Not a program-global counter, and that is the point.** Two units elaborated in separate compilations both mint from zero, so a bare ordinal means something only in the compilation that assigned it — the positional identity a stored unit may not carry, and the last of the four classes to be scoped. Pairing the ordinal with its declaring mount makes two witnesses disjoint by the same argument mount disjointness carries everywhere else, so restoring two independently compiled units together cannot alias one onto the other.
+///
+/// It is also what removes the floor. A counter seeded above the archived prelude's watermark tied a unit's identities to *where it sat*; per-mount ordinals depend on nothing but the unit itself.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[curios_archive::archived]
+#[cfg_attr(
+    feature = "archive",
+    rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))
+)]
+pub struct WitnessId {
+    mount: Qualifier,
+    ordinal: u32,
+}
 
 impl WitnessId {
-    /// A witness identity at `index`. Minted by `into_core` from one program-global counter, seeded above the archived prelude's floor.
-    pub fn new(index: u32) -> Self {
-        Self(index)
+    /// The `ordinal`th witness declared under `mount`.
+    pub fn new(mount: Qualifier, ordinal: u32) -> Self {
+        Self { mount, ordinal }
+    }
+
+    /// The mount that declares it.
+    pub fn mount(&self) -> &Qualifier {
+        &self.mount
+    }
+}
+
+impl fmt::Display for WitnessId {
+    /// Mount-qualified — which is the spelling two of this workspace's diagnostics already used while the identity behind it was still a bare counter.
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "{}/witness@{}", self.mount.join(), self.ordinal)
     }
 }
 
@@ -94,7 +120,7 @@ pub enum Global {
     Authored(Qualifier),
     /// A `satisfy` declaration. Witnesses are anonymous by design, so this is an identity rather than a manufactured name; the declaring module a diagnostic reports comes from `Definition::island`.
     ///
-    /// The identity is minted from one program-global counter, seeded above the archived prelude's floor — see `PreparedPrelude::witness_floor`. Nothing else distinguishes two witnesses, so a per-module ordinal would not do: aliasing one would silently rebind a coherence-table entry.
+    /// The identity is the declaring mount and an ordinal within it — see [`WitnessId`]. Nothing else distinguishes two witnesses, which is why the mount has to be part of it: two units minting bare ordinals from zero would alias, and aliasing one would silently rebind a coherence-table entry.
     Witness(WitnessId),
 }
 

@@ -4,7 +4,6 @@ use {
     curios_pipeline::Stage,
     curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},
-    std::path::Path,
 };
 
 #[test]
@@ -146,11 +145,11 @@ fn bang_std_parse_threads_bangs_left_to_right() {
         end
         "#;
 
-    let base = Path::new(env!("CARGO_MANIFEST_DIR"));
     let entrypoint = source
         .parse::<Entrypoint>()
         .expect("failed to parse source");
-    let loader = RootSource::file_system(base.to_path_buf());
+    // These fixtures declare no file-backed module, so the resolver has nothing to answer for.
+    let loader = RootSource::none();
 
     let (system, io) = MockHost::builder().build();
     crate::run_entrypoint(&entrypoint, loader, system).expect("expected result");
@@ -178,11 +177,11 @@ fn bang_region_mixes_action_types() {
         end
         "#;
 
-    let base = Path::new(env!("CARGO_MANIFEST_DIR"));
     let entrypoint = source
         .parse::<Entrypoint>()
         .expect("failed to parse source");
-    let loader = RootSource::file_system(base.to_path_buf());
+    // These fixtures declare no file-backed module, so the resolver has nothing to answer for.
+    let loader = RootSource::none();
 
     let (system, io) = MockHost::builder().build();
     crate::run_entrypoint(&entrypoint, loader, system).expect("expected result");

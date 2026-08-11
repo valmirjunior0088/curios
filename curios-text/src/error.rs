@@ -26,10 +26,16 @@ pub enum Error {
     InternalRootModule {
         segment: String,
     },
-    /// Two units claim one prefix, or a unit claims a prefix the entry program already declares as a module. Both are the same collision seen from either side, and both name every claimant: a reader has to know which two things to change, and only the mount table knows both.
+    /// Two claimed prefixes are not disjoint: the same prefix twice, one lying inside the other's subtree, or a prefix the entry program already declares as a module. All are the same collision seen from a different side, and all name both parties — a reader has to know which two things to change, and only the mount table knows both.
+    ///
+    /// A prefix *is* a package's canonical name, so naming the prefixes is naming the packages.
     MountCollision {
-        prefix: String,
-        claimants: Vec<String>,
+        /// What the unit being compiled claims, and how it claims it.
+        claim: String,
+        /// The prefix already claimed that the claim is not disjoint from.
+        claimed: String,
+        /// Who claims it.
+        claimant: String,
     },
     BindingNotFound {
         binding: String,
@@ -144,10 +150,13 @@ impl fmt::Display for Error {
                 f,
                 "`{segment}` is internal to the standard library; use the corresponding `/std` module"
             ),
-            Error::MountCollision { prefix, claimants } => write!(
+            Error::MountCollision {
+                claim,
+                claimed,
+                claimant,
+            } => write!(
                 f,
-                "`{prefix}` is claimed by {}; a prefix belongs to exactly one unit",
-                claimants.join(" and ")
+                "{claim} collides with `{claimed}`, claimed by {claimant}; a prefix belongs to exactly one unit, and no claimed prefix may lie within another's subtree"
             ),
             Error::BindingNotFound { binding } => write!(f, "binding not found: {binding}"),
             Error::PrivateBinding { binding } => write!(f, "private binding: {binding}"),

@@ -14,7 +14,7 @@ pub fn compile_with_prelude<O>(
 where
     O: FnMut(curios_pipeline::Stage<'_>),
 {
-    compile_with_units(budget, &[], entrypoint, loader, observe)
+    compile_with_units(budget, &[], entrypoint, loader, None, observe)
 }
 
 /// Compile `units` in the order given, then `entrypoint` against all of them and the prelude.
@@ -22,9 +22,10 @@ where
 /// The order *is* the dependency order — there is no manifest yet to derive one from, and none is invented here. A unit naming a prefix mounted after it fails as an unbound name, which is what a positional order costs and what Phase C's declared dependencies replace.
 pub fn compile_with_units<O>(
     budget: u64,
-    units: &[curios_text::PreludeModules],
+    units: &[curios_text::RootSource],
     entrypoint: &curios_text::Entrypoint,
     loader: curios_text::RootSource,
+    cache: Option<&dyn curios_pipeline::Cache>,
     observe: O,
 ) -> Result<(curios_wasm::Module, curios_abi::ForeignStore), curios_pipeline::CompileError>
 where
@@ -33,13 +34,14 @@ where
     curios_prelude::with_prelude(|prelude| {
         let sources = units
             .iter()
-            .map(curios_text::UnitSource::Mounted)
+            .map(curios_text::UnitSource::mounted)
             .collect::<Vec<_>>();
         let produced = curios_pipeline::compile_units(
             budget,
             curios_unit::Scope::over(from_ref(&prelude)),
             &curios_prelude::SYNTAX,
             &sources,
+            cache,
         )?;
         let scope = std::iter::once(prelude)
             .chain(produced.iter())
@@ -102,58 +104,6 @@ pub(crate) fn run_entrypoint<H: curios_runtime::HostOps + Send + Sync + 'static>
     run_wasm(&module, host, curios_runtime::ForeignBindings::empty()).map(|_| ())
 }
 
-/// Load a unit mounted at `prefix` from `path`, materializing its whole module tree.
-///
-/// A mounted unit's modules arrive as a map rather than through a loader, because discovery of a unit already in scope has no file system to reach — `curios-web` supplies every body inline and compiles with none at all. So the tree is walked eagerly here, at the one boundary that does have a file system: `mod foo;` inside `lib.crs` reads `lib/foo.crs`, exactly as the entry program's own file-backed modules resolve.
-pub fn load_unit(prefix: &str, path: &Path) -> Result<curios_text::PreludeModules, String> {
-    fn materialize(
-        modules: &mut curios_text::PreludeModules,
-        module: &curios_text::Module,
-        at: &curios_base::Qualifier,
-        base: &Path,
-    ) -> Result<(), String> {
-        for item in &module.items {
-            let curios_text::TopItem::Mod(declaration) = item else {
-                continue;
-            };
-            let here = at.with(&declaration.label);
-
-            let child = match &declaration.module {
-                // Written inline: discovery reads it out of the parent, so nothing is loaded.
-                Some(_) => continue,
-                None => {
-                    let file = base.join(format!("{}.crs", declaration.label));
-                    curios_text::Module::from_path(&file)
-                        .map_err(|error| format!("{}: {error:?}", file.display()))?
-                }
-            };
-
-            materialize(modules, &child, &here, &base.join(&declaration.label))?;
-            modules.insert_module(here, child);
-        }
-
-        Ok(())
-    }
-
-    let root = curios_text::Module::from_path(path)
-        .map_err(|error| format!("{}: {error:?}", path.display()))?;
-    let directory = path
-        .parent()
-        .unwrap_or(Path::new("."))
-        .join(path.file_stem().unwrap_or_default());
-
-    let mut modules = curios_text::PreludeModules::new();
-    materialize(
-        &mut modules,
-        &root,
-        &curios_base::Qualifier::from([prefix]),
-        &directory,
-    )?;
-    modules.insert_root(prefix, curios_base::RootKind::Ordinary, root);
-
-    Ok(modules)
-}
-
 /// Lower and type-check `entrypoint` against the fixed prelude, reporting the erasure obligations rather than raising them. See [`curios_pipeline::typecheck_reporting`].
 pub fn typecheck_with_prelude(
     budget: u64,
@@ -197,11 +147,9 @@ pub(crate) fn run_text<H: curios_runtime::HostOps + Send + Sync + 'static>(
     run_entrypoint(&entrypoint, curios_text::RootSource::none(), host)
 }
 
-/// Open a `.crs` entrypoint at `path`, paired with a [`curios_text::RootSource::file_system`] rooted at its parent directory — the standard way to resolve a program's imports relative to the file it lives in.
+/// Open a `.crs` entrypoint at `path`, paired with the [`curios_text::RootSource::entry`] its own stem directory anchors — a bare file is a header like any other, so `mod util` in `main.crs` reads `main/util.crs`.
 pub fn load(path: &Path) -> Result<(curios_text::Entrypoint, curios_text::RootSource), String> {
     let entrypoint = curios_text::Entrypoint::from_path(path).map_err(|error| error.format())?;
-    let loader =
-        curios_text::RootSource::file_system(path.parent().unwrap_or(Path::new(".")).to_path_buf());
 
-    Ok((entrypoint, loader))
+    Ok((entrypoint, curios_text::RootSource::entry(path)))
 }

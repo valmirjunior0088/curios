@@ -19,6 +19,7 @@ mod mutation;
 mod network;
 mod numeric;
 mod operators;
+mod packages;
 mod perimeter;
 mod plicity;
 mod positivity;

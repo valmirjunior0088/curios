@@ -1,0 +1,23 @@
+[package]
+name = "curios-package"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Curios packages: the manifest, the governance walk, the dependency resolver, and the store"
+
+[lints]
+workspace = true
+
+# The workspace's only TOML dependency, on the pattern `curios-archive` sets for rkyv: one crate
+# owns the format, its pin and its error shape, so nothing else can pick a second one. `/std`'s
+# TOML codec is a guest library — it runs in the compiled program — and cannot serve the driver.
+[dependencies]
+curios-base = { workspace = true }
+curios-text = { workspace = true }
+sha2 = "0.11.0"
+serde = { version = "1.0.228", features = ["derive"] }
+toml = { version = "0.9.12", default-features = false, features = [
+    "parse",
+    "serde",
+    "std",
+] }

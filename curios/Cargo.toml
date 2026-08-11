@@ -24,7 +24,9 @@ curios-cert = { workspace = true }
 curios-core = { workspace = true }
 curios-pipeline = { workspace = true }
 curios-prelude = { workspace = true }
-curios-unit = { workspace = true }
+curios-package = { workspace = true }
+curios-archive = { workspace = true, features = ["enabled"] }
+curios-unit = { workspace = true, features = ["archive"] }
 curios-binaryen = { workspace = true }
 curios-runtime = { workspace = true }
 # Named nowhere in code: this row is the switch that turns Cranelift on for the shared runtime engine, which is what gives `to_cwasm` a `precompile_module` to call.

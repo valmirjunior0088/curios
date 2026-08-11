@@ -33,7 +33,7 @@ use {
     },
     curios_abi::{WireLeaf, WireSignature, WireType},
     curios_base::{
-        Flt, Grain, NumOp, Plicity, Qualifier, Span,
+        Flt, Grain, NumOp, Plicity, Qualifier, Span, is_identifier_char, is_keyword,
         parser::{
             Parser, catch, fail, lazy, many0, many1, mark, memoize, not_ahead, preceded_by_space,
             pure, sep_by0_trailing, sep_by1, sep_by1_trailing, spanned, take_exact, take_n,
@@ -44,13 +44,6 @@ use {
     num_traits::{ToPrimitive, Zero},
     std::{cell::RefCell, collections::BTreeMap, iter},
 };
-
-const CHARACTERS: &[char] = &['_'];
-
-const KEYWORDS: &[&str] = &[
-    "let", "match", "choose", "rec", "mod", "use", "pub", "end", "false", "true", "induct",
-    "struct", "foreign",
-];
 
 thread_local! {
     /// Every comment the current parse run has consumed, keyed by start offset — recorded by [`parse_whitespace`], the single place comments die, and drained by the `parse_with_comments` entries. The packrat-memo pattern: per-thread and cleared per run, so runs never see each other's comments. Offset keying makes re-recording under backtracking idempotent, and memoized jumps that skip re-running whitespace are harmless because the cache-miss run already recorded.
@@ -99,11 +92,9 @@ fn parse_literal<'a>(expected: &'static str) -> Parser<'a, ()> {
 
 // The identifier characters alone, consuming no whitespace — the building block of the tight (whitespace-free) positions like a `Bits`/`Bytes` literal's `\..` spread operand.
 fn parse_identifier_raw<'a>() -> Parser<'a, &'a str> {
-    take_while(|char| CHARACTERS.contains(&char) || char.is_alphanumeric()).flat_map(|identifier| {
-        match identifier.is_empty() {
-            true => fail("Expected identifier"),
-            false => pure(identifier),
-        }
+    take_while(is_identifier_char).flat_map(|identifier| match identifier.is_empty() {
+        true => fail("Expected identifier"),
+        false => pure(identifier),
     })
 }
 
@@ -112,10 +103,7 @@ fn parse_identifier<'a>() -> Parser<'a, &'a str> {
 }
 
 fn name_from_segments<'a>(is_abs: bool, segments: Vec<String>) -> Parser<'a, Name> {
-    match segments
-        .iter()
-        .any(|segment| KEYWORDS.contains(&segment.as_str()))
-    {
+    match segments.iter().any(|segment| is_keyword(segment)) {
         true => fail(format!(
             "path '{}' contains a reserved keyword",
             segments.join("/")

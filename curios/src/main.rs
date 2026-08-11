@@ -1,4 +1,4 @@
-//! The `curios` CLI. Two modes: `run` compiles a `.crs` entrypoint and executes it in-process, forwarding the trailing arguments as the program's argv (input path as argv[0]) and its exit code as the process's; `compile` emits a self-contained native executable (the embedded launcher stub with the `.cwasm` payload appended). Argument parsing lives in `cli`, stage printing and file loading in `pipeline`, executable emission in `bundle` — this file only dispatches, mapping any error to stderr and a failure exit.
+//! The `curios` CLI. `run` compiles an entrypoint and executes it in-process, forwarding the trailing arguments as the program's argv (the entry path as argv[0]) and its exit code as the process's; `compile` emits a self-contained native executable (the embedded launcher stub with the `.cwasm` payload appended). Both take the same target three ways — no argument for the governing package's default executable, an identifier for one it declares, and a path for a bare `.crs` file — because what a bare invocation means inside a package should not depend on which subcommand asked. Argument parsing lives in `cli`, target resolution and stage printing in `pipeline`, executable emission in `bundle` — this file only dispatches, mapping any error to stderr and a failure exit.
 
 mod bundle;
 use bundle::*;
@@ -12,6 +12,7 @@ use pipeline::*;
 use {
     clap::Parser,
     curios::{run_wasm, to_cwasm},
+    curios_package::{Governing, materialize, reconcile, scaffold},
     curios_pipeline::CompileError,
     curios_runtime::{ForeignBindings, OsHost},
     curios_text::Formatted,
@@ -22,10 +23,7 @@ use {
 };
 
 #[cfg(feature = "profile")]
-use {
-    curios::{compile_with_units, load},
-    curios_profile::capture,
-};
+use curios_profile::capture;
 
 // Only the `profile` build installs it, so the ordinary CLI keeps the system allocator untouched and pays nothing for counters no mode would read.
 #[cfg(feature = "profile")]
@@ -58,19 +56,22 @@ fn dispatch() -> Result<(), Failure> {
         budget,
         print,
         units,
+        manifest,
         mode,
     } = Cli::parse();
 
     let print = print.unwrap_or_default();
 
     match mode {
-        Mode::Run { input_path, args } => {
-            let module = compile_file(budget, &print, &units, &input_path)?;
+        Mode::Run { target, args } => {
+            let target = resolve(target.as_deref(), manifest.as_deref())?;
+            let entry = target.entry().to_path_buf();
+            let module = compile_target(budget, &print, &units, target)?;
 
             let code = run_wasm(
                 &module,
                 OsHost::with_args(
-                    iter::once(input_path.to_string_lossy().into_owned().into_bytes())
+                    iter::once(entry.to_string_lossy().into_owned().into_bytes())
                         .chain(args.into_iter().map(String::into_bytes))
                         .collect(),
                 ),
@@ -82,25 +83,44 @@ fn dispatch() -> Result<(), Failure> {
             }
         }
         Mode::Compile {
-            input_path,
+            target,
             output_path,
         } => {
-            let output = output_path.unwrap_or_else(|| exe_output_path(&input_path));
+            let target = resolve(target.as_deref(), manifest.as_deref())?;
+            let entry = target.entry().to_path_buf();
+            let output = output_path.unwrap_or_else(|| target.output());
 
             // Nothing enforces a `.crs` extension, so an extensionless input's default output is the input itself — and `-o` can name it explicitly. Refuse before compiling rather than destroy the source.
-            if let (Ok(input), Ok(target)) = (input_path.canonicalize(), output.canonicalize())
-                && input == target
+            if let (Ok(input), Ok(written)) = (entry.canonicalize(), output.canonicalize())
+                && input == written
             {
                 return Err(Failure::Error(format!(
                     "refusing to overwrite the input {}",
-                    input_path.display()
+                    entry.display()
                 )));
             }
 
-            let module = compile_file(budget, &print, &units, &input_path)?;
+            let module = compile_target(budget, &print, &units, target)?;
             let cwasm = to_cwasm(&module)?;
 
             emit_exe(&cwasm, &output)?;
+        }
+        Mode::New { directory, lib } => {
+            scaffold(&directory, lib)?;
+
+            println!("started {}", directory.display());
+        }
+        Mode::Curate => {
+            let directory = std::env::current_dir().map_err(|error| error.to_string())?;
+            let governing = Governing::found(manifest.as_deref(), &directory)?;
+
+            for pin in materialize(&governing)? {
+                println!("fetched {pin}");
+            }
+
+            for report in reconcile(&governing)? {
+                println!("{report}");
+            }
         }
         Mode::Format { paths, check } => {
             // The formatter is pure and reports changedness in its result; whether a `Changed` verdict fails the run (`--check`) or rewrites the file is this loop's policy. The formatter refuses internally when its output would not reparse to the same program, so nothing corrupt is ever written.
@@ -124,10 +144,9 @@ fn dispatch() -> Result<(), Failure> {
         }
         #[cfg(feature = "profile")]
         Mode::Profile { input_path } => {
-            let (entrypoint, loader) = load(&input_path)?;
-            let (compilation, report) = capture(|| {
-                compile_with_units(budget, &load_units(&units)?, &entrypoint, loader, |_| {})
-            });
+            let scope = load_units(&units)?;
+            let (compilation, report) =
+                capture(|| compile_entry(budget, &print, scope, &input_path, None));
 
             println!(
                 "total_ms\tcalls\tmin_ms\tmax_ms\tretained_mb\tallocated_mb\tallocs\ttarget\tname\t(peak {:.1} MiB)",

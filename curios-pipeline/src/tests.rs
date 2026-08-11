@@ -2017,9 +2017,9 @@ fn compile_with_units(
     let parsed = sources
         .iter()
         .map(|(prefix, source)| {
-            let mut modules = curios_text::PreludeModules::new();
+            let mut modules = curios_text::RootSource::supplied();
             modules.insert_root(
-                *prefix,
+                prefix,
                 curios_base::RootKind::Ordinary,
                 source
                     .parse::<curios_text::Module>()
@@ -2033,13 +2033,14 @@ fn compile_with_units(
     with_prelude(|prelude| {
         let sources = parsed
             .iter()
-            .map(curios_text::UnitSource::Mounted)
+            .map(curios_text::UnitSource::mounted)
             .collect::<Vec<_>>();
         let produced = compile_units(
             DEFAULT_STEP_BUDGET,
             Scope::over(from_ref(&prelude)),
             &SYNTAX,
             &sources,
+            None,
         )?;
         let scope = std::iter::once(prelude)
             .chain(produced.iter())
@@ -2088,6 +2089,44 @@ fn an_entry_module_colliding_with_a_mount_is_diagnosed() {
     .expect_err("an entry cannot declare a module a unit already mounts");
 
     assert!(error.contains("lib"), "unexpected error: {error}");
+}
+
+/// A mount wins over the entry's empty prefix, which is the whole of what longest match decides now that a prefix is one segment: `/json/answer` is the mounted unit's, not a name the entry failed to declare.
+#[test]
+fn a_mount_wins_over_the_entrys_empty_prefix() {
+    compile_with_units(
+        &[("json", "pub let answer : /std/Nat = 42;")],
+        "/std/print(/std/Nat/to_str(/json/answer))",
+    )
+    .expect("a mounted prefix resolves");
+}
+
+/// Two mounted units are both reachable from one entry: the compilation root holds a child per mount, so neither shadows the other and the second does not replace the first.
+#[test]
+fn two_mounts_are_both_reachable() {
+    compile_with_units(
+        &[
+            ("json", "pub let a : /std/Nat = 1;"),
+            ("http", "pub let b : /std/Nat = 2;"),
+        ],
+        "/std/print(/std/Nat/to_str(/std/Nat/add(/json/a, /http/b)))",
+    )
+    .expect("two mounted packages");
+}
+
+/// An entry's `mod json` beside a mount at `/json` makes `/json/a` two answers, so the claim is refused naming both claimants. A prefix is one segment, so this is the only shape a collision has — but it is still decided here rather than surfacing later as an ordinary duplicate declaration, which would name the label without naming what else claimed it.
+#[test]
+fn a_prefix_claimed_twice_is_refused() {
+    let error = compile_with_units(
+        &[("json", "pub let a : /std/Nat = 1;")],
+        "mod json\n    pub let b : /std/Nat = 2;\nend\n/std/print(/std/Nat/to_str(0))",
+    )
+    .expect_err("an entry cannot declare a module a mount already claims");
+
+    assert!(
+        error.contains("mod json") && error.contains("/json"),
+        "unexpected error: {error}"
+    );
 }
 
 /// A unit's names resolve from the entry, which is the whole point of mounting one.

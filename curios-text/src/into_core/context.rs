@@ -5,7 +5,7 @@ use {
     curios_base::{Entropy, Mount, Qualifier, Span, SyntaxRegistry},
     std::{
         cell::{Cell, RefCell},
-        collections::{HashMap, HashSet},
+        collections::{BTreeMap, HashMap, HashSet},
     },
 };
 
@@ -231,8 +231,8 @@ pub(super) struct Context<'a> {
     universe_allocations: &'a RefCell<HashMap<Span, curios_core::UniverseMetaId>>,
     // Shared counter for every binder identity a lowered term closes over. Threaded (not a process-global atomic) for determinism: two runs over the same source must mint the same identities, or terms that should be equal would differ.
     binders: &'a Entropy,
-    // Program-global witness identities. A `satisfy` declaration is anonymous, so its identity is an id rather than a name — and the id must be unique across the whole program, not per module, because nothing else distinguishes two of them.
-    witnesses: &'a Entropy,
+    // One ordinal counter per mount. A `satisfy` declaration is anonymous, so its identity is minted rather than written — and it is scoped to the mount that declares it, because an ordinal alone would mean something only in the compilation that handed it out.
+    witnesses: &'a RefCell<BTreeMap<Qualifier, u32>>,
     syntax: &'a SyntaxRegistry,
 }
 
@@ -248,7 +248,7 @@ impl<'a> Context<'a> {
         universe_seeds: &'a RefCell<Vec<curios_core::UniverseSeed>>,
         universe_allocations: &'a RefCell<HashMap<Span, curios_core::UniverseMetaId>>,
         binders: &'a Entropy,
-        witnesses: &'a Entropy,
+        witnesses: &'a RefCell<BTreeMap<Qualifier, u32>>,
         syntax: &'a SyntaxRegistry,
     ) -> Context<'a> {
         Context {
@@ -343,11 +343,22 @@ impl<'a> Context<'a> {
         result
     }
 
-    /// Mint a witness identity. A `satisfy` declaration is anonymous by design, so it gets an identity rather than a manufactured name — see [`curios_core::Global::Witness`]. The counter is program-global, not per-module: nothing but the id distinguishes two witnesses.
+    /// Mint a witness identity under the mount that declares it.
+    ///
+    /// A `satisfy` declaration is anonymous by design, so it gets an identity rather than a manufactured name — see [`curios_core::Global::Witness`]. The ordinal is per mount rather than per program: two units both counting from zero is exactly what makes a bare ordinal unstorable, and the mount is what makes the pair disjoint without either unit knowing the other exists.
+    ///
+    /// The mount is the one this context's prefix lies within. A prefix owned by nothing is the synthetic compilation root, which only arises while no unit has claimed anything yet.
     pub(super) fn fresh_witness(&self) -> curios_core::WitnessId {
-        curios_core::WitnessId::new(
-            u32::try_from(self.witnesses.fresh()).expect("witness space exhausted"),
-        )
+        let mount = Mount::owning(self.mounts, &self.prefix)
+            .map(|mount| mount.prefix.clone())
+            .unwrap_or_default();
+
+        let mut witnesses = self.witnesses.borrow_mut();
+        let ordinal = witnesses.entry(mount.clone()).or_default();
+        let minted = curios_core::WitnessId::new(mount, *ordinal);
+        *ordinal += 1;
+
+        minted
     }
 
     /// Mint a binder identity, rendering as `hint`.

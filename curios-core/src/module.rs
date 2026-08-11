@@ -550,6 +550,8 @@ pub enum Positional {
     FreeLocal { owner: Option<Global>, index: u32 },
     /// A term metavariable. Zonking is contracted to substitute every solution and to refuse an unsolved hole, so one reaching here is that contract broken rather than a hole still to be solved.
     Metavar { owner: Option<Global> },
+    /// A witness this module declares, scoped to a mount it does not own. Its ordinal counts *within* a mount, so one carrying somebody else's is an ordinal two compilations can both hand out — the aliasing that would silently rebind a coherence-table entry.
+    UnscopedWitness { witness: Global },
 }
 
 impl fmt::Display for Positional {
@@ -557,6 +559,12 @@ impl fmt::Display for Positional {
         let (owner, carried) = match self {
             Positional::FreeLocal { owner, index } => (owner, format!("free local binder {index}")),
             Positional::Metavar { owner } => (owner, "an unsolved metavariable".to_string()),
+            Positional::UnscopedWitness { witness } => {
+                return write!(
+                    formatter,
+                    "{witness} is declared here and scoped to a mount this module does not own"
+                );
+            }
         };
 
         match owner {
@@ -570,7 +578,9 @@ impl fmt::Display for Positional {
 ///
 /// **A unit may be stored only if it carries no positional identity.** Storing one is how rustc came to need `cnum_map` — an index another compilation reads and then has to remap — and it is the property deciding whether a stored unit is portable at all.
 ///
-/// Two of the classes are refused here. The third, an unsolved universe metavariable, is refused at the same seam by `curios-elab`'s `validate_universes`, which names it in as many words; restating it would be a second implementation of one predicate rather than a second opinion about it, which is the standing [`UniverseContext::is_closed`] holds for the same reason. Witness identities are the fourth class, are not scoped to their mount yet, and are where this refusal grows when they are.
+/// Three of the classes are refused here. The remaining one, an unsolved universe metavariable, is refused at the same seam by `curios-elab`'s `validate_universes`, which names it in as many words; restating it would be a second implementation of one predicate rather than a second opinion about it, which is the standing [`UniverseContext::is_closed`] holds for the same reason.
+///
+/// The witness class is asked differently from the other two, and deliberately. Those are read off the module's *terms*, because a metavariable or a free local anywhere in one is disqualifying. A witness reference is not: a stored unit legitimately mentions witnesses its predecessors declared, scoped to *their* mounts. What must hold is that every witness this module **declares** is scoped to a mount it owns, which is a question about `Module::witnesses` rather than about any position — so it is asked over the declarations and not through the walk.
 ///
 /// It refuses where [`derived_binder_floor`] reports, over the same positions, and the difference is what each answer is for. A floor is a bound, so a gap in that walk degrades to a wider floor and to nothing worse. An identity reaching a stored unit has no safe direction to degrade in: it aliases silently in whatever compilation restores two such units together, which admits rather than crashes. It still *describes* rather than judges by this module's rule — whether a node is a metavariable, and whether a variable is local, are properties of the representation, taking no reduction, no conversion and no `Env`.
 pub fn validate_stored_identities(module: &Module) -> Result<(), Positional> {
@@ -603,6 +613,18 @@ pub fn validate_stored_identities(module: &Module) -> Result<(), Positional> {
             }
         },
     );
+
+    if let Some(witness) = module.witnesses.iter().find(|witness| match witness {
+        Global::Witness(id) => !module
+            .mounts
+            .iter()
+            .any(|mount| &mount.prefix == id.mount()),
+        Global::Authored(_) => false,
+    }) {
+        return Err(Positional::UnscopedWitness {
+            witness: witness.clone(),
+        });
+    }
 
     found.map_or(Ok(()), Err)
 }
@@ -639,7 +661,7 @@ pub fn derived_binder_floor_outside(module: &Module, in_scope: impl Fn(&Global) 
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use {super::*, crate::WitnessId, curios_base::RootKind};
 
     fn definition(name: &str, universe_context: UniverseContext) -> Definition {
         let global = Global::Authored(Qualifier::from([name]));
@@ -804,6 +826,42 @@ mod tests {
                 index: 1,
             })
         );
+    }
+
+    /// A witness declared here, scoped to a mount this module does not own.
+    ///
+    /// Before B1 there was nothing to check: an identity was a bare ordinal, so "unscoped" named no state a module could be in. What makes it checkable is that the ordinal now counts *within* a mount — and a module declaring a witness under somebody else's mount is claiming an ordinal in a space it does not own, which two compilations would both hand out.
+    #[test]
+    fn a_stored_unit_may_not_declare_a_witness_under_a_mount_it_does_not_own() {
+        let mut module = stored(
+            Term::intrinsic(crate::Intrinsic::NatType),
+            Term::intrinsic(crate::Intrinsic::NatType),
+        );
+        module.mounts = vec![Mount::new(Qualifier::from(["mine"]), RootKind::Ordinary)];
+        let witness = Global::Witness(WitnessId::new(Qualifier::from(["theirs"]), 0));
+        module.witnesses.insert(witness.clone());
+
+        assert_eq!(
+            validate_stored_identities(&module),
+            Err(Positional::UnscopedWitness { witness })
+        );
+    }
+
+    /// The control that keeps the refusal about *declaring*, not about mentioning.
+    ///
+    /// A stored unit legitimately names witnesses its predecessors declared, scoped to their mounts — every unit compiled against `/std` does. Reading this question off the terms instead of off the declarations would refuse all of them, which is why it is asked over `Module::witnesses` and deliberately not through the position walk.
+    #[test]
+    fn a_stored_unit_may_name_a_witness_another_mount_declared() {
+        let mut module = stored(
+            Term::free_var(&Free::Global(Global::Witness(WitnessId::new(
+                Qualifier::from(["theirs"]),
+                3,
+            )))),
+            Term::intrinsic(crate::Intrinsic::NatType),
+        );
+        module.mounts = vec![Mount::new(Qualifier::from(["mine"]), RootKind::Ordinary)];
+
+        assert_eq!(validate_stored_identities(&module), Ok(()));
     }
 
     /// The control. A free *global* is how one definition names another and is in every stored unit there has ever been, so a check that refused it would refuse the prelude — which is what makes this the test that the refusals above are aimed at something narrower than "a free variable".
