@@ -26,7 +26,7 @@ pub const MANIFEST: &str = "curios.toml";
 pub const LIBRARY: &str = "lib.crs";
 
 /// The extension every Curios source file carries, which is what makes an executable's declared name enough to locate it.
-pub const SOURCE: &str = "crs";
+pub const EXTENSION: &str = "crs";
 
 /// A parsed `curios.toml`, in exactly one of two mutually exclusive modes.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -108,6 +108,28 @@ pub enum Dependency {
     Path { path: PathBuf },
 }
 
+impl Dependency {
+    /// The snapshot this row pins, for a fetchable source. Live code pins nothing, so two live rows agree only by resolving to one place.
+    pub fn snapshot(&self) -> Option<Snapshot> {
+        match self {
+            Self::Git { rev, hash, .. } => Some(Snapshot {
+                rev: rev.clone(),
+                hash: hash.clone(),
+            }),
+            _ => None,
+        }
+    }
+}
+
+/// Exactly what a row pins: the instruction that fetches it, and the criterion that accepts it.
+///
+/// **`url` is not part of it, and that omission is the rule.** Acceptance is by hash, so any transport may deliver the bytes — which makes two dependents pinning one tree through different mirrors an *agreement*, not a conflict. This is the type the resolver compares, so what it leaves out is what a conflict is allowed to differ in. Where a fetch must actually be performed, `Acquisition` carries this alongside the transport that answers for it.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct Snapshot {
+    pub rev: String,
+    pub hash: TreeHash,
+}
+
 /// The manifest as TOML spells it, with every field optional.
 ///
 /// Deserializing straight into one shape per mode would make "declares both" a failure naming whichever shape was tried second, and "declares neither" a failure naming both. Those are this crate's refusals to write, so the deserializer is handed a shape that accepts either and nothing is decided until [`Document::classify`].
@@ -116,10 +138,10 @@ pub enum Dependency {
 struct Document {
     name: Option<String>,
     default: Option<String>,
-    dependencies: Option<BTreeMap<String, Row>>,
+    dependencies: Option<BTreeMap<String, DependencyRow>>,
     executables: Option<Vec<ExecutableRow>>,
     members: Option<Vec<String>>,
-    catalog: Option<BTreeMap<String, Row>>,
+    catalog: Option<BTreeMap<String, DependencyRow>>,
 }
 
 impl Document {
@@ -176,14 +198,14 @@ impl Document {
         Ok(Package {
             name,
             default: self.default,
-            dependencies: table(self.dependencies.unwrap_or_default(), "dependency")?,
+            dependencies: table(self.dependencies.unwrap_or_default(), "dependency row")?,
             executables,
         })
     }
 
     /// This document read as an umbrella.
     fn umbrella(self) -> Result<Umbrella, String> {
-        let catalog = table(self.catalog.unwrap_or_default(), "catalog entry")?;
+        let catalog = table(self.catalog.unwrap_or_default(), "catalog row")?;
 
         // A catalog row is what a member's marker resolves *to*, so it cannot be a marker itself: umbrellas do not nest, and nothing sits above one to answer a marker it wrote.
         if let Some((name, _)) = catalog
@@ -191,7 +213,7 @@ impl Document {
             .find(|(_, row)| matches!(row, Dependency::Member | Dependency::Catalog))
         {
             return Err(format!(
-                "the catalog entry {name:?} names a marker source; a catalog row names a fetchable source or `path`"
+                "the catalog row {name:?} names a marker source; a catalog row names a fetchable source or `path`"
             ));
         }
 
@@ -212,7 +234,7 @@ impl Document {
 /// The union rather than one shape per source, because which fields a row may carry is a refusal this crate writes — `source` is what a reader looks for first, and a row missing its pin should be told which pin, not told that no shape matched.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct Row {
+struct DependencyRow {
     source: Source,
     url: Option<String>,
     rev: Option<String>,
@@ -220,7 +242,7 @@ struct Row {
     path: Option<String>,
 }
 
-impl Row {
+impl DependencyRow {
     /// What this row resolves to, or which field the source it names cannot use — or requires. `subject` names the row for a refusal: the table it sits in, and the name it is filed under.
     fn dependency(self, subject: &str) -> Result<Dependency, String> {
         let Self {
@@ -315,7 +337,10 @@ impl ExecutableRow {
             ));
         }
 
-        let path = path.map_or_else(|| PathBuf::from(format!("{name}.{SOURCE}")), PathBuf::from);
+        let path = path.map_or_else(
+            || PathBuf::from(format!("{name}.{EXTENSION}")),
+            PathBuf::from,
+        );
 
         if let Some(previous) = declared.iter().find(|executable| executable.name == name) {
             return Err(format!(
@@ -346,7 +371,10 @@ fn declared(keys: &[(&'static str, bool)]) -> String {
 }
 
 /// Every row of one table, by the canonical name each is filed under.
-fn table(rows: BTreeMap<String, Row>, what: &str) -> Result<BTreeMap<String, Dependency>, String> {
+fn table(
+    rows: BTreeMap<String, DependencyRow>,
+    what: &str,
+) -> Result<BTreeMap<String, Dependency>, String> {
     rows.into_iter()
         .map(|(written, row)| {
             Ok((

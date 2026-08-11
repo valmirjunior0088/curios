@@ -8,7 +8,7 @@
 mod tests;
 
 use {
-    crate::{LIBRARY, MANIFEST, SOURCE, canonical},
+    crate::{EXTENSION, LIBRARY, MANIFEST, canonical},
     std::{fs, path::Path},
 };
 
@@ -43,7 +43,7 @@ pub fn scaffold(directory: &Path, library: bool) -> Result<(), String> {
         ),
         false => (
             format!("\n[[executables]]\nname = {name:?}\n"),
-            format!("{name}.{SOURCE}"),
+            format!("{name}.{EXTENSION}"),
             format!("/std/print(\"Hello from {name}!\\n\")\n"),
         ),
     };

@@ -13,7 +13,10 @@ use {
     crate::{LIBRARY, MANIFEST, Manifest, Package},
     curios_base::RootKind,
     curios_text::{Module, RootSource, TopItem},
-    std::{collections::BTreeMap, path::Path},
+    std::{
+        collections::BTreeMap,
+        path::{Path, PathBuf},
+    },
 };
 
 /// The package whose manifest sits in `directory`, and the resolver its library is lowered from — `None` when it has no library at all.
@@ -54,6 +57,25 @@ pub fn package_source(package: &Package, directory: &Path) -> Result<Option<Root
         header,
         directory,
     )))
+}
+
+/// The resolvers `directories` are lowered from, in the order given — which is the order they are compiled in.
+///
+/// The hand-written stand-in for a manifest's dependency edges, so nothing here resolves or sorts. A directory with no library is refused rather than skipped: mounting it would mount nothing, and a caller that named it meant something by it.
+pub fn mounted(directories: &[PathBuf]) -> Result<Vec<RootSource>, String> {
+    directories
+        .iter()
+        .map(|directory| {
+            let (_, source) = package_at(directory)?;
+
+            source.ok_or_else(|| {
+                format!(
+                    "{} has no library, so mounting it would mount nothing",
+                    directory.display()
+                )
+            })
+        })
+        .collect()
 }
 
 /// Refuse a stem claimed twice in the package root.

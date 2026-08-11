@@ -30,13 +30,6 @@ fn stage_printer(print: &str) -> Result<impl Fn(Stage<'_>) + '_, String> {
     })
 }
 
-/// What `target` names, resolved against whatever governs the working directory.
-pub(crate) fn resolve(target: Option<&str>, manifest: Option<&Path>) -> Result<Target, String> {
-    let directory = std::env::current_dir().map_err(|error| error.to_string())?;
-
-    Target::of(target, manifest, &directory)
-}
-
 /// Compile `target` to a wasm module, against the `--unit` packages and whatever its own manifest declares.
 ///
 /// A `--unit` package is the already-resolved form of a manifest entry, so it goes in front of the graph's own order: the order arguments arrive in *is* dependency order. The error keeps the incomplete/failure split so `main` can map a goal batch to its own exit code.
@@ -87,18 +80,5 @@ pub(crate) fn compile_entry(
 
 /// Read every `--unit DIR`'s manifest in the order written, which is the order they are compiled in.
 pub(crate) fn load_units(units: &[PathBuf]) -> Result<Vec<curios_text::RootSource>, CompileError> {
-    units
-        .iter()
-        .map(|directory| {
-            let (_, source) =
-                curios_package::package_at(directory).map_err(CompileError::Failure)?;
-
-            source.ok_or_else(|| {
-                CompileError::Failure(format!(
-                    "{} has no library, so mounting it would mount nothing",
-                    directory.display()
-                ))
-            })
-        })
-        .collect()
+    curios_package::mounted(units).map_err(CompileError::Failure)
 }

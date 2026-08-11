@@ -8,7 +8,7 @@
 mod tests;
 
 use {
-    crate::{Dependency, Governing, MANIFEST, Manifest, Package, TreeHash, package_source},
+    crate::{Dependency, Governing, MANIFEST, Manifest, Package, Snapshot, package_source},
     curios_text::RootSource,
     std::{
         collections::BTreeMap,
@@ -82,17 +82,10 @@ struct Walk<'a> {
 /// Where one canonical name resolved, and what resolved it.
 struct Placed {
     directory: PathBuf,
-    /// The pin that fixed it, for a fetchable source. Live code has no pin, so two live rows agree only by resolving to one place.
-    pin: Option<Pin>,
+    /// The snapshot that fixed it, for a fetchable source. Live code pins nothing, so two live rows agree only by resolving to one place.
+    snapshot: Option<Snapshot>,
     /// The package whose manifest said so.
     dependent: String,
-}
-
-/// An exact pin: the instruction that fetches it, and the criterion that accepts it.
-#[derive(PartialEq, Eq)]
-struct Pin {
-    rev: String,
-    hash: TreeHash,
 }
 
 impl Walk<'_> {
@@ -117,14 +110,8 @@ impl Walk<'_> {
         name: &str,
         row: &Dependency,
     ) -> Result<(), String> {
-        // The pin is read off the row, before anything is located: two dependents disagreeing about one name is refused whether or not either has been materialized, which is what "before any of the three elaborates" has to mean.
-        let pin = match row {
-            Dependency::Git { rev, hash, .. } => Some(Pin {
-                rev: rev.clone(),
-                hash: hash.clone(),
-            }),
-            _ => None,
-        };
+        // The snapshot is read off the row, before anything is located: two dependents disagreeing about one name is refused whether or not either has been materialized, which is what "before any of the three elaborates" has to mean.
+        let snapshot = row.snapshot();
 
         // Asked before anything else, because a name on the walk's own stack is a cycle *whether or not* it has already been placed. Checking it second let `b → c → b` past: `b` was placed on the way in, so the agreement branch below returned early and the walk emitted `c` before the `b` it depends on — a wrong fold order rather than a refusal, which is the shape a cycle takes when nobody looks for it.
         if self.open.iter().any(|open| open == name) {
@@ -140,16 +127,16 @@ impl Walk<'_> {
         }
 
         if let Some(earlier) = self.placed.get(name) {
-            if let (Some(earlier_pin), Some(pin)) = (&earlier.pin, &pin) {
-                return match earlier_pin == pin {
+            if let (Some(earlier_snapshot), Some(snapshot)) = (&earlier.snapshot, &snapshot) {
+                return match earlier_snapshot == snapshot {
                     // A diamond shares its point rather than duplicating it, which is the whole reason a package names itself.
                     true => Ok(()),
                     false => Err(format!(
                         "the dependency {:?} is pinned two ways: {} by {:?}, and {} by {:?}",
                         name,
-                        describe(earlier_pin),
+                        describe(earlier_snapshot),
                         earlier.dependent,
-                        describe(pin),
+                        describe(snapshot),
                         dependent.name
                     )),
                 };
@@ -176,7 +163,7 @@ impl Walk<'_> {
             name.to_string(),
             Placed {
                 directory: directory.clone(),
-                pin,
+                snapshot,
                 dependent: dependent.name.clone(),
             },
         );
@@ -256,7 +243,7 @@ impl Walk<'_> {
                     ));
                 }
 
-                let entry = self
+                let row = self
                     .governing
                     .umbrella
                     .as_ref()
@@ -267,7 +254,7 @@ impl Walk<'_> {
                         )
                     })?;
 
-                self.locate(dependent, &self.governing.root, name, entry)
+                self.locate(dependent, &self.governing.root, name, row)
             }
 
             // A direct row is the consumer answering for a name its own umbrella already answers for. Refused in both directions, because a promotion that only half happened is the shape that compiles two of one package.
@@ -279,10 +266,10 @@ impl Walk<'_> {
 
             // The store is where a fetchable dependency lives, and being *in* it is what "materialized" means — the hash it is filed under is the hash it was accepted against, so finding it there is the verification, already done.
             Dependency::Git { url, rev, hash } => {
-                let placed = self.governing.store().src(hash);
+                let tree = self.governing.store().src(hash);
 
-                match placed.is_dir() {
-                    true => Ok(placed),
+                match tree.is_dir() {
+                    true => Ok(tree),
                     false => Err(format!(
                         "{subject} is fetched from {url} at {rev}, and nothing has materialized it; run `curios curate`\n  the delivered tree must hash to {hash}"
                     )),
@@ -292,7 +279,7 @@ impl Walk<'_> {
     }
 }
 
-/// A pin as a refusal spells it.
-fn describe(pin: &Pin) -> String {
-    format!("`{}` ({})", pin.rev, pin.hash)
+/// A snapshot as a refusal spells it.
+fn describe(snapshot: &Snapshot) -> String {
+    format!("`{}` ({})", snapshot.rev, snapshot.hash)
 }

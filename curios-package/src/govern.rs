@@ -38,6 +38,15 @@ impl Governing {
         }
     }
 
+    /// What governs an invocation started where the process is standing.
+    ///
+    /// The working directory is read here rather than by each caller, because "where the invocation started" is this walk's own input and every caller had to spell the same two lines to supply it.
+    pub fn here(manifest: Option<&Path>) -> Result<Self, String> {
+        let directory = std::env::current_dir().map_err(|error| error.to_string())?;
+
+        Self::found(manifest, &directory)
+    }
+
     /// What governs an invocation started in `directory`.
     pub fn of(directory: &Path) -> Result<Self, String> {
         let directory = directory

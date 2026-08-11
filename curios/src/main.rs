@@ -12,7 +12,7 @@ use pipeline::*;
 use {
     clap::Parser,
     curios::{run_wasm, to_cwasm},
-    curios_package::{Governing, materialize, reconcile, scaffold},
+    curios_package::{Governing, Target, curate, scaffold},
     curios_pipeline::CompileError,
     curios_runtime::{ForeignBindings, OsHost},
     curios_text::Formatted,
@@ -64,7 +64,7 @@ fn dispatch() -> Result<(), Failure> {
 
     match mode {
         Mode::Run { target, args } => {
-            let target = resolve(target.as_deref(), manifest.as_deref())?;
+            let target = Target::here(target.as_deref(), manifest.as_deref())?;
             let entry = target.entry().to_path_buf();
             let module = compile_target(budget, &print, &units, target)?;
 
@@ -86,7 +86,7 @@ fn dispatch() -> Result<(), Failure> {
             target,
             output_path,
         } => {
-            let target = resolve(target.as_deref(), manifest.as_deref())?;
+            let target = Target::here(target.as_deref(), manifest.as_deref())?;
             let entry = target.entry().to_path_buf();
             let output = output_path.unwrap_or_else(|| target.output());
 
@@ -111,15 +111,10 @@ fn dispatch() -> Result<(), Failure> {
             println!("started {}", directory.display());
         }
         Mode::Curate => {
-            let directory = std::env::current_dir().map_err(|error| error.to_string())?;
-            let governing = Governing::found(manifest.as_deref(), &directory)?;
+            let governing = Governing::here(manifest.as_deref())?;
 
-            for pin in materialize(&governing)? {
-                println!("fetched {pin}");
-            }
-
-            for report in reconcile(&governing)? {
-                println!("{report}");
+            for acquisition in curate(&governing)? {
+                println!("fetched {acquisition}");
             }
         }
         Mode::Format { paths, check } => {

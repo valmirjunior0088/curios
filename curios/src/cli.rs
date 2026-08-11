@@ -48,7 +48,7 @@ pub(crate) enum Mode {
     },
 
     /// The store's tool, and the only thing in this toolchain that reaches the network. Acceptance is by hash, so what transport delivered the bytes does not matter — which is exactly why fetching can live in one place rather than being a capability the compiler carries.
-    #[command(about = "Materialize what the manifests reference, and report what nothing uses")]
+    #[command(about = "Materialize what the manifests reference")]
     Curate,
 
     /// Last of the machinery rather than first: it writes what everything else reads, so it can only be right once there is something for it to be right about.

@@ -111,7 +111,7 @@ json = { source = "git", url = "https://github.com/you/json", rev = "…", hash 
 shape = { source = "path", path = "../shape" }
 ```
 
-`curios curate` materializes what the manifests reference and reports what nothing uses. It is the only part of the toolchain that reaches the network — the compiler itself never fetches — and a delivered tree is accepted against its `hash` whatever transport produced it, so a mirror is no weaker than the origin.
+`curios curate` materializes what the manifests reference. It is the only part of the toolchain that reaches the network — the compiler itself never fetches — and a delivered tree is accepted against its `hash` whatever transport produced it, so a mirror is no weaker than the origin.
 
 Everything generated goes under `.curios/`, beside the governing manifest: built executables, materialized sources, and compiled units. It is the only directory the toolchain writes into.
 

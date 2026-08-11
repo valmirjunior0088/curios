@@ -1,6 +1,8 @@
 //! What the fold consults before compiling a unit again.
 //!
-//! The store's layout and its keys belong to `curios-package`; reading and writing a `Unit` through them belongs here, because this is the crate that already has both the driver and the archiving machinery. Keeping the implementation out of `curios-package` keeps that crate — which `curios new` also uses — free of the whole compiler.
+//! The store's layout and its keys belong to `curios-package`; reading and writing a `Unit` through them belongs here, because [`Cache`] is `curios-pipeline`'s trait and `curios-package` sits *beside* that boundary rather than under it. Implementing it there would make the crate that answers "what is in this compilation" depend on the driver that folds stages over the answer, which is the one direction the layering forbids.
+//!
+//! It is not, as this said until it was checked, about keeping `curios-package` free of the compiler. That crate depends on `curios-text` and so already links the elaborator — `curios new` included. The dependency the boundary actually buys is the driver's.
 //!
 //! **Taking a unit from here is believing a verdict this compiler reached earlier.** That is a change to what the compiler believes rather than a faster way to do what it already did, and the argument for it is in [SOUNDNESS.md](../../documentation/SOUNDNESS.md) under *Cached verdicts*. Everything below is the mechanism the argument is about.
 

@@ -79,6 +79,13 @@ impl Target {
             units: order(&governing)?,
         })
     }
+
+    /// What `argument` names, resolved against whatever governs the directory the process is standing in.
+    pub fn here(argument: Option<&str>, manifest: Option<&Path>) -> Result<Self, String> {
+        let directory = std::env::current_dir().map_err(|error| error.to_string())?;
+
+        Self::of(argument, manifest, &directory)
+    }
 }
 
 /// Whether `argument` names a file rather than an executable.

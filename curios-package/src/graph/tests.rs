@@ -1,5 +1,6 @@
 use {
     super::*,
+    crate::TreeHash,
     std::{
         fs,
         time::{SystemTime, UNIX_EPOCH},

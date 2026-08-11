@@ -29,14 +29,16 @@ fn a_delivery_matching_its_pin_is_placed() {
     fs::write(scratch.join("lib.crs"), "pub let x : Type = Type;").unwrap();
 
     let hash = TreeHash::of(&scratch).unwrap();
-    let pin = Pin {
+    let acquisition = Acquisition {
         name: "http".to_string(),
         url: "https://example/http".to_string(),
-        rev: "abc123".to_string(),
-        hash: hash.clone(),
+        snapshot: Snapshot {
+            rev: "abc123".to_string(),
+            hash: hash.clone(),
+        },
     };
 
-    accept(&scratch, &Store::at(root.clone()), &pin).expect("a delivery matching its pin");
+    accept(&scratch, &Store::at(root.clone()), &acquisition).expect("a delivery matching its pin");
 
     let placed = Store::at(root.clone()).src(&hash);
     assert!(placed.join("lib.crs").is_file(), "{}", placed.display());
@@ -54,29 +56,33 @@ fn a_delivery_failing_its_pin_is_refused_stating_what_arrived() {
     fs::write(scratch.join("lib.crs"), "pub let x : Type = Type;").unwrap();
 
     let delivered = TreeHash::of(&scratch).unwrap();
-    let pin = Pin {
+    let acquisition = Acquisition {
         name: "http".to_string(),
         url: "https://example/http".to_string(),
-        rev: "abc123".to_string(),
-        hash: TreeHash::parse(&format!("c1:{}", "a".repeat(64))).unwrap(),
+        snapshot: Snapshot {
+            rev: "abc123".to_string(),
+            hash: TreeHash::parse(&format!("c1:{}", "a".repeat(64))).unwrap(),
+        },
     };
 
     let refusal =
-        accept(&scratch, &Store::at(root.clone()), &pin).expect_err("a tampered delivery");
+        accept(&scratch, &Store::at(root.clone()), &acquisition).expect_err("a tampered delivery");
 
     assert!(refusal.contains("not what it is pinned to"), "{refusal}");
     assert!(refusal.contains(&delivered.to_string()), "{refusal}");
     assert!(
-        !Store::at(root.clone()).src(&pin.hash).exists(),
+        !Store::at(root.clone())
+            .src(&acquisition.snapshot.hash)
+            .exists(),
         "nothing is placed under a hash it does not have"
     );
 
     fs::remove_dir_all(root).unwrap();
 }
 
-/// A project whose every dependency is live has nothing to fetch, so `materialize` reaches its fixed point without asking `git` anything.
+/// A project whose every dependency is live has nothing to fetch, so `curate` reaches its fixed point without asking `git` anything.
 #[test]
-fn a_live_project_materializes_nothing() {
+fn a_live_project_acquires_nothing() {
     let root = tree(
         "curate-live",
         &[
@@ -92,60 +98,73 @@ fn a_live_project_materializes_nothing() {
 
     let governing = Governing::of(&root.join("app")).unwrap();
 
-    assert!(materialize(&governing).unwrap().is_empty());
+    assert!(curate(&governing).unwrap().is_empty());
 
     fs::remove_dir_all(root).unwrap();
 }
 
-/// A catalog entry no member references materializes nothing, and saying so is the whole of what it earns — activation lives in the package that names it.
+/// **A fetchable catalog row is acquired, and this is the regression.** The marker used to be resolved *after* the dispatch that decides what to fetch, so it landed in the store at a hash nothing had put there: `curate` acquired nothing, `order` then refused the dependency naming `curate`, and running it changed nothing. A dead end whose error message named the command that could not escape it.
+///
+/// Asserted against the walk rather than against a fetch, so it needs no `git` and no network: what was broken is which acquisitions the walk collects.
 #[test]
-fn reconcile_reports_a_catalog_entry_nothing_references() {
+fn a_fetchable_catalog_row_is_acquired() {
     let root = tree(
-        "curate-unreferenced",
+        "curate-catalog-fetchable",
         &[
             (
                 "curios.toml",
-                "members = [\"app\"]\n\n[catalog]\nunused = { source = \"path\", path = \"vendor/unused\" }\n",
+                "members = [\"app\"]\n\n[catalog]\nhttp = { source = \"git\", url = \"https://example/http\", rev = \"abc123\", hash = \"c1:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\" }\n",
             ),
-            ("app/curios.toml", "name = \"app\"\n"),
+            (
+                "app/curios.toml",
+                "name = \"app\"\n\n[dependencies]\nhttp = { source = \"catalog\" }\n",
+            ),
             ("app/lib.crs", ""),
         ],
     );
 
     let governing = Governing::of(&root.join("app")).unwrap();
-    let reports = reconcile(&governing).unwrap();
+    let wanted = acquisitions(&governing).unwrap();
 
-    assert!(
-        reports.iter().any(|report| report.contains("\"unused\"")),
-        "{reports:?}"
-    );
+    assert_eq!(wanted.len(), 1, "{:?}", wanted.len());
+    let acquired = wanted.iter().next().unwrap();
+    assert_eq!(acquired.name, "http");
+    assert_eq!(acquired.url, "https://example/http");
+    assert_eq!(acquired.snapshot.rev, "abc123");
 
     fs::remove_dir_all(root).unwrap();
 }
 
-/// A `.crs` file nothing enumerates is inert wherever it sits, which is the scratch-file freedom this design keeps by construction — so it is reported, never guessed at.
+/// The other half of the same dispatch: a `path` catalog row resolves against the *umbrella's* root rather than the depending package's directory, because a relative path is relative to whoever wrote it.
 #[test]
-fn reconcile_reports_an_unenumerated_file() {
+fn a_path_catalog_row_resolves_against_the_umbrella() {
     let root = tree(
-        "curate-inert",
+        "curate-catalog-path",
         &[
             (
                 "curios.toml",
-                "name = \"app\"\n\n[[executables]]\nname = \"serve\"\n",
+                "members = [\"app\"]\n\n[catalog]\nbase = { source = \"path\", path = \"vendor/base\" }\n",
             ),
-            ("lib.crs", "pub mod parse;"),
-            ("parse.crs", ""),
-            ("serve.crs", ""),
-            ("scratch.crs", ""),
+            (
+                "app/curios.toml",
+                "name = \"app\"\n\n[dependencies]\nbase = { source = \"catalog\" }\n",
+            ),
+            ("app/lib.crs", ""),
+            // Reached only if the base is the umbrella's root: from `app/` this path names nothing.
+            (
+                "vendor/base/curios.toml",
+                "name = \"base\"\n\n[dependencies]\nhttp = { source = \"git\", url = \"https://example/http\", rev = \"def456\", hash = \"c1:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\" }\n",
+            ),
+            ("vendor/base/lib.crs", ""),
         ],
     );
 
-    let governing = Governing::of(&root).unwrap();
-    let reports = reconcile(&governing).unwrap();
+    let governing = Governing::of(&root.join("app")).unwrap();
+    let wanted = acquisitions(&governing).unwrap();
 
-    assert_eq!(reports.len(), 1, "{reports:?}");
-    assert!(reports[0].contains("scratch.crs"), "{reports:?}");
-    assert!(reports[0].contains("nothing names it"), "{reports:?}");
+    // The catalog row itself fetches nothing, but the walk descended into it and found what it depends on.
+    assert_eq!(wanted.len(), 1, "{wanted:?}");
+    assert_eq!(wanted.iter().next().unwrap().name, "http");
 
     fs::remove_dir_all(root).unwrap();
 }
@@ -192,14 +211,16 @@ fn a_fetched_revision_is_verified_and_placed() {
     .to_string();
 
     let root = tree("curate-fetch", &[("curios.toml", "name = \"app\"\n")]);
-    let pin = Pin {
+    let acquisition = Acquisition {
         name: "http".to_string(),
         url: format!("file://{}", origin.display()),
-        rev: revision,
-        hash: expected.clone(),
+        snapshot: Snapshot {
+            rev: revision,
+            hash: expected.clone(),
+        },
     };
 
-    fetch(&Store::at(root.clone()), &pin).expect("a revision this machine is serving");
+    fetch(&Store::at(root.clone()), &acquisition).expect("a revision this machine is serving");
 
     let placed = Store::at(root.clone()).src(&expected);
     assert!(placed.join("lib.crs").is_file(), "{}", placed.display());
