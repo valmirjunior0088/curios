@@ -103,6 +103,33 @@ const MUTUAL_RECURSION: &str = r#"
     /std/print(Nat/to_str(match start : (_) => Nat | true => ping(n) | false => pong(n) end))
     "#;
 
+/// A callee returning two distinct constructors to two different callers — the intersection no existing pass reaches. Two external call sites is one too many for contification, whose whole admissibility rests on there being a single return context; the body is past the multi-site inline budget; and neither caller can see the construction, since it is built inside `advance` and arrives as an opaque continuation parameter. `more` carries two fields and `done` one, so the class is three slots wide and the shorter constructor exercises the filler. See [`a_returned_constructor_is_delivered_as_its_fields`].
+const SPLIT_RETURN: &str = r#"
+    use /std/{Handle, Nat, List, proc};
+    induct Step : Type
+    | more(Nat, Nat)
+    | done(Nat)
+    end
+    let advance(x : Nat) -> Step =
+        match x % 7 : (_) => Step
+        | 0 => Step/done((x * 3 + 1) % 20011)
+        | k + 1 => Step/more((x * 5) % 20011, (k * 2 + 11) % 20011)
+        end;
+    let first(a : Nat) -> Nat =
+        match advance(a) : (_) => Nat
+        | more(p, q) => p + q
+        | done(r) => r
+        end;
+    let second(b : Nat) -> Nat =
+        match advance(b + 1) : (_) => Nat
+        | more(p, q) => p * 2 + q
+        | done(r) => r * 3
+        end;
+    let taint = List/len(proc/args!);
+    let n : Nat = taint;
+    /std/print(Nat/to_str(first(n) + second(n)))
+    "#;
+
 // -- helpers ----------------------------------------------------------------
 
 /// Compile `source` (no external modules) to the raw, pre-Binaryen wasm module. The returned `.0` of `compile_entrypoint` is the module `into_wasm` produces; Binaryen only runs later, in `crate::to_cwasm`.
@@ -563,6 +590,97 @@ fn mutual_recursion_stays_reducible() {
     );
 }
 
+/// A returned constructor is handed back as its fields rather than as a heap tuple, so nothing allocates it and nothing takes it apart.
+///
+/// The fixture is the intersection the return protocol exists for: too many call sites to contify, too large to inline, and a construction no caller can see. Before the protocol every one of those exclusions held and the tuple survived; the assertion is that the callee both declares several results and allocates nothing to fill them.
+#[test]
+fn a_returned_constructor_is_delivered_as_its_fields() {
+    let wat = wat(SPLIT_RETURN);
+    let functions = functions(&wat);
+    // Located by its own arithmetic rather than by name, and the constant also proves the callee survived as a function: had it been inlined, `20011` would appear in both callers and identify neither.
+    let advance = function_with(&functions, "20011");
+
+    assert!(
+        advance
+            .body
+            .contains("(result (ref any) (ref any) (ref any))"),
+        "the callee must return the class's three slots: {}",
+        advance.name,
+    );
+    assert!(
+        !advance.body.contains("struct.new") && !advance.body.contains("array.new"),
+        "nothing may be allocated to carry a result that is now handed back in registers: {}",
+        advance.name,
+    );
+}
+
+/// What the return protocol removes from the corpus, and what that is worth.
+///
+/// Run it with:
+///
+/// ```sh
+/// cargo test --package curios --lib -- --ignored --nocapture split_return_measurements
+/// ```
+///
+/// It asserts nothing. The structural claim is [`a_returned_constructor_is_delivered_as_its_fields`]'s to make and it fails when it stops holding; this only reports how much of the corpus the protocol reaches, which is a question with no right answer to assert against.
+///
+/// # What it last printed
+///
+/// Taken **2026-08-12**, **debug**, on the commit that introduced the pass.
+///
+/// | Fixture | Multi-result types | Allocation sites |
+/// | --- | --- | --- |
+/// | lcg | 0 | 79 |
+/// | trees | 0 | 81 |
+/// | higher-order | 0 | 81 |
+/// | direct/escaping | 0 | 81 |
+/// | function-only | 0 | 79 |
+/// | mutual-recursion | 0 | 79 |
+/// | split-return | 1 | 79 |
+///
+/// **The zeroes are not a null result, they are the wrong corpus for the question.** These fixtures take their runtime taint from `proc/args!` and never read stdin, so none of them reaches the UTF-8 decode path where the protocol actually fires. What they do establish is that the pass is inert everywhere it has no candidate — which is most places.
+///
+/// Across `programs/`, which does read stdin, exactly one function is selected and it is the same one every time: `/syn/Str/classify`. Five return edges, all visible constructions, tagged at index zero, demanded five slots wide — and one of its two call sites sits inside `/std/Str/fold`'s per-character walk. Its emitted body goes from three allocations to none, and `programs/parse_digits.crs` as a whole from 145 to 142.
+///
+/// **The runtime figure is the one worth reading, and it is small.** Timing `programs/parse_digits.crs` with the pass toggled and nothing else changed, `user` time over repeated runs:
+///
+/// | Input | Pass off | Pass on |
+/// | --- | --- | --- |
+/// | 300000 | 0.27, 0.26 | 0.26, 0.25, 0.25 |
+/// | 1000000 | 0.95, 0.95 | 0.94, 0.93 |
+///
+/// Roughly **one to two percent** — consistent in direction across all five pairs and too small to be worth more precision than that. At about 135 ns per character the loop is not allocation-bound on the tuple this removes: it is dominated by the per-character closure call and the transient `Option` that `/std/Nat/of_str`'s lifted fold step allocates, neither of which a return protocol reaches, and both of which belong to the higher-order specialization that succeeds this work.
+///
+/// **Two things this does not separate.** The allocation counts are taken pre-Binaryen, so some of what the pass now removes earlier, Binaryen may have been removing later — the runtime figure is the only one that accounts for that, and it is the small one. And both binaries come from a debug-profile compiler; whether the gap widens under release is unmeasured.
+#[test]
+#[ignore = "measurement: reports what the return protocol reaches rather than asserting"]
+fn split_return_measurements() {
+    for (label, source) in [
+        ("lcg", LCG),
+        ("trees", TREES),
+        ("higher-order", HIGHER_ORDER),
+        ("direct/escaping", DIRECT_ESCAPING),
+        ("function-only", FUNCTION_ONLY),
+        ("mutual-recursion", MUTUAL_RECURSION),
+        ("split-return", SPLIT_RETURN),
+    ] {
+        let wat = wat(source);
+        // A multi-result type is spelled `func/{parameters}/{results}`; the single-result shape keeps the bare `func/{parameters}` and is what every function had before this. Counted off the type *name* in a declaration rather than off slashes in the line, because a function definition names its type too and carries a source hint that is itself full of slashes.
+        let split = wat
+            .lines()
+            .map(str::trim)
+            .filter(|line| line.starts_with("(type $func/"))
+            .filter(|line| {
+                line.split_whitespace()
+                    .nth(1)
+                    .is_some_and(|name| name.matches('/').count() == 2)
+            })
+            .count();
+        let allocations = wat.matches("struct.new").count() + wat.matches("array.new").count();
+        println!("{label}: {split} multi-result types, {allocations} allocation sites");
+    }
+}
+
 /// G6: the raw, pre-Binaryen wasm validates and executes without Binaryen repairing control flow. `run_raw` Cranelift-compiles the raw bytes directly (validation, including control-flow well-formedness, happens there) and runs them; its output must match the ordinary Binaryen path for the same input.
 #[test]
 fn raw_wasm_validates_and_executes_without_binaryen() {
@@ -573,6 +691,7 @@ fn raw_wasm_validates_and_executes_without_binaryen() {
         ("direct/escaping", DIRECT_ESCAPING),
         ("function-only", FUNCTION_ONLY),
         ("mutual-recursion", MUTUAL_RECURSION),
+        ("split-return", SPLIT_RETURN),
     ] {
         let args = ["prog", "a", "b", "c"];
         let raw = run_raw(source, &args);

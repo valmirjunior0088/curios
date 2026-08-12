@@ -796,7 +796,7 @@ impl<'a> Table<'a> {
 
     /// The emitted name of the function type with this `(parameters, results)` shape.
     ///
-    /// A single-result shape keeps the bare `func/{parameters}` spelling it has always had, which is what makes keying on the pair a change of the key alone and not of any emitted module — every function returns one value until a protocol says otherwise.
+    /// A single-result shape keeps the bare `func/{parameters}` spelling it has always had, which is what made keying on the pair a change of the key alone and of no emitted module when it landed. What produces the wider shapes is `cps::protocol`, which hands a class of functions back the leading fields of the construction they used to allocate; that class is a per-tail-call-component decision, because `return_call` requires a callee's results to match its caller's exactly. Closure supertypes are keyed separately, on arity alone, and stay single-result — which is why the decision excludes any function that escapes.
     fn func_type_name(shape: (usize, usize)) -> curios_wasm::TypeName {
         let (parameters, results) = shape;
 
