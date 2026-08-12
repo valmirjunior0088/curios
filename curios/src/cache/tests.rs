@@ -9,9 +9,17 @@ use {
     std::time::{SystemTime, UNIX_EPOCH},
 };
 
+/// The entry every project here compiles: it uses the dependency, so the dependency is a unit of the compilation.
+const ENTRY: &str = "use /std/{Fmt};\nuse /shape/{message};\n\nFmt/print(\"%\\n\")(message)\n";
+
 /// Whether the one mounted unit of a compilation came from the store.
 fn reused(root: &std::path::Path) -> bool {
-    let library = curios_package::mounted(&[root.join("shape")]).expect("a mountable package");
+    reused_from(root, &root.join("shape"))
+}
+
+/// The same, for a project whose dependency is mounted from somewhere other than beside it.
+fn reused_from(root: &std::path::Path, shape: &std::path::Path) -> bool {
+    let library = curios_package::mounted(&[shape.to_path_buf()]).expect("a mountable package");
     let (entrypoint, loader) =
         Entrypoint::opened(&root.join("exe.crs")).expect("an openable entrypoint");
 
@@ -34,26 +42,49 @@ fn reused(root: &std::path::Path) -> bool {
     reused
 }
 
-/// A project with one dependency and an entry that uses it, at a directory of its own.
-fn project(name: &str) -> PathBuf {
+/// A directory of its own, shared with no other test.
+fn temporary(name: &str) -> PathBuf {
     let millis = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_millis();
-    let root = std::env::temp_dir().join(format!(
+
+    std::env::temp_dir().join(format!(
         "curios-cache-{name}-{}-{millis}",
         std::process::id()
-    ));
+    ))
+}
+
+/// A project with one dependency and an entry that uses it, at a directory of its own.
+fn project(name: &str) -> PathBuf {
+    let root = temporary(name);
 
     write(&root, "shape/curios.toml", "name = \"shape\"\n");
     write(&root, "shape/lib.crs", &library("first"));
-    write(
-        &root,
-        "exe.crs",
-        "use /std/{Fmt};\nuse /shape/{message};\n\nFmt/print(\"%\\n\")(message)\n",
-    );
+    write(&root, "exe.crs", ENTRY);
 
     root
+}
+
+/// Copy every slot `from`'s store holds into `into`'s, replacing whatever was there.
+///
+/// How both cross-project tests stage a shared store: by copying rather than by setting `CURIOS_CACHE`, since the store's own hermeticity rests on no test ever setting it, and what is under test is the verification, which cannot tell how a foreign slot arrived.
+fn stage(from: &std::path::Path, into: &std::path::Path) {
+    let (from, into) = (from.join(".curios/unit"), into.join(".curios/unit"));
+
+    let _ = fs::remove_dir_all(&into);
+    fs::create_dir_all(&into).unwrap();
+
+    for slot in fs::read_dir(&from).expect("a store with units in it") {
+        let slot = slot.unwrap().path();
+        let target = into.join(slot.file_name().unwrap());
+        fs::create_dir_all(&target).unwrap();
+
+        for file in fs::read_dir(&slot).unwrap() {
+            let file = file.unwrap().path();
+            fs::copy(&file, target.join(file.file_name().unwrap())).unwrap();
+        }
+    }
 }
 
 /// The dependency's library, saying `word`.
@@ -102,7 +133,7 @@ fn an_edited_unit_is_not_reused() {
 
 /// A slot filed by one project must not answer for another's, even when both address it identically — which two projects holding a package of one name, compiled by one compiler after one chain, always do.
 ///
-/// The store is shared whenever `CURIOS_CACHE` names one, so this is reachable. It is staged by copying rather than by setting that variable: the store's own hermeticity rests on no test ever setting it, and what is being tested is the verification, which cannot tell how the foreign slot arrived.
+/// The store is shared whenever `CURIOS_CACHE` names one, so this is reachable.
 #[test]
 fn a_slot_does_not_answer_for_another_projects_source() {
     let mine = project("mine");
@@ -112,24 +143,38 @@ fn a_slot_does_not_answer_for_another_projects_source() {
     reused(&theirs);
     reused(&mine);
 
-    let (from, into) = (theirs.join(".curios/unit"), mine.join(".curios/unit"));
-    fs::remove_dir_all(&into).unwrap();
-    fs::create_dir_all(&into).unwrap();
-
-    for slot in fs::read_dir(&from).unwrap() {
-        let slot = slot.unwrap().path();
-        let target = into.join(slot.file_name().unwrap());
-        fs::create_dir_all(&target).unwrap();
-
-        for file in fs::read_dir(&slot).unwrap() {
-            let file = file.unwrap().path();
-            fs::copy(&file, target.join(file.file_name().unwrap())).unwrap();
-        }
-    }
+    stage(&theirs, &mine);
 
     assert!(
         !reused(&mine),
         "their record names their files, which are not mine to have read"
+    );
+}
+
+/// The other half of that clause, and the reason it checks containment rather than re-deriving the read set: a dependency materialized once and read from that same path by every project *is* shared, and must still hit.
+///
+/// The dependency sits outside both projects, standing in for the `src/` tree `curate` materializes under a shared store — the only way two projects ever read one unit's source from one path. `mine` never compiles it before the staging, so a hit has nowhere to come from but the slot `theirs` filed.
+#[test]
+fn a_slot_answers_for_a_dependency_both_projects_read() {
+    let materialized = temporary("materialized");
+    write(&materialized, "curios.toml", "name = \"shape\"\n");
+    write(&materialized, "lib.crs", &library("first"));
+
+    let theirs = temporary("theirs-sharing");
+    let mine = temporary("mine-sharing");
+    write(&theirs, "exe.crs", ENTRY);
+    write(&mine, "exe.crs", ENTRY);
+
+    assert!(
+        !reused_from(&theirs, &materialized),
+        "nothing is stored for the first compile, which files it"
+    );
+
+    stage(&theirs, &mine);
+
+    assert!(
+        reused_from(&mine, &materialized),
+        "and the record names a path mine reads from too, so the unit crosses"
     );
 }
 
