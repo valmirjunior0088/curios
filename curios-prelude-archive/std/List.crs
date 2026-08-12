@@ -1,12 +1,9 @@
 pub use /sys/{List};
-pub use /sys/List/{len, slice, map};
-use /std/{Nat, Bool, Option, Eq, Str, Show, Monad};
-
-pub let at(@T: Type, a: List(T), i: Nat, ok: Nat/Lt(i, len(a))) -> T =
-    /sys/List/get(a, i);
+pub use /sys/List/{at, len, slice, map};
+use /std/{Nat, Bool, Option, Eq, Str, Show, Monad, True};
 
 pub let get(@T: Type, a: List(T), i: Nat) -> Option(T) =
-    match i < len(a) | true => Option/some(/sys/List/get(a, i)) | false => Option/none() end;
+    match i < len(a) | true => Option/some(at(a, i, True/qed())) | false => Option/none() end;
 
 pub let flatten(@T: Type, parts: List(List(T))) -> List(T) =
     fold(parts, [], (a, acc) => [..acc, ..a]);
@@ -24,12 +21,12 @@ pub let fold(@T: Type, @A: Type, l: List(T), init: A, f: (T, A) -> A) -> A =
         end;
     go(n, 0, init, Eq/refl());
 
+-- The bound is scrutinised as `len(l)` rather than through a `let`-bound alias, for the reason `Map/bit` states: a refinement records the term it scrutinised, and `at` demands the bound spelled the way `Nat/Lt` states it.
 pub let find(@T: Type, l: List(T), pred: (T) -> Bool) -> Option(T) =
-    let n = len(l);
     rec go(i: Nat) -> Option(T) =
-        match i < n
+        match i < len(l)
         | true =>
-            let x = /sys/List/get(l, i);
+            let x = at(l, i, True/qed());
             match pred(x) | true => Option/some(x) | false => go(i + 1) end
         | false => Option/none()
         end;

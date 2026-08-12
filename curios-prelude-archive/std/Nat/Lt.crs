@@ -1,9 +1,7 @@
 -- `a < b` as a decided proposition: `True` when the machine comparison holds and `False` otherwise, so a proof reduces away on any concrete pair rather than being built constructor by constructor. `Nat/Lt` is the proposition, `Nat/Lt/try` decides it, and the remaining laws bridge it to `Nat/Lte`.
+pub use /syn/{Lt};
 use /std/{Nat, Option, True, False};
 use /std/Nat/{Lte};
-
-pub let Lt(a: Nat, b: Nat) -> Prop =
-    match a < b | true => True | false => False end;
 
 pub let try(a: Nat, b: Nat) -> Option(Lt(a, b)) =
     match a < b: (r) => Option(match r: (_) => Prop | true => True | false => False end)

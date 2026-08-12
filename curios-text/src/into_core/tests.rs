@@ -1,4 +1,4 @@
-use crate::{Entrypoint, Error, RootSource};
+use crate::{Entrypoint, Error, RootSource, sys_module};
 use curios_abi::{WireType, host_ops};
 use curios_base::{
     CharacterSyntax, ConceptField, LiftSyntax, MonadSyntax, OperatorSyntax, ProofSyntax, Qualifier,
@@ -56,6 +56,7 @@ const SYNTAX: SyntaxRegistry = SyntaxRegistry {
     },
     proof: ProofSyntax {
         true_qed: syn_name(&["syn", "True", "True", "qed"]),
+        lt: syn_name(&["syn", "Lt"]),
     },
 };
 
@@ -170,7 +171,7 @@ fn run_err(src: &str) -> String {
 // Lower against the real prelude (so `sys` and `std` are served and rooted), returning only success/error — the lens for the internal-root gate.
 fn lower_with_prelude(src: &str) -> Result<(), String> {
     let mut modules = RootSource::supplied();
-    modules.insert_root("sys", RootKind::Internal, crate::sys_module(&host_ops()));
+    modules.insert_root("sys", RootKind::Internal, sys_module(&host_ops(), &SYNTAX));
     modules.insert_root(
         "std",
         RootKind::Privileged,

@@ -67,6 +67,7 @@ impl SyntaxRegistry {
             self.string.of_scan_eq,
             self.string.refl_scan,
             self.proof.true_qed,
+            self.proof.lt,
         ]
         .into_iter()
         .chain(self.concept_fields().map(|target| target.concept))
@@ -163,7 +164,10 @@ pub struct StringSyntax {
     pub refl_scan: SyntaxName,
 }
 
+/// The proof vocabulary the compiler writes into terms it builds itself: the inhabitant it supplies for a discharged obligation, and the propositions it states as preconditions on `/sys`'s partial-looking operations.
 #[derive(Debug, Clone, Copy)]
 pub struct ProofSyntax {
     pub true_qed: SyntaxName,
+    /// `a < b`, decided — the bound `/sys`'s checked accessors take as their index precondition. Decided rather than inductive is load-bearing: it reduces to `True` on a refined comparison, which is what lets the obligation be discharged without a written proof.
+    pub lt: SyntaxName,
 }

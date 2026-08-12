@@ -312,7 +312,8 @@ let poll_ready(blocked: List(Parked), timeout: Int) -> Io({List(Job), List(Parke
                 let _ = run_guards(p.guards)!;
                 walk(tail, i + 1, woken, still)
             | false =>
-                match is_ready(/sys/List/get(results, i), p.interest)
+                -- The index is in range because `poll` answers one result per handle, which is the host's promise rather than a fact about this program: `results` crosses the boundary, so it is read through the checked accessor and a missing entry reads as no events, leaving the job parked.
+                match is_ready(Option/unwrap_or(List/get(results, i), 0), p.interest)
                 | true =>
                     walk(
                         tail,

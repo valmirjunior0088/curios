@@ -1,18 +1,34 @@
 use {
     super::{
-        FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Intrinsic, LetSignature, Module, Name,
-        Nat, NatLiteral, Pattern, Subterm, Term, TopForeign, TopItem, TopLet, TopMod, TopUse,
+        Apply, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Intrinsic, LetSignature, Module,
+        Name, Nat, NatLiteral, Pattern, Subterm, Term, TopForeign, TopItem, TopLet, TopMod, TopUse,
         TupleType, TupleTypeParam, UseGroup,
     },
     curios_abi::{ForeignFunction, ForeignStore, WireType, mode, poll, status, stdio},
-    curios_base::{Grain, Plicity},
+    curios_base::{Grain, Plicity, SyntaxName, SyntaxRegistry},
     std::sync::Arc,
 };
 
-// The `sys` module is the home of every intrinsic type and operation. It is built directly as `text` AST (never parsed) and prepended to every parsed `Entrypoint`, so intrinsics participate in the module system like any other binding. Bodies bake the `text::Intrinsic::*` nodes in directly, so the prelude needs no internal name resolution.
+// The `sys` module is the home of every intrinsic type and operation. It is built directly as `text` AST (never parsed) and prepended to every parsed `Entrypoint`, so intrinsics participate in the module system like any other binding. Bodies bake the `text::Intrinsic::*` nodes in directly, so the prelude needs no internal name resolution — with one exception, the propositions an operation states as its precondition, which are `/syn` names this module cannot spell and takes from the registry instead.
 
 fn name(label: &str) -> Term {
     Subterm::Name(Name::from([label.to_string()])).into()
+}
+
+// A registered `/syn` name, absolute so it resolves against the compilation root rather than whatever module the generated declaration lands in.
+fn registered(target: SyntaxName) -> Term {
+    Subterm::Name(Name::new(true, target.qualifier())).into()
+}
+
+fn applied(head: Term, args: Vec<Term>) -> Term {
+    Subterm::Apply(Apply {
+        head,
+        params: args
+            .into_iter()
+            .map(|arg| (Plicity::Explicit, arg))
+            .collect(),
+    })
+    .into()
 }
 
 fn intrinsic(p: Intrinsic) -> Term {
@@ -411,12 +427,19 @@ fn flt_ops() -> Vec<TopItem> {
     ]
 }
 
-fn bin_ops(grain: Grain) -> Vec<TopItem> {
+fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<TopItem> {
     let type_ = bin(grain);
     let atom = match grain {
         Grain::B => bool_(),
         Grain::X => byte(),
     };
+    // `i < len(b)`, the bound `at` will not index without. Stated here rather than only on `/std`'s wrapper because `/std` re-exports this module: a precondition the wrapper alone carried would be bypassed by naming the raw operation, which is the defect this obligation exists to close.
+    //
+    // The length is the sibling `len` rather than the `BinLen` intrinsic its body bakes in, which is the one place this module needs a name resolved rather than a node planted. The two are definitionally equal and that is not enough: a scrutinee refinement is keyed on the term written, so a caller who guards with `i < len(b)` — the only spelling available to them — discharges a goal spelled that way and not one spelled with an intrinsic they cannot write.
+    let in_range = applied(
+        registered(syntax.proof.lt),
+        vec![name("i"), applied(name("len"), vec![name("b")])],
+    );
     vec![
         pub_fn(
             "len",
@@ -431,8 +454,8 @@ fn bin_ops(grain: Grain) -> Vec<TopItem> {
             intrinsic(Intrinsic::BinEql(grain, name("a"), name("b"))),
         ),
         pub_fn(
-            "get",
-            vec![("b", type_.clone()), ("i", nat())],
+            "at",
+            vec![("b", type_.clone()), ("i", nat()), ("ok", in_range)],
             atom.clone(),
             intrinsic(Intrinsic::BinGet(grain, name("b"), name("i"))),
         ),
@@ -457,7 +480,7 @@ fn bin_ops(grain: Grain) -> Vec<TopItem> {
     ]
 }
 
-fn list_ops() -> Vec<TopItem> {
+fn list_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
     vec![
         pub_fn_marked(
             "len",
@@ -469,11 +492,19 @@ fn list_ops() -> Vec<TopItem> {
             intrinsic(Intrinsic::ListLen(name("T"), name("a"))),
         ),
         pub_fn_marked(
-            "get",
+            "at",
             vec![
                 (Plicity::Implicit, "T", type_()),
                 (Plicity::Explicit, "a", list_of(name("T"))),
                 (Plicity::Explicit, "i", nat()),
+                (
+                    Plicity::Explicit,
+                    "ok",
+                    applied(
+                        registered(syntax.proof.lt),
+                        vec![name("i"), applied(name("len"), vec![name("a")])],
+                    ),
+                ),
             ],
             name("T"),
             intrinsic(Intrinsic::ListGet(name("T"), name("a"), name("i"))),
@@ -720,7 +751,7 @@ fn host_operations(subjects: Vec<(String, Vec<TopItem>)>) -> Vec<TopItem> {
 }
 
 /// Construct the generated `/sys` surface module from the authoritative host function store. Each type module (`Nat`, …, `Handle`, `List`, `Cell`, `Io`) holds its type and operations and hoists the type to the `/sys` root; each host-operation subject the store names becomes a module of its own (`file`, `socket`, `dns`, …) except `Handle`'s, which join their type module; then the `status`/`poll`/`mode` code modules. Exposed for the build-time prelude artifact builder; production compilation never lowers it at runtime.
-pub fn sys_module(foreigns: &ForeignStore) -> Module {
+pub fn sys_module(foreigns: &ForeignStore, syntax: &SyntaxRegistry) -> Module {
     let mut subjects = host_subjects(foreigns);
     let handle_host = take_subject(&mut subjects, "Handle");
 
@@ -738,11 +769,17 @@ pub fn sys_module(foreigns: &ForeignStore) -> Module {
         pub_use("Flt"),
         pub_mod(
             "Bits",
-            with_type(pub_let("Bits", type_(), bin(Grain::B)), bin_ops(Grain::B)),
+            with_type(
+                pub_let("Bits", type_(), bin(Grain::B)),
+                bin_ops(Grain::B, syntax),
+            ),
         ),
         pub_mod(
             "Bytes",
-            with_type(pub_let("Bytes", type_(), bin(Grain::X)), bin_ops(Grain::X)),
+            with_type(
+                pub_let("Bytes", type_(), bin(Grain::X)),
+                bin_ops(Grain::X, syntax),
+            ),
         ),
         pub_mod(
             "Bool",
@@ -761,7 +798,7 @@ pub fn sys_module(foreigns: &ForeignStore) -> Module {
             "List",
             with_type(
                 pub_fn("List", vec![("T", type_())], type_(), list_of(name("T"))),
-                list_ops(),
+                list_ops(syntax),
             ),
         ),
         pub_use("List"),

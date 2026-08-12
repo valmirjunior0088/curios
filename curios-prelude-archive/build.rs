@@ -96,7 +96,7 @@ fn build() {
     );
 
     let mut modules = RootSource::supplied();
-    modules.insert_root("sys", RootKind::Internal, sys_module(&host_ops()));
+    modules.insert_root("sys", RootKind::Internal, sys_module(&host_ops(), &SYNTAX));
     modules.insert_root(
         "syn",
         RootKind::Privileged,
