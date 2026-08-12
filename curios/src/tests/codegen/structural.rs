@@ -681,6 +681,50 @@ fn split_return_measurements() {
     }
 }
 
+/// What copying more costs, in the two units that can see it.
+///
+/// Run it with:
+///
+/// ```sh
+/// cargo test --package curios --lib -- --ignored --nocapture copy_growth_measurements
+/// ```
+///
+/// It asserts nothing. Lifting the nested-definition refusal lets the inliner and both specializers copy bodies they used to decline, and copying is the one thing that trades size for speed in both directions at once — so the baseline is taken before the change rather than reconstructed after it.
+///
+/// # Which instrument sees what
+///
+/// **Peak memory cannot see a transient allocation, and it is not a shortcoming of the measurement.** The return protocol removes roughly one five-field object per character; running `programs/parse_digits.crs` at 1000000 with that pass toggled and nothing else changed gives a maximum resident set of 5 734 400 bytes without it and 5 767 168 bytes with it — flat, and if anything slightly up from the code that replaced it. Transient garbage never accumulates, so its cost is allocation *work* rather than footprint, and that lands on the clock. Retention is the opposite: `binary_trees` holds what it builds, and its resident set moves from 5.77 MB at depth 18 to 271.68 MB at depth 21 on nothing but what it keeps.
+///
+/// So: **time for a change to transient allocation, resident set for a change to retention, emitted size for a change that copies.** Reaching for the wrong one reports a confident null.
+///
+/// # The baseline, taken at `82cb8ef7`
+///
+/// Native binaries built with `cargo run --package curios -- compile <program> -o <path>`, timed with `/usr/bin/time -l`. The binary embeds the runtime launcher, so its absolute size is mostly launcher and only the *difference* between two builds is compiled code.
+///
+/// | Program | Input | `user` | Max RSS | Binary |
+/// | --- | --- | --- | --- | --- |
+/// | `parse_digits` | 1000000 | 0.92 s | 5 767 168 B | 3 786 408 B |
+/// | `binary_trees` | 21 | 0.23 s | 271 679 488 B | 3 786 504 B |
+///
+/// What this test itself prints is the third unit — the raw pre-Binaryen module size for each structural fixture, which is where code growth shows up first and without a runtime at all. At the same revision: `lcg` 6708, `trees` 7706, `higher-order` 7160, `direct/escaping` 7174, `function-only` 6632, `mutual-recursion` 6834, `split-return` 8367 bytes.
+#[test]
+#[ignore = "measurement: reports emitted size rather than asserting"]
+fn copy_growth_measurements() {
+    for (label, source) in [
+        ("lcg", LCG),
+        ("trees", TREES),
+        ("higher-order", HIGHER_ORDER),
+        ("direct/escaping", DIRECT_ESCAPING),
+        ("function-only", FUNCTION_ONLY),
+        ("mutual-recursion", MUTUAL_RECURSION),
+        ("split-return", SPLIT_RETURN),
+    ] {
+        let module = compile_raw(source);
+        let bytes = to_bytes(&module).len();
+        println!("{label}: {bytes} bytes");
+    }
+}
+
 /// G6: the raw, pre-Binaryen wasm validates and executes without Binaryen repairing control flow. `run_raw` Cranelift-compiles the raw bytes directly (validation, including control-flow well-formedness, happens there) and runs them; its output must match the ordinary Binaryen path for the same input.
 #[test]
 fn raw_wasm_validates_and_executes_without_binaryen() {
