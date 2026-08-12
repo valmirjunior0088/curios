@@ -2,7 +2,7 @@ use {
     super::*,
     super::{
         analysis::{CallAnalysis, analyze_calls, function_nodes, nodes_from, resolve_atom},
-        clone::{Mapping, clone_node, copied_extent},
+        clone::{copied_extent, copy_bodies},
         inline::continuation_transfers,
         optimize::{BRANCH_SPECIALIZATION_GROWTH_LIMIT, SCC_CLONE_NODE_LIMIT},
     },
@@ -205,12 +205,11 @@ pub(super) fn specialize_scc_calls(module: &mut CpsModule, budget: &mut usize) -
             continue;
         };
 
-        let Some(clones) = clone_scc(module, &member_set) else {
-            continue;
-        };
+        let clones = clone_scc(module, &member_set);
         let clone_entry = clones[&entry];
+        // Only the requested members are bound here. A copy of a *nested* definition is introduced by the copied `LetFun` inside its own member's body, so binding it out here as well would bind it twice.
         if let Some(CpsNode::LetFun { functions, .. }) = module.nodes.get_mut(intro) {
-            functions.extend(clones.values().copied());
+            functions.extend(member_set.iter().filter_map(|m| clones.get(m).copied()));
         }
         for (node_id, callee, args) in &external {
             if *callee == entry
@@ -280,13 +279,17 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
 
     let member = BTreeSet::from([callee]);
     let intro = introducing_letfun(module, &member).unwrap();
-    let Some(clones) = clone_scc(module, &member) else {
-        return false;
-    };
+    let clones = clone_scc(module, &member);
     let clone = clones[&callee];
 
     // Peel: the clone recurses into the general function, not itself, so a recursive call that does not carry the matched constructor stays valid.
-    for node_id in function_nodes(module, clone) {
+    //
+    // Over every copied function rather than the entry alone. The entry's parameters are about to be respliced, so a call to it that kept the old argument list would not merely be unpeeled — it would carry the wrong arity, and a definition copied from inside the entry's own body is exactly where such a call can hide.
+    let peeled = clones
+        .values()
+        .flat_map(|&id| function_nodes(module, id))
+        .collect::<Vec<_>>();
+    for node_id in peeled {
         let node = module.nodes.get_mut(node_id).unwrap();
         if let CpsNode::ApplyFun {
             callee: CpsCallee::Known(target),
@@ -432,147 +435,12 @@ pub(super) fn introducing_letfun(
     }
     None
 }
-/// Verbatim-clone every member of an SCC into fresh functions with fresh return continuations, local continuations, owned values, and nodes. Internal known-callee edges and return continuations are rewired to the clones while free values, external callees, and external continuations are shared. Returns the old-to-new function map, or `None` if a member body nests a function definition, which this verbatim clone does not reproduce.
+/// Copy every member of an SCC, and every definition nested inside them, into fresh functions with fresh return continuations, local continuations, owned values, and nodes. Internal known-callee edges and return continuations are rewired to the copies while free values, external callees, and external continuations are shared.
 pub(super) fn clone_scc(
     module: &mut CpsModule,
     members: &BTreeSet<CpsFunId>,
-) -> Option<BTreeMap<CpsFunId, CpsFunId>> {
-    // A function defined inside a member's body is a member too: its body may read values this copy is renaming, so it cannot be shared and cannot be copied by a separate call that would rename them differently.
-    let roots = members.iter().flat_map(|&m| function_nodes(module, m));
-    let (node_ids, nested) = copied_extent(module, roots);
-    let members: BTreeSet<CpsFunId> = members.union(&nested).copied().collect();
-    let member_defs: BTreeMap<CpsFunId, CpsFunction> = members
-        .iter()
-        .map(|&m| (m, module.function(m).unwrap().clone()))
-        .collect();
-    let node_defs: BTreeMap<CpsNodeId, CpsNode> = node_ids
-        .iter()
-        .map(|&id| (id, module.node(id).unwrap().clone()))
-        .collect();
-
-    let cont_ids: BTreeSet<CpsContId> = node_defs
-        .values()
-        .filter_map(|node| match node {
-            CpsNode::LetCont { continuations, .. } => Some(continuations.clone()),
-            _ => None,
-        })
-        .flatten()
-        .collect();
-    let cont_defs: BTreeMap<CpsContId, CpsContinuation> = cont_ids
-        .iter()
-        .map(|&id| (id, module.continuation(id).unwrap().clone()))
-        .collect();
-
-    // Mint fresh owned values: member params, let-bound results, local continuation parameters. Values defined outside the SCC are shared.
-    let mut values: BTreeMap<CpsValueId, CpsValueId> = BTreeMap::new();
-    let mut owned: Vec<CpsValueId> = Vec::new();
-    for def in member_defs.values() {
-        owned.extend(def.params.iter().copied());
-    }
-    for node in node_defs.values() {
-        match node {
-            CpsNode::LetValue { result, .. } | CpsNode::LetIntrinsic { result, .. } => {
-                owned.push(*result)
-            }
-            CpsNode::RecInit { values, .. } => owned.extend(values.iter().copied()),
-            _ => {}
-        }
-    }
-    for cont in cont_defs.values() {
-        owned.extend(cont.params.iter().copied());
-    }
-    for old in owned {
-        let definition = module.values.get(old).unwrap().clone();
-        let fresh = module.add_value(definition.debug_name);
-        values.insert(old, fresh);
-    }
-
-    let mut conts: BTreeMap<CpsContId, CpsContId> = BTreeMap::new();
-    for &id in cont_defs.keys() {
-        conts.insert(id, module.reserve_continuation());
-    }
-    let mut functions: BTreeMap<CpsFunId, CpsFunId> = BTreeMap::new();
-    let mut returns: BTreeMap<CpsContId, CpsContId> = BTreeMap::new();
-    for (&m, def) in &member_defs {
-        functions.insert(m, module.reserve_function());
-        returns.insert(def.return_cont, module.reserve_continuation());
-    }
-    let mut nodes: BTreeMap<CpsNodeId, CpsNodeId> = BTreeMap::new();
-    for &id in node_defs.keys() {
-        nodes.insert(id, module.reserve_node());
-    }
-
-    let map_value = |value: CpsValueId| values.get(&value).copied().unwrap_or(value);
-    let map_atom = |atom: &CpsAtom| match atom {
-        CpsAtom::Value(value) => CpsAtom::Value(map_value(*value)),
-        CpsAtom::Fun(function) => {
-            CpsAtom::Fun(functions.get(function).copied().unwrap_or(*function))
-        }
-        CpsAtom::Literal(literal) => CpsAtom::Literal(literal.clone()),
-    };
-    let map_cont = |target: CpsContId| {
-        returns
-            .get(&target)
-            .copied()
-            .or_else(|| conts.get(&target).copied())
-            .unwrap_or(target)
-    };
-    let map_callee = |callee: &CpsCallee| match callee {
-        CpsCallee::Known(function) => {
-            CpsCallee::Known(functions.get(function).copied().unwrap_or(*function))
-        }
-        CpsCallee::Closure(value) => CpsCallee::Closure(map_value(*value)),
-    };
-    let map_function = |function: CpsFunId| functions.get(&function).copied().unwrap_or(function);
-
-    let map = Mapping {
-        value: &map_value,
-        atom: &map_atom,
-        cont: &map_cont,
-        callee: &map_callee,
-        function: &map_function,
-        node: &|id| nodes[&id],
-    };
-    let mut cloned_nodes: Vec<(CpsNodeId, CpsNode)> = Vec::new();
-    for (&old, node) in &node_defs {
-        cloned_nodes.push((nodes[&old], clone_node(node, &map)));
-    }
-
-    let mut cloned_conts: Vec<(CpsContId, CpsContinuation)> = Vec::new();
-    for (&old, cont) in &cont_defs {
-        cloned_conts.push((
-            conts[&old],
-            CpsContinuation {
-                debug_name: cont.debug_name.clone(),
-                params: cont.params.iter().map(|&p| map_value(p)).collect(),
-                body: nodes[&cont.body],
-            },
-        ));
-    }
-
-    let mut cloned_functions: Vec<(CpsFunId, CpsFunction)> = Vec::new();
-    for (&m, def) in &member_defs {
-        cloned_functions.push((
-            functions[&m],
-            CpsFunction {
-                debug_name: def.debug_name.clone(),
-                params: def.params.iter().map(|&p| map_value(p)).collect(),
-                return_cont: returns[&def.return_cont],
-                body: nodes[&def.body],
-            },
-        ));
-    }
-
-    for (id, node) in cloned_nodes {
-        module.nodes.define(id, node);
-    }
-    for (id, cont) in cloned_conts {
-        module.continuations.define(id, cont);
-    }
-    for (id, function) in cloned_functions {
-        module.define_function(id, function);
-    }
-    Some(functions)
+) -> BTreeMap<CpsFunId, CpsFunId> {
+    copy_bodies(module, members, &BTreeSet::new()).functions
 }
 /// SpecConstr for continuation joins — the join-point analogue of [`specialize_call_patterns`]. When an edge jumps a statically-known tagged tuple into a multi-transfer continuation that deconstructs it, clone the continuation with the constructor rebuilt at its entry and its dynamic fields threaded as parameters, so the existing aggregate-projection and known-switch simplifications collapse the deconstruction — and usually the allocation and the branch — on a later iteration. Every edge sharing the `(target, index, tag, arity)` pattern repoints to the single clone. Single-transfer joins are excluded: `inline_single_use_continuations` already collapses them outright. Bounded by `BRANCH_SPECIALIZATION_GROWTH_LIMIT` cloned live nodes and the module-wide clone-count `budget`.
 pub(super) fn specialize_jump_patterns(module: &mut CpsModule, budget: &mut usize) -> bool {
@@ -619,14 +487,9 @@ pub(super) fn specialize_jump_patterns(module: &mut CpsModule, budget: &mut usiz
                 if introducing_letcont(module, edge.target).is_none() {
                     continue;
                 }
-                let body = nodes_from(module, continuation.body);
-                let unclonable = body.iter().any(|&id| {
-                    matches!(
-                        module.node(id),
-                        Some(CpsNode::LetFun { .. } | CpsNode::RecInit { .. })
-                    )
-                });
-                if unclonable || body.len() + 1 > BRANCH_SPECIALIZATION_GROWTH_LIMIT {
+                // The extent rather than the body, for the reason the call specializer counts one: a definition nested in the join is copied with it.
+                let (extent, _) = copied_extent(module, nodes_from(module, continuation.body));
+                if extent.len() + 1 > BRANCH_SPECIALIZATION_GROWTH_LIMIT {
                     continue;
                 }
                 chosen = Some((edge.target, index, *tag, fields.len()));
@@ -639,9 +502,7 @@ pub(super) fn specialize_jump_patterns(module: &mut CpsModule, budget: &mut usiz
     };
 
     let intro = introducing_letcont(module, target).unwrap();
-    let Some(clone) = clone_continuation(module, target) else {
-        return false;
-    };
+    let clone = clone_continuation(module, target);
 
     // Rebuild the constructor at the clone entry, threading its dynamic fields as fresh parameters in place of the specialized parameter.
     let clone_definition = module.continuation(clone).unwrap();
@@ -742,115 +603,9 @@ pub(super) fn introducing_letcont(
         .then_some(id)
     })
 }
-/// Verbatim-clone one continuation's body subtree into a fresh continuation with fresh parameters, owned values, nested continuations, and nodes. External values, functions, and continuations — including the owning function's return — are shared. Returns `None` if the body nests a function definition, which this verbatim clone does not reproduce.
-pub(super) fn clone_continuation(module: &mut CpsModule, target: CpsContId) -> Option<CpsContId> {
-    let definition = module.continuation(target).unwrap().clone();
-    let node_ids = nodes_from(module, definition.body);
-    let node_defs: BTreeMap<CpsNodeId, CpsNode> = node_ids
-        .iter()
-        .map(|&id| (id, module.node(id).unwrap().clone()))
-        .collect();
-    if node_defs
-        .values()
-        .any(|node| matches!(node, CpsNode::LetFun { .. } | CpsNode::RecInit { .. }))
-    {
-        return None;
-    }
-
-    let cont_ids: BTreeSet<CpsContId> = node_defs
-        .values()
-        .filter_map(|node| match node {
-            CpsNode::LetCont { continuations, .. } => Some(continuations.clone()),
-            _ => None,
-        })
-        .flatten()
-        .collect();
-    let cont_defs: BTreeMap<CpsContId, CpsContinuation> = cont_ids
-        .iter()
-        .map(|&id| (id, module.continuation(id).unwrap().clone()))
-        .collect();
-
-    // Mint fresh owned values: the continuation's own parameters, let-bound results, and nested continuation parameters. Values defined outside the body are shared.
-    let mut values: BTreeMap<CpsValueId, CpsValueId> = BTreeMap::new();
-    let mut owned: Vec<CpsValueId> = definition.params.clone();
-    for node in node_defs.values() {
-        if let CpsNode::LetValue { result, .. } | CpsNode::LetIntrinsic { result, .. } = node {
-            owned.push(*result);
-        }
-    }
-    for cont in cont_defs.values() {
-        owned.extend(cont.params.iter().copied());
-    }
-    for old in owned {
-        let value_definition = module.values.get(old).unwrap().clone();
-        let fresh = module.add_value(value_definition.debug_name);
-        values.insert(old, fresh);
-    }
-
-    let mut conts: BTreeMap<CpsContId, CpsContId> = BTreeMap::new();
-    for &id in cont_defs.keys() {
-        conts.insert(id, module.reserve_continuation());
-    }
-    let mut nodes: BTreeMap<CpsNodeId, CpsNodeId> = BTreeMap::new();
-    for &id in node_defs.keys() {
-        nodes.insert(id, module.reserve_node());
-    }
-
-    let map_value = |value: CpsValueId| values.get(&value).copied().unwrap_or(value);
-    let map_atom = |atom: &CpsAtom| match atom {
-        CpsAtom::Value(value) => CpsAtom::Value(map_value(*value)),
-        CpsAtom::Fun(function) => CpsAtom::Fun(*function),
-        CpsAtom::Literal(literal) => CpsAtom::Literal(literal.clone()),
-    };
-    let map_cont = |target: CpsContId| conts.get(&target).copied().unwrap_or(target);
-    let map_callee = |callee: &CpsCallee| match callee {
-        CpsCallee::Known(function) => CpsCallee::Known(*function),
-        CpsCallee::Closure(value) => CpsCallee::Closure(map_value(*value)),
-    };
-    // The join copier still refuses a body nesting a definition, so no function identity moves.
-    let map_function = |function: CpsFunId| function;
-
-    let map = Mapping {
-        value: &map_value,
-        atom: &map_atom,
-        cont: &map_cont,
-        callee: &map_callee,
-        function: &map_function,
-        node: &|id| nodes[&id],
-    };
-    let mut cloned_nodes: Vec<(CpsNodeId, CpsNode)> = Vec::new();
-    for (&old, node) in &node_defs {
-        cloned_nodes.push((nodes[&old], clone_node(node, &map)));
-    }
-
-    let mut cloned_conts: Vec<(CpsContId, CpsContinuation)> = Vec::new();
-    for (&old, cont) in &cont_defs {
-        cloned_conts.push((
-            conts[&old],
-            CpsContinuation {
-                debug_name: cont.debug_name.clone(),
-                params: cont.params.iter().map(|&p| map_value(p)).collect(),
-                body: nodes[&cont.body],
-            },
-        ));
-    }
-
-    let clone = module.reserve_continuation();
-    for (id, node) in cloned_nodes {
-        module.nodes.define(id, node);
-    }
-    for (id, cont) in cloned_conts {
-        module.continuations.define(id, cont);
-    }
-    module.define_continuation(
-        clone,
-        CpsContinuation {
-            debug_name: definition.debug_name.clone(),
-            params: definition.params.iter().map(|&p| map_value(p)).collect(),
-            body: nodes[&definition.body],
-        },
-    );
-    Some(clone)
+/// Copy one continuation's body subtree, and every definition nested inside it, into a fresh continuation with fresh parameters, owned values, nested continuations, and nodes. External values, functions, and continuations — including the owning function's return — are shared.
+pub(super) fn clone_continuation(module: &mut CpsModule, target: CpsContId) -> CpsContId {
+    copy_bodies(module, &BTreeSet::new(), &BTreeSet::from([target])).continuations[&target]
 }
 pub(super) fn merge_inputs(inputs: &mut [Knowledge], args: Option<&[CpsAtom]>) {
     for (index, input) in inputs.iter_mut().enumerate() {
