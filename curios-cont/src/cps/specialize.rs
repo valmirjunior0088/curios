@@ -2,6 +2,7 @@ use {
     super::*,
     super::{
         analysis::{CallAnalysis, analyze_calls, function_nodes, nodes_from, resolve_atom},
+        clone::{Mapping, clone_node},
         inline::continuation_transfers,
         optimize::{BRANCH_SPECIALIZATION_GROWTH_LIMIT, SCC_CLONE_NODE_LIMIT},
     },
@@ -524,10 +525,6 @@ pub(super) fn clone_scc(
             .or_else(|| conts.get(&target).copied())
             .unwrap_or(target)
     };
-    let map_edge = |edge: &CpsEdge| CpsEdge {
-        target: map_cont(edge.target),
-        args: edge.args.iter().map(&map_atom).collect(),
-    };
     let map_callee = |callee: &CpsCallee| match callee {
         CpsCallee::Known(function) => {
             CpsCallee::Known(functions.get(function).copied().unwrap_or(*function))
@@ -535,101 +532,16 @@ pub(super) fn clone_scc(
         CpsCallee::Closure(value) => CpsCallee::Closure(map_value(*value)),
     };
 
+    let map = Mapping {
+        value: &map_value,
+        atom: &map_atom,
+        cont: &map_cont,
+        callee: &map_callee,
+        node: &|id| nodes[&id],
+    };
     let mut cloned_nodes: Vec<(CpsNodeId, CpsNode)> = Vec::new();
     for (&old, node) in &node_defs {
-        let cloned = match node {
-            CpsNode::LetValue {
-                result,
-                value,
-                next,
-            } => CpsNode::LetValue {
-                result: map_value(*result),
-                value: match value {
-                    CpsValueExpr::Literal(literal) => CpsValueExpr::Literal(literal.clone()),
-                    CpsValueExpr::List(atoms) => {
-                        CpsValueExpr::List(atoms.iter().map(&map_atom).collect())
-                    }
-                    CpsValueExpr::Tuple(atoms) => {
-                        CpsValueExpr::Tuple(atoms.iter().map(&map_atom).collect())
-                    }
-                },
-                next: nodes[next],
-            },
-            CpsNode::LetIntrinsic {
-                result,
-                op,
-                args,
-                next,
-            } => CpsNode::LetIntrinsic {
-                result: map_value(*result),
-                op: *op,
-                args: args.iter().map(&map_atom).collect(),
-                next: nodes[next],
-            },
-            CpsNode::LetCont {
-                continuations: members,
-                body,
-            } => CpsNode::LetCont {
-                continuations: members.iter().map(|id| conts[id]).collect(),
-                body: nodes[body],
-            },
-            CpsNode::ApplyFun {
-                callee,
-                args,
-                return_to,
-            } => CpsNode::ApplyFun {
-                callee: map_callee(callee),
-                args: args.iter().map(&map_atom).collect(),
-                return_to: map_cont(*return_to),
-            },
-            CpsNode::ApplyCont(edge) => CpsNode::ApplyCont(map_edge(edge)),
-            CpsNode::Switch {
-                scrutinee,
-                cases,
-                default,
-            } => CpsNode::Switch {
-                scrutinee: map_atom(scrutinee),
-                cases: cases
-                    .iter()
-                    .map(|(tag, edge)| (*tag, map_edge(edge)))
-                    .collect(),
-                default: default.as_ref().map(map_edge),
-            },
-            CpsNode::Foreign {
-                function,
-                args,
-                return_to,
-            } => CpsNode::Foreign {
-                function: function.clone(),
-                args: args.iter().map(&map_atom).collect(),
-                return_to: map_cont(*return_to),
-            },
-            CpsNode::Cell {
-                op,
-                args,
-                return_to,
-            } => CpsNode::Cell {
-                op: *op,
-                args: args.iter().map(&map_atom).collect(),
-                return_to: map_cont(*return_to),
-            },
-            CpsNode::Intrinsic {
-                op,
-                args,
-                return_to,
-            } => CpsNode::Intrinsic {
-                op: *op,
-                args: args.iter().map(&map_atom).collect(),
-                return_to: map_cont(*return_to),
-            },
-            CpsNode::Exit { value } => CpsNode::Exit {
-                value: value.as_ref().map(&map_atom),
-            },
-            CpsNode::Unreachable => CpsNode::Unreachable,
-            // The pre-minting check above already rejected bodies nesting function definitions, and bailing here would leak the minted values and reserved slots.
-            CpsNode::LetFun { .. } | CpsNode::RecInit { .. } => unreachable!(),
-        };
-        cloned_nodes.push((nodes[&old], cloned));
+        cloned_nodes.push((nodes[&old], clone_node(node, &map)));
     }
 
     let mut cloned_conts: Vec<(CpsContId, CpsContinuation)> = Vec::new();
@@ -897,110 +809,21 @@ pub(super) fn clone_continuation(module: &mut CpsModule, target: CpsContId) -> O
         CpsAtom::Literal(literal) => CpsAtom::Literal(literal.clone()),
     };
     let map_cont = |target: CpsContId| conts.get(&target).copied().unwrap_or(target);
-    let map_edge = |edge: &CpsEdge| CpsEdge {
-        target: map_cont(edge.target),
-        args: edge.args.iter().map(&map_atom).collect(),
-    };
     let map_callee = |callee: &CpsCallee| match callee {
         CpsCallee::Known(function) => CpsCallee::Known(*function),
         CpsCallee::Closure(value) => CpsCallee::Closure(map_value(*value)),
     };
 
+    let map = Mapping {
+        value: &map_value,
+        atom: &map_atom,
+        cont: &map_cont,
+        callee: &map_callee,
+        node: &|id| nodes[&id],
+    };
     let mut cloned_nodes: Vec<(CpsNodeId, CpsNode)> = Vec::new();
     for (&old, node) in &node_defs {
-        let cloned = match node {
-            CpsNode::LetValue {
-                result,
-                value,
-                next,
-            } => CpsNode::LetValue {
-                result: map_value(*result),
-                value: match value {
-                    CpsValueExpr::Literal(literal) => CpsValueExpr::Literal(literal.clone()),
-                    CpsValueExpr::List(atoms) => {
-                        CpsValueExpr::List(atoms.iter().map(&map_atom).collect())
-                    }
-                    CpsValueExpr::Tuple(atoms) => {
-                        CpsValueExpr::Tuple(atoms.iter().map(&map_atom).collect())
-                    }
-                },
-                next: nodes[next],
-            },
-            CpsNode::LetIntrinsic {
-                result,
-                op,
-                args,
-                next,
-            } => CpsNode::LetIntrinsic {
-                result: map_value(*result),
-                op: *op,
-                args: args.iter().map(&map_atom).collect(),
-                next: nodes[next],
-            },
-            CpsNode::LetCont {
-                continuations: members,
-                body,
-            } => CpsNode::LetCont {
-                continuations: members.iter().map(|id| conts[id]).collect(),
-                body: nodes[body],
-            },
-            CpsNode::ApplyFun {
-                callee,
-                args,
-                return_to,
-            } => CpsNode::ApplyFun {
-                callee: map_callee(callee),
-                args: args.iter().map(&map_atom).collect(),
-                return_to: map_cont(*return_to),
-            },
-            CpsNode::ApplyCont(edge) => CpsNode::ApplyCont(map_edge(edge)),
-            CpsNode::Switch {
-                scrutinee,
-                cases,
-                default,
-            } => CpsNode::Switch {
-                scrutinee: map_atom(scrutinee),
-                cases: cases
-                    .iter()
-                    .map(|(tag, edge)| (*tag, map_edge(edge)))
-                    .collect(),
-                default: default.as_ref().map(map_edge),
-            },
-            CpsNode::Foreign {
-                function,
-                args,
-                return_to,
-            } => CpsNode::Foreign {
-                function: function.clone(),
-                args: args.iter().map(&map_atom).collect(),
-                return_to: map_cont(*return_to),
-            },
-            CpsNode::Cell {
-                op,
-                args,
-                return_to,
-            } => CpsNode::Cell {
-                op: *op,
-                args: args.iter().map(&map_atom).collect(),
-                return_to: map_cont(*return_to),
-            },
-            CpsNode::Intrinsic {
-                op,
-                args,
-                return_to,
-            } => CpsNode::Intrinsic {
-                op: *op,
-                args: args.iter().map(&map_atom).collect(),
-                return_to: map_cont(*return_to),
-            },
-            CpsNode::Exit { value } => CpsNode::Exit {
-                value: value.as_ref().map(&map_atom),
-            },
-            CpsNode::Unreachable => CpsNode::Unreachable,
-            // The pre-minting check above already rejected bodies nesting function definitions, and bailing here would leak the minted values and reserved slots.
-            CpsNode::LetFun { .. } | CpsNode::RecInit { .. } => unreachable!(),
-        };
-        cloned_nodes.push((nodes[&old], cloned));
+        cloned_nodes.push((nodes[&old], clone_node(node, &map)));
     }
 
     let mut cloned_conts: Vec<(CpsContId, CpsContinuation)> = Vec::new();

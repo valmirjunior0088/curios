@@ -2,6 +2,7 @@ use {
     super::*,
     super::{
         analysis::{analyze_calls, available_values, free_values, function_nodes, nodes_from},
+        clone::{Mapping, clone_node},
         optimize::{MULTI_SITE_INLINE_LIMIT, SCC_CLONE_NODE_LIMIT},
         reachable::prune_unreachable,
     },
@@ -327,114 +328,27 @@ pub(super) fn inline_call(
             continuations.get(&target).copied().unwrap_or(target)
         }
     };
-    let map_edge = |edge: &CpsEdge| CpsEdge {
-        target: map_cont(edge.target),
-        args: edge.args.iter().map(&map_atom).collect(),
-    };
 
+    // A callee parameter may map to a function reference, which turns an indirect call in the body into a direct one as the copy is made.
+    let map_callee = |callee: &CpsCallee| match callee {
+        CpsCallee::Known(function) => CpsCallee::Known(*function),
+        CpsCallee::Closure(value) => match map_atom(&CpsAtom::Value(*value)) {
+            CpsAtom::Value(value) => CpsCallee::Closure(value),
+            CpsAtom::Fun(function) => CpsCallee::Known(function),
+            // The pre-minting bail above already rejected every literal-mapped closure callee, and bailing here would leak the minted values and reserved slots.
+            CpsAtom::Literal(_) => unreachable!(),
+        },
+    };
+    let map = Mapping {
+        value: &map_value,
+        atom: &map_atom,
+        cont: &map_cont,
+        callee: &map_callee,
+        node: &|id| node_map[&id],
+    };
     let mut cloned_nodes = BTreeMap::new();
     for (&old, node) in &nodes {
-        let cloned = match node {
-            CpsNode::LetValue {
-                result,
-                value,
-                next,
-            } => CpsNode::LetValue {
-                result: map_value(*result),
-                value: match value {
-                    CpsValueExpr::Literal(literal) => CpsValueExpr::Literal(literal.clone()),
-                    CpsValueExpr::List(atoms) => {
-                        CpsValueExpr::List(atoms.iter().map(&map_atom).collect())
-                    }
-                    CpsValueExpr::Tuple(atoms) => {
-                        CpsValueExpr::Tuple(atoms.iter().map(&map_atom).collect())
-                    }
-                },
-                next: node_map[next],
-            },
-            CpsNode::LetIntrinsic {
-                result,
-                op,
-                args,
-                next,
-            } => CpsNode::LetIntrinsic {
-                result: map_value(*result),
-                op: *op,
-                args: args.iter().map(&map_atom).collect(),
-                next: node_map[next],
-            },
-            CpsNode::LetCont {
-                continuations: members,
-                body,
-            } => CpsNode::LetCont {
-                continuations: members.iter().map(|id| continuations[id]).collect(),
-                body: node_map[body],
-            },
-            CpsNode::ApplyFun {
-                callee,
-                args,
-                return_to,
-            } => CpsNode::ApplyFun {
-                callee: match callee {
-                    CpsCallee::Known(function) => CpsCallee::Known(*function),
-                    CpsCallee::Closure(value) => match map_atom(&CpsAtom::Value(*value)) {
-                        CpsAtom::Value(value) => CpsCallee::Closure(value),
-                        CpsAtom::Fun(function) => CpsCallee::Known(function),
-                        // The pre-minting bail above already rejected every literal-mapped closure callee, and bailing here would leak the minted values and reserved slots.
-                        CpsAtom::Literal(_) => unreachable!(),
-                    },
-                },
-                args: args.iter().map(&map_atom).collect(),
-                return_to: map_cont(*return_to),
-            },
-            CpsNode::ApplyCont(edge) => CpsNode::ApplyCont(map_edge(edge)),
-            CpsNode::Switch {
-                scrutinee,
-                cases,
-                default,
-            } => CpsNode::Switch {
-                scrutinee: map_atom(scrutinee),
-                cases: cases
-                    .iter()
-                    .map(|(tag, edge)| (*tag, map_edge(edge)))
-                    .collect(),
-                default: default.as_ref().map(map_edge),
-            },
-            CpsNode::Foreign {
-                function,
-                args,
-                return_to,
-            } => CpsNode::Foreign {
-                function: function.clone(),
-                args: args.iter().map(&map_atom).collect(),
-                return_to: map_cont(*return_to),
-            },
-            CpsNode::Cell {
-                op,
-                args,
-                return_to,
-            } => CpsNode::Cell {
-                op: *op,
-                args: args.iter().map(&map_atom).collect(),
-                return_to: map_cont(*return_to),
-            },
-            CpsNode::Intrinsic {
-                op,
-                args,
-                return_to,
-            } => CpsNode::Intrinsic {
-                op: *op,
-                args: args.iter().map(&map_atom).collect(),
-                return_to: map_cont(*return_to),
-            },
-            CpsNode::Exit { value } => CpsNode::Exit {
-                value: value.as_ref().map(&map_atom),
-            },
-            CpsNode::Unreachable => CpsNode::Unreachable,
-            // `inline_known_calls` inlines only bodies free of function definitions, and bailing here would leak the minted values and reserved slots.
-            CpsNode::LetFun { .. } | CpsNode::RecInit { .. } => unreachable!(),
-        };
-        cloned_nodes.insert(node_map[&old], cloned);
+        cloned_nodes.insert(node_map[&old], clone_node(node, &map));
     }
 
     for (&old, continuation) in &continuation_defs {
