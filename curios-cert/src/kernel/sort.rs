@@ -290,7 +290,7 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
     }
 
     match &**term {
-        Subterm::Var(var) => Ok(kernel.type_of(var.unwrap()).cloned()),
+        Subterm::Var(var) => Ok(kernel.type_of(var.unwrap())?.cloned()),
 
         // A polymorphic head at the levels this occurrence chose. The scheme is read *uninstantiated* and substituted at those levels; going through the `Var` arm would read an already-instantiated type and have nothing left to substitute.
         Subterm::UniverseInst(UniverseInst { head, levels }) => {

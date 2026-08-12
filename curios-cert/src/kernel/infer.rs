@@ -127,7 +127,7 @@ fn infer_node(
 
         // A variable has the type it was bound or declared at. There is no fallback: an unbound name in a finished term is a broken term.
         Subterm::Var(var) => kernel
-            .type_of(var.unwrap())
+            .type_of(var.unwrap())?
             .cloned()
             .ok_or_else(|| KernelError::Unbound(var.unwrap().clone())),
 

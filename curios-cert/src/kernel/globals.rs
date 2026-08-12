@@ -198,11 +198,6 @@ impl Globals {
         self.structs.get(name)
     }
 
-    /// The type `name` was declared at.
-    pub(super) fn type_of(&self, name: &Free) -> Option<&Term> {
-        self.definitions.get(name).map(|entry| &entry.type_)
-    }
-
     /// The universe scheme `name` was generalized under, for a use that states its own instance.
     pub(super) fn scheme_of(&self, name: &Free) -> Option<(&Term, &UniverseContext)> {
         self.definitions

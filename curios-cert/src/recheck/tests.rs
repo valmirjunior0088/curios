@@ -3551,3 +3551,176 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
         "expected `Nat`, found `/demo/Box/Box(Nat)`"
     );
 }
+
+/// The scheme both universe-occurrence fixtures below are built on: `def A<u, v | u + 1 <= v> : Type v = Type u`.
+///
+/// Its constraint is load-bearing rather than decorative, which is the whole point of the shape: checking the body needs `Type (u + 1) <= Type v`, and that holds under this hypothesis and under nothing else. So an occurrence of `A` is legitimate exactly where it discharges the constraint at its own levels, and [`Kernel::check_instance`](crate::Kernel) is what does that.
+fn scheme_context() -> UniverseContext {
+    let ordered = UniverseConstraint {
+        lower: Level::param(UniverseParam(0))
+            .checked_add(1)
+            .expect("level admits the offset"),
+        upper: Level::param(UniverseParam(1)),
+        origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
+    };
+
+    UniverseContext {
+        parameter_count: 2,
+        constraints: vec![ordered],
+    }
+}
+
+/// The same two parameters with the scheme's constraint *not* declared — the context a user of `A` stands in when it has assumed nothing about its own levels.
+fn open_context() -> UniverseContext {
+    UniverseContext {
+        parameter_count: 2,
+        constraints: Vec::new(),
+    }
+}
+
+/// The scheme above, followed by one `user` that spells an occurrence of it.
+///
+/// `user` is `(its own universe context, the term it is defined as)`, and its declared type is `Type v` throughout — so the two spellings of the occurrence differ in nothing but whether the instance is stated.
+fn universe_scheme_module(user: Option<(UniverseContext, Term)>) -> Module {
+    let scheme = Definition {
+        name: Global::Authored(Qualifier::from(["A"])),
+        kind: DefinitionKind::Authored,
+        universe_context: scheme_context(),
+        island: Qualifier::default(),
+        totality: Totality::Total,
+        type_: Term::type_at(Level::param(UniverseParam(1))),
+        body: Term::type_at(Level::param(UniverseParam(0))),
+    };
+
+    let mut items = vec![Item::Let(scheme)];
+    if let Some((universe_context, body)) = user {
+        items.push(Item::Let(Definition {
+            name: Global::Authored(Qualifier::from(["user"])),
+            kind: DefinitionKind::Authored,
+            universe_context,
+            island: Qualifier::default(),
+            totality: Totality::Total,
+            type_: Term::type_at(Level::param(UniverseParam(1))),
+            body,
+        }));
+    }
+
+    Module {
+        mounts: Vec::new(),
+        items,
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::new(),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 0,
+        type_: None,
+        body: Some(Term::intrinsic(Intrinsic::NatType)),
+    }
+}
+
+/// `A` alone, and `A` at the using item's own two parameters — the two spellings of one occurrence.
+fn scheme_occurrences() -> (Term, Term) {
+    let bare = Term::free_var(&Free::from(&Global::Authored(Qualifier::from(["A"]))));
+    let instance = Term::universe_inst(
+        bare.clone(),
+        vec![
+            Level::param(UniverseParam(0)),
+            Level::param(UniverseParam(1)),
+        ],
+    );
+
+    (bare, instance)
+}
+
+/// An occurrence of a universe-polymorphic definition that states no instance was typed at the scheme's own type, discharging nothing.
+///
+/// A bare `Var` denotes no particular instance, and the rest of the codebase says so twice. `Globals::value` withholds such an occurrence's *body*, because a polymorphic definition unfolds only through a `UniverseInst` that names which instance; `curios-elab` never builds one at all, rebuilding every polymorphic occurrence as a `UniverseInst` at freshly minted levels, and its `Frames::var_reduct` withholds the body for the reason it states — letting a raw variable unfold "would leak those bound parameters into the ambient solver". `Globals::type_of` carried no such rule: it handed the definition's stored type back whole, scheme parameters and all.
+///
+/// Two things follow from that, and the second is what this asserts. The scheme's parameters are *captured* — `A`'s `Type v` is read as the ambient item's `v`, so a level belonging to one scheme becomes a level the using item quantifies over, which is the collapse `documentation/SOUNDNESS.md`'s `validate_universes` row already records as having admitted at the neighbouring position. And `check_instance` never runs, so the scheme's own constraints are discharged by nothing. `A` here is well formed only where `u + 1 <= v`, and the second case below is that same occurrence with its instance stated, refused for exactly that reason — so the two cases differ in nothing but whether dropping the instance also drops the rule.
+///
+/// Verified while the hole was open: `recheck_module_verdicts` returned **zero refusals** for the first module, while the second — the same use of `A`, in an item with the same universe context, differing only in that the occurrence states its instance — was refused as "this instance does not satisfy its scheme's `u+1 <= v`". Reachable from no surface program, since the elaborator rebuilds every such occurrence before the kernel is asked, which is why this belongs here and why nothing in the corpus could have found it.
+///
+/// The control is [`an_occurrence_stating_its_universe_instance_is_still_accepted`], and it holds the two spellings the rule must keep: an instance that does discharge the constraint, and a bare occurrence of a *monomorphic* definition, which is how every definition with no universe parameters is written.
+#[test]
+fn a_bare_occurrence_of_a_universe_scheme_is_refused() {
+    let (bare, instance) = scheme_occurrences();
+
+    for (label, body, refusal) in [
+        ("the bare occurrence", bare, "states no universe instance"),
+        (
+            "the same occurrence with its instance stated",
+            instance,
+            "does not satisfy its scheme",
+        ),
+    ] {
+        let module = universe_scheme_module(Some((open_context(), body)));
+        let verdicts = recheck_module_verdicts(&module, 1_000_000, &Globals::default());
+
+        assert!(
+            verdicts
+                .iter()
+                .any(|verdict| verdict.error.to_string().contains(refusal)),
+            "{label}: the kernel read a universe scheme at the ambient item's parameters: {verdicts:?}",
+        );
+    }
+}
+
+/// The control: an occurrence that *states* its instance stays accepted, and so does a bare occurrence of a monomorphic definition.
+///
+/// The first half is what stops the witness above being closed by over-refusal — a rule refusing every occurrence of a universe scheme would pass it and take universe polymorphism with it. The second half is the larger one, and it is why the rule reads the scheme's *width* rather than the occurrence's shape: a bare `Var` is how every definition with no universe parameters is written, so refusing bare occurrences as a class would refuse the standard library rather than this fixture. The scheme is also checked standing alone, since `A` must remain well formed for the witness's refusals to be about its use.
+#[test]
+fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
+    let (_, instance) = scheme_occurrences();
+
+    assert_eq!(
+        recheck_module_verdicts(
+            &universe_scheme_module(None),
+            1_000_000,
+            &Globals::default()
+        ),
+        Vec::new(),
+        "the universe scheme was refused standing alone",
+    );
+
+    assert_eq!(
+        recheck_module_verdicts(
+            &universe_scheme_module(Some((scheme_context(), instance))),
+            1_000_000,
+            &Globals::default(),
+        ),
+        Vec::new(),
+        "an occurrence discharging its scheme's constraint was refused",
+    );
+
+    let zero = Global::Authored(Qualifier::from(["zero"]));
+    let monomorphic = Module {
+        mounts: Vec::new(),
+        items: vec![
+            authored(
+                &zero,
+                Term::intrinsic(Intrinsic::NatType),
+                Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+            ),
+            authored(
+                &Global::Authored(Qualifier::from(["echo"])),
+                Term::intrinsic(Intrinsic::NatType),
+                Term::free_var(&Free::from(&zero)),
+            ),
+        ],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::new(),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 0,
+        type_: None,
+        body: Some(Term::intrinsic(Intrinsic::NatType)),
+    };
+
+    assert_eq!(
+        recheck_module_verdicts(&monomorphic, 1_000_000, &Globals::default()),
+        Vec::new(),
+        "a bare occurrence of a monomorphic definition was refused",
+    );
+}

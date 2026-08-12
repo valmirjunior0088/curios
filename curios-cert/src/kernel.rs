@@ -114,6 +114,8 @@ pub enum KernelError {
     UnsatisfiableUniverses,
     /// A universe instance whose stated levels do not satisfy the scheme's constraint set. The scheme declared `lower ≤ upper` over its parameters; at this instance's levels, under the hypotheses of the item being checked, the inequality does not hold — which is the route back to the paradox the hierarchy exists to exclude.
     UniverseInstance { lower: Level, upper: Level },
+    /// An occurrence of a universe-polymorphic definition that states no instance. Such an occurrence denotes no particular instance, which is why `Globals::value` withholds its body; reading its *type* regardless hands back the scheme's own parameters, which are then read as the ambient item's, and skips `check_instance` entirely — so the scheme's constraints are discharged by nothing and a use the stated-instance spelling refuses is admitted by dropping the instance.
+    MissingUniverseInstance { name: Free, expected: usize },
 }
 
 impl From<ReduceError> for KernelError {
@@ -272,6 +274,10 @@ impl fmt::Display for Displayed<'_> {
             KernelError::UniverseInstance { lower, upper } => write!(
                 formatter,
                 "this instance does not satisfy its scheme's `{lower} <= {upper}`",
+            ),
+            KernelError::MissingUniverseInstance { name, expected } => write!(
+                formatter,
+                "this occurrence of `{name}` states no universe instance, and its scheme declares {expected}",
             ),
         }
     }
@@ -565,10 +571,23 @@ impl Kernel {
     }
 
     /// The type `name` was bound or declared at. Locals shadow definitions.
-    pub(crate) fn type_of(&self, name: &Free) -> Option<&Term> {
-        self.scope
-            .local_type(name)
-            .or_else(|| self.globals.type_of(name))
+    ///
+    /// A definition with universe parameters is refused here rather than answered, which is [`Globals::value`]'s rule applied to the other half of a definition. A bare occurrence denotes no particular instance, so there is no instantiation to report a type at: handing back the stored scheme type reads that scheme's parameters as the ambient item's — the capture `documentation/SOUNDNESS.md` records at the neighbouring position — and reaches [`Kernel::check_instance`] never, so the scheme's constraints go undischarged. A local is exempt because it is monomorphic: it was opened at one type, and there is no scheme to instantiate.
+    pub(crate) fn type_of(&self, name: &Free) -> Result<Option<&Term>, KernelError> {
+        if let Some(local) = self.scope.local_type(name) {
+            return Ok(Some(local));
+        }
+
+        match self.globals.scheme_of(name) {
+            None => Ok(None),
+            Some((type_, universes)) => match universes.parameter_count {
+                0 => Ok(Some(type_)),
+                expected => Err(KernelError::MissingUniverseInstance {
+                    name: name.clone(),
+                    expected,
+                }),
+            },
+        }
     }
 
     /// The universe scheme `name` was generalized under, for a use that states its own instance.
