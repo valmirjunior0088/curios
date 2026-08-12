@@ -539,6 +539,21 @@ pub enum CpsUseTarget {
     Cont(CpsContId),
 }
 
+/// What the module's functions state about returning: which continuation is whose sentinel, and how many values each hands back.
+///
+/// The two travel together because every arity question needs both — whether a transfer is a return at all, and how wide a return is — so they are one parameter rather than two threaded in parallel through the verifier.
+struct ReturnFacts<'a> {
+    owners: &'a BTreeMap<CpsContId, CpsFunId>,
+    arities: &'a BTreeMap<CpsFunId, usize>,
+}
+
+impl ReturnFacts<'_> {
+    /// How many values `function` returns, reading absence as the single value a function carried before any protocol widened it.
+    fn arity(&self, function: CpsFunId) -> usize {
+        self.arities.get(&function).copied().unwrap_or(1)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct CpsVerifyError(pub String);
 
@@ -619,6 +634,88 @@ impl CpsModule {
             }
         }
         counts
+    }
+
+    /// How many values each live function hands back to its caller.
+    ///
+    /// A function's returns are its edges to its own return sentinel, so the arity those edges carry *is* its result count — nothing declares it, and adding a field to say so would mean restating it at every construction site rather than reading it off the one place that already knows. A function with no such edge returns through some tail position instead: a foreign call, a cell operation, or a `ListMap` hands back what that operation produces, a closure call hands back the one value its shared type carries, and a tail call to a known function hands back whatever *that* function does — which is why the last of those is resolved by propagation rather than locally. A function with none of those neither returns nor is called for a result, and takes the one value every function carried before any protocol widened it.
+    ///
+    /// Where a function has both a return edge and a constrained tail position, the edge is taken and the disagreement is left to [`CpsModule::verify`], whose business it is to report rather than to paper over.
+    pub(crate) fn return_arities(&self) -> BTreeMap<CpsFunId, usize> {
+        let mut settled = BTreeMap::<CpsFunId, usize>::new();
+        let mut inherits = BTreeMap::<CpsFunId, BTreeSet<CpsFunId>>::new();
+
+        for (function, definition) in self.functions.iter_live() {
+            let sentinel = definition.return_cont;
+            let mut edges = None;
+            let mut operation = None;
+            let mut tail_calls = BTreeSet::new();
+
+            for node_id in analysis::nodes_from(self, definition.body) {
+                let mut returning = |edge: &CpsEdge| {
+                    if edge.target == sentinel {
+                        edges.get_or_insert(edge.args.len());
+                    }
+                };
+                match self.node(node_id).unwrap() {
+                    CpsNode::ApplyCont(edge) => returning(edge),
+                    CpsNode::Switch { cases, default, .. } => {
+                        cases.values().chain(default.as_ref()).for_each(returning);
+                    }
+                    CpsNode::ApplyFun {
+                        callee,
+                        return_to: to,
+                        ..
+                    } if *to == sentinel => match callee {
+                        CpsCallee::Known(callee) => {
+                            tail_calls.insert(*callee);
+                        }
+                        CpsCallee::Closure(_) => operation = operation.or(Some(1)),
+                    },
+                    CpsNode::Foreign {
+                        function,
+                        return_to,
+                        ..
+                    } if *return_to == sentinel => {
+                        operation = operation.or(Some(function.signature.results.len()));
+                    }
+                    CpsNode::Cell { op, return_to, .. } if *return_to == sentinel => {
+                        operation = operation.or(Some(op.result_arity()));
+                    }
+                    CpsNode::Intrinsic { return_to, .. } if *return_to == sentinel => {
+                        operation = operation.or(Some(1));
+                    }
+                    _ => {}
+                }
+            }
+
+            match edges.or(operation) {
+                Some(arity) => {
+                    settled.insert(function, arity);
+                }
+                None => {
+                    inherits.insert(function, tail_calls);
+                }
+            }
+        }
+
+        // Propagate along tail calls until nothing more resolves. Whatever is left over is mutually tail-recursive with nothing that ever returns, so no edge constrains it.
+        while inherits
+            .values()
+            .flatten()
+            .any(|to| settled.contains_key(to))
+        {
+            for (function, tail_calls) in &inherits {
+                if let Some(arity) = tail_calls.iter().find_map(|to| settled.get(to)).copied() {
+                    settled.insert(*function, arity);
+                }
+            }
+            inherits.retain(|function, _| !settled.contains_key(function));
+        }
+        for function in inherits.into_keys() {
+            settled.insert(function, 1);
+        }
+        settled
     }
 
     pub fn reserve_node(&mut self) -> CpsNodeId {
@@ -742,13 +839,18 @@ impl CpsModule {
             }
         }
 
+        let arities = self.return_arities();
+        let facts = ReturnFacts {
+            owners: &returns,
+            arities: &arities,
+        };
         let mut node_owners = BTreeMap::<CpsNodeId, CpsFunId>::new();
         let mut bound_continuations = BTreeSet::<CpsContId>::new();
         for (id, function) in self.functions.iter_live() {
             self.verify_function_body(
                 id,
                 function,
-                &returns,
+                &facts,
                 &mut node_owners,
                 &mut bound_continuations,
             )?;
@@ -975,7 +1077,7 @@ impl CpsModule {
         &self,
         owner: CpsFunId,
         function: &CpsFunction,
-        returns: &BTreeMap<CpsContId, CpsFunId>,
+        facts: &ReturnFacts<'_>,
         node_owners: &mut BTreeMap<CpsNodeId, CpsFunId>,
         bound_continuations: &mut BTreeSet<CpsContId>,
     ) -> Result<(), CpsVerifyError> {
@@ -996,7 +1098,7 @@ impl CpsModule {
             let node = self
                 .node(id)
                 .ok_or_else(|| CpsVerifyError(format!("function body references missing {id}")))?;
-            self.verify_node(owner, function.return_cont, returns, &scope, id, node)?;
+            self.verify_node(owner, function.return_cont, facts, &scope, id, node)?;
 
             match node {
                 CpsNode::LetValue { next, .. } | CpsNode::LetIntrinsic { next, .. } => {
@@ -1011,7 +1113,7 @@ impl CpsModule {
                 } => {
                     let mut inner = scope;
                     for &continuation in continuations {
-                        if returns.contains_key(&continuation) {
+                        if facts.owners.contains_key(&continuation) {
                             return Err(CpsVerifyError(format!(
                                 "return ID {continuation} cannot be bound as a local continuation"
                             )));
@@ -1046,7 +1148,7 @@ impl CpsModule {
         &self,
         current_function: CpsFunId,
         return_cont: CpsContId,
-        returns: &BTreeMap<CpsContId, CpsFunId>,
+        facts: &ReturnFacts<'_>,
         scope: &BTreeSet<CpsContId>,
         id: CpsNodeId,
         node: &CpsNode,
@@ -1105,28 +1207,33 @@ impl CpsModule {
                     }
                     CpsCallee::Closure(value) => self.require_value(*value, "closure callee")?,
                 }
-                if self.continuation_arity(
+                // A closure is reached through the shared type of its arity, which carries one result whatever the function behind it returns.
+                let results = match callee {
+                    CpsCallee::Known(function) => facts.arity(*function),
+                    CpsCallee::Closure(_) => 1,
+                };
+                let params = self.continuation_arity(
                     current_function,
                     return_cont,
-                    returns,
+                    facts,
                     scope,
                     *return_to,
-                )? != 1
-                {
+                )?;
+                if params != results {
                     return Err(CpsVerifyError(format!(
-                        "{id} user call return continuation {return_to} must accept one value"
+                        "{id} user call return continuation {return_to} accepts {params} values, callee returns {results}"
                     )));
                 }
             }
             CpsNode::ApplyCont(edge) => {
-                self.verify_edge(current_function, return_cont, returns, scope, id, edge)?
+                self.verify_edge(current_function, return_cont, facts, scope, id, edge)?
             }
             CpsNode::Switch { cases, default, .. } => {
                 for edge in cases.values() {
-                    self.verify_edge(current_function, return_cont, returns, scope, id, edge)?;
+                    self.verify_edge(current_function, return_cont, facts, scope, id, edge)?;
                 }
                 if let Some(edge) = default {
-                    self.verify_edge(current_function, return_cont, returns, scope, id, edge)?;
+                    self.verify_edge(current_function, return_cont, facts, scope, id, edge)?;
                 }
             }
             CpsNode::Foreign {
@@ -1145,7 +1252,7 @@ impl CpsModule {
                 let params = self.continuation_arity(
                     current_function,
                     return_cont,
-                    returns,
+                    facts,
                     scope,
                     *return_to,
                 )?;
@@ -1170,7 +1277,7 @@ impl CpsModule {
                 if self.continuation_arity(
                     current_function,
                     return_cont,
-                    returns,
+                    facts,
                     scope,
                     *return_to,
                 )? != op.result_arity()
@@ -1194,7 +1301,7 @@ impl CpsModule {
                 if self.continuation_arity(
                     current_function,
                     return_cont,
-                    returns,
+                    facts,
                     scope,
                     *return_to,
                 )? != 1
@@ -1237,16 +1344,17 @@ impl CpsModule {
         Ok(())
     }
 
+    /// Check one transfer's argument count against its target's. A return edge is covered by the same rule, `self_arity` being the arity [`CpsModule::return_arities`] read off the function's own edges — so an edge that disagrees with its siblings is reported here rather than reaching the emitter.
     fn verify_edge(
         &self,
         function: CpsFunId,
         return_cont: CpsContId,
-        returns: &BTreeMap<CpsContId, CpsFunId>,
+        facts: &ReturnFacts<'_>,
         scope: &BTreeSet<CpsContId>,
         owner: CpsNodeId,
         edge: &CpsEdge,
     ) -> Result<(), CpsVerifyError> {
-        let arity = self.continuation_arity(function, return_cont, returns, scope, edge.target)?;
+        let arity = self.continuation_arity(function, return_cont, facts, scope, edge.target)?;
         if arity != edge.args.len() {
             return Err(CpsVerifyError(format!(
                 "{owner} edge to {} carries {} arguments; expected {arity}",
@@ -1257,18 +1365,19 @@ impl CpsModule {
         Ok(())
     }
 
+    /// How many values a transfer to `target` carries, `self_arity` being what a transfer to the enclosing function's own sentinel carries — its return.
     fn continuation_arity(
         &self,
         function: CpsFunId,
         return_cont: CpsContId,
-        returns: &BTreeMap<CpsContId, CpsFunId>,
+        facts: &ReturnFacts<'_>,
         scope: &BTreeSet<CpsContId>,
         target: CpsContId,
     ) -> Result<usize, CpsVerifyError> {
         if target == return_cont {
-            return Ok(1);
+            return Ok(facts.arity(function));
         }
-        if let Some(owner) = returns.get(&target) {
+        if let Some(owner) = facts.owners.get(&target) {
             return Err(CpsVerifyError(format!(
                 "{function} references {owner}'s return continuation {target}"
             )));
