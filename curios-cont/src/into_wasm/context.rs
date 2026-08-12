@@ -295,7 +295,7 @@ impl<'a, 'b> Context<'a, 'b> {
 
     /// Enter a resume block with `arity` values already on the stack as references.
     ///
-    /// A resume block's parameters are held boxed by construction: the representation analysis withdraws the offer on every continuation a call, a host import or a cell operation returns to, precisely because the emitter hands those results over as references and has no cheaper store to make. The assert states that rather than trusting it — a violation is a broken analysis, and it would otherwise surface as a wasm validation failure with nothing pointing back here.
+    /// A resume block's parameters are held boxed by construction: the representation analysis withdraws the offer on every continuation a call, a host import, a cell operation or a call-shaped intrinsic returns to, precisely because the emitter hands those results over as references and has no cheaper store to make. The assert states that rather than trusting it — a violation is a broken analysis, and it would otherwise surface as a wasm validation failure with nothing pointing back here.
     fn resume_instrs(&self, resume: &EmissionBlockName, arity: usize) -> Vec<curios_wasm::Instr> {
         let block_data = self.find_block(resume);
 

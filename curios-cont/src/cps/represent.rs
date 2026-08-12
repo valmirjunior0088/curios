@@ -138,7 +138,7 @@ fn offers(module: &CpsModule) -> BTreeMap<CpsValueId, Offer> {
                 offers.insert(*result, offer);
             }
 
-            // A result returning from a call, a host import or a cell operation is already a reference by the time it reaches its continuation's parameter.
+            // A result returning from a call, a host import, a cell operation or a call-shaped intrinsic is already a reference by the time it reaches its continuation's parameter.
             CpsNode::ApplyFun { return_to, .. }
             | CpsNode::Foreign { return_to, .. }
             | CpsNode::Cell { return_to, .. }
