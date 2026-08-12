@@ -162,7 +162,7 @@ pub rec take_continuations(
                     Bytes/at(
                         b,
                         off,
-                        Nat/Lt/of_lte_succ(
+                        @Nat/Lt/of_lte_succ(
                             Nat/Lte/trans(Nat/Lte/s(Nat/Lte/add_r(off, pred)), bound))))
                     - 0x80),
             bound)
@@ -173,7 +173,7 @@ pub rec peel_byte(
     @b: Bytes,
     nz: Nat/Lt(0, Bytes/len(b)),
     w: Utf8(s, b),
-) -> Utf8(step(Bytes/at(b, 0, nz), s), Bytes/slice(b, 1, Bytes/len(b))) =
+) -> Utf8(step(Bytes/at(b, 0, @nz), s), Bytes/slice(b, 1, Bytes/len(b))) =
     match w
     | stop() => match nz end
     | more(c, st, t, rest) => rest

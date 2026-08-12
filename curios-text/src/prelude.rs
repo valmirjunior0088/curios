@@ -453,9 +453,13 @@ fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<TopItem> {
             bool_(),
             intrinsic(Intrinsic::BinEql(grain, name("a"), name("b"))),
         ),
-        pub_fn(
+        pub_fn_marked(
             "at",
-            vec![("b", type_.clone()), ("i", nat()), ("ok", in_range)],
+            vec![
+                (Plicity::Explicit, "b", type_.clone()),
+                (Plicity::Explicit, "i", nat()),
+                (Plicity::Implicit, "ok", in_range),
+            ],
             atom.clone(),
             intrinsic(Intrinsic::BinGet(grain, name("b"), name("i"))),
         ),
@@ -498,7 +502,7 @@ fn list_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
                 (Plicity::Explicit, "a", list_of(name("T"))),
                 (Plicity::Explicit, "i", nat()),
                 (
-                    Plicity::Explicit,
+                    Plicity::Implicit,
                     "ok",
                     applied(
                         registered(syntax.proof.lt),

@@ -165,3 +165,25 @@ pub(super) fn insert_implicits_on_check(
     let func_type = Term::func_type(binders.clone(), output);
     Ok((Term::func(binders, body), func_type))
 }
+
+/// The canonical inhabitant of `type_`, when it has exactly one and no argument is needed to build it.
+///
+/// **This is not proof search.** The answer is unique, so there is no choice to make, nothing to backtrack over, and no incompleteness to reason about — it is the introduction-side counterpart of the singleton condition [`singleton_eliminable`](super::match_::singleton_eliminable) applies to elimination, and of proof irrelevance, which already holds that every inhabitant of a proposition is interchangeable. This rule only says that where exactly one exists and it takes no arguments, the elaborator may write it down.
+///
+/// Recognised narrowly: the goal must reduce to `/syn`'s trivially true proposition. That covers every *decided* proposition — one defined as a `match` on a machine comparison, whose in-range branch is this type — which is the whole family `/sys`'s preconditions are drawn from. A user's own single-nullary-constructor proposition is not discharged, and widening to it means reading the constructor telescope apart from the declaration parameters it leads with; the narrow form needs neither and is what every caller here wants.
+pub(super) fn trivially_inhabited(context: &mut Context, type_: &Term) -> Option<Term> {
+    let truth = context.syntax().proof.true_type.qualifier();
+    let qed = context.syntax().proof.true_qed.qualifier();
+
+    let reduced = crate::reduce_with(context, type_).ok()?;
+    let Subterm::InductType(induct) = &*reduced else {
+        return None;
+    };
+
+    (induct.name == curios_core::Global::Authored(truth)).then(|| {
+        Term::apply(
+            Term::var(curios_core::Var::free(Free::global(qed))),
+            Vec::<Term>::new(),
+        )
+    })
+}

@@ -1,5 +1,5 @@
 -- A crit-bit (Patricia) trie keyed on the byte string a `Key` witness produces. The map deliberately does not remember `K`: the trie's identity *is* that byte string, so two key types serializing alike are the same key. `Key` is therefore a write-side injection only — `entries`, `keys`, and `fold` hand back `Bytes`, and a caller wanting typed keys decodes at the boundary.
-use /std/{Bytes, Byte, Nat, Bool, Str, List, Option, Eq, True};
+use /std/{Bytes, Byte, Nat, Bool, Str, List, Option, Eq};
 
 induct Node(V: Type): Type
 | leaf(key: Bytes, value: V)
@@ -34,7 +34,7 @@ satisfy Key(Str) {
 --
 -- So a caller wanting numeric keys encodes them at the boundary, and a future `Key` for a binary carrier is the shape worth building.
 
--- The range test is written `g < len` rather than as a refuted `g >= len` so that the in-range arm can index through `Bytes/at`: `Nat/Lt` is decided on exactly this comparison, so refining it to `true` reduces the proposition to `True` and `True/qed()` inhabits it. Spelling the same fact the other way round leaves the refinement on `>=`, where nothing reduces `<`, and the only way in is the unchecked `/sys` accessor.
+-- The range test is written `g < len` rather than as a refuted `g >= len` so that the in-range arm can index through `Bytes/at`: `Nat/Lt` is decided on exactly this comparison, so refining it to `true` reduces the proposition away and the bound is discharged with nothing written. Spelling the same fact the other way round leaves the refinement on `>=`, where nothing reduces `<`, and the index becomes unpayable.
 let bit(k: Bytes, j: Nat) -> Nat =
     let g = j / 9;
     let o = j % 9;
@@ -43,7 +43,7 @@ let bit(k: Bytes, j: Nat) -> Nat =
     | true =>
         match o == 0
         | true => 1
-        | false => Nat/and(Nat/shr(Byte/to_nat(Bytes/at(k, g, True/qed())), 8 - o), 1)
+        | false => Nat/and(Nat/shr(Byte/to_nat(Bytes/at(k, g)), 8 - o), 1)
         end
     end;
 
@@ -61,8 +61,8 @@ let crit(a: Bytes, b: Bytes) -> Nat =
             match g < Bytes/len(b)
             | false => g * 9
             | true =>
-                let x = Byte/to_nat(Bytes/at(a, g, True/qed()));
-                let y = Byte/to_nat(Bytes/at(b, g, True/qed()));
+                let x = Byte/to_nat(Bytes/at(a, g));
+                let y = Byte/to_nat(Bytes/at(b, g));
                 match x == y | true => bytes(g + 1) | false => bits(x, y, g, 1) end
             end
         end;

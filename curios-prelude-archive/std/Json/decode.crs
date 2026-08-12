@@ -135,7 +135,7 @@ pub rec decode: Parse(Json) =
                 match Nat/Lt/try(start, Bytes/len(input))
                 | none() => Result/failure("unexpected end of input")
                 | some(ok) =>
-                    match Byte/to_nat(Bytes/at(input, start, ok))
+                    match Byte/to_nat(Bytes/at(input, start, @ok))
                     | 110 => parse_null.run(input, start)
                     | 116 => parse_true_val.run(input, start)
                     | 102 => parse_false_val.run(input, start)

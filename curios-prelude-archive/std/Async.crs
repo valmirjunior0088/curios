@@ -599,7 +599,7 @@ pub let join_all(@A: Type, tasks: List(Async(A))) -> Async(List(A)) =
         match Nat/Lt/try(i, List/len(tasks))
         | none() => pure([])
         | some(ok) =>
-            let h = spawn(List/at(tasks, i, ok))!;
+            let h = spawn(List/at(@Async(A), tasks, i, @ok))!;
             let rest = go(i + 1)!;
             let a = join(h)!;
             pure([a, ..rest])
@@ -618,7 +618,7 @@ pub let select(@A: Type, tasks: List(Async(A))) -> Async({Nat, A}) =
                 fork_with(
                     Async {
                         bind_raw(
-                            List/at(tasks, i, ok).0,
+                            List/at(@Async(A), tasks, i, @ok).0,
                             (a) => bind(lift(Future/fulfill(winner, (i, a))), (_) => pure(())).0),
                     },
                     t)!;

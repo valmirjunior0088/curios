@@ -1,9 +1,9 @@
 pub use /sys/{List};
 pub use /sys/List/{at, len, slice, map};
-use /std/{Nat, Bool, Option, Eq, Str, Show, Monad, True};
+use /std/{Nat, Bool, Option, Eq, Str, Show, Monad};
 
 pub let get(@T: Type, a: List(T), i: Nat) -> Option(T) =
-    match i < len(a) | true => Option/some(at(a, i, True/qed())) | false => Option/none() end;
+    match i < len(a) | true => Option/some(at(a, i)) | false => Option/none() end;
 
 pub let flatten(@T: Type, parts: List(List(T))) -> List(T) =
     fold(parts, [], (a, acc) => [..acc, ..a]);
@@ -17,7 +17,7 @@ pub let fold(@T: Type, @A: Type, l: List(T), init: A, f: (T, A) -> A) -> A =
             -- `i < n` transported along the loop invariant: `i + (kp + 1) = n` gives `i ≤ i + kp`, whose successor is the bound `at` demands.
             let below =
                 Eq/subst((x) => Nat/Lt(i, x), inv, Nat/Lt/succ_of_lte(Nat/Lte/add_r(i, kp)));
-            go(kp, i + 1, f(at(l, i, below), acc), inv)
+            go(kp, i + 1, f(at(@T, l, i, @below), acc), inv)
         end;
     go(n, 0, init, Eq/refl());
 
@@ -26,7 +26,7 @@ pub let find(@T: Type, l: List(T), pred: (T) -> Bool) -> Option(T) =
     rec go(i: Nat) -> Option(T) =
         match i < len(l)
         | true =>
-            let x = at(l, i, True/qed());
+            let x = at(l, i);
             match pred(x) | true => Option/some(x) | false => go(i + 1) end
         | false => Option/none()
         end;

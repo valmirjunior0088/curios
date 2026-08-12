@@ -67,6 +67,7 @@ impl SyntaxRegistry {
             self.string.of_scan_eq,
             self.string.refl_scan,
             self.proof.true_qed,
+            self.proof.true_type,
             self.proof.lt,
         ]
         .into_iter()
@@ -168,6 +169,8 @@ pub struct StringSyntax {
 #[derive(Debug, Clone, Copy)]
 pub struct ProofSyntax {
     pub true_qed: SyntaxName,
+    /// The trivially true proposition itself. Named beside its constructor because discharging an obligation needs both halves: this one recognises a goal worth discharging, `true_qed` inhabits it.
+    pub true_type: SyntaxName,
     /// `a < b`, decided — the bound `/sys`'s checked accessors take as their index precondition. Decided rather than inductive is load-bearing: it reduces to `True` on a refined comparison, which is what lets the obligation be discharged without a written proof.
     pub lt: SyntaxName,
 }

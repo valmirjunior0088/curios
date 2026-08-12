@@ -135,7 +135,7 @@ let guard_header: Parse({}) =
             match Nat/Lt/try(pos, Bytes/len(input))
             | none() => Result/failure("unexpected end of headers")
             | some(ok) =>
-                match Bytes/at(input, pos, ok) == 0xD
+                match Bytes/at(input, pos, @ok) == 0xD
                 | true => Result/failure("end of header block")
                 | false => Result/success((pos, ()))
                 end

@@ -1,8 +1,8 @@
 pub use /sys/Bits/{let Bits, at, len, eql, slice};
-use /std/{List, Nat, Bool, Option, Eq, Str, Eql, Show, True};
+use /std/{List, Nat, Bool, Option, Eq, Str, Eql, Show};
 
 pub let get(b: Bits, i: Nat) -> Option(Bool) =
-    match i < len(b) | true => Option/some(at(b, i, True/qed())) | false => Option/none() end;
+    match i < len(b) | true => Option/some(at(b, i)) | false => Option/none() end;
 
 pub let flatten(parts: List(Bits)) -> Bits =
     List/fold(parts, b[], (bits, acc) => b[..acc, ..bits]);
@@ -16,7 +16,7 @@ pub let fold(@A: Type, b: Bits, init: A, f: (Bool, A) -> A) -> A =
             -- `i < n` transported along the loop invariant: `i + (kp + 1) = n` gives `i ≤ i + kp`, whose successor is the bound `at` demands.
             let below =
                 Eq/subst((x) => Nat/Lt(i, x), inv, Nat/Lt/succ_of_lte(Nat/Lte/add_r(i, kp)));
-            go(kp, i + 1, f(at(b, i, below), acc), inv)
+            go(kp, i + 1, f(at(b, i, @below), acc), inv)
         end;
     go(n, 0, init, Eq/refl());
 
