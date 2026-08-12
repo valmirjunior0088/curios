@@ -472,6 +472,38 @@ fn every_wrapper_of_a_higher_kinded_concept_shares_one_universe_context() {
     assert_eq!(universe_parameters(&module, "/M/bind"), 5);
 }
 
+/// A concept's field telescope is dependent — the record pass binds each field's label for the fields after it — so a field type may name a preceding field. The generated method wrapper has to state that type with every such reference projected off its own witness, `Eq(w.op(w.op(x)), w.op(x))`; re-lowering the written type in the wrapper's scope instead leaves `op` bound by nothing.
+#[test]
+fn a_concept_field_may_reference_a_preceding_field() {
+    elaborate_source(
+        "pub induct Eq(@A : Type) : (A, A) -> pub Prop
+         | refl(@z : A) : (z, z)
+         end
+         pub concept Idem(A : Type) : pub Type {
+             op(A) -> A,
+             law(x : A) -> Eq(op(op(x)), op(x)),
+         }
+         Idem",
+    );
+}
+
+/// Superclass fields occupy positions in the field telescope under minted `_super{i}` labels, but generate no wrapper. A wrapper must therefore read its field type at that field's *absolute* telescope index; using its position among the non-super fields would read `law`'s type one slot early here and hand the wrapper `op`'s.
+#[test]
+fn a_superclass_does_not_shift_a_dependent_field_reference() {
+    elaborate_source(
+        "pub induct Eq(@A : Type) : (A, A) -> pub Prop
+         | refl(@z : A) : (z, z)
+         end
+         pub concept Base(T : Type) : pub Type { base(T) -> T, }
+         pub concept Idem(A : Type) : pub Type {
+             use Base(A),
+             op(A) -> A,
+             law(x : A) -> Eq(op(op(x)), op(x)),
+         }
+         Idem",
+    );
+}
+
 #[test]
 fn single_let_binding() {
     assert_eq!(

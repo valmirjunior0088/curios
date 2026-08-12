@@ -187,7 +187,7 @@ pub(super) fn elaborate_proj(context: &mut Context, proj: &Proj) -> Result<(Term
     }
 
     let field_type = telescope
-        .nth(index, |j| Term::proj(head.clone(), j))
+        .field_type_from(&head, index)
         .expect("index in range");
 
     Ok((Term::proj(head, index), field_type))

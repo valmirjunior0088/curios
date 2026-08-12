@@ -206,7 +206,7 @@ fn infer_node(
                 Subterm::TupleType(TupleType { telescope }) => {
                     let len = telescope.len();
                     telescope
-                        .nth(*index, |j| Term::proj(head.clone(), j))
+                        .field_type_from(head, *index)
                         .ok_or(KernelError::Arity {
                             expected: *index + 1,
                             actual: len,
@@ -220,7 +220,7 @@ fn infer_node(
                     let fields = kernel.struct_at(&name, &universes, &params)?.fields();
                     let len = fields.len();
                     fields
-                        .nth(*index, |j| Term::proj(head.clone(), j))
+                        .field_type_from(head, *index)
                         .ok_or(KernelError::Arity {
                             expected: *index + 1,
                             actual: len,

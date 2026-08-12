@@ -389,7 +389,7 @@ fn superclass_projections(context: &mut Context, node: &Term) -> Result<Vec<(Ter
     for (index, _) in &concept.supers {
         let field_type = telescope
             .clone()
-            .nth(*index, |j| Term::proj(node.clone(), j))
+            .field_type_from(node, *index)
             .expect("superclass field index is within the concept's telescope");
         out.push((Term::proj(node.clone(), *index), field_type));
     }
@@ -429,7 +429,7 @@ fn node_type(context: &mut Context, node: &Term) -> Result<Term, Error> {
             )?;
             Ok(arity
                 .open(&params.iter().collect::<Vec<_>>())
-                .nth(index, |j| Term::proj(proj.head.clone(), j))
+                .field_type_from(&proj.head, index)
                 .expect("projection index within telescope"))
         }
         _ => unreachable!("step-2 nodes are variables or their projections"),

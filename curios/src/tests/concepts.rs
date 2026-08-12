@@ -1039,3 +1039,44 @@ fn a_bang_sequences_in_a_two_parameter_monad_region() {
 
     assert_eq!(run(source), b"6");
 }
+
+// A concept's field telescope is dependent, so a field may constrain the fields declared before it. `law` is a proposition about `op`, which makes registering a witness an obligation to *prove* the law of that witness's own implementation. Identity is idempotent by reduction, so `Eq/refl` discharges it.
+#[test]
+fn a_witness_must_prove_its_concepts_law() {
+    let source = r#"
+        use /std/{Nat, Eq, Handle, Str};
+        pub concept Idem(A : Type) : pub Type {
+            op(A) -> A,
+            law(x : A) -> Eq(op(op(x)), op(x)),
+        }
+        satisfy Idem(Nat) {
+            op(x) = x,
+            law(x) = Eq/refl(),
+        }
+        let n : Nat = 42;
+        /std/print(Nat/to_str(Idem/op(n)))
+        "#;
+
+    assert_eq!(run(source), b"42");
+}
+
+// The same law against an implementation that breaks it: `op(x) = x + 1` reduces `op(op(x))` to `x + 2` where the law demands `x + 1`, so the witness must be refused. The assertion names `type mismatch` rather than merely requiring some error, because this program failed with `unbound variable` while method wrappers re-lowered their field types in a scope binding no sibling — an error that arrives before the law is ever checked, and would otherwise pass for the wrong reason.
+#[test]
+fn a_witness_violating_its_concepts_law_is_rejected() {
+    let source = r#"
+        use /std/{Nat, Eq, Handle, Str};
+        pub concept Idem(A : Type) : pub Type {
+            op(A) -> A,
+            law(x : A) -> Eq(op(op(x)), op(x)),
+        }
+        satisfy Idem(Nat) {
+            op(x) = x + 1,
+            law(x) = Eq/refl(),
+        }
+        let n : Nat = 1;
+        /std/print(Nat/to_str(Idem/op(n)))
+        "#;
+
+    let message = error(source);
+    assert!(message.contains("type mismatch"), "{message}");
+}

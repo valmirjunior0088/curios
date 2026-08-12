@@ -361,9 +361,8 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
             };
 
             match Term::unwrap_or_clone(whnf(kernel, head_type)?) {
-                // A Σ field's type may mention the earlier fields, which are named here by projections of the same head.
                 Subterm::TupleType(TupleType { telescope }) => {
-                    Ok(telescope.nth(*index, |j| Term::proj(head.clone(), j)))
+                    Ok(telescope.field_type_from(head, *index))
                 }
                 // A nominal record's field types live on its declaration, instantiated first at the head's universes and then at its parameters. Concept dispatch is a projection out of a witness record, so this arm is what types a method call.
                 Subterm::StructType(StructType {
@@ -375,7 +374,7 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
                         return Ok(None);
                     };
 
-                    Ok(at.fields().nth(*index, |j| Term::proj(head.clone(), j)))
+                    Ok(at.fields().field_type_from(head, *index))
                 }
                 _ => Ok(None),
             }

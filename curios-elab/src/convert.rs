@@ -169,7 +169,7 @@ pub(crate) fn synth_neutral(
 
             match Term::unwrap_or_clone(reduce(context, head_type)?) {
                 Subterm::TupleType(TupleType { telescope, .. }) => {
-                    Ok(telescope.nth(*index, |j| Term::proj(head.clone(), j)))
+                    Ok(telescope.field_type_from(head, *index))
                 }
                 // A nominal structure's field types live on its declaration, instantiated at the head's universes and then at its parameters — the same two steps `elaborate_proj` takes. Concept dispatch is a projection out of a witness dictionary, so this arm is what types a method call.
                 Subterm::StructType(StructType {
@@ -191,7 +191,7 @@ pub(crate) fn synth_neutral(
                     )?;
                     Ok(arity
                         .open(&params.iter().collect::<Vec<_>>())
-                        .nth(*index, |j| Term::proj(head.clone(), j)))
+                        .field_type_from(head, *index))
                 }
                 _ => Ok(None),
             }

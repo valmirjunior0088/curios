@@ -365,7 +365,7 @@ fn infix_method(
     let (slot, witness) =
         context.fresh_witness_metavar(goal.clone(), term.span(), provenance.clone());
 
-    // The method's type at `?T`, read out of the concept's lowered structure — the same field telescope `elaborate_proj` reads, opened at the goal's own universes and parameter so the two agree by construction.
+    // The method's type at `?T`, read out of the concept's lowered structure through the one operation that answers this — opened at the goal's own universes and parameter, so this and `elaborate_proj` agree by construction rather than by two derivations staying in step.
     let arity = context.instantiate_universe_bound_at(
         &struct_decl.universe_context,
         &struct_decl.arity,
@@ -373,7 +373,7 @@ fn infix_method(
     )?;
     let method_type = arity
         .open(&[operand_type])
-        .nth(index, |j| Term::proj(witness.clone(), j))
+        .field_type_from(&witness, index)
         .expect("a concept's own field index is in range");
     let Subterm::FuncType(FuncType { telescope, .. }) = &*method_type else {
         panic!("a syn operator concept declares its method as an arrow");

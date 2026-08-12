@@ -832,6 +832,17 @@ pub concept Monad(M : (Type) -> Type) : pub Type {
 
 Every ordinary field receives a wrapper in the concept's namespace, so `Show/show(value)` asks for an implicit witness of `Show(A)` and projects its `show` implementation.
 
+The field list is a dependent telescope: later fields may refer to earlier named fields. In a generated wrapper such a reference becomes the corresponding projection of the resolved witness, so the wrapper's type constrains that witness's own implementations.
+
+```crs
+pub concept Idem(A : Type) : pub Type {
+    op(A) -> A,
+    law(x : A) -> Eq(op(op(x)), op(x)),
+}
+```
+
+A field whose type is a proposition about earlier fields is a law. `satisfy` cannot register a witness for such a concept without supplying a proof that discharges the law at the implementations that witness supplies, so a witness violating it is rejected where it is declared.
+
 A field beginning with `use` is an anonymous superclass edge. Its type must be a concept application.
 
 ```crs

@@ -264,28 +264,6 @@ fn scan_module_info(items: &[TopItem]) -> Result<ModuleInfo, Error> {
     Ok(info)
 }
 
-// The surface concept application `C(p₁, …)` for a method wrapper's `use w` binder: the concept name applied to its parameters, each carrying the parameter's declared plicity so the application matches the type-former.
-fn concept_application(label: &str, params: &[(Plicity, String, Term)]) -> Term {
-    let head: Term = Subterm::Name(Name::from(vec![label.to_string()])).into();
-    if params.is_empty() {
-        return head;
-    }
-
-    Subterm::Apply(Apply {
-        head,
-        params: params
-            .iter()
-            .map(|(plicity, label, _)| {
-                (
-                    *plicity,
-                    Subterm::Name(Name::from(vec![label.clone()])).into(),
-                )
-            })
-            .collect(),
-    })
-    .into()
-}
-
 // The surface concept application `C(args)` for a witness's declared type: the witnessed concept applied to the annotation's arguments (as written, so explicit).
 fn witness_concept_application(concept: &Name, args: &[Term]) -> Term {
     let head: Term = Subterm::Name(concept.clone()).into();
@@ -893,15 +871,16 @@ fn process_items(
 
                 let result_sort = lower.term(&concept.result_sort)?;
 
-                // The record shape drives struct literals and projections.
+                // The record shape drives struct literals, projections, and — through `field_type_from` below — the declared type of every method wrapper.
+                let arity = curios_core::Telescope::build(
+                    param_tys_unmarked.clone(),
+                    curios_core::Telescope::build(field_tys, ()),
+                );
                 struct_decls.insert(
                     name.clone(),
                     curios_core::StructDecl {
                         universe_context: curios_core::UniverseContext::empty(),
-                        arity: curios_core::Telescope::build(
-                            param_tys_unmarked.clone(),
-                            curios_core::Telescope::build(field_tys, ()),
-                        ),
+                        arity: arity.clone(),
                         result_sort: result_sort.clone(),
                         module,
                         rep_public: concept.rep_pub,
@@ -937,13 +916,13 @@ fn process_items(
                 );
 
                 // The type-former, exactly like a representation-public struct's.
-                let struct_type = curios_core::Term::struct_type(name.clone(), param_vars);
+                let struct_type = curios_core::Term::struct_type(name.clone(), param_vars.clone());
                 let (type_, body) = if param_tys.is_empty() {
                     (result_sort, struct_type)
                 } else {
                     (
                         curios_core::Term::func_type_marked(param_tys.clone(), result_sort),
-                        curios_core::Term::func_marked(param_tys, struct_type),
+                        curios_core::Term::func_marked(param_tys.clone(), struct_type),
                     )
                 };
                 flat_items.push(FlatItem::Let(FlatLet {
@@ -954,35 +933,40 @@ fn process_items(
                     body,
                 }));
 
-                // Method wrappers: for each *method* field `f : F`, pub let C/f(@p₁ : P₁, …, use w : C(p₁, …)) -> F = w.f; Built as surface AST and lowered through `Lowerer`, so binder scoping and de-Bruijn capture are handled uniformly. Superclass fields are anonymous and get no wrapper: an instance of the outer concept already yields the inner one by resolution.
-                let concept_app = concept_application(&concept.label, &concept.params);
-                for field in concept.fields.iter().filter(|field| !field.is_super) {
-                    let mut params = concept
-                        .params
+                // Method wrappers: for each *method* field `f`, pub let C/f(@p₁ : P₁, …, use w : C(p₁, …)) -> F = w.f;
+                //
+                // Built in core rather than as surface AST, because `F` is not the field's *written* type: the record telescope above binds each field's label for the fields after it, so a field type may name the fields before it, and the wrapper has to state it with every such name opened at its own projection off `w`. Restating the written type instead leaves those names bound by nothing — well-formed only while no concept has a dependent field telescope, which is why it survived. Reading it out of the telescope also means the wrapper inherits the record's universe metas by construction, rather than by re-lowering the same spans under a role forced to match.
+                //
+                // Type and body are constructed together so both close over the one `w`, and both index the field positionally. Superclass fields are anonymous and get no wrapper: an instance of the outer concept already yields the inner one by resolution.
+                let param_refs = param_vars.iter().collect::<Vec<_>>();
+                for (index, field) in concept
+                    .fields
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, field)| !field.is_super)
+                {
+                    // `index` is the field's position in the *whole* telescope, superclass slots included. Counting only the fields that get wrappers would read every method after a superclass one slot early.
+                    let witness_id = lower.mint(["w".to_string()]).remove(0).1;
+                    let witness =
+                        curios_core::Term::var(curios_core::Var::free(witness_id.clone()));
+
+                    let params = param_tys
                         .iter()
-                        .map(|(_, label, type_)| FuncSugarParam {
-                            plicity: Plicity::Implicit,
-                            label: Pattern::Binder(Some(label.clone())),
-                            type_: type_.clone(),
+                        .map(|(_, binder, type_)| {
+                            (Plicity::Implicit, binder.clone(), type_.clone())
                         })
+                        .chain(std::iter::once((
+                            Plicity::Witness,
+                            witness_id,
+                            curios_core::Term::struct_type(name.clone(), param_vars.clone()),
+                        )))
                         .collect::<Vec<_>>();
-                    params.push(FuncSugarParam {
-                        plicity: Plicity::Witness,
-                        label: Pattern::Binder(Some("w".to_string())),
-                        type_: concept_app.clone(),
-                    });
 
-                    let signature = LetSignature::Func {
-                        params,
-                        output: field.desugared_type(),
-                        body: Subterm::Proj(Proj {
-                            head: Subterm::Name(Name::from(vec!["w".to_string()])).into(),
-                            field: Field::Label(field.label.clone()),
-                        })
-                        .into(),
-                    };
+                    let field_type = arity
+                        .open(&param_refs)
+                        .field_type_from(&witness, index)
+                        .expect("a concept's own field index is within its record telescope");
 
-                    let lower = Lowerer::new(context);
                     flat_items.push(FlatItem::Let(FlatLet {
                         kind: curios_core::DefinitionKind::ConceptMethod {
                             owner: context.prefixed(&concept.label),
@@ -991,12 +975,11 @@ fn process_items(
                             context.prefixed(&concept.label).with(&field.label),
                         ),
                         island: context.island(),
-                        // The wrapper re-lowers the field type in its *output* position, but that type's written-`Type` spans already seeded universes in the record pass above, under `input_type`'s lexical `Generalizable`. The span-keyed seeds are shared across the two lowerings — the wrapper must speak the concept's inherited levels — and `fresh_universe` asserts the roles agree, so the whole signature lowers `Generalizable`: the record's reading, not the output-position default that panicked on a field whose result spine spells `Type`.
-                        type_: context
-                            .with_universe_role(curios_core::UniverseRole::Generalizable, || {
-                                lower.term(&signature.type_())
-                            })?,
-                        body: lower.value(&signature.body())?,
+                        type_: curios_core::Term::func_type_marked(params.clone(), field_type),
+                        body: curios_core::Term::func_marked(
+                            params,
+                            curios_core::Term::proj(witness, index),
+                        ),
                     }));
                 }
             }
