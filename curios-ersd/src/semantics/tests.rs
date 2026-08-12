@@ -1,4 +1,7 @@
-use crate::*;
+use {
+    crate::*,
+    curios_base::{Grain, PackedBin},
+};
 
 #[test]
 fn traps_and_effects_classify_by_operation() {
@@ -21,6 +24,27 @@ fn traps_and_effects_classify_by_operation() {
     assert!(Semantics::cell(CellOperation::New).is_observable());
     assert!(Semantics::cell(CellOperation::Get).observable.state_read);
     assert!(Semantics::cell(CellOperation::Set).observable.state_write);
+}
+
+#[test]
+fn a_decode_that_folds_to_a_trap_is_classified_as_one() {
+    // The classifier and the folder have to name the same set, and `FltOfLeBytes` is where they once disagreed: `TrapKind::MalformedInput` exists for this operation alone, yet the classifier reported it pure — which is `prune` dropping a top-level item whose only observable effect is the malformed decode.
+    let four = Constant::Bin(Grain::X, PackedBin::from_bytes(vec![0, 0, 0x80, 0x3f]));
+    let three = Constant::Bin(Grain::X, PackedBin::from_bytes(vec![0, 0, 0x80]));
+
+    assert!(matches!(
+        Semantics::fold_operation(Operation::FltOfLeBytes, &[three]),
+        FoldOutcome::WouldTrap(TrapKind::MalformedInput)
+    ));
+    assert!(matches!(
+        Semantics::fold_operation(Operation::FltOfLeBytes, &[four]),
+        FoldOutcome::Value(Constant::Flt(_))
+    ));
+    assert!(
+        Semantics::operation(Operation::FltOfLeBytes)
+            .observable
+            .may_trap
+    );
 }
 
 #[test]

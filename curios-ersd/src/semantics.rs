@@ -228,11 +228,13 @@ impl Semantics {
         }
     }
 
-    /// The behavior of a scalar operation. Division and remainder may trap (zero divisor; signed overflow), and the float-to-integer conversions may trap on non-finite or out-of-range input; every other scalar operation is total and allocation-free.
+    /// The behavior of a scalar operation. Division and remainder may trap (zero divisor; signed overflow), the float-to-integer conversions may trap on non-finite or out-of-range input, and `FltOfLeBytes` may trap on a binary that is not exactly four bytes — the [`TrapKind::MalformedInput`] its own fold reports, and the reason this arm and [`Semantics::fold_operation`] have to name the same set. Every other scalar operation is total and allocation-free.
     pub fn operation(operation: Operation) -> LocalBehavior {
         use Operation::*;
         match operation {
-            NatDiv | NatRem | IntDiv | IntRem | FltToNat | FltToInt => LocalBehavior::trap(),
+            NatDiv | NatRem | IntDiv | IntRem | FltToNat | FltToInt | FltOfLeBytes => {
+                LocalBehavior::trap()
+            }
             BoolAnd | BoolOr | BoolXor | BoolEql | BoolNeq | NatEql | NatNeq | NatAdd | NatSub
             | NatMul | NatLt | NatGt | NatLte | NatGte | NatAnd | NatOr | NatXor | NatShl
             | NatShr | NatRotl | NatRotr | NatClz | NatCtz | NatPopcnt | ByteToNat | NatToByte
@@ -242,7 +244,7 @@ impl Semantics {
             | FltMul | FltDiv | FltRem | FltEql | FltNeq | FltLt | FltGt | FltLte | FltGte
             | FltMin | FltMax | FltCopysign | FltNeg | FltAbs | FltSqrt | FltFloor | FltCeil
             | FltTrunc | FltNearest | NatToInt | NatToFlt | IntToNat | IntToFlt | FltToLeBytes
-            | FltOfLeBytes | HandleEql => LocalBehavior::pure(),
+            | HandleEql => LocalBehavior::pure(),
         }
     }
 
