@@ -344,6 +344,8 @@ pub(super) fn inline_call(
         atom: &map_atom,
         cont: &map_cont,
         callee: &map_callee,
+        // The inliner still refuses a body nesting a definition, so no function identity moves.
+        function: &|id| id,
         node: &|id| node_map[&id],
     };
     let mut cloned_nodes = BTreeMap::new();

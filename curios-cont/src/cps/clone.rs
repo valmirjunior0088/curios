@@ -4,7 +4,13 @@
 //!
 //! **The walk is the whole of the sharing, deliberately.** Each caller still decides its own member set, mints its own identities, and defines its own results, because those are where they genuinely differ — and a single entry point taking a description of all three would be a larger thing to read than the three call sites it replaced.
 
-use super::{CpsAtom, CpsCallee, CpsContId, CpsEdge, CpsNode, CpsNodeId, CpsValueExpr, CpsValueId};
+use {
+    super::{
+        CpsAtom, CpsCallee, CpsContId, CpsEdge, CpsFunId, CpsModule, CpsNode, CpsNodeId,
+        CpsValueExpr, CpsValueId, analysis::function_nodes,
+    },
+    std::collections::BTreeSet,
+};
 
 /// What one copy renames its original onto.
 ///
@@ -14,6 +20,7 @@ pub(super) struct Mapping<'a> {
     pub(super) atom: &'a dyn Fn(&CpsAtom) -> CpsAtom,
     pub(super) cont: &'a dyn Fn(CpsContId) -> CpsContId,
     pub(super) callee: &'a dyn Fn(&CpsCallee) -> CpsCallee,
+    pub(super) function: &'a dyn Fn(CpsFunId) -> CpsFunId,
     pub(super) node: &'a dyn Fn(CpsNodeId) -> CpsNodeId,
 }
 
@@ -117,7 +124,52 @@ pub(super) fn clone_node(node: &CpsNode, map: &Mapping<'_>) -> CpsNode {
             value: value.as_ref().map(map.atom),
         },
         CpsNode::Unreachable => CpsNode::Unreachable,
-        // Every caller rejects a body nesting a function definition before it mints anything, because a copy that reproduced neither the definition nor its identities would be silently wrong and bailing here would leak what was already minted.
-        CpsNode::LetFun { .. } | CpsNode::RecInit { .. } => unreachable!(),
+        CpsNode::LetFun { functions, body } => CpsNode::LetFun {
+            functions: functions.iter().map(|id| (map.function)(*id)).collect(),
+            body: (map.node)(*body),
+        },
+        CpsNode::RecInit {
+            functions,
+            values,
+            ready,
+            body,
+        } => CpsNode::RecInit {
+            functions: functions.iter().map(|id| (map.function)(*id)).collect(),
+            values: values.iter().map(|id| (map.value)(*id)).collect(),
+            ready: (map.node)(*ready),
+            body: (map.node)(*body),
+        },
     }
+}
+
+/// Everything a copy of `roots` has to reproduce: the nodes, and the functions defined lexically within them.
+///
+/// Closed transitively, because a nested body may nest further. A nested definition cannot be left shared and cannot be copied separately: its body may read values bound in the body being copied, so it has to be renamed by the same mapping — which is what makes the extent one question rather than each caller's own.
+pub(super) fn copied_extent(
+    module: &CpsModule,
+    roots: impl IntoIterator<Item = CpsNodeId>,
+) -> (BTreeSet<CpsNodeId>, BTreeSet<CpsFunId>) {
+    let mut nodes: BTreeSet<CpsNodeId> = roots.into_iter().collect();
+    let mut functions = BTreeSet::new();
+    let mut pending: Vec<CpsNodeId> = nodes.iter().copied().collect();
+
+    while let Some(node_id) = pending.pop() {
+        let nested = match module.node(node_id) {
+            Some(CpsNode::LetFun { functions, .. } | CpsNode::RecInit { functions, .. }) => {
+                functions.clone()
+            }
+            _ => continue,
+        };
+        for function in nested {
+            if !functions.insert(function) {
+                continue;
+            }
+            for inner in function_nodes(module, function) {
+                if nodes.insert(inner) {
+                    pending.push(inner);
+                }
+            }
+        }
+    }
+    (nodes, functions)
 }

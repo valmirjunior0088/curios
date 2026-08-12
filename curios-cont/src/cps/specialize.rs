@@ -2,7 +2,7 @@ use {
     super::*,
     super::{
         analysis::{CallAnalysis, analyze_calls, function_nodes, nodes_from, resolve_atom},
-        clone::{Mapping, clone_node},
+        clone::{Mapping, clone_node, copied_extent},
         inline::continuation_transfers,
         optimize::{BRANCH_SPECIALIZATION_GROWTH_LIMIT, SCC_CLONE_NODE_LIMIT},
     },
@@ -265,14 +265,9 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
             if introducing_letfun(module, &member).is_none() {
                 continue;
             }
-            let body = function_nodes(module, *callee);
-            let unclonable = body.iter().any(|&id| {
-                matches!(
-                    module.node(id),
-                    Some(CpsNode::LetFun { .. } | CpsNode::RecInit { .. })
-                )
-            });
-            if unclonable || body.len() + 1 > BRANCH_SPECIALIZATION_GROWTH_LIMIT {
+            // The extent rather than the body: a definition nested in the callee is copied along with it, and counting only the outer body would price the clone at a fraction of what it duplicates.
+            let (extent, _) = copied_extent(module, function_nodes(module, *callee));
+            if extent.len() + 1 > BRANCH_SPECIALIZATION_GROWTH_LIMIT {
                 continue;
             }
             chosen = Some((*callee, index, *tag, fields.len()));
@@ -442,25 +437,18 @@ pub(super) fn clone_scc(
     module: &mut CpsModule,
     members: &BTreeSet<CpsFunId>,
 ) -> Option<BTreeMap<CpsFunId, CpsFunId>> {
+    // A function defined inside a member's body is a member too: its body may read values this copy is renaming, so it cannot be shared and cannot be copied by a separate call that would rename them differently.
+    let roots = members.iter().flat_map(|&m| function_nodes(module, m));
+    let (node_ids, nested) = copied_extent(module, roots);
+    let members: BTreeSet<CpsFunId> = members.union(&nested).copied().collect();
     let member_defs: BTreeMap<CpsFunId, CpsFunction> = members
         .iter()
         .map(|&m| (m, module.function(m).unwrap().clone()))
         .collect();
-
-    let mut node_ids: Vec<CpsNodeId> = Vec::new();
-    for &m in members {
-        node_ids.extend(function_nodes(module, m));
-    }
     let node_defs: BTreeMap<CpsNodeId, CpsNode> = node_ids
         .iter()
         .map(|&id| (id, module.node(id).unwrap().clone()))
         .collect();
-    if node_defs
-        .values()
-        .any(|node| matches!(node, CpsNode::LetFun { .. } | CpsNode::RecInit { .. }))
-    {
-        return None;
-    }
 
     let cont_ids: BTreeSet<CpsContId> = node_defs
         .values()
@@ -482,8 +470,12 @@ pub(super) fn clone_scc(
         owned.extend(def.params.iter().copied());
     }
     for node in node_defs.values() {
-        if let CpsNode::LetValue { result, .. } | CpsNode::LetIntrinsic { result, .. } = node {
-            owned.push(*result);
+        match node {
+            CpsNode::LetValue { result, .. } | CpsNode::LetIntrinsic { result, .. } => {
+                owned.push(*result)
+            }
+            CpsNode::RecInit { values, .. } => owned.extend(values.iter().copied()),
+            _ => {}
         }
     }
     for cont in cont_defs.values() {
@@ -531,12 +523,14 @@ pub(super) fn clone_scc(
         }
         CpsCallee::Closure(value) => CpsCallee::Closure(map_value(*value)),
     };
+    let map_function = |function: CpsFunId| functions.get(&function).copied().unwrap_or(function);
 
     let map = Mapping {
         value: &map_value,
         atom: &map_atom,
         cont: &map_cont,
         callee: &map_callee,
+        function: &map_function,
         node: &|id| nodes[&id],
     };
     let mut cloned_nodes: Vec<(CpsNodeId, CpsNode)> = Vec::new();
@@ -813,12 +807,15 @@ pub(super) fn clone_continuation(module: &mut CpsModule, target: CpsContId) -> O
         CpsCallee::Known(function) => CpsCallee::Known(*function),
         CpsCallee::Closure(value) => CpsCallee::Closure(map_value(*value)),
     };
+    // The join copier still refuses a body nesting a definition, so no function identity moves.
+    let map_function = |function: CpsFunId| function;
 
     let map = Mapping {
         value: &map_value,
         atom: &map_atom,
         cont: &map_cont,
         callee: &map_callee,
+        function: &map_function,
         node: &|id| nodes[&id],
     };
     let mut cloned_nodes: Vec<(CpsNodeId, CpsNode)> = Vec::new();
