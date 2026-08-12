@@ -49,7 +49,7 @@ impl Store {
 
     /// Where a native executable is written: nested under the package that declares it, beside the project.
     ///
-    /// A package's name is the one identity in a compilation that cannot collide (law 2), so nesting by it removes the collision by construction — two members of one umbrella may both declare `serve` and nothing has to refuse it. Nesting also keeps the path stable: flat, a package's binary would move when it joined an umbrella, since only the governing root changed.
+    /// A package's name is the one identity in a compilation that cannot collide (law 2), so nesting by it removes the collision by construction — two members of one umbrella may both declare `serve` and nothing has to refuse it. Nesting also fixes the path *inside* the store: `bin/<package>/<executable>` does not depend on what encloses the package, so joining an umbrella re-roots a binary without renaming it.
     pub fn bin(&self, package: &str, executable: &str) -> PathBuf {
         self.project
             .join(STORE)
