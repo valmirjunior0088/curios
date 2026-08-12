@@ -2450,6 +2450,235 @@ fn a_proof_carrying_the_unit_value_is_accepted() {
     );
 }
 
+/// A totality stamp asserts the *closure* — it is what `Globals::of` seeds a later walk's non-total set from — so the cross-check must compare it against the closed verdict, not the local half.
+///
+/// It compared the local half. The disagreement check in `partial_definitions` fired only where `rejected || locally_partial(..)` held — a non-descending group, an inline `rec`, an exit — while the closure loop below it inserted a transitively-partial name into the set with no stamp comparison at all. So `reaches`, total in itself but stamped `Total` while mentioning the diverging `sink`, passed the very walk every account credited with refusing "a recorded verdict more generous than the kernel's own": while the hole was open, `recheck_module_verdicts` returned **zero refusals** for exactly this module. `Globals::of` then filed the lie — its non-total set is stamp-derived, so it held `sink` alone — and the compile-path walk certified a proof mentioning `reaches` with zero refusals too, which is [`a_lying_totality_stamp_is_believed_when_carried_and_refused_when_judged`]'s first half and was verified together with this. The elaborator seeds its `inherited` map from the same stamps, so a wrong one is invisible to the two-checker comparison; the transitive half of every carried stamp was the elaborator's `classify_module` conclusion, believed by the kernel and certified by nothing.
+///
+/// No surface program reaches it: the only stamp writer is `record_totality`, whose closure is correct, so the lie must be constructed — which is why this lives here and why nothing in the corpus could have found it. The control is [`an_honest_stamp_on_a_definition_reaching_a_partial_one_is_accepted`]: a `Partial` stamp on the same definition is a classification, not an error, and must stay accepted.
+#[test]
+fn a_totality_stamp_contradicted_only_by_the_closure_is_refused() {
+    let verdicts = recheck_module_verdicts(
+        &stamp_trial_module(Totality::Total, false),
+        1_000_000,
+        &Globals::default(),
+    );
+
+    assert!(
+        verdicts.iter().any(|verdict| {
+            verdict.name.as_ref() == Some(&Global::Authored(Qualifier::from(["reaches"])))
+                && matches!(
+                    &verdict.error,
+                    KernelError::NotTotal {
+                        erased: Erased::Proof,
+                        reached: Some(name),
+                    } if *name == Global::Authored(Qualifier::from(["sink"]))
+                )
+        }),
+        "a `Total` stamp contradicted only by the closure over its mentions was not refused: {verdicts:?}",
+    );
+}
+
+/// The control: the same two definitions honestly stamped stay accepted — partiality is a classification, and a rule refusing every mention of a partial definition would pass the witness above by breaking the language.
+#[test]
+fn an_honest_stamp_on_a_definition_reaching_a_partial_one_is_accepted() {
+    assert_eq!(
+        recheck_module_verdicts(
+            &stamp_trial_module(Totality::Partial, false),
+            1_000_000,
+            &Globals::default(),
+        ),
+        Vec::new(),
+        "an honestly stamped definition reaching a partial one was refused",
+    );
+}
+
+/// The pair the perimeter row asks for: a carried stamp more generous than the kernel's verdict is *believed* by the walk that carries it, and the same content judged fresh from an empty environment is refused — so the cross-check at a unit's filing is the whole of what holds the compile-path belief.
+///
+/// The first half is the compile path's exact shape: the environment is `Globals::of` over the lying library, its non-total set holds `sink` alone because the set is stamp-derived, and `held : Vouched` mentions only `reaches` — so the closure over the judged module never meets a partial name, (V) passes, and the walk returns no verdicts. That is by design and must stay: the belief is what keeps a compile from re-analyzing the standard library, and [`a_totality_stamp_contradicted_only_by_the_closure_is_refused`] is what makes it a belief in a verdict the kernel reached. The second half is the same three definitions in one module from an empty environment, where the closure runs over everything and the named route refuses the proof.
+#[test]
+fn a_lying_totality_stamp_is_believed_when_carried_and_refused_when_judged() {
+    let carried = recheck_module_verdicts(
+        &carried_proof_module(),
+        1_000_000,
+        &Globals::of(&stamp_trial_module(Totality::Total, false), 1_000),
+    );
+    assert_eq!(
+        carried,
+        Vec::new(),
+        "a carried totality stamp is believed, so a walk seeded from a lying one must accept",
+    );
+
+    let judged = recheck_module_verdicts(
+        &stamp_trial_module(Totality::Total, true),
+        1_000_000,
+        &Globals::default(),
+    );
+    assert!(
+        judged.iter().any(|verdict| {
+            verdict.name.as_ref() == Some(&Global::Authored(Qualifier::from(["held"])))
+                && matches!(
+                    &verdict.error,
+                    KernelError::NotTotal {
+                        erased: Erased::Proof,
+                        reached: Some(name),
+                    } if *name == Global::Authored(Qualifier::from(["reaches"]))
+                )
+        }),
+        "judged fresh, the same proof must be refused for reaching the mis-stamped definition: {judged:?}",
+    );
+}
+
+/// `sink : (Nat) -> Nat`, honestly stamped `Partial`: its body projects `rec f : (Nat) -> Nat = (n) => f(n)`, which does not descend.
+fn diverging_sink() -> Item {
+    let f = Free::local(920, Some("f"));
+    let n = Free::local(921, Some("n"));
+    let nat = Term::intrinsic(Intrinsic::NatType);
+
+    let group = RecGroup::new(vec![RecMemberScopes {
+        type_: Scope::close(
+            Many(1),
+            &[&f],
+            Term::func_type([(n.clone(), nat.clone())], nat.clone()),
+        ),
+        body: Scope::close(
+            Many(1),
+            &[&f],
+            Term::func(
+                [(n.clone(), nat.clone())],
+                Term::apply(Term::free_var(&f), [Term::free_var(&n)]),
+            ),
+        ),
+    }]);
+
+    authored_partial(
+        &Global::Authored(Qualifier::from(["sink"])),
+        Term::func_type([(Free::local(922, Some("n")), nat.clone())], nat),
+        Term::rec_proj(group, 0),
+    )
+}
+
+/// `reaches : (Nat) -> Nat = (m) => sink(m)` at the caller's stamp: partial by closure and nothing else, so a `Total` stamp here is the lie only the transitive comparison sees.
+fn reaching_definition(totality: Totality) -> Item {
+    let m = Free::local(923, Some("m"));
+    let nat = Term::intrinsic(Intrinsic::NatType);
+    let sink = Free::from(&Global::Authored(Qualifier::from(["sink"])));
+
+    let item = authored(
+        &Global::Authored(Qualifier::from(["reaches"])),
+        Term::func_type([(Free::local(924, Some("m")), nat.clone())], nat.clone()),
+        Term::func(
+            [(m.clone(), nat)],
+            Term::apply(Term::free_var(&sink), [Term::free_var(&m)]),
+        ),
+    );
+
+    match item {
+        Item::Let(definition) => Item::Let(Definition {
+            totality,
+            ..definition
+        }),
+        item => item,
+    }
+}
+
+/// `induct Vouched : Prop | qed(u : {})`, the proposition the proof below inhabits.
+fn vouched_declaration() -> (Global, InductDecl) {
+    let name = Global::Authored(Qualifier::from(["Vouched"]));
+    let declaration = InductDecl {
+        universe_context: UniverseContext::empty(),
+        arity: Telescope::done(Telescope::done(())),
+        constructors: vec![(
+            Atom::from("qed"),
+            InductParam {
+                telescope: Telescope::build(
+                    [(Free::local(925, Some("u")), Term::tuple_type_unit())],
+                    Vec::new(),
+                ),
+                plicities: vec![Plicity::Explicit],
+            },
+        )],
+        result_sort: Term::prop(),
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+    };
+
+    (name, declaration)
+}
+
+/// `held : Vouched = ((g : (Nat) -> Nat) => Vouched/qed(()))(reaches)` — a proof whose free variables name `reaches` and nothing else, so its verdict is exactly the stamp's.
+fn held_proof() -> Item {
+    let (vouched_name, _) = vouched_declaration();
+    let vouched = Term::induct_type(vouched_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let g = Free::local(926, Some("g"));
+    let nat = Term::intrinsic(Intrinsic::NatType);
+
+    authored(
+        &Global::Authored(Qualifier::from(["held"])),
+        vouched,
+        Term::apply(
+            Term::func(
+                [(
+                    g,
+                    Term::func_type([(Free::local(927, Some("n")), nat.clone())], nat),
+                )],
+                Term::variant(
+                    vouched_name,
+                    Vec::<Term>::new(),
+                    "qed",
+                    [Term::tuple(Vec::<Term>::new())],
+                ),
+            ),
+            [Term::free_var(&Free::from(&Global::Authored(
+                Qualifier::from(["reaches"]),
+            )))],
+        ),
+    )
+}
+
+/// The library whose stamp is on trial — `sink` and `reaches` — with `held` and its proposition beside them when the fixture needs a proof reaching the lie.
+fn stamp_trial_module(reaches: Totality, with_proof: bool) -> Module {
+    let mut items = vec![diverging_sink(), reaching_definition(reaches)];
+    let mut induct_decls = BTreeMap::new();
+
+    if with_proof {
+        let (vouched_name, declaration) = vouched_declaration();
+        induct_decls.insert(vouched_name, declaration);
+        items.push(held_proof());
+    }
+
+    Module {
+        mounts: Vec::new(),
+        items,
+        universe_seeds: Vec::new(),
+        induct_decls,
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Some(Term::tuple(Vec::<Term>::new())),
+    }
+}
+
+/// The proof alone, as the compile path shapes it: the library lives in the environment, and only `held` is judged.
+fn carried_proof_module() -> Module {
+    let (vouched_name, declaration) = vouched_declaration();
+
+    Module {
+        mounts: Vec::new(),
+        items: vec![held_proof()],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::from([(vouched_name, declaration)]),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Some(Term::tuple(Vec::<Term>::new())),
+    }
+}
+
 /// `induct Held : Prop | qed(u : {})`, with `bad : Held` built either from `exit(0)` or from `()`.
 fn proof_carrying_unit(exiting: bool) -> Module {
     let held_name = Global::Authored(Qualifier::from(["Held"]));

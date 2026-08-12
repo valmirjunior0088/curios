@@ -48,6 +48,8 @@ fn locally_partial(kernel: &mut Kernel, term: &Term, memo: &mut HashMap<Term, bo
 ///
 /// What `globals` already answers for is read rather than recomputed: its non-total set seeds the closure, and an item it declares has its flags read from [`Definition::totality`]. That is what keeps a compile from re-analyzing the standard library, and it is certified rather than believed — the walk from an empty environment recomputes every flag and refuses a definition whose recorded verdict is more generous than the kernel's own, so an archive that exists carries verdicts this crate reached.
 ///
+/// The stamp comparison runs after the closure, against the closed set, because a stamp *asserts* the closure: it is what `Globals::of` seeds a later walk's non-total set from, so a `Total` on a definition partial only through its mentions is exactly as generous as one on a diverging body. Compared against the local half alone — which this once was — that lie passed the filing walk, and a proof reaching the mis-stamped definition was then certified on the compile path with nothing anywhere refusing the route.
+///
 /// **Seeding from the environment is load-bearing rather than an optimization.** The closure is over what a definition *mentions*, and once the already-judged items stop being carried inside `module` there is nothing left in this walk that knows `/std/Async/bind` is partial. A user proof reaching it would then close over a name absent from the set and read as total, which is exactly the identification (T) and (V) exist to prevent.
 ///
 /// The selection is by name for the same reason it is by name in [`recheck_module_verdicts`](crate::recheck_module_verdicts), and skipping is again the direction that needs the argument: an item declaring nothing is recomputed rather than passed over.
@@ -61,7 +63,7 @@ pub(crate) fn partial_definitions(
 ) -> (BTreeSet<Global>, Vec<(Global, KernelError)>) {
     let mut mentions: BTreeMap<Global, BTreeSet<Global>> = BTreeMap::new();
     let mut partial: BTreeSet<Global> = globals.partial().clone();
-    let mut disagreements = Vec::new();
+    let mut stamped_total: Vec<Global> = Vec::new();
     let mut memo = HashMap::new();
 
     for item in &module.items {
@@ -78,19 +80,12 @@ pub(crate) fn partial_definitions(
             let local = if carried {
                 !definition.totality.is_total()
             } else {
-                let computed = rejected
-                    || locally_partial(kernel, &definition.body, &mut memo)
-                    || locally_partial(kernel, &definition.type_, &mut memo);
-                if computed && definition.totality.is_total() {
-                    disagreements.push((
-                        definition.name.clone(),
-                        KernelError::NotTotal {
-                            erased: Erased::Proof,
-                            reached: None,
-                        },
-                    ));
+                if definition.totality.is_total() {
+                    stamped_total.push(definition.name.clone());
                 }
-                computed
+                rejected
+                    || locally_partial(kernel, &definition.body, &mut memo)
+                    || locally_partial(kernel, &definition.type_, &mut memo)
             };
             if local {
                 partial.insert(definition.name.clone());
@@ -111,9 +106,30 @@ pub(crate) fn partial_definitions(
             }
         }
         if !changed {
-            return (partial, disagreements);
+            break;
         }
     }
+
+    // See the doc above: the stamp asserts the closure, so it is compared against the closed set. A partial mention is named where one exists; a definition partial in itself alone has nothing to blame.
+    let disagreements = stamped_total
+        .into_iter()
+        .filter(|name| partial.contains(name))
+        .map(|name| {
+            let reached = mentions
+                .get(&name)
+                .and_then(|reached| reached.iter().find(|other| partial.contains(*other)))
+                .cloned();
+            (
+                name,
+                KernelError::NotTotal {
+                    erased: Erased::Proof,
+                    reached,
+                },
+            )
+        })
+        .collect();
+
+    (partial, disagreements)
 }
 
 /// Obligations (T) and (V) over the positions one item's check recorded: each must reach nothing partial, and must not be partial in itself.
