@@ -4,6 +4,10 @@
 //!
 //! Keys are [`CpsValueId`] alone, which covers more than it looks: a function's parameters and a continuation's parameters *are* values, so a single key space spans ordinary bindings, call arguments, and join points without a sum type over the three.
 //!
+//! **That keying is also the limit: a fact belongs to a value, never to a program point.** No client can state something that holds inside one [`super::CpsNode::Switch`] arm and not outside it, so refining a scrutinee's tag where an arm establishes it is not expressible here. It is a per-program-point extension the key space could grow into rather than a property anything currently relies on, and no client to date has needed it.
+//!
+//! **The solver has no direction of its own.** [`Solver::solve`] seeds the keys and re-runs a client-supplied round closure until a round establishes nothing new; which facts flow from which is stated entirely inside that closure. A backward analysis and a forward one therefore differ in the client and not here, and neither asks anything of this module that the other does not.
+//!
 //! **Absence is meaningful and is not `bottom`.** A key the solver was never seeded with has no fact at all, which a client may legitimately read differently from a key seeded and still sitting at `bottom` — the constant propagation in [`super::analysis`] does exactly that, treating an unseeded value as an unobservable runtime value rather than as one it has yet to learn about. [`Solver::facts`] therefore hands out the map so absence stays visible, rather than a total lookup that would quietly answer `bottom` for both.
 //!
 //! The names below join the flat `cps` namespace rather than being reached through this module, so they are spelled for that namespace: [`Solver::solve`] is the entry point rather than a bare `solve`, which would be far too general a name to sit beside `CpsModule`.
