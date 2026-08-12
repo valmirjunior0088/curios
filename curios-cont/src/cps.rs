@@ -1387,6 +1387,7 @@ mod analysis;
 mod contify;
 mod cse;
 mod dataflow;
+mod demand;
 mod evaluate;
 mod inline;
 mod optimize;
@@ -1395,6 +1396,7 @@ pub(crate) mod represent;
 mod simplify;
 mod specialize;
 pub(crate) use dataflow::*;
+pub(crate) use demand::*;
 pub use optimize::optimize;
 
 impl fmt::Display for CpsModule {

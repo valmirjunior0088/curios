@@ -520,8 +520,12 @@ pub(super) fn rewire_node(module: &mut CpsModule, from: CpsNodeId, to: CpsNodeId
         }
     }
 }
+/// Drop one entity's unread parameters, and the arguments every caller passes into them.
+///
+/// Deadness is read from [`super::demand`]'s lattice rather than from a use count, which is the same question asked at the bottom point of a richer order — the one whose `Projected` point a return protocol needs. It answers identically here by construction: the walk contributes a demand at exactly the occurrences a use count counts, so `Unused` holds precisely when the count is zero. Deferring an argument's demand to the callee's own parameter would find more, and is deliberately not done here, because it would delete parameters this pass leaves alone and so move emitted code.
 pub(super) fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
-    let counts = module.value_use_counts();
+    let demands = demands(module);
+    let dead_value = |value: &CpsValueId| demand_of(&demands, *value) == Demand::Unused;
     // Precompute the continuations used as a return target in one pass, rather than rescanning every node for each continuation.
     let return_targets = module
         .nodes
@@ -545,9 +549,7 @@ pub(super) fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
             .params
             .iter()
             .enumerate()
-            .filter_map(|(index, value)| {
-                (counts.get(value).copied().unwrap_or(0) == 0).then_some(index)
-            })
+            .filter_map(|(index, value)| dead_value(value).then_some(index))
             .collect::<BTreeSet<_>>();
         if !dead.is_empty() {
             continuation = Some((id, dead));
@@ -600,9 +602,7 @@ pub(super) fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
             .params
             .iter()
             .enumerate()
-            .filter_map(|(index, value)| {
-                (counts.get(value).copied().unwrap_or(0) == 0).then_some(index)
-            })
+            .filter_map(|(index, value)| dead_value(value).then_some(index))
             .collect::<BTreeSet<_>>();
         if !dead.is_empty() {
             function = Some((id, dead));
