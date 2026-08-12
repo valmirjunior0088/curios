@@ -227,9 +227,12 @@ impl<'a> MachineFunctionBridge<'a> {
         blocks: &mut Vec<(EmissionBlockName, EmissionBlock)>,
     ) -> EmissionTail {
         match terminator {
-            MachineTerminator::Return(value) => EmissionTail::Jump(EmissionJumpTarget {
+            MachineTerminator::Return(operands) => EmissionTail::Jump(EmissionJumpTarget {
                 target: self.resume.clone(),
-                params: vec![self.operand(value, values)],
+                params: operands
+                    .iter()
+                    .map(|operand| self.operand(operand, values))
+                    .collect(),
             }),
             MachineTerminator::Jump(edge) => EmissionTail::Jump(self.edge(edge, values)),
             MachineTerminator::Switch {
@@ -551,7 +554,7 @@ fn block_operand_values(block: &MachineBlock) -> BTreeSet<MachineValueId> {
         }
     }
     match &block.terminator {
-        MachineTerminator::Return(operand) => insert(operand),
+        MachineTerminator::Return(operands) => operands.iter().for_each(&mut insert),
         MachineTerminator::Jump(edge) => edge.args.iter().for_each(&mut insert),
         MachineTerminator::Switch {
             scrutinee,

@@ -73,7 +73,8 @@ pub(crate) struct MachineEdge {
 
 #[derive(Debug, Clone)]
 pub(crate) enum MachineTerminator {
-    Return(MachineOperand),
+    /// Hand every operand back to the caller. The vector is the return continuation's argument list, which the CPS verifier has never constrained to one — so a protocol delivering a constructor as its fields needs no widening here, only a producer that builds more than one.
+    Return(Vec<MachineOperand>),
     Jump(MachineEdge),
     Switch {
         scrutinee: MachineOperand,
@@ -631,7 +632,12 @@ impl<'a> MachineFunctionLowerer<'a> {
     ) -> MachineTerminator {
         match node {
             CpsNode::ApplyCont(edge) if edge.target == self.function.return_cont => {
-                MachineTerminator::Return(self.lower_atom(&edge.args[0], instructions))
+                MachineTerminator::Return(
+                    edge.args
+                        .iter()
+                        .map(|arg| self.lower_atom(arg, instructions))
+                        .collect(),
+                )
             }
             CpsNode::ApplyCont(edge) => {
                 MachineTerminator::Jump(self.lower_edge(edge, instructions))
@@ -1228,9 +1234,13 @@ mod tests {
         let machine = lower(&source);
         let function = &machine.functions[&function];
         assert_eq!(function.blocks.len(), 1);
+        let MachineTerminator::Return(operands) = &function.blocks[&function.entry].terminator
+        else {
+            panic!("the entry block returns")
+        };
         assert!(matches!(
-            function.blocks[&function.entry].terminator,
-            MachineTerminator::Return(MachineOperand::Literal(CpsLiteral::Nat(7)))
+            operands.as_slice(),
+            [MachineOperand::Literal(CpsLiteral::Nat(7))]
         ));
     }
 
@@ -1422,8 +1432,9 @@ mod tests {
         ));
         assert!(main.blocks.values().any(|block| {
             matches!(
-                block.terminator,
-                MachineTerminator::Return(MachineOperand::Value(value)) if value == shells[0].0
+                &block.terminator,
+                MachineTerminator::Return(operands)
+                    if matches!(operands.as_slice(), [MachineOperand::Value(value)] if *value == shells[0].0)
             )
         }));
         let _wasm = into_wasm(&source);
