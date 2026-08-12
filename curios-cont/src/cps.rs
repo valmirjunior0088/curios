@@ -274,32 +274,103 @@ impl CpsIntrinsicOp {
         }
     }
 
+    /// What this operation does beyond producing its result, *as emitted* — which is not what it means in the language.
+    ///
+    /// The `MayTrap` set is the union of two unrelated reasons, and both belong at this layer rather than above it. A division, a float-to-integer conversion, an index and a projection are partial in the language, and `curios-ersd`'s `Semantics` says so too. The arithmetic entries are not: `Nat` addition wraps its `u32` carrier and cannot fail, and it is *this crate's* i31 envelope that makes a result leaving 31 bits trap instead of changing, per `documentation/DESIGN.md`'s *Numeric carriers narrow by refusing, never by changing a value*. So every operation `into_wasm` guards belongs here, and none of it may travel upward.
+    ///
+    /// Exhaustive on purpose. This was a wildcard defaulting to `Total`, which silently classified seven guarded operations as deletable — the same hazard the representation table is exhaustive to avoid, one accessor over.
     pub fn effect(self) -> CpsIntrinsicEffect {
         match self {
+            // Partial in the language: a zero divisor, a signed-division overflow, a non-finite or out-of-range conversion, an index or a projection out of bounds, a decode of the wrong length.
             Self::NatDiv
             | Self::NatRem
             | Self::IntDiv
             | Self::IntRem
             | Self::FltToNat
             | Self::FltToInt
+            | Self::FltOfLeBytes
             | Self::BinGet(_)
             | Self::BinSlice(_)
             | Self::ListGet
             | Self::ListSlice
             | Self::TplGet(_)
+            // Total in the language, guarded by the emitter because the result can leave the i31 envelope. `NatSub` is monus and `NatShr`/`IntShr` only clear bits, so neither needs a guard.
             | Self::NatAdd
             | Self::NatMul
             | Self::NatShl
             | Self::NatRotl
+            | Self::NatRotr
+            | Self::NatToInt
             | Self::IntAdd
             | Self::IntSub
-            | Self::IntMul => CpsIntrinsicEffect::MayTrap,
+            | Self::IntMul
+            | Self::IntShl
+            | Self::IntRotl
+            | Self::IntRotr
+            | Self::IntToNat => CpsIntrinsicEffect::MayTrap,
+
+            // Allocates a *sequence*. An `Flt` result is boxed too, but every `Flt` producer below is treated as total, so the category means a rope or a list rather than any heap traffic at all.
             Self::BinAppend(_)
             | Self::BinConcat(_, _)
             | Self::ListAppend
             | Self::ListConcat(_)
             | Self::FltToLeBytes => CpsIntrinsicEffect::Allocates,
-            _ => CpsIntrinsicEffect::Total,
+
+            Self::NatEql
+            | Self::NatNeq
+            | Self::NatSub
+            | Self::NatLt
+            | Self::NatGt
+            | Self::NatLte
+            | Self::NatGte
+            | Self::NatAnd
+            | Self::NatOr
+            | Self::NatXor
+            | Self::NatShr
+            | Self::NatClz
+            | Self::NatCtz
+            | Self::NatPopcnt
+            | Self::NatEqz
+            | Self::NatToFlt
+            | Self::IntEql
+            | Self::IntNeq
+            | Self::IntLt
+            | Self::IntGt
+            | Self::IntLte
+            | Self::IntGte
+            | Self::IntAnd
+            | Self::IntOr
+            | Self::IntXor
+            | Self::IntShr
+            | Self::IntClz
+            | Self::IntCtz
+            | Self::IntPopcnt
+            | Self::IntEqz
+            | Self::IntToFlt
+            | Self::FltAdd
+            | Self::FltSub
+            | Self::FltMul
+            | Self::FltDiv
+            | Self::FltRem
+            | Self::FltEql
+            | Self::FltNeq
+            | Self::FltLt
+            | Self::FltGt
+            | Self::FltLte
+            | Self::FltGte
+            | Self::FltMin
+            | Self::FltMax
+            | Self::FltNeg
+            | Self::FltAbs
+            | Self::FltSqrt
+            | Self::FltFloor
+            | Self::FltCeil
+            | Self::FltTrunc
+            | Self::FltNearest
+            | Self::FltCopysign
+            | Self::BinLen(_)
+            | Self::BinEql(_)
+            | Self::ListLen => CpsIntrinsicEffect::Total,
         }
     }
 
@@ -338,10 +409,6 @@ impl CpsIntrinsicOp {
     /// Whether a dominated duplicate of this op may reuse the dominating result. Every non-allocating op qualifies, `MayTrap` included: the ops are deterministic, and the dominating occurrence has already produced the identical value or already trapped, so the duplicate can neither observe a different result nor trap differently. Allocating ops are excluded to keep each construction's identity, even though nothing observes it today.
     pub fn cse_eligible(self) -> bool {
         !self.allocates()
-    }
-
-    pub fn loop_motion_eligible(self) -> bool {
-        self.is_total() && !self.allocates()
     }
 }
 
@@ -1565,6 +1632,28 @@ mod tests {
     fn list_map_is_not_an_intrinsic_opcode() {
         assert!(CpsIntrinsicOp::ListAppend.allocates());
         assert!(!CpsIntrinsicOp::NatAdd.is_total());
+    }
+
+    #[test]
+    fn every_guarded_operation_is_classified_as_trapping() {
+        // Found by reading `into_wasm`'s emission against this table rather than by a failure: each of these emits a guard — the first four through the same checked helpers as siblings already listed, the last three through an inline `Unreachable` — while the wildcard this match replaced answered `Total` for all seven, which is `eliminate_dead_bindings` deleting a refusal.
+        for op in [
+            CpsIntrinsicOp::NatRotr,
+            CpsIntrinsicOp::IntShl,
+            CpsIntrinsicOp::IntRotl,
+            CpsIntrinsicOp::IntRotr,
+            CpsIntrinsicOp::NatToInt,
+            CpsIntrinsicOp::IntToNat,
+            CpsIntrinsicOp::FltOfLeBytes,
+        ] {
+            assert!(op.may_trap(), "{op:?} emits a guard but is not `MayTrap`");
+            assert!(!op.is_total(), "{op:?} must not be deletable when dead");
+        }
+
+        // The controls that keep the rule from being "guard everything": monus saturates and a right shift only clears bits, so neither can leave the envelope.
+        assert!(CpsIntrinsicOp::NatSub.is_total());
+        assert!(CpsIntrinsicOp::NatShr.is_total());
+        assert!(CpsIntrinsicOp::IntShr.is_total());
     }
 
     #[test]
