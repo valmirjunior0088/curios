@@ -2,7 +2,7 @@ use {
     super::*,
     super::{
         analysis::{analyze_calls, available_values, free_values, function_nodes, nodes_from},
-        clone::{Mapping, clone_node},
+        clone::{Mapping, clone_node, copied_extent},
         optimize::{MULTI_SITE_INLINE_LIMIT, SCC_CLONE_NODE_LIMIT},
         reachable::prune_unreachable,
     },
@@ -33,17 +33,10 @@ pub(super) fn inline_known_calls(module: &mut CpsModule) -> bool {
             let Some(&owner) = analysis.node_owners.get(&node_id) else {
                 continue;
             };
-            let nodes = function_nodes(module, callee);
+            // The extent rather than the body: `function_nodes` walks a `LetFun`'s continuation and not its members, which cost nothing while such a body was refused outright and understates the duplication now that one is admitted — and a multi-site inline copies those members once per site.
+            let (nodes, _) = copied_extent(module, function_nodes(module, callee));
             let owner_values = available_values(module, owner);
             if !free_values(module, callee).is_subset(&owner_values) {
-                continue;
-            }
-            if nodes.iter().any(|node| {
-                matches!(
-                    module.node(*node).unwrap(),
-                    CpsNode::LetFun { .. } | CpsNode::RecInit { .. }
-                )
-            }) {
                 continue;
             }
             let sites = analysis.call_sites.get(&callee).map_or(0, Vec::len);
@@ -253,7 +246,12 @@ pub(super) fn inline_call(
     return_to: CpsContId,
 ) -> bool {
     let function = module.function(callee).unwrap().clone();
-    let node_ids = function_nodes(module, callee);
+    let (extent, nested) = copied_extent(module, function_nodes(module, callee));
+    let node_ids: Vec<CpsNodeId> = extent.into_iter().collect();
+    let nested_defs: BTreeMap<CpsFunId, CpsFunction> = nested
+        .iter()
+        .map(|&id| (id, module.function(id).unwrap().clone()))
+        .collect();
     let nodes = node_ids
         .iter()
         .map(|id| (*id, module.node(*id).unwrap().clone()))
@@ -283,12 +281,30 @@ pub(super) fn inline_call(
         return false;
     }
 
+    let mut owned: Vec<CpsValueId> = Vec::new();
     for node in nodes.values() {
-        if let CpsNode::LetValue { result, .. } | CpsNode::LetIntrinsic { result, .. } = node {
-            let definition = module.values.get(*result).unwrap().clone();
-            let fresh = module.add_value(definition.debug_name);
-            values.insert(*result, CpsAtom::Value(fresh));
+        match node {
+            CpsNode::LetValue { result, .. } | CpsNode::LetIntrinsic { result, .. } => {
+                owned.push(*result)
+            }
+            CpsNode::RecInit { values, .. } => owned.extend(values.iter().copied()),
+            _ => {}
         }
+    }
+    // A definition nested in the inlined body is copied with it, so its parameters are owned by the copy just as the body's own bindings are.
+    for definition in nested_defs.values() {
+        owned.extend(definition.params.iter().copied());
+    }
+    for old in owned {
+        let definition = module.values.get(old).unwrap().clone();
+        let fresh = module.add_value(definition.debug_name);
+        values.insert(old, CpsAtom::Value(fresh));
+    }
+    let mut functions: BTreeMap<CpsFunId, CpsFunId> = BTreeMap::new();
+    let mut returns: BTreeMap<CpsContId, CpsContId> = BTreeMap::new();
+    for (&id, definition) in &nested_defs {
+        functions.insert(id, module.reserve_function());
+        returns.insert(definition.return_cont, module.reserve_continuation());
     }
 
     let mut continuations = BTreeMap::new();
@@ -313,9 +329,12 @@ pub(super) fn inline_call(
         }
     }
 
+    let map_function = |id: CpsFunId| functions.get(&id).copied().unwrap_or(id);
+    // A nested definition is copied, so every reference to it inside the copy has to name the copy — as an atom, and as a direct callee.
     let map_atom = |atom: &CpsAtom| match atom {
         CpsAtom::Value(value) => values.get(value).cloned().unwrap_or(CpsAtom::Value(*value)),
-        atom => atom.clone(),
+        CpsAtom::Fun(function) => CpsAtom::Fun(map_function(*function)),
+        CpsAtom::Literal(_) => atom.clone(),
     };
     let map_value = |value: CpsValueId| match values.get(&value) {
         Some(CpsAtom::Value(value)) => *value,
@@ -325,13 +344,17 @@ pub(super) fn inline_call(
         if target == function.return_cont {
             return_to
         } else {
-            continuations.get(&target).copied().unwrap_or(target)
+            returns
+                .get(&target)
+                .copied()
+                .or_else(|| continuations.get(&target).copied())
+                .unwrap_or(target)
         }
     };
 
     // A callee parameter may map to a function reference, which turns an indirect call in the body into a direct one as the copy is made.
     let map_callee = |callee: &CpsCallee| match callee {
-        CpsCallee::Known(function) => CpsCallee::Known(*function),
+        CpsCallee::Known(function) => CpsCallee::Known(map_function(*function)),
         CpsCallee::Closure(value) => match map_atom(&CpsAtom::Value(*value)) {
             CpsAtom::Value(value) => CpsCallee::Closure(value),
             CpsAtom::Fun(function) => CpsCallee::Known(function),
@@ -344,8 +367,7 @@ pub(super) fn inline_call(
         atom: &map_atom,
         cont: &map_cont,
         callee: &map_callee,
-        // The inliner still refuses a body nesting a definition, so no function identity moves.
-        function: &|id| id,
+        function: &map_function,
         node: &|id| node_map[&id],
     };
     let mut cloned_nodes = BTreeMap::new();
@@ -364,6 +386,18 @@ pub(super) fn inline_call(
                     .map(|id| map_value(*id))
                     .collect(),
                 body: node_map[&continuation.body],
+            },
+        );
+    }
+    // Each nested definition is copied into the caller alongside the body that introduces it. Its return sentinel stays a reserved, bodyless identity, which is what the verifier requires of one.
+    for (&old, definition) in &nested_defs {
+        module.define_function(
+            functions[&old],
+            CpsFunction {
+                debug_name: definition.debug_name.clone(),
+                params: definition.params.iter().map(|id| map_value(*id)).collect(),
+                return_cont: returns[&definition.return_cont],
+                body: node_map[&definition.body],
             },
         );
     }
