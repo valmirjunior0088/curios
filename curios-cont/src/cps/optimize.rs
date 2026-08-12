@@ -11,6 +11,7 @@ use super::{
     contify::contify_calls,
     cse::dedupe_intrinsics,
     inline::{inline_known_calls, inline_single_use_continuations},
+    protocol::split_returns,
     reachable::prune_unreachable,
     simplify::{
         dissolve_rec_init, eliminate_dead_bindings, eliminate_dead_parameters,
@@ -61,6 +62,7 @@ pub fn optimize(module: &mut CpsModule) {
             | specialize_scc_calls(module, &mut scc_clone_budget)
             | specialize_call_patterns(module, &mut branch_clone_budget)
             | specialize_jump_patterns(module, &mut jump_clone_budget)
+            | split_returns(module)
             | dissolve_rec_init(module)
             | prune_unreachable(module);
         if !changed {

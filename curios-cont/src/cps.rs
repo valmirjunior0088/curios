@@ -1500,6 +1500,7 @@ mod demand;
 mod evaluate;
 mod inline;
 mod optimize;
+mod protocol;
 mod reachable;
 pub(crate) mod represent;
 mod simplify;
