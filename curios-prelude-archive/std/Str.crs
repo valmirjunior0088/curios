@@ -1,7 +1,7 @@
 pub use /syn/{Str};
 pub use /syn/Str/{Class, classify, Scan, step, Utf8, Valid};
 use /syn/{True, False};
-use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Eql, Show};
+use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Eq, Eql, Show};
 
 -- The scan-witness machinery every operation below rests on.
 pub mod utf8;
@@ -16,6 +16,13 @@ pub let of_bytes(b: Bytes) -> Option(Str) =
     | some(v) => Option/some(Str { bytes = b, valid = v })
     | none() => Option/none()
     end;
+
+-- Storage decides identity: the scan witness is proof-irrelevant, so two strings over the same bytes are the same string. The `BigNat/eq` and `Char/eq_of_code` construction at a third carrier — transport the field equality under a motive abstracting the dependent field, then apply the result to the right-hand witness.
+pub let eq_of_bytes(a: Str, b: Str, p: Eq(a.bytes, b.bytes)) -> Eq(a, b) =
+    Eq/subst(
+        (bytes: Bytes) => (valid: Valid(bytes)) -> Eq(a, Str { bytes = bytes, valid = valid }),
+        p,
+        (valid: Valid(a.bytes)) => Eq/refl())(b.valid);
 
 pub let concat(a: Str, b: Str) -> Str =
     Str { bytes = x[..a.bytes, ..b.bytes], valid = concat_closed(a.valid, b.valid) };

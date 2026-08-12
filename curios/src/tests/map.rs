@@ -84,47 +84,51 @@ fn map_entries_agree_across_insertion_orders() {
 }
 
 #[test]
-fn map_nat_keys_encode_injectively() {
-    // The `Key(Nat)` witness must keep 0 (empty encoding), one-byte, boundary (255/256), and multi-byte keys distinct.
-    let source = r#"
-        use /std/{Handle, Str, Map, Nat, Option, List};
-        let entries : List({Nat, Str}) =
-            [(0, "zero"), (1, "one"), (255, "ff"), (256, "big"), (65536, "bigger")];
-        let m : Map(Str) = Map/of(entries);
-        let at(n : Nat) -> Str = Option/unwrap_or(Map/get(m, n), "?");
-        /std/print(Str/join(",", [
-            Nat/to_str(Map/len(m)),
-            at(0), at(1), at(255), at(256), at(65536), at(2)]))
-        "#;
-    assert_eq!(run(source), b"5,zero,one,ff,big,bigger,?");
-}
-
-#[test]
 fn map_holds_many_keys_with_shared_prefixes() {
-    // 300 sequential Nat keys share long big-endian prefixes, exercising deep shared paths; deleting the even half exercises collapse at scale.
+    // 300 sequential keys, rendered as decimal, share long prefixes — "1" against "10" against "100" — exercising deep shared paths and the presence markers that separate a key from its own extensions; deleting the even half exercises collapse at scale. Keys are `Str` because there is no `Key(Nat)`: see `/std/Map`, which records why a base-256 encoding of an intrinsic `Nat` cannot discharge `Key/injective`.
     let source = r#"
         use /std/{Handle, Str, Map, Nat, Option};
         rec build(i : Nat, acc : Map(Str)) -> Map(Str) =
             match i
             | 0 => acc
-            | _ => build(i - 1, Map/insert(acc, i, Nat/to_str(i)))
+            | _ => build(i - 1, Map/insert(acc, Nat/to_str(i), Nat/to_str(i)))
             end;
         rec drop_even(i : Nat, acc : Map(Str)) -> Map(Str) =
             match i
             | 0 => acc
             | _ =>
                 match i % 2 == 0
-                | true => drop_even(i - 1, Map/remove(acc, i))
+                | true => drop_even(i - 1, Map/remove(acc, Nat/to_str(i)))
                 | false => drop_even(i - 1, acc)
                 end
             end;
         let m : Map(Str) = build(300, Map/empty());
         let d : Map(Str) = drop_even(300, m);
-        let at(n : Nat) -> Str = Option/unwrap_or(Map/get(d, n), "?");
+        let at(n : Nat) -> Str = Option/unwrap_or(Map/get(d, Nat/to_str(n)), "?");
         /std/print(Str/join(",", [
             Nat/to_str(Map/len(m)),
             Nat/to_str(Map/len(d)),
             at(2), at(3), at(255), at(256), at(257)]))
         "#;
     assert_eq!(run(source), b"300,150,?,3,255,?,257");
+}
+
+// The trie's identity is the byte string a `Key` produces, so a colliding encoding does not fail a lookup — it silently merges two keys into one entry. `Key/injective` states that obligation where it can be checked, and a witness whose encoding provably collides cannot discharge it: both constructors here encode to the empty byte string, so the law demands `Eq(a, b)` for values that are not equal.
+#[test]
+fn a_colliding_key_witness_is_rejected() {
+    let source = r#"
+        use /std/{Handle, Str, Bytes, Map, Eq};
+        pub induct Side : pub Type
+        | left()
+        | right()
+        end
+        satisfy Map/Key(Side) {
+            to_bin(s) = x[],
+            injective(a, b, same) = Eq/refl(),
+        }
+        /std/print("unreachable")
+        "#;
+
+    let message = super::error(source);
+    assert!(message.contains("type mismatch"), "{message}");
 }

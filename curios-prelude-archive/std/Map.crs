@@ -1,5 +1,5 @@
 -- A crit-bit (Patricia) trie keyed on the byte string a `Key` witness produces. The map deliberately does not remember `K`: the trie's identity *is* that byte string, so two key types serializing alike are the same key. `Key` is therefore a write-side injection only — `entries`, `keys`, and `fold` hand back `Bytes`, and a caller wanting typed keys decodes at the boundary.
-use /std/{Bytes, Byte, Nat, Bool, Str, List, Option};
+use /std/{Bytes, Byte, Nat, Bool, Str, List, Option, Eq};
 
 induct Node(V: Type): Type
 | leaf(key: Bytes, value: V)
@@ -11,24 +11,28 @@ pub struct Map(V: Type): Type {
     root: Option(Node(V)),
 }
 
+-- The trie's identity is the byte string, so a `to_bin` that collides silently merges two keys into one entry. `injective` is that obligation stated where it can be checked: a witness cannot register without proving its own encoding distinguishes what the key type distinguishes.
 pub concept Key(K: Type): pub Type {
     to_bin(K) -> Bytes,
+    injective(a: K, b: K, same: Eq(to_bin(a), to_bin(b))) -> Eq(a, b),
 }
 
 satisfy Key(Bytes) {
     to_bin(b) = b,
+    -- The identity encoding: the goal reduces to the hypothesis.
+    injective(a, b, same) = same,
 }
 
 satisfy Key(Str) {
     to_bin = Str/to_bytes,
+    injective(a, b, same) = Str/eq_of_bytes(a, b, same),
 }
 
-satisfy Key(Nat) {
-    to_bin(n) =
-        rec go(x: Nat) -> Bytes =
-            match x | 0 => x[] | _ => x[..go(x / 256), Nat/to_byte(x % 256)] end;
-        go(n),
-}
+-- No `Key(Nat)`. Its base-256 encoding recursed on `x / 256`, and intrinsic `Nat` eliminates only by unary successor, so no induction principle reaches that recursion: the injectivity is unprovable with or without the division reduction laws.
+--
+-- Rocq's answer is not to encode into a binary representation but to *work* in one — `positive` is this library's `NonZero` and `N` its `BigNat` — where digit injectivity comes from the representation rather than from arithmetic. Its bridge from unary `nat` is proved by successor (`Pos.of_nat (S n) = Pos.succ (Pos.of_nat n)`), which is affordable exactly because that bridge is only ever needed inside proofs. Agda and Lean instead give the digit expansion its own well-founded or fuel-based recursion, and neither form exists here.
+--
+-- So a caller wanting numeric keys encodes them at the boundary, and a future `Key` for a binary carrier is the shape worth building.
 
 let bit(k: Bytes, j: Nat) -> Nat =
     let g = j / 9;
