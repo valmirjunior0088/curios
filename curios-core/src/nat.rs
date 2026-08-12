@@ -141,7 +141,7 @@ impl Nat {
     ///
     /// **A multiset, never a set.** `a + a + b` against `a + c` cancels *one* `a` and leaves `a + b` against `c`. Cancelling both would read `a + b ⋈ c` off `a + a + b ⋈ a + c`, which is false — and false definitional equations are the route this file's soundness perimeter records as reaching `False` by congruence.
     ///
-    /// **Summands pair by term equality, deliberately.** A definitionally equal pair spelled two ways does not cancel, leaving the operation stuck on operands it could in principle have reduced. That is the safe direction — a stuck comparison decides nothing and admits nothing — where cancelling *more* than equality licenses is the unsound one. So the match stays syntactic rather than reducing candidates against each other, and incompleteness here costs reductions, never correctness.
+    /// **Summands pair by equality up to universe instances.** A definitionally equal pair spelled two ways still does not cancel — the match does not reduce candidates against each other, so incompleteness in that direction costs reductions and never correctness. What it *does* see through is an instance, because two occurrences of a polymorphic name are independently instantiated and would otherwise be two terms: `len(xs)` written twice never cancels against itself, and every bound mentioning one stays stuck. Erasing before the comparison is [`crate::project_erased_universes`], the same projection the refinement key already probes under, licensed by the same fact — an instance is deleted before anything runs and no value can depend on one. It is a question about numbers, and a level is not part of the answer.
     ///
     /// The literal floors cancel by the same law, which is why the minimum comes off both: it is the one-summand case of the same rule, and doing it here rather than at each consumer is what keeps the two spellings from drifting.
     pub(crate) fn cancel_common(left: &Term, right: &Term) -> (Term, Term) {
@@ -149,12 +149,18 @@ impl Nat {
         let (floor_right, inner_right) = Nat::decompose(right);
 
         let mut held = Self::summands(&inner_left);
+        let mut keys = held
+            .iter()
+            .map(crate::project_erased_universes)
+            .collect::<Vec<_>>();
         let mut residual_right = Vec::new();
         let mut cancelled = false;
         for summand in Self::summands(&inner_right) {
-            match held.iter().position(|candidate| *candidate == summand) {
+            let key = crate::project_erased_universes(&summand);
+            match keys.iter().position(|candidate| *candidate == key) {
                 Some(index) => {
                     held.remove(index);
+                    keys.remove(index);
                     cancelled = true;
                 }
                 None => residual_right.push(summand),

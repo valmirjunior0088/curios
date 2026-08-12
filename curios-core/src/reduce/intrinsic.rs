@@ -2,7 +2,7 @@ use {
     super::{ReduceError, Reducer},
     crate::{
         Intrinsic, Nat, Peel, Subterm, Term, normalize_concat, peel_bin, peel_first_atom,
-        peel_first_elem,
+        peel_first_elem, project_erased_universes,
     },
     curios_base::{Grain, Int, PackedBin, int_rotl, int_rotr, nat_rotl, nat_rotr},
     num_bigint::BigUint,
@@ -393,7 +393,8 @@ fn compare_nat(
     let (sr, ir) = Nat::decompose(&right);
 
     // Same inner ⇒ the floors alone decide: `cmp(x + sl, x + sr) = cmp(sl, sr)` (so `lt(pred, succ pred) = true`). Two literals — inner `0` on both sides — also land here: this is the O(1) literal fold. Otherwise, whichever side keeps successors past the shared floor is larger *iff* the other bottomed out at literal zero (`inner ≥ 0`); equal floors with one zero inner give a non-strict bound (`a ≤ b`/`a ≥ b`) the strict/`gte`/`lte` reads still use; anything else is undecidable.
-    let outcome = if il == ir {
+    // Compared up to universe instances for the same reason [`Nat::cancel_common`] matches summands that way: two occurrences of a polymorphic name carry independently fresh instances, and a level is not part of the answer to "are these the same number".
+    let outcome = if project_erased_universes(&il) == project_erased_universes(&ir) {
         from_ordering(sl.cmp(&sr))
     } else {
         match sl.cmp(&sr) {

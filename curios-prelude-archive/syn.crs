@@ -1,4 +1,4 @@
-use /std/{Bool, Nat};
+use /std/{Bool};
 
 pub concept Add(A: Type): pub Type {
     add(A, A) -> A,
@@ -61,6 +61,4 @@ pub use Char/{let Char};
 pub mod Str;
 pub use Str/{let Str};
 
--- Scrutinised through `/sys/Nat/lt` rather than `<`, which would be the same proposition with an edge nothing can see: `into_core` leaves an infix unresolved and the concept projection is inserted during elaboration, so the topological sort has no `Lt → Cmp(Nat)` edge to order by. With `/sys`'s accessors depending on this name, that ordering stops being luck.
-pub let Lt(a: Nat, b: Nat) -> Prop =
-    match /sys/Nat/lt(a, b) | true => True | false => False end;
+pub mod Nat;

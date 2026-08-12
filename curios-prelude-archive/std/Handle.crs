@@ -1,6 +1,6 @@
 pub use /sys/{Handle};
 pub use /sys/Handle/{stdin, stdout, stderr, eql};
-use /std/{Bytes, Nat, Result, List, Io};
+use /std/{Bytes, Nat, Result, List, Io, True};
 
 pub induct Error: pub Type
 | not_found()
@@ -47,6 +47,13 @@ pub rec write(h: Handle, b: Bytes) -> Io(Result({}, Error)) =
     let r = /sys/Handle/write(h, b)!;
     choose
     | r.status != /sys/status/ok => Io/pure(Result/failure(error_of(r.status)))
-    | r.written < Bytes/len(b) => write(h, Bytes/slice(b, r.written, Bytes/len(b)))
+    | r.written < Bytes/len(b) =>
+        write(
+            h,
+            Bytes/slice(
+                b,
+                r.written,
+                Bytes/len(b),
+                @Nat/Lt/le_of_lt(r.written, Bytes/len(b), True/qed())))
     | _ => Io/pure(Result/success(()))
     end;

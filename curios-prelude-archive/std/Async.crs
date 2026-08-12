@@ -1,4 +1,4 @@
-use /std/{Handle, Bytes, Nat, Int, Bool, List, Option, Result, Cell, Monad, Lift, Io};
+use /std/{Handle, Bytes, Nat, Int, Bool, List, Option, Result, Cell, Monad, Lift, Io, True};
 use /std/time/{Duration};
 
 -- Both are scheduler plumbing: their operations exist so this module and its descendants can drive a fiber, not so a program can complete someone else's future. The modules stay private and only the two type names are re-exported, which leaves `Future/fulfill` and friends reachable within `/std/Async` alone.
@@ -143,7 +143,13 @@ pub let write(h: Handle, b: Bytes) -> Async(Result({}, Handle/Error)) =
             | r.status != /sys/status/ok => pure(Result/failure(Handle/error_of(r.status)))
             | r.written < Bytes/len(rest) =>
                 let _ = wait(h, /sys/poll/write)!;
-                go(Bytes/slice(rest, r.written, Bytes/len(rest)))
+                go(
+                    Bytes/slice(
+                        rest,
+                        r.written,
+                        Bytes/len(rest),
+                        @Nat/Lt/le_of_lt(r.written, Bytes/len(rest), True/qed()),
+                        @Nat/Le/refl(Bytes/len(rest))))
             | _ => pure(Result/success(()))
             end;
         go(b)

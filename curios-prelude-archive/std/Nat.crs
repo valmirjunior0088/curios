@@ -100,3 +100,6 @@ pub use Lte/{let Lte};
 
 pub mod Lt;
 pub use Lt/{let Lt};
+
+pub mod Le;
+pub use Le/{let Le};

@@ -95,12 +95,22 @@ fn bin_concat_leading_byte_clash_is_rejected() {
 fn bin_slice_is_a_monoid_citizen() {
     // `Bytes/slice` rides the free-monoid spine (`core::spine`) as a measured `Window` — a length-`hi - lo` chunk whose contents are symbolic — so the slice algebra holds up to *definitional* equality, provable by `refl` for SYMBOLIC operands that `reduce` cannot fold. `split` fuses two adjacent windows of one base across their shared seam; `empty` drops a zero-width window (the monoid identity); `full` collapses `slice(b, 0, len b)` to its base (the `reduce` partner of the spine's window-collapse). Each declared type forces `convert` to peel the windows to a common normal form; without the peel these are stuck, distinct terms and `refl` would not check.
     let source = r#"
-        use /std/{Handle, Str, Eq, Bytes, Nat};
-        let split(b : Bytes, s : Nat, m : Nat, e : Nat)
-            -> Eq(x[..Bytes/slice(b, s, m), ..Bytes/slice(b, m, e)], Bytes/slice(b, s, e)) =
+        use /std/{Handle, Str, Eq, Bytes, Nat, True};
+        let split(b : Bytes, s : Nat, m : Nat, e : Nat,
+                  sm : Nat/Le(s, m), me : Nat/Le(m, e), el : Nat/Le(e, Bytes/len(b)))
+            -> Eq(
+                x[
+                    ..Bytes/slice(b, s, m, @sm, @Nat/Le/trans(me, el)),
+                    ..Bytes/slice(b, m, e, @me, @el)],
+                Bytes/slice(b, s, e, @Nat/Le/trans(sm, me), @el)) =
             Eq/refl();
-        let empty(b : Bytes, i : Nat) -> Eq(Bytes/slice(b, i, i), x[]) = Eq/refl();
-        let full(b : Bytes) -> Eq(Bytes/slice(b, 0, Bytes/len(b)), b) = Eq/refl();
+        let empty(b : Bytes, i : Nat, il : Nat/Le(i, Bytes/len(b)))
+            -> Eq(Bytes/slice(b, i, i, @Nat/Le/refl(i), @il), x[]) = Eq/refl();
+        let full(b : Bytes)
+            -> Eq(
+                Bytes/slice(b, 0, Bytes/len(b), @True/qed(), @Nat/Le/refl(Bytes/len(b))),
+                b) =
+            Eq/refl();
         let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
         /std/Io/pure(())
         "#;
@@ -112,8 +122,14 @@ fn bin_slice_window_seam_mismatch_is_rejected() {
     // The dual: two windows whose seam does not meet — `slice(b, s, m)` then `slice(b, n, e)` with `m` and `n` distinct — must NOT fuse, so the concat is not convertible to `slice(b, s, e)` and the `refl` is rejected. Guards the fusion's seam check against gluing non-adjacent slices of one base.
     let source = r#"
         use /std/{Handle, Str, Eq, Bytes, Nat};
-        let bad(b : Bytes, s : Nat, m : Nat, n : Nat, e : Nat)
-            -> Eq(x[..Bytes/slice(b, s, m), ..Bytes/slice(b, n, e)], Bytes/slice(b, s, e)) =
+        let bad(b : Bytes, s : Nat, m : Nat, n : Nat, e : Nat,
+                sm : Nat/Le(s, m), ml : Nat/Le(m, Bytes/len(b)),
+                ne : Nat/Le(n, e), el : Nat/Le(e, Bytes/len(b)), se : Nat/Le(s, e))
+            -> Eq(
+                x[
+                    ..Bytes/slice(b, s, m, @sm, @ml),
+                    ..Bytes/slice(b, n, e, @ne, @el)],
+                Bytes/slice(b, s, e, @se, @el)) =
             Eq/refl();
         let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
         /std/Io/pure(())
@@ -125,12 +141,22 @@ fn bin_slice_window_seam_mismatch_is_rejected() {
 fn list_slice_is_a_monoid_citizen() {
     // The `List` mirror of `bin_slice_is_a_monoid_citizen`: `List/slice` now rides the free-monoid spine as a measured `Window` (`core::spine`), so `split` fuses two adjacent windows of one base across their seam — the convert-level capability — while `empty` and `full` exercise the reduce-level slice identities.
     let source = r#"
-        use /std/{Handle, Str, Eq, List, Nat};
-        let split(@T : Type, a : List(T), s : Nat, m : Nat, e : Nat)
-            -> Eq([..List/slice(a, s, m), ..List/slice(a, m, e)], List/slice(a, s, e)) =
+        use /std/{Handle, Str, Eq, List, Nat, True};
+        let split(@T : Type, a : List(T), s : Nat, m : Nat, e : Nat,
+                  sm : Nat/Le(s, m), me : Nat/Le(m, e), el : Nat/Le(e, List/len(a)))
+            -> Eq(
+                [
+                    ..List/slice(@T, a, s, m, @sm, @Nat/Le/trans(me, el)),
+                    ..List/slice(@T, a, m, e, @me, @el)],
+                List/slice(@T, a, s, e, @Nat/Le/trans(sm, me), @el)) =
             Eq/refl();
-        let empty(@T : Type, a : List(T), i : Nat) -> Eq(List/slice(a, i, i), []) = Eq/refl();
-        let full(@T : Type, a : List(T)) -> Eq(List/slice(a, 0, List/len(a)), a) = Eq/refl();
+        let empty(@T : Type, a : List(T), i : Nat, il : Nat/Le(i, List/len(a)))
+            -> Eq(List/slice(@T, a, i, i, @Nat/Le/refl(i), @il), []) = Eq/refl();
+        let full(@T : Type, a : List(T))
+            -> Eq(
+                List/slice(@T, a, 0, List/len(a), @True/qed(), @Nat/Le/refl(List/len(a))),
+                a) =
+            Eq/refl();
         let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
         /std/Io/pure(())
         "#;
@@ -170,8 +196,14 @@ fn list_slice_window_seam_mismatch_is_rejected() {
     // The dual of `bin_slice_window_seam_mismatch_is_rejected`: two `List` windows whose seam does not meet must NOT fuse, so the concat is not convertible to the single slice and the `refl` is rejected.
     let source = r#"
         use /std/{Handle, Str, Eq, List, Nat};
-        let bad(@T : Type, a : List(T), s : Nat, m : Nat, n : Nat, e : Nat)
-            -> Eq([..List/slice(a, s, m), ..List/slice(a, n, e)], List/slice(a, s, e)) =
+        let bad(@T : Type, a : List(T), s : Nat, m : Nat, n : Nat, e : Nat,
+                sm : Nat/Le(s, m), ml : Nat/Le(m, List/len(a)),
+                ne : Nat/Le(n, e), el : Nat/Le(e, List/len(a)), se : Nat/Le(s, e))
+            -> Eq(
+                [
+                    ..List/slice(@T, a, s, m, @sm, @ml),
+                    ..List/slice(@T, a, n, e, @ne, @el)],
+                List/slice(@T, a, s, e, @se, @el)) =
             Eq/refl();
         let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
         /std/Io/pure(())

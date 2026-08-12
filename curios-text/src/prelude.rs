@@ -463,9 +463,27 @@ fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<TopItem> {
             atom.clone(),
             intrinsic(Intrinsic::BinGet(grain, name("b"), name("i"))),
         ),
-        pub_fn(
+        // A window is a length-`e - s` chunk, which is meaningful only when `s <= e <= len(b)`. Stated in two parts rather than one conjunction because a refinement records the term it scrutinised: a caller guards each bound separately, so each has to be dischargeable separately.
+        pub_fn_marked(
             "slice",
-            vec![("b", type_.clone()), ("s", nat()), ("e", nat())],
+            vec![
+                (Plicity::Explicit, "b", type_.clone()),
+                (Plicity::Explicit, "s", nat()),
+                (Plicity::Explicit, "e", nat()),
+                (
+                    Plicity::Implicit,
+                    "ordered",
+                    applied(registered(syntax.proof.le), vec![name("s"), name("e")]),
+                ),
+                (
+                    Plicity::Implicit,
+                    "within",
+                    applied(
+                        registered(syntax.proof.le),
+                        vec![name("e"), applied(name("len"), vec![name("b")])],
+                    ),
+                ),
+            ],
             type_.clone(),
             intrinsic(Intrinsic::BinSlice(grain, name("b"), name("s"), name("e"))),
         ),
@@ -520,6 +538,19 @@ fn list_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
                 (Plicity::Explicit, "a", list_of(name("T"))),
                 (Plicity::Explicit, "s", nat()),
                 (Plicity::Explicit, "e", nat()),
+                (
+                    Plicity::Implicit,
+                    "ordered",
+                    applied(registered(syntax.proof.le), vec![name("s"), name("e")]),
+                ),
+                (
+                    Plicity::Implicit,
+                    "within",
+                    applied(
+                        registered(syntax.proof.le),
+                        vec![name("e"), applied(name("len"), vec![name("a")])],
+                    ),
+                ),
             ],
             list_of(name("T")),
             intrinsic(Intrinsic::ListSlice(

@@ -69,6 +69,7 @@ impl SyntaxRegistry {
             self.proof.true_qed,
             self.proof.true_type,
             self.proof.lt,
+            self.proof.le,
         ]
         .into_iter()
         .chain(self.concept_fields().map(|target| target.concept))
@@ -173,4 +174,6 @@ pub struct ProofSyntax {
     pub true_type: SyntaxName,
     /// `a < b`, decided — the bound `/sys`'s checked accessors take as their index precondition. Decided rather than inductive is load-bearing: it reduces to `True` on a refined comparison, which is what lets the obligation be discharged without a written proof.
     pub lt: SyntaxName,
+    /// `a <= b`, decided, by the same mechanism — the ordering half of a window bound. Distinct from `/std/Nat/Lte`, which stays inductive so its laws can recurse over the relation's constructors.
+    pub le: SyntaxName,
 }

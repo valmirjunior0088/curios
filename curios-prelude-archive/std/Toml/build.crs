@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, List, Map, Option, Result, Parse};
+use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, List, Map, Option, Result, Parse, True};
 use /std/Toml/{Toml, Seg, State, let Build};
 
 induct Act: Type
@@ -143,9 +143,9 @@ rec walk(
                     | some(existing) =>
                         match existing
                         | arr(items) =>
-                            match List/get(items, index)
-                            | some(elem) =>
-                                match elem
+                            match Nat/Lt/try(index, List/len(items))
+                            | some(in_range) =>
+                                match List/at(@Toml, items, index, @in_range)
                                 | table(inner) =>
                                     match walk(
                                         inner,
@@ -155,11 +155,25 @@ rec walk(
                                         unchecked - 1,
                                         act)
                                     | success((inner2, side2, res)) =>
+                                        let count = List/len(@Toml, items);
                                         let items2 =
                                             [
-                                                ..List/slice(items, 0, index),
+                                                ..List/slice(
+                                                    @Toml,
+                                                    items,
+                                                    0,
+                                                    index,
+                                                    @True/qed(),
+                                                    @Nat/Lt/le_of_lt(index, count, in_range)),
                                                 Toml/table(inner2),
-                                                ..List/slice(items, index + 1, List/len(items))];
+                                                ..List/slice(
+                                                    @Toml,
+                                                    items,
+                                                    index + 1,
+                                                    count,
+                                                    @Nat/Lt/le_succ_of_lt(
+                                                        index, count, in_range),
+                                                    @Nat/Le/refl(count))];
                                         Result/success(
                                             (
                                                 Map/insert(m, name, Toml/arr(items2)),
@@ -246,14 +260,23 @@ rec walk(
                             | _ =>
                                 let index = List/len(items) - 1;
                                 let seg2 = Seg/at(name, index);
-                                match List/get(items, index)
-                                | some(elem) =>
-                                    match elem
+                                match Nat/Lt/try(index, List/len(items))
+                                | some(in_range) =>
+                                    match List/at(@Toml, items, index, @in_range)
                                     | table(inner) =>
                                         match walk(inner, side, seg_key(pre, seg2), rest, 0, act)
                                         | success((inner2, side2, res)) =>
                                             let items2 =
-                                                [..List/slice(items, 0, index), Toml/table(inner2)];
+                                                [
+                                                    ..List/slice(
+                                                        @Toml,
+                                                        items,
+                                                        0,
+                                                        index,
+                                                        @True/qed(),
+                                                        @Nat/Lt/le_of_lt(
+                                                            index, List/len(items), in_range)),
+                                                    Toml/table(inner2)];
                                             Result/success(
                                                 (
                                                     Map/insert(m, name, Toml/arr(items2)),

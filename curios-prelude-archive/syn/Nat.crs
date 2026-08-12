@@ -1,0 +1,11 @@
+-- The `Nat` bounds the compiler states as preconditions on `/sys`'s operations. Each is *decided* — a match on the machine comparison rather than an inductive family — so a caller who has already guarded on that comparison pays nothing to satisfy it: the proposition reduces away under the refinement and the obligation is discharged with nothing written. `/std/Nat/Lte` stays inductive alongside these, for the laws that recurse over the relation's own constructors.
+--
+-- Each is scrutinised through `/sys/Nat` directly rather than through `<` and `<=`. The operators denote the same propositions, but an infix survives `into_core` unresolved and its concept projection is inserted during elaboration — so the topological sort sees no edge to the `Cmp(Nat)` witness and orders these by source-order accident, which stops being survivable once `/sys` depends on them.
+use /std/{Nat};
+use /syn/{True, False};
+
+pub let Lt(a: Nat, b: Nat) -> Prop =
+    match /sys/Nat/lt(a, b) | true => True | false => False end;
+
+pub let Le(a: Nat, b: Nat) -> Prop =
+    match /sys/Nat/lte(a, b) | true => True | false => False end;

@@ -5,8 +5,9 @@ use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Eq, Eql, Show};
 
 -- The scan-witness machinery every operation below rests on.
 pub mod utf8;
-use utf8/{check, concat_closed, drop_width, drop_valid, take_valid, peel_byte, certify_decoded,
-    decode_head, count_scalars, lte_succ_of_lt};
+use utf8/{check, concat_closed, drop_width, drop_width_within, drop_valid, take_valid, peel_byte,
+    certify_decoded,
+    decode_head, count_scalars};
 
 pub let to_bytes(s: Str) -> Bytes =
     s.bytes;
@@ -29,13 +30,24 @@ pub let concat(a: Str, b: Str) -> Str =
 
 let drop_n(n: Nat, s: Str) -> Str =
     Str {
-        bytes = Bytes/slice(s.bytes, drop_width(n, Scan/lead(), s.bytes), Bytes/len(s.bytes)),
+        bytes =
+            Bytes/slice(
+                s.bytes,
+                drop_width(n, Scan/lead(), s.bytes),
+                Bytes/len(s.bytes),
+                @drop_width_within(n, Scan/lead(), s.bytes)),
         valid = drop_valid(n, Scan/lead(), s.valid),
     };
 
 let take_n(n: Nat, s: Str) -> Str =
     Str {
-        bytes = Bytes/slice(s.bytes, 0, drop_width(n, Scan/lead(), s.bytes)),
+        bytes =
+            Bytes/slice(
+                s.bytes,
+                0,
+                drop_width(n, Scan/lead(), s.bytes),
+                @True/qed(),
+                @drop_width_within(n, Scan/lead(), s.bytes)),
         valid = take_valid(n, Scan/lead(), s.valid),
     };
 
@@ -160,7 +172,7 @@ pub let at(s: Str, i: Nat, ok: Nat/Lt(i, len(s))) -> Char =
         s.bytes,
         s.valid,
         i,
-        lte_succ_of_lt(i, count_scalars(Scan/lead(), s.bytes), ok));
+        Nat/Lt/lte_succ_of_lt(i, count_scalars(Scan/lead(), s.bytes), ok));
 
 pub let join(sep: Str, parts: List(Str)) -> Str =
     List/balanced(

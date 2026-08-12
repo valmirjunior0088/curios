@@ -13,10 +13,19 @@ pub rec format_type_with(T: Type, f: Fmt) -> Type =
     | show(rest) => (@A: Type, use Show(A), a: A) -> format_type_with(T, rest)
     end;
 
+-- The window's bounds are tested rather than demanded, because the callers below reach here from arms where they hold no evidence about `pos` — the exhausted-fuel arm and the past-the-end arm both flush what they have. A span that is not a span yields no literal, which is the answer this already gave when the bytes were not text.
 let flush(bytes: Bytes, start: Nat, stop: Nat, rest: Fmt) -> Fmt =
-    match Str/of_bytes(Bytes/slice(bytes, start, stop))
-    | some(piece) => Fmt/lit(piece, rest)
+    match Nat/Le/try(start, stop)
     | none() => Fmt/nil()
+    | some(ordered) =>
+        match Nat/Le/try(stop, Bytes/len(bytes))
+        | none() => Fmt/nil()
+        | some(within) =>
+            match Str/of_bytes(Bytes/slice(bytes, start, stop, @ordered, @within))
+            | some(piece) => Fmt/lit(piece, rest)
+            | none() => Fmt/nil()
+            end
+        end
     end;
 
 -- These three recur on `pos + 1` and `pos + 2` with `bytes` fixed, so nothing about their arguments gets structurally smaller and no size-change checker can accept them. `parse` feeds `format_type_with(Str, parse(s))`, the result type of `render` and `print`, which puts them in a *type* position — and everything a type reaches has to be total, or type formation may not terminate. The descending `fuel` is what supplies the decrease.

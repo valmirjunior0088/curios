@@ -40,12 +40,28 @@ pub rec drop_width(n: Nat, s: Scan, b: Bytes) -> Nat =
         end
     end;
 
+-- `drop_width` peels at most one byte per step and stops when `b` runs out, so its count never passes `b`'s length. Every window the transports below open is `slice(b, drop_width(..), len(b))`, and this is the ordering half of what that slice demands. Each arm is decided outright — the empty scan counts nothing, an exhausted `n` counts nothing — and the recursive arms cancel a shared successor against the hypothesis at the tail.
+pub rec drop_width_within(n: Nat, s: Scan, b: Bytes) -> Nat/Le(drop_width(n, s, b), Bytes/len(b)) =
+    match b: (v) => Nat/Le(drop_width(n, s, v), Bytes/len(v))
+    | x[] => True/qed()
+    | x[h, ..t] =>
+        match s
+        | lead() =>
+            match n
+            | 0 => True/qed()
+            | pred + 1 => drop_width_within(pred, step(h, Scan/lead()), t)
+            end
+        | cont(rem, lo, hi) => drop_width_within(n, step(h, Scan/cont(rem, lo, hi)), t)
+        | bad() => drop_width_within(n, step(h, Scan/bad()), t)
+        end
+    end;
+
 pub rec drop_valid(
     n: Nat,
     s: Scan,
     @b: Bytes,
     d: Utf8(s, b),
-) -> Valid(Bytes/slice(b, drop_width(n, s, b), Bytes/len(b))) =
+) -> Valid(Bytes/slice(b, drop_width(n, s, b), Bytes/len(b), @drop_width_within(n, s, b))) =
     match s
     | lead() =>
         match d
@@ -66,7 +82,7 @@ pub rec take_valid(
     s: Scan,
     @b: Bytes,
     d: Utf8(s, b),
-) -> Utf8(s, Bytes/slice(b, 0, drop_width(n, s, b))) =
+) -> Utf8(s, Bytes/slice(b, 0, drop_width(n, s, b), @True/qed(), @drop_width_within(n, s, b))) =
     match s
     | lead() =>
         match d
@@ -78,7 +94,12 @@ pub rec take_valid(
                 Utf8/more(
                     c,
                     Scan/lead(),
-                    Bytes/slice(t, 0, drop_width(pred, step(c, Scan/lead()), t)),
+                    Bytes/slice(
+                        t,
+                        0,
+                        drop_width(pred, step(c, Scan/lead()), t),
+                        @True/qed(),
+                        @drop_width_within(pred, step(c, Scan/lead()), t)),
                     take_valid(pred, step(c, Scan/lead()), rest))
             end
         end
@@ -88,7 +109,12 @@ pub rec take_valid(
             Utf8/more(
                 c,
                 Scan/cont(rem, lo, hi),
-                Bytes/slice(t, 0, drop_width(n, step(c, Scan/cont(rem, lo, hi)), t)),
+                Bytes/slice(
+                    t,
+                    0,
+                    drop_width(n, step(c, Scan/cont(rem, lo, hi)), t),
+                    @True/qed(),
+                    @drop_width_within(n, step(c, Scan/cont(rem, lo, hi)), t)),
                 take_valid(n, step(c, Scan/cont(rem, lo, hi)), rest))
         end
     | bad() =>
@@ -97,7 +123,12 @@ pub rec take_valid(
             Utf8/more(
                 c,
                 Scan/bad(),
-                Bytes/slice(t, 0, drop_width(n, step(c, Scan/bad()), t)),
+                Bytes/slice(
+                    t,
+                    0,
+                    drop_width(n, step(c, Scan/bad()), t),
+                    @True/qed(),
+                    @drop_width_within(n, step(c, Scan/bad()), t)),
                 take_valid(n, step(c, Scan/bad()), rest))
         end
     end;
@@ -173,7 +204,7 @@ pub rec peel_byte(
     @b: Bytes,
     nz: Nat/Lt(0, Bytes/len(b)),
     w: Utf8(s, b),
-) -> Utf8(step(Bytes/at(b, 0, @nz), s), Bytes/slice(b, 1, Bytes/len(b))) =
+) -> Utf8(step(Bytes/at(b, 0, @nz), s), Bytes/slice(b, 1, Bytes/len(b), @Nat/Lt/le_one_of_positive(nz))) =
     match w
     | stop() => match nz end
     | more(c, st, t, rest) => rest
@@ -216,9 +247,3 @@ pub let certify_decoded(code: Nat) -> Char =
 pub let decode_head(c: Byte, @t: Bytes, w: Utf8(Scan/lead(), x[c, ..t])) -> Char =
     certify_decoded(decode_head_raw(c, w));
 
-pub rec lte_succ_of_lt(i: Nat, n: Nat, p: Nat/Lt(i, n)) -> Nat/Lte(i + 1, n) =
-    match n
-    | 0 => match p end
-    | np + 1 =>
-        match i | 0 => Nat/Lte/s(Nat/Lte/z()) | ip + 1 => Nat/Lte/s(lte_succ_of_lt(ip, np, p)) end
-    end;

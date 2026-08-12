@@ -126,7 +126,18 @@ pub struct Response: pub Type {
 let rest: Parse(Bytes) =
     Parse {
         run(input, pos) =
-            Result/success((Bytes/len(input), Bytes/slice(input, pos, Bytes/len(input)))),
+            match Nat/Le/try(pos, Bytes/len(input))
+            | none() => Result/failure("position past the end of input")
+            | some(within) =>
+                Result/success(
+                    (Bytes/len(input),
+                        Bytes/slice(
+                            input,
+                            pos,
+                            Bytes/len(input),
+                            @within,
+                            @Nat/Le/refl(Bytes/len(input)))))
+            end,
     };
 
 let guard_header: Parse({}) =
@@ -158,7 +169,15 @@ let take_n(n: Nat) -> Parse(Bytes) =
     Parse {
         run(input, pos) =
             let stop = Nat/min(pos + n, Bytes/len(input));
-            Result/success((stop, Bytes/slice(input, pos, stop))),
+            match Nat/Le/try(pos, stop)
+            | none() => Result/failure("position past the end of input")
+            | some(ordered) =>
+                match Nat/Le/try(stop, Bytes/len(input))
+                | none() => Result/failure("position past the end of input")
+                | some(within) =>
+                    Result/success((stop, Bytes/slice(input, pos, stop, @ordered, @within)))
+                end
+            end,
     };
 
 let content_length_of(headers: List({Str, Str})) -> Option(Nat) =
