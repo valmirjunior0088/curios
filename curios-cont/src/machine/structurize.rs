@@ -42,8 +42,7 @@ pub(crate) fn structurize(machine: &MachineModule) -> EmissionModule {
             function_name(machine, *id),
             EmissionFunction {
                 params,
-                // One value, because every return terminator carries one until a protocol builds more.
-                results: 1,
+                results: function.results,
                 resume,
                 region,
             },
@@ -256,7 +255,11 @@ impl<'a> MachineFunctionBridge<'a> {
             } => EmissionTail::Call(EmissionCallTarget::Direct {
                 target: direct_name(self.machine, *function),
                 params: self.operands(args, values),
-                resume: self.resume_target(*resume, 1, blocks),
+                resume: self.resume_target(
+                    *resume,
+                    self.machine.functions[function].results,
+                    blocks,
+                ),
             }),
             MachineTerminator::TailDirectCall { function, args } => {
                 EmissionTail::Call(EmissionCallTarget::Direct {

@@ -141,6 +141,8 @@ pub(crate) struct MachineBlock {
 pub(crate) struct MachineFunction {
     free_values: Vec<MachineValueId>,
     params: Vec<MachineValueId>,
+    /// How many values every `Return` in this function carries, read off the Cont module rather than recounted here — a caller has to know it to size the block that resumes the call, and a block cannot be sized from a terminator it has not reached yet.
+    results: usize,
     entry: MachineBlockId,
     blocks: BTreeMap<MachineBlockId, MachineBlock>,
     block_scopes: BTreeMap<MachineBlockId, Vec<MachineBlockId>>,
@@ -232,11 +234,14 @@ pub(crate) fn lower(source: &CpsModule) -> MachineModule {
         })
         .collect();
 
+    let arities = source.return_arities();
     let mut functions = BTreeMap::new();
     for (index, function) in source.functions().iter().enumerate() {
         let Some(function) = function else { continue };
         let id = CpsFunId::from_index(index);
-        let lowered = MachineFunctionLowerer::new(source, id, function, &free_values).lower();
+        let results = arities.get(&id).copied().unwrap_or(1);
+        let lowered =
+            MachineFunctionLowerer::new(source, id, function, &free_values, results).lower();
         functions.insert(id, lowered);
     }
     let function_hints = source
@@ -402,6 +407,7 @@ pub(crate) struct MachineFunctionLowerer<'a> {
     id: CpsFunId,
     function: &'a CpsFunction,
     free_values: &'a BTreeMap<CpsFunId, Vec<MachineValueId>>,
+    results: usize,
     blocks: BTreeMap<MachineBlockId, MachineBlock>,
     block_scopes: BTreeMap<MachineBlockId, Vec<MachineBlockId>>,
     continuation_blocks: BTreeMap<CpsContId, MachineBlockId>,
@@ -419,6 +425,7 @@ impl<'a> MachineFunctionLowerer<'a> {
         id: CpsFunId,
         function: &'a CpsFunction,
         free_values: &'a BTreeMap<CpsFunId, Vec<MachineValueId>>,
+        results: usize,
     ) -> Self {
         let block_entropy = Entropy::new();
         block_entropy.seed(1);
@@ -429,6 +436,7 @@ impl<'a> MachineFunctionLowerer<'a> {
             id,
             function,
             free_values,
+            results,
             blocks: BTreeMap::new(),
             block_scopes: BTreeMap::new(),
             continuation_blocks: BTreeMap::new(),
@@ -459,6 +467,7 @@ impl<'a> MachineFunctionLowerer<'a> {
                 .iter()
                 .map(|id| value_id(*id))
                 .collect(),
+            results: self.results,
             entry,
             blocks: self.blocks,
             block_scopes: self.block_scopes,
@@ -1052,6 +1061,13 @@ impl MachineModule {
             }
         }
         match &block.terminator {
+            MachineTerminator::Return(operands) if operands.len() != function.results => {
+                return Err(MachineVerifyError(format!(
+                    "{owner} returns {} values while its function returns {}",
+                    operands.len(),
+                    function.results
+                )));
+            }
             MachineTerminator::Return(_) => {}
             MachineTerminator::Jump(edge) => verify_edge(function, edge)?,
             MachineTerminator::Switch { cases, default, .. } => {
@@ -1072,7 +1088,7 @@ impl MachineModule {
                         "{owner} direct call argument count does not match closed signature"
                     )));
                 }
-                verify_block_resume(function, *resume, 1)?;
+                verify_block_resume(function, *resume, callee.results)?;
             }
             MachineTerminator::TailDirectCall {
                 function: callee,
@@ -1084,6 +1100,13 @@ impl MachineModule {
                 if args.len() != callee.free_values.len() + callee.params.len() {
                     return Err(MachineVerifyError(format!(
                         "{owner} tail-call argument count does not match closed signature"
+                    )));
+                }
+                // A tail call is emitted as `return_call`, which hands the callee's results straight out of this function — so the two signatures must agree on results as well as on arguments.
+                if callee.results != function.results {
+                    return Err(MachineVerifyError(format!(
+                        "{owner} tail-calls a function returning {} values while returning {}",
+                        callee.results, function.results
                     )));
                 }
             }
