@@ -141,3 +141,24 @@ fn carrier_bit_operations_compute_at_the_type_level() {
         b"ok"
     );
 }
+
+#[test]
+fn a_literal_divisor_sees_through_a_symbolic_dividend() {
+    // `/` and `%` join the floor seam `+`, `-`, and `*` already share, so a literal divisor reduces against an open term. Two unconditional laws do it: the floor law peels the whole divisors a literal floor certainly carries, and the split divides out a scaled symbol when every other summand is bounded below the divisor — which is exactly the shape a base-256 encoding produces, and what makes one provably injective.
+    assert_eq!(
+        run(r#"
+        use /std/{Handle, Nat, Byte, Eq};
+        -- The split: `b` cannot carry, because its carrier bounds it at 255.
+        let hi : (x : Nat, b : Byte) -> Eq((256 * x + Byte/to_nat(b)) / 256, x) =
+            (x, b) => Eq/refl();
+        let lo : (x : Nat, b : Byte) -> Eq((256 * x + Byte/to_nat(b)) % 256, Byte/to_nat(b)) =
+            (x, b) => Eq/refl();
+        -- The floor law, with nothing bounded to split on.
+        let floor : (x : Nat) -> Eq((x + 700) / 256, (x + 188) / 256 + 2) = (x) => Eq/refl();
+        -- A remainder is below its divisor, for every dividend.
+        let below : (x : Nat) -> Eq(x % 256 < 256, true) = (x) => Eq/refl();
+        /std/print("ok")
+        "#),
+        b"ok"
+    );
+}

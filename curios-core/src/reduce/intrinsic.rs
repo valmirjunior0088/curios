@@ -5,7 +5,8 @@ use {
         peel_first_elem,
     },
     curios_base::{Grain, Int, PackedBin, int_rotl, int_rotr, nat_rotl, nat_rotr},
-    num_traits::{ToPrimitive, Zero},
+    num_bigint::BigUint,
+    num_traits::{One, ToPrimitive, Zero},
     std::cmp::Ordering,
 };
 
@@ -73,36 +74,213 @@ fn reduce_nat_binary(
     }))
 }
 
-/// `Nat/div`/`Nat/rem`: like [`reduce_nat_binary`], but partial — a divisor that reduces to literal zero is a reported error (the type-level mirror of the runtime trap, following `BinGet`'s pattern), never a Rust panic. A symbolic operand still rebuilds the neutral term.
+/// Which half of a Euclidean division a fold computes. One enum rather than the pair of closures the other families take: the symbolic laws below build the quotient and the remainder out of the *same* split, so the two halves cannot be parameterized independently.
+#[derive(Clone, Copy)]
+enum Euclid {
+    Quotient,
+    Remainder,
+}
+
+impl Euclid {
+    fn kind(self) -> &'static str {
+        match self {
+            Euclid::Quotient => "Nat/div",
+            Euclid::Remainder => "Nat/rem",
+        }
+    }
+
+    fn fold(self, left: Nat, right: Nat) -> Option<Nat> {
+        match self {
+            Euclid::Quotient => left.checked_div(right),
+            Euclid::Remainder => left.checked_rem(right),
+        }
+    }
+
+    fn rebuild(self, left: Term, right: Term) -> Intrinsic {
+        match self {
+            Euclid::Quotient => Intrinsic::NatDiv(left, right),
+            Euclid::Remainder => Intrinsic::NatRem(left, right),
+        }
+    }
+}
+
+/// A statically known upper bound on every value a reduced term can take, or `None` where it has none.
+///
+/// Every arm is unconditional, which is what lets the callers below turn a bound into a definitional equation. A `Byte` is `0..=255` by its carrier — `Nat/to_byte` wraps and `Byte` is not a wire type, so no embedder can supply one outside the range — and `x % n < n` holds by definition, a zero divisor having already been reported. The remaining arms are monotone in operands whose own bounds this establishes.
+///
+/// A wrong bound here is a false definitional equation, not a wrong value: see `documentation/SOUNDNESS.md`, "Intrinsic fold laws and the free-monoid peel".
+fn nat_bound(term: &Term) -> Option<BigUint> {
+    let Subterm::Intrinsic(intrinsic) = &**term else {
+        return None;
+    };
+
+    match intrinsic {
+        Intrinsic::Nat(Nat::Zero) => Some(BigUint::zero()),
+        Intrinsic::Nat(Nat::Succ(floor, inner)) => Some(floor + nat_bound(inner)?),
+        Intrinsic::ByteToNat(_) => Some(BigUint::from(u8::MAX)),
+        Intrinsic::NatRem(_, divisor) => {
+            let divisor = divisor.as_nat()?.to_big_uint()?;
+            (!divisor.is_zero()).then(|| divisor - BigUint::one())
+        }
+        // Either bound alone is an upper bound, so one suffices; with both, the smaller wins.
+        Intrinsic::NatAnd(left, right) => match (nat_bound(left), nat_bound(right)) {
+            (Some(left), Some(right)) => Some(left.min(right)),
+            (Some(bound), None) | (None, Some(bound)) => Some(bound),
+            (None, None) => None,
+        },
+        Intrinsic::NatAdd(left, right) => Some(nat_bound(left)? + nat_bound(right)?),
+        Intrinsic::NatMul(left, right) => Some(nat_bound(left)? * nat_bound(right)?),
+        _ => None,
+    }
+}
+
+/// The summands of a reduced `Nat`'s symbolic inner, flattening the neutral `add` spine. `NatAdd` hoists every literal floor outward, so no summand reached here is successor-headed.
+fn nat_summands(inner: &Term) -> Vec<Term> {
+    let mut summands = Vec::new();
+    let mut pending = vec![inner.clone()];
+
+    while let Some(term) = pending.pop() {
+        match &*term {
+            Subterm::Intrinsic(Intrinsic::NatAdd(left, right)) => {
+                pending.push(left.clone());
+                pending.push(right.clone());
+            }
+            _ if Nat::is_zero(&term) => {}
+            _ => summands.push(term),
+        }
+    }
+
+    summands
+}
+
+/// A reduced summand read as `coefficient · factor` with a literal coefficient, in either operand order. `NatMul` folds two literals, so at most one side is literal by the time this sees it.
+fn nat_literal_factor(summand: &Term) -> Option<(BigUint, Term)> {
+    let Subterm::Intrinsic(Intrinsic::NatMul(left, right)) = &**summand else {
+        return None;
+    };
+
+    if let Some(coefficient) = left.as_nat().and_then(|value| value.to_big_uint()) {
+        return Some((coefficient, right.clone()));
+    }
+
+    right
+        .as_nat()
+        .and_then(|value| value.to_big_uint())
+        .map(|coefficient| (coefficient, left.clone()))
+}
+
+/// `coefficient · factor`, dropping a zero product and a unit coefficient rather than emitting `0 · t` or `1 · t` for reduction to clear afterwards.
+fn nat_scaled(coefficient: BigUint, factor: Term) -> Term {
+    if coefficient.is_zero() {
+        return Term::intrinsic(Intrinsic::Nat(Nat::Zero));
+    }
+
+    match coefficient.is_one() {
+        true => factor,
+        false => Term::intrinsic(Intrinsic::nat_mul(
+            Term::intrinsic(Intrinsic::Nat(Nat::new(coefficient))),
+            factor,
+        )),
+    }
+}
+
+/// The sum of `summands` over a literal `floor`, landing in the same normal form [`Nat::decompose`] reads back.
+fn nat_sum_over_floor(summands: Vec<Term>, floor: BigUint) -> Term {
+    let inner = summands
+        .into_iter()
+        .filter(|summand| !Nat::is_zero(summand))
+        .reduce(|left, right| Term::intrinsic(Intrinsic::nat_add(left, right)))
+        .unwrap_or_else(|| Term::intrinsic(Intrinsic::Nat(Nat::Zero)));
+
+    Nat::rebuild(floor, inner)
+}
+
+/// Split a reduced dividend against a literal divisor into `(quotient, remainder)`, or `None` where the division is not forced.
+///
+/// Every summand must be either a literal multiple of `n` — contributing its cofactor to the quotient — or statically bounded. When the bounded summands together with the residual floor stay below `n`, none of them can carry into the next multiple, so the split is exact for every value the symbolic parts take. That is what makes `(256·x + Byte/to_nat(b)) / 256` reduce to `x`.
+fn nat_euclid_split(dividend: &Term, divisor: &BigUint) -> Option<(Term, Term)> {
+    let (floor, inner) = Nat::decompose(dividend);
+    let mut quotient = Vec::new();
+    let mut residual = Vec::new();
+    let mut ceiling = &floor % divisor;
+
+    for summand in nat_summands(&inner) {
+        match nat_literal_factor(&summand) {
+            Some((coefficient, factor)) if (&coefficient % divisor).is_zero() => {
+                quotient.push(nat_scaled(coefficient / divisor, factor));
+            }
+            _ => {
+                ceiling += nat_bound(&summand)?;
+                residual.push(summand);
+            }
+        }
+    }
+
+    match ceiling < *divisor {
+        true => Some((
+            nat_sum_over_floor(quotient, &floor / divisor),
+            nat_sum_over_floor(residual, &floor % divisor),
+        )),
+        false => None,
+    }
+}
+
+/// `Nat/div`/`Nat/rem`: partial, like [`reduce_nat_binary`] is not — a divisor that reduces to literal zero is a reported error (the type-level mirror of the runtime trap, following `BinGet`'s pattern), never a Rust panic.
+///
+/// Past the closed fold, two unconditional laws let a literal divisor see through a symbolic dividend. Writing the dividend as `inner + floor` and the divisor as `n`:
+///
+/// The *floor law* is the division twin of `NatAdd`'s: `(i + f) / n = f/n + (i + f%n) / n`, and `(i + f) % n = (i + f%n) % n`. Both hold for every `i`, because `f = (f/n)·n + f%n` contributes exactly `f/n` whole divisors whatever `i` is. As with addition the floor only moves outward, and the residual floor `f%n < n` cannot fire the rule a second time.
+///
+/// The *split* additionally reads the summands, and is the rule that makes a base-256 encoding provably injective; [`nat_euclid_split`] states it and [`nat_bound`] states why the bounds it rests on are unconditional.
+///
+/// Nothing conditional may be added here. `(a + b)/n = a/n + b/n` is false — `1/2 + 1/2 = 0 ≠ 1` — so a law holding only for some values of a symbolic part would be a false definitional equation, and congruence carries one of those to `False`.
 fn reduce_nat_division(
     reducer: &mut impl Reducer,
     left: &Term,
     right: &Term,
-    kind: &'static str,
-    fold: impl FnOnce(Nat, Nat) -> Option<Nat>,
-    rebuild: impl FnOnce(Term, Term) -> Intrinsic,
+    euclid: Euclid,
 ) -> Result<Subterm, ReduceError> {
     let span = right.span().or_else(|| left.span());
     let left = reducer.reduce_forced(left.clone())?;
     let right = reducer.reduce_forced(right.clone())?;
 
-    if right
-        .as_nat()
-        .and_then(|divisor| divisor.to_big_uint())
-        .is_some_and(|divisor| divisor.is_zero())
-    {
-        return Err(ReduceError::DivisionByZero { kind, span });
+    let divisor = right.as_nat().and_then(|divisor| divisor.to_big_uint());
+    if divisor.as_ref().is_some_and(BigUint::is_zero) {
+        return Err(ReduceError::DivisionByZero {
+            kind: euclid.kind(),
+            span,
+        });
     }
 
-    let folded = match (left.as_nat(), right.as_nat()) {
-        (Some(l), Some(r)) => fold(l, r).map(Intrinsic::Nat),
-        _ => None,
-    };
+    if let (Some(dividend), Some(by)) = (left.as_nat(), right.as_nat())
+        && let Some(folded) = euclid.fold(dividend, by)
+    {
+        return Ok(Subterm::Intrinsic(Intrinsic::Nat(folded)));
+    }
 
-    Ok(Subterm::Intrinsic(match folded {
-        Some(intrinsic) => intrinsic,
-        None => rebuild(left, right),
-    }))
+    if let Some(divisor) = &divisor {
+        if let Some((quotient, remainder)) = nat_euclid_split(&left, divisor) {
+            return Ok(Term::unwrap_or_clone(match euclid {
+                Euclid::Quotient => quotient,
+                Euclid::Remainder => remainder,
+            }));
+        }
+
+        // The floor law alone, for a dividend the split could not close: peel the whole divisors the floor certainly carries and leave the rest neutral.
+        let (floor, inner) = Nat::decompose(&left);
+        if floor >= *divisor {
+            let peeled = Term::intrinsic(
+                euclid.rebuild(Nat::rebuild(&floor % divisor, inner), right.clone()),
+            );
+
+            return Ok(Term::unwrap_or_clone(match euclid {
+                Euclid::Quotient => Nat::rebuild(&floor / divisor, peeled),
+                Euclid::Remainder => peeled,
+            }));
+        }
+    }
+
+    Ok(Subterm::Intrinsic(euclid.rebuild(left, right)))
 }
 
 /// `Int` counterpart of [`reduce_nat_binary`]: fold both literal operands or rebuild the neutral term. The fold is partial for the same reason — the shifts decline a negative or oversized literal shift count (`None`); the total ops just wrap their result in `Some`.
@@ -250,6 +428,19 @@ fn compare_nat(
             Ordering::Equal if Nat::is_zero(&ir) => Comparison::Ge,
             _ => Comparison::Stuck,
         }
+    };
+
+    // A statically bounded operand decides against a literal one where the floors alone cannot: `bound(l) < r` forces `l < r` for every value `l` takes. This is what reduces `x % n < n`, whose left inner is a stuck `NatRem` the structural body has nothing to say about. See `nat_bound` for why each bound holds unconditionally.
+    let outcome = match outcome {
+        Comparison::Stuck if Nat::is_zero(&ir) => match nat_bound(&il).map(|bound| bound + &sl) {
+            Some(bound) if bound < sr => Comparison::Lt,
+            _ => Comparison::Stuck,
+        },
+        Comparison::Stuck if Nat::is_zero(&il) => match nat_bound(&ir).map(|bound| bound + &sr) {
+            Some(bound) if bound < sl => Comparison::Gt,
+            _ => Comparison::Stuck,
+        },
+        decided => decided,
     };
 
     let m = sl.clone().min(sr.clone());
@@ -512,22 +703,12 @@ pub fn reduce_intrinsic(
             },
             Intrinsic::nat_lt,
         ),
-        Intrinsic::NatDiv(left, right) => reduce_nat_division(
-            reducer,
-            left,
-            right,
-            "Nat/div",
-            Nat::checked_div,
-            Intrinsic::NatDiv,
-        ),
-        Intrinsic::NatRem(left, right) => reduce_nat_division(
-            reducer,
-            left,
-            right,
-            "Nat/rem",
-            Nat::checked_rem,
-            Intrinsic::NatRem,
-        ),
+        Intrinsic::NatDiv(left, right) => {
+            reduce_nat_division(reducer, left, right, Euclid::Quotient)
+        }
+        Intrinsic::NatRem(left, right) => {
+            reduce_nat_division(reducer, left, right, Euclid::Remainder)
+        }
         Intrinsic::NatGt(left, right) => reduce_nat_compare(
             reducer,
             left,
@@ -1540,9 +1721,13 @@ pub fn reduce_intrinsic(
 #[cfg(test)]
 mod tests {
     use {
-        super::{Reducer, compare_nat, from_ordering, reduce_intrinsic},
-        crate::{Free, Intrinsic, Nat, ReduceError, Subterm, Term},
+        super::{
+            Comparison, Reducer, compare_nat, from_ordering, nat_bound, nat_euclid_split,
+            reduce_intrinsic,
+        },
+        crate::{Free, Intrinsic, Nat, One, ReduceError, Scope, Subterm, Term},
         curios_base::{Grain, Int, PackedBin},
+        num_bigint::BigUint,
     };
 
     /// A reducer that reduces nothing. Every operand below is already a literal — a weak-head normal form — so no strategy is involved, and running the comparison body against an inert reducer says exactly that: the outcome is decided by the structural compare, not by anything unfolded.
@@ -1632,5 +1817,182 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// A reducer that folds intrinsics all the way down, for the gates that must *evaluate* a rebuilt term rather than inspect its shape. `reduce_intrinsic` already reduces its own operands through this seam, so one pass suffices for the terms below.
+    struct Folding;
+
+    impl Reducer for Folding {
+        fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
+            match &*term {
+                Subterm::Intrinsic(intrinsic) => Ok(reduce_intrinsic(self, intrinsic)?.into()),
+                _ => Ok(term),
+            }
+        }
+
+        fn reduce_forced(&mut self, term: Term) -> Result<Term, ReduceError> {
+            self.reduce(term)
+        }
+    }
+
+    fn symbol(index: u32, hint: &'static str) -> Term {
+        Term::free_var(&Free::local(index, Some(hint)))
+    }
+
+    fn to_nat_of(term: Term) -> Term {
+        Term::intrinsic(Intrinsic::ByteToNat(term))
+    }
+
+    fn scaled(coefficient: u32, factor: Term) -> Term {
+        Term::intrinsic(Intrinsic::nat_mul(lit(coefficient), factor))
+    }
+
+    fn plus(left: Term, right: Term) -> Term {
+        Term::intrinsic(Intrinsic::nat_add(left, right))
+    }
+
+    fn fold(term: Term) -> Term {
+        Folding.reduce(term).expect("reduces")
+    }
+
+    // Soundness gate: `nat_bound` must never under-report, because the division split and the comparison body both turn a bound into a definitional equation — an under-report there is a false equation, not merely a wrong value. Every closed instantiation of each bounded shape must land at or below the bound the oracle states for the shape itself.
+    #[test]
+    fn nat_bound_upper_bounds_every_closed_instantiation() {
+        let byte_shape = to_nat_of(symbol(0, "b"));
+        let byte_bound = nat_bound(&byte_shape).expect("a Byte carries a bound");
+        for byte in [0u8, 1, 17, 128, 254, 255] {
+            let value = fold(to_nat_of(Term::intrinsic(Intrinsic::Byte(byte))));
+            let value = value
+                .as_nat()
+                .expect("closed")
+                .to_big_uint()
+                .expect("literal");
+            assert!(
+                value <= byte_bound,
+                "Byte/to_nat({byte}) exceeded its bound"
+            );
+        }
+
+        for divisor in [1u32, 2, 7, 256, 1000] {
+            let shape = Term::intrinsic(Intrinsic::NatRem(symbol(0, "x"), lit(divisor)));
+            let bound = nat_bound(&shape).expect("a remainder carries a bound");
+            for dividend in [0u32, 1, 5, 255, 999, 100_000] {
+                let value = fold(Term::intrinsic(Intrinsic::NatRem(
+                    lit(dividend),
+                    lit(divisor),
+                )));
+                let value = value
+                    .as_nat()
+                    .expect("closed")
+                    .to_big_uint()
+                    .expect("literal");
+                assert!(value <= bound, "{dividend} % {divisor} exceeded its bound");
+            }
+        }
+    }
+
+    /// `term` with the free variable `binder` replaced by `value`: close over the binder, then open at the value. Comparing *values* rather than shapes is what this gate needs — `4 · (3 · x)` and `12 · x` are the same number, and reduction does not re-associate nested literal factors.
+    fn at(term: Term, binder: &Free, value: Term) -> Term {
+        Scope::close(One, &[binder], term).open(&[&value])
+    }
+
+    // Soundness gate: whatever the split returns must satisfy the Euclidean specification — `n·quotient + remainder` equals the dividend at every instantiation, and the remainder is provably below `n`. Those two together *are* the definition of division, so a split passing both cannot be a false equation whatever its symbolic parts take.
+    #[test]
+    fn nat_euclid_split_is_a_euclidean_division() {
+        let count = Free::local(0, Some("x"));
+        let byte = Free::local(1, Some("b"));
+        let x = Term::free_var(&count);
+        let digit = to_nat_of(Term::free_var(&byte));
+
+        let cases = [
+            (fold(plus(scaled(256, x.clone()), digit.clone())), 256u32),
+            (fold(plus(scaled(256, x.clone()), lit(700))), 256),
+            (fold(scaled(12, x.clone())), 4),
+            (fold(plus(scaled(1024, x.clone()), digit.clone())), 256),
+        ];
+
+        for (dividend, divisor) in cases {
+            let n = BigUint::from(divisor);
+            let (quotient, remainder) =
+                nat_euclid_split(&dividend, &n).expect("these dividends split");
+
+            assert!(
+                nat_bound(&remainder).expect("a split remainder is bounded") < n,
+                "the split remainder was not below {divisor}",
+            );
+
+            let rebuilt = plus(scaled(divisor, quotient), remainder);
+            for sample in [0u32, 1, 7, 255, 1000] {
+                let close = |term: Term| {
+                    let term = at(term, &count, lit(sample));
+                    fold(at(term, &byte, Term::intrinsic(Intrinsic::Byte(201))))
+                };
+
+                assert_eq!(
+                    close(rebuilt.clone()),
+                    close(dividend.clone()),
+                    "n·quotient + remainder disagreed with the dividend at {divisor}, x = {sample}",
+                );
+            }
+        }
+    }
+
+    // The rule the base-256 encodings need: a digit whose carrier bounds it below the divisor cannot carry, so the scaled symbol divides out exactly and the digit is the whole remainder.
+    #[test]
+    fn a_bounded_digit_divides_out_of_a_scaled_symbol() {
+        let x = symbol(0, "x");
+        let digit = to_nat_of(symbol(1, "b"));
+        let dividend = fold(plus(scaled(256, x.clone()), digit.clone()));
+
+        assert_eq!(
+            fold(Term::intrinsic(Intrinsic::NatDiv(
+                dividend.clone(),
+                lit(256)
+            ))),
+            x,
+        );
+        assert_eq!(
+            fold(Term::intrinsic(Intrinsic::NatRem(dividend, lit(256)))),
+            digit,
+        );
+    }
+
+    // The refusals that keep the rule sound: a coefficient the divisor does not divide could carry, and an unbounded summand could be anything at all. Both must stay neutral rather than fold.
+    #[test]
+    fn an_uncertain_summand_leaves_the_division_neutral() {
+        let x = symbol(0, "x");
+        let unbounded = plus(scaled(256, x.clone()), symbol(1, "y"));
+        let indivisible = plus(scaled(100, x.clone()), to_nat_of(symbol(1, "b")));
+
+        for dividend in [fold(unbounded), fold(indivisible)] {
+            let divided = fold(Term::intrinsic(Intrinsic::NatDiv(
+                dividend.clone(),
+                lit(256),
+            )));
+            assert!(
+                matches!(&*divided, Subterm::Intrinsic(Intrinsic::NatDiv(..))),
+                "a division that is not forced folded anyway: {divided:?}",
+            );
+        }
+    }
+
+    // A bounded operand decides a comparison the floors cannot: `x % n` is a stuck remainder the structural body has nothing to say about, yet it is below `n` for every `x`.
+    #[test]
+    fn a_bounded_operand_decides_a_comparison_against_a_literal() {
+        let mut reducer = Folding;
+        let remainder = Term::intrinsic(Intrinsic::NatRem(symbol(0, "x"), lit(256)));
+
+        assert_eq!(
+            compare_nat(&mut reducer, remainder.clone(), lit(256))
+                .expect("reduces")
+                .0,
+            Comparison::Lt,
+        );
+        assert_eq!(
+            compare_nat(&mut reducer, remainder, lit(200))
+                .expect("reduces")
+                .0,
+            Comparison::Stuck,
+        );
     }
 }
