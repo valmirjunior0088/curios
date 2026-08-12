@@ -134,25 +134,6 @@ fn nat_bound(term: &Term) -> Option<BigUint> {
     }
 }
 
-/// The summands of a reduced `Nat`'s symbolic inner, flattening the neutral `add` spine. `NatAdd` hoists every literal floor outward, so no summand reached here is successor-headed.
-fn nat_summands(inner: &Term) -> Vec<Term> {
-    let mut summands = Vec::new();
-    let mut pending = vec![inner.clone()];
-
-    while let Some(term) = pending.pop() {
-        match &*term {
-            Subterm::Intrinsic(Intrinsic::NatAdd(left, right)) => {
-                pending.push(left.clone());
-                pending.push(right.clone());
-            }
-            _ if Nat::is_zero(&term) => {}
-            _ => summands.push(term),
-        }
-    }
-
-    summands
-}
-
 /// A reduced summand read as `coefficient · factor` with a literal coefficient, in either operand order. `NatMul` folds two literals, so at most one side is literal by the time this sees it.
 fn nat_literal_factor(summand: &Term) -> Option<(BigUint, Term)> {
     let Subterm::Intrinsic(Intrinsic::NatMul(left, right)) = &**summand else {
@@ -184,17 +165,6 @@ fn nat_scaled(coefficient: BigUint, factor: Term) -> Term {
     }
 }
 
-/// The sum of `summands` over a literal `floor`, landing in the same normal form [`Nat::decompose`] reads back.
-fn nat_sum_over_floor(summands: Vec<Term>, floor: BigUint) -> Term {
-    let inner = summands
-        .into_iter()
-        .filter(|summand| !Nat::is_zero(summand))
-        .reduce(|left, right| Term::intrinsic(Intrinsic::nat_add(left, right)))
-        .unwrap_or_else(|| Term::intrinsic(Intrinsic::Nat(Nat::Zero)));
-
-    Nat::rebuild(floor, inner)
-}
-
 /// Split a reduced dividend against a literal divisor into `(quotient, remainder)`, or `None` where the division is not forced.
 ///
 /// Every summand must be either a literal multiple of `n` — contributing its cofactor to the quotient — or statically bounded. When the bounded summands together with the residual floor stay below `n`, none of them can carry into the next multiple, so the split is exact for every value the symbolic parts take. That is what makes `(256·x + Byte/to_nat(b)) / 256` reduce to `x`.
@@ -204,7 +174,7 @@ fn nat_euclid_split(dividend: &Term, divisor: &BigUint) -> Option<(Term, Term)> 
     let mut residual = Vec::new();
     let mut ceiling = &floor % divisor;
 
-    for summand in nat_summands(&inner) {
+    for summand in Nat::summands(&inner) {
         match nat_literal_factor(&summand) {
             Some((coefficient, factor)) if (&coefficient % divisor).is_zero() => {
                 quotient.push(nat_scaled(coefficient / divisor, factor));
@@ -218,8 +188,8 @@ fn nat_euclid_split(dividend: &Term, divisor: &BigUint) -> Option<(Term, Term)> 
 
     match ceiling < *divisor {
         true => Some((
-            nat_sum_over_floor(quotient, &floor / divisor),
-            nat_sum_over_floor(residual, &floor % divisor),
+            Nat::sum_over_floor(quotient, &floor / divisor),
+            Nat::sum_over_floor(residual, &floor % divisor),
         )),
         false => None,
     }
@@ -414,8 +384,13 @@ fn compare_nat(
     left: Term,
     right: Term,
 ) -> Result<(Comparison, Term, Term), ReduceError> {
-    let (sl, il) = Nat::decompose(&reducer.reduce_forced(left)?);
-    let (sr, ir) = Nat::decompose(&reducer.reduce_forced(right)?);
+    let left = reducer.reduce_forced(left)?;
+    let right = reducer.reduce_forced(right)?;
+    // Cancel first, so everything below reads the residuals: the shared part decides nothing on its own, and removing it is what lets `cmp(x + a, x + b)` reach `cmp(a, b)` — and `cmp(a + b, b + a)` reach equality — instead of stalling on two inners that differ only by what they share.
+    let (left, right) = Nat::cancel_common(&left, &right);
+
+    let (sl, il) = Nat::decompose(&left);
+    let (sr, ir) = Nat::decompose(&right);
 
     // Same inner ⇒ the floors alone decide: `cmp(x + sl, x + sr) = cmp(sl, sr)` (so `lt(pred, succ pred) = true`). Two literals — inner `0` on both sides — also land here: this is the O(1) literal fold. Otherwise, whichever side keeps successors past the shared floor is larger *iff* the other bottomed out at literal zero (`inner ≥ 0`); equal floors with one zero inner give a non-strict bound (`a ≤ b`/`a ≥ b`) the strict/`gte`/`lte` reads still use; anything else is undecidable.
     let outcome = if il == ir {
@@ -443,12 +418,7 @@ fn compare_nat(
         decided => decided,
     };
 
-    let m = sl.clone().min(sr.clone());
-    Ok((
-        outcome,
-        Nat::rebuild(sl - &m, il),
-        Nat::rebuild(sr - &m, ir),
-    ))
+    Ok((outcome, left, right))
 }
 
 /// Reduce a `Nat` comparison through the shared structural body [`compare_nat`]. `read` projects the outcome to this op's boolean (or `None` when the operands do not decide it), in which case the neutral term is rebuilt from the peeled operands so undecided comparisons land in a normal form.
@@ -657,6 +627,8 @@ pub fn reduce_intrinsic(
         Intrinsic::NatSub(left, right) => {
             let left = reducer.reduce_forced(left.clone())?;
             let right = reducer.reduce_forced(right.clone())?;
+            // The same cancellation the comparisons take, and for the same law: a borrow never reaches what both sides carry, so `(x + a) - (x + b)` is `a - b` and the floor law below gets to see a literal subtrahend where it would otherwise have seen a sum.
+            let (left, right) = Nat::cancel_common(&left, &right);
             let (sl, il) = Nat::decompose(&left);
             let (k, ir) = Nat::decompose(&right);
 
@@ -1745,6 +1717,82 @@ mod tests {
 
     fn lit(n: u32) -> Term {
         Term::intrinsic(Intrinsic::Nat(Nat::new(n as usize)))
+    }
+
+    fn sym(index: u32, hint: &'static str) -> Term {
+        Term::free_var(&Free::local(index, Some(hint)))
+    }
+
+    fn add(left: Term, right: Term) -> Term {
+        Term::intrinsic(Intrinsic::nat_add(left, right))
+    }
+
+    fn occurrences(term: &Term, wanted: &Term) -> usize {
+        Nat::summands(term)
+            .iter()
+            .filter(|summand| *summand == wanted)
+            .count()
+    }
+
+    // What the cancellation buys the comparison family: a shared addend decides nothing, so removing it lets a stuck comparison stall on the operands that actually differ. `Le(x + a, x + b)` becoming `Le(a, b)` is what makes a decided proposition usable under a binder rather than only at literals.
+    #[test]
+    fn compare_nat_sees_through_a_shared_addend() {
+        let (x, a, b) = (sym(0, "x"), sym(1, "a"), sym(2, "b"));
+
+        let (outcome, left, right) = compare_nat(
+            &mut Inert,
+            add(x.clone(), a.clone()),
+            add(x.clone(), b.clone()),
+        )
+        .expect("reduces");
+
+        assert_eq!(
+            outcome,
+            Comparison::Stuck,
+            "two distinct symbols decide nothing"
+        );
+        assert_eq!(
+            occurrences(&left, &x),
+            0,
+            "the shared `x` is gone from the left"
+        );
+        assert_eq!(occurrences(&right, &x), 0, "and from the right");
+        assert_eq!(occurrences(&left, &a), 1);
+        assert_eq!(occurrences(&right, &b), 1);
+    }
+
+    // Commutativity of `+` becomes definitional for the whole comparison family, which is the larger half of what cancellation buys: nothing else in the reducer normalises the order of a sum's summands.
+    #[test]
+    fn compare_nat_decides_a_commuted_sum_equal() {
+        let (a, b) = (sym(0, "a"), sym(1, "b"));
+
+        let (outcome, _, _) = compare_nat(
+            &mut Inert,
+            add(a.clone(), b.clone()),
+            add(b.clone(), a.clone()),
+        )
+        .expect("reduces");
+
+        assert_eq!(
+            outcome,
+            Comparison::Eq,
+            "`a + b` and `b + a` are the same number"
+        );
+    }
+
+    // The bound every indexed loop in the standard library needs: walking `i` up to `n` under an invariant `i + k = n` asks for `i < i + kp + 1` at each step. Before cancellation that was three lemma applications in the prelude (`add_r`, `succ_of_lte`, and the transport); the comparison now decides it outright.
+    #[test]
+    fn compare_nat_decides_the_bound_an_indexed_loop_walks_under() {
+        let (i, kp) = (sym(0, "i"), sym(1, "kp"));
+        let ceiling = Nat::rebuild(1u32.into(), add(i.clone(), kp.clone()));
+
+        let (outcome, _, _) = compare_nat(&mut Inert, i.clone(), ceiling).expect("reduces");
+
+        assert_eq!(
+            outcome,
+            Comparison::Lt,
+            "`i < i + kp + 1` holds for every `kp`"
+        );
     }
 
     // Regression: `get(append(b[], x), 0)` must reduce to `x` through its own base-case arm — the cons peel's symbolic head chunk IS `append(b[], x)`, so without that arm the rewrite rebuilt the redex it came from until the step budget exhausted.

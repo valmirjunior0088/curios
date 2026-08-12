@@ -104,4 +104,130 @@ impl Nat {
     pub fn is_zero(term: &Term) -> bool {
         matches!(&**term, Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)))
     }
+
+    /// The summands of a reduced `Nat`'s symbolic inner, flattening the neutral `add` spine. `NatAdd` hoists every literal floor outward, so no summand reached here is successor-headed.
+    pub(crate) fn summands(inner: &Term) -> Vec<Term> {
+        let mut summands = Vec::new();
+        let mut pending = vec![inner.clone()];
+
+        while let Some(term) = pending.pop() {
+            match &*term {
+                Subterm::Intrinsic(Intrinsic::NatAdd(left, right)) => {
+                    pending.push(left.clone());
+                    pending.push(right.clone());
+                }
+                _ if Self::is_zero(&term) => {}
+                _ => summands.push(term),
+            }
+        }
+
+        summands
+    }
+
+    /// The sum of `summands` over a literal `floor`, landing in the same normal form [`Nat::decompose`] reads back.
+    pub(crate) fn sum_over_floor(summands: Vec<Term>, floor: BigUint) -> Term {
+        let inner = summands
+            .into_iter()
+            .filter(|summand| !Self::is_zero(summand))
+            .reduce(|left, right| Term::intrinsic(Intrinsic::nat_add(left, right)))
+            .unwrap_or_else(|| Term::intrinsic(Intrinsic::Nat(Nat::Zero)));
+
+        Self::rebuild(floor, inner)
+    }
+
+    /// Strip what both operands carry in common, so residuals decide where the originals could not: `x + a` against `x + b` becomes `a` against `b`.
+    ///
+    /// **Why it is sound for every consumer.** `Nat` under `+` is a cancellative commutative monoid. Every order relation reads through it — `x + a ⋈ x + b` iff `a ⋈ b` — and so does truncated subtraction: either `a ≥ b`, where both differences are `a - b` because the `x` cancels in the borrow, or `a < b`, where `x + a < x + b` makes both sides zero. So removing a common addend preserves the answer rather than approximating it.
+    ///
+    /// **A multiset, never a set.** `a + a + b` against `a + c` cancels *one* `a` and leaves `a + b` against `c`. Cancelling both would read `a + b ⋈ c` off `a + a + b ⋈ a + c`, which is false — and false definitional equations are the route this file's soundness perimeter records as reaching `False` by congruence.
+    ///
+    /// **Summands pair by term equality, deliberately.** A definitionally equal pair spelled two ways does not cancel, leaving the operation stuck on operands it could in principle have reduced. That is the safe direction — a stuck comparison decides nothing and admits nothing — where cancelling *more* than equality licenses is the unsound one. So the match stays syntactic rather than reducing candidates against each other, and incompleteness here costs reductions, never correctness.
+    ///
+    /// The literal floors cancel by the same law, which is why the minimum comes off both: it is the one-summand case of the same rule, and doing it here rather than at each consumer is what keeps the two spellings from drifting.
+    pub(crate) fn cancel_common(left: &Term, right: &Term) -> (Term, Term) {
+        let (floor_left, inner_left) = Nat::decompose(left);
+        let (floor_right, inner_right) = Nat::decompose(right);
+
+        let mut held = Self::summands(&inner_left);
+        let mut residual_right = Vec::new();
+        let mut cancelled = false;
+        for summand in Self::summands(&inner_right) {
+            match held.iter().position(|candidate| *candidate == summand) {
+                Some(index) => {
+                    held.remove(index);
+                    cancelled = true;
+                }
+                None => residual_right.push(summand),
+            }
+        }
+
+        let shared = floor_left.clone().min(floor_right.clone());
+
+        // **A pass that cancels no summand must hand its inners back untouched.** Rebuilding through [`Nat::sum_over_floor`] re-associates and reorders a sum — `a + (b + c)` comes back as `(c + b) + a`, and again as `(a + b) + c` — so a stuck comparison rebuilt from reordered operands is a *different* term, which the caller reduces again, reorders again, and never settles. Taking the floors off the original inners is what the comparison family did before summands were read at all, and it is stable because it rewrites nothing below the floor.
+        if !cancelled {
+            return (
+                Self::rebuild(floor_left - &shared, inner_left),
+                Self::rebuild(floor_right - &shared, inner_right),
+            );
+        }
+
+        (
+            Self::sum_over_floor(held, floor_left - &shared),
+            Self::sum_over_floor(residual_right, floor_right - &shared),
+        )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sym(index: u32, hint: &'static str) -> Term {
+        Term::free_var(&crate::Free::local(index, Some(hint)))
+    }
+
+    fn add(left: Term, right: Term) -> Term {
+        Term::intrinsic(Intrinsic::nat_add(left, right))
+    }
+
+    fn occurrences(term: &Term, wanted: &Term) -> usize {
+        Nat::summands(term)
+            .iter()
+            .filter(|summand| *summand == wanted)
+            .count()
+    }
+
+    // Soundness gate on the cancellation: it is a *multiset* operation. A summand held twice on one side against once on the other must leave one behind, because reading `a + b ⋈ c` off `a + a + b ⋈ a + c` is a false definitional equation — the route this file's perimeter records as reaching `False` by congruence.
+    #[test]
+    fn nat_cancellation_removes_one_occurrence_per_match() {
+        let (a, b, c) = (sym(0, "a"), sym(1, "b"), sym(2, "c"));
+
+        let (left, right) = Nat::cancel_common(
+            &add(add(a.clone(), a.clone()), b.clone()),
+            &add(a.clone(), c.clone()),
+        );
+
+        assert_eq!(occurrences(&left, &a), 1, "one `a` must survive the cancel");
+        assert_eq!(occurrences(&left, &b), 1, "`b` is shared with nothing");
+        assert_eq!(occurrences(&right, &a), 0, "the right's single `a` cancels");
+        assert_eq!(occurrences(&right, &c), 1, "`c` is shared with nothing");
+    }
+
+    // Regression: a pass that cancels nothing must return its operands *identically*, not merely equivalently. Rebuilding a sum through `sum_over_floor` re-associates and reorders it, so a stuck comparison rebuilt from reordered operands is a new term the caller reduces again — which reorders again. That oscillation is not a slow reduction, it is an unbounded one, and it overflowed the stack building the fixed prelude.
+    #[test]
+    fn nat_cancellation_is_stable_when_nothing_is_shared() {
+        let (a, b, c, d) = (sym(0, "a"), sym(1, "b"), sym(2, "c"), sym(3, "d"));
+        let left = add(a, add(b, c));
+
+        let (settled_left, settled_right) = Nat::cancel_common(&left, &d);
+
+        assert_eq!(
+            settled_left, left,
+            "an uncancelled sum keeps its own association"
+        );
+        assert_eq!(
+            settled_right, d,
+            "and so does the side it was compared against"
+        );
+    }
 }

@@ -4,7 +4,7 @@ use {
     super::{Intrinsic, Nat, Subterm, Term},
     curios_base::{Grain, PackedBin},
     num_traits::Zero,
-    std::{cmp::Ordering, collections::VecDeque},
+    std::collections::VecDeque,
 };
 
 /// One step of peeling two free-monoid values. Each caller maps it into its own vocabulary: `invert` to `Step::{Ok, Clash, Refuse}`, `convert` to a `bool` with the residual enqueued.
@@ -38,26 +38,22 @@ fn decide(equal: bool) -> Peel {
     }
 }
 
-/// `Nat` is the free monoid on one generator: `k + a ~ k' + t` peels the shared successor spine and the leftover rides on the longer side — `2 ~ ?n + 1` becomes `1 ~ ?n`. A leftover positive spine against zero is a definite clash. The `is_zero` guards mirror the inverter's defence against a non-canonical `Succ(0, _)` (which `Nat::new` normalisation never actually produces).
+/// `Nat` is the free commutative monoid on its symbolic summands: `k + a ~ k' + t` cancels everything the two sides carry in common and the leftover rides on whichever side kept it — `2 ~ ?n + 1` becomes `1 ~ ?n`, and `x + a ~ x + b` becomes `a ~ b`.
+///
+/// The cancellation itself is [`Nat::cancel_common`], which the reduction-side comparison and subtraction folds read too — one law, three readers. This function is only its translation into [`Peel`]: both residuals gone is equality, a surviving positive floor against nothing is a definite clash, and anything else is a smaller pair for the caller to keep comparing. The non-canonical `Succ(0, _)` the inverter used to need its own guard against falls out of `Nat::rebuild` collapsing a zero floor, so no arm states it.
+///
+/// Cancelling *summands* rather than only the successor spine is what lets a commuted sum decide equal here instead of being handed to a structural comparison that would refuse it. `Peel::Stuck` stays unreachable for `Nat`: a residual pair is always something the caller can go on comparing, so peeling never has to decline.
 pub fn peel_nat(actual: &Nat, target: &Nat) -> Peel {
-    let zero = || Term::intrinsic(Intrinsic::Nat(Nat::Zero));
-    let succ = |spine, rest: &Term| Term::intrinsic(Intrinsic::Nat(Nat::Succ(spine, rest.clone())));
+    let lift = |value: &Nat| Term::intrinsic(Intrinsic::Nat(value.clone()));
+    let (left, right) = Nat::cancel_common(&lift(actual), &lift(target));
 
-    match (actual, target) {
-        (Nat::Zero, Nat::Zero) => Peel::Equal,
-        (Nat::Zero, Nat::Succ(spine, rest)) => match spine.is_zero() {
-            true => Peel::Continue(zero(), rest.clone()),
-            false => Peel::Clash,
-        },
-        (Nat::Succ(spine, rest), Nat::Zero) => match spine.is_zero() {
-            true => Peel::Continue(rest.clone(), zero()),
-            false => Peel::Clash,
-        },
-        (Nat::Succ(ka, ra), Nat::Succ(kt, rt)) => match ka.cmp(kt) {
-            Ordering::Equal => Peel::Continue(ra.clone(), rt.clone()),
-            Ordering::Greater => Peel::Continue(succ(ka - kt, ra), rt.clone()),
-            Ordering::Less => Peel::Continue(ra.clone(), succ(kt - ka, rt)),
-        },
+    let floored = |term: &Term| !Nat::decompose(term).0.is_zero();
+
+    match (Nat::is_zero(&left), Nat::is_zero(&right)) {
+        (true, true) => Peel::Equal,
+        (true, false) if floored(&right) => Peel::Clash,
+        (false, true) if floored(&left) => Peel::Clash,
+        _ => Peel::Continue(left, right),
     }
 }
 
@@ -377,5 +373,61 @@ fn reassemble_list(atoms: VecDeque<Atom<Term>>, elem: Term) -> Term {
 
             Term::intrinsic(Intrinsic::ListConcat(elem, parts))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn sym(index: u32, hint: &'static str) -> Term {
+        Term::free_var(&crate::Free::local(index, Some(hint)))
+    }
+
+    fn nat_of(floor: u32, inner: Term) -> Nat {
+        Nat::Succ(floor.into(), inner)
+    }
+
+    fn add(left: Term, right: Term) -> Term {
+        Term::intrinsic(Intrinsic::nat_add(left, right))
+    }
+
+    // The conclusion cancelling summands adds to the peel: two sums that differ only in the order of their addends are the same number, so peeling decides them equal instead of handing a pair to a structural comparison that compares spellings and refuses. Sound because `+` commutes; new, because nothing else in the peel normalises summand order.
+    #[test]
+    fn peel_nat_decides_a_commuted_sum_equal() {
+        let (x, y) = (sym(0, "x"), sym(1, "y"));
+
+        let peel = peel_nat(
+            &nat_of(1, add(x.clone(), y.clone())),
+            &nat_of(1, add(y.clone(), x.clone())),
+        );
+
+        assert!(
+            matches!(peel, Peel::Equal),
+            "`x + y + 1` and `y + x + 1` are one number"
+        );
+    }
+
+    // The clash the inverter reads as *impossible*, which is what excuses an omitted arm — so it must fire only where the two sides genuinely cannot be equal. A surviving positive floor against nothing is that case: whatever the symbolic residual takes, one side stays strictly larger.
+    #[test]
+    fn peel_nat_clashes_a_surviving_floor_against_the_identity() {
+        let x = sym(0, "x");
+
+        let peel = peel_nat(&nat_of(2, x.clone()), &nat_of(1, x.clone()));
+
+        assert!(matches!(peel, Peel::Clash), "`x + 2` never equals `x + 1`");
+    }
+
+    // The control against closing the clash above by clashing everything: a shared floor over *distinct* symbols cancels to a pair that may still be equal, so peeling must hand it on rather than decide it.
+    #[test]
+    fn peel_nat_continues_where_the_residuals_may_still_agree() {
+        let (x, y) = (sym(0, "x"), sym(1, "y"));
+
+        let peel = peel_nat(&nat_of(1, x.clone()), &nat_of(1, y.clone()));
+
+        assert!(
+            matches!(peel, Peel::Continue(..)),
+            "`x` and `y` are undecided, not unequal"
+        );
     }
 }
