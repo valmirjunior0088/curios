@@ -296,6 +296,11 @@ impl<'a, 'b> Context<'a, 'b> {
     /// Enter a resume block with `arity` values already on the stack as references.
     ///
     /// A resume block's parameters are held boxed by construction: the representation analysis withdraws the offer on every continuation a call, a host import, a cell operation or a call-shaped intrinsic returns to, precisely because the emitter hands those results over as references and has no cheaper store to make. The assert states that rather than trusting it — a violation is a broken analysis, and it would otherwise surface as a wasm validation failure with nothing pointing back here.
+    /// How many results the call feeding this resume block hands over — the block's own parameter count, rather than a fixed one, so a callee returning a constructor as its fields needs no second source of truth.
+    fn resume_arity(&self, resume: &EmissionBlockName) -> usize {
+        self.find_block(resume).params().len()
+    }
+
     fn resume_instrs(&self, resume: &EmissionBlockName, arity: usize) -> Vec<curios_wasm::Instr> {
         let block_data = self.find_block(resume);
 
@@ -359,17 +364,11 @@ impl<'a, 'b> Context<'a, 'b> {
     pub(crate) fn jump_instrs(&self, target: &'a EmissionJumpTarget) -> Vec<curios_wasm::Instr> {
         let mut output = Vec::new();
 
-        // The bare-forwarder sentinel is the function's own `anyref` return, so what it carries leaves boxed however it was held.
+        // The bare-forwarder sentinel is the function's own return, so whatever it carries leaves boxed however it was held. The count is the target's own, not a fixed one: a function returning a constructor as its fields returns as many values as the shape has, and the arity a jump carries is the arity the return delivers.
         if self.is_resume(&target.target) {
-            let [value_name] = &target.params[..] else {
-                panic!(
-                    "resume block `{}` expects 1 param, got {}",
-                    target.target,
-                    target.params.len(),
-                );
-            };
-
-            output.extend(self.load_value_instrs(value_name, LoadAs::NonNull));
+            for value_name in &target.params {
+                output.extend(self.load_value_instrs(value_name, LoadAs::NonNull));
+            }
             output.push(curios_wasm::Instr::Return);
 
             return output;
@@ -542,7 +541,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 func_name: self.table().find_func(target).func_name(),
             });
 
-            output.extend(self.resume_instrs(resume, 1));
+            output.extend(self.resume_instrs(resume, self.resume_arity(resume)));
         }
 
         output
@@ -583,7 +582,7 @@ impl<'a, 'b> Context<'a, 'b> {
                 type_name: clsr_type,
             });
 
-            output.extend(self.resume_instrs(resume, 1));
+            output.extend(self.resume_instrs(resume, self.resume_arity(resume)));
         }
 
         output
@@ -628,7 +627,7 @@ impl<'a, 'b> Context<'a, 'b> {
         if self.is_resume(resume) {
             output.push(curios_wasm::Instr::Return);
         } else {
-            output.extend(self.resume_instrs(resume, 1));
+            output.extend(self.resume_instrs(resume, self.resume_arity(resume)));
         }
     }
 
