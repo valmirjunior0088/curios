@@ -281,7 +281,8 @@ pub(crate) struct Table<'a> {
     tpl_types: BTreeMap<usize, curios_wasm::TypeName>,
     envr_types: BTreeMap<usize, curios_wasm::TypeName>,
     clsr_types: BTreeMap<usize, curios_wasm::TypeName>,
-    func_types: BTreeMap<usize, curios_wasm::TypeName>,
+    /// Keyed by the pair a wasm function type actually is — parameter count *and* result count — rather than by parameter count alone, so two functions of the same arity delivering different result shapes cannot collide on one type. The closure supertypes below stay keyed by arity, because a function reached through one is invoked at the uniform shape whatever its own type says.
+    func_types: BTreeMap<(usize, usize), curios_wasm::TypeName>,
     consts: HashMap<&'a EmissionValueName, curios_wasm::GlobalName>,
     clsrs: HashMap<&'a EmissionClosureName, ClsrData<'a>>,
     funcs: HashMap<&'a EmissionFunctionName, FuncData<'a>>,
@@ -400,13 +401,8 @@ impl<'a> Table<'a> {
             func_types: module
                 .funcs()
                 .iter()
-                .map(|(_, func)| func.params.len())
-                .map(|arity| {
-                    (
-                        arity,
-                        curios_wasm::TypeName::from(format!("func/{}", arity)),
-                    )
-                })
+                .map(|(_, func)| (func.params.len(), func.results))
+                .map(|shape| (shape, Table::func_type_name(shape)))
                 .collect(),
             consts: module
                 .consts()
@@ -798,16 +794,35 @@ impl<'a> Table<'a> {
             .clone()
     }
 
-    pub(crate) fn func_types(&self) -> impl Iterator<Item = (usize, curios_wasm::TypeName)> {
-        self.func_types
-            .iter()
-            .map(|(arity, type_name)| (*arity, type_name.clone()))
+    /// The emitted name of the function type with this `(parameters, results)` shape.
+    ///
+    /// A single-result shape keeps the bare `func/{parameters}` spelling it has always had, which is what makes keying on the pair a change of the key alone and not of any emitted module — every function returns one value until a protocol says otherwise.
+    fn func_type_name(shape: (usize, usize)) -> curios_wasm::TypeName {
+        let (parameters, results) = shape;
+
+        match results {
+            1 => curios_wasm::TypeName::from(format!("func/{}", parameters)),
+            _ => curios_wasm::TypeName::from(format!("func/{}/{}", parameters, results)),
+        }
     }
 
-    pub(crate) fn find_func_type(&self, arity: usize) -> curios_wasm::TypeName {
+    pub(crate) fn func_types(
+        &self,
+    ) -> impl Iterator<Item = ((usize, usize), curios_wasm::TypeName)> {
         self.func_types
-            .get(&arity)
-            .unwrap_or_else(|| panic!("`Table` lacks function type for arity `{}`", arity))
+            .iter()
+            .map(|(shape, type_name)| (*shape, type_name.clone()))
+    }
+
+    pub(crate) fn find_func_type(&self, shape: (usize, usize)) -> curios_wasm::TypeName {
+        self.func_types
+            .get(&shape)
+            .unwrap_or_else(|| {
+                panic!(
+                    "`Table` lacks function type for shape `{}` parameters, `{}` results",
+                    shape.0, shape.1
+                )
+            })
             .clone()
     }
 

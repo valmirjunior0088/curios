@@ -241,6 +241,8 @@ pub(crate) struct EmissionClosure {
 #[derive(Debug, Clone)]
 pub(crate) struct EmissionFunction {
     pub(crate) params: Vec<EmissionArgument>,
+    /// How many values this function hands back. One today for every function; the field exists so a protocol delivering a constructor as its fields has somewhere to say so, and so the wasm type is keyed on the shape rather than on the parameter count alone.
+    pub(crate) results: usize,
     pub(crate) resume: EmissionBlockName,
     pub(crate) region: EmissionBody,
 }

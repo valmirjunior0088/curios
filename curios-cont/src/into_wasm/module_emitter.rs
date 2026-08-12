@@ -366,7 +366,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     }
 
     fn emit_func_types(&mut self) {
-        for (arity, type_name) in self.table.func_types() {
+        for ((parameters, results), type_name) in self.table.func_types() {
             self.module.add_type(
                 type_name,
                 curios_wasm::SubType {
@@ -374,9 +374,11 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                     super_types: vec![],
                     comp_type: curios_wasm::CompType::Func(curios_wasm::FuncType {
                         inputs: curios_wasm::ResultType::from(
-                            (0..arity).map(|_| Table::top_type(false)),
+                            (0..parameters).map(|_| Table::top_type(false)),
                         ),
-                        outputs: curios_wasm::ResultType::from([Table::top_type(false)]),
+                        outputs: curios_wasm::ResultType::from(
+                            (0..results).map(|_| Table::top_type(false)),
+                        ),
                     }),
                 },
             );
@@ -542,7 +544,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         self.module.add_func(
             self.table.find_func(name).func_name(),
             curios_wasm::Func {
-                type_name: self.table.find_func_type(func.params.len()),
+                type_name: self.table.find_func_type((func.params.len(), func.results)),
                 params: func
                     .params
                     .iter()

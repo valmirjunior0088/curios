@@ -42,6 +42,8 @@ pub(crate) fn structurize(machine: &MachineModule) -> EmissionModule {
             function_name(machine, *id),
             EmissionFunction {
                 params,
+                // One value, because every return terminator carries one until a protocol builds more.
+                results: 1,
                 resume,
                 region,
             },
