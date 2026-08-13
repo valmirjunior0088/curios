@@ -49,35 +49,45 @@ const PARSE_MANUAL: &str = include_str!("../../../../programs/parse_manual.crs")
 ///
 /// Taken **2026-08-13**, debug-profile compiler, native binaries, Linux, at N = 1 000 000.
 ///
-/// ## The division, before anything was changed (`8ffe8aae`)
+/// ## The division, before anything was changed (`fb1db1ea`)
 ///
-/// | Rung | `user` | Isolates |
-/// | --- | --- | --- |
-/// | `parse_digits` | 2.31, 2.32, 2.30, 2.31, 2.33 | — |
-/// | `parse_bindless` | 2.22, 2.25, 2.22 | the bind |
-/// | `parse_manual` | 0.17, 0.17, 0.17 | the closure *and* the scan |
+/// | Rung | `user` | Isolates | `Str/fold` envs | slice calls |
+/// | --- | --- | --- | --- | --- |
+/// | `parse_digits` | 2.31, 2.32, 2.30, 2.31, 2.33 | — | 2 | 17 |
+/// | `parse_bindless` | 2.22, 2.25, 2.22 | the bind | 2 | — |
+/// | `parse_manual` | 0.17, 0.17, 0.17 | the closure *and* the scan | 2 | — |
 ///
 /// **The bind is about six percent of the gap** — 2.31 to 2.23 — and the whole gap is about fourteenfold. The remaining 2.06 s is the closure and the scan *together*, and this ladder cannot divide that pair: that needs a fourth program, or a change removing one of them, which is what makes a library reformulation an instrument as well as a fix.
 ///
-/// ## After the lowering stopped materializing an unread fold suffix (`7d1f0895`)
+/// ## After the lowering stopped materializing an unread fold suffix (`513ac6bc`)
 ///
 /// | Rung | `user` | Change |
 /// | --- | --- | --- |
-/// | `parse_digits` | 2.21, 2.22, 2.21, 2.22, 2.22 | −4% |
+/// | `parse_digits` | 2.21, 2.22, 2.21, 2.22, 2.22 | −4%, slice calls 17 to 15 |
 /// | `parse_bindless` | 2.05, 2.06, 2.05 | −8% |
 /// | `parse_manual` | 0.18, 0.17, 0.17 | unchanged, and expected to be: its hot path never folds |
 ///
-/// `parse_digits`'s slice calls fell 17 to 15 — the two fold sites, `/std/Str/fold` and `/std/Str/utf8/check`. Both figures are the raw pre-Binaryen module, and the in-process count agrees with a `--print=wasm` dump, so they are comparable.
+/// ## After the walk threaded its accumulator through the recursion (`06b54ece`)
+///
+/// | Rung | `user` | Change |
+/// | --- | --- | --- |
+/// | `parse_digits` | 1.06, 1.06, 1.07, 1.07, 1.07 | −52% |
+/// | `parse_bindless` | 1.00 ×5 | −51% |
+/// | `parse_manual` | 0.16, 0.16, 0.17 | unchanged |
+///
+/// The gap is now about sevenfold, from fourteen. **What bought it was removing the chain, not removing an allocation** — the `Str/fold` environments go two to none, while slice calls *rise* to 18, because the reformulated walk materializes the tail it recurses on. The old shape built N closures backward and applied them forward, two passes and an indirect call per character; the new one makes a single forward pass with a direct tail call. A prediction of "one allocation traded for another" was made before this was measured and was wrong about the size for exactly that reason: it counted allocations and the cost was the traversal.
+///
+/// The residue — `bindless` 1.00 against `manual` 0.16 — is the UTF-8 scan **plus one rope-view allocation per character**, which is the successor specification's subject rather than this one's.
 ///
 /// ## The static half, and why it divides almost nothing
 ///
 /// ```text
-/// parse_digits:   0 closure sites, 6 env sites, 0 shell sites, 15 slice calls, 324733 bytes of wat
-/// parse_bindless: 0 closure sites, 7 env sites, 0 shell sites, 16 slice calls, 361231 bytes of wat
-/// parse_manual:   0 closure sites, 6 env sites, 0 shell sites, 15 slice calls, 362458 bytes of wat
+/// parse_digits:   0 closure sites, 4 env sites, 0 shell sites, 18 slice calls, 344965 bytes of wat
+/// parse_bindless: 0 closure sites, 5 env sites, 0 shell sites, 19 slice calls, 381463 bytes of wat
+/// parse_manual:   0 closure sites, 4 env sites, 0 shell sites, 18 slice calls, 382690 bytes of wat
 /// ```
 ///
-/// Six, seven and six env sites span a fourteenfold spread in runtime, and `/std/Str/fold`'s environments are allocated in all three programs — `parse_manual` included, because every rung parses its stdin the same way. **A site count cannot see a loop.** It is kept because it is the half that survives a machine change, and because a site appearing or vanishing is a real event; it is never the half that answers "what does this cost".
+/// Four, five and four env sites span a sevenfold spread in runtime, and the remaining ones belong to `/std/Str/utf8/check` and `/std/Nat/of_str` in all three programs — `parse_manual` included, because every rung parses its stdin the same way. **A site count cannot see a loop.** It is kept because it is the half that survives a machine change, and because a site appearing or vanishing is a real event — the `Str/fold` environments vanishing is how the walk's chain was confirmed gone. It is never the half that answers "what does this cost".
 ///
 /// **Two comparisons this does not license.** An earlier record in `structural.rs` timed `parse_digits` at 0.92–0.95 s with `/usr/bin/time -l`, which is macOS syntax; these are Linux figures from another machine, so only the ratios transfer. And the roadmap's "roughly eightfold" for this gap has no probe at all — fourteenfold is what this tree and this machine report.
 #[test]
