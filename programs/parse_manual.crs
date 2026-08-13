@@ -1,0 +1,66 @@
+-- The control for `parse_digits.crs`: the same digit string decoded the same
+-- number of times, walked by index with the accumulator threaded by hand. No
+-- `Str/fold`, so no closure invoked per character, and no `!`, so no
+-- `/syn/Monad/bind` and no transient `Option` per character.
+-- **It is a ceiling, not an equivalent.** Indexing bytes also skips the UTF-8
+-- scanning `Str/fold` performs per codepoint, which is work the abstraction is
+-- paying for rather than overhead it adds -- so the gap bounds what removing the
+-- closure and the bind could recover, and does not estimate it. Splitting the
+-- two apart wants a third program that folds with an explicit match in place of
+-- `!`, keeping the scan and dropping only the bind.
+-- N is read from stdin so the loop survives constant folding; the output matches
+-- `parse_digits.crs` exactly for the same input.
+use /std/{Str, Nat, Bytes, Byte, Option, Io};
+
+rec walk(b: Bytes, i: Nat, remaining: Nat, acc: Nat) -> Option(Nat) =
+    match remaining: (_) => Option(Nat)
+    | 0 => Option/some(acc)
+    | m + 1 =>
+        match Bytes/get(b, i): (_) => Option(Nat)
+        | some(byte) =>
+            match 0x30 <= Byte/to_nat(byte): (_) => Option(Nat)
+            | true =>
+                match Byte/to_nat(byte) <= 0x39: (_) => Option(Nat)
+                | true =>
+                    walk(b, i + 1, m, acc * 10 + (Byte/to_nat(byte) - 0x30))
+                | false => Option/none()
+                end
+            | false => Option/none()
+            end
+        | none() => Option/none()
+        end
+    end;
+
+let decode(s: Str) -> Option(Nat) =
+    match Bytes/len(Str/to_bytes(s)) == 0: (_) => Option(Nat)
+    | true => Option/none()
+    | false =>
+        walk(Str/to_bytes(s), 0, Bytes/len(Str/to_bytes(s)), 0)
+    end;
+
+rec loop(k: Nat, digits: Str, acc: Nat) -> Nat =
+    match k: (_) => Nat
+    | 0 => acc
+    | m + 1 =>
+        match decode(digits): (_) => Nat
+        | some(n) => loop(m, digits, (acc + n) % 1000003)
+        | none() => loop(m, digits, acc)
+        end
+    end;
+
+let total(n: Nat) -> Nat =
+    loop(n, Nat/to_str(n), 0);
+
+let input = /std/read()!;
+match input: (_) => Io({})
+| some(bytes) =>
+    match Str/of_bytes(bytes): (_) => Io({})
+    | some(s) =>
+        match Nat/of_str(Str/trim(s)): (_) => Io({})
+        | some(n) => /std/print(Str/concat(Nat/to_str(total(n)), "\n"))
+        | none() => /std/print("bad input\n")
+        end
+    | none() => /std/print("invalid utf-8\n")
+    end
+| none() => /std/print("no input\n")
+end
