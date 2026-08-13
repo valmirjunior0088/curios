@@ -74,15 +74,19 @@ pub let eql_ascii_ci(a: Str, b: Str) -> Bool =
 pub let repeat(s: Str, n: Nat) -> Str =
     List/balanced(n, "", (i) => s, (l, r) => concat(l, r));
 
+-- The accumulator is threaded by the recursion, not by the motive, and that is the whole of why this is a `rec` rather than an induction over `s.bytes`.
+--
+-- Written as an induction, the result of folding the tail has to be a *function* of the scan state and the accumulator, because a right fold cannot carry a value leftwards any other way. That makes every step return a closure, so a walk of N characters allocates N of them and applies the composition once — the cost is in the encoding, not in the work. Here `sc` and `acc` are ordinary parameters that the tail call carries forward, and the scan witness rides along as a third, transported one byte at a time by `peel_byte` exactly as it was before. `at` below walks the same way, for the same reason.
 pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
-    (match s.bytes: (b) => (sc: Scan, valid: Utf8(sc, b), acc: {A, Nat}) -> {A, Nat}
-    | x[] => (sc, valid, acc) => acc
-    | x[h, ..t]; ih =>
-        (sc, valid, acc) =>
+    rec go(sc: Scan, b: Bytes, valid: Utf8(sc, b), acc: {A, Nat}) -> {A, Nat} =
+        match b
+        | x[] => acc
+        | x[h, ..t] =>
             match sc
             | lead() =>
-                ih(
+                go(
                     step(h, Scan/lead()),
+                    t,
                     peel_byte(True/qed(), valid),
                     match classify(h)
                     | ascii() => (f(certify_decoded(Byte/to_nat(h)), acc.0), 0)
@@ -91,16 +95,18 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
                     end)
             | cont(rem, lo, hi) =>
                 let partial = acc.1 * 0x40 + (Byte/to_nat(h) - 0x80);
-                ih(
+                go(
                     step(h, Scan/cont(rem, lo, hi)),
+                    t,
                     peel_byte(True/qed(), valid),
                     match rem == 1
                     | true => (f(certify_decoded(partial), acc.0), 0)
                     | false => (acc.0, partial)
                     end)
-            | bad() => ih(step(h, Scan/bad()), peel_byte(True/qed(), valid), acc)
+            | bad() => go(step(h, Scan/bad()), t, peel_byte(True/qed(), valid), acc)
             end
-    end)(Scan/lead(), s.valid, (init, 0)).0;
+        end;
+    go(Scan/lead(), s.bytes, s.valid, (init, 0)).0;
 
 pub let len(s: Str) -> Nat =
     count_scalars(Scan/lead(), s.bytes);
