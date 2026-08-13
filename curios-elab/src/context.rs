@@ -242,7 +242,7 @@ impl Context {
     ///
     /// Without this cache, elaboration tree-walks DAG-shaped lowered terms: a string literal's UTF-8 derivation shares every scan-state chain by `Rc`, so re-elaborating the chain at each link cost O(N²) work and the chain's depth in native stack; with it, each shared node elaborates once, at O(1) additional depth.
     ///
-    /// This is the recursive form — probe, compute under the stamp snapshot, record — used by every native `elaborate_subterm` dispatch. The iterative `elaborate` driver reaches the same cache through the split halves [`Context::probe_elaborated`] and [`Context::record_elaborated`] so it can suspend the computation between them; this method is those two halves with the `compute` call spliced in.
+    /// Probe, compute under the stamp snapshot, record — the one way in, used by every `elaborate_subterm` dispatch. The halves are split out as [`Context::probe_elaborated`] and [`Context::record_elaborated`] because this method is exactly the two of them with the `compute` call spliced in; nothing else calls them since the iterative driver that suspended between them was retired.
     pub(crate) fn get_or_init_elaborated<E>(
         &mut self,
         term: &Term,

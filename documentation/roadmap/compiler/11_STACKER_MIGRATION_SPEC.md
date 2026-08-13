@@ -2,7 +2,7 @@
 
 Nine walks in this workspace were rewritten from recursion into explicit frame machines, each to stop a *data*-shaped depth from reaching the native stack: a string literal's scan-state chain, a `Str` literal's per-byte UTF-8 derivation, a spine built by a loop. The motivation was real and is not in dispute. What it cost is the thing a checker can least afford to spend.
 
-`curios-base`'s `recurse` bracket now buys the same depth safety without it. The kernel's three walks were restored first — `convert.rs`, `infer.rs`, `whnf.rs`, at −242/+131 — and eight more have followed. This specification tracks what remains, records what the work has corrected about its own premises, and closes the one question that should *not* be answered by migrating.
+`curios-base`'s `recurse` bracket now buys the same depth safety without it. The kernel's three walks were restored first — `convert.rs`, `infer.rs`, `whnf.rs`, at −242/+131 — and nine more have followed. This specification tracks what remains, records what the work has corrected about its own premises, and closes the one question that should *not* be answered by migrating.
 
 ## Why this is a correctness argument and not a style one
 
@@ -36,7 +36,7 @@ Three tells, any of which is decisive: an element that mirrors a function's loca
 | erased-module verification | `curios-ersd/src/verify.rs`, `Task` | done, `10f5ac17`, −147/+76 |
 | size-change totality | `curios-analysis/src/totality.rs`, `Op` | done, −336/+170 |
 | `curios-text` lowering | `into_core/lowerer.rs`, two `let` sites | done, −74/+40 |
-| `curios-elab` elaboration | `elaborate.rs`, `Vec<ElabFrame>` + `work_term`/`work_mode` | **pending** — M4 |
+| `curios-elab` elaboration | `elaborate.rs`, `Vec<ElabFrame>` + `work_term`/`work_mode` | done, −257/+23 |
 
 ## What this work corrected about its own premises
 
@@ -91,7 +91,9 @@ Against that, the cost is the widest blast radius remaining: the kernel's erasur
 - ~~**M1 — `curios-elab`'s reducer.**~~ Done. `PendingMatch` gone; the `Match` arm now reads as the kernel's. The surviving asymmetry — elab passes the original scrutinee beside the forced value, for the call-by-name projection rule the kernel does not need — was promoted from an implicit fact to a stated one in `reduce_match`'s doc, because it is now the only thing a reader diffing the two must account for. Budget accounting was checked rather than assumed and is unchanged in both the warm and cold cases.
 - ~~**M3 — the universe solver.**~~ Done, both walks. `zonk`'s path-scoped cycle guard is now carried structurally: a metavariable is on the path exactly while its own call is open. `choose` keeps its exploration order, its budget decrement before the terminal check, and the revert-then-read ordering its old `Step::Resume` comment described as "the order the recursive form had." The `SOUNDNESS.md` satisfiability entry was re-read; the walk's shape is not part of what it argues, which concerns grounding heads in the base potential.
 - ~~**M2 — the lowerer.**~~ Done, both halves. The guard sits on the two recursions the change introduced, not on `Lowerer::term`/`subterm`, so the crate's other 178 recursive self-calls over surface depth stay unguarded exactly as they were — the open question above, deliberately not widened into here.
-- **M4 — elaboration.** Last, because it is the largest, the most interleaved, and the only one carrying a mode beside the term. Deleting `ElabFrame` removes a hand-specialized *copy* of `elaborate_apply` restricted to a class — the same duplication shape that produced `infer.rs`'s drift — which already falls back to the real thing whenever its gate declines. `elaborate` returns to its pre-`79063bc1` shape plus `record_checked`, which must stay outside the cache because it fires on hits too. *Acceptance:* the frame stack and both work variables gone; a deep-spine fixture written first, since the corpus no longer supplies one.
+- ~~**M4 — elaboration.**~~ Done, and the largest deletion of the campaign. `ElabFrame` was a hand-specialized *copy* of `elaborate_apply` restricted to a class — the duplication shape that produced `infer.rs`'s drift — which already fell back to the real thing whenever its gate declined. `elaborate` is its pre-`79063bc1` shape plus `record_checked`, which had to stay outside the cache: it seeds erasure obligation (V) and fires on cache *hits* as well as misses, so folding it into the compute closure would have silently dropped every repeated node's seed.
+
+  **No fixture was written, on evidence rather than for lack of one.** Forcing `fast_apply_eligible` to `false` — every application through the recursive path, no guard added — leaves the whole workspace suite passing: 1700 tests across 16 binaries, zero failures and zero stack overflows, including the 552-test cross-stage corpus and the `curios-prelude` build script that elaborates and certifies all of `/std` and `/syn`. So nothing anywhere in the repository produces a spine deep enough to need the machine. `long_str_literal_compiles_on_the_default_test_stack` is the fixture that once covered this and no longer does; its comment still describes the derivation `20a58e38` deleted. The guard went on `elaborate` regardless, because it is the cure if a deep spine ever appears and costs one comparison per level until then.
 
 ## Acceptance, for every milestone
 
