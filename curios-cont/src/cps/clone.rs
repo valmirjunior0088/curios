@@ -336,3 +336,6 @@ pub(super) fn copy_bodies(
         continuations: conts,
     }
 }
+
+#[cfg(test)]
+mod tests;
