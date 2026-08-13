@@ -75,6 +75,26 @@ The refusing direction is the safe one and nothing here is unsound. What is wron
 - **M2 — the termination argument, written before the edit and not after.** The cycle this clause prevents is real, and the induction-hypothesis shape is the case it was most likely written for: an arm's `ih` is a raw stuck fold-match on the same argument. *Acceptance:* an argument that every unfolding either strictly consumes a redex or is discarded, stated in the module that owns the clause — `curios-elab`'s `force_rec` and `curios-cert`'s `force`, separately, for M3's reason — plus a fixture that spins under the old rule and terminates under the new one, or a recorded reason no such fixture exists. A fixture that *spins* is exactly the shape that took a machine down, so build it through `typecheck_within`: state a budget, assert exhaustion under the old rule and success under the new one. That is also the only honest form of the claim, since the difference being pinned is whether the reduction terminates, not how long it takes.
 - **M3 — both copies, independently.** `curios-elab`'s `force_rec` and `curios-cert`'s `force` carry the identical clause, and the crate boundary exists so that the two are written separately and disagree when one is wrong. *Acceptance:* both changed, neither by extracting a shared helper; the differential between them still able to catch a mistake in either.
 
+## The termination argument (M2)
+
+Written before the edit, as M2 requires. It moves into `curios-elab`'s `force_rec` and `curios-cert`'s `force` when M1 lands — separately, for M3's reason — and lives here until then.
+
+**The clause does not bound `force_rec`'s loop, and this is the first thing to get right.** `context.spend()?` runs at the top of every iteration, and the arm carrying the clause *always returns* — it never continues the loop. The loop continues at exactly three places: a `rec` projection, a `Rec` value, and an `Apply` that unfolded. So `force_rec` terminates after at most `budget` iterations with the clause, without it, and under any replacement for it. Whatever the clause is for, it is not that.
+
+**What it is for is idempotence across repeated demands.** The cycle the module documentation describes grows "one more copy of its own body at every *demand*" — not within one call. A folded call `f(a)` whose unfolding lands on a stuck form is held by whatever demanded it; if the enlarged form is returned, the next demand unfolds it again and returns something larger still, and no fixed point is ever reached. Returning the folded spelling instead makes forcing stable. The property to preserve is therefore:
+
+> `force(force(T)) = force(T)`, for every `T`.
+
+**The union rule satisfies it, by its three outcomes.** A *head-exposed* reduct `C(…)` re-enters at the same arm — it is not a projection, a `Rec`, or an `Apply` — and is kept again, unchanged. A *group-free neutral* reduct is neutral, so no arm above the clause applies, and it too is returned unchanged. A *discarded* reduct returns `folded`, and re-forcing `folded` repeats the identical unfolding, reaches the identical reduct, and discards it identically — the same term, at the same size, for the price of the budget it spends.
+
+**And that is the finding that most bears on M1: termination does not separate the candidates.** The current rule is idempotent by the same three cases; so is the member-scoped candidate this document first proposed. All three terminate. What separates them is *completeness* — which reducts each fails to keep. The current rule loses a neutral answer, which is the defect reported here. The member-scoped candidate loses a productive reduct, which is the 6,472 rows the measurement found. The union loses neither, and that, not termination, is the argument for it.
+
+**The one residual risk is a cycle through two groups**, where forcing a member of A yields a term mentioning a member of B whose forcing yields A again. Scoping the occurrence test to the *group* rather than to the member closes the intra-group case, which is why the scope matters. The cross-group case cannot be constructed: a `rec` group is closed over its own members, and two separate groups cannot be mutually recursive, since each would have to be in scope before the other was written.
+
+**What still costs, and is accepted unchanged.** A non-productive group spins against the budget on every demand rather than growing — exactly as a top-level `rec` does, and exactly as it does today. The change makes no claim about that and does not improve it.
+
+**Consequence for M2's fixture, and it is the awkward one.** Since all three rules are idempotent, a fixture that *spins* under the old rule and terminates under the new one may not exist — the old rule does not spin where the new one does not. M2's acceptance anticipated this and allows "a recorded reason no such fixture exists", and this section is that reason unless implementation finds otherwise. What *is* fixturable, and what M1's acceptance already names, is the completeness difference: the reproducer compiling with the control still compiling.
+
 ## What must not happen
 
 **Do not delete the clause.** Removing it trades a refusal for a hang, which is strictly worse: a refusal names a term, and a reducer that stops terminating shows up as a prelude build that never finishes.
