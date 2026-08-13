@@ -11,6 +11,7 @@ mod tests;
 
 use {
     super::Kernel,
+    curios_base::recurse,
     curios_core::{
         Apply, Bound, Carrier, Cases, Field, FreeMonoid, Func, Layer, Let, Many, Match, Nat, Proj,
         Rec, ReduceError, Reducer, Scope, Struct, Subterm, Term, Tuple, UniverseInst, Var, Variant,
@@ -55,32 +56,15 @@ enum Step {
     Stop(Term),
 }
 
-/// A `match` whose scrutinee is still being reduced.
-///
-/// Scrutinee reduction runs on this explicit stack rather than by recursion. A tower of matches over a deep closed spine — the scan-state chain a string literal lowers to — would otherwise consume native stack once per link, and the kernel has to check exactly the terms the elaborator produced, on the same default thread stack.
-///
-/// The scrutinee as *written* is not kept: an arm binds the payload of the value the scrutinee reduced to, so nothing downstream refers back to the original spelling.
-struct Pending {
-    motive: Scope<Many>,
-    cases: Cases,
-}
-
-/// Native-stack headroom this reducer keeps in reserve, and the segment it takes when it runs low — the kernel's half of the reserve `curios-elab`'s reducer states, and it is here for the same reason the crate duplicates the strategy at all. The `Pending` stack above absorbs the depth of a *match tower*; an intrinsic's operands re-enter through [`reduce_intrinsic`](curios_core::reduce_intrinsic), which is shared, so a deep `add` chain puts one native frame per link on this side exactly as it does on the other. The kernel has to accept every term the elaborator produced, on the same thread stack, so a bound it can hit that the elaborator cannot is a term that typechecks and then fails to certify — which is how this was found: the elaborator was given its reserve first, and the abort simply moved here.
-///
-/// Neither figure caps depth; see the elaborator's constants for what each one is and what the trade costs.
-const WHNF_RED_ZONE: usize = 4 * 1024 * 1024;
-const WHNF_STACK_GROWTH: usize = 32 * 1024 * 1024;
-
 /// Reduce `term` until its head constructor is stable.
+///
+/// Guarded by [`recurse`] for the same reason the crate duplicates the strategy at all: the kernel has to accept every term the elaborator produced, on the same thread stack, so a depth it aborts at that the elaborator does not is a term that typechecks and then fails to certify. That is how the need was found — the elaborator was given its reserve first, and the abort simply moved here. An intrinsic's operands re-enter through [`reduce_intrinsic`](curios_core::reduce_intrinsic), which is shared, so a deep `add` chain puts one native frame per link on this side exactly as it does on the other.
 pub(crate) fn whnf(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
-    stacker::maybe_grow(WHNF_RED_ZONE, WHNF_STACK_GROWTH, || {
-        whnf_within(kernel, term)
-    })
+    recurse(|| whnf_within(kernel, term))
 }
 
 fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
     let mut term = term;
-    let mut pending: Vec<Pending> = Vec::new();
 
     loop {
         kernel.spend()?;
@@ -93,7 +77,7 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
             continue;
         }
 
-        let mut step = match Term::unwrap_or_clone(term) {
+        let step = match Term::unwrap_or_clone(term) {
             Subterm::Intrinsic(intrinsic) => {
                 Step::Stop(reduce_intrinsic(kernel, &intrinsic)?.into())
             }
@@ -103,39 +87,27 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
             Subterm::Func(func) => step_func(kernel, func),
             Subterm::Let(let_) => Step::Continue(step_let(let_)),
             Subterm::UniverseInst(instance) => step_universe_inst(kernel, instance)?,
+            // The scrutinee is reduced by a nested call, so a tower of matches over a deep closed spine — the scan-state chain a string literal lowers to — costs one native frame per link. That is data-shaped depth, which is what [`recurse`] at the entry point is for.
             Subterm::Match(Match {
                 head,
                 motive,
                 cases,
             }) => {
-                pending.push(Pending { motive, cases });
-                Step::Continue(head)
+                let value = whnf(kernel, head)?;
+
+                step_match(force(kernel, value)?, motive, cases)
             }
             // `InductType`/`Variant`, `StructType`/`Struct`, `Tuple`, `FuncType`, `Type`/`Prop`, `Rec`, and a `Metavar` no kernel input should contain are all weak-head normal already: their sub-terms are not reduced in this position.
             other => Step::Stop(other.into()),
         };
 
-        // A finished value resolves against the pending frames innermost-first.
-        loop {
-            match step {
-                Step::Continue(next) => {
-                    term = next;
-                    break;
-                }
-                Step::Stop(value) => {
-                    // A stuck form standing under an arm's case equation *is* that case's value, definitionally; continue from it.
-                    if let Some(refined) = kernel.refinement_of(&value) {
-                        step = Step::Continue(refined);
-                        continue;
-                    }
-
-                    match pending.pop() {
-                        None => return Ok(value),
-                        Some(frame) => {
-                            let forced = force(kernel, value)?;
-                            step = step_match(forced, frame.motive, frame.cases);
-                        }
-                    }
+        match step {
+            Step::Continue(next) => term = next,
+            Step::Stop(value) => {
+                // A stuck form standing under an arm's case equation *is* that case's value, definitionally; continue from it. This is the *second* of the two probe points, and it does not merge with the one above: that one asks about a term before it is taken apart, this one about a form reduction produced, and routing this one back to the top would re-decompose a normal form forever.
+                match kernel.refinement_of(&value) {
+                    Some(refined) => term = refined,
+                    None => return Ok(value),
                 }
             }
         }
