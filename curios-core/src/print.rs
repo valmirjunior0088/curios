@@ -6,7 +6,8 @@ use {
     },
     curios_base::{
         Flt, Grain, Plicity, Qualifier,
-        printer::{Printer, deferred, flat, group, indent, line, pure, sep_flat, soft_line},
+        printer::{Printer, flat, group, indent, line, pure, sep_flat, soft_line},
+        recurse,
     },
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
@@ -875,21 +876,11 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
     }
 }
 
-/// A child document, deferred.
+/// A child document.
 ///
-/// Every recursive call in this module goes through here. Printing a term is a recursive function over a recursive structure, so building the document descended as deep as the term — one native frame per link of a string literal's UTF-8 derivation, which aborted the compiler while it was trying to *report* that the same literal had exhausted the reduction budget. The thunk moves that descent onto `run_printer`'s stack.
+/// Every recursive call in this module goes through here, which is what makes this the one place the descent needs guarding: printing a term is a recursive function over a recursive structure, so building the document descends as deep as the term — and a diagnostic that cannot be printed is worse than no diagnostic, since it aborts the compiler while it is trying to *report* something else. [`recurse`] is what makes that depth affordable. Running and freeing the finished document stay iterative in [`Printer`] itself, for the same reason at a different layer.
 fn sub(term: Term, frame: Frame) -> Printer {
-    let spelling = Rc::clone(frame.spelling);
-    let depth = frame.depth;
-    deferred(move || {
-        term_doc(
-            term,
-            Frame {
-                spelling: &spelling,
-                depth,
-            },
-        )
-    })
+    recurse(|| term_doc(term, frame))
 }
 
 /// A delimited comma-list that fits on one line or breaks one item per line, indented — `f(a, b)` against `f(\n  a,\n  b\n)`. `spaced` spells the flat padding inside the delimiters so the flat form stays byte-identical to the fixed layout it replaced: `false` for parenthesized lists, `true` for brace literals (`S { a, b }`). Behavior-neutral on the unbounded `Display` path, where every group renders flat.
@@ -908,17 +899,7 @@ fn listed(open: String, spaced: bool, items: Vec<Printer>, close: &'static str) 
 
 /// [`sub`] for an intrinsic's operands.
 fn sub_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
-    let spelling = Rc::clone(frame.spelling);
-    let depth = frame.depth;
-    deferred(move || {
-        print_intrinsic(
-            intrinsic,
-            Frame {
-                spelling: &spelling,
-                depth,
-            },
-        )
-    })
+    recurse(|| print_intrinsic(intrinsic, frame))
 }
 
 pub(crate) fn print_term(term: Term, spelling: &Rc<Spelling>) -> Printer {
@@ -1509,5 +1490,19 @@ mod tests {
         let names = BTreeSet::from([Free::Global(global), binder.clone()]);
         let rename = build_rename(&names, &shorten);
         assert_eq!(rename.get(&binder).map(String::as_str), Some("helper2"));
+    }
+
+    /// Building a document descends once per link, so this is what [`sub`]'s guard is for — and the depth a diagnostic's term can reach is the elaborator's, not the writer's. Deep enough that a regression is a stack overflow rather than a slow test. The other two walks over a document, running and freeing it, are fixtured in `curios-base` at the same depth.
+    #[test]
+    fn a_deep_term_is_printed_without_overflowing() {
+        const DEEP: usize = 100_000;
+
+        let argument = Term::free_var(&Free::local(0, None));
+        let mut term = Term::free_var(&Free::local(0, None));
+        for _ in 0..DEEP {
+            term = Term::apply(term, [argument.clone()]);
+        }
+
+        assert_eq!(term.to_string().matches('(').count(), DEEP);
     }
 }
