@@ -39,7 +39,9 @@ impl Module {
     }
 }
 
-/// The recursion-admission context of one computed member's initializer: the group's computed members in order, the index being initialized, and the function depth at entry (a use at a greater depth is dormant).
+/// The recursion-admission context of a group's eager initializers: its computed members in order, the index currently being initialized, and the function depth at entry (a use at a greater depth is dormant).
+///
+/// One per group rather than one per member, since only `limit` moves between them.
 struct InitContext {
     computed: Vec<ValueId>,
     limit: usize,
@@ -189,15 +191,20 @@ impl<'m> Verifier<'m> {
                 for &function in &group.functions {
                     self.walk_function(function)?;
                 }
+                // One context for the whole group, its `limit` advanced per member. Only `limit` differs between members, so pushing a fresh context each time cloned the member list once per member — the same list, `n` times over.
+                self.init_contexts.push(InitContext {
+                    computed,
+                    limit: 0,
+                    function_depth: self.function_depth,
+                });
                 for (index, member) in group.values.iter().enumerate() {
-                    self.init_contexts.push(InitContext {
-                        computed: computed.clone(),
-                        limit: index,
-                        function_depth: self.function_depth,
-                    });
+                    self.init_contexts
+                        .last_mut()
+                        .expect("this group's context is live for every one of its members")
+                        .limit = index;
                     self.enter_block(member.init)?;
-                    self.init_contexts.pop();
                 }
+                self.init_contexts.pop();
                 Ok(())
             }
         }

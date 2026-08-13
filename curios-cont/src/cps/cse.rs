@@ -51,10 +51,12 @@ fn intrinsic_key(op: CpsIntrinsicOp, args: &[CpsAtom]) -> (CpsIntrinsicOp, Vec<A
     (op, keys)
 }
 
-/// One scope-walk work item: visit a node under the current table, or retract a key when its binder's subtree is done. The LIFO order makes retraction happen exactly between a `LetCont`'s sibling subtrees, which is what keeps one sibling's bindings invisible to the next.
+/// One scope-walk work item: visit a node under the current table, or retract what a binder inserted once its subtree is done. The LIFO order makes retraction happen exactly between a `LetCont`'s sibling subtrees, which is what keeps one sibling's bindings invisible to the next.
+///
+/// A retraction names the *node*, not the key it inserted. The walk never mutates the module — every rewrite is batched after the last function is walked — so the node still carries the operator and operands that produced its key, and recomputing costs one `intrinsic_key`. Carrying the key instead parked an owned `Vec<AtomKey>` here for the whole extent of the binder's subtree, and an `AtomKey::Bin` holds a packed literal's entire byte string, so a chain of literal-bearing intrinsics held one copy of each literal per pending retraction.
 enum Task {
     Visit(CpsNodeId),
-    Retract((CpsIntrinsicOp, Vec<AtomKey>)),
+    Retract(CpsNodeId),
 }
 
 /// Remove every `LetIntrinsic` whose `(op, operands)` already has a binding in scope, rewriting its uses to the dominating result. One walk collects every duplicate — a duplicate of a duplicate resolves to the first binder because only the first occupies the table — and the rewrites apply as a batch afterwards.
@@ -71,8 +73,15 @@ pub(super) fn dedupe_intrinsics(module: &mut CpsModule) -> bool {
         while let Some(task) = work.pop() {
             let node_id = match task {
                 Task::Visit(node_id) => node_id,
-                Task::Retract(key) => {
-                    table.remove(&key);
+                Task::Retract(node) => {
+                    let CpsNode::LetIntrinsic { op, args, .. } = module
+                        .node(node)
+                        .expect("a retraction names a node this walk visited")
+                    else {
+                        unreachable!("a retraction is scheduled only for a LetIntrinsic")
+                    };
+
+                    table.remove(&intrinsic_key(*op, args));
                     continue;
                 }
             };
@@ -92,8 +101,8 @@ pub(super) fn dedupe_intrinsics(module: &mut CpsModule) -> bool {
                             substitutions.insert(*result, CpsAtom::Value(existing));
                             duplicates.push((node_id, *result, *next));
                         } else {
-                            table.insert(key.clone(), *result);
-                            work.push(Task::Retract(key));
+                            table.insert(key, *result);
+                            work.push(Task::Retract(node_id));
                         }
                     }
                     work.push(Task::Visit(*next));
