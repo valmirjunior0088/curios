@@ -1,0 +1,55 @@
+-- The middle point between `parse_digits.crs` and `parse_manual.crs`: the same
+-- `Str/fold` over the same codepoints, so the UTF-8 scan is held constant, with
+-- `let n = acc!` written out as an explicit match so no `/syn/Monad/bind` is
+-- generated. The fold's step function is still a closure invoked per character.
+-- So the three programs separate what one gap could not: against
+-- `parse_digits.crs` this isolates the bind, and against `parse_manual.crs` it
+-- isolates the closure plus the scan.
+-- N is read from stdin so the loop survives constant folding; the output matches
+-- the other two exactly for the same input.
+use /std/{Str, Nat, Char, Option, Io};
+
+let decode(s: Str) -> Option(Nat) =
+    match Str/len(s) == 0: (_) => Option(Nat)
+    | true => Option/none()
+    | false =>
+        Str/fold(
+            s,
+            Option/some(0),
+            (cp, acc) =>
+                match acc: (_) => Option(Nat)
+                | some(n) =>
+                    match Char/is_digit(cp): (_) => Option(Nat)
+                    | true => Option/some(n * 10 + (Char/to_nat(cp) - 0x30))
+                    | false => Option/none()
+                    end
+                | none() => Option/none()
+                end)
+    end;
+
+rec loop(k: Nat, digits: Str, acc: Nat) -> Nat =
+    match k: (_) => Nat
+    | 0 => acc
+    | m + 1 =>
+        match decode(digits): (_) => Nat
+        | some(n) => loop(m, digits, (acc + n) % 1000003)
+        | none() => loop(m, digits, acc)
+        end
+    end;
+
+let total(n: Nat) -> Nat =
+    loop(n, Nat/to_str(n), 0);
+
+let input = /std/read()!;
+match input: (_) => Io({})
+| some(bytes) =>
+    match Str/of_bytes(bytes): (_) => Io({})
+    | some(s) =>
+        match Nat/of_str(Str/trim(s)): (_) => Io({})
+        | some(n) => /std/print(Str/concat(Nat/to_str(total(n)), "\n"))
+        | none() => /std/print("bad input\n")
+        end
+    | none() => /std/print("invalid utf-8\n")
+    end
+| none() => /std/print("no input\n")
+end
