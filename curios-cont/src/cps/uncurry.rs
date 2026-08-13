@@ -2,13 +2,18 @@
 //!
 //! A monadic carrier makes an action *be* a closure, so a step allocates one and calls it indirectly. Where every use of a returned closure is an immediate application, the callee can take the argument instead and the closure is never built — and this needs no knowledge of *which* closure comes back, which is what makes it smaller than dispatching on the possibilities.
 
+#[cfg(test)]
+mod tests;
+
 use {
-    super::analysis::{analyze_calls, function_nodes, nodes_from},
+    super::analysis::{CallAnalysis, analyze_calls, function_nodes, nodes_from},
     super::*,
     std::collections::{BTreeMap, BTreeSet},
 };
 
 /// A function whose returned closure every caller applies, and the arity it is applied at.
+///
+/// Absence means one of two different things, and [`uncurry_returns`] needs them apart: a function with non-tail callers that do something else with what it returns is *inadmissible*, while one reached only by a class-mate's tail call is merely *unobserved* — it has no callers of its own to disagree, and takes its width from the class. [`rewritable`] is the half of admissibility that does not depend on having been observed.
 pub(super) fn uncurryable(module: &CpsModule) -> BTreeMap<CpsFunId, usize> {
     let calls = analyze_calls(module);
     let demands = demands(module);
@@ -64,12 +69,18 @@ pub(super) fn uncurryable(module: &CpsModule) -> BTreeMap<CpsFunId, usize> {
         .filter_map(|(function, width)| {
             // A width of zero is a different transform wearing this one's clothes. There is no argument to absorb, so the closure is a *thunk* and the rewrite only decides when it runs — which for an `Io` description is the one thing its meaning rests on.
             let width = width.filter(|width| *width != usize::MAX && *width > 0)?;
-            let admissible = !calls.escaping.contains(&function)
-                && module.entry() != Some(function)
-                && returns_functions(module, function);
-            admissible.then_some((function, width))
+            rewritable(module, &calls, function).then_some((function, width))
         })
         .collect()
+}
+
+/// Whether `function` could be rewritten at all, on grounds that have nothing to do with what its callers do.
+///
+/// Separated out because it has to be asked of every member of a class, including the ones no caller observes. Those take their width from the class rather than from a site of their own, and none of the three facts below is implied by that width: an escaping member reaches its callers through the arity-keyed `clsr/{arity}` supertype, which the rewrite changes; the entry is called by the host; and a member whose return edges do not all carry a function reference has an edge the rewrite cannot turn into a call, which would leave it handing back a raw value where its class-mates hand back a called one.
+fn rewritable(module: &CpsModule, calls: &CallAnalysis, function: CpsFunId) -> bool {
+    !calls.escaping.contains(&function)
+        && module.entry() != Some(function)
+        && returns_functions(module, function)
 }
 
 /// Whether every edge `function` returns on carries a function reference — what the rewrite turns into a tail call.
@@ -156,12 +167,16 @@ pub(super) fn uncurry_returns(module: &mut CpsModule) -> bool {
     if widths.is_empty() {
         return false;
     }
+    let calls = analyze_calls(module);
     // A class that cannot be planned is declined, not fatal: aborting here would leave every later class untried, and one unrewritable site would silently disable the whole pass.
     let Some((members, width, plan)) = tail_classes(module).into_iter().find_map(|members| {
-        let width = widths.get(members.first()?).copied()?;
+        // Tail-forwarding makes one return stream of the whole class, so a width observed anywhere in it is the width of all of it — and a member with no caller of its own has nothing to disagree with. What every member must satisfy is [`rewritable`], which its width says nothing about.
+        let mut observed = members.iter().filter_map(|member| widths.get(member));
+        let width = *observed.next()?;
+        observed.all(|other| *other == width).then_some(())?;
         members
             .iter()
-            .all(|member| widths.get(member) == Some(&width))
+            .all(|member| rewritable(module, &calls, *member))
             .then_some(())?;
         let plan = plan_class(module, &members)?;
         Some((members, width, plan))
