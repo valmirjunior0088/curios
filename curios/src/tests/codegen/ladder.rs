@@ -18,7 +18,7 @@ const PARSE_DIGITS: &str = include_str!("../../../../programs/parse_digits.crs")
 const PARSE_BINDLESS: &str = include_str!("../../../../programs/parse_bindless.crs");
 const PARSE_MANUAL: &str = include_str!("../../../../programs/parse_manual.crs");
 
-/// Every static figure the string-walk specification's attribution leans on, taken over the three programs it names.
+/// Every static figure this attribution leans on, taken over the three programs above.
 ///
 /// # How to run it
 ///
