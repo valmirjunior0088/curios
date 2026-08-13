@@ -11,9 +11,10 @@ mod tests;
 
 use {
     super::{
-        Atom, Block, BlockId, CellOperation, Constant, ConstantId, ConstructorId, FoldNatStep,
-        FoldSequenceStep, Function, FunctionId, Intrinsic, Module, Operation, RecGroup, RecGroupId,
-        Rhs, SequenceGrain, SequenceOp, Statement, StatementId, Terminator, ValueId, VariantArm,
+        Analysis, Atom, Block, BlockId, CellOperation, Constant, ConstantId, ConstructorId,
+        FoldNatStep, FoldSequenceStep, Function, FunctionId, Intrinsic, Module, Operation,
+        RecGroup, RecGroupId, Rhs, SequenceGrain, SequenceOp, Statement, StatementId, Terminator,
+        ValueId, VariantArm,
     },
     curios_abi::ForeignFunction,
     curios_base::{Grain, PackedBin},
@@ -29,6 +30,7 @@ pub fn lower_to_cont(source: &Module) -> curios_cont::CpsModule {
     curios_profile::profile!("lower_to_cont");
     let mut lowerer = Lowerer {
         source,
+        analysis: Analysis::analyze(source),
         module: curios_cont::CpsModule::new(),
         values: BTreeMap::new(),
         functions: BTreeMap::new(),
@@ -62,6 +64,8 @@ pub fn lower_to_cont(source: &Module) -> curios_cont::CpsModule {
 
 struct Lowerer<'a> {
     source: &'a Module,
+    /// Use counts over the finished arena, read only to decline emitting a binding nothing reads. The module does not change during lowering, so one analysis taken at entry stays exact throughout.
+    analysis: Analysis,
     module: curios_cont::CpsModule,
     values: BTreeMap<ValueId, curios_cont::CpsAtom>,
     functions: BTreeMap<FunctionId, curios_cont::CpsFunId>,
@@ -1199,7 +1203,9 @@ impl Lowerer<'_> {
         let step_acc = self.bind_value(step.accumulator);
         let element_index = self.module.add_value(None);
         let element = self.bind_value(step.element);
-        let suffix = self.bind_value(step.suffix);
+        // A step almost never mentions its suffix — `Bytes/fold` and `List/fold` do not, and neither does a step whose only use of it is an argument to a `Prop` constructor, since erasure removes that. Binding it regardless costs one rope-view allocation per element, inside the loop, for a value nothing reads. **This is the only place that can decline to emit it:** a slice may trap, so no later pass may drop one on the grounds that its result is dead, and the fact that this one cannot trap is a property of the loop emitted below rather than anything recoverable downstream.
+        let suffix =
+            (self.analysis.value_uses(step.suffix) > 0).then(|| self.bind_value(step.suffix));
         let base_acc = self.module.add_value(None);
         let next_acc = self.module.add_value(None);
 
@@ -1231,16 +1237,19 @@ impl Lowerer<'_> {
             continuations: vec![step_resume],
             body: step_body,
         });
-        let step_body = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
-            result: suffix,
-            op: sequence_slice_op(grain),
-            args: vec![
-                sequence.clone(),
-                curios_cont::CpsAtom::Value(step_index),
-                curios_cont::CpsAtom::Value(length),
-            ],
-            next: step_body,
-        });
+        let step_body = match suffix {
+            Some(suffix) => self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
+                result: suffix,
+                op: sequence_slice_op(grain),
+                args: vec![
+                    sequence.clone(),
+                    curios_cont::CpsAtom::Value(step_index),
+                    curios_cont::CpsAtom::Value(length),
+                ],
+                next: step_body,
+            }),
+            None => step_body,
+        };
         let step_body = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
             result: element,
             op: sequence_get_op(grain),

@@ -207,12 +207,19 @@ fn a_sequence_fold_reads_through_its_grain() {
     let suffix = builder.value(Some("t".into()));
     let accumulator = builder.value(Some("ih".into()));
     builder.open_block();
-    let one = nat(&mut builder, 1);
+    // The step reads its suffix, which is what makes the slice part of this claim: an unused one is not emitted at all, per `an_unused_fold_suffix_is_not_sliced`.
+    let remaining = builder.let_value(
+        None,
+        Rhs::Sequence {
+            operation: SequenceOp::BinLen(Grain::X),
+            operands: vec![Atom::Value(suffix)],
+        },
+    );
     let stepped = builder.let_value(
         None,
         Rhs::Operation {
             operation: Operation::NatAdd,
-            operands: vec![Atom::Value(accumulator), one],
+            operands: vec![Atom::Value(accumulator), Atom::Value(remaining)],
         },
     );
     let step_block = builder.seal_block(Terminator::Return(Atom::Value(stepped)));
@@ -237,6 +244,58 @@ fn a_sequence_fold_reads_through_its_grain() {
     assert!(printed.contains("BinLen"), "{printed}");
     assert!(printed.contains("BinGet"), "{printed}");
     assert!(printed.contains("BinSlice"), "{printed}");
+}
+
+/// A fold whose step ignores its suffix pays nothing for it.
+///
+/// The suffix is a slice, and a slice allocates a view — once per element, inside the loop. Nearly every fold discards it (`Bytes/fold`, `List/fold`, and `/std/Str/fold`'s per-character walk, whose `t` survives only in erased `Prop` positions), so emitting it unconditionally put one allocation and one runtime allocation call per element into the hottest loops in the corpus, for a value nothing reads.
+///
+/// **No later pass can undo that**, which is why the check belongs at the point of emission: `BinSlice` is `MayTrap`, so dead-result elimination must keep one, and the reason this one cannot trap — the loop below indexes `[i, len)` with `1 <= i <= len` — is a property of the loop this same function emits rather than a range fact recoverable downstream.
+#[test]
+fn an_unused_fold_suffix_is_not_sliced() {
+    let mut builder = ErsdBuilder::new();
+    builder.open_block();
+    let bytes = builder.constant(Constant::Bin(
+        Grain::X,
+        PackedBin::from_bytes(vec![1, 2, 3]),
+    ));
+    builder.open_block();
+    let zero = nat(&mut builder, 0);
+    let empty_block = builder.seal_block(Terminator::Return(zero));
+    let element = builder.value(Some("h".into()));
+    let suffix = builder.value(Some("t".into()));
+    let accumulator = builder.value(Some("ih".into()));
+    builder.open_block();
+    // Reads the element and the hypothesis, never the suffix.
+    let stepped = builder.let_value(
+        None,
+        Rhs::Operation {
+            operation: Operation::NatAdd,
+            operands: vec![Atom::Value(accumulator), Atom::Value(element)],
+        },
+    );
+    let step_block = builder.seal_block(Terminator::Return(Atom::Value(stepped)));
+    let folded = builder.let_value(
+        None,
+        Rhs::FoldSequence {
+            grain: SequenceGrain::Bin(Grain::X),
+            scrutinee: Atom::Constant(bytes),
+            empty: empty_block,
+            step: FoldSequenceStep {
+                element,
+                suffix,
+                accumulator,
+                block: step_block,
+            },
+        },
+    );
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(folded)));
+    builder.set_entry(entry);
+    let module = builder.finalize().expect("verifies");
+    let printed = lowered(&module);
+    // The element is still read through its grain; only the discarded suffix is gone.
+    assert!(printed.contains("BinGet"), "{printed}");
+    assert!(!printed.contains("BinSlice"), "{printed}");
 }
 
 #[test]
