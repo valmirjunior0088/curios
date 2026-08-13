@@ -2,7 +2,7 @@
 
 Nine walks in this workspace were rewritten from recursion into explicit frame machines, each to stop a *data*-shaped depth from reaching the native stack: a string literal's scan-state chain, a `Str` literal's per-byte UTF-8 derivation, a spine built by a loop. The motivation was real and is not in dispute. What it cost is the thing a checker can least afford to spend.
 
-`curios-base`'s `recurse` bracket now buys the same depth safety without it, and the kernel's three walks have been restored — `convert.rs`, `infer.rs`, `whnf.rs`, at −242/+131 lines. This specification covers the six that remain, and closes the one question that should *not* be answered by migrating.
+`curios-base`'s `recurse` bracket now buys the same depth safety without it. The kernel's three walks were restored first — `convert.rs`, `infer.rs`, `whnf.rs`, at −242/+131 — and four more have followed. This specification tracks what remains, records what the work has corrected about its own premises, and closes the one question that should *not* be answered by migrating.
 
 ## Why this is a correctness argument and not a style one
 
@@ -12,15 +12,50 @@ The kernel work produced the concrete instance. `infer.rs`'s worklist replaced `
 
 That is the class this work exists to close, and it is why the acceptance criterion below is not "the tests still pass."
 
-## The remaining walks
+## What tells a machine from a loop
 
-| Walk | Site | Depth it absorbs |
+The first pass over this inventory misclassified a site, and the test that failed is worth writing down. "It iterates a `Vec`" is not the question — the lowerer's `let` sites iterate a flat `Vec<LetBinding>` and are machines anyway. The question is what the *accumulator* holds:
+
+- A **loop** accumulates results. `elaborate_let` gathers `(label, type, body)` triples and folds them into `Term::let_` — no context effects on the way back, nothing fallible, one flat scope throughout.
+- A **machine** accumulates frames. `lower_let_region`'s `PendingLet` holds `mark`, `binders`, `binds`, `binder`, `type_`, `value` — which is `build_let`'s local variables, field for field, twelve lines away in the same file. Its reverse pass runs `leave_scope(mark)` and a fallible `wrap`.
+
+Three tells, any of which is decisive: an element that mirrors a function's locals; a reverse or pop phase carrying *effects* (scope exit, unwinding) rather than construction; and a comment arguing that ordering is preserved, which is the argument a call stack makes unnecessary.
+
+## The walks
+
+| Walk | Site | Status |
 | --- | --- | --- |
-| `curios-elab` reduction | `reduce.rs`, `PendingMatch` | Match towers — the direct twin of the kernel's `Pending`, already restored |
-| `curios-elab` elaboration | `elaborate.rs`, `Vec<ElabFrame>` + `work_term`/`work_mode` | The largest and most interleaved; a mode threaded beside the term |
-| `curios-elab` universe solving | `universe_solver.rs` at three sites | Two worklists and a `Vec<Frame>` |
-| `curios-text` lowering | `into_core/lowerer.rs` at two sites | Surface-tree depth |
-| `curios-core` printing | `print.rs` | Document construction over a deep term |
+| kernel conversion | `curios-cert/src/kernel/convert.rs` | done, `fb81e456` |
+| kernel typing | `curios-cert/src/kernel/infer.rs` | done, `1fbb297c` — a rule set had drifted; see `SOUNDNESS.md` |
+| kernel reduction | `curios-cert/src/kernel/whnf.rs` | done, `3a3b8f0b` |
+| `curios-elab` reduction | `reduce.rs`, `PendingMatch` | done, `475759c9`, −46/+42 |
+| `curios-elab` universe zonk | `universe_solver.rs`, `zonk` | done, `cdd5fb34`, −58/+32 |
+| `curios-elab` universe search | `universe_solver.rs`, `check_consistent_full::choose` | done, `48dcb8a8`, −95/+42 |
+| `curios-core` printing | `print.rs`, `sub`/`sub_intrinsic` | done, `60bdd365`, −25/+20 |
+| `curios-text` lowering | `into_core/lowerer.rs`, two `let` sites | **pending** — M2 |
+| `curios-elab` elaboration | `elaborate.rs`, `Vec<ElabFrame>` + `work_term`/`work_mode` | **pending** — M4 |
+
+## What this work corrected about its own premises
+
+**The motivating input no longer exists.** `20a58e38` replaced a string literal's per-byte `Utf8` derivation with a constant-size `of_scan_eq(b, refl_scan(b))` proof, so a literal is now a packed `Bytes` plus an O(1) proof. Four consequences. The lowerer's `utf8_derivation` — plausibly one of the "two sites" this document first attributed to that crate — was deleted then, not still pending. `curios/src/tests/strings.rs:100` still describes the spine it built. `curios-elab/README.md` justifies its machinery by that shape. And nothing in the corpus now produces a deep ground all-explicit application spine, which is M4's whole input class: **its machine has no live input, and no existing test would notice its deletion.**
+
+**The universe solver held two walks, not three sites.** `zonk` and `choose`. The other `while let Some` loops in that file — `Potential::restore_from`, `connected_metas`, the solve worklist — are genuine graph and fixpoint algorithms that were never recursion.
+
+**The lowerer's two sites are its `let` blocks**, and the literal acceptance below cannot be run on them: the loop landed in `a4b69386`, and `1dc35095` then flattened the AST, so the pre-defunctionalization original lowers a different tree. `build_let`, in the same file, is a live worked reference instead — it does the identical step by recursion through `bound`, for the first binding of every block whose remaining bindings go through the machine.
+
+**The lowerer is otherwise unguarded.** It makes 178 recursive self-calls over surface depth and contains no `recurse` at all; exactly one node kind was defunctionalized. So the machine is a local exception inside a function that recurses freely, not a defence of a walk that is careful elsewhere. Whether `Lowerer::term`/`subterm` should be guarded is a real question this raises and does not settle.
+
+## Machines outside the original inventory
+
+Found by applying the test above across the workspace. None is scheduled here; each needs its own decision, and the first two sit below the checkers, where a drift rejects a valid module or admits a malformed one into codegen rather than admitting a term.
+
+- **`curios-analysis/src/totality.rs`** — the `ops: Vec<Op>` walk, 995 lines and 52 `Op::` sites, from `407d99c2` at +481/−230. Its own doc carries the argument the shared driver would make unnecessary: "Arms expand lazily, and that is the correctness argument for the whole stack." A shared analysis both checkers run, with one implementation.
+- **`curios-ersd/src/verify.rs`** — the `Task` walk, 747 lines and 44 `Task::` sites. It reifies all three of what `recurse` retires: sibling ordering (`push_sequence` extends the stack then reverses the slice, because the sequence is "given in execution order"), scope entry and exit (`BindValue`/`UnbindValues`, `UnbindFunctions`, `EnterFunction`/`ExitFunction`, `EnterInit`), and unwinding (`step` is fallible and the driver `?`s out, abandoning the pending stack).
+- **`curios-cont/src/cps/cse.rs`** — the `Task::Visit`/`Task::Retract` walk, 171 lines. `Retract` is a scope exit, and its doc argues the ordering by hand: "The LIFO order makes retraction happen exactly between a `LetCont`'s sibling subtrees."
+
+**`curios-analysis/src/satisfy.rs::choose` is the open one.** It is `universe_solver::choose`'s twin over the same clause shape, and its doc says iterative "is a requirement rather than a preference," citing that walk as "linearised for the same reason." That citation is now stale, since the walk it names has been restored. Either the twin moves too, or the comment must say why the two sides diverged — leaving it as it stands is the one option that makes the file wrong.
+
+Checked and deliberately **not** on this list: `invert.rs`'s `Step` (a three-valued verdict), `uncurry.rs`'s `Resume` (a call-site ABI concept), and `interpret.rs`'s `Frame` (an interpreter's lexical environment). `curios-wasm`, `curios-package` and the `into_wasm` emitter have not been swept.
 
 ## What must not be migrated
 
@@ -30,20 +65,42 @@ That is the class this work exists to close, and it is why the acceptance criter
 
 Dissolving it into six hand-written recursions trades one child-enumeration seam for six and loses automatic propagation of a new term former. The same criterion that condemns the frame machines protects this one: a driver with hooks is more legible than the recursion it replaced, not less. **This question is closed, not deferred.**
 
+The corollary ran the other way once: `print.rs`'s `collect_labels` hand-rolled its own worklist and was moved *onto* `Term::walk` in `b52a9062` (−139/+51), the enumerations having been diffed node for node first. That is consolidation, not restoration, and it is the only direction in which a walk should acquire an explicit stack.
+
+`curios-base`'s `Printer` also stays data. Its explicit stacks make *running* and *freeing* a document iterative, which no builder-side guard replaces, and three fixtures hold it at 100k depth. Note that `deferred()` and `Printer::Deferred` now have no producer anywhere in the workspace, since `print.rs` was their only caller — whether to delete them is open.
+
 ## Milestones
 
-Ordered by payoff per unit of risk, and by what each leaves behind for the next.
-
-- **M1 — `curios-elab`'s reducer.** The kernel's twin is already done, so this is the one migration with a worked reference to be written against, and the pair is what the duplication argument is *about*. *Acceptance:* `PendingMatch` gone; the two reducers readable side by side; the two refinement probe points still distinct and still commented as such.
-- **M2 — the lowerer and the printer.** Neither is a judgment, so a drift here refuses or misprints rather than admitting. Cheap, and they establish the pattern outside the checkers. *Acceptance:* both migrated; a deep-literal fixture that would have overflowed pre-`recurse` still passes.
-- **M3 — the universe solver's three sites.** Its walks decide satisfiability, which `SOUNDNESS.md` already carries an open entry about. *Acceptance:* all three migrated, with the satisfiability entry re-read and amended if the walk's shape is part of what it argues.
-- **M4 — elaboration.** Last, because it is the largest, the most interleaved, and the only one carrying a mode beside the term. *Acceptance:* the frame stack and both work variables gone.
+- ~~**M1 — `curios-elab`'s reducer.**~~ Done. `PendingMatch` gone; the `Match` arm now reads as the kernel's. The surviving asymmetry — elab passes the original scrutinee beside the forced value, for the call-by-name projection rule the kernel does not need — was promoted from an implicit fact to a stated one in `reduce_match`'s doc, because it is now the only thing a reader diffing the two must account for. Budget accounting was checked rather than assumed and is unchanged in both the warm and cold cases.
+- ~~**M3 — the universe solver.**~~ Done, both walks. `zonk`'s path-scoped cycle guard is now carried structurally: a metavariable is on the path exactly while its own call is open. `choose` keeps its exploration order, its budget decrement before the terminal check, and the revert-then-read ordering its old `Step::Resume` comment described as "the order the recursive form had." The `SOUNDNESS.md` satisfiability entry was re-read; the walk's shape is not part of what it argues, which concerns grounding heads in the base potential.
+- **M2 — the lowerer.** The printer half is done. What remains is `subterm`'s `Let` arm and `lower_let_region`, whose restoration deletes `PendingLet`, both loops, the inline tuple, and the `enter_scope`/`leave_scope` split. *Acceptance:* both migrated against `build_let` as the reference; a long straight-line `let` block still lowers.
+- **M4 — elaboration.** Last, because it is the largest, the most interleaved, and the only one carrying a mode beside the term. Deleting `ElabFrame` removes a hand-specialized *copy* of `elaborate_apply` restricted to a class — the same duplication shape that produced `infer.rs`'s drift — which already falls back to the real thing whenever its gate declines. `elaborate` returns to its pre-`79063bc1` shape plus `record_checked`, which must stay outside the cache because it fires on hits too. *Acceptance:* the frame stack and both work variables gone; a deep-spine fixture written first, since the corpus no longer supplies one.
 
 ## Acceptance, for every milestone
 
-**Diff the restored walk against the pre-defunctionalization original**, recoverable via `git show <commit>^:<path>` — the ten commits are recorded on the task list. The question is not whether the new code passes; it is whether the *machine* had silently changed a rule, as `infer.rs`'s had. Where it did, the restoration is a behavior change and says so in its commit message and in `SOUNDNESS.md`, rather than riding along inside a refactor.
+**Diff the restored walk against the pre-defunctionalization original**, recoverable via `git show <commit>^:<path>`. The question is not whether the new code passes; it is whether the *machine* had silently changed a rule, as `infer.rs`'s had. Where it did, the restoration is a behavior change and says so in its commit message and in `SOUNDNESS.md`, rather than riding along inside a refactor.
+
+| Walk | Introduced by | Path at that commit |
+| --- | --- | --- |
+| `curios-elab` reduction | `f2dcc251` | `curios-core/src/reduce.rs` |
+| `curios-elab` elaboration | `79063bc1` | `curios-core/src/elaborate.rs`, `elaborate/apply.rs` |
+| universe zonk | `c46571d5` | `curios-elab/src/universe_solver.rs` |
+| universe search | `434f32fb` | `curios-elab/src/universe_solver.rs` |
+| lowerer `let` sites | `a4b69386` | `curios-text/src/into_core/lowerer.rs` — but see the AST-flattening caveat above |
+| printer document | `c8491ba4`, `9fbdf1dd`, `13cda5a1` | `curios-base/src/monads/printer.rs`, `curios-core/src/print.rs` |
+| `collect_labels` | `a1ad4189` | `curios-core/src/print.rs` |
+| totality walk | `407d99c2` | `curios-cert/src/totality.rs` |
+
+Paths before `352b030c` are `curios-core/…`, which is today's `curios-elab`. This table replaces a task list that no longer exists.
 
 **A gate that passes is not evidence of equivalence here.** `infer.rs`'s drift survived every gate for two weeks, because the corpus does not reach the shape. State what the tests would have to contain to detect the difference, and record its absence when they do not contain it.
+
+Two fixtures were written because the answer was "nothing would detect it," and both were mutation-checked by removing the guard and confirming the abort:
+
+- `curios-elab`'s `reduce::tests::a_match_tower_reduces_without_overflowing` — 10,000 levels, each scrutinee the level below, sized far inside the step budget so it tests the stack rather than the budget.
+- `curios-core`'s `print::tests::a_deep_term_is_printed_without_overflowing` — a 100,000-link spine rendered through `Display`.
+
+M3 needed neither: `zonk`'s depth is the metavariable-solution chain the fixed prelude drives, and `choose`'s is the branching-clause depth `/std/Async/block_on` takes four hundred deep, so `curios-prelude`'s build script — which elaborates and certifies the whole prelude, and runs during `cargo clippy` — is the fixture.
 
 **Keep the trampolines.** `Step` and `Reduce::Continue`/`Break` are not part of the frame machines: they make the reduction *sequence* iterative, so a hundred-thousand-step fold costs zero native frames. Removing them would put one frame per reduction step, which is a different order of magnitude from one per structural link.
 
@@ -51,5 +108,12 @@ Ordered by payoff per unit of risk, and by what each leaves behind for the next.
 
 Both were recorded when the migration was first evaluated and neither is discharged. Neither blocks the milestones, and both bound what may be *claimed* about them.
 
-- **Every performance figure so far is debug.** The one measurement taken — defunctionalization costing up to 1.73× on `Term::warm_frees` — was a debug build over one synthetic string literal, with correctness unverified. Do not quote it as a reason to migrate; the reason to migrate is in the first section.
-- **Memory is unbounded by design and unmeasured in practice.** `recurse` grows rather than aborting, so a runaway type-level computation now runs until the *budget* stops it — a deep accumulator reached 233 MiB where it previously died. That trade is deliberate and stated at `curios-elab`'s `reduce`. What is not stated is a ceiling, because the budget bounds steps and not memory.
+- **Every performance figure so far is debug.** The one measurement taken — defunctionalization costing up to 1.73× on `Term::warm_frees` — was a debug build over one synthetic string literal, with correctness unverified. Do not quote it as a reason to migrate; the reason to migrate is in the first section. A restatement of it as "75% faster for 2% more memory" has already been observed in conversation, which is the decay this repository's measurement rule exists to prevent.
+- **Memory is unbounded by design and unmeasured in practice.** `recurse` grows rather than aborting, so a runaway type-level computation now runs until the *budget* stops it — a deep accumulator reached 233 MiB where it previously died. That trade is deliberate and stated at `curios-elab`'s `reduce`. What is not stated is a ceiling, because the budget bounds steps and not memory. Note that this figure is heap for *terms*, not stacker's segments, which are allocated only once a walk approaches its limit and are freed with the guard.
+
+## Documentation this campaign falsifies
+
+Not owned by any single milestone, so none of them will carry it. Fold it into the amendment rather than leaving it to be discovered.
+
+- `curios-elab/README.md` records, under a rejected alternative, that "Raising the stack instead was never on the table — recursive lowering working on the default stack is a contract, not a tuning knob." `recurse` is raising the stack. `CLAUDE.md` carries a matching invariant about the default test-thread stack.
+- `curios/src/tests/strings.rs:100` describes the per-byte derivation and the iterative elaboration that absorbed it. The derivation is gone and the elaboration is scheduled to be.
