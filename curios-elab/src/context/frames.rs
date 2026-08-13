@@ -364,6 +364,23 @@ impl Frames {
             .any(|f| f.keys().any(|k| k.head_key() == Some(head)))
     }
 
+    /// Every registered scrutinee key sharing `head`, with its value, innermost frame first — the escalation path's input, where a canonical comparison replaces the shallow lookup that missed.
+    ///
+    /// Filtered here rather than by the caller so a key under another head is never cloned: the store is keyed by written spelling, and reducing arguments cannot change an application's head, so such a key could not have become the candidate however it canonicalizes. Owned rather than borrowed because canonicalizing a key reduces, which needs the context mutably while this borrow would still be live.
+    pub(crate) fn scrutinee_entries(&self, head: HeadTag<'_>) -> Vec<(Term, Term)> {
+        if self.suppress_refinements {
+            return Vec::new();
+        }
+
+        self.refinement_scrutinees
+            .iter()
+            .rev()
+            .flat_map(|frame| frame.iter())
+            .filter(|(key, _)| key.head_key() == Some(head))
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect()
+    }
+
     /// The reduct of a canonical stuck scrutinee: its refinement value, unless suppressed (re-validation).
     pub(crate) fn scrutinee_reduct(&self, canonical: &Term) -> Option<&Term> {
         if self.suppress_refinements {

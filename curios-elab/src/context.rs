@@ -680,6 +680,10 @@ impl Context {
         self.frames.scrutinee_reduct(canonical)
     }
 
+    pub(crate) fn scrutinee_entries(&self, head: HeadTag<'_>) -> Vec<(Term, Term)> {
+        self.frames.scrutinee_entries(head)
+    }
+
     pub(crate) fn is_scrutinee_key(&self, canonical: &Term) -> bool {
         self.frames.is_scrutinee_key(canonical)
     }

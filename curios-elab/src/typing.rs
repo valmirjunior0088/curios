@@ -578,18 +578,14 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
             context.refine_projection(head.clone(), *index, value.clone());
         }
         _ => {
-            let canonical = super::canonical_scrutinee(context, head).map_err(|error| {
-                Error::from_reduce(error, || Error::reduce_exhausted(head.clone()))
-            })?;
+            // Registered on the *cheap* key: the scrutinee as written, with metas and universes normalized. Canonicalizing here is what used to make a guard cost its operand's evaluation before any use of the fact — see `shallow_scrutinee`. The reducer's probe escalates on a miss, so a spelling this does not collapse is still found, and found by reducing at the site that needs it rather than at every site that records one.
+            let canonical = super::shallow_scrutinee(context, head);
 
             // A concept-dispatched scrutinee (`a <= hi`) elaborates to the method projected out of the witness — `(?w).1(a, hi)` — which is not the shape the reducer probes: by then it has become the intrinsic normal form `NatLte(a, hi)`. Registering only the verbatim key leaves the arm unrefined, silently, while the equivalent `Nat/lte(a, hi)` spelling refines. Register the probed form alongside it so both spellings agree.
             if canonical.head_key().is_none()
                 && let Some(spined) = spine_whnf(context, head)?
             {
-                // Propagated, not swallowed: `canonical_scrutinee` is best-effort about arguments and returns only `Exhausted`, so discarding its error would discard a genuine exhaustion.
-                let resolved = super::canonical_scrutinee(context, &spined).map_err(|error| {
-                    Error::from_reduce(error, || Error::reduce_exhausted(head.clone()))
-                })?;
+                let resolved = super::shallow_scrutinee(context, &spined);
 
                 if resolved.head_key().is_some() && resolved != canonical {
                     context.refine_scrutinee(resolved, value.clone());

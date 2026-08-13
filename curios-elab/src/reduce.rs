@@ -167,7 +167,18 @@ pub(crate) fn reduce_forced(context: &mut Context, term: Term) -> Result<Term, R
     force_rec(context, reduced)
 }
 
-/// The canonical form of a (potential) scrutinee refinement key: the head kept verbatim — so the refined function (`classify`, `Nat/in_range`) is *not* unfolded and stays the key — with each argument reduced to WHNF. Storing and probing through one canonicalizer makes occurrences that differ only in argument spelling (`c` vs `Bin/at(cons(c,t),0,_)`, `lo` vs a projection that reduces to it) collapse to the same key. A non-application is its own canonical form.
+/// The *cheap* refinement key: metavariable solutions materialized and universe instances erased, with every argument left exactly as written.
+///
+/// [`canonical_scrutinee`] additionally reduces each argument, which is what collapses occurrences differing only in argument spelling — and what makes *recording* a refinement cost whatever its operands cost to evaluate. A guard over an expensive operand then pays for the very computation it was written to avoid, when the arm is entered and before any probe happens; `10 <= Bytes/len(built)` forces `built` to register a fact about it. Both sites therefore key on this form first and escalate to the canonical one only on a miss, which is a strict superset: every occurrence that matched before still matches, and the ones that used to spend the declaration's whole budget on the way in now match without reducing anything.
+///
+/// Zonking and universe erasure stay eager because they are cheap by construction — the walk returns at a cached `has_metavar` bit — and because the key is wrong without them for the reason each states.
+pub(crate) fn shallow_scrutinee(context: &Context, term: &Term) -> Term {
+    project_erased_universes(&zonk_solved_term_metas(context, term))
+}
+
+/// The canonical form of a (potential) scrutinee refinement key: the head kept verbatim — so the refined function (`classify`, `Nat/in_range`) is *not* unfolded and stays the key — with each argument reduced to WHNF. Probing through one canonicalizer makes occurrences that differ only in argument spelling (`c` vs `Bin/at(cons(c,t),0,_)`, `lo` vs a projection that reduces to it) collapse to the same key. A non-application is its own canonical form.
+///
+/// Reached from the escalation path alone, never from a store: [`shallow_scrutinee`] is what a key is recorded under, and this is what decides a probe the recorded spelling missed.
 ///
 /// Argument reduction is *best-effort*: an argument that cannot reduce at the type level (a runtime-only IO intrinsic like `is_ready`'s `/sys/Handle/poll` result, or an out-of-range access) is kept verbatim rather than forced. Such an argument was never going to differ in spelling — the only occurrence is the scrutinee itself, which matches the key raw — so keeping it raw both avoids forcing effects at elaboration and still matches. An `Exhausted` budget is the one error that propagates.
 pub(crate) fn canonical_scrutinee(context: &mut Context, term: &Term) -> Result<Term, ReduceError> {
@@ -493,20 +504,33 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
         context.spend()?;
 
         let mut step = 'step: {
-            // Rung B for stuck applications (convertibility-keyed). Gated cheaply — store non-empty, then a refined applied-head symbol — before canonicalizing the candidate's arguments and looking the key up.
+            // Rung B for stuck applications (convertibility-keyed). Gated cheaply — store non-empty, then a refined applied-head symbol — before keying the candidate and looking it up.
             if context.has_scrutinee_refinements()
                 && let Some(head) = term.head_key()
                 && context.scrutinee_head_refined(head)
             {
-                let canonical = canonical_scrutinee(context, &term)?;
+                let shallow = shallow_scrutinee(context, &term);
 
                 if context.refinements_suppressed() {
-                    // Withhold the value, but keep an application key neutral — as a `Var` key already is — so `solve_refinement_free`'s committed spelling stays a term the live refinement can fire on (the canonical form, never the unfolded body).
-                    if context.is_scrutinee_key(&canonical) {
-                        break 'step Reduce::Break(canonical);
+                    // Withhold the value, but keep an application key neutral — as a `Var` key already is — so `solve_refinement_free`'s committed spelling stays a term the live refinement can fire on (the registered form, never the unfolded body).
+                    if context.is_scrutinee_key(&shallow) {
+                        break 'step Reduce::Break(shallow);
                     }
-                } else if let Some(value) = context.scrutinee_reduct(&canonical) {
+                } else if let Some(value) = context.scrutinee_reduct(&shallow) {
                     break 'step Reduce::Continue(value.clone());
+                } else {
+                    // Escalate: the candidate and the registered key are spelled differently, so decide it by *convertible* arguments rather than written ones. Only here is anything reduced, and only against entries sharing this head — canonicalizing one under another head would spend the declaration's budget to learn nothing.
+                    let candidates = context.scrutinee_entries(head);
+
+                    if !candidates.is_empty() {
+                        let canonical = canonical_scrutinee(context, &term)?;
+
+                        for (key, value) in candidates {
+                            if canonical_scrutinee(context, &key)? == canonical {
+                                break 'step Reduce::Continue(value);
+                            }
+                        }
+                    }
                 }
             }
 
