@@ -643,6 +643,8 @@ fn cell_two_cells_are_distinct() {
 #[test]
 fn accumulation_loops_are_linear_by_construction() {
     // The rope representation's whole promise: a naive 100k-step packed-concatenation accumulation loop is O(n) with no optimizer recognition anywhere — each step is one node allocation, and the single read at the end forces once. The pre-rope representation copied the accumulator per step (Θ(n²), tens of minutes at this size); a regression fails on the timeout. The final slice + print also pins the force → memo → host-write path end to end.
+    //
+    // The head probe reads its bound off a *parameter*, which is what keeps this a runtime measurement. `Bytes/slice` states `10 <= len(b)`, so its subject stands in a type; against `built` that obligation is discharged by reducing `go(100000, x[])` — the compiler runs the very loop this test exists to time, and the timeout that detects a Θ(n²) regression then measures elaboration instead. Behind `head_of`, `b` is opaque, the guard refines it once and generically, and the call site passes an ordinary value.
     assert_eq!(
         run(r#"
         use /std/{Handle, Bytes, Nat, Str};
@@ -651,9 +653,10 @@ fn accumulation_loops_are_linear_by_construction() {
             | 0 => acc
             | k + 1; ih => go(k, x[..acc, ..Str/to_bytes("0123456789")])
             end;
+        let head_of(b : Bytes) -> Bytes =
+            match 10 <= Bytes/len(b) | true => Bytes/slice(b, 0, 10) | false => x[] end;
         let built = go(100000, x[]);
-        let head = Bytes/slice(built, 0, 10);
-        let _ = Handle/write(Handle/stdout, head)!;
+        let _ = Handle/write(Handle/stdout, head_of(built))!;
         let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Bytes/len(built))))!;
         /std/Io/pure(())
         "#),
