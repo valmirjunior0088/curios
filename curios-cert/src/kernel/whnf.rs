@@ -14,8 +14,8 @@ use {
     curios_base::recurse,
     curios_core::{
         Apply, Bound, Carrier, Cases, Field, FreeMonoid, Func, Layer, Let, Many, Match, Nat, Proj,
-        Rec, ReduceError, Reducer, Scope, Struct, Subterm, Term, Tuple, UniverseInst, Var, Variant,
-        instantiate_universe_levels_scoped, reduce_intrinsic,
+        Rec, RecGroup, ReduceError, Reducer, Scope, Struct, Subterm, Term, Tuple, UniverseInst,
+        Var, Variant, instantiate_universe_levels_scoped, reduce_intrinsic,
     },
     num_traits::ToPrimitive,
 };
@@ -401,7 +401,11 @@ pub(crate) fn unfold_rec(rec: Rec) -> Term {
 ///
 /// The main loop treats a `rec` as a normal form, which is what keeps a recursive definition from unfolding forever at every occurrence. An eliminator that actually needs the value calls this, which unfolds and re-reduces until it reaches one.
 ///
-/// An unfolding that lands on a stuck neutral is *discarded* and the folded spelling returned. That is what stops the unfold-and-restuck cycle: without it, a recursive function applied to a symbolic argument would grow one more copy of its own body at every demand and never reach a normal form. A non-productive group still spins until the budget runs out, exactly as a top-level `rec` does.
+/// An unfolding is kept when it achieved something, and there are two ways to have achieved something. A **head constructor** means an eliminator can absorb the result — a productive definition exposing `cons(x, f(k))` has made progress even though `f` is still named underneath. A reduct **carrying no member of the group** means the recursion is finished — `f(0, acc)` reducing to `acc` is an answer, and an answer is not less of one for being a variable. What is discarded is the remaining case: still neutral, and still naming the group. That is an unfolding that came back to where it started, and returning the folded spelling instead is what stops the unfold-and-restuck cycle — without it a recursive function on a symbolic argument grows one more copy of its own body at every demand and never reaches a normal form.
+///
+/// Reading the head alone cannot separate *stuck* from *finished*, since both are neutral; reading the occurrence alone cannot separate *restuck* from *productive*, since both name the group. The clause needs both, and the group it asks about is the one `folded` is a call on, because the cycle being ruled out is this term growing under repeated demand.
+///
+/// A non-productive group still spins until the budget runs out, exactly as a top-level `rec` does — every outcome here is idempotent, so this decides which reducts survive, never whether the walk stops.
 fn force(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
     let folded = term.clone();
     let mut term = term;
@@ -423,15 +427,42 @@ fn force(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
                 None => return Ok(folded),
             },
             other => {
-                return Ok(match other {
-                    Subterm::Match(_)
-                    | Subterm::Var(_)
-                    | Subterm::Metavar(_)
-                    | Subterm::Proj(_) => folded,
-                    value => value.into(),
+                let stuck = matches!(
+                    other,
+                    Subterm::Match(_) | Subterm::Var(_) | Subterm::Metavar(_) | Subterm::Proj(_)
+                );
+                let value: Term = other.into();
+
+                if !stuck {
+                    return Ok(value);
+                }
+
+                return Ok(match forced_group(kernel, &folded)? {
+                    Some(group) if value.mentions_rec_member(&group) => folded,
+                    _ => value,
                 });
             }
         }
+    }
+}
+
+/// The group `folded` denotes a call on, which is what [`force`] asks its occurrence question about.
+///
+/// Read off the term three ways because a folded call has three spellings: a member selection carries the group on the projection, a `rec` value carries it directly, and an application carries it on its head — the same place [`unfold_rec_apply`] reads it, reached again through the evaluation memo rather than by a fresh walk. A term that denotes no recursive call answers `None`, and nothing can restick in it.
+fn forced_group(kernel: &mut Kernel, folded: &Term) -> Result<Option<RecGroup>, ReduceError> {
+    if let Some((group, _)) = folded.as_rec_proj() {
+        return Ok(Some(group.clone()));
+    }
+
+    match &**folded {
+        Subterm::Rec(rec) => Ok(Some(rec.group.clone())),
+        Subterm::Apply(Apply { head, .. }) => {
+            let head = whnf(kernel, head.clone())?;
+            let head = expose_rec_tail(kernel, head)?;
+
+            Ok(head.as_rec_proj().map(|(group, _)| group.clone()))
+        }
+        _ => Ok(None),
     }
 }
 

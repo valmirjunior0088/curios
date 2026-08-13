@@ -166,6 +166,29 @@ impl Term {
         .is_break()
     }
 
+    /// Whether this term mentions a member of `group` — anywhere, at any depth.
+    ///
+    /// A member reference materializes as a `Rec` node carrying the whole group with a projecting tail, so this is a structural question about what a term *says*, not a judgment about what it means. That is why both reducers may share it while writing their own rules around it: like [`reduce_intrinsic`](crate::reduce_intrinsic), it cannot admit anything on its own — the rule that consults it decides, and there are deliberately two of those.
+    ///
+    /// Iterative and pointer-deduplicated, like [`Term::any_universe_meta`]: the terms this runs on are reducts, which may be data-shaped.
+    pub fn mentions_rec_member(&self, group: &RecGroup) -> bool {
+        let mut seen: HashSet<*const Node> = HashSet::new();
+        self.try_walk(
+            &mut seen,
+            |seen, term| {
+                if !seen.insert(Rc::as_ptr(&term.inner)) {
+                    return ControlFlow::Continue(Enter::Skip(()));
+                }
+                if term.as_rec_proj().is_some_and(|(found, _)| found == group) {
+                    return ControlFlow::Break(());
+                }
+                ControlFlow::Continue(Enter::Descend)
+            },
+            |_, _, _| (),
+        )
+        .is_break()
+    }
+
     /// Extend the two dependency sets in one explicit walk without rebuilding the term or warming its unrelated scalar caches. Declaration universe closure uses both sets together: direct level metas join the closure, while term metas lead to their result, telescope, and solved body in the context store. A metavariable's children are its spine entries, whose bare `Var`s carry nothing but dedup for free.
     pub fn collect_universe_dependencies(
         &self,

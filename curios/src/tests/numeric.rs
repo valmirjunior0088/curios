@@ -202,7 +202,6 @@ fn a_bound_over_a_recursion_returning_a_literal_discharges() {
 //
 // Ignored until that specification's M1 lands. It is the acceptance check: this compiling, with the control above still compiling, is what the rule change has to achieve.
 #[test]
-#[ignore = "blocked on 12_REC_UNFOLDING_DISCARD_SPEC.md M1: force_rec discards a Var-headed reduct"]
 fn a_bound_over_a_recursion_returning_a_parameter_discharges() {
     assert_eq!(
         run(r#"

@@ -6,10 +6,10 @@ use {
     curios_base::recurse,
     curios_core::{
         Apply, Bound, Carrier, Cases, Field, Free, FreeMonoid, Func, FuncType, Global, InductDecl,
-        InductType, Intrinsic, Layer, Let, Many, Match, Metavar, Nat, One, Proj, Rec, ReduceError,
-        Reducer, Scope, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType,
-        UniverseInst, Var, Variant, instantiate_universe_levels_scoped, project_erased_universes,
-        reduce_intrinsic,
+        InductType, Intrinsic, Layer, Let, Many, Match, Metavar, Nat, One, Proj, Rec, RecGroup,
+        ReduceError, Reducer, Scope, Struct, StructDecl, StructType, Subterm, Telescope, Term,
+        Tuple, TupleType, UniverseInst, Var, Variant, instantiate_universe_levels_scoped,
+        project_erased_universes, reduce_intrinsic,
     },
     num_traits::ToPrimitive,
 };
@@ -119,7 +119,11 @@ pub(crate) fn unfold_rec_apply(
 
 /// Force a `rec` group in WHNF position. The main loop treats a `Rec` node as a normal form, so an eliminator that demands its value unfolds it here and re-reduces, repeating if the opened tail is itself a `rec`. A non-productive group spins until the step budget runs out — exactly as a top-level `rec` does.
 ///
-/// The force either reaches a value some eliminator can absorb or returns the input unchanged: an unfolding that lands on a stuck neutral (a blocked match, variable, or projection) is discarded so the folded spelling — not an unfolded copy of the member body — stays the canonical normal form.
+/// The force either reaches a value some eliminator can absorb or returns the input unchanged. What it keeps is decided by whether the unfolding got anywhere, and there are two ways for it to have done so: a **head constructor** is progress by productivity, and a reduct **free of the group** is progress by termination. Only a reduct that is still neutral *and* still mentions the group is an unfolding that achieved nothing — the restuck case — and there the folded spelling stays the canonical normal form.
+///
+/// Testing the head alone, as this once did, conflates *neutral because stuck* with *neutral because that is the answer*: `go(0, acc)` reduces correctly to `acc` and a bare `Var` was thrown away, which made the base case of any lemma about an accumulator unprovable in decided form. Testing occurrence alone would conflate *restuck* with *productive* and discard `cons(x, go(k, …))`, which the fixed prelude reaches thousands of times.
+///
+/// The group is `folded`'s own, deliberately: what this protects is the idempotence of forcing *this* term, so the cycle to rule out is the reduct re-mentioning the group whose call was demanded. All three outcomes are idempotent — `force(force(t)) = force(t)` — so what this clause decides is completeness, not whether the reducer stops; the budget spent per iteration already does that.
 fn force_rec(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
     let folded = term.clone();
     let mut term = term;
@@ -143,15 +147,44 @@ fn force_rec(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
                 None => return Ok(folded),
             },
             other => {
-                return Ok(match other {
-                    Subterm::Match(_)
-                    | Subterm::Var(_)
-                    | Subterm::Metavar(_)
-                    | Subterm::Proj(_) => folded,
-                    value => value.into(),
+                let neutral = matches!(
+                    other,
+                    Subterm::Match(_) | Subterm::Var(_) | Subterm::Metavar(_) | Subterm::Proj(_)
+                );
+                let reduct: Term = other.into();
+
+                // A head was exposed, so the unfolding produced something an eliminator can absorb.
+                if !neutral {
+                    return Ok(reduct);
+                }
+
+                // Neutral: keep it only if the group is gone from it, and fall back to the folded spelling otherwise.
+                return Ok(match demanded_group(context, &folded)? {
+                    Some(group) if reduct.mentions_rec_member(&group) => folded,
+                    _ => reduct,
                 });
             }
         }
+    }
+}
+
+/// The group whose call `folded` is, for [`force_rec`]'s occurrence test.
+///
+/// A projection and a bare `rec` value carry it directly; an application carries it on its head, which is where `unfold_rec_apply` already looked — and looking again is a reduction-cache hit rather than a second traversal. `None` for a term that is not a recursive call at all, where nothing can restick and the reduct is kept.
+fn demanded_group(context: &mut Context, folded: &Term) -> Result<Option<RecGroup>, ReduceError> {
+    if let Some((group, _)) = folded.as_rec_proj() {
+        return Ok(Some(group.clone()));
+    }
+
+    match &**folded {
+        Subterm::Rec(rec) => Ok(Some(rec.group.clone())),
+        Subterm::Apply(Apply { head, .. }) => {
+            let head = reduce(context, head.clone())?;
+            let head = expose_rec_tail(context, head)?;
+
+            Ok(head.as_rec_proj().map(|(group, _)| group.clone()))
+        }
+        _ => Ok(None),
     }
 }
 
