@@ -2,7 +2,7 @@
 
 Nine walks in this workspace were rewritten from recursion into explicit frame machines, each to stop a *data*-shaped depth from reaching the native stack: a string literal's scan-state chain, a `Str` literal's per-byte UTF-8 derivation, a spine built by a loop. The motivation was real and is not in dispute. What it cost is the thing a checker can least afford to spend.
 
-`curios-base`'s `recurse` bracket now buys the same depth safety without it. The kernel's three walks were restored first — `convert.rs`, `infer.rs`, `whnf.rs`, at −242/+131 — and seven more have followed. This specification tracks what remains, records what the work has corrected about its own premises, and closes the one question that should *not* be answered by migrating.
+`curios-base`'s `recurse` bracket now buys the same depth safety without it. The kernel's three walks were restored first — `convert.rs`, `infer.rs`, `whnf.rs`, at −242/+131 — and eight more have followed. This specification tracks what remains, records what the work has corrected about its own premises, and closes the one question that should *not* be answered by migrating.
 
 ## Why this is a correctness argument and not a style one
 
@@ -35,7 +35,7 @@ Three tells, any of which is decisive: an element that mirrors a function's loca
 | kernel satisfiability | `curios-analysis/src/satisfy.rs`, `choose` | done, `eec7ec6c`, −53/+51 |
 | erased-module verification | `curios-ersd/src/verify.rs`, `Task` | done, `10f5ac17`, −147/+76 |
 | size-change totality | `curios-analysis/src/totality.rs`, `Op` | done, −336/+170 |
-| `curios-text` lowering | `into_core/lowerer.rs`, two `let` sites | **pending** — M2 |
+| `curios-text` lowering | `into_core/lowerer.rs`, two `let` sites | done, −74/+40 |
 | `curios-elab` elaboration | `elaborate.rs`, `Vec<ElabFrame>` + `work_term`/`work_mode` | **pending** — M4 |
 
 ## What this work corrected about its own premises
@@ -44,7 +44,9 @@ Three tells, any of which is decisive: an element that mirrors a function's loca
 
 **The universe solver held two walks, not three sites.** `zonk` and `choose`. The other `while let Some` loops in that file — `Potential::restore_from`, `connected_metas`, the solve worklist — are genuine graph and fixpoint algorithms that were never recursion.
 
-**The lowerer's two sites are its `let` blocks**, and the literal acceptance below cannot be run on them: the loop landed in `a4b69386`, and `1dc35095` then flattened the AST, so the pre-defunctionalization original lowers a different tree. `build_let`, in the same file, is a live worked reference instead — it does the identical step by recursion through `bound`, for the first binding of every block whose remaining bindings go through the machine.
+**The lowerer's two sites are its `let` blocks**, and the literal acceptance below could not be run on them: the loop landed in `a4b69386`, and `1dc35095` then flattened the AST, so the pre-defunctionalization original lowers a different tree. `build_let`, in the same file, was the live worked reference instead — it does the identical step by recursion through `bound`, for the first binding of every block whose remaining bindings went through the machine. Both are restored against it, and `enter_scope`/`leave_scope` folded back into `bound`, the doc justifying their separation having named the loop that needed them.
+
+**The near-miss there is worth more than the migration.** The two sites lower a binding's halves in *opposite* orders — `lower_let_region` value-then-type, `subterm`'s arm type-then-value — and both `term` and `collect` mint metavariables and fresh binders. They read as duplicate code inviting a merge, and merging them would renumber minted identities across the corpus, surfacing as changed names in diagnostics rather than as a failed assertion. Each order is preserved and `lower_let` now says why, so the next reader who notices the near-duplication does not collapse it.
 
 **The lowerer is otherwise unguarded.** It makes 178 recursive self-calls over surface depth and contains no `recurse` at all; exactly one node kind was defunctionalized. So the machine is a local exception inside a function that recurses freely, not a defence of a walk that is careful elsewhere. Whether `Lowerer::term`/`subterm` should be guarded is a real question this raises and does not settle.
 
@@ -88,7 +90,7 @@ Against that, the cost is the widest blast radius remaining: the kernel's erasur
 
 - ~~**M1 — `curios-elab`'s reducer.**~~ Done. `PendingMatch` gone; the `Match` arm now reads as the kernel's. The surviving asymmetry — elab passes the original scrutinee beside the forced value, for the call-by-name projection rule the kernel does not need — was promoted from an implicit fact to a stated one in `reduce_match`'s doc, because it is now the only thing a reader diffing the two must account for. Budget accounting was checked rather than assumed and is unchanged in both the warm and cold cases.
 - ~~**M3 — the universe solver.**~~ Done, both walks. `zonk`'s path-scoped cycle guard is now carried structurally: a metavariable is on the path exactly while its own call is open. `choose` keeps its exploration order, its budget decrement before the terminal check, and the revert-then-read ordering its old `Step::Resume` comment described as "the order the recursive form had." The `SOUNDNESS.md` satisfiability entry was re-read; the walk's shape is not part of what it argues, which concerns grounding heads in the base potential.
-- **M2 — the lowerer.** The printer half is done. What remains is `subterm`'s `Let` arm and `lower_let_region`, whose restoration deletes `PendingLet`, both loops, the inline tuple, and the `enter_scope`/`leave_scope` split. *Acceptance:* both migrated against `build_let` as the reference; a long straight-line `let` block still lowers.
+- ~~**M2 — the lowerer.**~~ Done, both halves. The guard sits on the two recursions the change introduced, not on `Lowerer::term`/`subterm`, so the crate's other 178 recursive self-calls over surface depth stay unguarded exactly as they were — the open question above, deliberately not widened into here.
 - **M4 — elaboration.** Last, because it is the largest, the most interleaved, and the only one carrying a mode beside the term. Deleting `ElabFrame` removes a hand-specialized *copy* of `elaborate_apply` restricted to a class — the same duplication shape that produced `infer.rs`'s drift — which already falls back to the real thing whenever its gate declines. `elaborate` returns to its pre-`79063bc1` shape plus `record_checked`, which must stay outside the cache because it fires on hits too. *Acceptance:* the frame stack and both work variables gone; a deep-spine fixture written first, since the corpus no longer supplies one.
 
 ## Acceptance, for every milestone
