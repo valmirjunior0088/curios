@@ -177,7 +177,7 @@ fn compile_raw(source: &str) -> Module {
 }
 
 /// The raw module's WAT text. Not digit-normalized: literal constants and exact token counts are load-bearing here.
-fn wat(source: &str) -> String {
+pub(super) fn wat(source: &str) -> String {
     compile_raw(source).to_string()
 }
 
@@ -186,7 +186,7 @@ fn wat(source: &str) -> String {
 /// Every program's tail is a description, and a description erases to a zero-argument closure — so an effect boundary allocates a closure and forces it through an indirect call no matter how the *user's* code is written. Those carry the `$io/…` hint their thunk was minted with (`io/pure`, `io/bind`, `io/write`, …), which is what lets a claim about user code stay a claim about user code. A test that dropped the distinction would either fail on every program or assert nothing.
 ///
 /// **The separation is by what the line names, and that is why this is for allocations and nothing else.** An allocation names its own definition, so `struct.new $clsr/451$io/bind` carries the hint even though the description is built *inside* user code — which is exactly where it is built, so filtering by enclosing function would discard the distinction this exists to make. An indirect call names the arity-keyed supertype instead: `call_ref $clsr/0` identifies no callee, and a needle like that would silently keep every `Io` force while looking like it had excluded them. Those claims belong to [`user_functions_with`], where the enclosing function is the only thing left to separate on. The assertion below is what keeps the choice from being made by accident.
-fn user_allocations<'a>(wat: &'a str, needle: &str) -> Vec<&'a str> {
+pub(super) fn user_allocations<'a>(wat: &'a str, needle: &str) -> Vec<&'a str> {
     assert!(
         needle.starts_with("struct.new") || needle.starts_with("array.new"),
         "`{needle}` names no definition of its own, so the `$io/` hint cannot separate carrier from user code — use `user_functions_with`",
