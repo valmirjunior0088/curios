@@ -1,7 +1,7 @@
 //! The numeric envelope gates: every constant folder computes in exact `u32`/`i32` (the numeric law), and the i31 backend boundary appears only as a trap in emitted Wasm — an overflowing computation traps, and a folded literal the carrier cannot box traps at its materialization point. The differential half runs each scalar expression twice — fully constant (folded at compile time) and with a runtime-zero perturbation (executed by the emitted Wasm) — and demands identical output, pinning the folders and the backend to one semantics.
 
 use {
-    super::{run, run_text},
+    super::{run, run_text, typecheck_within},
     curios_runtime::MockHost,
 };
 
@@ -181,4 +181,80 @@ fn a_literal_divisor_sees_through_a_symbolic_dividend() {
         "#),
         b"ok"
     );
+}
+
+// The control half of the minimal pair in `documentation/roadmap/compiler/12_REC_UNFOLDING_DISCARD_SPEC.md`. `f`'s base arm returns a literal, so `f(0, n)` reduces to an `Intrinsic`-headed term, `force_rec` keeps that reduct, and the decided `Nat/Le` discharges by reduction. Identical in every other respect to the refused half below, which differs only in what the base arm returns.
+#[test]
+fn a_bound_over_a_recursion_returning_a_literal_discharges() {
+    assert_eq!(
+        run(r#"
+        use /std/{Handle, Str, Nat};
+        rec f(k : Nat, n : Nat) -> Nat =
+            match k | 0 => 5 | j + 1; ih => f(j, n) end;
+        let bound(n : Nat) -> Nat/Le(5, f(0, n)) = Nat/Le/refl(5);
+        /std/print("ok")
+        "#),
+        b"ok"
+    );
+}
+
+// The reproducer for that specification, rebuilt: the same shape with a base arm returning a *parameter*. `f(0, n)` reduces correctly to `n`, and `force_rec` discards that reduct for being `Var`-headed — its head-shape test cannot tell a stuck form from an answer that happens to be a variable — so the bound is left standing as `Nat/Le(n, f(0, n))` and refused. Returning one's own parameter is the ordinary shape of an accumulator, which is why this is easy to hit.
+//
+// Ignored until that specification's M1 lands. It is the acceptance check: this compiling, with the control above still compiling, is what the rule change has to achieve.
+#[test]
+#[ignore = "blocked on 12_REC_UNFOLDING_DISCARD_SPEC.md M1: force_rec discards a Var-headed reduct"]
+fn a_bound_over_a_recursion_returning_a_parameter_discharges() {
+    assert_eq!(
+        run(r#"
+        use /std/{Handle, Str, Nat};
+        rec f(k : Nat, n : Nat) -> Nat =
+            match k | 0 => n | j + 1; ih => f(j, n) end;
+        let bound(n : Nat) -> Nat/Le(n, f(0, n)) = Nat/Le/refl(n);
+        /std/print("ok")
+        "#),
+        b"ok"
+    );
+}
+
+// A bound whose subject is a *computed* value is discharged by evaluating that value, at elaboration time. `Bytes/slice` states `10 <= Bytes/len(b)`, so `Bytes/slice(built, 0, 10)` puts `go(100000, x[])` in a type and the compiler runs the loop — which the default budget does not stop in any useful sense, because the budget bounds steps while the memory a reduction allocates is bounded by nothing. Under the default budget this exhausts the machine rather than refusing; the fixture therefore states a small budget and pins the refusal.
+//
+// The pair below is what isolates the cause. Both programs build the same value; they differ only in whether the bound's subject is that value or a parameter standing for it.
+#[test]
+fn a_bound_on_a_computed_subject_evaluates_it() {
+    let error = typecheck_within(
+        50_000,
+        r#"
+        use /std/{Handle, Bytes, Nat, Str};
+        rec go(i : Nat, acc : Bytes) -> Bytes =
+            match i | 0 => acc | k + 1; ih => go(k, x[..acc, ..Str/to_bytes("0123456789")]) end;
+        let built = go(100000, x[]);
+        let head = Bytes/slice(built, 0, 10);
+        /std/print("unreachable")
+        "#,
+    )
+    .expect_err("the bound's subject is evaluated, and cannot finish inside this budget");
+
+    assert!(
+        error.contains("ran out of steps"),
+        "expected a spent-budget refusal, got: {error}"
+    );
+}
+
+// The control: the same program with the bound read off a parameter. `b` is opaque behind `head_of`, the guard refines it once and generically, and nothing computes — so the identical budget that the spelling above cannot finish inside is ample here. This is the workaround `tests::runtime`'s accumulation measurement relies on, pinned as a fact rather than left as an idiom.
+#[test]
+fn a_bound_behind_a_parameter_evaluates_nothing() {
+    typecheck_within(
+        50_000,
+        r#"
+        use /std/{Handle, Bytes, Nat, Str};
+        rec go(i : Nat, acc : Bytes) -> Bytes =
+            match i | 0 => acc | k + 1; ih => go(k, x[..acc, ..Str/to_bytes("0123456789")]) end;
+        let head_of(b : Bytes) -> Bytes =
+            match 10 <= Bytes/len(b) | true => Bytes/slice(b, 0, 10) | false => x[] end;
+        let built = go(100000, x[]);
+        let head = head_of(built);
+        /std/print("ok")
+        "#,
+    )
+    .expect("a bound over an opaque parameter reduces nothing");
 }

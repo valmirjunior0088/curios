@@ -71,11 +71,18 @@ fn run(source: &str) -> Vec<u8> {
 
 /// Compile-only, for the programs whose point is that they are refused.
 fn typecheck(source: &str) -> Result<(), String> {
+    typecheck_within(DEFAULT_STEP_BUDGET, source)
+}
+
+/// [`typecheck`] under a stated step budget, for a program whose point is that elaboration *evaluates* something.
+///
+/// The budget is the only bound reduction has — it counts steps, and the memory a reduction allocates as it goes is bounded by nothing — so a fixture that would otherwise run a program's whole computation at the type level states a small budget and asserts the refusal instead. Sizing it is the fixture's job: large enough that the rest of the program elaborates, small enough that the evaluation under test cannot finish.
+fn typecheck_within(budget: u64, source: &str) -> Result<(), String> {
     let entrypoint = source
         .parse::<Entrypoint>()
         .expect("failed to parse source");
 
-    compile_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none(), |_| {})
+    compile_with_prelude(budget, &entrypoint, RootSource::none(), |_| {})
         .map(|_| ())
         .map_err(|error| error.to_string())
 }
