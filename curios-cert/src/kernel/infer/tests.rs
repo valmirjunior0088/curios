@@ -951,3 +951,71 @@ fn the_head_rules_still_decide_a_bare_sort() {
         Ok(true),
     );
 }
+
+/// A dependent Σ, for the two fixtures below: `(t : Type, x : t)`, whose second entry's type *is* its first component.
+///
+/// The dependency is the whole point. Inferring the components of a literal independently yields `(Type, Nat)`, a telescope binding nothing, and no conversion relates that to this one — so a rule that reaches this expectation only through inference cannot accept any inhabitant of it.
+fn dependent_pair_type() -> Term {
+    let t = binder(40, "t");
+    let x = binder(41, "x");
+
+    Term::tuple_type([(t.clone(), Term::type_ground()), (x, Term::free_var(&t))])
+}
+
+/// An argument reaches the *checked* rules, not merely inference and subsumption.
+///
+/// `check` dispatches let-descent, Π-introduction and Σ-introduction before falling through to infer-then-subsume, and an argument position must reach them. For a period it did not: typing drove its child obligations through an explicit worklist that called the node rule and `subsumes` directly, and every argument, constructor payload and record field lost all three rules. Nothing in the prelude or the corpus reached a shape that shows it, so the whole gate passed for two weeks — which is why this fixture is written against the *rule* rather than against a program.
+///
+/// Mutation-checked: replacing the `check` call at the application arm of `infer_within` with an inference and a `subsumes` refuses this term with a mismatch between `(Type, Nat)` and the dependent pair.
+#[test]
+fn a_dependent_tuple_in_argument_position_reaches_the_sigma_rule() {
+    let mut kernel = kernel();
+
+    let f = binder(42, "f");
+    kernel.assume(
+        &f,
+        &Term::func_type(
+            [(binder(43, "p"), dependent_pair_type())],
+            Term::tuple_type_unit(),
+        ),
+    );
+
+    // `f((Nat, 7))`: well-typed only by opening the telescope at the first component, which is what the Σ rule does and inference cannot.
+    let call = Term::apply(Term::free_var(&f), [Term::tuple([nat_type(), nat(7)])]);
+
+    assert_eq!(infer(&mut kernel, &call), Ok(Term::tuple_type_unit()));
+}
+
+/// The Π half of the rule above: a lambda in argument position is checked against its expected function type, so its *body* keeps the expectation.
+///
+/// Routing the body through `check` is what lets it reach the Σ rule with that expectation intact; inferring the lambda instead manufactures the non-dependent codomain `(Type, Nat)` first, and the mismatch surfaces at the codomain rather than at the body. The two rules compose here exactly as they do in `check`.
+///
+/// Mutation-checked with the fixture above, and by the same edit.
+#[test]
+fn a_lambda_in_argument_position_reaches_the_pi_rule() {
+    let mut kernel = kernel();
+
+    let g = binder(44, "g");
+    kernel.assume(
+        &g,
+        &Term::func_type(
+            [(
+                binder(45, "k"),
+                Term::func_type([(binder(46, "n"), nat_type())], dependent_pair_type()),
+            )],
+            Term::tuple_type_unit(),
+        ),
+    );
+
+    // `g((n) => (Nat, n))`: the body is a dependent pair, and only the checked route hands it the expectation that makes it one.
+    let n = binder(47, "n");
+    let call = Term::apply(
+        Term::free_var(&g),
+        [Term::func(
+            [(n.clone(), nat_type())],
+            Term::tuple([nat_type(), Term::free_var(&n)]),
+        )],
+    );
+
+    assert_eq!(infer(&mut kernel, &call), Ok(Term::tuple_type_unit()));
+}
