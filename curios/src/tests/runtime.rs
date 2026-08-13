@@ -648,7 +648,7 @@ fn accumulation_loops_are_linear_by_construction() {
     //
     // Behind `head_of` the subject is a parameter: `b` is opaque, the guard refines it once and generically, and the call site passes an ordinary value, so the bound is discharged against something with no computation behind it. That keeps this a runtime measurement rather than an elaboration one, and it is why the direct spelling is not merely slower here.
     //
-    // The underlying defect is `documentation/roadmap/compiler/12_REC_UNFOLDING_DISCARD_SPEC.md`, whose minimal pair is fixtured in `tests::numeric`. A user reaching for `Bytes/slice` on a computed value hits this by writing the obvious thing, which is the reason it is described here rather than left as an idiom to copy.
+    // The pair that isolates this is fixtured in `tests::numeric`, and `documentation/DESIGN.md`'s bound entry states the design it follows from. A user reaching for `Bytes/slice` on a computed value hits this by writing the obvious thing, which is the reason it is described here rather than left as an idiom to copy.
     assert_eq!(
         run(r#"
         use /std/{Handle, Bytes, Nat, Str};
