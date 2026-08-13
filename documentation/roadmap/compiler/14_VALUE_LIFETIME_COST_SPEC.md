@@ -22,13 +22,13 @@ In particular, Curios does not promise that the induction and explicit-recursion
 
 ## Evidence
 
-The string-walk campaign left three heap objects in the per-character path of `/std/Str/fold`, and no two of them are removed by the same mechanism.
+The string-walk campaign left four aggregate allocations in the per-character path of `/std/Str/fold`, spread across three source-level values and four optimizer obligations.
 
-The suffix view is produced by `match b | x[h, ..t]`. The `{A, Nat}` accumulator carries the result and the partial codepoint. The `Scan` state is destructured out of the loop's own parameter and rebuilt field by field to be handed to `step`.
+The suffix view is produced by `match b | x[h, ..t]`. The `{A, Nat}` accumulator carries the result and the partial codepoint. One `Scan` is constructed as the result of `step`, and another is rebuilt field by field from the loop's own parameter solely to be handed back to `step`.
 
-The third was missed while the first two were being counted, and how it was missed is worth keeping: the instrument reported the scan as *work* — a call to `step`, then `classify` — and an allocation handed **to** a call is not where a count of allocation sites looks.
+The argument reconstruction was missed while the other sites were being counted, and how it was missed is worth keeping: the instrument reported the scan as *work* — a call to `step`, then `classify` — and an allocation handed **to** a call is not where a count of allocation sites looks. The existing ladder instrument counts only allocations emitted inside `/std/Str/fold`, so it also cannot by itself attribute the `Scan` construction inside `/syn/Str/step`.
 
-None of the three is confined to the iteration that constructs it: each crosses the loop's own edge, so the region is the loop and its backedges rather than one lexical iteration.
+None of the four obligations is confined to the lexical expression that constructs it: each value crosses a call, continuation edge or loop backedge, so the relevant region is compiler-controlled control flow rather than one lexical iteration.
 
 `go` is not a function by the time the optimizer sees it. It has exactly one external call site and its recursion is a tail call, so `contify_calls` turns it into a continuation, and the accumulator arrives as a continuation parameter while the scan state is an argument to a known call. That difference is not incidental to the spelling — it is what decides which capability below removes which object.
 
@@ -44,17 +44,19 @@ This specification concerns the middle tier, where the value is used but no visi
 
 The shared demand lattice already distinguishes projection-only use from opaque use, but passing a value as an argument is deliberately opaque today; propagating demand through the callee parameter is the required interprocedural strengthening.
 
-**That strengthening pays before any rewrite is written.** `/syn/Str/step` returns a `Scan` whose every field the loop projects, but its result is passed onward as an argument and therefore reads as `Opaque`, which pins its component to the tuple protocol. Under a demand that defers to the receiving parameter the same component becomes `Fields(4)`, and `split_returns` — which already exists and already coordinates tail-call classes — becomes eligible on it. The fact is a shipping capability, not only a prerequisite.
+**That strengthening pays before any new rewrite is written, but initially relocates an allocation rather than removing it.** `/syn/Str/step` returns a `Scan` whose every field the loop projects, but its result is passed onward as an argument and therefore reads as `Opaque`, which pins its component to the tuple protocol. Under a demand that defers to the receiving parameter the same component becomes `Fields(4)`, and `split_returns` — which already exists and already coordinates tail-call classes — becomes eligible on it. The callee can then return four fields without constructing the `Scan`, while the current caller resume reconstructs the tuple before entering its continuation; continuation scalar replacement removes that reconstruction in M2. Interprocedural demand is therefore a shipping capability and a prerequisite, not by itself the completed allocation removal.
 
 The return protocol already coordinates multi-value results over tail-call-connected function components, and call-pattern specialization already uses worker/wrapper-shaped clones that thread dynamic tuple fields through parameters.
 
-**Specialization already matches the scan-state reconstruction and declines it, on a budget rather than on a rule.** The rebuilt `Scan` carries a literal tag, `step` deconstructs the parameter it lands in, and every other condition holds; the callee's extent is 37 live nodes against a `BRANCH_SPECIALIZATION_GROWTH_LIMIT` of 24. That refusal is correct for the mechanism doing the asking — SpecConstr must duplicate the callee once per tag to thread its fields — and it is the clearest argument that a distinct mechanism is warranted, because rewriting the signature threads the same fields while cloning nothing. A budget that declines a per-character allocation is evidence about the *mechanism*, not about the candidate.
+**Specialization already matches the scan-state reconstruction and declines it, on a budget rather than on a rule.** The rebuilt `Scan` carries a literal tag, `step` deconstructs the parameter it lands in, and every other condition holds; the callee exceeds the current `BRANCH_SPECIALIZATION_GROWTH_LIMIT`. That refusal is correct for the mechanism doing the asking — SpecConstr must duplicate the callee once per tag to thread its fields — and it is the clearest argument that a distinct mechanism is warranted, because rewriting the signature threads the same fields while cloning nothing. The exact extent and budget comparison belong beside the M0 probe that reproduces them. A budget that declines a per-character allocation is evidence about the *mechanism*, not about the candidate.
 
 `represent.rs` decides raw representation for locals only, correctly refusing unilateral decisions that cross a signature; this work must coordinate every rewritten caller and callee or retain a wrapper speaking the original boxed ABI.
 
 **Raw storage for a split field is therefore two capabilities, not one.** A continuation parameter offers `Open` and can settle on a raw carrier the moment a use demands one, so splitting a tuple through continuations delivers raw fields for free. A function parameter offers `Never` — it arrives through a signature that is uniformly `anyref` — so a split field in a *worker* signature stays boxed until something decides that signature's layout, which is the decision `represent.rs` exists to refuse. Splitting a product and unboxing its fields must not be quoted as one outcome.
 
-Curios therefore has several purpose-specific notions of demand, function escape and boundary crossing, but no general aggregate-flow fact that follows a construction through continuation and known-function parameters.
+The demand lattice is a backward fact about how a received value is used. Deferring argument demand to the receiving parameter supplies that fact across calls, but it does not prove the forward fact that every incoming edge carries the same exact construction or that a merged flow has an exclusive origin.
+
+Curios therefore has several purpose-specific notions of demand, function escape and boundary crossing, but no general aggregate-origin fact that follows a construction through continuation and known-function parameters. Interprocedural use demand and forward origin/exclusivity flow are separate analyses with separate focused tests, even if the eventual rewrite consumes them together.
 
 ## Binaryen is a control, not the owner
 
@@ -74,9 +76,11 @@ The Curios pass must therefore prove its value on raw pre-Binaryen output; Binar
 
 [OCaml Flambda's unboxing of specialized arguments](https://ocaml.org/manual/4.04/flambda.html#s%3Aflambda-unboxing-specialised-args) supplies the recursive policy: propagate field arguments through a recursive group, retain wrappers at other entries, bound signature growth, and refuse a transformation that would inhibit tail calls.
 
-[Lean 4's functional-but-in-place runtime](https://lean-lang.org/papers/lean4.pdf) solves a neighboring problem by reusing uniquely owned objects under exact reference counting; Curios does not adopt that mechanism here because tracing Wasm GC provides neither the ownership fact nor a dying object to reuse for every virtual value.
+[Lean's compiler IR](https://lean-lang.org/doc/api/Lean/Compiler/IR/Basic.html) supplies the closest proof-assistant precedent for small aggregate results: linearly consumed `Option`, `Prod` and `Except` values may use small unboxed struct or union results instead of heap objects, which supports pairing Curios's existing multi-result protocol with use-sensitive aggregate elimination.
 
-[Agda's GHC backend](https://agda.readthedocs.io/en/latest/tools/compilers.html) and [Rocq's extraction to OCaml, Haskell and Scheme](https://rocq-prover.org/doc/V8.16.0/refman/addendum/extraction.html) delegate this class of runtime representation optimization to mature functional compilers, so their precedent reinforces the GHC and OCaml techniques rather than supplying a theorem-prover-specific replacement.
+[Lean's reference-counting reset/reuse](https://lean-lang.org/doc/reference/latest/Run-Time-Code/Reference-Counting/) solves a neighboring problem by reusing uniquely owned objects under exact reference counting; Curios does not adopt that mechanism here because tracing Wasm GC provides neither the ownership fact nor a dying object to reuse for every virtual value.
+
+[Agda's GHC backend](https://agda.readthedocs.io/en/latest/tools/compilers.html) and [Rocq's extraction to OCaml, Haskell and Scheme](https://rocq-prover.org/doc/V9.1.0/refman/addendum/extraction.html) delegate this class of runtime representation optimization to mature functional compilers, so their precedent reinforces the GHC and OCaml techniques rather than supplying a theorem-prover-specific replacement.
 
 ## Common model: virtual values and materialization
 
@@ -134,7 +138,7 @@ If the function escapes or retains callers that need the boxed ABI, keep a wrapp
 
 Opaque recursive calls, indirect calls and host-visible functions remain on the boxed interface.
 
-The `/std/Str/fold` scan state is this capability's acceptance case. The `cont` arm projects `rem`, `lo` and `hi` out of the loop's parameter and rebuilds the four-field `Scan` solely to pass it into `step`, which deconstructs it again — a reconstruction that exists because the two sides agree on an object rather than on fields. It must disappear from the recursive path, and it must disappear by rewriting one signature rather than by duplicating a 37-node callee once per tag, which is what the existing specializer would have to do and correctly declines to.
+The `/std/Str/fold` scan state is this capability's acceptance case. The `cont` arm projects `rem`, `lo` and `hi` out of the loop's parameter and rebuilds the four-field `Scan` solely to pass it into `step`, which deconstructs it again — a reconstruction that exists because the two sides agree on an object rather than on fields. It must disappear from the recursive path, and it must disappear by rewriting one signature rather than by duplicating the over-budget callee once per tag, which is what the existing specializer would have to do and correctly declines to.
 
 Its fields stay boxed at the worker boundary unless a separate decision widens what a signature may carry, per *Existing substrate* above; that limit is a property of this capability and belongs in the tests, not a defect of the rewrite.
 
@@ -146,19 +150,21 @@ Product scalar replacement may expose constructions or projection-only demands t
 
 ## Rope-window virtualization
 
-Rope slices share the virtual-value cost contract but are not tuple constructions and must be implemented as a separate representation-aware capability after product scalar replacement.
+Rope slices share the virtual-value cost contract but are not tuple constructions and must be implemented as a separate representation-aware capability on the virtual-value framework established by product scalar replacement.
 
 The emitted slice helper eagerly checks bounds, returns a fresh empty leaf for an empty window, aliases the input for a whole window, collapses a view of a view, forces and memoizes an uncached base, and otherwise allocates a physical view whose fields are tag, length, base and offset.
 
 Only physical materialization may disappear; the bounds trap must remain at the original evaluation point, and base forcing and memoization must retain their order and effect.
 
-The optimizer-facing form must therefore separate window preparation from physical materialization.
+The optimizer-facing form must therefore separate window preparation from physical materialization and retain the representation distinction the helper currently makes.
 
-Preparation produces a stable virtual base, offset and length after performing every eager semantic obligation of the slice.
+Preparation produces one of `Empty`, `Whole(original)` or `Proper { base, offset, length }` after performing every eager semantic obligation of the slice. A universal `(base, offset, length)` triple is insufficient: the empty case has no required base, the whole case must be able to materialize by returning the original reference without forcing it, and only the proper case denotes a physical view.
+
+Represent preparation as a dedicated non-allocating CPS operation with one successor for each descriptor case, not as an ordinary tuple that recreates the allocation being removed. The operation owns the eager bounds check and any forcing or memoization required to establish a proper window; its successors receive the stable payload needed by consumers and by exact later materialization.
 
 `len`, `get` and further `slice` consumers operate on those fields, with further slices composing offsets and performing their own bounds check against the virtual length.
 
-**What this removes is a call as well as an allocation**, and framing it as one object per character undersells it. The window is built by the shared slice helper, so virtualizing it costs neither the `struct.new` nor the `call` that produced it, and a read through a prepared triple reaches the base's flat payload instead of re-dispatching on a tag. A walk that consumes its own suffixes stops being a chain of views and becomes an index into one payload. That is the larger claim, and the measurement gate must be allowed to hold it to that rather than to an allocation count.
+**What this removes is a call as well as an allocation**, and framing it as one object per character undersells it. The window is built by the shared slice helper, so virtualizing it costs neither the `struct.new` nor the `call` that produced it, and a read through a prepared proper window reaches the base's flat payload instead of re-dispatching on a tag. The runtime already collapses a view of a view; a walk that consumes its own suffixes therefore stops creating a succession of allocated collapsed views and repeatedly paying helper-call and tag-dispatch cost, and becomes an index into one payload. That is the larger claim, and the measurement gate must be allowed to hold it to that rather than to an allocation count.
 
 An opaque consumer materializes the same representation choice that the existing helper would provide for the corresponding empty, whole or proper window case.
 
@@ -172,37 +178,47 @@ The first milestone is a corpus survey over optimized CPS that classifies candid
 
 The survey must report which candidates continuation-only splitting reaches, which additionally require known-function workers, and which remain blocked after both.
 
-The string ladder must attribute the accumulator tuple and suffix view separately using an instrument or isolated transformation for each, rather than deriving their shares from the number of operations in the loop.
+The string ladder must attribute the returned `Scan`, caller-side return reconstruction, accumulator tuple, scan argument reconstruction and suffix view using four isolated mechanisms: one probe may track the returned `Scan` as its construction moves from callee to caller, while the other three each require their own instrument or isolated transformation. Their shares must not be inferred from the number of operations in the loop or from a count scoped only to the emitted fold body.
 
-Raw pre-Binaryen and optimized native artifacts must be compared so the work distinguishes an upstream optimization unlock from an allocation Binaryen already removes, and the raw browser path must remain represented in the acceptance fixtures.
+Raw pre-Binaryen and optimized native artifacts must be compared so the work distinguishes an upstream optimization unlock from an allocation Binaryen already removes. M0 must also establish an automated browser execution smoke fixture for a raw compiler-produced module, because building `curios-web` alone does not demonstrate that the browser accepts or executes the result.
 
 Any field-count, signature-growth or clone budget must be selected from that survey and recorded beside the test or instrument that justifies it.
 
-Evidence that would stop the campaign is a survey showing that eligible allocations are rare outside the motivating library code, or isolated measurements showing that both motivating allocations account for too little of the remaining cost to justify signature and IR complexity.
+Evidence that would stop the campaign is a survey showing that eligible allocations are rare outside the motivating library code, or isolated measurements showing that the four motivating allocation obligations and the suffix helper cost account for too little of the remaining cost to justify signature and IR complexity.
 
 ## Milestones
 
-**These are a fork, not a chain.** M1 establishes the one fact everything else reads, and M2, M4 and the existing return protocol each consume it independently; only M3 sits downstream of another capability. Ordering them M1 → M2 → M3 → M4 would be a schedule rather than a dependency, and M0 is what should choose that schedule — by yield, against a corpus, with the option of stopping.
+The dependency graph is `M0 → (M1a + M1b) → M2 → {M3, M4}`. M1a can independently enable the existing return protocol and should ship once its tests pass, but M2 requires both backward use demand and forward origin/exclusivity flow. M3 extends M2 across known-function signatures, while M4 reuses M2's virtual-value and materialization framework for a representation-aware operation. M0 still chooses whether measured yield justifies proceeding and may stop the campaign.
 
 ### M0 — Survey and instruments
 
 - Add the aggregate-flow census and its reproducible corpus fixture.
 
-- Add isolated attribution for the accumulator tuple, the scan state and the suffix view beside the string ladder — three instruments, because the three objects fall to three different mechanisms and a shared figure would attribute none of them.
+- Add four isolated attributions beside the string ladder: the returned `Scan` and its caller-side reconstruction as one protocol transition, the accumulator tuple, the scan argument reconstruction and the suffix view. Each falls to a distinct milestone or milestone combination, so a shared figure would attribute none of them.
 
-- Record raw-versus-Binaryen structural deltas and choose the growth policy from the observed candidates.
+- Record raw-versus-Binaryen structural deltas, measure the specialization clone extent beside the probe that reports its current refusal, and choose the growth policy from the observed candidates.
+
+- Establish the automated raw-module browser execution smoke fixture used by acceptance.
 
 - Report how many candidates lie outside `/std`. The stopping evidence below is a real possible outcome of this milestone, and reaching it is a result rather than a failure.
 
-### M1 — Aggregate-flow fact
+### M1a — Interprocedural use demand
 
 - Change the demand rule so an argument defers to the parameter that receives it. The analysis is already a fixpoint over the shared solver, and its own documentation says the strengthening is a change of one rule rather than of the shape — so this is not a rewrite of the substrate and should not be scheduled as one.
 
-- Classify materialization boundaries, exclusive and mixed flows, recursive components and demanded field sets.
+- Prove the backward fact with focused tests before it moves code, including regressions for dead-parameter elimination and `uncurry`'s returned-closure absorption, which consume the same demand lattice.
 
-- Prove the fact with focused tests before it moves code.
+- Then let it move code on its own: with arguments no longer opaque, `split_returns` becomes eligible on components it currently pins, and the returned scan state is the first of them. Ship that before any new rewrite exists, because it is the cheapest change in this document and it measures the fact.
 
-- Then let it move code on its own: with arguments no longer opaque, `split_returns` becomes eligible on components it currently pins, and the scan-state return is the first of them. Ship that before any new rewrite exists, because it is the cheapest thing in this document and it measures the fact.
+- Assert the intermediate shape explicitly: `/syn/Str/step` returns four fields without constructing a `Scan`, while the current caller resume reconstructs it before entering the continuation. M1a relocates this allocation; it does not claim to remove it.
+
+### M1b — Aggregate origin and exclusivity
+
+- Follow exact tuple origins forward through aliases, continuation edges and known direct calls independently of the backward demand fact.
+
+- Classify materialization boundaries, exclusive and mixed incoming flows, recursive components and available field sets.
+
+- Prove the forward fact with focused tests before either scalar-replacement rewrite consumes it.
 
 ### M2 — Continuation scalar replacement
 
@@ -214,6 +230,8 @@ Evidence that would stop the campaign is a survey showing that eligible allocati
 
 - Remove the `/std/Str/fold` accumulator allocation in raw pre-Binaryen output, and with it the seed construction the exit continuation leaves dead.
 
+- Remove the caller-side `Scan` reconstruction exposed by M1a by splitting the continuation that receives its returned fields.
+
 ### M3 — Known-function workers
 
 - Extend the same field flow through direct function calls and recursive components.
@@ -222,11 +240,13 @@ Evidence that would stop the campaign is a survey showing that eligible allocati
 
 - Preserve tail calls, continuation arities and the existing return-protocol ownership boundary.
 
-- Remove the `/std/Str/fold` scan-state reconstruction in raw pre-Binaryen output, and check the emitted callee is rewritten rather than duplicated — a clone that happens to remove the allocation has not demonstrated this capability.
+- Remove the `/std/Str/fold` scan argument reconstruction in raw pre-Binaryen output, and check the emitted callee is rewritten rather than duplicated — a clone that happens to remove the allocation has not demonstrated this capability.
 
 ### M4 — Prepared rope windows
 
 - Introduce the optimizer-visible prepared-window form without weakening slice traps or memoization effects.
+
+- Preserve the `Empty`, `Whole(original)` and `Proper { base, offset, length }` distinction through preparation and exact materialization.
 
 - Teach length, indexed read and further slicing to consume virtual windows.
 
@@ -256,11 +276,11 @@ The campaign is complete only when all of the following hold:
 
 - The same member split through a *worker signature* is asserted to stay boxed, and the test says why: a function parameter offers no carrier, and widening what a signature may carry is a separate decision this campaign does not take. An acceptance criterion that quietly expected raw here would be asserting the successor's work.
 
-- `/std/Str/fold` emits none of the three per-character objects on the raw pre-Binaryen recursive path: the accumulator tuple, the scan-state reconstruction, and the proper suffix-view object with the helper call that builds it.
+- `/std/Str/fold` and `/syn/Str/step` together emit none of the four aggregate allocations on the raw pre-Binaryen per-character path: the returned `Scan` or its caller-side reconstruction, the accumulator tuple, the scan argument reconstruction, and the proper suffix-view object with the helper call that builds it.
 
 - Empty, whole, nested, uncached and out-of-bounds slice fixtures preserve the existing result, eager trap and memoization behavior.
 
-- Raw and Binaryen-optimized native execution agree, and the browser compiler accepts and executes the raw module without depending on a postpass.
+- Raw and Binaryen-optimized native execution agree, and an automated browser smoke fixture compiles and executes the raw module without depending on a postpass.
 
 - The isolated probes show the contribution of each removed allocation and keep every figure beside the command that reproduces it.
 
