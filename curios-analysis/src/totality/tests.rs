@@ -312,7 +312,6 @@ fn a_peeled_prefix_keeps_its_binder_tail() {
         refined: BTreeMap::new(),
         nonzero: BTreeSet::new(),
         entered: Vec::new(),
-        ops: Vec::new(),
         scopes: Vec::new(),
         calls: Vec::new(),
     };
@@ -377,7 +376,6 @@ fn a_deeply_nested_body_walks_without_native_recursion() {
         refined: BTreeMap::new(),
         nonzero: BTreeSet::new(),
         entered: Vec::new(),
-        ops: Vec::new(),
         scopes: Vec::new(),
         calls: Vec::new(),
     };

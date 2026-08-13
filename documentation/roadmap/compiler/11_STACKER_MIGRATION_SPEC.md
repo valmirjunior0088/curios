@@ -2,7 +2,7 @@
 
 Nine walks in this workspace were rewritten from recursion into explicit frame machines, each to stop a *data*-shaped depth from reaching the native stack: a string literal's scan-state chain, a `Str` literal's per-byte UTF-8 derivation, a spine built by a loop. The motivation was real and is not in dispute. What it cost is the thing a checker can least afford to spend.
 
-`curios-base`'s `recurse` bracket now buys the same depth safety without it. The kernel's three walks were restored first — `convert.rs`, `infer.rs`, `whnf.rs`, at −242/+131 — and four more have followed. This specification tracks what remains, records what the work has corrected about its own premises, and closes the one question that should *not* be answered by migrating.
+`curios-base`'s `recurse` bracket now buys the same depth safety without it. The kernel's three walks were restored first — `convert.rs`, `infer.rs`, `whnf.rs`, at −242/+131 — and seven more have followed. This specification tracks what remains, records what the work has corrected about its own premises, and closes the one question that should *not* be answered by migrating.
 
 ## Why this is a correctness argument and not a style one
 
@@ -33,7 +33,8 @@ Three tells, any of which is decisive: an element that mirrors a function's loca
 | `curios-elab` universe search | `universe_solver.rs`, `check_consistent_full::choose` | done, `48dcb8a8`, −95/+42 |
 | `curios-core` printing | `print.rs`, `sub`/`sub_intrinsic` | done, `60bdd365`, −25/+20 |
 | kernel satisfiability | `curios-analysis/src/satisfy.rs`, `choose` | done, `eec7ec6c`, −53/+51 |
-| erased-module verification | `curios-ersd/src/verify.rs`, `Task` | done, `f7ee988d`, −147/+76 |
+| erased-module verification | `curios-ersd/src/verify.rs`, `Task` | done, `10f5ac17`, −147/+76 |
+| size-change totality | `curios-analysis/src/totality.rs`, `Op` | done, −336/+170 |
 | `curios-text` lowering | `into_core/lowerer.rs`, two `let` sites | **pending** — M2 |
 | `curios-elab` elaboration | `elaborate.rs`, `Vec<ElabFrame>` + `work_term`/`work_mode` | **pending** — M4 |
 
@@ -49,14 +50,15 @@ Three tells, any of which is decisive: an element that mirrors a function's loca
 
 ## Machines outside the original inventory
 
-Found by applying the test above across the workspace. None is scheduled here; each needs its own decision, and the first two sit below the checkers, where a drift rejects a valid module or admits a malformed one into codegen rather than admitting a term.
+Found by applying the test above across the workspace, after a sweep that also came back empty for `curios-wasm`, `curios-package`, `curios-runtime`, `curios-unit` and `curios-pipeline` — none of which holds an explicit work-stack loop at all. `curios-cont` holds ten, and nine pop a bare id into a visited set: reachability and call-graph fixpoints, not reified frames. So the inventory is closed, and one machine remains unscheduled:
 
-- **`curios-analysis/src/totality.rs`** — the `ops: Vec<Op>` walk, 995 lines and 52 `Op::` sites, from `407d99c2` at +481/−230. Its own doc carries the argument the shared driver would make unnecessary: "Arms expand lazily, and that is the correctness argument for the whole stack." A shared analysis both checkers run, with one implementation.
 - **`curios-cont/src/cps/cse.rs`** — the `Task::Visit`/`Task::Retract` walk, 171 lines. `Retract` is a scope exit, and its doc argues the ordering by hand: "The LIFO order makes retraction happen exactly between a `LetCont`'s sibling subtrees." The only one of these whose detector is the codegen corpus rather than the prelude build, because the prelude archive stops at Ersd and nothing in the light gate reaches the Cont stage.
 
-Two of the four have since been restored, and both are in the table above.
+Three of the four have since been restored, and all three are in the table above.
 
 **`curios-ersd/src/verify.rs`** reified all three of what `recurse` retires, which is why it was taken first: sibling ordering (`push_sequence` extended the stack then reversed the slice, because the sequence was "given in execution order"), scope entry and exit (`BindValue`/`UnbindValues`, `UnbindFunctions`, `EnterFunction`/`ExitFunction`, `EnterInit`/`ExitInit`), and unwinding. Each collapsed into something the language already says: the two function tasks into `walk_function`'s pair of lines, the bind/unbind tasks into one `scoped_block` bracket now shared by arm binders, fold binders and function parameters, and the init tasks into a push and pop around the recursive call. The error path was deliberately preserved rather than improved — `?` propagates before the unbinding, exactly as the task stack abandoned its pending work.
+
+**`curios-analysis/src/totality.rs`** was the largest, at 995 lines and 52 `Op::` sites from `407d99c2` (+481/−230), and the one whose machine argued hardest for itself: *"Arms expand lazily, and that is the correctness argument for the whole stack."* That argument is real — an arm's guard read, shape read and binder minting are effects on the checker (`Env::force` spends a reduction budget, `Env::fresh` mints an identity), so the order arms are reached in *is* the order those effects land in, and a differently-ordered spend against a nearly exhausted budget reads a different shape. What changed is who guarantees it. Each arm's reads now happen in the loop iteration that walks that arm, because that is where the recursion puts them; `Op::RecBodies`'s one-body-at-a-time materialization is a `for` over the group's length; the `Enter`/`Walk`/`Exit` triple is one `scoped` bracket; and the four telescope ops are two loops, a telescope being a list. The paragraph that argued the machine reproduced call order is four lines saying why the order matters.
 
 **`curios-analysis/src/satisfy.rs::choose` was the one whose citation had gone stale**, since it named `universe_solver::choose` as "linearised for the same reason" after that walk was restored. Restoring it surfaced a distinction the frame machine had kept implicit, and it is the sharpest thing this campaign has turned up since `infer`'s: the function returns plain `bool`, conflating *refuted* with *budget exhausted*, where its elaborator twin separates them in the return type. The iterative form abandoned the entire search on exhaustion by returning straight out through every pending frame. A naive recursion instead backtracks into it — retrying alternatives and committing arcs the old form never touched — because a `false` from a descent reads as refutation. The restoration checks the budget after each descent and propagates without rolling back, which reproduces the abort exactly. Nothing observes the difference today, since `Search` is local to `satisfiable` and an exhausted decision refuses either way; it is recorded because the next reader of that `bool` deserves to know it carries two meanings.
 
@@ -64,13 +66,21 @@ Checked and deliberately **not** on this list: `invert.rs`'s `Step` (a three-val
 
 ## What must not be migrated
 
-`Term::walk` (`curios-core/src/walk.rs`) stays. It is not a bespoke machine — it is one shared Enter/Exit driver behind which six call sites write two hooks each, and its value is not depth safety at all:
+`Term::walk` (`curios-core/src/walk.rs`) raises two questions, and only the first is settled. Keeping them apart matters, because this section used to answer the first and read as though it had answered both.
+
+**Dissolving the driver into hand-written recursions at its call sites is closed, not deferred.** Its value is not depth safety at all:
 
 > Children are enumerated exclusively through `Subterm::any_child_term`, so a new term former flows into every analysis by extending that one fold.
 
-Dissolving it into six hand-written recursions trades one child-enumeration seam for six and loses automatic propagation of a new term former. The same criterion that condemns the frame machines protects this one: a driver with hooks is more legible than the recursion it replaced, not less. **This question is closed, not deferred.**
+Trading one child-enumeration seam for eight loses automatic propagation of a new term former. The same criterion that condemns the frame machines protects this one: a driver with hooks is more legible than the recursion it replaced, not less. `collect_labels` was moved *onto* it for exactly that reason.
 
-The corollary ran the other way once: `print.rs`'s `collect_labels` hand-rolled its own worklist and was moved *onto* `Term::walk` in `b52a9062` (−139/+51), the enumerations having been diffed node for node first. That is consolidation, not restoration, and it is the only direction in which a walk should acquire an explicit stack.
+**Whether the driver's own internals should recurse, behind an unchanged API, is deferred indefinitely** — not closed, because the finding stands: by this document's test they *are* a machine. All four tells are in those forty lines: `Frame::Exit(Term, usize)` is a recursive frame's locals written out (the node, and how many results below belong to it); `exit` runs on pop carrying `&mut S`; `results.len().checked_sub(child_count).expect("each exit frame owns its child results")` is a hand-rolled calling convention with a hand-checked invariant; and `children.into_iter().rev()` is sibling ordering by manual reversal. The seam, the single `any_child_term` fold and every call site would survive a recursive reimplementation untouched, so none of the argument above bears on it.
+
+**What settles it is that the stack was never what this driver is for.** It exists to provide two seams: one child-enumeration fold, so a new term former reaches every analysis; and a place for each analysis to hang its own memo, which is why the driver deliberately owns none and prunes through `Enter::Skip`. `curios-elab/src/totality/reach.rs` records the two measurements that separate them — "2.5s of a 3.5s compile at 12KiB" was O(n²) *paths* through a shared DAG, cured by deduplicating on node identity in the `enter` hook, and a stack overflow above 16KiB was depth, cured by the explicit stack. The first is the one the driver was built for, and it lives in the hooks. A recursive reimplementation would address only the second, which `recurse` would handle equally well but which was never this component's reason to exist.
+
+Against that, the cost is the widest blast radius remaining: the kernel's erasure obligations, both positivity and totality drivers, `reach`, `collect_labels`, and `warm_frees`/`warm_scalars` — the per-node memo fill behind every `free_vars()` call in the compiler. And the payoff is legibility in a component that decides nothing, since every analysis's semantics live in its two hooks; a defect here breaks eight analyses loudly rather than changing one rule silently, which is the opposite of the failure this campaign exists to close. There is also no twin to read it against, so the argument in the first section has no purchase at all.
+
+**No work is scheduled, and the criterion alone is not a reason to reopen it.** What would be: a measurement. The one figure that bears on it names `warm_frees` directly and points toward the recursive form being faster on the hottest walk in the compiler — but it is debug, single-input and correctness-unverified, so under the prerequisite below it may not be quoted as a reason to migrate. Anyone reopening this should arrive with a probe, and should know that the recursive helper must take *named* generic parameters for the two closures rather than `impl FnMut` in argument position, or each level instantiates at `&mut &mut F` and monomorphization diverges.
 
 `curios-base`'s `Printer` also stays data. Its explicit stacks make *running* and *freeing* a document iterative, which no builder-side guard replaces, and three fixtures hold it at 100k depth. Note that `deferred()` and `Printer::Deferred` now have no producer anywhere in the workspace, since `print.rs` was their only caller — whether to delete them is open.
 

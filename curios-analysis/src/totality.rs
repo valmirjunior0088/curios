@@ -26,17 +26,14 @@ mod tests;
 
 use {
     crate::{Env, forceable},
+    curios_base::recurse,
     curios_core::{
-        Apply, Arity, Atom, Carrier, Cases, Free, FreeMonoid, Func, FuncType, InductType,
-        Intrinsic, Layer, Let, Many, Match, Nat, One, Proj, Rec, RecGroup, Scope, Struct,
-        StructType, Subterm, Telescope, Term, Three, Totality, Tuple, TupleType, Two, UniverseInst,
-        Variant,
+        Apply, Arity, Carrier, Cases, Free, FreeMonoid, Func, FuncType, InductType, Intrinsic,
+        Layer, Let, Many, Match, Nat, Proj, Rec, RecGroup, Scope, Struct, StructType, Subterm,
+        Telescope, Term, Three, Totality, Tuple, TupleType, Two, UniverseInst, Variant,
     },
     num_bigint::BigUint,
-    std::{
-        collections::{BTreeMap, BTreeSet},
-        iter::once,
-    },
+    std::collections::{BTreeMap, BTreeSet},
 };
 
 /// Whether shape reading may force `term`.
@@ -74,7 +71,6 @@ pub fn group_totality<E: Env>(env: &mut E, group: &RecGroup) -> Totality {
             refined: BTreeMap::new(),
             nonzero: BTreeSet::new(),
             entered: Vec::new(),
-            ops: Vec::new(),
             scopes: Vec::new(),
             calls: Vec::new(),
         };
@@ -146,71 +142,12 @@ struct Walk<'a, E: Env> {
     /// The nested groups whose bodies the walk is currently inside, entered and left exactly like `refined`. A group reached from within itself would regenerate its own bodies without end, since every member reference materializes as a projection carrying the whole group.
     entered: Vec<RecGroup>,
     /// The work still owed, innermost last. The traversal's depth lives here rather than on the native stack: a member body nests as deep as its source is written, and a program-generating spelling of it is unbounded by anything the walk controls.
-    ops: Vec<Op>,
-    /// One entry per scope an [`Op::Enter`] has opened and its [`Op::Exit`] has yet to close.
+    /// One entry per scope [`Walk::enter`] has opened and [`Walk::exit`] has yet to close.
     scopes: Vec<Undo>,
     calls: Vec<(usize, usize, Matrix)>,
 }
 
-/// One unit of the walk's pending work — what a native frame used to hold.
-///
-/// **Arms expand lazily, and that is the correctness argument for the whole stack.** Every op that opens an arm — [`Op::BoolArm`] through [`Op::ElemCons`], and [`Op::RecBodies`], [`Op::OpenMany`], [`Op::TermsRest`], [`Op::UnitsRest`] beside them — does its own guard read, shape read, binder minting, or body materialization when it is *popped*, never when the node that owns it is expanded. Those are effects on the checker driving the analysis: [`Env::force`] spends a reduction budget and [`Env::fresh`] mints an identity, so the order the arms are reached in *is* the order those effects land in. Expanding a node's arms together would batch its reads ahead of the subtrees the recursive walk ran between them, and a differently-ordered spend against a nearly exhausted budget reads a different shape — a verdict change with no cause in the term. One arm per pop makes the two orders identical rather than merely similar.
-enum Op {
-    /// Read one term: the traversal's own match, scheduling children in place of recursing.
-    Walk(Term),
-    /// Open a scope, applying what an arm established and recording its exact [`Undo`].
-    Enter {
-        refine: Option<(Free, Shape)>,
-        nonzero: Option<Free>,
-        entered: Option<RecGroup>,
-    },
-    /// Close the innermost open scope.
-    Exit,
-    /// One arm of a boolean match. The scrutinee is re-read as a guard per arm, because what a guard establishes depends on which way it went.
-    BoolArm {
-        head: Term,
-        scrutinee: Option<Free>,
-        taken: bool,
-        body: Term,
-    },
-    /// One enumerated arm of a `Nat` switch, refining the scrutinee to that arm's literal.
-    SwitchArm {
-        scrutinee: Option<Free>,
-        value: u32,
-        body: Term,
-    },
-    /// One arm of an inductive match: the scrutinee is that constructor applied to the arm's own payload binders.
-    InductArm {
-        scrutinee: Option<Free>,
-        tag: Atom,
-        body: Scope<Many>,
-    },
-    /// The cons arm of the `Nat` eliminator, binding the predecessor and the induction hypothesis.
-    NatCons {
-        scrutinee: Option<Free>,
-        cons_case: Scope<Two>,
-    },
-    /// The cons arm of a `Bin`/`List` eliminator, binding the generator, the tail, and the induction hypothesis.
-    ElemCons {
-        scrutinee: Option<Free>,
-        carriers: Carriers,
-        cons_case: Scope<Three>,
-    },
-    /// A nested group's members from `index` on, one body materialized at a time — each carries the whole group, so materializing them together would hold every one of them at once.
-    RecBodies { group: RecGroup, index: usize },
-    /// A runtime-arity scope — a motive, a `let` tail, a `rec` tail — to open against fresh binders and walk.
-    OpenMany(Scope<Many>),
-    /// A `Func`/`FuncType` telescope from its next entry on.
-    Terms(Telescope<Term>),
-    /// What follows a `Func`/`FuncType` entry, still closed: its binder is minted only after the entry before it has been walked, which is where the recursive walk minted it.
-    TermsRest(Scope<One, Telescope<Term>>),
-    /// A `TupleType` telescope from its next entry on. It has no terminal to walk — a tuple type's payload is its fields.
-    Units(Telescope<()>),
-    /// What follows a `TupleType` entry, minted like [`Op::TermsRest`].
-    UnitsRest(Scope<One, Telescope<()>>),
-}
-
-/// What one [`Op::Enter`] changed, so its [`Op::Exit`] puts back exactly that and nothing else.
+/// What one [`Walk::enter`] changed, so its [`Walk::exit`] puts back exactly that and nothing else.
 ///
 /// Recorded on the way in rather than recomputed on the way out, because only the entering side can tell the difference that matters: a binder an outer arm had already refined, or already knew nonzero, must be left standing as that outer arm left it.
 struct Undo {
@@ -488,12 +425,12 @@ impl<E: Env> Walk<'_, E> {
         });
     }
 
-    /// Close the innermost open scope, putting back exactly what its [`Op::Enter`] recorded.
+    /// Close the innermost open scope, putting back exactly what its [`Walk::enter`] recorded.
     fn exit(&mut self) {
         let undo = self
             .scopes
             .pop()
-            .expect("every Exit is scheduled together with its own Enter");
+            .expect("every exit is bracketed with its own enter");
 
         if let Some((binder, previous)) = undo.refined {
             match previous {
@@ -547,147 +484,171 @@ impl<E: Env> Walk<'_, E> {
 
     /// Find the recursive calls in `body`, tracking the refinements that make their arguments comparable.
     ///
-    /// The traversal is a loop over [`Op`]s rather than a recursion because a member body nests as deep as the source that spelled it, and one native frame per level makes a generated term an aborted process instead of a verdict. Scope discipline holds by construction: an arm is scheduled as `Enter`, its body, `Exit`, so no path can drop a refinement or carry one out.
+    /// Scope discipline holds by construction: an arm's refinement is taken on by [`Walk::scoped`], which walks the body and puts it back, so no path can drop a refinement or carry one out.
     fn walk(&mut self, body: &Term) {
-        self.ops.push(Op::Walk(body.clone()));
-
-        while let Some(op) = self.ops.pop() {
-            match op {
-                Op::Walk(term) => self.step(&term),
-
-                Op::Enter {
-                    refine,
-                    nonzero,
-                    entered,
-                } => self.enter(refine, nonzero, entered),
-
-                Op::Exit => self.exit(),
-
-                // A boolean arm carries no binder, but when the scrutinee compares a binder against a literal the arm still settles whether that binder can be zero — which is what an arithmetic decrease on it needs.
-                Op::BoolArm {
-                    head,
-                    scrutinee,
-                    taken,
-                    body,
-                } => {
-                    let atom = self
-                        .guard(&head)
-                        .filter(|guard| guard.establishes_nonzero(taken))
-                        .map(|guard| guard.atom);
-                    let shape = Shape::Node(Tag::Bool(taken), Vec::new());
-                    self.schedule(arm(refine(scrutinee, shape), atom, body));
-                }
-
-                Op::SwitchArm {
-                    scrutinee,
-                    value,
-                    body,
-                } => {
-                    let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(value)));
-                    let shape = self.shape_of(&literal);
-                    self.schedule(arm(refine(scrutinee, shape), None, body));
-                }
-
-                Op::InductArm {
-                    scrutinee,
-                    tag,
-                    body,
-                } => {
-                    let (binders, body) = self.open_many(&body);
-                    let shape = Shape::Node(
-                        Tag::Variant(tag),
-                        binders.iter().map(|b| Shape::Atom(b.clone())).collect(),
-                    );
-                    self.schedule(arm(refine(scrutinee, shape), None, body));
-                }
-
-                Op::NatCons {
-                    scrutinee,
-                    cons_case,
-                } => {
-                    let (binders, body) = self.open_two(&cons_case);
-                    let shape =
-                        Shape::unary_run(BigUint::from(1usize), Shape::Atom(binders[0].clone()));
-                    self.schedule(arm(refine(scrutinee, shape), None, body));
-                }
-
-                Op::ElemCons {
-                    scrutinee,
-                    carriers,
-                    cons_case,
-                } => {
-                    let (binders, body) = self.open_three(&cons_case);
-                    let shape = Shape::elem_run(
-                        carriers,
-                        vec![Shape::Atom(binders[0].clone())],
-                        Shape::Atom(binders[1].clone()),
-                    );
-                    self.schedule(arm(refine(scrutinee, shape), None, body));
-                }
-
-                Op::RecBodies { group, index } => {
-                    if index < group.length() {
-                        let body = group.member_body(index);
-                        self.schedule([
-                            Op::Walk(body),
-                            Op::RecBodies {
-                                group,
-                                index: index + 1,
-                            },
-                        ]);
-                    }
-                }
-
-                Op::OpenMany(scope) => {
-                    let (_, body) = self.open_many(&scope);
-                    self.ops.push(Op::Walk(body));
-                }
-
-                Op::Terms(telescope) => match telescope {
-                    Telescope::Done(terminal) => self.ops.push(Op::Walk(*terminal)),
-                    Telescope::Cons(entry, rest) => {
-                        self.schedule([Op::Walk(entry), Op::TermsRest(rest)])
-                    }
-                },
-
-                Op::TermsRest(rest) => {
-                    let binder = self.env.fresh(rest.first_hint());
-                    self.ops
-                        .push(Op::Terms(rest.open(&[&Term::free_var(&binder)])));
-                }
-
-                Op::Units(telescope) => {
-                    if let Telescope::Cons(entry, rest) = telescope {
-                        self.schedule([Op::Walk(entry), Op::UnitsRest(rest)]);
-                    }
-                }
-
-                Op::UnitsRest(rest) => {
-                    let binder = self.env.fresh(rest.first_hint());
-                    self.ops
-                        .push(Op::Units(rest.open(&[&Term::free_var(&binder)])));
-                }
-            }
-        }
+        self.walk_term(body);
 
         assert!(
             self.scopes.is_empty(),
-            "the walk left a scope open: {} unmatched Enter(s)",
+            "the walk left a scope open: {} unmatched enter(s)",
             self.scopes.len()
         );
     }
 
-    /// Schedule `ops` to run in the order written — the stack is LIFO, and every expansion below reads in execution order.
-    fn schedule(&mut self, ops: impl IntoIterator<Item = Op, IntoIter: DoubleEndedIterator>) {
-        self.ops.extend(ops.into_iter().rev());
+    /// Walk one term, scheduling its children by descending into them.
+    ///
+    /// Guarded by [`recurse`] because a member body nests as deep as the source that spelled it, and a generated term is bounded by nothing this analysis controls.
+    ///
+    /// **Arms are reached one at a time, and that is what makes this walk faithful.** Every arm's guard read, shape read, binder minting and body materialization happens in the arm's own call, never batched ahead of it — because those are effects on the checker driving the analysis: [`Env::force`] spends a reduction budget and [`Env::fresh`] mints an identity, so the order the arms are reached in *is* the order those effects land in. A differently-ordered spend against a nearly exhausted budget reads a different shape, which would be a verdict change with no cause in the term. The recursion gives that ordering; the frame machine this replaces had to argue for it.
+    fn walk_term(&mut self, term: &Term) {
+        recurse(|| self.step(term))
     }
 
-    /// Schedule a walk of each of `terms`, in order.
-    fn walks(&mut self, terms: impl IntoIterator<Item = Term, IntoIter: DoubleEndedIterator>) {
-        self.ops.extend(terms.into_iter().rev().map(Op::Walk));
+    /// Take on what an arm establishes, walk its body under it, and put it back.
+    fn scoped(&mut self, refine: Option<(Free, Shape)>, nonzero: Option<Free>, body: &Term) {
+        self.enter(refine, nonzero, None);
+        self.walk_term(body);
+        self.exit();
     }
 
-    /// Read one term, scheduling whatever it contains.
+    /// Walk each of `terms`, in order.
+    fn walks<'t>(&mut self, terms: impl IntoIterator<Item = &'t Term>) {
+        for term in terms {
+            self.walk_term(term);
+        }
+    }
+
+    /// Open a runtime-arity scope against fresh binders and walk its body.
+    fn open_many_walk(&mut self, scope: &Scope<Many>) {
+        let (_, body) = self.open_many(scope);
+        self.walk_term(&body);
+    }
+
+    /// Walk a `Func`/`FuncType` telescope: each entry, then the terminal.
+    ///
+    /// A loop rather than a recursion, because a telescope is a list and this iterates it. Each binder is minted only after the entry before it has been walked, which is where the recursive walk minted it.
+    fn walk_terms(&mut self, mut telescope: Telescope<Term>) {
+        loop {
+            match telescope {
+                Telescope::Done(terminal) => return self.walk_term(&terminal),
+                Telescope::Cons(entry, rest) => {
+                    self.walk_term(&entry);
+                    let binder = self.env.fresh(rest.first_hint());
+                    telescope = rest.open(&[&Term::free_var(&binder)]);
+                }
+            }
+        }
+    }
+
+    /// [`Walk::walk_terms`] for a `TupleType`, which has no terminal to walk — a tuple type's payload is its fields.
+    fn walk_units(&mut self, mut telescope: Telescope<()>) {
+        while let Telescope::Cons(entry, rest) = telescope {
+            self.walk_term(&entry);
+            let binder = self.env.fresh(rest.first_hint());
+            telescope = rest.open(&[&Term::free_var(&binder)]);
+        }
+    }
+
+    /// Walk a match's arms, in order, each under what it establishes.
+    ///
+    /// Nothing is read ahead: an arm's guard, shape and binders are taken in the arm's own call, which is the ordering [`Walk::walk_term`] documents.
+    fn walk_arms(&mut self, head: &Term, cases: &Cases) {
+        let scrutinee = match &**head {
+            Subterm::Var(var) => var.as_free().cloned(),
+            _ => None,
+        };
+
+        match cases {
+            // A boolean arm carries no binder, but when the scrutinee compares a binder against a literal the arm still settles whether that binder can be zero — which is what an arithmetic decrease on it needs. The scrutinee is re-read as a guard per arm, because what a guard establishes depends on which way it went.
+            Cases::Bool {
+                false_case,
+                true_case,
+            } => {
+                for (taken, body) in [(false, false_case), (true, true_case)] {
+                    let atom = self
+                        .guard(head)
+                        .filter(|guard| guard.establishes_nonzero(taken))
+                        .map(|guard| guard.atom);
+                    let shape = Shape::Node(Tag::Bool(taken), Vec::new());
+                    self.scoped(refine(scrutinee.clone(), shape), atom, body);
+                }
+            }
+
+            Cases::Switch { cases, default } => {
+                for (value, body) in cases {
+                    let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(*value)));
+                    let shape = self.shape_of(&literal);
+                    self.scoped(refine(scrutinee.clone(), shape), None, body);
+                }
+                // The default arm stands for every value *not* enumerated, so it refines the scrutinee to nothing — but enumerating zero is exactly what rules zero out everywhere else.
+                let atom = scrutinee.filter(|_| cases.contains_key(&0));
+                self.scoped(None, atom, default);
+            }
+
+            Cases::Induct { cases, default } => {
+                for (tag, case) in cases {
+                    let (binders, body) = self.open_many(&case.body);
+                    let shape = Shape::Node(
+                        Tag::Variant(tag.clone()),
+                        binders.iter().map(|b| Shape::Atom(b.clone())).collect(),
+                    );
+                    self.scoped(refine(scrutinee.clone(), shape), None, &body);
+                }
+                if let Some(default) = default {
+                    self.walk_term(default);
+                }
+            }
+
+            // The cons arm binds the generator, the tail, and the induction hypothesis; the scrutinee is the generator consed onto the tail, and the hypothesis is not part of the value's shape.
+            Cases::FreeMonoid { carrier } => match carrier {
+                Carrier::Nat {
+                    empty_case,
+                    cons_case,
+                } => {
+                    self.empty_arm(&scrutinee, Carriers::Unary, empty_case);
+                    let (binders, body) = self.open_two(cons_case);
+                    let shape =
+                        Shape::unary_run(BigUint::from(1usize), Shape::Atom(binders[0].clone()));
+                    self.scoped(refine(scrutinee, shape), None, &body);
+                }
+                Carrier::Bin {
+                    empty_case,
+                    cons_case,
+                    ..
+                } => {
+                    self.empty_arm(&scrutinee, Carriers::Bin, empty_case);
+                    self.elem_cons(scrutinee, Carriers::Bin, cons_case);
+                }
+                Carrier::List {
+                    elem,
+                    empty_case,
+                    cons_case,
+                } => {
+                    self.walk_term(elem);
+                    self.empty_arm(&scrutinee, Carriers::List, empty_case);
+                    self.elem_cons(scrutinee, Carriers::List, cons_case);
+                }
+            },
+        }
+    }
+
+    /// The identity arm of a free-monoid eliminator, refining the scrutinee to that carrier's empty value — a shape stated without opening anything.
+    fn empty_arm(&mut self, scrutinee: &Option<Free>, carriers: Carriers, empty_case: &Term) {
+        let shape = Shape::Node(Tag::Empty(carriers), Vec::new());
+        self.scoped(refine(scrutinee.clone(), shape), None, empty_case);
+    }
+
+    /// The cons arm of a `Bin`/`List` eliminator, binding the generator, the tail, and the induction hypothesis.
+    fn elem_cons(&mut self, scrutinee: Option<Free>, carriers: Carriers, cons_case: &Scope<Three>) {
+        let (binders, body) = self.open_three(cons_case);
+        let shape = Shape::elem_run(
+            carriers,
+            vec![Shape::Atom(binders[0].clone())],
+            Shape::Atom(binders[1].clone()),
+        );
+        self.scoped(refine(scrutinee, shape), None, &body);
+    }
+
     fn step(&mut self, term: &Term) {
         match &**term {
             // Nothing here can contain a call.
@@ -709,10 +670,11 @@ impl<E: Env> Walk<'_, E> {
                     && group == self.group
                 {
                     self.call(index, &arguments);
-                    self.walks(arguments);
+                    self.walks(&arguments);
                     return;
                 }
-                self.walks(once(head.clone()).chain(params.iter().cloned()));
+                self.walk_term(head);
+                self.walks(params);
             }
 
             Subterm::Match(Match {
@@ -720,44 +682,38 @@ impl<E: Env> Walk<'_, E> {
                 motive,
                 cases,
             }) => {
-                let mut ops = vec![Op::Walk(head.clone()), Op::OpenMany(motive.clone())];
-                arms(head, cases, &mut ops);
-                self.schedule(ops);
+                self.walk_term(head);
+                self.open_many_walk(motive);
+                self.walk_arms(head, cases);
             }
 
             Subterm::Func(Func { telescope, .. })
-            | Subterm::FuncType(FuncType { telescope, .. }) => {
-                self.ops.push(Op::Terms(telescope.clone()))
-            }
+            | Subterm::FuncType(FuncType { telescope, .. }) => self.walk_terms(telescope.clone()),
 
-            Subterm::TupleType(TupleType { telescope }) => {
-                self.ops.push(Op::Units(telescope.clone()));
-            }
+            Subterm::TupleType(TupleType { telescope }) => self.walk_units(telescope.clone()),
 
-            Subterm::Tuple(Tuple { fields, .. }) => self.walks(fields.iter().cloned()),
+            Subterm::Tuple(Tuple { fields, .. }) => self.walks(fields),
 
             Subterm::Proj(Proj { head, .. }) | Subterm::UniverseInst(UniverseInst { head, .. }) => {
-                self.ops.push(Op::Walk(head.clone()))
+                self.walk_term(head)
             }
 
             Subterm::InductType(InductType {
                 params, indices, ..
-            }) => self.walks(params.iter().chain(indices).cloned()),
+            }) => self.walks(params.iter().chain(indices)),
 
             Subterm::Variant(Variant {
                 params, payload, ..
-            }) => self.walks(params.iter().chain(payload).cloned()),
+            }) => self.walks(params.iter().chain(payload)),
 
-            Subterm::StructType(StructType { params, .. }) => self.walks(params.iter().cloned()),
+            Subterm::StructType(StructType { params, .. }) => self.walks(params),
 
             Subterm::Struct(Struct { params, fields, .. }) => {
-                self.walks(params.iter().chain(fields).cloned())
+                self.walks(params.iter().chain(fields))
             }
 
             // The early-mention net walks *written* (lowered, pre-elaboration) terms, so transients are legitimate here; their children may name definitions.
-            Subterm::Transient(transient) => {
-                self.walks(transient.subterms().cloned().collect::<Vec<_>>())
-            }
+            Subterm::Transient(transient) => self.walks(transient.subterms()),
 
             Subterm::Intrinsic(intrinsic) => {
                 let mut terms = Vec::new();
@@ -765,155 +721,35 @@ impl<E: Env> Walk<'_, E> {
                     terms.push(child.clone());
                     false
                 });
-                self.walks(terms);
+                self.walks(&terms);
             }
 
-            Subterm::Foreign(_, args) => self.walks(args.iter().cloned()),
+            Subterm::Foreign(_, args) => self.walks(args),
 
             Subterm::Let(Let { bindings, tail }) => {
-                let mut ops = Vec::new();
                 for binding in bindings {
-                    ops.push(Op::Walk(binding.type_().clone()));
-                    ops.push(Op::Walk(binding.value().clone()));
+                    self.walk_term(binding.type_());
+                    self.walk_term(binding.value());
                 }
-                ops.push(Op::OpenMany(tail.clone()));
-                self.schedule(ops);
+                self.open_many_walk(tail);
             }
 
             // An inner group is classified on its own, but its bodies may still call *this* group, and such a call is a real edge of this group's call graph.
             //
             // `entered` is what keeps the descent finite. `RecGroup::member_body` materializes every member reference as a projection carrying the whole group, so a group reached from inside its own bodies would regenerate them without end — which is why a projection of *this* group is answered above rather than descended into, and why any other group is walked at most once per path. It is entered and left exactly like `refined`, so a group met twice in sibling positions is still walked under each one's refinements.
             Subterm::Rec(Rec { group, tail }) => {
-                let mut ops = Vec::new();
                 if !self.entered.contains(group) {
-                    ops.extend([
-                        Op::Enter {
-                            refine: None,
-                            nonzero: None,
-                            entered: Some(group.clone()),
-                        },
-                        Op::RecBodies {
-                            group: group.clone(),
-                            index: 0,
-                        },
-                        Op::Exit,
-                    ]);
+                    self.enter(None, None, Some(group.clone()));
+                    // One body at a time: each materializes a projection carrying the whole group, so holding them together would hold every member at once.
+                    for index in 0..group.length() {
+                        self.walk_term(&group.member_body(index));
+                    }
+                    self.exit();
                 }
-                ops.push(Op::OpenMany(tail.clone()));
-                self.schedule(ops);
+                self.open_many_walk(tail);
             }
         }
     }
-}
-
-/// Append the ops of a match's arms, in the order the arms are walked.
-///
-/// Nothing here touches the checker: an arm that has a guard to read, a shape to read, or binders to mint waits for its own op to be popped. See [`Op`] for why the wait is what makes this walk the recursive one it replaces.
-fn arms(head: &Term, cases: &Cases, ops: &mut Vec<Op>) {
-    let scrutinee = match &**head {
-        Subterm::Var(var) => var.as_free().cloned(),
-        _ => None,
-    };
-
-    match cases {
-        Cases::Bool {
-            false_case,
-            true_case,
-        } => {
-            for (taken, body) in [(false, false_case), (true, true_case)] {
-                ops.push(Op::BoolArm {
-                    head: head.clone(),
-                    scrutinee: scrutinee.clone(),
-                    taken,
-                    body: body.clone(),
-                });
-            }
-        }
-
-        Cases::Switch { cases, default } => {
-            for (value, body) in cases {
-                ops.push(Op::SwitchArm {
-                    scrutinee: scrutinee.clone(),
-                    value: *value,
-                    body: body.clone(),
-                });
-            }
-            // The default arm stands for every value *not* enumerated, so it refines the scrutinee to nothing — but enumerating zero is exactly what rules zero out everywhere else.
-            let atom = scrutinee.filter(|_| cases.contains_key(&0));
-            ops.extend(arm(None, atom, default.clone()));
-        }
-
-        Cases::Induct { cases, default } => {
-            for (tag, case) in cases {
-                ops.push(Op::InductArm {
-                    scrutinee: scrutinee.clone(),
-                    tag: tag.clone(),
-                    body: case.body.clone(),
-                });
-            }
-            if let Some(default) = default {
-                ops.push(Op::Walk(default.clone()));
-            }
-        }
-
-        // The cons arm binds the generator, the tail, and the induction hypothesis; the scrutinee is the generator consed onto the tail, and the hypothesis is not part of the value's shape.
-        Cases::FreeMonoid { carrier } => match carrier {
-            Carrier::Nat {
-                empty_case,
-                cons_case,
-            } => {
-                ops.extend(empty_arm(&scrutinee, Carriers::Unary, empty_case));
-                ops.push(Op::NatCons {
-                    scrutinee,
-                    cons_case: cons_case.clone(),
-                });
-            }
-            Carrier::Bin {
-                empty_case,
-                cons_case,
-                ..
-            } => {
-                ops.extend(empty_arm(&scrutinee, Carriers::Bin, empty_case));
-                ops.push(Op::ElemCons {
-                    scrutinee,
-                    carriers: Carriers::Bin,
-                    cons_case: cons_case.clone(),
-                });
-            }
-            Carrier::List {
-                elem,
-                empty_case,
-                cons_case,
-            } => {
-                ops.push(Op::Walk(elem.clone()));
-                ops.extend(empty_arm(&scrutinee, Carriers::List, empty_case));
-                ops.push(Op::ElemCons {
-                    scrutinee,
-                    carriers: Carriers::List,
-                    cons_case: cons_case.clone(),
-                });
-            }
-        },
-    }
-}
-
-/// The three ops an arm is: take on what the arm establishes, walk its body, put it back. Written once so no arm can be scheduled without its own [`Op::Exit`].
-fn arm(refine: Option<(Free, Shape)>, nonzero: Option<Free>, body: Term) -> [Op; 3] {
-    [
-        Op::Enter {
-            refine,
-            nonzero,
-            entered: None,
-        },
-        Op::Walk(body),
-        Op::Exit,
-    ]
-}
-
-/// The identity arm of a free-monoid eliminator, refining the scrutinee to that carrier's empty value — a shape stated without opening anything, so this arm needs no op of its own.
-fn empty_arm(scrutinee: &Option<Free>, carriers: Carriers, empty_case: &Term) -> [Op; 3] {
-    let shape = Shape::Node(Tag::Empty(carriers), Vec::new());
-    arm(refine(scrutinee.clone(), shape), None, empty_case.clone())
 }
 
 /// What an arm refines, for a scrutinee that may not be a binder at all — a match on anything else establishes nothing to remember.
