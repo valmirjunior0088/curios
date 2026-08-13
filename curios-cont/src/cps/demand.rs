@@ -11,15 +11,17 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// How a value's uses consume it, ordered `Unused < Projected(_) < Opaque`.
+/// How a value's uses consume it, ordered `Unused < Projected(_) | Applied(_) < Opaque`.
 ///
-/// `Projected` carries the field indices read, so a use set that never reads the whole value stays distinguishable from one that does. Absence from the map is **not** `Unused` — see [`demand_of`].
+/// `Projected` carries the field indices read and `Applied` the arity called, so a use set that never reads the whole value stays distinguishable from one that does. The two refinements sit beside each other rather than in a chain: a value read as a tuple and a value invoked as a function are both narrower than opaque and neither is narrower than the other, so mixing them joins to `Opaque`. Absence from the map is **not** `Unused` — see [`demand_of`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Demand {
     /// No use at all. The point dead-parameter elimination reads.
     Unused,
     /// Every use so far projects a field, at these indices.
     Projected(BTreeSet<usize>),
+    /// Every use so far calls it, at this arity. Disagreeing arities join to `Opaque`, because a function reached at two arities cannot have either absorbed into it.
+    Applied(usize),
     /// Some use consumes the value whole.
     Opaque,
 }
@@ -37,6 +39,14 @@ impl Lattice for Demand {
                 left.extend(right);
                 Demand::Projected(left)
             }
+            (Demand::Applied(left), Demand::Applied(right)) if left == right => {
+                Demand::Applied(left)
+            }
+            // A projection and a call, or two calls at different arities: nothing narrower than opaque describes both.
+            (
+                Demand::Applied(_) | Demand::Projected(_),
+                Demand::Applied(_) | Demand::Projected(_),
+            ) => Demand::Opaque,
         }
     }
 }
@@ -72,13 +82,14 @@ pub(crate) fn demands(module: &CpsModule) -> BTreeMap<CpsValueId, Demand> {
                 }
             }
 
-            // A closure callee lives in a value `atoms` does not reach, and calling through it consumes the whole of it.
+            // A closure callee lives in a value `atoms` does not reach. Calling through it is a *use of the whole* value but not an opaque one: the arity is what a caller would have to pass if the application moved into whatever produced it.
             if let CpsNode::ApplyFun {
                 callee: CpsCallee::Closure(value),
+                args,
                 ..
             } = node
             {
-                solver.join(*value, Demand::Opaque);
+                solver.join(*value, Demand::Applied(args.len()));
             }
         }
     })
