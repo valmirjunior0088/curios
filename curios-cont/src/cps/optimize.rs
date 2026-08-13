@@ -19,6 +19,7 @@ use super::{
         rewrite_atoms, simplify_nodes,
     },
     specialize::{specialize_call_patterns, specialize_jump_patterns, specialize_scc_calls},
+    uncurry::uncurry_returns,
 };
 
 pub(super) const MULTI_SITE_INLINE_LIMIT: usize = 8;
@@ -63,6 +64,7 @@ pub fn optimize(module: &mut CpsModule) {
             | specialize_call_patterns(module, &mut branch_clone_budget)
             | specialize_jump_patterns(module, &mut jump_clone_budget)
             | split_returns(module)
+            | uncurry_returns(module)
             | dissolve_rec_init(module)
             | prune_unreachable(module);
         if !changed {

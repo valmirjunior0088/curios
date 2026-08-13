@@ -103,7 +103,9 @@ const MUTUAL_RECURSION: &str = r#"
     /std/print(Nat/to_str(match start : (_) => Nat | true => ping(n) | false => pong(n) end))
     "#;
 
-/// A callee returning two distinct constructors to two different callers — the intersection no existing pass reaches. Two external call sites is one too many for contification, whose whole admissibility rests on there being a single return context; the body is past the multi-site inline budget; and neither caller can see the construction, since it is built inside `advance` and arrives as an opaque continuation parameter. `more` carries two fields and `done` one, so the class is three slots wide and the shorter constructor exercises the filler. See [`a_returned_constructor_is_delivered_as_its_fields`].
+/// A callee returning two distinct constructors to two different callers — the intersection no existing pass reaches. Two external call sites is one too many for contification, whose whole admissibility rests on there being a single return context; the body is past the multi-site inline budget; and neither caller can see the construction, since it is built inside `advance` and arrives as an opaque continuation parameter. `more` carries two fields and `done` one, so the class is three slots wide and the shorter constructor exercises the filler.
+///
+/// **The arithmetic in `advance` is sized, not decorative.** The middle premise is a claim about `MULTI_SITE_INLINE_LIMIT`, and the fixture stopped holding it once when that constant moved — so the body carries enough operations to stay well clear rather than to just clear the value of the day. Each of the three functions also owns a distinct modulus, which is what lets [`a_returned_constructor_is_delivered_as_its_fields`] state that the callee is a different function from its callers instead of merely that some function exists.
 const SPLIT_RETURN: &str = r#"
     use /std/{Handle, Nat, List, proc};
     induct Step : Type
@@ -112,22 +114,49 @@ const SPLIT_RETURN: &str = r#"
     end
     let advance(x : Nat) -> Step =
         match x % 7 : (_) => Step
-        | 0 => Step/done((x * 3 + 1) % 20011)
-        | k + 1 => Step/more((x * 5) % 20011, (k * 2 + 11) % 20011)
+        | 0 => Step/done((x * 3 + 1) * 13 % 20011)
+        | k + 1 =>
+            let u = (x * 5 + 7) % 20011;
+            let v = (u * 3 + 2) % 20011;
+            let w = (k * 2 + 11) % 20011;
+            Step/more((v * 9 + 4) % 20011, (w * 6 + 5) % 20011)
         end;
     let first(a : Nat) -> Nat =
         match advance(a) : (_) => Nat
-        | more(p, q) => p + q
-        | done(r) => r
+        | more(p, q) => (p + q) % 30011
+        | done(r) => r % 30011
         end;
     let second(b : Nat) -> Nat =
         match advance(b + 1) : (_) => Nat
-        | more(p, q) => p * 2 + q
-        | done(r) => r * 3
+        | more(p, q) => (p * 2 + q) % 40009
+        | done(r) => (r * 3) % 40009
         end;
     let taint = List/len(proc/args!);
     let n : Nat = taint;
     /std/print(Nat/to_str(first(n) + second(n)))
+    "#;
+
+/// A recursive callee returning a closure that every caller immediately applies — the shape a monadic carrier produces, where an action *is* a function so each step allocates one.
+///
+/// It also returns a *different* closure per branch, which is the property separating absorption from defunctionalization: the rewrite never learns which of the two comes back, because both are applied to the same argument.
+///
+/// Nothing existing reaches it. The two lambdas leave as return values, so the recursion `walk → (s) => walk(m)(…) → walk` closes through an application of a value and no known-callee analysis sees a cycle at all; the closure is genuinely built and genuinely called through.
+///
+/// Two details of its shape are load-bearing rather than decoration, and a smaller fixture measures nothing. The arithmetic puts `walk`'s extent past the multi-site inline budget — without it the inliner *peels* the recursion into itself, since the same invisible cycle that hides the loop from this transform also leaves `walk` unmarked as recursive, and no known call site survives to rewrite. And the applied argument is bound to `c` ahead of the call rather than written into the call, because an argument computed inside the continuation that receives the closure cannot move above it. See [`a_returned_closure_every_caller_applies_is_absorbed`].
+const UNCURRY: &str = r#"
+    use /std/{Handle, Nat, List, proc};
+    rec walk(n : Nat) -> (Nat) -> Nat =
+        match n : (_) => (Nat) -> Nat
+        | 0 => (s) => (s * 7 + 13) % 30011
+        | m + 1 => (s) =>
+            let a = (s * 5 + 3) % 30011;
+            let b = (a * 11 + 17) % 30011;
+            let c = (b * 3 + 19) % 30011;
+            walk(m)(c)
+        end;
+    let taint = List/len(proc/args!);
+    let n : Nat = taint;
+    /std/print(Nat/to_str(walk(n)(1)))
     "#;
 
 // -- helpers ----------------------------------------------------------------
@@ -152,13 +181,31 @@ fn wat(source: &str) -> String {
     compile_raw(source).to_string()
 }
 
-/// The lines of `wat` mentioning `needle` that are not the `Io` carrier's own.
+/// The lines allocating `needle` that are not the `Io` carrier's own.
 ///
 /// Every program's tail is a description, and a description erases to a zero-argument closure — so an effect boundary allocates a closure and forces it through an indirect call no matter how the *user's* code is written. Those carry the `$io/…` hint their thunk was minted with (`io/pure`, `io/bind`, `io/write`, …), which is what lets a claim about user code stay a claim about user code. A test that dropped the distinction would either fail on every program or assert nothing.
-fn user_lines<'a>(wat: &'a str, needle: &str) -> Vec<&'a str> {
+///
+/// **The separation is by what the line names, and that is why this is for allocations and nothing else.** An allocation names its own definition, so `struct.new $clsr/451$io/bind` carries the hint even though the description is built *inside* user code — which is exactly where it is built, so filtering by enclosing function would discard the distinction this exists to make. An indirect call names the arity-keyed supertype instead: `call_ref $clsr/0` identifies no callee, and a needle like that would silently keep every `Io` force while looking like it had excluded them. Those claims belong to [`user_functions_with`], where the enclosing function is the only thing left to separate on. The assertion below is what keeps the choice from being made by accident.
+fn user_allocations<'a>(wat: &'a str, needle: &str) -> Vec<&'a str> {
+    assert!(
+        needle.starts_with("struct.new") || needle.starts_with("array.new"),
+        "`{needle}` names no definition of its own, so the `$io/` hint cannot separate carrier from user code — use `user_functions_with`",
+    );
     wat.lines()
         .map(str::trim)
         .filter(|line| line.contains(needle) && !line.contains("$io/"))
+        .collect()
+}
+
+/// The names of the user's own emitted functions whose bodies contain `needle`.
+///
+/// The counterpart to [`user_allocations`] for everything an instruction does not name itself. Two functions are the effect boundary rather than the user's code: one carrying the `$io/…` hint of the thunk it was minted for, and `$func/main`, which forces the program's own description exactly once because a program *is* a description.
+fn user_functions_with<'a>(functions: &'a [Function<'a>], needle: &str) -> Vec<&'a str> {
+    functions
+        .iter()
+        .filter(|function| function.body.contains(needle))
+        .filter(|function| !function.name.contains("$io/") && function.name != "$func/main")
+        .map(|function| function.name)
         .collect()
 }
 
@@ -201,13 +248,29 @@ fn functions(wat: &str) -> Vec<Function<'_>> {
         .collect()
 }
 
-/// The single emitted function whose body contains `needle` (asserting exactly one does).
+/// The single emitted function whose body contains `needle`, asserting it is a callee that *survived* rather than whatever the needle was inlined into.
+///
+/// "Exactly one function mentions it" is not that fact, and the gap is what a moved budget walks straight into. Inlining a callee into two callers puts the needle in both, and the count catches it — but inlining those callers into a common ancestor merges the mentions back down to one, and the count passes while handing back the ancestor. That is not hypothetical: raising `MULTI_SITE_INLINE_LIMIT` folded `SPLIT_RETURN`'s `first` and `second` into `main` and then `advance` into both, and the test failed claiming `main` should return three result slots — pointing at the wrong function entirely, and one lucky substring away from passing while asserting nothing.
+///
+/// Excluding the entry closes that case and reports it in the terms the reader needs, which is what the fixture must change rather than what the assertion saw. A fixture wanting more than this — that the callee is distinct from a *particular* caller rather than merely from the entry — gives each participant its own constant and compares the names, as [`a_returned_constructor_is_delivered_as_its_fields`] does.
 fn function_with<'a>(functions: &'a [Function<'a>], needle: &str) -> &'a Function<'a> {
-    let mut hits = functions.iter().filter(|f| f.body.contains(needle));
-    let found = hits.next().expect("some function contains the needle");
-    assert!(
-        hits.next().is_none(),
-        "`{needle}` must identify exactly one function",
+    let hits = functions
+        .iter()
+        .filter(|function| function.body.contains(needle))
+        .collect::<Vec<_>>();
+    let names = hits
+        .iter()
+        .map(|function| function.name)
+        .collect::<Vec<_>>();
+    assert_eq!(
+        hits.len(),
+        1,
+        "`{needle}` must identify exactly one function, and identifies {names:?} — the callee it names was inlined into its callers, so grow it past MULTI_SITE_INLINE_LIMIT to restore the fixture's premise",
+    );
+    let found = hits[0];
+    assert_ne!(
+        found.name, "$func/main",
+        "`{needle}` survives only inside the entry, so the callee it names was inlined away along with its callers — grow it past MULTI_SITE_INLINE_LIMIT to restore the fixture's premise",
     );
     found
 }
@@ -464,12 +527,7 @@ fn trees_hot_arithmetic_has_no_indirect_calls() {
     let wat = wat(TREES);
     let functions = functions(&wat);
 
-    let stray = functions
-        .iter()
-        .filter(|function| function.body.contains("call_ref"))
-        .filter(|function| !function.name.contains("$io/") && function.name != "$func/main")
-        .map(|function| function.name)
-        .collect::<Vec<_>>();
+    let stray = user_functions_with(&functions, "call_ref");
     assert!(
         stray.is_empty(),
         "trees calls indirectly outside the effect boundary: {stray:?}"
@@ -490,11 +548,11 @@ fn trees_hot_arithmetic_has_no_indirect_calls() {
 #[test]
 fn trees_ordinary_recursion_has_no_shells() {
     let wat = wat(TREES);
-    let closures = user_lines(&wat, "struct.new $clsr/");
+    let closures = user_allocations(&wat, "struct.new $clsr/");
     assert!(closures.is_empty(), "no closure allocation: {closures:?}");
-    let envs = user_lines(&wat, "struct.new $envr/");
+    let envs = user_allocations(&wat, "struct.new $envr/");
     assert!(envs.is_empty(), "no environment allocation: {envs:?}");
-    let shells = user_lines(&wat, "struct.new_default");
+    let shells = user_allocations(&wat, "struct.new_default");
     assert!(shells.is_empty(), "no closure shell: {shells:?}");
 }
 
@@ -547,17 +605,17 @@ fn direct_and_escaping_uses_coexist() {
 fn function_only_recursion_has_no_fallback_shells() {
     let wat = wat(FUNCTION_ONLY);
     // Allocation, not mention: a module that forces a description at all declares the closure *type* for the arity it forces at, and names it in the `call_ref`. What `down` must not do is allocate one.
-    let closures = user_lines(&wat, "struct.new $clsr/");
+    let closures = user_allocations(&wat, "struct.new $clsr/");
     assert!(
         closures.is_empty(),
         "function-only recursion needs no closures: {closures:?}"
     );
-    let envs = user_lines(&wat, "struct.new $envr/");
+    let envs = user_allocations(&wat, "struct.new $envr/");
     assert!(
         envs.is_empty(),
         "function-only recursion needs no environments: {envs:?}"
     );
-    let shells = user_lines(&wat, "struct.new_default");
+    let shells = user_allocations(&wat, "struct.new_default");
     assert!(
         shells.is_empty(),
         "function-only recursion needs no shells: {shells:?}"
@@ -593,12 +651,24 @@ fn mutual_recursion_stays_reducible() {
 /// A returned constructor is handed back as its fields rather than as a heap tuple, so nothing allocates it and nothing takes it apart.
 ///
 /// The fixture is the intersection the return protocol exists for: too many call sites to contify, too large to inline, and a construction no caller can see. Before the protocol every one of those exclusions held and the tuple survived; the assertion is that the callee both declares several results and allocates nothing to fill them.
+///
+/// The premise is checked before the claim, because it is the half that decays: "too large to inline" is a statement about a constant that may move, and the two exclusions around it are structural. A fixture that has quietly lost its premise asserts nothing while still passing, so the distinctness check earns its place ahead of the test's actual subject.
 #[test]
 fn a_returned_constructor_is_delivered_as_its_fields() {
     let wat = wat(SPLIT_RETURN);
     let functions = functions(&wat);
-    // Located by its own arithmetic rather than by name, and the constant also proves the callee survived as a function: had it been inlined, `20011` would appear in both callers and identify neither.
+    // Located by their own arithmetic rather than by name, which is not stable across the passes this exercises. The callers are expected to fold into the entry, being single-site; what must not happen is the callee folding in with them.
     let advance = function_with(&functions, "20011");
+    for caller in ["30011", "40009"] {
+        let home = functions
+            .iter()
+            .find(|function| function.body.contains(caller))
+            .unwrap_or_else(|| panic!("a caller keeps its own modulus somewhere: {caller}"));
+        assert_ne!(
+            advance.name, home.name,
+            "the callee must stay a function distinct from its callers, or there is no returned construction to deliver",
+        );
+    }
 
     assert!(
         advance
@@ -612,6 +682,49 @@ fn a_returned_constructor_is_delivered_as_its_fields() {
         "nothing may be allocated to carry a result that is now handed back in registers: {}",
         advance.name,
     );
+}
+
+/// A returned closure that every caller applies is absorbed into the callee, so nothing allocates it and nothing calls through it.
+///
+/// All three are asserted because each alone is satisfiable the wrong way. A module that allocated nothing but still dispatched indirectly would have moved the cost rather than removed it; one that dispatched directly while still allocating would pay for a closure nothing reaches; and both hold vacuously of a module where the recursion was simply peeled away, which is what a fixture inside the inline budget produces.
+///
+/// The `call_ref` exemption is `main`'s and the `$io/` thunks', following [`trees_hot_arithmetic_has_no_indirect_calls`]: a program *is* a description now, so forcing one is structurally an indirect call. It goes through [`user_functions_with`] rather than [`user_allocations`] because the instruction names the closure *type* it calls through and never the callee, leaving the enclosing function as the only thing that says whose call it is.
+///
+/// **The environment goes with the closure, and that is lowering's doing rather than this transform's.** A free value reaches a directly-called function as a lifted parameter and an escaping one as an environment field — one decision, taken in `machine::lower` — so absorbing the application moves `walk`'s captured `n` from the second case to the first for free. The emitted pair takes it as a parameter and allocates nothing.
+#[test]
+fn a_returned_closure_every_caller_applies_is_absorbed() {
+    let wat = wat(UNCURRY);
+    let functions = functions(&wat);
+
+    let closures = user_allocations(&wat, "struct.new $clsr/");
+    assert!(
+        closures.is_empty(),
+        "an absorbed closure is never built: {closures:?}"
+    );
+
+    let indirect = user_functions_with(&functions, "call_ref");
+    assert!(
+        indirect.is_empty(),
+        "nor does the application it received stay indirect: {indirect:?}"
+    );
+
+    // Located by the walk's own arithmetic, since neither surviving name is load-bearing: the absorbed step becomes a parameter of the function that used to return it, so the pair is identified by what it computes.
+    let stepping = functions
+        .iter()
+        .filter(|function| function.body.contains("30011"))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        stepping.len(),
+        2,
+        "the walk survives as the two functions it was written as, rather than being peeled",
+    );
+    for function in stepping {
+        assert!(
+            function.body.contains("return_call $func/"),
+            "and each hands on directly and in tail position, keeping the loop flat: {}",
+            function.name,
+        );
+    }
 }
 
 /// What the return protocol removes from the corpus, and what that is worth.

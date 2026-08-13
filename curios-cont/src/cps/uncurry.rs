@@ -62,7 +62,8 @@ pub(super) fn uncurryable(module: &CpsModule) -> BTreeMap<CpsFunId, usize> {
     arity
         .into_iter()
         .filter_map(|(function, width)| {
-            let width = width.filter(|width| *width != usize::MAX)?;
+            // A width of zero is a different transform wearing this one's clothes. There is no argument to absorb, so the closure is a *thunk* and the rewrite only decides when it runs — which for an `Io` description is the one thing its meaning rests on.
+            let width = width.filter(|width| *width != usize::MAX && *width > 0)?;
             let admissible = !calls.escaping.contains(&function)
                 && module.entry() != Some(function)
                 && returns_functions(module, function);
@@ -131,32 +132,54 @@ fn applied_arguments(module: &CpsModule, body: CpsNodeId, callee: CpsValueId) ->
     found
 }
 
+/// How a call site resumes once the callee hands back the answer instead of the closure that produced it.
+enum Resume {
+    /// Resume where the *application* did, bypassing the continuation that received the closure.
+    ///
+    /// Admissible only when that continuation's body is the application and nothing else, which is what makes the bypass total rather than a skipped computation — and which also proves the target is in scope at the call: with no `LetCont` of its own to introduce it, the target was already bound where the receiving continuation was.
+    Retarget(CpsContId),
+    /// Keep that continuation, and turn the application inside it into a jump carrying what the callee now returns directly.
+    ///
+    /// Always well-formed, because nothing moves. It costs one live frame per call, which matters only in a loop — and in a loop the application is itself in tail position, so its target is the caller's own sentinel and [`Resume::Retarget`] takes the site instead.
+    Jump {
+        site: CpsNodeId,
+        result: CpsValueId,
+        after: CpsContId,
+    },
+}
+
 /// Absorb the application, for every class [`uncurryable`] admits.
 ///
-/// Each member takes the applied arguments as extra parameters; each return edge `jump k[Fun(g)]` becomes the tail call `apply Known(g)` on them; each call site passes them; and the application that used to consume the returned closure becomes a jump carrying the result the callee now hands back directly. The continuation that received the closure is *kept* rather than bypassed — it may bind the very continuation the application resumes into, and skipping it would unbind that.
+/// Each member takes the applied arguments as extra parameters; each return edge `jump k[Fun(g)]` becomes the tail call `apply Known(g)` on them; and each call site passes them and resumes by whichever [`Resume`] form its shape admits.
 pub(super) fn uncurry_returns(module: &mut CpsModule) -> bool {
     let widths = uncurryable(module);
     if widths.is_empty() {
         return false;
     }
-    let classes = tail_classes(module);
-    let Some((members, width)) = classes.into_iter().find_map(|members| {
+    // A class that cannot be planned is declined, not fatal: aborting here would leave every later class untried, and one unrewritable site would silently disable the whole pass.
+    let Some((members, width, plan)) = tail_classes(module).into_iter().find_map(|members| {
         let width = widths.get(members.first()?).copied()?;
         members
             .iter()
             .all(|member| widths.get(member) == Some(&width))
-            .then_some((members, width))
+            .then_some(())?;
+        let plan = plan_class(module, &members)?;
+        Some((members, width, plan))
     }) else {
         return false;
     };
 
-    // Mint the parameters first: every member takes the same ones positionally, and a tail call between members forwards its own.
     let mut extra = BTreeMap::new();
     for &member in &members {
         let params = (0..width)
             .map(|index| module.add_value(Some(format!("applied/{}/{index}", member.index()))))
             .collect::<Vec<_>>();
-        module.functions.get_mut(member).unwrap().params.extend(&params);
+        module
+            .functions
+            .get_mut(member)
+            .unwrap()
+            .params
+            .extend(&params);
         extra.insert(member, params);
     }
 
@@ -168,8 +191,7 @@ pub(super) fn uncurry_returns(module: &mut CpsModule) -> bool {
             .map(CpsAtom::Value)
             .collect::<Vec<_>>();
         for node_id in function_nodes(module, member) {
-            // A return edge hands back a function this class no longer builds a closure for; calling it here is what absorbs the application.
-            // A member that returns by tail-calling another member forwards what it was given, or the callee would gain a parameter nothing passes.
+            // A member that returns by tail-calling another forwards what it was given, or the callee gains a parameter nothing passes.
             if let CpsNode::ApplyFun {
                 callee: CpsCallee::Known(onward),
                 args,
@@ -190,6 +212,7 @@ pub(super) fn uncurry_returns(module: &mut CpsModule) -> bool {
                 );
                 continue;
             }
+            // A return edge hands back a function this class no longer builds a closure for; calling it here is what absorbs the application.
             if let CpsNode::ApplyCont(edge) = module.node(node_id).unwrap()
                 && edge.target == sentinel
                 && let [CpsAtom::Fun(returned)] = edge.args.as_slice()
@@ -207,12 +230,59 @@ pub(super) fn uncurry_returns(module: &mut CpsModule) -> bool {
         }
     }
 
-    // Every call site: pass what the application passed, and turn that application into a jump carrying the result.
+    for (node_id, passed, resume) in plan {
+        let Some(CpsNode::ApplyFun {
+            callee,
+            args,
+            return_to,
+        }) = module.node(node_id)
+        else {
+            unreachable!("a planned site is a call")
+        };
+        let (callee, mut args, return_to) = (callee.clone(), args.clone(), *return_to);
+        args.extend(passed);
+        let return_to = match resume {
+            Resume::Retarget(after) => after,
+            Resume::Jump {
+                site,
+                result,
+                after,
+            } => {
+                module.nodes.set(
+                    site,
+                    CpsNode::ApplyCont(CpsEdge {
+                        target: after,
+                        args: vec![CpsAtom::Value(result)],
+                    }),
+                );
+                return_to
+            }
+        };
+        module.nodes.set(
+            node_id,
+            CpsNode::ApplyFun {
+                callee,
+                args,
+                return_to,
+            },
+        );
+    }
+    true
+}
+
+/// Every call site the rewrite must change, or `None` if any of them cannot be.
+///
+/// Parameters are added to a whole class at once, so a site discovered later to be unrewritable would leave a callee expecting an argument nobody passes. The transform has to be decided before it is begun.
+fn plan_class(
+    module: &CpsModule,
+    members: &[CpsFunId],
+) -> Option<Vec<(CpsNodeId, Vec<CpsAtom>, Resume)>> {
+    let mut plan = Vec::new();
     for node_id in module.nodes.live_ids().collect::<Vec<_>>() {
         let Some(CpsNode::ApplyFun {
             callee: CpsCallee::Known(callee),
-            args,
             return_to,
+            ..
         }) = module.node(node_id)
         else {
             continue;
@@ -220,45 +290,57 @@ pub(super) fn uncurry_returns(module: &mut CpsModule) -> bool {
         if !members.contains(callee) {
             continue;
         }
-        let (callee, mut args, return_to) = (*callee, args.clone(), *return_to);
-        let Some(resume) = module.continuation(return_to) else {
+        // A tail call between members forwards the caller's own parameters, and is rewritten with the member rather than here.
+        let Some(resume) = module.continuation(*return_to) else {
             continue;
         };
         let [result] = resume.params.as_slice() else {
-            continue;
+            return None;
         };
-        let (result, body) = (*result, resume.body);
-        let applications = application_sites(module, body, result);
-        let Some(passed) = applications.first().map(|(_, passed)| passed.clone()) else {
-            continue;
+        let applications = application_sites(module, resume.body, *result);
+        let [(site, passed)] = applications.as_slice() else {
+            return None;
         };
-        // A common arity is not a common argument list: two sites passing different values cannot both be answered by one call.
-        if applications.iter().any(|(_, other)| *other != passed) {
-            continue;
+        let CpsNode::ApplyFun {
+            return_to: after, ..
+        } = *module.node(*site).unwrap()
+        else {
+            unreachable!("an application site is an application")
+        };
+        if !reached_directly(module, resume.body, *site) {
+            return None;
         }
-        for (site, _) in applications {
-            let CpsNode::ApplyFun { return_to: after, .. } = *module.node(site).unwrap() else {
-                unreachable!("an application site is an application")
-            };
-            module.nodes.set(
-                site,
-                CpsNode::ApplyCont(CpsEdge {
-                    target: after,
-                    args: vec![CpsAtom::Value(result)],
-                }),
-            );
-        }
-        args.extend(passed);
-        module.nodes.set(
-            node_id,
-            CpsNode::ApplyFun {
-                callee: CpsCallee::Known(callee),
-                args,
-                return_to,
-            },
-        );
+        // Both forms are correct rewrites of this site, and the cheap one is available wherever losing it would cost: a call whose stack depth matters is in tail position, so the application that follows it is too, and a continuation holding nothing but that application is what [`Resume::Retarget`] asks for.
+        plan.push(match resume.body == *site {
+            true => (node_id, passed.clone(), Resume::Retarget(after)),
+            false => (
+                node_id,
+                passed.clone(),
+                Resume::Jump {
+                    site: *site,
+                    result: *result,
+                    after,
+                },
+            ),
+        });
     }
-    true
+    Some(plan)
+}
+
+/// Whether `site` is reached from `body` by binding continuations and doing nothing else.
+///
+/// [`Resume::Jump`] leaves the application where it stands but has the callee perform it before returning, so whatever the receiving continuation evaluates *ahead* of the application would move behind it. A `LetCont` introduces names without evaluating anything, which is why the shape that motivates the form — a join point bound for the application's own result — is admissible where a preceding `let` is not. It also rules out an application reached through a branch or a loop: one syntactic site inside a loop is many forcings, and the rewrite would leave one.
+fn reached_directly(module: &CpsModule, body: CpsNodeId, site: CpsNodeId) -> bool {
+    let mut node = body;
+    loop {
+        if node == site {
+            return true;
+        }
+        match module.node(node) {
+            Some(CpsNode::LetCont { body, .. }) => node = *body,
+            _ => return false,
+        }
+    }
 }
 
 /// Where `callee` is applied beneath `body`, and with what.

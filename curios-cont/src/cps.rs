@@ -1506,6 +1506,7 @@ mod reachable;
 pub(crate) mod represent;
 mod simplify;
 mod specialize;
+mod uncurry;
 pub(crate) use dataflow::*;
 pub(crate) use demand::*;
 pub use optimize::optimize;
