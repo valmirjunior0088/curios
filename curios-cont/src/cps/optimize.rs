@@ -22,7 +22,12 @@ use super::{
     uncurry::uncurry_returns,
 };
 
-pub(super) const MULTI_SITE_INLINE_LIMIT: usize = 8;
+/// How many live nodes a callee with more than one call site may have and still be inlined into each of them.
+///
+/// It was 8, and 8 bound something specific: `/std/State/bind` is a nine-node extent — two of its own and seven in the `bind/1` it nests — so a monadic step kept a shared generic `bind` that received both the action and the continuation as arguments and reached each through `call_ref`. `programs/rng_state.crs` spent 0.825 s there against its hand-threaded control's 0.025 s, and one node of budget was the whole of what stood between them.
+///
+/// That argues for nine. The value is twice the old one instead, because a budget tuned to clear one measured callee is a budget that clears exactly that callee, and the next one a node larger pays the same price with nobody watching.
+pub(super) const MULTI_SITE_INLINE_LIMIT: usize = 16;
 pub(super) const BRANCH_SPECIALIZATION_GROWTH_LIMIT: usize = 24;
 pub(super) const SCC_CLONE_LIMIT: usize = 64;
 pub(super) const SCC_CLONE_NODE_LIMIT: usize = 256;
