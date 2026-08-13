@@ -9,6 +9,7 @@ use constraints::{ConstraintStore, StoreMark, StoreScope};
 mod tests;
 
 use {
+    curios_base::recurse,
     curios_core::{
         Level, LevelHead, UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin,
         UniverseContext, UniverseError, UniverseMetaId, UniverseParam, UniverseRole, UniverseSeed,
@@ -558,72 +559,45 @@ impl UniverseSolver {
 
     /// Substitute every solved metavariable in `level`, and in whatever those solutions name, to a fixed point.
     ///
-    /// Walked on an explicit stack rather than natively. The depth here is the length of a chain of metavariables each solved to a level naming the next, which the fixed prelude drives deep enough that this was the tallest native recursion in the whole build — deep enough to leave the elaborator within about a megabyte of the default stack, so any frame added anywhere else in the crate overflowed it.
+    /// Guarded by [`recurse`] rather than walked on a frame stack. The depth here is the length of a chain of metavariables each solved to a level naming the next, which the fixed prelude drives deep enough that this was once the tallest native recursion in the whole build — deep enough to leave the elaborator within about a megabyte of the default stack. That is data-shaped depth: a chain's length is a function of how many constraints reached the declaration, not of anything anyone wrote.
     ///
-    /// The cycle guard stays *path*-scoped, exactly as the recursion had it: a metavariable already open on the current path resolves to itself, unsubstituted. That is what forbids memoizing a completed level and reusing it elsewhere — off that path the same metavariable does substitute, so a shared answer would be wrong.
+    /// The cycle guard is *path*-scoped, which the recursion carries for free: a metavariable is on the path exactly while its own call is open, so one already open resolves to itself, unsubstituted. That is also what forbids memoizing a completed level and reusing it elsewhere — off that path the same metavariable does substitute, so a shared answer would be wrong.
     ///
-    /// Each frame rebuilds its level through [`Level::substitute`] once its children have landed, so the offset, `max`, and constant arithmetic stays in one place and this walk only decides *what* each head resolves to.
+    /// Each level is rebuilt through [`Level::substitute`] once its children have landed, so the offset, `max`, and constant arithmetic stays in one place and this walk only decides *what* each head resolves to.
     pub fn zonk(&self, level: &Level) -> Result<Level, UniverseError> {
-        /// One level being rebuilt: the heads still to visit, the substitutions its children have supplied, and the metavariable it was entered through — which leaves the path when the frame pops.
-        struct Frame {
-            level: Level,
-            pending: std::vec::IntoIter<LevelHead>,
-            resolved: BTreeMap<LevelHead, Level>,
-            entered: Option<UniverseMetaId>,
-        }
+        /// `visiting` is the chain of metavariables whose solutions are open above this call — the path the guard is scoped to.
+        fn walk(
+            solver: &UniverseSolver,
+            level: &Level,
+            visiting: &mut BTreeSet<UniverseMetaId>,
+        ) -> Result<Level, UniverseError> {
+            recurse(|| {
+                let mut resolved = BTreeMap::new();
 
-        fn frame(level: Level, entered: Option<UniverseMetaId>) -> Frame {
-            let pending = level
-                .atoms()
-                .map(|(head, _)| head)
-                .collect::<Vec<_>>()
-                .into_iter();
+                // A head with nothing to resolve to — a parameter, an unsolved metavariable, or one already on the path — records no substitution, and the rebuild below leaves it standing as itself.
+                for (head, _) in level.atoms() {
+                    let LevelHead::Meta(meta) = head else {
+                        continue;
+                    };
+                    if visiting.contains(&meta) {
+                        continue;
+                    }
+                    let Some(solution) = solver.solution(meta).cloned() else {
+                        continue;
+                    };
 
-            Frame {
-                level,
-                pending,
-                resolved: BTreeMap::new(),
-                entered,
-            }
-        }
-
-        let mut visiting = BTreeSet::new();
-        let mut stack = vec![frame(level.clone(), None)];
-        let mut folded: Option<(LevelHead, Level)> = None;
-
-        loop {
-            let next = {
-                let top = stack.last_mut().expect("the root frame outlives the walk");
-                if let Some((head, zonked)) = folded.take() {
-                    top.resolved.insert(head, zonked);
-                }
-                top.pending.next()
-            };
-
-            // A head with nothing to resolve to — a parameter, an unsolved metavariable, or one already on the path — records no substitution, and the rebuild below leaves it standing as itself.
-            if let Some(head) = next {
-                if let LevelHead::Meta(meta) = head
-                    && !visiting.contains(&meta)
-                    && let Some(solution) = self.solution(meta)
-                {
-                    let solution = solution.clone();
                     visiting.insert(meta);
-                    stack.push(frame(solution, Some(meta)));
-                }
-                continue;
-            }
+                    let zonked = walk(solver, &solution, visiting);
+                    visiting.remove(&meta);
 
-            let done = stack.pop().expect("the frame was just inspected");
-            if let Some(meta) = done.entered {
-                visiting.remove(&meta);
-            }
-            let resolved = done.resolved;
-            let rebuilt = done.level.substitute(|head| resolved.get(&head).cloned())?;
-            match done.entered {
-                Some(meta) => folded = Some((LevelHead::Meta(meta), rebuilt)),
-                None => return Ok(rebuilt),
-            }
+                    resolved.insert(head, zonked?);
+                }
+
+                level.substitute(|head| resolved.get(&head).cloned())
+            })
         }
+
+        walk(self, level, &mut BTreeSet::new())
     }
 
     pub fn add_leq(
