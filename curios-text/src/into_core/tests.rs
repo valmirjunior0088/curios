@@ -59,6 +59,8 @@ const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         true_type: syn_name(&["syn", "True", "True"]),
         lt: syn_name(&["syn", "Nat", "Lt"]),
         le: syn_name(&["syn", "Nat", "Le"]),
+        int_non_zero: syn_name(&["syn", "Int", "NonZero"]),
+        int_non_neg: syn_name(&["syn", "Int", "NonNeg"]),
     },
 };
 
@@ -184,6 +186,23 @@ fn lower_with_prelude(src: &str) -> Result<(), String> {
             pub mod Nat
                 pub let Nat : Type = Type;
                 pub let add : Type = Type;
+            end
+        "#
+        .parse()
+        .unwrap(),
+    );
+    // `/sys` states its preconditions in `/syn`'s propositions, so the roster this fixture builds now carries references out of its own root and the scope has to hold their targets. Stubs, not definitions: these tests lower and never elaborate, so a name that resolves is the whole requirement — the same reason `/std` above is two modules of `Type`.
+    modules.insert_root(
+        "syn",
+        RootKind::Privileged,
+        r#"
+            pub mod Nat
+                pub let Lt : Type = Type;
+                pub let Le : Type = Type;
+            end
+            pub mod Int
+                pub let NonZero : Type = Type;
+                pub let NonNeg : Type = Type;
             end
         "#
         .parse()

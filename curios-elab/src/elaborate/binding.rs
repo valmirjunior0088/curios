@@ -306,8 +306,10 @@ struct InfixMethod {
     provenance: WitnessOrigin,
     /// The method's position among the concept's fields — the projection index.
     index: usize,
-    /// The method's type at `?T`, as a telescope: the two operand domains and the codomain that is the operator's result type.
+    /// The method's type at `?T`, as a telescope: the two operand domains, any binder the declaration carries past them, and the codomain that is the operator's result type.
     signature: Telescope<Term>,
+    /// One mark per binder of `signature`, so an inserted argument is filled by the convention its slot declares.
+    plicities: Vec<Plicity>,
 }
 
 impl InfixMethod {
@@ -318,9 +320,43 @@ impl InfixMethod {
         self.signature.terminal() == operand_type
     }
 
-    /// The operator's result type at its elaborated operands.
-    fn result_type(&self, left: &Term, right: &Term) -> Term {
-        self.signature.open(&[left, right])
+    /// The operator's arguments and result type: the two written operands, then one inserted argument for every binder the method declares past them.
+    ///
+    /// A concept method is not required to be exactly binary. `Div` states the domain its carrier's division is defined on and takes a proof of it, so `a / b` has a third slot to fill — filled here the way an omitted argument is filled at any other application, which is what routes it through the same discharge. Opening the telescope at two values regardless is what this did before, and it panicked on the arity the moment a declaration carried a third binder.
+    ///
+    /// Each argument comes back beside the mark its *slot* declares, not beside the mark its origin suggests. The rebuilt application is re-elaborated — by erasure's re-derivation, by zonking, by archive restoration — and the arity check at that point counts written arguments against explicit slots, so an inserted proof passed off as explicit is an arity error at every later pass. This is [`elaborate_func_check`]'s idempotence requirement on the application side.
+    fn arguments(
+        &self,
+        context: &mut Context,
+        op: NumOp,
+        left: &Term,
+        right: &Term,
+        origin: &Term,
+    ) -> Result<(Vec<(Plicity, Term)>, Term), Error> {
+        let mut telescope = self.signature.clone();
+        let mut marks = self.plicities.iter().copied();
+        let mut arguments = Vec::new();
+
+        for operand in [left, right] {
+            let Telescope::Cons(_, rest) = telescope else {
+                panic!("a syn operator concept declares its method over both operands");
+            };
+            arguments.push((marks.next().unwrap_or(Plicity::Explicit), operand.clone()));
+            telescope = rest.open(&[operand]);
+        }
+
+        loop {
+            match telescope {
+                Telescope::Done(terminal) => return Ok((arguments, *terminal)),
+                Telescope::Cons(domain, rest) => {
+                    let plicity = marks.next().unwrap_or(Plicity::Explicit);
+                    let filled =
+                        insert_auto_argument(context, plicity, &domain, None, op.symbol(), origin)?;
+                    telescope = rest.open(&[&filled]);
+                    arguments.push((plicity, filled));
+                }
+            }
+        }
     }
 }
 
@@ -375,7 +411,11 @@ fn infix_method(
         .open(&[operand_type])
         .field_type_from(&witness, index)
         .expect("a concept's own field index is in range");
-    let Subterm::FuncType(FuncType { telescope, .. }) = &*method_type else {
+    let Subterm::FuncType(FuncType {
+        telescope,
+        plicities,
+    }) = &*method_type
+    else {
         panic!("a syn operator concept declares its method as an arrow");
     };
 
@@ -386,6 +426,7 @@ fn infix_method(
         provenance,
         index,
         signature: telescope.clone(),
+        plicities: plicities.clone(),
     }))
 }
 
@@ -584,11 +625,8 @@ pub(super) fn elaborate_infix(
         term,
     )?;
 
-    let rebuilt = Term::apply(
-        Term::proj(method.witness.clone(), method.index),
-        [left.clone(), right.clone()],
-    );
-    let result_type = method.result_type(&left, &right);
+    let (arguments, result_type) = method.arguments(context, infix.op, &left, &right, term)?;
+    let rebuilt = Term::apply_marked(Term::proj(method.witness.clone(), method.index), arguments);
 
     if let Mode::Check(expected) = &mode {
         expect(context, term, &result_type, expected)?;

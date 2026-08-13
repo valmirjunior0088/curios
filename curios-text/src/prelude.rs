@@ -296,6 +296,26 @@ fn binary(label: &str, operand: Term, output: Term, ctor: fn(Term, Term) -> Intr
     )
 }
 
+// A binary operation whose second operand carries a precondition — the divisions, whose fold reports rather than answers on a zero divisor. The bound is stated the way source states it, for the reason `bin_ops` gives: a refinement is keyed on the term written, and a caller can only write the operand.
+fn guarded_binary(
+    label: &str,
+    operand: Term,
+    output: Term,
+    bound: Term,
+    ctor: fn(Term, Term) -> Intrinsic,
+) -> TopItem {
+    pub_fn_marked(
+        label,
+        vec![
+            (Plicity::Explicit, "a", operand.clone()),
+            (Plicity::Explicit, "b", operand),
+            (Plicity::Implicit, "ok", bound),
+        ],
+        output,
+        intrinsic(ctor(name("a"), name("b"))),
+    )
+}
+
 fn unary(label: &str, input: Term, output: Term, ctor: fn(Term) -> Intrinsic) -> TopItem {
     pub_fn(
         label,
@@ -317,7 +337,19 @@ fn nat_succ() -> TopItem {
     )
 }
 
-fn nat_ops() -> Vec<TopItem> {
+// `0 < b`: a natural is nonzero exactly when zero is below it, so the divisions reuse the bound the accessors already state rather than introducing a second proposition for the same fact.
+fn nat_nonzero(syntax: &SyntaxRegistry) -> Term {
+    applied(
+        registered(syntax.proof.lt),
+        vec![intrinsic(Intrinsic::Nat(Nat::Zero)), name("b")],
+    )
+}
+
+fn int_nonzero(syntax: &SyntaxRegistry) -> Term {
+    applied(registered(syntax.proof.int_non_zero), vec![name("b")])
+}
+
+fn nat_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
     vec![
         nat_succ(),
         binary("eql", nat(), bool_(), Intrinsic::NatEql),
@@ -325,8 +357,8 @@ fn nat_ops() -> Vec<TopItem> {
         binary("add", nat(), nat(), Intrinsic::NatAdd),
         binary("sub", nat(), nat(), Intrinsic::NatSub),
         binary("mul", nat(), nat(), Intrinsic::NatMul),
-        binary("div", nat(), nat(), Intrinsic::NatDiv),
-        binary("rem", nat(), nat(), Intrinsic::NatRem),
+        guarded_binary("div", nat(), nat(), nat_nonzero(syntax), Intrinsic::NatDiv),
+        guarded_binary("rem", nat(), nat(), nat_nonzero(syntax), Intrinsic::NatRem),
         binary("lt", nat(), bool_(), Intrinsic::NatLt),
         binary("gt", nat(), bool_(), Intrinsic::NatGt),
         binary("lte", nat(), bool_(), Intrinsic::NatLte),
@@ -368,15 +400,15 @@ fn bool_ops() -> Vec<TopItem> {
     ]
 }
 
-fn int_ops() -> Vec<TopItem> {
+fn int_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
     vec![
         binary("eql", int(), bool_(), Intrinsic::IntEql),
         binary("neq", int(), bool_(), Intrinsic::IntNeq),
         binary("add", int(), int(), Intrinsic::IntAdd),
         binary("sub", int(), int(), Intrinsic::IntSub),
         binary("mul", int(), int(), Intrinsic::IntMul),
-        binary("div", int(), int(), Intrinsic::IntDiv),
-        binary("rem", int(), int(), Intrinsic::IntRem),
+        guarded_binary("div", int(), int(), int_nonzero(syntax), Intrinsic::IntDiv),
+        guarded_binary("rem", int(), int(), int_nonzero(syntax), Intrinsic::IntRem),
         binary("lt", int(), bool_(), Intrinsic::IntLt),
         binary("gt", int(), bool_(), Intrinsic::IntGt),
         binary("lte", int(), bool_(), Intrinsic::IntLte),
@@ -392,7 +424,19 @@ fn int_ops() -> Vec<TopItem> {
         unary("clz", int(), int(), Intrinsic::IntClz),
         unary("ctz", int(), int(), Intrinsic::IntCtz),
         unary("popcnt", int(), int(), Intrinsic::IntPopcnt),
-        unary("to_nat", int(), nat(), Intrinsic::IntToNat),
+        pub_fn_marked(
+            "to_nat",
+            vec![
+                (Plicity::Explicit, "a", int()),
+                (
+                    Plicity::Implicit,
+                    "ok",
+                    applied(registered(syntax.proof.int_non_neg), vec![name("a")]),
+                ),
+            ],
+            nat(),
+            intrinsic(Intrinsic::IntToNat(name("a"))),
+        ),
         unary("to_flt", int(), flt(), Intrinsic::IntToFlt),
     ]
 }
@@ -791,14 +835,20 @@ pub fn sys_module(foreigns: &ForeignStore, syntax: &SyntaxRegistry) -> Module {
     let handle_host = take_subject(&mut subjects, "Handle");
 
     let mut items = vec![
-        pub_mod("Nat", with_type(pub_let("Nat", type_(), nat()), nat_ops())),
+        pub_mod(
+            "Nat",
+            with_type(pub_let("Nat", type_(), nat()), nat_ops(syntax)),
+        ),
         pub_use("Nat"),
         pub_mod(
             "Byte",
             with_type(pub_let("Byte", type_(), byte()), byte_ops()),
         ),
         pub_use("Byte"),
-        pub_mod("Int", with_type(pub_let("Int", type_(), int()), int_ops())),
+        pub_mod(
+            "Int",
+            with_type(pub_let("Int", type_(), int()), int_ops(syntax)),
+        ),
         pub_use("Int"),
         pub_mod("Flt", with_type(pub_let("Flt", type_(), flt()), flt_ops())),
         pub_use("Flt"),

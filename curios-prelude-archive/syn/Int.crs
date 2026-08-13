@@ -1,0 +1,11 @@
+-- The `Int` bounds the compiler states as preconditions on `/sys`'s operations, decided for the same reason `/syn/Nat`'s are: a caller who has already guarded on the comparison pays nothing to satisfy them, and a literal operand settles them outright.
+--
+-- `Nat` needs no counterpart to `NonZero` — a natural is nonzero exactly when `0 < n`, which `/syn/Nat/Lt` already states.
+use /std/{Int};
+use /syn/{True, False};
+
+pub let NonZero(a: Int) -> Prop =
+    match /sys/Int/neq(a, 0) | true => True | false => False end;
+
+pub let NonNeg(a: Int) -> Prop =
+    match /sys/Int/gte(a, 0) | true => True | false => False end;

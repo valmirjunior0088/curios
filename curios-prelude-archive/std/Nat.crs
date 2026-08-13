@@ -79,10 +79,12 @@ satisfy Mul(Nat) {
 }
 
 satisfy Div(Nat) {
+    Ok(b) = /syn/Nat/Lt(0, b),
     div = div,
 }
 
 satisfy Rem(Nat) {
+    Ok(b) = /syn/Nat/Lt(0, b),
     rem = rem,
 }
 

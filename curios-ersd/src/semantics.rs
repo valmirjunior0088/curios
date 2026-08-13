@@ -228,23 +228,23 @@ impl Semantics {
         }
     }
 
-    /// The behavior of a scalar operation. Division and remainder may trap (zero divisor; signed overflow), the float-to-integer conversions may trap on non-finite or out-of-range input, and `FltOfLeBytes` may trap on a binary that is not exactly four bytes — the [`TrapKind::MalformedInput`] its own fold reports, and the reason this arm and [`Semantics::fold_operation`] have to name the same set. Every other scalar operation is total and allocation-free.
+    /// The behavior of a scalar operation. `IntDiv` may trap, the float-to-integer conversions may trap on non-finite or out-of-range input, and `FltOfLeBytes` may trap on a binary that is not exactly four bytes — the [`TrapKind::MalformedInput`] its own fold reports, and the reason this arm and [`Semantics::fold_operation`] have to name the same set. Every other scalar operation is total and allocation-free.
+    ///
+    /// The divisions used to be trapping as a family, on a zero divisor. They no longer can be: `/sys`'s division takes a proof that its divisor is nonzero, so a term reaching here has already been refused if it could not supply one. `IntDiv` alone keeps the classification, and for the other half of its old note — signed overflow, which is `i32::MIN / -1` and is a *range* fact rather than a domain one, so the precondition says nothing about it and the width the emitter enforces is where it lives. `IntRem` sheds it because the remainder instruction traps only on the divisor.
     pub fn operation(operation: Operation) -> LocalBehavior {
         use Operation::*;
         match operation {
-            NatDiv | NatRem | IntDiv | IntRem | FltToNat | FltToInt | FltOfLeBytes => {
-                LocalBehavior::trap()
-            }
-            BoolAnd | BoolOr | BoolXor | BoolEql | BoolNeq | NatEql | NatNeq | NatAdd | NatSub
-            | NatMul | NatLt | NatGt | NatLte | NatGte | NatAnd | NatOr | NatXor | NatShl
-            | NatShr | NatRotl | NatRotr | NatClz | NatCtz | NatPopcnt | ByteToNat | NatToByte
-            | ByteEql | ByteLt | ByteLte | ByteGt | ByteGte | IntEql | IntNeq | IntAdd | IntSub
-            | IntMul | IntLt | IntGt | IntLte | IntGte | IntAnd | IntOr | IntXor | IntShl
-            | IntShr | IntRotl | IntRotr | IntClz | IntCtz | IntPopcnt | FltAdd | FltSub
-            | FltMul | FltDiv | FltRem | FltEql | FltNeq | FltLt | FltGt | FltLte | FltGte
-            | FltMin | FltMax | FltCopysign | FltNeg | FltAbs | FltSqrt | FltFloor | FltCeil
-            | FltTrunc | FltNearest | NatToInt | NatToFlt | IntToNat | IntToFlt | FltToLeBytes
-            | HandleEql => LocalBehavior::pure(),
+            IntDiv | FltToNat | FltToInt | FltOfLeBytes => LocalBehavior::trap(),
+            NatDiv | NatRem | IntRem | BoolAnd | BoolOr | BoolXor | BoolEql | BoolNeq | NatEql
+            | NatNeq | NatAdd | NatSub | NatMul | NatLt | NatGt | NatLte | NatGte | NatAnd
+            | NatOr | NatXor | NatShl | NatShr | NatRotl | NatRotr | NatClz | NatCtz
+            | NatPopcnt | ByteToNat | NatToByte | ByteEql | ByteLt | ByteLte | ByteGt | ByteGte
+            | IntEql | IntNeq | IntAdd | IntSub | IntMul | IntLt | IntGt | IntLte | IntGte
+            | IntAnd | IntOr | IntXor | IntShl | IntShr | IntRotl | IntRotr | IntClz | IntCtz
+            | IntPopcnt | FltAdd | FltSub | FltMul | FltDiv | FltRem | FltEql | FltNeq | FltLt
+            | FltGt | FltLte | FltGte | FltMin | FltMax | FltCopysign | FltNeg | FltAbs
+            | FltSqrt | FltFloor | FltCeil | FltTrunc | FltNearest | NatToInt | NatToFlt
+            | IntToNat | IntToFlt | FltToLeBytes | HandleEql => LocalBehavior::pure(),
         }
     }
 

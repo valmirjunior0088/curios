@@ -9,9 +9,9 @@ fn a_raise_short_circuits_the_region() {
         use /std/{Nat, Str, Throw, print};
         use /std/Throw/{raise, rescue};
         pub let checked_div(a: Nat, b: Nat) -> Throw(Str, Nat) =
-            match b == 0
-            | true => raise("division by zero")
-            | false => Throw/pure(a / b)
+            match 0 < b
+            | false => raise("division by zero")
+            | true => Throw/pure(a / b)
             end;
         pub let compute(a: Nat, b: Nat) -> Throw(Str, Nat) =
             let q = checked_div(a, b)!;

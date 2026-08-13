@@ -70,6 +70,8 @@ impl SyntaxRegistry {
             self.proof.true_type,
             self.proof.lt,
             self.proof.le,
+            self.proof.int_non_zero,
+            self.proof.int_non_neg,
         ]
         .into_iter()
         .chain(self.concept_fields().map(|target| target.concept))
@@ -176,4 +178,8 @@ pub struct ProofSyntax {
     pub lt: SyntaxName,
     /// `a <= b`, decided, by the same mechanism — the ordering half of a window bound. Distinct from `/std/Nat/Lte`, which stays inductive so its laws can recurse over the relation's constructors.
     pub le: SyntaxName,
+    /// `a != 0` over `Int`, the precondition a division states. `Nat` needs no counterpart: a natural is nonzero exactly when `0 < n`, which [`ProofSyntax::lt`] already states.
+    pub int_non_zero: SyntaxName,
+    /// `0 <= a` over `Int`, the precondition narrowing to `Nat` states.
+    pub int_non_neg: SyntaxName,
 }

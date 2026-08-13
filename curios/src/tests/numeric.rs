@@ -17,6 +17,8 @@ fn tainted(body: &str) -> String {
             end;
         let n = Nat/sub(Byte/to_nat(Option/unwrap_or(Bytes/get(bytes, 0), 0)), 65);
         let i = Nat/to_int(n);
+        let to_nat_or(x : Int, d : Nat) -> Nat =
+            match x >= +0 | true => Int/to_nat(x) | false => d end;
         /std/print({body})
         "#
     )
@@ -29,6 +31,8 @@ fn closed(body: &str) -> String {
         use /std/{{Handle, Nat, Int, Flt, Str}};
         let n = 0;
         let i = +0;
+        let to_nat_or(x : Int, d : Nat) -> Nat =
+            match x >= +0 | true => Int/to_nat(x) | false => d end;
         /std/print({body})
         "#
     )
@@ -76,7 +80,8 @@ fn folded_and_executed_scalar_ops_agree_inside_the_envelope() {
         "Int/to_str(Int/shr(Int/add(-65, i), +1))",
         // Carrier reinterpretations inside both envelopes.
         "Int/to_str(Nat/to_int(1000000000 + n))",
-        "Nat/to_str(Int/to_nat(Int/add(+12345, i)))",
+        // Guarded on `>= +0`, the comparison `/sys/Int/to_nat`'s precondition is decided on: `i` is runtime-tainted, so nothing settles the sign statically and the narrowing demands evidence. Both arms fold identically at the literal `i`, so the differential still compares the conversion rather than the guard.
+        "Nat/to_str(to_nat_or(Int/add(+12345, i), 0))",
         // Rotations, bit counts, and sign transfer.
         "Nat/to_str(Nat/rotl(3 + n, 4))",
         "Nat/to_str(Nat/rotr(64 + n, 3))",
@@ -104,10 +109,25 @@ fn overflowing_computations_trap_at_the_backend_boundary() {
         "Nat/to_str(Nat/rotl(1 + n, 31))",
         "Int/to_str(Int/rotl(Int/add(+1, i), +31))",
         "Int/to_str(Nat/to_int(1073741824 + n))",
-        "Nat/to_str(Int/to_nat(Int/sub(i, +1)))",
-        "Nat/to_str(Nat/div(5 + n, n))",
     ] {
         runtime_traps(body);
+    }
+}
+
+/// The domain half, which is no longer a runtime concern: a negative narrowed to `Nat` and a zero divisor are refused where they are written, because `/sys` states both as preconditions.
+///
+/// These two probes lived in the overflow list above and do not belong there — that list is about a *valid* computation whose value leaves the i31 envelope, a range fact the backend enforces at materialization. Out of domain is a different failure entirely, and it now has a different, earlier answer. `IntDiv` is the one operation in both categories: its precondition rules out the zero divisor, and signed overflow (`i32::MIN / -1`) remains the backend's.
+#[test]
+fn out_of_domain_computations_are_refused_where_they_are_written() {
+    for (body, operation) in [
+        ("Nat/to_str(Int/to_nat(Int/sub(i, +1)))", "/sys/Int/to_nat"),
+        ("Nat/to_str(Nat/div(5 + n, n))", "/"),
+    ] {
+        let error = run_tainted(body).expect_err("expression should be refused");
+        assert!(
+            error.contains("was not inferred") && error.contains(operation),
+            "expected {operation} to demand its precondition for {body}, got: {error}"
+        );
     }
 }
 

@@ -12,12 +12,15 @@ pub concept Mul(A: Type): pub Type {
     mul(A, A) -> A,
 }
 
+-- Division states its own domain. A carrier whose division is partial names the precondition it wants — `Nat` and `Int` a nonzero divisor — and one whose division is total says so with `True` and pays nothing, which is what keeps `/` a single operator over carriers that disagree about whether it can fail.
 pub concept Div(A: Type): pub Type {
-    div(A, A) -> A,
+    Ok(A) -> Prop,
+    div(a: A, b: A, @ok: Ok(b)) -> A,
 }
 
 pub concept Rem(A: Type): pub Type {
-    rem(A, A) -> A,
+    Ok(A) -> Prop,
+    rem(a: A, b: A, @ok: Ok(b)) -> A,
 }
 
 pub concept And(A: Type): pub Type {
@@ -62,3 +65,4 @@ pub mod Str;
 pub use Str/{let Str};
 
 pub mod Nat;
+pub mod Int;

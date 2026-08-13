@@ -2,7 +2,7 @@ pub use /sys/{Flt};
 pub use /sys/Flt/{add, sub, mul, div, rem, min, max, eql, neq, lt, gt, lte, gte, neg, abs, sqrt,
     floor, ceil, trunc, nearest, copysign, to_nat, to_int, to_le_bytes, of_le_bytes};
 use /std/{Nat, Byte, Int, Str, Bool, Option, Bytes, List, Order, BigNat, Eql, Cmp, Add, Sub, Mul,
-    Div, Rem, Show, Ord};
+    Div, Rem, Show, Ord, True};
 
 let pow2(k: Nat) -> BigNat =
     BigNat/mul/pow2(BigNat/of_nat(1), k);
@@ -102,18 +102,24 @@ let setup(f_mant: Nat, exp_field: Nat) -> {BigNat, BigNat, BigNat, BigNat} =
         end
     end;
 
+-- Guarded on `k >= 0` rather than a refuted `k <= 0`, because `Int/to_nat`'s precondition is decided on that comparison and nothing relates the two when both are stuck. The zero exponent moves inside, where it was previously carried by the refuted arm: at `k = 0` the leading form is what it always was, `0.` over no padding.
 let layout(digits_str: Str, k: Int) -> Str =
     let len = Str/len(digits_str);
-    match k <= 0
-    | true => Str/concat(Str/concat("0.", Str/repeat("0", Int/abs(k))), digits_str)
-    | false =>
+    let leading = (pad: Nat) => Str/concat(Str/concat("0.", Str/repeat("0", pad)), digits_str);
+    match k >= +0
+    | false => leading(Int/abs(k))
+    | true =>
         let kn = Int/to_nat(k);
-        match kn < len
-        | true =>
-            Str/concat(
-                Str/concat(Str/slice(digits_str, 0, kn), "."),
-                Str/slice(digits_str, kn, len))
-        | false => Str/concat(digits_str, Str/repeat("0", kn - len))
+        match kn == 0
+        | true => leading(0)
+        | false =>
+            match kn < len
+            | true =>
+                Str/concat(
+                    Str/concat(Str/slice(digits_str, 0, kn), "."),
+                    Str/slice(digits_str, kn, len))
+            | false => Str/concat(digits_str, Str/repeat("0", kn - len))
+            end
         end
     end;
 
@@ -221,12 +227,15 @@ satisfy Mul(Flt) {
     mul = mul,
 }
 
+-- IEEE division is total, so this carrier's domain is everything and the obligation costs nothing — the check that the concept can express "no precondition" without a carve-out.
 satisfy Div(Flt) {
-    div = div,
+    Ok(b) = True,
+    div(a, b) = div(a, b),
 }
 
 satisfy Rem(Flt) {
-    rem = rem,
+    Ok(b) = True,
+    rem(a, b) = rem(a, b),
 }
 
 satisfy Show(Flt) {

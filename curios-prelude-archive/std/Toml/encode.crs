@@ -83,7 +83,8 @@ let int_str(n: Int) -> Str =
     choose
     | n >= +0 => Nat/to_str(Int/to_nat(n))
     | n == -1073741824 => "-1073741824"
-    | _ => Str/concat("-", Nat/to_str(Int/to_nat(+0 - n)))
+    -- The magnitude is `Int/abs`'s to compute now that the one value it cannot carry has its own arm above.
+    | _ => Str/concat("-", Nat/to_str(Int/abs(n)))
     end;
 
 let flt_str(f: Flt) -> Str =

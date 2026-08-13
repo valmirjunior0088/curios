@@ -55,5 +55,7 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         true_type: name(&["syn", "True", "True"]),
         lt: name(&["syn", "Nat", "Lt"]),
         le: name(&["syn", "Nat", "Le"]),
+        int_non_zero: name(&["syn", "Int", "NonZero"]),
+        int_non_neg: name(&["syn", "Int", "NonNeg"]),
     },
 };

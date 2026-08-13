@@ -1,7 +1,7 @@
 pub use /sys/{Int};
 pub use /sys/Int/{eql, neq, add, sub, mul, div, rem, lt, gt, lte, gte, and, or, xor, shl, shr, rotl,
     rotr, clz, ctz, popcnt, to_nat, to_flt};
-use /std/{Nat, Str, Option, Order, Eql, Cmp, Add, Sub, Mul, Div, Rem, Show, Ord};
+use /std/{Nat, Str, Option, Order, Eql, Cmp, Add, Sub, Mul, Div, Rem, Show, Ord, True, False};
 
 pub let to_str(n: Int) -> Str =
     let mag = Nat/to_str(abs(n));
@@ -28,8 +28,23 @@ pub let of_str(s: Str) -> Option(Int) =
         end
     end;
 
+-- The procedure that decides `0 <= n`, the `Int` twin of `Nat/Lt/try`. `Int` carries no inductive ordering family — `Nat/Lte` has constructors a proof can recurse over, and there is no counterpart here — so an `Int` bound is *decided* or it is not had at all.
+pub let non_neg(n: Int) -> Option(/syn/Int/NonNeg(n)) =
+    match n >= +0: (r) => Option(match r: (_) => Prop | true => True | false => False end)
+    | true => Option/some(True/qed())
+    | false => Option/none()
+    end;
+
+-- Both branches decide their own bound rather than deriving the second from the first. That `0 - n` is non-negative whenever `n` is not would need `Int` arithmetic reasoning the library has no family to carry, so the negated branch asks the same question again — and its own failure, which no `Int` can reach, answers zero rather than pretending to a magnitude it did not compute.
 pub let abs(n: Int) -> Nat =
-    match n >= +0 | true => to_nat(n) | false => to_nat(+0 - n) end;
+    match non_neg(n)
+    | some(ok) => to_nat(n, @ok)
+    | none() =>
+        match non_neg(+0 - n)
+        | some(ok) => to_nat(+0 - n, @ok)
+        | none() => 0
+        end
+    end;
 
 pub let cmp(x: Int, y: Int) -> Order =
     choose | x < y => Order/lt() | x == y => Order/eq() | _ => Order/gt() end;
@@ -59,10 +74,12 @@ satisfy Mul(Int) {
 }
 
 satisfy Div(Int) {
+    Ok(b) = /syn/Int/NonZero(b),
     div = div,
 }
 
 satisfy Rem(Int) {
+    Ok(b) = /syn/Int/NonZero(b),
     rem = rem,
 }
 
