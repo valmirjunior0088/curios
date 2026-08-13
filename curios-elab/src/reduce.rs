@@ -463,7 +463,23 @@ fn reduce_universe_inst(context: &Context, instance: UniverseInst) -> Result<Red
     Ok(Reduce::Continue(reduct))
 }
 
-pub(crate) fn reduce(context: &mut Context, mut term: Term) -> Result<Term, ReduceError> {
+/// Native-stack headroom the reducer keeps in reserve, and the segment it takes when it runs low.
+///
+/// Reduction re-enters itself once per operand of a nested intrinsic and once per link of a spine peel, so a *data*-shaped term puts its depth on the native stack even though its unrolling does not — the `PendingMatch` stack below absorbs the eliminator half and nothing absorbed the rest. Growing instead of aborting is what keeps [`DEFAULT_STEP_BUDGET`](crate::DEFAULT_STEP_BUDGET) the only bound that decides whether a term reduces: a stack limit would make acceptance depend on the host's stack size and on frame sizes the optimizer chose, which is exactly the machine-dependence the step budget exists to keep out of the answer.
+///
+/// **Neither figure caps anything, and neither is a tuning knob.** The red zone is the *trigger* — grow when less headroom than this remains — and must simply exceed one re-entry's own frame usage, since the check runs at every level; too small sails past the check and overflows anyway, while too large only grows a little sooner. The growth is the *granularity* of one allocation, so their ratio decides how often the allocator is called and nothing else. Depth is bounded by the budget above, not by either of these.
+///
+/// What this does change: a runaway type-level computation used to meet the native stack at a couple of hundred levels and abort, and now runs until the budget stops it, allocating as it goes — a deep accumulator reached 233 MiB where it previously died. The budget bounds *steps*, so nothing bounds that memory; the trade is deliberate, because a term's acceptance should not depend on how much stack the host handed the process.
+const REDUCE_RED_ZONE: usize = 4 * 1024 * 1024;
+const REDUCE_STACK_GROWTH: usize = 32 * 1024 * 1024;
+
+pub(crate) fn reduce(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
+    stacker::maybe_grow(REDUCE_RED_ZONE, REDUCE_STACK_GROWTH, || {
+        reduce_within(context, term)
+    })
+}
+
+fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceError> {
     if let Some(cached) = context.cached_reduced(&term) {
         return Ok(cached);
     }

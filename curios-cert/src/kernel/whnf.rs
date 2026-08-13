@@ -65,8 +65,20 @@ struct Pending {
     cases: Cases,
 }
 
+/// Native-stack headroom this reducer keeps in reserve, and the segment it takes when it runs low — the kernel's half of the reserve `curios-elab`'s reducer states, and it is here for the same reason the crate duplicates the strategy at all. The `Pending` stack above absorbs the depth of a *match tower*; an intrinsic's operands re-enter through [`reduce_intrinsic`](curios_core::reduce_intrinsic), which is shared, so a deep `add` chain puts one native frame per link on this side exactly as it does on the other. The kernel has to accept every term the elaborator produced, on the same thread stack, so a bound it can hit that the elaborator cannot is a term that typechecks and then fails to certify — which is how this was found: the elaborator was given its reserve first, and the abort simply moved here.
+///
+/// Neither figure caps depth; see the elaborator's constants for what each one is and what the trade costs.
+const WHNF_RED_ZONE: usize = 4 * 1024 * 1024;
+const WHNF_STACK_GROWTH: usize = 32 * 1024 * 1024;
+
 /// Reduce `term` until its head constructor is stable.
 pub(crate) fn whnf(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
+    stacker::maybe_grow(WHNF_RED_ZONE, WHNF_STACK_GROWTH, || {
+        whnf_within(kernel, term)
+    })
+}
+
+fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
     let mut term = term;
     let mut pending: Vec<Pending> = Vec::new();
 
