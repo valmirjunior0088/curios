@@ -1,8 +1,9 @@
 use {
     super::{
-        Apply, Arity, Atom, Bang, Bound, Carrier, Cases, Field, Free, Func, FuncType, Global,
-        InductType, Infix, Intrinsic, Let, Level, Match, Nat, Proj, Rec, Scope, Struct, StructType,
-        Subterm, Telescope, Term, Three, Transient, Tuple, TupleType, Two, Var, Variant,
+        Apply, Arity, Atom, Bang, Bound, Carrier, Cases, Enter, Field, Free, Func, FuncType,
+        Global, InductType, Infix, Intrinsic, Let, Level, Match, Nat, Proj, Rec, Scope, Struct,
+        StructType, Subterm, Telescope, Term, Three, Transient, Tuple, TupleType, Two, Var,
+        Variant,
     },
     curios_base::{
         Flt, Grain, Plicity, Qualifier,
@@ -173,161 +174,72 @@ pub fn display_names(term: &Term) -> BTreeSet<Free> {
     names
 }
 
-/// Collect every binder label in `term`, descending scope and telescope bodies on an explicit stack — a diagnostic's term can be as deep as the deliberately iterative elaborator admits, so this walk must not abort the report the printer's own deferred descent already survives. (`Intrinsic` interiors are skipped: they hold no binders the diagnostics need to name, and any free vars there are already in `free_vars`.)
+/// Collect every binder label in `term` — the names [`Bound`]'s free-variable traversal cannot surface, because a scope's stored labels are bound by definition and the printer reopens them anyway.
+///
+/// Driven by [`Term::walk`] rather than its own worklist, so child enumeration stays in `Subterm::any_child_term` and a new term former carrying a binder cannot reach the printer while quietly missing this walk. What that would look like is not a crash but two distinct binders rendering under one spelling, which is exactly the thing [`build_rename`] promises cannot happen — so the failure mode argues for the shared fold rather than against it.
+///
+/// This hook adds only each node's *own* labels; the depth is [`Term::walk`]'s to absorb. `Intrinsic` and `Foreign` interiors are skipped whole: they hold no binders the diagnostics need to name, and any free vars there are already in `free_vars`.
 fn collect_labels(term: &Term, out: &mut BTreeSet<Free>) {
-    fn scope<'a, A: Arity>(
-        out: &mut BTreeSet<Free>,
-        stack: &mut Vec<&'a Term>,
-        scope: &'a Scope<A>,
-    ) {
+    fn scope_names<A: Arity>(out: &mut BTreeSet<Free>, scope: &Scope<A>) {
         if let Some(names) = scope.names() {
             out.extend(names.iter().cloned());
         }
-        stack.push(scope.body());
     }
 
-    fn telescope<'a>(
-        out: &mut BTreeSet<Free>,
-        stack: &mut Vec<&'a Term>,
-        mut cur: &'a Telescope<Term>,
-    ) {
-        loop {
-            match cur {
-                Telescope::Cons(ty, rest) => {
-                    if let Some(binder) = rest.binder(0) {
-                        out.insert(binder.clone());
-                    }
-                    stack.push(ty);
-                    cur = rest.body();
-                }
-                Telescope::Done(body) => break stack.push(body),
-            }
-        }
-    }
-
-    // A tuple type's telescope has no result term (`Telescope<()>`); only its field types and labels carry names.
-    fn tuple_telescope<'a>(
-        out: &mut BTreeSet<Free>,
-        stack: &mut Vec<&'a Term>,
-        mut cur: &'a Telescope<()>,
-    ) {
-        while let Telescope::Cons(ty, rest) = cur {
+    /// One binder per telescope entry. The entry *types* arrive as ordinary children, so this reads the spine for labels alone — which is what lets one function serve a `Func`/`FuncType` telescope and a `TupleType`'s, whose `Done` carries no term.
+    fn telescope_binders<T: Bound>(out: &mut BTreeSet<Free>, mut cur: &Telescope<T>) {
+        while let Telescope::Cons(_, rest) = cur {
             if let Some(binder) = rest.binder(0) {
                 out.insert(binder.clone());
             }
-            stack.push(ty);
             cur = rest.body();
         }
     }
 
-    let mut stack = vec![term];
-    while let Some(term) = stack.pop() {
-        match &**term {
-            Subterm::FuncType(FuncType { telescope: t, .. }) => telescope(out, &mut stack, t),
-            Subterm::Func(Func { telescope: t, .. }) => telescope(out, &mut stack, t),
-            Subterm::TupleType(TupleType { telescope: t, .. }) => {
-                tuple_telescope(out, &mut stack, t)
-            }
-            Subterm::Apply(Apply { head, params, .. }) => {
-                stack.push(head);
-                stack.extend(params.iter());
-            }
-            Subterm::Tuple(Tuple { fields, .. }) => stack.extend(fields.iter()),
-            Subterm::Proj(Proj { head, .. }) => stack.push(head),
-            Subterm::InductType(InductType {
-                params, indices, ..
-            }) => {
-                stack.extend(params.iter());
-                stack.extend(indices.iter());
-            }
-            Subterm::Variant(Variant {
-                params, payload, ..
-            }) => {
-                stack.extend(params.iter());
-                stack.extend(payload.iter());
-            }
-            Subterm::StructType(StructType { params, .. }) => stack.extend(params.iter()),
-            Subterm::Struct(Struct { params, fields, .. }) => {
-                stack.extend(params.iter());
-                stack.extend(fields.iter());
-            }
-            Subterm::Let(Let { bindings, tail, .. }) => {
-                for binding in bindings {
-                    stack.push(binding.type_());
-                    stack.push(binding.value());
+    term.walk(
+        out,
+        |out, term| {
+            match &**term {
+                Subterm::Intrinsic(_) | Subterm::Foreign(..) => return Enter::Skip(()),
+                Subterm::Func(Func { telescope, .. })
+                | Subterm::FuncType(FuncType { telescope, .. }) => {
+                    telescope_binders(out, telescope)
                 }
-                scope(out, &mut stack, tail);
-            }
-            Subterm::Rec(Rec { group, tail }) => {
-                for member in group.iter() {
-                    scope(out, &mut stack, &member.type_);
-                    scope(out, &mut stack, &member.body);
+                Subterm::TupleType(TupleType { telescope }) => telescope_binders(out, telescope),
+                Subterm::Let(Let { tail, .. }) => scope_names(out, tail),
+                Subterm::Rec(Rec { group, tail }) => {
+                    for member in group.iter() {
+                        scope_names(out, &member.type_);
+                        scope_names(out, &member.body);
+                    }
+                    scope_names(out, tail);
                 }
-                scope(out, &mut stack, tail);
-            }
-            Subterm::Match(Match {
-                head,
-                motive,
-                cases,
-            }) => {
-                stack.push(head);
-                scope(out, &mut stack, motive);
-                match cases {
-                    Cases::Bool {
-                        false_case,
-                        true_case,
-                    } => {
-                        stack.push(false_case);
-                        stack.push(true_case);
+                Subterm::Match(Match { motive, cases, .. }) => {
+                    scope_names(out, motive);
+
+                    match cases {
+                        Cases::Induct { cases, .. } => {
+                            for (_, arm) in cases {
+                                scope_names(out, &arm.body);
+                            }
+                        }
+                        // The unary `Nat` cons arm binds a tail and a hypothesis; `Bin`/`List` bind a peeled generator before those, so the two arities do not share a pattern.
+                        Cases::FreeMonoid { carrier } => match carrier {
+                            Carrier::Nat { cons_case, .. } => scope_names(out, cons_case),
+                            Carrier::Bin { cons_case, .. } | Carrier::List { cons_case, .. } => {
+                                scope_names(out, cons_case)
+                            }
+                        },
+                        Cases::Bool { .. } | Cases::Switch { .. } => {}
                     }
-                    Cases::Switch { cases, default } => {
-                        stack.extend(cases.values());
-                        stack.push(default);
-                    }
-                    Cases::Induct { cases, default, .. } => {
-                        for (_, arm) in cases {
-                            scope(out, &mut stack, &arm.body);
-                        }
-                        stack.extend(default.iter());
-                    }
-                    Cases::FreeMonoid { carrier } => match carrier {
-                        Carrier::Nat {
-                            empty_case,
-                            cons_case,
-                        } => {
-                            stack.push(empty_case);
-                            scope(out, &mut stack, cons_case);
-                        }
-                        Carrier::Bin {
-                            empty_case,
-                            cons_case,
-                            ..
-                        } => {
-                            stack.push(empty_case);
-                            scope(out, &mut stack, cons_case);
-                        }
-                        Carrier::List {
-                            elem,
-                            empty_case,
-                            cons_case,
-                        } => {
-                            stack.push(elem);
-                            stack.push(empty_case);
-                            scope(out, &mut stack, cons_case);
-                        }
-                    },
                 }
+                _ => {}
             }
-            Subterm::Metavar(metavar) => stack.extend(metavar.spine.iter()),
-            Subterm::UniverseInst(instance) => stack.push(&instance.head),
-            Subterm::Transient(transient) => stack.extend(transient.subterms()),
-            Subterm::Var(_)
-            | Subterm::Type(_)
-            | Subterm::Prop
-            | Subterm::Intrinsic(_)
-            | Subterm::Foreign(..) => {}
-        }
-    }
+
+            Enter::Descend
+        },
+        |_, _, _| (),
+    )
 }
 
 /// Give every local binder a clean display spelling: its hint — or `x` where it was minted hintless — suffixed `hint2`, `hint3`, … when several distinct identities — binders *or* free vars — would otherwise render alike, or would shadow a global's displayed rendering. The result is unambiguous by construction, so no rendered name is ever silently shared between two binders.
