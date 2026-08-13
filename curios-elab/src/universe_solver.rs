@@ -1446,113 +1446,60 @@ impl UniverseSolver {
         curios_profile::profile!("universe::check_consistent_full");
         let constraints = self.constraints.as_slice();
 
-        /// One suspended clause of the search: which alternative to try next, the arc committed for the alternative currently being explored (to revert on the way back), and the longest refutation any alternative has produced so far.
-        struct Frame {
-            clause: usize,
-            next: usize,
-            undo: Option<Undo>,
-            best_failure: Option<Vec<usize>>,
-        }
-
-        /// Where the driver is in the walk: descending into a clause, carrying a finished clause's verdict back to its parent, or picking a suspended clause's next alternative.
-        enum Step {
-            Descend(usize),
-            Resume(Result<(), Option<Vec<usize>>>),
-            Advance,
-        }
-
         /// `budget` bounds the nodes this search may visit. Exhausting it is reported as `Err(None)`, distinct from a refuted branch, so the caller can name the clause shape instead of spinning.
         ///
         /// Reaching the last clause needs no final check: feasibility is the search's invariant, so an assignment that committed is a model.
         ///
-        /// The walk is driven by an explicit stack rather than the call stack. Depth here is the number of *branching* clauses, which the budget does not bound — it counts visits — so a constraint set wide enough to need many decisions overflowed the native stack before the budget ever noticed. `/std/Async/block_on` reached four hundred branches. The order of exploration and the decision reached are unchanged.
+        /// Guarded by [`recurse`], because depth here is the number of *branching* clauses and the budget does not bound it — the budget counts visits, so a constraint set wide enough to need many decisions overflowed the native stack before the budget ever noticed. `/std/Async/block_on` reaches four hundred branches. That depth is a function of how many constraints reached the declaration, which is the data-shaped kind.
+        ///
+        /// The recursion is what pairs a committed arc with its revert: the alternative that committed one owns it for exactly the call it is exploring, and reverts before reading that call's verdict.
         fn choose(
             clauses: &[(usize, Vec<Option<Arc>>)],
-            start: usize,
+            clause: usize,
             search: &mut Search,
             budget: &mut u64,
         ) -> Result<(), Option<Vec<usize>>> {
-            let mut stack = Vec::<Frame>::new();
-            let mut step = Step::Descend(start);
+            recurse(|| {
+                match budget.checked_sub(1) {
+                    None => return Err(None),
+                    Some(remaining) => *budget = remaining,
+                }
 
-            loop {
-                step = match step {
-                    Step::Descend(clause) => match budget.checked_sub(1) {
-                        None => Step::Resume(Err(None)),
-                        Some(remaining) => {
-                            *budget = remaining;
-                            match clause == clauses.len() {
-                                true => Step::Resume(Ok(())),
-                                false => {
-                                    stack.push(Frame {
-                                        clause,
-                                        next: 0,
-                                        undo: None,
-                                        best_failure: None,
-                                    });
-                                    Step::Advance
-                                }
+                if clause == clauses.len() {
+                    return Ok(());
+                }
+
+                let mut best_failure = None;
+
+                for choice in clauses[clause].1.iter().copied() {
+                    let undo = match choice {
+                        // A clause alternative that needs no arc is already satisfied by the committed potential.
+                        None => None,
+                        Some(arc) => match search.commit(arc) {
+                            Ok(undo) => Some(undo),
+                            Err(path) => {
+                                record_failure(&mut best_failure, path);
+                                continue;
                             }
-                        }
-                    },
-                    // A clause finished. Its parent owns the arc committed to reach it, and reverts before reading the verdict — the order the recursive form's `revert`-then-`match` had.
-                    Step::Resume(result) => {
-                        let Some(frame) = stack.last_mut() else {
-                            return result;
-                        };
-                        if let Some(undo) = frame.undo.take() {
-                            search.revert(undo);
-                        }
-                        match result {
-                            Ok(()) => {
-                                stack.pop();
-                                Step::Resume(Ok(()))
-                            }
-                            Err(None) => {
-                                stack.pop();
-                                Step::Resume(Err(None))
-                            }
-                            Err(Some(path)) => {
-                                record_failure(&mut frame.best_failure, path);
-                                Step::Advance
-                            }
-                        }
+                        },
+                    };
+
+                    let explored = choose(clauses, clause + 1, search, budget);
+                    if let Some(undo) = undo {
+                        search.revert(undo);
                     }
-                    Step::Advance => {
-                        let frame = stack.last_mut().expect("a frame is suspended");
-                        let clause = frame.clause;
-                        let choices = &clauses[clause].1;
-                        if frame.next == choices.len() {
-                            let failed = frame
-                                .best_failure
-                                .take()
-                                .unwrap_or_else(|| vec![clauses[clause].0]);
-                            stack.pop();
-                            Step::Resume(Err(Some(failed)))
-                        } else {
-                            let choice = choices[frame.next];
-                            frame.next += 1;
-                            match choice {
-                                // A clause alternative that needs no arc is already satisfied by the committed potential.
-                                None => {
-                                    frame.undo = None;
-                                    Step::Descend(clause + 1)
-                                }
-                                Some(arc) => match search.commit(arc) {
-                                    Ok(undo) => {
-                                        frame.undo = Some(undo);
-                                        Step::Descend(clause + 1)
-                                    }
-                                    Err(path) => {
-                                        record_failure(&mut frame.best_failure, path);
-                                        Step::Advance
-                                    }
-                                },
-                            }
-                        }
+
+                    match explored {
+                        Ok(()) => return Ok(()),
+                        Err(None) => return Err(None),
+                        Err(Some(path)) => record_failure(&mut best_failure, path),
                     }
-                };
-            }
+                }
+
+                Err(Some(
+                    best_failure.unwrap_or_else(|| vec![clauses[clause].0]),
+                ))
+            })
         }
 
         /// Keep the longest refutation seen for a clause: the deeper path names more of what forced the contradiction, which is what the caller renders.
