@@ -11,7 +11,7 @@ pub let not(x: Int) -> Int =
     xor(x, -1);
 
 pub let of_str(s: Str) -> Option(Int) =
-    match Str/len(s) == 0
+    match Str/is_empty(s)
     | true => Option/none()
     | false =>
         let first = Str/get(s, 0)!;

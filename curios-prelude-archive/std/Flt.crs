@@ -160,7 +160,7 @@ pub let pow10(n: Nat) -> Flt =
     match n | 0 => +1.0 | pred + 1; ih => ih * +10.0 end;
 
 let digits_or_zero(s: Str) -> Option(Nat) =
-    match Str/len(s) == 0 | true => Option/some(0) | false => Nat/of_str(s) end;
+    match Str/is_empty(s) | true => Option/some(0) | false => Nat/of_str(s) end;
 
 let exp_factor(exp_int: Int) -> Flt =
     match exp_int >= 0
@@ -175,7 +175,7 @@ let exp_factor_of(s: Str, e_pos: Nat, len: Nat) -> Option(Flt) =
     end;
 
 pub let of_str(s: Str) -> Option(Flt) =
-    match Str/len(s) == 0
+    match Str/is_empty(s)
     | true => Option/none()
     | false =>
         let first = Str/get(s, 0)!;
@@ -191,7 +191,7 @@ pub let of_str(s: Str) -> Option(Flt) =
         let int_slice = Str/slice(s, start, int_end);
         let frac_slice =
             match dot_pos < e_pos | true => Str/slice(s, dot_pos + 1, e_pos) | false => "" end;
-        match Str/len(int_slice) > 0 || Str/len(frac_slice) > 0
+        match Bool/not(Str/is_empty(int_slice)) || Bool/not(Str/is_empty(frac_slice))
         | true =>
             let int_val = digits_or_zero(int_slice)!;
             let frac_val = digits_or_zero(frac_slice)!;

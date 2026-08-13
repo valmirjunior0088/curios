@@ -111,6 +111,10 @@ pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
 pub let len(s: Str) -> Nat =
     count_scalars(Scan/lead(), s.bytes);
 
+-- Emptiness without the walk `len` performs, and it decides exactly that question: a `Str` carries a scan from `lead()`, so it holds no scalars precisely when it holds no bytes. Empty bytes count none, and nonempty bytes have their first byte read in the `lead()` state — the only arm `count_scalars` increments on — so the count is at least one. `Bytes/len` reads a stored length, so this settles in constant time what `len(s) == 0` settles in a pass over every byte.
+pub let is_empty(s: Str) -> Bool =
+    Bytes/len(to_bytes(s)) == 0;
+
 pub let find_index(s: Str, pred: (Char) -> Bool) -> Option(Nat) =
     let (_, found): {Nat, Option(Nat)} =
         fold(

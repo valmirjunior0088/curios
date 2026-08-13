@@ -10,7 +10,7 @@
 use /std/{Str, Nat, Char, Option, Io};
 
 let decode(s: Str) -> Option(Nat) =
-    match Str/len(s) == 0: (_) => Option(Nat)
+    match Str/is_empty(s): (_) => Option(Nat)
     | true => Option/none()
     | false =>
         Str/fold(

@@ -25,7 +25,7 @@ pub rec to_str(n: Nat) -> Str =
     end;
 
 pub let of_str(s: Str) -> Option(Nat) =
-    match Str/len(s) == 0
+    match Str/is_empty(s)
     | true => Option/none()
     | false =>
         Str/fold(
