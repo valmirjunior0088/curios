@@ -50,6 +50,10 @@ impl Mount {
 #[curios_archive::archived]
 pub enum RootKind {
     /// Reachable only from a privileged root — `sys` today. Discoverable (so the standard library can resolve it by absolute path) but rejected when referenced from an ordinary consumer.
+    ///
+    /// **The reason is interface stability, not safety.** `/sys` is generated from `curios-abi`'s foreign store: its roster, its argument order, and the shape of every host row move when the ABI moves, and a consumer that reached past the `/std` facade would be pinned to a surface with no compatibility promise. That is the whole of what this tier buys, and it is worth buying.
+    ///
+    /// It is worth stating because the tier was long assumed to be a soundness mechanism, and it never was one. It grants trust to whole *roots*, so `/std/Map` and `/std/Bytes` are indistinguishable to it — which is why the bypasses that motivated giving `/sys`'s operations their preconditions were all *inside* the roots this tier authorizes, one of them inside the very module any conceivable reach rule would have allowed. Nothing behind the gate is a hazard now that those operations carry their domains in their types, and nothing behind it was a hazard the gate itself was catching. It does not constrain what `/sys` *exports* either, so the one premise that does depend on `/sys`'s surface — that `/sys/Io` offers no eliminator — is asserted where that roster is built and not here.
     Internal,
     /// May reference an internal root — `sys`, `syn`, `std` today.
     Privileged,

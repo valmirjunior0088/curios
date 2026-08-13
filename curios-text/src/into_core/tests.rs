@@ -1,4 +1,6 @@
-use crate::{Entrypoint, Error, RootSource, sys_module};
+use crate::{
+    Entrypoint, Error, Intrinsic, LetSignature, RootSource, Subterm, Term, TopItem, sys_module,
+};
 use curios_abi::{WireType, host_ops};
 use curios_base::{
     CharacterSyntax, ConceptField, LiftSyntax, MonadSyntax, OperatorSyntax, ProofSyntax, Qualifier,
@@ -2471,4 +2473,64 @@ fn an_unannotated_local_let_is_pinned_through_a_type_alias() {
             .any(|item| matches!(item, curios_core::Item::Let(d) if d.name.symbol() == "/outer")),
         "outer elaborated"
     );
+}
+
+/// `/sys` offers no way out of `Io`: the effect module exports its carrier and its two monad operations, and no `/sys` function anywhere takes an `Io` to something that is not one.
+///
+/// This *narrows* `SOUNDNESS.md`'s *A type is a pure term*; it does not discharge it. That row rests on there being no operation from `Io(T)` to `T`, and the surface an eliminator could enter through is two Rust tables rather than the whole library: a foreign row cannot introduce one, because `host_fn` wraps every store row's result in `Io` at a single site and `WireType` is a closed enum with no case that could name an `Io` in a domain; and no `.crs` can define one without already having one. So what is checkable is the roster below, and that is what is checked — the general property remains argued.
+#[test]
+fn the_sys_io_roster_offers_no_eliminator() {
+    /// Whether a signature's type is headed by `Io`, which is the only shape that matters here: `/sys` states its effect types directly rather than behind an alias, so a domain that is an `Io` is written as one.
+    fn is_io(term: &Term) -> bool {
+        matches!(&**term, Subterm::Intrinsic(Intrinsic::IoType(_)))
+    }
+
+    /// Every `let` in the module tree, flattened — a nested module is walked rather than skipped, so a later `/sys` submodule cannot host an eliminator out of view.
+    fn lets<'a>(items: &'a [TopItem], out: &mut Vec<(&'a str, &'a LetSignature)>) {
+        for item in items {
+            match item {
+                TopItem::Let(binding) => out.push((&binding.label, &binding.signature)),
+                TopItem::Mod(module) => {
+                    if let Some(module) = &module.module {
+                        lets(&module.items, out);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    let sys = sys_module(&host_ops(), &SYNTAX);
+
+    let io = sys
+        .items
+        .iter()
+        .find_map(|item| match item {
+            TopItem::Mod(module) if module.label == "Io" => module.module.as_ref(),
+            _ => None,
+        })
+        .expect("/sys declares an Io module");
+
+    let mut exported = Vec::new();
+    lets(&io.items, &mut exported);
+    let names = exported.iter().map(|(label, _)| *label).collect::<Vec<_>>();
+    assert_eq!(
+        names,
+        ["Io", "pure", "bind"],
+        "/sys/Io's roster changed; an entry here is a new way into or out of the effect type"
+    );
+
+    let mut all = Vec::new();
+    lets(&sys.items, &mut all);
+    for (label, signature) in all {
+        let LetSignature::Func { params, output, .. } = signature else {
+            continue;
+        };
+
+        let consumes_io = params.iter().any(|param| is_io(&param.type_));
+        assert!(
+            !consumes_io || is_io(output),
+            "/sys/{label} takes an Io to a non-Io result, which is an eliminator for the effect type"
+        );
+    }
 }
