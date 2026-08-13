@@ -4,7 +4,7 @@
 //!
 //! Recursion admission mirrors the language: recursion through functions is unrestricted, and a group's computed member may *evaluate* only earlier computed members — a reference from inside a function body constructed during initialization is dormant and unrestricted. That single rule admits the corpus's value-recursion idioms (a `join_all`-shaped knot whose initializer calls a group function, a value-only self-referential lazy value whose knot closes through a constructed closure) while rejecting exactly the computed-only *evaluation* cycles no initialization order can satisfy. Every rule is corpus-certified: a rule that rejects a supported program is a bug in the rule.
 //!
-//! The walk is iterative over an explicit task stack, so a deep module diagnoses on the default test-thread stack instead of overflowing it.
+//! The walk recurses over the module's block structure inside [`recurse`], so a deep module diagnoses on the default test-thread stack instead of overflowing it. It used to drive an explicit task stack, which reified three things the call stack already provides — sibling ordering, scope entry and exit, and unwinding — into a `Task` enum, a reversing `push_sequence`, and a driver loop that abandoned its pending work on the error path.
 
 #[cfg(test)]
 mod tests;
@@ -15,6 +15,7 @@ use {
         Intrinsic, Module, ProductId, ProductSchema, RecGroup, RecGroupId, Rhs, SequenceArity,
         Statement, StatementId, Terminator, ValueId, VariantFamily,
     },
+    curios_base::recurse,
     std::collections::HashSet,
 };
 
@@ -38,30 +39,6 @@ impl Module {
     }
 }
 
-/// One step of the iterative walk, in execution order (the stack pushes each step sequence reversed).
-enum Task {
-    /// Mark and walk a block: its statements in order, its terminator, then its shallow unbinding.
-    Block(BlockId),
-    /// Check one statement and enqueue its sub-walks.
-    Statement(StatementId),
-    /// Check a block's terminator atoms.
-    Terminator(BlockId),
-    /// Define a value (exactly once) and bring it into scope.
-    BindValue(ValueId),
-    /// Take values out of scope at a frame boundary.
-    UnbindValues(Vec<ValueId>),
-    /// Take functions out of scope at a block boundary.
-    UnbindFunctions(Vec<FunctionId>),
-    /// Enter a function body: dormant context for recursion admission.
-    EnterFunction,
-    /// Leave a function body.
-    ExitFunction,
-    /// Enter the eager initializer of a mixed group's computed member.
-    EnterInit(InitContext),
-    /// Leave the initializer.
-    ExitInit,
-}
-
 /// The recursion-admission context of one computed member's initializer: the group's computed members in order, the index being initialized, and the function depth at entry (a use at a greater depth is dormant).
 struct InitContext {
     computed: Vec<ValueId>,
@@ -71,7 +48,6 @@ struct InitContext {
 
 struct Verifier<'m> {
     module: &'m Module,
-    stack: Vec<Task>,
     values_in_scope: HashSet<ValueId>,
     functions_in_scope: HashSet<FunctionId>,
     defined_values: HashSet<ValueId>,
@@ -87,7 +63,6 @@ impl<'m> Verifier<'m> {
     fn new(module: &'m Module) -> Self {
         Self {
             module,
-            stack: Vec::new(),
             values_in_scope: HashSet::new(),
             functions_in_scope: HashSet::new(),
             defined_values: HashSet::new(),
@@ -108,92 +83,67 @@ impl<'m> Verifier<'m> {
         };
 
         // The module's top level is a virtual block: items in order, then the entry block, with item bindings ambient for everything after them.
-        self.push_sequence(
-            self.module
-                .items()
-                .iter()
-                .map(|&item| Task::Statement(item))
-                .chain([Task::Block(entry)])
-                .collect::<Vec<_>>(),
-        );
-
-        while let Some(task) = self.stack.pop() {
-            self.step(task)?;
+        let items = self.module.items().to_vec();
+        for item in items {
+            self.check_statement(item)?;
         }
+        self.enter_block(entry)?;
 
         self.check_ownership_complete()
     }
 
-    /// Push a step sequence given in execution order.
-    fn push_sequence(&mut self, tasks: impl IntoIterator<Item = Task>) {
-        let start = self.stack.len();
-        self.stack.extend(tasks);
-        self.stack[start..].reverse();
-    }
-
-    fn step(&mut self, task: Task) -> Result<(), VerifyError> {
-        match task {
-            Task::Block(id) => self.enter_block(id),
-            Task::Statement(id) => self.check_statement(id),
-            Task::Terminator(id) => self.check_terminator(id),
-            Task::BindValue(id) => self.bind_value(id),
-            Task::UnbindValues(values) => {
-                for value in values {
-                    self.values_in_scope.remove(&value);
-                }
-                Ok(())
-            }
-            Task::UnbindFunctions(functions) => {
-                for function in functions {
-                    self.functions_in_scope.remove(&function);
-                }
-                Ok(())
-            }
-            Task::EnterFunction => {
-                self.function_depth += 1;
-                Ok(())
-            }
-            Task::ExitFunction => {
-                self.function_depth -= 1;
-                Ok(())
-            }
-            Task::EnterInit(context) => {
-                self.init_contexts.push(context);
-                Ok(())
-            }
-            Task::ExitInit => {
-                self.init_contexts.pop();
-                Ok(())
-            }
-        }
-    }
-
+    /// Walk a block: its statements in order, its terminator, then the shallow bindings it introduced going back out of scope.
+    ///
+    /// The recursion point of the whole verifier — a block's statements open blocks of their own — so this is where [`recurse`] sits. Depth is the module's block nesting, which erasure generates rather than anyone writing.
+    ///
+    /// An error propagates before the unbinding, exactly as the task-stack spelling abandoned its pending work: the walk is over, and a scope left standing cannot be observed.
     fn enter_block(&mut self, id: BlockId) -> Result<(), VerifyError> {
-        let statements = self.block(id)?.statements.clone();
-        if !self.visited_blocks.insert(id) {
-            return Err(VerifyError(format!("block {id} has more than one owner")));
-        }
+        recurse(|| {
+            let statements = self.block(id)?.statements.clone();
+            if !self.visited_blocks.insert(id) {
+                return Err(VerifyError(format!("block {id} has more than one owner")));
+            }
 
-        // Shallow bindings of this block, taken out of scope when it ends.
-        let mut bound_values = Vec::new();
-        let mut bound_functions = Vec::new();
-        for &statement in &statements {
-            match self.statement(statement)? {
-                Statement::Let { result, .. } => bound_values.push(*result),
-                Statement::Functions { functions } => bound_functions.extend(functions),
-                Statement::Rec { group } => {
-                    let group = self.rec_group(*group)?;
-                    bound_functions.extend(&group.functions);
-                    bound_values.extend(group.values.iter().map(|member| member.value));
+            // Shallow bindings of this block, taken out of scope when it ends.
+            let mut bound_values = Vec::new();
+            let mut bound_functions = Vec::new();
+            for &statement in &statements {
+                match self.statement(statement)? {
+                    Statement::Let { result, .. } => bound_values.push(*result),
+                    Statement::Functions { functions } => bound_functions.extend(functions),
+                    Statement::Rec { group } => {
+                        let group = self.rec_group(*group)?;
+                        bound_functions.extend(&group.functions);
+                        bound_values.extend(group.values.iter().map(|member| member.value));
+                    }
                 }
             }
-        }
 
-        self.push_sequence(statements.into_iter().map(Task::Statement).chain([
-            Task::Terminator(id),
-            Task::UnbindValues(bound_values),
-            Task::UnbindFunctions(bound_functions),
-        ]));
+            for statement in statements {
+                self.check_statement(statement)?;
+            }
+            self.check_terminator(id)?;
+
+            for value in bound_values {
+                self.values_in_scope.remove(&value);
+            }
+            for function in bound_functions {
+                self.functions_in_scope.remove(&function);
+            }
+
+            Ok(())
+        })
+    }
+
+    /// Bind `values`, walk `block` under them, and take them back out of scope — the bracket every arm binder, fold binder and function parameter enters its body through.
+    fn scoped_block(&mut self, values: &[ValueId], block: BlockId) -> Result<(), VerifyError> {
+        for &value in values {
+            self.bind_value(value)?;
+        }
+        self.enter_block(block)?;
+        for value in values {
+            self.values_in_scope.remove(value);
+        }
         Ok(())
     }
 
@@ -212,11 +162,9 @@ impl<'m> Verifier<'m> {
                 for &function in &functions {
                     self.bind_function(function)?;
                 }
-                let mut tasks = Vec::new();
                 for &function in &functions {
-                    self.push_function_walk(&mut tasks, function)?;
+                    self.walk_function(function)?;
                 }
-                self.push_sequence(tasks);
                 Ok(())
             }
             Statement::Rec { group: group_id } => {
@@ -238,44 +186,37 @@ impl<'m> Verifier<'m> {
                 for &value in &computed {
                     self.bind_value(value)?;
                 }
-                let mut tasks = Vec::new();
                 for &function in &group.functions {
-                    self.push_function_walk(&mut tasks, function)?;
+                    self.walk_function(function)?;
                 }
                 for (index, member) in group.values.iter().enumerate() {
-                    tasks.push(Task::EnterInit(InitContext {
+                    self.init_contexts.push(InitContext {
                         computed: computed.clone(),
                         limit: index,
                         function_depth: self.function_depth,
-                    }));
-                    tasks.push(Task::Block(member.init));
-                    tasks.push(Task::ExitInit);
+                    });
+                    self.enter_block(member.init)?;
+                    self.init_contexts.pop();
                 }
-                self.push_sequence(tasks);
                 Ok(())
             }
         }
     }
 
-    /// Append the walk of one function definition, entered at its binding site: params bound around the body, dormant depth incremented.
-    fn push_function_walk(
-        &mut self,
-        tasks: &mut Vec<Task>,
-        function: FunctionId,
-    ) -> Result<(), VerifyError> {
+    /// Walk one function definition, entered at its binding site: params bound around the body, dormant depth incremented for the extent of it.
+    fn walk_function(&mut self, function: FunctionId) -> Result<(), VerifyError> {
         let definition = self.function(function)?;
         let params = definition.params.clone();
         let body = definition.body;
-        tasks.push(Task::EnterFunction);
-        tasks.extend(params.iter().map(|&param| Task::BindValue(param)));
-        tasks.push(Task::Block(body));
-        tasks.push(Task::UnbindValues(params));
-        tasks.push(Task::ExitFunction);
+
+        self.function_depth += 1;
+        self.scoped_block(&params, body)?;
+        self.function_depth -= 1;
+
         Ok(())
     }
 
     fn check_let(&mut self, id: StatementId, result: ValueId, rhs: Rhs) -> Result<(), VerifyError> {
-        let mut tasks = Vec::new();
         match rhs {
             Rhs::Alias(atom) => self.check_atom(id, atom)?,
             Rhs::Apply { callee, arguments } => {
@@ -416,12 +357,10 @@ impl<'m> Verifier<'m> {
                     )));
                 }
                 for arm in arms {
-                    tasks.extend(arm.bindings.iter().map(|&binder| Task::BindValue(binder)));
-                    tasks.push(Task::Block(arm.block));
-                    tasks.push(Task::UnbindValues(arm.bindings));
+                    self.scoped_block(&arm.bindings, arm.block)?;
                 }
                 if let Some(default) = default {
-                    tasks.push(Task::Block(default));
+                    self.enter_block(default)?;
                 }
             }
             Rhs::SwitchBool {
@@ -430,8 +369,8 @@ impl<'m> Verifier<'m> {
                 if_true,
             } => {
                 self.check_atom(id, scrutinee)?;
-                tasks.push(Task::Block(if_false));
-                tasks.push(Task::Block(if_true));
+                self.enter_block(if_false)?;
+                self.enter_block(if_true)?;
             }
             Rhs::SwitchNat {
                 scrutinee,
@@ -448,8 +387,10 @@ impl<'m> Verifier<'m> {
                         )));
                     }
                 }
-                tasks.extend(cases.into_iter().map(|case| Task::Block(case.block)));
-                tasks.push(Task::Block(default));
+                for case in cases {
+                    self.enter_block(case.block)?;
+                }
+                self.enter_block(default)?;
             }
             Rhs::FoldNat {
                 scrutinee,
@@ -457,11 +398,8 @@ impl<'m> Verifier<'m> {
                 step,
             } => {
                 self.check_atom(id, scrutinee)?;
-                tasks.push(Task::Block(zero));
-                tasks.push(Task::BindValue(step.predecessor));
-                tasks.push(Task::BindValue(step.hypothesis));
-                tasks.push(Task::Block(step.block));
-                tasks.push(Task::UnbindValues(vec![step.predecessor, step.hypothesis]));
+                self.enter_block(zero)?;
+                self.scoped_block(&[step.predecessor, step.hypothesis], step.block)?;
             }
             Rhs::FoldSequence {
                 grain: _,
@@ -470,16 +408,8 @@ impl<'m> Verifier<'m> {
                 step,
             } => {
                 self.check_atom(id, scrutinee)?;
-                tasks.push(Task::Block(empty));
-                tasks.push(Task::BindValue(step.element));
-                tasks.push(Task::BindValue(step.suffix));
-                tasks.push(Task::BindValue(step.accumulator));
-                tasks.push(Task::Block(step.block));
-                tasks.push(Task::UnbindValues(vec![
-                    step.element,
-                    step.suffix,
-                    step.accumulator,
-                ]));
+                self.enter_block(empty)?;
+                self.scoped_block(&[step.element, step.suffix, step.accumulator], step.block)?;
             }
             Rhs::Cell {
                 operation,
@@ -541,9 +471,8 @@ impl<'m> Verifier<'m> {
                 }
             }
         }
-        tasks.push(Task::BindValue(result));
-        self.push_sequence(tasks);
-        Ok(())
+        // The result comes into scope only after every sub-block has been walked, so a block of this statement cannot see it.
+        self.bind_value(result)
     }
 
     fn check_terminator(&mut self, id: BlockId) -> Result<(), VerifyError> {
