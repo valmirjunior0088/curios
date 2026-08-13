@@ -22,7 +22,6 @@ curios-core = { workspace = true }
 curios-ersd = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
-stacker = { workspace = true }
 
 # The kernel is a *dev*-dependency, and that is the point of the split rather than
 # an accident of it: three tests here put a fixture to both checkers, and a

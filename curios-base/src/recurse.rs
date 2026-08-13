@@ -1,0 +1,24 @@
+//! The native-stack reserve every recursive walk over user data runs inside.
+//!
+//! A compiler stage recurses over two very different depths. One is *authored* — how deeply someone nested a lambda, a module, a match — and the default thread stack tolerates it because a human wrote every level. The other is *data-shaped*: the scan-state chain a string literal lowers to, the UTF-8 derivation of a `Str`, a spine built by a loop. That depth is a function of the input, so no constant bounds it and no reduction budget prevents it — a budget bounds steps, and depth is not steps.
+//!
+//! The alternative is to defunctionalize: turn the recursion into an explicit frame stack so native depth stays O(1) per link. That works, and it costs the thing a checker can least afford to lose. Reduction and conversion decide which programs typecheck, and this workspace deliberately implements each of them *twice* — once in `curios-elab` and once in `curios-cert` — so that a bug in one is caught by disagreement with the other. That bet only pays if a person can read the two side by side, and two hand-rolled state machines are far harder to diff than two recursive strategies. Defunctionalization also re-implements, by hand, what the call stack already did: scope entry and exit, sibling ordering, unwinding on the error path. Each of those becomes a comment arguing that the machine still does what recursion did for free.
+//!
+//! So the recursion stays and the stack grows to fit it. [`recurse`] is that bracket, and it is deliberately the *only* place the figures are written: three call sites once carried their own pair of constants, which is three chances for them to drift apart and no way to tell which one was right.
+
+/// Native-stack headroom to keep in reserve before growing.
+///
+/// The *trigger*, not a cap: when less than this remains, the next [`recurse`] allocates a fresh segment. It must exceed the deepest single frame any guarded walk can push, since the check happens between frames and not inside one — measured at 21.5KiB per level for the kernel's typing walk in a debug build, so this clears the worst known frame by two orders of magnitude.
+const RED_ZONE: usize = 4 * 1024 * 1024;
+
+/// How much stack to take when the reserve runs low.
+///
+/// The *granularity*, not a cap either: nothing here bounds total depth, and a genuinely non-terminating walk is stopped by the reduction budget rather than by running out of stack. A larger segment means fewer allocations on a deep walk and more untouched address space on a shallow one; at this size a walk that never goes deep pays nothing, because the reserve is never taken.
+const STACK_GROWTH: usize = 32 * 1024 * 1024;
+
+/// Run `walk` with room to recurse over data-shaped depth.
+///
+/// Cheap enough to sit at the head of a hot recursive function: the common case is one comparison against the remaining stack. Guard the *entry point* of a recursive walk rather than each internal step — one check per level is the intent, and the segment is sized so that levels are rarely what triggers it.
+pub fn recurse<T>(walk: impl FnOnce() -> T) -> T {
+    stacker::maybe_grow(RED_ZONE, STACK_GROWTH, walk)
+}

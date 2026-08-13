@@ -528,6 +528,7 @@ dependencies = [
  "curios-archive",
  "num-bigint",
  "num-traits",
+ "stacker",
 ]
 
 [[package]]
@@ -553,7 +554,6 @@ dependencies = [
  "curios-profile",
  "num-bigint",
  "num-traits",
- "stacker",
 ]
 
 [[package]]
@@ -592,7 +592,6 @@ dependencies = [
  "curios-profile",
  "num-bigint",
  "num-traits",
- "stacker",
 ]
 
 [[package]]

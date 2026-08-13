@@ -15,3 +15,4 @@ archive = ["curios-archive/enabled"]
 curios-archive = { workspace = true }
 num-bigint = { workspace = true }
 num-traits = { workspace = true }
+stacker = { version = "0.1.25" }

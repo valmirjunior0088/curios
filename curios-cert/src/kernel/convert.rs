@@ -28,6 +28,7 @@ mod tests;
 
 use {
     super::{Kernel, KernelError, Sort, unfold_spelling},
+    curios_base::recurse,
     curios_core::{
         Bound, Carrier, Cases, Field, FuncType, Global, InductType, Level, Many, Proj, Reducer,
         Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two,
@@ -54,22 +55,6 @@ pub fn convert(
 #[derive(Default)]
 struct History {
     seen: HashSet<Goal>,
-}
-
-/// What one turn of [`compare`]'s loop settled.
-enum Turn {
-    /// The comparison is decided.
-    Done(bool),
-    /// A structural mismatch that both sides can still unfold past, to be compared on the *next turn of the loop* rather than in a nested call.
-    ///
-    /// Each retry opens a recursive spelling whose spine may have grown, so its goals never recur into `seen` and the coinductive rule cannot close the chain. Iterating rather than recursing is what leaves the reduction budget as the bound — the same resource `curios-elab`'s conversion leaves it to — instead of a depth counter standing in for the call stack.
-    Retry(Term, Term),
-}
-
-impl From<bool> for Turn {
-    fn from(decided: bool) -> Self {
-        Turn::Done(decided)
-    }
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
@@ -110,9 +95,9 @@ impl History {
 
 /// Compare `this` and `that` at `type_`, under the binders currently in scope.
 ///
-/// An unfolding retry continues this loop instead of recursing into a fresh comparison, so the chain a growing spine produces is bounded by the reduction budget rather than by a depth counter. Measured over the whole `curios` corpus — every test, the entire fixed prelude — the deepest chain real code reaches is three.
+/// Every goal entered stays in `seen` until this call returns, because retry *N+1* is reached from inside retry *N* and both are in progress at once. The call stack is what records that, and unwinding it retires the innermost goal first.
 ///
-/// Every goal a turn enters stays in `seen` until the loop leaves, because retry *N+1* is reached from inside retry *N* and both are in progress at once. `entered` is what keeps that true now that the call stack no longer records it, and unwinding it in reverse retires the innermost goal first.
+/// An unfolding retry recurses back into here, and what bounds that chain is the budget spent on entry rather than a count of how deep it has gone — a constant standing in for the call stack is what [`recurse`] makes unnecessary. Measured over the whole `curios` corpus — every test, the entire fixed prelude — the deepest chain real code reaches is three.
 fn compare(
     kernel: &mut Kernel,
     history: &mut History,
@@ -120,69 +105,41 @@ fn compare(
     this: &Term,
     that: &Term,
 ) -> Result<bool, KernelError> {
-    let (mut type_, mut this, mut that) = (type_.clone(), this.clone(), that.clone());
-    let mut entered = Vec::new();
+    recurse(|| {
+        kernel.spend()?;
 
-    let outcome = loop {
-        match turn(kernel, history, &mut entered, &type_, &this, &that) {
-            Err(error) => break Err(error),
-            Ok(Turn::Done(decided)) => break Ok(decided),
-            // The unfoldings are compared untyped, as the nested `ground` call this replaces did.
-            Ok(Turn::Retry(left, right)) => {
-                type_ = Term::type_ground();
-                this = left;
-                that = right;
+        // Cheapest first: a term converts with itself at any type, and structural sharing makes this hit constantly on terms built by substitution.
+        if this == that {
+            return Ok(true);
+        }
+
+        // Proof irrelevance. Deliberately before reduction: the point is that neither side is examined, and reducing a proof in order to discover it equals another proof is work whose answer was already known.
+        if Sort::of(kernel, type_)?.is_prop() {
+            return Ok(true);
+        }
+
+        let Some(goal) = history.enter(kernel, type_, this, that) else {
+            return Ok(true);
+        };
+
+        let outcome = match Term::unwrap_or_clone(kernel.reduce_forced(type_.clone())?) {
+            Subterm::FuncType(FuncType { telescope, .. }) => {
+                eta_function(kernel, history, telescope, this, that)
             }
-        }
-    };
+            Subterm::TupleType(TupleType { telescope }) if !telescope.is_empty() => {
+                eta_tuple(kernel, history, telescope, this, that)
+            }
+            _ => {
+                let this = kernel.reduce_forced(this.clone())?;
+                let that = kernel.reduce_forced(that.clone())?;
 
-    for goal in entered.iter().rev() {
-        history.leave(goal);
-    }
+                structural(kernel, history, &this, &that)
+            }
+        };
 
-    outcome
-}
-
-/// One turn of [`compare`]'s loop: the fast paths, the history entry, and the type-directed dispatch.
-fn turn(
-    kernel: &mut Kernel,
-    history: &mut History,
-    entered: &mut Vec<Goal>,
-    type_: &Term,
-    this: &Term,
-    that: &Term,
-) -> Result<Turn, KernelError> {
-    kernel.spend()?;
-
-    // Cheapest first: a term converts with itself at any type, and structural sharing makes this hit constantly on terms built by substitution.
-    if this == that {
-        return Ok(Turn::Done(true));
-    }
-
-    // Proof irrelevance. Deliberately before reduction: the point is that neither side is examined, and reducing a proof in order to discover it equals another proof is work whose answer was already known.
-    if Sort::of(kernel, type_)?.is_prop() {
-        return Ok(Turn::Done(true));
-    }
-
-    let Some(goal) = history.enter(kernel, type_, this, that) else {
-        return Ok(Turn::Done(true));
-    };
-    entered.push(goal);
-
-    match Term::unwrap_or_clone(kernel.reduce_forced(type_.clone())?) {
-        Subterm::FuncType(FuncType { telescope, .. }) => {
-            eta_function(kernel, history, telescope, this, that).map(Turn::from)
-        }
-        Subterm::TupleType(TupleType { telescope }) if !telescope.is_empty() => {
-            eta_tuple(kernel, history, telescope, this, that).map(Turn::from)
-        }
-        _ => {
-            let this = kernel.reduce_forced(this.clone())?;
-            let that = kernel.reduce_forced(that.clone())?;
-
-            structural(kernel, history, &this, &that)
-        }
-    }
+        history.leave(&goal);
+        outcome
+    })
 }
 
 /// Eta at a function type: apply both sides to the same fresh binders and compare the results at the codomain.
@@ -261,17 +218,17 @@ fn structural(
     history: &mut History,
     this: &Term,
     that: &Term,
-) -> Result<Turn, KernelError> {
+) -> Result<bool, KernelError> {
     match (&**this, &**that) {
         // Levels compare under the item's assumed constraints: two levels the hypotheses force equal are equal in every instance that satisfies them, which is what checking generically means.
-        (Subterm::Type(left), Subterm::Type(right)) => Ok(kernel.level_eq(left, right).into()),
-        (Subterm::Prop, Subterm::Prop) => Ok(Turn::Done(true)),
+        (Subterm::Type(left), Subterm::Type(right)) => Ok(kernel.level_eq(left, right)),
+        (Subterm::Prop, Subterm::Prop) => Ok(true),
 
         (Subterm::Intrinsic(left), Subterm::Intrinsic(right)) => {
-            convert_intrinsic(kernel, history, left, right).map(Turn::from)
+            convert_intrinsic(kernel, history, left, right)
         }
 
-        (Subterm::Var(left), Subterm::Var(right)) => Ok((left.unwrap() == right.unwrap()).into()),
+        (Subterm::Var(left), Subterm::Var(right)) => Ok(left.unwrap() == right.unwrap()),
 
         // A metavariable is elaboration-only syntax, and refusing it *here* is what makes the exclusion the kernel's own rather than an inherited guarantee of `zonk_module`'s traversal. `whnf` still treats one as a stuck neutral — a reduction stance, not an admission: the only ways a term is admitted are `infer` and this comparison, and both refuse. The syntactic fast path in `compare` does admit a metavariable against *itself*, and soundly: reflexivity decides nothing about the unknown, which is exactly what this arm exists to prevent.
         (Subterm::Metavar(_), _) | (_, Subterm::Metavar(_)) => {
@@ -279,38 +236,34 @@ fn structural(
         }
 
         // Plicity is part of a function type's identity: `(A) -> A` and `(@A) -> A` have different calling conventions, and conflating them would let a value be applied through the wrong one.
-        (Subterm::FuncType(left), Subterm::FuncType(right)) => Ok((left.plicities
+        (Subterm::FuncType(left), Subterm::FuncType(right)) => Ok(left.plicities
             == right.plicities
             && compare_telescope(
                 kernel,
                 history,
                 left.telescope.clone(),
                 right.telescope.clone(),
-            )?)
-        .into()),
+            )?),
 
         // Two lambdas with no expected type to eta against: compare their bodies under one shared set of binders.
-        (Subterm::Func(left), Subterm::Func(right)) => Ok((left.plicities == right.plicities
+        (Subterm::Func(left), Subterm::Func(right)) => Ok(left.plicities == right.plicities
             && compare_telescope(
                 kernel,
                 history,
                 left.telescope.clone(),
                 right.telescope.clone(),
-            )?)
-        .into()),
+            )?),
 
         (Subterm::TupleType(left), Subterm::TupleType(right)) => compare_field_telescope(
             kernel,
             history,
             left.telescope.clone(),
             right.telescope.clone(),
-        )
-        .map(Turn::from),
-
+        ),
         (
             Subterm::Tuple(Tuple { fields: left, .. }),
             Subterm::Tuple(Tuple { fields: right, .. }),
-        ) => compare_each(kernel, history, left, right).map(Turn::from),
+        ) => compare_each(kernel, history, left, right),
 
         // Spine against spine, and when that fails, one definitional unfolding each: two applications of the same fold can differ in an argument position the fold discards — `is_trimmed(h ++ rest)` against `is_trimmed(rest)` — so a spine mismatch is not yet a verdict when either head is a folded recursive call.
         (Subterm::Apply(left), Subterm::Apply(right)) => {
@@ -318,10 +271,10 @@ fn structural(
                 && ground(kernel, history, &left.head, &right.head)?
                 && compare_each(kernel, history, &left.params, &right.params)?
             {
-                return Ok(Turn::Done(true));
+                return Ok(true);
             }
 
-            unfolded(kernel, this, that)
+            unfolded_retry(kernel, history, this, that)
         }
 
         (
@@ -333,7 +286,7 @@ fn structural(
                 head: right,
                 field: right_field,
             }),
-        ) => Ok((left_field == right_field && ground(kernel, history, left, right)?).into()),
+        ) => Ok(left_field == right_field && ground(kernel, history, left, right)?),
 
         (
             Subterm::InductType(InductType {
@@ -348,7 +301,7 @@ fn structural(
                 params: right_params,
                 indices: right_indices,
             }),
-        ) => Ok((left_name == right_name
+        ) => Ok(left_name == right_name
             && kernel.levels_eq(left_universes, right_universes)
             && induct_type_args(
                 kernel,
@@ -357,8 +310,7 @@ fn structural(
                 left_universes,
                 (left_params, left_indices),
                 (right_params, right_indices),
-            )?)
-        .into()),
+            )?),
 
         (
             Subterm::StructType(StructType {
@@ -371,17 +323,15 @@ fn structural(
                 universes: right_universes,
                 params: right_params,
             }),
-        ) => Ok((left_name == right_name
+        ) => Ok(left_name == right_name
             && kernel.levels_eq(left_universes, right_universes)
-            && compare_each(kernel, history, left_params, right_params)?)
-        .into()),
+            && compare_each(kernel, history, left_params, right_params)?),
 
-        (Subterm::Variant(left), Subterm::Variant(right)) => Ok((left.name == right.name
+        (Subterm::Variant(left), Subterm::Variant(right)) => Ok(left.name == right.name
             && left.tag == right.tag
             && kernel.levels_eq(&left.universes, &right.universes)
             && compare_each(kernel, history, &left.params, &right.params)?
-            && compare_each(kernel, history, &left.payload, &right.payload)?)
-        .into()),
+            && compare_each(kernel, history, &left.payload, &right.payload)?),
 
         (
             Subterm::Struct(Struct {
@@ -398,18 +348,17 @@ fn structural(
                 fields: right_fields,
                 ..
             }),
-        ) => Ok((left_name == right_name
+        ) => Ok(left_name == right_name
             && kernel.levels_eq(left_universes, right_universes)
             && compare_each(kernel, history, left_params, right_params)?
-            && compare_each(kernel, history, left_fields, right_fields)?)
-        .into()),
+            && compare_each(kernel, history, left_fields, right_fields)?),
 
         // Eta at a nominal struct, against a neutral inhabitant only — see `struct_eta` for the rule and the restriction.
         (Subterm::Struct(literal), _) if matches!(&**that, Subterm::Var(_) | Subterm::Proj(_)) => {
-            struct_eta(kernel, history, literal, that).map(Turn::from)
+            struct_eta(kernel, history, literal, that)
         }
         (_, Subterm::Struct(literal)) if matches!(&**this, Subterm::Var(_) | Subterm::Proj(_)) => {
-            struct_eta(kernel, history, literal, this).map(Turn::from)
+            struct_eta(kernel, history, literal, this)
         }
 
         (
@@ -421,27 +370,26 @@ fn structural(
                 head: right,
                 levels: right_levels,
             }),
-        ) => Ok((kernel.levels_eq(left_levels, right_levels)
-            && ground(kernel, history, left, right)?)
-        .into()),
+        ) => Ok(
+            kernel.levels_eq(left_levels, right_levels) && ground(kernel, history, left, right)?
+        ),
 
         // A stuck elimination. Everything is compared up to conversion: the scrutinee because that is the position an unfolding cycle travels through, and the motive and arms because a delta-unfolded caller and its spelled-out twin differ exactly there — `step(c, st)` against `step(at(cons(c, t), 0, _), st)` reduces to two stuck matches whose arms are convertible but not identical. The shape stays rigid: tags, plicities, arity, and default presence must agree exactly, because two eliminations enumerating different constructors compute differently on some input even where they agree on this one.
         (Subterm::Match(left), Subterm::Match(right)) => {
-            Ok((ground(kernel, history, &left.head, &right.head)?
+            Ok(ground(kernel, history, &left.head, &right.head)?
                 && ground_scope(kernel, history, &left.motive, &right.motive)?
                 && ground_cases(kernel, history, &left.cases, &right.cases)?)
-            .into())
         }
 
         // A folded recursive call, and a `rec` that forcing declined to unfold. Both are compared syntactically: the interesting case — a cycle that unfolds without disagreeing — is handled by the recurrence rule above, not here. A `rec` whose tail computes something is *not* this case, and falls through to the delta step below.
         (Subterm::Rec(_), Subterm::Rec(_))
             if this.as_rec_proj().is_some() && that.as_rec_proj().is_some() =>
         {
-            Ok((this.as_rec_proj() == that.as_rec_proj()).into())
+            Ok(this.as_rec_proj() == that.as_rec_proj())
         }
 
         // Two spellings of one recursive call: `force` keeps the folded application as a recursive call's normal form, while an arm's induction hypothesis is the raw stuck fold-match on the same argument. When the heads disagree, grant each side the one definitional unfolding `force` withheld and compare what results.
-        _ => unfolded(kernel, this, that),
+        _ => unfolded_retry(kernel, history, this, that),
     }
 }
 
@@ -534,19 +482,26 @@ fn struct_eta(
     Ok(telescope.is_empty())
 }
 
-/// The last chance before a structural refusal: grant each side the one definitional unfolding `force` withheld, and hand the pair back for [`compare`]'s loop to compare on its next turn. A refusal when neither side has a folded recursive spelling to open.
+/// The last chance before a structural refusal: grant each side the one definitional unfolding `force` withheld, and compare the results. A refusal when neither side has a folded recursive spelling to open.
 ///
-/// This decides nothing itself, which is the point — comparing the unfoldings from here would nest one call per retry, and it is that nesting a depth counter used to have to bound.
-fn unfolded(kernel: &mut Kernel, this: &Term, that: &Term) -> Result<Turn, KernelError> {
+/// The unfoldings are compared untyped, through [`ground`]. Each retry opens a spelling whose spine may have *grown*, so its goals never recur into `seen` and the coinductive rule cannot close the chain; what stops an unproductive pair is [`compare`]'s budget, spent once per entry, rather than a count of how deep the retries have gone.
+fn unfolded_retry(
+    kernel: &mut Kernel,
+    history: &mut History,
+    this: &Term,
+    that: &Term,
+) -> Result<bool, KernelError> {
     let left = unfold_spelling(kernel, this)?;
     let right = unfold_spelling(kernel, that)?;
 
     match (left, right) {
-        (None, None) => Ok(Turn::Done(false)),
-        (left, right) => Ok(Turn::Retry(
-            left.unwrap_or_else(|| this.clone()),
-            right.unwrap_or_else(|| that.clone()),
-        )),
+        (None, None) => Ok(false),
+        (left, right) => ground(
+            kernel,
+            history,
+            &left.unwrap_or_else(|| this.clone()),
+            &right.unwrap_or_else(|| that.clone()),
+        ),
     }
 }
 

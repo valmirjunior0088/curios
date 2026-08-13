@@ -43,5 +43,8 @@ pub use monads::*;
 mod packed;
 pub use packed::*;
 
+mod recurse;
+pub use recurse::*;
+
 mod scalar;
 pub use scalar::*;
