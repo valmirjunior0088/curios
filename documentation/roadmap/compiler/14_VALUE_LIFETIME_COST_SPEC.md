@@ -22,9 +22,15 @@ In particular, Curios does not promise that the induction and explicit-recursion
 
 ## Evidence
 
-The string-walk campaign left two heap objects in the per-character path of `/std/Str/fold`: the suffix view produced by `match b | x[h, ..t]` and the `{A, Nat}` accumulator used to carry the result and partial codepoint.
+The string-walk campaign left three heap objects in the per-character path of `/std/Str/fold`, and no two of them are removed by the same mechanism.
 
-Neither value is confined to the iteration that constructs it: both are passed to the recursive `go`, so the relevant region is the visible recursive function and its backedges rather than one lexical iteration.
+The suffix view is produced by `match b | x[h, ..t]`. The `{A, Nat}` accumulator carries the result and the partial codepoint. The `Scan` state is destructured out of the loop's own parameter and rebuilt field by field to be handed to `step`.
+
+The third was missed while the first two were being counted, and how it was missed is worth keeping: the instrument reported the scan as *work* — a call to `step`, then `classify` — and an allocation handed **to** a call is not where a count of allocation sites looks.
+
+None of the three is confined to the iteration that constructs it: each crosses the loop's own edge, so the region is the loop and its backedges rather than one lexical iteration.
+
+`go` is not a function by the time the optimizer sees it. It has exactly one external call site and its recursion is a tail call, so `contify_calls` turns it into a continuation, and the accumulator arrives as a continuation parameter while the scan state is an argument to a known call. That difference is not incidental to the spelling — it is what decides which capability below removes which object.
 
 The measurements, commands and structural counts live in `curios/src/tests/codegen/ladder.rs` and `curios/src/tests/codegen/structural.rs`; this document records what they selected, not figures that can drift away from their probes.
 
@@ -38,9 +44,15 @@ This specification concerns the middle tier, where the value is used but no visi
 
 The shared demand lattice already distinguishes projection-only use from opaque use, but passing a value as an argument is deliberately opaque today; propagating demand through the callee parameter is the required interprocedural strengthening.
 
+**That strengthening pays before any rewrite is written.** `/syn/Str/step` returns a `Scan` whose every field the loop projects, but its result is passed onward as an argument and therefore reads as `Opaque`, which pins its component to the tuple protocol. Under a demand that defers to the receiving parameter the same component becomes `Fields(4)`, and `split_returns` — which already exists and already coordinates tail-call classes — becomes eligible on it. The fact is a shipping capability, not only a prerequisite.
+
 The return protocol already coordinates multi-value results over tail-call-connected function components, and call-pattern specialization already uses worker/wrapper-shaped clones that thread dynamic tuple fields through parameters.
 
+**Specialization already matches the scan-state reconstruction and declines it, on a budget rather than on a rule.** The rebuilt `Scan` carries a literal tag, `step` deconstructs the parameter it lands in, and every other condition holds; the callee's extent is 37 live nodes against a `BRANCH_SPECIALIZATION_GROWTH_LIMIT` of 24. That refusal is correct for the mechanism doing the asking — SpecConstr must duplicate the callee once per tag to thread its fields — and it is the clearest argument that a distinct mechanism is warranted, because rewriting the signature threads the same fields while cloning nothing. A budget that declines a per-character allocation is evidence about the *mechanism*, not about the candidate.
+
 `represent.rs` decides raw representation for locals only, correctly refusing unilateral decisions that cross a signature; this work must coordinate every rewritten caller and callee or retain a wrapper speaking the original boxed ABI.
+
+**Raw storage for a split field is therefore two capabilities, not one.** A continuation parameter offers `Open` and can settle on a raw carrier the moment a use demands one, so splitting a tuple through continuations delivers raw fields for free. A function parameter offers `Never` — it arrives through a signature that is uniformly `anyref` — so a split field in a *worker* signature stays boxed until something decides that signature's layout, which is the decision `represent.rs` exists to refuse. Splitting a product and unboxing its fields must not be quoted as one outcome.
 
 Curios therefore has several purpose-specific notions of demand, function escape and boundary crossing, but no general aggregate-flow fact that follows a construction through continuation and known-function parameters.
 
@@ -108,6 +120,8 @@ This includes loop headers and backedges: loop-carried state is the central case
 
 Only demanded fields need be threaded, so the transformation can expose newly dead fields and parameters to the existing optimizer.
 
+The `/std/Str/fold` accumulator is this capability's acceptance case, and it is reached here rather than through a worker signature because contification has already made it a continuation parameter. Every use of it is a projection or a jump, every incoming edge carries a visible construction, and the continuation it exits to projects field zero and nothing else — so splitting the exit alongside the header leaves the seed construction dead and removes the `{A, Nat}` object from the path entirely, without inlining and without Binaryen. Its `A` field stays a reference; its `Nat` field is demanded raw by the multiply that reads it, and a continuation parameter is allowed to answer that.
+
 ### Known function parameters
 
 When the same flow crosses known direct function calls, create or select a worker signature carrying the demanded fields.
@@ -120,7 +134,9 @@ If the function escapes or retains callers that need the boxed ABI, keep a wrapp
 
 Opaque recursive calls, indirect calls and host-visible functions remain on the boxed interface.
 
-The `/std/Str/fold` accumulator is the motivating acceptance case: its `A` field may remain a reference while its `Nat` field becomes eligible for raw scalar storage, and the `{A, Nat}` object must disappear from the recursive path without relying on inlining or Binaryen.
+The `/std/Str/fold` scan state is this capability's acceptance case. The `cont` arm projects `rem`, `lo` and `hi` out of the loop's parameter and rebuilds the four-field `Scan` solely to pass it into `step`, which deconstructs it again — a reconstruction that exists because the two sides agree on an object rather than on fields. It must disappear from the recursive path, and it must disappear by rewriting one signature rather than by duplicating a 37-node callee once per tag, which is what the existing specializer would have to do and correctly declines to.
+
+Its fields stay boxed at the worker boundary unless a separate decision widens what a signature may carry, per *Existing substrate* above; that limit is a property of this capability and belongs in the tests, not a defect of the rewrite.
 
 ### Results
 
@@ -141,6 +157,8 @@ The optimizer-facing form must therefore separate window preparation from physic
 Preparation produces a stable virtual base, offset and length after performing every eager semantic obligation of the slice.
 
 `len`, `get` and further `slice` consumers operate on those fields, with further slices composing offsets and performing their own bounds check against the virtual length.
+
+**What this removes is a call as well as an allocation**, and framing it as one object per character undersells it. The window is built by the shared slice helper, so virtualizing it costs neither the `struct.new` nor the `call` that produced it, and a read through a prepared triple reaches the base's flat payload instead of re-dispatching on a tag. A walk that consumes its own suffixes stops being a chain of views and becomes an index into one payload. That is the larger claim, and the measurement gate must be allowed to hold it to that rather than to an allocation count.
 
 An opaque consumer materializes the same representation choice that the existing helper would provide for the corresponding empty, whole or proper window case.
 
@@ -164,21 +182,27 @@ Evidence that would stop the campaign is a survey showing that eligible allocati
 
 ## Milestones
 
+**These are a fork, not a chain.** M1 establishes the one fact everything else reads, and M2, M4 and the existing return protocol each consume it independently; only M3 sits downstream of another capability. Ordering them M1 → M2 → M3 → M4 would be a schedule rather than a dependency, and M0 is what should choose that schedule — by yield, against a corpus, with the option of stopping.
+
 ### M0 — Survey and instruments
 
 - Add the aggregate-flow census and its reproducible corpus fixture.
 
-- Add isolated attribution for the accumulator tuple and suffix view beside the string ladder.
+- Add isolated attribution for the accumulator tuple, the scan state and the suffix view beside the string ladder — three instruments, because the three objects fall to three different mechanisms and a shared figure would attribute none of them.
 
 - Record raw-versus-Binaryen structural deltas and choose the growth policy from the observed candidates.
 
+- Report how many candidates lie outside `/std`. The stopping evidence below is a real possible outcome of this milestone, and reaching it is a result rather than a failure.
+
 ### M1 — Aggregate-flow fact
 
-- Strengthen demand from a syntactic scan into a fixpoint that can relate eligible arguments to receiving parameters without treating every transfer as opaque.
+- Change the demand rule so an argument defers to the parameter that receives it. The analysis is already a fixpoint over the shared solver, and its own documentation says the strengthening is a change of one rule rather than of the shape — so this is not a rewrite of the substrate and should not be scheduled as one.
 
 - Classify materialization boundaries, exclusive and mixed flows, recursive components and demanded field sets.
 
 - Prove the fact with focused tests before it moves code.
+
+- Then let it move code on its own: with arguments no longer opaque, `split_returns` becomes eligible on components it currently pins, and the scan-state return is the first of them. Ship that before any new rewrite exists, because it is the cheapest thing in this document and it measures the fact.
 
 ### M2 — Continuation scalar replacement
 
@@ -188,6 +212,8 @@ Evidence that would stop the campaign is a survey showing that eligible allocati
 
 - Retain or decline candidates at mixed and opaque boundaries according to the first implementation's documented limit.
 
+- Remove the `/std/Str/fold` accumulator allocation in raw pre-Binaryen output, and with it the seed construction the exit continuation leaves dead.
+
 ### M3 — Known-function workers
 
 - Extend the same field flow through direct function calls and recursive components.
@@ -196,7 +222,7 @@ Evidence that would stop the campaign is a survey showing that eligible allocati
 
 - Preserve tail calls, continuation arities and the existing return-protocol ownership boundary.
 
-- Remove the `/std/Str/fold` accumulator allocation in raw pre-Binaryen output.
+- Remove the `/std/Str/fold` scan-state reconstruction in raw pre-Binaryen output, and check the emitted callee is rewritten rather than duplicated — a clone that happens to remove the allocation has not demonstrated this capability.
 
 ### M4 — Prepared rope windows
 
@@ -204,7 +230,7 @@ Evidence that would stop the campaign is a survey showing that eligible allocati
 
 - Teach length, indexed read and further slicing to consume virtual windows.
 
-- Materialize at opaque boundaries and remove the recursive suffix-view allocation in raw pre-Binaryen output.
+- Materialize at opaque boundaries and remove the recursive suffix-view allocation in raw pre-Binaryen output — together with the helper call that produced it, which is the half an allocation count does not see.
 
 ### M5 — Cost contract
 
@@ -226,9 +252,11 @@ The campaign is complete only when all of the following hold:
 
 - Tail-recursive fixtures remain tail calls after signature rewriting, and shared continuation arities remain valid.
 
-- The `Nat` member of a split product can reach raw scalar representation when its uses permit it.
+- The `Nat` member of a product split through *continuation* parameters reaches raw scalar representation when its uses demand it.
 
-- `/std/Str/fold` emits neither the per-character accumulator tuple nor the proper suffix-view object on the raw pre-Binaryen recursive path.
+- The same member split through a *worker signature* is asserted to stay boxed, and the test says why: a function parameter offers no carrier, and widening what a signature may carry is a separate decision this campaign does not take. An acceptance criterion that quietly expected raw here would be asserting the successor's work.
+
+- `/std/Str/fold` emits none of the three per-character objects on the raw pre-Binaryen recursive path: the accumulator tuple, the scan-state reconstruction, and the proper suffix-view object with the helper call that builds it.
 
 - Empty, whole, nested, uncached and out-of-bounds slice fixtures preserve the existing result, eager trap and memoization behavior.
 

@@ -97,13 +97,24 @@ const PARSE_MANUAL: &str = include_str!("../../../../programs/parse_manual.crs")
 /// | --- | --- |
 /// | read the byte | `call $bytes/read` |
 /// | **allocate a rope view** for the tail | `call $bytes/slice` |
+/// | **allocate the scan state** to hand to `step` | `struct.new $tpl/4` |
 /// | the UTF-8 scan | `call $syn/Str/step`, then `classify` |
 /// | **indirect call** through `f` | `call_ref $clsr/2` |
 /// | **allocate the accumulator tuple** | `struct.new $tpl/2` |
 ///
-/// Two of those five are allocations, and **both are created and consumed inside one iteration and never escape**. The accumulator tuple is the less obvious one and the better example: nobody wrote it, it exists because the fold threads `{A, Nat}`. The indirect call is its own roadmap item. The scan is the work the abstraction performs and the control declines, which is what makes `parse_manual` a ceiling rather than an equivalent.
+/// Three of those six are allocations, and **none is confined to the iteration that builds it**: each crosses the loop's own edge, so the region is the loop and its backedges rather than one lexical iteration. The accumulator tuple is the least obvious and the best example: nobody wrote it, it exists because the fold threads `{A, Nat}`. The indirect call is its own roadmap item. The scan is the work the abstraction performs and the control declines, which is what makes `parse_manual` a ceiling rather than an equivalent.
 ///
-/// **The split between those five is unmeasured**, and dividing it needs one instrument each rather than another rung: removing the two allocations measures them, specializing `f` measures the call, and what remains is the scan.
+/// **The scan state was missing from this table, and how it was missing is the reusable part.** The row below it reports the scan as *work* — two calls — and an allocation handed **to** a call is not where a reader counting allocation sites looks. It is `Scan/cont(rem, lo, hi)`, destructured out of the loop's own parameter and rebuilt field by field purely to be passed in, so it is a reconstruction rather than a value anyone wrote.
+///
+/// Retaken **2026-08-13** by reading the emitted body rather than grepping the module, which is what the count above should have done from the start:
+///
+/// ```sh
+/// cargo run --package curios -- --print=wasm compile programs/parse_digits.crs -o /tmp/parse_digits
+/// ```
+///
+/// The raw pre-Binaryen module goes to stderr. `$func/…$/std/Str/fold` then holds five `struct.new $tpl/2` — four in the arms, plus the seed built before the loop — one `struct.new $tpl/4`, three `call $bytes/slice`, three `call $bytes/read` and two `call_ref $clsr/2`. Exactly one arm runs per character, which is what turns those site counts into the per-character row above.
+///
+/// **The split between those six is unmeasured**, and dividing it needs one instrument each rather than another rung: removing the three allocations measures them, specializing `f` measures the call, and what remains is the scan.
 ///
 /// ## The static half, and why it divides almost nothing
 ///
