@@ -26,7 +26,7 @@ use {
         Kernel, KernelError, Sort, check_group, convert::convert, sort::as_sort, sort::infer_sort,
         synth_neutral,
     },
-    curios_base::{Grain, PackedBin},
+    curios_base::{Grain, PackedBin, recurse},
     curios_core::{
         Apply, Bound, Carrier, Cases, Field, Free, Func, FuncType, InductType, Intrinsic, Let,
         Many, Nat, One, Proj, Rec, Reducer, Scope, Struct, StructType, Subterm, Telescope, Term,
@@ -34,54 +34,22 @@ use {
     },
 };
 
-/// Record `obligations` for [`infer`]'s loop, innermost-last.
-///
-/// Reversed on the way in so popping yields them in source order, which is the order the recursion they replace visited them in.
-fn defer(deferred: &mut Vec<Obligation>, obligations: Vec<Obligation>) {
-    deferred.extend(obligations.into_iter().rev());
-}
-
-/// A child whose type must be checked, deferred rather than descended into.
-///
-/// See [`infer`]: the pair is a term and the type it has to inhabit, recorded at the context it was written in.
-type Obligation = (Term, Term);
-
 /// The type of `term`.
 ///
-/// # Why this drives a stack instead of recursing
+/// A child position is checked by descending into it. `check` is `infer` followed by `subsumes`, so `infer → check → infer` costs two native frames per link of a right-nested chain, and a `Str` literal's UTF-8 derivation is one such link per byte — depth as a function of the *data* rather than of what anyone wrote, measured at 21.5KiB per level in a debug build. [`recurse`] is what makes that affordable; a budget cannot, since a budget bounds steps and depth is not steps.
 ///
-/// `check` is `infer` followed by `subsumes`, and `infer` on an application checks each argument — so `infer → check → infer` descends two native frames per link of a right-nested chain. A `Str` literal's UTF-8 derivation is one such link per byte, which made the depth a function of the *data* rather than of what anyone wrote. Measured at 21.5KiB of stack per level in a debug build, that exhausted a 2MiB thread partway through `/std/Toml`, and no reduction budget can prevent it: a budget bounds steps, and depth is not steps.
-///
-/// The child obligations of an application, a constructor, and a record are therefore *deferred* to this loop rather than descended into. Those three open no binders — they instantiate their telescopes by substituting the child term, not by binding it — so every obligation they defer is checked in the same context it was recorded in. Arms that *do* open binders keep recursing, because their depth is the nesting someone wrote, which is a bound the default stack tolerates.
-///
-/// Order is preserved exactly: obligations are pushed in reverse and popped, so a child is fully checked before its next sibling, which is what recursion did. `infer` drains before it returns, so nothing outside this function can observe an obligation in flight.
+/// This once drove an explicit worklist instead, and the worklist quietly changed the *rule*: a deferred child was inferred and subsumed, which skips the three checked rules `check` dispatches first — let-descent, Π-introduction, Σ-introduction. Since the deferred positions are exactly arguments, constructor payloads and record fields, that made a lambda or a dependent tuple in argument position take the inferred route and manufacture the non-dependent type those rules exist to avoid. Nothing in the prelude or corpus reached the shape, so it never surfaced. See `documentation/SOUNDNESS.md`, *Checked rules at deferred child positions*.
 pub fn infer(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
-    let mut deferred = Vec::new();
-    let inferred = infer_node(kernel, term, &mut deferred)?;
-    // Seed for the erasure obligations, at an *inferred* position. A term's type is its type however the judgment arrived at it, so a proof reached only by inference — a match scrutinee, most consequentially — is a proof position exactly as a checked one is. Recording only checked positions left a diverging proof in a scrutinee unseeded, and the elimination conjured a relevant value from it.
-    kernel.record_checked(term, &inferred);
+    recurse(|| {
+        let inferred = infer_within(kernel, term)?;
+        // Seed for the erasure obligations, at an *inferred* position. A term's type is its type however the judgment arrived at it, so a proof reached only by inference — a match scrutinee, most consequentially — is a proof position exactly as a checked one is. Recording only checked positions left a diverging proof in a scrutinee unseeded, and the elimination conjured a relevant value from it.
+        kernel.record_checked(term, &inferred);
 
-    while let Some((term, expected)) = deferred.pop() {
-        let actual = infer_node(kernel, &term, &mut deferred)?;
-        kernel.record_checked(&term, &actual);
-
-        if !subsumes(kernel, &actual, &expected)? {
-            return Err(KernelError::Mismatch {
-                inferred: Box::new(actual),
-                expected: Box::new(expected),
-            });
-        }
-    }
-
-    Ok(inferred)
+        Ok(inferred)
+    })
 }
 
-/// One node's type, with its deferrable children pushed onto `deferred`.
-fn infer_node(
-    kernel: &mut Kernel,
-    term: &Term,
-    deferred: &mut Vec<Obligation>,
-) -> Result<Term, KernelError> {
+fn infer_within(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
     kernel.spend()?;
 
     match &**term {
@@ -166,17 +134,14 @@ fn infer_node(
             }
 
             let mut telescope = telescope;
-            let mut obligations = Vec::with_capacity(params.len());
             for param in params {
                 let Telescope::Cons(domain, rest) = telescope else {
                     unreachable!("arity was checked above")
                 };
 
-                // The codomain needs the argument *substituted*, not checked, so the result is available without descending into it.
-                obligations.push((param.clone(), domain));
+                check(kernel, param, &domain)?;
                 telescope = rest.open(&[param]);
             }
-            defer(deferred, obligations);
 
             match telescope {
                 Telescope::Done(result) => Ok(*result),
@@ -237,14 +202,13 @@ fn infer_node(
             let sort = infer_sort(kernel, term)?;
             let at = kernel.induct_at(family)?;
 
-            let mut obligations = Vec::with_capacity(family.params.len() + family.indices.len());
             let mut parameters = at.parameters();
             for param in &family.params {
                 let Telescope::Cons(domain, rest) = parameters else {
                     unreachable!("the handle checked the parameter count")
                 };
 
-                obligations.push((param.clone(), domain));
+                check(kernel, param, &domain)?;
                 parameters = rest.open(&[param]);
             }
 
@@ -255,10 +219,9 @@ fn infer_node(
                     unreachable!("the handle checked the index count")
                 };
 
-                obligations.push((index.clone(), domain));
+                check(kernel, index, &domain)?;
                 indices = rest.open(&[index]);
             }
-            defer(deferred, obligations);
 
             Ok(sort.term())
         }
@@ -271,17 +234,15 @@ fn infer_node(
             let sort = infer_sort(kernel, term)?;
             let at = kernel.struct_at(name, universes, params)?;
 
-            let mut obligations = Vec::with_capacity(params.len());
             let mut parameters = at.parameters();
             for param in params {
                 let Telescope::Cons(domain, rest) = parameters else {
                     unreachable!("the handle checked the parameter count")
                 };
 
-                obligations.push((param.clone(), domain));
+                check(kernel, param, &domain)?;
                 parameters = rest.open(&[param]);
             }
-            defer(deferred, obligations);
 
             Ok(sort.term())
         }
@@ -308,16 +269,14 @@ fn infer_node(
             }
 
             let mut signature = signature;
-            let mut obligations = Vec::with_capacity(payload.len());
             for component in payload {
                 let Telescope::Cons(field, rest) = signature else {
                     unreachable!("arity was checked above")
                 };
 
-                obligations.push((component.clone(), field));
+                check(kernel, component, &field)?;
                 signature = rest.open(&[component]);
             }
-            defer(deferred, obligations);
 
             // The constructed type, rebuilt from what the terminal states and what the declaration already fixes: this family, at the parameters this occurrence supplied.
             match signature {
@@ -350,16 +309,14 @@ fn infer_node(
             }
 
             let mut telescope = telescope;
-            let mut obligations = Vec::with_capacity(fields.len());
             for field in fields {
                 let Telescope::Cons(expected, rest) = telescope else {
                     unreachable!("arity was checked above")
                 };
 
-                obligations.push((field.clone(), expected));
+                check(kernel, field, &expected)?;
                 telescope = rest.open(&[field]);
             }
-            defer(deferred, obligations);
 
             Ok(Subterm::StructType(StructType {
                 name: name.clone(),
