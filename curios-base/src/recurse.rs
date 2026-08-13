@@ -5,6 +5,14 @@
 //! The alternative is to defunctionalize: turn the recursion into an explicit frame stack so native depth stays O(1) per link. That works, and it costs the thing a checker can least afford to lose. Reduction and conversion decide which programs typecheck, and this workspace deliberately implements each of them *twice* — once in `curios-elab` and once in `curios-cert` — so that a bug in one is caught by disagreement with the other. That bet only pays if a person can read the two side by side, and two hand-rolled state machines are far harder to diff than two recursive strategies. Defunctionalization also re-implements, by hand, what the call stack already did: scope entry and exit, sibling ordering, unwinding on the error path. Each of those becomes a comment arguing that the machine still does what recursion did for free.
 //!
 //! So the recursion stays and the stack grows to fit it. [`recurse`] is that bracket, and it is deliberately the *only* place the figures are written: three call sites once carried their own pair of constants, which is three chances for them to drift apart and no way to tell which one was right.
+//!
+//! # Telling a machine from a loop
+//!
+//! Twelve walks were restored to recursion behind this bracket, and classifying them correctly took two corrections worth keeping. The question is never whether a `Vec` is iterated — a machine can iterate a flat input, and a loop can accumulate — but what the accumulator *holds*.
+//!
+//! A **loop** accumulates results, and folding them afterwards carries no effects: the elaborator's `let` gathers `(label, type, body)` triples and folds them into a term. A **machine** accumulates frames, and shows three tells — an element mirroring a function's locals, a reverse phase carrying effects (scope exit, unwinding), and a comment arguing that ordering is preserved. The lowerer's `PendingLet` held six fields that were `build_let`'s local variables verbatim, twelve lines away in the same file.
+//!
+//! The element mirroring locals is the decisive one. A reverse-with-effects phase alone is not, because an **undo record** has one and is legitimate — and an undo record is right exactly when it stores what was *destroyed* (a refinement some scope overwrote, a node's distance before relaxation moved it) rather than what can be *derived* from state the walk never mutated. `documentation/DESIGN.md`'s *Depth is bought with stack, not with hand-rolled frames* carries the whole argument.
 
 /// Native-stack headroom to keep in reserve before growing.
 ///

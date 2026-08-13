@@ -97,7 +97,7 @@ fn str_literal_prints_its_bytes() {
     assert_eq!(run(source), b"hello");
 }
 
-// A string literal lowers to a right-nested certified UTF-8 derivation — `more(c, st, t, rest)`, one link per byte. The elaboration cache collapses the `Rc`-shared per-byte scan-state chains hanging off each link, but the spine nodes themselves are each unique, so sharing-oblivious elaboration still recursed one native frame per link and overflowed a default 2MB test thread near ~50 bytes. Iterative (defunctionalized) elaboration now walks the spine on an explicit heap frame stack at O(1) native depth per link, so the length a literal can reach is bounded by the reduction budget, not the stack. This 500-byte literal sits an order of magnitude past that old cliff. See curios-elab/README.md.
+// A literal's proof is `of_scan_eq(b, refl_scan(b))` — constant size, discharged by running the `scan_from` fold — so the term is a packed `Bytes` and an O(1) proof, and what bounds a literal's length is the reduction budget. It was not always: the proof used to be a right-nested `Utf8` derivation, one `more(c, st, t, rest)` link per byte, and elaborating it overflowed a default 2MB test thread near ~50 bytes. This 500-byte literal is an order of magnitude past that old cliff and no longer reaches deeply into anything; it is kept as the regression against a literal's cost becoming linear in its length again.
 #[test]
 fn long_str_literal_compiles_on_the_default_test_stack() {
     let literal = "0123456789".repeat(50); // 500 bytes: an order of magnitude past the old cliff

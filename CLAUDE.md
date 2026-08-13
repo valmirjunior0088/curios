@@ -159,6 +159,12 @@ cargo run --package curios -- <args>
 cargo test --workspace --all-targets --all-features > /tmp/curios-tests.txt 2>&1
 ```
 
+### What a workspace check already exercises
+
+`cargo clippy --workspace` (or any workspace build) is not only a compile. It builds `curios-prelude-archive`, whose build script elaborates every `/std` and `/syn` module, erases them through `erase_unit` — which runs `curios-ersd`'s verifier over the result — and then `curios-prelude`'s script certifies the whole module with the kernel, which decides universe satisfiability for every context before assuming it. So a change on the Text, Core, Ersd or certification path is exercised over the entire standard library by a step already in the gate, and needs only its own crate's tests beside it.
+
+A change *below* Ersd is not. The archive stops there, so nothing in a workspace check reaches `curios-cont` or `curios-wasm`, and their detector is the cross-stage corpus in `curios`. That line, rather than the size of a diff, is what decides whether a change can be verified cheaply.
+
 ### Before handing off code changes
 
 Run this gate, in order. All commands must pass, and Clippy warnings are errors in CI.
