@@ -171,19 +171,25 @@ pub(super) fn insert_implicits_on_check(
 /// **This is not proof search.** The answer is unique, so there is no choice to make, nothing to backtrack over, and no incompleteness to reason about — it is the introduction-side counterpart of the singleton condition [`singleton_eliminable`](super::match_::singleton_eliminable) applies to elimination, and of proof irrelevance, which already holds that every inhabitant of a proposition is interchangeable. This rule only says that where exactly one exists and it takes no arguments, the elaborator may write it down.
 ///
 /// Recognised narrowly: the goal must reduce to `/syn`'s trivially true proposition. That covers every *decided* proposition — one defined as a `match` on a machine comparison, whose in-range branch is this type — which is the whole family `/sys`'s preconditions are drawn from. A user's own single-nullary-constructor proposition is not discharged, and widening to it means reading the constructor telescope apart from the declaration parameters it leads with; the narrow form needs neither and is what every caller here wants.
-pub(super) fn trivially_inhabited(context: &mut Context, type_: &Term) -> Option<Term> {
+/// A *spent* budget is not an answer. Reduction failing to reach `True` because it ran out of steps is not evidence that the proposition is untrue, so the failure propagates instead of collapsing into `None`: the caller's fallback mints a hole, and a hole minted here reports as an uninferred implicit against a caller who may well have established the bound. That reads as the user's fault at the argument rather than as the resource limit it is, and it is the one place where an exhausted budget could be mistaken for a judgment.
+pub(super) fn trivially_inhabited(
+    context: &mut Context,
+    type_: &Term,
+) -> Result<Option<Term>, Error> {
     let truth = context.syntax().proof.true_type.qualifier();
     let qed = context.syntax().proof.true_qed.qualifier();
 
-    let reduced = crate::reduce_with(context, type_).ok()?;
+    let reduced = crate::reduce_with(context, type_)?;
     let Subterm::InductType(induct) = &*reduced else {
-        return None;
+        return Ok(None);
     };
 
-    (induct.name == curios_core::Global::Authored(truth)).then(|| {
-        Term::apply(
-            Term::var(curios_core::Var::free(Free::global(qed))),
-            Vec::<Term>::new(),
-        )
-    })
+    Ok(
+        (induct.name == curios_core::Global::Authored(truth)).then(|| {
+            Term::apply(
+                Term::var(curios_core::Var::free(Free::global(qed))),
+                Vec::<Term>::new(),
+            )
+        }),
+    )
 }
