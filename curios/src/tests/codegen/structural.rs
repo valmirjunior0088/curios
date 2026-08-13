@@ -159,6 +159,17 @@ const UNCURRY: &str = r#"
     /std/print(Nat/to_str(walk(n)(1)))
     "#;
 
+/// An idiomatic string walk: `/std/Str/fold` over a string the program derives at runtime.
+///
+/// The string comes from `Nat/to_str` rather than a literal or `Str/of_bytes`, and both choices are load-bearing. A literal would let partial evaluation unroll the walk over known bytes, so the fixture would assert nothing about a loop; `of_bytes` would drag in `/std/Str/utf8/check`, whose own encoding still returns a function per byte and whose allocations would swamp the claim. What is left is the walk itself.
+const STRING_WALK: &str = r#"
+    use /std/{Handle, Nat, Str, Char, List, proc};
+    let taint = List/len(proc/args!);
+    let n : Nat = taint;
+    let text : Str = Nat/to_str(n);
+    /std/print(Nat/to_str(Str/fold(text, 0, (codepoint, acc) => acc + Char/to_nat(codepoint))))
+    "#;
+
 // -- helpers ----------------------------------------------------------------
 
 /// Compile `source` (no external modules) to the raw, pre-Binaryen wasm module. The returned `.0` of `compile_entrypoint` is the module `into_wasm` produces; Binaryen only runs later, in `crate::to_cwasm`.
@@ -552,6 +563,25 @@ fn trees_ordinary_recursion_has_no_shells() {
     assert!(closures.is_empty(), "no closure allocation: {closures:?}");
     let envs = user_allocations(&wat, "struct.new $envr/");
     assert!(envs.is_empty(), "no environment allocation: {envs:?}");
+    let shells = user_allocations(&wat, "struct.new_default");
+    assert!(shells.is_empty(), "no closure shell: {shells:?}");
+}
+
+/// A string walk allocates nothing per character.
+///
+/// `/std/Str/fold` used to be an induction over the bytes whose motive was a *function* of the scan state and the accumulator, because a right fold cannot carry a value leftwards any other way. Every step therefore returned a closure: the walk built `step₀ ∘ … ∘ base` and applied it once, so N characters cost N environment allocations and N indirect calls before any of the user's own work ran. It is now a `rec` whose parameters carry the scan state and the accumulator, and whose tail call advances them.
+///
+/// **What this asserts is the property, not the spelling.** Any encoding that captures per character reintroduces an environment allocation here, whatever it is named — which is what makes this survive the next person to reach for the induction form.
+///
+/// Measured when it landed, at N = 1 000 000 on `programs/parse_digits.crs` and `programs/parse_bindless.crs`: 2.31 s to 1.07 s and 2.23 s to 1.01 s, with the emitted `$envr/…$/std/Str/fold/…` sites going from two to none. The figures live beside the probe that reproduces them, in [`super::ladder`].
+#[test]
+fn a_string_walk_allocates_no_closure_per_character() {
+    let wat = wat(STRING_WALK);
+    let envs = user_allocations(&wat, "struct.new $envr/");
+    assert!(
+        envs.is_empty(),
+        "the walk carries its state in parameters, so nothing is captured per character: {envs:?}"
+    );
     let shells = user_allocations(&wat, "struct.new_default");
     assert!(shells.is_empty(), "no closure shell: {shells:?}");
 }
