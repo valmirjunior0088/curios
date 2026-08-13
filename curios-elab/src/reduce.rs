@@ -67,13 +67,6 @@ enum Reduce {
     Break(Term),
 }
 
-/// One `match` waiting for its scrutinee's value on [`reduce`]'s explicit scrutinee stack. `head` is the *original* scrutinee term: `Induct` dispatch binds arms to projections of it (call-by-name), and the finished value is cached under it exactly as the previously nested `reduce` call would have cached it.
-struct PendingMatch {
-    head: Term,
-    motive: Scope<Many>,
-    cases: Cases,
-}
-
 /// Open a `rec` group's tail over structural folded member terms. This is a pure binder operation: it neither mints names nor mutates the context.
 pub(crate) fn unfold_rec(_context: &mut Context, rec: Rec) -> Term {
     let members = rec.group.members();
@@ -301,7 +294,9 @@ fn reduce_func_eta(context: &mut Context, func: Func) -> Result<Reduce, ReduceEr
     }
 }
 
-/// Dispatch a `match` over its scrutinee's already-reduced-and-forced value. `head` is the *original* scrutinee term, which the `Induct` arm projects (call-by-name — see its comment); `forced` is what `reduce_forced` produced for it. Scrutinee reduction itself happens on [`reduce`]'s explicit scrutinee stack rather than by recursing here: a tower of matches over a deep closed spine — a string literal's scan-state chain — would otherwise consume native stack once per link.
+/// Dispatch a `match` over its scrutinee's already-reduced-and-forced value. `head` is the *original* scrutinee term, which the `Induct` arm projects (call-by-name — see its comment); `forced` is what `reduce_forced` produced for it.
+///
+/// Taking both is where this strategy visibly parts from the kernel's, which passes only the forced value: the kernel binds an arm at the payload directly, having no zonker for the annotation holes a reduced payload can carry.
 fn reduce_match(head: Term, forced: Term, motive: Scope<Many>, cases: Cases) -> Reduce {
     match cases {
         Cases::Bool {
@@ -477,7 +472,7 @@ fn reduce_universe_inst(context: &Context, instance: UniverseInst) -> Result<Red
 
 /// Reduce `term` until its head constructor is stable.
 ///
-/// Reduction re-enters itself once per operand of a nested intrinsic and once per link of a spine peel, so a *data*-shaped term puts its depth on the native stack even though its unrolling does not — the `PendingMatch` stack below absorbs the eliminator half and nothing absorbed the rest. Running inside [`recurse`] rather than aborting is what keeps [`DEFAULT_STEP_BUDGET`](crate::DEFAULT_STEP_BUDGET) the only bound that decides whether a term reduces: a stack limit would make acceptance depend on the host's stack size and on frame sizes the optimizer chose, which is exactly the machine-dependence the step budget exists to keep out of the answer.
+/// Reduction re-enters itself once per operand of a nested intrinsic, once per link of a spine peel, and once per level of a match tower, so a *data*-shaped term puts its depth on the native stack even though its unrolling does not. Running inside [`recurse`] rather than aborting is what keeps [`DEFAULT_STEP_BUDGET`](crate::DEFAULT_STEP_BUDGET) the only bound that decides whether a term reduces: a stack limit would make acceptance depend on the host's stack size and on frame sizes the optimizer chose, which is exactly the machine-dependence the step budget exists to keep out of the answer.
 ///
 /// What that changes, measured: a runaway type-level computation used to meet the native stack at a couple of hundred levels and abort, and now runs until the budget stops it, allocating as it goes — a deep accumulator reached 233 MiB where it previously died. The budget bounds *steps*, so nothing bounds that memory; the trade is deliberate, because a term's acceptance should not depend on how much stack the host handed the process.
 pub(crate) fn reduce(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
@@ -491,13 +486,10 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
 
     let entry = term.clone();
 
-    // Matches waiting for their scrutinees. Reducing a scrutinee re-enters this loop under a pushed frame instead of recursing, so a tower of matches over a deep closed spine — a string literal's scan-state chain — costs one `PendingMatch` per level rather than native stack. A finished value resolves against these frames innermost-first; each landing reduct — a frame's scrutinee value, or with no frame left the entry term's overall value — is cached under the term it reduces.
-    let mut pending: Vec<PendingMatch> = Vec::new();
-
     loop {
         context.spend()?;
 
-        let mut step = 'step: {
+        let step = 'step: {
             // Rung B for stuck applications (convertibility-keyed). Gated cheaply — store non-empty, then a refined applied-head symbol — before keying the candidate and looking it up.
             if context.has_scrutinee_refinements()
                 && let Some(head) = term.head_key()
@@ -532,21 +524,12 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
                 Subterm::Intrinsic(intrinsic) => {
                     Reduce::Break(reduce_intrinsic(context, &intrinsic)?.into())
                 }
-                Subterm::Match(m) => match context.cached_reduced(&m.head) {
-                    // A warm scrutinee dispatches immediately — the frame-free analogue of the nested call's cache hit.
-                    Some(value) => {
-                        let forced = force_rec(context, value)?;
-                        reduce_match(m.head, forced, m.motive, m.cases)
-                    }
-                    None => {
-                        pending.push(PendingMatch {
-                            head: m.head.clone(),
-                            motive: m.motive,
-                            cases: m.cases,
-                        });
-                        Reduce::Continue(m.head)
-                    }
-                },
+                // The scrutinee is reduced by a nested call, so a tower of matches over a deep closed spine costs one native frame per link. That is data-shaped depth, which is what [`recurse`] at the entry point is for. The nested call probes and stores the reduction cache under the scrutinee itself, which is what a warm-scrutinee special case here used to do by hand.
+                Subterm::Match(m) => {
+                    let value = reduce(context, m.head.clone())?;
+
+                    reduce_match(m.head, force_rec(context, value)?, m.motive, m.cases)
+                }
                 Subterm::Apply(apply) => reduce_apply(context, apply)?,
                 Subterm::Proj(proj) => reduce_proj(context, proj)?,
                 Subterm::Func(func) => reduce_func_eta(context, func)?,
@@ -559,23 +542,11 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
             }
         };
 
-        loop {
-            match step {
-                Reduce::Continue(next) => {
-                    term = next;
-                    break;
-                }
-                Reduce::Break(result) => match pending.pop() {
-                    None => {
-                        context.reduce(entry, &result);
-                        return Ok(result);
-                    }
-                    Some(frame) => {
-                        context.reduce(frame.head.clone(), &result);
-                        let forced = force_rec(context, result)?;
-                        step = reduce_match(frame.head, forced, frame.motive, frame.cases);
-                    }
-                },
+        match step {
+            Reduce::Continue(next) => term = next,
+            Reduce::Break(result) => {
+                context.reduce(entry, &result);
+                return Ok(result);
             }
         }
     }

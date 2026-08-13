@@ -329,6 +329,31 @@ fn deep_let_chain_is_one_flat_block_reducing_without_native_recursion() {
 }
 
 #[test]
+fn a_match_tower_reduces_without_overflowing() {
+    // Each level's scrutinee is the level below it, so reducing the top costs one nested `reduce` per link. That is the depth `PendingMatch` used to absorb and `recurse` now carries, and it is data-shaped: a tower this tall is generated rather than written.
+    //
+    // Deep enough that a regression is a stack overflow rather than a slow test, and far enough inside the step budget that the budget is not what decides it — which is the property `reduce`'s own documentation claims.
+    const DEEP: usize = 10_000;
+
+    let mut context = Context::with_default_budget(crate::SYNTAX);
+    let bool_type = Term::intrinsic(Intrinsic::BoolType);
+    let true_ = || Term::intrinsic(Intrinsic::Bool(true));
+
+    let mut term = true_();
+    for _ in 0..DEEP {
+        term = Term::bool_match(
+            term,
+            None,
+            bool_type.clone(),
+            Term::intrinsic(Intrinsic::Bool(false)),
+            true_(),
+        );
+    }
+
+    assert_eq!(reduce(&mut context, term), Ok(true_()));
+}
+
+#[test]
 fn reduce_var_cycle_times_out() {
     let mut context = context();
     let loop_ = context.fresh(Some("loop"));
