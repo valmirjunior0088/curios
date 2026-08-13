@@ -77,17 +77,43 @@ const PARSE_MANUAL: &str = include_str!("../../../../programs/parse_manual.crs")
 ///
 /// The gap is now about sevenfold, from fourteen. **What bought it was removing the chain, not removing an allocation** — the `Str/fold` environments go two to none, while slice calls *rise* to 18, because the reformulated walk materializes the tail it recurses on. The old shape built N closures backward and applied them forward, two passes and an indirect call per character; the new one makes a single forward pass with a direct tail call. A prediction of "one allocation traded for another" was made before this was measured and was wrong about the size for exactly that reason: it counted allocations and the cost was the traversal.
 ///
-/// The residue — `bindless` 1.00 against `manual` 0.16 — is the UTF-8 scan **plus one rope-view allocation per character**, which is the successor specification's subject rather than this one's.
+/// ## After emptiness stopped being decided by a walk (`493f8503`)
+///
+/// | Rung | `user` | Change |
+/// | --- | --- | --- |
+/// | `parse_digits` | 0.89, 0.91, 0.90, 0.90, 0.90 | −16% |
+/// | `parse_bindless` | 0.93, 0.92, 0.92, 0.93, 0.93 | −8% |
+/// | `parse_manual` | 0.16 ×3 | unchanged |
+///
+/// `/std/Nat/of_str` tested `Str/len(s) == 0`, and `Str/len` is `count_scalars` — so every parse walked its input twice, once to ask whether it was empty and once to read it. Five other sites in `/std` asked the same question the same way.
+///
+/// **The bind has inverted, and that retires a suspect.** `parse_digits` now beats `parse_bindless` — 0.89–0.91 against 0.92–0.93, distributions barely overlapping — although it does strictly more work, since `!` is what separates them. The bind measured about six percent at the top of this table and measures nothing now. Read it as an upper bound that has closed rather than as evidence `!` is free: two rungs this close are separated by code layout as much as by work.
+///
+/// ## What one character still costs
+///
+/// Counted in the emitted body of `/std/Str/fold`, which has three arms — `lead`, `cont` and `bad` — so exactly one of each runs per character:
+///
+/// | Per character | Site |
+/// | --- | --- |
+/// | read the byte | `call $bytes/read` |
+/// | **allocate a rope view** for the tail | `call $bytes/slice` |
+/// | the UTF-8 scan | `call $syn/Str/step`, then `classify` |
+/// | **indirect call** through `f` | `call_ref $clsr/2` |
+/// | **allocate the accumulator tuple** | `struct.new $tpl/2` |
+///
+/// Two of those five are allocations, and **both are created and consumed inside one iteration and never escape**. The accumulator tuple is the less obvious one and the better example: nobody wrote it, it exists because the fold threads `{A, Nat}`. The indirect call is its own roadmap item. The scan is the work the abstraction performs and the control declines, which is what makes `parse_manual` a ceiling rather than an equivalent.
+///
+/// **The split between those five is unmeasured**, and dividing it needs one instrument each rather than another rung: removing the two allocations measures them, specializing `f` measures the call, and what remains is the scan.
 ///
 /// ## The static half, and why it divides almost nothing
 ///
 /// ```text
-/// parse_digits:   0 closure sites, 4 env sites, 0 shell sites, 18 slice calls, 344965 bytes of wat
-/// parse_bindless: 0 closure sites, 5 env sites, 0 shell sites, 19 slice calls, 381463 bytes of wat
-/// parse_manual:   0 closure sites, 4 env sites, 0 shell sites, 18 slice calls, 382690 bytes of wat
+/// parse_digits:   0 closure sites, 4 env sites, 0 shell sites, 17 slice calls, 362098 bytes of wat
+/// parse_bindless: 0 closure sites, 5 env sites, 0 shell sites, 17 slice calls, 377561 bytes of wat
+/// parse_manual:   0 closure sites, 4 env sites, 0 shell sites, 17 slice calls, 403921 bytes of wat
 /// ```
 ///
-/// Four, five and four env sites span a sevenfold spread in runtime, and the remaining ones belong to `/std/Str/utf8/check` and `/std/Nat/of_str` in all three programs — `parse_manual` included, because every rung parses its stdin the same way. **A site count cannot see a loop.** It is kept because it is the half that survives a machine change, and because a site appearing or vanishing is a real event — the `Str/fold` environments vanishing is how the walk's chain was confirmed gone. It is never the half that answers "what does this cost".
+/// Four, five and four env sites span a sixfold spread in runtime, and the remaining ones belong to `/std/Str/utf8/check` and `/std/Nat/of_str` in all three programs — `parse_manual` included, because every rung parses its stdin the same way. **A site count cannot see a loop.** It is kept because it is the half that survives a machine change, and because a site appearing or vanishing is a real event — the `Str/fold` environments vanishing is how the walk's chain was confirmed gone. It is never the half that answers "what does this cost".
 ///
 /// **Two comparisons this does not license.** An earlier record in `structural.rs` timed `parse_digits` at 0.92–0.95 s with `/usr/bin/time -l`, which is macOS syntax; these are Linux figures from another machine, so only the ratios transfer. And the roadmap's "roughly eightfold" for this gap has no probe at all — fourteenfold is what this tree and this machine report.
 #[test]
