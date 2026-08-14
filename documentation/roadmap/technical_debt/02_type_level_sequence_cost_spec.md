@@ -14,7 +14,7 @@ Scoped to reduction and conversion. The surface language, the erased IR, the hos
 
 `curios/src/tests/runtime.rs`'s `accumulation_loops_are_linear_by_construction` records why the runtime uses a rope: the representation it replaced "copied the accumulator per step (Θ(n²), tens of minutes at this size)". The type level still uses that representation.
 
-The spec-13 reproducer measures both sides of the resulting asymmetry. The same accumulate-then-slice loop is linear when the program runs it and quadratic when a decided bound makes the compiler evaluate it, and compile-time evaluation of a small fraction of the runtime measurement's size already costs gigabytes. The figures live beside that probe; what they decide is recorded here.
+The accumulate-then-slice reproducer [A reduction step costs what it builds](01_priced_reduction_spec.md) specifies measures both sides of the resulting asymmetry. The same accumulate-then-slice loop is linear when the program runs it and quadratic when a decided bound makes the compiler evaluate it, and compile-time evaluation of a small fraction of the runtime measurement's size already costs gigabytes. The figures live beside that probe; what they decide is recorded here.
 
 The user-facing consequence is the reason this is a roadmap item rather than a tuning note. `Bytes/slice` states `10 <= Bytes/len(b)`, so writing the obvious thing — accumulate a value, then take its head — is what triggers the evaluation. The workaround is to route the subject through a parameter so reduction stops at it, and `accumulation_loops_are_linear_by_construction` carries exactly that helper, labelled in place as a workaround.
 
@@ -52,7 +52,7 @@ Second, `Bin/get`, `Bin/slice` and their `List` twins gain a length-directed dis
 
 **The distribution rule is a new fold law and is probed rather than argued.** It lands on [Intrinsic fold laws and the free-monoid peel](../../soundness/per-term-rules/intrinsic-fold-laws-and-the-free-monoid-peel.md), which that file names as the weakest position on the perimeter and grades as argued in code comments only. A wrong fold there is a false definitional equation, and congruence carries one to `False`. Landing a new law on that row without a probe would make the weakest row weaker.
 
-**Depth becomes data-shaped, and the shared walks meet it first.** `peel_front`, `bin_collect_intrinsic` and their list twins recurse into a concatenation's leading operand, so an accumulation as long as the loop becomes a walk as deep as the loop. `documentation/design/toolchain/depth-is-bought-with-stack-not-with-hand-rolled-frames.md` protects the two reduction and conversion strategies that are deliberately implemented twice, and it does not reach these: they are single-implementation shared helpers in `curios-core`, so an explicit worklist costs nothing that entry was defending. The precedent is already in the tree — the backend's `$<carrier>/force` walks a hundred-thousand-deep concatenation chain on an explicit doubling worklist for exactly this reason. Under spec 13 a recursion level is priced, so leaving these recursive costs budget as well as memory.
+**Depth becomes data-shaped, and the shared walks meet it first.** `peel_front`, `bin_collect_intrinsic` and their list twins recurse into a concatenation's leading operand, so an accumulation as long as the loop becomes a walk as deep as the loop. `documentation/design/toolchain/depth-is-bought-with-stack-not-with-hand-rolled-frames.md` protects the two reduction and conversion strategies that are deliberately implemented twice, and it does not reach these: they are single-implementation shared helpers in `curios-core`, so an explicit worklist costs nothing that entry was defending. The precedent is already in the tree — the backend's `$<carrier>/force` walks a hundred-thousand-deep concatenation chain on an explicit doubling worklist for exactly this reason. Under [A reduction step costs what it builds](01_priced_reduction_spec.md) a recursion level is priced, so leaving these recursive costs budget as well as memory.
 
 ## The fixtures this returns to their natural spelling
 
@@ -60,13 +60,13 @@ Second, `Bin/get`, `Bin/slice` and their `List` twins gain a length-directed dis
 
 Its pinned twin, `tests::numeric`'s `a_bound_on_a_computed_subject_evaluates_it`, states a 50 000-step budget so that the program refuses before it consumes the machine — the budget is containment, not a claim about the program. Under this capability that program succeeds, so the fixture is rewritten to assert success at an ordinary budget, and its parameter control stays, restated as what it always meant: that opacity costs nothing, rather than that opacity is how a computed subject survives.
 
-Sequence matters. Spec 13 reprices that budget first and updates the fixture's figure to what the corrected pricing says; this specification then changes what the fixture asserts. The same fixture therefore moves twice, for two different reasons, and this document owns the second move.
+Sequence matters. [A reduction step costs what it builds](01_priced_reduction_spec.md) reprices that budget first and updates the fixture's figure to what the corrected pricing says; this specification then changes what the fixture asserts. The same fixture therefore moves twice, for two different reasons, and this document owns the second move.
 
 [The decided-bound entry](../../design/language/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md) closes with *What still constrains these obligations is evaluation, not provability*, which names both fixtures and states the opaque-subject discipline as the answer. It is amended in the same landing change.
 
 ## Measurement gate
 
-Spec 13's accumulate-then-slice probe is the regression. Its growing-accumulator arm must fall from quadratic to linear in the iteration count, and its fixed-payload arm must not move — a change that improves the first by slowing the second has moved cost rather than removed it.
+The accumulate-then-slice probe [A reduction step costs what it builds](01_priced_reduction_spec.md) specifies is the regression. Its growing-accumulator arm must fall from quadratic to linear in the iteration count, and its fixed-payload arm must not move — a change that improves the first by slowing the second has moved cost rather than removed it.
 
 Beside it, the prelude's own cost, following `curios-prelude-archive`'s `stored_prelude_measurements` pattern: build time and peak memory before and after, recorded with the command, the date and the profile that produced them.
 
@@ -78,7 +78,7 @@ The cap's value is chosen from a census of operand sizes actually reached in `/s
 
 ### M0 — Evidence and the census
 
-- Extend the spec-13 reproducer, or add its sibling, so the `List` carrier is measured alongside `Bin` at both grains.
+- Extend the reproducer [A reduction step costs what it builds](01_priced_reduction_spec.md) specifies, or add its sibling, so the `List` carrier is measured alongside `Bin` at both grains.
 - Census the operand sizes reached by every `BinConcat` and `ListConcat` that reduction fuses over a fixed-prelude build, and choose the cap from it.
 - Record the prelude baseline the gate compares against.
 - Prove the conversion premise: focused tests, per grain and per carrier and in both checkers, that a capped spelling and a fused literal are definitionally equal.

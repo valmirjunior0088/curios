@@ -209,7 +209,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Arbitrary-precision integers (`std/BigInt` over the strictly-positive `std/NonZero`)
 - [ ] Dyadic `BigFlt` exact core
   - [ ] [Canonical representation, exact operations, comparison, and witnesses](roadmap/big_flt_dyadic/01_core_spec.md)
-  - [ ] [Exact binary32 conversion and correctly rounded output](roadmap/big_flt_dyadic/02_BINARY32_SPEC.md)
+  - [ ] [Exact binary32 conversion and correctly rounded output](roadmap/big_flt_dyadic/02_binary32_spec.md)
 - [ ] [`BigInt` certified algebra, order, and binary-scale laws](roadmap/big_flt_dyadic_proofs/01_big_int_laws_spec.md)
 - [ ] Dyadic `BigFlt` proof and quotient-boundary completion
   - [ ] [Algebra and order theorem corpus](roadmap/big_flt_dyadic_proofs/02_laws_spec.md)
@@ -220,7 +220,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [ ] [General `BigFlt` reduced rational representation and exact operations](roadmap/big_flt_general/02_core_spec.md)
   - [ ] [General canonical uniqueness, ring, and order laws](roadmap/big_flt_general/03_laws_spec.md)
   - [ ] [General division and field laws](roadmap/big_flt_general/04_field_laws_spec.md)
-  - [ ] [General rational binary32 boundaries](roadmap/big_flt_general/05_BINARY32_SPEC.md)
+  - [ ] [General rational binary32 boundaries](roadmap/big_flt_general/05_binary32_spec.md)
   - [ ] [Exact decimal parsing and presentation](roadmap/big_flt_general/06_decimal_spec.md)
 
 ## Tooling & Ecosystem
