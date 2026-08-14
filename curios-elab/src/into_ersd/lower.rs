@@ -450,13 +450,9 @@ impl Lowering {
 ///
 /// `Default` is the empty scope, and it is what makes "erase the first unit" the same call as "erase a later one": `ErsdBuilder::resume` over an empty module reindexes nothing and yields exactly a fresh builder.
 #[derive(Debug, Clone, Default)]
-#[curios_archive::archived(
-        serialize_bounds(__S: curios_archive::rkyv::ser::Writer + curios_archive::rkyv::ser::Allocator + curios_archive::rkyv::ser::Sharing, __S::Error: curios_archive::rkyv::rancor::Source),
-        deserialize_bounds(__D: curios_archive::rkyv::de::Pooling, __D::Error: curios_archive::rkyv::rancor::Source),
-        bytecheck(bounds(__C: curios_archive::rkyv::validation::ArchiveContext + curios_archive::rkyv::validation::shared::SharedContext, __C::Error: curios_archive::rkyv::rancor::Source))
-    )]
+#[curios_archive::archived(recursive)]
 pub struct ErasedArena {
-    #[cfg_attr(feature = "archive", rkyv(omit_bounds))]
+    #[archived_omit_bounds]
     module: curios_ersd::Module,
     environment: Environment,
 }

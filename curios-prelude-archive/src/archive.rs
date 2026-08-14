@@ -6,23 +6,8 @@ use {curios_core::Module, curios_elab::ErasedArena, curios_text::PreparedText};
 
 pub(crate) const SCHEMA: u32 = 26;
 
-// Unconditional rather than `#[curios_archive::archived]`: this crate always archives, so there is no feature to gate on and nothing for the macro to do but forward bounds.
-#[derive(curios_archive::Archive, curios_archive::Serialize, curios_archive::Deserialize)]
-#[rkyv(
-    crate = curios_archive::rkyv,
-    serialize_bounds(
-        __S: curios_archive::rkyv::ser::Writer + curios_archive::rkyv::ser::Allocator + curios_archive::rkyv::ser::Sharing,
-        __S::Error: curios_archive::rkyv::rancor::Source
-    ),
-    deserialize_bounds(
-        __D: curios_archive::rkyv::de::Pooling,
-        __D::Error: curios_archive::rkyv::rancor::Source
-    ),
-    bytecheck(bounds(
-        __C: curios_archive::rkyv::validation::ArchiveContext + curios_archive::rkyv::validation::SharedContext,
-        __C::Error: curios_archive::rkyv::rancor::Source
-    ))
-)]
+// `always` because this crate archives unconditionally — there is no `archive` feature here for a `cfg_attr` to name — and `recursive` for the bounds a self-reaching type needs.
+#[curios_archive::archived(always, recursive)]
 pub(crate) struct PreludeArchive {
     pub(crate) schema: u32,
     pub(crate) fingerprint: [u8; 32],

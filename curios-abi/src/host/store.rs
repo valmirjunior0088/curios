@@ -64,7 +64,7 @@ pub struct WireSignature {
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
 pub struct ForeignFunction {
-    #[cfg_attr(feature = "archive", rkyv(with = crate::Namespace))]
+    #[archived_with(crate::Namespace)]
     pub namespace: &'static str,
     pub name: String,
     pub subject: Option<String>,

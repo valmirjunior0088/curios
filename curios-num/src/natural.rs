@@ -13,7 +13,7 @@ use {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[curios_archive::archived]
 pub struct Natural {
-    #[cfg_attr(feature = "archive", rkyv(with = crate::BigUintBytes))]
+    #[archived_with(crate::BigUintBytes)]
     value: BigUint,
 }
 

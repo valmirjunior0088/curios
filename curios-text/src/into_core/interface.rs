@@ -12,9 +12,9 @@ use {
 #[derive(Clone)]
 #[curios_archive::archived]
 pub(super) struct PublicInterface {
-    #[cfg_attr(feature = "archive", rkyv(with = crate::OrderedMap))]
+    #[archived_with(crate::OrderedMap)]
     pub children: HashMap<String, Entry>,
-    #[cfg_attr(feature = "archive", rkyv(with = crate::OrderedMap))]
+    #[archived_with(crate::OrderedMap)]
     pub bindings: HashMap<String, Entry>,
 }
 

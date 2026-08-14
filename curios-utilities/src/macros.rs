@@ -35,8 +35,7 @@ macro_rules! name {
     ($name:ident; archive) => {
         #[doc = concat!("A `", stringify!($name), "`: a plain string spelling behind a dedicated type, so names from different namespaces cannot be confused however identical their text.")]
         #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-        #[curios_archive::archived]
-        #[cfg_attr(feature = "archive", rkyv(derive(PartialEq, Eq, Hash)))]
+        #[curios_archive::archived(derive(PartialEq, Eq, Hash))]
         pub struct $name {
             string: String,
         }
@@ -105,11 +104,7 @@ macro_rules! id {
 
     ($name:ident, $prefix:literal; archive) => {
         #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-        #[curios_archive::archived]
-        #[cfg_attr(
-            feature = "archive",
-            rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))
-        )]
+        #[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
         pub struct $name(pub(crate) u32);
 
         $crate::id!(@impls $name, $prefix);

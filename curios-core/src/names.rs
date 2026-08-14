@@ -20,11 +20,7 @@ name!(Atom; archive);
 ///
 /// It is also what removes the floor. A counter seeded above the archived prelude's watermark tied a unit's identities to *where it sat*; per-mount ordinals depend on nothing but the unit itself.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[curios_archive::archived]
-#[cfg_attr(
-    feature = "archive",
-    rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))
-)]
+#[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
 pub struct WitnessId {
     mount: Qualifier,
     ordinal: u32,
@@ -110,11 +106,7 @@ impl hash::Hash for Mint {
 ///
 /// The two cases are a sum rather than a qualifier with an optional disambiguator, because a witness's declaring module is not its name. Folding both into one field would make [`Qualifier`] mean "module plus the item's own name" for one case and "the declaring module alone" for the other — one field with two readings, which is the defect this vocabulary exists to remove.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[curios_archive::archived]
-#[cfg_attr(
-    feature = "archive",
-    rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))
-)]
+#[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
 pub enum Global {
     /// A name a programmer wrote, at its resolved module path.
     Authored(Qualifier),
@@ -143,11 +135,7 @@ impl Global {
 ///
 /// The distinction is a discriminant rather than a spelling convention. Asking "is this a local?" is a `matches!` — exact, and impossible to get wrong the way a marker character in a string could be.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[curios_archive::archived]
-#[cfg_attr(
-    feature = "archive",
-    rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))
-)]
+#[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
 pub enum Free {
     Global(Global),
     Local(Mint),

@@ -115,9 +115,9 @@ impl ChildInfo {
 #[derive(Clone)]
 #[curios_archive::archived]
 pub(super) struct ModuleInfo {
-    #[cfg_attr(feature = "archive", rkyv(with = crate::OrderedMap))]
+    #[archived_with(crate::OrderedMap)]
     children: HashMap<String, ChildInfo>,
-    #[cfg_attr(feature = "archive", rkyv(with = crate::OrderedMap))]
+    #[archived_with(crate::OrderedMap)]
     bindings: HashMap<String, bool>,
 }
 

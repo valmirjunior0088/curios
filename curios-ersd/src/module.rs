@@ -38,11 +38,7 @@ pub struct ValueDef {
 ///
 /// Archived (behind the `archive` feature) as the fixed prelude's replayable prefix. The constant interning index is skipped — it is exactly the inverse of the `constants` arena, rebuilt by `reindex_constants` on restore — so the serialized bytes stay deterministic (a hash map's iteration order is not).
 #[derive(Debug, Clone, Default)]
-#[curios_archive::archived(
-        serialize_bounds(__S: curios_archive::rkyv::ser::Writer + curios_archive::rkyv::ser::Allocator + curios_archive::rkyv::ser::Sharing, __S::Error: curios_archive::rkyv::rancor::Source),
-        deserialize_bounds(__D: curios_archive::rkyv::de::Pooling, __D::Error: curios_archive::rkyv::rancor::Source),
-        bytecheck(bounds(__C: curios_archive::rkyv::validation::ArchiveContext + curios_archive::rkyv::validation::shared::SharedContext, __C::Error: curios_archive::rkyv::rancor::Source))
-    )]
+#[curios_archive::archived(recursive)]
 pub struct Module {
     values: Arena<ValueId, ValueDef>,
     functions: Arena<FunctionId, Function>,
@@ -53,11 +49,11 @@ pub struct Module {
     products: Vec<ProductSchema>,
     families: Vec<VariantFamily>,
     constructors: Vec<Constructor>,
-    #[cfg_attr(feature = "archive", rkyv(omit_bounds))]
+    #[archived_omit_bounds]
     foreigns: Vec<Arc<ForeignFunction>>,
     items: Vec<StatementId>,
     entry: Option<BlockId>,
-    #[cfg_attr(feature = "archive", rkyv(with = curios_archive::rkyv::with::Skip))]
+    #[archived_with(curios_archive::Skip)]
     constant_index: HashMap<Constant, ConstantId>,
 }
 

@@ -1,65 +1,35 @@
-//! Deterministic rkyv adapters for resolver maps.
+//! How a resolver map is archived: as its entries, sorted by key.
+//!
+//! Sorted because a `HashMap`'s iteration order is not deterministic, and the prelude image is compared byte-for-byte against a second serialization of the same value to prove it is. An unordered archive would fail that check on some runs and pass on others, which is the worst way for it to fail.
 
 use {
-    curios_archive::rkyv::{
-        Archive, Archived, Deserialize, Place, Resolver, Serialize,
-        rancor::Fallible,
-        with::{ArchiveWith, DeserializeWith, SerializeWith},
-    },
-    std::{collections::HashMap, hash::Hash},
+    curios_archive::{Proxy, Via},
+    std::{borrow::Borrow, collections::HashMap, hash::Hash},
 };
 
-pub(crate) struct OrderedMap;
+pub(crate) struct SortedEntries;
 
-fn ordered<K, V>(map: &HashMap<K, V>) -> Vec<(K, V)>
+impl<K, V> Proxy<HashMap<K, V>> for SortedEntries
 where
-    K: Clone + Ord,
+    K: Clone + Ord + Eq + Hash,
     V: Clone,
 {
-    let mut entries = map
-        .iter()
-        .map(|(key, value)| (key.clone(), value.clone()))
-        .collect::<Vec<_>>();
-    entries.sort_by(|(left, _), (right, _)| left.cmp(right));
-    entries
-}
+    type Archivable = Vec<(K, V)>;
 
-impl<K, V> ArchiveWith<HashMap<K, V>> for OrderedMap
-where
-    K: Archive + Clone + Ord,
-    V: Archive + Clone,
-{
-    type Archived = Archived<Vec<(K, V)>>;
-    type Resolver = Resolver<Vec<(K, V)>>;
+    fn to_archivable(map: &HashMap<K, V>) -> impl Borrow<Vec<(K, V)>> {
+        let mut entries = map
+            .iter()
+            .map(|(key, value)| (key.clone(), value.clone()))
+            .collect::<Vec<_>>();
+        entries.sort_by(|(left, _), (right, _)| left.cmp(right));
 
-    fn resolve_with(map: &HashMap<K, V>, resolver: Self::Resolver, out: Place<Self::Archived>) {
-        ordered(map).resolve(resolver, out);
+        entries
+    }
+
+    /// Infallible, and deliberately not checking for duplicate keys: the entries came from a map, so there are none, and a duplicate would mean the archive was corrupt in a way bytecheck already refuses.
+    fn from_archivable(entries: Vec<(K, V)>) -> Result<HashMap<K, V>, String> {
+        Ok(entries.into_iter().collect())
     }
 }
 
-impl<K, V, S> SerializeWith<HashMap<K, V>, S> for OrderedMap
-where
-    S: Fallible + ?Sized,
-    K: Archive + Clone + Ord,
-    V: Archive + Clone,
-    Vec<(K, V)>: Serialize<S>,
-{
-    fn serialize_with(map: &HashMap<K, V>, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
-        ordered(map).serialize(serializer)
-    }
-}
-
-impl<K, V, D> DeserializeWith<Archived<Vec<(K, V)>>, HashMap<K, V>, D> for OrderedMap
-where
-    D: Fallible + ?Sized,
-    K: Archive + Eq + Hash,
-    V: Archive,
-    Archived<Vec<(K, V)>>: Deserialize<Vec<(K, V)>, D>,
-{
-    fn deserialize_with(
-        entries: &Archived<Vec<(K, V)>>,
-        deserializer: &mut D,
-    ) -> Result<HashMap<K, V>, D::Error> {
-        Ok(entries.deserialize(deserializer)?.into_iter().collect())
-    }
-}
+pub(crate) type OrderedMap = Via<SortedEntries>;

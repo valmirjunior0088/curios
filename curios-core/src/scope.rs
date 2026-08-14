@@ -566,21 +566,10 @@ impl<A: Arity + Hash, B: Bound> Hash for Scope<A, B> {
 // === Telescope ===============================================================
 
 /// A dependent context: a chain of entry types where each `Cons` tail is a one-binder [`Scope`], so every later entry — and the final `Done` payload — may mention the binders before it. Function types, function literals, and tuple types all reuse it and differ only in the payload: a `Term` (the return type or body) for Π/λ, `()` for Σ, where the fields themselves are the point.
-#[curios_archive::archived]
-#[cfg_attr(
-    feature = "archive",
-    rkyv(
-        serialize_bounds(__S: curios_archive::rkyv::ser::Writer + curios_archive::rkyv::ser::Allocator + curios_archive::rkyv::ser::Sharing, __S::Error: curios_archive::rkyv::rancor::Source),
-        deserialize_bounds(__D: curios_archive::rkyv::de::Pooling, __D::Error: curios_archive::rkyv::rancor::Source),
-        bytecheck(bounds(__C: curios_archive::rkyv::validation::ArchiveContext + curios_archive::rkyv::validation::SharedContext, __C::Error: curios_archive::rkyv::rancor::Source))
-    )
-)]
+#[curios_archive::archived(recursive)]
 pub enum Telescope<B: Bound> {
     Done(Box<B>),
-    Cons(
-        Term,
-        #[cfg_attr(feature = "archive", rkyv(omit_bounds))] Scope<One, Telescope<B>>,
-    ),
+    Cons(Term, #[archived_omit_bounds] Scope<One, Telescope<B>>),
 }
 
 impl<B: Bound> Telescope<B> {

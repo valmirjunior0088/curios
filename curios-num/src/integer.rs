@@ -12,7 +12,7 @@ use {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[curios_archive::archived]
 pub struct Integer {
-    #[cfg_attr(feature = "archive", rkyv(with = crate::BigIntBytes))]
+    #[archived_with(crate::BigIntBytes)]
     value: BigInt,
 }
 

@@ -1,63 +1,36 @@
-//! rkyv adapters for validated host-import namespaces.
+//! How a validated host-import namespace is archived: as its one-byte code.
+//!
+//! The namespace is one of a closed pair, so archiving the string would store a length and up to three bytes to say what a single byte says exactly. The roster below is the only place the codes are assigned, and both directions read it.
 
-use curios_archive::rkyv::{
-    Archive, Archived, Deserialize, Place, Resolver, Serialize,
-    rancor::{Fallible, Source},
-    with::{ArchiveWith, DeserializeWith, SerializeWith},
+use {
+    curios_archive::{Proxy, Via},
+    std::borrow::Borrow,
 };
 
-pub struct Namespace;
+/// The archived form of a namespace: `sys` is 0, `ffi` is 1.
+pub struct NamespaceCode;
 
-fn code(namespace: &str) -> Option<u8> {
-    match namespace {
-        "sys" => Some(0),
-        "ffi" => Some(1),
-        _ => None,
+impl Proxy<&'static str> for NamespaceCode {
+    type Archivable = u8;
+
+    /// Panics on an unknown namespace, which is not a validation step but a restatement of one: a `ForeignFunction` cannot be constructed with a namespace outside the pair, so reaching here with one means the constructor's own check was bypassed.
+    fn to_archivable(namespace: &&'static str) -> impl Borrow<u8> {
+        match *namespace {
+            "sys" => 0,
+            "ffi" => 1,
+            other => panic!("foreign namespace `{other}` is validated at construction"),
+        }
     }
-}
 
-impl ArchiveWith<&'static str> for Namespace {
-    type Archived = Archived<u8>;
-    type Resolver = Resolver<u8>;
-
-    fn resolve_with(value: &&'static str, resolver: Self::Resolver, out: Place<Self::Archived>) {
-        code(value)
-            .expect("foreign namespace is validated at construction")
-            .resolve(resolver, out);
-    }
-}
-
-impl<S> SerializeWith<&'static str, S> for Namespace
-where
-    S: Fallible + ?Sized,
-    u8: Serialize<S>,
-{
-    fn serialize_with(
-        value: &&'static str,
-        serializer: &mut S,
-    ) -> Result<Self::Resolver, S::Error> {
-        code(value)
-            .expect("foreign namespace is validated at construction")
-            .serialize(serializer)
-    }
-}
-
-impl<D> DeserializeWith<Archived<u8>, &'static str, D> for Namespace
-where
-    D: Fallible + ?Sized,
-    D::Error: Source,
-    Archived<u8>: Deserialize<u8, D>,
-{
-    fn deserialize_with(
-        value: &Archived<u8>,
-        deserializer: &mut D,
-    ) -> Result<&'static str, D::Error> {
-        match value.deserialize(deserializer)? {
+    /// Fallible in the direction that reads bytes: an archive is a file, and a file can say 7.
+    fn from_archivable(code: u8) -> Result<&'static str, String> {
+        match code {
             0 => Ok("sys"),
             1 => Ok("ffi"),
-            invalid => Err(D::Error::new(std::io::Error::other(format!(
-                "invalid foreign namespace code {invalid}"
-            )))),
+            invalid => Err(format!("invalid foreign namespace code {invalid}")),
         }
     }
 }
+
+/// The field adapter: `#[archived_with(crate::Namespace)]`.
+pub type Namespace = Via<NamespaceCode>;

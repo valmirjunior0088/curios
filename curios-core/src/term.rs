@@ -38,18 +38,10 @@ pub enum HeadTag<'a> {
 
 /// A core-calculus term: an `Rc`-shared `Node` — a [`Subterm`] plus its lazily-cached, span-independent derivations (a structural hash, `reach`, the free-variable set, and the `has_local_free`/`has_metavar` bits) — with an optional per-occurrence source span. Clones are pointer bumps that share the node's cache, so a subterm shared across occurrences memoizes each derivation once, not once per occurrence. Equality short-circuits first on pointer identity, then on the cached hashes, before falling back to structural comparison — which is what keeps conversion and the reduction memo affordable on heavily shared trees. The span is identity-irrelevant: hash and equality look only at the node, so re-spanning a term never splits a cache.
 #[derive(Debug, Clone)]
-#[curios_archive::archived]
-#[cfg_attr(
-    feature = "archive",
-    rkyv(
-        serialize_bounds(__S: curios_archive::rkyv::ser::Writer + curios_archive::rkyv::ser::Allocator + curios_archive::rkyv::ser::Sharing, __S::Error: curios_archive::rkyv::rancor::Source),
-        deserialize_bounds(__D: curios_archive::rkyv::de::Pooling, __D::Error: curios_archive::rkyv::rancor::Source),
-        bytecheck(bounds(__C: curios_archive::rkyv::validation::ArchiveContext + curios_archive::rkyv::validation::SharedContext, __C::Error: curios_archive::rkyv::rancor::Source))
-    )
-)]
+#[curios_archive::archived(recursive)]
 pub struct Term {
     span: Option<Span>,
-    #[cfg_attr(feature = "archive", rkyv(omit_bounds))]
+    #[archived_omit_bounds]
     inner: Rc<Node>,
 }
 
@@ -57,10 +49,10 @@ pub struct Term {
 #[curios_archive::archived]
 struct Node {
     /// The eager derivations — hash, `reach`, and the containment flags — packed behind one filled bit; see [`ScalarCache`].
-    #[cfg_attr(feature = "archive", rkyv(with = curios_archive::rkyv::with::Skip))]
+    #[archived_with(curios_archive::Skip)]
     scalars: ScalarCache,
     /// The one derivation left lazy. A `BTreeSet<Free>` per node would dominate the archive it is stored in, and unlike the scalars it is wanted by a minority of nodes on a given compilation.
-    #[cfg_attr(feature = "archive", rkyv(with = curios_archive::rkyv::with::Skip))]
+    #[archived_with(curios_archive::Skip)]
     frees: FreeCache,
     subterm: Subterm,
 }
@@ -2122,11 +2114,7 @@ pub enum MetavarOrigin {
 
 /// A metavariable's identity: a dense index into the `Context`'s `MetaStore`, minted monotonically by an `Entropy`(Entropy). A newtype so it can never be confused with the other `usize`-shaped notions the kernel juggles (de Bruijn indices, telescope arities, variant tags, `Nat` magnitudes).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[curios_archive::archived]
-#[cfg_attr(
-    feature = "archive",
-    rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))
-)]
+#[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
 pub struct MetaId(pub usize);
 
 impl From<usize> for MetaId {

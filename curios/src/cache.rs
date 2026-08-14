@@ -14,7 +14,6 @@
 mod tests;
 
 use {
-    curios_archive::rkyv,
     curios_package::{Store, compiler, digest, unit_slot},
     curios_pipeline::Cache,
     curios_text::UnitSource,
@@ -35,9 +34,8 @@ const RECORD: &str = "record.rkyv";
 /// What a stored unit must still be true of to be believed.
 ///
 /// Every field is a fact the compilation depended on and the address deliberately does not carry. Verification is all of them or nothing: a record that cannot be read, or that disagrees anywhere, is a miss.
-// Derived rather than taken from `curios_archive::archived`, which expands under a `cfg(feature = "archive")` this crate neither has nor wants: a product that always reads and writes archives has nothing to gate.
-#[derive(curios_archive::Archive, curios_archive::Serialize, curios_archive::Deserialize)]
-#[rkyv(crate = ::curios_archive::rkyv)]
+// `always`: a product that reads and writes archives unconditionally has no `archive` feature for a `cfg_attr` to gate on.
+#[curios_archive::archived(always)]
 struct Record {
     /// Each file the compilation read, by canonical path, with the digest of the text that was parsed from it. Sorted, because `RootSource::reads` yields a map.
     reads: Vec<(String, String)>,
@@ -144,8 +142,7 @@ impl Verdicts {
     /// That is also why a failed removal abandons the write instead of being ignored. Finding no record to remove is the ordinary case on a fresh slot; failing to remove one that *is* there leaves precisely the state this ordering exists to prevent.
     fn file(&self, slot: &str, source: &UnitSource<'_>, bytes: &[u8]) -> io::Result<()> {
         let directory = self.store.unit(slot);
-        let record = rkyv::to_bytes::<rkyv::rancor::Error>(&self.recorded(source))
-            .map_err(io::Error::other)?;
+        let record = curios_archive::to_bytes(&self.recorded(source)).map_err(io::Error::other)?;
 
         // Every failure names the directory it happened in: an error reading `Permission denied` alone leaves a reader guessing which of the three families under `.curios/` refused.
         let at = |error: io::Error| io::Error::other(format!("{}: {error}", directory.display()));
@@ -194,13 +191,13 @@ impl Cache for Verdicts {
         let bytes = fs::read(directory.join(STORED)).ok()?;
 
         // A stored unit that will not read back is a store to ignore, never a compile to fail: the source it was made from is still there, and recompiling costs time rather than correctness.
-        let record = rkyv::from_bytes::<Record, rkyv::rancor::Error>(&recorded).ok()?;
+        let record = curios_archive::from_bytes::<Record>(&recorded).ok()?;
 
         if !self.agrees(source, &record) {
             return None;
         }
 
-        let restored = rkyv::from_bytes::<Unit, rkyv::rancor::Error>(&bytes).ok()?;
+        let restored = curios_archive::from_bytes::<Unit>(&bytes).ok()?;
 
         self.placed.borrow_mut().push((slot, digest(&bytes)));
 
@@ -217,7 +214,7 @@ impl Cache for Verdicts {
             return;
         }
 
-        let Ok(bytes) = rkyv::to_bytes::<rkyv::rancor::Error>(unit_) else {
+        let Ok(bytes) = curios_archive::to_bytes(unit_) else {
             return;
         };
 

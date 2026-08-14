@@ -17,11 +17,7 @@ use {
 
 /// A lowering- or elaboration-minted universe metavariable.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[curios_archive::archived]
-#[cfg_attr(
-    feature = "archive",
-    rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))
-)]
+#[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
 pub struct UniverseMetaId(pub usize);
 
 impl From<usize> for UniverseMetaId {
@@ -44,20 +40,12 @@ impl fmt::Display for UniverseMetaId {
 
 /// A declaration-local, de Bruijn-indexed universe parameter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[curios_archive::archived]
-#[cfg_attr(
-    feature = "archive",
-    rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))
-)]
+#[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
 pub struct UniverseParam(pub usize);
 
 /// The head of one non-constant level atom.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-#[curios_archive::archived]
-#[cfg_attr(
-    feature = "archive",
-    rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))
-)]
+#[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
 pub enum LevelHead {
     Param(UniverseParam),
     Meta(UniverseMetaId),

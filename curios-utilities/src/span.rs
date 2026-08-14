@@ -10,7 +10,7 @@ use std::{
 #[derive(Debug)]
 #[curios_archive::archived]
 pub struct Source {
-    #[cfg_attr(feature = "archive", rkyv(with = curios_archive::rkyv::with::Map<curios_archive::rkyv::with::AsString>))]
+    #[archived_with(curios_archive::Map<curios_archive::AsString>)]
     pub path: Option<PathBuf>,
     pub text: String,
 }

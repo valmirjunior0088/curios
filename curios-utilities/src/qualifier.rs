@@ -44,16 +44,12 @@ pub fn is_keyword(word: &str) -> bool {
 ///
 /// The segments are shared behind an `Rc`, so cloning a qualifier is a refcount bump rather than one allocation per segment. That matters because a qualifier is copied and compared far more often than it is built: every free variable in every Core term names one, and the free-variable set memoized on every node is keyed by them, so an owned clone put the cost on the kernel's hottest structure. Sharing also gives equality and ordering a pointer-identity fast path, which fires whenever two occurrences came from the same resolution — the common case, since references resolve through one table entry.
 #[derive(Clone)]
-#[curios_archive::archived]
-#[cfg_attr(
-    feature = "archive",
-    rkyv(derive(PartialEq, Eq, PartialOrd, Ord, Hash))
-)]
+#[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
 pub struct Qualifier {
     /// Archived as the bare segment sequence, exactly as `rkyv::with::Unshare` would write it: putting the `Rc` in the archive would drag rkyv's `Sharing`/`Pooling` bounds into every container that holds a qualifier, and the archived form stays what it has always been, so its derived comparisons agree with the live ones by construction.
     ///
     /// It is read back *interned* rather than unshared — see [`Interned`].
-    #[cfg_attr(feature = "archive", rkyv(with = Interned))]
+    #[archived_with(Interned)]
     segments: Rc<Vec<String>>,
 }
 
@@ -209,18 +205,18 @@ where
 ///
 /// It matters because the archive is where qualifiers are overwhelmingly *created*: the fixed prelude's Core carries on the order of a hundred thousand qualifier occurrences drawn from a couple of thousand distinct paths, so unsharing them allocates the same few paths tens of thousands of times over. Interning collapses that to one allocation per distinct path, and restores the pointer-identity fast path in [`Qualifier`]'s `PartialEq` and `Ord` for every restored name — which unsharing defeats by construction, since no two occurrences can ever share a pointer.
 #[cfg(feature = "archive")]
-pub struct Interned;
+pub struct Interning;
+
+/// The field adapter: `#[archived_with(Interned)]`.
+#[cfg(feature = "archive")]
+pub type Interned = curios_archive::Via<Interning>;
 
 #[cfg(feature = "archive")]
 mod interned {
     use {
-        super::{Interned, Rc},
-        curios_archive::rkyv::{
-            Archive, Deserialize, Place, Serialize,
-            rancor::Fallible,
-            with::{ArchiveWith, DeserializeWith, SerializeWith},
-        },
-        std::{cell::RefCell, collections::HashSet},
+        super::Rc,
+        curios_archive::Proxy,
+        std::{borrow::Borrow, cell::RefCell, collections::HashSet},
     };
 
     thread_local! {
@@ -242,39 +238,17 @@ mod interned {
         })
     }
 
-    impl ArchiveWith<Rc<Vec<String>>> for Interned {
-        type Archived = <Vec<String> as Archive>::Archived;
-        type Resolver = <Vec<String> as Archive>::Resolver;
+    impl Proxy<Rc<Vec<String>>> for super::Interning {
+        type Archivable = Vec<String>;
 
-        fn resolve_with(
-            field: &Rc<Vec<String>>,
-            resolver: Self::Resolver,
-            out: Place<Self::Archived>,
-        ) {
-            field.as_ref().resolve(resolver, out);
+        /// Borrowed, never cloned: the archived form is the `Vec` already inside the `Rc`, so serializing one occurrence costs nothing beyond writing it.
+        fn to_archivable(path: &Rc<Vec<String>>) -> impl Borrow<Vec<String>> {
+            path.as_ref()
         }
-    }
 
-    impl<S> SerializeWith<Rc<Vec<String>>, S> for Interned
-    where
-        S: Fallible + ?Sized,
-        Vec<String>: Serialize<S>,
-    {
-        fn serialize_with(
-            field: &Rc<Vec<String>>,
-            serializer: &mut S,
-        ) -> Result<Self::Resolver, S::Error> {
-            field.as_ref().serialize(serializer)
-        }
-    }
-
-    impl<A, D> DeserializeWith<A, Rc<Vec<String>>, D> for Interned
-    where
-        A: Deserialize<Vec<String>, D>,
-        D: Fallible + ?Sized,
-    {
-        fn deserialize_with(field: &A, deserializer: &mut D) -> Result<Rc<Vec<String>>, D::Error> {
-            Ok(intern(A::deserialize(field, deserializer)?))
+        /// The interning happens here, on the way in — which is the direction that matters, since this is where a hundred thousand occurrences become a couple of thousand allocations.
+        fn from_archivable(segments: Vec<String>) -> Result<Rc<Vec<String>>, String> {
+            Ok(intern(segments))
         }
     }
 }

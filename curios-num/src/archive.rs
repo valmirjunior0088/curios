@@ -1,58 +1,44 @@
-//! rkyv adapters for arbitrary-precision integers.
+//! How the arbitrary-precision integers are archived: as their little-endian bytes.
+//!
+//! Bytes rather than rkyv's own integer support because these are unbounded — there is no fixed width to archive them at. The signed and unsigned twins differ only in which pair of `num-bigint` conversions they name.
 
 use {
-    curios_archive::rkyv::{
-        Archive, Archived, Deserialize, Place, Resolver, Serialize,
-        rancor::Fallible,
-        with::{ArchiveWith, DeserializeWith, SerializeWith},
-    },
+    curios_archive::{Proxy, Via},
     num_bigint::{BigInt, BigUint},
+    std::borrow::Borrow,
 };
 
-/// Declares one with-adapter archiving `$int` as the little-endian byte vector `$to` produces and `$from` reads back. The twins below differ only in these parameters, so a change to the adapter shape reaches both.
+/// Declares one proxy archiving `$int` as the little-endian byte vector `$to` produces and `$from` reads back, plus the adapter alias fields name.
 macro_rules! big_bytes {
-    ($adapter:ident, $int:ident, $to:ident, $from:ident) => {
-        pub struct $adapter;
+    ($proxy:ident, $adapter:ident, $int:ident, $to:ident, $from:ident) => {
+        pub struct $proxy;
 
-        impl ArchiveWith<$int> for $adapter {
-            type Archived = Archived<Vec<u8>>;
-            type Resolver = Resolver<Vec<u8>>;
+        impl Proxy<$int> for $proxy {
+            type Archivable = Vec<u8>;
 
-            fn resolve_with(value: &$int, resolver: Self::Resolver, out: Place<Self::Archived>) {
-                value.$to().resolve(resolver, out);
+            fn to_archivable(value: &$int) -> impl Borrow<Vec<u8>> {
+                value.$to()
+            }
+
+            // Infallible: every byte sequence denotes some integer, including the empty one.
+            fn from_archivable(bytes: Vec<u8>) -> Result<$int, String> {
+                Ok($int::$from(&bytes))
             }
         }
 
-        impl<S> SerializeWith<$int, S> for $adapter
-        where
-            S: Fallible + ?Sized,
-            Vec<u8>: Serialize<S>,
-        {
-            fn serialize_with(
-                value: &$int,
-                serializer: &mut S,
-            ) -> Result<Self::Resolver, S::Error> {
-                value.$to().serialize(serializer)
-            }
-        }
-
-        impl<D> DeserializeWith<Archived<Vec<u8>>, $int, D> for $adapter
-        where
-            D: Fallible + ?Sized,
-            Archived<Vec<u8>>: Deserialize<Vec<u8>, D>,
-        {
-            fn deserialize_with(
-                value: &Archived<Vec<u8>>,
-                deserializer: &mut D,
-            ) -> Result<$int, D::Error> {
-                Ok($int::$from(&value.deserialize(deserializer)?))
-            }
-        }
+        pub type $adapter = Via<$proxy>;
     };
 }
 
-big_bytes!(BigUintBytes, BigUint, to_bytes_le, from_bytes_le);
 big_bytes!(
+    NaturalBytes,
+    BigUintBytes,
+    BigUint,
+    to_bytes_le,
+    from_bytes_le
+);
+big_bytes!(
+    IntegerBytes,
     BigIntBytes,
     BigInt,
     to_signed_bytes_le,

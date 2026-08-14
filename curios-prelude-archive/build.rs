@@ -189,18 +189,17 @@ fn build() {
         binder_floor,
         ersd,
     };
-    let first = curios_archive::rkyv::to_bytes::<curios_archive::rkyv::rancor::Error>(&image)
-        .expect("fixed prelude archive serialization failed");
-    let second = curios_archive::rkyv::to_bytes::<curios_archive::rkyv::rancor::Error>(&image)
+    let first =
+        curios_archive::to_bytes(&image).expect("fixed prelude archive serialization failed");
+    let second = curios_archive::to_bytes(&image)
         .expect("fixed prelude archive repeat serialization failed");
     assert_eq!(
-        first.as_slice(),
-        second.as_slice(),
+        &*first, &*second,
         "fixed prelude archive is not deterministic"
     );
 
     let out = PathBuf::from(env::var_os("OUT_DIR").unwrap()).join("prelude.rkyv");
-    fs::write(out, first).expect("failed to write fixed prelude archive");
+    fs::write(out, &*first).expect("failed to write fixed prelude archive");
 }
 
 fn source_files(manifest: &Path) -> Vec<PathBuf> {
