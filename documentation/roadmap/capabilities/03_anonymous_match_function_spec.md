@@ -2,7 +2,7 @@
 
 Working implementation specification for a surface form analogous to OCaml's `function`, expressed in Curios as `match =>`, together with the inference-position machinery that lets it be used where no expected function type supplies its scrutinee carrier.
 
-This document states responsibilities and invariants, not today's internal APIs — those move, and this feature has not started. Its durable user-facing semantics belong in `SYNTAX.md`, lowering invariants in `curios-text` module documentation and tests, and scheduler invariants in `curios-elab` module documentation and tests.
+This document states responsibilities and invariants, not today's internal APIs — those move, and this feature has not started. Its durable user-facing semantics belong in `syntax.md`, lowering invariants in `curios-text` module documentation and tests, and scheduler invariants in `curios-elab` module documentation and tests.
 
 ## Design decision: the form carries the inference
 
@@ -10,7 +10,7 @@ Monomorphic use-driven lambda inference was cut as a general language feature an
 
 The reframing changes the language story, not just the document layout. An unannotated lambda in inference position stays rejected, uniformly — `curios-elab`'s `elaborate_func_infer` refuses a bare-metavariable domain with `CannotInfer`. `match =>` is the one form that acquires use-driven inference, because the form itself declares that its single parameter is the scrutinee. An earlier draft warned that implementing only match-shaped parking "would leave ordinary lambdas inconsistent across match, projection, and application bodies"; that worry assumed general lambda inference was the goal, and dissolves with it — there is no partially-inferring lambda feature to be inconsistent about, only a syntax form with defined behavior. This follows the same philosophy as the closed operator grammar: the form is fixed, and the form carries its semantics.
 
-What the reframing cuts, deliberately: projection parking (`(pair) => pair.0`) and application parking (`(f, x) => f(x)`) have no consumer once general lambda inference is off the table, since nothing lowered from `match =>` produces either shape. Both are additive later on top of the machinery specified here. When the feature lands, this rationale moves to `DESIGN.md`.
+What the reframing cuts, deliberately: projection parking (`(pair) => pair.0`) and application parking (`(f, x) => f(x)`) have no consumer once general lambda inference is off the table, since nothing lowered from `match =>` produces either shape. Both are additive later on top of the machinery specified here. When the feature lands, this rationale moves to `design.md`.
 
 ## Staging
 
@@ -123,7 +123,7 @@ After each stage, run the repository's full done bar in order — [CLAUDE.md](..
 
 ## Retirement criteria
 
-- `match =>` grammar and semantics — including the inference-position behavior and its item boundary — are recorded in `SYNTAX.md`.
+- `match =>` grammar and semantics — including the inference-position behavior and its item boundary — are recorded in `syntax.md`.
 - Parsing, printing, and lowering invariants are recorded in the owning `curios-text` module documentation and tests; parking, retry, and provenance invariants in the owning `curios-elab` module documentation and tests.
-- The design decision that the form carries the inference, and that general lambda inference was dropped for lack of demand, is recorded in `DESIGN.md`.
+- The design decision that the form carries the inference, and that general lambda inference was dropped for lack of demand, is recorded in `design.md`.
 - Remaining plans refer to the landed syntax rather than this file, the roadmap entry is a checked unlinked summary, and no reference to this filename remains.

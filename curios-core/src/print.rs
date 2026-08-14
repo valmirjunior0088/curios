@@ -964,7 +964,7 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
                 cur = rest.open(&[&Term::free_var(&label)]);
             }
 
-            // Through `listed` like every other sequence, rather than the hand-rolled always-broken leading-comma form this used to carry: a goal report naming a tuple type is read by a person, and `{a : A, b : B}` on one line is what `documentation/SYNTAX.md` spells. Unspaced for the same reason the surface printer is.
+            // Through `listed` like every other sequence, rather than the hand-rolled always-broken leading-comma form this used to carry: a goal report naming a tuple type is read by a person, and `{a : A, b : B}` on one line is what `documentation/syntax.md` spells. Unspaced for the same reason the surface printer is.
             listed("{".into(), false, items, "}")
         }
         Subterm::Tuple(Tuple { fields, names }) => {

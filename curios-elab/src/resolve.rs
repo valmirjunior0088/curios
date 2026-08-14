@@ -807,7 +807,7 @@ pub(crate) fn register_witness(
         }
     }
 
-    // The orphan rule: a witness may be declared only where the concept it witnesses, or at least one rigid type in its key, is already declared — never by a third root unrelated to both. Without this, two unrelated roots could each legally `satisfy` the same `(concept, key)` pair, a collision that is unfixable once both are linked into one program (see `documentation/ROADMAP.md`'s Type System section). Checked before the duplicate-key insert below: "not allowed to register this at all" is the more fundamental violation than "and it also collides."
+    // The orphan rule: a witness may be declared only where the concept it witnesses, or at least one rigid type in its key, is already declared — never by a third root unrelated to both. Without this, two unrelated roots could each legally `satisfy` the same `(concept, key)` pair, a collision that is unfixable once both are linked into one program (see `documentation/roadmap.md`'s Type System section). Checked before the duplicate-key insert below: "not allowed to register this at all" is the more fundamental violation than "and it also collides."
     //
     // A privileged root (`sys`/`syn`/`std`) is exempt: the three are one coordinated standard library, not independent unrelated packages, so e.g. a `/std`-declared `Eql(Str)` witness bridging `/sys`'s `Eql` concept and `/syn`'s `Str` type is exactly the sanctioned pattern (`/std` facades for `/sys`/`/syn`-homed concepts and types), not an orphan instance. The check only bites an ordinary root — the entry program today, an untrusted external package once one exists.
     //

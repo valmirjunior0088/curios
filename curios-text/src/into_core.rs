@@ -1293,7 +1293,7 @@ fn exposed_nominal(
 
 /// Every nominal declaration an alias chain can land on: the unit's own, over the ones its scope already made visible.
 ///
-/// A *scope*, not a merged map. The audit walks alias edges until it reaches something nominal, and an alias may legitimately point at a type from an earlier unit — so the question crosses the boundary and is answered by asking every half. Merging them upstream answers it too, and that is what this replaced: a map whose correctness here depended on somebody else having concatenated the prelude into it, with nothing saying so. See `documentation/DESIGN.md`, "A module is a compilation unit, and the prelude is an environment".
+/// A *scope*, not a merged map. The audit walks alias edges until it reaches something nominal, and an alias may legitimately point at a type from an earlier unit — so the question crosses the boundary and is answered by asking every half. Merging them upstream answers it too, and that is what this replaced: a map whose correctness here depended on somebody else having concatenated the prelude into it, with nothing saying so. See `documentation/design/toolchain/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md`.
 #[derive(Clone, Copy)]
 struct NominalScope<'a> {
     /// The units already lowered, in dependency order. Empty when this lowering *is* the first and there is nothing beneath it.
@@ -1767,7 +1767,7 @@ pub fn into_core_unit(
         NominalScope::new(&scope_cores, &induct_decls, &struct_decls),
     )?;
 
-    // This unit's own items alone. A predecessor reaches later stages as an *environment* they are seeded from — `Globals` at the certifier, a replayed context at elaboration and erasure — and copying its items into every compilation only ever existed so those stages could then skip them again by index. See `documentation/DESIGN.md`, "A module is a compilation unit, and the prelude is an environment".
+    // This unit's own items alone. A predecessor reaches later stages as an *environment* they are seeded from — `Globals` at the certifier, a replayed context at elaboration and erasure — and copying its items into every compilation only ever existed so those stages could then skip them again by index. See `documentation/design/toolchain/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md`.
     let items = order_flat_items(flat_items, &mounts, &induct_decls, &struct_decls)
         .into_iter()
         .map(FlatItem::into_core)

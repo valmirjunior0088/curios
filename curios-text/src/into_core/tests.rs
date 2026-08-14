@@ -2477,7 +2477,7 @@ fn an_unannotated_local_let_is_pinned_through_a_type_alias() {
 
 /// `/sys` offers no way out of `Io`: the effect module exports its carrier and its two monad operations, and no `/sys` function anywhere takes an `Io` to something that is not one.
 ///
-/// This *narrows* `SOUNDNESS.md`'s *A type is a pure term*; it does not discharge it. That row rests on there being no operation from `Io(T)` to `T`, and the surface an eliminator could enter through is two Rust tables rather than the whole library: a foreign row cannot introduce one, because `host_fn` wraps every store row's result in `Io` at a single site and `WireType` is a closed enum with no case that could name an `Io` in a domain; and no `.crs` can define one without already having one. So what is checkable is the roster below, and that is what is checked — the general property remains argued.
+/// This *narrows* `documentation/soundness/per-term-rules/a-type-is-a-pure-term.md`; it does not discharge it. That row rests on there being no operation from `Io(T)` to `T`, and the surface an eliminator could enter through is two Rust tables rather than the whole library: a foreign row cannot introduce one, because `host_fn` wraps every store row's result in `Io` at a single site and `WireType` is a closed enum with no case that could name an `Io` in a domain; and no `.crs` can define one without already having one. So what is checkable is the roster below, and that is what is checked — the general property remains argued.
 #[test]
 fn the_sys_io_roster_offers_no_eliminator() {
     /// Whether a signature's type is headed by `Io`, which is the only shape that matters here: `/sys` states its effect types directly rather than behind an alias, so a domain that is an `Io` is written as one.

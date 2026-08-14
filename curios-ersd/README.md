@@ -26,4 +26,4 @@ The Curios erased IR: the flat, explicit, first-order stage between `curios-elab
 
 ### Identity naming is cross-cutting
 
-This crate's arena identities (`id.rs`) follow the naming scheme shared with `curios-cont` and `curios-wasm` — see "One naming scheme for compiler identities" in [`documentation/DESIGN.md`](../documentation/DESIGN.md), which states it once for all three.
+This crate's arena identities (`id.rs`) follow the naming scheme shared with `curios-cont` and `curios-wasm` — see [One naming scheme for compiler identities](../documentation/design/toolchain/one-naming-scheme-for-compiler-identities.md), which states it once for all three.

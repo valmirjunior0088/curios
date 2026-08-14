@@ -53,7 +53,7 @@ pub(crate) fn check_definition(
 ///
 /// Member *signatures* are checked at that opaque spelling too, and bodies at the folded one. See the note in the body for what each phase needs and what goes wrong when either takes the other's.
 ///
-/// Totality is not decided for the group as a whole. `rec` is general recursion by design, and the obligation that keeps it sound is positional and whole-module — see "Totality of the erased program" in `documentation/DESIGN.md`. What *is* decided here is the local gate: a member that erasure deletes must descend, or assuming it at its declared type certifies `rec f : False = f`.
+/// Totality is not decided for the group as a whole. `rec` is general recursion by design, and the obligation that keeps it sound is positional and whole-module — see `documentation/design/language/totality-of-the-erased-program.md`. What *is* decided here is the local gate: a member that erasure deletes must descend, or assuming it at its declared type certifies `rec f : False = f`.
 pub(crate) fn check_group<R>(
     kernel: &mut Kernel,
     group: &RecGroup,
@@ -110,7 +110,7 @@ pub(crate) fn check_group<R>(
 ///
 /// Each member is assumed at its declared type while every body is checked, so a member may call itself and its siblings. `names` parallels the group's members positionally; an export is defined as the folded selection of the member it names, which is what a later item's occurrence of it reduces through.
 ///
-/// Totality is not decided here. `rec` is general recursion by design, and the obligation that keeps it sound is positional and whole-module — see "Totality of the erased program" in `documentation/DESIGN.md`.
+/// Totality is not decided here. `rec` is general recursion by design, and the obligation that keeps it sound is positional and whole-module — see `documentation/design/language/totality-of-the-erased-program.md`.
 pub(crate) fn check_rec_group(
     kernel: &mut Kernel,
     names: &[Free],

@@ -114,7 +114,7 @@ A list literal constructs `List(T)`. Entries are elements or spreads; a spread i
 A nonempty literal may infer `T` from its elements. An empty literal needs an expected list type from its position, such as a binder annotation:
 
 ```crs
-let empty : List(Nat) = [];
+let empty: List(Nat) = [];
 ```
 
 Spreads may appear in any position and may be repeated. Every element and spread operand must agree on the same element type.
@@ -165,13 +165,13 @@ All inhabitants of the same proposition are definitionally irrelevant. Eliminati
 
 A function type is a parenthesized dependent parameter list followed by `->` and its result.
 
-An explicit parameter is written `name : type` or as an unlabeled type. An implicit parameter begins with `@`. A witness parameter begins with `use` and is anonymous.
+An explicit parameter is written `name: type` or as an unlabeled type. An implicit parameter begins with `@`. A witness parameter begins with `use` and is anonymous.
 
 ```crs
 (Nat) -> Nat
-(x : Nat, y : Nat) -> Nat
-(@A : Type, x : A) -> A
-(@A : Type, use Show(A), value : A) -> Str
+(x: Nat, y: Nat) -> Nat
+(@A: Type, x: A) -> A
+(@A: Type, use Show(A), value: A) -> Str
 ```
 
 Later parameter types and the result may refer to earlier named parameters.
@@ -182,8 +182,8 @@ A tuple type is a dependent field telescope enclosed in braces.
 
 ```crs
 {Nat, Bool}
-{fst : Nat, snd : Bool}
-{value : A, proof : Valid(value)}
+{fst: Nat, snd: Bool}
+{value: A, proof: Valid(value)}
 {}
 ```
 
@@ -192,13 +192,13 @@ Later fields may refer to earlier named fields. The empty tuple type `{}` is the
 A labeled function field may use signature sugar:
 
 ```crs
-{run(input : Bytes) -> Async(Nat)}
+{run(input: Bytes) -> Async(Nat)}
 ```
 
 This is equivalent to:
 
 ```crs
-{run : (input : Bytes) -> Async(Nat)}
+{run: (input: Bytes) -> Async(Nat)}
 ```
 
 ## Expressions
@@ -259,7 +259,7 @@ A lambda is a comma-separated parameter list followed by `=>` and a body.
 
 ```crs
 (x) => x
-(x : Nat) => x + 1
+(x: Nat) => x + 1
 (f, value) => f(value)
 ```
 
@@ -268,8 +268,8 @@ Lambda parameters may be plain binders or irrefutable tuple and struct patterns.
 A lambda's parameter list is a dependent telescope, exactly as a function type's is: a later parameter's annotation may name the parameters written before it, including the leaf names bound by an earlier tuple or struct pattern. An earlier parameter shadows a like-named module binding inside a later annotation, just as it does inside the body.
 
 ```crs
-(s : A, t : A, q : Eq(s, t)) => proof(q)
-((lo, hi), q : Eq(lo, hi)) => lo
+(s: A, t: A, q: Eq(s, t)) => proof(q)
+((lo, hi), q: Eq(lo, hi)) => lo
 ```
 
 A lambda parameter carries the same plicity mark as a function-type parameter: `@name` binds an implicit slot, `use name` binds a witness slot, and an unmarked binder binds an explicit slot. The mark applies to the slot the parameter occupies whatever the pattern shape. Each written binder is checked against the plicity of the slot it claims when the lambda is checked against an expected function type.
@@ -279,7 +279,7 @@ A lambda parameter carries the same plicity mark as a function-type parameter: `
 (@A, use show, value) => Show/show(value)
 ```
 
-An omitted implicit or witness binder is inserted automatically from the expected function type, so hidden binders may be left out when the body does not name them. Alignment is positional by plicity: among the parameters of the expected type, each written binder claims the next slot of its own plicity, and every skipped implicit or witness slot before it is inserted. A plain binder never silently binds a hidden slot. For the expected type `(@A : Type, use Show(A), value : A) -> Str`, every one of `(value) => …`, `(@A, value) => …`, `(use show, value) => …`, and `(@A, use show, value) => …` is accepted; `(A, show, value) => …` is not, because `A` binds the sole explicit slot and the remaining binders are surplus.
+An omitted implicit or witness binder is inserted automatically from the expected function type, so hidden binders may be left out when the body does not name them. Alignment is positional by plicity: among the parameters of the expected type, each written binder claims the next slot of its own plicity, and every skipped implicit or witness slot before it is inserted. A plain binder never silently binds a hidden slot. For the expected type `(@A: Type, use Show(A), value: A) -> Str`, every one of `(value) => …`, `(@A, value) => …`, `(use show, value) => …`, and `(@A, use show, value) => …` is accepted; `(A, show, value) => …` is not, because `A` binds the sole explicit slot and the remaining binders are surplus.
 
 ### Local `let`
 
@@ -287,14 +287,14 @@ A local `let` binds a value throughout the term after its terminating `;`.
 
 ```crs
 let x = compute();
-let y : Nat = 0;
+let y: Nat = 0;
 x + y
 ```
 
 Function-definition sugar introduces parameters and an optional result type:
 
 ```crs
-let increment(n : Nat) -> Nat = n + 1;
+let increment(n: Nat) -> Nat = n + 1;
 increment(4)
 ```
 
@@ -311,12 +311,12 @@ x + y
 `rec` introduces locally scoped recursive definitions. Every recursive member requires a type. `and` joins a mutually recursive group.
 
 ```crs
-rec even(n : Nat) -> Bool =
+rec even(n: Nat) -> Bool =
     match n
     | 0 => true
     | p + 1; _ => odd(p)
     end
-and odd(n : Nat) -> Bool =
+and odd(n: Nat) -> Bool =
     match n
     | 0 => false
     | p + 1; _ => even(p)
@@ -343,7 +343,7 @@ Refutable patterns belong only to `match`.
 `?` is a development goal. It asks the elaborator to infer as much as possible, records the local scope and expected type, and then causes compilation to fail with a report.
 
 ```crs
-let compose(@A : Type, @B : Type, @C : Type, f : (B) -> C, g : (A) -> B) -> (A) -> C =
+let compose(@A: Type, @B: Type, @C: Type, f: (B) -> C, g: (A) -> B) -> (A) -> C =
     ?;
 compose
 ```
@@ -355,7 +355,7 @@ A goal is never accepted in a successfully compiled program.
 `action!` is monadic sequencing. Each occurrence is equivalent to a call to `/syn/Monad/bind(action, continuation)` in the monad of its region.
 
 ```crs
-let parser : Parse(Nat) =
+let parser: Parse(Nat) =
     let a = Parse/any_byte!;
     let b = Parse/any_byte!;
     Parse/pure(a + b);
@@ -375,14 +375,14 @@ Every operation that touches the host — writing a handle, reading a clock, all
 
 ```crs
 use /std/{Io, print};
-let greeting : Io({}) = print("hello");   -- nothing has been printed
+let greeting: Io({}) = print("hello");   -- nothing has been printed
 ```
 
 `Io/pure` wraps a value as a description that performs nothing, and `Io/bind` sequences one description into another. Postfix `!` is the ordinary sequencing form and reaches `Io` through its `Monad` witness like any other monad:
 
 ```crs
 use /std/{Io, print};
-let shout(s : Str) -> Io({}) =
+let shout(s: Str) -> Io({}) =
     let _ = print(s)!;
     print("!\n")
 ```
@@ -390,7 +390,7 @@ let shout(s : Str) -> Io({}) =
 **There is no operation taking an `Io(T)` to a `T`.** A description is performed only by being the program's tail, which the emitted entrypoint forces once. So a function whose result type is not an `Io` cannot perform an effect, and a `!` may only appear in a region whose type is a monad — a `(Str, Bool) -> Bool` has nowhere to sequence one.
 
 ```crs
-let probe(tag : Str, r : Bool) -> Bool =
+let probe(tag: Str, r: Bool) -> Bool =
     let _ = /std/print(tag)!;   -- rejected: this region's type is `Bool`, not a monad
     r;
 ```
@@ -399,7 +399,7 @@ Binding a description does not perform it, and forcing one twice performs it twi
 
 ```crs
 use /std/{Io, print};
-let once : Io({}) = print("x");
+let once: Io({}) = print("x");
 let _ = once!;
 once                            -- prints "x" twice in total
 ```
@@ -420,7 +420,7 @@ With that witness declared — `/std/Async` declares it — an `Io` action seque
 
 ```crs
 use /std/{Async, print};
-pub let fiber : Async({}) =
+pub let fiber: Async({}) =
     let _ = print("hello\n")!;
     Async/pure(());
 ```
@@ -431,7 +431,7 @@ Embeddings never chain. Declaring `Lift(Io, Job)` and `Lift(Job, Sched)` does no
 
 ### Whole-term forms and operand positions
 
-`let`, `rec`, `match`, `choose`, lambdas, and function types are whole-term forms: a body or tail extends to the end of the enclosing term. There is no expression-level `term : type` ascription; a `:` annotation appears only in binder, signature, and motive positions.
+`let`, `rec`, `match`, `choose`, lambdas, and function types are whole-term forms: a body or tail extends to the end of the enclosing term. There is no expression-level `term: type` ascription; a `:` annotation appears only in binder, signature, and motive positions.
 
 An infix operand is an applied atom: a literal, name, tuple, structure literal, or parenthesized term, followed by any chain of calls, projections, and postfix `!`. A whole-term form is not an operand; parenthesize it to use it as one.
 
@@ -472,11 +472,11 @@ The motive states the result type as a family. It is an ordinary term, checked a
 There is no motive grammar. What follows `:` is parsed as a term and terminates at the first arm, since `|` is not an infix operator.
 
 ```crs
-match b : (_) => Nat                            -- result ignores the scrutinee
-match n : (m) => P(m)                           -- result depends on it
-match p : (s, t, q) => Eq(t, s)                 -- an indexed family
-match p : (s : A, t : A, q : Eq(s, t)) => Eq(t, s) -- with written annotations
-match p : discriminates_eq                      -- a named family
+match b: (_) => Nat                            -- result ignores the scrutinee
+match n: (m) => P(m)                           -- result depends on it
+match p: (s, t, q) => Eq(t, s)                 -- an indexed family
+match p: (s: A, t: A, q: Eq(s, t)) => Eq(t, s) -- with written annotations
+match p: discriminates_eq                      -- a named family
 match v                                         -- omitted; inferred
 ```
 
@@ -489,7 +489,7 @@ Each arm is checked against the motive at that constructor's target indices, and
 A binder may be written bare, as `_`, or annotated. An annotation is an ordinary type in an ordinary position: it is checked by conversion against the binder's expected type, obeys the usual plicity rules, and may name the binders written before it. Annotating the scrutinee binder is how a reader recovers the eliminated family on the motive line.
 
 ```crs
-match p : (s, t, q : Eq(s, t)) => Eq(t, s)
+match p: (s, t, q: Eq(s, t)) => Eq(t, s)
 ```
 
 Omitting the motive asks the elaborator to infer it. Prefer omission wherever inference succeeds; a written motive is needed where there is nothing to infer from — a type-level match whose result appears in a signature, or an elimination in inference position.
@@ -569,7 +569,7 @@ end
 Natural-number induction has a zero arm and a successor arm. The successor arm binds the predecessor before `+ 1`; a binding after `;` receives the induction hypothesis for the predecessor, and omitting it makes the arm an ordinary case split.
 
 ```crs
-match n : (m) => P(m)
+match n: (m) => P(m)
 | 0 => base
 | predecessor + 1; hypothesis => step(predecessor, hypothesis)
 end
@@ -654,9 +654,9 @@ Top-level `let` declarations require a type annotation. Function-definition suga
 That requirement is also what separates items from the final term: an *unannotated* top-level binding in an entrypoint is not an item at all, but a local `let` opening the final term. The difference is not only scope. An item's value body is its own sequencing region, so a `!` written in it sequences within that definition; a local `let`'s value shares the final term's region, so a `!` written there sequences with the rest of the program.
 
 ```crs
-pub let zero : Nat = 0;
+pub let zero: Nat = 0;
 
-pub let map(@A : Type, @B : Type, value : Option(A), f : (A) -> B) -> Option(B) =
+pub let map(@A: Type, @B: Type, value: Option(A), f: (A) -> B) -> Option(B) =
     match value
     | some(x) => Option/some(f(x))
     | none() => Option/none()
@@ -673,7 +673,7 @@ A file-backed module ends its declaration with `;` and loads `Name.crs`. An inli
 pub mod Nat;
 
 pub mod Internal
-    pub let value : Nat = 1;
+    pub let value: Nat = 1;
 end
 ```
 
@@ -724,7 +724,7 @@ The check compares audiences rather than declaration paths, so a name re-exporte
 An inductive declaration introduces a nominal family and its constructors.
 
 ```crs
-pub induct Option(A : Type) : pub Type
+pub induct Option(A: Type): pub Type
 | some(A)
 | none()
 end
@@ -735,17 +735,17 @@ Parameters follow the name. A parameter marked `@` is implicit at the type const
 The required result annotation is either a sort or an index telescope followed by a sort:
 
 ```crs
-pub induct Vec(T : Type) : (length : Nat) -> pub Type
-| nil() : (0)
-| cons(@n : Nat, head : T, tail : Vec(T, n)) : (n + 1)
+pub induct Vec(T: Type): (length: Nat) -> pub Type
+| nil(): (0)
+| cons(@n: Nat, head: T, tail: Vec(T, n)): (n + 1)
 end
 ```
 
-Each index binder may be named or left bare — `(length : Nat)` and `(Nat)` are both well-formed — and an index never takes `@`. The name is never in scope in the constructor cases; it appears in the family's printed signature, and a later entry of the same telescope may depend on it. That dependency is what makes the annotation a telescope rather than a list of types:
+Each index binder may be named or left bare — `(length: Nat)` and `(Nat)` are both well-formed — and an index never takes `@`. The name is never in scope in the constructor cases; it appears in the family's printed signature, and a later entry of the same telescope may depend on it. That dependency is what makes the annotation a telescope rather than a list of types:
 
 ```crs
-pub induct Tagged : (size : Nat, contents : Vec(Nat, size)) -> pub Type
-| tag(@size : Nat, @contents : Vec(Nat, size)) : (size, contents)
+pub induct Tagged: (size: Nat, contents: Vec(Nat, size)) -> pub Type
+| tag(@size: Nat, @contents: Vec(Nat, size)): (size, contents)
 end
 ```
 
@@ -754,8 +754,8 @@ Each constructor of an indexed family must state the indices it produces after `
 An inductive proposition is declared with `Prop`:
 
 ```crs
-pub induct Eq(@A : Type) : (left : A, right : A) -> pub Prop
-| refl(@value : A) : (value, value)
+pub induct Eq(@A: Type): (left: A, right: A) -> pub Prop
+| refl(@value: A): (value, value)
 end
 ```
 
@@ -768,16 +768,16 @@ Mutually recursive inductives are separated by `and` within one block. Each memb
 A structure is a nominal dependent record.
 
 ```crs
-pub struct Pair(A : Type, B : Type) : pub Type {
-    fst : A,
-    snd : B,
+pub struct Pair(A: Type, B: Type): pub Type {
+    fst: A,
+    snd: B,
 }
 ```
 
 A single unlabeled field defines a newtype-like structure and is projected with `.0`.
 
 ```crs
-pub struct Meters : pub Type { Nat }
+pub struct Meters: pub Type { Nat }
 ```
 
 The outer `pub` exports the type name. The inner `pub` exports construction and projection. Without the inner marker, those operations are restricted to the declaring module's subtree.
@@ -820,13 +820,13 @@ Concepts provide ad-hoc polymorphism. A concept is a record-shaped interface, a 
 A concept has zero or more parameters, a required representation sort, and a field list. The representation sort follows the struct rules: `: pub Type` declares a transparent concept, and `: Type` a *sealed* one, whose representation is private to its declaring module's subtree — witness declarations, dictionary literals, structure updates, and raw field projections are then permitted only there. Resolution, `use` parameters, and the generated method wrappers work the same either way, and visibility of the concept's name remains independent of its representation.
 
 ```crs
-pub concept Show(A : Type) : pub Type {
+pub concept Show(A: Type): pub Type {
     show(A) -> Str,
 }
 
-pub concept Monad(M : (Type) -> Type) : pub Type {
-    pure(@A : Type, value : A) -> M(A),
-    bind(@A : Type, @B : Type, action : M(A), next : (A) -> M(B)) -> M(B),
+pub concept Monad(M: (Type) -> Type): pub Type {
+    pure(@A: Type, value: A) -> M(A),
+    bind(@A: Type, @B: Type, action: M(A), next: (A) -> M(B)) -> M(B),
 }
 ```
 
@@ -835,9 +835,9 @@ Every ordinary field receives a wrapper in the concept's namespace, so `Show/sho
 The field list is a dependent telescope: later fields may refer to earlier named fields. In a generated wrapper such a reference becomes the corresponding projection of the resolved witness, so the wrapper's type constrains that witness's own implementations.
 
 ```crs
-pub concept Idem(A : Type) : pub Type {
+pub concept Idem(A: Type): pub Type {
     op(A) -> A,
-    law(x : A) -> Eq(op(op(x)), op(x)),
+    law(x: A) -> Eq(op(op(x)), op(x)),
 }
 ```
 
@@ -846,7 +846,7 @@ A field whose type is a proposition about earlier fields is a law. `satisfy` can
 A field beginning with `use` is an anonymous superclass edge. Its type must be a concept application.
 
 ```crs
-pub concept Ord(A : Type) : pub Type {
+pub concept Ord(A: Type): pub Type {
     use Eql(A),
     cmp(A, A) -> Order,
 }
@@ -871,12 +871,12 @@ satisfy Show(Nat) {
 A witness may quantify over implicit parameters and require other witnesses. A nonempty telescope is separated from the concept application by `=>`. It cannot declare explicit parameters because resolution has no explicit arguments to supply.
 
 ```crs
-satisfy (@A : Type, use Show(A)) => Show(List(A)) {
+satisfy (@A: Type, use Show(A)) => Show(List(A)) {
     show(values) = List/fold(values, "", (value, result) => Str/concat(result, Show/show(value))),
 }
 ```
 
-Every registered witness is keyed by the concept name and the tuple of rigid heads of every concept parameter. Each head must reduce to an inductive, structure, intrinsic type, or supported higher-kinded type constructor — including a *partially applied* family written as a lambda, `(A : Type) => State(S, A)`, which keys on the applied head. Remaining arguments below those heads are checked by unification after lookup.
+Every registered witness is keyed by the concept name and the tuple of rigid heads of every concept parameter. Each head must reduce to an inductive, structure, intrinsic type, or supported higher-kinded type constructor — including a *partially applied* family written as a lambda, `(A: Type) => State(S, A)`, which keys on the applied head. Remaining arguments below those heads are checked by unification after lookup.
 
 A globally registered witness therefore requires a concept with at least one parameter. A parameterless concept can still be used through an ordinary value supplied in a local `use` scope.
 
@@ -887,7 +887,7 @@ Only one witness may occupy a key across the whole program. Module visibility do
 To use a second dictionary for the same key on a *transparent* concept, construct an ordinary concept value and supply it explicitly (a sealed concept forbids the literal outside its module):
 
 ```crs
-let reverse : Ord(Nat) = Ord { cmp(a, b) = compare_reverse(a, b) };
+let reverse: Ord(Nat) = Ord { cmp(a, b) = compare_reverse(a, b) };
 sort(use reverse, values)
 ```
 
@@ -916,7 +916,7 @@ In a structure update, a spread copies superclass fields from the base. An expli
 A witness parameter is written `use Concept(args)` in a function type or definition telescope. It is anonymous but joins the witness scope of the function body.
 
 ```crs
-pub let join(@A : Type, use Show(A), values : List(A)) -> Str =
+pub let join(@A: Type, use Show(A), values: List(A)) -> Str =
     List/fold(values, "", (value, result) => Str/concat(result, Show/show(value)));
 ```
 
@@ -944,9 +944,9 @@ Higher-kinded parameters are keyable. When conversion establishes a shape such a
 A `foreign` declaration introduces a value implemented by the embedder. Its declared type uses the wire grammar rather than arbitrary Curios types.
 
 ```crs
-foreign random : Nat;
-foreign frobnicate : (Nat, Bytes) -> Nat;
-pub foreign log : (Bytes) -> Nat;
+foreign random: Nat;
+foreign frobnicate: (Nat, Bytes) -> Nat;
+pub foreign log: (Bytes) -> Nat;
 ```
 
 The wire types are `Nat`, `Int`, `Bool`, `Bytes`, `Handle`, and `List(T)`. A wire signature is a bare wire result type for a zero-argument foreign or a parenthesized wire parameter list followed by `->` and a wire result type.
@@ -958,8 +958,8 @@ The wire types are `Nat`, `Int`, `Bool`, `Bytes`, `Handle`, and `List(T)`. A wir
 Propositional equality `Eq` is an ordinary indexed inductive proposition from `/std/Eq`. Its proofs use the same constructors, functions, and match forms as other inductives.
 
 ```crs
-pub let sym(@A : Type, @x : A, @y : A, proof : Eq(x, y)) -> Eq(y, x) =
-    match proof : (left, right, p) => Eq(right, left)
+pub let sym(@A: Type, @x: A, @y: A, proof: Eq(x, y)) -> Eq(y, x) =
+    match proof: (left, right, p) => Eq(right, left)
     | refl(value) => Eq/refl()
     end;
 ```
@@ -972,7 +972,7 @@ The standard equality operations include reflexivity, symmetry, transitivity, co
 | --- | --- |
 | `{}` | Unit type |
 | `()` | Unit value |
-| `@A : Type` | Implicit binder |
+| `@A: Type` | Implicit binder |
 | `@value` | Explicitly supplied implicit argument |
 | `use C(A)` | Automatically resolved witness binder |
 | `use value` | Explicitly supplied witness argument or superclass field |
@@ -983,4 +983,4 @@ The standard equality operations include reflexivity, symmetry, transitivity, co
 | `match term ... end` | Typed elimination or dispatch |
 | `choose ... end` | Ordered guarded ladder |
 | `satisfy C(args) { ... }` | Globally registered anonymous witness |
-| `satisfy (@A : Type, use C(A)) => D(args) { ... }` | Parameterized globally registered anonymous witness |
+| `satisfy (@A: Type, use C(A)) => D(args) { ... }` | Parameterized globally registered anonymous witness |

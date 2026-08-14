@@ -14,10 +14,10 @@ Operational guide for working on Curios. Read this before investigating or chang
 
 ## Before starting
 
-- Read [ROADMAP.md](documentation/ROADMAP.md) before proposing or implementing a capability. Confirm whether the work is new, pending, or already represented differently.
+- Read [roadmap.md](documentation/roadmap.md) before proposing or implementing a capability. Confirm whether the work is new, pending, or already represented differently.
 - Inspect the worktree before editing. Preserve unrelated changes and avoid files outside the authorized scope.
 - Identify the subsystem that owns the behavior, then read its crate-level and relevant module-level `//!` documentation before changing Rust.
-- Read [SYNTAX.md](documentation/SYNTAX.md) in full immediately before writing or modifying Curios source. Do not rely on remembered syntax.
+- Read [syntax.md](documentation/syntax.md) in full immediately before writing or modifying Curios source. Do not rely on remembered syntax.
 - Trace public contracts to their consumers before changing them. Pipeline stages, the host ABI, the runtime, the JavaScript harness, and embedded standard-library modules often impose downstream obligations.
 - Prefer focused investigation first. Search with `rg` or `rg --files`, read the narrowest authoritative source, and widen only when the evidence requires it.
 
@@ -77,10 +77,10 @@ Data flows downward through the diagram, while Rust dependencies between compile
 
 | If changing… | Start in… | Also inspect… |
 | --- | --- | --- |
-| Surface grammar, syntax tree, or printing | `curios-text/src/parse*`, `module.rs`, `print.rs` | `into_core/`, parser tests, `documentation/SYNTAX.md` |
+| Surface grammar, syntax tree, or printing | `curios-text/src/parse*`, `module.rs`, `print.rs` | `into_core/`, parser tests, `documentation/syntax.md` |
 | Surface-to-core lowering | `curios-text/src/into_core/` | Core constructors and cross-stage integration tests |
 | Elaboration, typing, or conversion | `curios-elab/src/` | Text lowering, erasure, diagnostics, and integration tests |
-| Kernel judgments | `curios-cert/src/` | `curios-core`'s representation, `curios-cert/src/recheck.rs`, and `documentation/DESIGN.md`'s perimeter |
+| Kernel judgments | `curios-cert/src/` | `curios-core`'s representation, `curios-cert/src/recheck.rs`, and `documentation/design/language/the-soundness-perimeter.md` |
 | A shared analysis | `curios-analysis/src/` | Both drivers — `curios-cert`'s `Kernel` and `curios-elab`'s `Context` — plus `curios-analysis/tests/driven.rs`, where the checker-driven probes live |
 | Concepts or witness resolution | `curios-elab/src/concept.rs`, `resolve.rs` | Surface declarations, standard-library witnesses, and syntax documentation |
 | Type erasure | `curios-elab/src/into_ersd*` | `curios-ersd` representation and downstream tests |
@@ -90,10 +90,10 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | Host operations or foreign calls | `curios-abi/src/` | Core validation, Wasm imports, runtime bindings, and the JavaScript harness |
 | What a unit hands its successors | `curios-unit/src/` | Every stage whose artifact `Unit` holds, `curios-pipeline`'s fold, and the store's stored-unit format |
 | Pipeline orchestration | `curios-pipeline/src/compile.rs`, `stage.rs`, `standard.rs` | Native and browser callers |
-| Manifests, dependency resolution, or the store | `curios-package/src/` | The CLI subcommands that wrap it, `curios-base`'s `Qualifier`/`Mount`, and `documentation/SOUNDNESS.md`'s *Cached verdicts* when the store's keys are involved |
+| Manifests, dependency resolution, or the store | `curios-package/src/` | The CLI subcommands that wrap it, `curios-base`'s `Qualifier`/`Mount`, and `documentation/soundness/admission-without-judgment/cached-verdicts.md` when the store's keys are involved |
 | Runtime or bundle format | `curios-runtime/src/`, `curios/src/bundle.rs` | Slim-launcher dependency boundary and bundle integration tests |
 | CLI or native compile behavior | `curios/src/` | `README.md`, public helpers, and integration tests |
-| Standard or syntax library | `curios-prelude-archive/std/`, `curios-prelude-archive/syn/` | Module indices, canonical syntax registry, `SYNTAX.md`, and Curios integration tests |
+| Standard or syntax library | `curios-prelude-archive/std/`, `curios-prelude-archive/syn/` | Module indices, canonical syntax registry, `syntax.md`, and Curios integration tests |
 | Prelude archive or replay | `curios-prelude-archive/build.rs`, `curios-prelude-archive/src/` | Text preparation, Core elaboration/erasure replay APIs, pipeline integration, and archive validation tests |
 | Browser compiler or harness | `curios-web/` | Host ABI, wasm32 build, wasm-bindgen version, and CI release steps |
 | Profiling instrumentation | `curios-profile/src/lib.rs` | Each consumer crate's `profile` feature fan-out, and `make curios/profile` |
@@ -113,7 +113,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 - `/std` and `/syn` are owned by `curios-prelude-archive` and compiled into an rkyv image in that crate's `OUT_DIR`. Every source module must be registered in its Curios index; the build script discovers every `.crs` input, fingerprints it, and emits the matching Cargo rebuild directives.
 - Production compilation has no fixed-prelude source fallback or cache-miss branch. Archive construction or restoration failure is a compiler invariant and fails loudly. The image is scoped to one compiler build and is not a stable interchange format.
 - `/syn` ownership — which names it holds, and why — is `curios-prelude-archive/README.md`'s decision to state. The registry contract belongs to `curios-base`, below both stages that read it, and the erased runtime carriers for compiler-emitted literals remain `Nat` and packed `Bytes`. No crate below `curios-prelude-archive` may spell a `/syn` name: `curios-base` states slots, `curios-prelude-archive/src/syntax.rs` states spellings, and the prelude build checks every slot against the sources.
-- Binaryen is built from a verified source release. Its expensive C++ build is shared through the locked, target-specific cache under `target/binaryen`, not a Cargo fingerprint-specific `OUT_DIR`.
+- Binaryen is built from a verified source release. Its C++ build is shared through the locked, target-specific cache under `target/binaryen`, not a Cargo fingerprint-specific `OUT_DIR`.
 - Recursive lowering and packed-value interpretation must work on the default test-thread stack. Do not use `RUST_MIN_STACK` to hide a regression.
 - Generated `.wasm` files and other build products are not source. Do not commit them. `Cargo.lock` is source and must remain synchronized with dependency changes.
 
@@ -130,11 +130,11 @@ Data flows downward through the diagram, while Rust dependencies between compile
 
 ## Writing Curios
 
-- Read [SYNTAX.md](documentation/SYNTAX.md) in full before editing any `.crs` file. It is the normative surface-language reference; `curios-text/src/parse.rs` implements the contract.
-- The surface grammar's syntax forms are closed: a new type never gets its own operator or keyword. It opts into an existing form (`+`, `==`, postfix `!`, …) by writing a `satisfy` witness against the form's `/syn` concept. See "Syntax forms are closed, semantics extend by witness" in `documentation/DESIGN.md` before proposing hardcoded syntax for a type.
+- Read [syntax.md](documentation/syntax.md) in full before editing any `.crs` file. It is the normative surface-language reference; `curios-text/src/parse.rs` implements the contract.
+- The surface grammar's syntax forms are closed: a new type never gets its own operator or keyword. It opts into an existing form (`+`, `==`, postfix `!`, …) by writing a `satisfy` witness against the form's `/syn` concept. See `documentation/design/language/syntax-forms-are-closed-semantics-extend-by-witness.md` before proposing hardcoded syntax for a type.
 - Use `curios-prelude-archive/std/` as the reference for idiomatic code.
 - Register a new `curios-prelude-archive/std/Foo.crs` module in `curios-prelude-archive/std.crs`. Apply the corresponding rule to `curios-prelude-archive/syn/` and `curios-prelude-archive/syn.crs`; update `curios-prelude-archive/src/syntax.rs` only when Rust directly emits the new `/syn` name — from lowering, or from a type-directed feature in `curios-elab`.
-- Remember that names use `/` qualification, `{}` is the unit type, `()` is the unit value, and visibility of a nominal name is independent from visibility of its representation. Consult `SYNTAX.md` for the full rules rather than extending this reminder list.
+- Remember that names use `/` qualification, `{}` is the unit type, `()` is the unit value, and visibility of a nominal name is independent from visibility of its representation. Consult `syntax.md` for the full rules rather than extending this reminder list.
 - Run Curios programs through the native CLI: `cargo run --package curios -- run <file.crs>`.
 
 ## Build and validation
@@ -194,7 +194,7 @@ Documentation-only changes do not require rebuilding the compiler unless they al
 
 - Changes to `curios-web` or its dependencies must also pass `make curios/web` with the exactly version-matched `wasm-bindgen-cli` installed.
 - Changes to `curios-binaryen/build.rs` must verify an empty-cache build and a cache hit from a different Cargo mode or build-script fingerprint. Bump `BUILD_SCHEMA` when the CMake configuration or installed-library contract changes.
-- Changes to runtime dependencies must rebuild `curios-runtime` in isolation through `make curios/runtime` and confirm that neither Cranelift nor Binaryen entered its dependency graph.
+- Changes to runtime dependencies must rebuild `curios-runtime` in isolation through `make curios/runtime` and confirm that neither `cranelift-codegen` nor `curios-binaryen` entered its dependency graph. Name those crates when checking: Wasmtime's runtime pulls the `cranelift-bitset`, `cranelift-bforest` and `cranelift-entity` utility crates, so a search for "cranelift" reports a boundary that holds.
 - Changes to the bundle format must run the ignored end-to-end test in `curios/tests/bundle.rs` explicitly.
 
 ### Profiling
@@ -219,13 +219,15 @@ Document each fact at the narrowest authoritative level and link to it elsewhere
 
 | Location | Owns |
 | --- | --- |
-| `README.md` | Public introduction: what Curios is, the happy path to running one, and where to go next. Reference detail belongs in `documentation/USAGE.md`, not here |
-| `documentation/USAGE.md` | Complete command-line and package reference — every subcommand, exit codes, dependencies, umbrellas, and the global flags |
+| `README.md` | Public introduction: what Curios is, the happy path to running one, and where to go next. Reference detail belongs in `documentation/usage.md`, not here |
+| `documentation/usage.md` | Complete command-line and package reference — every subcommand, exit codes, dependencies, umbrellas, and the global flags |
 | `CLAUDE.md` | Contributor behavior, ownership boundaries, durable invariants, and validation |
-| `documentation/SYNTAX.md` | Complete Curios surface-language reference |
-| `documentation/ROADMAP.md` | Implemented capabilities and pending specifications |
-| `documentation/DESIGN.md` | Cross-cutting design decisions — those spanning the language or several crates — their rationale, and rejected alternatives |
-| `documentation/SOUNDNESS.md` | The soundness perimeter: every rule that can admit a term, its grade, and the evidence behind it |
+| `documentation/syntax.md` | Complete Curios surface-language reference |
+| `documentation/roadmap.md` | Implemented capabilities and pending specifications |
+| `documentation/design.md` | The objectives, and what a design decision is; one decision per file under `documentation/design/`, cited by path so a rename fails loudly |
+| `documentation/design/**` | One cross-cutting design decision each — those spanning the language or several crates — with its rationale and rejected alternatives |
+| `documentation/soundness.md` | What the perimeter is, how to read a grade, and the index of every entry's grade; one entry per file under `documentation/soundness/`, cited by path |
+| `documentation/soundness/**` | One perimeter rule each — what it assumes, how far that has been checked, and the fixtures that are its evidence |
 | Crate `README.md` files | The crate's mission and its crate-scoped design decisions, rationale, and rejected alternatives |
 | Crate and module rustdoc | Local architecture, algorithms, invariants, and public APIs |
 | `Cargo.toml` descriptions | One-line crate purposes for Cargo tooling |
@@ -242,7 +244,7 @@ Do not hardwrap Markdown prose. Write one source line per paragraph or list item
 
 ## Known build constraints
 
-- `curios-binaryen` downloads, verifies, and builds a pinned Binaryen source release with CMake. The first cache population takes minutes and requires a C++ toolchain; subsequent Cargo modes must reuse `target/binaryen`. A full `cargo clean` removes the cache.
-- `target/` is pruned by hand and never with `cargo clean`, which takes `target/binaryen` with it. `target/debug/incremental` is pure rustc cache and the one directory safe to delete outright, provided no build is running — measured at 21G of `target/debug`'s 39G, since Cargo enables incremental compilation for `dev` and `test` while this workspace's edit pattern rebuilds every downstream crate in full anyway; `CARGO_INCREMENTAL=0` suppresses it per invocation. Everything else there holds real artifacts — above all `target/binaryen` and the target-triple-scoped `target/<triple>/release/curios-runtime` that `make curios/runtime` copies the embedded launcher out of.
+- `curios-binaryen` downloads, verifies, and builds a pinned Binaryen source release with CMake, which requires a C++ toolchain. Subsequent Cargo modes must reuse `target/binaryen`; a full `cargo clean` removes the cache.
+- `target/` is pruned by hand and never with `cargo clean`, which takes `target/binaryen` with it. `target/debug/incremental` is pure rustc cache and the one directory safe to delete outright, provided no build is running — and it holds a large share of `target/debug`, since Cargo enables incremental compilation for `dev` and `test` while this workspace's edit pattern rebuilds every downstream crate in full anyway; `CARGO_INCREMENTAL=0` suppresses it per invocation. Everything else there holds real artifacts — above all `target/binaryen` and the target-triple-scoped `target/<triple>/release/curios-runtime` that `make curios/runtime` copies the embedded launcher out of.
 - `curios-web` deliberately uses plain `cargo build` plus `wasm-bindgen-cli`; do not introduce `wasm-pack` or `wasm-opt` without an explicit design decision. Binaryen optimization belongs only to the native `curios` product.
 - The wasm32 build requires the installed `wasm-bindgen-cli` version to match the `wasm-bindgen` crate version in `Cargo.lock` exactly.

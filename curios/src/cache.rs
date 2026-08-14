@@ -4,7 +4,7 @@
 //!
 //! It is not, as this said until it was checked, about keeping `curios-package` free of the compiler. That crate depends on `curios-text` and so already links the elaborator — `curios new` included. The dependency the boundary actually buys is the driver's.
 //!
-//! **Taking a unit from here is believing a verdict this compiler reached earlier.** That is a change to what the compiler believes rather than a faster way to do what it already did, and the argument for it is in [SOUNDNESS.md](../../documentation/SOUNDNESS.md) under *Cached verdicts*. Everything below is the mechanism the argument is about.
+//! **Taking a unit from here is believing a verdict this compiler reached earlier.** That is a change to what the compiler believes rather than a faster way to do what it already did, and the argument for it is in [Cached verdicts](../../documentation/soundness/admission-without-judgment/cached-verdicts.md). Everything below is the mechanism the argument is about.
 //!
 //! **A slot is addressed, and a hit is verified.** The address ([`unit_slot`]) names a place — these mounts, this compiler, this predecessor chain — and holds no file contents at all, so a project has as many slots as it has units rather than one per compile. What the unit was compiled *from* rides in a [`Record`] beside it and is checked when the slot is opened: every file the compilation read, by the text it read, plus what each predecessor contained.
 //!

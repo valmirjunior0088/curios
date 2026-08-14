@@ -6,7 +6,7 @@ This is the implementation specification for making a sequence value cost the sa
 
 A performance capability over the free-monoid carriers — `Bin` at both grains, and `List` — where the type level and the runtime currently disagree about what a concatenation costs.
 
-It rests on [A reduction step costs what it builds](01_PRICED_REDUCTION_SPEC.md) for the bound. Pricing decides that a runaway reduction refuses; this decides that the ordinary program never approaches the limit. Both are wanted, and neither substitutes for the other: a limit that the obvious spelling reaches is a limit that reads as a language defect, and a cheaper representation still needs something to stop a genuinely unbounded computation.
+It rests on [A reduction step costs what it builds](01_priced_reduction_spec.md) for the bound. Pricing decides that a runaway reduction refuses; this decides that the ordinary program never approaches the limit. Both are wanted, and neither substitutes for the other: a limit that the obvious spelling reaches is a limit that reads as a language defect, and a cheaper representation still needs something to stop a genuinely unbounded computation.
 
 Scoped to reduction and conversion. The surface language, the erased IR, the host ABI and the runtime are unchanged.
 
@@ -50,9 +50,9 @@ Second, `Bin/get`, `Bin/slice` and their `List` twins gain a length-directed dis
 
 **Declining to fuse adds no equation.** It removes a normalization step, so the risk is completeness rather than soundness: a proof that closed by literal equality must still close through the peel. That fails toward refusal, and the fixed prelude is the detector — a workspace check already elaborates, erases and certifies every `/std` and `/syn` module, so one build says whether anything lost its derivation.
 
-**The distribution rule is a new fold law and is probed rather than argued.** It lands on `documentation/SOUNDNESS.md`'s *Intrinsic fold laws and the free-monoid peel*, which that file names as the weakest position on the perimeter and grades as argued in code comments only. A wrong fold there is a false definitional equation, and congruence carries one to `False`. Landing a new law on that row without a probe would make the weakest row weaker.
+**The distribution rule is a new fold law and is probed rather than argued.** It lands on [Intrinsic fold laws and the free-monoid peel](../../soundness/per-term-rules/intrinsic-fold-laws-and-the-free-monoid-peel.md), which that file names as the weakest position on the perimeter and grades as argued in code comments only. A wrong fold there is a false definitional equation, and congruence carries one to `False`. Landing a new law on that row without a probe would make the weakest row weaker.
 
-**Depth becomes data-shaped, and the shared walks meet it first.** `peel_front`, `bin_collect_intrinsic` and their list twins recurse into a concatenation's leading operand, so an accumulation as long as the loop becomes a walk as deep as the loop. `documentation/DESIGN.md`'s *Depth is bought with stack, not with hand-rolled frames* protects the two reduction and conversion strategies that are deliberately implemented twice, and it does not reach these: they are single-implementation shared helpers in `curios-core`, so an explicit worklist costs nothing that entry was defending. The precedent is already in the tree — the backend's `$<carrier>/force` walks a hundred-thousand-deep concatenation chain on an explicit doubling worklist for exactly this reason. Under spec 13 a recursion level is priced, so leaving these recursive costs budget as well as memory.
+**Depth becomes data-shaped, and the shared walks meet it first.** `peel_front`, `bin_collect_intrinsic` and their list twins recurse into a concatenation's leading operand, so an accumulation as long as the loop becomes a walk as deep as the loop. `documentation/design/toolchain/depth-is-bought-with-stack-not-with-hand-rolled-frames.md` protects the two reduction and conversion strategies that are deliberately implemented twice, and it does not reach these: they are single-implementation shared helpers in `curios-core`, so an explicit worklist costs nothing that entry was defending. The precedent is already in the tree — the backend's `$<carrier>/force` walks a hundred-thousand-deep concatenation chain on an explicit doubling worklist for exactly this reason. Under spec 13 a recursion level is priced, so leaving these recursive costs budget as well as memory.
 
 ## The fixtures this returns to their natural spelling
 
@@ -62,7 +62,7 @@ Its pinned twin, `tests::numeric`'s `a_bound_on_a_computed_subject_evaluates_it`
 
 Sequence matters. Spec 13 reprices that budget first and updates the fixture's figure to what the corrected pricing says; this specification then changes what the fixture asserts. The same fixture therefore moves twice, for two different reasons, and this document owns the second move.
 
-`documentation/DESIGN.md`'s decided-bound entry closes with *What still constrains these obligations is evaluation, not provability*, which names both fixtures and states the opaque-subject discipline as the answer. It is amended in the same landing change.
+[The decided-bound entry](../../design/language/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md) closes with *What still constrains these obligations is evaluation, not provability*, which names both fixtures and states the opaque-subject discipline as the answer. It is amended in the same landing change.
 
 ## Measurement gate
 
@@ -102,7 +102,7 @@ The cap's value is chosen from a census of operand sizes actually reached in `/s
 
 - Delete `head_of` from `accumulation_loops_are_linear_by_construction` and write the bound directly.
 - Rewrite `a_bound_on_a_computed_subject_evaluates_it` to assert success at an ordinary budget, keeping its parameter control with its meaning restated.
-- Amend `documentation/DESIGN.md`'s decided-bound entry, move the durable cost statement into permanent documentation, check off the roadmap item, and delete this working specification in the same landing change.
+- Amend [the decided-bound entry](../../design/language/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md), move the durable cost statement into permanent documentation, check off the roadmap item, and delete this working specification in the same landing change.
 
 ## Acceptance
 

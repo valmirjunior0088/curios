@@ -254,7 +254,7 @@ The dependency graph is `M0 → (M1a + M1b) → M2 → {M3, M4}`. M1a can indepe
 
 ### M5 — Cost contract
 
-- Move the accepted durable cost-model decision to `documentation/DESIGN.md` once the measured implementation establishes its actual envelope.
+- Move the accepted durable cost-model decision to `documentation/design.md` once the measured implementation establishes its actual envelope.
 
 - Retire transient measurements into their owning probes and update the roadmap with the capability and its explicit limits.
 

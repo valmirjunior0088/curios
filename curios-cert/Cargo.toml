@@ -12,7 +12,7 @@ workspace = true
 archive = ["curios-archive/enabled", "curios-base/archive", "curios-core/archive"]
 profile = ["curios-profile/enabled", "curios-analysis/profile", "curios-core/profile"]
 
-# Tests only. `curios-abi` is already inside this crate's normal graph through `curios-core` — DESIGN.md's enumeration of the trusted base names it — so this adds nothing to what `cargo tree -p curios-cert -e normal` reaches. It is here so a fixture can forge an ABI row by hand.
+# Tests only. `curios-abi` is already inside this crate's normal graph through `curios-core` — `documentation/design/language/an-independent-kernel-re-checks-what-the-elaborator-accepts.md`'s enumeration of the trusted base names it — so this adds nothing to what `cargo tree -p curios-cert -e normal` reaches. It is here so a fixture can forge an ABI row by hand.
 [dev-dependencies]
 curios-abi = { workspace = true }
 

@@ -223,7 +223,7 @@ fn a_comment_banner_parses_without_native_recursion() {
 
 #[test]
 fn a_path_admits_no_whitespace_and_division_requires_it() {
-    // Paths are whitespace-free and infix operators require whitespace on both sides (SYNTAX.md's lexical rule), so `a/b` is only ever the path, `a / b` only ever the division, and the asymmetric spellings satisfy neither grammar.
+    // Paths are whitespace-free and infix operators require whitespace on both sides (syntax.md's lexical rule), so `a/b` is only ever the path, `a / b` only ever the division, and the asymmetric spellings satisfy neither grammar.
     assert_eq!("a/b".parse::<Term>().unwrap().to_string(), "a/b");
     assert_eq!("/std/Nat".parse::<Term>().unwrap().to_string(), "/std/Nat");
     assert_eq!("a / b".parse::<Term>().unwrap().to_string(), "a / b");

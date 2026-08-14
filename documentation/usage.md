@@ -150,4 +150,17 @@ Set `CURIOS_CACHE` to share the content-addressed half across projects; unset, e
 | `--budget <STEPS>` | reduction steps each declaration may spend while type checking |
 | `--print[=STAGES]` | dump selected intermediate representations to stderr |
 
+`--print` takes a comma-separated list of stage names, and bare `--print` means all of them:
+
+| Stage | Is |
+| --- | --- |
+| `text` | the surface syntax tree, reprinted |
+| `core` | the lowered core term, which nothing has checked yet |
+| `core-elab` | the same after elaboration and zonking — the module every later stage consumes |
+| `ersd` | the erased term |
+| `ersd-optm` | the erased term after optimization |
+| `cont` | the continuation IR |
+| `cont-optm` | the continuation IR after optimization |
+| `wasm` | the emitted WebAssembly module |
+
 `--manifest` overrides exactly which manifest is the package's. Which umbrella governs is still enumeration's answer, because a manifest cannot declare itself governed.

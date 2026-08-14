@@ -1,0 +1,7 @@
+# Driver-supplied convertibility
+
+**Assumes.** A shared analysis taking its driver's word on convertibility is as sound as that driver's conversion
+
+**Status.** **argued**, and the argument is `curios-analysis`'s own: the seam splits `Env`, which answers environment queries and no judgments, from `Judge`, which adds conversion and therefore hands the analysis its driver's opinion. The split exists to keep the concession visible in the type system rather than buried in a call graph, and the crate says so — with `invert` its only consumer today, and `Judge` losing its last implementor named as the signal that the concession is gone.
+
+**What it qualifies is the reason the shared analyses are shared at all.** That reason is that index inversion, strict positivity and size-change totality all run post-zonk on final meta-free terms, so "two runs of a total function on identical input is one sample, not two" and duplicating them would buy a diff test worth less than property-testing one implementation. That argument is exact for positivity and totality, which take only `Env`. It does not reach `invert`, because `Judge` makes the driver an input: the same analysis run by the elaborator and by the kernel is two functions of two different convertibility relations, and the kernel's is known by [Conversion recurrence](conversion-recurrence.md) to differ from the elaborator's in its key. [Index inversion and K](index-inversion-and-k.md) grades the deletion rule and its semantic half without recording that the half is decided by whoever is driving

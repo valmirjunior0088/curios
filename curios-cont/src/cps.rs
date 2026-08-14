@@ -12,7 +12,7 @@ use {
     },
 };
 
-// Sigils follow the naming scheme shared with `curios-ersd` and `curios-wasm` — see "One naming scheme for compiler identities" in `documentation/DESIGN.md`.
+// Sigils follow the naming scheme shared with `curios-ersd` and `curios-wasm` — see `documentation/design/toolchain/one-naming-scheme-for-compiler-identities.md`.
 id!(CpsNodeId, "~n");
 id!(CpsValueId, "~v");
 id!(CpsFunId, "~f");
@@ -276,7 +276,7 @@ impl CpsIntrinsicOp {
 
     /// What this operation does beyond producing its result, *as emitted* — which is not what it means in the language.
     ///
-    /// The `MayTrap` set is the union of two unrelated reasons, and both belong at this layer rather than above it. A division, a float-to-integer conversion, an index and a projection are partial in the language, and `curios-ersd`'s `Semantics` says so too. The arithmetic entries are not: `Nat` addition wraps its `u32` carrier and cannot fail, and it is *this crate's* i31 envelope that makes a result leaving 31 bits trap instead of changing, per `documentation/DESIGN.md`'s *Numeric carriers narrow by refusing, never by changing a value*. So every operation `into_wasm` guards belongs here, and none of it may travel upward.
+    /// The `MayTrap` set is the union of two unrelated reasons, and both belong at this layer rather than above it. A division, a float-to-integer conversion, an index and a projection are partial in the language, and `curios-ersd`'s `Semantics` says so too. The arithmetic entries are not: `Nat` addition wraps its `u32` carrier and cannot fail, and it is *this crate's* i31 envelope that makes a result leaving 31 bits trap instead of changing, per `documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md`. So every operation `into_wasm` guards belongs here, and none of it may travel upward.
     ///
     /// Exhaustive on purpose. This was a wildcard defaulting to `Total`, which silently classified seven guarded operations as deletable — the same hazard the representation table is exhaustive to avoid, one accessor over.
     pub fn effect(self) -> CpsIntrinsicEffect {

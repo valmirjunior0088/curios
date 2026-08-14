@@ -1,0 +1,9 @@
+# A motive is a term, not a grammar
+
+**Decision.** A match motive is a single construct: a term checked against the eliminator's motive type, `(ī : Ī(p̄)) -> I(p̄, ī) -> Sort`. It binds one name per index and then the scrutinee. Parameters are never abstracted, and the eliminated family is never written.
+
+**Rationale.** The motive is morally a lambda, so making it literally one removes every question a bespoke grammar had to answer badly. Binder annotations become ordinary types in ordinary positions, so plicity is expressible — a family declared `induct Eq(@A : Type)` is annotated `Eq(s, t)`, the same spelling it has everywhere else. Whether a position binds or is checked is decided by the syntax rather than by whether a name happens to resolve to a module binding. Parameters were abstracted to the identical term in the match's type and in every arm, so removing them costs nothing and settles the plicity question by deleting the positions that raised it. A malformed motive becomes a type error at the motive instead of a silent reinterpretation.
+
+Dropping the constant rung is what buys the absence of a disambiguation rule: a constant motive may itself be a Π type, and when its domain is the scrutinee's type both readings check and mean different things. With one rung the parser calls `parse_term` and needs no backtracking, because `|` is not an infix operator and a motive term therefore ends at the first arm.
+
+**Rejected.** The three-rung ladder — constant, scrutinee-bound, and an annotated type-pattern over the inductive's flat parameter-then-index slots. Also rejected: making eliminators first-class functions with the motive as an ordinary argument, which would require generating a bespoke matcher per match site; `Match` stays an intrinsic node whose arms carry per-constructor index refinement. Making the motive a checked term keeps that door open without walking through it.

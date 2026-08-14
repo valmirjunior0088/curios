@@ -8,7 +8,7 @@
 //!
 //! # The closure half is not here, and that is the correction
 //!
-//! Deciding whether a context is *closed* used to sit beside this as a second `pub fn`, and it was a character-for-character transcription of the elaborator's own test — a second opinion known to be worth nothing, which `documentation/SOUNDNESS.md` recorded as such. Rewriting it independently was the proposed remedy and does not survive inspection: the predicate is "every parameter index is below the declared count and no level holds a metavariable", which has essentially one implementation, so any rewrite would agree by construction rather than by independence. It is now [`UniverseContext::is_closed`], decided once on the data it is about.
+//! Deciding whether a context is *closed* used to sit beside this as a second `pub fn`, and it was a character-for-character transcription of the elaborator's own test — a second opinion known to be worth nothing, which `documentation/soundness.md` recorded as such. Rewriting it independently was the proposed remedy and does not survive inspection: the predicate is "every parameter index is below the declared count and no level holds a metavariable", which has essentially one implementation, so any rewrite would agree by construction rather than by independence. It is now [`UniverseContext::is_closed`], decided once on the data it is about.
 //!
 //! Satisfiability is the opposite case and stays written twice, because here there is real algorithmic freedom for the two to differ in: this is a difference-constraint search with backtracking, and the elaborator's is a run of its solver. That is the line — a property of the data is read once; a question that needs a procedure is answered twice.
 //!

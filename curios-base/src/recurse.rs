@@ -12,7 +12,7 @@
 //!
 //! A **loop** accumulates results, and folding them afterwards carries no effects: the elaborator's `let` gathers `(label, type, body)` triples and folds them into a term. A **machine** accumulates frames, and shows three tells — an element mirroring a function's locals, a reverse phase carrying effects (scope exit, unwinding), and a comment arguing that ordering is preserved. The lowerer's `PendingLet` held six fields that were `build_let`'s local variables verbatim, twelve lines away in the same file.
 //!
-//! The element mirroring locals is the decisive one. A reverse-with-effects phase alone is not, because an **undo record** has one and is legitimate — and an undo record is right exactly when it stores what was *destroyed* (a refinement some scope overwrote, a node's distance before relaxation moved it) rather than what can be *derived* from state the walk never mutated. `documentation/DESIGN.md`'s *Depth is bought with stack, not with hand-rolled frames* carries the whole argument.
+//! The element mirroring locals is the decisive one. A reverse-with-effects phase alone is not, because an **undo record** has one and is legitimate — and an undo record is right exactly when it stores what was *destroyed* (a refinement some scope overwrote, a node's distance before relaxation moved it) rather than what can be *derived* from state the walk never mutated. `documentation/design/toolchain/depth-is-bought-with-stack-not-with-hand-rolled-frames.md` carries the whole argument.
 
 /// Native-stack headroom to keep in reserve before growing.
 ///

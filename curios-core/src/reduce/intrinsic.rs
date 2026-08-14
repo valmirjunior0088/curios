@@ -108,7 +108,7 @@ impl Euclid {
 ///
 /// Every arm is unconditional, which is what lets the callers below turn a bound into a definitional equation. A `Byte` is `0..=255` by its carrier — `Nat/to_byte` wraps and `Byte` is not a wire type, so no embedder can supply one outside the range — and `x % n < n` holds by definition, a zero divisor having already been reported. The remaining arms are monotone in operands whose own bounds this establishes.
 ///
-/// A wrong bound here is a false definitional equation, not a wrong value: see `documentation/SOUNDNESS.md`, "Intrinsic fold laws and the free-monoid peel".
+/// A wrong bound here is a false definitional equation, not a wrong value: see `documentation/soundness/per-term-rules/intrinsic-fold-laws-and-the-free-monoid-peel.md`.
 fn nat_bound(term: &Term) -> Option<BigUint> {
     let Subterm::Intrinsic(intrinsic) = &**term else {
         return None;

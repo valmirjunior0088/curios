@@ -572,7 +572,7 @@ impl Kernel {
 
     /// The type `name` was bound or declared at. Locals shadow definitions.
     ///
-    /// A definition with universe parameters is refused here rather than answered, which is [`Globals::value`]'s rule applied to the other half of a definition. A bare occurrence denotes no particular instance, so there is no instantiation to report a type at: handing back the stored scheme type reads that scheme's parameters as the ambient item's — the capture `documentation/SOUNDNESS.md` records at the neighbouring position — and reaches [`Kernel::check_instance`] never, so the scheme's constraints go undischarged. A local is exempt because it is monomorphic: it was opened at one type, and there is no scheme to instantiate.
+    /// A definition with universe parameters is refused here rather than answered, which is [`Globals::value`]'s rule applied to the other half of a definition. A bare occurrence denotes no particular instance, so there is no instantiation to report a type at: handing back the stored scheme type reads that scheme's parameters as the ambient item's — the capture `documentation/soundness.md` records at the neighbouring position — and reaches [`Kernel::check_instance`] never, so the scheme's constraints go undischarged. A local is exempt because it is monomorphic: it was opened at one type, and there is no scheme to instantiate.
     pub(crate) fn type_of(&self, name: &Free) -> Result<Option<&Term>, KernelError> {
         if let Some(local) = self.scope.local_type(name) {
             return Ok(Some(local));

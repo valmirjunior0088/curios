@@ -1,6 +1,6 @@
 # curios-elab
 
-The Curios elaborator: bidirectional elaboration and typing, unification and metavariable solving, witness resolution, universe solving, zonking, and type erasure — the stage between `curios-text`'s lowering and the erased IR of `curios-ersd`. The language rules it enforces are recorded in [DESIGN.md](../documentation/DESIGN.md); entry points and local architecture belong to the crate rustdoc.
+The Curios elaborator: bidirectional elaboration and typing, unification and metavariable solving, witness resolution, universe solving, zonking, and type erasure — the stage between `curios-text`'s lowering and the erased IR of `curios-ersd`. The language rules it enforces are recorded in [design.md](../documentation/design.md); entry points and local architecture belong to the crate rustdoc.
 
 ## Design
 

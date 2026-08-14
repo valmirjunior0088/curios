@@ -1,0 +1,9 @@
+# Recorded positions and sort-hood
+
+**Assumes.** Every `Prop`-typed and every type-position term an item's check meets is recorded, classified at the moment its binders are still in scope
+
+**Status.** **argued**. This is the kernel's *output* rather than an input — nothing in it decides whether a term is well typed — and it earns a place because it is what (T) and (V) are seeded from, so a position it fails to record is a position those obligations never see. Its coverage is stated by [(V)](../whole-module-passes/v.md)'s premise, that the obligations inspect every `Prop`-typed term in the accepted module; this entry is where the machinery that makes that true is named.
+
+**Classified when recorded, never afterwards, and the reason is that the alternative fails silently.** A position's type routinely mentions binders the item opened, and those retract the moment the item's check returns, so a later pass cannot ask for their sorts at all — it can only fail, and failing quietly is how positions across a tenth of the fixed prelude once came to be silently unconstrained. Three properties make classifying at every record site workable, and all three belong to the component rather than to its callers: sort-hood is memoized per *distinct type*, so the cost is one question per type rather than one per position; a classification that could not be decided is kept and surfaced with the drain, since a recording site returns nothing and cannot report it; and the walk is re-entrancy guarded, because deciding a position's erased half types terms of its own and those must not be recorded as positions in turn.
+
+**The memo carries the same scoping hazard as the evaluation memo and a shorter argument.** Its keys are terms whose binders are the item's own, which is what makes an entry meaningful only within the item that made it, and it is cleared with the drain. Nothing tests that the clearing and the item boundary cannot come apart

@@ -12,7 +12,7 @@ The pricing, the audit, the retention quota, and the calibration are pending.
 
 The step counter charges one unit per reducer transition regardless of what that transition constructs. A `PackedBin::concat` that copies half a megabyte costs exactly what a `Bool` fold costs, and a `recurse` level that takes a fresh 32 MiB stack segment costs the same again.
 
-That is the whole defect. `curios-elab/src/reduce.rs`'s note on the reduction loop already records the consequence — the budget bounds steps, so nothing bounds the memory a reduction allocates — and `documentation/DESIGN.md` records it twice more, at the decided-bound entry and at *Depth is bought with stack, not with hand-rolled frames*, where growing the stack rather than aborting was accepted on exactly this trade.
+That is the whole defect. `curios-elab/src/reduce.rs`'s note on the reduction loop already records the consequence — the budget bounds steps, so nothing bounds the memory a reduction allocates — and [the decided-bound entry](../../design/language/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md) and [Depth is bought with stack, not with hand-rolled frames](../../design/toolchain/depth-is-bought-with-stack-not-with-hand-rolled-frames.md) record it twice more, where growing the stack rather than aborting was accepted on exactly this trade.
 
 Reduction is the only stage that can be driven to arbitrary cost by a well-typed program, because it is the only stage a *type* can call. Every other stage's work is bounded by the size of what elaboration produced. That asymmetry is why the bound belongs on the counter rather than on the process.
 
@@ -138,7 +138,7 @@ The value and its evidence live beside the ignored probe introduced with account
 
 ## Configuration
 
-`--budget <UNITS>` remains the only verdict-affecting reduction limit and keeps its option name. Its help text, `documentation/USAGE.md` row, and internal `DEFAULT_STEP_BUDGET` terminology change from steps to reduction work. Its calibrated default changes as well.
+`--budget <UNITS>` remains the only verdict-affecting reduction limit and keeps its option name. Its help text, `documentation/usage.md` row, and internal `DEFAULT_STEP_BUDGET` terminology change from steps to reduction work. Its calibrated default changes as well.
 
 The retention quota is a product default rather than a second command-line option. It controls an optimization, not whether a program is accepted, and ordinary users are not asked to coordinate it with the work budget.
 
@@ -209,7 +209,7 @@ The limit bounds reducer-created logical work, reducer-caused stack growth, and 
 ### M3 — Calibrate, verify, document
 
 - Use the completed probe and M0 baselines to set both defaults, respecting the per-transition memory floor as well as the fixed prelude's headroom.
-- Update `documentation/USAGE.md`, `documentation/DESIGN.md`, the CLI help, and relevant crate documentation with the widened meaning of the budget and its scope.
+- Update `documentation/usage.md`, `documentation/design.md`, the CLI help, and relevant crate documentation with the widened meaning of the budget and its scope.
 - Keep measurement values beside the ignored probe and normative semantics in permanent documentation rather than in this roadmap file.
 - Complete the acceptance suite and the repository verification gate before checking off the roadmap item.
 

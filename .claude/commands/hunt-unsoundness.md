@@ -8,11 +8,11 @@ Hunt for an unsoundness in the trusted base.
 
 ## Authority
 
-`$ARGUMENTS` names an entry of the soundness perimeter to attack, spelled as `documentation/SOUNDNESS.md` spells it. With no row given, choose one by "Where to hunt" and say why.
+`$ARGUMENTS` names an entry of the soundness perimeter to attack, spelled as `documentation/soundness.md` spells it. With no row given, choose one by "Where to hunt" and say why.
 
 **One invocation is one row.** The run ends when the row's outcome is committed or a stopping condition hands control back. Iteration lives outside — run this under `/loop` to hunt while away from the keyboard — and the committed Status rows are what one run hands the next.
 
-**Invoking this command is the user's standing authorization, and it covers exactly two kinds of commit:** one carrying a regression test, the fix it guards, and the updated `documentation/SOUNDNESS.md` entry recording the find, and one carrying a probe with its evidence recorded against the entry it attacked in `documentation/SOUNDNESS.md`. For those it overrides CLAUDE.md's prohibition on unattended edits and commits, and for nothing else. Commit on whatever branch is already checked out; never create, switch, or rebase one. Prefer stopping to guessing — idleness is the correct failure mode here, overreach is not.
+**Invoking this command is the user's standing authorization, and it covers exactly two kinds of commit:** one carrying a regression test, the fix it guards, and the updated `documentation/soundness.md` entry recording the find, and one carrying a probe with its evidence recorded against the entry it attacked in `documentation/soundness.md`. For those it overrides CLAUDE.md's prohibition on unattended edits and commits, and for nothing else. Commit on whatever branch is already checked out; never create, switch, or rebase one. Prefer stopping to guessing — idleness is the correct failure mode here, overreach is not.
 
 **Pre-flight, before any investigation.** Run `git status`. Every file already modified belongs to the user: do not edit it, stage it, or read a finding into its contents. If the row you mean to attack is implemented in one, choose another row or stop. A regression test left uncommitted by an earlier run is covered by the same rule — it is a finding waiting for a human, not work to resume, and the row it names is spent for this run.
 
@@ -22,8 +22,8 @@ Running a witness needs the embedded launcher built first — `make curios/runti
 
 Everything factual about the perimeter lives elsewhere and is read there. This file restates none of it, deliberately: a second copy drifts, and the last revision of this file did.
 
-- `documentation/SOUNDNESS.md` — every rule that can admit a term, each graded *probed*, *argued*, or *auditable only*, with one section per entry carrying its evidence, and a closing "Across the perimeter" section carrying the routes named and not yet attacked. `documentation/DESIGN.md`, "The soundness perimeter", holds the decision behind it and nothing else; the grades and the evidence are not there.
-- `documentation/DESIGN.md`, "An independent kernel re-checks what the elaborator accepts" — what the second checker buys and what it does not — and "The perimeter's boundaries", the edges of the region the rules are looked for in.
+- `documentation/soundness.md` — every rule that can admit a term, each graded *probed*, *argued*, or *auditable only*, with one section per entry carrying its evidence, and a closing "Across the perimeter" section carrying the routes named and not yet attacked. `documentation/design/language/the-soundness-perimeter.md`, holds the decision behind it and nothing else; the grades and the evidence are not there.
+- `documentation/design/language/an-independent-kernel-re-checks-what-the-elaborator-accepts.md` — what the second checker buys and what it does not — and `documentation/design/language/the-perimeters-boundaries.md`, the edges of the region the rules are looked for in.
 - `curios-cert/README.md`, "Incompleteness is the safe direction".
 - `curios/src/tests/perimeter.rs` and `soundness.rs` — what is already guarded from the surface, by which diagnostic, and what each checker is recorded as saying about it; each file's own documentation names the entries homed elsewhere. The constructed-term regressions live beside the rules they guard, in `curios-cert`'s and `curios-analysis`'s own test modules, and the rows name them.
 
@@ -41,12 +41,12 @@ What unites them is demonstration. A plausible story about a rule being wrong is
 
 The kernel runs on the compile path, so a *disagreement* between the two checkers already fails the build. Do not hunt disagreement. Hunt **agreement on a wrong rule**, which lives in four places:
 
-- the shared analyses behind the `Env`/`Judge` seam, where one implementation serves both checkers and the known `Prop`-valued index defect actually lived. `curios-analysis`'s crate documentation is the roster; do not recite one from memory — an earlier revision of this file counted level entailment among them after DESIGN.md's amendment had already corrected exactly that, and the amendment records a hunt the wrong roster misdirected
+- the shared analyses behind the `Env`/`Judge` seam, where one implementation serves both checkers and the known `Prop`-valued index defect actually lived. `curios-analysis`'s crate documentation is the roster; do not recite one from memory — an earlier revision of this file counted level entailment among them after design.md's amendment had already corrected exactly that, and the amendment records a hunt the wrong roster misdirected
 - the rules only one checker ever reaches — the rows record which ones, and whose copy is inert
 - rules both sides implement identically wrong
 - the components a rule reads an answer out of rather than deriving — the *Admission without judgment* and *What the kernel consults* parts of the table, where every grade is **argued** and admitting is done by believing
 
-Rank candidates by that asymmetry and by the weakness of their Status, not by how easy they are to test. The index in `documentation/SOUNDNESS.md` carries the grades; each entry's own section carries what has already been tried; the closing "Across the perimeter" section carries the missing tests already named, which is the candidate list before it is anything else.
+Rank candidates by that asymmetry and by the weakness of their Status, not by how easy they are to test. The index in `documentation/soundness.md` carries the grades; each entry's own section carries what has already been tried; the closing "Across the perimeter" section carries the missing tests already named, which is the candidate list before it is anything else.
 
 The third class of find has one operative sentence: **the kernel relies on something it did not itself decide.** Reading elaborator output is not the violation — it is the kernel's entire input. Believing it is. The perimeter now rows what the kernel consults and what is admitted without judgment, so check the table before reporting: a memo replay and the archived prefix's recorded walk are cached kernel judgment, not inherited elaborator judgment, and their rows say so — while the same part of the table names the verdicts that *are* believed rather than re-derived, each a standing target its own row describes. Report a genuine dependency the table does not already carry, even when it is currently benign; it is the shape every future unsoundness will arrive through.
 
@@ -66,7 +66,7 @@ Counting deserves particular weight. Every defect this design has produced was f
 
 ## On a null result
 
-Attacking a row and finding nothing is a result, not a wasted iteration: it is the difference between *unprobed* and *probed*. Commit the probe and the Status it updates — that entry's Status in `documentation/SOUNDNESS.md` is this hunt's only memory across runs, so an unrecorded null result will be re-attacked.
+Attacking a row and finding nothing is a result, not a wasted iteration: it is the difference between *unprobed* and *probed*. Commit the probe and the Status it updates — that entry's Status in `documentation/soundness.md` is this hunt's only memory across runs, so an unrecorded null result will be re-attacked.
 
 **A null's gate is everything below except the suite** — `make curios/runtime` (the workspace does not build without the embedded launcher), `cargo fmt --all -- --check`, clippy as the fix gate spells it, and one targeted run of the probe in the form being committed: `cargo test --package <crate> <probe_name>`. That last is not the suite creeping back in — fmt and clippy compile a test without running it, and evidence gathered from an earlier spelling of the probe is evidence about that spelling. Clear those and commit. The reason the suite is missing is the reason it is present for a fix: it is there to catch a rule that now over-refuses, and a probe leaves every rule exactly as it found it — that is what makes it a null. The compiler decides the same thing after the commit as before, so there is nothing for the suite to catch, and running it costs minutes per iteration to confirm an answer it cannot change.
 
@@ -84,7 +84,7 @@ A fixture goes where its row's neighbours already live. From the surface, `curio
 
 In the comment, record how the hole was verified while it was open — that the program compiled, that the compile-path recheck certified it, and what it did at runtime (printed `FORGED`, trapped at an `unreachable`). That verification is what separates a witness from a suspicion, and it is what a reader needs to re-confirm months later that the test guards something real. Write it in the past tense: the commit that adds the test is the commit that closes the hole, so a present-tense note is false the moment it lands.
 
-The find is recorded twice, and the second record rides the same commit: update the entry's section in `documentation/SOUNDNESS.md` — and its grade, where the find moves it — the way every row's account of a demonstrated defect got there. A fix that lands without its row leaves the next run reading a grade the hole already falsified.
+The find is recorded twice, and the second record rides the same commit: update the entry's section in `documentation/soundness.md` — and its grade, where the find moves it — the way every row's account of a demonstrated defect got there. A fix that lands without its row leaves the next run reading a grade the hole already falsified.
 
 A certifier dependency on elaborator output is the one finding with no natural fixture. Report it, and say what re-deriving it would take.
 
@@ -101,7 +101,7 @@ cargo test --workspace --all-targets --all-features > /tmp/curios-hunt.txt 2>&1
 
 This is CLAUDE.md's hand-off gate, the suite's output redirected as its iteration advice asks; the reasons for its exact shape — no `check` step, the Clippy denial after the separator rather than through `RUSTFLAGS` — are argued there and not restated here. Every command must pass, and the witness must now be rejected by the diagnostic it names. The suite is in this list for one reason, and it is the same reason a null skips it: making a rule stricter always looks safe given that incompleteness is the safe direction, and it is not — a stricter rule may reject valid programs, and the standard library plus the whole corpus compiling is the only thing that catches one which now over-refuses.
 
-**Do not run the ignored `kernel_disagreements`.** It is a measurement, not an assertion — it prints a per-class tally and never fails, so a green run of it establishes nothing. What the two checkers are held to each other on is enumerated at the end of `documentation/SOUNDNESS.md`, and the strongest of those runs inside the gate above without being a test: a kernel edit re-runs `curios-prelude`'s build script, which walks the whole prelude with the kernel from an empty environment and panics on the first refusal, so the suite *compiling* is already the whole-prelude verdict — and every `.crs` fixture then compiles through `compile_entrypoint`, which runs `recheck_module_suffix` on the compile path. Note which named comparison carries your rule rather than re-running the tally.
+**Do not run the ignored `kernel_disagreements`.** It is a measurement, not an assertion — it prints a per-class tally and never fails, so a green run of it establishes nothing. What the two checkers are held to each other on is enumerated at the end of `documentation/soundness.md`, and the strongest of those runs inside the gate above without being a test: a kernel edit re-runs `curios-prelude`'s build script, which walks the whole prelude with the kernel from an empty environment and panics on the first refusal, so the suite *compiling* is already the whole-prelude verdict — and every `.crs` fixture then compiles through `compile_entrypoint`, which runs `recheck_module_suffix` on the compile path. Note which named comparison carries your rule rather than re-running the tally.
 
 Two conditions the script cannot check, which are judgments and are named as such:
 

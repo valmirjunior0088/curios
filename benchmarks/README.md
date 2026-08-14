@@ -178,7 +178,7 @@ Both are (a) expressible in a total, structurally-recursive language, (b) immune
 
 ### Why the constants are small
 
-Curios's `Nat` and `Int` are unbounded in the type checker but ride an **i31** — the unboxed WebAssembly-GC 31-bit integer — at runtime, and arithmetic is _checked_: a result that leaves i31 traps. Why it traps rather than wrapping is [DESIGN.md](../documentation/DESIGN.md)'s *Numeric carriers narrow by refusing, never by changing a value*. (`Flt`/`f64` has the range but heap-allocates per value — the wrong tool for a tight integer loop.) So both workloads are deliberately sized to keep **every intermediate, including products,** within i31, and every other language uses its native integer to compute the identical values. The upshot: the integer comparison is like-for-like on values, and it honestly folds Curios's per-op overflow check into the measured cost rather than hiding it.
+Curios's `Nat` and `Int` are unbounded in the type checker but ride an **i31** — the unboxed WebAssembly-GC 31-bit integer — at runtime, and arithmetic is _checked_: a result that leaves i31 traps. Why it traps rather than wrapping is [Numeric carriers narrow by refusing, never by changing a value](../documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md). (`Flt`/`f64` has the range but heap-allocates per value — the wrong tool for a tight integer loop.) So both workloads are deliberately sized to keep **every intermediate, including products,** within i31, and every other language uses its native integer to compute the identical values. The upshot: the integer comparison is like-for-like on values, and it honestly folds Curios's per-op overflow check into the measured cost rather than hiding it.
 
 ## Run it
 

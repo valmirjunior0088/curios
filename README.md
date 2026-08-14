@@ -6,7 +6,7 @@
 
 Curios is a dependently typed programming language that compiles to WebAssembly. Types can depend on values, proofs live beside ordinary code, and the compiler is happy to double-check your math homework.
 
-[Playground](https://valmirjunior0088.github.io/curios/playground) · [Documentation](https://valmirjunior0088.github.io/curios/docs/curios/index.html) · [Language reference](documentation/SYNTAX.md) · [Usage](documentation/USAGE.md) · [Releases](https://github.com/valmirjunior0088/curios/releases) · [Roadmap](documentation/ROADMAP.md)
+[Playground](https://valmirjunior0088.github.io/curios/playground) · [Documentation](https://valmirjunior0088.github.io/curios/docs/curios/index.html) · [Language reference](documentation/syntax.md) · [Usage](documentation/usage.md) · [Releases](https://github.com/valmirjunior0088/curios/releases) · [Roadmap](documentation/roadmap.md)
 
 [![Build](https://github.com/valmirjunior0088/curios/actions/workflows/check.yml/badge.svg)](https://github.com/valmirjunior0088/curios/actions/workflows/check.yml)
 [![Release](https://img.shields.io/github/v/release/valmirjunior0088/curios)](https://github.com/valmirjunior0088/curios/releases)
@@ -14,7 +14,7 @@ Curios is a dependently typed programming language that compiles to WebAssembly.
 
 </div>
 
-> **Status:** Curios is early, experimental, and under active development — syntax, standard library, and compiler may all change without notice. An independent kernel re-checks every compilation from the finished terms alone, but it is still being refined, and it is a second opinion rather than a proof of soundness.
+> **Status:** Curios is early, experimental, and under active development — syntax, standard library, and compiler may all change without notice. An independent kernel re-checks every compilation from the finished terms alone; what it covers, and what each rule it applies rests on, is tracked in the [soundness perimeter](documentation/soundness.md).
 
 ## A taste
 
@@ -56,7 +56,7 @@ type mismatch
 - A proof-irrelevant `Prop`, so proofs weigh nothing at runtime
 - Erased arguments — type-level information that guides checking and then vanishes from the output
 - Concepts and witnesses for ad-hoc polymorphism
-- A standard library for collections, formatting, IO, networking, tasks, and JSON
+- A standard library for collections, formatting, IO, networking, tasks, time, randomness, arbitrary-precision integers, JSON, and TOML
 - One lowering pipeline from source to WebAssembly, whether you run it natively or in a browser tab
 
 ## Try it
@@ -119,11 +119,11 @@ Fmt/print("%\n")(message)
 
 Note what the program imports. `lib` and `exe` are spellings nothing can refer to, so `/hello` is unambiguously the *mount* — a package's own name never has to mean two things at once. Delete either file and the package is happily just the other one.
 
-Dependencies, umbrellas, extra executables, and the rest of the command line live in [Usage](documentation/USAGE.md).
+Dependencies, umbrellas, extra executables, and the rest of the command line live in [Usage](documentation/usage.md).
 
 ## Build from source
 
-Building requires Rust, a C++ toolchain, and CMake. The first build compiles Binaryen from a verified source release and takes several minutes — a good moment to go read the [language reference](documentation/SYNTAX.md).
+Building requires Rust, a C++ toolchain, and CMake. The first build compiles Binaryen from a verified source release and takes several minutes — a good moment to go read the [language reference](documentation/syntax.md).
 
 ```sh
 git clone https://github.com/valmirjunior0088/curios
@@ -136,10 +136,11 @@ The resulting CLI is `target/release/curios`.
 
 ## Go deeper
 
-- [Language reference](documentation/SYNTAX.md) — the complete surface language
-- [Usage](documentation/USAGE.md) — the complete command line and package reference
-- [Development roadmap](documentation/ROADMAP.md)
-- [Cross-cutting design decisions](documentation/DESIGN.md) — decisions scoped to one crate live in that crate's `README.md`
+- [Language reference](documentation/syntax.md) — the complete surface language, when you want to know what something means or how to spell it
+- [Usage](documentation/usage.md) — every subcommand, flag, and package concept the command line offers
+- [Design decisions](documentation/design.md) — one file per decision under [`design/`](documentation/design), when you want to know *why* Curios is the way it is; a decision scoped to one crate lives in that crate's `README.md`
+- [Soundness perimeter](documentation/soundness.md) — every rule that can admit a term, what it assumes, and how far it has actually been checked
+- [Development roadmap](documentation/roadmap.md) — what exists, what is pending, and the specifications for the pending half
 - [Benchmark methodology and results](benchmarks/README.md)
 
 ## Contributing

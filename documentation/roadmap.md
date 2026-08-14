@@ -6,7 +6,7 @@ Specifications live under [roadmap/](roadmap). A campaign large enough to sequen
 
 An item's entry here is a summary and a link, never the specification in miniature. Name the capability and, for an unchecked item, what is wrong or missing today; leave rationale, mechanism, findings, rejected alternatives, and every measured figure to the owners named below. A figure in particular belongs beside the probe that reproduces it and appears here in no form at all.
 
-Unchecked items may link to working implementation specifications. Unchecked items whose design is not refined yet instead link a placeholder specification marked "Not refined yet", possibly an umbrella covering several related items; the placeholder only reserves the specification location until refinement replaces it. When an item lands completely, transfer every durable contract and invariant to its owning source, module or crate documentation and tests; record its design rationale and rejected alternatives in [DESIGN.md](DESIGN.md) when cross-cutting or in the owning crate's `README.md` when crate-scoped; update remaining specifications to depend on the landed API rather than the working document; replace the linked checkbox with a checked plain-text summary; verify that nothing still references the specification filename; and delete the specification.
+Unchecked items may link to working implementation specifications. Unchecked items whose design is not refined yet instead link a placeholder specification marked "Not refined yet", possibly an umbrella covering several related items; the placeholder only reserves the specification location until refinement replaces it. When an item lands completely, transfer every durable contract and invariant to its owning source, module or crate documentation and tests; record its design rationale and rejected alternatives in [design.md](design.md) when cross-cutting or in the owning crate's `README.md` when crate-scoped; update remaining specifications to depend on the landed API rather than the working document; replace the linked checkbox with a checked plain-text summary; verify that nothing still references the specification filename; and delete the specification.
 
 ## Type System
 
@@ -58,7 +58,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Final `| _ =>` catch-all in headed inductive matches (bare/final/top-level only; lowers to the core `Cases::Induct` default)
 - [x] Destructuring patterns at `let`/lambda-parameter/function-sugar-parameter position (tuple/struct only, irrefutable; desugars to projections)
 - [x] Irrefutable patterns at the `;` fold-hypothesis binder (`| pred + 1; (count, live) =>` — the hypothesis binds the fold result rather than scrutinee shape, so it takes the same patterns a `let` binder does, desugared to projections)
-- [ ] [Anonymous match functions](roadmap/capabilities/03_ANONYMOUS_MATCH_FUNCTION_SPEC.md) (`match =>`, lowering to an ordinary one-argument lambda and headed match)
+- [ ] [Anonymous match functions](roadmap/capabilities/03_anonymous_match_function_spec.md) (`match =>`, lowering to an ordinary one-argument lambda and headed match)
 
 ## Syntax Sugar
 
@@ -79,7 +79,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] `Flt` (bit-preserving binary32 identity, including `to_le_bytes`/`of_le_bytes` reinterpretation across every compiler stage, plus the full native arithmetic and comparison family — `add`/`sub`/`mul`/`div`/`rem`/`min`/`max`/`neg`/`abs`/`sqrt`/`floor`/`ceil`/`trunc`/`nearest`/`copysign`)
   - [x] Packed `Bits` and `Bytes` (grain-specialized operations over shared immutable windows; O(1) slices and tails)
   - [x] `List`
-- [x] Total `/sys` primitives — every operation whose reduction could fail carries its precondition in its type, in the decided style (see [DESIGN.md](DESIGN.md), "A partial primitive is totalized by a canonical extension, or it states its domain" and "A bound is stated in a decided proposition and discharged by reduction")
+- [x] Total `/sys` primitives — every operation whose reduction could fail carries its precondition in its type, in the decided style (see [A partial primitive is totalized by a canonical extension, or it states its domain](design/language/a-partial-primitive-is-totalized-by-a-canonical-extension-or-it-states-its-domain.md) and [A bound is stated in a decided proposition and discharged by reduction](design/language/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md))
 
 ## Module System
 
@@ -99,18 +99,18 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Crate-boundary split isolating the Cranelift/Binaryen-free launcher (`curios-runtime`) from the JIT-capable compiler
 - [x] Pure pipeline driver crate (`curios-pipeline`) decoupled from runtime/Binaryen/CLI, enabling a wasm32 (browser) build
 - [x] Build-scoped archived prelude and replay (`curios-prelude-archive` compiles fixed Text/Core/Ersd state into an image in its `OUT_DIR` and `curios-prelude` certifies it, the split keeping a kernel edit from re-elaborating the standard library; production compilations restore the image with no source fallback and lower/elaborate/erase only the user suffix)
-- [x] A compilation is units folded over a dependency order, with `--unit <DIR>` mounting a package beside the entry program (see [DESIGN.md](DESIGN.md), "A module is a compilation unit, and the prelude is an environment")
+- [x] A compilation is units folded over a dependency order, with `--unit <DIR>` mounting a package beside the entry program (see [A module is a compilation unit, and the prelude is an environment](design/toolchain/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md))
 - [x] Configurable type-checker reduction budget (the CLI's `--budget`, default 1,000,000 steps, restored per declaration; counting steps rather than elapsed time makes acceptance reproducible across machines, so the browser build needs no clock shim)
 - [x] Elaboration and per-node memoization bounded by written binder nesting, never data length (the `elaborate → elaborate_apply → check` cycle defunctionalized onto a frame stack for ground, all-explicit applications; each term's cached derivations carried on the shared `Rc` node and filled by an iterative post-order walk — so a literal or generated spine of any size compiles on a default 2MB stack, the ceiling now being the reduction deadline and memory)
 - [x] Elaboration transients grouped under one core variant (`Transient`: `Infix`, `NumLit`, and `Bang` — postfix `!` carried into core unresolved and desugared by `elaborate_bang`, where the type-directed lift decision lives; refused wholesale at the kernel boundary)
-- [x] Names as identity only — a compiler name distinguishes bindings and renders for a human, and nothing branches on its spelling (see [DESIGN.md](DESIGN.md), "One naming scheme for compiler identities")
-- [x] Totality of everything erasure deletes, so no closed term inhabits `/syn/False` by a divergent type or a divergent proof (see [DESIGN.md](DESIGN.md), "Totality of the erased program", and [SOUNDNESS.md](SOUNDNESS.md), which records the one route still open)
+- [x] Names as identity only — a compiler name distinguishes bindings and renders for a human, and nothing branches on its spelling (see [One naming scheme for compiler identities](design/toolchain/one-naming-scheme-for-compiler-identities.md))
+- [x] Totality of everything erasure deletes, so no closed term inhabits `/syn/False` by a divergent type or a divergent proof (see [Totality of the erased program](design/language/totality-of-the-erased-program.md), and [soundness.md](soundness.md), which records the one route still open)
 - [x] Crate-boundary split separating the term representation from the elaborator (`curios-core` holds `Term`, its binder discipline, the intrinsic roster and folds, universes, and the nominal registry; `curios-elab` holds elaboration, unification, zonking, the universe solver, witness resolution, and erasure — with `Reducer` as the seam that shares intrinsic folding while leaving reduction strategy to each side)
-- [x] Independent kernel in `curios-cert` re-checking what the elaborator accepts from the finished terms alone, on the compile path in production and at prelude-archive build time (see [DESIGN.md](DESIGN.md), "An independent kernel re-checks what the elaborator accepts"; what it covers is [`curios-cert/README.md`](../curios-cert/README.md), and its disagreement inventory is `curios-prelude-archive`'s `kernel_disagreements`)
-- [ ] [Full data section support in `curios-wasm`](roadmap/capabilities/01_WASM_FULL_CONFORMANCE_SPEC.md) (today the section is minimum-fitted to its one consumer — passive-only segments reached through `array.new_data`)
-- [ ] [Full element section support in `curios-wasm`](roadmap/capabilities/01_WASM_FULL_CONFORMANCE_SPEC.md) (today the section is minimum-fitted to its one consumer — a single declarative segment making functions `ref.func`-eligible)
-- [ ] [`Stage::WasmOptm`: observe the Binaryen-optimized module through a binary reader](roadmap/capabilities/02_WASM_OPTM_STAGE_SPEC.md) (the binary writer's inverse does not exist today)
-- [ ] Self-hosting bootstrap of the language-specific stages _(deferred until further notice, deliberately unspecified; the objective and the Curios/Rust ownership split are recorded in [DESIGN.md](DESIGN.md))_
+- [x] Independent kernel in `curios-cert` re-checking what the elaborator accepts from the finished terms alone, on the compile path in production and at prelude-archive build time (see [An independent kernel re-checks what the elaborator accepts](design/language/an-independent-kernel-re-checks-what-the-elaborator-accepts.md); what it covers is [`curios-cert/README.md`](../curios-cert/README.md), and its disagreement inventory is `curios-prelude-archive`'s `kernel_disagreements`)
+- [ ] [Full data section support in `curios-wasm`](roadmap/capabilities/01_wasm_full_conformance_spec.md) (today the section is minimum-fitted to its one consumer — passive-only segments reached through `array.new_data`)
+- [ ] [Full element section support in `curios-wasm`](roadmap/capabilities/01_wasm_full_conformance_spec.md) (today the section is minimum-fitted to its one consumer — a single declarative segment making functions `ref.func`-eligible)
+- [ ] [`Stage::WasmOptm`: observe the Binaryen-optimized module through a binary reader](roadmap/capabilities/02_wasm_optm_stage_spec.md) (the binary writer's inverse does not exist today)
+- [ ] Self-hosting bootstrap of the language-specific stages _(deferred until further notice, deliberately unspecified; the objective and the Curios/Rust ownership split are recorded in [design.md](design.md))_
 
 ## Optimizations
 
@@ -138,10 +138,10 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] An idiomatic string walk costs about a sixth of what it did, and none of the three changes that bought it was the mechanism proposed for it (the corpus that divides the cost had been complete and unrun for three roadmap items, so the first milestone was to run it and the rest were chosen by what it said: the bind measured six percent and has since inverted to nothing, every sequence fold in the language was materializing a suffix nothing reads, `/std/Str/fold`'s motive was a function so a walk built one closure per character and applied the composition once, and `/std/Nat/of_str` decided emptiness with `Str/len(s) == 0`, walking the whole string to do it. `programs/parse_digits.crs` went 2.31 s to 0.90 s at N = 1 000 000, the gap against the hand-written control fourteenfold to under sixfold. Every figure lives beside the probe that reproduces it in `curios/src/tests/codegen/ladder.rs`, and that the walk captures nothing per character is asserted in `curios/src/tests/codegen/structural.rs`, where it fails against the old spelling)
 - [ ] Specializing on a known function argument, so a shared combinator stops calling through a parameter — `/std/Str/fold` is called from two places with two different step functions, so the parameter joins to a conflict and every call through it stays indirect, once per character. Every pass declines structurally: the SCC specializer needs a self-edge `fold` does not have, since its recursion runs through closures; both call-pattern specializers key on a tagged tuple and a function reference is not one; contification needs a single call site; inlining refuses a multi-site callee above sixteen nodes. Nothing downstream is missing, since `rewrite_atoms` devirtualizes the moment a callee value is known — so this is two existing passes recognizing one more atom. Bounded above by a hand-monomorphized control at roughly eightfold, though that control also skips the UTF-8 scan `Str/fold` performs, so the recoverable share is smaller and unmeasured — and smaller again than it reads, since specializing the parameter leaves the per-byte closure chain above untouched.
 - [x] The unfolding discard decides on progress (a folded recursive call's one definitional unfolding is kept when it exposed a head constructor **or** carries no member of the group it recursed on, and discarded only when it is still neutral and still names that group; the head-shape test it replaced could not tell a stuck form from an answer that happens to be a variable, which made the base case of any lemma about an accumulator unprovable in decided form. Both reducers carry the rule, written separately per the two-checker discipline; `Term::mentions_rec_member` is shared as representation. All three outcomes are idempotent, so the clause decides completeness and the step budget alone decides termination)
-- [ ] [A reduction step costs what it builds](roadmap/technical_debt/01_PRICED_REDUCTION_SPEC.md) — the step counter prices a transition the same whatever it constructs, so nothing bounds the memory a reduction allocates or retains
-- [ ] [A type-level concatenation should not copy what it joins](roadmap/technical_debt/02_TYPE_LEVEL_SEQUENCE_COST_SPEC.md) — the runtime uses a rope and the type level still copies, so the same loop is linear when the program runs it and quadratic when a decided bound makes the compiler evaluate it
-- [ ] [You should pay for a value when you keep it, not when you name it](roadmap/technical_debt/03_VALUE_LIFETIME_COST_SPEC.md) — a value whose identity nothing observes still costs a heap allocation and the call that builds it
-- [x] Recursion restored to the defunctionalized walks — twelve walks recurse inside `curios-base`'s `recurse` instead of driving explicit frame machines (see [DESIGN.md](DESIGN.md), "Depth is bought with stack, not with hand-rolled frames")
+- [ ] [A reduction step costs what it builds](roadmap/technical_debt/01_priced_reduction_spec.md) — the step counter prices a transition the same whatever it constructs, so nothing bounds the memory a reduction allocates or retains
+- [ ] [A type-level concatenation should not copy what it joins](roadmap/technical_debt/02_type_level_sequence_cost_spec.md) — the runtime uses a rope and the type level still copies, so the same loop is linear when the program runs it and quadratic when a decided bound makes the compiler evaluate it
+- [ ] [You should pay for a value when you keep it, not when you name it](roadmap/technical_debt/03_value_lifetime_cost_spec.md) — a value whose identity nothing observes still costs a heap allocation and the call that builds it
+- [x] Recursion restored to the defunctionalized walks — twelve walks recurse inside `curios-base`'s `recurse` instead of driving explicit frame machines (see [Depth is bought with stack, not with hand-rolled frames](design/toolchain/depth-is-bought-with-stack-not-with-hand-rolled-frames.md))
 - [x] Wasm-emission optimizations
   - [x] `struct.new` construction with immutable fields
   - [x] Direct `br` for single-target regions
@@ -192,7 +192,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Decimal numeric conversions (`of_str`/`to_str` for `Nat`, `Int`, and `Flt`; `Flt/to_str` renders the shortest round-trip binary32 decimal through exact `BigNat` digit generation)
 - [x] JSON codec (`std/Json`)
 - [x] TOML 1.0.0 codec over native `Int` and binary32 `Flt` (`std/Toml`; explicitly not fully TOML-conforming because numeric storage is native-width)
-  - [ ] [Full TOML conformance over exact numerics](roadmap/capabilities/04_TOML_FULL_CONFORMANCE_SPEC.md) _(not refined; after the general rational `BigFlt` sequence)_
+  - [ ] [Full TOML conformance over exact numerics](roadmap/capabilities/04_toml_full_conformance_spec.md) _(not refined; after the general rational `BigFlt` sequence)_
 - [x] Async combinators for `/std/Async`
   - [x] `map`
   - [x] concurrent `both`/`race`/`select`
@@ -208,20 +208,20 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Certified strictly-positive arbitrary-precision naturals (`std/NonZero`)
 - [x] Arbitrary-precision integers (`std/BigInt` over the strictly-positive `std/NonZero`)
 - [ ] Dyadic `BigFlt` exact core
-  - [ ] [Canonical representation, exact operations, comparison, and witnesses](roadmap/big_flt_dyadic/01_CORE_SPEC.md)
+  - [ ] [Canonical representation, exact operations, comparison, and witnesses](roadmap/big_flt_dyadic/01_core_spec.md)
   - [ ] [Exact binary32 conversion and correctly rounded output](roadmap/big_flt_dyadic/02_BINARY32_SPEC.md)
-- [ ] [`BigInt` certified algebra, order, and binary-scale laws](roadmap/big_flt_dyadic_proofs/01_BIG_INT_LAWS_SPEC.md)
+- [ ] [`BigInt` certified algebra, order, and binary-scale laws](roadmap/big_flt_dyadic_proofs/01_big_int_laws_spec.md)
 - [ ] Dyadic `BigFlt` proof and quotient-boundary completion
-  - [ ] [Algebra and order theorem corpus](roadmap/big_flt_dyadic_proofs/02_LAWS_SPEC.md)
-  - [ ] [Correctly rounded exact quotient conversion to binary32](roadmap/big_flt_dyadic_proofs/03_RATIO_NARROWING_SPEC.md)
-  - [ ] [Binary32 round-trip and correct-rounding proofs](roadmap/big_flt_dyadic_proofs/04_BOUNDARY_PROOFS_SPEC.md)
+  - [ ] [Algebra and order theorem corpus](roadmap/big_flt_dyadic_proofs/02_laws_spec.md)
+  - [ ] [Correctly rounded exact quotient conversion to binary32](roadmap/big_flt_dyadic_proofs/03_ratio_narrowing_spec.md)
+  - [ ] [Binary32 round-trip and correct-rounding proofs](roadmap/big_flt_dyadic_proofs/04_boundary_proofs_spec.md)
 - [ ] General rational `BigFlt` sequence _(explicitly after the program-analysis interface; no umbrella-only implementation step)_
-  - [ ] [`BigNat` certified Euclidean division, GCD, divisibility, and coprimality](roadmap/big_flt_general/01_BIG_NAT_EUCLIDEAN_SPEC.md)
-  - [ ] [General `BigFlt` reduced rational representation and exact operations](roadmap/big_flt_general/02_CORE_SPEC.md)
-  - [ ] [General canonical uniqueness, ring, and order laws](roadmap/big_flt_general/03_LAWS_SPEC.md)
-  - [ ] [General division and field laws](roadmap/big_flt_general/04_FIELD_LAWS_SPEC.md)
+  - [ ] [`BigNat` certified Euclidean division, GCD, divisibility, and coprimality](roadmap/big_flt_general/01_big_nat_euclidean_spec.md)
+  - [ ] [General `BigFlt` reduced rational representation and exact operations](roadmap/big_flt_general/02_core_spec.md)
+  - [ ] [General canonical uniqueness, ring, and order laws](roadmap/big_flt_general/03_laws_spec.md)
+  - [ ] [General division and field laws](roadmap/big_flt_general/04_field_laws_spec.md)
   - [ ] [General rational binary32 boundaries](roadmap/big_flt_general/05_BINARY32_SPEC.md)
-  - [ ] [Exact decimal parsing and presentation](roadmap/big_flt_general/06_DECIMAL_SPEC.md)
+  - [ ] [Exact decimal parsing and presentation](roadmap/big_flt_general/06_decimal_spec.md)
 
 ## Tooling & Ecosystem
 

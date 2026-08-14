@@ -67,13 +67,13 @@ fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Global {
 
 /// The deletion rule (Goguen–McBride–McKinna) decides a binder forced in two index positions by *convertibility*, and this is the direction no program reaches.
 ///
-/// Instrumenting `consolidate` and running the whole corpus — the fixed prelude through the kernel's own walk, plus every test program through both checkers — counts 5883 inversions, 20 of which re-force a binder. Sixteen refuse, on genuinely inconvertible `Bits` spines. The four that accept are all `prior == value`: the two forcings are *syntactically identical*, so a plain equality test would have decided every acceptance the corpus contains. The semantic half of the rule — accepting two forcings that differ but convert — is exercised by nothing, which is precisely the condition under which a rule's mistakes stay invisible. See DESIGN.md's note that (V)'s argument rule sat inert at 6010 of 6041 sites while the corpus passed throughout.
+/// Instrumenting `consolidate` and running the whole corpus — the fixed prelude through the kernel's own walk, plus every test program through both checkers — counts 5883 inversions, 20 of which re-force a binder. Sixteen refuse, on genuinely inconvertible `Bits` spines. The four that accept are all `prior == value`: the two forcings are *syntactically identical*, so a plain equality test would have decided every acceptance the corpus contains. The semantic half of the rule — accepting two forcings that differ but convert — is exercised by nothing, which is precisely the condition under which a rule's mistakes stay invisible. See design.md's note that (V)'s argument rule sat inert at 6010 of 6041 sites while the corpus passed throughout.
 ///
 /// So the two directions are put to it directly. Both fixtures force one binder to `a()` in the first index position and to `b()` in the second, differing in nothing but the family's sort — which is what makes them a control pair rather than two unrelated cases.
 ///
 /// At a proposition the two forcings convert by irrelevance, so the rule deletes the redundant constraint and one solution survives: sound because `Eq : Prop` makes the system definitionally K, and harmless because the surviving substitution is interchangeable with the one it replaced. At a relevant family they do not convert, and the binder's solutions are dropped rather than reconciled — the arm is still checked, with the binder simply unsolved.
 ///
-/// What both must never be is `Impossible`. That verdict excuses an arm from being checked at all, and an arm excused wrongly at a `Prop`-sorted family is the vacuous-elimination route to a closed inhabitant of `False` that DESIGN.md records under index inversion. `consolidate` returns no clash by construction; this is what holds that to account, since the refusing path removes solutions and a future rewrite could as easily report the position unreachable.
+/// What both must never be is `Impossible`. That verdict excuses an arm from being checked at all, and an arm excused wrongly at a `Prop`-sorted family is the vacuous-elimination route to a closed inhabitant of `False` that design.md records under index inversion. `consolidate` returns no clash by construction; this is what holds that to account, since the refusing path removes solutions and a future rewrite could as easily report the position unreachable.
 #[test]
 fn a_binder_forced_twice_survives_only_when_its_forcings_convert() {
     for (label, sort, surviving) in [
@@ -293,7 +293,7 @@ fn call_is_seen(body: Term) -> bool {
     group_totality(&mut kernel, group) == Totality::Partial
 }
 
-/// The differential `documentation/SOUNDNESS.md` asks for: `Walk::walk` visits every child position `Subterm::any_child_term` does, minus a named whitelist.
+/// The differential `documentation/soundness.md` asks for: `Walk::walk` visits every child position `Subterm::any_child_term` does, minus a named whitelist.
 ///
 /// This matters more here than anywhere else on the perimeter because this is the only analysis whose blindness *admits*. Every other one refuses when it cannot see — positivity answers `Mixed` at an out-of-set name, `whnf` goes stuck, inversion derives nothing at a `Prop`-valued position, an under-applied call is graded `Matrix::unknown` — while a call site the walk never visits contributes no edge, and a group with no edges is `Total`. Route eight of this row's history was exactly that and nothing else: a projected inner group went unwalked, `rec f(n) -> False = (rec g(m) -> False = f(m); g)(n)` closed to no call whatsoever, both groups classified `Total`, and `f(0)` diverged through `g` while (V) read the verdict.
 ///
