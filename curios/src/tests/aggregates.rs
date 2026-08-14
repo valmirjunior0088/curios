@@ -92,6 +92,43 @@ fn bin_concat_leading_byte_clash_is_rejected() {
 }
 
 #[test]
+fn a_literal_run_is_the_same_value_however_it_is_grouped() {
+    // **The premise the fusion cap rests on, stated as a program.** Reduction fuses an all-literal concatenation into one value today (`normalize_concat`); capping that by operand size leaves the `Concat` node standing instead, so a capped spelling and the literal it would have fused to have to remain definitionally equal. They do because `bin_atoms`/`list_atoms` flatten a concatenation into segments and `push` merges every pair of adjacent literal runs (`core::spine`), so both groupings decompose to the same segment list before anything is compared.
+    //
+    // **Each law carries a symbolic tail, and that is what makes this a test.** Without it both sides are all-literal, reduction fuses each into one value on the way in, and `refl` checks without the peel having decided anything. With it neither side fuses, so the peel is the only thing that can equate them. `curios-core`'s `spine` tests state the same premise directly against the peel; this states it where *both* checkers see it, since a program here is elaborated and then certified.
+    //
+    // All three carriers, because each flattens in its own representation: two `Bin` grains over packed runs, and `List` over element vectors whose entries are compared syntactically.
+    let source = r#"
+        use /std/{Handle, Str, Eq, Bits, Bytes, Bool, List};
+        let bytes_law(rest : Bytes)
+            -> Eq(x[..x[\30, \31], ..x[\32, \33], ..rest], x[..x[\30, \31, \32, \33], ..rest]) =
+            Eq/refl();
+        let bits_law(rest : Bits)
+            -> Eq(b[..b[\1, \0], ..b[\1, \1], ..b[\0], ..rest], b[..b[\1, \0, \1, \1, \0], ..rest]) =
+            Eq/refl();
+        let list_law(@T : Type, xs : List(T), p : T, q : T, r : T)
+            -> Eq([..[p, q], ..[r], ..xs], [..[p, q, r], ..xs]) =
+            Eq/refl();
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
+        "#;
+    assert_eq!(run(source), b"ok");
+}
+
+#[test]
+fn a_regrouped_run_still_respects_its_order() {
+    // The control the law above would be worthless without: regrouping preserves element order, so the peel must merge adjacent runs without becoming blind to a reordering. Two bytes swapped across the seam are a `Clash`, and the `refl` is rejected.
+    let source = r#"
+        use /std/{Handle, Str, Eq, Bytes};
+        let bad(rest : Bytes)
+            -> Eq(x[..x[\30], ..x[\31], ..rest], x[..x[\31, \30], ..rest]) = Eq/refl();
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
+        "#;
+    error(source);
+}
+
+#[test]
 fn bin_slice_is_a_monoid_citizen() {
     // `Bytes/slice` rides the free-monoid spine (`core::spine`) as a measured `Window` — a length-`hi - lo` chunk whose contents are symbolic — so the slice algebra holds up to *definitional* equality, provable by `refl` for SYMBOLIC operands that `reduce` cannot fold. `split` fuses two adjacent windows of one base across their shared seam; `empty` drops a zero-width window (the monoid identity); `full` collapses `slice(b, 0, len b)` to its base (the `reduce` partner of the spine's window-collapse). Each declared type forces `convert` to peel the windows to a common normal form; without the peel these are stuck, distinct terms and `refl` would not check.
     let source = r#"
