@@ -20,17 +20,17 @@ Reduction is the only stage that can be driven to arbitrary cost by a well-typed
 
 The reproducer is the accumulate-then-slice shape: a `rec` that appends a fixed run to an accumulator, whose result then stands under a `Bytes/slice` bound. It is parameterized by iteration count, and three arms separate the costs — the bound read off an opaque parameter, so nothing evaluates; the same iteration count with an accumulator that is replaced rather than extended, so there are steps without payload growth; and the growing accumulator, which has both.
 
-Three conclusions follow, and the design rests on them rather than on the motivating anecdote.
+**The probe exists.** [A type-level concatenation should not copy what it joins](02_type_level_sequence_cost_spec.md) built it, over both carriers, and it lives in `curios/src/tests/reduction.rs` with its figures beside it. What follows is what it decided, not numbers this file could keep true.
 
-**The per-transition machinery is linear and modest.** The fixed-payload arm grows linearly in iteration count at a small constant. Nothing about performing a transition is superlinear.
+Three conclusions followed, and the design rests on them rather than on the motivating anecdote. **Two survive unchanged and one has been overtaken**, which is stated rather than quietly edited because the one that moved is the one the motivating anecdote came from.
 
-**The growth is constructed payload that reduction then retains.** The growing arm's excess over the fixed-payload arm converges on a quadratic in the iteration count, and its coefficient matches the cumulative size of the intermediate values within allocator overhead. Repeated binary concatenation performs a linear number of transitions and a quadratic volume of construction; the counter observes only the linear part.
+**The per-transition machinery is linear and modest.** The fixed-payload arm grows linearly in iteration count at a small constant. Nothing about performing a transition is superlinear. **This is the load-bearing conclusion for calibration and it is untouched**: measured at roughly 2 KiB retained per transition while constructing nothing, so a budget of a million transitions admits about two gigabytes before a single byte of payload is built. Calibration selects against that floor.
 
-**The same expression is linear when the program runs it.** `curios/src/tests/runtime.rs`'s `accumulation_loops_are_linear_by_construction` measures the identical loop end to end at a hundred thousand steps. Compile-time evaluation of a fraction of that already costs gigabytes.
+**The growth was constructed payload that reduction then retained** — the growing arm's excess over the fixed-payload arm converged on a quadratic in the iteration count, and the counter observed only the linear part. **That arm is now linear.** Fusion no longer recopies an accumulator past a documented operand size, and the free monoid's measure reads a length off the resulting spine, so the shape that produced this conclusion no longer reproduces: peak memory for the same program fell from 321 MiB to 52 MiB above baseline and stopped growing quadratically. The conclusion was true when taken and the pre-change figures are recorded beside the probe; what it no longer supplies is a *reproducer*, so the acceptance criteria below name shapes the cap does not flatten.
 
-So a step count cannot see either lever, and both levers are construction: what a transition builds, and how long the reducer keeps it. The limit must price both, and it must do so in units a representation change cannot move.
+**The same expression is linear when the program runs it.** `curios/src/tests/runtime.rs`'s `accumulation_loops_are_linear_by_construction` measures the identical loop end to end at a hundred thousand steps. Compile-time evaluation of that now costs about seventeen million reduction steps — sixteen times the default budget, so it refuses — where it once exhausted the machine instead. (The "already costs gigabytes" this paragraph used to carry was never checked and was wrong: at the largest iteration count the default budget admitted, the cost was 321 MiB.)
 
-M0 records these figures beside the probe that reproduces them. They appear here as what the measurement *decided*, not as numbers this file could keep true.
+So a step count cannot see either lever, and both levers are construction: what a transition builds, and how long the reducer keeps it. That is unchanged by any of the above — a cheaper carrier spends fewer units for the same result, and the unit, the price list and the acceptance threshold are unaffected. The limit must price both, in units a representation change cannot move.
 
 ## Decision
 
@@ -90,13 +90,13 @@ Checker-specific reduction code uses the same formulas and the same charge-first
 
 Infallible helpers that allocate below the reducer boundary — including scope and telescope opening or releasing, term reconstruction, substitution, normalization, and packed-value operations — gain an accounting-aware fallible path, or a conservative charge for their entire construction precedes them. The implementation charges from the operands, never by allocating first to discover the price.
 
-`normalize_concat` in `curios-core/src/free_monoid.rs` is the representative shape. Its fusing closure returns a `Subterm` infallibly today, so charging at the point of allocation makes the closure and the function fallible, across its binary and list callers. Expect that shape repeatedly rather than once.
+`normalize_concat` in `curios-core/src/free_monoid.rs` is the representative shape. Its fusing closure returns a `Subterm` infallibly today, so charging at the point of allocation makes the closure and the function fallible, across its binary and list callers. Expect that shape repeatedly rather than once. It still fuses, and still copies when it does — `FUSION_CAP` only bounds *how much* it will copy at once, which changes how often this site is reached and not whether it must charge.
 
 The audit covers at least packed bytes, packed bits, big naturals and integers, shifts, list construction and slicing, argument vectors, term reconstruction, scope and telescope traversal, substitutions that clone payload, elaborator reduction-cache insertion, and kernel memo and replay insertion. It also covers temporary allocation hidden inside hashing, equality, collection growth, and convenience conversions.
 
 Four sites are named because they were found by reading rather than by category, and they are the shape the rest of the audit should expect.
 
-`bin_shape` classifies a `Bin` value by materializing its whole run into a `Vec` — one element per byte at `Grain::X`, one per *bit* at `Grain::B` — and `Bin/len` then reads only that vector's length. An operation whose result is a single `Nat` allocates the entire subject to compute it.
+`bin_shape` classifies a `Bin` value by materializing its whole run into a `Vec` — one element per byte at `Grain::X`, one per *bit* at `Grain::B` — and an operation whose result is a single `Nat` therefore allocates the entire subject to compute it. `Bin/len` no longer reaches it for a wholly-literal value, which now answers from the free monoid's measure, but every symbolic shape still falls through to the homomorphism and so still pays this. The site is unfixed; only its traffic changed.
 
 `peel_bin`'s `bin_atoms` flattens both operands into merged literal runs on every conversion between two sequence values, so a comparison that decides on the first byte can allocate both subjects in full.
 
@@ -132,7 +132,9 @@ Construction pricing changes what an existing budget figure buys, so the default
 
 This is a deliberate compatibility break in an existing observable. It is affordable here specifically: the fixed-prelude archive is explicitly not a stable interchange format, the standard library is entirely in-tree, and only a handful of fixtures state a budget explicitly. It would not be affordable in a project with published budget figures, and the specification claims no general license for the change.
 
-The default is chosen from the completed measurement probe and the M0 baselines, and the fixed-payload arm supplies the floor the choice must respect: a construction-free program already retains a measurable amount of memory per transition, so a budget of one million transitions permits gigabytes before a single byte of payload is built. Calibration therefore selects against observed memory per unit, not only against whether the fixed prelude fits.
+The default is chosen from the completed measurement probe and the M0 baselines, and the fixed-payload arm supplies the floor the choice must respect: a construction-free program already retains about 2 KiB per transition, so a budget of one million transitions permits roughly two gigabytes before a single byte of payload is built. Calibration therefore selects against observed memory per unit, not only against whether the fixed prelude fits.
+
+**Calibrate against a program that replays, not only one that evaluates once.** Per *Kernel behavior*, the kernel charges a memo hit the recorded cost of the computation it replays, and construction charges ride that record — so a construction-heavy subterm hit k times is charged k× its construction while being built once. A default set against a corpus that never replays would be set against a number no user program is charged. The fixed prelude alone is not sufficient evidence here; the corpus must include a shape that hits the same memoized construction repeatedly.
 
 The value and its evidence live beside the ignored probe introduced with accounting, so the figure and the thing that would check it cannot drift apart.
 
@@ -162,7 +164,15 @@ Ordinary definitional equality, explicit decided proofs, and every other reducti
 
 Certificate checking enforces its own limit and never trusts accounting performed by elaboration or compilation.
 
-The kernel's spend component already records what a remembered computation consumed and charges a memo hit across two quantities: reduction steps and minted binder identities. Its intended invariant is that the whole observable trajectory — refusal payloads, exhaustion points, and later-minted identities — is bit-identical with evaluation memos on or off. The existing fixed-prelude parity test compares final verdicts at the ordinary budget; M2 strengthens it to low-budget failure payloads and identity trajectories.
+The kernel's spend component already records what a remembered computation consumed and charges a memo hit across two quantities: reduction steps and minted binder identities. Its intended invariant is that the whole observable trajectory — refusal payloads, exhaustion points, and later-minted identities — is bit-identical with evaluation memos on or off. The existing fixed-prelude parity test compares final verdicts at the ordinary budget; M2 strengthens it to low-budget failure payloads and identity trajectories. **The gap is wider than that sentence suggests and the reason to close it is no longer hypothetical.** `curios-prelude-archive`'s `kernel_memo_parity` compares verdicts, at one budget, on a corpus where nothing exhausts, and is `#[ignore]`d — so the only regime in which the charge model is *observable* is the one regime nothing checks, and no ordinary run checks any of it.
+
+**That charge prices what a memo-free evaluator would have spent, not what the kernel does, and it can therefore be superlinear in the work performed.** `Spend::charge` in `curios-cert/src/kernel/spend.rs` subtracts a `Replay`'s whole recorded cost, and recorded costs *compound*: if computing `Aₙ` hits the memo for `Aₙ₋₁` twice, `S(n) = 2·S(n−1) + c`. A structure cheap to evaluate with memos can be expensive to charge. Measured while implementing [A type-level concatenation should not copy what it joins](02_type_level_sequence_cost_spec.md): the kernel declared a 262 144-step budget exhausted after **6 547 actual reduction steps**, on a program whose cold cost was genuinely quadratic while its memoized evaluation was linear.
+
+This is deliberate and this specification does not propose changing it — `curios-cert/src/kernel/memos.rs` calls it "the property that makes them an evaluation strategy rather than a store", and a trusted checker whose verdict moved with its own cache state would be a checker whose cache had to be verified. What is new here is only that it is *written down*, because it decides acceptance and because two consequences below follow from it.
+
+**Construction pricing amplifies through the same mechanism.** Construction charges ride the recorded cost, so a construction-heavy memoized subterm hit k times charges k× its construction. Calibration must therefore be measured against a program that *replays*, not only one that evaluates once, or the default will be set against a number that does not reflect what a user's program is charged.
+
+**The elaborator and the kernel disagree about cost by an unbounded factor, and the disagreement runs the wrong way.** Elaborator cache hits are free; kernel hits charge in full. So the elaborator can accept a program the kernel refuses — which is the worse direction, since a user meets the elaborator first and the kernel's refusal arrives later and is harder to attribute. That happened twice while spec 02 was implemented, both times with the elaborator entirely silent. Diagnostics for kernel exhaustion should assume the elaborator gave no warning.
 
 Construction charges ride that existing mechanism. The recorded step cost becomes the recorded priced cost, and the replay charge that already exists spends it. Cache-table construction and insertion are excluded from that cost and consume only retention quota, so enabling memos cannot make the first evaluation spend more semantic work than disabling them. A successful replay needs no new field.
 
@@ -187,7 +197,7 @@ The limit bounds reducer-created logical work, reducer-caused stack growth, and 
 ### M0 — Audit and baselines
 
 - Inventory every reducer allocation site in `curios-core`, `curios-elab`, and `curios-cert`, classifying each as construction or sharing, and turn the inventory into a checklist linked from this specification. The four sites named under *Accounting boundary* are its seed, not its extent.
-- Add the parameterized accumulate-then-slice reproducer as an ignored, explicitly bounded probe with all three arms, and record command, input sizes, transition count, wall time, and peak process memory for each. It is cheap at sizes that already show the growth, so this milestone measures rather than extrapolates.
+- The parameterized accumulate-then-slice reproducer is **already in the tree**: `curios/src/tests/reduction.rs`, three arms over both the `Bin` and `List` carriers, ignored and explicitly bounded, recording command, input sizes, transition count, wall time and peak process memory, with pre- and post-cap figures beside it. Read it rather than rebuilding it. What it does *not* yet carry is priced work, which M1 adds.
 - Record the same baselines for representative prelude compilation and certificate checking. Priced work and retention do not exist yet and are not claimed at this milestone.
 
 ### M1 — Price the counter
@@ -215,7 +225,7 @@ The limit bounds reducer-created logical work, reducer-caused stack growth, and 
 
 ## Acceptance
 
-- The motivating computed-subject fixture fails with budget exhaustion before a large allocation, process-memory spike, abort, or operating-system kill.
+- A construction-dominated fixture fails with budget exhaustion before a large allocation, process-memory spike, abort, or operating-system kill. **It cannot be the accumulate-then-slice shape any more**: capping fusion made that program's construction linear, so it now refuses on ordinary step cost like any other long computation. Pick a shape the cap does not flatten — a single oversized construction, a large shift, or a big-integer operation, each of which the criteria below already name — and say in the fixture why that one and not the accumulator.
 - The paired fixture whose subject is behind a parameter still elaborates under a low budget and materializes nothing.
 - A single intrinsic operation whose result exceeds the remaining budget is refused before its allocation is attempted.
 - Repeated concatenation with distinct growing cached results is bounded by cumulative charges even when every individual result would fit.
@@ -237,6 +247,8 @@ The limit bounds reducer-created logical work, reducer-caused stack growth, and 
 ## Refused alternatives
 
 **A second verdict-affecting budget dimension.** Independent transition and materialization limits are genuinely more expressive than one weighted limit: a transition-heavy program and a construction-heavy program can receive different verdicts under the two designs. Curios accepts the weighted policy tradeoff. One user-facing limit preserves the existing configuration shape, requires one default and one acceptance threshold to calibrate, and gives the elaborator and independent kernel one deterministic quantity to reproduce. The fixed price list states the exchange rate rather than hiding it. Failing-charge attribution retains useful diagnostic distinction without being claimed to make the two policies equivalent.
+
+**Charging only *distinct* reductions, over a total deterministic memo.** The kernel charges a memo hit what a memo-free evaluator would have spent; the alternative is to charge each distinct reduction once and nothing for later hits. It is *also* independent of runtime state — a fixed, total memo policy is part of the specification rather than an implementation accident — and it has the better property of the two: it prices work rather than denotation, so the memo could buy acceptance instead of only wall clock. It is refused because totality would become a *trusted* property. Evict one entry under memory pressure and verdicts move, which makes the cache something that has to be verified to trust the verdict — and this specification has already chosen the opposite trade one layer up, where exhausting the retention quota degrades the elaborator's cache rather than refusing a program. Taking it here and degrading there would be incoherent. The cost of refusing it is stated under *Kernel behavior*: the charge can be superlinear in the work, and the two checkers disagree about cost by an unbounded factor.
 
 **Bounding the cache by eviction instead of admission accounting.** Eviction requires a replacement policy and shared-payload lifetime accounting, and makes warmth less predictable. The monotone retention quota instead refuses new insertions after a conservative logical allowance is consumed, and never directly rejects evaluation.
 
