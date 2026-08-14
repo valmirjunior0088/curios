@@ -2,6 +2,7 @@
 
 use {
     super::{run, run_text, typecheck_within},
+    curios_pipeline::DEFAULT_STEP_BUDGET,
     curios_runtime::MockHost,
 };
 
@@ -215,9 +216,11 @@ fn a_bound_over_a_recursion_returning_a_parameter_discharges() {
     );
 }
 
-// A bound whose subject is a *computed* value is discharged by evaluating that value, at elaboration time. `Bytes/slice` states `10 <= Bytes/len(b)`, so `Bytes/slice(built, 0, 10)` puts `go(100000, x[])` in a type and the compiler runs the loop — which the default budget does not stop in any useful sense, because the budget bounds steps while the memory a reduction allocates is bounded by nothing. Under the default budget this exhausts the machine rather than refusing; the fixture therefore states a small budget and pins the refusal.
+// A bound whose subject is a *computed* value is discharged by evaluating that value, at elaboration time. `Bytes/slice` states `10 <= Bytes/len(b)`, so `Bytes/slice(built, 0, 10)` puts `go(100000, x[])` in a type and the compiler runs the loop. A hundred thousand iterations costs about seventeen million reduction steps — sixteen times the default budget — so the refusal below is the budget doing exactly its job, and the small figure stated here only makes the fixture cheap.
 //
-// The pair below is what isolates the cause. Both programs build the same value; they differ only in whether the bound's subject is that value or a parameter standing for it.
+// **What this used to pin was something worse, and the difference is the point.** The budget bounds steps, and the memory a reduction allocated used to be bounded by nothing: fusing an all-literal concatenation recopied the whole accumulator every step, so the same program spent a quadratic volume of construction against a linear step count and exhausted the machine rather than refusing. `curios-core`'s `FUSION_CAP` and its measure removed that, and `curios`'s `tests::reduction` holds the figures. What is left is an ordinary bounded computation that happens to be bigger than the default allowance.
+//
+// The trio below is what isolates the cause. All three build the same value; they differ in whether the bound's subject is that value or a parameter standing for it, and in how much of it there is.
 #[test]
 fn a_bound_on_a_computed_subject_evaluates_it() {
     let error = typecheck_within(
@@ -239,7 +242,24 @@ fn a_bound_on_a_computed_subject_evaluates_it() {
     );
 }
 
-// The control: the same program with the bound read off a parameter. `b` is opaque behind `head_of`, the guard refines it once and generically, and nothing computes — so the identical budget that the spelling above cannot finish inside is ample here. This is the workaround `tests::runtime`'s accumulation measurement relies on, pinned as a fact rather than left as an idiom.
+// **The one the campaign bought: the obvious spelling, at a size the ordinary budget admits.** No helper stands between the bound and its computed subject — the compiler runs the loop, measures what it built, and discharges `10 <= Bytes/len(built)` from the result. This is what a user reaching for `Bytes/slice` on a computed value writes, and it now works; what decides whether it works is the ordinary reduction budget, on a cost linear in the iteration count, rather than how much memory the host happens to have.
+#[test]
+fn a_bound_on_a_small_computed_subject_discharges() {
+    typecheck_within(
+        DEFAULT_STEP_BUDGET,
+        r#"
+        use /std/{Handle, Bytes, Nat, Str};
+        rec go(i : Nat, acc : Bytes) -> Bytes =
+            match i | 0 => acc | k + 1; ih => go(k, x[..acc, ..Str/to_bytes("0123456789")]) end;
+        let built = go(2000, x[]);
+        let head = Bytes/slice(built, 0, 10);
+        /std/print("ok")
+        "#,
+    )
+    .expect("a computed subject the budget can afford discharges its own bound");
+}
+
+// The control: the same program with the bound read off a parameter. `b` is opaque behind `head_of`, the guard refines it once and generically, and nothing computes — so the identical budget that the hundred-thousand-iteration spelling cannot finish inside is ample here. It now says what it always meant: that opacity costs *nothing*, not that opacity is how a computed subject survives. `tests::runtime`'s accumulation measurement still keeps this helper, for the narrower reason stated there — a runtime measurement should not also be an elaboration-time one.
 #[test]
 fn a_bound_behind_a_parameter_evaluates_nothing() {
     typecheck_within(
