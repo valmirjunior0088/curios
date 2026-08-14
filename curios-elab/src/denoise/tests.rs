@@ -1,12 +1,12 @@
 use {
     super::{OperatorTable, denoise_for_display},
     curios_core::{Free, Global, Infix, Subterm, Term, Transient},
-    curios_utilities::{NumOp, Qualifier},
+    curios_utilities::{InfixOp, Qualifier},
     std::{collections::BTreeMap, rc::Rc},
 };
 
 /// Fold `Apply(Proj(witness, 0), [a, b])` through a table registering the witness's field 0 as `op`.
-fn fold_projection(op: NumOp) -> Term {
+fn fold_projection(op: InfixOp) -> Term {
     let witness = Global::Authored(Qualifier::from(["std", "Nat", "w"]));
     let mut table = OperatorTable::default();
     table.by_witness.insert((witness.clone(), 0), op);
@@ -21,7 +21,7 @@ fn fold_projection(op: NumOp) -> Term {
     denoise_for_display(&Rc::new(table), &Rc::new(BTreeMap::new()), &call)
 }
 
-fn folded_op(term: &Term) -> NumOp {
+fn folded_op(term: &Term) -> InfixOp {
     let Subterm::Transient(Transient::Infix(Infix { op, .. })) = &**term else {
         panic!("the projection folds to an infix node");
     };
@@ -31,10 +31,10 @@ fn folded_op(term: &Term) -> NumOp {
 // `Neq` has its own concept slot, so a `neq` projection keeps the disequality spelling rather than folding to an equality the reader would have to un-negate.
 #[test]
 fn a_neq_witness_projection_folds_to_neq() {
-    assert_eq!(folded_op(&fold_projection(NumOp::Neq)), NumOp::Neq);
+    assert_eq!(folded_op(&fold_projection(InfixOp::Neq)), InfixOp::Neq);
 }
 
 #[test]
 fn an_eql_witness_projection_folds_to_eql() {
-    assert_eq!(folded_op(&fold_projection(NumOp::Eql)), NumOp::Eql);
+    assert_eq!(folded_op(&fold_projection(InfixOp::Eql)), InfixOp::Eql);
 }

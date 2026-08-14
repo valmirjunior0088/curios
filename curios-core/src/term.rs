@@ -17,7 +17,7 @@ use {
     curios_abi::ForeignFunction,
     curios_num::{Integer, Natural},
     curios_print::{run_printer, run_printer_within},
-    curios_utilities::{Grain, Mint, NumOp, Plicity, Span},
+    curios_utilities::{Grain, InfixOp, Mint, Plicity, Span},
     std::{
         collections::{BTreeMap, BTreeSet, HashSet},
         fmt,
@@ -1583,7 +1583,7 @@ impl Term {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Infix {
-    pub op: NumOp,
+    pub op: InfixOp,
     pub left: Term,
     pub right: Term,
 }

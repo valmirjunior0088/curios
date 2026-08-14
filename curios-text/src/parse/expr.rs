@@ -221,34 +221,34 @@ pub(super) fn parse_atomic_term_inner<'a>() -> Parser<'a, Term> {
 }
 
 // The fixed set of overloaded infix operators, recognised by maximal munch (two-character symbols before their one-character prefixes).
-pub(super) fn parse_num_op<'a>() -> Parser<'a, NumOp> {
-    fn symbol<'a>(text: &'static str, op: NumOp) -> Parser<'a, NumOp> {
+pub(super) fn parse_infix_symbol<'a>() -> Parser<'a, InfixOp> {
+    fn symbol<'a>(text: &'static str, op: InfixOp) -> Parser<'a, InfixOp> {
         catch(take_exact(text)).map(move |()| op)
     }
 
-    symbol("==", NumOp::Eql)
-        .or(symbol("!=", NumOp::Neq))
-        .or(symbol("<=", NumOp::Lte))
-        .or(symbol(">=", NumOp::Gte))
-        .or(symbol("&&", NumOp::And))
-        .or(symbol("||", NumOp::Or))
-        .or(symbol("+", NumOp::Add))
-        .or(symbol("-", NumOp::Sub))
-        .or(symbol("*", NumOp::Mul))
-        .or(symbol("/", NumOp::Div))
-        .or(symbol("%", NumOp::Rem))
-        .or(symbol("<", NumOp::Lt))
-        .or(symbol(">", NumOp::Gt))
+    symbol("==", InfixOp::Eql)
+        .or(symbol("!=", InfixOp::Neq))
+        .or(symbol("<=", InfixOp::Lte))
+        .or(symbol(">=", InfixOp::Gte))
+        .or(symbol("&&", InfixOp::And))
+        .or(symbol("||", InfixOp::Or))
+        .or(symbol("+", InfixOp::Add))
+        .or(symbol("-", InfixOp::Sub))
+        .or(symbol("*", InfixOp::Mul))
+        .or(symbol("/", InfixOp::Div))
+        .or(symbol("%", InfixOp::Rem))
+        .or(symbol("<", InfixOp::Lt))
+        .or(symbol(">", InfixOp::Gt))
 }
 
 // Operator precedence: higher binds tighter. Every operator is left-associative. The printer consumes this table too, reinserting exactly the parentheses the climb would need to reparse its output.
-pub(crate) fn op_precedence(op: NumOp) -> u8 {
+pub(crate) fn op_precedence(op: InfixOp) -> u8 {
     match op {
-        NumOp::Or => 1,
-        NumOp::And => 2,
-        NumOp::Eql | NumOp::Neq | NumOp::Lt | NumOp::Gt | NumOp::Lte | NumOp::Gte => 3,
-        NumOp::Add | NumOp::Sub => 4,
-        NumOp::Mul | NumOp::Div | NumOp::Rem => 5,
+        InfixOp::Or => 1,
+        InfixOp::And => 2,
+        InfixOp::Eql | InfixOp::Neq | InfixOp::Lt | InfixOp::Gt | InfixOp::Lte | InfixOp::Gte => 3,
+        InfixOp::Add | InfixOp::Sub => 4,
+        InfixOp::Mul | InfixOp::Div | InfixOp::Rem => 5,
     }
 }
 
@@ -263,10 +263,10 @@ pub(super) fn require_space<'a>() -> Parser<'a, ()> {
 }
 
 // An infix operator with a space on each side, consumed without its operands.
-pub(super) fn parse_infix_op<'a>() -> Parser<'a, NumOp> {
+pub(super) fn parse_infix_op<'a>() -> Parser<'a, InfixOp> {
     catch(
         preceded_by_space()
-            .and_keep(parse_num_op())
+            .and_keep(parse_infix_symbol())
             .and_drop(require_space()),
     )
 }

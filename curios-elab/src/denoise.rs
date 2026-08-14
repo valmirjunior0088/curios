@@ -15,7 +15,7 @@ use {
         Apply, Bound, Field, Free, Global, Metavar, MetavarOrigin, Proj, StructType, Subterm, Term,
         UniverseInst, Visit,
     },
-    curios_utilities::NumOp,
+    curios_utilities::InfixOp,
     std::{collections::BTreeMap, rc::Rc},
 };
 
@@ -23,9 +23,9 @@ use {
 #[derive(Debug, Default)]
 pub(crate) struct OperatorTable {
     /// (witness name, projected field index) → operator, for every registered witness of a `/syn` operator concept.
-    by_witness: BTreeMap<(Global, usize), NumOp>,
+    by_witness: BTreeMap<(Global, usize), InfixOp>,
     /// (concept name, field index) → operator, for every `/syn` operator concept. Keyed on the concept rather than on any witness of it, because an abstract witness has none: the binder's type names the concept and the projection's index picks the method out of it.
-    by_concept: BTreeMap<(Global, usize), NumOp>,
+    by_concept: BTreeMap<(Global, usize), InfixOp>,
 }
 
 pub(crate) type Operators = Rc<OperatorTable>;
@@ -88,7 +88,7 @@ fn operator_call<'a>(
     table: &Operators,
     binders: &BinderTypes,
     term: &'a Term,
-) -> Option<(NumOp, &'a Term, &'a Term)> {
+) -> Option<(InfixOp, &'a Term, &'a Term)> {
     let Subterm::Apply(Apply { head, params, .. }) = &**term else {
         return None;
     };
@@ -114,7 +114,7 @@ fn operator_call<'a>(
         Subterm::Metavar(Metavar {
             origin: Some(MetavarOrigin::Witness(origin)),
             ..
-        }) => NumOp::from_symbol(&origin.func)?,
+        }) => InfixOp::from_symbol(&origin.func)?,
         Subterm::Var(var) => {
             let Field::Index(index) = field else {
                 return None;

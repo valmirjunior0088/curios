@@ -37,7 +37,7 @@ use {
         Variant, WitnessOrigin, instantiate_universe_levels_scoped, wire_term,
     },
     curios_num::{Flt, Integer},
-    curios_utilities::{NumOp, Plicity, recurse},
+    curios_utilities::{InfixOp, Plicity, recurse},
     std::{
         collections::{BTreeSet, VecDeque},
         sync::Arc,

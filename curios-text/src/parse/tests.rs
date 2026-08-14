@@ -2,7 +2,7 @@ use {
     crate::*,
     curios_abi::{WireLeaf, WireSignature, WireType},
     curios_num::Flt,
-    curios_utilities::{Grain, NumOp, Plicity, Qualifier},
+    curios_utilities::{Grain, InfixOp, Plicity, Qualifier},
 };
 
 #[test]
@@ -118,24 +118,24 @@ fn parse_infix_precedence_and_associativity() {
     assert_eq!(
         "a + b * c".parse::<Term>().unwrap(),
         infix(
-            NumOp::Add,
+            InfixOp::Add,
             name("a"),
-            infix(NumOp::Mul, name("b"), name("c")),
+            infix(InfixOp::Mul, name("b"), name("c")),
         )
     );
     assert_eq!(
         "a - b - c".parse::<Term>().unwrap(),
         infix(
-            NumOp::Sub,
-            infix(NumOp::Sub, name("a"), name("b")),
+            InfixOp::Sub,
+            infix(InfixOp::Sub, name("a"), name("b")),
             name("c"),
         )
     );
     assert_eq!(
         "a + b < c".parse::<Term>().unwrap(),
         infix(
-            NumOp::Lt,
-            infix(NumOp::Add, name("a"), name("b")),
+            InfixOp::Lt,
+            infix(InfixOp::Add, name("a"), name("b")),
             name("c"),
         )
     );
@@ -149,7 +149,7 @@ fn parse_infix_requires_spaces_and_disambiguates_signs() {
     assert_eq!(
         "a - 42".parse::<Term>().unwrap(),
         Subterm::Infix(Infix {
-            op: NumOp::Sub,
+            op: InfixOp::Sub,
             left: name("a"),
             right: num_lit(42, false, false),
         })
@@ -162,7 +162,7 @@ fn parse_infix_requires_spaces_and_disambiguates_signs() {
     assert_eq!(
         "a != b".parse::<Term>().unwrap(),
         Subterm::Infix(Infix {
-            op: NumOp::Neq,
+            op: InfixOp::Neq,
             left: name("a"),
             right: name("b"),
         })

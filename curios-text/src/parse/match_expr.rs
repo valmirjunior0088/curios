@@ -13,7 +13,7 @@ pub(super) fn parse_func<'a>() -> Parser<'a, Term> {
     .map(|(params, body)| Subterm::Func(Func { params, body }).into())
 }
 
-// `match head [: motive]`. The motive is an ordinary term — a term of the eliminator's motive type, with no grammar of its own and so no disambiguation rule: `parse_term` is called directly and there is nothing to backtrack. It cannot run into the arms because `|` is not an infix operator (`parse_num_op` has `||` but no bare `|`), so a motive term always terminates at the first `|`.
+// `match head [: motive]`. The motive is an ordinary term — a term of the eliminator's motive type, with no grammar of its own and so no disambiguation rule: `parse_term` is called directly and there is nothing to backtrack. It cannot run into the arms because `|` is not an infix operator (`parse_infix_symbol` has `||` but no bare `|`), so a motive term always terminates at the first `|`.
 pub(super) fn parse_match_prefix<'a>() -> Parser<'a, (Term, Option<Term>)> {
     catch(parse_keyword("match"))
         .and_keep(lazy(parse_term))

@@ -9,7 +9,7 @@ use {
         Tuple,
     },
     curios_num::Natural,
-    curios_utilities::NumOp,
+    curios_utilities::InfixOp,
     std::rc::Rc,
 };
 
@@ -617,7 +617,7 @@ pub trait TermBuilders {
     fn goal(id: impl Into<MetaId>) -> Self;
 
     /// An unresolved infix application ([`Infix`]) — elaboration-transient, consumed by `elaborate_infix`.
-    fn infix(op: NumOp, left: Term, right: Term) -> Self;
+    fn infix(op: InfixOp, left: Term, right: Term) -> Self;
 
     /// A postfix `!` sequencing site ([`Bang`]) — elaboration-transient, consumed by `elaborate_bang`. `action` is the sequenced description; `continuation` is the hoisted rest of the region as an ordinary one-parameter function.
     fn bang(action: Term, continuation: Term) -> Self;
@@ -700,7 +700,7 @@ impl TermBuilders for Term {
         }))
     }
 
-    fn infix(op: NumOp, left: Term, right: Term) -> Self {
+    fn infix(op: InfixOp, left: Term, right: Term) -> Self {
         Self::from(Subterm::Transient(Transient::Infix(Infix {
             op,
             left,

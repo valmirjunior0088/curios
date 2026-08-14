@@ -424,7 +424,7 @@ fn print_unary(name: &'static str, inner: Term, frame: Frame) -> Printer {
     flat([pure(name), sub(inner, frame)])
 }
 
-/// The surface infix symbol an operator intrinsic prints as, or `None` for an intrinsic with no infix spelling — the bitwise ops, conversions, `min`/`max`, and the `Bool.xor` that `!=` desugars through. Exactly the operators the surface language spells infix ([`NumOp::symbol`](super::NumOp::symbol)); the concept-dispatched arithmetic/comparison operators plus the two hardcoded `Bool` short-circuits.
+/// The surface infix symbol an operator intrinsic prints as, or `None` for an intrinsic with no infix spelling — the bitwise ops, conversions, `min`/`max`, and the `Bool.xor` that `!=` desugars through. Exactly the operators the surface language spells infix ([`InfixOp::symbol`](super::InfixOp::symbol)); the concept-dispatched arithmetic/comparison operators plus the two hardcoded `Bool` short-circuits.
 fn infix_symbol(intrinsic: &Intrinsic) -> Option<&'static str> {
     Some(match intrinsic {
         Intrinsic::NatAdd(..) | Intrinsic::IntAdd(..) | Intrinsic::FltAdd(..) => "+",

@@ -5,7 +5,7 @@ use {
     curios_num::Natural,
     curios_parse::{ParserError, run_parser, take_eof},
     curios_print::run_printer,
-    curios_utilities::{Grain, NumOp, Plicity, Source, Span},
+    curios_utilities::{Grain, InfixOp, Plicity, Source, Span},
     std::{fmt, ops::Deref, rc::Rc, str::FromStr, sync::Arc},
 };
 
@@ -469,7 +469,7 @@ pub struct Rec {
 /// A surface infix application `left <op> right`, produced by the precedence-climbing parser. Lowered verbatim to a `core::Infix` and resolved to a concrete scalar intrinsic during elaboration (the operand types are not yet known at lowering).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Infix {
-    pub op: NumOp,
+    pub op: InfixOp,
     pub left: Term,
     pub right: Term,
 }

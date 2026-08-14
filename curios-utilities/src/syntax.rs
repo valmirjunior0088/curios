@@ -2,7 +2,7 @@
 //!
 //! The registry is *shape only*: it names slots, never spellings. `curios-prelude` fills them, because that is the crate holding both the authored `.crs` declarations and the archive that proves each one exists; the two stages that emit `/syn` names — `curios-text`'s lowering and `curios-elab`'s type-directed features — read the filled registry rather than spelling anything themselves. That inversion is why this file lives below both consumers instead of beside the sources: a consumer must see the type, and the prelude sits above every consumer in the crate graph.
 
-use crate::{NumOp, Qualifier};
+use crate::{InfixOp, Qualifier};
 
 /// One compiler-known `/syn` name, stated as its module segments.
 ///
@@ -119,27 +119,27 @@ pub struct OperatorSyntax {
 
 impl OperatorSyntax {
     /// The concept and method `op` dispatches through. `Neq` has its own slot rather than sharing `Eql`'s: it projects `neq`, so a carrier with a native disequality instruction names it instead of paying for an equality and a negation.
-    pub const fn concept_field(self, op: NumOp) -> ConceptField {
+    pub const fn concept_field(self, op: InfixOp) -> ConceptField {
         match op {
-            NumOp::Add => self.add,
-            NumOp::Sub => self.sub,
-            NumOp::Mul => self.mul,
-            NumOp::Div => self.div,
-            NumOp::Rem => self.rem,
-            NumOp::Eql => self.eql,
-            NumOp::Neq => self.neq,
-            NumOp::Lt => self.lt,
-            NumOp::Gt => self.gt,
-            NumOp::Lte => self.lte,
-            NumOp::Gte => self.gte,
-            NumOp::And => self.and,
-            NumOp::Or => self.or,
+            InfixOp::Add => self.add,
+            InfixOp::Sub => self.sub,
+            InfixOp::Mul => self.mul,
+            InfixOp::Div => self.div,
+            InfixOp::Rem => self.rem,
+            InfixOp::Eql => self.eql,
+            InfixOp::Neq => self.neq,
+            InfixOp::Lt => self.lt,
+            InfixOp::Gt => self.gt,
+            InfixOp::Lte => self.lte,
+            InfixOp::Gte => self.gte,
+            InfixOp::And => self.and,
+            InfixOp::Or => self.or,
         }
     }
 
     /// The operator dispatching through `concept`'s `field` — [`OperatorSyntax::concept_field`]'s reverse, for folding an elaborated projection back to operator syntax in a report. Exact rather than lossy: `Neq` has its own slot, so `!=` folds back to `!=` instead of to an equality the reader would have to un-negate.
-    pub fn operator_for(self, concept: &Qualifier, field: &str) -> Option<NumOp> {
-        NumOp::ALL.into_iter().find(|op| {
+    pub fn operator_for(self, concept: &Qualifier, field: &str) -> Option<InfixOp> {
+        InfixOp::ALL.into_iter().find(|op| {
             let target = self.concept_field(*op);
             target.concept.qualifier() == *concept && target.field == field
         })
