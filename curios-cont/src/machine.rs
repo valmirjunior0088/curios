@@ -8,7 +8,7 @@ use {
         CpsIntrinsicOp, CpsLiteral, CpsModule, CpsNode, CpsNodeId, CpsValueExpr, CpsValueId, atoms,
     },
     curios_abi::ForeignFunction,
-    curios_base::{Entropy, id},
+    curios_utilities::{Entropy, id},
     std::{
         collections::{BTreeMap, BTreeSet, VecDeque},
         fmt,

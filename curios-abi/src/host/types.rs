@@ -4,7 +4,7 @@
 
 use {
     crate::{status, stdio},
-    num_bigint::BigUint,
+    curios_num::Natural,
 };
 
 /// A handle the guest shuttles across the host boundary: one of the three standard streams, or a host-minted token for an open file, socket, TLS config, or lookup. Mirrors the guest's `/sys/Handle` values; lifts from / lowers to its `Bytes` wire token (the opaque bytes a host mints — see [`bytes`](Self::bytes)).
@@ -23,12 +23,12 @@ impl Handle {
     const STDOUT: u32 = stdio::STDOUT;
     /// The well-known stderr handle token, the last before [`HANDLE_SEED`](Self::HANDLE_SEED).
     const STDERR: u32 = stdio::STDERR;
-    /// The first handle token a host mints, one past the stdio tokens so a minted file or socket handle never collides with stdin/stdout/stderr; each host counts up from here with an unbounded `BigUint`.
+    /// The first handle token a host mints, one past the stdio tokens so a minted file or socket handle never collides with stdin/stdout/stderr; each host counts up from here with a [`TokenMint`].
     pub const HANDLE_SEED: u32 = Self::STDERR + 1;
 
-    /// The canonical byte encoding of a token integer: its little-endian `BigUint` bytes. The single shared convention — the runtime mints and keys handles on it, and the `ersd → cont` lowering encodes the stdio constants `Handle(0/1/2)` the same way — so the two ends cannot drift.
+    /// The canonical byte encoding of a token integer: its little-endian [`Natural`] bytes. The single shared convention — [`TokenMint`] mints on it, hosts key their tables on it, and the `ersd → cont` lowering encodes the stdio constants `Handle(0/1/2)` the same way — so the three ends cannot drift.
     fn encode(token: u32) -> Vec<u8> {
-        BigUint::from(token).to_bytes_le()
+        Natural::from(token).to_bytes_le()
     }
 
     /// The raw wire token bytes: the stdio encodings, or the minted handle.
@@ -52,6 +52,38 @@ impl Handle {
         } else {
             Handle::Other(bytes)
         }
+    }
+}
+
+/// The monotonic source a host mints handle tokens from, seeded one past the stdio band so a minted token never collides with stdin/stdout/stderr.
+///
+/// It lives beside [`Handle`] rather than in the host that drives it because the token encoding is wire contract, not host policy: [`Handle::bytes`] reads back the same little-endian convention this writes. A host owns *when* to mint and what to file under the result; it does not get its own opinion about what a token looks like.
+///
+/// The counter is unbounded and never wraps, so a token is never reused. A closed handle's bytes are removed from the host's table and never minted again, which is what makes use-after-close a loud miss rather than a silent alias onto a later resource.
+pub struct TokenMint {
+    next: Natural,
+}
+
+impl TokenMint {
+    /// A mint seeded at [`Handle::HANDLE_SEED`], having issued nothing.
+    pub fn new() -> Self {
+        Self {
+            next: Natural::from(Handle::HANDLE_SEED),
+        }
+    }
+
+    /// The next token's canonical bytes, advancing the counter past it so no later call can reproduce them.
+    pub fn mint(&mut self) -> Vec<u8> {
+        let bytes = self.next.to_bytes_le();
+        self.next = &self.next + Natural::one();
+
+        bytes
+    }
+}
+
+impl Default for TokenMint {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

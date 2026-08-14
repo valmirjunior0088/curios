@@ -7,7 +7,6 @@ mod tests;
 
 use {
     super::{Context, check, reduce, reduce_forced, unfold_rec, unfold_rec_apply},
-    curios_base::Plicity,
     curios_core::{
         Apply, Bound, Carrier, Cases, Field, Free, Func, FuncType, InductType, Intrinsic, Level,
         Match, Metavar, Proj, Rec, ReduceError, Scope, Struct, StructType, Subterm, Telescope,
@@ -15,6 +14,7 @@ use {
         UniverseContext, UniverseInst, Variant, Visit, instantiate_universe_levels_scoped,
         project_erased_universes,
     },
+    curios_utilities::Plicity,
     std::{
         collections::{HashMap, HashSet, VecDeque},
         mem,

@@ -1,12 +1,12 @@
 use {
     super::subsumes,
     crate::{Kernel, KernelError, check, check_definition, infer},
-    curios_base::{Plicity, Qualifier},
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, MetaId, Nat, Polarity,
         StructDecl, StructType, Subterm, Telescope, Term, UniverseConstraint,
         UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseParam,
     },
+    curios_utilities::{Plicity, Qualifier},
 };
 
 fn kernel() -> Kernel {

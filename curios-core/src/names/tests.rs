@@ -1,6 +1,6 @@
 use {
     super::{Free, Global, Mint, WitnessId},
-    curios_base::Qualifier,
+    curios_utilities::Qualifier,
     std::collections::HashSet,
 };
 

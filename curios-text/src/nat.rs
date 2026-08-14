@@ -1,4 +1,4 @@
-use {super::Term, num_bigint::BigUint};
+use {super::Term, curios_num::Natural};
 
 /// The base a numeric literal was written in (`0x` hex, `0b` binary, or plain decimal). Purely presentational: retained through the surface tree so the printer round-trips the written form, dropped at lowering to core.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -10,10 +10,10 @@ pub enum Radix {
 
 /// The written form of a `Nat` literal's magnitude: a numeral together with its radix. Character literals are syntax-owned [`crate::Syn::Char`] values rather than natural-number spellings.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct NatLiteral(pub BigUint, pub Radix);
+pub struct NatLiteral(pub Natural, pub Radix);
 
 impl NatLiteral {
-    pub(crate) fn number(n: impl Into<BigUint>) -> Self {
+    pub(crate) fn number(n: impl Into<Natural>) -> Self {
         NatLiteral(n.into(), Radix::Dec)
     }
 }

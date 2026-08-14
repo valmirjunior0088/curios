@@ -2,7 +2,7 @@
 //!
 //! This crate cannot see `curios-prelude` — the dependency runs the other way, which is the whole reason the registry is supplied rather than spelled — so its unit tests need their own values, exactly as `curios-text`'s lowering tests do. The spellings match the real prelude's so a test that does reach a type-directed feature reaches the same declarations; nothing here is authoritative, and production compilation never constructs it.
 
-use curios_base::{
+use curios_utilities::{
     CharacterSyntax, ConceptField, LiftSyntax, MonadSyntax, OperatorSyntax, ProofSyntax,
     StringSyntax, SyntaxName, SyntaxRegistry,
 };

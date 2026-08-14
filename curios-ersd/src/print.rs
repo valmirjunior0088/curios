@@ -10,7 +10,7 @@ use {
         Atom, BlockId, Constant, FunctionId, Module, Rhs, Statement, StatementId, Terminator,
         ValueId,
     },
-    curios_base::Grain,
+    curios_utilities::Grain,
     std::fmt,
 };
 

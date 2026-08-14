@@ -20,7 +20,7 @@ mod tests;
 
 use {
     crate::TreeHash,
-    curios_base::{Mount, RootKind},
+    curios_utilities::{Mount, RootKind},
     sha2::{Digest, Sha256},
     std::path::PathBuf,
 };

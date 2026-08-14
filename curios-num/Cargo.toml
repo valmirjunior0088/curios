@@ -1,0 +1,21 @@
+[package]
+name = "curios-num"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The Curios numeric tower: the unbounded type-level Natural and Integer, the opaque Flt, and the erased carriers' scalar semantics"
+
+[lints]
+workspace = true
+
+[features]
+archive = ["curios-archive/enabled"]
+
+# The one place in the workspace num-bigint and num-traits are named, so the pins live
+# here rather than in the workspace table. A row in `[workspace.dependencies]` shares
+# configuration; it does not concentrate authority, because any crate may still add
+# `num-bigint = { workspace = true }` without anyone deciding it should.
+[dependencies]
+curios-archive = { workspace = true }
+num-bigint = { version = "0.5.1" }
+num-traits = { version = "0.2.19" }

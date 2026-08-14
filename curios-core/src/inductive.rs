@@ -1,6 +1,6 @@
 use {
     super::{Atom, Polarity, Telescope, Term, UniverseContext},
-    curios_base::{Plicity, Qualifier},
+    curios_utilities::{Plicity, Qualifier},
 };
 
 /// One constructor's registry signature: its full telescope.

@@ -1,7 +1,7 @@
 use {
     super::print_term,
     crate::Term,
-    curios_base::printer::{Printer, run_printer_within},
+    curios_print::{Printer, run_printer_within},
     std::{cell::Cell, fmt},
 };
 

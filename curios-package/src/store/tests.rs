@@ -1,4 +1,4 @@
-use {super::*, curios_base::Qualifier};
+use {super::*, curios_utilities::Qualifier};
 
 /// A binary nests under the package that declares it — so two members of one umbrella declaring `serve` cannot collide, and nothing has to refuse it.
 #[test]

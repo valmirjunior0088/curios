@@ -26,12 +26,12 @@ use {
         Kernel, KernelError, Sort, check_group, convert::convert, sort::as_sort, sort::infer_sort,
         synth_neutral,
     },
-    curios_base::{Grain, PackedBin, recurse},
     curios_core::{
         Apply, Bound, Carrier, Cases, Field, Free, Func, FuncType, InductType, Intrinsic, Let,
         Many, Nat, One, Proj, Rec, Reducer, Scope, Struct, StructType, Subterm, Telescope, Term,
         Tuple, TupleType, UniverseInst, Variant, wire_term,
     },
+    curios_utilities::{Grain, PackedBin, recurse},
 };
 
 /// The type of `term`.

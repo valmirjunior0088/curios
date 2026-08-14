@@ -1,6 +1,6 @@
 use {
     crate::*,
-    curios_base::{Plicity, Qualifier},
+    curios_utilities::{Plicity, Qualifier},
     std::{
         collections::{BTreeSet, HashSet, hash_map::RandomState},
         hash::BuildHasher,

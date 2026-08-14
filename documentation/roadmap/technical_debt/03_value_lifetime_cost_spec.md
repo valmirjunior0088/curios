@@ -180,7 +180,7 @@ The survey must report which candidates continuation-only splitting reaches, whi
 
 The string ladder must attribute the returned `Scan`, caller-side return reconstruction, accumulator tuple, scan argument reconstruction and suffix view using four isolated mechanisms: one probe may track the returned `Scan` as its construction moves from callee to caller, while the other three each require their own instrument or isolated transformation. Their shares must not be inferred from the number of operations in the loop or from a count scoped only to the emitted fold body.
 
-Raw pre-Binaryen and optimized native artifacts must be compared so the work distinguishes an upstream optimization unlock from an allocation Binaryen already removes. M0 must also establish an automated browser execution smoke fixture for a raw compiler-produced module, because building `curios-web` alone does not demonstrate that the browser accepts or executes the result.
+Raw pre-Binaryen and optimized native artifacts must be compared so the work distinguishes an upstream optimization unlock from an allocation Binaryen already removes. M0 must also establish an automated browser execution smoke fixture for a raw compiler-produced module, because building `curios-js` alone does not demonstrate that the browser accepts or executes the result.
 
 Any field-count, signature-growth or clone budget must be selected from that survey and recorded beside the test or instrument that justifies it.
 

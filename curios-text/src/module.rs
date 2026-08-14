@@ -8,11 +8,9 @@ use {
         take_comments,
     },
     curios_abi::WireSignature,
-    curios_base::{
-        Plicity, Source, Span,
-        parser::{ParserError, lazy, many0, run_parser, spanned, take_eof},
-        printer::{flat, pure, run_printer},
-    },
+    curios_parse::{ParserError, lazy, many0, run_parser, spanned, take_eof},
+    curios_print::{flat, pure, run_printer},
+    curios_utilities::{Plicity, Source, Span},
     std::{fmt, path::Path, rc::Rc, str::FromStr},
 };
 

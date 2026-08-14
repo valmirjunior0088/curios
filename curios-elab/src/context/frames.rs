@@ -4,8 +4,8 @@
 
 use {
     super::{SharedSpine, SharedTelescope},
-    curios_base::Entropy,
     curios_core::{DefinitionKind, Free, HeadTag, Term, UniverseContext, project_erased_universes},
+    curios_utilities::Entropy,
     std::{collections::HashMap, rc::Rc},
 };
 

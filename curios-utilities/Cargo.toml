@@ -1,9 +1,9 @@
 [package]
-name = "curios-base"
+name = "curios-utilities"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Foundational utilities shared across every Curios stage: spans, names, entropy, parser/printer monads, and packed values"
+description = "Foundational utilities shared across every Curios stage: spans, names, entropy, the typed arena, and packed values"
 
 [lints]
 workspace = true
@@ -13,6 +13,4 @@ archive = ["curios-archive/enabled"]
 
 [dependencies]
 curios-archive = { workspace = true }
-num-bigint = { workspace = true }
-num-traits = { workspace = true }
 stacker = { version = "0.1.25" }

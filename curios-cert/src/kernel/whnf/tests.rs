@@ -1,11 +1,11 @@
 use {
     super::unfold_rec,
     crate::{Kernel, whnf},
-    curios_base::Qualifier,
     curios_core::{
         Apply, Free, Global, Intrinsic, Level, Nat, ReduceError, Reducer, Subterm, Term,
         UniverseContext,
     },
+    curios_utilities::Qualifier,
 };
 
 /// The kernel every test starts from. The floor keeps the identities minted below out of the range the kernel mints from for eta-contraction, exactly as a real caller must seed it above the lowerer's and the elaborator's binders.

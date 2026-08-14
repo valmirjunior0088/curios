@@ -9,13 +9,13 @@ description = "The Curios erased IR: post-erasure optimization and lowering to c
 workspace = true
 
 [features]
-archive = ["curios-archive/enabled", "curios-abi/archive", "curios-base/archive"]
+archive = ["curios-archive/enabled", "curios-abi/archive", "curios-utilities/archive", "curios-num/archive"]
 profile = ["curios-profile/enabled"]
 
 [dependencies]
 curios-archive = { workspace = true }
 curios-profile = { workspace = true }
 curios-abi = { workspace = true }
-curios-base = { workspace = true }
+curios-utilities = { workspace = true }
 curios-cont = { workspace = true }
-num-bigint = { workspace = true }
+curios-num = { workspace = true }

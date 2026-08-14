@@ -8,13 +8,13 @@ use {
         retry_deferred_witnesses, sort_term, zonk, zonk_arity, zonk_module, zonk_solved_term_metas,
     },
     curios_analysis::group_totality,
-    curios_base::Qualifier,
     curios_core::{
         Bound, ConceptDecl, Definition, DefinitionKind, Free, FuncType, Global, InductDecl,
         InductParam, Item, Level, Module, RecItem, SelfReference, StructDecl, Subterm, Telescope,
         Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
         UniverseMetaId, Visit, stamp_declaration_instance, universe_metas,
     },
+    curios_utilities::Qualifier,
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet},

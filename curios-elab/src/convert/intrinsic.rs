@@ -6,10 +6,10 @@
 
 use {
     super::Convert,
-    curios_base::{Grain, PackedBin},
     curios_core::{
         Intrinsic, Peel, ReduceError, Subterm, Term, Var, Visit, peel_bin, peel_list, peel_nat,
     },
+    curios_utilities::{Grain, PackedBin},
 };
 
 pub(crate) fn convert_intrinsic(

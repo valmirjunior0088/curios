@@ -7,13 +7,13 @@ use {
     crate::{Globals, KernelError},
     curios_abi::{ForeignFunction, WireSignature, WireType},
     curios_analysis::Erased,
-    curios_base::{Plicity, Qualifier},
     curios_core::{
         Atom, Definition, DefinitionKind, Free, Func, FuncType, Global, InductDecl, InductParam,
         Intrinsic, Item, Level, Many, Module, Nat, RecGroup, RecMemberScopes, Scope, StructDecl,
         StructType, Subterm, Telescope, Term, Totality, UniverseConstraint, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseContext, UniverseMetaId, UniverseParam,
     },
+    curios_utilities::{Plicity, Qualifier},
     std::{
         collections::{BTreeMap, BTreeSet},
         panic::{AssertUnwindSafe, catch_unwind},

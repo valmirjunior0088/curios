@@ -1,0 +1,14 @@
+[package]
+name = "curios-print"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "The Curios pretty-printing combinator DSL: the Wadler document algebra every IR's Display impls are written in"
+
+[lints]
+workspace = true
+
+# No dependencies, deliberately: the document algebra is defined over `std::fmt`
+# alone, so nothing about a Curios term reaches it. That is what lets every IR
+# crate depend on it without depending on each other.
+[dependencies]

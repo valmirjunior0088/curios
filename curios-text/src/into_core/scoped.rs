@@ -10,8 +10,8 @@ use std::collections::{BTreeMap, HashMap};
 
 pub(super) struct Scoped<'a, V> {
     /// What each unit already in scope established, in dependency order. Empty when the unit being lowered is the first and there is nothing beneath it.
-    bases: &'a [&'a BTreeMap<curios_base::Qualifier, V>],
-    own: HashMap<curios_base::Qualifier, V>,
+    bases: &'a [&'a BTreeMap<curios_utilities::Qualifier, V>],
+    own: HashMap<curios_utilities::Qualifier, V>,
 }
 
 impl<V> Default for Scoped<'_, V> {
@@ -25,7 +25,7 @@ impl<V> Default for Scoped<'_, V> {
 
 impl<'a, V> Scoped<'a, V> {
     /// A map layered over `bases`, in dependency order.
-    pub(super) fn over(bases: &'a [&'a BTreeMap<curios_base::Qualifier, V>]) -> Self {
+    pub(super) fn over(bases: &'a [&'a BTreeMap<curios_utilities::Qualifier, V>]) -> Self {
         Self {
             bases,
             own: HashMap::new(),
@@ -33,17 +33,17 @@ impl<'a, V> Scoped<'a, V> {
     }
 
     /// The unit's own, then its scope's, latest first. A name the unit declares shadows one a base does, and a later unit's shadows an earlier one's — neither can arise, since mount sets are pairwise disjoint, and the rule is stated so the type has an answer rather than a precondition.
-    pub(super) fn get(&self, name: &curios_base::Qualifier) -> Option<&V> {
+    pub(super) fn get(&self, name: &curios_utilities::Qualifier) -> Option<&V> {
         self.own
             .get(name)
             .or_else(|| self.bases.iter().rev().find_map(|base| base.get(name)))
     }
 
-    pub(super) fn insert(&mut self, name: curios_base::Qualifier, value: V) -> Option<V> {
+    pub(super) fn insert(&mut self, name: curios_utilities::Qualifier, value: V) -> Option<V> {
         self.own.insert(name, value)
     }
 
-    pub(super) fn get_mut(&mut self, name: &curios_base::Qualifier) -> Option<&mut V> {
+    pub(super) fn get_mut(&mut self, name: &curios_utilities::Qualifier) -> Option<&mut V> {
         self.own.get_mut(name)
     }
 
@@ -52,7 +52,7 @@ impl<'a, V> Scoped<'a, V> {
     /// The union, because the passes that iterate are the ones that reason about *visibility* — who can see what, and what a public entry exposes — and those cross the boundary by nature: a unit's public item may hand out a type from its scope. A pass that only reports on the unit's own declarations wants [`Scoped::own`] instead.
     ///
     /// Deduplicated against nearer halves rather than against a merged set, which is the same shadowing rule [`Scoped::get`] answers by and is likewise unreachable while mount sets stay disjoint.
-    pub(super) fn iter(&self) -> impl Iterator<Item = (&curios_base::Qualifier, &V)> {
+    pub(super) fn iter(&self) -> impl Iterator<Item = (&curios_utilities::Qualifier, &V)> {
         self.own.iter().chain(
             self.bases
                 .iter()
@@ -71,11 +71,11 @@ impl<'a, V> Scoped<'a, V> {
     /// Only what the unit declares.
     ///
     /// Every walk that *reports* — dead-entry classification above all — wants this rather than the union: whether a scope's interface has an unused entry was settled when that unit was prepared, and re-deciding it against one program's imports would answer about the wrong thing.
-    pub(super) fn own(&self) -> &HashMap<curios_base::Qualifier, V> {
+    pub(super) fn own(&self) -> &HashMap<curios_utilities::Qualifier, V> {
         &self.own
     }
 
-    pub(super) fn into_own(self) -> HashMap<curios_base::Qualifier, V> {
+    pub(super) fn into_own(self) -> HashMap<curios_utilities::Qualifier, V> {
         self.own
     }
 }

@@ -9,7 +9,7 @@ mod tests;
 
 use {
     crate::TreeHash,
-    curios_base::{is_identifier, is_keyword},
+    curios_utilities::{is_identifier, is_keyword},
     serde::Deserialize,
     std::{
         collections::BTreeMap,

@@ -5,7 +5,7 @@
 use {
     super::simplify::{rewire_node, rewrite_atoms},
     super::*,
-    curios_base::Grain,
+    curios_utilities::Grain,
     std::collections::{BTreeMap, BTreeSet},
 };
 

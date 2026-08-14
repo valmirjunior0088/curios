@@ -1,7 +1,8 @@
 use {
     crate::*,
     curios_abi::{WireLeaf, WireSignature, WireType},
-    curios_base::{Flt, Grain, NumOp, Plicity, Qualifier},
+    curios_num::Flt,
+    curios_utilities::{Grain, NumOp, Plicity, Qualifier},
 };
 
 #[test]
@@ -2456,7 +2457,7 @@ fn lone_comma_is_not_an_empty_list() {
 
 /// The captured comment texts of one parse, in offset order.
 fn comments_of(source: &str) -> Vec<String> {
-    let source = curios_base::Source::inline(source);
+    let source = curios_utilities::Source::inline(source);
     let (_, comments) = Module::parse_with_comments(&source).expect("fixture parses");
     comments
         .iter()
@@ -2499,7 +2500,7 @@ fn backtracked_positions_record_a_comment_once() {
 
 #[test]
 fn entrypoint_parses_capture_tail_comments() {
-    let source = curios_base::Source::inline("let x : Nat = 5; -- item\nx -- tail\n");
+    let source = curios_utilities::Source::inline("let x : Nat = 5; -- item\nx -- tail\n");
     let (_, comments) = Entrypoint::parse_with_comments(&source).expect("fixture parses");
     let texts = comments
         .iter()

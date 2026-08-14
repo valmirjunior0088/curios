@@ -833,7 +833,7 @@ impl<'a> Table<'a> {
             .clone()
     }
 
-    /// Deliberately no iterating accessor: these are `HashMap`s, so iteration order varies per process, and every consumer here emits into the module — where order is load-bearing for a reproducible build. Walk [`EmissionModule`]'s own ordered sequence and resolve each name through this index instead, which is what `curios-base`'s `name!` means by carrying an explicit sequence where the order matters.
+    /// Deliberately no iterating accessor: these are `HashMap`s, so iteration order varies per process, and every consumer here emits into the module — where order is load-bearing for a reproducible build. Walk [`EmissionModule`]'s own ordered sequence and resolve each name through this index instead, which is what `curios-utilities`'s `name!` means by carrying an explicit sequence where the order matters.
     /// The carrier this value is held at in a register, or `None` when it is held behind a reference.
     pub(crate) fn raw_carrier(&self, value_name: &EmissionValueName) -> Option<Repr> {
         self.raw.get(value_name).copied()

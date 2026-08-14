@@ -5,8 +5,8 @@
 use {
     super::{FrozenFrame, SharedTelescope},
     crate::Goal,
-    curios_base::Entropy,
     curios_core::{Bound, MetaId, Metavar, MetavarOrigin, Subterm, Term, WitnessOrigin},
+    curios_utilities::Entropy,
     std::{collections::BTreeSet, mem},
 };
 

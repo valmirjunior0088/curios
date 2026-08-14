@@ -1,7 +1,8 @@
 use curios_core::*;
 use {
     crate::*,
-    curios_base::{Grain, Int, PackedBin, Plicity, Qualifier},
+    curios_num::Integer,
+    curios_utilities::{Grain, PackedBin, Plicity, Qualifier},
 };
 
 /// A declaration's name, from the path a test writes. Fixture-only.
@@ -212,7 +213,7 @@ fn convert_intrinsic_recurses_into_operands() {
         [&x],
         Subterm::Intrinsic(Intrinsic::int_add(
             Term::free_var(&x),
-            Subterm::Intrinsic(Intrinsic::Int(Int::new(1))),
+            Subterm::Intrinsic(Intrinsic::Int(Integer::from(1))),
         )),
     );
 
@@ -220,7 +221,7 @@ fn convert_intrinsic_recurses_into_operands() {
         [&y],
         Subterm::Intrinsic(Intrinsic::int_add(
             Term::free_var(&y),
-            Subterm::Intrinsic(Intrinsic::Int(Int::new(1))),
+            Subterm::Intrinsic(Intrinsic::Int(Integer::from(1))),
         )),
     );
 
@@ -236,7 +237,7 @@ fn convert_intrinsic_distinguishes_operator_kind() {
         [&x],
         Subterm::Intrinsic(Intrinsic::int_add(
             Term::free_var(&x),
-            Subterm::Intrinsic(Intrinsic::Int(Int::new(1))),
+            Subterm::Intrinsic(Intrinsic::Int(Integer::from(1))),
         )),
     );
 
@@ -244,7 +245,7 @@ fn convert_intrinsic_distinguishes_operator_kind() {
         [&x],
         Subterm::Intrinsic(Intrinsic::int_sub(
             Term::free_var(&x),
-            Subterm::Intrinsic(Intrinsic::Int(Int::new(1))),
+            Subterm::Intrinsic(Intrinsic::Int(Integer::from(1))),
         )),
     );
 

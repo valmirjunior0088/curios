@@ -8,7 +8,7 @@
 mod tests;
 
 use {
-    curios_base::{Qualifier, name},
+    curios_utilities::{Qualifier, name},
     std::{cmp::Ordering, fmt, hash},
 };
 

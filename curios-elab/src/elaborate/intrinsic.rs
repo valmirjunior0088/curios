@@ -1,8 +1,8 @@
 use {
     super::{Context, Error, Mode, elaborate, expect},
     crate::reduce_with,
-    curios_base::Grain,
     curios_core::{ImplicitOrigin, Intrinsic, Subterm, Term},
+    curios_utilities::Grain,
 };
 
 /// Elaborate both operands of a homogeneous binary intrinsic at `operand`, then rebuild the variant through its constructor (`build`) and pair it with `result`. Lets each arm name itself once instead of destructuring an OR-pattern and re-matching just to reattach the elaborated operands.

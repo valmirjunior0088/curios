@@ -2,11 +2,11 @@ use crate::{
     Entrypoint, Error, Intrinsic, LetSignature, RootSource, Subterm, Term, TopItem, sys_module,
 };
 use curios_abi::{WireType, host_ops};
-use curios_base::{
+use curios_elab::TermBuilders;
+use curios_utilities::{
     CharacterSyntax, ConceptField, LiftSyntax, MonadSyntax, OperatorSyntax, ProofSyntax, Qualifier,
     RootKind, StringSyntax, SyntaxName, SyntaxRegistry,
 };
-use curios_elab::TermBuilders;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -2030,7 +2030,7 @@ fn file_backed_module_missing_from_loader_is_module_not_found() {
 
 /// A source that is not a directory resolves, and resolves to the same unit one that is does.
 ///
-/// The whole resolver contract is a qualifier in and a module out, and nothing above it may assume a filesystem: `curios-web` supplies every body inline and compiles with none at all, and a package fetched from anywhere arrives as bytes somebody else placed. So the two bases are written here against one another rather than each against itself — one of them being wrong is the interesting failure, not either of them being broken.
+/// The whole resolver contract is a qualifier in and a module out, and nothing above it may assume a filesystem: `curios-js` supplies every body inline and compiles with none at all, and a package fetched from anywhere arrives as bytes somebody else placed. So the two bases are written here against one another rather than each against itself — one of them being wrong is the interesting failure, not either of them being broken.
 #[test]
 fn a_supplied_source_and_a_directory_resolve_alike() {
     const HEADER: &str = "pub mod Inner;";

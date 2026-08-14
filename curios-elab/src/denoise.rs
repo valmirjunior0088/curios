@@ -11,11 +11,11 @@ mod tests;
 
 use {
     super::{Context, TermBuilders},
-    curios_base::NumOp,
     curios_core::{
         Apply, Bound, Field, Free, Global, Metavar, MetavarOrigin, Proj, StructType, Subterm, Term,
         UniverseInst, Visit,
     },
+    curios_utilities::NumOp,
     std::{collections::BTreeMap, rc::Rc},
 };
 
@@ -83,7 +83,7 @@ fn fold(table: &Operators, binders: &BinderTypes, term: &Term) -> Option<Term> {
     ))
 }
 
-/// Recognize `Apply(Proj(witness, index), [left, right])` — the exact shape `elaborate_infix` rebuilds — and name its operator. `!=` needs no special case: `Neq` has its own concept slot, so [`OperatorSyntax::operator_for`](curios_base::OperatorSyntax::operator_for) keys the `neq` projection exactly.
+/// Recognize `Apply(Proj(witness, index), [left, right])` — the exact shape `elaborate_infix` rebuilds — and name its operator. `!=` needs no special case: `Neq` has its own concept slot, so [`OperatorSyntax::operator_for`](curios_utilities::OperatorSyntax::operator_for) keys the `neq` projection exactly.
 fn operator_call<'a>(
     table: &Operators,
     binders: &BinderTypes,

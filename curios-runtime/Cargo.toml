@@ -9,17 +9,32 @@ description = "The runtime-only Curios engine: .cwasm deserialization, host bind
 workspace = true
 
 # Lib (the engine/host API, reused by curios) + bin (the launcher stub).
-# Declares no compile-ish feature and never names Cranelift or Binaryen: building
-# `-p curios-runtime` yields a slim, runtime-only launcher.
+# Building `-p curios-runtime` yields a slim, runtime-only launcher: `cranelift`
+# below is never in `default`, so the isolated build `make curios/runtime` runs
+# cannot reach a compiler. That property is checked against the shipped bytes by
+# `curios/src/bundle.rs`'s guards, not merely asserted here.
 
 [features]
 # Emit a perf map for the guest, so a sampling profiler can name emitted wasm functions. Carries no dependency: the whole feature is one `Config` call, and it is spelled as a feature rather than an environment variable so profiling is a property of the build like every other `profile` in this workspace.
 profile = []
+# Cranelift, for the AOT half `curios` needs. **Never add this to `default`.** It gates API surface rather than only linkage — `precompile` does not exist without it — so a caller that needs compilation gets a named missing function instead of a silently fatter binary. Enabling it grows the launcher from ~3.6 MB to ~11.7 MB, which is exactly what the bundle guards refuse.
+cranelift = ["wasmtime/cranelift"]
+# `GuestInstance`, for a *test* that drives an emitted module by hand — `curios-js`'s bridge suite. Implies `cranelift` because instantiating compiles. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, so a `cfg(test)` item is invisible to another crate's tests; a dev-dependency carries the crate, not its private test code.
+test-support = ["cranelift"]
 
 [dependencies]
 curios-abi = { workspace = true }        # for the host<->guest wire ABI constants
-wasmtime = { workspace = true }          # runtime baseline only (no cranelift)
-num-bigint = { workspace = true }
+# The one place in the workspace wasmtime is named, so the pin and the feature set
+# live here rather than in the workspace table — the arrangement `curios-archive`
+# and `curios-num` use for rkyv and num-bigint. It also makes the version-match
+# invariant structural: `curios` precompiles a `.cwasm` and the launcher
+# deserializes it, and with a single row they cannot drift.
+wasmtime = { version = "46.0.1", default-features = false, features = [
+    "runtime",
+    "gc",
+    "gc-copying",
+    "std",
+] }
 getrandom = { version = "0.4.3" }
 socket2 = { version = "0.6.4" }
 rustix = { version = "1.1.4", features = ["event"] }

@@ -6,7 +6,7 @@ use {
         rope_leaf_sub_type, rope_node_sub_type, rope_view_sub_type,
     },
     curios_abi::WireType,
-    curios_base::{Grain, PackedBin},
+    curios_utilities::{Grain, PackedBin},
     std::iter,
 };
 
@@ -26,7 +26,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    /// The binary rope family: the flat `$bytes` payload (the host-boundary shape), the `$rope/bin` base, and its `leaf`/`node`/`view` subtypes. Each is its own singleton recursion group — `$bytes` must canonicalize equal to the type curios-web's bridge declares standalone, and a subtype may reference any *earlier* group.
+    /// The binary rope family: the flat `$bytes` payload (the host-boundary shape), the `$rope/bin` base, and its `leaf`/`node`/`view` subtypes. Each is its own singleton recursion group — `$bytes` must canonicalize equal to the type curios-js's bridge declares standalone, and a subtype may reference any *earlier* group.
     fn emit_bin_rope_types(&mut self) {
         let rope = self.table.bin_rope();
 

@@ -1,7 +1,7 @@
 use {
     super::{OperatorTable, denoise_for_display},
-    curios_base::{NumOp, Qualifier},
     curios_core::{Free, Global, Infix, Subterm, Term, Transient},
+    curios_utilities::{NumOp, Qualifier},
     std::{collections::BTreeMap, rc::Rc},
 };
 

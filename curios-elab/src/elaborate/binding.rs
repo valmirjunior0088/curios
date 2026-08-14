@@ -238,13 +238,13 @@ pub(super) fn elaborate_num_lit(
             (Intrinsic::Byte(value), byte_type)
         }
         Subterm::Intrinsic(Intrinsic::IntType) => {
-            let magnitude = BigInt::from(num_lit.magnitude.clone());
+            let magnitude = Integer::from(num_lit.magnitude.clone());
             let value = if num_lit.negative {
                 -magnitude
             } else {
                 magnitude
             };
-            (Intrinsic::Int(Int::new(value)), int_type)
+            (Intrinsic::Int(value), int_type)
         }
         Subterm::Intrinsic(Intrinsic::FltType) => {
             // `to_f32` saturates an overflowing magnitude to infinity, a value no literal can spell — refused like the `Byte` range above, never minted.
@@ -545,7 +545,7 @@ fn declared_result_key(
 
 /// Elaborate an infix operator ([`Infix`]) as a concept method call. A fresh operand-type metavar `?T` is pinned by the non-literal operands first (or, for an operator whose method returns its operand type, by the expected result type), then defaulted from the operand literals if nothing constrains it; only then are the literal operands checked — against a `?T` that is already concrete, so they never force it to their own default. That ordering is what lets `1 + flt` resolve to `Flt` rather than a `Nat`/`Flt` mismatch.
 ///
-/// Dispatch is then **one path**: every operator desugars to a projection of a witness of its `/syn` concept ([`OperatorSyntax::concept_field`](curios_base::OperatorSyntax::concept_field)) — `a + b` ≙ `Add/add(a, b)`, intrinsics included, resolved by the same engine that fills `use` slots (so `no witness of Add(Point)` is the single error vocabulary, and what an operator means at a type is entirely a question of which witnesses exist). There are no carved-out operators: `&&`/`||` project `And`/`Or`, and `!=` projects `Eql`'s `neq` rather than negating a rebuilt `eql`, so this function synthesizes no term of its own and reads every result type from the declaration. The node never survives elaboration; witness projections over the statically-known intrinsic witnesses collapse back to bare `Intrinsic` code in the backend (`And(Bool)`/`Or(Bool)` collapse to `BoolAnd`/`BoolOr` exactly as `Eql(Bool)` collapses to `BoolEql` — see the codegen parity tests).
+/// Dispatch is then **one path**: every operator desugars to a projection of a witness of its `/syn` concept ([`OperatorSyntax::concept_field`](curios_utilities::OperatorSyntax::concept_field)) — `a + b` ≙ `Add/add(a, b)`, intrinsics included, resolved by the same engine that fills `use` slots (so `no witness of Add(Point)` is the single error vocabulary, and what an operator means at a type is entirely a question of which witnesses exist). There are no carved-out operators: `&&`/`||` project `And`/`Or`, and `!=` projects `Eql`'s `neq` rather than negating a rebuilt `eql`, so this function synthesizes no term of its own and reads every result type from the declaration. The node never survives elaboration; witness projections over the statically-known intrinsic witnesses collapse back to bare `Intrinsic` code in the backend (`And(Bool)`/`Or(Bool)` collapse to `BoolAnd`/`BoolOr` exactly as `Eql(Bool)` collapses to `BoolEql` — see the codegen parity tests).
 pub(super) fn elaborate_infix(
     context: &mut Context,
     infix: &Infix,

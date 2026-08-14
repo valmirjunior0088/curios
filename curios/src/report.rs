@@ -15,7 +15,7 @@
 //! **A group's header is the one line terminated before its work is done.** Nesting costs that much of the rule above: `Building hello` has to close so the `↳` lines can follow it, and the group ends by dedent rather than by a closing line of its own. What the rule protects survives and sharpens — the unterminated line is now the innermost one, so an interrupted compile names the step it died in rather than the group around it.
 
 use {
-    curios_base::Qualifier,
+    curios_utilities::Qualifier,
     std::{fmt, path::PathBuf, time::Instant},
 };
 

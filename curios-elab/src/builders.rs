@@ -3,13 +3,13 @@
 //! Extension traits keep every call site spelling what it always spelled — `Intrinsic::flt_add(…)`, `Term::struct_at(…)` — under a plain trait import (`use curios_elab::IntrinsicBuilders;`). The representation crate keeps only the constructors its own fold table and the certifier name; everything that exists purely so a lowering or an elaborator reads well lives here.
 
 use {
-    curios_base::NumOp,
     curios_core::{
         Apply, Bang, Free, Func, FuncType, Global, Infix, Intrinsic, Level, Many, MetaId, Metavar,
         MetavarOrigin, NumLit, Scope, Struct, StructEntry, StructType, Subterm, Term, Transient,
         Tuple,
     },
-    num_bigint::BigUint,
+    curios_num::Natural,
+    curios_utilities::NumOp,
     std::rc::Rc,
 };
 
@@ -630,7 +630,7 @@ pub trait TermBuilders {
         M: Into<Term>;
 
     /// A polymorphic numeric literal ([`NumLit`]) — elaboration-transient, resolved to a concrete `Nat`/`Int`/`Flt` intrinsic by `elaborate_numlit`.
-    fn num_lit(magnitude: BigUint, signed: bool, negative: bool) -> Self;
+    fn num_lit(magnitude: Natural, signed: bool, negative: bool) -> Self;
 
     /// A struct literal carrying the written entry shapes from `into_core`; elaboration validates them against the declared fields and rebuilds entry-free, exactly like `tuple_named`.
     fn struct_entries<I, P, J, T>(name: Global, params: I, fields: J) -> Self
@@ -722,7 +722,7 @@ impl TermBuilders for Term {
         Scope::constant(Many(0), motive.into())
     }
 
-    fn num_lit(magnitude: BigUint, signed: bool, negative: bool) -> Self {
+    fn num_lit(magnitude: Natural, signed: bool, negative: bool) -> Self {
         Self::from(Subterm::Transient(Transient::NumLit(NumLit {
             magnitude,
             signed,

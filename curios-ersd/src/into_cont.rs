@@ -17,8 +17,8 @@ use {
         ValueId, VariantArm,
     },
     curios_abi::ForeignFunction,
-    curios_base::{Grain, PackedBin},
-    num_bigint::BigUint,
+    curios_num::Natural,
+    curios_utilities::{Grain, PackedBin},
     std::{
         collections::{BTreeMap, BTreeSet},
         sync::Arc,
@@ -1532,7 +1532,7 @@ impl Lowerer<'_> {
             // A Handle descriptor token rides the packed-binary carrier: its little-endian bytes at byte grain.
             Constant::Handle(token) => curios_cont::CpsLiteral::Bin(
                 Grain::X,
-                PackedBin::from_bytes(BigUint::from(*token).to_bytes_le()),
+                PackedBin::from_bytes(Natural::from(*token).to_bytes_le()),
             ),
         }
     }

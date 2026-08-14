@@ -12,7 +12,7 @@ workspace = true
 archive = [
     "curios-archive/enabled",
     "curios-abi/archive",
-    "curios-base/archive",
+    "curios-utilities/archive",
     "curios-core/archive",
     "curios-elab/archive",
     "curios-ersd/archive",
@@ -34,7 +34,7 @@ profile = [
 [dependencies]
 curios-abi = { workspace = true }
 curios-archive = { workspace = true }
-curios-base = { workspace = true }
+curios-utilities = { workspace = true }
 curios-core = { workspace = true }
 curios-elab = { workspace = true }
 curios-ersd = { workspace = true }

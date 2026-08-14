@@ -24,8 +24,8 @@
 mod tests;
 
 use {
-    curios_base::recurse,
     curios_core::{Level, LevelHead, UniverseConstraint},
+    curios_utilities::recurse,
 };
 
 /// Search nodes this decision will visit before giving up.

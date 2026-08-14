@@ -14,7 +14,7 @@ use {
         StatementId, Terminator, ValueId, VariantFamily,
     },
     curios_abi::ForeignFunction,
-    curios_base::Arena,
+    curios_utilities::Arena,
     std::{collections::HashMap, sync::Arc},
 };
 

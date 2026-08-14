@@ -60,7 +60,7 @@ pub(super) fn parse_radix<'a>(
     tag: Radix,
 ) -> Parser<'a, NatLiteral> {
     take_exact(prefix).and_keep(take_while(move |char: char| char.is_digit(radix)).flat_map(
-        move |digits| match BigUint::parse_bytes(digits.as_bytes(), radix) {
+        move |digits| match Natural::parse_bytes(digits.as_bytes(), radix) {
             Some(value) => pure(NatLiteral(value, tag)),
             None => fail(format!("expected base-{radix} digits after '{prefix}'")),
         },
@@ -72,9 +72,9 @@ pub(super) fn parse_nat_digits<'a>() -> Parser<'a, NatLiteral> {
         .or(catch(parse_radix("0b", 2, Radix::Bin)))
         .or(
             take_while(|char: char| char.is_ascii_digit()).flat_map(|digits| {
-                match digits.parse::<BigUint>() {
-                    Ok(value) => pure(NatLiteral(value, Radix::Dec)),
-                    Err(_) => fail("expected nat"),
+                match Natural::parse_bytes(digits.as_bytes(), 10) {
+                    Some(value) => pure(NatLiteral(value, Radix::Dec)),
+                    None => fail("expected nat"),
                 }
             }),
         )

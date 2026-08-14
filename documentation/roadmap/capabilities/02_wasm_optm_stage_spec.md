@@ -40,7 +40,7 @@ M0 can land today; M2 is the bulk; M3 is small and strictly last.
 
 - Parsing arbitrary third-party modules: the reader's contract is Binaryen's output for our envelope, stated rather than silently assumed.
 - Validation: Binaryen validated; the reader asserts on surprises.
-- The browser path: `curios-web` never reads binaries.
+- The browser path: `curios-js` never reads binaries.
 - Parsing Binaryen's text output, at any point.
 
 ## Rejected

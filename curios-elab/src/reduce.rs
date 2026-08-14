@@ -3,7 +3,6 @@ mod tests;
 
 use {
     super::{Context, zonk_solved_term_metas},
-    curios_base::recurse,
     curios_core::{
         Apply, Bound, Carrier, Cases, Field, Free, FreeMonoid, Func, FuncType, Global, InductDecl,
         InductType, Intrinsic, Layer, Let, Many, Match, Metavar, Nat, One, Proj, Rec, RecGroup,
@@ -11,7 +10,7 @@ use {
         Tuple, TupleType, UniverseInst, Var, Variant, instantiate_universe_levels_scoped,
         project_erased_universes, reduce_intrinsic,
     },
-    num_traits::ToPrimitive,
+    curios_utilities::recurse,
 };
 
 /// The elaborator's reduction strategy, supplied to `curios-core`'s intrinsic folds. It is the full-strength one: definitions unfold, metavariables resolve, scrutinee refinements fire, and every step is charged against the declaration's budget.

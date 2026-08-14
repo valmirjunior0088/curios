@@ -1,5 +1,5 @@
 use {
-    curios_base::{Qualifier, Span},
+    curios_utilities::{Qualifier, Span},
     std::hash::{Hash, Hasher},
 };
 

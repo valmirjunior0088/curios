@@ -30,15 +30,14 @@ use {
         Context, Error, ParkedWork, attempt_witness_goal, blocked_on_metavar, check, expect,
         reduce_with, sort_term, transitively_ground,
     },
-    curios_base::{Flt, Int, NumOp, Plicity, recurse},
     curios_core::{
         Apply, Bang, Bound, Field, Free, Func, FuncType, ImplicitOrigin, InductType, Infix,
         Intrinsic, Let, MetaId, Metavar, MetavarOrigin, Nat, NumLit, One, Proj, Rec, Scope, Struct,
         StructDecl, StructEntry, StructType, Subterm, Telescope, Term, Transient, Tuple, TupleType,
         Variant, WitnessOrigin, instantiate_universe_levels_scoped, wire_term,
     },
-    num_bigint::BigInt,
-    num_traits::ToPrimitive,
+    curios_num::{Flt, Integer},
+    curios_utilities::{NumOp, Plicity, recurse},
     std::{
         collections::{BTreeSet, VecDeque},
         sync::Arc,

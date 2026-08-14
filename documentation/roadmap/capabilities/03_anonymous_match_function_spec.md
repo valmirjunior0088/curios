@@ -119,7 +119,7 @@ Stage 2 does not require pruning: its placeholder equations are deliberately ori
 
 ## Verification
 
-After each stage, run the repository's full done bar in order — [CLAUDE.md](../../../CLAUDE.md), "Before handing off code changes", which owns the command list. It was copied here verbatim once and had drifted from it within the day. Because `curios-text` and `curios-elab` are both in the browser compiler's dependency graph, also run `make curios/web` with the exactly version-matched `wasm-bindgen-cli`.
+After each stage, run the repository's full done bar in order — [CLAUDE.md](../../../CLAUDE.md), "Before handing off code changes", which owns the command list. It was copied here verbatim once and had drifted from it within the day. Because `curios-text` and `curios-elab` are both in the browser compiler's dependency graph, also run `make curios/js` with the exactly version-matched `wasm-bindgen-cli`.
 
 ## Retirement criteria
 

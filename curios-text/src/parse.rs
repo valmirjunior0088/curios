@@ -32,16 +32,12 @@ use {
         WitnessField,
     },
     curios_abi::{WireLeaf, WireSignature, WireType},
-    curios_base::{
-        Flt, Grain, NumOp, Plicity, Qualifier, Span, is_identifier_char, is_keyword,
-        parser::{
-            Parser, catch, fail, lazy, many0, many1, mark, memoize, not_ahead, preceded_by_space,
-            pure, sep_by0_trailing, sep_by1, sep_by1_trailing, spanned, take_exact, take_n,
-            take_while,
-        },
+    curios_num::{Flt, Natural},
+    curios_parse::{
+        Parser, catch, fail, lazy, many0, many1, mark, memoize, not_ahead, preceded_by_space, pure,
+        sep_by0_trailing, sep_by1, sep_by1_trailing, spanned, take_exact, take_n, take_while,
     },
-    num_bigint::BigUint,
-    num_traits::{ToPrimitive, Zero},
+    curios_utilities::{Grain, NumOp, Plicity, Qualifier, Span, is_identifier_char, is_keyword},
     std::{cell::RefCell, collections::BTreeMap, iter},
 };
 

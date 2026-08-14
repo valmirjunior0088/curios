@@ -4,8 +4,8 @@
 
 use {
     super::*,
-    curios_base::{Grain, PackedBin},
     curios_core::{Free, Global, InductDecl, Intrinsic, Rec, StructDecl, Subterm, Term},
+    curios_utilities::{Grain, PackedBin},
 };
 
 /// An [`Env`] that reduces nothing, for the two probes below that build a [`Walk`] by hand.
@@ -122,8 +122,8 @@ fn a_rebuilt_constructor_is_smaller_than_the_binder_it_rebuilds() {
 fn a_literal_is_one_packed_run_however_large_its_value() {
     // The size order on literals is decided by count arithmetic on the packed spine — never by expanding the value into a unary chain, whose depth for a `u64`-sized switch literal or call argument is a stack overflow.
     let empty = || Shape::Node(Tag::Empty(Carriers::Unary), Vec::new());
-    let huge = Shape::unary_run(BigUint::from(u64::MAX), empty());
-    let smaller = Shape::unary_run(BigUint::from(u64::MAX - 1), empty());
+    let huge = Shape::unary_run(Natural::from(u64::MAX), empty());
+    let smaller = Shape::unary_run(Natural::from(u64::MAX - 1), empty());
 
     assert_eq!(huge.against(&huge), Size::Same);
     assert_eq!(smaller.against(&huge), Size::Less);
@@ -136,13 +136,13 @@ fn runs_merge_so_a_refined_tail_stays_one_chain() {
     // `match n` refines `n` to a 1-run over `pred`; a nested arm refining `pred` to a 4-run must expand to the single 5-run the chain denotes, or a literal argument could never grade against it.
     let empty = || Shape::Node(Tag::Empty(Carriers::Unary), Vec::new());
     let merged = Shape::unary_run(
-        BigUint::from(1usize),
-        Shape::unary_run(BigUint::from(4usize), empty()),
+        Natural::from(1usize),
+        Shape::unary_run(Natural::from(4usize), empty()),
     );
 
-    assert!(merged.same_as(&Shape::unary_run(BigUint::from(5usize), empty())));
+    assert!(merged.same_as(&Shape::unary_run(Natural::from(5usize), empty())));
     assert_eq!(
-        Shape::unary_run(BigUint::from(3usize), empty()).against(&merged),
+        Shape::unary_run(Natural::from(3usize), empty()).against(&merged),
         Size::Less
     );
 }
@@ -157,7 +157,7 @@ fn an_arithmetic_decrease_grades_only_against_its_own_binder() {
     assert_eq!(smaller.against(&Shape::Atom(other)), NONE);
     assert_eq!(smaller.against(&Shape::Opaque), NONE);
 
-    let refined = Shape::unary_run(BigUint::from(1usize), Shape::Atom(n));
+    let refined = Shape::unary_run(Natural::from(1usize), Shape::Atom(n));
     assert_eq!(smaller.against(&refined), NONE);
 }
 
@@ -178,7 +178,7 @@ fn an_arithmetic_decrease_is_inert_in_the_constructor_order() {
 fn a_guard_excludes_zero_only_when_its_arm_does() {
     let guard = |relation, literal: usize| Guard {
         atom: Free::local(1, None),
-        literal: BigUint::from(literal),
+        literal: Natural::from(literal),
         relation,
     };
 

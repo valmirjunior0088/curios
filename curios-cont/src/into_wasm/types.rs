@@ -1,4 +1,4 @@
-//! The fixed runtime heap-type shapes every emitted module declares: the data representations (`Flt`, packed binary sequences, `List`, `Cell`) whose structure is program-independent, unlike the per-program families (`tpl/N`, closures, environments, `func/N`) the emitter derives from the module. Kept in one file so the emitter has one spelling for each shape. curios-web's bridge builder imports [`bytes_sub_type`] and declares the same `$bytes` shape: wasm-GC canonicalizes structural types, so any module declaring the exact shape can exchange byte-payload refs with a compiled program. curios-runtime's `host_func_type` mirrors `$bytes` and `$elems` in wasmtime's type universe — keep that end in sync.
+//! The fixed runtime heap-type shapes every emitted module declares: the data representations (`Flt`, packed binary sequences, `List`, `Cell`) whose structure is program-independent, unlike the per-program families (`tpl/N`, closures, environments, `func/N`) the emitter derives from the module. Kept in one file so the emitter has one spelling for each shape. curios-js's bridge builder imports [`bytes_sub_type`] and declares the same `$bytes` shape: wasm-GC canonicalizes structural types, so any module declaring the exact shape can exchange byte-payload refs with a compiled program. curios-runtime's `host_func_type` mirrors `$bytes` and `$elems` in wasmtime's type universe — keep that end in sync.
 //!
 //! # The rope representation
 //!
@@ -12,7 +12,7 @@
 //!
 //! Naive accumulation loops are therefore O(n) by construction, and so are head/tail peel loops (`get` head + `slice` tail): the first peel forces once, every later peel is an O(1) window over the settled payload. There is no compile-time recognition anywhere.
 //!
-//! The host ABI is untouched by the rope: wire `Bytes` payloads cross the boundary as the flat `$bytes`/`$elems` arrays (params are forced before the call, results are embedded into fresh leaves after it), so curios-runtime and the curios-web bridge only ever see flat arrays.
+//! The host ABI is untouched by the rope: wire `Bytes` payloads cross the boundary as the flat `$bytes`/`$elems` arrays (params are forced before the call, results are embedded into fresh leaves after it), so curios-runtime and the curios-js bridge only ever see flat arrays.
 
 /// `Flt` — a boxed `f32`: `struct (field $special (f32))`.
 pub fn flt_sub_type(special_field: curios_wasm::FieldName) -> curios_wasm::SubType {
@@ -31,7 +31,7 @@ pub fn flt_sub_type(special_field: curios_wasm::FieldName) -> curios_wasm::SubTy
     }
 }
 
-/// `$bytes` — a `Bits`/`Bytes` rope's flat packed payload, and the wire-`Bytes` host-boundary shape: `array (mut i8)`. Exported so curios-web's bridge declares the identical shape rather than a copy that could drift.
+/// `$bytes` — a `Bits`/`Bytes` rope's flat packed payload, and the wire-`Bytes` host-boundary shape: `array (mut i8)`. Exported so curios-js's bridge declares the identical shape rather than a copy that could drift.
 pub fn bytes_sub_type() -> curios_wasm::SubType {
     curios_wasm::SubType {
         is_final: true,

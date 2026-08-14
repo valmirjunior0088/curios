@@ -1,10 +1,10 @@
 use {
     crate::{Kernel, KernelError, convert},
-    curios_base::{Plicity, Qualifier},
     curios_core::{
         Free, FuncType, Global, InductDecl, Intrinsic, Level, MetaId, Nat, StructDecl, StructType,
         Subterm, Telescope, Term, UniverseContext,
     },
+    curios_utilities::{Plicity, Qualifier},
 };
 
 fn kernel() -> Kernel {

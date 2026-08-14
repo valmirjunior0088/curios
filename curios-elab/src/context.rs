@@ -17,7 +17,6 @@ use {
     super::{
         Error, HeadKey, UniverseMark, UniverseSolver, UniverseStateToken, Witness, WitnessKey,
     },
-    curios_base::{Entropy, Mount, Qualifier, Span, SyntaxRegistry},
     curios_core::ReduceError,
     curios_core::{
         Bound, ConceptDecl, DefinitionKind, Free, Global, HeadTag, ImplicitOrigin, InductDecl,
@@ -25,6 +24,7 @@ use {
         UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseRole,
         UniverseSeed, WitnessOrigin, instantiate_universe_levels_scoped,
     },
+    curios_utilities::{Entropy, Mount, Qualifier, Span, SyntaxRegistry},
     std::{
         cell::Cell,
         collections::{BTreeMap, BTreeSet},

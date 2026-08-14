@@ -3,7 +3,6 @@ mod tests;
 
 use {
     super::{BinderTypes, Context, Error, GoalReport, UniverseSolver, universe_context_validate},
-    curios_base::{Grain, Span},
     curios_core::{
         Apply, Bound, Carrier, Cases, ConceptDecl, Definition, DefinitionKind, Free, Func,
         FuncType, Global, InductDecl, InductParam, InductType, Intrinsic, Item, Let, LetBinding,
@@ -13,6 +12,7 @@ use {
         project_erased_universes, rewrite_universe_levels_scoped, shift_universe_params,
         universe_metas,
     },
+    curios_utilities::{Grain, Span},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet},

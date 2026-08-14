@@ -2,8 +2,7 @@
 
 use {
     super::{Intrinsic, Nat, Subterm, Term},
-    curios_base::{Grain, PackedBin},
-    num_traits::Zero,
+    curios_utilities::{Grain, PackedBin},
     std::collections::VecDeque,
 };
 

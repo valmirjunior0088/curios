@@ -1,7 +1,7 @@
 use {
     super::{ModuleInfo, Scoped},
     crate::{Error, GroupItem, Module, Name, TopItem, UseGroup},
-    curios_base::{Mount, Qualifier},
+    curios_utilities::{Mount, Qualifier},
     std::{
         collections::{HashMap, HashSet},
         rc::Rc,

@@ -20,7 +20,7 @@ The Curios erased IR: the flat, explicit, first-order stage between `curios-elab
 
 ### Numeric carriers are exact
 
-**Decision.** Core arithmetic is unbounded; the erased carriers are exact machine scalars — `Nat` as `u32`, `Int` as `i32`, `Flt` as binary32 — with their semantics owned by `curios_base::scalar`, the one constant-folding table every stage shares. The runtime's i31 envelope appears nowhere in the IR: a value the backend cannot box traps at the Wasm boundary instead of changing.
+**Decision.** Core arithmetic is unbounded; the erased carriers are exact machine scalars — `Nat` as `u32`, `Int` as `i32`, `Flt` as binary32 — with their semantics owned by `curios-num`'s `scalar`, the one constant-folding table every stage shares. The runtime's i31 envelope appears nowhere in the IR: a value the backend cannot box traps at the Wasm boundary instead of changing.
 
 **Rationale.** One shared semantics table means the stages' constant folders cannot drift from each other or from emitted code, and keeping the envelope out of the IR keeps a representation limit from becoming a silent semantic one.
 

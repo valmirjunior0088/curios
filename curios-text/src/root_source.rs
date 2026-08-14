@@ -6,7 +6,7 @@
 
 use {
     super::{Error, Module},
-    curios_base::{Mount, Qualifier, RootKind, Source, is_identifier},
+    curios_utilities::{Mount, Qualifier, RootKind, Source, is_identifier},
     std::{
         cell::RefCell,
         collections::BTreeMap,
@@ -17,7 +17,7 @@ use {
 
 /// The modules a unit is lowered from: one base per prefix it mounts.
 ///
-/// **A source is a resolver, never an assumed filesystem.** Turning a qualifier into a module is the whole contract, which is why a directory and a tree already in memory are two bases here rather than two kinds of unit. `curios-web` supplies every body inline and compiles with no filesystem at all; a build script hands the fixed prelude over already parsed; a package read from disk is read lazily, one header at a time. Fetching stays separable for the same reason — whatever placed the bytes, what arrives here is a base.
+/// **A source is a resolver, never an assumed filesystem.** Turning a qualifier into a module is the whole contract, which is why a directory and a tree already in memory are two bases here rather than two kinds of unit. `curios-js` supplies every body inline and compiles with no filesystem at all; a build script hands the fixed prelude over already parsed; a package read from disk is read lazily, one header at a time. Fetching stays separable for the same reason — whatever placed the bytes, what arrives here is a base.
 ///
 /// Lookup is longest-match over the claimed prefixes, exactly as [`Mount::owning`] is everywhere else, and the mounts of one source are pairwise disjoint because a unit claims each of its prefixes once.
 pub struct RootSource {
@@ -40,7 +40,7 @@ enum Base {
 }
 
 impl RootSource {
-    /// The entry program with no filesystem: every `mod` it declares must carry an inline body. Used by tests exercising resolution in isolation, and by embedders (`curios-web`) with no filesystem at all.
+    /// The entry program with no filesystem: every `mod` it declares must carry an inline body. Used by tests exercising resolution in isolation, and by embedders (`curios-js`) with no filesystem at all.
     pub fn none() -> Self {
         Self::over(vec![(entry_mount(), Base::Supplied(BTreeMap::new()))])
     }

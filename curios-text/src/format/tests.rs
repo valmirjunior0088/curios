@@ -1,4 +1,4 @@
-use {super::Formatted, curios_base::Source};
+use {super::Formatted, curios_utilities::Source};
 
 fn formatted(source: &str) -> String {
     Formatted::from_source(&Source::inline(source))

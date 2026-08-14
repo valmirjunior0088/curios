@@ -1,10 +1,10 @@
 use {
     crate::{Kernel, KernelError, Sort},
-    curios_base::Qualifier,
     curios_core::{
         Free, Global, InductDecl, Intrinsic, Level, Many, RecGroup, RecMemberScopes, Scope,
         Telescope, Term, UniverseContext,
     },
+    curios_utilities::Qualifier,
 };
 
 fn kernel() -> Kernel {

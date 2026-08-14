@@ -1,35 +1,29 @@
 use {
-    num_bigint::{BigInt, BigUint},
+    crate::Natural,
+    num_bigint::BigInt,
     num_traits::{FromPrimitive, ToPrimitive, Zero},
     std::{
         fmt,
-        ops::{Add, BitAnd, BitOr, BitXor, Mul, Sub},
+        ops::{Add, BitAnd, BitOr, BitXor, Mul, Neg, Sub},
     },
 };
 
-/// A type-level integer. Unbounded — the type level pretends ℤ, the way `Nat`'s `BigUint` pretends ℕ; the runtime's 31-bit range is enforced only where a literal must materialize (`erase`'s narrowing) and by the runtime's own overflow traps.
+/// A type-level integer. Unbounded — the type level pretends ℤ, the way [`Natural`] pretends ℕ; the runtime's 31-bit range is enforced only where a literal must materialize (`erase`'s narrowing) and by the runtime's own overflow traps.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[curios_archive::archived]
-pub struct Int {
+pub struct Integer {
     #[cfg_attr(feature = "archive", rkyv(with = crate::BigIntBytes))]
     value: BigInt,
 }
 
-impl Int {
-    /// An `Int` from anything `BigInt`-convertible — the entry point for integer literals, e.g. curios-text's lowering of a surface `Int` token.
-    pub fn new(value: impl Into<BigInt>) -> Self {
-        Self {
-            value: value.into(),
-        }
-    }
-
+impl Integer {
     pub fn to_i32(&self) -> Option<i32> {
         self.value.to_i32()
     }
 
-    /// The same number as a `BigUint`; `None` on a negative, which no natural equals.
-    pub fn to_big_uint(&self) -> Option<BigUint> {
-        self.value.to_biguint()
+    /// The same number as a [`Natural`]; `None` on a negative, which no natural equals. [`From<Natural>`](Integer::from) is the total inverse.
+    pub fn to_natural(&self) -> Option<Natural> {
+        self.value.to_biguint().map(Natural::new)
     }
 
     /// `self << amount` as `self * 2^amount`, and `self >> amount` as the arithmetic (floor) shift `num-bigint` provides — both unbounded. `None` when `amount` is negative or too large to be a shift count, leaving the op a neutral term rather than fabricating a value.
@@ -61,7 +55,7 @@ impl Int {
         })
     }
 
-    /// `None` on a zero divisor, like [`Int::checked_div`]. The remainder takes the dividend's sign, like the runtime's `i32.rem_s`.
+    /// `None` on a zero divisor, like [`Integer::checked_div`]. The remainder takes the dividend's sign, like the runtime's `i32.rem_s`.
     pub fn checked_rem(self, other: Self) -> Option<Self> {
         (!other.value.is_zero()).then(|| Self {
             value: self.value % other.value,
@@ -69,7 +63,7 @@ impl Int {
     }
 }
 
-impl Add for Int {
+impl Add for Integer {
     type Output = Self;
 
     fn add(self, other: Self) -> Self {
@@ -79,7 +73,7 @@ impl Add for Int {
     }
 }
 
-impl Sub for Int {
+impl Sub for Integer {
     type Output = Self;
 
     fn sub(self, other: Self) -> Self {
@@ -89,7 +83,7 @@ impl Sub for Int {
     }
 }
 
-impl Mul for Int {
+impl Mul for Integer {
     type Output = Self;
 
     fn mul(self, other: Self) -> Self {
@@ -100,7 +94,7 @@ impl Mul for Int {
 }
 
 /// Unbounded bitwise `and`/`or`/`xor`, on the infinite two's-complement representation `num-bigint` models. The type level pretends ℤ, so these impose no 31-bit limit; the runtime's i31 carrier is enforced only in the backend (see `scalar_eval`/`code_emitter`).
-impl BitAnd for Int {
+impl BitAnd for Integer {
     type Output = Self;
 
     fn bitand(self, other: Self) -> Self {
@@ -110,7 +104,7 @@ impl BitAnd for Int {
     }
 }
 
-impl BitOr for Int {
+impl BitOr for Integer {
     type Output = Self;
 
     fn bitor(self, other: Self) -> Self {
@@ -120,7 +114,7 @@ impl BitOr for Int {
     }
 }
 
-impl BitXor for Int {
+impl BitXor for Integer {
     type Output = Self;
 
     fn bitxor(self, other: Self) -> Self {
@@ -130,7 +124,42 @@ impl BitXor for Int {
     }
 }
 
-impl fmt::Display for Int {
+/// Negation is total and exact at the type level: ℤ is closed under it, so unlike the erased `i32` carrier there is no `i32::MIN` to trap on.
+impl Neg for Integer {
+    type Output = Self;
+
+    fn neg(self) -> Self {
+        Self { value: -self.value }
+    }
+}
+
+/// Every primitive integer converts exactly, and this is the only way in: there is deliberately no `new` taking `impl Into<BigInt>`, because rustdoc would print that bound on a type whose whole purpose is that nothing above this crate names a bignum.
+macro_rules! from_primitive {
+    ($($primitive:ty),+ $(,)?) => {
+        $(
+            impl From<$primitive> for Integer {
+                fn from(value: $primitive) -> Self {
+                    Self { value: BigInt::from(value) }
+                }
+            }
+        )+
+    };
+}
+
+from_primitive!(
+    i8, i16, i32, i64, i128, isize, u8, u16, u32, u64, u128, usize
+);
+
+/// Widening a natural is total and exact — ℕ ⊂ ℤ — and is the inverse of [`Integer::to_natural`] on every value that one accepts.
+impl From<Natural> for Integer {
+    fn from(value: Natural) -> Self {
+        Self {
+            value: BigInt::from(value.as_big_uint().clone()),
+        }
+    }
+}
+
+impl fmt::Display for Integer {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Delegate so format flags pass through — the printer relies on `{:+}` for the surface `+`/`-` literal prefix.
         self.value.fmt(f)

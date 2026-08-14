@@ -1,6 +1,6 @@
 use {
     super::*,
-    curios_base::{
+    curios_num::{
         flt_max, flt_min, flt_to_int, flt_to_nat, int_add, int_div, int_mul, int_rem, int_rotl,
         int_rotr, int_shl, int_shr, int_sub, int_to_nat, nat_add, nat_div, nat_mul, nat_rem,
         nat_rotl, nat_rotr, nat_shl, nat_shr, nat_sub, nat_to_int,

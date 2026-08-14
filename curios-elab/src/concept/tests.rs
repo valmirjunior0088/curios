@@ -1,7 +1,7 @@
 use {
     super::{HeadKey, WitnessKey},
-    curios_base::{Grain, Qualifier},
     curios_core::Global,
+    curios_utilities::{Grain, Qualifier},
 };
 
 // Arity one displays bare, so single-parameter diagnostics keep today's spelling ("for head 'Nat'", never "for head '(Nat)'").

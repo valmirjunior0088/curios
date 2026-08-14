@@ -14,7 +14,7 @@ use {
         FunctionId, Intrinsic, Module, Operation, RecValue, Rhs, Semantics, SequenceGrain,
         SequenceOp, Statement, Terminator, ValueId, VariantArm,
     },
-    curios_base::{Grain, PackedBin},
+    curios_utilities::{Grain, PackedBin},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet},

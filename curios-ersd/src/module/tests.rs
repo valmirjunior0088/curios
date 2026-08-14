@@ -1,6 +1,7 @@
 use {
     crate::*,
-    curios_base::{Flt, Grain, PackedBin},
+    curios_num::Flt,
+    curios_utilities::{Grain, PackedBin},
 };
 
 #[test]

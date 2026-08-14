@@ -1,8 +1,9 @@
 use curios_core::*;
 use {
     crate::*,
-    curios_base::{Flt, Plicity, Qualifier},
-    num_bigint::BigUint,
+    curios_num::Flt,
+    curios_num::Natural,
+    curios_utilities::{Plicity, Qualifier},
 };
 
 /// A declaration's name, from the path a test writes. Fixture-only.
@@ -456,14 +457,14 @@ fn a_num_lit_that_overflows_flt_is_refused() {
     let flt = || Term::intrinsic(Intrinsic::FltType);
 
     // 2^512 saturates `to_f32` to infinity, a value no literal spells — refused like an out-of-range Byte.
-    let huge = Term::num_lit(BigUint::from(2u32).pow(512), false, false);
+    let huge = Term::num_lit(Natural::from(2u32).pow(512), false, false);
     assert!(matches!(
         elaborate(&mut context, &huge, Mode::Check(flt())),
         Err(Error::FltLiteralOutOfRange { .. })
     ));
 
     // A magnitude inside the finite range still resolves at `Flt`.
-    let small = Term::num_lit(BigUint::from(42u32), false, false);
+    let small = Term::num_lit(Natural::from(42u32), false, false);
     let (term, _) = elaborate(&mut context, &small, Mode::Check(flt())).unwrap();
     assert_eq!(term, Term::intrinsic(Intrinsic::Flt(Flt::from_f32(42.0))));
 }

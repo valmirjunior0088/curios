@@ -1,7 +1,7 @@
 use {
     super::{Context, EmissionCode, EmissionValueName, LoadAs, RopeData, Table, box_instr},
     crate::{CpsIntrinsicOp, Repr},
-    curios_base::Grain,
+    curios_utilities::Grain,
 };
 
 /// Where one computed value goes: the local it is stored in, and the name the representation analysis decided about.

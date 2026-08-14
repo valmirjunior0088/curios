@@ -1,4 +1,4 @@
-use {crate::*, curios_base::Flt};
+use {crate::*, curios_num::Flt};
 
 fn doubling_module() -> Module {
     let mut builder = ErsdBuilder::new();

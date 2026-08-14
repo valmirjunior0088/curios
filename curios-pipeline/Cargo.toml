@@ -25,7 +25,7 @@ profile = [
 # program needs a prelude to compile against.
 [dependencies]
 curios-abi = { workspace = true }
-curios-base = { workspace = true }
+curios-utilities = { workspace = true }
 curios-cert = { workspace = true }
 curios-cont = { workspace = true }
 curios-core = { workspace = true }

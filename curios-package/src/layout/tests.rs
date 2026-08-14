@@ -1,6 +1,6 @@
 use {
     super::*,
-    curios_base::Qualifier,
+    curios_utilities::Qualifier,
     std::{
         fs,
         path::PathBuf,

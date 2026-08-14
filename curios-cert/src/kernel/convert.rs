@@ -28,12 +28,12 @@ mod tests;
 
 use {
     super::{Kernel, KernelError, Sort, unfold_spelling},
-    curios_base::recurse,
     curios_core::{
         Bound, Carrier, Cases, Field, FuncType, Global, InductType, Level, Many, Proj, Reducer,
         Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two,
         UniverseInst, instantiate_universe_levels_scoped,
     },
+    curios_utilities::recurse,
     std::collections::HashSet,
 };
 

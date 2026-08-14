@@ -1,26 +1,19 @@
 use {
     super::{Intrinsic, Subterm, Term},
-    num_bigint::BigUint,
-    num_traits::{ToPrimitive, Zero},
+    curios_num::Natural,
 };
 
-#[cfg(feature = "archive")]
-use curios_base::BigUintBytes;
-
-/// A type-level natural in successor-floor form: `Zero`, or `Succ(floor, inner)` — a `BigUint` count of successors stacked on a tail term `inner`, so a closed literal is one node and `x + 3` is `Succ(3, x)`, never a unary chain. Unbounded — the type level pretends ℕ, like `Int`'s ℤ; the runtime's 31-bit range is enforced only where a literal must materialize (`erase`'s narrowing) and by the runtime's own overflow traps. Reduction keeps the form canonical — nested `Succ` flattened, zero floors collapsed (see `Nat::decompose` and `Nat::rebuild`) — so arithmetic on the floor is `BigUint` arithmetic.
+/// A type-level natural in successor-floor form: `Zero`, or `Succ(floor, inner)` — a [`Natural`] count of successors stacked on a tail term `inner`, so a closed literal is one node and `x + 3` is `Succ(3, x)`, never a unary chain. Unbounded — the type level pretends ℕ, like `Integer`'s ℤ; the runtime's 31-bit range is enforced only where a literal must materialize (`erase`'s narrowing) and by the runtime's own overflow traps. Reduction keeps the form canonical — nested `Succ` flattened, zero floors collapsed (see `Nat::decompose` and `Nat::rebuild`) — so arithmetic on the floor is [`Natural`] arithmetic.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum Nat {
     Zero,
-    Succ(
-        #[cfg_attr(feature = "archive", rkyv(with = BigUintBytes))] BigUint,
-        Term,
-    ),
+    Succ(Natural, Term),
 }
 
 impl Nat {
     /// A closed literal in canonical form: zero is `Zero`, anything positive is a single `Succ` floor over the literal-zero tail — never a unary chain.
-    pub fn new(value: impl Into<BigUint>) -> Self {
+    pub fn new(value: impl Into<Natural>) -> Self {
         let value = value.into();
 
         if value.is_zero() {
@@ -30,9 +23,9 @@ impl Nat {
         }
     }
 
-    pub fn to_big_uint(&self) -> Option<BigUint> {
+    pub fn to_natural(&self) -> Option<Natural> {
         match self {
-            Nat::Zero => Some(BigUint::zero()),
+            Nat::Zero => Some(Natural::zero()),
             Nat::Succ(spine, inner) => match inner.as_ref() {
                 Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => Some(spine.clone()),
                 _ => None,
@@ -42,58 +35,56 @@ impl Nat {
 
     /// `None` on a symbolic operand *or* a zero divisor — never a panic; the reducer reports the zero-divisor case before folding.
     pub(crate) fn checked_div(self, other: Self) -> Option<Self> {
-        let left = self.to_big_uint()?;
-        let right = other.to_big_uint()?;
-
-        (!right.is_zero()).then(|| Self::new(left / right))
+        Some(Self::new(
+            self.to_natural()?.checked_div(other.to_natural()?)?,
+        ))
     }
 
     /// `None` on a symbolic operand or a zero divisor, like [`Nat::checked_div`].
     pub(crate) fn checked_rem(self, other: Self) -> Option<Self> {
-        let left = self.to_big_uint()?;
-        let right = other.to_big_uint()?;
-
-        (!right.is_zero()).then(|| Self::new(left % right))
+        Some(Self::new(
+            self.to_natural()?.checked_rem(other.to_natural()?)?,
+        ))
     }
 
     /// Unbounded bitwise `and`/`or`/`xor` on the infinite binary expansion. The type level pretends ℕ, so these impose no 31-bit limit; the runtime's i31 carrier is enforced only in the backend. `None` on a symbolic operand, like [`Nat::checked_div`].
     pub(crate) fn checked_bitand(self, other: Self) -> Option<Self> {
-        Some(Self::new(self.to_big_uint()? & other.to_big_uint()?))
+        Some(Self::new(self.to_natural()? & other.to_natural()?))
     }
 
     pub(crate) fn checked_bitor(self, other: Self) -> Option<Self> {
-        Some(Self::new(self.to_big_uint()? | other.to_big_uint()?))
+        Some(Self::new(self.to_natural()? | other.to_natural()?))
     }
 
     pub(crate) fn checked_bitxor(self, other: Self) -> Option<Self> {
-        Some(Self::new(self.to_big_uint()? ^ other.to_big_uint()?))
+        Some(Self::new(self.to_natural()? ^ other.to_natural()?))
     }
 
     /// `self << amount` as `self * 2^amount`, and `self >> amount` as `⌊self / 2^amount⌋` — both unbounded. `None` on a symbolic operand or an `amount` too large to be a shift count.
     pub(crate) fn checked_shl(self, amount: Self) -> Option<Self> {
         Some(Self::new(
-            self.to_big_uint()? << amount.to_big_uint()?.to_usize()?,
+            self.to_natural()?.checked_shl(amount.to_natural()?)?,
         ))
     }
 
     pub(crate) fn checked_shr(self, amount: Self) -> Option<Self> {
         Some(Self::new(
-            self.to_big_uint()? >> amount.to_big_uint()?.to_usize()?,
+            self.to_natural()?.checked_shr(amount.to_natural()?)?,
         ))
     }
 
     /// View a reduced term as a flat successor floor over a symbolic tail: `term = inner + floor`. A non-`Succ` term — literal zero, a variable, any stuck intrinsic — has floor `0` and is its own `inner`; reduction flattens nested `Succ`, so `inner` is never itself successor-headed. The one-value companion to `spine::peel_nat` (which peels the floor shared by *two* values): this is the seam `Nat/add`, `Nat/sub`, `Nat/mul`, and the comparison family share to act on the floor symbolically, then rebuild a canonical neutral.
-    pub fn decompose(term: &Term) -> (BigUint, Term) {
+    pub fn decompose(term: &Term) -> (Natural, Term) {
         match &**term {
             Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(floor, inner))) => {
                 (floor.clone(), inner.clone())
             }
-            _ => (BigUint::zero(), term.clone()),
+            _ => (Natural::zero(), term.clone()),
         }
     }
 
     /// The inverse of [`Nat::decompose`]: `inner + floor`, collapsing a zero floor back to the bare `inner` so the rebuilt term lands in the same normal form `decompose` expects.
-    pub(crate) fn rebuild(floor: BigUint, inner: Term) -> Term {
+    pub(crate) fn rebuild(floor: Natural, inner: Term) -> Term {
         match floor.is_zero() {
             true => inner,
             false => Term::intrinsic(Intrinsic::Nat(Nat::Succ(floor, inner))),
@@ -125,7 +116,7 @@ impl Nat {
     }
 
     /// The sum of `summands` over a literal `floor`, landing in the same normal form [`Nat::decompose`] reads back.
-    pub(crate) fn sum_over_floor(summands: Vec<Term>, floor: BigUint) -> Term {
+    pub(crate) fn sum_over_floor(summands: Vec<Term>, floor: Natural) -> Term {
         let inner = summands
             .into_iter()
             .filter(|summand| !Self::is_zero(summand))

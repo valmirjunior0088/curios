@@ -1,8 +1,8 @@
 //! What one unit provides to its successors.
 
 use {
-    curios_abi::ForeignStore, curios_base::Mount, curios_core::Module, curios_elab::ErasedArena,
-    curios_text::PreparedText,
+    curios_abi::ForeignStore, curios_core::Module, curios_elab::ErasedArena,
+    curios_text::PreparedText, curios_utilities::Mount,
 };
 
 /// One compiled unit: everything a later unit needs in order to be compiled against it.

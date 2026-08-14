@@ -2,12 +2,10 @@ use {
     super::{Intrinsic, Name, Radix, print_term},
     crate::parse::{parse_term, parse_whitespace},
     curios_abi::ForeignFunction,
-    curios_base::{
-        Grain, NumOp, Plicity, Source, Span,
-        parser::{ParserError, run_parser, take_eof},
-        printer::run_printer,
-    },
-    num_bigint::BigUint,
+    curios_num::Natural,
+    curios_parse::{ParserError, run_parser, take_eof},
+    curios_print::run_printer,
+    curios_utilities::{Grain, NumOp, Plicity, Source, Span},
     std::{fmt, ops::Deref, rc::Rc, str::FromStr, sync::Arc},
 };
 
@@ -479,7 +477,7 @@ pub struct Infix {
 /// A surface polymorphic numeric literal: an integer `magnitude` with an optional written sign. Its concrete type (`Nat`/`Int`/`Flt`) is chosen during elaboration. The `radix` is retained only so the printer round-trips the written form (`0xC2` back to `0xC2`); lowering to core drops it. Decimal literals are not `NumLit`; they parse to `Intrinsic::Flt`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct NumLit {
-    pub magnitude: BigUint,
+    pub magnitude: Natural,
     pub radix: Radix,
     pub signed: bool,
     pub negative: bool,

@@ -15,7 +15,7 @@ use {
         Intrinsic, Module, ProductId, ProductSchema, RecGroup, RecGroupId, Rhs, SequenceArity,
         Statement, StatementId, Terminator, ValueId, VariantFamily,
     },
-    curios_base::recurse,
+    curios_utilities::recurse,
     std::collections::HashSet,
 };
 

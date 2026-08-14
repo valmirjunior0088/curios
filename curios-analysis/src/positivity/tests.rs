@@ -4,8 +4,8 @@
 
 use {
     super::{Occurrences, close},
-    curios_base::Qualifier,
     curios_core::{Global, Polarity},
+    curios_utilities::Qualifier,
     std::collections::BTreeMap,
 };
 

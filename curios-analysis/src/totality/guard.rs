@@ -6,7 +6,7 @@
 
 use {
     curios_core::{Free, Intrinsic, Subterm, Term},
-    num_bigint::BigUint,
+    curios_num::Natural,
 };
 
 /// How a [`Guard`] relates its binder to its literal, always read with the binder on the left.
@@ -37,7 +37,7 @@ impl Relation {
 /// A boolean scrutinee read as a comparison between a tracked binder and a `Nat` literal — the only shape from which an arm can conclude that the binder is not zero.
 pub(super) struct Guard {
     pub(super) atom: Free,
-    pub(super) literal: BigUint,
+    pub(super) literal: Natural,
     pub(super) relation: Relation,
 }
 
@@ -57,7 +57,7 @@ impl Guard {
             Subterm::Var(var) => var.as_free().cloned(),
             _ => None,
         };
-        let literal = |term: &Term| term.as_nat().and_then(|nat| nat.to_big_uint());
+        let literal = |term: &Term| term.as_nat().and_then(|nat| nat.to_natural());
 
         if let (Some(atom), Some(literal)) = (atom(left), literal(right)) {
             return Some(Guard {
@@ -80,8 +80,8 @@ impl Guard {
     ///
     /// Each row is the arm's fact about `atom` followed by what it takes for that fact to exclude zero: `atom >= k` excludes it only for `k >= 1`, while `atom > k` excludes it for every `k`.
     pub(super) fn establishes_nonzero(&self, taken: bool) -> bool {
-        let zero = BigUint::from(0usize);
-        let one = BigUint::from(1usize);
+        let zero = Natural::from(0usize);
+        let one = Natural::from(1usize);
 
         match (self.relation, taken) {
             // atom > k, hence atom >= k + 1 >= 1.

@@ -15,7 +15,7 @@ use {
             EmissionMatchTarget, EmissionModule, EmissionTail, EmissionValue, EmissionValueName,
         },
     },
-    curios_base::Entropy,
+    curios_utilities::Entropy,
     std::collections::{BTreeMap, BTreeSet},
 };
 

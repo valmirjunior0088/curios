@@ -2,7 +2,7 @@ use {
     super::PublicInterface,
     super::Scoped,
     crate::{Error, Name},
-    curios_base::{Entropy, Mount, Qualifier, Span, SyntaxRegistry},
+    curios_utilities::{Entropy, Mount, Qualifier, Span, SyntaxRegistry},
     std::{
         cell::{Cell, RefCell},
         collections::{BTreeMap, HashMap, HashSet},

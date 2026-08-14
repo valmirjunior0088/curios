@@ -12,7 +12,7 @@ use {
         RecMemberScopes, Scope, Sharing, Spelling, StructDecl, Subterm, Term, UniverseContext,
         UniverseError, UniverseSeed, build_shorten, project_erased_universes,
     },
-    curios_base::{Mount, Plicity, Qualifier},
+    curios_utilities::{Mount, Plicity, Qualifier},
     std::{
         collections::{BTreeMap, BTreeSet},
         fmt,
@@ -661,7 +661,7 @@ pub fn derived_binder_floor_outside(module: &Module, in_scope: impl Fn(&Global) 
 
 #[cfg(test)]
 mod tests {
-    use {super::*, crate::WitnessId, curios_base::RootKind};
+    use {super::*, crate::WitnessId, curios_utilities::RootKind};
 
     fn definition(name: &str, universe_context: UniverseContext) -> Definition {
         let global = Global::Authored(Qualifier::from([name]));

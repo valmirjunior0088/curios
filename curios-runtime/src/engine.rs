@@ -16,6 +16,25 @@ use {
     },
 };
 
+/// Reject a malformed module, against the same engine that will run it.
+///
+/// Available without the `cranelift` feature: validation is a wasmparser pass over the bytes, not a compilation, so a runtime-only build can decide it. That is what lets the check live beside the engine whose feature set decides what counts as valid, rather than in whichever crate happens to link a compiler.
+///
+/// Returns the failure as a `String` so no `wasmtime` type appears in the signature; callers are free to treat a refusal as fatal, and `curios` does.
+pub fn validate(bytes: &[u8]) -> Result<(), String> {
+    Module::validate(shared_engine(), bytes).map_err(|error| error.to_string())
+}
+
+/// AOT-compile `bytes` to the `.cwasm` payload [`run_bytes`] deserializes.
+///
+/// Gated on `cranelift` because `Engine::precompile_module` is: wasmtime declares it in an `impl` block behind `any(feature = "cranelift", feature = "winch")`. The gate is the point rather than an inconvenience — a build without a compiler has no `precompile` to call, so the mistake is a named missing function at compile time instead of a launcher that quietly grew a backend.
+#[cfg(feature = "cranelift")]
+pub fn precompile(bytes: &[u8]) -> Result<Vec<u8>, String> {
+    shared_engine()
+        .precompile_module(bytes)
+        .map_err(|error| format!("failed to precompile module: {error}"))
+}
+
 /// The one wasm engine for the whole process. Building an `Engine` stands up the Cranelift backend and is expensive, so it is created once and shared; `Engine` is `Send + Sync` (internally reference-counted), so a `static` is sound and a clone is cheap. Every module, store, and type below is created against it, so they stay engine-consistent.
 pub fn shared_engine() -> &'static Engine {
     static ENGINE: LazyLock<Engine> = LazyLock::new(|| {

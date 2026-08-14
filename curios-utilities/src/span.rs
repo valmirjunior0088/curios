@@ -50,7 +50,8 @@ pub struct Span {
 }
 
 impl Span {
-    pub(crate) fn new(source: Rc<Source>, start: usize, end: usize) -> Self {
+    /// Public because the thing that mints spans from byte offsets is the parser, and that now lives outside this crate as `curios-parse`. It was `pub(crate)` only while the two shared one.
+    pub fn new(source: Rc<Source>, start: usize, end: usize) -> Self {
         Self { source, start, end }
     }
 

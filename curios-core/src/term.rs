@@ -15,11 +15,9 @@ use {
         UniverseScheme, Var, Visit, instantiate_universe_levels_scoped, print_term,
     },
     curios_abi::ForeignFunction,
-    curios_base::{
-        Grain, Int, Mint, NumOp, Plicity, Span,
-        printer::{run_printer, run_printer_within},
-    },
-    num_bigint::BigUint,
+    curios_num::{Integer, Natural},
+    curios_print::{run_printer, run_printer_within},
+    curios_utilities::{Grain, Mint, NumOp, Plicity, Span},
     std::{
         collections::{BTreeMap, BTreeSet, HashSet},
         fmt,
@@ -30,9 +28,6 @@ use {
         sync::Arc,
     },
 };
-
-#[cfg(feature = "archive")]
-use curios_base::BigUintBytes;
 
 /// The head identity a scrutinee-refinement key gates on: a named free-variable head, or the tag standing in for a comparison intrinsic whose normal form has no named head. Produced only by [`Term::head_key`], which documents the mechanism.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1553,7 +1548,7 @@ impl Term {
 
     /// The cached free-variable set, borrowed.
     ///
-    /// [`Bound::free_vars`] hands back an owned clone, which is what a caller that mutates or stores the set wants. A caller that only *reads* it — extending another set, testing membership — pays a deep copy of every [`Free`] for nothing, and a `Free::Global` drags a [`Qualifier`](curios_base::Qualifier) of owned segments behind it. The set is already behind an `Rc` precisely so it need not be copied; this is the accessor that keeps that promise.
+    /// [`Bound::free_vars`] hands back an owned clone, which is what a caller that mutates or stores the set wants. A caller that only *reads* it — extending another set, testing membership — pays a deep copy of every [`Free`] for nothing, and a `Free::Global` drags a [`Qualifier`](curios_utilities::Qualifier) of owned segments behind it. The set is already behind an `Rc` precisely so it need not be copied; this is the accessor that keeps that promise.
     pub fn free_vars_shared(&self) -> &BTreeSet<Free> {
         self.get_or_init_free_vars()
     }
@@ -1605,8 +1600,7 @@ pub struct Infix {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct NumLit {
-    #[cfg_attr(feature = "archive", rkyv(with = BigUintBytes))]
-    pub magnitude: BigUint,
+    pub magnitude: Natural,
     /// A `+`/`-` was written: drops `Nat` from the candidate set and defaults the literal to `Int`.
     pub signed: bool,
     /// The written sign was `-` (a negative literal can never be a `Nat`).
@@ -2256,7 +2250,7 @@ impl Subterm {
         }
     }
 
-    pub(crate) fn as_int(&self) -> Option<Int> {
+    pub(crate) fn as_int(&self) -> Option<Integer> {
         match self {
             Subterm::Intrinsic(Intrinsic::Int(value)) => Some(value.clone()),
             _ => None,

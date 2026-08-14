@@ -15,8 +15,7 @@ use {
         InductType, Intrinsic, IntrinsicHead, Let, Many, Match, Nat, Proj, Rec, RecItem, Scope,
         Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two, Variant,
     },
-    num_bigint::BigUint,
-    num_traits::ToPrimitive,
+    curios_num::Natural,
     std::collections::{BTreeMap, BTreeSet},
 };
 

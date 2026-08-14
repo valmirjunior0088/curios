@@ -4,7 +4,8 @@ pub use intrinsic::*;
 use {
     super::{Subterm, Term, UniverseError},
     curios_abi::ForeignFunction,
-    curios_base::{Int, Span},
+    curios_num::Integer,
+    curios_utilities::Span,
     std::sync::Arc,
 };
 
@@ -57,7 +58,7 @@ pub enum ReduceError {
     },
     /// An `Int/to_nat` whose operand reduced to a negative literal — a value no natural holds, so it is reported like [`ReduceError::DivisionByZero`] rather than folded by bit reinterpretation.
     IntToNatNegative {
-        value: Int,
+        value: Integer,
         span: Option<Span>,
     },
     Universe(UniverseError),

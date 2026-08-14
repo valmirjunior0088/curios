@@ -6,7 +6,7 @@ This pre-bootstrap document specifies executable conversion behavior. Formal rou
 
 ## Boundary architecture
 
-Native `Flt` is IEEE-754 binary32 stored bitwise in `curios-base/src/flt.rs`. Term identity is bitwise: NaN equals itself as a term and `+0.0` differs from `-0.0`, unlike IEEE numeric equality.
+Native `Flt` is IEEE-754 binary32 stored bitwise in `curios-num/src/flt.rs`. Term identity is bitwise: NaN equals itself as a term and `+0.0` differs from `-0.0`, unlike IEEE numeric equality.
 
 Open native intrinsics are opaque to reduction. `Flt/to_le_bytes` and `Flt/of_le_bytes` are therefore the explicit trust boundary, while all inspectable conversion logic operates on `Bytes`.
 

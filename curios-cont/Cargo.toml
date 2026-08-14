@@ -14,5 +14,6 @@ profile = ["curios-profile/enabled"]
 [dependencies]
 curios-profile = { workspace = true }
 curios-abi = { workspace = true }
-curios-base = { workspace = true }
+curios-utilities = { workspace = true }
+curios-num = { workspace = true }
 curios-wasm = { workspace = true }

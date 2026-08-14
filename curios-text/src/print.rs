@@ -13,15 +13,12 @@ use {
     },
     crate::{format::claim_comments_before, parse::op_precedence},
     curios_abi::{WireSignature, WireType},
-    curios_base::{
-        Grain, Plicity,
-        printer::{
-            Printer, fill, flat, group, hard_line, if_break, indent, line, line_suffix, pure,
-            sep_flat, soft_line,
-        },
+    curios_num::Natural,
+    curios_print::{
+        Printer, fill, flat, group, hard_line, if_break, indent, line, line_suffix, pure, sep_flat,
+        soft_line,
     },
-    num_bigint::BigUint,
-    num_traits::One,
+    curios_utilities::{Grain, Plicity},
 };
 
 fn print_plicity(plicity: Plicity) -> Printer {
@@ -399,7 +396,7 @@ fn print_field(param: TupleTypeParam) -> Printer {
     }
 }
 
-fn format_radix(n: &BigUint, radix: Radix) -> String {
+fn format_radix(n: &Natural, radix: Radix) -> String {
     match radix {
         Radix::Dec => format!("{n}"),
         Radix::Hex => format!("0x{n:X}"),

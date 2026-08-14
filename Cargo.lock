@@ -473,7 +473,6 @@ dependencies = [
  "clap",
  "curios-abi",
  "curios-archive",
- "curios-base",
  "curios-binaryen",
  "curios-cert",
  "curios-cont",
@@ -486,8 +485,8 @@ dependencies = [
  "curios-runtime",
  "curios-text",
  "curios-unit",
+ "curios-utilities",
  "curios-wasm",
- "wasmtime",
 ]
 
 [[package]]
@@ -495,18 +494,18 @@ name = "curios-abi"
 version = "0.9.3"
 dependencies = [
  "curios-archive",
- "num-bigint",
+ "curios-num",
 ]
 
 [[package]]
 name = "curios-analysis"
 version = "0.9.3"
 dependencies = [
- "curios-base",
  "curios-cert",
  "curios-core",
+ "curios-num",
  "curios-profile",
- "num-bigint",
+ "curios-utilities",
 ]
 
 [[package]]
@@ -520,16 +519,6 @@ dependencies = [
 [[package]]
 name = "curios-archive-derive"
 version = "0.9.3"
-
-[[package]]
-name = "curios-base"
-version = "0.9.3"
-dependencies = [
- "curios-archive",
- "num-bigint",
- "num-traits",
- "stacker",
-]
 
 [[package]]
 name = "curios-binaryen"
@@ -549,11 +538,10 @@ dependencies = [
  "curios-abi",
  "curios-analysis",
  "curios-archive",
- "curios-base",
  "curios-core",
+ "curios-num",
  "curios-profile",
- "num-bigint",
- "num-traits",
+ "curios-utilities",
 ]
 
 [[package]]
@@ -561,8 +549,9 @@ name = "curios-cont"
 version = "0.9.3"
 dependencies = [
  "curios-abi",
- "curios-base",
+ "curios-num",
  "curios-profile",
+ "curios-utilities",
  "curios-wasm",
 ]
 
@@ -572,10 +561,10 @@ version = "0.9.3"
 dependencies = [
  "curios-abi",
  "curios-archive",
- "curios-base",
+ "curios-num",
+ "curios-print",
  "curios-profile",
- "num-bigint",
- "num-traits",
+ "curios-utilities",
 ]
 
 [[package]]
@@ -585,13 +574,12 @@ dependencies = [
  "curios-abi",
  "curios-analysis",
  "curios-archive",
- "curios-base",
  "curios-cert",
  "curios-core",
  "curios-ersd",
+ "curios-num",
  "curios-profile",
- "num-bigint",
- "num-traits",
+ "curios-utilities",
 ]
 
 [[package]]
@@ -600,21 +588,53 @@ version = "0.9.3"
 dependencies = [
  "curios-abi",
  "curios-archive",
- "curios-base",
  "curios-cont",
+ "curios-num",
  "curios-profile",
+ "curios-utilities",
+]
+
+[[package]]
+name = "curios-js"
+version = "0.9.3"
+dependencies = [
+ "curios-abi",
+ "curios-cont",
+ "curios-pipeline",
+ "curios-prelude",
+ "curios-runtime",
+ "curios-text",
+ "curios-unit",
+ "curios-wasm",
+ "js-sys",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "curios-num"
+version = "0.9.3"
+dependencies = [
+ "curios-archive",
  "num-bigint",
+ "num-traits",
 ]
 
 [[package]]
 name = "curios-package"
 version = "0.9.3"
 dependencies = [
- "curios-base",
  "curios-text",
+ "curios-utilities",
  "serde",
  "sha2 0.11.0",
  "toml",
+]
+
+[[package]]
+name = "curios-parse"
+version = "0.9.3"
+dependencies = [
+ "curios-utilities",
 ]
 
 [[package]]
@@ -622,7 +642,6 @@ name = "curios-pipeline"
 version = "0.9.3"
 dependencies = [
  "curios-abi",
- "curios-base",
  "curios-cert",
  "curios-cont",
  "curios-core",
@@ -632,6 +651,7 @@ dependencies = [
  "curios-profile",
  "curios-text",
  "curios-unit",
+ "curios-utilities",
  "curios-wasm",
 ]
 
@@ -650,7 +670,6 @@ version = "0.9.3"
 dependencies = [
  "curios-abi",
  "curios-archive",
- "curios-base",
  "curios-cert",
  "curios-core",
  "curios-elab",
@@ -658,8 +677,13 @@ dependencies = [
  "curios-profile",
  "curios-text",
  "curios-unit",
+ "curios-utilities",
  "sha2 0.11.0",
 ]
+
+[[package]]
+name = "curios-print"
+version = "0.9.3"
 
 [[package]]
 name = "curios-profile"
@@ -675,7 +699,6 @@ version = "0.9.3"
 dependencies = [
  "curios-abi",
  "getrandom 0.4.3",
- "num-bigint",
  "rustix",
  "rustls",
  "rustls-pemfile",
@@ -690,12 +713,13 @@ version = "0.9.3"
 dependencies = [
  "curios-abi",
  "curios-archive",
- "curios-base",
  "curios-core",
  "curios-elab",
+ "curios-num",
+ "curios-parse",
+ "curios-print",
  "curios-profile",
- "num-bigint",
- "num-traits",
+ "curios-utilities",
 ]
 
 [[package]]
@@ -704,36 +728,29 @@ version = "0.9.3"
 dependencies = [
  "curios-abi",
  "curios-archive",
- "curios-base",
  "curios-core",
  "curios-elab",
  "curios-ersd",
  "curios-profile",
  "curios-text",
+ "curios-utilities",
+]
+
+[[package]]
+name = "curios-utilities"
+version = "0.9.3"
+dependencies = [
+ "curios-archive",
+ "stacker",
 ]
 
 [[package]]
 name = "curios-wasm"
 version = "0.9.3"
 dependencies = [
- "curios-base",
-]
-
-[[package]]
-name = "curios-web"
-version = "0.9.3"
-dependencies = [
- "curios-abi",
- "curios-cont",
- "curios-pipeline",
- "curios-prelude",
- "curios-runtime",
- "curios-text",
- "curios-unit",
- "curios-wasm",
- "js-sys",
- "wasm-bindgen",
- "wasmtime",
+ "curios-parse",
+ "curios-print",
+ "curios-utilities",
 ]
 
 [[package]]

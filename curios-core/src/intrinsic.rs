@@ -1,7 +1,8 @@
 use {
     super::{Bound, MetaId, Nat, Subterm, Term, Var, Visit},
     curios_abi::WireType,
-    curios_base::{Flt, Grain, Int, PackedBin},
+    curios_num::{Flt, Integer},
+    curios_utilities::{Grain, PackedBin},
     std::collections::BTreeSet,
 };
 
@@ -67,7 +68,7 @@ pub enum Intrinsic {
     ByteGt(Term, Term),
     ByteGte(Term, Term),
     IntType,
-    Int(Int),
+    Int(Integer),
     IntEql(Term, Term),
     IntNeq(Term, Term),
     IntAdd(Term, Term),

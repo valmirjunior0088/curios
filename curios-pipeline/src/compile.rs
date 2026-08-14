@@ -3,7 +3,6 @@
 use {
     super::Stage,
     curios_abi::ForeignStore,
-    curios_base::{Qualifier, SyntaxRegistry},
     curios_cert::{Globals, Verdict, recheck_module_verdicts},
     curios_cont::into_wasm,
     curios_core::derived_binder_floor,
@@ -15,6 +14,7 @@ use {
     curios_ersd::lower_to_cont,
     curios_text::{Entrypoint, RootSource, UnitSource, into_core_unit, into_core_with_prelude},
     curios_unit::{Prefix, Unit},
+    curios_utilities::{Qualifier, SyntaxRegistry},
     std::fmt,
 };
 

@@ -1,24 +1,23 @@
-use {super::Handle, num_bigint::BigUint, std::collections::HashMap};
+use {super::Handle, curios_abi::TokenMint, std::collections::HashMap};
 
-/// A host's handle table: an unbounded `BigUint` mint counter paired with the live-handle map keyed by minted token bytes, generic over the host's resource type `T`. Each host wraps one in a `Mutex` so a mint (read the counter, bump it, file the resource) is atomic. The counter never wraps, so a token is never reused — a closed handle's bytes are removed and never minted again, making use-after-close a loud miss rather than a silent alias. The map tracks live handles only, so it is sized by what is currently open, not by how many were ever opened.
+/// A host's handle table: a [`TokenMint`] paired with the live-handle map keyed by minted token bytes, generic over the host's resource type `T`. Each host wraps one in a `Mutex` so a mint (take the next token, file the resource) is atomic. The mint's counter never wraps, so a token is never reused — a closed handle's bytes are removed and never minted again, making use-after-close a loud miss rather than a silent alias. The map tracks live handles only, so it is sized by what is currently open, not by how many were ever opened.
 pub(crate) struct Table<T> {
-    next: BigUint,
+    tokens: TokenMint,
     map: HashMap<Vec<u8>, T>,
 }
 
 impl<T> Table<T> {
-    /// A fresh table: the mint counter seeded one past the stdio tokens, no live handles.
+    /// A fresh table: a mint seeded one past the stdio tokens, no live handles.
     pub(crate) fn new() -> Self {
         Self {
-            next: BigUint::from(Handle::HANDLE_SEED),
+            tokens: TokenMint::new(),
             map: HashMap::new(),
         }
     }
 
-    /// Mint a fresh handle for `resource`: encode the next token (its canonical LE bytes), bump the counter so the token is never reused, and file the resource under those bytes. The bytes are the handle the guest shuttles back; `close` removes them and the counter never reproduces them.
+    /// Mint a fresh handle for `resource` and file the resource under its token bytes. The bytes are the handle the guest shuttles back; `close` removes them and the mint never reproduces them.
     pub(crate) fn mint(&mut self, resource: T) -> Handle {
-        let bytes = self.next.to_bytes_le();
-        self.next += 1u32;
+        let bytes = self.tokens.mint();
         self.map.insert(bytes.clone(), resource);
 
         Handle::Other(bytes)

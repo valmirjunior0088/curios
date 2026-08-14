@@ -9,11 +9,11 @@ use constraints::{ConstraintStore, StoreMark, StoreScope};
 mod tests;
 
 use {
-    curios_base::recurse,
     curios_core::{
         Level, LevelHead, UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin,
         UniverseContext, UniverseError, UniverseMetaId, UniverseParam, UniverseRole, UniverseSeed,
     },
+    curios_utilities::recurse,
     std::collections::{BTreeMap, BTreeSet, VecDeque},
 };
 

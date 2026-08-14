@@ -1,8 +1,8 @@
 use curios_core::*;
 use {
     crate::*,
-    curios_base::Qualifier,
     curios_cert::{Kernel, carries_information},
+    curios_utilities::Qualifier,
 };
 
 #[test]

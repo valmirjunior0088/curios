@@ -17,22 +17,22 @@ curios/runtime:
 		"$(CARGO_TARGET_DIR)/$(CURIOS_RUNTIME_TARGET_TRIPLE)/release/curios-runtime" \
 		"$(CURIOS_RUNTIME_BIN)"
 
-.PHONY: curios/web
-CURIOS_WEB_TARGET_TRIPLE := wasm32-unknown-unknown
-CURIOS_WEB_BIN := $(CARGO_TARGET_DIR)/$(CURIOS_WEB_TARGET_TRIPLE)/release/curios_web.wasm
-CURIOS_WEB_BUNDLE := $(CARGO_TARGET_DIR)/curios/$(CURIOS_WEB_TARGET_TRIPLE)
+.PHONY: curios/js
+CURIOS_JS_TARGET_TRIPLE := wasm32-unknown-unknown
+CURIOS_JS_BIN := $(CARGO_TARGET_DIR)/$(CURIOS_JS_TARGET_TRIPLE)/release/curios_js.wasm
+CURIOS_JS_BUNDLE := $(CARGO_TARGET_DIR)/curios/$(CURIOS_JS_TARGET_TRIPLE)
 
-curios/web:
+curios/js:
 	cargo build \
 		--release \
-		--package curios-web \
-		--target "$(CURIOS_WEB_TARGET_TRIPLE)" \
+		--package curios-js \
+		--target "$(CURIOS_JS_TARGET_TRIPLE)" \
 		--target-dir "$(CARGO_TARGET_DIR)"
 
 	wasm-bindgen \
 		--target web \
-		--out-dir "$(CURIOS_WEB_BUNDLE)" \
-		"$(CURIOS_WEB_BIN)"
+		--out-dir "$(CURIOS_JS_BUNDLE)" \
+		"$(CURIOS_JS_BIN)"
 
 .PHONY: curios/profile
 CURIOS_PROFILE_SOURCE ?= programs/hello_world.crs

@@ -10,12 +10,12 @@ use {
     curios_analysis::{
         Coverage, Declarations, Invert, group_totality, invert_indices, positivity_vectors,
     },
-    curios_base::{Plicity, Qualifier},
     curios_cert::Kernel,
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, MetaId, Metavar, Nat, Polarity,
         Rec, StructType, Subterm, Telescope, Term, Totality, UniverseContext, UniverseInst,
     },
+    curios_utilities::{Plicity, Qualifier},
     std::{collections::BTreeMap, rc::Rc, slice},
 };
 

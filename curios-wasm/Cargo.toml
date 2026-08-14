@@ -9,4 +9,6 @@ description = "The Curios WebAssembly-GC target: symbolic module model, parser, 
 workspace = true
 
 [dependencies]
-curios-base = { workspace = true }
+curios-utilities = { workspace = true }
+curios-parse = { workspace = true }
+curios-print = { workspace = true }

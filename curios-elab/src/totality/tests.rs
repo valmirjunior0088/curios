@@ -1,7 +1,7 @@
 use {
     super::*,
-    curios_base::Qualifier,
     curios_core::{DefinitionKind, Free, Nat, UniverseContext},
+    curios_utilities::Qualifier,
 };
 
 /// A qualified top-level name, from the path a test writes. Fixture-only.

@@ -2,11 +2,11 @@ use {
     super::{Context, Error, Mode, check, elaborate, expect},
     crate::{MotiveShape, check_intrinsic_head, check_motive, is_prop, reduce_with, refine_head},
     curios_analysis::{Invert, case_target_indices, invert_indices, pinned_by_targets},
-    curios_base::{Grain, PackedBin},
     curios_core::{
         Atom, Carrier, Cases, Free, InductArm, InductDecl, InductType, Intrinsic, IntrinsicHead,
         Many, Match, Nat, Scope, Subterm, Telescope, Term, Three, Two,
     },
+    curios_utilities::{Grain, PackedBin},
     std::collections::{BTreeMap, BTreeSet},
 };
 

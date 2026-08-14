@@ -1,11 +1,11 @@
 use {
     super::Erased,
-    curios_base::{Grain, Int, Plicity, Qualifier, Span},
     curios_core::{
         Atom, Free, Global, Level, Module, Polarity, ReduceError, Spelling, Subterm, Term,
         UniverseConstraintOrigin, UniverseError, build_rename, build_shorten, display_names,
     },
-    num_bigint::BigUint,
+    curios_num::{Integer, Natural},
+    curios_utilities::{Grain, Plicity, Qualifier, Span},
     std::{
         collections::{BTreeSet, HashMap},
         fmt,
@@ -67,7 +67,7 @@ pub enum Error {
         kind: &'static str,
     },
     IntToNatNegative {
-        value: Box<Int>,
+        value: Box<Integer>,
     },
     UniverseInconsistency {
         lower: Level,
@@ -386,7 +386,7 @@ pub enum Error {
         witness: String,
     },
     NatOverflow {
-        value: BigUint,
+        value: Natural,
     },
     /// A program whose erased module fails the arena representation's verifier — today exactly the recursion classes the language rejects (a computed-only recursive cycle no initialization order satisfies). The verifier owns rejection; erasure only surfaces its diagnostic.
     ErasedModuleInvalid {
@@ -394,7 +394,7 @@ pub enum Error {
     },
     /// An `Int` literal that survived to `erase` but does not fit `ersd`'s `i32` carrier — the type level is unbounded, so the representation narrowing lives at the erase boundary, like [`Error::NatOverflow`]'s u32. (The runtime's own i31 limit is enforced where it appears: `cont` → wasm lowering.)
     IntOverflow {
-        value: Box<Int>,
+        value: Box<Integer>,
     },
     /// A written motive binds the wrong number of names. An eliminator's motive abstracts the scrutinee's indices, in declaration order, and then the scrutinee — `expected` of them. `name` is the eliminated family when there is one to name (an intrinsic carrier has none).
     MotiveBinderCount {
@@ -921,7 +921,7 @@ impl Error {
         }
     }
 
-    pub(crate) fn nat_overflow(value: BigUint) -> Self {
+    pub(crate) fn nat_overflow(value: Natural) -> Self {
         Self::NatOverflow { value }
     }
 
@@ -929,7 +929,7 @@ impl Error {
         Self::ErasedModuleInvalid { detail }
     }
 
-    pub(crate) fn int_overflow(value: Int) -> Self {
+    pub(crate) fn int_overflow(value: Integer) -> Self {
         Self::IntOverflow {
             value: Box::new(value),
         }

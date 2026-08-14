@@ -7,8 +7,8 @@
 use {
     super::{check, infer},
     crate::{Kernel, KernelError, sort_of_intrinsic},
-    curios_base::Grain,
     curios_core::{Intrinsic, Reducer, Subterm, Term},
+    curios_utilities::Grain,
 };
 
 fn bool_type() -> Term {

@@ -1,3 +1,9 @@
+//! The pretty-printing combinator DSL: single-use [`Printer`] actions composed through `flat`/`sep_flat`/`indent` and run by [`run_printer`]. Every IR crate's `Display` impls are written in it — `print.rs` in `curios-text`, `curios-core` and `curios-wasm`. The layout decision it implements, with width as the mode and groups and lines as the only per-printer vocabulary, is `documentation/design/toolchain/one-document-algebra-decides-layout-for-every-printer.md`.
+//!
+//! **This crate depends on nothing.** The document algebra is defined over `std::fmt` alone, so no Curios term reaches it — which is what lets every IR crate depend on it without any of them depending on each other.
+//!
+//! Split from `curios-parse` rather than sharing a module namespace with it: both are monads that name their unit `pure`, which is why the pair were the one documented exception to this workspace's flat-crate rule. The crate name now does that disambiguation, and both crates are flat like every other.
+
 use std::{
     fmt::{self, Write},
     mem,

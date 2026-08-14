@@ -5,15 +5,14 @@ use {
         bin_window, list_locate, list_measure, list_window, normalize_concat, peel_bin,
         peel_first_atom, peel_first_elem, project_erased_universes,
     },
-    curios_base::{Grain, Int, PackedBin, int_rotl, int_rotr, nat_rotl, nat_rotr},
-    num_bigint::BigUint,
-    num_traits::{One, ToPrimitive, Zero},
+    curios_num::{Integer, Natural, int_rotl, int_rotr, nat_rotl, nat_rotr},
+    curios_utilities::{Grain, PackedBin},
     std::cmp::Ordering,
 };
 
 /// Read an already-reduced `Nat` term as a concrete `usize` index — `None` when it is still symbolic or too large to fit. The shared decode behind the `Bin`/`List` `get`/`slice` bounds.
 fn as_index(term: &Term) -> Option<usize> {
-    term.as_nat().and_then(|n| n.to_big_uint()?.to_usize())
+    term.as_nat().and_then(|n| n.to_natural()?.to_usize())
 }
 
 /// Reduce both operands of a `Bool` binary intrinsic, then either `fold` the two literals or `rebuild` the neutral term. `Bool` has no numeric carrier at the type level, so the fold reads the `true`/`false` constructors directly.
@@ -110,18 +109,18 @@ impl Euclid {
 /// Every arm is unconditional, which is what lets the callers below turn a bound into a definitional equation. A `Byte` is `0..=255` by its carrier — `Nat/to_byte` wraps and `Byte` is not a wire type, so no embedder can supply one outside the range — and `x % n < n` holds by definition, a zero divisor having already been reported. The remaining arms are monotone in operands whose own bounds this establishes.
 ///
 /// A wrong bound here is a false definitional equation, not a wrong value: see `documentation/soundness/per-term-rules/intrinsic-fold-laws-and-the-free-monoid-peel.md`.
-fn nat_bound(term: &Term) -> Option<BigUint> {
+fn nat_bound(term: &Term) -> Option<Natural> {
     let Subterm::Intrinsic(intrinsic) = &**term else {
         return None;
     };
 
     match intrinsic {
-        Intrinsic::Nat(Nat::Zero) => Some(BigUint::zero()),
+        Intrinsic::Nat(Nat::Zero) => Some(Natural::zero()),
         Intrinsic::Nat(Nat::Succ(floor, inner)) => Some(floor + nat_bound(inner)?),
-        Intrinsic::ByteToNat(_) => Some(BigUint::from(u8::MAX)),
+        Intrinsic::ByteToNat(_) => Some(Natural::from(u8::MAX)),
         Intrinsic::NatRem(_, divisor) => {
-            let divisor = divisor.as_nat()?.to_big_uint()?;
-            (!divisor.is_zero()).then(|| divisor - BigUint::one())
+            let divisor = divisor.as_nat()?.to_natural()?;
+            (!divisor.is_zero()).then(|| divisor - Natural::one())
         }
         // Either bound alone is an upper bound, so one suffices; with both, the smaller wins.
         Intrinsic::NatAnd(left, right) => match (nat_bound(left), nat_bound(right)) {
@@ -136,23 +135,23 @@ fn nat_bound(term: &Term) -> Option<BigUint> {
 }
 
 /// A reduced summand read as `coefficient · factor` with a literal coefficient, in either operand order. `NatMul` folds two literals, so at most one side is literal by the time this sees it.
-fn nat_literal_factor(summand: &Term) -> Option<(BigUint, Term)> {
+fn nat_literal_factor(summand: &Term) -> Option<(Natural, Term)> {
     let Subterm::Intrinsic(Intrinsic::NatMul(left, right)) = &**summand else {
         return None;
     };
 
-    if let Some(coefficient) = left.as_nat().and_then(|value| value.to_big_uint()) {
+    if let Some(coefficient) = left.as_nat().and_then(|value| value.to_natural()) {
         return Some((coefficient, right.clone()));
     }
 
     right
         .as_nat()
-        .and_then(|value| value.to_big_uint())
+        .and_then(|value| value.to_natural())
         .map(|coefficient| (coefficient, left.clone()))
 }
 
 /// `coefficient · factor`, dropping a zero product and a unit coefficient rather than emitting `0 · t` or `1 · t` for reduction to clear afterwards.
-fn nat_scaled(coefficient: BigUint, factor: Term) -> Term {
+fn nat_scaled(coefficient: Natural, factor: Term) -> Term {
     if coefficient.is_zero() {
         return Term::intrinsic(Intrinsic::Nat(Nat::Zero));
     }
@@ -169,7 +168,7 @@ fn nat_scaled(coefficient: BigUint, factor: Term) -> Term {
 /// Split a reduced dividend against a literal divisor into `(quotient, remainder)`, or `None` where the division is not forced.
 ///
 /// Every summand must be either a literal multiple of `n` — contributing its cofactor to the quotient — or statically bounded. When the bounded summands together with the residual floor stay below `n`, none of them can carry into the next multiple, so the split is exact for every value the symbolic parts take. That is what makes `(256·x + Byte/to_nat(b)) / 256` reduce to `x`.
-fn nat_euclid_split(dividend: &Term, divisor: &BigUint) -> Option<(Term, Term)> {
+fn nat_euclid_split(dividend: &Term, divisor: &Natural) -> Option<(Term, Term)> {
     let (floor, inner) = Nat::decompose(dividend);
     let mut quotient = Vec::new();
     let mut residual = Vec::new();
@@ -215,8 +214,8 @@ fn reduce_nat_division(
     let left = reducer.reduce_forced(left.clone())?;
     let right = reducer.reduce_forced(right.clone())?;
 
-    let divisor = right.as_nat().and_then(|divisor| divisor.to_big_uint());
-    if divisor.as_ref().is_some_and(BigUint::is_zero) {
+    let divisor = right.as_nat().and_then(|divisor| divisor.to_natural());
+    if divisor.as_ref().is_some_and(Natural::is_zero) {
         return Err(ReduceError::DivisionByZero {
             kind: euclid.kind(),
             span,
@@ -259,7 +258,7 @@ fn reduce_int_binary(
     reducer: &mut impl Reducer,
     left: &Term,
     right: &Term,
-    fold: impl FnOnce(Int, Int) -> Option<Intrinsic>,
+    fold: impl FnOnce(Integer, Integer) -> Option<Intrinsic>,
     rebuild: impl FnOnce(Term, Term) -> Intrinsic,
 ) -> Result<Subterm, ReduceError> {
     let left = reducer.reduce_forced(left.clone())?;
@@ -282,7 +281,7 @@ fn reduce_int_division(
     left: &Term,
     right: &Term,
     kind: &'static str,
-    fold: impl FnOnce(Int, Int) -> Option<Int>,
+    fold: impl FnOnce(Integer, Integer) -> Option<Integer>,
     rebuild: impl FnOnce(Term, Term) -> Intrinsic,
 ) -> Result<Subterm, ReduceError> {
     let span = right.span().or_else(|| left.span());
@@ -336,7 +335,7 @@ fn reduce_nat_unary(
 fn reduce_int_unary(
     reducer: &mut impl Reducer,
     inner: &Term,
-    fold: impl FnOnce(Int) -> Option<Intrinsic>,
+    fold: impl FnOnce(Integer) -> Option<Intrinsic>,
     rebuild: impl FnOnce(Term) -> Intrinsic,
 ) -> Result<Subterm, ReduceError> {
     let inner = reducer.reduce_forced(inner.clone())?;
@@ -377,7 +376,7 @@ fn from_ordering(ordering: Ordering) -> Comparison {
     }
 }
 
-/// The `Nat` eliminator's structural comparison, specialized to the flat `BigUint` successor spine: the floors stand in for peeling successors, so no recursion is needed and two literals decide in one `BigUint` compare (the literal fold folds into the shared-inner shortcut). It decides ONLY where the answer is forced and is `Stuck` otherwise — a sound partial decision procedure, the shared body of the whole comparison family. (The `lt` partner of the `Unary` eliminator's successor peel; for `Bin`/`List` the same `Comparison` shape would recurse via `uncons`.)
+/// The `Nat` eliminator's structural comparison, specialized to the flat `Natural` successor spine: the floors stand in for peeling successors, so no recursion is needed and two literals decide in one `Natural` compare (the literal fold folds into the shared-inner shortcut). It decides ONLY where the answer is forced and is `Stuck` otherwise — a sound partial decision procedure, the shared body of the whole comparison family. (The `lt` partner of the `Unary` eliminator's successor peel; for `Bin`/`List` the same `Comparison` shape would recurse via `uncons`.)
 ///
 /// Returns the operands with their shared successor floor peeled off, so an *undecided* comparison still rebuilds a normalized neutral: `cmp(x + m, y + m)` and `cmp(x, y)` reduce to the same term, which conversion needs (e.g. `Lt(a, succ b) ≡ Lt(succ a, succ(succ b))`).
 fn compare_nat(
@@ -562,7 +561,7 @@ pub fn reduce_intrinsic(
 
             Ok(Subterm::Intrinsic(
                 match inner.as_nat().and_then(|value| {
-                    let value = value.to_big_uint()?;
+                    let value = value.to_natural()?;
                     Some((value.to_u32()? & 0xff) as u8)
                 }) {
                     Some(value) => Intrinsic::Byte(value),
@@ -758,8 +757,8 @@ pub fn reduce_intrinsic(
             left,
             right,
             |l, r| {
-                let l = l.to_big_uint()?.to_u32()?;
-                let r = r.to_big_uint()?.to_u32()?;
+                let l = l.to_natural()?.to_u32()?;
+                let r = r.to_natural()?.to_u32()?;
                 Some(Intrinsic::Nat(Nat::new(nat_rotl(l, r) as usize)))
             },
             Intrinsic::NatRotl,
@@ -769,8 +768,8 @@ pub fn reduce_intrinsic(
             left,
             right,
             |l, r| {
-                let l = l.to_big_uint()?.to_u32()?;
-                let r = r.to_big_uint()?.to_u32()?;
+                let l = l.to_natural()?.to_u32()?;
+                let r = r.to_natural()?.to_u32()?;
                 Some(Intrinsic::Nat(Nat::new(nat_rotr(l, r) as usize)))
             },
             Intrinsic::NatRotr,
@@ -780,7 +779,7 @@ pub fn reduce_intrinsic(
             inner,
             |n| {
                 Some(Intrinsic::Nat(Nat::new(
-                    n.to_big_uint()?.to_u32()?.leading_zeros() as usize,
+                    n.to_natural()?.to_u32()?.leading_zeros() as usize,
                 )))
             },
             Intrinsic::NatClz,
@@ -790,7 +789,7 @@ pub fn reduce_intrinsic(
             inner,
             |n| {
                 Some(Intrinsic::Nat(Nat::new(
-                    n.to_big_uint()?.to_u32()?.trailing_zeros() as usize,
+                    n.to_natural()?.to_u32()?.trailing_zeros() as usize,
                 )))
             },
             Intrinsic::NatCtz,
@@ -800,7 +799,7 @@ pub fn reduce_intrinsic(
             inner,
             |n| {
                 Some(Intrinsic::Nat(Nat::new(
-                    n.to_big_uint()?.to_u32()?.count_ones() as usize,
+                    n.to_natural()?.to_u32()?.count_ones() as usize,
                 )))
             },
             Intrinsic::NatPopcnt,
@@ -847,7 +846,7 @@ pub fn reduce_intrinsic(
             left,
             right,
             "Int/div",
-            Int::checked_div,
+            Integer::checked_div,
             Intrinsic::IntDiv,
         ),
         Intrinsic::IntRem(left, right) => reduce_int_division(
@@ -855,7 +854,7 @@ pub fn reduce_intrinsic(
             left,
             right,
             "Int/rem",
-            Int::checked_rem,
+            Integer::checked_rem,
             Intrinsic::IntRem,
         ),
         Intrinsic::IntLt(left, right) => reduce_int_binary(
@@ -927,21 +926,31 @@ pub fn reduce_intrinsic(
             reducer,
             left,
             right,
-            |l, r| Some(Intrinsic::Int(Int::new(int_rotl(l.to_i32()?, r.to_i32()?)))),
+            |l, r| {
+                Some(Intrinsic::Int(Integer::from(int_rotl(
+                    l.to_i32()?,
+                    r.to_i32()?,
+                ))))
+            },
             Intrinsic::IntRotl,
         ),
         Intrinsic::IntRotr(left, right) => reduce_int_binary(
             reducer,
             left,
             right,
-            |l, r| Some(Intrinsic::Int(Int::new(int_rotr(l.to_i32()?, r.to_i32()?)))),
+            |l, r| {
+                Some(Intrinsic::Int(Integer::from(int_rotr(
+                    l.to_i32()?,
+                    r.to_i32()?,
+                ))))
+            },
             Intrinsic::IntRotr,
         ),
         Intrinsic::IntClz(inner) => reduce_int_unary(
             reducer,
             inner,
             |n| {
-                Some(Intrinsic::Int(Int::new(
+                Some(Intrinsic::Int(Integer::from(
                     (n.to_i32()? as u32).leading_zeros() as i32,
                 )))
             },
@@ -951,7 +960,7 @@ pub fn reduce_intrinsic(
             reducer,
             inner,
             |n| {
-                Some(Intrinsic::Int(Int::new(
+                Some(Intrinsic::Int(Integer::from(
                     (n.to_i32()? as u32).trailing_zeros() as i32,
                 )))
             },
@@ -961,8 +970,8 @@ pub fn reduce_intrinsic(
             reducer,
             inner,
             |n| {
-                Some(Intrinsic::Int(Int::new(
-                    (n.to_i32()? as u32).count_ones() as i32
+                Some(Intrinsic::Int(Integer::from(
+                    (n.to_i32()? as u32).count_ones() as i32,
                 )))
             },
             Intrinsic::IntPopcnt,
@@ -1024,7 +1033,7 @@ pub fn reduce_intrinsic(
         Intrinsic::NatToInt(inner) => reduce_nat_unary(
             reducer,
             inner,
-            |v| Some(Intrinsic::Int(Int::new(v.to_big_uint()?))),
+            |v| Some(Intrinsic::Int(Integer::from(v.to_natural()?))),
             Intrinsic::NatToInt,
         ),
         // Opaque at the type level, like every `Flt` operation: constructing a float *is* float semantics.
@@ -1036,7 +1045,7 @@ pub fn reduce_intrinsic(
             let span = inner.span();
             let inner = reducer.reduce_forced(inner.clone())?;
             match inner.as_int() {
-                Some(value) => match value.to_big_uint() {
+                Some(value) => match value.to_natural() {
                     Some(number) => Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(number)))),
                     None => Err(ReduceError::IntToNatNegative { value, span }),
                 },
@@ -1884,8 +1893,8 @@ mod tests {
             reduce_intrinsic,
         },
         crate::{Free, Intrinsic, Nat, One, ReduceError, Scope, Subterm, Term},
-        curios_base::{Grain, Int, PackedBin},
-        num_bigint::BigUint,
+        curios_num::{Integer, Natural},
+        curios_utilities::{Grain, PackedBin},
     };
 
     /// A reducer that reduces nothing. Every operand below is already a literal — a weak-head normal form — so no strategy is involved, and running the comparison body against an inert reducer says exactly that: the outcome is decided by the structural compare, not by anything unfolded.
@@ -2012,12 +2021,12 @@ mod tests {
             let reduced = reduce_intrinsic(&mut Inert, &Intrinsic::NatToInt(nat)).expect("reduces");
             assert_eq!(
                 reduced,
-                Subterm::Intrinsic(Intrinsic::Int(Int::new(n))),
+                Subterm::Intrinsic(Intrinsic::Int(Integer::from(n))),
                 "Nat/to_int changed the number on {n}",
             );
         }
         for i in [0i64, 1, 0x3FFF_FFFF, 0x7FFF_FFFF, 0x1_0000_0000] {
-            let int = Term::intrinsic(Intrinsic::Int(Int::new(i)));
+            let int = Term::intrinsic(Intrinsic::Int(Integer::from(i)));
             let reduced = reduce_intrinsic(&mut Inert, &Intrinsic::IntToNat(int)).expect("reduces");
             assert_eq!(
                 reduced,
@@ -2026,7 +2035,7 @@ mod tests {
             );
         }
         for i in [-1i64, -0x4000_0000, i32::MIN as i64, i64::MIN] {
-            let int = Term::intrinsic(Intrinsic::Int(Int::new(i)));
+            let int = Term::intrinsic(Intrinsic::Int(Integer::from(i)));
             let reduced = reduce_intrinsic(&mut Inert, &Intrinsic::IntToNat(int));
             assert!(
                 matches!(reduced, Err(ReduceError::IntToNatNegative { .. })),
@@ -2099,7 +2108,7 @@ mod tests {
             let value = value
                 .as_nat()
                 .expect("closed")
-                .to_big_uint()
+                .to_natural()
                 .expect("literal");
             assert!(
                 value <= byte_bound,
@@ -2118,7 +2127,7 @@ mod tests {
                 let value = value
                     .as_nat()
                     .expect("closed")
-                    .to_big_uint()
+                    .to_natural()
                     .expect("literal");
                 assert!(value <= bound, "{dividend} % {divisor} exceeded its bound");
             }
@@ -2146,7 +2155,7 @@ mod tests {
         ];
 
         for (dividend, divisor) in cases {
-            let n = BigUint::from(divisor);
+            let n = Natural::from(divisor);
             let (quotient, remainder) =
                 nat_euclid_split(&dividend, &n).expect("these dividends split");
 

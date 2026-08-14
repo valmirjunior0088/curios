@@ -1,6 +1,7 @@
 use {
     super::{Nat, Term},
-    curios_base::{Flt, Grain, Int},
+    curios_num::{Flt, Integer},
+    curios_utilities::Grain,
 };
 
 /// One entry of a list literal `[a, ..xs, b]` — a plain element, or a `..`-spread whose term contributes a whole `List` run. Lowering groups consecutive elements into literal chunks and splices the spreads with the n-ary `ListConcat` intrinsic; a spread-free literal lowers to a plain `List` exactly as before.
@@ -63,7 +64,7 @@ pub enum Intrinsic {
     ByteGt(Term, Term),
     ByteGte(Term, Term),
     IntType,
-    Int(Int),
+    Int(Integer),
     IntEql(Term, Term),
     IntNeq(Term, Term),
     IntAdd(Term, Term),

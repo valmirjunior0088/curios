@@ -1,7 +1,8 @@
 use curios_core::*;
 use {
     crate::*,
-    curios_base::{Flt, Grain, Int, PackedBin, Qualifier},
+    curios_num::{Flt, Integer},
+    curios_utilities::{Grain, PackedBin, Qualifier},
 };
 
 /// A declaration's name, from the path a test writes. Fixture-only.
@@ -374,12 +375,12 @@ fn reduce_int_add_computes() {
         reduce(
             &mut context,
             Subterm::Intrinsic(Intrinsic::int_add(
-                Subterm::Intrinsic(Intrinsic::Int(Int::new(1))),
-                Subterm::Intrinsic(Intrinsic::Int(Int::new(2)))
+                Subterm::Intrinsic(Intrinsic::Int(Integer::from(1))),
+                Subterm::Intrinsic(Intrinsic::Int(Integer::from(2)))
             ))
             .into()
         ),
-        Ok(Subterm::Intrinsic(Intrinsic::Int(Int::new(3))).into())
+        Ok(Subterm::Intrinsic(Intrinsic::Int(Integer::from(3))).into())
     );
 }
 
@@ -391,8 +392,8 @@ fn reduce_int_eql_returns_true_or_false_bool() {
         reduce(
             &mut context,
             Subterm::Intrinsic(Intrinsic::int_eql(
-                Subterm::Intrinsic(Intrinsic::Int(Int::new(4))),
-                Subterm::Intrinsic(Intrinsic::Int(Int::new(4)))
+                Subterm::Intrinsic(Intrinsic::Int(Integer::from(4))),
+                Subterm::Intrinsic(Intrinsic::Int(Integer::from(4)))
             ))
             .into()
         ),
@@ -402,8 +403,8 @@ fn reduce_int_eql_returns_true_or_false_bool() {
         reduce(
             &mut context,
             Subterm::Intrinsic(Intrinsic::int_eql(
-                Subterm::Intrinsic(Intrinsic::Int(Int::new(4))),
-                Subterm::Intrinsic(Intrinsic::Int(Int::new(5)))
+                Subterm::Intrinsic(Intrinsic::Int(Integer::from(4))),
+                Subterm::Intrinsic(Intrinsic::Int(Integer::from(5)))
             ))
             .into()
         ),
@@ -826,8 +827,8 @@ fn reduce_int_div_by_zero_reports() {
         reduce(
             &mut context,
             Term::intrinsic(Intrinsic::int_div(
-                Subterm::Intrinsic(Intrinsic::Int(Int::new(1))),
-                Subterm::Intrinsic(Intrinsic::Int(Int::new(0))),
+                Subterm::Intrinsic(Intrinsic::Int(Integer::from(1))),
+                Subterm::Intrinsic(Intrinsic::Int(Integer::from(0))),
             )),
         ),
         Err(ReduceError::DivisionByZero {
@@ -840,8 +841,8 @@ fn reduce_int_div_by_zero_reports() {
         reduce(
             &mut context,
             Term::intrinsic(Intrinsic::int_rem(
-                Subterm::Intrinsic(Intrinsic::Int(Int::new(1))),
-                Subterm::Intrinsic(Intrinsic::Int(Int::new(0))),
+                Subterm::Intrinsic(Intrinsic::Int(Integer::from(1))),
+                Subterm::Intrinsic(Intrinsic::Int(Integer::from(0))),
             )),
         ),
         Err(ReduceError::DivisionByZero {
@@ -860,22 +861,22 @@ fn reduce_int_arithmetic_is_unbounded() {
         reduce(
             &mut context,
             Term::intrinsic(Intrinsic::int_add(
-                Subterm::Intrinsic(Intrinsic::Int(Int::new((1i64 << 30) - 1))),
-                Subterm::Intrinsic(Intrinsic::Int(Int::new(1))),
+                Subterm::Intrinsic(Intrinsic::Int(Integer::from((1i64 << 30) - 1))),
+                Subterm::Intrinsic(Intrinsic::Int(Integer::from(1))),
             )),
         ),
-        Ok(Term::intrinsic(Intrinsic::Int(Int::new(1i64 << 30))))
+        Ok(Term::intrinsic(Intrinsic::Int(Integer::from(1i64 << 30))))
     );
 
     assert_eq!(
         reduce(
             &mut context,
             Term::intrinsic(Intrinsic::int_mul(
-                Subterm::Intrinsic(Intrinsic::Int(Int::new(1i64 << 30))),
-                Subterm::Intrinsic(Intrinsic::Int(Int::new(1i64 << 30))),
+                Subterm::Intrinsic(Intrinsic::Int(Integer::from(1i64 << 30))),
+                Subterm::Intrinsic(Intrinsic::Int(Integer::from(1i64 << 30))),
             )),
         ),
-        Ok(Term::intrinsic(Intrinsic::Int(Int::new(1i64 << 60))))
+        Ok(Term::intrinsic(Intrinsic::Int(Integer::from(1i64 << 60))))
     );
 }
 
@@ -899,8 +900,8 @@ mod intrinsic {
     use curios_core::*;
     use {
         crate::{Context, reduce},
-        curios_base::{Grain, PackedBin},
-        num_bigint::BigUint,
+        curios_num::Natural,
+        curios_utilities::{Grain, PackedBin},
     };
 
     fn context() -> Context {
@@ -912,7 +913,7 @@ mod intrinsic {
     }
 
     fn succ(inner: Term) -> Term {
-        Term::intrinsic(Intrinsic::Nat(Nat::Succ(BigUint::from(1u32), inner)))
+        Term::intrinsic(Intrinsic::Nat(Nat::Succ(Natural::from(1u32), inner)))
     }
 
     fn reduced(context: &mut Context, term: Term) -> Subterm {

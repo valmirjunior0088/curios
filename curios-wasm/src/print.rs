@@ -5,7 +5,7 @@ use {
         Import, Instr, LabelName, LocalName, Module, Mutability, NumType, PackedType, RecType,
         RefType, ResultType, StorageType, StructType, SubType, TypeName, ValType,
     },
-    curios_base::printer::{Printer, flat, group, hard_line, indent, line, pure, sep_flat},
+    curios_print::{Printer, flat, group, hard_line, indent, line, pure, sep_flat},
 };
 
 fn print_dollar_ident(name: &str) -> Printer {

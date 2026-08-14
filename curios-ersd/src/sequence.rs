@@ -2,7 +2,7 @@
 //!
 //! Sequence operations form their own family beside the scalar [`Operation`](super::Operation)s: the packed-binary forms carry their [`Grain`] so `Bool`- and `Byte`-grained binaries stay distinct shapes, and the variadic construction/concatenation forms carry their whole operand list in the statement's operand vector.
 
-use curios_base::Grain;
+use curios_utilities::Grain;
 
 /// A packed-binary or list operation. Operand order is documented per variant; [`arity`](SequenceOp::arity) is the single authoritative operand contract.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

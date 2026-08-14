@@ -7,7 +7,7 @@
 use {
     super::Size,
     curios_core::{Atom, Free, Global},
-    num_bigint::BigUint,
+    curios_num::Natural,
 };
 
 /// The constructor a [`Shape`] node stands for.
@@ -45,7 +45,7 @@ pub(super) enum Shape {
     /// A constructor applied to its arguments.
     Node(Tag, Vec<Shape>),
     /// A packed run of `Nat` successors: `count` unary layers over `tail`, the shape-level mirror of `Nat::Succ`'s packed spine. Canonical by construction — built only through [`Shape::unary_run`], so the count is nonzero and the tail is never itself a unary run.
-    UnaryRun { count: BigUint, tail: Box<Shape> },
+    UnaryRun { count: Natural, tail: Box<Shape> },
     /// A packed run of `Bin`/`List` elements over `tail`, front first — one head shape per element, held breadth-wise. The carrier is [`Carriers::Bin`] or [`Carriers::List`]; `Nat`'s payload-less layers are [`Shape::UnaryRun`]. Canonical by construction — built only through [`Shape::elem_run`], so the heads are nonempty and the tail is never an elem run of the same carrier.
     ElemRun {
         carrier: Carriers,
@@ -62,8 +62,8 @@ pub(super) enum Shape {
 
 impl Shape {
     /// `count` successors over `tail`. Zero successors are the tail itself, and a run landing on another run merges, so the canonicity the comparisons assume is established here rather than at every builder.
-    pub(super) fn unary_run(count: BigUint, tail: Shape) -> Shape {
-        if count == BigUint::from(0usize) {
+    pub(super) fn unary_run(count: Natural, tail: Shape) -> Shape {
+        if count == Natural::from(0usize) {
             return tail;
         }
         match tail {

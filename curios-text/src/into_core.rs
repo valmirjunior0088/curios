@@ -20,8 +20,8 @@ mod tests;
 use {
     super::*,
     curios_abi::ForeignStore,
-    curios_base::{Entropy, Mount, Plicity, Qualifier, RootKind, SyntaxRegistry},
     curios_core::Bound,
+    curios_utilities::{Entropy, Mount, Plicity, Qualifier, RootKind, SyntaxRegistry},
     std::{
         cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet, HashMap, HashSet},
@@ -1573,7 +1573,7 @@ impl<'a> UnitSource<'a> {
     }
 
     /// Every file this unit has read. See [`RootSource::reads`].
-    pub fn reads(&self) -> Vec<(std::path::PathBuf, std::rc::Rc<curios_base::Source>)> {
+    pub fn reads(&self) -> Vec<(std::path::PathBuf, std::rc::Rc<curios_utilities::Source>)> {
         self.source.reads()
     }
 

@@ -4,7 +4,8 @@
 
 use {
     super::{ConstantId, FunctionId, ValueId},
-    curios_base::{Flt, Grain, PackedBin},
+    curios_num::Flt,
+    curios_utilities::{Grain, PackedBin},
 };
 
 /// An atomic operand: a lexically bound value, a bound function used as a value, or an interned constant.

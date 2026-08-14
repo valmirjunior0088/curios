@@ -5,7 +5,7 @@
 use {
     crate::tests::cont_optm,
     curios_pipeline::compile_with_prelude,
-    curios_runtime::{ForeignBindings, MockHost, run_bytes, shared_engine},
+    curios_runtime::{ForeignBindings, MockHost, precompile, run_bytes},
     curios_text::{Entrypoint, RootSource},
     curios_wasm::{Module, to_bytes},
     std::collections::BTreeSet,
@@ -373,8 +373,7 @@ fn indices(wat: &str, prefix: &str) -> BTreeSet<u32> {
 /// Run the raw (Binaryen-free) module: Cranelift-precompile the raw bytes directly — validation, including control-flow well-formedness, happens here, so a module Binaryen would have had to repair fails — then execute it and return captured stdout. `args` seeds `proc/args!`, which drives the taint.
 fn run_raw(source: &str, args: &[&str]) -> Vec<u8> {
     let module = compile_raw(source);
-    let cwasm = shared_engine()
-        .precompile_module(&to_bytes(&module))
+    let cwasm = precompile(&to_bytes(&module))
         .expect("raw module validates and Cranelift-compiles without Binaryen");
 
     let (system, io) = MockHost::builder().args(args).build();

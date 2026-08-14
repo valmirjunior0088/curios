@@ -5,7 +5,7 @@ use {
         TupleType, TupleTypeParam, UseGroup,
     },
     curios_abi::{ForeignFunction, ForeignStore, WireType, mode, poll, status, stdio},
-    curios_base::{Grain, Plicity, SyntaxName, SyntaxRegistry},
+    curios_utilities::{Grain, Plicity, SyntaxName, SyntaxRegistry},
     std::sync::Arc,
 };
 

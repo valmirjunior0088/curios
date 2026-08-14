@@ -6,8 +6,8 @@
 
 use {
     super::{Intrinsic, Nat, Subterm, Term},
-    curios_base::{Grain, PackedBin},
-    num_bigint::BigUint,
+    curios_num::Natural,
+    curios_utilities::{Grain, PackedBin},
 };
 
 /// The one-step decode of a free-monoid scrutinee — a carrier's signature functor made concrete. `Empty` is the identity form (`x[]`, `[]`, `0`); `Cons` peels a generator: its `head` is the payload reflected into the element type — a `Nat` byte for `Bin`, the element term itself for `List`, and `None` for `Nat`, whose unary successor carries no payload — over the symbolic tail the induction hypothesis recurses on; `Stuck` is a scrutinee exposing neither form (a variable, a non-cons symbolic concatenation), where the eliminator rebuilds.
@@ -44,7 +44,7 @@ impl FreeMonoid {
             Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => Layer::Empty,
             // Peel one successor off the spine; the predecessor is the tail, and the unary generator carries no head. A spine count `> 1` keeps the rest as a shorter `Succ`, exactly as the old bespoke `Nat` eliminator did.
             Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(spine, inner))) => {
-                let one = BigUint::from(1usize);
+                let one = Natural::from(1usize);
 
                 Layer::Cons {
                     head: None,
@@ -132,7 +132,7 @@ enum Front {
 
 /// One pending level of a leading-edge descent — what that level has to put back once the generator underneath it has been peeled. `Appended` is a `BinAppend`'s trailing atom; `Concat` is the operands a `BinConcat` carried after its first.
 ///
-/// **The descent is explicit rather than recursive because this depth is *data*-shaped.** `FUSION_CAP` stops an accumulation fusing, so what it builds is a concatenation nested as deeply as the loop is long, and the leading edge of that is what these walks descend. [`curios_base::recurse`] is taken at the *entry point* of each checker's reduction and checked between its frames, never per level of a helper it calls, so a hundred thousand native frames here would spend one granted segment without ever reaching a check. `curios-cont`'s `$<carrier>/force` walks the same shape on the same kind of explicit worklist, for the same reason — and `documentation/design/toolchain/depth-is-bought-with-stack-not-with-hand-rolled-frames.md` does not reach here: what that entry defends is the two reduction and conversion strategies written deliberately *twice*, so that a person can diff them, and these are single-implementation helpers both of them share.
+/// **The descent is explicit rather than recursive because this depth is *data*-shaped.** `FUSION_CAP` stops an accumulation fusing, so what it builds is a concatenation nested as deeply as the loop is long, and the leading edge of that is what these walks descend. [`curios_utilities::recurse`] is taken at the *entry point* of each checker's reduction and checked between its frames, never per level of a helper it calls, so a hundred thousand native frames here would spend one granted segment without ever reaching a check. `curios-cont`'s `$<carrier>/force` walks the same shape on the same kind of explicit worklist, for the same reason — and `documentation/design/toolchain/depth-is-bought-with-stack-not-with-hand-rolled-frames.md` does not reach here: what that entry defends is the two reduction and conversion strategies written deliberately *twice*, so that a person can diff them, and these are single-implementation helpers both of them share.
 enum BinLevel<'a> {
     Appended(&'a Term),
     Concat(&'a [Term]),

@@ -4,8 +4,8 @@
 
 use {
     crate::{Error, HeadKey, Witness, WitnessKey},
-    curios_base::{Mount, Qualifier},
     curios_core::{ConceptDecl, Global, InductDecl, StructDecl, Term, Totality, UniverseContext},
+    curios_utilities::{Mount, Qualifier},
     std::collections::{BTreeMap, BTreeSet},
 };
 

@@ -3,20 +3,18 @@
 //! No carrier is chosen here: `Bool` values and operations stay `Bool`-shaped, `Byte` stays `Byte`, `Handle` stays an opaque handle constant, and a packed binary's element is its grain's shape (`Byte` for `X`, `Bool` for `B`) — every collapse onto a runtime carrier belongs to the lowering out of the representation. Unbounded type-level numerals narrow to the exact 32-bit domains here (the numeric law's Core border), with overflow reported as an error, never wrapped.
 
 use {
-    super::{
-        BigUint, Context, Error, Intrinsic, Lowering, Nat, Outcome, Subterm, Term, ToPrimitive,
-        emitted,
-    },
-    curios_base::{Grain, Int},
+    super::{Context, Error, Intrinsic, Lowering, Nat, Natural, Outcome, Subterm, Term, emitted},
+    curios_num::Integer,
+    curios_utilities::Grain,
 };
 
-fn narrow_nat(value: &BigUint) -> Result<u32, Error> {
+fn narrow_nat(value: &Natural) -> Result<u32, Error> {
     value
         .to_u32()
         .ok_or_else(|| Error::nat_overflow(value.clone()))
 }
 
-fn narrow_int(value: &Int) -> Result<i32, Error> {
+fn narrow_int(value: &Integer) -> Result<i32, Error> {
     value
         .to_i32()
         .ok_or_else(|| Error::int_overflow(value.clone()))

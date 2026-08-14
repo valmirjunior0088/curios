@@ -7,7 +7,7 @@ use {
         EmissionBody, EmissionCallTarget, EmissionCellTarget, EmissionCode, EmissionData,
         EmissionHostTarget, EmissionModule, EmissionTail, EmissionValue, EmissionValueName,
     },
-    curios_base::{Grain, PackedBin},
+    curios_utilities::{Grain, PackedBin},
     std::collections::HashMap,
 };
 

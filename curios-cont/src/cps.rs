@@ -4,7 +4,7 @@
 
 use {
     curios_abi::ForeignFunction,
-    curios_base::{Arena, Grain, PackedBin, id},
+    curios_utilities::{Arena, Grain, PackedBin, id},
     std::{
         collections::{BTreeMap, BTreeSet},
         fmt,

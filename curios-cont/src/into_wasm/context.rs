@@ -6,7 +6,7 @@ use {
     },
     crate::Repr,
     curios_abi::{WireLeaf, WireType},
-    curios_base::Entropy,
+    curios_utilities::Entropy,
     std::{
         collections::{BTreeMap, HashMap},
         iter,

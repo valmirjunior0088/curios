@@ -6,8 +6,7 @@ use {
         ListEntry, Name, Nat, NatLiteral, NumLit, Pattern, PatternField, Rec, StructLitEntry,
         Subterm, Syn, Term,
     },
-    curios_base::{Grain, PackedBin, Plicity, Qualifier, Span, SyntaxName, recurse},
-    num_traits::ToPrimitive,
+    curios_utilities::{Grain, PackedBin, Plicity, Qualifier, Span, SyntaxName, recurse},
     std::{cell::RefCell, sync::Arc},
 };
 

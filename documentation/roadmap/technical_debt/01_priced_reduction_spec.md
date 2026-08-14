@@ -50,7 +50,7 @@ Existing input terms and source text are not retroactively charged. Any new payl
 
 Units are machine-independent logical words: one unit covers eight logical bytes of scalar payload or one abstract reference slot. An abstract slot is one unit on every target; it is not a claim that a physical pointer occupies eight bytes. The accounting uses fixed formulas rather than `size_of`, allocator capacities, resident-set size, or platform-dependent big-integer limb layouts.
 
-That independence is load-bearing rather than fastidious. `curios-web` compiles to wasm32, where `usize` and `num-bigint`'s digit width both differ from the native target, and its budget constant exists to promise that a program compiling in the playground compiles at the command line. All charge arithmetic is therefore computed in `u64` regardless of host pointer width.
+That independence is load-bearing rather than fastidious. `curios-js` compiles to wasm32, where `usize` and `num-bigint`'s digit width both differ from the native target, and its budget constant exists to promise that a program compiling in the playground compiles at the command line. All charge arithmetic is therefore computed in `u64` regardless of host pointer width.
 
 The same independence is what keeps this limit correct while a representation changes underneath it. A carrier that concatenates more cheaply spends fewer units for the same result; the unit itself, the price list, and the acceptance threshold are unaffected.
 
@@ -317,7 +317,7 @@ make curios/runtime
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -Dwarnings
 cargo test --workspace --all-targets --all-features
-make curios/web
+make curios/js
 ```
 
 The web build is required because shared reducer dependencies feed the browser target. The handoff also includes the documentation, invariant, and repository-hygiene review required by `CLAUDE.md`.

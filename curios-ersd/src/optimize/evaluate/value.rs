@@ -4,7 +4,8 @@
 
 use {
     crate::{Constant, ConstructorId, FunctionId, ProductId, ValueId},
-    curios_base::{Flt, Grain, PackedBin},
+    curios_num::Flt,
+    curios_utilities::{Grain, PackedBin},
     std::{cell::RefCell, rc::Rc},
 };
 

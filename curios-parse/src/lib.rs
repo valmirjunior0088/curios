@@ -1,5 +1,9 @@
+//! The parser combinator DSL: `FnOnce`-based, with ordered choice under progress-based commitment (an alternative that consumed input owns the error unless [`catch`]ed), packrat memoization via [`memoize`], and byte-offset errors rendered as caret snippets. The engine behind both the `.crs` surface grammar (`curios-text`) and the WAT parser (`curios-wasm`).
+//!
+//! This and `curios-print` are separate crates rather than two modules of one, and the reason is naming. Both are monads and both name their unit `pure`, so while they shared a crate they had to stay unflattened namespaces — the single documented exception to this workspace's rule that a crate is a flat namespace — purely so that `parser::pure` and `printer::pure` stayed distinguishable. Split, the crate name does that work: [`curios_parse::pure`](pure) and `curios_print::pure` are unambiguous at every use site, and each crate is flat like every other. A crate that exists to hold a name apart is cheaper than an exception to a layout rule.
+
 use {
-    crate::Source,
+    curios_utilities::{Source, Span},
     std::{any::Any, cell::RefCell, collections::HashMap, rc::Rc},
 };
 
@@ -118,8 +122,7 @@ impl ParserError {
         format!(
             "{message}\n\n{snippet}",
             message = self.message,
-            snippet =
-                crate::Span::new(self.source.clone(), self.offset, self.offset).render_snippet(),
+            snippet = Span::new(self.source.clone(), self.offset, self.offset).render_snippet(),
         )
     }
 }
@@ -407,8 +410,8 @@ where
     Parser::new(move |state| parser.parse(state).map_err(|error| error.catch()))
 }
 
-/// Pairs the parser's output with the [`crate::Span`] covering exactly the bytes it consumed — how surface parsers attach source locations, so wrap the whole construct rather than its pieces.
-pub fn spanned<'a, T>(parser: Parser<'a, T>) -> Parser<'a, (crate::Span, T)>
+/// Pairs the parser's output with the [`Span`] covering exactly the bytes it consumed — how surface parsers attach source locations, so wrap the whole construct rather than its pieces.
+pub fn spanned<'a, T>(parser: Parser<'a, T>) -> Parser<'a, (Span, T)>
 where
     T: 'a,
 {
@@ -417,10 +420,7 @@ where
         let (item, state) = parser.parse(state)?;
 
         Ok((
-            (
-                crate::Span::new(state.source.clone(), start, state.offset),
-                item,
-            ),
+            (Span::new(state.source.clone(), start, state.offset), item),
             state,
         ))
     })
@@ -484,7 +484,7 @@ where
     many_core(f, true)
 }
 
-/// A bookmarked parse position, for building a [`crate::Span`] after the fact from two positions captured at different points in a grammar — [`spanned`] only covers what its one wrapped parser itself consumes, so a node whose span should reach further (e.g. through a tail parsed by a separate step) needs this instead.
+/// A bookmarked parse position, for building a [`Span`] after the fact from two positions captured at different points in a grammar — [`spanned`] only covers what its one wrapped parser itself consumes, so a node whose span should reach further (e.g. through a tail parsed by a separate step) needs this instead.
 #[derive(Debug, Clone)]
 pub struct Mark {
     offset: usize,
@@ -493,13 +493,13 @@ pub struct Mark {
 
 impl Mark {
     /// The span between this mark and `end` (order-independent — whichever offset is smaller becomes the start).
-    pub fn to(&self, end: &Mark) -> crate::Span {
+    pub fn to(&self, end: &Mark) -> Span {
         let (start, end) = match self.offset <= end.offset {
             true => (self.offset, end.offset),
             false => (end.offset, self.offset),
         };
 
-        crate::Span::new(self.source.clone(), start, end)
+        Span::new(self.source.clone(), start, end)
     }
 }
 

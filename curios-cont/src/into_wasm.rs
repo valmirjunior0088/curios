@@ -4,7 +4,7 @@ use {
         machine::value_id, machine::value_name,
     },
     curios_abi::ForeignFunction,
-    curios_base::{Grain, PackedBin},
+    curios_utilities::{Grain, PackedBin},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
         sync::Arc,

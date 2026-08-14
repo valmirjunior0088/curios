@@ -1,6 +1,6 @@
 use {
     super::{Polarity, Telescope, Term, UniverseContext},
-    curios_base::Qualifier,
+    curios_utilities::Qualifier,
 };
 
 /// One struct declaration's registry entry: the metadata a `struct` declaration produces alongside its type-former binding.

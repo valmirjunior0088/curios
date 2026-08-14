@@ -7,10 +7,8 @@
 use {
     super::{FormatInput, TopItem, parse_for_format},
     crate::print::{print_term, print_top_item},
-    curios_base::{
-        Source, Span,
-        printer::{Printer, run_printer_within},
-    },
+    curios_print::{Printer, run_printer_within},
+    curios_utilities::{Source, Span},
     std::{cell::RefCell, fmt, path::Path, rc::Rc},
 };
 

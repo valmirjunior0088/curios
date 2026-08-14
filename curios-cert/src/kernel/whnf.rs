@@ -11,13 +11,12 @@ mod tests;
 
 use {
     super::Kernel,
-    curios_base::recurse,
     curios_core::{
         Apply, Bound, Carrier, Cases, Field, FreeMonoid, Func, Layer, Let, Many, Match, Nat, Proj,
         Rec, RecGroup, ReduceError, Reducer, Scope, Struct, Subterm, Term, Tuple, UniverseInst,
         Var, Variant, instantiate_universe_levels_scoped, reduce_intrinsic,
     },
-    num_traits::ToPrimitive,
+    curios_utilities::recurse,
 };
 
 /// The kernel's reduction strategy: everything unfolds, and what a local-free term unfolds to is remembered — see the memo fields on [`Kernel`] for what that does and does not concede.

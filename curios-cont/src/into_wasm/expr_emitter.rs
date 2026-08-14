@@ -4,7 +4,7 @@ use {
         EmissionData, EmissionValue, EmissionValueName, Frame, LayoutItem, LoadAs, LocalData,
         region_layout,
     },
-    curios_base::Grain,
+    curios_utilities::Grain,
     std::collections::{BTreeMap, HashMap, HashSet},
 };
 

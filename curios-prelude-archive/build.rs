@@ -9,7 +9,6 @@ use syntax::SYNTAX;
 
 use {
     curios_abi::host_ops,
-    curios_base::{Qualifier, RootKind},
     curios_core::Item,
     curios_core::{Global, Sharing, derived_binder_floor, validate_stored_identities},
     curios_elab::{
@@ -17,6 +16,7 @@ use {
         validate_lowered_universe_seeds, validate_universes,
     },
     curios_text::{Module, RootSource, prepare_prelude, sys_module},
+    curios_utilities::{Qualifier, RootKind},
     sha2::{Digest, Sha256},
     std::{
         collections::BTreeSet,

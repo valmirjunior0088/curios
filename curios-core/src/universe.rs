@@ -7,7 +7,7 @@
 //! Constraint provenance is diagnostic-only: semantic equality and hashing compare normalized inequalities but ignore their spans and explanations. Consistency reduces ordinary inequalities to one difference graph and branches only for genuine maxima on the right. Solver marks cover both assignments and constraints so failed speculative elaboration rolls them back together. Zonked Core validates that contexts are closed and nominal instance arities agree, then erasure removes every level, context, and instance before Ersd.
 
 use {
-    curios_base::{Mint, Span},
+    curios_utilities::{Mint, Span},
     std::{
         collections::BTreeMap,
         fmt,
@@ -532,7 +532,7 @@ impl std::error::Error for UniverseError {}
 mod tests {
     use {
         super::*,
-        curios_base::{Source, Span},
+        curios_utilities::{Source, Span},
         std::{
             collections::hash_map::DefaultHasher,
             hash::{Hash, Hasher},

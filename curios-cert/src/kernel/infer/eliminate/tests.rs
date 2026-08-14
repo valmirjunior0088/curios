@@ -1,10 +1,10 @@
 use {
     crate::{Kernel, KernelError, infer},
-    curios_base::{Plicity, Qualifier},
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Many, Nat, Scope, Telescope, Term,
         UniverseContext,
     },
+    curios_utilities::{Plicity, Qualifier},
 };
 
 fn kernel() -> Kernel {

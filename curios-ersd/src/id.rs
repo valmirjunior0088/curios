@@ -2,7 +2,7 @@
 //!
 //! Each kind gets its own `u32`-backed newtype with a distinct `~`-sigil display prefix, following the naming scheme shared with `curios-cont` and `curios-wasm` — see `documentation/design/toolchain/one-naming-scheme-for-compiler-identities.md`. Identities are minted monotonically by their owning arena and never reused; removal tombstones the slot instead.
 
-use curios_base::id;
+use curios_utilities::id;
 
 id!(ValueId, "~v"; archive);
 id!(FunctionId, "~f"; archive);

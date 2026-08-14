@@ -1,5 +1,6 @@
 use {
-    curios_base::{Span, parser::ParserError},
+    curios_parse::ParserError,
+    curios_utilities::Span,
     std::{fmt, io, path::PathBuf},
 };
 

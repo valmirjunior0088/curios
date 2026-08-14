@@ -13,8 +13,8 @@ mod tests;
 
 use {
     crate::{LIBRARY, MANIFEST, Manifest, Package},
-    curios_base::RootKind,
     curios_text::{Module, RootSource, TopItem},
+    curios_utilities::RootKind,
     std::{
         collections::BTreeMap,
         path::{Path, PathBuf},

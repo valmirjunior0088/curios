@@ -12,11 +12,11 @@ use {
         Context, EmbeddingDiagnosis, Error, HeadKey, Outcome, ParkedGoal, ParkedWork, Witness,
         WitnessKey, convert_outcome, reduce_with,
     },
-    curios_base::{Mount, Plicity, Qualifier},
     curios_core::{
         ConceptDecl, Field, Free, Global, ImplicitOrigin, Level, MetaId, Metavar, StructType,
         Subterm, Telescope, Term, UniverseContext, WitnessOrigin,
     },
+    curios_utilities::{Mount, Plicity, Qualifier},
     std::collections::{BTreeMap, BTreeSet, HashSet, VecDeque},
 };
 

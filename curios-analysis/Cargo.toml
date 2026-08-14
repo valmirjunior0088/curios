@@ -13,9 +13,9 @@ profile = ["curios-profile/enabled", "curios-core/profile"]
 
 [dependencies]
 curios-profile = { workspace = true }
-curios-base = { workspace = true }
+curios-utilities = { workspace = true }
 curios-core = { workspace = true }
-num-bigint = { workspace = true }
+curios-num = { workspace = true }
 
 # The kernel, for the tests in `tests/` that drive these analyses through a real
 # checker. It is a cycle — `curios-cert` depends on this crate — and Cargo permits

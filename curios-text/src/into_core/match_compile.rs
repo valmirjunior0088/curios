@@ -5,7 +5,7 @@ use {
         BinPattern, Choose, ChooseArm, ChooseTest, Error, ListPattern, Match, MatchPattern,
         MatrixArm, NatPattern, Pattern, PatternField, Term,
     },
-    curios_base::{Grain, Plicity},
+    curios_utilities::{Grain, Plicity},
     std::{collections::BTreeMap, mem},
 };
 

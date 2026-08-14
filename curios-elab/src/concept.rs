@@ -6,8 +6,8 @@
 mod tests;
 
 use {
-    curios_base::{Grain, Qualifier},
     curios_core::{Free, Global, Intrinsic, Subterm, Telescope, Term, UniverseContext},
+    curios_utilities::{Grain, Qualifier},
     std::fmt,
 };
 

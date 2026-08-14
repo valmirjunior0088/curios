@@ -10,8 +10,8 @@ use {
         IntrinsicHead, Lowering, Many, Match, Nat, Outcome, Scope, Subterm, Telescope, Term, Three,
         Two, emitted, expect_intrinsic_head, infer, is_erasable, reduce_with, refine_head,
     },
-    curios_base::{Grain, PackedBin},
     curios_core::{Free, Level},
+    curios_utilities::{Grain, PackedBin},
     std::collections::BTreeMap,
 };
 

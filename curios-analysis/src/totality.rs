@@ -26,13 +26,13 @@ mod tests;
 
 use {
     crate::{Env, forceable},
-    curios_base::recurse,
     curios_core::{
         Apply, Arity, Carrier, Cases, Free, FreeMonoid, Func, FuncType, InductType, Intrinsic,
         Layer, Let, Many, Match, Nat, Proj, Rec, RecGroup, Scope, Struct, StructType, Subterm,
         Telescope, Term, Three, Totality, Tuple, TupleType, Two, UniverseInst, Variant,
     },
-    num_bigint::BigUint,
+    curios_num::Natural,
+    curios_utilities::recurse,
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -273,13 +273,13 @@ impl<E: Env> Walk<'_, E> {
                 | Intrinsic::ListSlice(..),
             ) => self.monoid_shape(FreeMonoid::List, term),
 
-            // Arithmetic descent. Both operations are monotone and floor-like on Core's unbounded `Nat` — `NatDiv` folds through `BigUint` division and `NatSub` truncates at zero — so each is below its left operand whenever that operand is nonzero.
+            // Arithmetic descent. Both operations are monotone and floor-like on Core's unbounded `Nat` — `NatDiv` folds through `Natural` division and `NatSub` truncates at zero — so each is below its left operand whenever that operand is nonzero.
             Subterm::Intrinsic(Intrinsic::NatDiv(left, right)) => {
-                self.arithmetic_shape(left, right, &BigUint::from(2usize))
+                self.arithmetic_shape(left, right, &Natural::from(2usize))
             }
 
             Subterm::Intrinsic(Intrinsic::NatSub(left, right)) => {
-                self.arithmetic_shape(left, right, &BigUint::from(1usize))
+                self.arithmetic_shape(left, right, &Natural::from(1usize))
             }
 
             _ => self.unfolded_shape(term),
@@ -289,8 +289,8 @@ impl<E: Env> Walk<'_, E> {
     /// Read `left op right` as a decrease on the binder `left` stands for.
     ///
     /// `least` is the smallest literal right-hand operand that makes the operation strictly decreasing: `2` for division, because `n / 1` is `n`, and `1` for subtraction, because `n - 0` is `n`. A non-literal operand, an operand below `least`, or a left side that is neither the binder nor already a decrease on one, all read as unread — which is what this term read as before the rule existed.
-    fn arithmetic_shape(&mut self, left: &Term, right: &Term, least: &BigUint) -> Shape {
-        let Some(divisor) = right.as_nat().and_then(|nat| nat.to_big_uint()) else {
+    fn arithmetic_shape(&mut self, left: &Term, right: &Term, least: &Natural) -> Shape {
+        let Some(divisor) = right.as_nat().and_then(|nat| nat.to_natural()) else {
             return Shape::Opaque;
         };
         if divisor < *least {
@@ -608,7 +608,7 @@ impl<E: Env> Walk<'_, E> {
                     self.empty_arm(&scrutinee, Carriers::Unary, empty_case);
                     let (binders, body) = self.open_two(cons_case);
                     let shape =
-                        Shape::unary_run(BigUint::from(1usize), Shape::Atom(binders[0].clone()));
+                        Shape::unary_run(Natural::from(1usize), Shape::Atom(binders[0].clone()));
                     self.scoped(refine(scrutinee, shape), None, &body);
                 }
                 Carrier::Bin {

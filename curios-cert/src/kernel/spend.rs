@@ -5,8 +5,8 @@
 //! [`Memos`](super::Memos) deliberately cannot reach this: it stores [`Replay`]s and hands them back, and charging one is this component's job. A store that could also charge would be a store that could charge twice.
 
 use {
-    curios_base::Entropy,
     curios_core::{Free, ReduceError, Term},
+    curios_utilities::Entropy,
 };
 
 /// One remembered reduction: the reduct, and everything computing it consumed — so a hit can charge exactly what a recomputation would have.

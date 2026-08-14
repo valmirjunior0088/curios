@@ -5,8 +5,8 @@
 //! The *policies* — what is cacheable, and what a probe's groundness gate admits — stay on `Context`, which alone can read the solution and universe stores they consult. This type owns the storage and the write discipline.
 
 use {
-    curios_base::Entropy,
     curios_core::{Free, Term},
+    curios_utilities::Entropy,
     std::collections::HashMap,
 };
 

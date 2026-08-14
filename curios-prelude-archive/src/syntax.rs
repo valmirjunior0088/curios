@@ -1,6 +1,6 @@
 //! Canonical compiler-known names owned by the authored `/syn` source tree.
 
-use curios_base::{
+use curios_utilities::{
     CharacterSyntax, ConceptField, LiftSyntax, MonadSyntax, OperatorSyntax, ProofSyntax,
     StringSyntax, SyntaxName, SyntaxRegistry,
 };

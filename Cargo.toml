@@ -4,7 +4,10 @@ members = [
     "curios-abi",
     "curios-archive",
     "curios-archive-derive",
-    "curios-base",
+    "curios-utilities",
+    "curios-num",
+    "curios-parse",
+    "curios-print",
     "curios-wasm",
     "curios-cont",
     "curios-ersd",
@@ -19,7 +22,7 @@ members = [
     "curios-pipeline",
     "curios-package",
     "curios-profile",
-    "curios-web",
+    "curios-js",
     "curios",
     "curios-binaryen",
     "curios-runtime",
@@ -43,7 +46,10 @@ curios-abi = { path = "curios-abi" }
 curios-archive = { path = "curios-archive" }
 curios-archive-derive = { path = "curios-archive-derive" }
 curios-profile = { path = "curios-profile" }
-curios-base = { path = "curios-base" }
+curios-utilities = { path = "curios-utilities" }
+curios-num = { path = "curios-num" }
+curios-parse = { path = "curios-parse" }
+curios-print = { path = "curios-print" }
 curios-wasm = { path = "curios-wasm" }
 curios-cont = { path = "curios-cont" }
 curios-ersd = { path = "curios-ersd" }
@@ -57,9 +63,6 @@ curios-prelude = { path = "curios-prelude" }
 curios-prelude-archive = { path = "curios-prelude-archive" }
 curios-pipeline = { path = "curios-pipeline" }
 curios-package = { path = "curios-package" }
-curios-web = { path = "curios-web" }
+curios-js = { path = "curios-js" }
 curios-binaryen = { path = "curios-binaryen" }
 curios-runtime = { path = "curios-runtime" }
-num-bigint = { version = "0.5.1" }
-num-traits = { version = "0.2.19" }
-wasmtime = { version = "46.0.1", default-features = false, features = ["runtime", "gc", "gc-copying", "std"] }

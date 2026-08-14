@@ -6,7 +6,7 @@ use {
         CpsIntrinsicOp, CpsLiteral, CpsModule, CpsNode, CpsValueExpr, into_wasm,
     },
     curios_abi::host_ops,
-    curios_base::{Grain, PackedBin},
+    curios_utilities::{Grain, PackedBin},
     std::collections::BTreeMap,
 };
 
