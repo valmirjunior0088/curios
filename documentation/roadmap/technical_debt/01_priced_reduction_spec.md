@@ -6,7 +6,7 @@ This is the implementation specification for making type-level evaluation refuse
 
 The propagation half is done. `trivially_inhabited` no longer converts an exhausted reduction into `None`, so an omitted implicit argument whose proposition ran out of budget reports the exhaustion rather than falling back to a hole that later reads as the user's fault. That was a standalone diagnostic defect, correct under any pricing, and it landed ahead of this work.
 
-The pricing, the audit, the retention quota, and the calibration are pending.
+The memo charging, the pricing, the audit, the retention quota, and the calibration are pending. The first of those is specified and measured but not implemented, and is ordered ahead of the rest as Ma: it is independently landable, and pricing construction without it would multiply the defect it fixes rather than sit beside it.
 
 ## The defect is the price of one transition
 
@@ -34,7 +34,9 @@ So a step count cannot see either lever, and both levers are construction: what 
 
 ## Decision
 
-Reduction keeps exactly one verdict-affecting counter. A transition costs one unit plus the logical size of whatever it constructs.
+Reduction keeps exactly one verdict-affecting counter. A transition costs one unit plus the logical size of whatever it constructs — **and a computation is charged once, not once per time its result is asked for.**
+
+Those are two halves of one sentence, and the second is as load-bearing as the first. Pricing construction closes what the counter cannot see; charging distinct reductions closes what it sees twice. A counter that priced construction perfectly while still charging a memo hit the whole cost of the computation it replaces would refuse programs whose work it never did — measured, today, at a 262 144-step budget declared exhausted after **6 547 actual reduction steps**.
 
 The work counter, its restoration at declaration boundaries, its command-line option, and its exhaustion error keep their present roles. The option's spelling remains `--budget`; its unit, help text, internal names, and calibrated default change from transitions to priced reduction work.
 
@@ -164,17 +166,41 @@ Ordinary definitional equality, explicit decided proofs, and every other reducti
 
 Certificate checking enforces its own limit and never trusts accounting performed by elaboration or compilation.
 
-The kernel's spend component already records what a remembered computation consumed and charges a memo hit across two quantities: reduction steps and minted binder identities. Its intended invariant is that the whole observable trajectory — refusal payloads, exhaustion points, and later-minted identities — is bit-identical with evaluation memos on or off. The existing fixed-prelude parity test compares final verdicts at the ordinary budget; M2 strengthens it to low-budget failure payloads and identity trajectories. **The gap is wider than that sentence suggests and the reason to close it is no longer hypothetical.** `curios-prelude-archive`'s `kernel_memo_parity` compares verdicts, at one budget, on a corpus where nothing exhausts, and is `#[ignore]`d — so the only regime in which the charge model is *observable* is the one regime nothing checks, and no ordinary run checks any of it.
+The kernel's spend component records what a remembered computation consumed and charges a memo hit across two quantities: reduction steps and minted binder identities. Its invariant *today* is that the whole observable trajectory — refusal payloads, exhaustion points, and later-minted identities — is bit-identical with evaluation memos on or off. Ma narrows that to the semantic half, for the reasons below; the paragraphs here describe what is being replaced before replacing it.
+
+**What checks the invariant is weaker than the invariant, and that is worth knowing whichever way this goes.** `curios-prelude-archive`'s `kernel_memo_parity` compares verdicts, at one budget, on a corpus where nothing exhausts, and is `#[ignore]`d — so the one regime in which the charge model is *observable* is the one regime nothing checks, and no ordinary run checks any of it. That is why the strengthening promised at M2 is stated below in terms of semantic verdicts and identity trajectories rather than exhaustion payloads: after Ma, exhaustion points are permitted to differ, and a test asserting they do not would be asserting the design that Ma removes.
 
 **That charge prices what a memo-free evaluator would have spent, not what the kernel does, and it can therefore be superlinear in the work performed.** `Spend::charge` in `curios-cert/src/kernel/spend.rs` subtracts a `Replay`'s whole recorded cost, and recorded costs *compound*: if computing `Aₙ` hits the memo for `Aₙ₋₁` twice, `S(n) = 2·S(n−1) + c`. A structure cheap to evaluate with memos can be expensive to charge. Measured while the free monoid's fusion cap was landing: the kernel declared a 262 144-step budget exhausted after **6 547 actual reduction steps**, on a program whose cold cost was genuinely quadratic while its memoized evaluation was linear.
 
-This is deliberate and this specification does not propose changing it — `curios-cert/src/kernel/memos.rs` calls it "the property that makes them an evaluation strategy rather than a store", and a trusted checker whose verdict moved with its own cache state would be a checker whose cache had to be verified. What is new here is only that it is *written down*, because it decides acceptance and because two consequences below follow from it.
+**This specification changes it.** A `whnf`/`forced` memo hit spends no steps, and those two tables are cleared where `restore_budget` fires. The name-keyed `unfold` memo is untouched — a charged hit is history-independent, so cross-declaration sharing of definition unfolds stays exactly as safe as it is today, and it is what makes whole-module certification affordable.
 
-**Construction pricing amplifies through the same mechanism.** Construction charges ride the recorded cost, so a construction-heavy memoized subterm hit k times charges k× its construction. Calibration must therefore be measured against a program that *replays*, not only one that evaluates once, or the default will be set against a number that does not reflect what a user's program is charged.
+**What makes free hits deterministic is aligning two lifetimes that are already mismatched.** The budget is restored at every declaration boundary, on the stated grounds that "whether one declaration typechecks must not depend on how much the declarations before it had already spent"; the memo is not, and persists across the whole module walk. Today that asymmetry is invisible only because hits cost full price. Clearing the term-keyed tables where the budget is restored makes *which entries are present* a function of the declaration under judgment, so a hit can be free without anyone trusting a cache policy. `memos.rs` already argues the entries themselves are semantically determined — a whnf entry is stored only for a local-free term, so "the reduct is a function of the definition store alone"; only their *presence* was historical, and per-declaration clearing removes that.
 
-**The elaborator and the kernel disagree about cost by an unbounded factor, and the disagreement runs the wrong way.** Elaborator cache hits are free; kernel hits charge in full. So the elaborator can accept a program the kernel refuses — which is the worse direction, since a user meets the elaborator first and the kernel's refusal arrives later and is harder to attribute. That happened twice while spec 02 was implemented, both times with the elaborator entirely silent. Diagnostics for kernel exhaustion should assume the elaborator gave no warning.
+**The property `Kernel::uncached` protects is not the one free hits give up.** Free hits can only *reduce* spend, so they can only turn a refusal into an acceptance, and only an **exhaustion** refusal — a semantic refusal is budget-independent, and exhaustion masking a type error simply reaches the type error with more budget and refuses anyway. So the invariant weakens from "memos change nothing" to "**memos change only resource verdicts, never semantic ones**", which is still a proper invariant and still testable. Of the three things `spend.rs` claims are bit-identical with memos on or off, two survive: refusal payloads for semantic errors, and later-minted identities, because a hit still advances the entropy exactly as a recomputation would. Only exhaustion points move.
 
-Construction charges ride that existing mechanism. The recorded step cost becomes the recorded priced cost, and the replay charge that already exists spends it. Cache-table construction and insertion are excluded from that cost and consume only retention quota, so enabling memos cannot make the first evaluation spend more semantic work than disabling them. A successful replay needs no new field.
+Termination is unaffected, and the reason is structural: a `Replay` is built *after* the reduct exists, so a divergent reduction never completes, never stores, and can never be hit — every step of one is charged. A memo hit only ever hands back a finished computation, and handing back a finished computation does not continue a loop.
+
+**Verified before adoption**, on the tree that landed the free-monoid measure:
+
+| | today | with free hits |
+| --- | --- | --- |
+| kernel budget floor, accumulate-then-slice at n = 800 | 131 072 | 16 384 |
+| same, kernel-versus-elaborator divergence | 8–16× | 1–2× |
+| whole-unit certification | 6.6 s | 6.5 s |
+| `kernel_memo_parity` | passes | passes, unchanged |
+| workspace suite | 1843 pass | 1843 pass |
+
+Per-declaration clearing measured free on both axes — same budget floors as the non-clearing variant, and certification unmoved against a control taken on the same machine. The elaborator/kernel divergence closing is the practical payoff: that gap is why the elaborator twice accepted what the kernel then refused, silently, while the free-monoid measure was being developed.
+
+**It lands before the pricing work and needs no recalibration to do so**, because free hits are monotone: they only reduce spend, so no program that compiles today can stop compiling. The default is retuned once, at M3, against both halves together.
+
+**Why this is not left as a separate concern from construction pricing: the two multiply.** Construction charges ride the recorded cost, so under the present rule a construction-heavy memoized subterm hit k times would be charged k× its construction while being built once. Pricing construction without this change would therefore *amplify* the defect rather than sit beside it, and M3 would be calibrating a default against numbers no user program is charged.
+
+Construction charges still ride the existing mechanism where a computation *is* performed. The recorded step cost becomes the recorded priced cost; what changes is that a `whnf`/`forced` hit no longer spends it. Cache-table construction and insertion are excluded from that cost and consume only retention quota, so enabling memos cannot make the first evaluation spend more semantic work than disabling them.
+
+**The `unfold` replay path keeps its present shape in full.** If the charge fits, the kernel spends it and advances the recorded identities. If it does not, the kernel bypasses that entry and evaluates under the actual remaining budget, so the direct path identifies the same first failing charge and advances exactly the identities reached before it, rather than returning a cached result or manufacturing a diagnostic from an aggregate. Replay arithmetic follows the same checked-overflow rule as direct reduction.
+
+**A second beneficiary, independent of anything above.** A `Str` literal's UTF-8 validity is discharged by running a fold over its bytes, and the kernel re-runs it at every use site — measured at 83 steps per character *per use*, against an elaborator that is flat regardless of use count because its hits are already free. Free hits remove that multiplier. The rest of that cost is not a pricing defect and is specified separately in [A string literal is checked once per use](04_string_literal_cost_spec.md); it is named here because it is the case that shows this change reaches ordinary code, not only a loop written to stress the reducer.
 
 If the full replay charge fits, the kernel spends it and advances the recorded binder identities exactly as it does today. If it does not fit, the kernel bypasses that memo entry for the recomputation and evaluates under the actual remaining budget; any nested replay that does not fit follows the same rule. The direct path then identifies the same first failing charge and advances exactly the identities reached before that failure, rather than returning the cached result or manufacturing a diagnostic from an aggregate total. Replay arithmetic follows the same checked-overflow rule as direct reduction.
 
@@ -194,6 +220,16 @@ The limit bounds reducer-created logical work, reducer-caused stack growth, and 
 
 ## Milestones
 
+### Ma — Charge a computation once
+
+Ordered first and independently landable. It is verified, it is two functions wide, and it is monotone — free hits only reduce spend, so nothing that compiles today can stop compiling and no fixture's stated budget has to move for it. Everything after it is the construction-pricing work, which it must precede so that M3 calibrates one default against both halves rather than two against each.
+
+- Make a `whnf`/`forced` memo hit spend no steps while still advancing minted identities, and clear those two tables where `Spend::restore_budget` fires. Leave the name-keyed `unfold` memo charged and cross-declaration.
+- Rewrite `curios-cert/src/kernel/spend.rs`'s module documentation, whose stated invariant — refusal payloads, exhaustion points and identities all bit-identical with memos on or off — is the justification for the design being replaced. The new statement is that memos change only resource verdicts.
+- Add the two properties nothing asserts today: that cached spend never exceeds uncached, and that reducing the same closed term twice within one declaration charges the second time O(1).
+- Strengthen `kernel_memo_parity` to the semantic half explicitly — it passes unchanged, because it compares verdicts on a corpus where nothing exhausts, and that is now the property it is *for* rather than an accident of what it happens to cover.
+- Record the measured before-and-after beside a probe, per the figures under *Kernel behavior*.
+
 ### M0 — Audit and baselines
 
 - Inventory every reducer allocation site in `curios-core`, `curios-elab`, and `curios-cert`, classifying each as construction or sharing, and turn the inventory into a checklist linked from this specification. The four sites named under *Accounting boundary* are its seed, not its extent.
@@ -212,7 +248,7 @@ The limit bounds reducer-created logical work, reducer-caused stack growth, and 
 ### M2 — Retention and replay
 
 - Add the compilation-scoped retention counter, charging conservatively reachable payload on elaborator cache and kernel memo insertion and exhausting into a cold cache rather than a refusal.
-- Carry the priced cost through the kernel's existing replay record, add unaffordable-replay fallback, and extend parity tests to low-budget exhaustion, diagnostic payload, and minted identities.
+- Carry the priced cost through the kernel's `unfold` replay record, add unaffordable-replay fallback, and extend parity tests to that path's low-budget exhaustion, diagnostic payload, and minted identities. Term-keyed hits are free after Ma, so parity there is over semantic verdicts and identities rather than exhaustion points.
 - Add the failing-charge diagnostic metadata.
 - Extend the probe with observed retention consumption.
 
@@ -238,7 +274,11 @@ The limit bounds reducer-created logical work, reducer-caused stack growth, and 
 - Enabling a cache or memo does not add semantic work to a first computation; table allocation and insertion consume only retention quota.
 - The retention default is measured with enough headroom that no fixed-prelude or representative compilation reaches it, since crossing it can cost a later declaration its own budget in re-derivation.
 - Automatic implicit synthesis propagates exhaustion and never disguises it as an unsolved metavariable.
-- Kernel direct evaluation and memo replay produce the same acceptance or exhaustion for the same kernel budget. Focused parity tests include insufficient replay budgets and compare the failing category, attempted charge, remaining budget, and later-minted identities.
+- A `whnf`/`forced` memo hit spends no steps, and reducing the same closed term twice within one declaration charges the second time O(1).
+- Cached kernel spend never exceeds uncached kernel spend, on every fixture that states a budget.
+- Kernel direct evaluation and memo replay produce the same *semantic* verdict — acceptance, or a refusal that is not exhaustion — for the same kernel budget, and the same later-minted identities. Exhaustion points are permitted to differ, and that is the one part of the former invariant this specification gives up.
+- The `unfold` replay path still produces the same acceptance or exhaustion for the same kernel budget. Focused parity tests include insufficient replay budgets and compare the failing category, attempted charge, remaining budget, and later-minted identities.
+- Whole-unit certification does not regress against a control taken on the same machine, and the elaborator's and kernel's budget floors for the same program agree within a small factor rather than the 8–16× measured today.
 - Checked size arithmetic rejects overflow before allocation.
 - Charges are identical on the native and wasm32 targets for the same program.
 - The recalibrated default compiles the fixed prelude and passes representative source and certificate tests with the measurement-documented margin.
@@ -248,7 +288,9 @@ The limit bounds reducer-created logical work, reducer-caused stack growth, and 
 
 **A second verdict-affecting budget dimension.** Independent transition and materialization limits are genuinely more expressive than one weighted limit: a transition-heavy program and a construction-heavy program can receive different verdicts under the two designs. Curios accepts the weighted policy tradeoff. One user-facing limit preserves the existing configuration shape, requires one default and one acceptance threshold to calibrate, and gives the elaborator and independent kernel one deterministic quantity to reproduce. The fixed price list states the exchange rate rather than hiding it. Failing-charge attribution retains useful diagnostic distinction without being claimed to make the two policies equivalent.
 
-**Charging only *distinct* reductions, over a total deterministic memo.** The kernel charges a memo hit what a memo-free evaluator would have spent; the alternative is to charge each distinct reduction once and nothing for later hits. It is *also* independent of runtime state — a fixed, total memo policy is part of the specification rather than an implementation accident — and it has the better property of the two: it prices work rather than denotation, so the memo could buy acceptance instead of only wall clock. It is refused because totality would become a *trusted* property. Evict one entry under memory pressure and verdicts move, which makes the cache something that has to be verified to trust the verdict — and this specification has already chosen the opposite trade one layer up, where exhausting the retention quota degrades the elaborator's cache rather than refusing a program. Taking it here and degrading there would be incoherent. The cost of refusing it is stated under *Kernel behavior*: the charge can be superlinear in the work, and the two checkers disagree about cost by an unbounded factor.
+**Free memo hits over a memo of unbounded lifetime.** The adopted design clears the term-keyed tables at declaration boundaries; the discarded variant leaves them to persist across the whole module walk, which measured identically on every probe. It is refused for a reason no measurement shows: with an unbounded lifetime, *which* entries are present depends on which declarations were checked before, so a hit being free would make a verdict depend on check order. Clearing costs nothing and removes the dependence, so there is no case for keeping it.
+
+**Charging a memo hit a fixed small constant rather than nothing.** It sounds more conservative and is strictly worse: it re-introduces a dependence of the verdict on the number of hits without bounding anything the free rule does not already bound, and it needs a constant nobody can derive.
 
 **Bounding the cache by eviction instead of admission accounting.** Eviction requires a replacement policy and shared-payload lifetime accounting, and makes warmth less predictable. The monotone retention quota instead refuses new insertions after a conservative logical allowance is consumed, and never directly rejects evaluation.
 
