@@ -129,6 +129,31 @@ fn a_regrouped_run_still_respects_its_order() {
 }
 
 #[test]
+fn a_length_and_a_window_do_not_depend_on_grouping() {
+    // **The law the measure adds, stated where both checkers see it.** `Bin/len` now answers a wholly-literal spine by folding the operands' own lengths, and `Bin/get`/`Bin/slice` locate their position the same way, rather than rebuilding a `len` per operand or peeling one generator at a time. A length is a definitional equation, so a measure that disagreed with the run would be a false one and congruence carries a false equation to `False` — which is why this is stated as a checked proof rather than an observed result.
+    //
+    // Each law puts the *same* run on both sides under different groupings, so what is being proven is precisely that grouping is invisible. `curios-core`'s `reduce::intrinsic` tests state the same thing against the folds directly and over more shapes; this is the both-checkers half.
+    let source = r#"
+        use /std/{Handle, Str, Eq, Bytes, Byte, Nat, List, Option};
+        let split_length : Eq(Bytes/len(x[..x[\30, \31], ..x[\32, \33, \34]]), 5) = Eq/refl();
+        let nested_length : Eq(Bytes/len(x[..x[..x[\30], ..x[\31]], ..x[\32, \33, \34]]), 5) =
+            Eq/refl();
+        let split_window
+            : Eq(Bytes/slice(x[..x[\30, \31], ..x[\32, \33, \34]], 1, 4), x[\31, \32, \33]) =
+            Eq/refl();
+        let third : Byte = 0x33;
+        let split_index
+            : Eq(Bytes/get(x[..x[\30, \31], ..x[\32, \33, \34]], 3), Option/some(third)) =
+            Eq/refl();
+        let list_length(p : Nat, q : Nat, r : Nat)
+            -> Eq(List/len([..[p, q], ..[r]]), 3) = Eq/refl();
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
+        "#;
+    assert_eq!(run(source), b"ok");
+}
+
+#[test]
 fn bin_slice_is_a_monoid_citizen() {
     // `Bytes/slice` rides the free-monoid spine (`core::spine`) as a measured `Window` — a length-`hi - lo` chunk whose contents are symbolic — so the slice algebra holds up to *definitional* equality, provable by `refl` for SYMBOLIC operands that `reduce` cannot fold. `split` fuses two adjacent windows of one base across their shared seam; `empty` drops a zero-width window (the monoid identity); `full` collapses `slice(b, 0, len b)` to its base (the `reduce` partner of the spine's window-collapse). Each declared type forces `convert` to peel the windows to a common normal form; without the peel these are stuck, distinct terms and `refl` would not check.
     let source = r#"

@@ -1,8 +1,9 @@
 use {
     super::{ReduceError, Reducer},
     crate::{
-        Intrinsic, Nat, Peel, Subterm, Term, normalize_concat, peel_bin, peel_first_atom,
-        peel_first_elem, project_erased_universes,
+        FUSION_CAP, Intrinsic, Located, Nat, Peel, Piece, Subterm, Term, bin_locate, bin_measure,
+        bin_window, list_locate, list_measure, list_window, normalize_concat, peel_bin,
+        peel_first_atom, peel_first_elem, project_erased_universes,
     },
     curios_base::{Grain, Int, PackedBin, int_rotl, int_rotr, nat_rotl, nat_rotr},
     num_bigint::BigUint,
@@ -1056,6 +1057,10 @@ pub fn reduce_intrinsic(
         }
         Intrinsic::BinLen(Grain::X, bin) => {
             let bin = reducer.reduce_forced(bin.clone())?;
+            // The measure answers a wholly-literal spine by folding it, without rebuilding a `Bin/len` per operand and handing each back to the reducer — which is what made a length over a deep concatenation cost a re-walk of every sub-spine. It agrees with the homomorphism below by construction on the shapes it accepts (a literal run's length, summed over a concatenation's operands) and declines everything else, so every other value reduces exactly as it did.
+            if let Some(total) = bin_measure(Grain::X, &bin) {
+                return Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(total))));
+            }
             reduce_homomorphism(
                 reducer,
                 bin_shape(Grain::X, bin),
@@ -1118,6 +1123,30 @@ pub fn reduce_intrinsic(
                 return reducer.reduce(byte.clone()).map(Term::unwrap_or_clone);
             }
             // A get over a cons spine peels one byte per `0`/`succ` index step: `get(cons(h, t), 0) = h`   and   `get(cons(h, t), succ k) = get(t, k)`.
+            // Locate the index by the operands' own lengths rather than peeling one generator at a time. A peel walks the whole spine to expose one generator and rebuilds the rest, so reading an index costs a pass per generator ahead of it; the measure reaches the operand holding it in one pass and indexes within that operand alone. `None` means some operand's length is not statically known, which is what the peel below is for.
+            if let Some(i) = i {
+                match bin_locate(Grain::X, &bin, i) {
+                    Some(Located::At(operand, local)) => {
+                        let local = Term::intrinsic(Intrinsic::Nat(Nat::new(local)));
+                        let operand = operand.clone();
+                        return reducer
+                            .reduce(Term::intrinsic(Intrinsic::bin_get(
+                                Grain::X,
+                                operand,
+                                local,
+                            )))
+                            .map(Term::unwrap_or_clone);
+                    }
+                    Some(Located::Past(len)) => {
+                        return Err(ReduceError::BinGetOutOfBounds {
+                            len,
+                            index: i,
+                            span: index.span(),
+                        });
+                    }
+                    None => {}
+                }
+            }
             if let Some((head, tail)) = peel_first_atom(Grain::X, &bin) {
                 match &*index_reduced {
                     Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => {
@@ -1178,6 +1207,39 @@ pub fn reduce_intrinsic(
                 };
             }
             // A slice over a cons spine peels one byte per `0`/`succ` boundary step — the reduction partner of the `Utf8` cons the validity proofs walk:  `slice(cons(h, t), 0, succ e) = h ++ slice(t, 0, e)`  and `slice(cons(h, t), succ s, e) = slice(t, s, e - 1)`.
+            // Locate the window by the operands' own lengths. Every operand it covers whole is handed back untouched and shares its payload; only the two at the edges are narrowed, and everything outside the window is dropped without being read.
+            if let (Some(s), Some(e)) = (s, e) {
+                match bin_window(Grain::X, &bin, s, e) {
+                    Some(Ok(pieces)) => {
+                        let parts: Vec<Term> = pieces
+                            .into_iter()
+                            .map(|piece| match piece {
+                                Piece::Whole(operand) => operand.clone(),
+                                Piece::Part(operand, lo, hi) => {
+                                    Term::intrinsic(Intrinsic::bin_slice(
+                                        Grain::X,
+                                        operand.clone(),
+                                        Term::intrinsic(Intrinsic::Nat(Nat::new(lo))),
+                                        Term::intrinsic(Intrinsic::Nat(Nat::new(hi))),
+                                    ))
+                                }
+                            })
+                            .collect();
+                        return reducer
+                            .reduce(Term::intrinsic(Intrinsic::bin_concat(Grain::X, parts)))
+                            .map(Term::unwrap_or_clone);
+                    }
+                    Some(Err(len)) => {
+                        return Err(ReduceError::BinSliceOutOfRange {
+                            len,
+                            start: s,
+                            end: e,
+                            span: start.span().or_else(|| end.span()),
+                        });
+                    }
+                    None => {}
+                }
+            }
             if let Some((head, tail)) = peel_first_atom(Grain::X, &bin) {
                 let dec = |n: &Term| {
                     let one = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
@@ -1239,10 +1301,14 @@ pub fn reduce_intrinsic(
                 .map(|e| reducer.reduce_forced(e.clone()))
                 .collect::<Result<_, _>>()?;
             // Normalise by the monoid unit/associativity laws — drop the empty identity (so `concat(x[], a)`/`concat(a, x[])` collapse to `a`), fuse an all-literal survivor set with `PackedBin::concat`, collapse a lone operand. Grain-generic: both carriers fuse in the packed representation. The definitional partner of `peel_bin`'s `x[]`-handling (`core::spine`); see `normalize_concat`.
+            //
+            // A run past `FUSION_CAP` declines to lend itself, so the concatenation keeps its node instead of copying both operands into a third. Measured in the grain's own generators, which is what makes one constant serve both: a bit-grain operand is capped at 64 bits and a byte-grain one at 64 bytes, and the corpus reaches neither.
             Ok(normalize_concat(
                 reduced,
                 |operand: &Term| match &**operand {
-                    Subterm::Intrinsic(Intrinsic::Bin(found, bytes)) if *found == grain => {
+                    Subterm::Intrinsic(Intrinsic::Bin(found, bytes))
+                        if *found == grain && bytes.len(grain) <= FUSION_CAP =>
+                    {
                         Some(bytes)
                     }
                     _ => None,
@@ -1257,6 +1323,9 @@ pub fn reduce_intrinsic(
         }
         Intrinsic::BinLen(Grain::B, bin) => {
             let bin = reducer.reduce_forced(bin.clone())?;
+            if let Some(total) = bin_measure(Grain::B, &bin) {
+                return Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(total))));
+            }
             reduce_homomorphism(
                 reducer,
                 bin_shape(Grain::B, bin),
@@ -1309,6 +1378,30 @@ pub fn reduce_intrinsic(
                 && let Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) = &*index_reduced
             {
                 return reducer.reduce(bit.clone()).map(Term::unwrap_or_clone);
+            }
+            // Locate the index by the operands' own lengths rather than peeling one generator at a time. A peel walks the whole spine to expose one generator and rebuilds the rest, so reading an index costs a pass per generator ahead of it; the measure reaches the operand holding it in one pass and indexes within that operand alone. `None` means some operand's length is not statically known, which is what the peel below is for.
+            if let Some(i) = as_index(&index_reduced) {
+                match bin_locate(Grain::B, &bin, i) {
+                    Some(Located::At(operand, local)) => {
+                        let local = Term::intrinsic(Intrinsic::Nat(Nat::new(local)));
+                        let operand = operand.clone();
+                        return reducer
+                            .reduce(Term::intrinsic(Intrinsic::bin_get(
+                                Grain::B,
+                                operand,
+                                local,
+                            )))
+                            .map(Term::unwrap_or_clone);
+                    }
+                    Some(Located::Past(len)) => {
+                        return Err(ReduceError::BinGetOutOfBounds {
+                            len,
+                            index: i,
+                            span,
+                        });
+                    }
+                    None => {}
+                }
             }
             if let Some((head, tail)) = peel_first_atom(Grain::B, &bin) {
                 match &*index_reduced {
@@ -1369,6 +1462,39 @@ pub fn reduce_intrinsic(
                         end,
                         span,
                     });
+            }
+            // Locate the window by the operands' own lengths. Every operand it covers whole is handed back untouched and shares its payload; only the two at the edges are narrowed, and everything outside the window is dropped without being read.
+            if let (Some(s), Some(e)) = (as_index(&start_reduced), as_index(&end_reduced)) {
+                match bin_window(Grain::B, &bin, s, e) {
+                    Some(Ok(pieces)) => {
+                        let parts: Vec<Term> = pieces
+                            .into_iter()
+                            .map(|piece| match piece {
+                                Piece::Whole(operand) => operand.clone(),
+                                Piece::Part(operand, lo, hi) => {
+                                    Term::intrinsic(Intrinsic::bin_slice(
+                                        Grain::B,
+                                        operand.clone(),
+                                        Term::intrinsic(Intrinsic::Nat(Nat::new(lo))),
+                                        Term::intrinsic(Intrinsic::Nat(Nat::new(hi))),
+                                    ))
+                                }
+                            })
+                            .collect();
+                        return reducer
+                            .reduce(Term::intrinsic(Intrinsic::bin_concat(Grain::B, parts)))
+                            .map(Term::unwrap_or_clone);
+                    }
+                    Some(Err(len)) => {
+                        return Err(ReduceError::BinSliceOutOfRange {
+                            len,
+                            start: s,
+                            end: e,
+                            span,
+                        });
+                    }
+                    None => {}
+                }
             }
             if let Some((head, tail)) = peel_first_atom(Grain::B, &bin) {
                 let dec = |n: &Term| {
@@ -1440,6 +1566,9 @@ pub fn reduce_intrinsic(
         Intrinsic::ListLen(type_, list) => {
             let type_ = reducer.reduce(type_.clone())?;
             let list = reducer.reduce_forced(list.clone())?;
+            if let Some(total) = list_measure(&list) {
+                return Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(total))));
+            }
             reduce_homomorphism(
                 reducer,
                 list_shape(list),
@@ -1470,6 +1599,26 @@ pub fn reduce_intrinsic(
                         span: index.span(),
                     }),
                 };
+            }
+            // The `List` twin of `BinGet`'s locator: reach the segment holding the index by the segments' own lengths, then index within it, rather than peeling one element at a time.
+            if let Some(i) = i {
+                match list_locate(&list, i) {
+                    Some(Located::At(operand, local)) => {
+                        let local = Term::intrinsic(Intrinsic::Nat(Nat::new(local)));
+                        let operand = operand.clone();
+                        return reducer
+                            .reduce(Term::intrinsic(Intrinsic::list_get(type_, operand, local)))
+                            .map(Term::unwrap_or_clone);
+                    }
+                    Some(Located::Past(len)) => {
+                        return Err(ReduceError::ListGetOutOfBounds {
+                            len,
+                            index: i,
+                            span: index.span(),
+                        });
+                    }
+                    None => {}
+                }
             }
             // A get over a cons spine peels one element per `0`/`succ` index step, the `List` twin of `BinGet`'s byte peel: `get(cons(h, t), 0) = h`   and   `get(cons(h, t), succ k) = get(t, k)`.
             if let Some((head, tail)) = peel_first_elem(&list) {
@@ -1531,6 +1680,39 @@ pub fn reduce_intrinsic(
                         span: start.span().or_else(|| end.span()),
                     }),
                 };
+            }
+            // The `List` twin of `BinSlice`'s locator: the window's segments, each already narrowed to its overlap.
+            if let (Some(s), Some(e)) = (as_index(&start_reduced), as_index(&end_reduced)) {
+                match list_window(&list, s, e) {
+                    Some(Ok(pieces)) => {
+                        let parts: Vec<Term> = pieces
+                            .into_iter()
+                            .map(|piece| match piece {
+                                Piece::Whole(operand) => operand.clone(),
+                                Piece::Part(operand, lo, hi) => {
+                                    Term::intrinsic(Intrinsic::list_slice(
+                                        type_.clone(),
+                                        operand.clone(),
+                                        Term::intrinsic(Intrinsic::Nat(Nat::new(lo))),
+                                        Term::intrinsic(Intrinsic::Nat(Nat::new(hi))),
+                                    ))
+                                }
+                            })
+                            .collect();
+                        return reducer
+                            .reduce(Term::intrinsic(Intrinsic::list_concat(type_, parts)))
+                            .map(Term::unwrap_or_clone);
+                    }
+                    Some(Err(len)) => {
+                        return Err(ReduceError::ListSliceOutOfRange {
+                            len,
+                            start: s,
+                            end: e,
+                            span: start.span().or_else(|| end.span()),
+                        });
+                    }
+                    None => {}
+                }
             }
             // A slice over a cons spine peels one element per `0`/`succ` boundary step, the `List` twin of `BinSlice`'s byte peel: `slice(cons(h, t), 0, succ e) = [h] ++ slice(t, 0, e)`  and `slice(cons(h, t), succ s, e) = slice(t, s, e - 1)`.
             if let Some((head, tail)) = peel_first_elem(&list) {
@@ -1594,9 +1776,12 @@ pub fn reduce_intrinsic(
                 .map(|e| reducer.reduce_forced(e.clone()))
                 .collect::<Result<_, _>>()?;
             // The `List` twin of `BinConcat` normalisation: drop the empty list (so `concat([], a)`/`concat(a, [])` collapse to `a`), fuse an all-literal survivor set into one flattened literal, collapse a lone operand — the definitional partner of `peel_arr`'s `[]`-handling (`core::spine`); see `normalize_concat`.
+            // A run past `FUSION_CAP` declines to lend itself, exactly as on the `Bin` side, so a growing accumulation stops flattening its element vector into a longer one every step.
             fn literal(operand: &Term) -> Option<&Vec<Term>> {
                 match &**operand {
-                    Subterm::Intrinsic(Intrinsic::List(_, elems)) => Some(elems),
+                    Subterm::Intrinsic(Intrinsic::List(_, elems)) if elems.len() <= FUSION_CAP => {
+                        Some(elems)
+                    }
                     _ => None,
                 }
             }
@@ -2043,5 +2228,183 @@ mod tests {
                 .0,
             Comparison::Stuck,
         );
+    }
+
+    fn run_bytes(run: &[u8]) -> Term {
+        Term::intrinsic(Intrinsic::Bin(
+            Grain::X,
+            PackedBin::from_bytes(run.to_vec()),
+        ))
+    }
+
+    /// The same five bytes, spelled four ways: whole, split once, split twice, and left-nested the way an accumulation builds one.
+    fn groupings(whole: &[u8]) -> Vec<Term> {
+        let nest = |left: Term, right: Term| {
+            Term::intrinsic(Intrinsic::BinConcat(Grain::X, vec![left, right]))
+        };
+
+        vec![
+            run_bytes(whole),
+            nest(run_bytes(&whole[..2]), run_bytes(&whole[2..])),
+            Term::intrinsic(Intrinsic::BinConcat(
+                Grain::X,
+                vec![
+                    run_bytes(&whole[..1]),
+                    run_bytes(&whole[1..3]),
+                    run_bytes(&whole[3..]),
+                ],
+            )),
+            nest(
+                nest(run_bytes(&whole[..1]), run_bytes(&whole[1..2])),
+                run_bytes(&whole[2..]),
+            ),
+        ]
+    }
+
+    /// **What `Bin/len` now answers from has to agree with what the run actually is.** The measure replaced computing a length by rebuilding a `Bin/len` per operand and handing each back to the reducer; a length is a definitional equation, so a measure that disagreed with the run would be a false one, and congruence carries a false equation to `False`. Ground truth here is the fused literal's own byte count, so this pins the measure to the representation rather than to itself — and it varies the grouping, including the left-nested shape an accumulation builds, because grouping is exactly what the measure must not be able to see.
+    #[test]
+    fn a_length_does_not_depend_on_how_its_run_is_grouped() {
+        let whole: &[u8] = &[0x30, 0x31, 0x32, 0x33, 0x34];
+
+        for spelling in groupings(whole) {
+            let length = reduce_intrinsic(&mut Folding, &Intrinsic::BinLen(Grain::X, spelling))
+                .expect("a length over a literal run reduces");
+
+            assert_eq!(
+                length,
+                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(whole.len()))),
+                "every grouping of the same run is the same length",
+            );
+        }
+    }
+
+    /// The control the test above would be worthless without: an operand the measure cannot read must send the length back to the homomorphism rather than be silently skipped. Skipping one is the sharp failure — it would report `2` for a value at least two bytes long, which is a false equation in the admitting direction.
+    #[test]
+    fn an_unmeasurable_operand_is_not_skipped() {
+        let spine = Term::intrinsic(Intrinsic::BinConcat(
+            Grain::X,
+            vec![run_bytes(&[0x30, 0x31]), symbol(0, "b")],
+        ));
+
+        let length = reduce_intrinsic(&mut Folding, &Intrinsic::BinLen(Grain::X, spine))
+            .expect("a length over a symbolic tail reduces to a neutral sum");
+
+        assert_ne!(
+            length,
+            Subterm::Intrinsic(Intrinsic::Nat(Nat::new(2usize))),
+            "the literal prefix is not the whole length",
+        );
+    }
+
+    /// **A window located by operand lengths has to be the window.** `Bin/slice` now reaches its result by measuring the operands and narrowing the two at the edges, rather than peeling one byte at a time; the two must agree for every grouping, or slicing would depend on how a value was spelled.
+    #[test]
+    fn a_window_over_a_spine_is_the_window_over_its_run() {
+        let whole: &[u8] = &[0x30, 0x31, 0x32, 0x33, 0x34];
+
+        for spelling in groupings(whole) {
+            for (start, end) in [(0usize, 5usize), (0, 2), (1, 4), (2, 5), (3, 3), (4, 5)] {
+                let window = Intrinsic::bin_slice(
+                    Grain::X,
+                    spelling.clone(),
+                    lit(start as u32),
+                    lit(end as u32),
+                );
+
+                let sliced = reduce_intrinsic(&mut Folding, &window).expect("a window reduces");
+
+                assert_eq!(
+                    sliced,
+                    Subterm::Intrinsic(Intrinsic::Bin(
+                        Grain::X,
+                        PackedBin::from_bytes(whole[start..end].to_vec()),
+                    )),
+                    "the window {start}..{end} is the same bytes however the run is grouped",
+                );
+            }
+        }
+    }
+
+    /// The index twin of the window test: reading a byte must not depend on the grouping either.
+    #[test]
+    fn an_index_into_a_spine_reads_the_same_byte() {
+        let whole: &[u8] = &[0x30, 0x31, 0x32, 0x33, 0x34];
+
+        for spelling in groupings(whole) {
+            for (index, expected) in whole.iter().enumerate() {
+                let read = Intrinsic::bin_get(Grain::X, spelling.clone(), lit(index as u32));
+                let byte = reduce_intrinsic(&mut Folding, &read).expect("an index reduces");
+
+                assert_eq!(
+                    byte,
+                    Subterm::Intrinsic(Intrinsic::Byte(*expected)),
+                    "index {index} is the same byte however the run is grouped",
+                );
+            }
+        }
+    }
+
+    /// The `List` twin of the three tests above, in one: its carrier flattens element vectors where `Bin` copies packed bytes, and the walks are written separately, so agreement on one is not agreement on the other. Elements are symbols, compared syntactically — which is all the property needs, since regrouping never changes an element, only which run it sits in.
+    fn list_of(elements: &[u32]) -> Term {
+        Term::intrinsic(Intrinsic::List(
+            symbol(1000, "T"),
+            elements.iter().map(|n| symbol(*n, "e")).collect(),
+        ))
+    }
+
+    #[test]
+    fn a_list_length_window_and_index_do_not_depend_on_grouping() {
+        let whole: &[u32] = &[1, 2, 3, 4, 5];
+        let elem = symbol(1000, "T");
+        let concat = |parts: Vec<Term>| Term::intrinsic(Intrinsic::ListConcat(elem.clone(), parts));
+
+        let groupings = [
+            list_of(whole),
+            concat(vec![list_of(&whole[..2]), list_of(&whole[2..])]),
+            concat(vec![
+                concat(vec![list_of(&whole[..1]), list_of(&whole[1..2])]),
+                list_of(&whole[2..]),
+            ]),
+        ];
+
+        for spelling in groupings {
+            let length = reduce_intrinsic(
+                &mut Folding,
+                &Intrinsic::ListLen(elem.clone(), spelling.clone()),
+            )
+            .expect("a length over an element run reduces");
+
+            assert_eq!(
+                length,
+                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(whole.len()))),
+                "every grouping of the same run is the same length",
+            );
+
+            for (start, end) in [(0usize, 5usize), (1, 4), (2, 5), (3, 3)] {
+                let window = Intrinsic::list_slice(
+                    elem.clone(),
+                    spelling.clone(),
+                    lit(start as u32),
+                    lit(end as u32),
+                );
+                let sliced = reduce_intrinsic(&mut Folding, &window).expect("a window reduces");
+
+                assert_eq!(
+                    sliced,
+                    Term::unwrap_or_clone(list_of(&whole[start..end])),
+                    "the window {start}..{end} is the same elements however the run is grouped",
+                );
+            }
+
+            for (index, expected) in whole.iter().enumerate() {
+                let read = Intrinsic::list_get(elem.clone(), spelling.clone(), lit(index as u32));
+                let element = reduce_intrinsic(&mut Folding, &read).expect("an index reduces");
+
+                assert_eq!(
+                    element,
+                    Term::unwrap_or_clone(symbol(*expected, "e")),
+                    "index {index} is the same element however the run is grouped",
+                );
+            }
+        }
     }
 }

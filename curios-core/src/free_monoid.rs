@@ -1,6 +1,8 @@
 //! The free-monoid destructors. `Nat`, `Bin`, and `List` are the native intrinsics that are free monoids on their generators (the unary unit, bytes, elements). Their structural eliminator (`Cases::FreeMonoid`) reduces by a one-step decode — peel the empty identity or a single leading generator off the scrutinee — and that decode is `uncons`, one match arm per carrier; the catamorphism driver in `reduce` consumes the `Layer` it returns and never inspects the carrier's representation again. The eliminator-side analogue of `spine::peel_intrinsic`: a new free-monoid carrier is one `FreeMonoid` variant and its `uncons` arm.
 //!
 //! For `Bin` and `List`, the same front decode also feeds the operation level: `Bin/get`/`Bin/slice` and `List/get`/`List/slice` peel one generator at a time via `peel_first_byte`/`peel_first_elem`. Each carrier's two destructors share one structural traversal (`peel_front`, `peel_front_list`); `Bin` reflects the peeled head two ways — a `Nat` byte for the eliminator, a one-byte `Bin` chunk for the operations — while `List`'s head is the element term for both.
+//!
+//! Beside the destructors, this module owns the free monoid's *product* and its *measure*, because both are walks over the same spine. [`normalize_concat`] is the product: it collapses a concatenation under the unit and associativity laws and fuses literal operands up to [`FUSION_CAP`], past which a value keeps its `Concat` node rather than being recopied into a longer run. [`bin_measure`] and [`list_measure`] are the measure — how many generators a value carries, folded off the spine — and `Bin/len`, `Bin/get` and `Bin/slice` are its three consumers. Neither the measure nor the walks take a [`crate::Reducer`]: measuring or peeling cannot re-enter reduction, and that is enforced by the signatures rather than asserted in a comment.
 
 use {
     super::{Intrinsic, Nat, Subterm, Term},
@@ -128,78 +130,102 @@ enum Front {
     Opaque,
 }
 
-/// The structural traversal shared by both `Bin` destructors ([`FreeMonoid::uncons`] for the eliminator, [`peel_first_atom`] for `Bin/get`/`Bin/slice`): peel the leading generator off an already-reduced value. A literal run yields its first byte; a `Utf8` cons `append(x[], c)` yields its symbolic byte; a concatenation recurses into its first operand so a literal- or cons-led `BinConcat` decodes too, the residual first-operand tail rejoining the rest — normalised (an empty first-operand tail drops, a lone survivor collapses) so a cons-led concat decodes to the same tail the bare cons would. The empty bytestring is `Empty`; anything else (a variable, a slice, a non-`x[]`-based append) is `Opaque`.
+/// One pending level of a leading-edge descent — what that level has to put back once the generator underneath it has been peeled. `Appended` is a `BinAppend`'s trailing atom; `Concat` is the operands a `BinConcat` carried after its first.
+///
+/// **The descent is explicit rather than recursive because this depth is *data*-shaped.** `FUSION_CAP` stops an accumulation fusing, so what it builds is a concatenation nested as deeply as the loop is long, and the leading edge of that is what these walks descend. [`curios_base::recurse`] is taken at the *entry point* of each checker's reduction and checked between its frames, never per level of a helper it calls, so a hundred thousand native frames here would spend one granted segment without ever reaching a check. `curios-cont`'s `$<carrier>/force` walks the same shape on the same kind of explicit worklist, for the same reason — and `documentation/design/toolchain/depth-is-bought-with-stack-not-with-hand-rolled-frames.md` does not reach here: what that entry defends is the two reduction and conversion strategies written deliberately *twice*, so that a person can diff them, and these are single-implementation helpers both of them share.
+enum BinLevel<'a> {
+    Appended(&'a Term),
+    Concat(&'a [Term]),
+}
+
+/// The structural traversal shared by both `Bin` destructors ([`FreeMonoid::uncons`] for the eliminator, [`peel_first_atom`] for `Bin/get`/`Bin/slice`): peel the leading generator off an already-reduced value. A literal run yields its first byte; a `Utf8` cons `append(x[], c)` yields its symbolic byte; a concatenation descends into its first operand so a literal- or cons-led `BinConcat` decodes too, the residual first-operand tail rejoining the rest — normalised (an empty first-operand tail drops, a lone survivor collapses) so a cons-led concat decodes to the same tail the bare cons would. The empty bytestring is `Empty`; anything else (a variable, a slice, a non-`x[]`-based append) is `Opaque`.
+///
+/// Two phases over a [`BinLevel`] stack: descend the leading edge to the value that actually carries the first generator, then rebuild outward, each level rejoining what it was holding. `Opaque` propagates through both level kinds, and a concatenation whose first operand exposes no generator is itself opaque — a reduced `BinConcat` has no empty operands, so that case is a leading variable or slice.
 fn peel_front(grain: Grain, bin: &Term) -> Front {
-    match &**bin {
-        Subterm::Intrinsic(Intrinsic::Bin(found, bytes)) if *found == grain => match grain {
-            Grain::B => match bytes.bit(0) {
-                None => Front::Empty,
-                Some(bit) => Front::Cons {
-                    head: Head::LiteralBit(bit),
-                    tail: Subterm::Intrinsic(Intrinsic::Bin(
+    let mut levels: Vec<BinLevel<'_>> = Vec::new();
+    let mut current = bin;
+
+    let mut front = loop {
+        match &**current {
+            Subterm::Intrinsic(Intrinsic::Bin(found, bytes)) if *found == grain => {
+                let tail = || {
+                    Subterm::Intrinsic(Intrinsic::Bin(
                         grain,
                         bytes.slice(grain, 1, bytes.len(grain)).unwrap(),
                     ))
-                    .into(),
-                },
-            },
-            Grain::X => match bytes.byte(0) {
-                None => Front::Empty,
-                Some(byte) => Front::Cons {
-                    head: Head::LiteralByte(byte),
-                    tail: Subterm::Intrinsic(Intrinsic::Bin(
-                        grain,
-                        bytes.slice(grain, 1, bytes.len(grain)).unwrap(),
-                    ))
-                    .into(),
-                },
-            },
-        },
-        // `append(base, atom) = base ++ [atom]`: peel the base's leading generator, and the appended atom rejoins the residual. An empty base is the canonical one-atom chunk, which is where the symbolic head comes from; any other base decodes as far as it can, so a chained `append(append(x[], a), b)` and a run-based `append(x[\48], b)` both expose their first generator instead of going opaque. `core::spine`'s two-value peel has always decoded an append this way, so without this arm the same term was transparent to conversion and opaque to reduction.
-        Subterm::Intrinsic(Intrinsic::BinAppend(found, base, atom)) if *found == grain => {
-            match peel_front(grain, base) {
-                Front::Empty => Front::Cons {
-                    head: Head::Symbolic(atom.clone()),
-                    tail: Subterm::Intrinsic(Intrinsic::Bin(grain, PackedBin::empty())).into(),
-                },
-                Front::Cons { head, tail } => Front::Cons {
-                    head,
-                    tail: Subterm::Intrinsic(Intrinsic::BinAppend(grain, tail, atom.clone()))
-                        .into(),
-                },
-                Front::Opaque => Front::Opaque,
+                    .into()
+                };
+
+                break match grain {
+                    Grain::B => match bytes.bit(0) {
+                        None => Front::Empty,
+                        Some(bit) => Front::Cons {
+                            head: Head::LiteralBit(bit),
+                            tail: tail(),
+                        },
+                    },
+                    Grain::X => match bytes.byte(0) {
+                        None => Front::Empty,
+                        Some(byte) => Front::Cons {
+                            head: Head::LiteralByte(byte),
+                            tail: tail(),
+                        },
+                    },
+                };
             }
-        }
-        // A concatenation: peel the leading generator off its first operand; the residual first-operand tail rejoins the rest.
-        Subterm::Intrinsic(Intrinsic::BinConcat(found, operands)) if *found == grain => {
-            match operands.split_first() {
-                Some((first, rest)) => match peel_front(grain, first) {
-                    Front::Cons {
-                        head,
-                        tail: first_tail,
-                    } => {
-                        let mut segments = Vec::with_capacity(operands.len());
-                        if !is_empty_bin(grain, &first_tail) {
-                            segments.push(first_tail);
-                        }
-                        segments.extend(rest.iter().cloned());
-                        let tail = match segments.len() {
-                            0 => {
-                                Subterm::Intrinsic(Intrinsic::Bin(grain, PackedBin::empty())).into()
-                            }
-                            1 => segments.into_iter().next().unwrap(),
-                            _ => Subterm::Intrinsic(Intrinsic::BinConcat(grain, segments)).into(),
-                        };
-                        Front::Cons { head, tail }
+            // `append(base, atom) = base ++ [atom]`: peel the base's leading generator, and the appended atom rejoins the residual. An empty base is the canonical one-atom chunk, which is where the symbolic head comes from; any other base decodes as far as it can, so a chained `append(append(x[], a), b)` and a run-based `append(x[\48], b)` both expose their first generator instead of going opaque. `core::spine`'s two-value peel has always decoded an append this way, so without this level the same term was transparent to conversion and opaque to reduction.
+            Subterm::Intrinsic(Intrinsic::BinAppend(found, base, atom)) if *found == grain => {
+                levels.push(BinLevel::Appended(atom));
+                current = base;
+            }
+            Subterm::Intrinsic(Intrinsic::BinConcat(found, operands)) if *found == grain => {
+                match operands.split_first() {
+                    Some((first, rest)) => {
+                        levels.push(BinLevel::Concat(rest));
+                        current = first;
                     }
-                    // A reduced `BinConcat` has no empty operands, so a first operand that exposes no byte is opaque (a leading variable/slice).
-                    Front::Empty | Front::Opaque => Front::Opaque,
-                },
-                None => Front::Empty,
+                    None => break Front::Empty,
+                }
             }
+            _ => break Front::Opaque,
         }
-        _ => Front::Opaque,
+    };
+
+    while let Some(level) = levels.pop() {
+        front = match (level, front) {
+            (BinLevel::Appended(atom), Front::Empty) => Front::Cons {
+                head: Head::Symbolic(atom.clone()),
+                tail: Subterm::Intrinsic(Intrinsic::Bin(grain, PackedBin::empty())).into(),
+            },
+            (BinLevel::Appended(atom), Front::Cons { head, tail }) => Front::Cons {
+                head,
+                tail: Subterm::Intrinsic(Intrinsic::BinAppend(grain, tail, atom.clone())).into(),
+            },
+            (
+                BinLevel::Concat(rest),
+                Front::Cons {
+                    head,
+                    tail: first_tail,
+                },
+            ) => {
+                let mut segments = Vec::with_capacity(rest.len() + 1);
+                if !is_empty_bin(grain, &first_tail) {
+                    segments.push(first_tail);
+                }
+                segments.extend(rest.iter().cloned());
+                let tail = match segments.len() {
+                    0 => Subterm::Intrinsic(Intrinsic::Bin(grain, PackedBin::empty())).into(),
+                    1 => segments.into_iter().next().unwrap(),
+                    _ => Subterm::Intrinsic(Intrinsic::BinConcat(grain, segments)).into(),
+                };
+                Front::Cons { head, tail }
+            }
+            (BinLevel::Appended(_), Front::Opaque)
+            | (BinLevel::Concat(_), Front::Empty | Front::Opaque) => Front::Opaque,
+        };
     }
+
+    front
 }
 
 /// Split the first byte off a reduced `Bin` value, returning a length-1 head chunk and the residual tail. Where `peel_bin` (`core::spine`) strips a common prefix of *two* values, this decomposes *one* — the operation-level destructors `Bin/get` and `Bin/slice` walk an atom at a time, exposing the cons structure the `Utf8` relation builds (`concat(append(x[], h), t)`) along with literal runs and concatenations. `None` for the empty bytestring or an opaque symbolic value, where no first byte is statically exposed.
@@ -217,24 +243,55 @@ enum ListFront {
     Opaque,
 }
 
-/// The structural traversal shared by both `List` destructors ([`FreeMonoid::uncons`] for the eliminator, [`peel_first_elem`] for `List/get`/`List/slice`) — the element-typed twin of [`peel_front`]. Peel the leading element off an already-reduced value: a literal run yields its first element; `append(base, e)` decodes through its base, the appended element rejoining the residual; a concatenation recurses into its first segment — so the symbolic cons `concat([h], t)`, a cons-led concat, and an append over a decodable base all expose their first element, the residual renormalised (an empty first-segment tail drops, a lone survivor collapses) so each decodes to the same tail its flattened form would. The empty list is `Empty`; anything else (a variable, a slice) is `Opaque`.
+/// [`BinLevel`] over the element carrier: `Appended` is a `ListAppend`'s trailing element, `Concat` the segments a `ListConcat` carried after its first. Each level also carries the element type, since every `List`-valued producer holds one and the residual has to be rebuilt with it.
+enum ListLevel<'a> {
+    Appended { elem: &'a Term, appended: &'a Term },
+    Concat { elem: &'a Term, rest: &'a [Term] },
+}
+
+/// The structural traversal shared by both `List` destructors ([`FreeMonoid::uncons`] for the eliminator, [`peel_first_elem`] for `List/get`/`List/slice`) — the element-typed twin of [`peel_front`], iterative for the same reason and in the same two phases. Peel the leading element off an already-reduced value: a literal run yields its first element; `append(base, e)` decodes through its base, the appended element rejoining the residual; a concatenation descends into its first segment — so the symbolic cons `concat([h], t)`, a cons-led concat, and an append over a decodable base all expose their first element, the residual renormalised (an empty first-segment tail drops, a lone survivor collapses) so each decodes to the same tail its flattened form would. The empty list is `Empty`; anything else (a variable, a slice) is `Opaque`.
 fn peel_front_list(list: &Term) -> ListFront {
-    match &**list {
-        Subterm::Intrinsic(Intrinsic::List(elem, elems)) => match elems.split_first() {
-            None => ListFront::Empty,
-            Some((head, rest)) => ListFront::Cons {
-                head: head.clone(),
-                tail: Subterm::Intrinsic(Intrinsic::List(elem.clone(), rest.to_vec())).into(),
+    let mut levels: Vec<ListLevel<'_>> = Vec::new();
+    let mut current = list;
+
+    let mut front = loop {
+        match &**current {
+            Subterm::Intrinsic(Intrinsic::List(elem, elems)) => {
+                break match elems.split_first() {
+                    None => ListFront::Empty,
+                    Some((head, rest)) => ListFront::Cons {
+                        head: head.clone(),
+                        tail: Subterm::Intrinsic(Intrinsic::List(elem.clone(), rest.to_vec()))
+                            .into(),
+                    },
+                };
+            }
+            // `append(base, e) = base ++ [e]`: peel the base's leading element, and the appended element rejoins the residual. An empty base's front is the appended element itself; a decodable base exposes its own head instead. The element-typed twin of the `BinAppend` level above, closing the same gap: `core::spine`'s two-value peel decodes an append as `concat(base, [e])`, so without this level the same term was transparent to conversion and opaque to reduction.
+            Subterm::Intrinsic(Intrinsic::ListAppend(elem, base, appended)) => {
+                levels.push(ListLevel::Appended { elem, appended });
+                current = base;
+            }
+            Subterm::Intrinsic(Intrinsic::ListConcat(elem, segments)) => {
+                match segments.split_first() {
+                    Some((first, rest)) => {
+                        levels.push(ListLevel::Concat { elem, rest });
+                        current = first;
+                    }
+                    None => break ListFront::Empty,
+                }
+            }
+            _ => break ListFront::Opaque,
+        }
+    };
+
+    while let Some(level) = levels.pop() {
+        front = match (level, front) {
+            (ListLevel::Appended { elem, appended }, ListFront::Empty) => ListFront::Cons {
+                head: appended.clone(),
+                tail: Subterm::Intrinsic(Intrinsic::List(elem.clone(), vec![])).into(),
             },
-        },
-        // `append(base, e) = base ++ [e]`: peel the base's leading element, and the appended element rejoins the residual. An empty base's front is the appended element itself; a decodable base exposes its own head instead. The element-typed twin of the `BinAppend` arm above, closing the same gap: `core::spine`'s two-value peel decodes an append as `concat(base, [e])`, so without this arm the same term was transparent to conversion and opaque to reduction.
-        Subterm::Intrinsic(Intrinsic::ListAppend(elem, base, appended)) => {
-            match peel_front_list(base) {
-                ListFront::Empty => ListFront::Cons {
-                    head: appended.clone(),
-                    tail: Subterm::Intrinsic(Intrinsic::List(elem.clone(), vec![])).into(),
-                },
-                ListFront::Cons { head, tail } => ListFront::Cons {
+            (ListLevel::Appended { elem, appended }, ListFront::Cons { head, tail }) => {
+                ListFront::Cons {
                     head,
                     tail: Subterm::Intrinsic(Intrinsic::ListAppend(
                         elem.clone(),
@@ -242,40 +299,34 @@ fn peel_front_list(list: &Term) -> ListFront {
                         appended.clone(),
                     ))
                     .into(),
-                },
-                ListFront::Opaque => ListFront::Opaque,
+                }
             }
-        }
-        // A concatenation: peel the leading element off its first segment; the residual first-segment tail rejoins the rest.
-        Subterm::Intrinsic(Intrinsic::ListConcat(elem, segments)) => {
-            match segments.split_first() {
-                Some((first, rest)) => match peel_front_list(first) {
-                    ListFront::Cons {
-                        head,
-                        tail: first_tail,
-                    } => {
-                        let mut kept = Vec::with_capacity(segments.len());
-                        if !is_empty_list(&first_tail) {
-                            kept.push(first_tail);
-                        }
-                        kept.extend(rest.iter().cloned());
-                        let tail = match kept.len() {
-                            0 => Subterm::Intrinsic(Intrinsic::List(elem.clone(), vec![])).into(),
-                            1 => kept.into_iter().next().unwrap(),
-                            _ => {
-                                Subterm::Intrinsic(Intrinsic::ListConcat(elem.clone(), kept)).into()
-                            }
-                        };
-                        ListFront::Cons { head, tail }
-                    }
-                    // A reduced `ListConcat` has no empty segments, so a first segment that exposes no element is opaque (a leading variable/slice).
-                    ListFront::Empty | ListFront::Opaque => ListFront::Opaque,
+            (
+                ListLevel::Concat { elem, rest },
+                ListFront::Cons {
+                    head,
+                    tail: first_tail,
                 },
-                None => ListFront::Empty,
+            ) => {
+                let mut kept = Vec::with_capacity(rest.len() + 1);
+                if !is_empty_list(&first_tail) {
+                    kept.push(first_tail);
+                }
+                kept.extend(rest.iter().cloned());
+                let tail = match kept.len() {
+                    0 => Subterm::Intrinsic(Intrinsic::List(elem.clone(), vec![])).into(),
+                    1 => kept.into_iter().next().unwrap(),
+                    _ => Subterm::Intrinsic(Intrinsic::ListConcat(elem.clone(), kept)).into(),
+                };
+                ListFront::Cons { head, tail }
             }
-        }
-        _ => ListFront::Opaque,
+            // A reduced `ListConcat` has no empty segments, so a first segment that exposes no element is opaque (a leading variable/slice) — and an `Opaque` from any level below stays opaque all the way out.
+            (ListLevel::Appended { .. }, ListFront::Opaque)
+            | (ListLevel::Concat { .. }, ListFront::Empty | ListFront::Opaque) => ListFront::Opaque,
+        };
     }
+
+    front
 }
 
 /// Split the first element off a reduced `List` value, returning the head element and the residual tail — the element-typed twin of [`peel_first_atom`]. Lets `List/get` and `List/slice` peel a symbolic cons one element at a time, exactly as `Bin/get`/`Bin/slice` walk an atom at a time. `None` for the empty array or an opaque symbolic value, where no first element is statically exposed.
@@ -296,6 +347,179 @@ fn is_empty_list(term: &Term) -> bool {
     matches!(&**term, Subterm::Intrinsic(Intrinsic::List(_, elems)) if elems.is_empty())
 }
 
+/// The operands of an already-reduced value, left to right, each with the number of generators it carries — `None` where any operand's length is not statically known.
+///
+/// **The free monoid's measure, and the one thing `len`, `get` and `slice` all actually want.** A length is a homomorphism into `(ℕ, +, 0)`, and over a value already in normal form it is a *fold over the spine*: no reduction, no rebuilding, no budget. That is what this is, and it replaces computing one by building `Bin/len(operand)` terms and handing them back to the reducer — which costs a full re-walk of each sub-spine, so a spine of depth n costs Σk = O(n²) where the answer is one linear pass.
+///
+/// **It takes no [`crate::Reducer`], and that is the enforcement rather than a comment.** A function that cannot reach the reducer cannot re-enter reduction, cannot spend budget, and cannot rebuild a term to ask about it. The audit is the signature.
+///
+/// **The notion is not new here — conversion has had it all along.** `crate::spine`'s `Atom::Window` is documented as a chunk whose "contents [are] symbolic, but length `hi - lo` [is] statically known"; deciding equality has always been able to measure what it cannot read. Only reduction lacked the same view.
+///
+/// **Deliberately narrow: literal runs and their concatenations, nothing else.** An append, a window, a variable — anything whose length this cannot read off — answers `None`, and every caller then falls back to exactly the rule it uses today. That keeps this from asserting a single equation that is not already decided: measuring a window as `hi - lo` would be sound on `/sys`'s `s <= e <= len(b)` preconditions, but nothing decides `len(slice(b, s, e)) = e - s` today — conversion holds a window's very emptiness undecidable (`against_identity` answers `Stuck`) — so admitting it would be a *new* definitional equation on the perimeter's weakest row. It buys nothing here, since an accumulation's spine is literals, and it can be taken later on its own evidence.
+fn bin_segments(grain: Grain, value: &Term) -> Option<Vec<(&Term, usize)>> {
+    let mut segments = Vec::new();
+    let mut pending = vec![value];
+
+    while let Some(term) = pending.pop() {
+        match &**term {
+            Subterm::Intrinsic(Intrinsic::Bin(found, run)) if *found == grain => {
+                segments.push((term, run.len(grain)));
+            }
+            // Pushed in reverse so they come back off left to right: a segment list is ordered, unlike the sum taken over it.
+            Subterm::Intrinsic(Intrinsic::BinConcat(found, operands)) if *found == grain => {
+                pending.extend(operands.iter().rev());
+            }
+            _ => return None,
+        }
+    }
+
+    Some(segments)
+}
+
+/// [`bin_segments`] over the element carrier.
+fn list_segments(value: &Term) -> Option<Vec<(&Term, usize)>> {
+    let mut segments = Vec::new();
+    let mut pending = vec![value];
+
+    while let Some(term) = pending.pop() {
+        match &**term {
+            Subterm::Intrinsic(Intrinsic::List(_, elems)) => segments.push((term, elems.len())),
+            Subterm::Intrinsic(Intrinsic::ListConcat(_, operands)) => {
+                pending.extend(operands.iter().rev());
+            }
+            _ => return None,
+        }
+    }
+
+    Some(segments)
+}
+
+/// How many generators an already-reduced `Bin` value carries — the sum of [`bin_segments`]. `None` where the value is not wholly measurable, or where the total does not fit a `usize`.
+pub(crate) fn bin_measure(grain: Grain, value: &Term) -> Option<usize> {
+    measure(&bin_segments(grain, value)?)
+}
+
+/// [`bin_measure`] over the element carrier.
+pub(crate) fn list_measure(value: &Term) -> Option<usize> {
+    measure(&list_segments(value)?)
+}
+
+fn measure(segments: &[(&Term, usize)]) -> Option<usize> {
+    segments
+        .iter()
+        .try_fold(0usize, |total, (_, length)| total.checked_add(*length))
+}
+
+/// Where an index lands: the operand holding it, and the index *within* that operand. `None` when the value is not wholly measurable, or when the index is past its end — which the caller reports as the out-of-bounds it is.
+pub(crate) fn bin_locate(grain: Grain, value: &Term, index: usize) -> Option<Located<'_>> {
+    locate(bin_segments(grain, value)?, index)
+}
+
+/// [`bin_locate`] over the element carrier.
+pub(crate) fn list_locate(value: &Term, index: usize) -> Option<Located<'_>> {
+    locate(list_segments(value)?, index)
+}
+
+/// The outcome of locating an index in a measured value.
+pub(crate) enum Located<'a> {
+    /// The operand holding the index, and the index within it.
+    At(&'a Term, usize),
+    /// The index is past the value's end, which measured this many generators.
+    Past(usize),
+}
+
+fn locate(segments: Vec<(&Term, usize)>, index: usize) -> Option<Located<'_>> {
+    let mut offset = 0usize;
+
+    for (operand, length) in segments {
+        match index.checked_sub(offset) {
+            Some(local) if local < length => return Some(Located::At(operand, local)),
+            _ => offset = offset.checked_add(length)?,
+        }
+    }
+
+    Some(Located::Past(offset))
+}
+
+/// The operands a `[start, end)` window spans, each already narrowed to its overlap — the pieces whose concatenation *is* the window. `None` when the value is not wholly measurable; `Err` carries the measured total when the window is out of range, which the caller reports.
+///
+/// The point of returning pieces rather than a value: an operand the window covers whole is handed back untouched and shares its payload, and only the two at the edges are narrowed. A window over a spine therefore costs one pass and two slices, where peeling one generator at a time costs a walk of the whole spine per generator read.
+pub(crate) fn bin_window(
+    grain: Grain,
+    value: &Term,
+    start: usize,
+    end: usize,
+) -> Option<Result<Vec<Piece<'_>>, usize>> {
+    window(bin_segments(grain, value)?, start, end)
+}
+
+/// [`bin_window`] over the element carrier.
+pub(crate) fn list_window(
+    value: &Term,
+    start: usize,
+    end: usize,
+) -> Option<Result<Vec<Piece<'_>>, usize>> {
+    window(list_segments(value)?, start, end)
+}
+
+/// One operand a window spans: whole, or narrowed to the half-open range within it.
+pub(crate) enum Piece<'a> {
+    Whole(&'a Term),
+    Part(&'a Term, usize, usize),
+}
+
+fn window(
+    segments: Vec<(&Term, usize)>,
+    start: usize,
+    end: usize,
+) -> Option<Result<Vec<Piece<'_>>, usize>> {
+    let total = measure(&segments)?;
+
+    if start > end || end > total {
+        return Some(Err(total));
+    }
+
+    let mut pieces = Vec::new();
+    let mut offset = 0usize;
+
+    for (operand, length) in segments {
+        let (from, to) = (offset, offset + length);
+        offset = to;
+
+        // Half-open overlap: an operand entirely before the window or entirely after it contributes nothing, and an empty overlap is not a piece.
+        let (lo, hi) = (start.max(from), end.min(to));
+        if lo >= hi {
+            continue;
+        }
+
+        pieces.push(match (lo - from, hi - from) {
+            (0, upper) if upper == length => Piece::Whole(operand),
+            (lower, upper) => Piece::Part(operand, lower, upper),
+        });
+    }
+
+    Some(Ok(pieces))
+}
+
+/// The largest literal operand reduction will fuse, in the carrier's own generators — bits at [`Grain::B`], bytes at [`Grain::X`], elements for `List`.
+///
+/// **Fusion is an optimization for small runs, not a normalization obligation.** [`normalize_concat`] copies every operand it fuses, so an accumulation that appends to its own result recopies everything accumulated so far on every step: a linear number of transitions performing a quadratic volume of construction. Declining to fuse past this size leaves the `Concat` node standing instead, and each step is then one node over operands it shares rather than copies. `curios`'s `tests::reduction` measures both halves; `tests::runtime`'s `accumulation_loops_are_linear_by_construction` is the same loop at runtime, where a rope has always made it linear.
+///
+/// **The cap is by *operand*, and that is the load-bearing half.** Under a cap on the *result* an accumulator is re-copied within every chunk, so the cost stays quadratic in the chunk size and is merely divided by the number of chunks. Under an operand cap the accumulator stops being fusible after a handful of steps whatever its chunk size, every later step is one node, and the leaves of a loop appending the same run share one payload.
+///
+/// **Chosen from a census, not picked.** Instrumenting the two `merge` closures over a fixed-prelude build (elaboration *and* kernel certification of every `/std` and `/syn` module) and over `curios`'s 557-test corpus, taken **2026-08-14**:
+///
+/// | Corpus | Fusing concatenations | Largest operand |
+/// | --- | --- | --- |
+/// | Fixed prelude | 207, all bit-grain | 1 generator |
+/// | Cross-stage corpus | 210 — 207 bit-grain, 3 `List`, **0 byte-grain** | 3 generators |
+/// | The accumulation reproducer alone, at n = 800 | 1600 | 7990 generators |
+///
+/// So the corpus fuses almost nothing, and what it does fuse is one to three generators; the pathological case is unbounded. Any cap of four or more leaves every normal form the corpus reaches untouched, and this one clears the observed maximum by more than an order of magnitude while stopping the accumulation within a handful of steps. The third row is the whole defect in one line: operands of 10, 20, 30 … 7990, the accumulator recopied every step.
+///
+/// **What declining to fuse costs is completeness, not soundness.** It removes a normalization step rather than adding an equation, so the risk is a proof that used to close by literal equality failing to close through the peel. It does not: `bin_atoms`/`list_atoms` flatten a concatenation into segments and `push` merges adjacent literal runs (`crate::spine`), so a capped spelling and the literal it would have fused to decompose identically. `curios-core`'s `spine` tests state that per grain and per carrier, `curios`'s `tests::aggregates::a_literal_run_is_the_same_value_however_it_is_grouped` states it where both checkers see it, and a workspace build — which elaborates, erases and certifies the whole standard library — is the detector for anything they miss.
+pub(crate) const FUSION_CAP: usize = 64;
+
 /// The literal run a normalized concatenation inspects — each carrier's own representation of a generator sequence (`PackedBin` for both `Bin` grains, the element vector for `List`), exposing only the emptiness [`normalize_concat`] drops.
 pub(crate) trait Run {
     fn is_empty(&self) -> bool;
@@ -313,7 +537,9 @@ impl Run for Vec<Term> {
     }
 }
 
-/// The free monoid's normalising *product* — the constructor dual of [`FreeMonoid::uncons`] (the destructor) — shared by `BinConcat` (both grains) and `ListConcat` reduction. Collapse a concatenation's already-reduced `operands` to a normal form under the unit and associativity laws: drop the empty identity (`x[]`, `b[]`, `[]`), fuse an all-literal survivor set into one literal, and collapse a lone surviving operand to itself (an `n`-ary concat of one *is* that one). `literal` lends an operand's run when it is a literal (`None` for a symbolic chunk); `merge` fuses the runs in the carrier's own representation — `PackedBin::concat`'s bulk copy, `List`'s flatten — and must fuse zero runs to the empty literal; `into_concat` rebuilds the surviving mixed operands.
+/// The free monoid's normalising *product* — the constructor dual of [`FreeMonoid::uncons`] (the destructor) — shared by `BinConcat` (both grains) and `ListConcat` reduction. Collapse a concatenation's already-reduced `operands` to a normal form under the unit and associativity laws: drop the empty identity (`x[]`, `b[]`, `[]`), fuse an all-*fusible*-literal survivor set into one literal, and collapse a lone surviving operand to itself (an `n`-ary concat of one *is* that one). `literal` lends an operand's run when it is a literal this may fuse (`None` for a symbolic chunk *or* for a literal past [`FUSION_CAP`], which is how the cap is applied without this function knowing the carrier's size unit); `merge` fuses the runs in the carrier's own representation — `PackedBin::concat`'s bulk copy, `List`'s flatten — and must fuse zero runs to the empty literal; `into_concat` rebuilds the surviving mixed operands.
+///
+/// An over-cap operand therefore reads exactly like a symbolic one here: not droppable as empty, not fusible, and left standing by `into_concat`. That is the whole of the cap's implementation, and it is why the emptiness filter below is unaffected — an over-cap run is never empty.
 ///
 /// Window fusion (adjacent `Bin/slice`s of one base) is deliberately NOT done here: that is the spine peel's job when *deciding equality* (`spine::push`); reduction only needs a normal form, and conversion closes any residual gap.
 pub(crate) fn normalize_concat<C: Run>(
@@ -332,5 +558,97 @@ pub(crate) fn normalize_concat<C: Run>(
         Some(runs) => merge(runs),
         None if kept.len() == 1 => Term::unwrap_or_clone(kept.pop().unwrap()),
         None => into_concat(kept),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use {super::*, crate::Peel};
+
+    /// The shape [`FUSION_CAP`] makes reachable: a left-nested concatenation as deep as an accumulation loop is long, since an accumulator past the cap keeps one node per step instead of fusing into one run.
+    fn deep_bin(grain: Grain, depth: usize) -> Term {
+        let leaf = |byte| {
+            Term::from(Subterm::Intrinsic(Intrinsic::Bin(
+                grain,
+                PackedBin::from_bytes(vec![byte]),
+            )))
+        };
+
+        (0..depth).fold(leaf(0x30), |acc, _| {
+            Subterm::Intrinsic(Intrinsic::BinConcat(grain, vec![acc, leaf(0x31)])).into()
+        })
+    }
+
+    /// Its `List` twin, over an element type that stays symbolic.
+    fn deep_list(depth: usize) -> Term {
+        let elem = Term::free_var(&crate::Free::local(0, Some("T")));
+        let leaf = |index: u32| {
+            Term::from(Subterm::Intrinsic(Intrinsic::List(
+                elem.clone(),
+                vec![Term::free_var(&crate::Free::local(index, Some("e")))],
+            )))
+        };
+
+        (0..depth).fold(leaf(1), |acc, _| {
+            Subterm::Intrinsic(Intrinsic::ListConcat(elem.clone(), vec![acc, leaf(2)])).into()
+        })
+    }
+
+    // A hundred thousand levels is what a loop builds, and it used to be unreachable: fusion collapsed every concatenation into one run on the way in, so no walk here ever saw depth. `FUSION_CAP` is what creates it, which is why these tests land *with* the cap rather than after it — a walk that recursed once per level would spend one granted segment and then the process, since `recurse` is taken at each checker's reduction entry point and checked between *its* frames rather than inside a helper it calls. The same depth constant for the same reason as `print::tests::a_deep_term_is_printed_without_overflowing` and `term::tests::deep_terms_compare_without_native_recursion`, which are the two walks that already met data-shaped depth and were made to survive it.
+    #[test]
+    fn a_deep_concatenation_peels_its_first_generator() {
+        const DEEP: usize = 100_000;
+
+        let (head, _tail) = peel_first_atom(Grain::X, &deep_bin(Grain::X, DEEP))
+            .expect("a literal-led concatenation exposes its leading byte");
+
+        assert_eq!(
+            head,
+            Term::from(Subterm::Intrinsic(Intrinsic::Bin(
+                Grain::X,
+                PackedBin::from_bytes(vec![0x30])
+            ))),
+            "the leftmost leaf's byte, found under a hundred thousand levels"
+        );
+    }
+
+    #[test]
+    fn a_deep_list_concatenation_peels_its_first_element() {
+        const DEEP: usize = 100_000;
+
+        let (head, _tail) = peel_first_elem(&deep_list(DEEP))
+            .expect("a literal-led concatenation exposes its head");
+
+        assert_eq!(
+            head,
+            Term::free_var(&crate::Free::local(1, Some("e"))),
+            "the leftmost leaf's element"
+        );
+    }
+
+    // The conversion side of the same depth: `peel_bin`/`peel_list` flatten a value into segments before comparing, so they meet the nesting through a different walk than the destructors above and need their own evidence. Comparing a value against itself is the cheapest thing that forces both sides to flatten in full.
+    #[test]
+    fn a_deep_concatenation_flattens_for_conversion() {
+        const DEEP: usize = 100_000;
+
+        let bin = deep_bin(Grain::X, DEEP);
+        let Subterm::Intrinsic(intrinsic) = &*bin else {
+            unreachable!("a concatenation");
+        };
+
+        assert!(
+            matches!(crate::peel_bin(intrinsic, intrinsic), Some(Peel::Equal)),
+            "a value is itself, however deeply it is nested"
+        );
+
+        let list = deep_list(DEEP);
+        let Subterm::Intrinsic(intrinsic) = &*list else {
+            unreachable!("a concatenation");
+        };
+
+        assert!(
+            matches!(crate::peel_list(intrinsic, intrinsic), Some(Peel::Equal)),
+            "the `List` twin"
+        );
     }
 }

@@ -1,6 +1,6 @@
 //! What a sequence costs to build at the *type* level, measured against what the same loop costs at runtime.
 //!
-//! `Bytes/slice` states `10 <= Bytes/len(b)`, a decided proposition, so its subject stands in a type and the obligation is discharged by reducing that subject. Writing `Bytes/slice(built, 0, 10)` over a computed accumulator therefore runs the whole accumulation at elaboration time. `normalize_concat` fuses an all-literal concatenation into one packed value, so each step copies everything accumulated so far — the representation the runtime replaced with a rope, still in use here. The same loop is linear when the program runs it (`tests::runtime`'s `accumulation_loops_are_linear_by_construction`) and quadratic when a bound makes the compiler evaluate it.
+//! `Bytes/slice` states `10 <= Bytes/len(b)`, a decided proposition, so its subject stands in a type and the obligation is discharged by reducing that subject. Writing `Bytes/slice(built, 0, 10)` over a computed accumulator therefore runs the whole accumulation at elaboration time — and it used to run it quadratically, because `normalize_concat` fused an all-literal concatenation into one packed value and so recopied everything accumulated so far on every step. `curios-core`'s `FUSION_CAP` stopped that, and its measure is what keeps a length over the resulting spine a single fold; the figures below are what those two decided, taken on both sides of them.
 //!
 //! Three arms divide that cost, and the division is the point: the middle arm performs the same number of transitions as the last one and constructs nothing, so whatever separates them is construction rather than machinery.
 //!
@@ -138,6 +138,17 @@ fn elaboration_time(source: &str) -> Duration {
     elapsed
 }
 
+/// **The regression guard the measurement above cannot be.** A probe is ignored, so nothing runs it; and the elaborator's reduction cache charges nothing on a hit, so it absorbs this entire class of defect and stays silent while the *kernel* — which charges a memo hit what the computation cost — refuses. That asymmetry is exactly how a quadratic length went unnoticed until a budget ran out, so the guard has to be an ordinary assertion at the ordinary budget.
+///
+/// Both carriers, at an iteration count that costs a small multiple of the default budget when a length is quadratic in the spine's depth and a small fraction of it when a length is a fold.
+#[test]
+fn an_accumulated_sequence_is_bounded_when_a_window_is_taken_of_it() {
+    for source in [bytes_growing(2000), list_growing(2000)] {
+        typecheck_within(DEFAULT_STEP_BUDGET, &source)
+            .expect("an accumulation and a window over it fit the ordinary budget");
+    }
+}
+
 /// What a type-level accumulation costs, divided three ways per carrier.
 ///
 /// ```sh
@@ -148,57 +159,72 @@ fn elaboration_time(source: &str) -> Duration {
 ///
 /// # What it last printed
 ///
-/// Taken **2026-08-14**, **release**, on `aarch64-apple-darwin`, before any part of the fusion cap existed. Kept here rather than in a document that cites this test, so a number cannot drift from the thing that would check it.
+/// Taken **2026-08-14**, **release**, on `aarch64-apple-darwin`, with the fusion cap and the measure both in place.
 ///
 /// ```text
 /// Bytes
 ///          n     opaque      fixed    growing   fixed-opaque  growing-fixed   floor fixed  floor growing
-///        800    127.6ms    131.1ms    137.5ms          3.5ms          6.4ms         65536        131072
-///       1600    100.3ms    123.8ms    136.5ms         23.5ms         12.6ms        131072        262144
-///       3200    103.7ms    145.4ms    183.4ms         41.7ms         38.0ms        262144        524288
-///       6400     96.6ms    190.2ms    319.1ms         93.6ms        128.9ms        524288      > 524288
+///        800    186.9ms    166.1ms    168.6ms          0.0ns          2.4ms         65536        131072
+///       1600    154.0ms    176.3ms    186.5ms         22.3ms         10.1ms        131072        262144
+///       3200    156.0ms    197.9ms    219.5ms         41.9ms         21.6ms        262144        524288
+///       6400    156.2ms    249.4ms    288.6ms         93.2ms         39.2ms        524288      > 524288
 ///
 /// List
 ///          n     opaque      fixed    growing   fixed-opaque  growing-fixed   floor fixed  floor growing
-///        250    107.0ms    102.1ms    147.0ms          0.0ns         44.9ms         16384         65536
-///        500    115.1ms    105.8ms    244.2ms          0.0ns        138.4ms         32768        131072
-///       1000    111.5ms    111.3ms    598.8ms          0.0ns        487.6ms         65536        262144
-///       2000    115.4ms    123.8ms       2.0s          8.4ms           1.8s        131072        524288
+///        250    170.7ms    155.2ms    171.9ms          0.0ns         16.7ms         16384         65536
+///        500    168.5ms    159.7ms    172.4ms          0.0ns         12.7ms         32768        131072
+///       1000    167.7ms    165.7ms    182.4ms          0.0ns         16.7ms         65536        262144
+///       2000    169.6ms    177.4ms    198.1ms          7.8ms         20.8ms        131072        524288
 /// ```
 ///
-/// **Every budget floor doubles when the iteration count doubles.** That holds in all four columns, on both carriers, for the arm that constructs nothing and the arm that constructs quadratically alike. The step counter prices this loop identically whichever it is running, which is the whole of what the counter cannot see.
+/// **`> 524288` is a gap in this probe, not a refusal.** The last power of two below the default budget is 524 288, so a program needing between that and 1 000 000 steps elaborates fine while every probe here fails. The timing column beside it is a successful elaboration.
 ///
-/// **The fixed-payload arm is linear and the growing arm is not.** `fixed-opaque` roughly doubles per rung (3.5 → 23.5 → 41.7 → 93.6 ms); `growing-fixed` grows by 1.97×, 3.02× and 3.39× on `Bytes` and by 3.08×, 3.52× and 3.69× on `List`, converging on the 4× a quadratic gives for a doubled input. Nothing about performing a transition is superlinear; what grows is what a transition builds.
+/// # What it printed before any of this
 ///
-/// **`Bytes` needs eight times the iteration count to show what `List` shows**, which is why the two ladders differ. A packed byte copy is a `memcpy`; an element copy is a reference-count increment per element. Same shape, two orders of magnitude apart in the constant.
+/// The same command on the same machine, before the cap and the measure existed. This is the baseline the work is read against, and the arms that did *not* move are as much of the evidence as the ones that did.
 ///
-/// **`> 524288` is a gap in this probe, not a refusal.** The last power of two below the default budget is 524 288, so a program needing between that and 1 000 000 steps elaborates fine while every probe here fails. `Bytes`/growing at n = 6400 is that case — the timing column beside it is a successful elaboration.
+/// ```text
+/// Bytes    n=800: fixed-opaque 3.5ms  growing-fixed   6.4ms   floors  65536 / 131072
+///          n=1600:              23.5ms                12.6ms         131072 / 262144
+///          n=3200:              41.7ms                38.0ms         262144 / 524288
+///          n=6400:              93.6ms               128.9ms         524288 / > 524288
+/// List     n=250:                0.0ns                44.9ms          16384 /  65536
+///          n=500:                0.0ns               138.4ms          32768 / 131072
+///          n=1000:               0.0ns               487.6ms          65536 / 262144
+///          n=2000:               8.4ms                  1.8s         131072 / 524288
+/// ```
+///
+/// **Every budget floor doubles when the iteration count doubles — before and after alike.** That held even when the growing arm was quadratic in *time*, on both carriers, for the arm that constructs nothing and the arm that constructed quadratically. The step counter prices this loop identically whichever it is running, which is the whole of what it cannot see, and the reason the memory column below is the one that moved.
+///
+/// **The fixed-payload arm did not move**, which is what makes the rest a removal rather than a reallocation: 3.5 / 23.5 / 41.7 / 93.6 ms became 0.0 / 22.3 / 41.9 / 93.2 ms.
+///
+/// **The growing arm's excess over it went from quadratic to linear.** On `Bytes` its per-rung growth was 1.97×, 3.02×, 3.39× — converging on the 4× a quadratic gives for a doubled input — and is now 4.2×, 2.1×, 1.8×. On `List` it was 3.08×, 3.52×, 3.69× and the arm cost 1.8 s at n = 2000; it now costs 20.8 ms, and does not grow.
+///
+/// **`Bytes` needed eight times the iteration count to show what `List` showed**, which is why the two ladders differ. A packed byte copy is a `memcpy`; an element copy is a reference-count increment per element. Same shape, two orders of magnitude apart in the constant.
 ///
 /// # Peak memory
 ///
 /// Taken the same day, same profile, from outside the process because a high-water mark read from inside it would already have been returned to the allocator:
 ///
 /// ```sh
-/// /usr/bin/time -l target/release/curios compile bytes_growing_6400.crs -o /dev/null
+/// /usr/bin/time -l target/release/curios compile bytes_growing_6400.crs -o out
 /// ```
 ///
-/// | Arm | n = 800 | n = 6400 |
-/// | --- | --- | --- |
-/// | opaque | 75.3 MiB | 75.5 MiB |
-/// | fixed | 75.7 MiB | 87.8 MiB |
-/// | growing | 87.8 MiB | 396.3 MiB |
+/// | Arm | n = 800 | n = 6400 | before, n = 800 | before, n = 6400 |
+/// | --- | --- | --- | --- | --- |
+/// | opaque | — | 74.8 MiB | 75.3 MiB | 75.5 MiB |
+/// | fixed | — | 87.9 MiB | 75.7 MiB | 87.8 MiB |
+/// | growing | 80.4 MiB | 126.6 MiB | 87.8 MiB | 396.3 MiB |
 ///
-/// **The opaque arm is flat in the iteration count** — 75.3 against 75.5 MiB across an eightfold range — so it is the compiler's own baseline and the other two rows are read as excesses over it.
+/// **The growing arm's excess over baseline fell from 321 MiB to 52 MiB** — a sixfold reduction to produce the same 64 KiB value — and its growth across the ladder (5.6 / 9.5 / 15.7 / 51.8 MiB) is no longer quadratic. That is the whole point of the work: the accumulator stops being recopied every step.
 ///
-/// **The fixed-payload arm retains about 2 KiB per transition while constructing nothing.** 12.5 MiB over 6400 iterations, growing linearly. That is the floor a budget default has to respect, and it is the sharper half of this measurement: at that rate a budget of a million transitions admits roughly two gigabytes before a single byte of payload is built.
+/// **The opaque and fixed arms are unmoved**, at 74.8 against 75.5 and 87.9 against 87.8 MiB. The fixed arm still retains about 2 KiB per transition while constructing nothing, growing linearly, and that figure is untouched by any of this — it is a property of the machinery rather than of what a transition builds, and it is the floor a budget default has to respect: at that rate a million transitions admit roughly two gigabytes before a single byte of payload is built.
 ///
-/// **The growing arm retains 321 MiB above baseline to produce a 64 KiB value.** Its excess (12.5 → 36.8 → 127.0 → 320.8 MiB) grows superlinearly, matching the timings.
-///
-/// **This corrects a figure stated in prose, which is why it is here.** The specification says compile-time evaluation of a small fraction of the runtime measurement's size "already costs gigabytes". Inside the default budget it does not: the largest iteration count the default admits for this arm is around 6400, and that costs 321 MiB. Gigabytes are reached by this shape, but only past a budget the compiler does not ship — which is where the n = 100 000 fixture in `tests::numeric` sits, and it refuses rather than arriving there.
+/// **One figure this corrects.** The specification says compile-time evaluation of a small fraction of the runtime measurement's size "already costs gigabytes". It did not even before this work: the largest iteration count the default budget admits for this arm is around 6400, and that cost 321 MiB. Gigabytes are reached by the shape, but only past a budget the compiler does not ship.
 ///
 /// # The fixed prelude, which the cap must not move
 ///
-/// The other half of the gate: capping fusion must not cost the prelude anything. Taken the same day, from the build script's own capture rather than from `cargo`'s wall clock, because `cargo build` is mostly `rustc` and its RSS says nothing about elaboration:
+/// The other half of the gate, from the build script's own capture rather than `cargo`'s wall clock, because `cargo build` is mostly `rustc` and its RSS says nothing about elaboration:
 ///
 /// ```sh
 /// touch curios-prelude-archive/std.crs
@@ -206,14 +232,15 @@ fn elaboration_time(source: &str) -> Duration {
 /// # target/debug/build/curios-prelude-archive-*/out/profile.tsv
 /// ```
 ///
-/// | Span | Time | Retained | Allocated | Allocations |
+/// | Span | Retained | Allocated | Allocations | Before |
 /// | --- | --- | --- | --- | --- |
-/// | `elaborate_and_zonk_module` | 18.6 s | 248.7 MiB | 10 208.7 MiB | 67 368 289 |
-/// | `erase_unit` | 1.75 s | 47.9 MiB | 664.8 MiB | 6 318 194 |
+/// | `elaborate_and_zonk_module` | 248.7 MiB | 10 210.3 MiB | 67 383 115 | 248.7 MiB / 10 208.7 MiB / 67 368 289 |
+/// | `erase_unit` | 47.9 MiB | 665.0 MiB | 6 319 619 | 47.9 MiB / 664.8 MiB / 6 318 194 |
 ///
-/// Reported peak, printed by the build as a warning: **606.6 MiB**, identical across two runs.
+/// Reported peak, printed by the build as a warning: **606.6 MiB**, before and after, identical across runs.
 ///
-/// **Compare the allocation columns, not the time one.** Time here is a debug build under a capture and moved by three seconds between runs; the allocation volume, the allocation count and the reported peak came back bit-identical, because they are counted rather than sampled. A regression that matters to this work is one that allocates more.
+/// **Compare the allocation columns, not the time one.** Time here is a debug build under a capture and moves by seconds between runs; allocation volume, allocation count and the reported peak come back bit-identical, because they are counted rather than sampled. The prelude moved by **+0.02%** in allocations and not at all in retained memory or reported peak — the cost of the measure's segment list running over values that are one to three generators long.
+///
 #[test]
 #[ignore = "measurement: reports what a type-level accumulation costs rather than asserting"]
 fn type_level_sequence_cost_measurements() {

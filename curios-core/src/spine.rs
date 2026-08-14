@@ -245,49 +245,63 @@ fn bin_atoms(grain: Grain, intrinsic: &Intrinsic) -> VecDeque<Atom<u8>> {
     out.into()
 }
 
-fn bin_collect_intrinsic(grain: Grain, intrinsic: &Intrinsic, out: &mut Vec<Atom<u8>>) {
-    match intrinsic {
-        Intrinsic::Bin(found, value) if *found == grain => push(
-            out,
-            Atom::Literal(match grain {
-                Grain::B => (0..value.bit_length())
-                    .map(|index| u8::from(value.bit(index).unwrap()))
-                    .collect(),
-                Grain::X => value.to_bytes().unwrap(),
-            }),
-        ),
-        Intrinsic::BinConcat(found, operands) if *found == grain => operands
-            .iter()
-            .for_each(|op| bin_collect_term(grain, op, out)),
-        Intrinsic::BinSlice(found, base, lo, hi) if *found == grain => push(
-            out,
-            Atom::Window {
-                base: base.clone(),
-                lo: lo.clone(),
-                hi: hi.clone(),
-            },
-        ),
-        // `append(base, b) = base ++ [b]`: decode the base, then the appended byte. A concrete byte is a length-1 literal run (so it merges with an abutting run and unifies with `concat(base, \b)`); a symbolic byte is the canonical one-byte chunk `append(x[], b)` — opaque, so its emptiness stays undecidable.
-        Intrinsic::BinAppend(found, base, atom) if *found == grain => {
-            bin_collect_term(grain, base, out);
+/// One item of a flattening walk's worklist. `Appended` is a `BinAppend`'s trailing atom, held back so it lands *after* everything its base contributes — the one place order is not simply left-to-right, and the reason a plain stack of operands would not do.
+///
+/// Explicit rather than recursive because a concatenation's depth is data-shaped once [`crate::FUSION_CAP`] stops an accumulation fusing; see [`crate::free_monoid`]'s `BinLevel`, which states the argument in full for the destructor side.
+enum BinPending<'a> {
+    Term(&'a Term),
+    Intrinsic(&'a Intrinsic),
+    Appended(&'a Term),
+}
 
-            match bin_atom(grain, atom) {
+fn bin_collect_intrinsic(grain: Grain, intrinsic: &Intrinsic, out: &mut Vec<Atom<u8>>) {
+    // A stack, so operands are pushed in reverse to come back off in order — `push`'s run merging depends on segments arriving left to right.
+    let mut pending = vec![BinPending::Intrinsic(intrinsic)];
+
+    while let Some(item) = pending.pop() {
+        match item {
+            BinPending::Term(term) => match &**term {
+                Subterm::Intrinsic(intrinsic) => pending.push(BinPending::Intrinsic(intrinsic)),
+                _ => push(out, Atom::Symbolic(term.clone())),
+            },
+            // The appended atom of a `BinAppend`, reached once its base has been flattened. A concrete byte is a length-1 literal run (so it merges with an abutting run and unifies with `concat(base, \b)`); a symbolic byte is the canonical one-byte chunk `append(x[], b)` — opaque, so its emptiness stays undecidable.
+            BinPending::Appended(atom) => match bin_atom(grain, atom) {
                 Some(b) => push(out, Atom::Literal(vec![b])),
                 None => {
                     let empty = Subterm::Intrinsic(Intrinsic::Bin(grain, PackedBin::empty()));
                     let chunk = Term::intrinsic(Intrinsic::bin_append(grain, empty, atom.clone()));
                     push(out, Atom::Symbolic(chunk));
                 }
-            }
+            },
+            BinPending::Intrinsic(intrinsic) => match intrinsic {
+                Intrinsic::Bin(found, value) if *found == grain => push(
+                    out,
+                    Atom::Literal(match grain {
+                        Grain::B => (0..value.bit_length())
+                            .map(|index| u8::from(value.bit(index).unwrap()))
+                            .collect(),
+                        Grain::X => value.to_bytes().unwrap(),
+                    }),
+                ),
+                Intrinsic::BinConcat(found, operands) if *found == grain => {
+                    pending.extend(operands.iter().rev().map(BinPending::Term));
+                }
+                Intrinsic::BinSlice(found, base, lo, hi) if *found == grain => push(
+                    out,
+                    Atom::Window {
+                        base: base.clone(),
+                        lo: lo.clone(),
+                        hi: hi.clone(),
+                    },
+                ),
+                // `append(base, b) = base ++ [b]`: decode the base, then the appended byte.
+                Intrinsic::BinAppend(found, base, atom) if *found == grain => {
+                    pending.push(BinPending::Appended(atom));
+                    pending.push(BinPending::Term(base));
+                }
+                other => push(out, Atom::Symbolic(Term::intrinsic(other.clone()))),
+            },
         }
-        other => push(out, Atom::Symbolic(Term::intrinsic(other.clone()))),
-    }
-}
-
-fn bin_collect_term(grain: Grain, term: &Term, out: &mut Vec<Atom<u8>>) {
-    match &**term {
-        Subterm::Intrinsic(intrinsic) => bin_collect_intrinsic(grain, intrinsic, out),
-        _ => push(out, Atom::Symbolic(term.clone())),
     }
 }
 
@@ -298,33 +312,45 @@ fn list_atoms(intrinsic: &Intrinsic) -> VecDeque<Atom<Term>> {
     out.into()
 }
 
-fn list_collect_intrinsic(intrinsic: &Intrinsic, out: &mut Vec<Atom<Term>>) {
-    match intrinsic {
-        Intrinsic::List(_, elems) => push(out, Atom::Literal(elems.clone())),
-        Intrinsic::ListConcat(_, operands) => {
-            operands.iter().for_each(|op| list_collect_term(op, out))
-        }
-        Intrinsic::ListSlice(_, base, lo, hi) => push(
-            out,
-            Atom::Window {
-                base: base.clone(),
-                lo: lo.clone(),
-                hi: hi.clone(),
-            },
-        ),
-        // `append(base, e) = base ++ [e]`: decode the base, then the appended element as a length-1 literal run, so it merges with an abutting run and unifies with `concat(base, single(e))`.
-        Intrinsic::ListAppend(_, base, elem) => {
-            list_collect_term(base, out);
-            push(out, Atom::Literal(vec![elem.clone()]));
-        }
-        other => push(out, Atom::Symbolic(Term::intrinsic(other.clone()))),
-    }
+/// [`BinPending`] over the element carrier.
+enum ListPending<'a> {
+    Term(&'a Term),
+    Intrinsic(&'a Intrinsic),
+    Appended(&'a Term),
 }
 
-fn list_collect_term(term: &Term, out: &mut Vec<Atom<Term>>) {
-    match &**term {
-        Subterm::Intrinsic(intrinsic) => list_collect_intrinsic(intrinsic, out),
-        _ => push(out, Atom::Symbolic(term.clone())),
+fn list_collect_intrinsic(intrinsic: &Intrinsic, out: &mut Vec<Atom<Term>>) {
+    let mut pending = vec![ListPending::Intrinsic(intrinsic)];
+
+    while let Some(item) = pending.pop() {
+        match item {
+            ListPending::Term(term) => match &**term {
+                Subterm::Intrinsic(intrinsic) => pending.push(ListPending::Intrinsic(intrinsic)),
+                _ => push(out, Atom::Symbolic(term.clone())),
+            },
+            // The appended element of a `ListAppend`, as a length-1 literal run, so it merges with an abutting run and unifies with `concat(base, single(e))`.
+            ListPending::Appended(elem) => push(out, Atom::Literal(vec![elem.clone()])),
+            ListPending::Intrinsic(intrinsic) => match intrinsic {
+                Intrinsic::List(_, elems) => push(out, Atom::Literal(elems.clone())),
+                Intrinsic::ListConcat(_, operands) => {
+                    pending.extend(operands.iter().rev().map(ListPending::Term));
+                }
+                Intrinsic::ListSlice(_, base, lo, hi) => push(
+                    out,
+                    Atom::Window {
+                        base: base.clone(),
+                        lo: lo.clone(),
+                        hi: hi.clone(),
+                    },
+                ),
+                // `append(base, e) = base ++ [e]`: decode the base, then the appended element.
+                Intrinsic::ListAppend(_, base, elem) => {
+                    pending.push(ListPending::Appended(elem));
+                    pending.push(ListPending::Term(base));
+                }
+                other => push(out, Atom::Symbolic(Term::intrinsic(other.clone()))),
+            },
+        }
     }
 }
 
