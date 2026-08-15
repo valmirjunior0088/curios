@@ -17,6 +17,8 @@ pub fn reduce_foreign(
     function: &Arc<ForeignFunction>,
     args: &[Term],
 ) -> Result<Subterm, ReduceError> {
+    reducer.spend(Cost::collection(args.len() as u64))?;
+
     let mut reduced = Vec::with_capacity(args.len());
     for arg in args {
         reduced.push(reducer.reduce(arg.clone())?);

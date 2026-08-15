@@ -8,6 +8,8 @@
 //!
 //! That independence is load-bearing rather than fastidious. `curios-js` compiles to wasm32, where `usize` and `num-bigint`'s digit width both differ from the native target, and the shipped budget promises that a program compiling in the playground compiles at the command line. Every figure here is therefore computed in `u64` regardless of host pointer width.
 //!
+//! Every formula takes a `u64` rather than a `usize`, including the ones whose caller has a `Vec::len()` in hand. A widening cast is safe on both targets and a narrowing one is not, and `usize` narrows on wasm32 — a charge computed through it would silently differ between the playground and the command line, which is the one thing this module exists to prevent.
+//!
 //! The same independence is what keeps the limit correct while a representation changes underneath it. A carrier that concatenates more cheaply spends fewer units for the same result; the unit itself, the formulas, and the budget are unaffected.
 //!
 //! # Saturation is refusal
@@ -75,13 +77,13 @@ impl Cost {
     }
 
     /// A packed byte string of `length` bytes: the value header, plus one unit per eight bytes, rounded up.
-    pub fn packed_bytes(length: usize) -> Self {
-        Self(VALUE_HEADER).saturating_add(Self(units_of(length as u64, 8)))
+    pub fn packed_bytes(length: u64) -> Self {
+        Self(VALUE_HEADER).saturating_add(Self(units_of(length, 8)))
     }
 
     /// A packed bit string of `length` bits: the value header, plus one unit per sixty-four bits, rounded up.
-    pub fn packed_bits(length: usize) -> Self {
-        Self(VALUE_HEADER).saturating_add(Self(units_of(length as u64, 64)))
+    pub fn packed_bits(length: u64) -> Self {
+        Self(VALUE_HEADER).saturating_add(Self(units_of(length, 64)))
     }
 
     /// A big natural or integer of `bits` magnitude bits: the value header, plus one unit per base-2^64 logical limb, rounded up.
@@ -94,18 +96,18 @@ impl Cost {
     /// A list, vector, or argument store of `slots` retained references: the collection header, plus one unit per slot.
     ///
     /// The elements themselves are charged separately where they are *constructed*. A vector of already-existing terms retains references and builds nothing, which is what this row prices.
-    pub fn collection(slots: usize) -> Self {
-        Self(COLLECTION_HEADER).saturating_add(Self(slots as u64))
+    pub fn collection(slots: u64) -> Self {
+        Self(COLLECTION_HEADER).saturating_add(Self(slots))
     }
 
     /// A temporary reducer buffer of `slots` logical units of payload or slots: the buffer header, plus its request.
-    pub fn buffer(slots: usize) -> Self {
-        Self(BUFFER_HEADER).saturating_add(Self(slots as u64))
+    pub fn buffer(slots: u64) -> Self {
+        Self(BUFFER_HEADER).saturating_add(Self(slots))
     }
 
     /// A term node retaining `slots` children or scalar fields: the node's fixed charge, plus one unit per slot.
-    pub fn term(slots: usize) -> Self {
-        Self(TERM_NODE).saturating_add(Self(slots as u64))
+    pub fn term(slots: u64) -> Self {
+        Self(TERM_NODE).saturating_add(Self(slots))
     }
 
     /// This charge and `other` together, saturating into [`Cost::REFUSED`].

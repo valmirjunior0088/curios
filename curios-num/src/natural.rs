@@ -59,6 +59,13 @@ impl Natural {
         self.value.to_f32()
     }
 
+    /// The magnitude as a `u64`, when it fits.
+    ///
+    /// Beside [`Natural::to_usize`] rather than instead of it, and the difference is not cosmetic: `usize` is 32 bits on wasm32 and 64 natively, so a question answered through it can be answered differently on the two targets. A reduction *charge* may not be, so a charge computed from a magnitude reads it through this.
+    pub fn to_u64(&self) -> Option<u64> {
+        self.value.to_u64()
+    }
+
     pub fn to_usize(&self) -> Option<usize> {
         self.value.to_usize()
     }
@@ -68,6 +75,13 @@ impl Natural {
     }
 
     /// The canonical little-endian byte encoding, and its inverse. The host/guest handle token rides on exactly this pair (`curios-abi`'s `Handle`), so the two ends cannot drift.
+    /// How many bits the magnitude occupies — zero for zero, `floor(log2(n)) + 1` otherwise.
+    ///
+    /// The size a reduction charges for a result *before* building it. Bits rather than limbs because a limb is a property of this target's `num-bigint` build and a bit is a property of the number, and the budget has to price a program the same on wasm32 as it does natively.
+    pub fn bits(&self) -> u64 {
+        self.value.bits()
+    }
+
     pub fn to_bytes_le(&self) -> Vec<u8> {
         self.value.to_bytes_le()
     }

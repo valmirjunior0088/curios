@@ -541,13 +541,15 @@ impl Run for Vec<Term> {
 ///
 /// An over-cap operand therefore reads exactly like a symbolic one here: not droppable as empty, not fusible, and left standing by `into_concat`. That is the whole of the cap's implementation, and it is why the emptiness filter below is unaffected — an over-cap run is never empty.
 ///
+/// **`merge` is fallible and the other two are not**, and the asymmetry is the price list's rather than this function's: fusing is the only branch that *constructs* anything, so it is the only one that has to charge before it does. Dropping an empty operand and rebuilding the survivors both hand back storage that already exists. That makes this function fallible for its caller, which is the shape the audit says to expect at every fusing seam rather than only at this one.
+///
 /// Window fusion (adjacent `Bin/slice`s of one base) is deliberately NOT done here: that is the spine peel's job when *deciding equality* (`spine::push`); reduction only needs a normal form, and conversion closes any residual gap.
-pub(crate) fn normalize_concat<C: Run>(
+pub(crate) fn normalize_concat<C: Run, E>(
     operands: Vec<Term>,
     literal: impl Fn(&Term) -> Option<&C>,
-    merge: impl FnOnce(Vec<&C>) -> Subterm,
+    merge: impl FnOnce(Vec<&C>) -> Result<Subterm, E>,
     into_concat: impl FnOnce(Vec<Term>) -> Subterm,
-) -> Subterm {
+) -> Result<Subterm, E> {
     let mut kept: Vec<Term> = operands
         .into_iter()
         .filter(|operand| !matches!(literal(operand), Some(run) if run.is_empty()))
@@ -556,8 +558,8 @@ pub(crate) fn normalize_concat<C: Run>(
     // Every surviving operand literal ⇒ the runs fuse into one; the first symbolic chunk stops the collection, leaving the concatenation (a lone operand collapses to itself).
     match kept.iter().map(&literal).collect::<Option<Vec<&C>>>() {
         Some(runs) => merge(runs),
-        None if kept.len() == 1 => Term::unwrap_or_clone(kept.pop().unwrap()),
-        None => into_concat(kept),
+        None if kept.len() == 1 => Ok(Term::unwrap_or_clone(kept.pop().unwrap())),
+        None => Ok(into_concat(kept)),
     }
 }
 

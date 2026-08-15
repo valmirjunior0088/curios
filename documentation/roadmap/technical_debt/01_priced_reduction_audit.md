@@ -29,12 +29,14 @@ A site is **temporary** when its storage does not survive the operation. Tempora
 | `PackedBin::hash` | unaligned arm allocates `to_packed_bytes` | construction, temporary | **to be removed** — the specification requires streaming |
 | `PackedBin::eq` | nothing | sharing | — |
 
-- [ ] `from_bytes` charged from the operand length
-- [ ] `from_bits` charged at three buffers, the first at eight units per logical bit
+Charged at the *fold* that calls them rather than inside `PackedBin` itself, which is where the reducer is and therefore where a charge can be taken before an allocation. The rows below are ticked against that.
+
+- [x] `concat` charged twice, per the price list's last paragraph — at `BinConcat`'s fusing closure
+- [x] `append_byte` charged for the whole rebuilt value, twice over
+- [x] `append_bit` charged for the whole rebuilt value plus the eight-times-oversized `bool` scratch `from_bits` fills
+- [ ] `from_bytes` / `from_bits` charged at every *other* path that reaches them
 - [ ] `window`/`slice`/`as_bytes` shown to charge a value header and no payload
-- [ ] `to_packed_bytes` / `to_bytes` precharged as temporaries
-- [ ] `concat` charged twice, per the price list's last paragraph
-- [ ] `append_bit` / `append_byte` charged for the whole rebuilt value
+- [ ] `to_packed_bytes` / `to_bytes` precharged as temporaries wherever a fold reaches them
 - [ ] `hash` streams the unaligned contents rather than materializing them
 
 **`from_bits` is worse than the price list's bit row suggests and the row is still right.** The logical charge is `ceil(bit_length / 64)` units for the value; what this method physically takes is that plus a `Vec<bool>` eight times the payload. The price list prices the *value*, and the specification's temporary-buffer row is what covers the rest — so this site charges a value plus two temporaries rather than one value.
@@ -47,14 +49,14 @@ A site is **temporary** when its storage does not survive the operation. Tempora
 | `Natural::checked_div` / `checked_rem`, `Integer`'s | a result no wider than the dividend | construction | bigint limbs |
 | `Natural::checked_shl`, `Integer::checked_shl` | a result of `bits(operand) + amount` — **the operand does not bound it** | construction | bigint limbs, precharged from operand *and* shift amount |
 | `Natural::checked_shr`, `Integer::checked_shr` | a result no wider than the operand | construction | bigint limbs |
-| `Natural::pow` | a result of `bits(operand) · exponent` | construction | bigint limbs |
 | `Natural::to_bytes_le` | a `Vec<u8>` of the magnitude | construction, temporary | temporary buffer |
+| `Natural::pow` | a result of `bits(operand) · exponent` | construction | **out of scope** — reached only from tests, never from a fold |
 | `Natural::parse_bytes` | the parsed magnitude | construction | **out of scope** — the lexer's, not reduction's |
 
-- [ ] every closed arithmetic fold precharged from its operands' limb counts
-- [ ] `checked_shl` refuses a shift amount whose result would exceed the affordable bound, *before* `num-bigint` is asked
-- [ ] `pow` precharged from `bits(operand) · exponent`, with the multiplication checked
-- [ ] `to_bytes_le` precharged as a temporary
+- [x] every closed arithmetic fold precharged from its operands' bit widths — `operand_bound`, taken inside `reduce_nat_binary` and `reduce_int_binary` so no call site can forget it
+- [x] `checked_shl` refuses a shift amount whose result would exceed the affordable bound, *before* `num-bigint` is asked — `reduce_nat_shl`/`reduce_int_shl`, split out of the binary helpers precisely so the exception has a name
+- [x] `pow` shown out of scope: it is reached from tests alone, never from a fold
+- [ ] `to_bytes_le` precharged as a temporary, or shown not to be reducer-reachable
 
 **The shift is the sharpest site anywhere in this audit, and it is the one the specification singles out.** `checked_shl` converts the shift amount with `to_usize()` and hands it to `BigUint`, so the result is `bits(operand) + amount` and the amount is a number the program writes. The result size is exactly computable from the operand and the amount without performing the shift, which is what makes charge-first straightforward here rather than conservative.
 
@@ -86,7 +88,7 @@ This is the acceptance suite's "single oversized construction" candidate, and it
 | `Nat::decompose` | a floor clone and a term clone | **sharing** | nothing new |
 
 - [ ] `bin_segments`/`list_segments` precharged from the spine's operand count
-- [ ] `normalize_concat` charges its kept vector, and its fusing closure becomes fallible so `merge` can charge at the allocation point
+- [x] `normalize_concat`'s fusing closure is fallible, so `merge` charges at the allocation point; the kept vector is charged at the two fold call sites, together with the reduced-operand vector it filters
 - [ ] `bin_atoms` precharged, or narrowed so a comparison that decides on the first generator does not flatten both subjects
 
 **`normalize_concat` is the representative shape the specification warns will recur.** Its fusing closure returns a `Subterm` infallibly, so charging where the allocation happens makes the closure and the function fallible across both the binary and list callers. It still fuses and still copies when it does: `FUSION_CAP` bounds *how much* it copies at once, which changes how often this site is reached rather than whether it must charge.
@@ -108,9 +110,9 @@ This is the acceptance suite's "single oversized construction" candidate, and it
 | `nat_euclid_split` | a `quotient` and a `residual` vector, one entry per summand | construction, temporary | temporary collection |
 | `reduce_foreign` | a `Vec<Term>` of reduced arguments | construction | collection slots |
 
-- [ ] every fold above charges before it allocates, through the new `Reducer` operation
-- [ ] `bin_shape` precharged, or made to answer a measurable question without materializing the run
-- [ ] `ListConcat`'s flatten charged per cloned element
+- [x] every fold above charges before it allocates, through the new `Reducer` operation
+- [x] `bin_shape` precharged — it takes a reducer now, which is what a temporary that scales with its subject has to do
+- [x] `ListConcat`'s flatten charged per cloned element
 
 **`bin_shape` is the site whose traffic changed and whose cost did not.** `Bin/len` no longer reaches it for a wholly-literal value, which now answers from the free monoid's measure — but every symbolic shape still falls through to the homomorphism and still pays a full materialization to compute a result that is one `Nat`.
 

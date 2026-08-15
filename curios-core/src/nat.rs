@@ -23,6 +23,32 @@ impl Nat {
         }
     }
 
+    /// The magnitude's bit width when this is a closed literal, and zero when it is symbolic — the operand size a fold's price is computed from, read off the spine without materializing anything.
+    pub(crate) fn bits(&self) -> u64 {
+        match self.as_literal() {
+            Some(value) => value.bits(),
+            None => 0,
+        }
+    }
+
+    /// This literal as a `u64`, when it is closed and fits — the shift amount a price is computed from.
+    ///
+    /// A `u64` rather than a `usize` because a charge may not differ between the native and wasm32 targets, and `usize` differs; [`Natural::to_u64`] carries the argument.
+    pub(crate) fn to_u64(&self) -> Option<u64> {
+        self.as_literal()?.to_u64()
+    }
+
+    /// The stored magnitude of a closed literal, borrowed. `None` for zero — which carries no magnitude to borrow — and for a symbolic successor floor.
+    fn as_literal(&self) -> Option<&Natural> {
+        match self {
+            Nat::Zero => None,
+            Nat::Succ(spine, inner) => match inner.as_ref() {
+                Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => Some(spine),
+                _ => None,
+            },
+        }
+    }
+
     pub fn to_natural(&self) -> Option<Natural> {
         match self {
             Nat::Zero => Some(Natural::zero()),

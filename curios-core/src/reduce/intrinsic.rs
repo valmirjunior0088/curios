@@ -1,9 +1,9 @@
 use {
     super::{ReduceError, Reducer},
     crate::{
-        FUSION_CAP, Intrinsic, Located, Nat, Peel, Piece, Subterm, Term, bin_locate, bin_measure,
-        bin_window, list_locate, list_measure, list_window, normalize_concat, peel_bin,
-        peel_first_atom, peel_first_elem, project_erased_universes,
+        Cost, FUSION_CAP, Intrinsic, Located, Nat, Peel, Piece, Subterm, Term, bin_locate,
+        bin_measure, bin_window, list_locate, list_measure, list_window, normalize_concat,
+        peel_bin, peel_first_atom, peel_first_elem, project_erased_universes,
     },
     curios_num::{Integer, Natural, int_rotl, int_rotr, nat_rotl, nat_rotr},
     curios_utilities::{Grain, PackedBin},
@@ -52,7 +52,42 @@ fn reduce_byte_binary(
     }))
 }
 
+/// What a packed value of `bits` logical bits costs, in its grain's own row of the price list.
+///
+/// One function rather than two call sites choosing a row, because the two rows differ by a factor of eight and picking the wrong one undercharges by that factor at the byte grain.
+fn packed_bound(grain: Grain, bits: u64) -> Cost {
+    match grain {
+        Grain::X => Cost::packed_bytes(bits / 8),
+        Grain::B => Cost::packed_bits(bits),
+    }
+}
+
+/// What a closed binary fold on two big numbers may construct, charged before it runs.
+///
+/// Every operation routed through [`reduce_nat_binary`] and [`reduce_int_binary`] has a result no wider than `left + right + 1` bits: a sum is at most one bit past the wider operand, a product is exactly the two widths together, a quotient or remainder is no wider than its dividend, and a bitwise operation is no wider than the wider operand. One conservative bound rather than six exact ones, because the price list permits overcharging and forbids the opposite — six formulas would be six chances to get the direction wrong for a saving no program would notice.
+///
+/// **The shifts are deliberately not routed through those two**, and that is the whole reason this is a named function with a doc rather than an expression. See [`shift_bound`].
+fn operand_bound(left: u64, right: u64) -> Cost {
+    Cost::big_number(left.saturating_add(right).saturating_add(1))
+}
+
+/// What a closed shift may construct: the value's width plus the shift *amount*.
+///
+/// The one fold in the roster whose result size is not bounded by its operands' sizes, and it is reachable from three lines of surface Curios with no loop in them — `Nat/shl(1, 400000000)` builds fifty megabytes of magnitude while a transition counter sees a single step. The charge is computed from the amount before `num-bigint` is asked for anything, so the refusal happens instead of the allocation rather than after it.
+///
+/// `amount` is `None` when the second operand is symbolic or does not fit a `u64`, and then this charges **nothing** — because the fold declines in exactly that case and constructs nothing to charge for. It is read as a `u64` rather than a `usize` for the reason [`Natural::to_u64`](curios_num::Natural::to_u64) states: a charge that differed between the native and wasm32 targets would break the promise that a program compiling in the playground compiles at the command line.
+///
+/// Pricing first also closes a target divergence in the *fold*, which reads its amount through `to_usize` and therefore folds natively what it leaves neutral on wasm32. Any amount large enough for the two to disagree prices far past any budget, so both targets refuse before either reaches the shift.
+fn shift_bound(value: u64, amount: Option<u64>) -> Cost {
+    match amount {
+        Some(amount) => Cost::big_number(value.saturating_add(amount)),
+        None => Cost::NOTHING,
+    }
+}
+
 /// Reduce both operands of a `Nat` binary intrinsic, then either `fold` the two literals or `rebuild` the neutral term from the reduced operands.
+///
+/// The fold is charged [`operand_bound`] before it runs, so every operation reaching here must have a result bounded by its operands' widths. `Nat/shl` does not and is folded by [`reduce_nat_shl`] instead.
 fn reduce_nat_binary(
     reducer: &mut impl Reducer,
     left: &Term,
@@ -64,13 +99,68 @@ fn reduce_nat_binary(
     let right = reducer.reduce_forced(right.clone())?;
 
     let folded = match (left.as_nat(), right.as_nat()) {
-        (Some(l), Some(r)) => fold(l, r),
+        (Some(l), Some(r)) => {
+            reducer.spend(operand_bound(l.bits(), r.bits()))?;
+
+            fold(l, r)
+        }
         _ => None,
     };
 
     Ok(Subterm::Intrinsic(match folded {
         Some(intrinsic) => intrinsic,
         None => rebuild(left, right),
+    }))
+}
+
+/// `Nat/shl`, folded under [`shift_bound`] rather than [`operand_bound`].
+fn reduce_nat_shl(
+    reducer: &mut impl Reducer,
+    left: &Term,
+    right: &Term,
+) -> Result<Subterm, ReduceError> {
+    let left = reducer.reduce_forced(left.clone())?;
+    let right = reducer.reduce_forced(right.clone())?;
+
+    let folded = match (left.as_nat(), right.as_nat()) {
+        (Some(value), Some(amount)) => {
+            reducer.spend(shift_bound(value.bits(), amount.to_u64()))?;
+
+            value.checked_shl(amount).map(Intrinsic::Nat)
+        }
+        _ => None,
+    };
+
+    Ok(Subterm::Intrinsic(match folded {
+        Some(intrinsic) => intrinsic,
+        None => Intrinsic::NatShl(left, right),
+    }))
+}
+
+/// `Int/shl`, the signed twin of [`reduce_nat_shl`].
+fn reduce_int_shl(
+    reducer: &mut impl Reducer,
+    left: &Term,
+    right: &Term,
+) -> Result<Subterm, ReduceError> {
+    let left = reducer.reduce_forced(left.clone())?;
+    let right = reducer.reduce_forced(right.clone())?;
+
+    let folded = match (left.as_int(), right.as_int()) {
+        (Some(value), Some(amount)) => {
+            reducer.spend(shift_bound(
+                value.bits(),
+                amount.to_natural().and_then(|amount| amount.to_u64()),
+            ))?;
+
+            value.checked_shl(amount).map(Intrinsic::Int)
+        }
+        _ => None,
+    };
+
+    Ok(Subterm::Intrinsic(match folded {
+        Some(intrinsic) => intrinsic,
+        None => Intrinsic::IntShl(left, right),
     }))
 }
 
@@ -265,7 +355,11 @@ fn reduce_int_binary(
     let right = reducer.reduce_forced(right.clone())?;
 
     let folded = match (left.as_int(), right.as_int()) {
-        (Some(l), Some(r)) => fold(l, r),
+        (Some(l), Some(r)) => {
+            reducer.spend(operand_bound(l.bits(), r.bits()))?;
+
+            fold(l, r)
+        }
         _ => None,
     };
 
@@ -447,9 +541,17 @@ enum Shape<L> {
 }
 
 /// Classify a reduced `Bin` value into its product shape (generators are bytes).
-fn bin_shape(grain: Grain, value: Term) -> Shape<u8> {
-    match Term::unwrap_or_clone(value) {
+///
+/// **The literal arm materializes the whole run**, one `u8` per generator — which at the bit grain is a byte per *bit*, eight times the value's own width. An operation whose result is a single `Nat` therefore allocates its entire subject to compute it, and that is why this takes a reducer: the buffer is charged before it is filled. `Bin/len` no longer reaches here for a wholly-literal value, which answers from the free monoid's measure instead, but every symbolic shape still falls through to the homomorphism and still pays this.
+fn bin_shape(
+    reducer: &mut impl Reducer,
+    grain: Grain,
+    value: Term,
+) -> Result<Shape<u8>, ReduceError> {
+    Ok(match Term::unwrap_or_clone(value) {
         Subterm::Intrinsic(Intrinsic::Bin(found, value)) if found == grain => {
+            reducer.spend(Cost::buffer(value.len(grain) as u64))?;
+
             Shape::Literal(match grain {
                 Grain::B => (0..value.bit_length())
                     .map(|index| u8::from(value.bit(index).unwrap()))
@@ -464,10 +566,12 @@ fn bin_shape(grain: Grain, value: Term) -> Shape<u8> {
             Shape::Append(base, atom)
         }
         other => Shape::Opaque(other.into()),
-    }
+    })
 }
 
 /// Classify a reduced `List` value into its product shape (generators are elements).
+///
+/// No charge: every arm hands back storage the value already held. The literal arm moves the element vector out of a uniquely-held node, or clones its reference slots out of a shared one — which is the sharing case, since the elements themselves are reference-count bumps rather than rebuilt terms.
 fn list_shape(value: Term) -> Shape<Term> {
     match Term::unwrap_or_clone(value) {
         Subterm::Intrinsic(Intrinsic::List(_, elems)) => Shape::Literal(elems),
@@ -488,7 +592,15 @@ fn reduce_homomorphism<L>(
 ) -> Result<Subterm, ReduceError> {
     let built = match shape {
         Shape::Literal(run) => literal(run),
-        Shape::Concat(operands) => combine(operands.into_iter().map(node).collect()),
+        Shape::Concat(operands) => {
+            // One rebuilt image node per operand, collected into one vector — the homomorphism's whole allocation, and the only arm of the four that scales with anything.
+            reducer.spend(
+                Cost::collection(operands.len() as u64)
+                    .saturating_add(Cost::term(1).saturating_mul(operands.len() as u64)),
+            )?;
+
+            combine(operands.into_iter().map(node).collect())
+        }
         Shape::Append(base, generator) => append(node(base), generator),
         Shape::Opaque(value) => return Ok(Term::unwrap_or_clone(node(value))),
     };
@@ -737,13 +849,7 @@ pub fn reduce_intrinsic(
             |l, r| l.checked_bitxor(r).map(Intrinsic::Nat),
             Intrinsic::NatXor,
         ),
-        Intrinsic::NatShl(left, right) => reduce_nat_binary(
-            reducer,
-            left,
-            right,
-            |l, r| l.checked_shl(r).map(Intrinsic::Nat),
-            Intrinsic::NatShl,
-        ),
+        Intrinsic::NatShl(left, right) => reduce_nat_shl(reducer, left, right),
         Intrinsic::NatShr(left, right) => reduce_nat_binary(
             reducer,
             left,
@@ -907,13 +1013,7 @@ pub fn reduce_intrinsic(
             |left, right| Some(Intrinsic::Int(left ^ right)),
             Intrinsic::IntXor,
         ),
-        Intrinsic::IntShl(left, right) => reduce_int_binary(
-            reducer,
-            left,
-            right,
-            |left, right| left.checked_shl(right).map(Intrinsic::Int),
-            Intrinsic::IntShl,
-        ),
+        Intrinsic::IntShl(left, right) => reduce_int_shl(reducer, left, right),
         Intrinsic::IntShr(left, right) => reduce_int_binary(
             reducer,
             left,
@@ -1070,9 +1170,11 @@ pub fn reduce_intrinsic(
             if let Some(total) = bin_measure(Grain::X, &bin) {
                 return Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(total))));
             }
+            let shape = bin_shape(reducer, Grain::X, bin)?;
+
             reduce_homomorphism(
                 reducer,
-                bin_shape(Grain::X, bin),
+                shape,
                 |run| Term::intrinsic(Intrinsic::Nat(Nat::new(run.len()))),
                 nat_sum,
                 |base_len, _| {
@@ -1234,6 +1336,8 @@ pub fn reduce_intrinsic(
                                 }
                             })
                             .collect();
+                        reducer.spend(Cost::collection(parts.len() as u64))?;
+
                         return reducer
                             .reduce(Term::intrinsic(Intrinsic::bin_concat(Grain::X, parts)))
                             .map(Term::unwrap_or_clone);
@@ -1298,6 +1402,11 @@ pub fn reduce_intrinsic(
             };
             Ok(match (Term::unwrap_or_clone(bin), n) {
                 (Subterm::Intrinsic(Intrinsic::Bin(Grain::X, bytes)), Some(n)) => {
+                    // Twice the whole rebuilt value: `append_byte` copies the base out with `to_bytes` and then copies the extended run into a fresh buffer. Appending one byte therefore costs the length of everything appended so far, twice — which is the shape that makes a naive accumulation quadratic, and the reason it is charged rather than treated as an increment.
+                    reducer.spend(
+                        packed_bound(Grain::X, bytes.bit_length() as u64 + 8).saturating_mul(2),
+                    )?;
+
                     Subterm::Intrinsic(Intrinsic::Bin(Grain::X, bytes.append_byte(n).unwrap()))
                 }
                 (bin, _) => Subterm::Intrinsic(Intrinsic::bin_append(Grain::X, bin, byte)),
@@ -1312,7 +1421,10 @@ pub fn reduce_intrinsic(
             // Normalise by the monoid unit/associativity laws — drop the empty identity (so `concat(x[], a)`/`concat(a, x[])` collapse to `a`), fuse an all-literal survivor set with `PackedBin::concat`, collapse a lone operand. Grain-generic: both carriers fuse in the packed representation. The definitional partner of `peel_bin`'s `x[]`-handling (`core::spine`); see `normalize_concat`.
             //
             // A run past `FUSION_CAP` declines to lend itself, so the concatenation keeps its node instead of copying both operands into a third. Measured in the grain's own generators, which is what makes one constant serve both: a bit-grain operand is capped at 64 bits and a byte-grain one at 64 bytes, and the corpus reaches neither.
-            Ok(normalize_concat(
+            // The reduced operand vector, and the survivor vector the normalizer filters out of it — two collections whose length is the operand count, charged together before either exists.
+            reducer.spend(Cost::collection(reduced.len() as u64).saturating_mul(2))?;
+
+            normalize_concat(
                 reduced,
                 |operand: &Term| match &**operand {
                     Subterm::Intrinsic(Intrinsic::Bin(found, bytes))
@@ -1322,9 +1434,21 @@ pub fn reduce_intrinsic(
                     }
                     _ => None,
                 },
-                |runs| Subterm::Intrinsic(Intrinsic::Bin(grain, PackedBin::concat(runs))),
+                |runs| {
+                    // Twice the fused payload, per the price list's last paragraph: `PackedBin::concat` fills a `Vec<u8>` and then converts it into an `Arc<[u8]>`, which allocates a second buffer of the same length. The operation costs two payloads even though one survives.
+                    let bits = runs
+                        .iter()
+                        .map(|run| run.bit_length() as u64)
+                        .fold(0u64, u64::saturating_add);
+                    reducer.spend(packed_bound(grain, bits).saturating_mul(2))?;
+
+                    Ok(Subterm::Intrinsic(Intrinsic::Bin(
+                        grain,
+                        PackedBin::concat(runs),
+                    )))
+                },
                 |kept| Subterm::Intrinsic(Intrinsic::BinConcat(grain, kept)),
-            ))
+            )
         }
         Intrinsic::BinType(Grain::B) => Ok(Subterm::Intrinsic(Intrinsic::BinType(Grain::B))),
         Intrinsic::Bin(Grain::B, bits) => {
@@ -1335,9 +1459,11 @@ pub fn reduce_intrinsic(
             if let Some(total) = bin_measure(Grain::B, &bin) {
                 return Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(total))));
             }
+            let shape = bin_shape(reducer, Grain::B, bin)?;
+
             reduce_homomorphism(
                 reducer,
-                bin_shape(Grain::B, bin),
+                shape,
                 |run| Term::intrinsic(Intrinsic::Nat(Nat::new(run.len()))),
                 nat_sum,
                 |base_len, _| {
@@ -1490,6 +1616,8 @@ pub fn reduce_intrinsic(
                                 }
                             })
                             .collect();
+                        reducer.spend(Cost::collection(parts.len() as u64))?;
+
                         return reducer
                             .reduce(Term::intrinsic(Intrinsic::bin_concat(Grain::B, parts)))
                             .map(Term::unwrap_or_clone);
@@ -1553,12 +1681,22 @@ pub fn reduce_intrinsic(
         Intrinsic::BinAppend(Grain::B, bin, bit) => {
             let bin = reducer.reduce_forced(bin.clone())?;
             let bit = reducer.reduce_forced(bit.clone())?;
-            Ok(Subterm::Intrinsic(match (&*bin, bit.as_bool()) {
+            let appended = match (&*bin, bit.as_bool()) {
                 (Subterm::Intrinsic(Intrinsic::Bin(Grain::B, bits)), Some(bit)) => {
+                    // `append_bit` rebuilds the whole value through `from_bits`, which materializes a `bool` per bit — eight units of scratch for every one the result holds — before packing it and copying that into a fresh buffer. The value row plus a buffer eight times its width is what that comes to.
+                    let width = bits.bit_length() as u64 + 1;
+                    reducer.spend(
+                        packed_bound(Grain::B, width)
+                            .saturating_mul(2)
+                            .saturating_add(Cost::buffer(width)),
+                    )?;
+
                     Intrinsic::Bin(Grain::B, bits.append_bit(bit))
                 }
                 _ => Intrinsic::BinAppend(Grain::B, bin, bit),
-            }))
+            };
+
+            Ok(Subterm::Intrinsic(appended))
         }
         Intrinsic::ListType(elem) => {
             let elem = reducer.reduce(elem.clone())?;
@@ -1566,6 +1704,7 @@ pub fn reduce_intrinsic(
         }
         Intrinsic::List(elem, elems) => {
             let elem = reducer.reduce(elem.clone())?;
+            reducer.spend(Cost::collection(elems.len() as u64))?;
             let elems = elems
                 .iter()
                 .map(|e| reducer.reduce(e.clone()))
@@ -1678,10 +1817,14 @@ pub fn reduce_intrinsic(
                 (&*list, s, e)
             {
                 return match elems.get(s..e) {
-                    Some(slice) => Ok(Subterm::Intrinsic(Intrinsic::List(
-                        type_.clone(),
-                        slice.to_vec(),
-                    ))),
+                    Some(slice) => {
+                        reducer.spend(Cost::collection(slice.len() as u64))?;
+
+                        Ok(Subterm::Intrinsic(Intrinsic::List(
+                            type_.clone(),
+                            slice.to_vec(),
+                        )))
+                    }
                     None => Err(ReduceError::ListSliceOutOfRange {
                         len: elems.len(),
                         start: s,
@@ -1708,6 +1851,8 @@ pub fn reduce_intrinsic(
                                 }
                             })
                             .collect();
+                        reducer.spend(Cost::collection(parts.len() as u64))?;
+
                         return reducer
                             .reduce(Term::intrinsic(Intrinsic::list_concat(type_, parts)))
                             .map(Term::unwrap_or_clone);
@@ -1770,13 +1915,18 @@ pub fn reduce_intrinsic(
             let type_ = reducer.reduce(type_.clone())?;
             let list = reducer.reduce_forced(list.clone())?;
             let elem = reducer.reduce(elem.clone())?;
-            Ok(match Term::unwrap_or_clone(list) {
+            let appended = match Term::unwrap_or_clone(list) {
                 Subterm::Intrinsic(Intrinsic::List(list_elem, mut elems)) => {
+                    // Growing a vector reallocates it, so the whole extended run is charged rather than the one slot appended — the same reason `BinAppend` charges its whole rebuilt value.
+                    reducer.spend(Cost::collection(elems.len() as u64 + 1))?;
                     elems.push(elem);
+
                     Subterm::Intrinsic(Intrinsic::List(list_elem, elems))
                 }
                 list => Subterm::Intrinsic(Intrinsic::list_append(type_, list, elem)),
-            })
+            };
+
+            Ok(appended)
         }
         Intrinsic::ListConcat(type_, operands) => {
             let type_ = reducer.reduce(type_.clone())?;
@@ -1794,17 +1944,26 @@ pub fn reduce_intrinsic(
                     _ => None,
                 }
             }
-            Ok(normalize_concat(
+            reducer.spend(Cost::collection(reduced.len() as u64).saturating_mul(2))?;
+
+            normalize_concat(
                 reduced,
                 literal,
                 |runs| {
-                    Subterm::Intrinsic(Intrinsic::List(
+                    // One flattened vector of every operand's elements, each a retained reference rather than a rebuilt term — so this is the collection row and not the term row, and the elements it clones are reference-count bumps.
+                    let slots = runs
+                        .iter()
+                        .map(|run| run.len() as u64)
+                        .fold(0u64, u64::saturating_add);
+                    reducer.spend(Cost::collection(slots))?;
+
+                    Ok(Subterm::Intrinsic(Intrinsic::List(
                         type_.clone(),
                         runs.into_iter().flatten().cloned().collect(),
-                    ))
+                    )))
                 },
                 |kept| Subterm::Intrinsic(Intrinsic::list_concat(type_.clone(), kept)),
-            ))
+            )
         }
         // `map`: the eliminator homomorphism. The literal case applies `f` elementwise; the spine cases distribute (`map f (concat segs) = concat (map f segs)`, `map f (append b x) = append (map f b) (f x)`) — the same normal form a structural `foldr (\x ih. f x :: ih) []` produces, so map-based proofs still reduce. A symbolic list stays neutral (the `Opaque` case), so there is no unfold of a variable.
         Intrinsic::ListMap(a, b, list, f) => {
@@ -2086,6 +2245,76 @@ mod tests {
         fn spend(&mut self, _cost: Cost) -> Result<(), ReduceError> {
             Ok(())
         }
+    }
+
+    /// [`Folding`] under a budget, for the gates whose subject is a *charge* rather than a value.
+    struct Budgeted {
+        remaining: u64,
+    }
+
+    impl Reducer for Budgeted {
+        fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
+            match &*term {
+                Subterm::Intrinsic(intrinsic) => Ok(reduce_intrinsic(self, intrinsic)?.into()),
+                _ => Ok(term),
+            }
+        }
+
+        fn reduce_forced(&mut self, term: Term) -> Result<Term, ReduceError> {
+            self.reduce(term)
+        }
+
+        fn spend(&mut self, cost: Cost) -> Result<(), ReduceError> {
+            if cost.is_refused() {
+                return Err(ReduceError::Exhausted);
+            }
+
+            match self.remaining.checked_sub(cost.get()) {
+                Some(remaining) => {
+                    self.remaining = remaining;
+                    Ok(())
+                }
+                None => Err(ReduceError::Exhausted),
+            }
+        }
+    }
+
+    /// A shift's result is `bits(value) + amount` wide and the amount is a *value*, so no operand size bounds it. The charge is computed from the amount and refused before `num-bigint` is asked for anything — which is the difference between a diagnostic and an allocation the process may not survive.
+    ///
+    /// The two arms differ only in the shift amount, and the affordable one establishes that the refusal is about size rather than about the operation.
+    #[test]
+    fn an_oversized_shift_is_refused_before_it_is_built() {
+        let shift = |amount: usize| {
+            Term::intrinsic(Intrinsic::NatShl(
+                lit(1),
+                Term::intrinsic(Intrinsic::Nat(Nat::new(amount))),
+            ))
+        };
+
+        let mut reducer = Budgeted { remaining: 1_000 };
+        assert_eq!(
+            reducer.reduce(shift(40)),
+            Ok(Term::intrinsic(Intrinsic::Nat(Nat::new(1usize << 40_u32))))
+        );
+
+        let mut reducer = Budgeted { remaining: 1_000 };
+        assert_eq!(reducer.reduce(shift(1 << 30)), Err(ReduceError::Exhausted));
+    }
+
+    /// The refusal is target-independent, which a shift priced through `usize` would not be: `usize` is 32 bits on wasm32 and 64 natively, so an amount between the two would be folded on one target and left neutral on the other. Any such amount prices at 2^32 bits or more — sixty-seven million units before the value's own width — which no shippable budget affords, so both targets refuse.
+    ///
+    /// The budget below is a thousand times the shipped default and still refuses, which is the margin that makes "no shippable budget" a claim rather than a hope. **It is also a live regression guard**: with the charge removed, this test does not fail, it *aborts* — `memory allocation of 2305843009213693960 bytes failed`, which is what the fold does when nothing stops it.
+    #[test]
+    fn a_shift_amount_past_a_host_index_is_refused_rather_than_folded() {
+        let huge = Term::intrinsic(Intrinsic::NatShl(
+            lit(1),
+            Term::intrinsic(Intrinsic::Nat(Nat::new(Natural::from(u64::MAX)))),
+        ));
+
+        let mut reducer = Budgeted {
+            remaining: 1_000_000_000,
+        };
+        assert_eq!(reducer.reduce(huge), Err(ReduceError::Exhausted));
     }
 
     fn symbol(index: u32, hint: &'static str) -> Term {
