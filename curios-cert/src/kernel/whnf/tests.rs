@@ -2,7 +2,8 @@ use {
     super::unfold_rec,
     crate::{Kernel, whnf},
     curios_core::{
-        Apply, Cost, Free, Global, Intrinsic, Level, Nat, Reducer, Subterm, Term, UniverseContext,
+        Apply, Category, Cost, Free, Global, Intrinsic, Level, Nat, ReduceError, Reducer, Subterm,
+        Term, UniverseContext,
     },
     curios_utilities::Qualifier,
 };
@@ -537,4 +538,68 @@ fn cached_spend_never_exceeds_uncached() {
     let without = spent(&mut uncached, repeated);
 
     assert!(with_memos < without, "{with_memos} against {without}");
+}
+
+/// Depth is refused by the counter, and the refusal says so. Before the frame row, a reduction driven deep took real stack and the budget observed none of it — `recurse` grows rather than aborting, so what bounded depth was the host's memory rather than anything the program could be told about.
+///
+/// The subject is a chain of nested intrinsic operands, which re-enters reduction once per link; the budget affords a handful of levels and no more.
+#[test]
+fn a_deep_reduction_is_refused_and_the_refusal_names_depth() {
+    let mut kernel = Kernel::new(Cost::FRAME.get() * 4);
+    kernel.set_local_floor(1_000);
+
+    let refusal = kernel
+        .reduce_forced(chain(64))
+        .expect_err("four frames do not afford sixty-four levels");
+
+    assert!(
+        matches!(
+            refusal,
+            ReduceError::Exhausted {
+                category: Category::Depth,
+                ..
+            }
+        ),
+        "expected a depth refusal, got {refusal:?}"
+    );
+}
+
+/// The retention quota degrades the cache rather than refusing the program: an allowance too small for any entry leaves every reduction correct and every one of them cold.
+///
+/// Correctness is the assertion, and the coldness is what makes it worth making — with retention exhausted the second reduction re-derives instead of hitting, so this is the same term reduced twice by two different routes to the same answer.
+#[test]
+fn an_exhausted_retention_quota_leaves_the_answer_alone() {
+    let mut warm = kernel();
+    let mut cold = Kernel::with_retention(1_000_000, 0);
+    cold.set_local_floor(1_000);
+
+    let term = chain(64);
+    let expected = warm.reduce_forced(term.clone()).expect("reduces");
+
+    assert_eq!(cold.reduce_forced(term.clone()), Ok(expected.clone()));
+    assert_eq!(cold.reduce_forced(term), Ok(expected));
+    assert_eq!(cold.retained(), 0, "nothing was admitted, so nothing spent");
+}
+
+/// A cold cache costs *work*, which is the warmth dependence the specification states rather than claims away: the second reduction of a term the memos declined to keep re-derives it, where a warm one hands it back for nothing.
+///
+/// What the cold second reduction does *not* re-pay is the frames, and that is the peak-depth rule showing through rather than an exception to it — the first reduction already reached that depth, so re-reaching it is free. The re-derivation it does pay is the transitions and the construction, which is what makes the two figures below differ by more than rounding.
+#[test]
+fn a_declined_insertion_costs_the_next_reduction_a_re_derivation() {
+    let term = chain(64);
+
+    let mut warm = kernel();
+    spent(&mut warm, term.clone());
+    let warm_again = spent(&mut warm, term.clone());
+
+    let mut cold = Kernel::with_retention(1_000_000, 0);
+    cold.set_local_floor(1_000);
+    spent(&mut cold, term.clone());
+    let cold_again = spent(&mut cold, term);
+
+    assert_eq!(warm_again, 0, "a retained entry is hit for nothing");
+    assert!(
+        cold_again > 0,
+        "a declined entry is not there to be hit, so the work happens again"
+    );
 }

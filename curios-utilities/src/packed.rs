@@ -173,12 +173,30 @@ impl PartialEq for PackedBin {
 }
 impl Eq for PackedBin {}
 impl Hash for PackedBin {
+    /// **Allocation-free on both arms**, which is what lets a cache probe stay a probe.
+    ///
+    /// The unaligned arm used to materialize `to_packed_bytes`, so looking a value up in a hash map built one — and a lookup that allocates is a lookup that would have to be fallible under a budget that charges construction. It streams the packed bytes instead, feeding the hasher exactly what the aligned arm's slice feeds it.
+    ///
+    /// The two arms must agree byte for byte, because a window and a directly-built value of the same bits are equal and must hash alike. `Hash` for `[u8]` writes its length and then its bytes, so the loop below matches that shape rather than merely covering the same data.
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.bit_length.hash(state);
-        // `Vec<u8>` hashes as its slice, so both arms feed the hasher the same logical packed bytes — the aligned arm just skips the allocation.
+
         match self.as_bytes() {
             Some(bytes) => bytes.hash(state),
-            None => self.to_packed_bytes().hash(state),
+            None => {
+                let packed = self.bit_length.div_ceil(8);
+                packed.hash(state);
+
+                for index in 0..packed {
+                    let mut byte = 0u8;
+                    for offset in 0..8 {
+                        if self.bit(index * 8 + offset).unwrap_or(false) {
+                            byte |= 1 << offset;
+                        }
+                    }
+                    state.write_u8(byte);
+                }
+            }
         }
     }
 }

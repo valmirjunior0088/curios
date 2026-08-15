@@ -372,6 +372,16 @@ impl Kernel {
         self.globals = globals.clone();
     }
 
+    /// A kernel at a stated retention allowance rather than the product default.
+    ///
+    /// Exists so a test can put the quota under pressure without building a module large enough to reach the shipped figure — which is measured to be unreachable by ordinary compilation, and would therefore make the degradation path untestable.
+    pub fn with_retention(budget: u64, quota: u64) -> Self {
+        Self {
+            retention: Retention::new(quota),
+            ..Self::new(budget)
+        }
+    }
+
     /// A kernel whose evaluation memos are off — every reduction re-derived from scratch. Exists for one purpose: asserting that memoization changes no *semantic* verdict. It may change a resource one, since a term-keyed hit is free and an uncached walk therefore spends at least as much; see the `spend` module's documentation for why that is the whole of what was given up.
     pub fn uncached(budget: u64) -> Self {
         Self {

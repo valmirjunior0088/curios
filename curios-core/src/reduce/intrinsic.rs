@@ -2333,6 +2333,93 @@ mod tests {
         );
     }
 
+    /// What reducing `term` costs a fresh [`Budgeted`], for the gates whose subject is a charge.
+    fn charged(term: Term) -> u64 {
+        const AMPLE: u64 = 1_000_000_000;
+        let mut reducer = Budgeted { remaining: AMPLE };
+        reducer.reduce(term).expect("the subject reduces");
+
+        AMPLE - reducer.remaining
+    }
+
+    /// Bytes are not the only protected payload. Each subject below builds a result whose logical size its operands decide, and each is charged **at least** that size — so a carrier priced as a constant would show up here as a charge that does not cover what it built.
+    ///
+    /// At least, rather than exactly: a fold pays for traversing its operands as well as for its result, and the price list is an upper bound rather than an equality. The lower bound is the half that matters, because undercharging is the direction that loses the property.
+    ///
+    /// The `Bin` subject appends rather than concatenates, deliberately: `FUSION_CAP` stops a concatenation fusing past 64 generators, so past that it builds *nothing* and correctly charges nothing. An append has no cap and rebuilds its whole value, which is the shape whose price has to scale.
+    #[test]
+    fn every_payload_carrier_is_charged_for_at_least_what_it_builds() {
+        const BITS: usize = 4_096;
+        const DIGITS: usize = 1_000;
+        const ELEMENTS: usize = 32;
+
+        let appended_bits = Term::intrinsic(Intrinsic::BinAppend(
+            Grain::B,
+            Term::intrinsic(Intrinsic::Bin(
+                Grain::B,
+                PackedBin::from_bits((0..BITS).map(|index| index % 2 == 0)),
+            )),
+            Term::intrinsic(Intrinsic::Bool(true)),
+        ));
+
+        let wide = Integer::from(
+            Natural::parse_bytes(&vec![b'9'; DIGITS], 10).expect("a decimal numeral"),
+        );
+        let product = Term::intrinsic(Intrinsic::IntMul(
+            Term::intrinsic(Intrinsic::Int(wide.clone())),
+            Term::intrinsic(Intrinsic::Int(wide)),
+        ));
+
+        let joined = Term::intrinsic(Intrinsic::ListConcat(
+            nat_type(),
+            vec![run_of(ELEMENTS), run_of(ELEMENTS)],
+        ));
+
+        // A decimal digit is a little over three and a third bits; rounding down keeps this a lower bound.
+        let digit_bits = (DIGITS as u64 * 33) / 10;
+
+        for (carrier, charge, built) in [
+            ("bits", charged(appended_bits), BITS as u64 / 64),
+            ("integer", charged(product), digit_bits * 2 / 64),
+            ("list", charged(joined), ELEMENTS as u64 * 2),
+        ] {
+            assert!(
+                charge >= built,
+                "{carrier}: charged {charge} for a result of {built} units"
+            );
+        }
+    }
+
+    /// A window over a value builds no payload — it takes a reference count on the buffer somebody else owns — so slicing a large run costs about what slicing a small one costs. This is the sharing half of the audit's central distinction, and the half a price list gets wrong by charging for every value it touches rather than every value it builds.
+    #[test]
+    fn a_window_charges_for_no_payload_it_did_not_build() {
+        let slice = |n: usize| {
+            Term::intrinsic(Intrinsic::BinSlice(
+                Grain::X,
+                Term::intrinsic(Intrinsic::Bin(
+                    Grain::X,
+                    PackedBin::from_bytes(vec![7u8; n]),
+                )),
+                Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+                Term::intrinsic(Intrinsic::Nat(Nat::new(4usize))),
+            ))
+        };
+
+        assert_eq!(charged(slice(8)), charged(slice(8_000)));
+    }
+
+    /// A literal run of `n` naturals.
+    fn run_of(n: usize) -> Term {
+        Term::intrinsic(Intrinsic::List(
+            nat_type(),
+            (0..n).map(|i| lit(i as u32)).collect(),
+        ))
+    }
+
+    fn nat_type() -> Term {
+        Term::intrinsic(Intrinsic::NatType)
+    }
+
     fn symbol(index: u32, hint: &'static str) -> Term {
         Term::free_var(&Free::local(index, Some(hint)))
     }

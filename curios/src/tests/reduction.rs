@@ -454,3 +454,48 @@ fn kernel_memo_charge_measurements() {
         }
     }
 }
+
+/// **The construction-dominated fixture the acceptance criteria ask for**, and it is deliberately not the accumulate-then-slice shape above: capping fusion made that program's construction linear, so it now refuses on ordinary step cost like any other long computation and would be testing the wrong thing.
+///
+/// A shift is the shape no representation change can flatten. It has no loop, so nothing amortizes it; its result is `bits(value) + amount` wide and the amount is a numeral the program writes, so no operand size bounds it. Before construction was priced this compiled in well under a second while building fifty megabytes of magnitude, with the counter charging a handful of transitions.
+///
+/// The paired control is [`a_bound_behind_a_parameter_evaluates_nothing`](super::numeric) in spirit and the second arm here in fact: the same term at an amount the budget affords still folds, so what the first arm demonstrates is a refusal about *size* rather than about the operation.
+#[test]
+fn an_oversized_construction_is_refused_before_it_is_allocated() {
+    let shift = |amount: u64| {
+        format!(
+            r#"
+            use /std/{{Handle, Nat, Bool}};
+            let big : Nat = Nat/shl(1, {amount});
+            let check = match Nat/lte(1, big) | true => () | false => () end;
+            /std/print("ok")
+            "#
+        )
+    };
+
+    let refusal = typecheck_within(DEFAULT_STEP_BUDGET, &shift(1 << 40))
+        .expect_err("a shift whose result no budget affords is refused");
+    assert!(
+        refusal.contains("ran out"),
+        "expected a spent-budget refusal, got: {refusal}"
+    );
+
+    typecheck_within(DEFAULT_STEP_BUDGET, &shift(64))
+        .expect("the same operation at an affordable size still folds");
+}
+
+/// Repeated concatenation is bounded by *cumulative* charges even though every individual result fits: the budget is never refunded, so a loop that builds a growing value pays for each of them and runs out on the total.
+///
+/// The two arms differ only in how many iterations they run, and the small one establishes that the shape itself is affordable — so the large one's refusal is about the accumulation rather than about the program.
+#[test]
+fn a_growing_accumulation_is_bounded_by_what_it_has_already_built() {
+    typecheck_within(DEFAULT_STEP_BUDGET, &bytes_growing(2_000))
+        .expect("an accumulation this size fits the ordinary budget");
+
+    let refusal = typecheck_within(DEFAULT_STEP_BUDGET, &bytes_growing(100_000))
+        .expect_err("fifty times the iterations does not");
+    assert!(
+        refusal.contains("ran out"),
+        "expected a spent-budget refusal, got: {refusal}"
+    );
+}

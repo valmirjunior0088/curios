@@ -6,7 +6,7 @@ This is the implementation specification for making a `Str` literal affordable a
 
 A recorded shortcut, not a missing capability. `curios-text/src/into_core/lowerer.rs`'s `str_literal` states the trade in full under *What this does not fix, and what would*, names two remedies, and defers both. This document is that note promoted to a specification, with the cost measured rather than estimated.
 
-Nothing here is a pricing defect. Price reduction perfectly — which is [A reduction step costs what it builds](01_priced_reduction_spec.md)'s job — and a six-kilobyte string literal still costs half a million steps, because the cost is *running a fold*, not building anything. The two specifications meet at exactly one point, recorded under *What spec 01 already removes*.
+Nothing here is a pricing defect. Reduction has since been priced — [A reduction step costs what it builds](../../design/toolchain/a-reduction-step-costs-what-it-builds.md) — and a six-kilobyte string literal still costs half a million steps, because the cost is *running a fold*, not building anything. Where the two meet is recorded below, and it is not where this paragraph originally expected.
 
 ## What a literal costs today
 
@@ -38,17 +38,9 @@ The 16 is exactly right and the 61KiB is not. Sixteen is the **elaborator's** sh
 
 It is the failure mode `CLAUDE.md` names: a figure in prose with no probe beside it, designed against later. Whatever this specification lands, the replacement figure lives beside a test that reproduces it.
 
-## What spec 01 already removes, and what it leaves
+## What priced reduction removed, and the direction it moved the rest
 
-[A reduction step costs what it builds](01_priced_reduction_spec.md)'s Ma makes a `whnf`/`forced` memo hit spend nothing. A literal's scan is the same closed term at every use site, so **the `× (1 + uses)` multiplier goes away entirely** — the kernel becomes flat in use count, as the elaborator already is.
-
-Whether the base 67 also falls is unmeasured and worth measuring first, because it decides how much of this specification is left. The kernel's 67 is about four times the elaborator's 16 for identical work, and the +83 per use proves the kernel does re-scan identical closed terms; if the base factor is the same phenomenon inside one declaration, Ma collapses it toward 17 and the ceiling lands near 60 000 characters — which would make `lowerer.rs`'s 61KiB true rather than wrong. If it is instead one scan costing four times as many transitions, Ma leaves it untouched.
-
-**Measure that before scoping the rest.** It is the difference between this specification being about a 6 000-character ceiling and a 60 000-character one.
-
-## What spec 01 measured, and the direction it moved
-
-Both halves of spec 01 have since landed, and the answer is not the one either arm above predicted.
+[A reduction step costs what it builds](../../design/toolchain/a-reduction-step-costs-what-it-builds.md) has landed. It was expected to remove the use multiplier and possibly the kernel's 4× base; it removed the first, left the second, and made the *third* axis — depth — the one that decides this specification's ceiling. That was not predicted here and is the reason this section exists rather than the two paragraphs of forecasting it replaces.
 
 **The use multiplier is gone, as predicted.** Measured 2026-08-15 by bisecting `--budget` over a literal of `n` identical characters: the floor is flat across zero, one, two and three use sites — 33 853 to 33 934 units at `n = 500`, an increase of twenty-seven units per use where the model predicted the whole scan again. The kernel is now flat in use count, as the elaborator already was.
 
@@ -64,7 +56,7 @@ What Ma cannot do under any reading is remove the *linearity*. The cost stays pr
 
 Three, and they compose rather than compete.
 
-**Charge a computation once — spec 01's Ma.** Removes the use multiplier; possibly the 4×. Not this specification's work, and listed only so its share is not claimed twice.
+**Charge a computation once — landed.** It removed the use multiplier and not the 4×, and its frame row then made depth the dominant term. Not this specification's work, and listed so its share is neither claimed twice nor mistaken for a lever still available.
 
 **Shrink the per-byte constant.** Nobody has tried. Sixteen elaboration steps per ASCII byte buys a `rec` unfold, a packed peel, a `Byte/to_nat`, `classify`'s ladder of `Nat` range comparisons, and an inductive match. `classify` is written for clarity over a `Nat` carrier; whether it can be cheaper without becoming unreadable is an open question, and a cheap one to answer.
 
