@@ -2,8 +2,7 @@ use {
     super::unfold_rec,
     crate::{Kernel, whnf},
     curios_core::{
-        Apply, Cost, Free, Global, Intrinsic, Level, Nat, ReduceError, Reducer, Subterm, Term,
-        UniverseContext,
+        Apply, Cost, Free, Global, Intrinsic, Level, Nat, Reducer, Subterm, Term, UniverseContext,
     },
     curios_utilities::Qualifier,
 };
@@ -362,7 +361,11 @@ fn a_non_productive_recursion_exhausts_the_budget() {
         Term::apply(Term::free_var(&loop_), [nat(1)]),
     );
 
-    assert_eq!(kernel.reduce_forced(term), Err(ReduceError::Exhausted));
+    assert!(
+        kernel
+            .reduce_forced(term)
+            .is_err_and(|spent| spent.is_exhausted())
+    );
 }
 
 /// Each judgment gets the full budget back, so one expensive declaration cannot starve the next.
@@ -381,10 +384,7 @@ fn restoring_the_budget_refills_it() {
         whnf(&mut kernel, occurrence.clone()),
         Ok(occurrence.clone())
     );
-    assert_eq!(
-        whnf(&mut kernel, occurrence.clone()),
-        Err(ReduceError::Exhausted)
-    );
+    assert!(whnf(&mut kernel, occurrence.clone()).is_err_and(|spent| spent.is_exhausted()));
 
     kernel.restore_budget();
     assert_eq!(whnf(&mut kernel, occurrence.clone()), Ok(occurrence));

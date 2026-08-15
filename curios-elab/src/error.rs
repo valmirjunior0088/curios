@@ -423,7 +423,7 @@ impl Error {
     /// Phrase a [`ReduceError`] as a user-facing diagnostic. The reducer reports what the term did; naming it is this crate's job, which is why the conversion lives on [`Error`] rather than on the core failure. The `exhausted` callback lets each caller decide what a spent budget reports — the term being reduced, or the pair being compared.
     pub(crate) fn from_reduce(error: ReduceError, exhausted: impl FnOnce() -> Error) -> Error {
         match error {
-            ReduceError::Exhausted => exhausted(),
+            ReduceError::Exhausted { .. } => exhausted(),
             ReduceError::BinGetOutOfBounds { len, index, span } => {
                 Error::BinGetOutOfBounds { len, index }.at_opt(span)
             }

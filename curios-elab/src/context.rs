@@ -19,10 +19,10 @@ use {
     },
     curios_core::ReduceError,
     curios_core::{
-        Bound, ConceptDecl, Cost, DefinitionKind, Free, Global, HeadTag, ImplicitOrigin,
-        InductDecl, Level, MetaId, Metavar, MetavarOrigin, StructDecl, Term, Totality,
-        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
-        UniverseMetaId, UniverseRole, UniverseSeed, WitnessOrigin,
+        Bound, ConceptDecl, Cost, DEFAULT_RETENTION_QUOTA, DefinitionKind, Free, Global, HeadTag,
+        ImplicitOrigin, InductDecl, Level, MetaId, Metavar, MetavarOrigin, Retention, StructDecl,
+        Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
+        UniverseError, UniverseMetaId, UniverseRole, UniverseSeed, WitnessOrigin,
         instantiate_universe_levels_scoped,
     },
     curios_utilities::{Entropy, Mount, Qualifier, Span, SyntaxRegistry},
@@ -106,6 +106,8 @@ pub struct Context {
     /// How many guarded reduction levels are live, and the deepest this declaration has reached. `Cell` for [`Context::remaining`]'s reason; see [`Context::enter_level`].
     depth: Cell<usize>,
     peak_depth: Cell<usize>,
+    /// What this compilation may still retain in the caches below. Compilation-scoped and never restored, unlike the budget beside it — see [`Retention`].
+    retention: Retention,
     // The reduction and elaboration memo tables with their write stamps and the named invalidation protocol every mutation site routes through; see [`Caches`].
     caches: Caches,
     // The frame-scoped lexical stores — assumptions, local definitions, refinements, the witness scope; see [`Frames`].
@@ -143,6 +145,7 @@ impl Context {
             remaining: Cell::new(budget),
             depth: Cell::new(0),
             peak_depth: Cell::new(0),
+            retention: Retention::new(DEFAULT_RETENTION_QUOTA),
             caches: Caches::new(),
             frames: Frames::new(),
             solutions: Solutions::new(),
@@ -223,7 +226,7 @@ impl Context {
     /// A saturated cost is refused without being compared, so a size that overflowed while being computed can never look affordable. That is the one case where the budget is not consulted at all, and [`Cost`]'s module documentation carries why.
     pub(crate) fn spend(&self, cost: Cost) -> Result<(), ReduceError> {
         if cost.is_refused() {
-            return Err(ReduceError::Exhausted);
+            return Err(ReduceError::exhausted(self.remaining.get(), cost));
         }
 
         match self.remaining.get().checked_sub(cost.get()) {
@@ -232,8 +235,11 @@ impl Context {
                 Ok(())
             }
             None => {
+                // Built before the budget moves, from bounded metadata alone — see `curios-cert`'s `Spend::spend`, which does the same thing for the same reason.
+                let refusal = ReduceError::exhausted(self.remaining.get(), cost);
                 self.remaining.set(0);
-                Err(ReduceError::Exhausted)
+
+                Err(refusal)
             }
         }
     }
@@ -279,9 +285,21 @@ impl Context {
             && !result.has_universe_meta()
             && !result.any_metavar(&mut |id| self.metavar_solution(id).is_none());
 
-        if cacheable {
+        // The key and the reduct both have their lifetimes extended by the insertion, so both are charged; the allowance is the compilation's rather than this declaration's, and exhausting it stops the cache accepting entries instead of refusing anything.
+        let cost = Cost::collection(1)
+            .saturating_add(Cost::units(term.footprint()))
+            .saturating_add(Cost::units(result.footprint()));
+
+        if cacheable && self.retention.admits(cost) {
             self.caches.reduction_insert(term, result.clone());
         }
+    }
+
+    /// How much of this compilation's retention allowance the caches have consumed.
+    ///
+    /// An observation for a measurement, not a control: nothing in elaboration reads it, and what it is for is setting [`DEFAULT_RETENTION_QUOTA`] against a figure rather than a guess.
+    pub fn retained(&self) -> u64 {
+        self.retention.spent()
     }
 
     /// The elaboration-level counterpart of the reduction cache ([`Context::cached_reduced`] / [`Context::reduce`]): memoize `(term, expected) → (rebuilt, type)` for subterms whose elaboration can neither read nor write anything context-dependent. Eligibility is O(1) per call (the bits are cached per `Term` node): the term — and the expected type, when checking — must contain no metavariable and no `#`-named free variable (an elaborator-minted local or witness name; `#` cannot occur in a written identifier, so every other free name is a top-level reference). Writes are detected by snapshotting `mutation_stamp` around the computation: an entry is inserted only when the run minted, solved, parked, defined, and refined nothing — a pure run whose replay would be the identity on the context. Errors are never cached. The one deliberate delta on a hit: the skipped run's `expect` no longer drains `retry_parked` at that exact point — safe deferral, since retries re-run at every later `expect` and the module drain reports whatever survives.

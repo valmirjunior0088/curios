@@ -130,8 +130,9 @@ fn step_var(kernel: &mut Kernel, var: Var) -> Result<Step, ReduceError> {
         return Ok(Step::Stop(Term::var(var)));
     };
 
+    // A `None` here is "no entry, or one this budget cannot afford", and both mean the same thing: fall through and evaluate. The direct path then exhausts at the charge that could not be paid rather than at a recorded total.
     if let Some(replayed) = kernel.unfold_hit(var.unwrap()) {
-        return Ok(Step::Continue(replayed?));
+        return Ok(Step::Continue(replayed));
     }
 
     let before = kernel.consumption();

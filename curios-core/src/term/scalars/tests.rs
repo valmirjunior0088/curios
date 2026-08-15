@@ -17,6 +17,7 @@ fn round_trips_every_field() {
         has_metavar: false,
         has_universe_meta: true,
         has_universe_data: false,
+        footprint: 987_654,
         hash: u64::MAX,
     });
 
@@ -27,6 +28,7 @@ fn round_trips_every_field() {
     assert!(!read.has_metavar);
     assert!(read.has_universe_meta);
     assert!(!read.has_universe_data);
+    assert_eq!(read.footprint, 987_654);
     assert_eq!(read.hash, u64::MAX);
 }
 
@@ -40,6 +42,7 @@ fn zero_values_read_back_as_filled() {
         has_metavar: true,
         has_universe_meta: false,
         has_universe_data: true,
+        footprint: 0,
         hash: 0,
     });
 
@@ -50,21 +53,43 @@ fn zero_values_read_back_as_filled() {
     assert!(read.has_metavar);
     assert!(!read.has_universe_meta);
     assert!(read.has_universe_data);
+    assert_eq!(read.footprint, 0);
     assert_eq!(read.hash, 0);
 }
 
+/// The two packed figures share one word, so each has to keep its own widest value with the other at *its* widest — a shift that overlapped would show up here and nowhere else.
 #[test]
-fn reach_keeps_its_widest_packed_value() {
-    let widest = usize::try_from((1u64 << 59) - 1).unwrap_or(usize::MAX);
+fn reach_and_footprint_keep_their_widest_packed_values() {
+    let widest_reach = usize::try_from((1u64 << REACH_BITS) - 1).unwrap_or(usize::MAX);
     let cache = ScalarCache::default();
     cache.fill(Scalars {
-        reach: widest,
+        reach: widest_reach,
         has_local_free: true,
         has_metavar: true,
         has_universe_meta: true,
         has_universe_data: true,
+        footprint: FOOTPRINT_MAX,
         hash: 7,
     });
 
-    assert_eq!(cache.get().unwrap().reach, widest);
+    let read = cache.get().unwrap();
+    assert_eq!(read.reach, widest_reach);
+    assert_eq!(read.footprint, FOOTPRINT_MAX);
+}
+
+/// A footprint past its field is *clamped*, not wrapped — so an unmeasurably large term reads as "at least the maximum", which stops a retention insertion rather than admitting one. Wrapping would report a huge term as a tiny one, which is the direction that loses the bound.
+#[test]
+fn an_oversized_footprint_clamps_rather_than_wrapping() {
+    let cache = ScalarCache::default();
+    cache.fill(Scalars {
+        reach: 0,
+        has_local_free: false,
+        has_metavar: false,
+        has_universe_meta: false,
+        has_universe_data: false,
+        footprint: u64::MAX,
+        hash: 0,
+    });
+
+    assert_eq!(cache.get().unwrap().footprint, FOOTPRINT_MAX);
 }

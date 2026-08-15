@@ -87,7 +87,8 @@ mod tests {
         super::*,
         crate::SYNTAX,
         curios_cert::{
-            Globals, KernelError, recheck_module_verdicts, recheck_module_verdicts_uncached,
+            Globals, KernelError, recheck_module_retention, recheck_module_verdicts,
+            recheck_module_verdicts_uncached,
         },
         curios_core::Global,
         curios_core::Item,
@@ -384,9 +385,10 @@ mod tests {
             }
             let clone = start.elapsed() / CLONES;
 
+            let mut erasure_context = Context::new(DEFAULT_STEP_BUDGET, SYNTAX);
             let start = Instant::now();
             erase_unit(
-                &mut Context::new(DEFAULT_STEP_BUDGET, SYNTAX),
+                &mut erasure_context,
                 Resumed::of(&[], ErasedArena::default()),
                 core,
                 None,
@@ -395,7 +397,8 @@ mod tests {
             let erasure = start.elapsed();
 
             let start = Instant::now();
-            let verdicts = recheck_module_verdicts(core, DEFAULT_STEP_BUDGET, &Globals::default());
+            let (verdicts, retained) =
+                recheck_module_retention(core, DEFAULT_STEP_BUDGET, &Globals::default());
             let certification = start.elapsed();
 
             let definitions: usize = core
@@ -418,6 +421,10 @@ mod tests {
                 "  certifying one whole unit    {:>10.1?}  ({} refusals)",
                 certification,
                 verdicts.len()
+            );
+            println!(
+                "  ...retaining                 {retained:>10} units   (elaborator side, over the re-erasure: {})",
+                erasure_context.retained()
             );
 
             println!("\n=== shape ===");

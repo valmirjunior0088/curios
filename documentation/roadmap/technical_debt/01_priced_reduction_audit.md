@@ -154,7 +154,7 @@ What makes the gap bounded rather than open: a `release` never allocates more th
 | reduction-cache insertion | the key term and the retained result | **retention** | retention quota |
 
 - [x] each construction site above charged
-- [ ] cache insertion charged against the retention quota alone, never against work — the quota does not exist yet
+- [x] cache insertion charged against the retention quota alone, never against work — key and result both, from `Term::footprint`
 
 ## `curios-cert` — the kernel's strategy
 
@@ -170,7 +170,7 @@ Written separately from the elaborator's on purpose, so the same shapes appear t
 
 - [x] `step_let` charged, including its per-binding ref vectors — triangular in the run's length, and charged as such
 - [x] the `recurse` bracket charges a frame, from a measured constant — **per new peak depth rather than per call**, see below
-- [ ] memo insertion charged against the retention quota alone — the quota does not exist yet
+- [x] memo insertion charged against the retention quota alone — the `unfold` table charges its reduct, the term-keyed tables their key as well
 
 **`step_let` substitutes where the elaborator binds.** The kernel copies each value into every use, on the stated ground that a substitution is visibly the rule and an environment is a second place a variable's meaning could come from. That is a judgment worth keeping and a cost worth pricing: the two checkers will legitimately spend different amounts here, which is why the specification compares verdicts rather than sums.
 

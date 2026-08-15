@@ -35,6 +35,9 @@ pub use free_monoid::*;
 mod cost;
 pub use cost::*;
 
+mod retention;
+pub use retention::*;
+
 mod reduce;
 pub use reduce::*;
 

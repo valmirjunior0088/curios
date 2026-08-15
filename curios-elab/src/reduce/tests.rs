@@ -363,10 +363,7 @@ fn reduce_var_cycle_times_out() {
 
     context.define(&loop_, &Term::free_var(&loop_), None);
 
-    assert_eq!(
-        reduce(&mut context, Term::free_var(&loop_)),
-        Err(ReduceError::Exhausted)
-    );
+    assert!(reduce(&mut context, Term::free_var(&loop_)).is_err_and(|spent| spent.is_exhausted()));
 }
 
 #[test]

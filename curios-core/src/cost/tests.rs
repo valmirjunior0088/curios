@@ -29,7 +29,7 @@ fn an_empty_payload_still_costs_its_header() {
         Cost::buffer(0),
         Cost::term(0),
     ] {
-        assert!(empty > Cost::NOTHING, "{empty:?}");
+        assert!(empty.get() > Cost::NOTHING.get(), "{empty:?}");
     }
 }
 
@@ -74,4 +74,28 @@ fn summing_charges_saturates_too() {
 
     let plain: Cost = [Cost::units(3), Cost::units(4)].into_iter().sum();
     assert_eq!(plain.get(), 7);
+}
+
+/// A composite charge names the row that made it expensive, so a refusal points at the payload rather than at the header that happened to be added first.
+#[test]
+fn the_larger_contributor_keeps_its_category() {
+    let header = Cost::collection(1);
+    let payload = Cost::packed_bytes(8 * 10_000);
+
+    assert_eq!(header.saturating_add(payload).category(), Category::Payload);
+    assert_eq!(payload.saturating_add(header).category(), Category::Payload);
+    // Ties keep the left, which is what makes the rule deterministic rather than merely reasonable.
+    assert_eq!(
+        Cost::term(0).saturating_add(Cost::term(0)).category(),
+        Category::Reconstruction
+    );
+}
+
+/// Multiplying keeps the row: two payloads are still payload, which is what `PackedBin::concat`'s double charge has to report.
+#[test]
+fn multiplying_keeps_the_category() {
+    let doubled = Cost::packed_bits(64).saturating_mul(2);
+
+    assert_eq!(doubled.category(), Category::Payload);
+    assert_eq!(doubled.get(), Cost::packed_bits(64).get() * 2);
 }

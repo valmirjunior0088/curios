@@ -22,13 +22,56 @@
 //!
 //! The headers below are deliberately generous and are **not** claims about Rust's heap layout. What they have to be is an upper bound on the fixed cost of a thing, so that a program building a million small values is charged for a million small values rather than for the payload alone. Each is documented where it is defined, and the tests beside this module pin the formulas rather than the constants — a constant may rise without a test moving.
 
-use std::ops::Add;
+use std::{fmt, ops::Add};
 
-/// A charge in logical units.
+/// What a refused charge was *for*.
 ///
-/// See the module documentation for the unit, and for why the arithmetic saturates instead of failing.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Default, Hash)]
-pub struct Cost(u64);
+/// Attribution without a second budget. One number still decides acceptance — the specification refuses independent transition and construction limits, and states why — and this says what that number was being spent on at the point it ran out, which is the difference between "your program is too big" and a diagnostic somebody can act on.
+///
+/// **Dominance is deliberately not promised.** This is the category of the *refused charge*, not of whatever consumed the most budget over the declaration; answering the second would need cumulative per-category accounting that has nothing to do with the refusal.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Category {
+    /// A reducer transition: the loop moving once.
+    Transition,
+    /// Packed byte or bit payload.
+    Payload,
+    /// A big natural's or integer's limbs.
+    Limbs,
+    /// A list, vector, or argument store's retained slots.
+    Slots,
+    /// A term node and the children it retains.
+    Reconstruction,
+    /// A temporary buffer the reducer fills and drops.
+    Buffer,
+    /// One level of guarded reducer recursion, priced at the native frame it pushes.
+    Depth,
+    /// Priced construction with no more specific row.
+    Construction,
+}
+
+impl fmt::Display for Category {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Category::Transition => "reduction steps",
+            Category::Payload => "packed payload",
+            Category::Limbs => "big-number limbs",
+            Category::Slots => "collection slots",
+            Category::Reconstruction => "term reconstruction",
+            Category::Buffer => "a temporary buffer",
+            Category::Depth => "recursion depth",
+            Category::Construction => "construction",
+        })
+    }
+}
+
+/// A charge in logical units, and what it is for.
+///
+/// See the module documentation for the unit, and for why the arithmetic saturates instead of failing. The category rides along so a refusal can name it; it takes no part in the arithmetic beyond [`Cost::saturating_add`]'s rule for which of two survives.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Cost {
+    units: u64,
+    category: Category,
+}
 
 /// The fixed cost of a packed value or a big number: its length, its offset, and the handle to its buffer.
 ///
@@ -48,78 +91,101 @@ const TERM_NODE: u64 = 8;
 
 impl Cost {
     /// No charge at all — the sharing case, where storage was reached again rather than built.
-    pub const NOTHING: Self = Self(0);
+    pub const NOTHING: Self = Self::of(0, Category::Construction);
 
     /// One unit: the transition itself, which every reducer step already spends.
-    pub const STEP: Self = Self(1);
+    pub const STEP: Self = Self::of(1, Category::Transition);
 
     /// A charge no budget affords, for a size that overflowed before anything was allocated.
-    pub const REFUSED: Self = Self(u64::MAX);
+    pub const REFUSED: Self = Self::of(u64::MAX, Category::Construction);
 
     /// One level of guarded reducer recursion, priced at the native frame it pushes.
     ///
     /// This is the row that brings *depth* inside the contract. `curios_utilities::recurse` grows the native stack rather than aborting, and nothing else bounds total depth, so a data-shaped walk takes real memory the transition counter never observed — one unit per level is already spent, and what this adds is a price commensurate with the stack that level takes.
     ///
     /// See `FRAME_UNITS` for the measurement and for which of the two figures it is.
-    pub const FRAME: Self = Self(FRAME_UNITS);
+    pub const FRAME: Self = Self::of(FRAME_UNITS, Category::Depth);
 
-    /// A charge of exactly `units`.
+    const fn of(units: u64, category: Category) -> Self {
+        Self { units, category }
+    }
+
+    /// A charge of exactly `units`, with no more specific row than construction.
     pub const fn units(units: u64) -> Self {
-        Self(units)
+        Self::of(units, Category::Construction)
     }
 
     /// What this charge comes to, for a budget to subtract.
     pub const fn get(self) -> u64 {
-        self.0
+        self.units
+    }
+
+    /// What this charge is for, for a refusal to name.
+    pub const fn category(self) -> Category {
+        self.category
     }
 
     /// Whether this charge saturated, and is therefore a refusal rather than a number.
     pub const fn is_refused(self) -> bool {
-        self.0 == u64::MAX
+        self.units == u64::MAX
     }
 
     /// A packed byte string of `length` bytes: the value header, plus one unit per eight bytes, rounded up.
     pub fn packed_bytes(length: u64) -> Self {
-        Self(VALUE_HEADER).saturating_add(Self(units_of(length, 8)))
+        Self::of(VALUE_HEADER, Category::Payload)
+            .saturating_add(Self::of(units_of(length, 8), Category::Payload))
     }
 
     /// A packed bit string of `length` bits: the value header, plus one unit per sixty-four bits, rounded up.
     pub fn packed_bits(length: u64) -> Self {
-        Self(VALUE_HEADER).saturating_add(Self(units_of(length, 64)))
+        Self::of(VALUE_HEADER, Category::Payload)
+            .saturating_add(Self::of(units_of(length, 64), Category::Payload))
     }
 
     /// A big natural or integer of `bits` magnitude bits: the value header, plus one unit per base-2^64 logical limb, rounded up.
     ///
     /// Logical limbs, from the magnitude's bit length, rather than whatever `num-bigint` chose for this target — which is the whole reason this takes a bit count and not a limb count.
     pub fn big_number(bits: u64) -> Self {
-        Self(VALUE_HEADER).saturating_add(Self(units_of(bits, 64)))
+        Self::of(VALUE_HEADER, Category::Limbs)
+            .saturating_add(Self::of(units_of(bits, 64), Category::Limbs))
     }
 
     /// A list, vector, or argument store of `slots` retained references: the collection header, plus one unit per slot.
     ///
     /// The elements themselves are charged separately where they are *constructed*. A vector of already-existing terms retains references and builds nothing, which is what this row prices.
     pub fn collection(slots: u64) -> Self {
-        Self(COLLECTION_HEADER).saturating_add(Self(slots))
+        Self::of(COLLECTION_HEADER.saturating_add(slots), Category::Slots)
     }
 
     /// A temporary reducer buffer of `slots` logical units of payload or slots: the buffer header, plus its request.
     pub fn buffer(slots: u64) -> Self {
-        Self(BUFFER_HEADER).saturating_add(Self(slots))
+        Self::of(BUFFER_HEADER.saturating_add(slots), Category::Buffer)
     }
 
     /// A term node retaining `slots` children or scalar fields: the node's fixed charge, plus one unit per slot.
     pub fn term(slots: u64) -> Self {
-        Self(TERM_NODE).saturating_add(Self(slots))
+        Self::of(TERM_NODE.saturating_add(slots), Category::Reconstruction)
     }
 
     /// This charge and `other` together, saturating into [`Cost::REFUSED`].
+    ///
+    /// **The larger contributor keeps its category**, ties to the left. A composite charge — a value plus the two temporaries building it takes — should name the row that made it expensive, and "larger of the two" is the only rule here that is both deterministic and says something. It is not a claim about what dominated the *declaration*; see [`Category`].
     pub const fn saturating_add(self, other: Self) -> Self {
-        Self(self.0.saturating_add(other.0))
+        Self {
+            units: self.units.saturating_add(other.units),
+            category: match other.units > self.units {
+                true => other.category,
+                false => self.category,
+            },
+        }
     }
 
-    /// This charge `factor` times over, saturating into [`Cost::REFUSED`].
+    /// This charge `factor` times over, saturating into [`Cost::REFUSED`], keeping its own category.
     pub const fn saturating_mul(self, factor: u64) -> Self {
-        Self(self.0.saturating_mul(factor))
+        Self {
+            units: self.units.saturating_mul(factor),
+            category: self.category,
+        }
     }
 }
 
@@ -141,6 +207,12 @@ const fn units_of(value: u64, divisor: u64) -> u64 {
 ///
 /// **It is a recipe rather than a probe, and that is a deliberate exception.** Retaking it needs six lines of temporary instrumentation inside `Kernel::spend`, and leaving those in the product to keep a probe reproducible would put a measurement hook on the hottest path in the trusted base. The recipe above is complete enough to retype in a few minutes.
 const FRAME_UNITS: u64 = 1024;
+
+impl Default for Cost {
+    fn default() -> Self {
+        Self::NOTHING
+    }
+}
 
 impl Add for Cost {
     type Output = Self;

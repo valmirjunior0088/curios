@@ -48,9 +48,9 @@ use {
     crate::{entails, erased_half},
     curios_analysis::{Env, Erased, Judge},
     curios_core::{
-        Atom, Cost, Free, Global, InductDecl, Level, LevelHead, Module, Polarity, ReduceError,
-        Reducer, Spelling, StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError,
-        build_shorten,
+        Atom, Cost, DEFAULT_RETENTION_QUOTA, Free, Global, InductDecl, Level, LevelHead, Module,
+        Polarity, ReduceError, Reducer, Retention, Spelling, StructDecl, Term, UniverseConstraint,
+        UniverseContext, UniverseError, build_shorten,
     },
     std::{fmt, rc::Rc},
 };
@@ -169,9 +169,14 @@ impl fmt::Display for Displayed<'_> {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         let spelling = &self.1;
         match self.0 {
-            KernelError::Reduce(ReduceError::Exhausted) => {
-                formatter.write_str("the kernel's reduction budget ran out")
-            }
+            KernelError::Reduce(ReduceError::Exhausted {
+                category,
+                remaining,
+                attempted,
+            }) => write!(
+                formatter,
+                "the kernel's reduction budget ran out: {category} needed {attempted} units with {remaining} left"
+            ),
             KernelError::Reduce(_) => formatter.write_str("reduction failed in the kernel"),
             KernelError::Unbound(name) => write!(formatter, "unbound name `{name}`"),
             KernelError::Undeclared(name) => {
@@ -334,6 +339,8 @@ pub struct Kernel {
     spend: Spend,
     /// Remembered weak-head reducts, replayed rather than re-derived.
     memos: Memos,
+    /// What this walk may still retain in those memos. Compilation-scoped, never restored — see [`Retention`].
+    retention: Retention,
     /// The erased positions this walk recorded — an output, not an input.
     positions: Positions,
     /// Top-level definitions and the nominal registry.
@@ -351,6 +358,7 @@ impl Kernel {
             scope: Scope::default(),
             spend: Spend::new(budget),
             memos: Memos::new(true),
+            retention: Retention::new(DEFAULT_RETENTION_QUOTA),
             positions: Positions::default(),
             globals: Globals::default(),
             assumed: Vec::new(),
@@ -372,18 +380,24 @@ impl Kernel {
         }
     }
 
-    /// The remembered reduct of `name`'s body, with the replayed computation's whole consumption charged.
+    /// The remembered reduct of `name`'s body, with the replayed computation's whole consumption charged — or `None` when there is no entry, *or* when its charge does not fit.
     ///
     /// Looking one up and charging it are two components' jobs, joined here: [`Memos`] can hand back a [`Replay`] and cannot apply one.
-    pub(crate) fn unfold_hit(&mut self, name: &Free) -> Option<Result<Term, ReduceError>> {
+    ///
+    /// The two `None`s are deliberately the same answer, because the caller does the same thing with them: evaluate the body directly. An unaffordable replay is a reason to take the direct path and let it fail where it actually fails, not a reason to refuse from an aggregate — see [`Spend::charge`].
+    pub(crate) fn unfold_hit(&mut self, name: &Free) -> Option<Term> {
         let replay = self.memos.unfold(name)?;
 
-        Some(self.spend.charge(replay))
+        self.spend.charge(replay)
     }
 
-    /// Remember what `name`'s body reduces to, and what computing it consumed.
+    /// Remember what `name`'s body reduces to, and what computing it consumed — unless the compilation's retention allowance cannot cover the entry.
+    ///
+    /// A declined insertion is not a refusal of anything: the reduct has already been computed and is returned either way, and the only consequence is that the next occurrence of this name recomputes it. See [`Retention`].
     pub(crate) fn unfold_store(&mut self, name: Free, replay: Replay) {
-        self.memos.store_unfold(name, replay);
+        if self.retention.admits(replay.retention()) {
+            self.memos.store_unfold(name, replay);
+        }
     }
 
     /// The remembered weak-head reduct of a local-free `term`, per entry point, replayed for nothing.
@@ -395,9 +409,24 @@ impl Kernel {
         Some(self.spend.charge_nothing(replay))
     }
 
-    /// Remember a local-free `term`'s weak-head reduct and its consumption.
+    /// Remember a local-free `term`'s weak-head reduct and its consumption — unless the compilation's retention allowance cannot cover the entry.
+    ///
+    /// The key is charged as well as the reduct here, and is not there: an `unfold` entry is keyed by a name, and this one by the whole term, whose lifetime the insertion extends exactly as it extends the reduct's.
     pub(crate) fn whnf_store(&mut self, term: Term, forced: bool, replay: Replay) {
-        self.memos.store_whnf(term, forced, replay);
+        let cost = replay
+            .retention()
+            .saturating_add(Cost::units(term.footprint()));
+
+        if self.retention.admits(cost) {
+            self.memos.store_whnf(term, forced, replay);
+        }
+    }
+
+    /// How much of this walk's retention allowance its memos have consumed.
+    ///
+    /// An observation for a measurement, not a control: nothing in the kernel reads it, and what it is for is setting [`DEFAULT_RETENTION_QUOTA`] against a figure rather than a guess.
+    pub fn retained(&self) -> u64 {
+        self.retention.spent()
     }
 
     /// A consumption snapshot, for measuring what a computation charges.

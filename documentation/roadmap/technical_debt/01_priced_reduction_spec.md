@@ -26,7 +26,15 @@ Three things it decided that this file did not anticipate.
 
 **A `Str` literal's ceiling fell, from roughly 12 000 characters to under 6 000.** A literal's derivation nests one reduction level per byte, so the frame row charges it directly. That is not a calibration this default can fix, and it is [A string literal is checked once per use](04_string_literal_cost_spec.md)'s to fix rather than this one's — its *What spec 01 measured* section now carries the figures and what they change about its own scoping.
 
-The retention quota and the calibration are pending.
+**M2 is done.** A compilation-scoped `Retention` allowance sits beside the work budget in `curios-core`, charged before every elaborator-cache and kernel-memo insertion and refusing the *insertion* rather than the program. `ReduceError::Exhausted` carries the failing charge's category, what the budget had left, and what was asked — built from bounded metadata before the budget moves, so no diagnostic path attempts the allocation it refused. The kernel's `unfold` replay already carried a priced cost, since the record measures the same counter construction spends from; what it lacked was the fallback, and an unaffordable replay now declines and lets the direct path exhaust at the charge that could not be paid.
+
+Two things it decided beyond what this file specified.
+
+**A term carries its own logical footprint, cached.** The quota needs a conservative footprint in O(1) at every insertion site, which this file names as an acceptable strategy without saying where it lives. It is packed into the existing scalar cache rather than a third word — `reach` keeps 29 bits and the footprint takes 30, saturating — because a third word would cost eight bytes on every node of every term the compiler holds, which the fixed prelude alone counts in millions.
+
+**The quota's default is measured, not assumed.** A whole-unit certification retains 24 444 443 units and a whole-unit re-erasure 3 524 199. The default is forty times the larger, which bounds retained storage at about eight gigabytes while leaving the heaviest thing the compiler holds at two and a half percent of it.
+
+The calibration is pending.
 
 ## The defect is the price of one transition
 
@@ -267,7 +275,7 @@ Ordered first and independently landable. It is verified, it is two functions wi
 - Extend the M0 probe with observed priced work beside the memory it already records.
 - Treat any unaudited allocation discovered during implementation as part of this milestone rather than narrowing the guarantee to the motivating byte path.
 
-### M2 — Retention and replay
+### M2 — Retention and replay — **done**
 
 - Add the compilation-scoped retention counter, charging conservatively reachable payload on elaborator cache and kernel memo insertion and exhausting into a cold cache rather than a refusal.
 - Carry the priced cost through the kernel's `unfold` replay record, add unaffordable-replay fallback, and extend parity tests to that path's low-budget exhaustion, diagnostic payload, and minted identities. Term-keyed hits are free after Ma, so parity there is over semantic verdicts and identities rather than exhaustion points.

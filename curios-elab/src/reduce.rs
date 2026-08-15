@@ -235,7 +235,7 @@ pub(crate) fn canonical_scrutinee(context: &mut Context, term: &Term) -> Result<
                 .iter()
                 .map(|p| match reduce(context, p.clone()) {
                     Ok(reduced) => Ok(reduced),
-                    Err(ReduceError::Exhausted) => Err(ReduceError::Exhausted),
+                    Err(spent) if spent.is_exhausted() => Err(spent),
                     Err(_) => Ok(p.clone()),
                 })
                 .collect::<Result<Vec<_>, _>>()?;

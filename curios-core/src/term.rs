@@ -111,6 +111,13 @@ impl Term {
         self.scalars().has_local_free
     }
 
+    /// The logical units this term and everything under it occupy, read off the node's cache in O(1).
+    ///
+    /// What a retention charge is computed from: the specification asks for a conservative logical footprint of a value whose lifetime an insertion may extend, computed without allocating and without walking an adversarial shared graph. See `scalars`' `footprint_of` for what it counts and where it overcounts.
+    pub fn footprint(&self) -> u64 {
+        self.scalars().footprint
+    }
+
     /// Whether any `Metavar` node occurs in this term. Cached per node like `has_local_free` and for the same reason: the elaboration cache's O(1)-per-call gate.
     pub(crate) fn has_metavar(&self) -> bool {
         self.scalars().has_metavar

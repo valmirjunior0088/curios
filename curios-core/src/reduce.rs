@@ -2,7 +2,7 @@ mod intrinsic;
 pub use intrinsic::*;
 
 use {
-    super::{Cost, Subterm, Term, UniverseError},
+    super::{Category, Cost, Subterm, Term, UniverseError},
     curios_abi::ForeignFunction,
     curios_num::Integer,
     curios_utilities::Span,
@@ -29,8 +29,17 @@ pub fn reduce_foreign(
 /// The failure mode of type-level evaluation: either the declaration's step budget ran out (`Exhausted`) or a partial intrinsic was folded outside its domain, carrying the offending redex's span. It is deliberately free of any elaboration vocabulary — a reducer reports what the *term* did, and the driver that owns the user-facing diagnostic decides how to phrase it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ReduceError {
-    /// The declaration's step budget ran out. Deterministic: the same program spends the same steps on every machine, so this is a fact about the program rather than about the host that compiled it.
-    Exhausted,
+    /// The declaration's work budget ran out. Deterministic: the same program spends the same units on every machine, so this is a fact about the program rather than about the host that compiled it.
+    ///
+    /// The three fields are attribution without a second budget, captured *before* the refusal and from bounded metadata alone — so no error path attempts the allocation that was refused. One number still decides acceptance; these say what it was being spent on when it ran out.
+    Exhausted {
+        /// What the refused charge was for.
+        category: Category,
+        /// What the budget had left when the charge was refused.
+        remaining: u64,
+        /// What the refused charge came to. [`u64::MAX`] is a size that overflowed while being computed, which is refused without being compared.
+        attempted: u64,
+    },
     BinGetOutOfBounds {
         len: usize,
         index: usize,
@@ -64,6 +73,24 @@ pub enum ReduceError {
         span: Option<Span>,
     },
     Universe(UniverseError),
+}
+
+impl ReduceError {
+    /// The refusal a budget of `remaining` gives when it cannot afford `cost`.
+    pub fn exhausted(remaining: u64, cost: Cost) -> Self {
+        Self::Exhausted {
+            category: cost.category(),
+            remaining,
+            attempted: cost.get(),
+        }
+    }
+
+    /// Whether this is a spent budget rather than a partial intrinsic folded outside its domain.
+    ///
+    /// A predicate rather than a pattern at every call site: the payload exists to be *read* by a diagnostic, and every other consumer only wants to know which of the two kinds of failure this is.
+    pub fn is_exhausted(&self) -> bool {
+        matches!(self, Self::Exhausted { .. })
+    }
 }
 
 /// The evaluator an intrinsic fold calls back into for its operands.

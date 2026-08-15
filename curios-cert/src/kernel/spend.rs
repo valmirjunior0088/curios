@@ -25,6 +25,15 @@ pub(crate) struct Replay {
     mints: usize,
 }
 
+impl Replay {
+    /// What retaining this record costs the compilation's allowance: the entry itself, and the logical footprint of the reduct whose lifetime storing it extends.
+    ///
+    /// The recorded `steps` and `mints` are two words and ride in the entry's fixed cost. The reduct is the part that can be arbitrarily large, and is read off its own cached summary in O(1) rather than walked — see [`Term::footprint`].
+    pub(super) fn retention(&self) -> Cost {
+        Cost::collection(2).saturating_add(Cost::units(self.reduct.footprint()))
+    }
+}
+
 pub(super) struct Spend {
     /// Units of reduction work a single judgment may spend. Restored at each declaration boundary by [`Spend::restore_budget`]. A transition costs one; a construction costs what it builds.
     budget: u64,
@@ -75,7 +84,7 @@ impl Spend {
     /// [`Cost::STEP`] is the transition; a construction charge is what the same counter spends so that the budget bounds the memory a reduction builds and not only how many times it moves. A saturated cost is refused without being compared, so a size that overflowed while being computed never looks affordable.
     pub(super) fn spend(&mut self, cost: Cost) -> Result<(), ReduceError> {
         if cost.is_refused() {
-            return Err(ReduceError::Exhausted);
+            return Err(ReduceError::exhausted(self.remaining, cost));
         }
 
         match self.remaining.checked_sub(cost.get()) {
@@ -84,8 +93,11 @@ impl Spend {
                 Ok(())
             }
             None => {
+                // The refusal is built from what is in hand before the budget moves — the category, what was left, and what was asked — so no diagnostic path attempts the allocation that was just refused.
+                let refusal = ReduceError::exhausted(self.remaining, cost);
                 self.remaining = 0;
-                Err(ReduceError::Exhausted)
+
+                Err(refusal)
             }
         }
     }
@@ -124,22 +136,18 @@ impl Spend {
         }
     }
 
-    /// Charge a replayed computation's whole consumption at once. Exhausting here is exactly where the recomputation would have exhausted mid-chain, and it reports the same error; the entropy advances as if every probe binder had been minted, so later identities land where they would have.
+    /// Charge a replayed computation's whole consumption at once, or **decline** when it does not fit.
     ///
     /// Reached by the name-keyed `unfold` replay alone. That table outlives a declaration, so a hit whose price varied with what was already in scope would make a verdict depend on check order — and its entries are what make certifying a whole module affordable, so they are not the ones to make free.
-    pub(super) fn charge(&mut self, replay: Replay) -> Result<Term, ReduceError> {
+    ///
+    /// **Declining is not a refusal.** A caller that cannot afford the replay evaluates the body directly under the actual remaining budget instead, which reaches the same first failing charge and advances exactly the identities reached before it — where refusing from the aggregate would manufacture a diagnostic about a total rather than about the charge that could not be paid. So the declining path spends nothing and mints nothing: the budget is checked before either is touched, and an entry that does not fit leaves the counter exactly as it found it.
+    pub(super) fn charge(&mut self, replay: Replay) -> Option<Term> {
+        let remaining = self.remaining.checked_sub(replay.steps)?;
+
+        self.remaining = remaining;
         self.minted.seed(self.minted.count() + replay.mints);
 
-        match self.remaining.checked_sub(replay.steps) {
-            Some(remaining) => {
-                self.remaining = remaining;
-                Ok(replay.reduct)
-            }
-            None => {
-                self.remaining = 0;
-                Err(ReduceError::Exhausted)
-            }
-        }
+        Some(replay.reduct)
     }
 
     /// Replay a remembered computation and spend nothing for it: the recorded identities are minted exactly as a recomputation would have minted them, and the recorded steps are not taken.

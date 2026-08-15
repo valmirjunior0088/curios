@@ -450,10 +450,7 @@ fn convert_growing_recursive_unfolding_spends_the_budget() {
 
     let this = Term::apply(Term::free_var(&f), [Term::free_var(&a)]);
     let that = Term::apply(Term::free_var(&g), [Term::free_var(&a)]);
-    assert_eq!(
-        conv(&mut context, &this, &that),
-        Err(ReduceError::Exhausted)
-    );
+    assert!(conv(&mut context, &this, &that).is_err_and(|spent| spent.is_exhausted()));
 }
 
 #[test]
@@ -897,10 +894,7 @@ fn convert_times_out_on_pathological_inputs() {
         (y.clone(), Term::free_var(&x)),
     ]);
 
-    assert_eq!(
-        conv(&mut context, &this, &that),
-        Err(ReduceError::Exhausted)
-    );
+    assert!(conv(&mut context, &this, &that).is_err_and(|spent| spent.is_exhausted()));
 }
 
 #[test]

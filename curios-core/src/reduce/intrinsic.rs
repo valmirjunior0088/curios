@@ -2051,7 +2051,7 @@ mod tests {
             Comparison, Reducer, compare_nat, from_ordering, nat_bound, nat_euclid_split,
             reduce_intrinsic,
         },
-        crate::{Cost, Free, Intrinsic, Nat, One, ReduceError, Scope, Subterm, Term},
+        crate::{Category, Cost, Free, Intrinsic, Nat, One, ReduceError, Scope, Subterm, Term},
         curios_num::{Integer, Natural},
         curios_utilities::{Grain, PackedBin},
     };
@@ -2266,7 +2266,7 @@ mod tests {
 
         fn spend(&mut self, cost: Cost) -> Result<(), ReduceError> {
             if cost.is_refused() {
-                return Err(ReduceError::Exhausted);
+                return Err(ReduceError::exhausted(self.remaining, cost));
             }
 
             match self.remaining.checked_sub(cost.get()) {
@@ -2274,7 +2274,7 @@ mod tests {
                     self.remaining = remaining;
                     Ok(())
                 }
-                None => Err(ReduceError::Exhausted),
+                None => Err(ReduceError::exhausted(self.remaining, cost)),
             }
         }
     }
@@ -2298,7 +2298,16 @@ mod tests {
         );
 
         let mut reducer = Budgeted { remaining: 1_000 };
-        assert_eq!(reducer.reduce(shift(1 << 30)), Err(ReduceError::Exhausted));
+        assert_eq!(
+            reducer.reduce(shift(1 << 30)),
+            Err(ReduceError::Exhausted {
+                category: Category::Limbs,
+                remaining: 1_000,
+                // The value's own width plus the amount: `1` is one bit wide, so the charge is a bit past the shift itself.
+                attempted: Cost::big_number(1 + (1 << 30)).get(),
+            }),
+            "the refusal names the row it was refused on, and the size it was refused at"
+        );
     }
 
     /// The refusal is target-independent, which a shift priced through `usize` would not be: `usize` is 32 bits on wasm32 and 64 natively, so an amount between the two would be folded on one target and left neutral on the other. Any such amount prices at 2^32 bits or more — sixty-seven million units before the value's own width — which no shippable budget affords, so both targets refuse.
@@ -2314,7 +2323,14 @@ mod tests {
         let mut reducer = Budgeted {
             remaining: 1_000_000_000,
         };
-        assert_eq!(reducer.reduce(huge), Err(ReduceError::Exhausted));
+        assert_eq!(
+            reducer.reduce(huge),
+            Err(ReduceError::Exhausted {
+                category: Category::Limbs,
+                remaining: 1_000_000_000,
+                attempted: Cost::big_number(u64::MAX).get(),
+            })
+        );
     }
 
     fn symbol(index: u32, hint: &'static str) -> Term {

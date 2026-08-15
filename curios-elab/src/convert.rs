@@ -1535,7 +1535,7 @@ impl Convert {
             // An entry the type level may not reduce (an effectful scrutinee, say) simply contributes no reduced spelling — only an exhausted budget propagates.
             let reduced = match reduce(context, entry.clone()) {
                 Ok(reduced) => reduced,
-                Err(ReduceError::Exhausted) => return Err(ReduceError::Exhausted),
+                Err(spent) if spent.is_exhausted() => return Err(spent),
                 Err(_) => continue,
             };
             let ambiguous = matches!(&*reduced, Subterm::Var(_))

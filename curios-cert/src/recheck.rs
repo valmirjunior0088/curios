@@ -146,13 +146,27 @@ pub fn recheck_module_verdicts(module: &Module, budget: u64, globals: &Globals) 
 
 /// [`recheck_module_verdicts`] with the kernel's evaluation memos off.
 ///
-/// Exists for one purpose: asserting that memoization changes no verdict — the property that makes a memo an evaluation strategy rather than a store.
+/// Exists for one purpose: asserting that memoization changes no *semantic* verdict — the property that makes a memo an evaluation strategy rather than a store. A resource verdict may differ, since a term-keyed hit is free.
 pub fn recheck_module_verdicts_uncached(
     module: &Module,
     budget: u64,
     globals: &Globals,
 ) -> Vec<Verdict> {
     verdicts_from(Kernel::uncached(budget), module, globals)
+}
+
+/// How much retention allowance a whole-module walk consumes, beside the verdicts it reaches.
+///
+/// Exists for one purpose too: `DEFAULT_RETENTION_QUOTA` has to be set against what a real module actually retains, and nothing else can see that figure — the kernel a walk builds is its own. A measurement's entry point, never a control; nothing in the compiler reads what it returns.
+pub fn recheck_module_retention(
+    module: &Module,
+    budget: u64,
+    globals: &Globals,
+) -> (Vec<Verdict>, u64) {
+    let mut kernel = Kernel::new(budget);
+    let verdicts = verdicts_into(&mut kernel, module, globals);
+
+    (verdicts, kernel.retained())
 }
 
 /// One item's erased positions, carried with the name a refusal should be reported against.
@@ -258,9 +272,13 @@ fn struct_residue(declaration: &StructDecl) -> Option<KernelError> {
         })
 }
 
+fn verdicts_from(mut kernel: Kernel, module: &Module, globals: &Globals) -> Vec<Verdict> {
+    verdicts_into(&mut kernel, module, globals)
+}
+
 // Safety: the memos below are keyed on `Term`, whose `OnceCell` scalar caches trip Clippy's interior-mutability warning. The logical value is immutable, and hashing and equality stay stable across those caches filling.
 #[allow(clippy::mutable_key_type)]
-fn verdicts_from(mut kernel: Kernel, module: &Module, globals: &Globals) -> Vec<Verdict> {
+fn verdicts_into(kernel: &mut Kernel, module: &Module, globals: &Globals) -> Vec<Verdict> {
     let mut verdicts = Vec::new();
     // What this walk has to decide for itself: the names `globals` does not already answer for. A name identifies one top-level thing within a module, so an item every one of whose declared names is in scope was judged by the walk that built the environment, and one that declares anything new is judged here. Skipping is the direction that needs the argument, so an item declaring nothing at all is judged rather than passed over.
     let fresh = |name: &Global| !globals.in_scope(name);
@@ -388,7 +406,7 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, globals: &Globals) -> Vec<
         match item {
             Item::Let(definition) => {
                 let outcome = check_definition(
-                    &mut kernel,
+                    kernel,
                     &Free::from(&definition.name),
                     &definition.type_,
                     &definition.body,
@@ -416,7 +434,7 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, globals: &Globals) -> Vec<
                     .collect::<Vec<_>>();
                 let universes = rec.group.universe_context().clone();
 
-                let outcome = check_rec_group(&mut kernel, &names, &rec.group, &universes);
+                let outcome = check_rec_group(kernel, &names, &rec.group, &universes);
 
                 if let Err(error) = outcome {
                     verdicts.push(Verdict {
@@ -448,7 +466,7 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, globals: &Globals) -> Vec<
 
     // A unit with no entrypoint has nothing here to judge — being the entry is what having one *means*, and a scope unit is not it. The prelude used to carry a dummy body and have this walk certify it.
     if let Some(body) = &module.body
-        && let Err(error) = check_entrypoint(&mut kernel, body, module.type_.as_ref())
+        && let Err(error) = check_entrypoint(kernel, body, module.type_.as_ref())
     {
         verdicts.push(Verdict { name: None, error });
     }
@@ -460,7 +478,7 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, globals: &Globals) -> Vec<
     }
 
     // Obligations (T) and (V), after the item walk for the same reason declaration acceptance runs there: the classification closes over what every definition mentions, and the environment is only complete once every item has been defined.
-    let (partial, disagreements) = partial_definitions(&mut kernel, module, globals);
+    let (partial, disagreements) = partial_definitions(kernel, module, globals);
     for (name, error) in disagreements {
         verdicts.push(Verdict {
             name: Some(name),
@@ -469,8 +487,7 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, globals: &Globals) -> Vec<
     }
     let mut local_memo = HashMap::new();
     for (name, item_positions) in &positions {
-        if let Err(error) = check_positions(&mut kernel, item_positions, &partial, &mut local_memo)
-        {
+        if let Err(error) = check_positions(kernel, item_positions, &partial, &mut local_memo) {
             verdicts.push(Verdict {
                 name: name.clone(),
                 error,
@@ -480,7 +497,7 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, globals: &Globals) -> Vec<
 
     // Declaration acceptance, after the item walk rather than before it: a registry telescope may mention any top-level definition — a type alias, a type constructor's own `rec` group — and those names are only defined as the walk proceeds. Every item defines whether or not it checked, so by this point the environment is complete. Strict positivity runs over the *full* declaration set — the registries are merged even though the items are not, because a user declaration may reach a prelude one — so the analysis recomputes every vector rather than reading any from the archive; then the size condition, the clause the item walk cannot supply, because it computes each signature's sort and compares it to nothing.
     if let Err(refusal) = positivity_vectors(
-        &mut kernel,
+        kernel,
         Declarations::extending(
             globals.inducts(),
             globals.structs(),
@@ -499,7 +516,7 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, globals: &Globals) -> Vec<
         });
     }
     for (name, declaration) in module.induct_decls.iter().filter(|(name, _)| fresh(name)) {
-        if let Err(error) = check_induct_decl(&mut kernel, declaration) {
+        if let Err(error) = check_induct_decl(kernel, declaration) {
             verdicts.push(Verdict {
                 name: Some(name.clone()),
                 error,
@@ -507,7 +524,7 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, globals: &Globals) -> Vec<
         }
     }
     for (name, declaration) in module.struct_decls.iter().filter(|(name, _)| fresh(name)) {
-        if let Err(error) = check_struct_decl(&mut kernel, declaration) {
+        if let Err(error) = check_struct_decl(kernel, declaration) {
             verdicts.push(Verdict {
                 name: Some(name.clone()),
                 error,
