@@ -48,9 +48,9 @@ use {
     crate::{entails, erased_half},
     curios_analysis::{Env, Erased, Judge},
     curios_core::{
-        Atom, Cost, DEFAULT_RETENTION_QUOTA, Free, Global, InductDecl, Level, LevelHead, Module,
-        Polarity, ReduceError, Reducer, Retention, Spelling, StructDecl, Term, UniverseConstraint,
-        UniverseContext, UniverseError, build_shorten,
+        Atom, Consumption, Cost, DEFAULT_RETENTION_QUOTA, Free, Global, InductDecl, Level,
+        LevelHead, Module, Polarity, ReduceError, Reducer, Retention, Spelling, StructDecl, Term,
+        UniverseConstraint, UniverseContext, UniverseError, build_shorten,
     },
     std::{fmt, rc::Rc},
 };
@@ -437,6 +437,13 @@ impl Kernel {
     /// An observation for a measurement, not a control: nothing in the kernel reads it, and what it is for is setting [`DEFAULT_RETENTION_QUOTA`] against a figure rather than a guess.
     pub fn retained(&self) -> u64 {
         self.retention.spent()
+    }
+
+    /// The heaviest declaration this kernel has walked — what it spent, and how deep it went.
+    ///
+    /// The measurement counterpart of [`Kernel::retained`], and the same kind of thing: nothing in the kernel reads it, and it exists so a figure can be stated with a probe beside it instead of bisected against a budget from outside the compiler. See [`Consumption`] for why depth is the row it separates out.
+    pub fn heaviest_declaration(&self) -> Consumption {
+        self.spend.heaviest()
     }
 
     /// A consumption snapshot, for measuring what a computation charges.

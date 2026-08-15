@@ -13,7 +13,7 @@
 //! [`Memos`](super::Memos) deliberately cannot reach this: it stores [`Replay`]s and hands them back, and applying one is this component's job. A store that could also charge would be a store that could charge twice.
 
 use {
-    curios_core::{Cost, Free, ReduceError, Term},
+    curios_core::{Consumption, Cost, Free, ReduceError, Term},
     curios_utilities::Entropy,
 };
 
@@ -41,6 +41,8 @@ pub(super) struct Spend {
     /// How many guarded reduction levels are live, and the deepest this judgment has reached. See [`Spend::enter_level`].
     depth: usize,
     peak_depth: usize,
+    /// The heaviest declaration walked so far, for a measurement to read. See [`Consumption`]; nothing in the kernel consults it.
+    heaviest: Consumption,
     /// Identities for binders the kernel opens itself, when comparing under a telescope and when eta-contracting. Seeded above every index the earlier stages minted, so a kernel-minted binder can never alias one in a term.
     minted: Entropy,
 }
@@ -52,6 +54,7 @@ impl Spend {
             remaining: budget,
             depth: 0,
             peak_depth: 0,
+            heaviest: Consumption::default(),
             minted: Entropy::new(),
         }
     }
@@ -103,9 +106,26 @@ impl Spend {
     }
 
     /// Restore the full budget for a new judgment, and with it the depth this judgment may reach before paying again.
+    ///
+    /// **The live count is reset here too, and it has to be.** [`Spend::enter_level`] increments before it charges and propagates the refusal with `?`, so the level whose frame could not be paid is never left; and the module walk continues past a refused item to judge the next one. Without this line a module that refuses once charges every later declaration [`Cost::FRAME`] for a level nothing is holding, and the leak accumulates per refusal — a cost that is a fact about what failed earlier rather than about the declaration under judgment, which is the one thing the per-declaration budget exists to prevent.
     pub(super) fn restore_budget(&mut self) {
+        self.heaviest = self.heaviest.heavier_of(self.consumed());
+
         self.remaining = self.budget;
+        self.depth = 0;
         self.peak_depth = 0;
+    }
+
+    /// What the declaration under judgment has consumed so far.
+    fn consumed(&self) -> Consumption {
+        Consumption::new(self.budget - self.remaining, self.peak_depth)
+    }
+
+    /// The heaviest declaration this kernel has walked, including the one under judgment.
+    ///
+    /// A measurement's read, never a control — see [`Consumption`]. It reports the heaviest rather than a sum because the budget is per declaration, which makes the heaviest the figure a default has to clear.
+    pub(super) fn heaviest(&self) -> Consumption {
+        self.heaviest.heavier_of(self.consumed())
     }
 
     /// A fresh binder identity, rendering as `hint`.

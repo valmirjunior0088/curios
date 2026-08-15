@@ -92,6 +92,41 @@ pub fn typecheck_with_prelude(
     })
 }
 
+/// [`typecheck_with_prelude`], reporting what elaboration consumed as well. See [`typecheck_measured`](crate::typecheck_measured).
+pub fn typecheck_with_prelude_measured(
+    budget: u64,
+    entrypoint: &curios_text::Entrypoint,
+    loader: curios_text::RootSource,
+) -> Result<
+    (
+        curios_core::Module,
+        Vec<String>,
+        curios_core::Consumption,
+        u64,
+    ),
+    CompileError,
+> {
+    with_prelude(|prelude| {
+        crate::typecheck_measured(
+            budget,
+            Prefix::over(from_ref(&prelude)),
+            &SYNTAX,
+            entrypoint,
+            loader,
+        )
+    })
+}
+
+/// Put `module` to the independent kernel with the fixed prelude in scope, handing back the walk's own kernel for a measurement to read. See `curios_cert::recheck_module_measured`.
+pub fn recheck_with_prelude_measured(
+    module: &curios_core::Module,
+    budget: u64,
+) -> (Vec<curios_cert::Verdict>, curios_cert::Kernel) {
+    with_prelude(|prelude| {
+        crate::recheck_measured(module, budget, Prefix::over(from_ref(&prelude)))
+    })
+}
+
 /// Put `module` to the independent kernel with the fixed prelude in scope. See [`recheck`].
 pub fn recheck_with_prelude(
     module: &curios_core::Module,

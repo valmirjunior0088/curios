@@ -3,10 +3,10 @@
 use {
     super::Stage,
     curios_abi::ForeignStore,
-    curios_cert::{Globals, Verdict, recheck_module_verdicts},
+    curios_cert::{Globals, Kernel, Verdict, recheck_module_measured, recheck_module_verdicts},
     curios_cont::into_wasm,
     curios_core::derived_binder_floor,
-    curios_core::{Intrinsic, Term},
+    curios_core::{Consumption, Intrinsic, Term},
     curios_elab::{
         Context, Established, Mode, Resumed, elaborate_and_zonk_unit,
         elaborate_and_zonk_unit_reporting, erase_unit,
@@ -58,6 +58,15 @@ pub fn recheck(module: &curios_core::Module, budget: u64, scope: Prefix<'_>) -> 
     recheck_module_verdicts(module, budget, &globals(scope))
 }
 
+/// [`recheck`], handing back the walk's own kernel for a measurement to read rather than only its verdicts. See `curios_cert::recheck_module_measured`.
+pub fn recheck_measured(
+    module: &curios_core::Module,
+    budget: u64,
+    scope: Prefix<'_>,
+) -> (Vec<Verdict>, Kernel) {
+    recheck_module_measured(module, budget, &globals(scope))
+}
+
 /// The kernel's environment for `scope`: every unit mounted, at the binder floor its own walk derived.
 fn globals(scope: Prefix<'_>) -> Globals {
     let mut globals = Globals::default();
@@ -80,6 +89,22 @@ pub fn typecheck_reporting(
     entrypoint: &Entrypoint,
     loader: RootSource,
 ) -> Result<(curios_core::Module, Vec<String>), CompileError> {
+    typecheck_measured(budget, scope, syntax, entrypoint, loader)
+        .map(|(module, obligations, _, _)| (module, obligations))
+}
+
+/// [`typecheck_reporting`], reporting what elaboration consumed as well: the heaviest declaration, and the retention allowance the whole compilation used.
+///
+/// The measurement entry point on this side of the seam, matching `curios-cert`'s `recheck_module_measured` on the other. The heaviest declaration's units and peak depth are what `DEFAULT_STEP_BUDGET` is set against and the only figures that say whether a program's cost is depth or work; the retention figure is what `DEFAULT_RETENTION_QUOTA` is set against, and the two are coupled from one side — a memo that cannot be stored is re-derived against the *work* budget, so a compilation that exhausts its allowance stops being linear in what it spends.
+///
+/// A measurement's entry point, never a control. Nothing in the compiler reads the last two components, and [`typecheck_reporting`] drops them.
+pub fn typecheck_measured(
+    budget: u64,
+    scope: Prefix<'_>,
+    syntax: &SyntaxRegistry,
+    entrypoint: &Entrypoint,
+    loader: RootSource,
+) -> Result<(curios_core::Module, Vec<String>, Consumption, u64), CompileError> {
     let text = scope.text();
     let cores = scope.cores();
     let (lowered, metavars, universe_floor, _foreigns) =
@@ -91,8 +116,9 @@ pub fn typecheck_reporting(
         None => Mode::Infer,
     };
 
+    let mut context = Context::new(budget, *syntax);
     let (module, _core_type, obligations) = elaborate_and_zonk_unit_reporting(
-        &mut Context::new(budget, *syntax),
+        &mut context,
         Established::over(&cores),
         &lowered,
         metavars,
@@ -106,7 +132,12 @@ pub fn typecheck_reporting(
         .map(|error| error.format_with(&lowered, &cores))
         .collect();
 
-    Ok((module, obligations))
+    Ok((
+        module,
+        obligations,
+        context.heaviest_declaration(),
+        context.retained(),
+    ))
 }
 
 /// The type-checking prologue of [`compile_entrypoint`] (and the tests' typecheck-only path): lower to core, elaborate (checking against the entrypoint's type when it carries one, else synthesizing), then zonk metavariable solutions in so the module is meta-free — the `elaborate → zonk` half of the `elaborate → zonk → erase` data flow. Elaboration is authoritative: it returns a rebuilt module (lambda domains solved, binders re-closed), and it is *that* module — not the lowered one — that zonk makes meta-free. `zonk` is also where an unsolved hole is rejected, so a program that merely *type-checks* is fully validated by the time this returns. Elaboration and zonking share one context (the solutions live in its `MetaStore`); the returned module is self-contained, so the caller's `erase` runs over a fresh one.

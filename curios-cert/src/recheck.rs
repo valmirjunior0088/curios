@@ -155,18 +155,20 @@ pub fn recheck_module_verdicts_uncached(
     verdicts_from(Kernel::uncached(budget), module, globals)
 }
 
-/// How much retention allowance a whole-module walk consumes, beside the verdicts it reaches.
+/// What a whole-module walk consumed, beside the verdicts it reached — the walk's own kernel, handed back for a measurement to read.
 ///
-/// Exists for one purpose too: `DEFAULT_RETENTION_QUOTA` has to be set against what a real module actually retains, and nothing else can see that figure — the kernel a walk builds is its own. A measurement's entry point, never a control; nothing in the compiler reads what it returns.
-pub fn recheck_module_retention(
+/// Exists for one purpose too: `DEFAULT_RETENTION_QUOTA` and `DEFAULT_STEP_BUDGET` have to be set against what a real module actually costs, and nothing else can see those figures — the kernel a walk builds is otherwise its own. [`Kernel::retained`] is the compilation-scoped allowance it used and [`Kernel::heaviest_declaration`] the heaviest single judgment it made.
+///
+/// It hands back the kernel rather than a tuple of figures so that asking a new question of a finished walk costs a reader rather than a signature. A measurement's entry point, never a control; nothing in the compiler reads what it returns.
+pub fn recheck_module_measured(
     module: &Module,
     budget: u64,
     globals: &Globals,
-) -> (Vec<Verdict>, u64) {
+) -> (Vec<Verdict>, Kernel) {
     let mut kernel = Kernel::new(budget);
     let verdicts = verdicts_into(&mut kernel, module, globals);
 
-    (verdicts, kernel.retained())
+    (verdicts, kernel)
 }
 
 /// One item's erased positions, carried with the name a refusal should be reported against.

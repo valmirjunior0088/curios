@@ -19,10 +19,10 @@ use {
     },
     curios_core::ReduceError,
     curios_core::{
-        Bound, ConceptDecl, Cost, DEFAULT_RETENTION_QUOTA, DefinitionKind, Free, Global, HeadTag,
-        ImplicitOrigin, InductDecl, Level, MetaId, Metavar, MetavarOrigin, Retention, StructDecl,
-        Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
-        UniverseError, UniverseMetaId, UniverseRole, UniverseSeed, WitnessOrigin,
+        Bound, ConceptDecl, Consumption, Cost, DEFAULT_RETENTION_QUOTA, DefinitionKind, Free,
+        Global, HeadTag, ImplicitOrigin, InductDecl, Level, MetaId, Metavar, MetavarOrigin,
+        Retention, StructDecl, Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin,
+        UniverseContext, UniverseError, UniverseMetaId, UniverseRole, UniverseSeed, WitnessOrigin,
         instantiate_universe_levels_scoped,
     },
     curios_utilities::{Entropy, Mount, Qualifier, Span, SyntaxRegistry},
@@ -43,13 +43,15 @@ use {
 ///
 /// **The prelude floor.** The heaviest declaration in the fixed prelude — still in `/std/BigNat/add` — measured between 2 500 000 and 3 000 000 units by bisecting this constant against the prelude build, where it was about 91 000 *steps* before. Thirty million keeps roughly the tenfold margin the previous figure held over the worst real declaration, which is the property that figure was chosen for.
 ///
+/// That is the *elaborator's* floor, which is the one this bisection reaches. The kernel's is now readable directly rather than by bisection — `curios-prelude-archive`'s `stored_prelude_measurements` reports the heaviest declaration a whole-unit certification makes, **189 294 units at a peak depth of 6**, taken 2026-08-15. The two are not comparable as a ratio: the elaborator solves metavariables, resolves witnesses and zonks where the kernel rechecks a finished term.
+///
 /// **What a unit costs in bytes.** Measured on the same machine, a payload-heavy program costs about **28 bytes of process memory per unit** — the logical unit is eight, and the rest is copies and term traffic the price list deliberately does not model. So this figure admits roughly 780 MB of construction in one declaration.
 ///
 /// # Two things it does not buy, stated rather than left to be discovered
 ///
 /// **A single oversized construction is still affordable, and no default the prelude can build under would refuse it.** `Nat/shl(1, 400000000)` prices at 6 250 004 units and builds fifty megabytes; refusing it outright needs a default of six million, which is twice the prelude's own floor with no margin at all. What the charge bought is a ceiling where there was none — the same term at a larger numeral now refuses instead of taking the machine — not one low enough to call fifty megabytes unreasonable. Squeezing both ends onto one number is the weighted single limit the specification's *Refused alternatives* accepts, and these are its numbers.
 ///
-/// **A `Str` literal's ceiling fell, because a literal is deep and depth is now priced.** Its UTF-8 derivation nests one reduction level per byte, so the frame row charges it directly: a literal of about 12 000 characters compiled before this work and one of 6 000 does not now. That is not a calibration this constant can fix — raising it far enough to restore the old ceiling would give up the memory bound entirely — and it is not meant to be: making a literal affordable at the size people write one is `documentation/roadmap/technical_debt/04_string_literal_cost_spec.md`'s work, and that specification already names this row as one of the levers it composes with.
+/// **A `Str` literal's ceiling is now this constant divided by the frame row, and nothing else.** Its UTF-8 derivation nests one reduction level per byte and costs 1 088 units per character, of which 1 024 are the frame — so about **16 700 characters**, measured by bisecting the length at this budget. Raising this constant raises that ceiling proportionally, and the trade it would make is the one stated above rather than anything about strings. `curios`' `str_literal_cost_measurements` carries the split and `a_str_literal_costs_about_one_frame_per_character` holds it.
 ///
 /// What "provisional" still means: this has *not* been set against a corpus that replays a memoized construction rather than evaluating it once, which the specification says must also decide it. That is the calibration milestone's work.
 pub const DEFAULT_STEP_BUDGET: u64 = 30_000_000;
@@ -106,6 +108,8 @@ pub struct Context {
     /// How many guarded reduction levels are live, and the deepest this declaration has reached. `Cell` for [`Context::remaining`]'s reason; see [`Context::enter_level`].
     depth: Cell<usize>,
     peak_depth: Cell<usize>,
+    /// The heaviest declaration elaborated so far, for a measurement to read. See [`Consumption`]; nothing in elaboration consults it.
+    heaviest: Cell<Consumption>,
     /// What this compilation may still retain in the caches below. Compilation-scoped and never restored, unlike the budget beside it — see [`Retention`].
     retention: Retention,
     // The reduction and elaboration memo tables with their write stamps and the named invalidation protocol every mutation site routes through; see [`Caches`].
@@ -145,6 +149,7 @@ impl Context {
             remaining: Cell::new(budget),
             depth: Cell::new(0),
             peak_depth: Cell::new(0),
+            heaviest: Cell::new(Consumption::default()),
             retention: Retention::new(DEFAULT_RETENTION_QUOTA),
             caches: Caches::new(),
             frames: Frames::new(),
@@ -265,9 +270,27 @@ impl Context {
     }
 
     /// Restore the full budget for a new declaration, and with it the depth this declaration may reach before paying again.
+    ///
+    /// The live count is reset for the reason `curios-cert`'s `Spend::restore_budget` states in full: [`Context::enter_level`] increments before it charges and propagates the refusal, so an exhausted level is never left, and elaboration continues to the next declaration. A leaked level costs every later declaration [`Cost::FRAME`] for a frame nothing holds.
     pub(crate) fn restore_budget(&mut self) {
+        self.heaviest
+            .set(self.heaviest.get().heavier_of(self.consumed()));
+
         self.remaining.set(self.budget);
+        self.depth.set(0);
         self.peak_depth.set(0);
+    }
+
+    /// What the declaration being elaborated has consumed so far.
+    fn consumed(&self) -> Consumption {
+        Consumption::new(self.budget - self.remaining.get(), self.peak_depth.get())
+    }
+
+    /// The heaviest declaration this context has elaborated, including the one in progress.
+    ///
+    /// The measurement counterpart of [`Context::retained`], and what `curios-cert`'s `Kernel::heaviest_declaration` reads on the other side of the seam — the two are deliberately the same shape, because comparing them is the point. An observation for a measurement; nothing in elaboration reads it.
+    pub fn heaviest_declaration(&self) -> Consumption {
+        self.heaviest.get().heavier_of(self.consumed())
     }
 
     /// The read half of the reduction cache. The reducer probes it wherever a term's reduction begins — at entry, and at the scrutinee stack's frame push, where a warm scrutinee dispatches in place instead of framing.

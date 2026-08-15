@@ -87,7 +87,7 @@ mod tests {
         super::*,
         crate::SYNTAX,
         curios_cert::{
-            Globals, KernelError, recheck_module_retention, recheck_module_verdicts,
+            Globals, KernelError, recheck_module_measured, recheck_module_verdicts,
             recheck_module_verdicts_uncached,
         },
         curios_core::Global,
@@ -397,9 +397,11 @@ mod tests {
             let erasure = start.elapsed();
 
             let start = Instant::now();
-            let (verdicts, retained) =
-                recheck_module_retention(core, DEFAULT_STEP_BUDGET, &Globals::default());
+            let (verdicts, kernel) =
+                recheck_module_measured(core, DEFAULT_STEP_BUDGET, &Globals::default());
             let certification = start.elapsed();
+            let retained = kernel.retained();
+            let heaviest = kernel.heaviest_declaration();
 
             let definitions: usize = core
                 .items
@@ -425,6 +427,12 @@ mod tests {
             println!(
                 "  ...retaining                 {retained:>10} units   (elaborator side, over the re-erasure: {})",
                 erasure_context.retained()
+            );
+            println!(
+                "  ...heaviest declaration      {:>10} units   (depth {}, costing {} of them)",
+                heaviest.units(),
+                heaviest.peak_depth(),
+                heaviest.frame_units()
             );
 
             println!("\n=== shape ===");
