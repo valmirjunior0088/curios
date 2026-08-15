@@ -6,7 +6,11 @@ This is the implementation specification for making type-level evaluation refuse
 
 The propagation half is done. `trivially_inhabited` no longer converts an exhausted reduction into `None`, so an omitted implicit argument whose proposition ran out of budget reports the exhaustion rather than falling back to a hole that later reads as the user's fault. That was a standalone diagnostic defect, correct under any pricing, and it landed ahead of this work.
 
-The memo charging, the pricing, the audit, the retention quota, and the calibration are pending. The first of those is specified and measured but not implemented, and is ordered ahead of the rest as Ma: it is independently landable, and pricing construction without it would multiply the defect it fixes rather than sit beside it.
+**Ma is done.** A `whnf`/`forced` memo hit spends no steps, those two tables are cleared wherever the budget is restored, and the name-keyed `unfold` memo keeps both its charge and its cross-declaration life. The normative statement moved out of this file as it landed: `curios-cert`'s `spend` and `memos` module documentation, its README's memo decision, and [the evaluation memo](../../soundness/what-the-kernel-consults/the-evaluation-memo.md), which records what the weakened assumption no longer covers. The before-and-after is beside `curios`' `kernel_memo_charge_measurements` and the certification row of `curios-prelude-archive`'s `stored_prelude_measurements`.
+
+Two things about it are worth carrying forward. The retake reproduced the floor and divergence figures under *Kernel behavior* exactly and the certification figure only in its shape — 6.2 s to 6.1 s rather than 6.6 to 6.5, on a machine whose absolute number differs. And it left a residue this file did not predict, recorded in `spend`'s module documentation and in the soundness entry: an `unfold` record is measured over a computation that may itself have taken free term-keyed hits, so it can record less than the same body costs cold, which makes what a declaration is charged for a name depend on which declaration first unfolded it. The direction is undercharging, so it only ever accepts, and closing it needs the priced replay record M2 already carries.
+
+The pricing, the audit, the retention quota, and the calibration are pending.
 
 ## The defect is the price of one transition
 
@@ -166,7 +170,9 @@ Ordinary definitional equality, explicit decided proofs, and every other reducti
 
 Certificate checking enforces its own limit and never trusts accounting performed by elaboration or compilation.
 
-The kernel's spend component records what a remembered computation consumed and charges a memo hit across two quantities: reduction steps and minted binder identities. Its invariant *today* is that the whole observable trajectory — refusal payloads, exhaustion points, and later-minted identities — is bit-identical with evaluation memos on or off. Ma narrows that to the semantic half, for the reasons below; the paragraphs here describe what is being replaced before replacing it.
+**This section is retained as the argument that was made, not as pending work: Ma has landed.** What it decided is now stated where the code is — `curios-cert`'s `spend` and `memos` modules, its README, and the soundness entry — and what follows describes the design it replaced before replacing it.
+
+The kernel's spend component records what a remembered computation consumed and charges a memo hit across two quantities: reduction steps and minted binder identities. Its invariant *before Ma* was that the whole observable trajectory — refusal payloads, exhaustion points, and later-minted identities — is bit-identical with evaluation memos on or off. Ma narrows that to the semantic half, for the reasons below.
 
 **What checks the invariant is weaker than the invariant, and that is worth knowing whichever way this goes.** `curios-prelude-archive`'s `kernel_memo_parity` compares verdicts, at one budget, on a corpus where nothing exhausts, and is `#[ignore]`d — so the one regime in which the charge model is *observable* is the one regime nothing checks, and no ordinary run checks any of it. That is why the strengthening promised at M2 is stated below in terms of semantic verdicts and identity trajectories rather than exhaustion payloads: after Ma, exhaustion points are permitted to differ, and a test asserting they do not would be asserting the design that Ma removes.
 
@@ -220,7 +226,7 @@ The limit bounds reducer-created logical work, reducer-caused stack growth, and 
 
 ## Milestones
 
-### Ma — Charge a computation once
+### Ma — Charge a computation once — **done**
 
 Ordered first and independently landable. It is verified, it is two functions wide, and it is monotone — free hits only reduce spend, so nothing that compiles today can stop compiling and no fixture's stated budget has to move for it. Everything after it is the construction-pricing work, which it must precede so that M3 calibrates one default against both halves rather than two against each.
 

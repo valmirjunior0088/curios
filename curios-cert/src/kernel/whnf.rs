@@ -19,11 +19,11 @@ use {
     curios_utilities::recurse,
 };
 
-/// The kernel's reduction strategy: everything unfolds, and what a local-free term unfolds to is remembered — see the memo fields on [`Kernel`] for what that does and does not concede.
+/// The kernel's reduction strategy: everything unfolds, and what a local-free term unfolds to is remembered — see the `memos` and `spend` modules for what that does and does not concede, and for why a hit on this entry point is free while a definition unfold's is charged.
 impl Reducer for Kernel {
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
         if let Some(replayed) = self.whnf_hit(&term, false) {
-            return replayed;
+            return Ok(replayed);
         }
 
         let before = self.consumption();
@@ -36,7 +36,7 @@ impl Reducer for Kernel {
 
     fn reduce_forced(&mut self, term: Term) -> Result<Term, ReduceError> {
         if let Some(replayed) = self.whnf_hit(&term, true) {
-            return replayed;
+            return Ok(replayed);
         }
 
         let before = self.consumption();

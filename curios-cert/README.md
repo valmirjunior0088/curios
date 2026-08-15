@@ -22,11 +22,13 @@ The Curios certifier: the kernel deciding, from a finished term alone, whether t
 
 **Rationale.** The two-checker split only catches a systematic mistake if a wrong rule shows up as a disagreement. An overly permissive rule hides in the corpus passing, exactly like the single-checker baseline this crate exists to improve on; an overly strict one is visible the moment a real program hits it.
 
-### The kernel memoizes its own evaluation, transparently
+### The kernel memoizes its own evaluation, and a memo changes only resource verdicts
 
-**Decision.** The kernel carries evaluation memos — a per-definition unfold memo and weak-head memos for local-free terms — following the precedent of Lean's trusted `type_checker`. Every entry records what its computation consumed (budget steps and minted binder identities), and a hit charges exactly both, so the whole observable trajectory is bit-identical with the memos on or off; `kernel_memo_parity` holds that to account, and `Kernel::uncached` exists so it can.
+**Decision.** The kernel carries evaluation memos — a per-definition unfold memo and weak-head memos for local-free terms — following the precedent of Lean's trusted `type_checker`. Every entry records what its computation consumed, in budget steps and minted binder identities, and the identities are always replayed: a hit mints exactly what a recomputation would have, so every later identity lands where it would have. The *steps* are charged for a name-keyed unfold hit and not for a term-keyed one, and the two term-keyed tables are cleared wherever the budget is restored. So switching the memos off may move an exhaustion point and can move nothing else; `kernel_memo_parity` holds the semantic half to account, and `Kernel::uncached` exists so it can.
 
 **Rationale.** A metavariable heap or refinement store *injects* answers a term alone could not produce; a memo replays the kernel's own pure function of `(term, definitions)`, computed once. The measured cost of refusing even that was a 10× whole-prelude re-check.
+
+Charging a hit what a memo-free evaluator would have spent is a different thing from charging what the kernel did, and it was the second that the budget is supposed to bound. Recorded costs compound — a subterm hit twice per level makes the charge exponential in a structure the memos evaluate linearly — and the measured consequence was a 262 144-step budget declared exhausted after 6 547 actual reduction steps, with this kernel refusing at 8–16× the budget the elaborator needed for the same program. A free hit can only reduce what a judgment spends, so it can only turn an exhaustion refusal into an acceptance; a semantic refusal does not move, because it does not depend on the budget. Clearing the term-keyed tables at the declaration boundary is what makes the free hit deterministic rather than order-dependent, and it measured free. The name-keyed table keeps both its charge and its longer life: it is what makes certifying a whole module affordable, and a charged hit costs what recomputing would.
 
 ### A type is accepted by typing it, and reduction is total so that it can be
 

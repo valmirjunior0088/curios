@@ -456,3 +456,81 @@ fn a_case_equation_does_not_outlive_its_scope() {
     });
     assert_eq!(kernel.refinement_of(&stuck), None);
 }
+
+/// What reducing `term` costs `kernel`, read off the remaining budget on either side.
+fn spent(kernel: &mut Kernel, term: Term) -> u64 {
+    let (before, _) = kernel.consumption();
+    kernel.reduce_forced(term).expect("reduces");
+    let (after, _) = kernel.consumption();
+
+    before - after
+}
+
+/// A closed arithmetic tree `links` deep. Local-free, so it is a term the `whnf`/`forced` tables may key on, and its cost is proportional to its depth.
+fn chain(links: usize) -> Term {
+    (0..links).fold(nat(0), |accumulator, _| {
+        Term::intrinsic(Intrinsic::nat_add(accumulator, nat(1)))
+    })
+}
+
+/// A term-keyed memo hit spends nothing, so the same closed term reduced twice within one declaration costs its full price once and O(1) after.
+///
+/// This is what a hit charging the recorded cost of the computation it replaces got wrong. That charge prices what a memo-free evaluator would have spent rather than what this kernel did, and recorded costs compound — a subterm hit twice per level makes the charge exponential in a structure the memos evaluate linearly — which is how a 262 144-step budget came to be declared exhausted after 6 547 actual reduction steps.
+#[test]
+fn a_repeated_reduction_within_one_declaration_is_free() {
+    let mut kernel = kernel();
+    let term = chain(64);
+
+    let first = spent(&mut kernel, term.clone());
+    let second = spent(&mut kernel, term);
+
+    assert!(first > 1, "the first reduction is the one that pays");
+    assert_eq!(second, 0);
+}
+
+/// A free hit is only deterministic because the tables it reads live exactly as long as the budget does. Restoring one discards the other, so what a declaration spends is decided by the declaration rather than by which declarations were walked before it.
+#[test]
+fn restoring_the_budget_forgets_the_term_keyed_memos() {
+    let mut kernel = kernel();
+    let term = chain(64);
+
+    let first = spent(&mut kernel, term.clone());
+    kernel.restore_budget();
+    let after_boundary = spent(&mut kernel, term);
+
+    assert_eq!(after_boundary, first);
+}
+
+/// The name-keyed table is the one that is *not* cleared at a declaration boundary, and it stays charged for exactly that reason: an entry outliving a declaration may not also be free, or which declarations came first would decide what this one can afford.
+///
+/// So a hit costs what computing the body cost, and the second occurrence spends what the first did. That equality is also why the *survival* cannot be asserted here: a charged hit and a recomputation are the same number by construction, and only the wall clock separates them.
+#[test]
+fn an_unfold_hit_is_charged_what_it_replaces() {
+    let mut kernel = kernel();
+    let name = binder(0, "chain");
+    kernel.define(&name, &nat_type(), &chain(64), &monomorphic());
+    let occurrence = Term::free_var(&name);
+
+    let first = spent(&mut kernel, occurrence.clone());
+    let second = spent(&mut kernel, occurrence);
+
+    assert!(first > 1, "computing the body is what the first call pays");
+    assert_eq!(second, first);
+}
+
+/// Memoization may only *reduce* what a judgment spends. That is what makes free hits monotone against the kernel that shipped before them — no program that certified then can stop certifying now — and it is the half of the old bit-identical invariant this design keeps: a semantic refusal is budget-independent, so only an exhaustion point can move, and it can only move later.
+///
+/// The subject repeats a closed subterm, so the inequality is strict rather than merely satisfied.
+#[test]
+fn cached_spend_never_exceeds_uncached() {
+    let repeated = Term::intrinsic(Intrinsic::nat_add(chain(32), chain(32)));
+
+    let mut cached = kernel();
+    let mut uncached = Kernel::uncached(100_000);
+    uncached.set_local_floor(1_000);
+
+    let with_memos = spent(&mut cached, repeated.clone());
+    let without = spent(&mut uncached, repeated);
+
+    assert!(with_memos < without, "{with_memos} against {without}");
+}

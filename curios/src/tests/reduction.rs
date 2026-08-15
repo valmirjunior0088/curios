@@ -5,10 +5,13 @@
 //! Three arms divide that cost, and the division is the point: the middle arm performs the same number of transitions as the last one and constructs nothing, so whatever separates them is construction rather than machinery.
 //!
 //! Both carriers are measured, and `Bytes` covers the byte grain only. `Bits` shares `normalize_concat` and `PackedBin::concat` with it at a different generator width, so it would report the same shape eight times smaller per step; the two carriers here are the ones whose *representations* differ.
+//!
+//! A second probe reads the same programs the other way round. [`type_level_sequence_cost_measurements`] divides one checker's cost into machinery and construction; [`kernel_memo_charge_measurements`] holds the program fixed and divides the *checkers*, because the compile path puts one budget to both and a user meets whichever demands more.
 
 use {
     super::typecheck_within,
-    curios_pipeline::DEFAULT_STEP_BUDGET,
+    curios_pipeline::{DEFAULT_STEP_BUDGET, recheck_with_prelude, typecheck_with_prelude},
+    curios_text::{Entrypoint, RootSource},
     std::time::{Duration, Instant},
 };
 
@@ -100,24 +103,45 @@ fn list_growing(n: usize) -> String {
     )
 }
 
-/// The smallest power-of-two step budget `source` elaborates within, as `Ok`; `Err` carries the largest budget tried when none of them sufficed.
+/// The smallest power-of-two budget `accepts` answers `true` at, as `Ok`; `Err` carries the largest budget tried when none of them sufficed.
 ///
 /// The budget is per declaration and restored at every item boundary, so this reports the *heaviest declaration's* spend rather than a total — which is the quantity a budget default has to clear. A power of two rather than a bisection because the question is whether the count grows linearly in the iteration count, and a factor of two answers that; the failing probes abort as soon as the budget is spent, so only the succeeding one costs full price.
 ///
 /// The `Err` payload is the largest budget *tried*, not [`DEFAULT_STEP_BUDGET`]: the last power of two below the default is 524 288, so a program needing 600 000 steps elaborates fine at the default while every probe here fails. Reporting the default in that case would claim the program does not elaborate, which is the opposite of true.
-fn budget_floor(source: &str) -> Result<u64, u64> {
+fn floor(mut accepts: impl FnMut(u64) -> bool) -> Result<u64, u64> {
     let mut largest = 0;
 
     for budget in std::iter::successors(Some(1024u64), |budget| budget.checked_mul(2))
         .take_while(|budget| *budget <= DEFAULT_STEP_BUDGET)
     {
         largest = budget;
-        if typecheck_within(budget, source).is_ok() {
+        if accepts(budget) {
             return Ok(budget);
         }
     }
 
     Err(largest)
+}
+
+/// [`floor`] for the whole compile path, which puts the same budget to the elaborator and then to the kernel — so this reports whichever of the two demands more.
+fn budget_floor(source: &str) -> Result<u64, u64> {
+    floor(|budget| typecheck_within(budget, source).is_ok())
+}
+
+/// [`floor`] for elaboration alone, with the kernel not asked.
+fn elaborator_floor(entrypoint: &Entrypoint) -> Result<u64, u64> {
+    floor(|budget| typecheck_with_prelude(budget, entrypoint, RootSource::none()).is_ok())
+}
+
+/// [`floor`] for the kernel alone, over a module elaboration already produced.
+///
+/// Elaborating once at the default budget and re-certifying the result is what separates the two counters: the module does not change with the budget the kernel is then given, so the sweep measures the kernel's own spend rather than a compile that fails earlier.
+fn kernel_floor(entrypoint: &Entrypoint) -> Result<u64, u64> {
+    let (module, _obligations) =
+        typecheck_with_prelude(DEFAULT_STEP_BUDGET, entrypoint, RootSource::none())
+            .expect("the arm elaborates within the default budget");
+
+    floor(|budget| recheck_with_prelude(&module, budget).is_empty())
 }
 
 /// Render a [`budget_floor`] outcome for the table.
@@ -138,7 +162,9 @@ fn elaboration_time(source: &str) -> Duration {
     elapsed
 }
 
-/// **The regression guard the measurement above cannot be.** A probe is ignored, so nothing runs it; and the elaborator's reduction cache charges nothing on a hit, so it absorbs this entire class of defect and stays silent while the *kernel* — which charges a memo hit what the computation cost — refuses. That asymmetry is exactly how a quadratic length went unnoticed until a budget ran out, so the guard has to be an ordinary assertion at the ordinary budget.
+/// **The regression guard the measurement above cannot be.** A probe is ignored, so nothing runs it; and a cache hit charges nothing in either checker, so both absorb this entire class of defect and stay silent until a budget runs out. That is how a quadratic length went unnoticed, so the guard has to be an ordinary assertion at the ordinary budget.
+///
+/// It went unnoticed for longer than it had to because the two checkers disagreed about the *price* as well: the kernel charged a memo hit what the computation it replaced had cost, so it refused at 8–16× the elaborator's budget for the same program, and a construction defect reached a user as a kernel refusal rather than as either checker's honest cost. That asymmetry is gone — see [`kernel_memo_charge_measurements`] — and this guard is what remains needed once the two agree.
 ///
 /// Both carriers, at an iteration count that costs a small multiple of the default budget when a length is quadratic in the spine's depth and a small fraction of it when a length is a fold.
 #[test]
@@ -289,6 +315,99 @@ fn type_level_sequence_cost_measurements() {
                 growing_time.saturating_sub(fixed_time),
                 floor_cell(budget_floor(&fixed_source)),
                 floor_cell(budget_floor(&growing_source)),
+            );
+        }
+    }
+}
+
+/// What the kernel charges for a memo hit, read off the budget it forces.
+///
+/// ```sh
+/// cargo test --release --package curios -- --ignored --nocapture kernel_memo_charge_measurements
+/// ```
+///
+/// The two floors are the same program put to the two checkers separately, at a budget swept independently for each: [`elaborator_floor`] does not ask the kernel, and [`kernel_floor`] re-certifies a module elaboration already produced. Their ratio is the quantity of interest. Both checkers reduce the same terms and neither is the reference implementation of the other, so a *small* divergence is expected and says only that two evaluators differ; a large one says the two are pricing differently, and the compile path takes the larger of the two, so it is the kernel's number a user meets.
+///
+/// It asserts nothing beyond each arm elaborating at all — a measurement that fails is a measurement with an opinion.
+///
+/// # What it last printed
+///
+/// Taken **2026-08-15**, **release**, on `aarch64-apple-darwin`, after a `whnf`/`forced` memo hit stopped spending steps.
+///
+/// ```text
+/// Bytes
+///          n  floor elaborator  floor kernel  divergence
+///        800             16384         16384          1x
+///       1600             16384         32768          2x
+///       3200             32768         65536          2x
+///       6400             65536        131072          2x
+///
+/// List
+///          n  floor elaborator  floor kernel  divergence
+///        250              4096          8192          2x
+///        500              8192         16384          2x
+///       1000             16384         16384          1x
+///       2000             32768         32768          1x
+/// ```
+///
+/// # What it printed before it
+///
+/// The same command on the same machine, with a hit charged the whole recorded cost of the computation it replaced.
+///
+/// ```text
+/// Bytes
+///          n  floor elaborator  floor kernel  divergence
+///        800             16384        131072          8x
+///       1600             16384        262144         16x
+///       3200             32768        524288         16x
+///       6400             65536      > 524288           —
+///
+/// List
+///          n  floor elaborator  floor kernel  divergence
+///        250              4096         65536         16x
+///        500              8192        131072         16x
+///       1000             16384        262144         16x
+///       2000             32768        524288         16x
+/// ```
+///
+/// **The elaborator column did not move, and that is what identifies the change as the kernel's pricing.** Its hits were already free; every figure in it is identical on both sides. The kernel's fell by 8× or 16× at every rung that had a figure on both sides, and the `Bytes` ladder's last rung came back inside the sweep at all.
+///
+/// **The divergence is what a user met.** The compile path puts the same budget to both checkers, so `budget_floor` above — which reports the larger — was reporting the kernel's number throughout, and a program the elaborator accepted within its budget was refused for exhaustion by the kernel with no disagreement about any rule. That happened twice while the free monoid's measure was being developed.
+///
+/// **What no longer reproduces here.** The 8–16× was measured across every rung of both ladders and is now 1–2×, which is two evaluators differing rather than two price lists differing. A residual factor of two is expected and is not evidence of anything: the sweep doubles, so adjacent powers of two are one step apart.
+///
+/// # Whole-unit certification, which the clearing must not move
+///
+/// Free hits come with the `whnf`/`forced` tables cleared at every declaration boundary, and 1107 clearings over a module walk is the cost that had to be checked. It is `curios-prelude-archive`'s `stored_prelude_measurements` that takes this figure, and the retake is recorded there: **6.2 s before, 6.1 s after**, 0 refusals both times, and `kernel_memo_parity` passing unchanged on both sides.
+#[test]
+#[ignore = "measurement: reports what a memo hit costs the kernel rather than asserting"]
+fn kernel_memo_charge_measurements() {
+    type Build = fn(usize) -> String;
+    let carriers: [(&str, [usize; 4], Build); 2] = [
+        ("Bytes", [800, 1600, 3200, 6400], bytes_growing),
+        ("List", [250, 500, 1000, 2000], list_growing),
+    ];
+
+    for (carrier, ladder, growing) in carriers {
+        println!("\n{carrier}");
+        println!(
+            "    {:>6}  {:>16}  {:>12}  {:>10}",
+            "n", "floor elaborator", "floor kernel", "divergence",
+        );
+
+        for n in ladder {
+            let entrypoint = growing(n).parse::<Entrypoint>().expect("the arm parses");
+            let elaborator = elaborator_floor(&entrypoint);
+            let kernel = kernel_floor(&entrypoint);
+            let divergence = match (elaborator, kernel) {
+                (Ok(elaborator), Ok(kernel)) => format!("{}x", kernel / elaborator),
+                _ => "—".to_string(),
+            };
+
+            println!(
+                "    {n:>6}  {:>16}  {:>12}  {divergence:>10}",
+                floor_cell(elaborator),
+                floor_cell(kernel),
             );
         }
     }

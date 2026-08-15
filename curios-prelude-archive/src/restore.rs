@@ -300,7 +300,9 @@ mod tests {
         });
     }
 
-    /// Memoization is an evaluation strategy exactly as long as switching it off changes nothing. This runs the whole-prelude walk both ways and requires the verdict lists identical — the same instrument that validated the defunctionalized judgment (identical counts across profiles).
+    /// Memoization is an evaluation strategy exactly as long as switching it off changes no *semantic* verdict. This runs the whole-prelude walk both ways and requires the verdict lists identical — the same instrument that validated the defunctionalized judgment (identical counts across profiles).
+    ///
+    /// **The semantic half is what this is for, rather than what it happens to cover.** A term-keyed memo hit spends nothing, so an uncached walk spends at least as much as a cached one and the two may reach different *exhaustion* points; `curios-cert`'s `spend` module argues why that is the whole of what the design gives up. Comparing verdicts at one budget, over a corpus where nothing exhausts, is therefore exactly the surviving property — acceptance, and refusals that are not exhaustion, are budget-independent and must agree. Asserting equal exhaustion points here would be asserting the design that was replaced.
     ///
     /// The prelude is the subject because the property needs a large body of real terms to mean anything, and this is the only one the workspace has. That it walks from an empty environment rather than production's is beside the point here: what is under test is the memo, which both walks use.
     #[test]
@@ -352,6 +354,12 @@ mod tests {
     /// **The clone's old figure was a single sample, and that was the defect.** Taken once the same way it read 3.7 ms, which would have looked like a 2.6× regression from the compaction pass; averaged over 100 it is 2.0 ms. At one-to-four milliseconds the noise band swallows the signal, which is why this one is averaged and the others are not. The 1.4 ms it replaces was never wrong so much as never repeated.
     ///
     /// **The certification figure was owed a retake and got one.** It was taken before the kernel's level substitution changed, and the kernel calls it — so the doubt was right to raise, and the answer is that nothing moved. Roughly twelve seconds is what a whole-unit certification costs, and it is the number the caching half is designed against.
+    ///
+    /// # Certification, retaken 2026-08-15
+    ///
+    /// A partial retake, of the certification row alone, taken on both sides of the kernel's `whnf`/`forced` memo hits becoming free — which came with those two tables cleared at every declaration boundary, so 1107 clearings over this walk is what needed checking. **6.2 s before, 6.1 s after**, 0 refusals both times, and `kernel_memo_parity` passing on both sides. The clearing costs nothing measurable.
+    ///
+    /// **It also says the twelve seconds above is stale by roughly a factor of two, for reasons that are not this.** Both readings here are of the unchanged kernel and both are near six seconds. Nothing in that change could halve a whole-unit walk — it only ever *reduces* what a judgment spends, and this corpus exhausts nowhere — so the drift belongs to something between 2026-08-10 and now that the row above has not been re-run against. The rest of the table is not retaken and is not corrected on the strength of one row.
     #[test]
     #[ignore = "measurement: reports timings over the stored image rather than asserting"]
     fn stored_prelude_measurements() {

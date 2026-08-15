@@ -364,7 +364,7 @@ impl Kernel {
         self.globals = globals.clone();
     }
 
-    /// A kernel whose evaluation memos are off — every reduction re-derived from scratch. Exists for one purpose: asserting that memoization changes no verdict.
+    /// A kernel whose evaluation memos are off — every reduction re-derived from scratch. Exists for one purpose: asserting that memoization changes no *semantic* verdict. It may change a resource one, since a term-keyed hit is free and an uncached walk therefore spends at least as much; see the `spend` module's documentation for why that is the whole of what was given up.
     pub fn uncached(budget: u64) -> Self {
         Self {
             memos: Memos::new(false),
@@ -386,15 +386,13 @@ impl Kernel {
         self.memos.store_unfold(name, replay);
     }
 
-    /// The remembered weak-head reduct of a local-free `term`, per entry point, with the replayed computation's whole consumption charged.
-    pub(crate) fn whnf_hit(
-        &mut self,
-        term: &Term,
-        forced: bool,
-    ) -> Option<Result<Term, ReduceError>> {
+    /// The remembered weak-head reduct of a local-free `term`, per entry point, replayed for nothing.
+    ///
+    /// The one hit that cannot fail, because it spends no steps: the kernel did not perform this computation, and charging it what a memo-free evaluator would have spent is what made a budget run out on work nobody did. [`Spend::charge_nothing`] and [`Memos`] state the two halves of why that is safe.
+    pub(crate) fn whnf_hit(&mut self, term: &Term, forced: bool) -> Option<Term> {
         let replay = self.memos.whnf(term, forced)?;
 
-        Some(self.spend.charge(replay))
+        Some(self.spend.charge_nothing(replay))
     }
 
     /// Remember a local-free `term`'s weak-head reduct and its consumption.
@@ -643,7 +641,11 @@ impl Kernel {
         self.positions.drain()
     }
 
+    /// Begin a new declaration: the full budget back, and the term-keyed memos discarded.
+    ///
+    /// The two go together and neither is optional. A restored budget is what keeps one declaration's verdict off what the declarations before it spent; discarding the tables a hit is *free* on is what keeps it off what they warmed.
     pub fn restore_budget(&mut self) {
         self.spend.restore_budget();
+        self.memos.begin_declaration();
     }
 }
