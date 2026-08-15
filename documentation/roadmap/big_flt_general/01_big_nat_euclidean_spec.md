@@ -31,8 +31,8 @@ Define a dependent result carrying executable outputs and erased evidence:
 pub struct DivMod(dividend : BigNat, divisor : NonZero) : pub Type {
     quotient : BigNat,
     remainder : BigNat,
-    reconstruct : Eq(dividend, add(mul(quotient, divisor.magnitude), remainder)),
-    bounded : Lt(remainder, divisor.magnitude),
+    reconstruct : Eq(dividend, add(mul(quotient, divisor.value), remainder)),
+    bounded : Lt(remainder, divisor.value),
 }
 
 pub let divmod(dividend : BigNat, divisor : NonZero) -> DivMod(dividend, divisor)

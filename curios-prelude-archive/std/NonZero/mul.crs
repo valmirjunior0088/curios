@@ -31,11 +31,11 @@ rec raw_trim_cons(
 
 pub let mul(p: NonZero, q: NonZero) -> NonZero =
     NonZero {
-        magnitude = p.magnitude * q.magnitude,
+        value = p.value * q.value,
         non_zero =
             raw_trim_cons(
-                p.magnitude.rep,
-                q.magnitude.rep,
+                p.value.bits,
+                q.value.bits,
                 nz_trimmed(p),
                 p.non_zero,
                 nz_trimmed(q),
@@ -43,13 +43,13 @@ pub let mul(p: NonZero, q: NonZero) -> NonZero =
     };
 
 pub let comm(p: NonZero, q: NonZero) -> Eq(mul(p, q), mul(q, p)) =
-    NonZero/eq(mul(p, q), mul(q, p), BigNat/mul/comm(p.magnitude, q.magnitude));
+    NonZero/eq(mul(p, q), mul(q, p), BigNat/mul/comm(p.value, q.value));
 
 pub let assoc(p: NonZero, q: NonZero, r: NonZero) -> Eq(mul(mul(p, q), r), mul(p, mul(q, r))) =
     NonZero/eq(
         mul(mul(p, q), r),
         mul(p, mul(q, r)),
-        BigNat/mul/assoc(p.magnitude, q.magnitude, r.magnitude));
+        BigNat/mul/assoc(p.value, q.value, r.value));
 
 pub let distrib_l(
     p: NonZero,
@@ -59,4 +59,4 @@ pub let distrib_l(
     NonZero/eq(
         mul(p, add(q, r)),
         add(mul(p, q), mul(p, r)),
-        BigNat/mul/distrib_l(p.magnitude, q.magnitude, r.magnitude));
+        BigNat/mul/distrib_l(p.value, q.value, r.value));

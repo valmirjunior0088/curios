@@ -1,7 +1,7 @@
 use /std/{Nat, Bool, Bits, Str, Order, Eq, False, True, Eql, Cmp, Add, Sub, Mul, Show, Ord};
 use /std/Bool/{false_neq_true};
 use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
-use /std/BigNat/{BigNat, cong_cons2, cong_is_trimmed, cong_of_bits, cong_rep, cons_inj_head,
+use /std/BigNat/{BigNat, cong_bits, cong_cons2, cong_is_trimmed, cong_of_bits, cons_inj_head,
     cons_inj_tail, eq, is_trimmed, is_trimmed_cons, is_trimmed_of_canonical, maj3, nonempty,
     of_bits, refl_at, tail_is_trimmed, trim_of_trimmed, xor3, mod succ};
 
@@ -20,7 +20,7 @@ pub rec raw(x: Bits, y: Bits, carry: Bool) -> Bits =
     end;
 
 pub let add(a: BigNat, b: BigNat) -> BigNat =
-    of_bits(raw(a.rep, b.rep, false));
+    of_bits(raw(a.bits, b.bits, false));
 
 -- Facts about the full-adder bit functions above. They exist only to justify this ladder's commutativity and cancellation, so they live with the adder rather than with `xor3`/`maj3` themselves, which `sub` and `mul` share.
 let xor3_comm(a: Bool, b: Bool, c: Bool) -> Eq(xor3(a, b, c), xor3(b, a, c)) =
@@ -1191,35 +1191,35 @@ pub rec raw_trimmed(
     end;
 
 pub let comm(a: BigNat, b: BigNat) -> Eq(add(a, b), add(b, a)) =
-    cong_of_bits(raw_comm(a.rep, b.rep, false));
+    cong_of_bits(raw_comm(a.bits, b.bits, false));
 
 pub let assoc(a: BigNat, b: BigNat, c: BigNat) -> Eq(add(add(a, b), c), add(a, add(b, c))) =
     cong_of_bits(
         Eq/trans(
             cong_raw_l(
                 trim_of_trimmed(
-                    raw(a.rep, b.rep, false),
+                    raw(a.bits, b.bits, false),
                     raw_trimmed(
-                        a.rep,
-                        b.rep,
+                        a.bits,
+                        b.bits,
                         false,
-                        is_trimmed_of_canonical(a.rep, a.canonical),
-                        is_trimmed_of_canonical(b.rep, b.canonical))),
-                c.rep,
+                        is_trimmed_of_canonical(a.bits, a.canonical),
+                        is_trimmed_of_canonical(b.bits, b.canonical))),
+                c.bits,
                 false),
             Eq/trans(
-                raw_assoc(a.rep, b.rep, c.rep, false, false),
+                raw_assoc(a.bits, b.bits, c.bits, false, false),
                 cong_raw_r(
-                    a.rep,
+                    a.bits,
                     Eq/sym(
                         trim_of_trimmed(
-                            raw(b.rep, c.rep, false),
+                            raw(b.bits, c.bits, false),
                             raw_trimmed(
-                                b.rep,
-                                c.rep,
+                                b.bits,
+                                c.bits,
                                 false,
-                                is_trimmed_of_canonical(b.rep, b.canonical),
-                                is_trimmed_of_canonical(c.rep, c.canonical)))),
+                                is_trimmed_of_canonical(b.bits, b.canonical),
+                                is_trimmed_of_canonical(c.bits, c.canonical)))),
                     false))));
 
 pub rec raw_cancel_l(
@@ -1319,32 +1319,32 @@ pub let cancel_l(a: BigNat, b: BigNat, c: BigNat, p: Eq(add(a, b), add(a, c))) -
         b,
         c,
         raw_cancel_l(
-            a.rep,
-            b.rep,
-            c.rep,
+            a.bits,
+            b.bits,
+            c.bits,
             false,
-            is_trimmed_of_canonical(b.rep, b.canonical),
-            is_trimmed_of_canonical(c.rep, c.canonical),
+            is_trimmed_of_canonical(b.bits, b.canonical),
+            is_trimmed_of_canonical(c.bits, c.canonical),
             Eq/trans(
                 Eq/sym(
                     trim_of_trimmed(
-                        raw(a.rep, b.rep, false),
+                        raw(a.bits, b.bits, false),
                         raw_trimmed(
-                            a.rep,
-                            b.rep,
+                            a.bits,
+                            b.bits,
                             false,
-                            is_trimmed_of_canonical(a.rep, a.canonical),
-                            is_trimmed_of_canonical(b.rep, b.canonical)))),
+                            is_trimmed_of_canonical(a.bits, a.canonical),
+                            is_trimmed_of_canonical(b.bits, b.canonical)))),
                 Eq/trans(
-                    cong_rep(p),
+                    cong_bits(p),
                     trim_of_trimmed(
-                        raw(a.rep, c.rep, false),
+                        raw(a.bits, c.bits, false),
                         raw_trimmed(
-                            a.rep,
-                            c.rep,
+                            a.bits,
+                            c.bits,
                             false,
-                            is_trimmed_of_canonical(a.rep, a.canonical),
-                            is_trimmed_of_canonical(c.rep, c.canonical)))))));
+                            is_trimmed_of_canonical(a.bits, a.canonical),
+                            is_trimmed_of_canonical(c.bits, c.canonical)))))));
 
 pub let cancel_r(a: BigNat, b: BigNat, c: BigNat, p: Eq(add(b, a), add(c, a))) -> Eq(b, c) =
     cancel_l(a, b, c, Eq/trans(comm(a, b), Eq/trans(p, comm(c, a))));

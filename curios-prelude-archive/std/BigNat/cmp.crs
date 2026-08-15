@@ -23,7 +23,7 @@ pub rec raw(x: Bits, y: Bits) -> Order =
     end;
 
 pub let cmp(a: BigNat, b: BigNat) -> Order =
-    raw(a.rep, b.rep);
+    raw(a.bits, b.bits);
 
 pub let eql(a: BigNat, b: BigNat) -> Bool =
     match cmp(a, b) | eq() => true | _ => false end;
@@ -357,13 +357,13 @@ pub rec raw_trans(
     end;
 
 pub let refl(a: BigNat) -> Eq(cmp(a, a), Order/eq()) =
-    raw_refl(a.rep);
+    raw_refl(a.bits);
 
 pub let to_eq(a: BigNat, b: BigNat, p: Eq(cmp(a, b), Order/eq())) -> Eq(a, b) =
-    eq(a, b, raw_to_eq(a.rep, b.rep, p));
+    eq(a, b, raw_to_eq(a.bits, b.bits, p));
 
 pub let flip(a: BigNat, b: BigNat) -> Eq(cmp(b, a), Order/flip(cmp(a, b))) =
-    raw_flip(a.rep, b.rep);
+    raw_flip(a.bits, b.bits);
 
 pub let trans(
     a: BigNat,
@@ -372,4 +372,4 @@ pub let trans(
     p: Eq(cmp(a, b), Order/lt()),
     q: Eq(cmp(b, c), Order/lt()),
 ) -> Eq(cmp(a, c), Order/lt()) =
-    raw_trans(a.rep, b.rep, c.rep, p, q);
+    raw_trans(a.bits, b.bits, c.bits, p, q);

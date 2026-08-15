@@ -26,9 +26,9 @@ pub let of_big_nat(a: BigNat) -> BigInt =
 -- x - y for positive x, y: the sign is non_zero_cmp, the magnitude is the truncating BigNat difference of the larger minus the smaller.
 pub let pos_sub(x: NonZero, y: NonZero) -> BigInt =
     match NonZero/cmp(x, y)
-    | lt() => signed(true, y.magnitude - x.magnitude)
+    | lt() => signed(true, y.value - x.value)
     | eq() => BigInt/zero()
-    | gt() => signed(false, x.magnitude - y.magnitude)
+    | gt() => signed(false, x.value - y.value)
     end;
 
 pub let add(a: BigInt, b: BigInt) -> BigInt =
@@ -52,7 +52,7 @@ pub let abs(a: BigInt) -> BigInt =
     match a | neg(p) => BigInt/pos(p) | zero() => BigInt/zero() | pos(p) => BigInt/pos(p) end;
 
 pub let magnitude(a: BigInt) -> BigNat =
-    match a | neg(p) => p.magnitude | zero() => BigNat/zero | pos(p) => p.magnitude end;
+    match a | neg(p) => p.value | zero() => BigNat/zero | pos(p) => p.value end;
 
 pub let mul(a: BigInt, b: BigInt) -> BigInt =
     match (a, b)
@@ -105,16 +105,16 @@ pub let is_even(a: BigInt) -> Bool =
 
 pub let div2(a: BigInt) -> BigInt =
     match a
-    | neg(p) => neg(of_big_nat(BigNat/div2(p.magnitude)))
+    | neg(p) => neg(of_big_nat(BigNat/div2(p.value)))
     | zero() => BigInt/zero()
-    | pos(p) => of_big_nat(BigNat/div2(p.magnitude))
+    | pos(p) => of_big_nat(BigNat/div2(p.value))
     end;
 
 pub let to_str(a: BigInt) -> Str =
     match a
-    | neg(p) => Str/concat("-", BigNat/to_str(p.magnitude))
+    | neg(p) => Str/concat("-", BigNat/to_str(p.value))
     | zero() => "+0"
-    | pos(p) => Str/concat("+", BigNat/to_str(p.magnitude))
+    | pos(p) => Str/concat("+", BigNat/to_str(p.value))
     end;
 
 satisfy Eql(BigInt) {

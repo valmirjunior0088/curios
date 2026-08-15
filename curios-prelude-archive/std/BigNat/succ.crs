@@ -11,7 +11,7 @@ pub rec raw(x: Bits) -> Bits =
     end;
 
 pub let succ(a: BigNat) -> BigNat =
-    of_bits(raw(a.rep));
+    of_bits(raw(a.bits));
 
 pub let cong_raw(@s: Bits, @t: Bits, p: Eq(s, t)) -> Eq(raw(s), raw(t)) =
     Eq/cong(raw, p);

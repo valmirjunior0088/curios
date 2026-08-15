@@ -84,24 +84,24 @@ pub rec trim_non_zero(
 
 pub let add(p: NonZero, q: NonZero) -> NonZero =
     NonZero {
-        magnitude = p.magnitude + q.magnitude,
+        value = p.value + q.value,
         non_zero =
             raw_non_zero(
-                BigNat/add/raw(p.magnitude.rep, q.magnitude.rep, false),
+                BigNat/add/raw(p.value.bits, q.value.bits, false),
                 BigNat/add/raw_trimmed(
-                    p.magnitude.rep,
-                    q.magnitude.rep,
+                    p.value.bits,
+                    q.value.bits,
                     false,
                     nz_trimmed(p),
                     nz_trimmed(q)),
-                raw_cons(p.magnitude.rep, q.magnitude.rep, false, p.non_zero)),
+                raw_cons(p.value.bits, q.value.bits, false, p.non_zero)),
     };
 
 pub let comm(p: NonZero, q: NonZero) -> Eq(add(p, q), add(q, p)) =
-    NonZero/eq(add(p, q), add(q, p), BigNat/add/comm(p.magnitude, q.magnitude));
+    NonZero/eq(add(p, q), add(q, p), BigNat/add/comm(p.value, q.value));
 
 pub let assoc(p: NonZero, q: NonZero, r: NonZero) -> Eq(add(add(p, q), r), add(p, add(q, r))) =
     NonZero/eq(
         add(add(p, q), r),
         add(p, add(q, r)),
-        BigNat/add/assoc(p.magnitude, q.magnitude, r.magnitude));
+        BigNat/add/assoc(p.value, q.value, r.value));

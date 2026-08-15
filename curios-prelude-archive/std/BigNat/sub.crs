@@ -30,5 +30,5 @@ pub rec raw(x: Bits, y: Bits, borrow: Bool) -> {Bits, Bool} =
     end;
 
 pub let sub(a: BigNat, b: BigNat) -> BigNat =
-    let (bits, borrow) = raw(a.rep, b.rep, false);
+    let (bits, borrow) = raw(a.bits, b.bits, false);
     match borrow | true => zero | false => of_bits(bits) end;
