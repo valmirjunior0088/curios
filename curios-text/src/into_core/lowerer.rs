@@ -135,9 +135,13 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     //
     // # What this does not fix, and what would
     //
-    // Reduction is still linear — measured at about 16 steps per byte against the derivation's 42, so a literal's ceiling against the default budget moves from roughly 23KiB to roughly 61KiB rather than away. Removing it needs one of two things, and both are deferred deliberately until the trusted-base work settles:
+    // Reduction is still linear in the literal's length, and that is now the whole of what bounds one. A character costs **1 088 units, of which 1 024 are the frame `curios-core`'s `Cost::FRAME` charges for the reduction level the scan nests per byte** — so a literal is priced at very nearly one guarded reduction level each, and the ceiling against the default budget is about **16 700 characters**. Both checkers report that figure to within 0.1%; `curios`' `str_literal_cost_measurements` carries the split and `a_str_literal_costs_about_one_frame_per_character` asserts it.
     //
-    // - Full reflection: restate `Valid` as `Eq(scan_from(lead, b), lead)` and rewrite `/std/Str/utf8`'s lemmas — every one of which recurses on the derivation — as lemmas about the fold's algebra. That deletes the family this bridge preserves, and it is a rewrite of that module rather than an edit to it.
+    // **Which half of the compiler a figure belongs to is stated here because getting that wrong is how the previous note decayed.** It quoted "about 16 steps per byte against the derivation's 42", and 16 was the elaborator's share of a transition count while the number deciding whether a program compiled was the kernel's — so the ceiling it named was five to ten times what a compiler actually accepted. The figures above are units of priced work, they are the *same* on both sides, and each is reproduced by a probe rather than by prose.
+    //
+    // Removing the linearity needs one of two things, and both are deferred deliberately until the trusted-base work settles:
+    //
+    // - Full reflection: restate `Valid` as `Eq(scan_from(lead, b), lead)` and rewrite `/std/Str/utf8`'s lemmas — every one of which recurses on the derivation — as lemmas about the fold's algebra. That deletes the family this bridge preserves, and it is a rewrite of that module rather than an edit to it. It does not help a literal on its own: checking one still decides the same equation, so the scan remains.
     // - A native scan intrinsic folded over packed `Bytes`, which would make the check O(1) steps. That moves a UTF-8 validator into the trusted base, which is the wrong direction while the kernel is being made load-bearing.
     pub(super) fn str_literal(&self, bytes: &[u8]) -> curios_core::Term {
         let packed = curios_core::Term::intrinsic(curios_core::Intrinsic::Bin(

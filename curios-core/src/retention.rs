@@ -22,10 +22,16 @@ use super::Cost;
 ///
 /// | What | Retained |
 /// | --- | --- |
-/// | certifying one whole unit — the kernel's three memo tables | 24 444 443 units |
+/// | certifying one whole unit — the kernel's three memo tables | 108 530 138 units |
 /// | re-erasing one whole unit — the elaborator's reduction cache | 3 524 199 units |
 ///
-/// This is forty times the larger of them. That is a real ceiling rather than an unreachable one — at the eight logical bytes a unit names, it bounds retained storage at about eight gigabytes — while leaving the fixed prelude, which is the heaviest thing the compiler ever holds, using two and a half percent of it.
+/// This is nine times the larger of them. That is a real ceiling rather than an unreachable one — at the eight logical bytes a unit names, it bounds retained storage at about eight gigabytes — while leaving the fixed prelude, which is the heaviest thing the compiler ever holds, using eleven percent of it.
+///
+/// **The kernel's figure was 24 444 443 until its memo was made to reach every reduction level rather than only the two `Reducer` entry points.** Four and a half times the entries for a 5.3× drop in what a `Str` literal's check charges, and no measurable change in process memory — the counter double-counts payload shared between entries, deliberately, which is why it moved so much further than the machine did.
+///
+/// **What this does not bound is the *shape*, and the shape comes from unforced accumulators rather than from anything about this quota.** Arguments are substituted unreduced, so a tail recursion threading an accumulator it never inspects builds a term one link deeper per element — `/syn/Str`'s scan is `scan_from(step(h, s), t)`, and after `k` bytes `s` is a chain of `k` unevaluated `step` applications. Every memo entry keyed on a term containing that chain therefore has a footprint of O(k), and there is one per element: a `Str` literal of 4 000 characters consumes 774 million of these units by itself, and one of 8 000 exhausts the allowance and degrades into a cold cache mid-declaration.
+///
+/// The model is ~25 units a link over an average chain of half the walk, and it predicts every rung of that ladder to within 4%. It is on both checkers, and it is not a quota set too low — 4 000 characters is not a large literal. `curios`' `str_literal_cost_measurements` records the ladder and the cliff; what to do about the accumulator is open.
 pub const DEFAULT_RETENTION_QUOTA: u64 = 1_000_000_000;
 
 /// What a compilation has left to retain.

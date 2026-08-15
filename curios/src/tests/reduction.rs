@@ -10,7 +10,11 @@
 
 use {
     super::typecheck_within,
-    curios_pipeline::{DEFAULT_STEP_BUDGET, recheck_with_prelude, typecheck_with_prelude},
+    curios_core::{Consumption, Cost},
+    curios_pipeline::{
+        DEFAULT_STEP_BUDGET, recheck_with_prelude, recheck_with_prelude_measured,
+        typecheck_with_prelude, typecheck_with_prelude_measured,
+    },
     curios_text::{Entrypoint, RootSource},
     std::time::{Duration, Instant},
 };
@@ -453,6 +457,208 @@ fn kernel_memo_charge_measurements() {
             );
         }
     }
+}
+
+/// A `Str` literal of `n` identical ASCII characters, bound and used `uses` times.
+///
+/// The literal lowers to `Str { bytes = <Bytes>, valid = of_scan_eq(b, refl_scan(b)) }`, and checking that proof makes conversion decide `scan_from(lead, b) ≡ lead` — a `rec` unfold, a `Bytes` peel, a `Byte/to_nat`, `classify`'s ladder and an inductive match, per byte. Nothing else in the program costs anything, so what a floor over this reports is the check.
+fn str_literal(n: usize, uses: usize) -> String {
+    let literal = "0123456789".repeat(n.div_ceil(10))[..n].to_string();
+    let used = (0..uses)
+        .map(|index| format!("let use{index} = Str/to_bytes(s);\n"))
+        .collect::<String>();
+
+    format!(
+        r#"
+        use /std/{{Str, Bytes, Handle}};
+        let s : Str = "{literal}";
+        {used}
+        /std/print("ok")
+        "#
+    )
+}
+
+/// The same `n` bytes written as a raw `Bytes` literal — the derivation-free control, and the whole of what a `Str` literal would cost if its validity were not checked by running a fold.
+fn bytes_literal(n: usize) -> String {
+    let entries = (0..n)
+        .map(|index| format!("\\{:02x}", b'0' + (index % 10) as u8))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    format!(
+        r#"
+        use /std/{{Bytes, Nat, Handle}};
+        let b : Bytes = x[{entries}];
+        /std/print(Nat/to_str(Bytes/len(b)))
+        "#
+    )
+}
+
+/// What both checkers spend on `source`, each reporting its own heaviest declaration, beside what the kernel's walk retained.
+///
+/// Reported rather than bisected. A budget floor found from outside costs one whole compile per probe, reports only the larger of the two checkers, and cannot separate depth from the rest at all — which is the separation that matters, because depth is the one row whose size is set by the reduction *strategy* rather than by the term.
+///
+/// Retention rides along because the two are coupled from one side: a memo that cannot be stored is re-derived against the *work* budget, so a program large enough to exhaust the compilation's retention allowance stops being linear in what it spends. That coupling is invisible in the work figures alone, and reading them without it is how a cliff gets mistaken for a cost model.
+fn declaration_cost(source: &str) -> (Consumption, u64, Consumption, u64) {
+    let entrypoint = source.parse::<Entrypoint>().expect("the program parses");
+    let (module, _obligations, elaborator, elaborator_retained) =
+        typecheck_with_prelude_measured(DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none())
+            .expect("the program elaborates within the default budget");
+    let (verdicts, kernel) = recheck_with_prelude_measured(&module, DEFAULT_STEP_BUDGET);
+
+    assert!(verdicts.is_empty(), "the kernel accepts it: {verdicts:?}");
+
+    (
+        elaborator,
+        elaborator_retained,
+        kernel.heaviest_declaration(),
+        kernel.retained(),
+    )
+}
+
+/// One row of the table below: what a program cost each checker, split into depth and everything else.
+fn cost_row(label: &str, source: &str) {
+    let (elaborator, elaborator_retained, kernel, retained) = declaration_cost(source);
+    let divergence = match elaborator.units() {
+        0 => 0.0,
+        units => kernel.units() as f64 / units as f64,
+    };
+
+    println!(
+        "  {label:<22}  {:>10}  {:>6}  {:>9}  {:>12}  {:>10}  {:>6}  {:>9}  {:>12}  {:>6.1}x",
+        elaborator.units(),
+        elaborator.peak_depth(),
+        elaborator.other_units(),
+        elaborator_retained,
+        kernel.units(),
+        kernel.peak_depth(),
+        kernel.other_units(),
+        retained,
+        divergence,
+    );
+}
+
+/// What a `Str` literal costs to check, and which row of the price list it spends on.
+///
+/// ```sh
+/// cargo test --release --package curios -- --ignored --nocapture str_literal_cost_measurements
+/// ```
+///
+/// This is the probe [`a_str_literal_compiles_up_to_its_measured_ceiling`] guards. It asserts only that each arm checks at all — a measurement that fails is a measurement with an opinion — and the assertion that a regression has to trip lives in that ordinary test instead.
+///
+/// # What it last printed
+///
+/// Taken **2026-08-15**, **release**, on `aarch64-apple-darwin`. `depth` is the peak guarded reduction level; `other` is what the declaration spent on everything but the frame row, which is the peak times [`Cost::FRAME`] exactly because that row charges once per new peak. The first four columns are the elaborator's, the next four the kernel's.
+///
+/// ```text
+///   program                      units   depth      other      retained       units   depth      other      retained  kernel/elab
+///   Str literal, n=250          278374     255      17254       3186474      279697     256      17553       3360434     1.0x
+///   Str literal, n=500          550374     505      33254      12366375      550947     506      32803      12541116     1.0x
+///   Str literal, n=1000        1094374    1005      65254      48819921     1093447    1006      63303      48996224     1.0x
+///   Str literal, n=2000        2182374    2005     129254     194102046     2178447    2006     124303     194281474     1.0x
+///   Str literal, n=4000        4358374    4005     257254     774166296     4348447    4006     246303     774351974     1.0x
+///   Str literal, n=8000       11261744    8005    3064624    1000000000    14422506    8006    6224362     999999999     1.3x
+///   Str n=500, 1 uses           550374     505      33254      12366576      550947     506      32803      12541224     1.0x
+///   Str n=500, 3 uses           550374     505      33254      12366576      550947     506      32803      12541224     1.0x
+///   Bytes literal, n=500          5064       2       3016         17331       17992       7      10824        188255     3.6x
+///   Str n=500, sliced           550374     505      33254      12357908      550947     506      32803      12532062     1.0x
+/// ```
+///
+/// # What the figures decide
+///
+/// **A character costs 1 088 units and 1 024 of them are the frame row**, so a literal's price is very nearly one guarded reduction level per byte and nothing else. The ceiling that follows, measured by bisecting the length at the default budget, is **between 16 625 and 16 750 characters**; [`a_str_literal_costs_about_one_frame_per_character`] is the assertion that holds it.
+///
+/// **The two checkers agree to 1.0× at every size inside that range**, at the same peak depth to within one level. They did not: the kernel charged 5.3× the elaborator for the identical reduction, because its memo was consulted only at the two `Reducer` entry points while fifteen internal `whnf` calls re-derived what the table already held. `whnf_within` probes at every level now, which is what the elaborator's reducer always did, and the whole of the gap was that.
+///
+/// **Use count is flat**, which is what spec 01's first milestone bought and this keeps honest.
+///
+/// **Slicing is not what costs.** `Str/slice` supplies its `Bytes/slice` bounds with `@drop_width_within` rather than leaving a decided proposition to be discharged by reducing its subject, so the sliced arm is the bare arm to within 0.1% — the literal's validity check is the whole price, and the natural guess that a large literal fails *to be sliced* is wrong.
+///
+/// **`Str` costs 31× `Bytes` at the same length** (550 947 against 17 992), and that gap is the UTF-8 derivation. It is the figure that makes an `include_bytes!` analogue a decision rather than a convenience.
+///
+/// # The second regime, and why the model has one
+///
+/// **Retention is quadratic in the literal's length** — 3.2M, 12.5M, 49.0M, 194.3M, 774.4M across the ladder, a clean 4× per doubling. The cause is the scan's *accumulator*, not the bytes it has left: arguments are substituted unreduced, `scan_from` matches only on `b`, so after `k` bytes the state is a chain of `k` unevaluated `step` applications and every entry keyed on a term containing it has a footprint of O(k). At ~25 units a link over an average chain of half the walk that predicts 25 000 units per byte at n = 500 against **25 082 measured**, and every other rung to within 4%.
+///
+/// At n = 8000 the compilation's [`DEFAULT_RETENTION_QUOTA`](curios_core::DEFAULT_RETENTION_QUOTA) is exhausted, storage stops, and the reduction it would have served is re-derived against the work budget: `other` jumps 12× on the elaborator and 25× on the kernel, and the two stop agreeing.
+///
+/// So the linear model holds up to about n = 4 500 and the ceiling above sits past the cliff, in the degraded regime. Both figures are real and the boundary between them is stated rather than averaged over. **This is on both checkers and predates the memo change on the elaborator, which has always probed at every level** — the change made the kernel match it in this respect too.
+///
+/// Closing it means not building the chain, which is a question about reduction strategy rather than about strings or about memo policy. The same unforced accumulator is what puts 1 024 of a character's 1 088 units in the frame row: measured over a fold with no strings in it, forcing the accumulator each step costs 59 units a byte against 1 070 for leaving it lazy, and carrying no accumulator at all costs 34.
+#[test]
+#[ignore = "measurement: reports what a Str literal costs rather than asserting"]
+fn str_literal_cost_measurements() {
+    println!(
+        "\n  {:<22}  {:>10}  {:>6}  {:>9}  {:>12}  {:>10}  {:>6}  {:>9}  {:>12}  {:>7}",
+        "program",
+        "units",
+        "depth",
+        "other",
+        "retained",
+        "units",
+        "depth",
+        "other",
+        "retained",
+        "kernel/elab",
+    );
+
+    for n in [250, 500, 1000, 2000, 4000, 8000] {
+        cost_row(&format!("Str literal, n={n}"), &str_literal(n, 0));
+    }
+
+    // Flat in use count is what spec 01's first milestone bought; a regression here is that milestone coming undone.
+    for uses in [1, 3] {
+        cost_row(&format!("Str n=500, {uses} uses"), &str_literal(500, uses));
+    }
+
+    // The control: the same bytes with no derivation over them.
+    cost_row("Bytes literal, n=500", &bytes_literal(500));
+
+    // Slicing supplies its bounds with `@drop_width_within` rather than leaving a decided proposition to reduce, so this should sit within a few percent of the bare literal — the check is the cost, not the slice.
+    cost_row(
+        "Str n=500, sliced",
+        &str_literal(500, 0).replace(r#"/std/print("ok")"#, r#"/std/print(Str/slice(s, 0, 10))"#),
+    );
+}
+
+/// **The guard [`str_literal_cost_measurements`] cannot be**, because a probe is ignored and nothing runs it.
+///
+/// What it holds is the shape of a literal's cost rather than a number: one reduction level per character on *both* checkers, a per-character price at the frame row and not a multiple of it, and neither checker paying a multiple of the other for the same reduction. Each of those failed within living memory, and each failure reached a user as a budget refusal naming nothing about strings.
+///
+/// The bound is stated against [`Cost::FRAME`] rather than as a literal, because the quantity it is really asserting is *that a character costs about one guarded reduction level and little else*. A per-character price well above the frame means reduction is re-deriving what it could have remembered — which is exactly what the kernel did before its memo reached every level, at 5.3× the elaborator for the same program at the same depth.
+///
+/// The ceiling this implies, measured 2026-08-15 by bisecting the length at the default budget: **between 16 625 and 16 750 characters**. `str_literal_cost_measurements` carries the table and the two regimes behind it.
+#[test]
+fn a_str_literal_costs_about_one_frame_per_character() {
+    let (elaborator_small, _, kernel_small, _) = declaration_cost(&str_literal(500, 0));
+    let (elaborator_large, _, kernel_large, _) = declaration_cost(&str_literal(1000, 0));
+
+    // A literal's UTF-8 scan nests one reduction level per byte, on both sides. That is what a literal's ceiling is made of, so it is the first thing a regression would move.
+    assert_eq!(kernel_large.peak_depth() - kernel_small.peak_depth(), 500);
+    assert_eq!(
+        elaborator_large.peak_depth() - elaborator_small.peak_depth(),
+        500
+    );
+
+    let per_character = (kernel_large.units() - kernel_small.units()) / 500;
+    let frame = Cost::FRAME.get();
+    assert!(
+        (frame..frame + frame / 4).contains(&per_character),
+        "a character costs {per_character} units against a {frame}-unit frame, so the ceiling is about {} characters",
+        DEFAULT_STEP_BUDGET / per_character.max(1),
+    );
+
+    // The two checkers reduce the same terms and neither is the other's reference implementation, so they are not required to agree exactly — but a *multiple* is two price lists differing rather than two evaluators differing, and the compile path puts one budget to both.
+    assert!(
+        kernel_large.units() < elaborator_large.units() * 2,
+        "kernel {} against elaborator {}",
+        kernel_large.units(),
+        elaborator_large.units(),
+    );
+
+    // Flat in use count: what spec 01's first milestone bought, and the defect this specification was opened on.
+    let (_, _, kernel_used, _) = declaration_cost(&str_literal(500, 3));
+    assert_eq!(kernel_used.units(), kernel_small.units());
 }
 
 /// **The construction-dominated fixture the acceptance criteria ask for**, and it is deliberately not the accumulate-then-slice shape above: capping fusion made that program's construction linear, so it now refuses on ordinary step cost like any other long computation and would be testing the wrong thing.
