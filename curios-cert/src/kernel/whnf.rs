@@ -22,16 +22,7 @@ use {
 /// The kernel's reduction strategy: everything unfolds, and what a local-free term unfolds to is remembered — see the `memos` and `spend` modules for what that does and does not concede, and for why a hit on this entry point is free while a definition unfold's is charged.
 impl Reducer for Kernel {
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
-        if let Some(replayed) = self.whnf_hit(&term, false) {
-            return Ok(replayed);
-        }
-
-        let before = self.consumption();
-        let reduct = whnf(self, term.clone())?;
-        let replay = self.replay_since(reduct.clone(), before);
-        self.whnf_store(term, false, replay);
-
-        Ok(reduct)
+        whnf(self, term)
     }
 
     fn reduce_forced(&mut self, term: Term) -> Result<Term, ReduceError> {
@@ -72,6 +63,17 @@ pub(crate) fn whnf(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError>
 }
 
 fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
+    // **The memo is consulted here, at every level, and not only where something outside reduction asks for one.**
+    //
+    // It used to sit on the two `Reducer` methods alone, so the fifteen internal calls below — a scrutinee, an application's head, each turn of `force`'s loop, `expose_rec_tail`, `unfold_spelling` — re-derived what the table already held, and `reduce_forced` re-derived its own weak-head half because it probed only the `forced` table before calling this directly. The elaborator's reducer has always probed at its own entry and recursed through that same entry, so the two strategies differed in reach rather than in rule; measured over a `Str` literal's UTF-8 scan the kernel charged 72× what the elaborator did for the *same* reduction, at the same peak depth, and the whole of that gap was this.
+    //
+    // The gate is unchanged and is what makes reaching further safe: [`Memos::storable`](super::Memos) admits only a local-free term, on the lookup as well as the store, so every new site here is protected by the same test the two old ones were.
+    if let Some(replayed) = kernel.whnf_hit(&term, false) {
+        return Ok(replayed);
+    }
+
+    let entry = term.clone();
+    let before = kernel.consumption();
     let mut term = term;
 
     loop {
@@ -115,7 +117,13 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
                 // A stuck form standing under an arm's case equation *is* that case's value, definitionally; continue from it. This is the *second* of the two probe points, and it does not merge with the one above: that one asks about a term before it is taken apart, this one about a form reduction produced, and routing this one back to the top would re-decompose a normal form forever.
                 match kernel.refinement_of(&value) {
                     Some(refined) => term = refined,
-                    None => return Ok(value),
+                    None => {
+                        // Remembered under the term this level was *entered* with, not the one the loop finished on — the same key the probe above will present.
+                        let replay = kernel.replay_since(value.clone(), before);
+                        kernel.whnf_store(entry, false, replay);
+
+                        return Ok(value);
+                    }
                 }
             }
         }
