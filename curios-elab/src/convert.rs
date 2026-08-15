@@ -2138,7 +2138,7 @@ impl Convert {
                     // Opening a projection's tail is the identity on it, so the step available here is the delta one: on to the member's body.
                     let stepped = match rec.as_proj() {
                         Some(index) => rec.group.member_body(index),
-                        None => unfold_rec(context, rec),
+                        None => unfold_rec(context, rec)?,
                     };
                     self.enqueue(type_, stepped, other.into());
                     true
@@ -2146,7 +2146,7 @@ impl Convert {
                 (other, Subterm::Rec(rec)) => {
                     let stepped = match rec.as_proj() {
                         Some(index) => rec.group.member_body(index),
-                        None => unfold_rec(context, rec),
+                        None => unfold_rec(context, rec)?,
                     };
                     self.enqueue(type_, other.into(), stepped);
                     true

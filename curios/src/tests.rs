@@ -75,9 +75,9 @@ fn typecheck(source: &str) -> Result<(), String> {
     typecheck_within(DEFAULT_STEP_BUDGET, source)
 }
 
-/// [`typecheck`] under a stated step budget, for a program whose point is that elaboration *evaluates* something.
+/// [`typecheck`] under a stated work budget, for a program whose point is that elaboration *evaluates* something.
 ///
-/// The budget is the only bound reduction has — it counts steps, and the memory a reduction allocates as it goes is bounded by nothing — so a fixture that would otherwise run a program's whole computation at the type level states a small budget and asserts the refusal instead. Sizing it is the fixture's job: large enough that the rest of the program elaborates, small enough that the evaluation under test cannot finish.
+/// The budget is the only bound reduction has, and it counts *priced work*: a transition costs one unit and a construction costs what it builds, so the memory a reduction allocates as it goes is bounded by the same number that bounds how often it moves. A fixture that would otherwise run a program's whole computation at the type level states a small budget and asserts the refusal instead. Sizing it is the fixture's job: large enough that the rest of the program elaborates, small enough that the evaluation under test cannot finish.
 fn typecheck_within(budget: u64, source: &str) -> Result<(), String> {
     let entrypoint = source
         .parse::<Entrypoint>()

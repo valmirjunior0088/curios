@@ -77,7 +77,7 @@ fn recursive_application_stays_folded_until_its_result_is_demanded() {
     let Subterm::Rec(rec) = Term::unwrap_or_clone(neutral) else {
         unreachable!()
     };
-    let opened = unfold_rec(&mut context, rec);
+    let opened = unfold_rec(&mut context, rec).expect("opening a group's tail is affordable");
     let reduced = reduce(&mut context, opened).expect("ordinary reduction should terminate");
     assert!(matches!(
         &*reduced,

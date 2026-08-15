@@ -71,10 +71,18 @@ enum Reduce {
 }
 
 /// Open a `rec` group's tail over structural folded member terms. This is a pure binder operation: it neither mints names nor mutates the context.
-pub(crate) fn unfold_rec(_context: &mut Context, rec: Rec) -> Term {
+pub(crate) fn unfold_rec(context: &mut Context, rec: Rec) -> Result<Term, ReduceError> {
     let members = rec.group.members();
+    // The member vector, the ref vector over it, and the opening — one substitution pass per member.
+    context.spend(
+        Cost::collection(members.len() as u64)
+            .saturating_mul(2)
+            .saturating_add(Cost::term(1).saturating_mul(members.len() as u64)),
+    )?;
+
     let refs = members.iter().collect::<Vec<_>>();
-    rec.tail.open(&refs)
+
+    Ok(rec.tail.open(&refs))
 }
 
 /// Expose only `Rec` binding syntax, without unfolding a selected member's fixed point. This strips down to the projection `rec f = ...; f` denotes, preserving the folded recursive call as the canonical neutral.
@@ -87,7 +95,7 @@ fn expose_rec_tail(context: &mut Context, mut term: Term) -> Result<Term, Reduce
 
         match Term::unwrap_or_clone(term) {
             Subterm::Rec(rec) => {
-                let tail = unfold_rec(context, rec);
+                let tail = unfold_rec(context, rec)?;
                 term = reduce(context, tail)?;
             }
             other => return Ok(other.into()),
@@ -116,7 +124,12 @@ pub(crate) fn unfold_rec_apply(
     let Subterm::Func(Func { telescope, .. }) = Term::unwrap_or_clone(body) else {
         return Ok(None);
     };
+    context.spend(
+        Cost::collection(params.len() as u64)
+            .saturating_add(Cost::term(1).saturating_mul(params.len() as u64)),
+    )?;
     let param_refs = params.iter().collect::<Vec<_>>();
+
     Ok(Some(telescope.open(&param_refs)))
 }
 
@@ -142,7 +155,7 @@ fn force_rec(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
 
         match Term::unwrap_or_clone(term) {
             Subterm::Rec(rec) => {
-                let tail = unfold_rec(context, rec);
+                let tail = unfold_rec(context, rec)?;
                 term = reduce(context, tail)?;
             }
             Subterm::Apply(apply) => match unfold_rec_apply(context, apply)? {
@@ -310,6 +323,13 @@ fn reduce_proj(context: &mut Context, proj: Proj) -> Result<Reduce, ReduceError>
 fn reduce_func_eta(context: &mut Context, func: Func) -> Result<Reduce, ReduceError> {
     let n = func.telescope.len();
 
+    // Three arity-sized vectors and one opening, charged whether or not the probe succeeds — the probe is what allocates.
+    context.spend(
+        Cost::collection(n as u64)
+            .saturating_mul(3)
+            .saturating_add(Cost::term(1).saturating_mul(n as u64)),
+    )?;
+
     let freshs = (0..n).map(|_| context.fresh(None)).collect::<Vec<_>>();
 
     let ys = freshs.iter().map(Term::free_var).collect::<Vec<_>>();
@@ -448,8 +468,16 @@ fn reduce_match(head: Term, forced: Term, motive: Scope<Many>, cases: Cases) -> 
     }
 }
 
-fn reduce_let(context: &mut Context, let_: Let) -> Reduce {
+fn reduce_let(context: &mut Context, let_: Let) -> Result<Reduce, ReduceError> {
     // Bind each value as a fresh definition and continue with the tail opened over those definitions — an environment step (like `unfold_rec`) rather than a substitution, so no value is copied into the tail. Left to right: a `let` is non-recursive, so binding `i` sees only labels `0..i`, which are already defined; each value is released against just that prefix. The definitions land in the enclosing context and outlive this call; their labels are entropy-fresh, so nothing collides.
+    // Three vectors the length of the binding run, and one release per binding against the prefix before it. The kernel's zeta is triangular here because it copies each value into every use; this one is linear, and the two are charged for what each actually builds.
+    let bindings = let_.bindings.len() as u64;
+    context.spend(
+        Cost::collection(bindings)
+            .saturating_mul(3)
+            .saturating_add(Cost::term(1).saturating_mul(bindings)),
+    )?;
+
     let labels = let_
         .tail
         .hint_iter()
@@ -463,7 +491,7 @@ fn reduce_let(context: &mut Context, let_: Let) -> Reduce {
         context.define(label, &binding.value().release(&label_refs[..i]), None);
     }
 
-    Reduce::Continue(let_.tail.open(&label_refs))
+    Ok(Reduce::Continue(let_.tail.open(&label_refs)))
 }
 
 fn reduce_var(context: &Context, var: Var) -> Reduce {
@@ -512,7 +540,12 @@ fn reduce_universe_inst(context: &Context, instance: UniverseInst) -> Result<Red
 ///
 /// What that changes, measured: a runaway type-level computation used to meet the native stack at a couple of hundred levels and abort, and now runs until the budget stops it, allocating as it goes — a deep accumulator reached 233 MiB where it previously died. The budget bounds *steps*, so nothing bounds that memory; the trade is deliberate, because a term's acceptance should not depend on how much stack the host handed the process.
 pub(crate) fn reduce(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
-    recurse(|| reduce_within(context, term))
+    // The level itself, charged when it is a new peak — the kernel's `whnf` charges the same row the same way. See [`Context::enter_level`] and [`Cost::FRAME`].
+    context.enter_level()?;
+    let reduct = recurse(|| reduce_within(context, term));
+    context.leave_level();
+
+    reduct
 }
 
 fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceError> {
@@ -569,7 +602,7 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
                 Subterm::Apply(apply) => reduce_apply(context, apply)?,
                 Subterm::Proj(proj) => reduce_proj(context, proj)?,
                 Subterm::Func(func) => reduce_func_eta(context, func)?,
-                Subterm::Let(let_) => reduce_let(context, let_),
+                Subterm::Let(let_) => reduce_let(context, let_)?,
                 Subterm::Var(var) => reduce_var(context, var),
                 Subterm::Metavar(metavar) => reduce_metavar(context, metavar),
                 Subterm::UniverseInst(instance) => reduce_universe_inst(context, instance)?,

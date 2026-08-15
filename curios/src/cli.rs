@@ -102,8 +102,8 @@ pub(crate) struct Cli {
     #[arg(
         long,
         default_value_t = curios_pipeline::DEFAULT_STEP_BUDGET,
-        value_name = "STEPS",
-        help = "Reduction steps each declaration may spend while type checking"
+        value_name = "UNITS",
+        help = "Units of reduction work each declaration may spend while type checking"
     )]
     pub(crate) budget: u64,
 

@@ -29,6 +29,9 @@ pub(super) struct Spend {
     /// Units of reduction work a single judgment may spend. Restored at each declaration boundary by [`Spend::restore_budget`]. A transition costs one; a construction costs what it builds.
     budget: u64,
     remaining: u64,
+    /// How many guarded reduction levels are live, and the deepest this judgment has reached. See [`Spend::enter_level`].
+    depth: usize,
+    peak_depth: usize,
     /// Identities for binders the kernel opens itself, when comparing under a telescope and when eta-contracting. Seeded above every index the earlier stages minted, so a kernel-minted binder can never alias one in a term.
     minted: Entropy,
 }
@@ -38,8 +41,31 @@ impl Spend {
         Self {
             budget,
             remaining: budget,
+            depth: 0,
+            peak_depth: 0,
             minted: Entropy::new(),
         }
+    }
+
+    /// Enter one guarded reduction level, charging [`Cost::FRAME`] when it is deeper than any level this judgment has reached before.
+    ///
+    /// **Per new peak, not per call**, and the difference is the whole of what makes this row mean anything. A level's native frame is reclaimed when the level returns, so charging every `whnf` call would price a stack the reduction is not holding — and reduction calls itself once per operand of a nested intrinsic and once per link of a spine, so a wide, shallow computation would pay for depth it never reached. A high-water mark charges exactly the stack the reduction *peaks* at, which is the resource the row exists to bound, and it never refunds: the mark only rises.
+    ///
+    /// The two machine-independent alternatives were both worse. Charging when `recurse` actually grows would price the 32 MiB segment exactly, and makes acceptance depend on the host thread's stack size — a two-megabyte test thread grows on its first call and an eight-megabyte main thread does not. Charging nothing leaves depth bounded by the host's stack alone, which is what this row exists to replace.
+    pub(super) fn enter_level(&mut self, cost: Cost) -> Result<(), ReduceError> {
+        self.depth += 1;
+
+        if self.depth > self.peak_depth {
+            self.peak_depth = self.depth;
+            self.spend(cost)?;
+        }
+
+        Ok(())
+    }
+
+    /// Leave a guarded reduction level. The peak stands; only the live count falls.
+    pub(super) fn leave_level(&mut self) {
+        self.depth -= 1;
     }
 
     /// Charge `cost` against the budget, failing when it cannot be afforded.
@@ -64,9 +90,10 @@ impl Spend {
         }
     }
 
-    /// Restore the full budget for a new judgment.
+    /// Restore the full budget for a new judgment, and with it the depth this judgment may reach before paying again.
     pub(super) fn restore_budget(&mut self) {
         self.remaining = self.budget;
+        self.peak_depth = 0;
     }
 
     /// A fresh binder identity, rendering as `hint`.

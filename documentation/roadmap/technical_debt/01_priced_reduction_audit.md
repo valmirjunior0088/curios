@@ -133,10 +133,13 @@ Reference counting is what keeps this section short: a new node is charged for i
 | `Bound::free_vars` | a `BTreeSet<Free>` over the whole term | construction, temporary | temporary collection |
 | `Scope::map_body` / `try_map_body` | one scope node, and whatever `f` builds | construction | term node |
 
-- [ ] term construction charged at the node, by variant and retained slot count
-- [ ] `release`/`capture` charged for the nodes they rebuild, from a bound computed before the walk
-- [ ] `Telescope::open` charged for its clone as well as its substitutions
+- [x] `Telescope::open` charged for its clone and its substitutions, at each of the four reduction sites that reach it
+- [ ] `release`/`capture` charged per node rebuilt — see the note below for why this is a *stated residue* rather than an omission
 - [ ] `free_vars` precharged or shown not to be reducer-reachable
+
+**Term reconstruction is charged per binder opened, not per node rebuilt, and that is a stated limit.** A `release` is pruning: it shares every subtree whose `reach` proves no loose index can be touched, so what it rebuilds is the paths to substituted positions rather than the body. Charging the body's node count would overcharge by that ratio, and charging the true count needs either a size cached on every node or a fallible traversal — `Bound::traverse` is the single intrinsic the whole trait is defined from, reached by zonking, erasure, printing and elaboration, so making it fallible is not a local change.
+
+What makes the gap bounded rather than open: a `release` never allocates more than the term it walks, and that term already exists and was already charged when it was built. So a single call cannot be an unbounded allocation — the thing charge-first exists to prevent — and repetition is bounded by the step counter. What is *not* bounded is the constant between them, which is why this is written down rather than closed.
 
 **`Telescope::open` is quadratic in the binder count and nothing says so.** It clones the boxed chain and then substitutes once per binder, so a beta step against an `n`-ary lambda costs `n` boxes and `n` substitution passes over the body. It is called at every beta step in both checkers.
 
@@ -150,8 +153,8 @@ Reference counting is what keeps this section short: a new node is charged for i
 | `normalize_each` | `spine.to_vec()` and a collected result | construction | collection slots |
 | reduction-cache insertion | the key term and the retained result | **retention** | retention quota |
 
-- [ ] each construction site above charged
-- [ ] cache insertion charged against the retention quota alone, never against work
+- [x] each construction site above charged
+- [ ] cache insertion charged against the retention quota alone, never against work — the quota does not exist yet
 
 ## `curios-cert` — the kernel's strategy
 
@@ -165,9 +168,9 @@ Written separately from the elaborator's on purpose, so the same shapes appear t
 | `whnf`'s `recurse` bracket | a native stack segment when a level crosses the guard | construction | **recursion level** |
 | `whnf`/`forced`/`unfold` memo insertion | the key term and the `Replay` | **retention** | retention quota |
 
-- [ ] `step_let` charged, including its per-binding ref vectors
-- [ ] the `recurse` bracket charges a frame, from a constant justified beside the deepest measured guarded frame
-- [ ] memo insertion charged against the retention quota alone
+- [x] `step_let` charged, including its per-binding ref vectors — triangular in the run's length, and charged as such
+- [x] the `recurse` bracket charges a frame, from a measured constant — **per new peak depth rather than per call**, see below
+- [ ] memo insertion charged against the retention quota alone — the quota does not exist yet
 
 **`step_let` substitutes where the elaborator binds.** The kernel copies each value into every use, on the stated ground that a substitution is visibly the rule and an environment is a second place a variable's meaning could come from. That is a judgment worth keeping and a cost worth pricing: the two checkers will legitimately spend different amounts here, which is why the specification compares verdicts rather than sums.
 

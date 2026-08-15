@@ -12,7 +12,17 @@ Two things about it are worth carrying forward. The retake reproduced the floor 
 
 **M0 is done.** The inventory is [The reducer allocation audit](01_priced_reduction_audit.md), a checklist M1 ticks. It found five sites beyond the four this file names, and the ones worth knowing before reading it are that `Natural::checked_shl` hands a converted shift amount straight to the allocator — so one well-typed term with no loop in it can ask for an arbitrary allocation — and that `Telescope::open` clones its whole chain at every beta step, on the hottest path either checker has.
 
-The pricing, the retention quota, and the calibration are pending.
+**M1 is done but for two rows, which the audit records as stated residues rather than omissions.** `Cost` and the price constants live in `curios-core` below both checkers, `Reducer` carries the shared spending operation, and construction is charged in every audited shared fold, at both checkers' beta/eta/zeta/`rec` paths, and at the `recurse` bracket. `--budget` now names units of reduction work. What is left open: `release`/`capture` are charged per binder opened rather than per node rebuilt, and `bin_atoms`/`bin_segments` are unpriced temporaries — both bounded by an already-charged term rather than unbounded, which is the distinction the audit's note draws.
+
+Three things it decided that this file did not anticipate.
+
+**The frame row is charged per new *peak* depth, not per `recurse` call.** A level's native frame is reclaimed when the level returns, and reduction re-enters itself once per operand and once per spine link, so charging every call prices a stack the reduction is not holding — measured: the fixed prelude would not build at a hundred times the default. A high-water mark charges the peak, never refunds, and costs a wide shallow computation nothing. The two alternatives are worse and are recorded where the code is: charging when `recurse` actually grows prices the segment exactly and makes acceptance depend on the host thread's stack size, and charging nothing leaves depth bounded by the host alone.
+
+**The frame constant is measured and there are two figures.** A guarded reduction level takes 7 264 bytes of native stack in release and 97 200 in debug, identical to the byte at every depth. The release figure is charged, because a charge must be a property of the program rather than of the build that checked it, and release is what ships.
+
+**The default is recalibrated provisionally, from 1 000 000 to 30 000 000.** The heaviest prelude declaration measured between 2.5 and 3 million units, against about 91 000 steps before, so this keeps the eleven-fold margin the old figure held. It has *not* yet been set against observed memory per unit or against a replaying corpus, which is the calibration milestone's job.
+
+The retention quota and the calibration are pending.
 
 ## The defect is the price of one transition
 
@@ -244,7 +254,7 @@ Ordered first and independently landable. It is verified, it is two functions wi
 - The parameterized accumulate-then-slice reproducer is **already in the tree**: `curios/src/tests/reduction.rs`, three arms over both the `Bin` and `List` carriers, ignored and explicitly bounded, recording command, input sizes, transition count, wall time and peak process memory, with pre- and post-cap figures beside it. Read it rather than rebuilding it. What it does *not* yet carry is priced work, which M1 adds.
 - Record the same baselines for representative prelude compilation and certificate checking. Priced work and retention do not exist yet and are not claimed at this milestone.
 
-### M1 — Price the counter
+### M1 — Price the counter — **done but for two rows**
 
 - Introduce checked unit arithmetic and the price constants in `curios-core`, with the shared spending operation on `Reducer`.
 - Charge construction in every audited shared intrinsic fold, making the fusing seams fallible where charging at the allocation point requires it.

@@ -147,7 +147,7 @@ Set `CURIOS_CACHE` to share the content-addressed half across projects; unset, e
 | --- | --- |
 | `--manifest <PATH>` | use this `curios.toml` as the governing package's, instead of the working directory's |
 | `--unit <DIR>` | mount the package in `DIR` ahead of the entry program, with no manifest edge; repeat for more, in dependency order |
-| `--budget <STEPS>` | reduction steps each declaration may spend while type checking |
+| `--budget <UNITS>` | units of reduction work each declaration may spend while type checking — a transition costs one, a construction costs what it builds |
 | `--print[=STAGES]` | dump selected intermediate representations to stderr |
 
 `--print` takes a comma-separated list of stage names, and bare `--print` means all of them:

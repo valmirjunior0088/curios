@@ -58,7 +58,9 @@ impl Cost {
 
     /// One level of guarded reducer recursion, priced at the native frame it pushes.
     ///
-    /// The constant is justified by measurement rather than by the segment size: `curios_utilities::recurse` grows the stack by 32 MiB when the reserve runs low, but a *level* costs one frame, and it is the frame a level has to be charged for. See `curios-cert`'s `reducer_frame_measurements` for what a reduction frame was measured at and how to retake it.
+    /// This is the row that brings *depth* inside the contract. `curios_utilities::recurse` grows the native stack rather than aborting, and nothing else bounds total depth, so a data-shaped walk takes real memory the transition counter never observed — one unit per level is already spent, and what this adds is a price commensurate with the stack that level takes.
+    ///
+    /// See [`FRAME_UNITS`] for the measurement and for which of the two figures it is.
     pub const FRAME: Self = Self(FRAME_UNITS);
 
     /// A charge of exactly `units`.
@@ -126,10 +128,19 @@ const fn units_of(value: u64, divisor: u64) -> u64 {
     value.div_ceil(divisor)
 }
 
-/// The measured native frame of one guarded reduction level, rounded up.
+/// The measured native frame of one guarded reduction level, rounded up to a power of two.
 ///
-/// Kept beside [`Cost::FRAME`] rather than inlined so the figure and its rounding are one line to read.
-const FRAME_UNITS: u64 = 4096;
+/// **Measured, not guessed.** Taken 2026-08-15 on `aarch64-apple-darwin` by instrumenting `Kernel::spend` to record the address of a stack local, reducing a right-nested `Nat/add` chain at depths 100, 200, 400 and 800, and taking the median descent between consecutive observations inside one stack segment — the min/max span is useless here, because `recurse` moves the walk onto a fresh 32 MiB segment and the addresses stop being comparable across the jump. Every depth reported the same figure to the byte:
+///
+/// | Profile | Bytes per level | Units |
+/// | --- | --- | --- |
+/// | release | 7 264 | 908 |
+/// | debug | 97 200 | 12 150 |
+///
+/// **The release figure is the one charged**, rounded up to 1024, and the debug figure is recorded rather than used. A charge has to be a property of the program rather than of the build that checked it — the same reason the unit is target-independent — and release is the compiler that ships. What the divergence means in practice is that a debug build takes about thirteen times the stack this charges for, which `recurse` absorbs by growing rather than aborting.
+///
+/// **It is a recipe rather than a probe, and that is a deliberate exception.** Retaking it needs six lines of temporary instrumentation inside `Kernel::spend`, and leaving those in the product to keep a probe reproducible would put a measurement hook on the hottest path in the trusted base. The recipe above is complete enough to retype in a few minutes.
+const FRAME_UNITS: u64 = 1024;
 
 impl Add for Cost {
     type Output = Self;

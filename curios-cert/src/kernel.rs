@@ -598,6 +598,16 @@ impl Kernel {
         self.spend.spend(cost)
     }
 
+    /// Enter one guarded reduction level, charging its frame when it is a new peak. See [`Spend::enter_level`].
+    pub(crate) fn enter_level(&mut self) -> Result<(), ReduceError> {
+        self.spend.enter_level(Cost::FRAME)
+    }
+
+    /// Leave a guarded reduction level.
+    pub(crate) fn leave_level(&mut self) {
+        self.spend.leave_level();
+    }
+
     /// A fresh binder identity, rendering as `hint`.
     pub(crate) fn fresh(&self, hint: Option<&str>) -> Free {
         self.spend.fresh(hint)

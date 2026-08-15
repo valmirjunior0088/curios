@@ -2,7 +2,7 @@ use {
     super::unfold_rec,
     crate::{Kernel, whnf},
     curios_core::{
-        Apply, Free, Global, Intrinsic, Level, Nat, ReduceError, Reducer, Subterm, Term,
+        Apply, Cost, Free, Global, Intrinsic, Level, Nat, ReduceError, Reducer, Subterm, Term,
         UniverseContext,
     },
     curios_utilities::Qualifier,
@@ -10,7 +10,7 @@ use {
 
 /// The kernel every test starts from. The floor keeps the identities minted below out of the range the kernel mints from for eta-contraction, exactly as a real caller must seed it above the lowerer's and the elaborator's binders.
 fn kernel() -> Kernel {
-    let mut kernel = Kernel::new(100_000);
+    let mut kernel = Kernel::new(1_000_000);
     kernel.set_local_floor(1_000);
     kernel
 }
@@ -367,10 +367,12 @@ fn a_non_productive_recursion_exhausts_the_budget() {
 
 /// Each judgment gets the full budget back, so one expensive declaration cannot starve the next.
 ///
-/// An undefined variable costs exactly one step — it is looked at once and is already normal — so a budget of one affords exactly one reduction, and what the second and third calls do is entirely about the refill.
+/// An undefined variable costs exactly one *step* — it is looked at once and is already normal — on top of the one guarded level the reduction enters. So the smallest budget that affords exactly one reduction is a frame plus a step, spelled from the constants rather than as a number, and what the second and third calls do is entirely about the refill.
+///
+/// The frame is charged per new *peak* depth, so a second reduction at the same depth would be free of it — which is why the refill matters here twice over: `restore_budget` resets the peak as well as the budget, so the second call pays for its level again exactly as the first did.
 #[test]
 fn restoring_the_budget_refills_it() {
-    let mut kernel = Kernel::new(1);
+    let mut kernel = Kernel::new(Cost::FRAME.get() + Cost::STEP.get());
     kernel.set_local_floor(1_000);
     let x = binder(0, "x");
     let occurrence = Term::free_var(&x);
@@ -503,7 +505,9 @@ fn restoring_the_budget_forgets_the_term_keyed_memos() {
 
 /// The name-keyed table is the one that is *not* cleared at a declaration boundary, and it stays charged for exactly that reason: an entry outliving a declaration may not also be free, or which declarations came first would decide what this one can afford.
 ///
-/// So a hit costs what computing the body cost, and the second occurrence spends what the first did. That equality is also why the *survival* cannot be asserted here: a charged hit and a recomputation are the same number by construction, and only the wall clock separates them.
+/// So a hit costs what computing the body cost, and the second occurrence spends what the first did — **less exactly one frame**, which is the peak-depth rule showing through rather than an exception to it. The first call enters a guarded level that is deeper than any this judgment had reached and pays [`Cost::FRAME`] for it; the second re-enters the same depth, which is no longer a new peak and is therefore free. Everything the replay itself charges is identical, frames the *body* paid included, since those are part of the recorded cost.
+///
+/// That near-equality is also why the table's *survival* cannot be asserted here: a charged hit and a recomputation are the same number by construction, and only the wall clock separates them.
 #[test]
 fn an_unfold_hit_is_charged_what_it_replaces() {
     let mut kernel = kernel();
@@ -515,7 +519,7 @@ fn an_unfold_hit_is_charged_what_it_replaces() {
     let second = spent(&mut kernel, occurrence);
 
     assert!(first > 1, "computing the body is what the first call pays");
-    assert_eq!(second, first);
+    assert_eq!(second, first - Cost::FRAME.get());
 }
 
 /// Memoization may only *reduce* what a judgment spends. That is what makes free hits monotone against the kernel that shipped before them — no program that certified then can stop certifying now — and it is the half of the old bit-identical invariant this design keeps: a semantic refusal is budget-independent, so only an exhaustion point can move, and it can only move later.
@@ -526,7 +530,7 @@ fn cached_spend_never_exceeds_uncached() {
     let repeated = Term::intrinsic(Intrinsic::nat_add(chain(32), chain(32)));
 
     let mut cached = kernel();
-    let mut uncached = Kernel::uncached(100_000);
+    let mut uncached = Kernel::uncached(1_000_000);
     uncached.set_local_floor(1_000);
 
     let with_memos = spent(&mut cached, repeated.clone());

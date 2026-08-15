@@ -35,10 +35,14 @@ use {
     },
 };
 
-/// Reduction steps one declaration may spend before its budget is exhausted.
+/// Units of reduction work one declaration may spend before its budget is exhausted.
 ///
-/// Sized from measurement rather than taste: the heaviest declaration in the whole fixed prelude is `/std/BigNat/add/raw_assoc` at about 91,000 steps, with a median near 150, so this clears the worst real declaration by better than an order of magnitude. It bounds *reduction*, not elapsed time — the cost of a step varies by roughly 8x across the prelude — so it is a reproducibility guarantee, not a latency one.
-pub const DEFAULT_STEP_BUDGET: u64 = 1_000_000;
+/// **Provisional, and it is the pricing that made it so.** A transition still costs one unit, but a construction now costs what it builds, so an old figure no longer buys what it used to and this was recalibrated rather than retained. The heaviest declaration in the fixed prelude — still in `/std/BigNat/add` — was measured at between 2 500 000 and 3 000 000 units by bisecting this constant against the prelude build, where it was about 91 000 *steps* before. Thirty million keeps roughly the eleven-fold margin the previous figure held over the worst real declaration.
+///
+/// What "provisional" means: this clears the fixed prelude and the cross-stage corpus with the margin above, and it has *not* yet been set against the two things the specification says must decide it — observed memory per unit, and a corpus that replays a memoized construction rather than evaluating it once. That is the calibration milestone's work.
+///
+/// It bounds *reduction*, not elapsed time, so it is a reproducibility guarantee rather than a latency one — and it is machine-independent by construction: see [`Cost`] for why every charge is computed in `u64` and none of them consults a host width.
+pub const DEFAULT_STEP_BUDGET: u64 = 30_000_000;
 
 /// Γ frozen in binding order, with birth-time types. `Rc`-shared: every meta born under the same Γ shares one allocation (see [`Context::identity_snapshot`]).
 type SharedTelescope = Rc<Vec<(Free, Term)>>;
@@ -89,6 +93,9 @@ pub struct Context {
     budget: u64,
     /// Work left in the current declaration's budget. `Cell` because the conversion queue spends through a shared borrow.
     remaining: Cell<u64>,
+    /// How many guarded reduction levels are live, and the deepest this declaration has reached. `Cell` for [`Context::remaining`]'s reason; see [`Context::enter_level`].
+    depth: Cell<usize>,
+    peak_depth: Cell<usize>,
     // The reduction and elaboration memo tables with their write stamps and the named invalidation protocol every mutation site routes through; see [`Caches`].
     caches: Caches,
     // The frame-scoped lexical stores — assumptions, local definitions, refinements, the witness scope; see [`Frames`].
@@ -124,6 +131,8 @@ impl Context {
             fresh_names: Entropy::<usize>::new(),
             budget,
             remaining: Cell::new(budget),
+            depth: Cell::new(0),
+            peak_depth: Cell::new(0),
             caches: Caches::new(),
             frames: Frames::new(),
             solutions: Solutions::new(),
@@ -219,9 +228,30 @@ impl Context {
         }
     }
 
-    /// Restore the full budget for a new declaration.
+    /// Enter one guarded reduction level, charging [`Cost::FRAME`] when it is deeper than any level this declaration has reached before.
+    ///
+    /// Per new peak rather than per call, for the reason `curios-cert`'s `Spend::enter_level` states in full: a level's native frame is reclaimed when the level returns, and reduction re-enters itself once per operand and once per spine link, so charging every call would price a stack the reduction is not holding. The kernel charges the same row the same way, which is what lets the two checkers' depth limits be compared.
+    pub(crate) fn enter_level(&self) -> Result<(), ReduceError> {
+        let depth = self.depth.get() + 1;
+        self.depth.set(depth);
+
+        if depth > self.peak_depth.get() {
+            self.peak_depth.set(depth);
+            self.spend(Cost::FRAME)?;
+        }
+
+        Ok(())
+    }
+
+    /// Leave a guarded reduction level. The peak stands; only the live count falls.
+    pub(crate) fn leave_level(&self) {
+        self.depth.set(self.depth.get() - 1);
+    }
+
+    /// Restore the full budget for a new declaration, and with it the depth this declaration may reach before paying again.
     pub(crate) fn restore_budget(&mut self) {
         self.remaining.set(self.budget);
+        self.peak_depth.set(0);
     }
 
     /// The read half of the reduction cache. The reducer probes it wherever a term's reduction begins — at entry, and at the scrutinee stack's frame push, where a warm scrutinee dispatches in place instead of framing.

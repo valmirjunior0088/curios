@@ -63,7 +63,12 @@ enum Step {
 ///
 /// Guarded by [`recurse`] for the same reason the crate duplicates the strategy at all: the kernel has to accept every term the elaborator produced, on the same thread stack, so a depth it aborts at that the elaborator does not is a term that typechecks and then fails to certify. That is how the need was found — the elaborator was given its reserve first, and the abort simply moved here. An intrinsic's operands re-enter through [`reduce_intrinsic`](curios_core::reduce_intrinsic), which is shared, so a deep `add` chain puts one native frame per link on this side exactly as it does on the other.
 pub(crate) fn whnf(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
-    recurse(|| whnf_within(kernel, term))
+    // The level itself, charged when it is deeper than any this judgment has reached — see `Spend::enter_level`. What it buys is that depth is bounded by the budget rather than by how much stack the host handed the process, which is the one resource this walk could previously consume without being counted.
+    kernel.enter_level()?;
+    let reduct = recurse(|| whnf_within(kernel, term));
+    kernel.leave_level();
+
+    reduct
 }
 
 fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
@@ -87,8 +92,8 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
             Subterm::Var(var) => step_var(kernel, var)?,
             Subterm::Apply(apply) => step_apply(kernel, apply)?,
             Subterm::Proj(proj) => step_proj(kernel, proj)?,
-            Subterm::Func(func) => step_func(kernel, func),
-            Subterm::Let(let_) => Step::Continue(step_let(let_)),
+            Subterm::Func(func) => step_func(kernel, func)?,
+            Subterm::Let(let_) => Step::Continue(step_let(kernel, let_)?),
             Subterm::UniverseInst(instance) => step_universe_inst(kernel, instance)?,
             // The scrutinee is reduced by a nested call, so a tower of matches over a deep closed spine — the scan-state chain a string literal lowers to — costs one native frame per link. That is data-shaped depth, which is what [`recurse`] at the entry point is for.
             Subterm::Match(Match {
@@ -153,6 +158,12 @@ fn step_apply(kernel: &mut Kernel, apply: Apply) -> Result<Step, ReduceError> {
     Ok(match Term::unwrap_or_clone(head) {
         // Saturation is the precondition of the β step, not an assumption about it: `Telescope::open` asserts on a count mismatch, so an under- or over-applied lambda would abort the walk rather than be refused. An application that does not saturate its lambda is stuck instead, which is the conservative direction — it leaves the term for the typing rules to reject with a diagnostic, and reduction that declines to fire can never admit anything.
         Subterm::Func(Func { telescope, .. }) if telescope.len() == params.len() => {
+            // The argument ref vector, and what `Telescope::open` costs on top of it: it clones the whole boxed chain and then substitutes once per binder, so an `n`-ary beta step is `n` boxes and `n` passes rather than one.
+            kernel.spend(
+                Cost::collection(params.len() as u64)
+                    .saturating_add(Cost::term(1).saturating_mul(params.len() as u64)),
+            )?;
+
             let refs = params.iter().collect::<Vec<_>>();
             Step::Continue(telescope.open(&refs))
         }
@@ -197,14 +208,21 @@ fn step_proj(kernel: &mut Kernel, proj: Proj) -> Result<Step, ReduceError> {
 /// Eta for functions: `(x) => f(x)` is `f`, provided `f` does not itself mention `x`.
 ///
 /// Contracting here rather than only at conversion means the two spellings have one normal form, so every consumer of a weak-head normal form sees them as the same term without having to know the rule.
-fn step_func(kernel: &mut Kernel, func: Func) -> Step {
+fn step_func(kernel: &mut Kernel, func: Func) -> Result<Step, ReduceError> {
     let arity = func.telescope.len();
+
+    // Three arity-sized vectors — the probe binders, their occurrences, and the refs handed to `open` — plus the opening itself. Charged even though the probe usually fails, because the probe is what allocates.
+    kernel.spend(
+        Cost::collection(arity as u64)
+            .saturating_mul(3)
+            .saturating_add(Cost::term(1).saturating_mul(arity as u64)),
+    )?;
 
     let binders = (0..arity).map(|_| kernel.fresh(None)).collect::<Vec<_>>();
     let occurrences = binders.iter().map(Term::free_var).collect::<Vec<_>>();
     let refs = occurrences.iter().collect::<Vec<_>>();
 
-    match Term::unwrap_or_clone(func.telescope.open(&refs)) {
+    Ok(match Term::unwrap_or_clone(func.telescope.open(&refs)) {
         Subterm::Apply(Apply { head, params, .. })
             if params.len() == arity
                 && params.iter().enumerate().all(|(i, param)| {
@@ -215,13 +233,23 @@ fn step_func(kernel: &mut Kernel, func: Func) -> Step {
             Step::Continue(head)
         }
         _ => Step::Stop(Term::from(Subterm::Func(func))),
-    }
+    })
 }
 
 /// Zeta: substitute a `let`'s bindings into its tail.
 ///
 /// The elaborator instead binds each value as a fresh definition and opens the tail over *those*, which avoids copying a value into every use. The kernel substitutes, because a substitution is visibly the rule and an environment is a second place a variable's meaning can come from. Bindings are non-recursive and bind left to right, so binding `i` sees exactly the values before it.
-fn step_let(let_: Let) -> Term {
+fn step_let(kernel: &mut Kernel, let_: Let) -> Result<Term, ReduceError> {
+    // One values vector, and a fresh ref vector at every binding — so the ref vectors together are triangular in the run's length, which the surface language makes as long as a program likes.
+    let bindings = let_.bindings.len() as u64;
+    kernel.spend(
+        Cost::collection(bindings)
+            .saturating_add(Cost::buffer(
+                bindings.saturating_mul(bindings.saturating_add(1)) / 2,
+            ))
+            .saturating_add(Cost::term(1).saturating_mul(bindings)),
+    )?;
+
     let mut values: Vec<Term> = Vec::with_capacity(let_.bindings.len());
 
     for binding in &let_.bindings {
@@ -230,7 +258,8 @@ fn step_let(let_: Let) -> Term {
     }
 
     let refs = values.iter().collect::<Vec<_>>();
-    let_.tail.open(&refs)
+
+    Ok(let_.tail.open(&refs))
 }
 
 /// Instantiate a universe-polymorphic definition at a stated instance.

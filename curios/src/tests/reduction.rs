@@ -107,7 +107,7 @@ fn list_growing(n: usize) -> String {
 ///
 /// The budget is per declaration and restored at every item boundary, so this reports the *heaviest declaration's* spend rather than a total — which is the quantity a budget default has to clear. A power of two rather than a bisection because the question is whether the count grows linearly in the iteration count, and a factor of two answers that; the failing probes abort as soon as the budget is spent, so only the succeeding one costs full price.
 ///
-/// The `Err` payload is the largest budget *tried*, not [`DEFAULT_STEP_BUDGET`]: the last power of two below the default is 524 288, so a program needing 600 000 steps elaborates fine at the default while every probe here fails. Reporting the default in that case would claim the program does not elaborate, which is the opposite of true.
+/// The `Err` payload is the largest budget *tried*, not [`DEFAULT_STEP_BUDGET`]: the sweep stops at the last power of two below the default, so a program needing more than that but less than the default elaborates fine while every probe here fails. Reporting the default in that case would claim the program does not elaborate, which is the opposite of true.
 fn floor(mut accepts: impl FnMut(u64) -> bool) -> Result<u64, u64> {
     let mut largest = 0;
 
@@ -185,7 +185,31 @@ fn an_accumulated_sequence_is_bounded_when_a_window_is_taken_of_it() {
 ///
 /// # What it last printed
 ///
-/// Taken **2026-08-14**, **release**, on `aarch64-apple-darwin`, with the fusion cap and the measure both in place.
+/// Taken **2026-08-15**, **release**, on `aarch64-apple-darwin`, with construction priced. The floor columns are units of reduction *work*, not transitions, and are not comparable to the pre-pricing table below except in shape.
+///
+/// ```text
+/// Bytes
+///          n     opaque      fixed    growing   fixed-opaque  growing-fixed   floor fixed  floor growing
+///        800    120.1ms    117.8ms    123.8ms          0.0ns          6.0ms         65536       1048576
+///       1600    105.8ms    128.1ms    140.0ms         22.3ms         11.9ms        262144       2097152
+///       3200    106.8ms    154.7ms    173.7ms         47.9ms         19.0ms        262144       4194304
+///       6400    108.2ms    203.6ms    248.3ms         95.4ms         44.7ms        524288       8388608
+///
+/// List
+///          n     opaque      fixed    growing   fixed-opaque  growing-fixed   floor fixed  floor growing
+///        250    116.6ms    106.7ms    118.3ms          0.0ns         11.7ms        131072        524288
+///        500    118.6ms    110.3ms    126.5ms          0.0ns         16.2ms        131072       1048576
+///       1000    119.1ms    117.9ms    135.5ms          0.0ns         17.6ms        262144       2097152
+///       2000    119.0ms    131.5ms    151.7ms         12.5ms         20.2ms        262144       4194304
+/// ```
+///
+/// **This table is the work's own verdict, and the two floor columns are the whole of it.** The fixed-payload arm builds nothing and its floor barely moves across the ladder — 65 536 to 524 288 over an eightfold input, and within a factor of two of what it was before pricing. The growing arm performs *the same transitions* and its floor is now sixteen times the fixed arm's and doubles exactly with the input. That gap is constructed payload, and before this work the counter could not see one unit of it: the same two columns used to sit within 2× of each other whichever arm was running.
+///
+/// **The `Bytes` ladder's last rung is inside the sweep again**, where it read `> 524288` before — not because the program got cheaper but because the default it is swept against was recalibrated with the pricing.
+///
+/// # What it printed before construction was priced
+///
+/// Taken **2026-08-14**, **release**, same machine, with the fusion cap and the measure in place and the counter still charging one unit per transition.
 ///
 /// ```text
 /// Bytes
@@ -203,8 +227,6 @@ fn an_accumulated_sequence_is_bounded_when_a_window_is_taken_of_it() {
 ///       2000    169.6ms    177.4ms    198.1ms          7.8ms         20.8ms        131072        524288
 /// ```
 ///
-/// **`> 524288` is a gap in this probe, not a refusal.** The last power of two below the default budget is 524 288, so a program needing between that and 1 000 000 steps elaborates fine while every probe here fails. The timing column beside it is a successful elaboration.
-///
 /// # What it printed before any of this
 ///
 /// The same command on the same machine, before the cap and the measure existed. This is the baseline the work is read against, and the arms that did *not* move are as much of the evidence as the ones that did.
@@ -220,7 +242,7 @@ fn an_accumulated_sequence_is_bounded_when_a_window_is_taken_of_it() {
 ///          n=2000:               8.4ms                  1.8s         131072 / 524288
 /// ```
 ///
-/// **Every budget floor doubles when the iteration count doubles — before and after alike.** That held even when the growing arm was quadratic in *time*, on both carriers, for the arm that constructs nothing and the arm that constructed quadratically. The step counter prices this loop identically whichever it is running, which is the whole of what it cannot see, and the reason the memory column below is the one that moved.
+/// **Every budget floor doubles when the iteration count doubles — in every one of these tables.** That held even when the growing arm was quadratic in *time*, on both carriers, for the arm that constructs nothing and the arm that constructed quadratically. The step counter priced this loop identically whichever it was running, which is the whole of what it could not see, and the reason the memory column below was the one that moved. Pricing construction is what finally separated the two arms in the column that decides acceptance.
 ///
 /// **The fixed-payload arm did not move**, which is what makes the rest a removal rather than a reallocation: 3.5 / 23.5 / 41.7 / 93.6 ms became 0.0 / 22.3 / 41.9 / 93.2 ms.
 ///
@@ -332,7 +354,27 @@ fn type_level_sequence_cost_measurements() {
 ///
 /// # What it last printed
 ///
-/// Taken **2026-08-15**, **release**, on `aarch64-apple-darwin`, after a `whnf`/`forced` memo hit stopped spending steps.
+/// Taken **2026-08-15**, **release**, on `aarch64-apple-darwin`, with construction priced — so these floors are units of reduction *work* rather than transitions, and are not comparable to the two tables below except in shape.
+///
+/// ```text
+/// Bytes
+///          n  floor elaborator  floor kernel  divergence
+///        800           1048576       1048576          1x
+///       1600           2097152       2097152          1x
+///       3200           4194304       4194304          1x
+///       6400           8388608       8388608          1x
+///
+/// List
+///          n  floor elaborator  floor kernel  divergence
+///        250            524288        524288          1x
+///        500           1048576       1048576          1x
+///       1000           2097152       2097152          1x
+///       2000           4194304       4194304          1x
+/// ```
+///
+/// **Every rung is 1×.** The two checkers now agree on this program's cost exactly, on both carriers and at every size — which is more than the memo change alone bought, and says the two evaluators differ in what they do far less than they differed in what they charged.
+///
+/// # What it printed with memo hits free but construction unpriced
 ///
 /// ```text
 /// Bytes
@@ -350,7 +392,7 @@ fn type_level_sequence_cost_measurements() {
 ///       2000             32768         32768          1x
 /// ```
 ///
-/// # What it printed before it
+/// # What it printed before either
 ///
 /// The same command on the same machine, with a hit charged the whole recorded cost of the computation it replaced.
 ///
