@@ -4,10 +4,10 @@ mod tests;
 use {
     super::{Context, zonk_solved_term_metas},
     curios_core::{
-        Apply, Bound, Carrier, Cases, Field, Free, FreeMonoid, Func, FuncType, Global, InductDecl,
-        InductType, Intrinsic, Layer, Let, Many, Match, Metavar, Nat, One, Proj, Rec, RecGroup,
-        ReduceError, Reducer, Scope, Struct, StructDecl, StructType, Subterm, Telescope, Term,
-        Tuple, TupleType, UniverseInst, Var, Variant, instantiate_universe_levels_scoped,
+        Apply, Bound, Carrier, Cases, Cost, Field, Free, FreeMonoid, Func, FuncType, Global,
+        InductDecl, InductType, Intrinsic, Layer, Let, Many, Match, Metavar, Nat, One, Proj, Rec,
+        RecGroup, ReduceError, Reducer, Scope, Struct, StructDecl, StructType, Subterm, Telescope,
+        Term, Tuple, TupleType, UniverseInst, Var, Variant, instantiate_universe_levels_scoped,
         project_erased_universes, reduce_intrinsic,
     },
     curios_utilities::recurse,
@@ -21,6 +21,10 @@ impl Reducer for Context {
 
     fn reduce_forced(&mut self, term: Term) -> Result<Term, ReduceError> {
         reduce_forced(self, term)
+    }
+
+    fn spend(&mut self, cost: Cost) -> Result<(), ReduceError> {
+        Context::spend(self, cost)
     }
 }
 
@@ -127,7 +131,7 @@ fn force_rec(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
     let folded = term.clone();
     let mut term = term;
     loop {
-        context.spend()?;
+        context.spend(Cost::STEP)?;
 
         // Unfolding a projection means stepping to the member's body; unfolding any other `rec` means opening its tail.
         if let Some((group, index)) = term.as_rec_proj() {
@@ -519,7 +523,7 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
     let entry = term.clone();
 
     loop {
-        context.spend()?;
+        context.spend(Cost::STEP)?;
 
         let step = 'step: {
             // Rung B for stuck applications (convertibility-keyed). Gated cheaply — store non-empty, then a refined applied-head symbol — before keying the candidate and looking it up.

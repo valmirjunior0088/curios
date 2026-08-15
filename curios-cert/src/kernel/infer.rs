@@ -27,9 +27,9 @@ use {
         synth_neutral,
     },
     curios_core::{
-        Apply, Bound, Carrier, Cases, Field, Free, Func, FuncType, InductType, Intrinsic, Let,
-        Many, Nat, One, Proj, Rec, Reducer, Scope, Struct, StructType, Subterm, Telescope, Term,
-        Tuple, TupleType, UniverseInst, Variant, wire_term,
+        Apply, Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Intrinsic,
+        Let, Many, Nat, One, Proj, Rec, Reducer, Scope, Struct, StructType, Subterm, Telescope,
+        Term, Tuple, TupleType, UniverseInst, Variant, wire_term,
     },
     curios_utilities::{Grain, PackedBin, recurse},
 };
@@ -50,7 +50,7 @@ pub fn infer(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
 }
 
 fn infer_within(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
-    kernel.spend()?;
+    kernel.spend(Cost::STEP)?;
 
     match &**term {
         // `Type u : Type (u + 1)`, and `Prop : Type 0`. The hierarchy is what makes `Type : Type` — and Girard's paradox with it — unstatable.
@@ -895,7 +895,7 @@ fn check_fields(
 ///
 /// The elaborator reaches the same verdicts by a different route — it is bidirectional, so checking a λ against a Π pushes the comparison down to the leaves, where both sides are sorts and the head rule suffices, and it never forms the Π being subsumed here. Deciding this structurally instead is what makes the rule readable, and what lets the two checkers disagree if elaboration's traversal order ever changes.
 fn subsumes(kernel: &mut Kernel, inferred: &Term, expected: &Term) -> Result<bool, KernelError> {
-    kernel.spend()?;
+    kernel.spend(Cost::STEP)?;
 
     let lower = kernel.reduce_forced(inferred.clone())?;
     let upper = kernel.reduce_forced(expected.clone())?;

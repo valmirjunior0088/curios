@@ -32,6 +32,9 @@ pub use spine::*;
 mod free_monoid;
 pub use free_monoid::*;
 
+mod cost;
+pub use cost::*;
+
 mod reduce;
 pub use reduce::*;
 

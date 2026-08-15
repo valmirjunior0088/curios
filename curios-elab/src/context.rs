@@ -19,10 +19,11 @@ use {
     },
     curios_core::ReduceError,
     curios_core::{
-        Bound, ConceptDecl, DefinitionKind, Free, Global, HeadTag, ImplicitOrigin, InductDecl,
-        Level, MetaId, Metavar, MetavarOrigin, StructDecl, Term, Totality, UniverseConstraintKind,
-        UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseRole,
-        UniverseSeed, WitnessOrigin, instantiate_universe_levels_scoped,
+        Bound, ConceptDecl, Cost, DefinitionKind, Free, Global, HeadTag, ImplicitOrigin,
+        InductDecl, Level, MetaId, Metavar, MetavarOrigin, StructDecl, Term, Totality,
+        UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext, UniverseError,
+        UniverseMetaId, UniverseRole, UniverseSeed, WitnessOrigin,
+        instantiate_universe_levels_scoped,
     },
     curios_utilities::{Entropy, Mount, Qualifier, Span, SyntaxRegistry},
     std::{
@@ -84,9 +85,9 @@ pub(crate) struct SolutionMark {
 #[derive(Debug)]
 pub struct Context {
     fresh_names: Entropy,
-    /// Reduction steps each declaration may spend, restored by [`Context::restore_budget`] at every declaration boundary.
+    /// Units of reduction work each declaration may spend, restored by [`Context::restore_budget`] at every declaration boundary. A transition costs one; a construction costs what it builds, per [`Cost`].
     budget: u64,
-    /// Steps left in the current declaration's budget. `Cell` because the conversion queue spends through a shared borrow.
+    /// Work left in the current declaration's budget. `Cell` because the conversion queue spends through a shared borrow.
     remaining: Cell<u64>,
     // The reduction and elaboration memo tables with their write stamps and the named invalidation protocol every mutation site routes through; see [`Caches`].
     caches: Caches,
@@ -196,15 +197,24 @@ impl Context {
         self.fresh_names.seed(floor);
     }
 
-    /// Charge one reduction step, failing when the current declaration's budget is spent.
+    /// Charge `cost` against the current declaration's budget, failing when it cannot be afforded.
     ///
-    /// Called at the three loops that drive reduction and conversion, which is what makes the budget bound every route into unbounded computation.
-    pub(crate) fn spend(&self) -> Result<(), ReduceError> {
-        match self.remaining.get() {
-            0 => Err(ReduceError::Exhausted),
-            remaining => {
-                self.remaining.set(remaining - 1);
+    /// [`Cost::STEP`] at the three loops that drive reduction and conversion is what makes the budget bound every route into unbounded computation; a construction charge at every allocating fold is what makes it bound the *memory* those routes reach, which a transition count could not see.
+    ///
+    /// A saturated cost is refused without being compared, so a size that overflowed while being computed can never look affordable. That is the one case where the budget is not consulted at all, and [`Cost`]'s module documentation carries why.
+    pub(crate) fn spend(&self, cost: Cost) -> Result<(), ReduceError> {
+        if cost.is_refused() {
+            return Err(ReduceError::Exhausted);
+        }
+
+        match self.remaining.get().checked_sub(cost.get()) {
+            Some(remaining) => {
+                self.remaining.set(remaining);
                 Ok(())
+            }
+            None => {
+                self.remaining.set(0);
+                Err(ReduceError::Exhausted)
             }
         }
     }

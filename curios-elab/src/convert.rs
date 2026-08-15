@@ -8,9 +8,9 @@ mod tests;
 use {
     super::{Context, check, reduce, reduce_forced, unfold_rec, unfold_rec_apply},
     curios_core::{
-        Apply, Bound, Carrier, Cases, Field, Free, Func, FuncType, InductType, Intrinsic, Level,
-        Match, Metavar, Proj, Rec, ReduceError, Scope, Struct, StructType, Subterm, Telescope,
-        Term, Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin,
+        Apply, Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Intrinsic,
+        Level, Match, Metavar, Proj, Rec, ReduceError, Scope, Struct, StructType, Subterm,
+        Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin,
         UniverseContext, UniverseInst, Variant, Visit, instantiate_universe_levels_scoped,
         project_erased_universes,
     },
@@ -672,7 +672,7 @@ impl Convert {
     }
 
     fn dequeue(&mut self, context: &Context) -> Result<Option<Goal>, ReduceError> {
-        context.spend()?;
+        context.spend(Cost::STEP)?;
 
         Ok(self.pending.pop_front())
     }

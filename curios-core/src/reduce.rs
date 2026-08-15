@@ -2,7 +2,7 @@ mod intrinsic;
 pub use intrinsic::*;
 
 use {
-    super::{Subterm, Term, UniverseError},
+    super::{Cost, Subterm, Term, UniverseError},
     curios_abi::ForeignFunction,
     curios_num::Integer,
     curios_utilities::Span,
@@ -68,11 +68,18 @@ pub enum ReduceError {
 ///
 /// Intrinsic folding is arithmetic on the representation and belongs here; deciding *how far* a term reduces — which definitions unfold, what a budget costs, which refinements are in scope, whether a `rec` is forced — is a strategy, and a strategy is a judgment. This trait is the seam between them: [`reduce_intrinsic`] states only that it needs its operands' values, and each consumer supplies the strategy it is entitled to. The elaborator's `Context` implements it with metavariable resolution and scrutinee refinement; a kernel implements it without either, and folds the same intrinsics.
 ///
-/// The two methods differ in what they do with a `rec` head: [`Reducer::reduce`] stops at one, treating the folded spelling as the normal form, while [`Reducer::reduce_forced`] unfolds it because an eliminator demands a value.
+/// The two reduction methods differ in what they do with a `rec` head: [`Reducer::reduce`] stops at one, treating the folded spelling as the normal form, while [`Reducer::reduce_forced`] unfolds it because an eliminator demands a value.
+///
+/// The third is what makes the budget bound memory rather than only steps. [`Reducer::spend`] charges a [`Cost`] against the same counter a transition spends from, and every fold that can allocate reducer-owned storage calls it *before* allocating — a charge taken afterwards is a report rather than a limit. See [`cost`](crate::Cost) for the unit and the formulas.
 pub trait Reducer {
     /// Reduce to weak-head normal form.
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError>;
 
     /// Reduce to weak-head normal form and then force a `rec` head, for a position that demands a value rather than a normal form.
     fn reduce_forced(&mut self, term: Term) -> Result<Term, ReduceError>;
+
+    /// Charge `cost` before constructing what it prices, failing when the budget cannot afford it.
+    ///
+    /// A saturated cost is refused outright rather than compared, so a size that overflowed can never be handed to an allocator; [`Cost`]'s module documentation carries the argument. Charging nothing is still a call — a site that computes [`Cost::NOTHING`] because it shares rather than builds is saying so, and saying so is what the audit checks.
+    fn spend(&mut self, cost: Cost) -> Result<(), ReduceError>;
 }

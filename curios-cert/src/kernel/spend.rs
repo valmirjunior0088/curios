@@ -13,7 +13,7 @@
 //! [`Memos`](super::Memos) deliberately cannot reach this: it stores [`Replay`]s and hands them back, and applying one is this component's job. A store that could also charge would be a store that could charge twice.
 
 use {
-    curios_core::{Free, ReduceError, Term},
+    curios_core::{Cost, Free, ReduceError, Term},
     curios_utilities::Entropy,
 };
 
@@ -26,7 +26,7 @@ pub(crate) struct Replay {
 }
 
 pub(super) struct Spend {
-    /// Reduction steps a single judgment may spend. Restored at each declaration boundary by [`Spend::restore_budget`].
+    /// Units of reduction work a single judgment may spend. Restored at each declaration boundary by [`Spend::restore_budget`]. A transition costs one; a construction costs what it builds.
     budget: u64,
     remaining: u64,
     /// Identities for binders the kernel opens itself, when comparing under a telescope and when eta-contracting. Seeded above every index the earlier stages minted, so a kernel-minted binder can never alias one in a term.
@@ -42,15 +42,24 @@ impl Spend {
         }
     }
 
-    /// Charge one reduction step, failing when the budget is spent.
+    /// Charge `cost` against the budget, failing when it cannot be afforded.
     ///
-    /// The kernel is not strongly normalizing and does not pretend to be: a non-productive `rec` reduces forever. The budget is what makes every judgment terminate, and it is deterministic — the same program spends the same steps on every machine — so exhausting it is a fact about the program, not about the host that checked it.
-    pub(super) fn step(&mut self) -> Result<(), ReduceError> {
-        match self.remaining {
-            0 => Err(ReduceError::Exhausted),
-            remaining => {
-                self.remaining = remaining - 1;
+    /// The kernel is not strongly normalizing and does not pretend to be: a non-productive `rec` reduces forever. The budget is what makes every judgment terminate, and it is deterministic — the same program spends the same units on every machine — so exhausting it is a fact about the program, not about the host that checked it.
+    ///
+    /// [`Cost::STEP`] is the transition; a construction charge is what the same counter spends so that the budget bounds the memory a reduction builds and not only how many times it moves. A saturated cost is refused without being compared, so a size that overflowed while being computed never looks affordable.
+    pub(super) fn spend(&mut self, cost: Cost) -> Result<(), ReduceError> {
+        if cost.is_refused() {
+            return Err(ReduceError::Exhausted);
+        }
+
+        match self.remaining.checked_sub(cost.get()) {
+            Some(remaining) => {
+                self.remaining = remaining;
                 Ok(())
+            }
+            None => {
+                self.remaining = 0;
+                Err(ReduceError::Exhausted)
             }
         }
     }

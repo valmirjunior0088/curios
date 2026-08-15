@@ -48,8 +48,8 @@ use {
     crate::{entails, erased_half},
     curios_analysis::{Env, Erased, Judge},
     curios_core::{
-        Atom, Free, Global, InductDecl, Level, LevelHead, Module, Polarity, ReduceError, Reducer,
-        Spelling, StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError,
+        Atom, Cost, Free, Global, InductDecl, Level, LevelHead, Module, Polarity, ReduceError,
+        Reducer, Spelling, StructDecl, Term, UniverseConstraint, UniverseContext, UniverseError,
         build_shorten,
     },
     std::{fmt, rc::Rc},
@@ -593,9 +593,9 @@ impl Kernel {
         self.globals.scheme_of(name)
     }
 
-    /// Charge one reduction step, failing when the budget is spent.
-    pub(crate) fn spend(&mut self) -> Result<(), ReduceError> {
-        self.spend.step()
+    /// Charge `cost` against this judgment's budget, failing when it cannot be afforded.
+    pub(crate) fn spend(&mut self, cost: Cost) -> Result<(), ReduceError> {
+        self.spend.spend(cost)
     }
 
     /// A fresh binder identity, rendering as `hint`.

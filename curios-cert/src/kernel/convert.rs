@@ -29,8 +29,8 @@ mod tests;
 use {
     super::{Kernel, KernelError, Sort, unfold_spelling},
     curios_core::{
-        Bound, Carrier, Cases, Field, FuncType, Global, InductType, Level, Many, Proj, Reducer,
-        Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two,
+        Bound, Carrier, Cases, Cost, Field, FuncType, Global, InductType, Level, Many, Proj,
+        Reducer, Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two,
         UniverseInst, instantiate_universe_levels_scoped,
     },
     curios_utilities::recurse,
@@ -106,7 +106,7 @@ fn compare(
     that: &Term,
 ) -> Result<bool, KernelError> {
     recurse(|| {
-        kernel.spend()?;
+        kernel.spend(Cost::STEP)?;
 
         // Cheapest first: a term converts with itself at any type, and structural sharing makes this hit constantly on terms built by substitution.
         if this == that {

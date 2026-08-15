@@ -1892,7 +1892,7 @@ mod tests {
             Comparison, Reducer, compare_nat, from_ordering, nat_bound, nat_euclid_split,
             reduce_intrinsic,
         },
-        crate::{Free, Intrinsic, Nat, One, ReduceError, Scope, Subterm, Term},
+        crate::{Cost, Free, Intrinsic, Nat, One, ReduceError, Scope, Subterm, Term},
         curios_num::{Integer, Natural},
         curios_utilities::{Grain, PackedBin},
     };
@@ -1907,6 +1907,11 @@ mod tests {
 
         fn reduce_forced(&mut self, term: Term) -> Result<Term, ReduceError> {
             Ok(term)
+        }
+
+        /// Unbudgeted: these fixtures are about what a fold *decides*, and a limit would only decide it a second time.
+        fn spend(&mut self, _cost: Cost) -> Result<(), ReduceError> {
+            Ok(())
         }
     }
 
@@ -2075,6 +2080,11 @@ mod tests {
 
         fn reduce_forced(&mut self, term: Term) -> Result<Term, ReduceError> {
             self.reduce(term)
+        }
+
+        /// Unbudgeted, for [`Inert`]'s reason.
+        fn spend(&mut self, _cost: Cost) -> Result<(), ReduceError> {
+            Ok(())
         }
     }
 

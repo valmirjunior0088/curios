@@ -12,9 +12,9 @@ mod tests;
 use {
     super::Kernel,
     curios_core::{
-        Apply, Bound, Carrier, Cases, Field, FreeMonoid, Func, Layer, Let, Many, Match, Nat, Proj,
-        Rec, RecGroup, ReduceError, Reducer, Scope, Struct, Subterm, Term, Tuple, UniverseInst,
-        Var, Variant, instantiate_universe_levels_scoped, reduce_intrinsic,
+        Apply, Bound, Carrier, Cases, Cost, Field, FreeMonoid, Func, Layer, Let, Many, Match, Nat,
+        Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Struct, Subterm, Term, Tuple,
+        UniverseInst, Var, Variant, instantiate_universe_levels_scoped, reduce_intrinsic,
     },
     curios_utilities::recurse,
 };
@@ -47,6 +47,10 @@ impl Reducer for Kernel {
 
         Ok(reduct)
     }
+
+    fn spend(&mut self, cost: Cost) -> Result<(), ReduceError> {
+        Kernel::spend(self, cost)
+    }
 }
 
 /// One step's outcome: another term to reduce, or a weak-head normal form.
@@ -66,7 +70,7 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
     let mut term = term;
 
     loop {
-        kernel.spend()?;
+        kernel.spend(Cost::STEP)?;
 
         // An arm's case equation is consulted *before* the term is taken apart, not only on the value it reduced to. Both points are sound for the same reason and by the same test: [`Scope::refinement_of`] matches by syntactic equality up to universe instances, so a hit means this term *is* the registered scrutinee and the arm's hypothesis applies to it directly — and the value it substitutes is a constructor, a normal form, so nothing cycles.
         //
@@ -410,7 +414,7 @@ fn force(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
     let mut term = term;
 
     loop {
-        kernel.spend()?;
+        kernel.spend(Cost::STEP)?;
 
         // Unfolding a projection means stepping to the member's body; unfolding any other `rec` means opening its tail. Both are the same rule read at the two tail shapes.
         if let Some((group, index)) = term.as_rec_proj() {
