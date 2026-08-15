@@ -39,7 +39,7 @@ fn decide(equal: bool) -> Peel {
 
 /// `Nat` is the free commutative monoid on its symbolic summands: `k + a ~ k' + t` cancels everything the two sides carry in common and the leftover rides on whichever side kept it — `2 ~ ?n + 1` becomes `1 ~ ?n`, and `x + a ~ x + b` becomes `a ~ b`.
 ///
-/// The cancellation itself is [`Nat::cancel_common`], which the reduction-side comparison and subtraction folds read too — one law, three readers. This function is only its translation into [`Peel`]: both residuals gone is equality, a surviving positive floor against nothing is a definite clash, and anything else is a smaller pair for the caller to keep comparing. The non-canonical `Succ(0, _)` the inverter used to need its own guard against falls out of `Nat::rebuild` collapsing a zero floor, so no arm states it.
+/// The cancellation itself is `Nat::cancel_common`, which the reduction-side comparison and subtraction folds read too — one law, three readers. This function is only its translation into [`Peel`]: both residuals gone is equality, a surviving positive floor against nothing is a definite clash, and anything else is a smaller pair for the caller to keep comparing. The non-canonical `Succ(0, _)` the inverter used to need its own guard against falls out of `Nat::rebuild` collapsing a zero floor, so no arm states it.
 ///
 /// Cancelling *summands* rather than only the successor spine is what lets a commuted sum decide equal here instead of being handed to a structural comparison that would refuse it. `Peel::Stuck` stays unreachable for `Nat`: a residual pair is always something the caller can go on comparing, so peeling never has to decline.
 pub fn peel_nat(actual: &Nat, target: &Nat) -> Peel {

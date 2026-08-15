@@ -132,7 +132,7 @@ impl RootSource {
 
     /// Every file this source has read so far, by canonical path, with the text that was parsed from it.
     ///
-    /// **This is a unit's input set, and it is closed.** A file can only join it by being declared `mod x` in a header, and that header is itself a read — so nothing can enter the set without changing something already in it. Cross-unit references read nothing at all: [`owning`](Self::owning) claims only qualifiers inside this source's own mounts, so `use /json/Value` resolves against a compiled predecessor rather than a file. Together those are why a cache can verify a stored unit by re-reading exactly this list and needs no record of what was *looked for and not found*.
+    /// **This is a unit's input set, and it is closed.** A file can only join it by being declared `mod x` in a header, and that header is itself a read — so nothing can enter the set without changing something already in it. Cross-unit references read nothing at all: `Self::owning` claims only qualifiers inside this source's own mounts, so `use /json/Value` resolves against a compiled predecessor rather than a file. Together those are why a cache can verify a stored unit by re-reading exactly this list and needs no record of what was *looked for and not found*.
     ///
     /// Empty until something is resolved, and empty forever for a source supplied already parsed — which is why the fixed prelude has an archive of its own rather than a place in such a store.
     ///

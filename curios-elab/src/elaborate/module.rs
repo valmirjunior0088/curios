@@ -1171,13 +1171,13 @@ pub fn elaborate_and_zonk_module(
     )?)
 }
 
-/// Elaborate a [`Module`] against an already-elaborated `sys`/`syn`/`std` prelude, reusing the cached result instead of re-type-checking it.
+/// Elaborate one [`Module`] against the units already established, then zonk and check it.
 ///
-/// `prelude` is the elaborated + zonked prelude-only module — its `items` are the whole prelude in dependency order (its trivial `body`/`type_` are ignored). The lowered `module` still carries the *whole* program as `text::into_core` produced it, and the prelude is its **leading prefix**: with the prune gone every program lowers the same prelude, and since prelude items depend only on each other they always topologically sort ahead of the user items.
+/// `established` is that scope: the modules elaborated ahead of this one, in dependency order and *borrowed* rather than merged. What a predecessor contributes is its nominal registries, its mounts and its recorded totality verdicts, seeded into the [`Context`] before the unit's first item is checked — never its items.
 ///
-/// Sound because the prelude is program-independent: its items never see user code, and — since top-level definitions are excluded from a metavariable's Γ (`Context::identity_snapshot`) — a user item elaborates against the identical local context it would with no prefix at all, so the solutions (and the zonked output) are identical.
+/// Sound because a scope is unit-independent: its items never see this unit's code, and — since top-level definitions are excluded from a metavariable's Γ (`Context::identity_snapshot`) — an item elaborates against the identical local context it would with no scope at all, so the solutions (and the zonked output) are identical.
 ///
-/// The returned module keeps that shape: its items are `prelude`'s own, cloned unchanged and in order, followed by the user's, and its registries are `prelude`'s extended in place. That is a contract, not an artifact of how the splice happens to be written — [`crate::erase_module_with_prelude`] skips the prefix by `prelude.items.len()` and reuses the prelude's already projected terms for it rather than re-deriving the standard library on every compilation.
+/// **The returned module holds this unit's items and no one else's.** That is a contract rather than an artifact of how the elaboration happens to be written: [`crate::erase_unit`] erases a unit *onto* what its scope already erased, and re-deriving the standard library on every compilation is exactly what carrying it here would cost. The one quantity that combines is the binder floor, which is a bound rather than a set and is taken as the maximum of the scope's and this unit's.
 pub fn elaborate_and_zonk_unit(
     context: &mut Context,
     established: Established<'_>,
@@ -1198,9 +1198,9 @@ pub fn elaborate_and_zonk_unit(
     raise((module, body_type, obligations))
 }
 
-/// [`elaborate_and_zonk_with_prelude`] with the erasure obligations *reported* rather than raised.
+/// [`elaborate_and_zonk_unit`] with the erasure obligations *reported* rather than raised.
 ///
-/// Elaboration is no less checked: everything that decides whether the program is well-typed still short-circuits. What is handed back instead of thrown is the pair of obligations `curios-cert` also decides — (T) and (V) — and the reason is that a fixture this checker refuses must still be able to reach the kernel. Raising leaves no module, so whether the kernel would have refused the same program is unobservable, and that is precisely the disagreement worth seeing: an obligation only this side enforces is the trusted base resting on an elaborator-only analysis. The two-checker fixture harness in `curios` is the caller; every other caller wants [`elaborate_and_zonk_with_prelude`].
+/// Elaboration is no less checked: everything that decides whether the program is well-typed still short-circuits. What is handed back instead of thrown is the pair of obligations `curios-cert` also decides — (T) and (V) — and the reason is that a fixture this checker refuses must still be able to reach the kernel. Raising leaves no module, so whether the kernel would have refused the same program is unobservable, and that is precisely the disagreement worth seeing: an obligation only this side enforces is the trusted base resting on an elaborator-only analysis. The two-checker fixture harness in `curios` is the caller; every other caller wants [`elaborate_and_zonk_unit`].
 pub fn elaborate_and_zonk_unit_reporting(
     context: &mut Context,
     established: Established<'_>,

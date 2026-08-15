@@ -103,7 +103,7 @@ pub enum Printer {
     ///
     /// A [`Printer::Group`] is all-or-nothing — when its flat form does not fit, every [`Printer::Line`] inside it breaks — which is right for a structure whose parts belong on separate lines once any of them does. It is wrong for a run of short interchangeable items: a twenty-name import does not fit on one line, so a group puts each name on a line of its own and spends twenty lines on what two would hold. Each item carries its own separator, so this variant inserts only the gap and never invents punctuation.
     ///
-    /// The gaps are decided while printing and owe nothing to the mode the fill was reached in: a fill inside a *flat* group still wraps. That is why [`fits`] reads a fill that runs out of room as the line ending rather than as the scan failing — any other reading would let a group render flat over a fill that then wrapped underneath it.
+    /// The gaps are decided while printing and owe nothing to the mode the fill was reached in: a fill inside a *flat* group still wraps. That is why `fits` reads a fill that runs out of room as the line ending rather than as the scan failing — any other reading would let a group render flat over a fill that then wrapped underneath it.
     Fill(Vec<Printer>),
     /// The width-adaptive unit: renders flat — every enclosed [`Printer::Line`] as its flat spelling — when its flat form fits the room left on the line, and broken otherwise. Nested groups measured inside a fitting parent render flat with it; under a broken parent each decides for itself. With no width configured every group fits.
     Group(Box<Printer>),

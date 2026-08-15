@@ -527,7 +527,7 @@ impl Kernel {
 
     /// Open a binder: bring `name : type_` into scope for the walk in progress.
     ///
-    /// Locals are a stack, and closing them is [`Kernel::scoped`]'s job rather than the caller's — it is the only bracket there is, so a binder opened here is closed on every path out of the walk that opened it.
+    /// Locals are a stack, and closing them is `Kernel::scoped`'s job rather than the caller's — it is the only bracket there is, so a binder opened here is closed on every path out of the walk that opened it.
     pub fn assume(&mut self, name: &Free, type_: &Term) {
         self.scope.assume(name, type_);
     }

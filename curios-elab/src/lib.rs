@@ -1,6 +1,6 @@
-//! The core calculus of the Curios compiler: the dependently-typed kernel between `curios-text` (whose `into_core` lowers surface syntax into this crate's `Term`) and `curios-ersd` (which consumes the erased output of [`erase_module_with_prelude`]).
+//! The core calculus of the Curios compiler: the dependently-typed kernel between `curios-text` (whose `into_core` lowers surface syntax into this crate's `Term`) and `curios-ersd` (which consumes the erased output of [`erase_unit`]).
 //!
-//! The stage runs module-at-a-time: [`elaborate_and_zonk_module`] walks a lowered `Module` item by item, elaborating each definition (bidirectional infer/check with implicit-argument insertion, witness resolution, and infix/numeric-literal overload resolution) under a [`Context`] that accumulates metavariables, inductive/struct/concept declarations, and the program-wide witness table; `zonk`/[`zonk_module`] then substitute solved metavariables and report unsolved holes; `into_ersd` ([`erase_module_with_prelude`]) strips types, proofs, and other runtime-irrelevant structure for `curios-ersd`.
+//! The stage runs module-at-a-time: [`elaborate_and_zonk_module`] walks a lowered `Module` item by item, elaborating each definition (bidirectional infer/check with implicit-argument insertion, witness resolution, and infix/numeric-literal overload resolution) under a [`Context`] that accumulates metavariables, inductive/struct/concept declarations, and the program-wide witness table; `zonk`/[`zonk_module`] then substitute solved metavariables and report unsolved holes; `into_ersd` ([`erase_unit`]) strips types, proofs, and other runtime-irrelevant structure for `curios-ersd`.
 //!
 //! # What this stage starts from
 //!

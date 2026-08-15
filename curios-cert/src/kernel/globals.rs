@@ -108,7 +108,7 @@ impl Globals {
 
     /// Add everything a second `module` puts in scope, at the binder floor its own walk derived.
     ///
-    /// For a compilation whose scope is several units. Names are disjoint by mount, so this cannot overwrite — and it is asserted rather than reported, unlike [`Globals::insert`], for a second reason: mounting happens before any walk, so there are no remembered reducts for an overwrite to invalidate. A collision here is a driver that mounted one prefix twice, which is a construction bug and not a program's fault.
+    /// For a compilation whose scope is several units. Names are disjoint by mount, so this cannot overwrite — and it is asserted rather than reported, unlike `Globals::insert`, for a second reason: mounting happens before any walk, so there are no remembered reducts for an overwrite to invalidate. A collision here is a driver that mounted one prefix twice, which is a construction bug and not a program's fault.
     ///
     /// The floor combines by maximum, which can only widen: a bound is not a verdict, and a walk seeded above every identity in scope cannot capture one.
     pub fn mount(&mut self, module: &Module, carried: usize) {

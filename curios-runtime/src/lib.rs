@@ -2,7 +2,7 @@
 //!
 //! **This crate is the workspace's only `wasmtime` dependency**, and nothing above it names a wasmtime type at all. The pin and the feature set live in its manifest — the arrangement `curios-archive` and `curios-num` use for rkyv and num-bigint — so the version `curios` precompiles a `.cwasm` against and the version the launcher deserializes it with cannot drift: there is only one row to change.
 //!
-//! Nothing is re-exported to achieve that. The wasmtime vocabulary appears in [`Lift`] and [`Lower`], which no crate outside this one implements, and every operation an outside caller needs has a wasmtime-free signature: [`validate`], [`precompile`], [`run_bytes`], and — under `test-support` — [`GuestInstance`] for driving a module by hand.
+//! Nothing is re-exported to achieve that. The wasmtime vocabulary appears in [`Lift`] and [`Lower`], which no crate outside this one implements, and every operation an outside caller needs has a wasmtime-free signature: [`validate`], [`precompile`], [`run_bytes`], and — under `test-support`, so it carries no link here — `test_support::GuestInstance` for driving a module by hand.
 //!
 //! **Runtime-only is a property of the default build, and it is checked.** The `cranelift` feature is never in `default`, so the isolated `cargo build -p curios-runtime` that `make curios/runtime` runs cannot reach a compiler; `curios` turns it on for itself to get [`precompile`]. What enforces this is not the feature declaration but `curios/src/bundle.rs`, whose guards scan the launcher image that actually ships for backend markers and hold it under a size ceiling — a Cranelift-carrying launcher was built and measured against them, and both refuse it.
 //!

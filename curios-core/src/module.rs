@@ -635,7 +635,7 @@ pub fn validate_stored_identities(module: &Module) -> Result<(), Positional> {
 ///
 /// It lives here by this module's own rule, the one stated at the top: it *describes* rather than judges. Reading the highest index a term mentions asks nothing of a kernel — no reduction, no conversion, no `Env` — so it is a property of the data, and a second implementation would be a second run of the same function rather than a second opinion. That is the standing `UniverseContext::is_closed` has for the same reason.
 ///
-/// Every position that can hold a free local is covered, including ones that in practice never do: each item's type and body, every registry telescope and declared result sort, and the entrypoint's own type and body. Deciding a field cannot matter is the reasoning this walk exists to replace, which is why the positions are enumerated once in [`module_positions`] and read from there rather than listed again here.
+/// Every position that can hold a free local is covered, including ones that in practice never do: each item's type and body, every registry telescope and declared result sort, and the entrypoint's own type and body. Deciding a field cannot matter is the reasoning this walk exists to replace, which is why the positions are enumerated once in `module_positions` and read from there rather than listed again here.
 pub fn derived_binder_floor(module: &Module) -> usize {
     derived_binder_floor_outside(module, |_| false)
 }
