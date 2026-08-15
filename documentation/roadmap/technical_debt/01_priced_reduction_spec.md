@@ -20,7 +20,11 @@ Three things it decided that this file did not anticipate.
 
 **The frame constant is measured and there are two figures.** A guarded reduction level takes 7 264 bytes of native stack in release and 97 200 in debug, identical to the byte at every depth. The release figure is charged, because a charge must be a property of the program rather than of the build that checked it, and release is what ships.
 
-**The default is recalibrated provisionally, from 1 000 000 to 30 000 000.** The heaviest prelude declaration measured between 2.5 and 3 million units, against about 91 000 steps before, so this keeps the eleven-fold margin the old figure held. It has *not* yet been set against observed memory per unit or against a replaying corpus, which is the calibration milestone's job.
+**The default is recalibrated provisionally, from 1 000 000 to 30 000 000.** The heaviest prelude declaration measured between 2.5 and 3 million units, against about 91 000 steps before, so this keeps roughly the tenfold margin the old figure held. `curios-elab`'s `DEFAULT_STEP_BUDGET` carries the full reasoning; two things it establishes belong here.
+
+**A single oversized construction is affordable at any default the prelude can build under**, which this file's acceptance criteria did not anticipate. `Nat/shl(1, 400000000)` prices at 6 250 004 units and builds fifty megabytes; refusing it needs a default of six million, twice the prelude's own floor with no margin. Measured at about 28 bytes of process memory per unit, this default admits roughly 780 MB in one declaration. What the charge bought is a ceiling where there was none, not a low one — the weighted single limit this file's *Refused alternatives* accepts, now with numbers.
+
+**A `Str` literal's ceiling fell, from roughly 12 000 characters to under 6 000.** A literal's derivation nests one reduction level per byte, so the frame row charges it directly. That is not a calibration this default can fix, and it is [A string literal is checked once per use](04_string_literal_cost_spec.md)'s to fix rather than this one's — its *What spec 01 measured* section now carries the figures and what they change about its own scoping.
 
 The retention quota and the calibration are pending.
 

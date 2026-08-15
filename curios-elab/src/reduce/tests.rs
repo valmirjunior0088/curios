@@ -333,10 +333,12 @@ fn deep_let_chain_is_one_flat_block_reducing_without_native_recursion() {
 fn a_match_tower_reduces_without_overflowing() {
     // Each level's scrutinee is the level below it, so reducing the top costs one nested `reduce` per link. That is the depth `PendingMatch` used to absorb and `recurse` now carries, and it is data-shaped: a tower this tall is generated rather than written.
     //
-    // Deep enough that a regression is a stack overflow rather than a slow test, and far enough inside the step budget that the budget is not what decides it — which is the property `reduce`'s own documentation claims.
+    // Deep enough that a regression is a stack overflow rather than a slow test, and under a budget large enough that the budget is not what decides it — which is the property `reduce`'s own documentation claims.
+    //
+    // **The stated budget is the part that changed with pricing, and it is not incidental.** A guarded level now charges `Cost::FRAME` when it is a new peak, so depth is a priced resource and the default would decide this test rather than the stack: ten thousand levels cost about 10.2 million units of frames alone, which is past what the compiler ships. A test whose subject is the stack has to take the budget out of the answer, and stating one is how.
     const DEEP: usize = 10_000;
 
-    let mut context = Context::with_default_budget(crate::SYNTAX);
+    let mut context = Context::new(100_000_000, crate::SYNTAX);
     let bool_type = Term::intrinsic(Intrinsic::BoolType);
     let true_ = || Term::intrinsic(Intrinsic::Bool(true));
 

@@ -37,11 +37,21 @@ use {
 
 /// Units of reduction work one declaration may spend before its budget is exhausted.
 ///
-/// **Provisional, and it is the pricing that made it so.** A transition still costs one unit, but a construction now costs what it builds, so an old figure no longer buys what it used to and this was recalibrated rather than retained. The heaviest declaration in the fixed prelude — still in `/std/BigNat/add` — was measured at between 2 500 000 and 3 000 000 units by bisecting this constant against the prelude build, where it was about 91 000 *steps* before. Thirty million keeps roughly the eleven-fold margin the previous figure held over the worst real declaration.
+/// **Provisional, and it is the pricing that made it so.** A transition still costs one unit, but a construction now costs what it builds and a new peak of reduction depth costs the native frame it takes, so an old figure no longer buys what it used to and this was recalibrated rather than retained.
 ///
-/// What "provisional" means: this clears the fixed prelude and the cross-stage corpus with the margin above, and it has *not* yet been set against the two things the specification says must decide it — observed memory per unit, and a corpus that replays a memoized construction rather than evaluating it once. That is the calibration milestone's work.
+/// # What it is set against
 ///
-/// It bounds *reduction*, not elapsed time, so it is a reproducibility guarantee rather than a latency one — and it is machine-independent by construction: see [`Cost`] for why every charge is computed in `u64` and none of them consults a host width.
+/// **The prelude floor.** The heaviest declaration in the fixed prelude — still in `/std/BigNat/add` — measured between 2 500 000 and 3 000 000 units by bisecting this constant against the prelude build, where it was about 91 000 *steps* before. Thirty million keeps roughly the tenfold margin the previous figure held over the worst real declaration, which is the property that figure was chosen for.
+///
+/// **What a unit costs in bytes.** Measured on the same machine, a payload-heavy program costs about **28 bytes of process memory per unit** — the logical unit is eight, and the rest is copies and term traffic the price list deliberately does not model. So this figure admits roughly 780 MB of construction in one declaration.
+///
+/// # Two things it does not buy, stated rather than left to be discovered
+///
+/// **A single oversized construction is still affordable, and no default the prelude can build under would refuse it.** `Nat/shl(1, 400000000)` prices at 6 250 004 units and builds fifty megabytes; refusing it outright needs a default of six million, which is twice the prelude's own floor with no margin at all. What the charge bought is a ceiling where there was none — the same term at a larger numeral now refuses instead of taking the machine — not one low enough to call fifty megabytes unreasonable. Squeezing both ends onto one number is the weighted single limit the specification's *Refused alternatives* accepts, and these are its numbers.
+///
+/// **A `Str` literal's ceiling fell, because a literal is deep and depth is now priced.** Its UTF-8 derivation nests one reduction level per byte, so the frame row charges it directly: a literal of about 12 000 characters compiled before this work and one of 6 000 does not now. That is not a calibration this constant can fix — raising it far enough to restore the old ceiling would give up the memory bound entirely — and it is not meant to be: making a literal affordable at the size people write one is `documentation/roadmap/technical_debt/04_string_literal_cost_spec.md`'s work, and that specification already names this row as one of the levers it composes with.
+///
+/// What "provisional" still means: this has *not* been set against a corpus that replays a memoized construction rather than evaluating it once, which the specification says must also decide it. That is the calibration milestone's work.
 pub const DEFAULT_STEP_BUDGET: u64 = 30_000_000;
 
 /// Γ frozen in binding order, with birth-time types. `Rc`-shared: every meta born under the same Γ shares one allocation (see [`Context::identity_snapshot`]).

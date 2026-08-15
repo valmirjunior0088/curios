@@ -46,6 +46,18 @@ Whether the base 67 also falls is unmeasured and worth measuring first, because 
 
 **Measure that before scoping the rest.** It is the difference between this specification being about a 6 000-character ceiling and a 60 000-character one.
 
+## What spec 01 measured, and the direction it moved
+
+Both halves of spec 01 have since landed, and the answer is not the one either arm above predicted.
+
+**The use multiplier is gone, as predicted.** Measured 2026-08-15 by bisecting `--budget` over a literal of `n` identical characters: the floor is flat across zero, one, two and three use sites — 33 853 to 33 934 units at `n = 500`, an increase of twenty-seven units per use where the model predicted the whole scan again. The kernel is now flat in use count, as the elaborator already was.
+
+**The base did not fall, and pricing raised the ceiling's *cost* rather than lowering it.** A literal's UTF-8 derivation nests one reduction level per byte, and spec 01's frame row charges a new peak of reduction depth the native frame it takes — measured at 7 264 bytes, 1 024 units. So depth, which a literal has in proportion to its length, became the dominant term. Against the recalibrated 30 000 000-unit default a literal of about 2 000 characters compiles and one of 6 000 does not, where roughly 12 000 compiled before any of this work.
+
+**That makes this specification's second lever the load-bearing one.** Shrinking the per-byte constant now buys depth as well as steps, because the two are the same walk. And it makes the third lever — an O(1) native scan — the only one that removes the length-dependence from both axes at once. What spec 01 changed is not the ceiling but which of these levers is worth pulling first.
+
+The ceiling is not a calibration the budget default can fix: raising it far enough to restore 12 000 characters would give up the memory bound spec 01 exists to establish. `curios-elab`'s `DEFAULT_STEP_BUDGET` records that trade where the constant is.
+
 What Ma cannot do under any reading is remove the *linearity*. The cost stays proportional to the literal's length with a non-zero constant, so a large enough literal always crosses any budget. Only an O(1) check changes that.
 
 ## The levers, and what each is worth
