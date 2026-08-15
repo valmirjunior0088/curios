@@ -60,7 +60,7 @@ impl Cost {
     ///
     /// This is the row that brings *depth* inside the contract. `curios_utilities::recurse` grows the native stack rather than aborting, and nothing else bounds total depth, so a data-shaped walk takes real memory the transition counter never observed — one unit per level is already spent, and what this adds is a price commensurate with the stack that level takes.
     ///
-    /// See [`FRAME_UNITS`] for the measurement and for which of the two figures it is.
+    /// See `FRAME_UNITS` for the measurement and for which of the two figures it is.
     pub const FRAME: Self = Self(FRAME_UNITS);
 
     /// A charge of exactly `units`.
