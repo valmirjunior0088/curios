@@ -10,7 +10,9 @@ The propagation half is done. `trivially_inhabited` no longer converts an exhaus
 
 Two things about it are worth carrying forward. The retake reproduced the floor and divergence figures under *Kernel behavior* exactly and the certification figure only in its shape — 6.2 s to 6.1 s rather than 6.6 to 6.5, on a machine whose absolute number differs. And it left a residue this file did not predict, recorded in `spend`'s module documentation and in the soundness entry: an `unfold` record is measured over a computation that may itself have taken free term-keyed hits, so it can record less than the same body costs cold, which makes what a declaration is charged for a name depend on which declaration first unfolded it. The direction is undercharging, so it only ever accepts, and closing it needs the priced replay record M2 already carries.
 
-The pricing, the audit, the retention quota, and the calibration are pending.
+**M0 is done.** The inventory is [The reducer allocation audit](01_priced_reduction_audit.md), a checklist M1 ticks. It found five sites beyond the four this file names, and the ones worth knowing before reading it are that `Natural::checked_shl` hands a converted shift amount straight to the allocator — so one well-typed term with no loop in it can ask for an arbitrary allocation — and that `Telescope::open` clones its whole chain at every beta step, on the hottest path either checker has.
+
+The pricing, the retention quota, and the calibration are pending.
 
 ## The defect is the price of one transition
 
@@ -236,9 +238,9 @@ Ordered first and independently landable. It is verified, it is two functions wi
 - Strengthen `kernel_memo_parity` to the semantic half explicitly — it passes unchanged, because it compares verdicts on a corpus where nothing exhausts, and that is now the property it is *for* rather than an accident of what it happens to cover.
 - Record the measured before-and-after beside a probe, per the figures under *Kernel behavior*.
 
-### M0 — Audit and baselines
+### M0 — Audit and baselines — **done**
 
-- Inventory every reducer allocation site in `curios-core`, `curios-elab`, and `curios-cert`, classifying each as construction or sharing, and turn the inventory into a checklist linked from this specification. The four sites named under *Accounting boundary* are its seed, not its extent.
+- Inventory every reducer allocation site in `curios-core`, `curios-elab`, and `curios-cert`, classifying each as construction or sharing, and turn the inventory into a checklist linked from this specification. The four sites named under *Accounting boundary* are its seed, not its extent. → **[The reducer allocation audit](01_priced_reduction_audit.md)**, which also covers `curios-utilities` and `curios-num`: the four seed sites are three-quarters in `PackedBin`, and every packed-payload and bigint-limb charge lands on a method those two crates own.
 - The parameterized accumulate-then-slice reproducer is **already in the tree**: `curios/src/tests/reduction.rs`, three arms over both the `Bin` and `List` carriers, ignored and explicitly bounded, recording command, input sizes, transition count, wall time and peak process memory, with pre- and post-cap figures beside it. Read it rather than rebuilding it. What it does *not* yet carry is priced work, which M1 adds.
 - Record the same baselines for representative prelude compilation and certificate checking. Priced work and retention do not exist yet and are not claimed at this milestone.
 
