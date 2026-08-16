@@ -1,0 +1,6 @@
+.git
+target
+.claude
+**/.artifacts
+**/.lake
+*.wasm

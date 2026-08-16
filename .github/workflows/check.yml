@@ -39,8 +39,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-directories: |
-            target/curios
-            target/binaryen
+            curios/.artifacts
+            curios-binaryen/.artifacts
       - name: Build runtime launcher
         run: make curios/runtime
       - name: Run cargo check
@@ -58,8 +58,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-directories: |
-            target/curios
-            target/binaryen
+            curios/.artifacts
+            curios-binaryen/.artifacts
       - name: Build runtime launcher
         run: make curios/runtime
       - name: Run Clippy
@@ -75,8 +75,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           cache-directories: |
-            target/curios
-            target/binaryen
+            curios/.artifacts
+            curios-binaryen/.artifacts
       - name: Build runtime launcher
         run: make curios/runtime
       - name: Run tests

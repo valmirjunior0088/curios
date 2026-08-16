@@ -1,6 +1,6 @@
 //! Downloads, verifies, and builds the pinned Binaryen source release.
 //!
-//! Cargo gives distinct build-script fingerprints their own `OUT_DIR`, so that directory cannot cache an expensive C++ build shared by ordinary builds, tests, and Clippy. This script instead keeps one locked cache per compilation target beneath Cargo's target tree. A cache entry is complete only after CMake installs the static library and the script writes its versioned completion marker.
+//! Cargo gives distinct build-script fingerprints their own `OUT_DIR`, so that directory cannot cache an expensive C++ build shared by ordinary builds, tests, and Clippy. This script instead keeps one locked cache per compilation target in `.artifacts/` beside this crate — outside Cargo's target tree, so `cargo clean` does not take a build measured in minutes with it. A cache entry is complete only after CMake installs the static library and the script writes its versioned completion marker.
 
 use {
     flate2::read::GzDecoder,
@@ -10,6 +10,7 @@ use {
         fs::{self, File, OpenOptions},
         io::Read,
         path::{Path, PathBuf},
+        process::Command,
     },
     tar::Archive,
 };
@@ -17,7 +18,6 @@ use {
 const BINARYEN_VERSION: &str = "version_130";
 const BINARYEN_SOURCE_SHA256: &str =
     "20d727e7f3011cfe604b8ebdc873edbb4831c6b148209cb15bc2bedcded036ee";
-const BINARYEN_BUILD_SCHEMA: &str = "1";
 
 fn source_url() -> String {
     format!("https://github.com/WebAssembly/binaryen/archive/refs/tags/{BINARYEN_VERSION}.tar.gz")
@@ -33,41 +33,43 @@ fn sha256_hex(bytes: &[u8]) -> String {
         .collect()
 }
 
-fn build_marker() -> String {
-    format!(
-        "version={BINARYEN_VERSION}\nsource={BINARYEN_SOURCE_SHA256}\nschema={BINARYEN_BUILD_SCHEMA}\n"
-    )
+/// This script's own bytes, hashed — the build *recipe*, as distinct from the source it builds.
+///
+/// This replaces a hand-bumped `BUILD_SCHEMA` constant. The constant was correct and forgettable: nothing but a contributor's memory connected a changed CMake flag to the bump that would invalidate every warm cache, so the same commit could link a library built with the old flags here and the new flags on a cold machine. Deriving it removes the step instead of documenting it.
+///
+/// `include_bytes!` rather than a read at run time, because the path is then resolved by the compiler relative to this file and cannot go looking in the wrong directory. Hashing the file that computes the hash is not circular: the hash is never written into the file.
+///
+/// The cost is that any edit here — a comment included — discards the cache. This file changes rarely, and the error is in the direction of rebuilding.
+fn build_schema() -> String {
+    sha256_hex(include_bytes!("build.rs"))
 }
 
-/// Find Cargo's target directory from its `<target-dir>[/<target>]/<profile>/build/<package-hash>/out` layout.
-fn cargo_target_dir(out_dir: &Path, target_triple: &str) -> PathBuf {
-    let package_dir = out_dir
-        .parent()
-        .unwrap_or_else(|| panic!("unexpected OUT_DIR: {}", out_dir.display()));
-    let build_dir = package_dir
-        .parent()
-        .unwrap_or_else(|| panic!("unexpected OUT_DIR: {}", out_dir.display()));
-    assert_eq!(
-        build_dir.file_name().and_then(|name| name.to_str()),
-        Some("build"),
-        "unexpected OUT_DIR: {}",
-        out_dir.display()
-    );
-    let profile_dir = build_dir
-        .parent()
-        .unwrap_or_else(|| panic!("unexpected OUT_DIR: {}", out_dir.display()));
-    let target_scope = profile_dir
-        .parent()
-        .unwrap_or_else(|| panic!("unexpected OUT_DIR: {}", out_dir.display()));
+/// How the C++ toolchain identifies itself, which is what the cached library is actually compatible with.
+///
+/// The entry's *path* carries the target triple, so an architecture cannot be confused. Nothing carried the platform underneath it, and two machines of one triple on different distributions produce incompatible static libraries under identical paths and identical markers. That was nearly unreachable while this cache sat under `target/`; beside the crate it is one `rsync`, shared checkout, or restored CI cache away.
+///
+/// A probe that fails answers with the compiler's name rather than a fixed string, so an unidentifiable toolchain differs from an identified one and forces a rebuild rather than silently inheriting someone else's.
+fn toolchain() -> String {
+    let compiler = env::var("CXX").unwrap_or_else(|_| "c++".to_owned());
 
-    if target_scope.file_name().and_then(|name| name.to_str()) == Some(target_triple) {
-        target_scope
-            .parent()
-            .unwrap_or_else(|| panic!("unexpected OUT_DIR: {}", out_dir.display()))
-            .to_path_buf()
-    } else {
-        target_scope.to_path_buf()
-    }
+    Command::new(&compiler)
+        .arg("--version")
+        .output()
+        .ok()
+        .filter(|probe| probe.status.success())
+        .and_then(|probe| String::from_utf8(probe.stdout).ok())
+        .and_then(|version| version.lines().next().map(str::to_owned))
+        .unwrap_or_else(|| format!("unidentified {compiler}"))
+}
+
+fn build_marker() -> String {
+    let schema = build_schema();
+    let target = env::var("TARGET").unwrap();
+    let toolchain = toolchain();
+
+    format!(
+        "version={BINARYEN_VERSION}\nsource={BINARYEN_SOURCE_SHA256}\nschema={schema}\ntarget={target}\ntoolchain={toolchain}\n"
+    )
 }
 
 fn lock(path: &Path) -> File {
@@ -193,10 +195,9 @@ fn build(entry: &Path) {
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
 
-    let cargo_out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     let target_triple = env::var("TARGET").unwrap();
-    let binaryen_dir = cargo_target_dir(&cargo_out_dir, &target_triple)
-        .join("binaryen")
+    let binaryen_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
+        .join(".artifacts")
         .join(&target_triple);
     fs::create_dir_all(&binaryen_dir).expect("create Binaryen cache entry");
     let _lock = lock(&binaryen_dir.join("lock"));

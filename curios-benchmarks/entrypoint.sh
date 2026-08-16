@@ -7,7 +7,7 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 ROOT="$PWD"          # absolute benchmarks dir; asc is invoked from elsewhere (see below)
-mkdir -p bin
+mkdir -p .artifacts
 
 # Allowlist, not a blocklist: default stdout to stderr for the whole script, so
 # every command's output — this script's own or any subprocess's, present or
@@ -40,11 +40,11 @@ build() {
   echo ">> building $prog"
 
   # Rust — native + wasm from one source
-  rustc -O "$dir/$stem.rs" -o "bin/${stem}_rust"
-  rustc -O --target wasm32-wasip1 "$dir/$stem.rs" -o "bin/${stem}_rust.wasm"
+  rustc -O "$dir/$stem.rs" -o ".artifacts/${stem}_rust"
+  rustc -O --target wasm32-wasip1 "$dir/$stem.rs" -o ".artifacts/${stem}_rust.wasm"
 
   # OCaml — native, flambda -O3
-  ocamlopt -O3 "$dir/$stem.ml" -o "bin/${stem}_ocaml"
+  ocamlopt -O3 "$dir/$stem.ml" -o ".artifacts/${stem}_ocaml"
   rm -f "$dir"/*.cmi "$dir"/*.cmx "$dir"/*.o
 
   # Lean — a Lake package living in this program's dir. VERIFY: elan default toolchain.
@@ -54,14 +54,14 @@ build() {
   # `lib` glob resolves); in/out are absolute since cwd changes. The shim patches
   # the built-in process/console, so the .ts uses them as globals (no imports).
   ( cd "$AS_DIR" && asc "$ROOT/$dir/$stem.ts" --config "$AS_CONFIG" -O3 \
-      -o "$ROOT/bin/${stem}_asc.wasm" )
+      -o "$ROOT/.artifacts/${stem}_asc.wasm" )
 
   # Grain — precompiled to wasm in the amd64 build stage (no arm64 Grain toolchain);
   # editing a .gr therefore needs an image rebuild, not just a rerun.
-  cp "prebuilt/${stem}_grain.wasm" "bin/${stem}_grain.wasm"
+  cp "prebuilt/${stem}_grain.wasm" ".artifacts/${stem}_grain.wasm"
 
   # Curios — self-contained native executable (embeds wasmtime + the .cwasm)
-  curios compile "$dir/$stem.crs" -o "bin/${stem}_curios"
+  curios compile "$dir/$stem.crs" -o ".artifacts/${stem}_curios"
 }
 
 # --- correctness cross-check: every language must print the same number ------
@@ -69,14 +69,14 @@ check() {  # check <prog> <stem> <arg> <js-file>
   local prog=$1 stem=$2 arg=$3 js="$4"
   local lean; lean="$(lean_bin "$prog" "$stem")"
   echo ">> checking $prog (input $arg) — every output should be identical"
-  printf '  %-12s %s\n' rust       "$(bin/${stem}_rust $arg)"
-  printf '  %-12s %s\n' ocaml      "$(bin/${stem}_ocaml $arg)"
+  printf '  %-12s %s\n' rust       "$(.artifacts/${stem}_rust $arg)"
+  printf '  %-12s %s\n' ocaml      "$(.artifacts/${stem}_ocaml $arg)"
   printf '  %-12s %s\n' node       "$(node $js $arg)"
   printf '  %-12s %s\n' lean       "$($lean $arg)"
-  printf '  %-12s %s\n' curios     "$(echo $arg | bin/${stem}_curios)"
-  printf '  %-12s %s\n' rust-wasm  "$(wasmtime run bin/${stem}_rust.wasm $arg)"
-  printf '  %-12s %s\n' grain-wasm "$(wasmtime run bin/${stem}_grain.wasm $arg)"
-  printf '  %-12s %s\n' asc-wasm   "$(wasmtime run bin/${stem}_asc.wasm $arg)"
+  printf '  %-12s %s\n' curios     "$(echo $arg | .artifacts/${stem}_curios)"
+  printf '  %-12s %s\n' rust-wasm  "$(wasmtime run .artifacts/${stem}_rust.wasm $arg)"
+  printf '  %-12s %s\n' grain-wasm "$(wasmtime run .artifacts/${stem}_grain.wasm $arg)"
+  printf '  %-12s %s\n' asc-wasm   "$(wasmtime run .artifacts/${stem}_asc.wasm $arg)"
 }
 
 table() {  # table "<title>" <hyperfine args...>
@@ -94,31 +94,31 @@ check lcg   lcg   8  programs/lcg/lcg.js
 check trees trees 10 programs/trees/trees.js
 
 # --- LCG --------------------------------------------------------------------
-table "LCG (N=$N_LCG) — native targets" --export-markdown bin/lcg-native.md \
-  "bin/lcg_rust $N_LCG" \
-  "bin/lcg_ocaml $N_LCG" \
+table "LCG (N=$N_LCG) — native targets" --export-markdown .artifacts/lcg-native.md \
+  ".artifacts/lcg_rust $N_LCG" \
+  ".artifacts/lcg_ocaml $N_LCG" \
   "node programs/lcg/lcg.js $N_LCG" \
   "$(lean_bin lcg lcg) $N_LCG" \
-  "echo $N_LCG | bin/lcg_curios"
+  "echo $N_LCG | .artifacts/lcg_curios"
 
-table "LCG (N=$N_LCG) — wasm on wasmtime" --export-markdown bin/lcg-wasm.md \
-  "echo $N_LCG | bin/lcg_curios" \
-  "wasmtime run bin/lcg_rust.wasm $N_LCG" \
-  "wasmtime run bin/lcg_grain.wasm $N_LCG" \
-  "wasmtime run bin/lcg_asc.wasm $N_LCG"
+table "LCG (N=$N_LCG) — wasm on wasmtime" --export-markdown .artifacts/lcg-wasm.md \
+  "echo $N_LCG | .artifacts/lcg_curios" \
+  "wasmtime run .artifacts/lcg_rust.wasm $N_LCG" \
+  "wasmtime run .artifacts/lcg_grain.wasm $N_LCG" \
+  "wasmtime run .artifacts/lcg_asc.wasm $N_LCG"
 
 # --- trees -------------------------------------------------------------------
-table "trees (D=$D_TREES) — native targets" --export-markdown bin/trees-native.md \
-  "bin/trees_rust $D_TREES" \
-  "bin/trees_ocaml $D_TREES" \
+table "trees (D=$D_TREES) — native targets" --export-markdown .artifacts/trees-native.md \
+  ".artifacts/trees_rust $D_TREES" \
+  ".artifacts/trees_ocaml $D_TREES" \
   "node programs/trees/trees.js $D_TREES" \
   "$(lean_bin trees trees) $D_TREES" \
-  "echo $D_TREES | bin/trees_curios"
+  "echo $D_TREES | .artifacts/trees_curios"
 
-table "trees (D=$D_TREES) — wasm on wasmtime" --export-markdown bin/trees-wasm.md \
-  "echo $D_TREES | bin/trees_curios" \
-  "wasmtime run bin/trees_rust.wasm $D_TREES" \
-  "wasmtime run bin/trees_grain.wasm $D_TREES" \
-  "wasmtime run bin/trees_asc.wasm $D_TREES"
+table "trees (D=$D_TREES) — wasm on wasmtime" --export-markdown .artifacts/trees-wasm.md \
+  "echo $D_TREES | .artifacts/trees_curios" \
+  "wasmtime run .artifacts/trees_rust.wasm $D_TREES" \
+  "wasmtime run .artifacts/trees_grain.wasm $D_TREES" \
+  "wasmtime run .artifacts/trees_asc.wasm $D_TREES"
 
-echo; echo "Markdown tables written to bin/*.md"
+echo; echo "Markdown tables written to .artifacts/*.md"

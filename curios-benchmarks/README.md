@@ -1,4 +1,4 @@
-# benchmarks — where is Curios, roughly, on performance?
+# curios-benchmarks — where is Curios, roughly, on performance?
 
 A throwaway, run-once-every-never harness to place Curios against industry languages with a single number per workload. It is **not** a rigorous benchmark suite — its job is orientation: "Curios is ~Nx off Rust on integer loops, ~Mx on allocation." Everything runs in one kitchen-sink arm64 container so nothing has to be installed locally.
 
@@ -183,7 +183,7 @@ Curios's `Nat` and `Int` are unbounded in the type checker but ride an **i31** �
 ## Run it
 
 ```
-benchmarks/
+curios-benchmarks/
   Dockerfile           kitchen-sink arm64 image with all 8 toolchains + curios
   entrypoint.sh        build all, cross-check outputs, then 4 hyperfine tables
   programs/
@@ -191,16 +191,16 @@ benchmarks/
     trees/             trees.{crs,rs,ml,js,ts,gr}  Trees.lean  lakefile.toml
 ```
 
-The image build needs the Curios sources, which live _above_ `benchmarks/`, so it must run with the **repo root as the build context**. The `benchmarks` Makefile target does that, from the repo root:
+The image build needs the Curios sources, which live _above_ `curios-benchmarks/`, so it must run with the **repo root as the build context**. The `curios/benchmarks` Makefile target does that, from the repo root:
 
 ```sh
-make benchmarks
+make curios/benchmarks
 
 # tune the workloads:
 docker run --rm --cpuset-cpus 0 -e N_LCG=200000000 -e D_TREES=23 -e RUNS=7 curios-benchmarks
 ```
 
-`entrypoint.sh` first prints the correctness cross-check (all eight outputs must be identical), then hyperfine's comparison — with relative "x times faster than" ratios — for each table, and writes `bin/*.md`. Read the ratio to Rust as the headline "where are we" number.
+`entrypoint.sh` first prints the correctness cross-check (all eight outputs must be identical), then hyperfine's comparison — with relative "x times faster than" ratios — for each table, and writes `.artifacts/*.md`. Read the ratio to Rust as the headline "where are we" number.
 
 ## Toolchains — installed the perf-correct way
 

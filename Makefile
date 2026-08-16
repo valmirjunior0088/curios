@@ -2,7 +2,7 @@ CARGO_TARGET_DIR ?= target
 
 .PHONY: curios/runtime
 CURIOS_RUNTIME_TARGET_TRIPLE := $(shell rustc -vV | sed -n 's/^host: //p')
-CURIOS_RUNTIME_BIN := $(CARGO_TARGET_DIR)/curios/$(CURIOS_RUNTIME_TARGET_TRIPLE)/runtime
+CURIOS_RUNTIME_BIN := curios/.artifacts/$(CURIOS_RUNTIME_TARGET_TRIPLE)
 
 curios/runtime:
 	cargo build \
@@ -17,10 +17,18 @@ curios/runtime:
 		"$(CARGO_TARGET_DIR)/$(CURIOS_RUNTIME_TARGET_TRIPLE)/release/curios-runtime" \
 		"$(CURIOS_RUNTIME_BIN)"
 
+.PHONY: curios
+
+curios: curios/runtime
+	cargo build \
+		--release \
+		--package curios \
+		--target-dir "$(CARGO_TARGET_DIR)"
+
 .PHONY: curios/js
 CURIOS_JS_TARGET_TRIPLE := wasm32-unknown-unknown
-CURIOS_JS_BIN := $(CARGO_TARGET_DIR)/$(CURIOS_JS_TARGET_TRIPLE)/release/curios_js.wasm
-CURIOS_JS_BUNDLE := $(CARGO_TARGET_DIR)/curios/$(CURIOS_JS_TARGET_TRIPLE)
+CURIOS_JS_WASM := $(CARGO_TARGET_DIR)/$(CURIOS_JS_TARGET_TRIPLE)/release/curios_js.wasm
+CURIOS_JS_BUNDLE := curios-js/.artifacts/$(CURIOS_JS_TARGET_TRIPLE)
 
 curios/js:
 	cargo build \
@@ -32,7 +40,7 @@ curios/js:
 	wasm-bindgen \
 		--target web \
 		--out-dir "$(CURIOS_JS_BUNDLE)" \
-		"$(CURIOS_JS_BIN)"
+		"$(CURIOS_JS_WASM)"
 
 .PHONY: curios/profile
 CURIOS_PROFILE_SOURCE ?= programs/hello_world.crs
@@ -45,16 +53,16 @@ curios/profile:
 		--target-dir "$(CARGO_TARGET_DIR)" \
 		-- profile "$(CURIOS_PROFILE_SOURCE)"
 
-.PHONY: benchmarks
-BENCHMARKS_TAG ?= curios-benchmarks
+.PHONY: curios/benchmarks
+CURIOS_BENCHMARKS_TAG ?= curios-benchmarks
 
-benchmarks:
+curios/benchmarks:
 	docker build \
 	    --platform linux/arm64 \
-		--file benchmarks/Dockerfile \
-		--tag "$(BENCHMARKS_TAG)" .
+		--file curios-benchmarks/Dockerfile \
+		--tag "$(CURIOS_BENCHMARKS_TAG)" .
 
 	docker run \
 	    --rm \
 		--cpuset-cpus 0 \
-		"$(BENCHMARKS_TAG)"
+		"$(CURIOS_BENCHMARKS_TAG)"

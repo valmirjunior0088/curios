@@ -128,11 +128,10 @@ Building requires Rust, a C++ toolchain, and CMake. The first build compiles Bin
 ```sh
 git clone https://github.com/valmirjunior0088/curios
 cd curios
-make curios/runtime
-cargo build --release --package curios
+make curios
 ```
 
-The resulting CLI is `target/release/curios`.
+The resulting CLI is `target/release/curios`. The build has two stages — a slim runtime launcher, then the compiler that embeds it — and `make curios` runs both in order.
 
 ## Go deeper
 
@@ -141,7 +140,7 @@ The resulting CLI is `target/release/curios`.
 - [Design decisions](documentation/design.md) — one file per decision under [`design/`](documentation/design), when you want to know *why* Curios is the way it is; a decision scoped to one crate lives in that crate's `README.md`
 - [Soundness perimeter](documentation/soundness.md) — every rule that can admit a term, what it assumes, and how far it has actually been checked
 - [Development roadmap](documentation/roadmap.md) — what exists, what is pending, and the specifications for the pending half
-- [Benchmark methodology and results](benchmarks/README.md)
+- [Benchmark methodology and results](curios-benchmarks/README.md)
 
 ## Contributing
 

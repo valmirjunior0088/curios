@@ -117,7 +117,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 - `/std` and `/syn` are owned by `curios-prelude-archive` and compiled into an rkyv image in that crate's `OUT_DIR`. Every source module must be registered in its Curios index; the build script discovers every `.crs` input, fingerprints it, and emits the matching Cargo rebuild directives.
 - Production compilation has no fixed-prelude source fallback or cache-miss branch. Archive construction or restoration failure is a compiler invariant and fails loudly. The image is scoped to one compiler build and is not a stable interchange format.
 - `/syn` ownership — which names it holds, and why — is `curios-prelude-archive/README.md`'s decision to state. The registry contract belongs to `curios-utilities`, below both stages that read it, and the erased runtime carriers for compiler-emitted literals remain `Nat` and packed `Bytes`. No crate below `curios-prelude-archive` may spell a `/syn` name: `curios-utilities` states slots, `curios-prelude-archive/src/syntax.rs` states spellings, and the prelude build checks every slot against the sources.
-- Binaryen is built from a verified source release. Its C++ build is shared through the locked, target-specific cache under `target/binaryen`, not a Cargo fingerprint-specific `OUT_DIR`.
+- Binaryen is built from a verified source release. Its C++ build is shared through the locked, target-specific cache under `curios-binaryen/.artifacts/<triple>`, not a Cargo fingerprint-specific `OUT_DIR`.
 - Recursive lowering and packed-value interpretation must work on the default test-thread stack. Do not use `RUST_MIN_STACK` to hide a regression.
 - Generated `.wasm` files and other build products are not source. Do not commit them. `Cargo.lock` is source and must remain synchronized with dependency changes.
 
@@ -145,15 +145,14 @@ One namespace is kept for a different reason, and it is the only one: `curios-ru
 
 ## Build and validation
 
-The native compiler embeds the slim `curios-runtime` launcher with `include_bytes!`. Build that launcher in isolation before building `curios`:
+The native compiler embeds the slim `curios-runtime` launcher with `include_bytes!`, and that launcher must be built in its own Cargo invocation. `make curios` does both stages in order:
 
 ```sh
-make curios/runtime
-cargo build --package curios
+make curios
 cargo run --package curios -- <args>
 ```
 
-`make curios/runtime` is load-bearing: it builds `curios-runtime` without workspace feature unification, keeping Cranelift and Binaryen out, and copies the resulting launcher to the target-scoped `target/curios/<target>/runtime` path for embedding. A `curios-runtime` binary produced by a workspace build is not evidence that the isolated launcher remains slim.
+`make curios/runtime` is the first stage on its own, and it is load-bearing: it builds `curios-runtime` without workspace feature unification, keeping Cranelift and Binaryen out, and copies the resulting launcher to `curios/.artifacts/<triple>` for embedding. A `curios-runtime` binary produced by a workspace build is not evidence that the isolated launcher remains slim. Building `curios` without that stage fails with a message naming the command to run, and a launcher older than `curios-runtime`'s sources warns rather than being embedded silently.
 
 ### While iterating
 
@@ -200,7 +199,7 @@ Documentation-only changes do not require rebuilding the compiler unless they al
 ### Additional gates
 
 - Changes to `curios-js` or its dependencies must also pass `make curios/js` with the exactly version-matched `wasm-bindgen-cli` installed.
-- Changes to `curios-binaryen/build.rs` must verify an empty-cache build and a cache hit from a different Cargo mode or build-script fingerprint. Bump `BUILD_SCHEMA` when the CMake configuration or installed-library contract changes.
+- Changes to `curios-binaryen/build.rs` must verify an empty-cache build and a cache hit from a different Cargo mode or build-script fingerprint. There is no schema constant to bump: the cache marker carries a hash of the build script itself, so any change to the recipe invalidates every entry, and it carries the target and the C++ toolchain's own version string beside it, so a cache is never reused across a toolchain it was not built with.
 - Changes to runtime dependencies must rebuild `curios-runtime` in isolation through `make curios/runtime` and confirm that neither `cranelift-codegen` nor `curios-binaryen` entered its dependency graph. Name those crates when checking: Wasmtime's runtime pulls the `cranelift-bitset`, `cranelift-bforest` and `cranelift-entity` utility crates, so a search for "cranelift" reports a boundary that holds. The ordinary suite now checks the *artifact* rather than the graph — `curios/src/bundle.rs`'s guards scan the embedded launcher image for backend markers and hold it under a size ceiling — so this manual step is for diagnosing a failure, not for detecting one. Both guards have been run against a Cranelift-linked launcher and observed to fail; `launcher_guard_positive_control` records that measurement and how to reproduce it.
 - Changes to the bundle format must run the ignored end-to-end test in `curios/tests/bundle.rs` explicitly.
 
@@ -238,7 +237,7 @@ Document each fact at the narrowest authoritative level and link to it elsewhere
 | Crate `README.md` files | The crate's mission and its crate-scoped design decisions, rationale, and rejected alternatives |
 | Crate and module rustdoc | Local architecture, algorithms, invariants, and public APIs |
 | `Cargo.toml` descriptions | One-line crate purposes for Cargo tooling |
-| `benchmarks/README.md` | Benchmark harness mechanics |
+| `curios-benchmarks/README.md` | Benchmark harness mechanics |
 
 Do not hardwrap Markdown prose. Write one source line per paragraph or list item and let the renderer soft-wrap it. Fenced code blocks and tables retain their deliberate line structure.
 
@@ -251,7 +250,8 @@ Do not hardwrap Markdown prose. Write one source line per paragraph or list item
 
 ## Known build constraints
 
-- `curios-binaryen` downloads, verifies, and builds a pinned Binaryen source release with CMake, which requires a C++ toolchain. Subsequent Cargo modes must reuse `target/binaryen`; a full `cargo clean` removes the cache.
-- `target/` is pruned by hand and never with `cargo clean`, which takes `target/binaryen` with it. `target/debug/incremental` is pure rustc cache and the one directory safe to delete outright, provided no build is running — and it holds a large share of `target/debug`, since Cargo enables incremental compilation for `dev` and `test` while this workspace's edit pattern rebuilds every downstream crate in full anyway; `CARGO_INCREMENTAL=0` suppresses it per invocation. Everything else there holds real artifacts — above all `target/binaryen` and the target-triple-scoped `target/<triple>/release/curios-runtime` that `make curios/runtime` copies the embedded launcher out of.
+- `curios-binaryen` downloads, verifies, and builds a pinned Binaryen source release with CMake, which requires a C++ toolchain. Subsequent Cargo modes must reuse `curios-binaryen/.artifacts/<triple>`, which sits beside the crate rather than under `target/` precisely so `cargo clean` cannot remove a build measured in minutes.
+- **Everything that must survive a clean lives in `.artifacts/` beside its owning crate**, never under `target/`: `curios-binaryen/.artifacts/<triple>` holds the Binaryen build, and `curios/.artifacts/<triple>` the embedded launcher. Both are found through `CARGO_MANIFEST_DIR`, so no build script reconstructs Cargo's internal directory layout, and `cargo clean` is an ordinary command again. Delete either by hand when you want it rebuilt.
+- `target/debug/incremental` is pure rustc cache and safe to delete outright, provided no build is running — and it holds a large share of `target/debug`, since Cargo enables incremental compilation for `dev` and `test` while this workspace's edit pattern rebuilds every downstream crate in full anyway; `CARGO_INCREMENTAL=0` suppresses it per invocation.
 - `curios-js` deliberately uses plain `cargo build` plus `wasm-bindgen-cli`; do not introduce `wasm-pack` or `wasm-opt` without an explicit design decision. Binaryen optimization belongs only to the native `curios` product.
 - The wasm32 build requires the installed `wasm-bindgen-cli` version to match the `wasm-bindgen` crate version in `Cargo.lock` exactly.

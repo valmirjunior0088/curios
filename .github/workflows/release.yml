@@ -41,8 +41,8 @@ jobs:
         with:
           key: ${{ matrix.target }}
           cache-directories: |
-            target/curios
-            target/binaryen
+            curios/.artifacts
+            curios-binaryen/.artifacts
 
       - name: Build
         run: |
@@ -81,7 +81,7 @@ jobs:
         run: make curios/js
 
       - name: Archive package
-        run: tar -czf curios-js.tar.gz -C target/curios/wasm32-unknown-unknown .
+        run: tar -czf curios-js.tar.gz -C curios-js/.artifacts/wasm32-unknown-unknown .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
@@ -104,8 +104,8 @@ jobs:
         with:
           key: docs
           cache-directories: |
-            target/curios
-            target/binaryen
+            curios/.artifacts
+            curios-binaryen/.artifacts
 
       - name: Build runtime launcher
         run: make curios/runtime
