@@ -6,6 +6,13 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -19,18 +26,13 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - uses: Swatinem/rust-cache@v2
-        with:
-          cache-directories: |
-            target/curios
-            target/binaryen
       - name: Run rustfmt
         run: cargo fmt --all -- --check
 
   check:
     name: Run `check`
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -42,15 +44,12 @@ jobs:
       - name: Build runtime launcher
         run: make curios/runtime
       - name: Run cargo check
-        run: cargo check --all-targets --all-features
+        run: cargo check --workspace --all-targets --all-features
 
   clippy:
     name: Run `clippy`
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    needs: check
-    env:
-      RUSTFLAGS: "-Dwarnings"
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -64,13 +63,12 @@ jobs:
       - name: Build runtime launcher
         run: make curios/runtime
       - name: Run Clippy
-        run: cargo clippy --all-targets --all-features
+        run: cargo clippy --workspace --all-targets --all-features -- -Dwarnings
 
   test:
     name: Run `test`
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
-    needs: clippy
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
@@ -82,10 +80,10 @@ jobs:
       - name: Build runtime launcher
         run: make curios/runtime
       - name: Run tests
-        run: cargo test --all-targets --all-features
+        run: cargo test --workspace --all-targets --all-features
 
   wasm:
-    name: Build `curios-web`
+    name: Build `curios-js`
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -96,12 +94,9 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: wasm32-unknown-unknown
-          cache-directories: |
-            target/curios
-            target/binaryen
       - name: Install wasm-bindgen-cli
         run: |
           version=$(grep -A1 'name = "wasm-bindgen"' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
           cargo install wasm-bindgen-cli --version "$version" --locked
-      - name: Build curios-web
-        run: make curios/web
+      - name: Build curios-js
+        run: make curios/js

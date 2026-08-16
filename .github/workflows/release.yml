@@ -5,12 +5,15 @@ on:
     tags:
       - "release/*"
 
+permissions:
+  contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   build:
-    name: Build ${{ matrix.target }}
+    name: Build `${{ matrix.target }}`
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
 
@@ -19,15 +22,12 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             runner: ubuntu-24.04
-            binary: curios
             asset: curios-linux-x86_64
           - target: aarch64-unknown-linux-gnu
             runner: ubuntu-24.04-arm
-            binary: curios
             asset: curios-linux-aarch64
           - target: aarch64-apple-darwin
             runner: macos-14
-            binary: curios
             asset: curios-macos-aarch64
 
     steps:
@@ -45,7 +45,6 @@ jobs:
             target/binaryen
 
       - name: Build
-        shell: bash
         run: |
           make curios/runtime CURIOS_RUNTIME_TARGET_TRIPLE=${{ matrix.target }}
           cargo build --release --target ${{ matrix.target }} --package curios
@@ -54,10 +53,11 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.asset }}
-          path: target/${{ matrix.target }}/release/${{ matrix.binary }}
+          path: target/${{ matrix.target }}/release/curios
+          retention-days: 1
 
   build-wasm:
-    name: Build curios-web
+    name: Build `curios-js`
     runs-on: ubuntu-24.04
     timeout-minutes: 30
 
@@ -71,26 +71,24 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: wasm32-unknown-unknown
-          cache-directories: |
-            target/curios
-            target/binaryen
 
       - name: Install wasm-bindgen-cli
         run: |
           version=$(grep -A1 'name = "wasm-bindgen"' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
           cargo install wasm-bindgen-cli --version "$version" --locked
 
-      - name: Build curios-web
-        run: make curios/web
+      - name: Build curios-js
+        run: make curios/js
 
       - name: Archive package
-        run: tar -czf curios-web.tar.gz -C target/curios/wasm32-unknown-unknown .
+        run: tar -czf curios-js.tar.gz -C target/curios/wasm32-unknown-unknown .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: curios-web
-          path: curios-web.tar.gz
+          name: curios-js
+          path: curios-js.tar.gz
+          retention-days: 1
 
   build-docs:
     name: Build docs
@@ -126,6 +124,7 @@ jobs:
         with:
           name: curios-docs
           path: curios-docs.tar.gz
+          retention-days: 1
 
   release:
     name: Create release
@@ -148,7 +147,7 @@ jobs:
           mv artifacts/curios-linux-x86_64/curios curios-linux-x86_64
           mv artifacts/curios-linux-aarch64/curios curios-linux-aarch64
           mv artifacts/curios-macos-aarch64/curios curios-macos-aarch64
-          mv artifacts/curios-web/curios-web.tar.gz curios-web.tar.gz
+          mv artifacts/curios-js/curios-js.tar.gz curios-js.tar.gz
           mv artifacts/curios-docs/curios-docs.tar.gz curios-docs.tar.gz
 
       # The installer's version is baked in here rather than discovered at run time, so the script a release ships installs that release's binary and a pinned URL stays pinned.
@@ -167,7 +166,7 @@ jobs:
             curios-linux-x86_64 \
             curios-linux-aarch64 \
             curios-macos-aarch64 \
-            curios-web.tar.gz \
+            curios-js.tar.gz \
             curios-docs.tar.gz \
             checksums.txt \
             .github/workflows/install.sh
