@@ -215,6 +215,8 @@ Tuple values use parentheses and comma-separated fields:
 ()
 ```
 
+A one-field tuple is written `(x,)`; the trailing comma is what separates it from the parenthesized term `(x)`. A labeled single field needs no comma, since `=` already disambiguates it: `(only = 1)`.
+
 Labeled fields may use function-definition sugar:
 
 ```crs
@@ -298,6 +300,8 @@ let increment(n: Nat) -> Nat = n + 1;
 increment(4)
 ```
 
+Every parameter of a `let`, `rec`, or `satisfy` telescope must be annotated; only a `use` parameter is written without one. The `label(params) = value` sugar inside tuple, struct, and witness bodies takes the annotation as optional, since the field's declared type supplies it.
+
 The binder may be an irrefutable tuple or struct pattern:
 
 ```crs
@@ -334,7 +338,7 @@ let Point { loc = (x, y), color } = point;
 body
 ```
 
-These patterns are projection sugar, not runtime matches. The struct head is documentary and is not resolved or checked; fields are matched positionally. Field punning such as `Point { x, y }` binds fields with the same written names.
+These patterns are projection sugar, not runtime matches. The struct head is documentary and is not resolved or checked. An unlabeled field is matched positionally; a `label = pattern` field projects that label. Field punning such as `Point { x, y }` is the positional form, whose sub-patterns happen to be binders named after the fields.
 
 Refutable patterns belong only to `match`.
 
@@ -369,7 +373,7 @@ An action whose own monad differs from the region's is lifted: the `!` wraps the
 
 Postfix `!` is not allowed in types. The token `!=` is an infix operator and is not parsed as postfix `!` followed by `=`.
 
-### Host effects are `Io` descriptions
+### Host effects and `Io`
 
 Every operation that touches the host — writing a handle, reading a clock, allocating or reading a cell, calling a `foreign` function, exiting — has result type `Io(T)`. An `Io(T)` is a *description* of a computation yielding a `T`, not the `T`. Calling such an operation performs nothing; it builds a description.
 
@@ -384,14 +388,15 @@ let greeting: Io({}) = print("hello");   -- nothing has been printed
 use /std/{Io, print};
 let shout(s: Str) -> Io({}) =
     let _ = print(s)!;
-    print("!\n")
+    print("!\n");
 ```
 
 **There is no operation taking an `Io(T)` to a `T`.** A description is performed only by being the program's tail, which the emitted entrypoint forces once. So a function whose result type is not an `Io` cannot perform an effect, and a `!` may only appear in a region whose type is a monad — a `(Str, Bool) -> Bool` has nowhere to sequence one.
 
 ```crs
+use /std/{print};
 let probe(tag: Str, r: Bool) -> Bool =
-    let _ = /std/print(tag)!;   -- rejected: this region's type is `Bool`, not a monad
+    let _ = print(tag)!;   -- rejected: this region's type is `Bool`, not a monad
     r;
 ```
 
@@ -433,7 +438,7 @@ Embeddings never chain. Declaring `Lift(Io, Job)` and `Lift(Job, Sched)` does no
 
 `let`, `rec`, `match`, `choose`, lambdas, and function types are whole-term forms: a body or tail extends to the end of the enclosing term. There is no expression-level `term: type` ascription; a `:` annotation appears only in binder, signature, and motive positions.
 
-An infix operand is an applied atom: a literal, name, tuple, structure literal, or parenthesized term, followed by any chain of calls, projections, and postfix `!`. A whole-term form is not an operand; parenthesize it to use it as one.
+An infix operand is an applied atom: a literal, name, sort (`Type`/`Prop`), tuple, tuple type, structure literal, goal, or parenthesized term, followed by any chain of calls, projections, and postfix `!`. A whole-term form is not an operand; parenthesize it to use it as one.
 
 ```crs
 1 + (match flag | true => 1 | false => 0 end)
@@ -454,6 +459,10 @@ All infix operators require whitespace on both sides and associate to the left.
 | 5, tightest | `*`, `/`, `%` | `Mul`, `Div`, `Rem` |
 
 Both operands of an operator have the same type. `==` and `!=` are two separate methods of `Eql`, `eql` and `neq`, so a witness supplies both; `!=` is not a negation applied to `eql`.
+
+An operator's result type is whatever its `/syn` method declares: `+`, `-`, `*`, `/`, `%`, `&&` and `||` return the operand type, while `==`, `!=`, `<`, `>`, `<=` and `>=` return `Bool`.
+
+`/` and `%` additionally carry the precondition their concept declares. `Div` and `Rem` each have an `Ok(A) -> Prop` field, and the operator inserts an implicit proof of `Ok(divisor)` — so `a / b` on `Nat` must discharge `Nat/Lt(0, b)`. A carrier whose division is total states `True` and pays nothing, which is what keeps `/` a single operator over carriers that disagree about whether it can fail.
 
 Operator notation always uses witness resolution, including intrinsic operands. Standard witnesses cover the intrinsic types, while a `satisfy` declaration enables the same notation for a user-defined type.
 
@@ -477,7 +486,7 @@ match n: (m) => P(m)                           -- result depends on it
 match p: (s, t, q) => Eq(t, s)                 -- an indexed family
 match p: (s: A, t: A, q: Eq(s, t)) => Eq(t, s) -- with written annotations
 match p: discriminates_eq                      -- a named family
-match v                                         -- omitted; inferred
+match v                                        -- omitted; inferred
 ```
 
 The number of binders is fixed by the eliminated type: one per index, then one for the scrutinee. A non-indexed scrutinee — every intrinsic carrier, and any inductive declared without an index telescope — therefore takes exactly one binder, so a result that ignores the scrutinee is written `(_) => T`. `Vec(T)` has one index and takes two binders; `Eq` has two and takes three.
@@ -494,6 +503,8 @@ match p: (s, t, q: Eq(s, t)) => Eq(t, s)
 
 Omitting the motive asks the elaborator to infer it. Prefer omission wherever inference succeeds; a written motive is needed where there is nothing to infer from — a type-level match whose result appears in a signature, or an elimination in inference position.
 
+A motive may only be written where the head dispatches directly: every arm's top-level pattern must be the same dispatchable shape. A tuple-scrutinee matrix, a struct-headed match, or a plain-binder match builds no core eliminator for the motive to attach to, and rejects one.
+
 ### Inductive patterns
 
 An inductive pattern names a constructor and supplies one pattern per payload position.
@@ -509,11 +520,12 @@ A payload position the constructor declared implicit (`@`) must be matched with 
 
 ```crs
 match vector
+| nil() => fallback
 | cons(@length, head, tail) => head
 end
 ```
 
-Patterns may nest through constructors, tuples, structs, booleans, naturals, lists, `Bits`, and `Bytes`.
+A pattern may nest *inside* a constructor, tuple, or struct field. The operands of the `Nat`, `List`, `Bits`, and `Bytes` leaves are plain binder names rather than patterns — `[some(x), ..tail]` is not a pattern — while the `; ih` binding takes a full irrefutable pattern.
 
 ```crs
 match value
@@ -524,9 +536,9 @@ end
 
 Concrete constructor rows have no priority. Each reachable combination needed by the program must be represented by a compatible row.
 
-### Inductive default arm
+### Dispatch default arm
 
-A final top-level bare `_` may follow concrete inductive arms and covers constructors not named earlier.
+A final top-level bare `_` may follow any run of concrete *dispatching* arms — inductive constructors, `true`/`false`, `Nat` shapes, `[]`/`[head, ..tail]`, `b[]`/`x[]` — and covers every shape not named earlier. It is not available after tuple or struct arms, which project exhaustively rather than dispatching.
 
 ```crs
 match option
@@ -555,7 +567,7 @@ Tuple and struct patterns over non-inductive values compile to projections rathe
 
 ### Boolean match
 
-A `Bool` match has exactly one `true` arm and one `false` arm, in either order.
+A `Bool` match covers both shapes: one `true` arm and one `false` arm in either order, or one of them followed by the bare `_` default described under [Dispatch default arm](#dispatch-default-arm).
 
 ```crs
 match condition
@@ -566,7 +578,7 @@ end
 
 ### Natural-number induction
 
-Natural-number induction has a zero arm and a successor arm. The successor arm binds the predecessor before `+ 1`; a binding after `;` receives the induction hypothesis for the predecessor, and omitting it makes the arm an ordinary case split.
+Natural-number induction has a zero arm and a successor arm. The successor arm binds the predecessor before `+ 1`; a binding after `;` receives the induction hypothesis for the predecessor, and omitting it makes the arm an ordinary case split. `+ 1` takes whitespace on both sides, like an infix operator: `pred+1` is not a successor pattern.
 
 ```crs
 match n: (m) => P(m)
@@ -598,11 +610,13 @@ end
 
 Induction arms and literal-dispatch arms cannot be mixed in one match.
 
-Natural-number pattern literals are numeric literals only. Character literals do not provide character, natural-number, or byte patterns.
+Natural-number pattern literals are numeric literals only. Character literals do not provide character, natural-number, or byte patterns. A dispatch literal must fit in 32 bits; a larger numeral is a parse error, even though `Nat` itself is unbounded.
 
 ### List fold and case split
 
 A list match uses `[]` for the empty case and `[head, ..tail]` for the nonempty case. A binding after `;` receives the fold result for `tail` — a plain name or an irrefutable tuple/struct pattern, exactly as in [natural-number induction](#natural-number-induction); omit it for an ordinary case split.
+
+Both cases are required: unlike an inductive family, this carrier has no vacuity inversion to prune one. A trailing `| _ =>` may stand in for the missing one.
 
 ```crs
 match values
@@ -613,7 +627,7 @@ end
 
 ### Packed folds
 
-`Bits` and `Bytes` use their literal grain letters to select the carrier, and their arms take the same shape as a [list fold](#list-fold-and-case-split). The nonempty arm binds the leading element and tail; an optional binding after `;` receives the fold result for the tail, as a plain name or an irrefutable tuple/struct pattern. A `Bits` head has type `Bool`; a `Bytes` head has type `Byte`.
+`Bits` and `Bytes` use their literal grain letters to select the carrier, and their arms take the same shape as a [list fold](#list-fold-and-case-split). The nonempty arm binds the leading element and tail; an optional binding after `;` receives the fold result for the tail, as a plain name or an irrefutable tuple/struct pattern. A `Bits` head has type `Bool`; a `Bytes` head has type `Byte`. Both cases are required here too, and a trailing `| _ =>` may stand in for the missing one.
 
 ```crs
 match bits
@@ -627,7 +641,7 @@ match bytes
 end
 ```
 
-## Choose
+## Guarded ladders (`choose`)
 
 `choose` is an ordered guarded ladder, not a match — it consumes no scrutinee. Arms are tried from top to bottom, and a final `_` arm is mandatory.
 
@@ -679,16 +693,16 @@ end
 
 A header's file-backed modules live in its **stem directory**. `mod Nat;` written in `foo.crs` loads `foo/Nat.crs`, and `Nat`'s own file-backed modules load from `foo/Nat/`. One rule governs every file in the language, so the file handed to `curios run` is a header like any other: `mod Nat;` in `main.crs` loads `main/Nat.crs`.
 
-A package's library header is the single exception: `lib.crs` sits beside `curios.toml`, and its modules load from the manifest's own directory rather than from `lib/`. The package's declared name is what names that namespace, so no directory on disk has to. A stem is never part of a name — neither `main` nor `lib` can be written in a path.
+A package's library header is the single exception, and it is a fact about package layout rather than about the language — see [What a package is made of](usage.md#what-a-package-is-made-of). A stem is never part of a name: neither `main` nor `lib` can be written in a path.
 
 ### Imports and re-exports
 
-`use` imports paths. Prefixing it with `pub` re-exports what it imports.
+`use` imports through a group: a braced list `path/{…}` or a glob `path/*`. There is no bare `use path;` form — a single import is written `use /std/{Nat};`. Prefixing it with `pub` re-exports what it imports.
 
 ```crs
 use /std/{Nat, Bool};
 pub use Option/*;
-use /syn/Str/{classify, step};
+use /std/Nat/{Lt};
 ```
 
 Inside a group, a bare name imports both a child module and a value with that name when both exist. `mod Name` imports only the module namespace; `let Name` imports only the value namespace.
@@ -843,6 +857,15 @@ pub concept Idem(A: Type): pub Type {
 
 A field whose type is a proposition about earlier fields is a law. `satisfy` cannot register a witness for such a concept without supplying a proof that discharges the law at the implementations that witness supplies, so a witness violating it is rejected where it is declared.
 
+A field's result may itself be a sort, which makes the field an associated type each witness chooses. `Div`'s `Ok(A) -> Prop` is what lets every carrier state its own division precondition, and a witness supplies it with the same field sugar as any other:
+
+```crs
+satisfy Rem(Nat) {
+    Ok(b) = Nat/Lt(0, b),
+    rem = rem,
+}
+```
+
 A field beginning with `use` is an anonymous superclass edge. Its type must be a concept application.
 
 ```crs
@@ -951,7 +974,7 @@ pub foreign log: (Bytes) -> Nat;
 
 The wire types are `Nat`, `Int`, `Bool`, `Bytes`, `Handle`, and `List(T)`. A wire signature is a bare wire result type for a zero-argument foreign or a parenthesized wire parameter list followed by `->` and a wire result type.
 
-`Byte` and `Bits` are not distinct wire types. `List` does not nest: its element must be `Nat`, `Int`, `Bool`, `Bytes`, or `Handle`, so `List(List(T))` is rejected. `List` is in practice reachable only from builtin `/sys` operations — an embedder implementing a `foreign` declaration binds it through typed host closures, and the shapes those provide are the ones the builtins use. The Wasm import uses the declaration's fully qualified name in the `ffi` namespace.
+`Byte` and `Bits` are not distinct wire types. `List` does not nest: its element must be `Nat`, `Int`, `Bool`, `Bytes`, or `Handle`, so `List(List(T))` is rejected. `List` is in practice reachable only from builtin `/sys` operations — an embedder implementing a `foreign` declaration binds it through typed host closures, and the shapes those provide are the ones the builtins use. How the declaration reaches the embedder is the host ABI's concern rather than the surface language's.
 
 ## Equality and proofs
 
@@ -960,7 +983,7 @@ Propositional equality `Eq` is an ordinary indexed inductive proposition from `/
 ```crs
 pub let sym(@A: Type, @x: A, @y: A, proof: Eq(x, y)) -> Eq(y, x) =
     match proof: (left, right, p) => Eq(right, left)
-    | refl(value) => Eq/refl()
+    | refl(@value) => Eq/refl()
     end;
 ```
 
@@ -978,6 +1001,8 @@ The standard equality operations include reflexivity, symmetry, transitivity, co
 | `use value` | Explicitly supplied witness argument or superclass field |
 | `?` | Written elaboration goal that always reports and fails compilation |
 | `term!` | Monadic bind through `Monad`, lifting a cross-monad action through `Lift` |
+| `b[...]` | `Bits` literal — grain letter glued to the bracket |
+| `x[...]` | `Bytes` literal |
 | `Name { ... }` | Structure or concept literal |
 | `Name { ..base, ... }` | Structure update |
 | `match term ... end` | Typed elimination or dispatch |

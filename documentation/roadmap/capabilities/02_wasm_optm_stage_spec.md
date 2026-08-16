@@ -29,8 +29,8 @@ The reader trusts shape rather than re-validating: its input is Binaryen's alrea
 
 ## Sequencing and milestones
 
-- **M0 — envelope audit.** Walk the eight-feature envelope against the representation, writer, text parser, and printer; refine 07's umbrella into the concrete gap list (the two known section items, plus likely multivalue block types, plus whatever else falls out). Cheap, immediate, and the input 07 needs to stop being a placeholder.
-- **M1 — representation fullness.** Implement the refined 07: sections, instructions, writer, text parser, printer, and round-trip tests for every gap M0 names.
+- **M0 — envelope audit.** Walk the eight-feature envelope against the representation, writer, text parser, and printer; refine [01_wasm_full_conformance_spec.md](01_wasm_full_conformance_spec.md)'s umbrella into the concrete gap list (the two known section items, plus likely multivalue block types, plus whatever else falls out). Cheap, immediate, and the input that specification needs to stop being a placeholder.
+- **M1 — representation fullness.** Implement the refined [01_wasm_full_conformance_spec.md](01_wasm_full_conformance_spec.md): sections, instructions, writer, text parser, printer, and round-trip tests for every gap M0 names.
 - **M2 — the reader.** `reader.rs`/`from_bytes` over the complete representation, with both laws pinned and the name-section recovery tested.
 - **M3 — the stage.** The enum variant, the `NAMES` entry, the `to_cwasm`-path construction, and the CLI wiring.
 
@@ -58,4 +58,4 @@ M0 can land today; M2 is the bulk; M3 is small and strictly last.
 
 ## Retirement criteria
 
-- Before this specification is deleted: the reader's contract, envelope, and laws are recorded in `curios-wasm`'s documentation and tests; the downstream-constructed-stage deviation is recorded on the `Stage` enum; 07 is either implemented and retired or re-scoped by M0's findings; the roadmap subitem is a checked unlinked summary; and no reference to this filename remains.
+- Before this specification is deleted: the reader's contract, envelope, and laws are recorded in `curios-wasm`'s documentation and tests; the downstream-constructed-stage deviation is recorded on the `Stage` enum; [01_wasm_full_conformance_spec.md](01_wasm_full_conformance_spec.md) is either implemented and retired or re-scoped by M0's findings; the roadmap subitem is a checked unlinked summary; and no reference to this filename remains.

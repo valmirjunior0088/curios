@@ -2,7 +2,7 @@
 
 **Assumes.** Any two inhabitants of a proposition are interchangeable
 
-**Status.** **argued** (fixpoint on (V), below); not directly observable, but its side condition — the guard above — is probed.
+**Status.** **argued** (the fixpoint on (V), in [Across the perimeter](../across-the-perimeter.md)); not directly observable, but its side condition — the [large-elimination guard](large-elimination-guard.md) — is probed.
 
 **It is load-bearing in the elaborator and inert in the kernel, and that asymmetry is the entry's real content.** No conversion goal in the kernel arrives at a `Prop`-sorted type at all, so the rule is unreachable there rather than merely redundant, and no cheaper rule is shadowing it. The cause is the incompleteness conversion's own module documentation states: a proof reaching conversion does so in an untyped child position, compared at `Type`, where the type driving the comparison is not the proposition. The elaborator's copy is the opposite — it fires, and not one firing has syntactically identical sides, so unlike inversion's reconciliation rule a plain equality test would have decided none of them. The work it does is narrow: every firing is at a *computed* proposition rather than a nominal `Prop` family — the validity-predicate shapes irrelevance exists for — and overwhelmingly at one site shape.
 

@@ -14,6 +14,16 @@ The complete command-line and package reference. The [README](../README.md) cove
 
 The dispatch is lexical and never probes the disk: an executable's name is a single identifier, so it can hold neither `.crs` nor a path separator, and the two spaces cannot overlap. `curios run scratch.crs` therefore means the file even when the package declares an executable called `scratch`.
 
+Everything after the target belongs to the program, not to `curios`, and reaches it through `/std/proc/args`:
+
+```sh
+curios run serve --port 8080
+```
+
+Everything from the target onward is collected verbatim, hyphens included, so a program's own flags never collide with the compiler's — which is also why every `curios` flag must precede the subcommand.
+
+`compile` writes its executable beside you, named after the executable it built or after the input file's stem; `-o`/`--output <PATH>` names it something else.
+
 A file argument brings no project with it — no manifest, no dependencies, not even the library of the package you are standing in. That is deliberate: project scope is reachable only through something a manifest declares, so a scratch file cannot quietly acquire one. When a scratch program does want the library, one `[[executables]]` line gives it one.
 
 ## What a package is made of
@@ -149,8 +159,11 @@ Set `CURIOS_CACHE` to share the content-addressed half across projects; unset, e
 | `--unit <DIR>` | mount the package in `DIR` ahead of the entry program, with no manifest edge; repeat for more, in dependency order |
 | `--budget <UNITS>` | units of reduction work each declaration may spend while type checking — a transition costs one, a construction costs what it builds |
 | `--print[=STAGES]` | dump selected intermediate representations to stderr |
+| `--version` | the build's version, so a bug report can say which compiler produced the output |
 
-`--print` takes a comma-separated list of stage names, and bare `--print` means all of them:
+The budget is restored at every declaration boundary, so it bounds the heaviest declaration rather than the compilation; `curios --help` prints the default it was built with.
+
+`--print` takes a comma-separated list of stage names, and bare `--print` means all of them. It is the one flag whose value must be attached with `=` — `--print=core,wasm`, never `--print core,wasm`, since a detached word would be read as the target:
 
 | Stage | Is |
 | --- | --- |

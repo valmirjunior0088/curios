@@ -6,7 +6,7 @@ Each entry names what it assumes and how far it has been checked, and the vocabu
 
 An entry's evidence is the fixtures it names. A fixture is named rather than counted because a name is a contract — moving it is a change someone must make deliberately — while a count is true on the day it is taken and quietly false afterwards. Where this file used to carry population figures, retake them from the probes beside the code: `curios-prelude-archive`'s `kernel_disagreements` for the whole-prelude walk, and each crate's own test module for the rest. A defect's history is kept only where the defect is still expressible; where the mechanism that admitted it is gone, git holds the account.
 
-The perimeter has four parts. Two are halves of the same thing and differ only in how coverage is obtained; the third is different in kind, and is a rule about *not* running the other two; the fourth is not a rule at all. The **whole-module passes** run once over a module: the elaborator's from `finalize_and_check` in `curios-elab`, the single site every entry point that produces an elaborated module comes through, which is what keeps a check from reaching one configuration and not the other. The **per-term rules** run during elaboration, so their coverage follows from the elaborator visiting every term rather than from a pass enumerating positions. **What the kernel consults** holds the components a rule reads an answer *out of* rather than deriving — a remembered reduct, an assumed equation, a classification recorded earlier, a verdict carried from a walk already run. None of them decides whether a term is well typed; each of them supplies something a rule then believes, so a wrong answer there is admitted by whichever rule asked.
+The perimeter has four parts. Two are halves of the same thing and differ only in how coverage is obtained; the third is different in kind, and is a rule about *not* running the other two; the fourth is not a rule at all. The **whole-module passes** run once over a module: the elaborator's from `finalize_and_check` in `curios-elab`, the single site every entry point that produces an elaborated module comes through, which is what keeps a check from reaching one configuration and not the other. The **per-term rules** run during elaboration, so their coverage follows from the elaborator visiting every term rather than from a pass enumerating positions. **Admission without judgment** is the rule about *not* running the other two: a verdict already reached, under an address carrying what it was reached about, may be believed instead of re-decided. **What the kernel consults** holds the components a rule reads an answer *out of* rather than deriving — a remembered reduct, an assumed equation, a classification recorded earlier, a verdict carried from a walk already run. None of them decides whether a term is well typed; each of them supplies something a rule then believes, so a wrong answer there is admitted by whichever rule asked.
 
 An entry earns its place by *assuming* something, not merely by admitting. The discriminator is whether the rule rests on anything beyond the shape of the term in front of it — a declaration, a carried number, a cached verdict, an equation stated elsewhere. A rule that only destructures inherits its correctness from the representation and is not listed; `Var`, `Let`, the bare `Func` rule and the `Type`/`Prop` head rules are the ones that fall the other side of that line, and they inherit [Telescope instantiation](soundness/per-term-rules/telescope-instantiation.md) and [Binder identity](soundness/per-term-rules/binder-identity.md) rather than earning rows.
 
@@ -49,16 +49,16 @@ Grades only. Each entry's evidence is the entry it links to.
 | [Intrinsic signatures](soundness/per-term-rules/intrinsic-signatures.md) | auditable only |
 | [Intrinsic fold laws and the free-monoid peel](soundness/per-term-rules/intrinsic-fold-laws-and-the-free-monoid-peel.md) | **argued** in code comments only, except the `Nat` division family and its bounds oracle, which are **probed** |
 | [Telescope instantiation](soundness/per-term-rules/telescope-instantiation.md) | **probed** incidentally, never directly |
-| [Checked rules at deferred child positions](soundness/what-the-kernel-consults/checked-rules-at-deferred-child-positions.md) | **argued**, and restored rather than designed |
+| [Checked rules at deferred child positions](soundness/per-term-rules/checked-rules-at-deferred-child-positions.md) | **argued** |
 | [Binder identity](soundness/per-term-rules/binder-identity.md) | **argued** |
 | [A type is a pure term](soundness/per-term-rules/a-type-is-a-pure-term.md) | **argued** |
-| [Universe instance discharge](soundness/per-term-rules/universe-instance-discharge.md) | **probed**, and it admitted |
+| [Universe instance discharge](soundness/per-term-rules/universe-instance-discharge.md) | **probed** |
 | [Driver-supplied convertibility](soundness/per-term-rules/driver-supplied-convertibility.md) | **argued** |
 
 | Admission without judgment | Grade |
 | --- | --- |
 | [Cached verdicts](soundness/admission-without-judgment/cached-verdicts.md) | **argued** |
-| [Judging only what is not in scope](soundness/admission-without-judgment/judging-only-what-is-not-in-scope.md) | **argued**, and discharged in another crate |
+| [Judging only what is not in scope](soundness/admission-without-judgment/judging-only-what-is-not-in-scope.md) | **argued** |
 
 | What the kernel consults | Grade |
 | --- | --- |
