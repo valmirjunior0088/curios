@@ -12,12 +12,33 @@ mod tests;
 use {
     super::Kernel,
     curios_core::{
-        Apply, Bound, Carrier, Cases, Cost, Field, FreeMonoid, Func, Layer, Let, Many, Match, Nat,
-        Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Struct, Subterm, Term, Tuple,
-        UniverseInst, Var, Variant, instantiate_universe_levels_scoped, reduce_intrinsic,
+        Apply, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free, FreeMonoid, Func,
+        Layer, Let, Many, Match, Nat, Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Struct,
+        Subterm, Term, Tuple, UniverseInst, Var, Variant, accelerable,
+        instantiate_universe_levels_scoped, reduce_closed, reduce_intrinsic,
     },
     curios_utilities::recurse,
 };
+
+/// The kernel's side of the closed-machine seam: the same delta [`step_var`] and [`step_universe_inst`] perform, handed to the shared machine so a closed term evaluates at machine depth under this strategy's own charges.
+impl ClosedHost for Kernel {
+    fn closed_body(&self, name: &Free) -> Option<&Term> {
+        self.value(name)
+    }
+
+    fn closed_body_at(&self, name: &Free) -> Option<&Term> {
+        self.value_at(name)
+    }
+
+    fn fresh_binder(&mut self, hint: Option<&str>) -> Free {
+        self.fresh(hint)
+    }
+}
+
+/// Whether the closed machine may take `term` under this judgment: the representation-side gate ([`accelerable`]) plus the judgment-side one — no case equation in scope, because inside an arm a closed scrutinee *is* the arm's assumed value.
+fn machine_admissible(kernel: &Kernel, term: &Term) -> bool {
+    accelerable(term) && !kernel.has_refinements()
+}
 
 /// The kernel's reduction strategy: everything unfolds, and what a local-free term unfolds to is remembered — see the `memos` and `spend` modules for what that does and does not concede, and for why a hit on this entry point is free while a definition unfold's is charged.
 impl Reducer for Kernel {
@@ -70,6 +91,17 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
     // The gate is unchanged and is what makes reaching further safe: [`Memos::storable`](super::Memos) admits only a local-free term, on the lookup as well as the store, so every new site here is protected by the same test the two old ones were.
     if let Some(replayed) = kernel.whnf_hit(&term, false) {
         return Ok(replayed);
+    }
+
+    // A closed term takes the machine: same rules, same counter, machine depth instead of one native frame per element. Stored under the same memo entry a strategy-derived reduct would be.
+    if machine_admissible(kernel, &term) {
+        let entry = term.clone();
+        let before = kernel.consumption();
+        let value = reduce_closed(kernel, term, Demand::Whnf)?;
+        let replay = kernel.replay_since(value.clone(), before);
+        kernel.whnf_store(entry, false, replay);
+
+        return Ok(value);
     }
 
     let entry = term.clone();
@@ -448,6 +480,11 @@ pub(crate) fn unfold_rec(rec: Rec) -> Term {
 ///
 /// A non-productive group still spins until the budget runs out, exactly as a top-level `rec` does — every outcome here is idempotent, so this decides which reducts survive, never whether the walk stops.
 fn force(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
+    // A closed term takes the machine at the eliminator's demand; the recursive loop below is the strategy for everything the gate declines.
+    if machine_admissible(kernel, &term) {
+        return reduce_closed(kernel, term, Demand::Forced);
+    }
+
     let folded = term.clone();
     let mut term = term;
 

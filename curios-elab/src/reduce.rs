@@ -4,14 +4,35 @@ mod tests;
 use {
     super::{Context, zonk_solved_term_metas},
     curios_core::{
-        Apply, Bound, Carrier, Cases, Cost, Field, Free, FreeMonoid, Func, FuncType, Global,
-        InductDecl, InductType, Intrinsic, Layer, Let, Many, Match, Metavar, Nat, One, Proj, Rec,
-        RecGroup, ReduceError, Reducer, Scope, Struct, StructDecl, StructType, Subterm, Telescope,
-        Term, Tuple, TupleType, UniverseInst, Var, Variant, instantiate_universe_levels_scoped,
-        project_erased_universes, reduce_intrinsic,
+        Apply, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free, FreeMonoid, Func,
+        FuncType, Global, InductDecl, InductType, Intrinsic, Layer, Let, Many, Match, Metavar, Nat,
+        One, Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Struct, StructDecl, StructType,
+        Subterm, Telescope, Term, Tuple, TupleType, UniverseInst, Var, Variant, accelerable,
+        instantiate_universe_levels_scoped, project_erased_universes, reduce_closed,
+        reduce_intrinsic,
     },
     curios_utilities::recurse,
 };
+
+/// The elaborator's side of the closed-machine seam: the same delta [`reduce_var`] and [`reduce_universe_inst`] perform, handed to the shared machine so a closed term evaluates at machine depth under this strategy's own charges.
+impl ClosedHost for Context {
+    fn closed_body(&self, name: &Free) -> Option<&Term> {
+        self.var_reduct(name)
+    }
+
+    fn closed_body_at(&self, name: &Free) -> Option<&Term> {
+        self.var_reduct_at(name)
+    }
+
+    fn fresh_binder(&mut self, hint: Option<&str>) -> Free {
+        self.fresh(hint)
+    }
+}
+
+/// Whether the closed machine may take `term` in this context: the representation-side gate ([`accelerable`]) plus the judgment-side one — no refinement of any kind registered, suppressed or live, because a refined closed scrutinee *is* the arm's assumed value, a refined projection is its recorded reduct, and a *suppressed* key must stay withheld rather than be evaluated.
+fn machine_admissible(context: &Context, term: &Term) -> bool {
+    accelerable(term) && !context.any_refinements_registered()
+}
 
 /// The elaborator's reduction strategy, supplied to `curios-core`'s intrinsic folds. It is the full-strength one: definitions unfold, metavariables resolve, scrutinee refinements fire, and every step is charged against the declaration's budget.
 impl Reducer for Context {
@@ -141,6 +162,11 @@ pub(crate) fn unfold_rec_apply(
 ///
 /// The group is `folded`'s own, deliberately: what this protects is the idempotence of forcing *this* term, so the cycle to rule out is the reduct re-mentioning the group whose call was demanded. All three outcomes are idempotent — `force(force(t)) = force(t)` — so what this clause decides is completeness, not whether the reducer stops; the budget spent per iteration already does that.
 fn force_rec(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
+    // A closed term takes the machine at the eliminator's demand; the recursive loop below is the strategy for everything the gate declines.
+    if machine_admissible(context, &term) {
+        return reduce_closed(context, term, Demand::Forced);
+    }
+
     let folded = term.clone();
     let mut term = term;
     loop {
@@ -553,6 +579,15 @@ pub(crate) fn reduce(context: &mut Context, term: Term) -> Result<Term, ReduceEr
 fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceError> {
     if let Some(cached) = context.cached_reduced(&term) {
         return Ok(cached);
+    }
+
+    // A closed term takes the machine: same rules, same counter, machine depth instead of one native frame per element. Stored under the same cache entry a strategy-derived reduct would be.
+    if machine_admissible(context, &term) {
+        let entry = term.clone();
+        let result = reduce_closed(context, term, Demand::Whnf)?;
+        context.reduce(entry, &result);
+
+        return Ok(result);
     }
 
     let entry = term.clone();

@@ -599,6 +599,11 @@ impl Kernel {
         self.scope.refinement_of(term)
     }
 
+    /// Whether any arm's case equation is currently assumed — the judgment-side half of the closed machine's gate.
+    pub(crate) fn has_refinements(&self) -> bool {
+        self.scope.has_refinements()
+    }
+
     /// The types of the binders currently in scope, outermost first. The conversion history keys on this: the same goal under a different context is a different goal.
     pub(crate) fn local_types(&self) -> Vec<Term> {
         self.scope.local_types()

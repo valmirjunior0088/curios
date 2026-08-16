@@ -10,6 +10,7 @@ struct Host {
     definitions: BTreeMap<Free, Term>,
     budget: u64,
     by_category: BTreeMap<Category, u64>,
+    minted: u32,
 }
 
 impl Host {
@@ -18,6 +19,7 @@ impl Host {
             definitions: BTreeMap::new(),
             budget,
             by_category: BTreeMap::new(),
+            minted: 0,
         }
     }
 }
@@ -49,6 +51,11 @@ impl ClosedHost for Host {
 
     fn closed_body_at(&self, name: &Free) -> Option<&Term> {
         self.definitions.get(name)
+    }
+
+    fn fresh_binder(&mut self, _hint: Option<&str>) -> Free {
+        self.minted += 1;
+        Free::local(1_000_000 + self.minted, Some("fresh"))
     }
 }
 

@@ -623,32 +623,27 @@ fn str_literal_cost_measurements() {
 
 /// **The guard [`str_literal_cost_measurements`] cannot be**, because a probe is ignored and nothing runs it.
 ///
-/// What it holds is the shape of a literal's cost rather than a number: one reduction level per character on *both* checkers, a per-character price at the frame row and not a multiple of it, and neither checker paying a multiple of the other for the same reduction. Each of those failed within living memory, and each failure reached a user as a budget refusal naming nothing about strings.
+/// What it holds is the shape of a literal's cost rather than a number, and the closed machine is what set the shape: guarded reduction depth *flat* in the literal's length on both checkers, a per-character price in transitions and machine frames far below [`Cost::FRAME`], and neither checker paying a multiple of the other for the same reduction. The first two are the machine's whole yield — a literal used to nest one native reduction level per byte and cost 1 088 units a character, 1 024 of them the frame row, which capped a literal near 16 700 characters; the third failed within living memory on its own, when the kernel's memo stopped short of its internal levels and charged 5.3× the elaborator at the same depth.
 ///
-/// The bound is stated against [`Cost::FRAME`] rather than as a literal, because the quantity it is really asserting is *that a character costs about one guarded reduction level and little else*. A per-character price well above the frame means reduction is re-deriving what it could have remembered — which is exactly what the kernel did before its memo reached every level, at 5.3× the elaborator for the same program at the same depth.
-///
-/// The ceiling this implies, measured 2026-08-15 by bisecting the length at the default budget: **between 16 625 and 16 750 characters**. `str_literal_cost_measurements` carries the table and the two regimes behind it.
+/// The bound is stated against [`Cost::FRAME`] rather than as a literal because the quantity asserted is *that no per-character native frame is being paid at all*: a per-character price within even a quarter of the frame row means closed evaluation has fallen off the machine and back onto the recursive strategy, which is the silent cliff this guard exists to catch.
 #[test]
-fn a_str_literal_costs_about_one_frame_per_character() {
+fn a_str_literal_costs_transitions_rather_than_frames() {
     let (elaborator_small, _, kernel_small, _) = declaration_cost(&str_literal(500, 0));
     let (elaborator_large, _, kernel_large, _) = declaration_cost(&str_literal(1000, 0));
 
-    // A literal's UTF-8 scan nests one reduction level per byte, on both sides. That is what a literal's ceiling is made of, so it is the first thing a regression would move.
-    assert_eq!(kernel_large.peak_depth() - kernel_small.peak_depth(), 500);
-    assert_eq!(
-        elaborator_large.peak_depth() - elaborator_small.peak_depth(),
-        500
-    );
+    // The literal's scan runs on the machine's explicit stack, so doubling the literal moves guarded depth not at all — where it used to move it by exactly the added byte count.
+    assert_eq!(kernel_large.peak_depth(), kernel_small.peak_depth());
+    assert_eq!(elaborator_large.peak_depth(), elaborator_small.peak_depth());
 
     let per_character = (kernel_large.units() - kernel_small.units()) / 500;
     let frame = Cost::FRAME.get();
     assert!(
-        (frame..frame + frame / 4).contains(&per_character),
+        per_character < frame / 4,
         "a character costs {per_character} units against a {frame}-unit frame, so the ceiling is about {} characters",
         DEFAULT_STEP_BUDGET / per_character.max(1),
     );
 
-    // The two checkers reduce the same terms and neither is the other's reference implementation, so they are not required to agree exactly — but a *multiple* is two price lists differing rather than two evaluators differing, and the compile path puts one budget to both.
+    // The two checkers run the same machine on the same closed terms, so agreement here is structural; the factor-two slack covers what each checker's own strategy spends around the machine.
     assert!(
         kernel_large.units() < elaborator_large.units() * 2,
         "kernel {} against elaborator {}",
@@ -656,9 +651,74 @@ fn a_str_literal_costs_about_one_frame_per_character() {
         elaborator_large.units(),
     );
 
-    // Flat in use count: what spec 01's first milestone bought, and the defect this specification was opened on.
+    // Flat in use count: what spec 01's first milestone bought, and the defect this line of work was opened on.
     let (_, _, kernel_used, _) = declaration_cost(&str_literal(500, 3));
     assert_eq!(kernel_used.units(), kernel_small.units());
+}
+
+/// A user's own refinement over a packed carrier, `n` bytes long: an authored `rec` fold decides ASCII-ness, and a literal's proof of it is discharged by conversion running the closed fold — exactly the shape of `Str`'s validity check with nothing of `Str` in it.
+///
+/// The proof is bound by a `let` rather than packed into a dependent record deliberately: checking a *struct declaration* whose field applies a fold to an earlier field costs native stack this fixture does not measure, and overflows the default test-thread stack in debug builds with or without the closed machine — the pre-existing cliff [`a_struct_refinement_field_overflows_the_test_thread_stack`] reproduces, hit nowhere else only because the prelude's own instance of the shape (`/std/BigNat`) is checked on a main thread with four times the stack.
+fn ascii_refinement(n: usize) -> String {
+    let entries = (0..n)
+        .map(|index| format!("\\{:02x}", b'a' + (index % 26) as u8))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    format!(
+        r#"
+        use /std/{{Bytes, Byte, Nat, Bool, Eq, Handle}};
+        rec all_ascii(b : Bytes) -> Bool =
+            match b
+            | x[] => true
+            | x[h, ..t] =>
+                match Byte/to_nat(h) < 0x80
+                | true => all_ascii(t)
+                | false => false
+                end
+            end;
+        let ok : Eq(all_ascii(x[{entries}]), true) = Eq/refl();
+        /std/print("ok")
+        "#
+    )
+}
+
+/// **A pre-existing defect's repro, not a passing test: running it aborts the harness.** Checking a struct declaration whose proof field applies a `rec` fold to an earlier field — `ok: Certified(bytes)`, the exact shape `/std/BigNat` ships — recurses natively past the default test-thread stack, in debug, at any data size, with the closed machine on or off (established by running this with both checkers' machine gates hardwired shut). The prelude never notices because build scripts check it on a main thread with four times the stack; `documentation/syntax.md`'s conformance promise and the "works on the default test-thread stack" invariant are what it breaks. Kept ignored under this name so the defect has an address; the fix is elsewhere ­— somewhere in struct-declaration checking's open-term reduction, which no closed machine can reach.
+#[test]
+#[ignore = "repro of a pre-existing stack overflow in struct-declaration checking; running it aborts the process"]
+fn a_struct_refinement_field_overflows_the_test_thread_stack() {
+    let source = r#"
+        use /std/{Bytes, Bool, Eq, Handle};
+        use /syn/{True, False};
+        rec always(b : Bytes) -> Bool =
+            match b | x[] => true | x[h, ..t] => always(t) end;
+        let Certified(b: Bytes) -> Prop =
+            match always(b) | true => True | false => False end;
+        struct Wrapped: Type {
+            bytes: Bytes,
+            ok: Certified(bytes),
+        }
+        let w : Wrapped = Wrapped { bytes = x[\61], ok = True/qed() };
+        /std/print("ok")
+    "#;
+
+    let _ = typecheck_within(DEFAULT_STEP_BUDGET, source);
+}
+
+/// **The fixture the closed machine's acceptance asks for: a refinement that is not `Str`.** The machine fires on closedness, not on anything about strings, so a user's fold over a packed carrier gets the same flat depth and sub-frame per-element price a `Str` literal gets — asserted with the same two bounds as [`a_str_literal_costs_transitions_rather_than_frames`], so this cannot quietly hold for the prelude's type and not for a user's.
+#[test]
+fn a_user_refinement_over_a_packed_carrier_takes_the_same_machine() {
+    let (_, _, kernel_small, _) = declaration_cost(&ascii_refinement(500));
+    let (_, _, kernel_large, _) = declaration_cost(&ascii_refinement(1000));
+
+    assert_eq!(kernel_large.peak_depth(), kernel_small.peak_depth());
+
+    let per_element = (kernel_large.units() - kernel_small.units()) / 500;
+    assert!(
+        per_element < Cost::FRAME.get() / 4,
+        "an element costs {per_element} units against a {}-unit frame",
+        Cost::FRAME.get(),
+    );
 }
 
 /// **The construction-dominated fixture the acceptance criteria ask for**, and it is deliberately not the accumulate-then-slice shape above: capping fusion made that program's construction linear, so it now refuses on ordinary step cost like any other long computation and would be testing the wrong thing.
@@ -692,14 +752,14 @@ fn an_oversized_construction_is_refused_before_it_is_allocated() {
 
 /// Repeated concatenation is bounded by *cumulative* charges even though every individual result fits: the budget is never refunded, so a loop that builds a growing value pays for each of them and runs out on the total.
 ///
-/// The two arms differ only in how many iterations they run, and the small one establishes that the shape itself is affordable — so the large one's refusal is about the accumulation rather than about the program.
+/// The two arms differ only in how many iterations they run, and the small one establishes that the shape itself is affordable — so the large one's refusal is about the accumulation rather than about the program. The refusing count moved once, deliberately: a hundred thousand iterations refused under the recursive strategy and fits under the closed machine, so the arm that must refuse now runs two million — the property held is that a count exists past which cumulative construction refuses, not where it sits.
 #[test]
 fn a_growing_accumulation_is_bounded_by_what_it_has_already_built() {
     typecheck_within(DEFAULT_STEP_BUDGET, &bytes_growing(2_000))
         .expect("an accumulation this size fits the ordinary budget");
 
-    let refusal = typecheck_within(DEFAULT_STEP_BUDGET, &bytes_growing(100_000))
-        .expect_err("fifty times the iterations does not");
+    let refusal = typecheck_within(DEFAULT_STEP_BUDGET, &bytes_growing(2_000_000))
+        .expect_err("a thousand times the iterations does not");
     assert!(
         refusal.contains("ran out"),
         "expected a spent-budget refusal, got: {refusal}"

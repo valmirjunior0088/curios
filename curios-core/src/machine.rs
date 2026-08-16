@@ -14,7 +14,7 @@
 //!
 //! **Substituted terms are evaluated first.** Arguments, `let` values, and `Induct` payload binds are taken to weak-head values before substitution, where the hosts substitute them unreduced. On a closed term the result is the same by confluence; what changes is cost, which is the point. Two consequences are handled rather than hoped away: a substituend whose evaluation *errors* falls back to its unreduced spelling — the hosts defer such an error until the position is demanded, and the fallback preserves exactly that — and a substituend whose evaluation exhausts the budget propagates, because spend is never refunded. An induction hypothesis is the deliberate exception: it is bound unreduced exactly as the hosts bind it, because evaluating one eagerly would run the whole tail fold whether or not the arm uses it.
 //!
-//! **Eta is not contracted.** The hosts probe `(x) => f(x)` down to `f` during weak-head reduction; the machine leaves the function value as written, because contracting needs fresh binder identities the [`Reducer`] seam does not mint. Conversion decides eta on its own, so the two spellings stay convertible; only the normal form's spelling differs.
+//! **Eta is contracted, with the hosts' own probe.** `(x) => f(x)` steps to `f` exactly as under the strategies, through the fresh binder identities [`ClosedHost::fresh_binder`] mints. This was learned rather than assumed: a first version skipped the probe on the theory that conversion decides eta anyway, and the elaborator's witness keying — which reads rigid heads off weak-head forms — stopped finding `Async` under `(A) => Async(A)` and failed the prelude at `/std/File`.
 //!
 //! **`Induct` arms bind payload values.** The kernel binds an arm to the scrutinee's payload directly; the elaborator binds projections of the original head, guarding annotation holes a reduced payload could carry. A closed, metavariable-free payload carries none, so the machine uses the kernel's rule on both sides.
 //!
@@ -38,13 +38,16 @@ fn machine_frame() -> Cost {
     Cost::buffer(2)
 }
 
-/// What the machine asks of its host: the reduction seam every intrinsic fold already drives, plus the delta the strategy owns — what a global unfolds to at a bare occurrence and at a stated universe instance. Charges land on the host's counter through [`Reducer::spend`], so both checkers price a machine run identically because both run the same machine.
+/// What the machine asks of its host: the reduction seam every intrinsic fold already drives, plus the judgment the strategy owns — what a global unfolds to, and a fresh binder identity for the eta probe. Charges land on the host's counter through [`Reducer::spend`], so both checkers price a machine run identically because both run the same machine.
 pub trait ClosedHost: Reducer {
     /// What `name` unfolds to through a bare occurrence. A universe-polymorphic definition is withheld, exactly as the host's own delta withholds it.
     fn closed_body(&self, name: &Free) -> Option<&Term>;
 
     /// What `name` unfolds to at a stated universe instance — the one position a polymorphic definition may be unfolded from.
     fn closed_body_at(&self, name: &Free) -> Option<&Term>;
+
+    /// A fresh binder identity, for the eta probe's openings.
+    fn fresh_binder(&mut self, hint: Option<&str>) -> Free;
 }
 
 /// Whether `term` is in the machine's domain: no local frees and no metavariables, read off the per-node cached bits in O(1). The hosts add their own judgment-side condition — no refinements in scope — at the call site.
@@ -112,11 +115,12 @@ struct Args {
 
 /// One reified level of the recursive strategy: what the enclosing computation will do with the value under focus.
 enum Frame {
-    /// An application waiting for its head.
+    /// An application waiting for its head. `memo_key` is the application itself, recorded with its value when the head exposes a plain function — see the machine's eval arm for why the decision lives here.
     Head {
         params: Vec<Term>,
         plicities: Vec<Plicity>,
         demand: Demand,
+        memo_key: Option<Term>,
     },
     /// A forced recursive application waiting for its member's body to expose a function.
     RecBody {
@@ -139,6 +143,10 @@ enum Frame {
     ProjK {
         index: usize,
         demand: Demand,
+    },
+    /// Record the value about to be produced under `key` in the run-scoped memo — pushed under a forced application or member selection, so the second occurrence of the same closed call is one probe. This is the machine's spelling of the amortization the hosts get from their own memos, which the machine's internal steps bypass.
+    Memo {
+        key: Term,
     },
     /// A `let` run evaluating its bindings left to right; `released` holds the values already in.
     LetK {
@@ -280,13 +288,15 @@ impl Machine {
             return Ok(Step::Value(value.clone()));
         }
 
-        // A projection is the fixed point of `rec` unfolding: opening its tail yields the same term, so it is its own weak-head form and only a demand for its value steps into the member's body.
+        // A projection is the fixed point of `rec` unfolding: opening its tail yields the same term, so it is its own weak-head form and only a demand for its value steps into the member's body. The forced body is remembered under the projection, so a recursive member's body is opened and eta-probed once per run rather than once per call.
         if term.as_rec_proj().is_some() {
             return match demand {
                 Demand::Whnf => Ok(Step::Value(term)),
                 Demand::Forced => {
                     let (group, index) = term.as_rec_proj().expect("checked above");
                     let body = group.member_body(index);
+                    let key = term.clone();
+                    self.push(host, Frame::Memo { key })?;
                     Ok(Step::Eval(body, Demand::Forced))
                 }
             };
@@ -298,17 +308,24 @@ impl Machine {
                 None => Ok(Step::Value(Term::var(var))),
             },
 
-            Subterm::Apply(Apply {
-                head,
-                params,
-                plicities,
-            }) => {
+            aps @ Subterm::Apply(_) => {
+                // The application is remembered whole so that, if its head turns out to be a plain function, its value can be recorded under it — the same closed call, `step` at the same byte and state, then evaluates once per run and probes thereafter. Whether to record is the head frame's decision, because only there is the head known: a member selection's calls never repeat within a run (their fold argument strictly shrinks), and a folded spelling must never be served to a demand that would unfold it.
+                let key = Term::from(aps);
+                let Subterm::Apply(Apply {
+                    head,
+                    params,
+                    plicities,
+                }) = Term::unwrap_or_clone(key.clone())
+                else {
+                    unreachable!("rebuilt from the same value")
+                };
                 self.push(
                     host,
                     Frame::Head {
                         params,
                         plicities,
                         demand,
+                        memo_key: Some(key),
                     },
                 )?;
                 Ok(Step::Eval(head, Demand::Whnf))
@@ -439,13 +456,54 @@ impl Machine {
                 Ok(Step::Eval(reduct, demand))
             }
 
-            // The gate excludes metavariables, so this arm is defensive: a metavariable is its own normal form here as it is in the kernel.
+            // The entry gate excludes metavariables, but a definition *body* the machine unfolds mid-run may still carry solved ones — the elaborator zonks its store at module boundaries, not per definition. Resolution is the host strategy's judgment, so the node bails to it; a metavariable the host leaves standing is genuinely unsolved and is its own normal form, as it is in both hosts.
             metavar @ Subterm::Metavar(_) => {
-                debug_assert!(false, "the accelerable gate admits no metavariable");
-                Ok(Step::Value(Term::from(metavar)))
+                let resolved = host.reduce(Term::from(metavar))?;
+
+                match &*resolved {
+                    Subterm::Metavar(_) => Ok(Step::Value(resolved)),
+                    _ => Ok(Step::Eval(resolved, demand)),
+                }
             }
 
-            // Every remaining former — sorts, function and tuple types, functions, tuples, structs, variants, inductive types, transients — is weak-head normal with its sub-terms unentered, exactly as in both hosts.
+            // Eta for functions, exactly the hosts' probe: `(x) => f(x)` is `f` provided `f` mentions none of the binders. This is not a normalization nicety — the elaborator's witness keying reads rigid heads off weak-head forms, so `(A) => Async(A)` must contract to `Async` here as it does under the strategy.
+            Subterm::Func(func) => {
+                let arity = func.telescope.len();
+                host.spend(
+                    Cost::collection(arity as u64)
+                        .saturating_mul(3)
+                        .saturating_add(Cost::term(1).saturating_mul(arity as u64)),
+                )?;
+
+                let binders = (0..arity)
+                    .map(|_| host.fresh_binder(None))
+                    .collect::<Vec<_>>();
+                let occurrences = binders.iter().map(Term::free_var).collect::<Vec<_>>();
+                let refs = occurrences.iter().collect::<Vec<_>>();
+
+                match Term::unwrap_or_clone(func.telescope.open(&refs)) {
+                    Subterm::Apply(Apply { head, params, .. })
+                        if params.len() == arity
+                            && params.iter().enumerate().all(|(index, param)| {
+                                matches!(param.as_ref(), Subterm::Var(var) if var.unwrap() == &binders[index])
+                            })
+                            && binders
+                                .iter()
+                                .all(|binder| !head.free_vars().contains(binder)) =>
+                    {
+                        Ok(Step::Eval(head, demand))
+                    }
+                    _ => {
+                        // Remember the probe's negative outcome under the function itself, so a body reached again — a plain definition's, unfolded at every call — pays the eta probe once per run.
+                        let value = Term::from(Subterm::Func(func));
+                        host.spend(Cost::buffer(2))?;
+                        self.values.insert(value.clone(), value.clone());
+                        Ok(Step::Value(value))
+                    }
+                }
+            }
+
+            // Every remaining former — sorts, function and tuple types, tuples, structs, variants, inductive types, transients — is weak-head normal with its sub-terms unentered, exactly as in both hosts.
             value => Ok(Step::Value(Term::from(value))),
         }
     }
@@ -461,6 +519,7 @@ impl Machine {
                 params,
                 plicities,
                 demand,
+                memo_key,
             } => {
                 if value.as_rec_proj().is_some() {
                     return match demand {
@@ -501,11 +560,15 @@ impl Machine {
                                 params,
                                 plicities,
                                 demand,
+                                memo_key,
                             },
                         )?;
                         Ok(Step::Eval(unfold_rec(rec), Demand::Whnf))
                     }
                     Subterm::Func(Func { telescope, .. }) if telescope.len() == params.len() => {
+                        if let Some(key) = memo_key {
+                            self.push(host, Frame::Memo { key })?;
+                        }
                         self.beta(host, telescope, params, demand)
                     }
                     head => Ok(Step::Value(Term::from(Subterm::Apply(Apply {
@@ -587,6 +650,21 @@ impl Machine {
             } => {
                 released.push(value);
                 self.let_advance(host, released, bindings, next, tail, demand)
+            }
+
+            Frame::Memo { key } => {
+                // A folded recursive spelling is a weak-head value that a *forced* probe must not be served, and the memo does not tag demands — so a rec-shaped value is simply not recorded. Every other weak-head value is its own forced form, since forcing only unfolds recursive heads.
+                let folded = value.as_rec_proj().is_some()
+                    || matches!(&*value, Subterm::Rec(_))
+                    || matches!(&*value, Subterm::Apply(apply) if apply.head.as_rec_proj().is_some());
+
+                if !folded {
+                    // One entry of two `Term` handles, on the buffer row, charged before the write.
+                    host.spend(Cost::buffer(2))?;
+                    self.values.insert(key, value.clone());
+                }
+
+                Ok(Step::Value(value))
             }
 
             Frame::Args(mut args) => {

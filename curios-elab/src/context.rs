@@ -787,6 +787,11 @@ impl Context {
         self.frames.has_refinements()
     }
 
+    /// Whether any refinement of any kind is registered, suppressed or not — the closed machine's gate. Suppression must not open it: a suppressed scrutinee key is *withheld* by the strategy, and the machine evaluating it would hand out the value the suppression exists to withhold.
+    pub(crate) fn any_refinements_registered(&self) -> bool {
+        self.frames.any_refinements_registered()
+    }
+
     /// Run `f` with refinements suppressed (re-validation). Brackets the region with reduction-cache clears so refinement-applied and refinement-suppressed reducts never contaminate each other's cache — but only when some refinement is actually registered. With none, suppressing changes no reduct, so the flag is inert and the clears are pure waste (the common re-validation path: an oracle run outside any match arm). Each boundary is gated on the live state independently, so a refinement added and dropped *inside* `f` — which clears on its own add and exit — does not force a clear here.
     pub(crate) fn with_suppressed_refinements<R>(&mut self, f: impl FnOnce(&mut Self) -> R) -> R {
         if self.frames.any_refinements_registered() {

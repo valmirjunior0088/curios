@@ -27,6 +27,11 @@ impl Scope {
         self.locals.push((name.clone(), type_.clone()));
     }
 
+    /// Whether any arm's case equation is currently assumed — the judgment-side half of the closed machine's gate: inside an arm a closed scrutinee *is* the assumed value, so closed evaluation must stand aside for the strategy that consults these.
+    pub(super) fn has_refinements(&self) -> bool {
+        !self.refinements.is_empty()
+    }
+
     /// Assume an arm's case equation: within the arm, `scrutinee` — already in weak-head normal form — is `value`, definitionally.
     ///
     /// A local-free scrutinee is skipped rather than recorded: local-free terms reduce to their case values instead of sticking, and the skip is also what keeps the evaluation memos sound — they store local-free terms only, and reduction of a local-free term never encounters a local-bearing stuck form, so no memoized reduct can depend on an equation that was later retracted.
