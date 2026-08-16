@@ -44,6 +44,9 @@ pub use retention::*;
 mod reduce;
 pub use reduce::*;
 
+mod machine;
+pub use machine::*;
+
 mod names;
 pub use names::*;
 
