@@ -150,11 +150,11 @@ jobs:
           mv artifacts/curios-js/curios-js.tar.gz curios-js.tar.gz
           mv artifacts/curios-docs/curios-docs.tar.gz curios-docs.tar.gz
 
-      # The installer's version is baked in here rather than discovered at run time, so the script a release ships installs that release's binary and a pinned URL stays pinned.
+      # The installer's version is baked in here rather than discovered at run time, so the script a release ships installs that release's binary and a pinned URL stays pinned. The template is rendered to a fresh file rather than edited in place: what ships is a build product, never a mutated checkout.
       - name: Prepare installer
         run: |
           sha256sum curios-linux-x86_64 curios-linux-aarch64 curios-macos-aarch64 > checksums.txt
-          sed -i "s/@VERSION@/${GITHUB_REF_NAME#release/}/" .github/workflows/install.sh
+          sed "s/@VERSION@/${GITHUB_REF_NAME#release/}/" .github/workflows/install.sh.in > install.sh
 
       - name: Create release
         env:
@@ -169,4 +169,4 @@ jobs:
             curios-js.tar.gz \
             curios-docs.tar.gz \
             checksums.txt \
-            .github/workflows/install.sh
+            install.sh
