@@ -2,10 +2,10 @@ use {
     super::unfold_rec,
     crate::{Kernel, whnf},
     curios_core::{
-        Apply, Category, Cost, Free, Global, Intrinsic, Level, Nat, ReduceError, Reducer, Subterm,
-        Term, UniverseContext,
+        Apply, Category, Cost, Free, Global, Intrinsic, Level, Many, Nat, ReduceError, Reducer,
+        Scope, Subterm, Term, UniverseContext,
     },
-    curios_utilities::Qualifier,
+    curios_utilities::{Grain, PackedBin, Qualifier},
 };
 
 /// The kernel every test starts from. The floor keeps the identities minted below out of the range the kernel mints from for eta-contraction, exactly as a real caller must seed it above the lowerer's and the elaborator's binders.
@@ -617,4 +617,161 @@ fn a_declined_insertion_costs_the_next_reduction_a_re_derivation() {
         cold_again > 0,
         "a declined entry is not there to be hit, so the work happens again"
     );
+}
+
+/// **The differential fixture the machine's perimeter entry names.** The same closed terms are put to a kernel with the closed machine and to one without it — the recursive strategy — and the reducts must be identical, term for term. The battery covers each rule the machine implements on its own: beta over eagerly-evaluated arguments, zeta's left-to-right release, all four match families, projection, recursive unfolding to a value, and the two fold recursion encodings over a packed carrier. Results are first-order values, the shape both evaluators determine completely, so equality here is syntactic rather than up-to-anything.
+#[test]
+fn the_closed_machine_agrees_with_the_strategy() {
+    let bin_type = Term::intrinsic(Intrinsic::BinType(Grain::X));
+    let bytes =
+        |data: Vec<u8>| Term::intrinsic(Intrinsic::Bin(Grain::X, PackedBin::from_bytes(data)));
+    let motive = || {
+        let m = binder(100, "m");
+        Scope::close(Many(1), &[&m], nat_type())
+    };
+
+    let ih_fold = {
+        let (h, t, ih) = (binder(0, "h"), binder(1, "t"), binder(2, "ih"));
+        Term::bin_match_scoped(
+            Grain::X,
+            bytes(vec![7; 40]),
+            motive(),
+            nat(0),
+            &h,
+            &t,
+            &ih,
+            Term::intrinsic(Intrinsic::nat_add(Term::free_var(&ih), nat(1))),
+        )
+    };
+
+    let tail_fold = {
+        let (go, acc, b) = (binder(0, "go"), binder(1, "acc"), binder(2, "b"));
+        let (h, t, ih) = (binder(3, "h"), binder(4, "t"), binder(5, "ih"));
+        let body = Term::func(
+            [(acc.clone(), nat_type()), (b.clone(), bin_type.clone())],
+            Term::bin_match_scoped(
+                Grain::X,
+                Term::free_var(&b),
+                motive(),
+                Term::free_var(&acc),
+                &h,
+                &t,
+                &ih,
+                Term::apply(
+                    Term::free_var(&go),
+                    [
+                        Term::intrinsic(Intrinsic::nat_add(
+                            Term::free_var(&acc),
+                            Term::intrinsic(Intrinsic::ByteToNat(Term::free_var(&h))),
+                        )),
+                        Term::free_var(&t),
+                    ],
+                ),
+            ),
+        );
+        Term::rec(
+            [(
+                go.clone(),
+                Term::func_type(
+                    [(acc.clone(), nat_type()), (b.clone(), bin_type.clone())],
+                    nat_type(),
+                ),
+                body,
+            )],
+            Term::apply(Term::free_var(&go), [nat(0), bytes(vec![3; 40])]),
+        )
+    };
+
+    let countdown = {
+        let (n, motive_b) = (binder(0, "n"), binder(1, "m"));
+        let (pred, hypothesis, member) = (binder(2, "pred"), binder(3, "ih"), binder(4, "member"));
+        let body = Term::func(
+            [(n.clone(), nat_type())],
+            Term::nat_match(
+                Term::free_var(&n),
+                Some(&motive_b),
+                nat_type(),
+                nat(0),
+                &pred,
+                &hypothesis,
+                Term::apply(Term::free_var(&member), [Term::free_var(&pred)]),
+            ),
+        );
+        Term::rec(
+            [(
+                member.clone(),
+                Term::func_type([(n.clone(), nat_type())], nat_type()),
+                body,
+            )],
+            Term::apply(Term::free_var(&member), [nat(9)]),
+        )
+    };
+
+    let beta_zeta = {
+        let (x, y) = (binder(0, "x"), binder(1, "y"));
+        Term::apply(
+            Term::func(
+                [(x.clone(), nat_type()), (y.clone(), nat_type())],
+                Term::let_(
+                    &y,
+                    nat_type(),
+                    Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), nat(3))),
+                    Term::free_var(&y),
+                ),
+            ),
+            [nat(2), nat(0)],
+        )
+    };
+
+    let switch = {
+        let m = binder(0, "m");
+        Term::switch(
+            nat(2),
+            Some(&m),
+            nat_type(),
+            [(1u32, nat(10)), (2, nat(20))],
+            nat(99),
+        )
+    };
+
+    let projection = Term::proj(Term::tuple([nat(10), nat(20), nat(30)]), 2);
+
+    let induct = {
+        let (m, payload) = (binder(0, "m"), binder(1, "a"));
+        Term::induct_match(
+            Term::variant(
+                Global::Authored(Qualifier::from(["E"])),
+                Vec::<Term>::new(),
+                "some",
+                [Term::intrinsic(Intrinsic::nat_add(nat(40), nat(2)))],
+            ),
+            Some(&m),
+            nat_type(),
+            [
+                ("none", Vec::<Free>::new(), nat(0)),
+                ("some", vec![payload.clone()], Term::free_var(&payload)),
+            ],
+        )
+    };
+
+    for term in [
+        chain(64),
+        ih_fold,
+        tail_fold,
+        countdown,
+        beta_zeta,
+        switch,
+        projection,
+        induct,
+    ] {
+        let mut machined = kernel();
+        let mut strategy = Kernel::without_closed_machine(1_000_000);
+        strategy.set_local_floor(1_000);
+
+        assert_eq!(
+            machined.reduce_forced(term.clone()),
+            strategy.reduce_forced(term.clone()),
+            "the machine and the strategy disagreed on {term}",
+        );
+    }
 }
