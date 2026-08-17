@@ -262,13 +262,9 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                     comp_type: curios_wasm::CompType::Struct(curios_wasm::StructType::from([(
                         self.table.special_field(),
                         curios_wasm::FieldType {
-                            storage_type: curios_wasm::StorageType::Val(curios_wasm::ValType::Ref(
-                                curios_wasm::RefType {
-                                    is_nullable: true,
-                                    heap_type: curios_wasm::HeapType::Concrete(
-                                        self.table.find_clsr_type(arity),
-                                    ),
-                                },
+                            // The code field is the body's index in the shared funcref table, not a funcref: writing an `i32` skips the engine's per-store funcref-to-GC-heap intern at every construction. A `struct.new_default` shell zeroes it, and slot 0 is left null, so dispatching an unfilled shell still traps.
+                            storage_type: curios_wasm::StorageType::Val(curios_wasm::ValType::Num(
+                                curios_wasm::NumType::I32,
                             )),
                             mutability: self.table.envr_special_mutability(arity),
                         },
@@ -294,12 +290,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                             self.table.special_field(),
                             curios_wasm::FieldType {
                                 storage_type: curios_wasm::StorageType::Val(
-                                    curios_wasm::ValType::Ref(curios_wasm::RefType {
-                                        is_nullable: true,
-                                        heap_type: curios_wasm::HeapType::Concrete(
-                                            self.table.find_clsr_type(data.arity()),
-                                        ),
-                                    }),
+                                    curios_wasm::ValType::Num(curios_wasm::NumType::I32),
                                 ),
                                 // Must agree with the shared `envr/N` special field above.
                                 mutability: self.table.envr_special_mutability(data.arity()),
@@ -531,22 +522,51 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
-    /// Closures are referenced by `ref.func` when their values are built, and `ref.func $f` validates only if `$f` is declared. Nothing exports them and nothing puts them in a table, so a declarative element segment — which contributes no elements at all — is what makes them eligible. `curios-wasm` mints no such segment on a module's behalf: needing one is a fact about *this* lowering, so it is stated here.
-    fn emit_declared_clsrs(&mut self, module: &'a EmissionModule) {
+    /// The shared funcref table every closure dispatches through: one table, filled by one active element segment in the module's ordered closure walk, so [`ClsrData::index`](super::ClsrData::index) is reproducible. Slot 0 stays null — a shell's zeroed index field must trap, and a funcref table's uninitialized entry does exactly that under `call_indirect`. The table exists whenever the module speaks the closure vocabulary at all, because an indirect call site can survive the inlining-away of every closure definition of its arity.
+    fn emit_clsr_table(&mut self, module: &'a EmissionModule) {
+        if self.table.clsr_types().next().is_none() {
+            return;
+        }
+
         let func_names: Vec<_> = module
             .clsrs()
             .iter()
             .map(|(name, _)| self.table.find_clsr(name).func_name())
             .collect();
 
+        let slots = func_names.len() as u64 + 1;
+        self.module.add_table(
+            self.table.clsr_table(),
+            curios_wasm::Table {
+                table_type: curios_wasm::TableType {
+                    address_type: curios_wasm::AddressType::I32,
+                    ref_type: curios_wasm::RefType {
+                        is_nullable: true,
+                        heap_type: curios_wasm::HeapType::Abstract(curios_wasm::AbsHeapType::Func),
+                    },
+                    limits: curios_wasm::Limits {
+                        min: slots,
+                        max: Some(slots),
+                    },
+                },
+                expr: None,
+            },
+        );
+
         if func_names.is_empty() {
             return;
         }
 
+        let mut offset: curios_wasm::Expr = Default::default();
+        offset.push(curios_wasm::Instr::I32Const { value: 1 });
+
         self.module.add_elem(
             curios_wasm::ElemName::from("clsr"),
             curios_wasm::ElemSegment {
-                mode: curios_wasm::ElemMode::Declarative,
+                mode: curios_wasm::ElemMode::Active {
+                    table_name: self.table.clsr_table(),
+                    offset,
+                },
                 list: curios_wasm::ElemList::Funcs(func_names),
             },
         );
@@ -696,7 +716,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             self.emit_let_clsr(name, clsr);
         }
 
-        self.emit_declared_clsrs(module);
+        self.emit_clsr_table(module);
 
         for (name, func) in module.funcs() {
             self.emit_let_func(name, func);

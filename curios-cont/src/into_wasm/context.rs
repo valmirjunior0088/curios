@@ -566,19 +566,20 @@ impl<'a, 'b> Context<'a, 'b> {
 
         output.extend(self.load_value_instrs(target, LoadAs::Concrete(envr_type.clone())));
 
+        // The special field is the body's `i32` table index; `call_indirect` reads the funcref out of the table itself, so nothing here materializes one. A shell's zeroed field selects the null slot and traps, exactly as the null funcref did.
         output.push(curios_wasm::Instr::StructGet {
             type_name: envr_type,
             field_name: self.table().special_field(),
         });
 
-        output.push(curios_wasm::Instr::RefAsNonNull);
-
         if self.is_resume(resume) {
-            output.push(curios_wasm::Instr::ReturnCallRef {
+            output.push(curios_wasm::Instr::ReturnCallIndirect {
+                table_name: self.table().clsr_table(),
                 type_name: clsr_type,
             });
         } else {
-            output.push(curios_wasm::Instr::CallRef {
+            output.push(curios_wasm::Instr::CallIndirect {
+                table_name: self.table().clsr_table(),
                 type_name: clsr_type,
             });
 

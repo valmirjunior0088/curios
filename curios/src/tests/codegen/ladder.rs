@@ -356,7 +356,11 @@ fn returned_scan_is_delivered_as_fields_and_rebuilt_by_callers() {
         "the suffix view is a virtual window: no helper call, no view allocation",
     );
     assert_eq!(in_fold("call $bytes/read"), 3, "the byte read per arm");
-    assert_eq!(in_fold("call_ref $clsr/2"), 2, "the user's step closure");
+    assert_eq!(
+        in_fold("call_indirect $clsr $clsr/2"),
+        2,
+        "the user's step closure"
+    );
 }
 
 /// The attribution measurement over the mirror family: static counts, raw-and-Binaryen agreement at a small input, and the recorded native timing protocol. Run explicitly:

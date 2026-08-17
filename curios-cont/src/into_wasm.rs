@@ -91,7 +91,7 @@ pub(crate) enum EmissionData {
 pub(crate) enum EmissionCode {
     /// One [`CpsIntrinsicOp`] over its operands, in the order and arity the op fixes — verified at the CPS boundary, so codegen indexes the vector directly. The scalar families (`Nat*`/`Int*`/`Flt*`) lower to the wasm ops they mirror one-for-one; the `Bin*`/`List*` families are rope operations codegen services through shared helper functions.
     Intrinsic(CpsIntrinsicOp, Vec<EmissionValueName>),
-    // `ListMap(src, f)`: map closure `f` over list `src` into a fresh list of the same length. Codegen lowers it to the shared `$list/map` rope helper: one allocation, one fill loop applying `f` per slot via `call_ref`.
+    // `ListMap(src, f)`: map closure `f` over list `src` into a fresh list of the same length. Codegen lowers it to the shared `$list/map` rope helper: one allocation, one fill loop applying `f` per slot via `call_indirect`.
     /// The list-map runtime helper call: list first, mapper second. Not an [`Intrinsic`](Self::Intrinsic) member because it is no [`CpsIntrinsicOp`] upstream — it runs a closure, so CPS carries it as the call-shaped `CpsIntrinsicCall` with a return continuation, and only structurization collapses it to a pure helper call.
     ListMap(EmissionValueName, EmissionValueName),
 }
@@ -125,7 +125,7 @@ pub(crate) struct EmissionMatchTarget {
     pub(crate) default: Option<EmissionJumpTarget>,
 }
 
-/// A user-code call in tail position: `Direct` names a known function, `Indirect` invokes a closure value through the shared closure type of its arity (`call_ref`). Both name the `resume` block, which receives the callee's single result as its one parameter — except when `resume` is the enclosing body's return sentinel, where the call is a genuine tail call and codegen emits `return_call`/`return_call_ref` instead of branching.
+/// A user-code call in tail position: `Direct` names a known function, `Indirect` invokes a closure value through the shared closure type of its arity (`call_indirect` through the module's closure table). Both name the `resume` block, which receives the callee's single result as its one parameter — except when `resume` is the enclosing body's return sentinel, where the call is a genuine tail call and codegen emits `return_call`/`return_call_indirect` instead of branching.
 #[derive(Debug, Clone)]
 pub(crate) enum EmissionCallTarget {
     Direct {
@@ -204,7 +204,7 @@ pub(crate) struct EmissionBody {
 }
 
 impl EmissionBody {
-    /// Collect the arity of every *indirect* call site in this region (and its nested blocks). A closure of that arity is invoked here even when the optimizer has specialized its definition away (a higher-order function's argument inlined, dropping the only closure of that arity while a `call_ref` in its body survives), so a closure type for the arity is needed even though no closure of it is defined.
+    /// Collect the arity of every *indirect* call site in this region (and its nested blocks). A closure of that arity is invoked here even when the optimizer has specialized its definition away (a higher-order function's argument inlined, dropping the only closure of that arity while a `call_indirect` in its body survives), so a closure type for the arity is needed even though no closure of it is defined.
     fn collect_indirect_arities(&self, out: &mut BTreeSet<usize>) {
         if let EmissionTail::Call(EmissionCallTarget::Indirect { params, .. }) = &self.tail {
             out.insert(params.len());
@@ -286,7 +286,7 @@ impl EmissionModule {
         self.funcs.push((func_name, func));
     }
 
-    /// Every closure arity the module needs closure types for: the arities of the surviving closure definitions, unioned with the arities of indirect call sites (whose target definition may have been inlined away). Sizing closure types from definitions alone misses the latter, leaving a surviving `call_ref` with no declared type for its arity.
+    /// Every closure arity the module needs closure types for: the arities of the surviving closure definitions, unioned with the arities of indirect call sites (whose target definition may have been inlined away). Sizing closure types from definitions alone misses the latter, leaving a surviving `call_indirect` with no declared type for its arity.
     pub(crate) fn clsr_arities(&self) -> BTreeSet<usize> {
         let mut arities = BTreeSet::new();
 

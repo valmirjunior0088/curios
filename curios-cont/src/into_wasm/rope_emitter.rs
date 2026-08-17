@@ -1465,7 +1465,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// leaf { tag 0, count, out }
     /// ```
     ///
-    /// `f` is a unary closure `(A) -> B`, called by the arity-1 convention: the environment as the self argument, the funcref from its special field.
+    /// `f` is a unary closure `(A) -> B`, called by the arity-1 convention: the environment as the self argument, the table index from its special field.
     pub(crate) fn emit_map_func(
         &mut self,
         func_name: curios_wasm::FuncName,
@@ -1507,8 +1507,8 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             curios_wasm::Instr::RefAsNonNull,
             get(&f),
             field_get(&envr_type, &special_field),
-            curios_wasm::Instr::RefAsNonNull,
-            curios_wasm::Instr::CallRef {
+            curios_wasm::Instr::CallIndirect {
+                table_name: self.table.clsr_table(),
                 type_name: clsr_type,
             },
             curios_wasm::Instr::ArraySet {

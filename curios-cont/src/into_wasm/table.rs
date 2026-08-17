@@ -60,6 +60,8 @@ pub(crate) struct RopeData {
 #[derive(Debug, Clone)]
 pub(crate) struct ClsrData<'a> {
     name: &'a EmissionClosureName,
+    /// This closure's slot in the shared funcref table — the value its environment's special field holds. 1-based: slot 0 stays null so a `struct.new_default` shell's zeroed field dispatches into the null entry and traps, as the unfilled funcref did.
+    index: i32,
     func_name: curios_wasm::FuncName,
     clsr_type: curios_wasm::TypeName,
     envr_type: curios_wasm::TypeName,
@@ -69,9 +71,14 @@ pub(crate) struct ClsrData<'a> {
 }
 
 impl<'a> ClsrData<'a> {
-    pub(crate) fn new(clsr_name: &'a EmissionClosureName, clsr: &'a EmissionClosure) -> Self {
+    pub(crate) fn new(
+        clsr_name: &'a EmissionClosureName,
+        clsr: &'a EmissionClosure,
+        index: i32,
+    ) -> Self {
         Self {
             name: clsr_name,
+            index,
             func_name: curios_wasm::FuncName::from(format!("clsr/{}", clsr_name)),
             clsr_type: curios_wasm::TypeName::from(format!("clsr/{}", clsr_name)),
             envr_type: curios_wasm::TypeName::from(format!("envr/{}", clsr_name)),
@@ -101,6 +108,10 @@ impl<'a> ClsrData<'a> {
 
     pub(crate) fn name(&self) -> &'a EmissionClosureName {
         self.name
+    }
+
+    pub(crate) fn index(&self) -> i32 {
+        self.index
     }
 
     pub(crate) fn func_name(&self) -> curios_wasm::FuncName {
@@ -246,6 +257,7 @@ pub(crate) struct Table<'a> {
     special_field: curios_wasm::FieldName,
     special_local: curios_wasm::LocalName,
     special_label: curios_wasm::LabelName,
+    clsr_table: curios_wasm::TableName,
     flt_type: curios_wasm::TypeName,
     bin_rope_type: curios_wasm::TypeName,
     list_rope_type: curios_wasm::TypeName,
@@ -324,6 +336,7 @@ impl<'a> Table<'a> {
             special_field: curios_wasm::FieldName::from("!"),
             special_local: curios_wasm::LocalName::from("!"),
             special_label: curios_wasm::LabelName::from("!"),
+            clsr_table: curios_wasm::TableName::from("clsr"),
             flt_type: curios_wasm::TypeName::from("flt"),
             bin_rope_type: curios_wasm::TypeName::from("rope/bin"),
             list_rope_type: curios_wasm::TypeName::from("rope/list"),
@@ -414,10 +427,14 @@ impl<'a> Table<'a> {
                     )
                 })
                 .collect(),
+            // Table indices come from the module's ordered closure walk — the same order the element segment lists the bodies in — never from this map's iteration.
             clsrs: module
                 .clsrs()
                 .iter()
-                .map(|(clsr_name, clsr)| (clsr_name, ClsrData::new(clsr_name, clsr)))
+                .enumerate()
+                .map(|(index, (clsr_name, clsr))| {
+                    (clsr_name, ClsrData::new(clsr_name, clsr, index as i32 + 1))
+                })
                 .collect(),
             funcs: module
                 .funcs()
@@ -437,6 +454,11 @@ impl<'a> Table<'a> {
 
     pub(crate) fn special_label(&self) -> curios_wasm::LabelName {
         self.special_label.clone()
+    }
+
+    /// The module-level funcref table holding every closure body, indexed by [`ClsrData::index`].
+    pub(crate) fn clsr_table(&self) -> curios_wasm::TableName {
+        self.clsr_table.clone()
     }
 
     pub(crate) fn top_type(is_nullable: bool) -> curios_wasm::ValType {

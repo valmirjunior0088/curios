@@ -164,8 +164,9 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 let clsr_data = self.context.table().find_clsr(target);
                 let envr_type = clsr_data.envr_type();
 
-                self.emit_instr(curios_wasm::Instr::RefFunc {
-                    func_name: clsr_data.func_name(),
+                // The code field is the body's table index — an ordinary `i32`, so constructing a closure pays no `ref.func` materialization and no per-store funcref intern.
+                self.emit_instr(curios_wasm::Instr::I32Const {
+                    value: clsr_data.index(),
                 });
 
                 for field in fields {
@@ -246,8 +247,8 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             self.context
                 .load_value_instrs(value_name, LoadAs::Concrete(envr_type.clone())),
         );
-        self.emit_instr(curios_wasm::Instr::RefFunc {
-            func_name: clsr_data.func_name(),
+        self.emit_instr(curios_wasm::Instr::I32Const {
+            value: clsr_data.index(),
         });
 
         self.emit_instr(curios_wasm::Instr::StructSet {

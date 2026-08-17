@@ -7,7 +7,12 @@ use {
     curios_pipeline::compile_with_prelude,
     curios_runtime::{ForeignBindings, MockHost, precompile, run_bytes},
     curios_text::{Entrypoint, RootSource},
-    curios_wasm::{Module, to_bytes},
+    curios_wasm::{
+        AbsHeapType, AddressType, CompType, Export, Expr, FieldName, FieldType, Func, FuncName,
+        FuncType, HeapType, Instr, Limits, LocalName, Module, Mutability, NumType, RefType,
+        ResultType, StorageType, StructType, SubType, Table, TableName, TableType, TypeName,
+        ValType, to_bytes,
+    },
     std::collections::BTreeSet,
 };
 
@@ -196,7 +201,7 @@ pub(super) fn wat(source: &str) -> String {
 ///
 /// Every program's tail is a description, and a description erases to a zero-argument closure — so an effect boundary allocates a closure and forces it through an indirect call no matter how the *user's* code is written. Those carry the `$io/…` hint their thunk was minted with (`io/pure`, `io/bind`, `io/write`, …), which is what lets a claim about user code stay a claim about user code. A test that dropped the distinction would either fail on every program or assert nothing.
 ///
-/// **The separation is by what the line names, and that is why this is for allocations and nothing else.** An allocation names its own definition, so `struct.new $clsr/451$io/bind` carries the hint even though the description is built *inside* user code — which is exactly where it is built, so filtering by enclosing function would discard the distinction this exists to make. An indirect call names the arity-keyed supertype instead: `call_ref $clsr/0` identifies no callee, and a needle like that would silently keep every `Io` force while looking like it had excluded them. Those claims belong to [`user_functions_with`], where the enclosing function is the only thing left to separate on. The assertion below is what keeps the choice from being made by accident.
+/// **The separation is by what the line names, and that is why this is for allocations and nothing else.** An allocation names its own definition, so `struct.new $clsr/451$io/bind` carries the hint even though the description is built *inside* user code — which is exactly where it is built, so filtering by enclosing function would discard the distinction this exists to make. An indirect call names the table and the arity-keyed supertype instead: `call_indirect $clsr $clsr/0` identifies no callee, and a needle like that would silently keep every `Io` force while looking like it had excluded them. Those claims belong to [`user_functions_with`], where the enclosing function is the only thing left to separate on. The assertion below is what keeps the choice from being made by accident.
 pub(super) fn user_allocations<'a>(wat: &'a str, needle: &str) -> Vec<&'a str> {
     assert!(
         needle.starts_with("struct.new") || needle.starts_with("array.new"),
@@ -355,7 +360,7 @@ fn loop_containing<'a>(wat: &'a str, needle: &str) -> &'a str {
     &wat[start..end]
 }
 
-/// The `<N>` indices following every occurrence of `prefix` (e.g. `"call $func/"` for directly-called functions, `"ref.func $clsr/"` for materialized closures); the digit run stops at the optional `$hint` suffix.
+/// The `<N>` indices following every occurrence of `prefix` (e.g. `"call $func/"` for directly-called functions, `"struct.new $envr/"` for materialized closures); the digit run stops at the optional `$hint` suffix.
 fn indices(wat: &str, prefix: &str) -> BTreeSet<u32> {
     let mut set = BTreeSet::new();
     let mut cursor = 0;
@@ -455,7 +460,7 @@ fn lcg_loop_is_scalar_no_closure_no_indirect() {
         "the modulo is direct scalar arithmetic"
     );
     assert!(
-        !kernel.contains("call_ref"),
+        !kernel.contains("call_indirect"),
         "no indirect call in the hot loop"
     );
     assert!(
@@ -524,20 +529,20 @@ fn trees_invariant_arithmetic_propagates_through_scc() {
         "the summation folded to bare instructions"
     );
     assert!(
-        !sum.body.contains("call_ref"),
+        !sum.body.contains("call_indirect"),
         "no witness dispatch survives in the recursive arithmetic",
     );
 }
 
 /// T3: the hot recursive code performs no indirect calls. Every call in the trees module is direct except at the effect boundary, where forcing a description *is* an indirect call — `main` forces the program's own description, and `io/bind` forces each of the two it sequences. The tree recursion is not among them.
 ///
-/// Stated as "the module contains no `call_ref`" this held only while programs were direct-style; a program is a description now, so two forces are structural. Pinning `main`'s count keeps that from being a licence: an indirect call anywhere in user code, or a second one in `main`, still fails.
+/// Stated as "the module contains no indirect dispatch" this held only while programs were direct-style; a program is a description now, so two forces are structural. Pinning `main`'s count keeps that from being a licence: an indirect call anywhere in user code, or a second one in `main`, still fails.
 #[test]
 fn trees_hot_arithmetic_has_no_indirect_calls() {
     let wat = wat(TREES);
     let functions = functions(&wat);
 
-    let stray = user_functions_with(&functions, "call_ref");
+    let stray = user_functions_with(&functions, "call_indirect");
     assert!(
         stray.is_empty(),
         "trees calls indirectly outside the effect boundary: {stray:?}"
@@ -548,7 +553,7 @@ fn trees_hot_arithmetic_has_no_indirect_calls() {
         .find(|function| function.name == "$func/main")
         .expect("the module has an entry");
     assert_eq!(
-        main.body.matches("call_ref").count(),
+        main.body.matches("call_indirect").count(),
         1,
         "main forces the program's description once and calls nothing else indirectly",
     );
@@ -646,23 +651,177 @@ fn trees_leaf_rides_its_payload() {
 
 // -- general corpus ---------------------------------------------------------
 
-/// G1: a genuinely unknown higher-order call retains the closure ABI and emits `call_ref`. `f` is selected at runtime, so it cannot be devirtualized: the module declares `$clsr/…` closure types, materializes the branches with `ref.func`, and dispatches through `call_ref`.
+/// G1: a genuinely unknown higher-order call retains the closure ABI and dispatches through the shared funcref table. `f` is selected at runtime, so it cannot be devirtualized: the module declares `$clsr/…` closure types, materializes the branches as environments carrying their body's `i32` table index, and dispatches through `call_indirect`.
 #[test]
-fn unknown_higher_order_call_uses_closure_abi_and_call_ref() {
+fn unknown_higher_order_call_uses_closure_abi_and_call_indirect() {
     let wat = wat(HIGHER_ORDER);
     assert!(
-        wat.contains("call_ref"),
-        "the unknown call dispatches through call_ref"
+        wat.contains("call_indirect $clsr "),
+        "the unknown call dispatches through the closure table"
     );
     assert!(wat.contains("$clsr/"), "the closure ABI is retained");
 }
 
-/// G2: direct and escaping uses of the same function coexist. A function used both directly and as a first-class value is emitted once as `$func/<N>` (the direct callee) and once as `$clsr/<N>` (the escaping wrapper) under the same index, so the set of directly-called `$func/<N>` indices and the set of `ref.func`'d `$clsr/<N>` indices overlap.
+/// The closure ABI's code field is an `i32` table index, and nothing in emitted code touches a funcref. Construction writes `i32.const`, dispatch reads the field into `call_indirect`, and the table plus one active element segment (offset 1 — slot 0 stays null for the shell trap) carry every closure body. `ref.func` and `call_ref` are absent from every corpus module, which is the whole point: the per-store funcref-to-GC-heap intern the funcref field paid on every construction has no site left to fire on.
+#[test]
+fn closures_carry_their_code_as_a_table_index() {
+    for (label, source) in [
+        ("lcg", LCG),
+        ("trees", TREES),
+        ("higher-order", HIGHER_ORDER),
+        ("direct/escaping", DIRECT_ESCAPING),
+        ("function-only", FUNCTION_ONLY),
+        ("mutual-recursion", MUTUAL_RECURSION),
+        ("split-return", SPLIT_RETURN),
+        ("uncurry", UNCURRY),
+        ("string-walk", STRING_WALK),
+    ] {
+        let wat = wat(source);
+        assert!(
+            !wat.contains("ref.func"),
+            "{label}: no funcref is materialized anywhere",
+        );
+        assert!(
+            !wat.contains("call_ref"),
+            "{label}: no dispatch reads a funcref back",
+        );
+    }
+
+    let wat = wat(HIGHER_ORDER);
+    assert!(
+        wat.contains("(field $! i32)"),
+        "the environment's code field is an ordinary i32",
+    );
+    assert!(
+        wat.contains("(table $clsr i32 ") && wat.contains("(ref null func)"),
+        "one shared funcref table holds the closure bodies",
+    );
+    assert!(
+        wat.contains("(elem $clsr (table $clsr) (offset i32.const 1) func"),
+        "one active segment fills it from slot 1, leaving slot 0 null",
+    );
+}
+
+/// A shell dispatched before its back-patch still traps. A recursive shell is built with `struct.new_default`, so its code field is index zero; the shared table's slot 0 is deliberately left null, and `call_indirect` on a null entry traps — the same loud failure the unfilled funcref field reached under `call_ref`. No `.crs` program dispatches a shell before its fill, so the boundary is pinned at the wasm level: the module below is the emitter's own shapes — the `i32` code field, the mutable shell field, the null slot — with the fill omitted.
+#[test]
+fn a_shell_dispatched_before_backpatch_traps() {
+    let ref_any = || {
+        ValType::Ref(RefType {
+            is_nullable: false,
+            heap_type: HeapType::Abstract(AbsHeapType::Any),
+        })
+    };
+
+    let mut module = Module::new("shell-trap");
+
+    module.add_type(
+        TypeName::from("clsr/0"),
+        SubType {
+            is_final: false,
+            super_types: vec![],
+            comp_type: CompType::Func(FuncType {
+                inputs: ResultType::from([ref_any()]),
+                outputs: ResultType::from([ref_any()]),
+            }),
+        },
+    );
+    module.add_type(
+        TypeName::from("envr/0"),
+        SubType {
+            is_final: false,
+            super_types: vec![],
+            comp_type: CompType::Struct(StructType::from([(
+                FieldName::from("!"),
+                FieldType {
+                    storage_type: StorageType::Val(ValType::Num(NumType::I32)),
+                    mutability: Mutability::Var,
+                },
+            )])),
+        },
+    );
+    module.add_type(
+        TypeName::from("func/0"),
+        SubType {
+            is_final: true,
+            super_types: vec![],
+            comp_type: CompType::Func(FuncType {
+                inputs: ResultType::from([]),
+                outputs: ResultType::from([ref_any()]),
+            }),
+        },
+    );
+    module.add_table(
+        TableName::from("clsr"),
+        Table {
+            table_type: TableType {
+                address_type: AddressType::I32,
+                ref_type: RefType {
+                    is_nullable: true,
+                    heap_type: HeapType::Abstract(AbsHeapType::Func),
+                },
+                limits: Limits {
+                    min: 1,
+                    max: Some(1),
+                },
+            },
+            expr: None,
+        },
+    );
+
+    let envr = || RefType {
+        is_nullable: true,
+        heap_type: HeapType::Concrete(TypeName::from("envr/0")),
+    };
+    module.add_func(
+        FuncName::from("func/main"),
+        Func {
+            type_name: TypeName::from("func/0"),
+            params: vec![],
+            locals: vec![(LocalName::from("e"), ValType::Ref(envr()))],
+            expr: Expr::from([
+                Instr::StructNewDefault {
+                    type_name: TypeName::from("envr/0"),
+                },
+                Instr::LocalSet {
+                    local_name: LocalName::from("e"),
+                },
+                Instr::LocalGet {
+                    local_name: LocalName::from("e"),
+                },
+                Instr::RefAsNonNull,
+                Instr::LocalGet {
+                    local_name: LocalName::from("e"),
+                },
+                Instr::StructGet {
+                    type_name: TypeName::from("envr/0"),
+                    field_name: FieldName::from("!"),
+                },
+                Instr::CallIndirect {
+                    table_name: TableName::from("clsr"),
+                    type_name: TypeName::from("clsr/0"),
+                },
+            ]),
+        },
+    );
+    module.add_export("func/main", Export::Func(FuncName::from("func/main")));
+
+    let cwasm = precompile(&to_bytes(&module)).expect("the shell module validates");
+    let (system, _io) = MockHost::builder().build();
+    // The runtime surfaces a trap's wasm backtrace but not its reason string, so the assertion is that execution fails inside the guest — the `call_indirect` on the null slot — rather than matching wasmtime's "uninitialized element" wording.
+    let error = run_bytes(&cwasm, system, ForeignBindings::empty())
+        .expect_err("dispatching an unfilled shell must trap");
+    assert!(
+        error.contains("error while executing"),
+        "the failure is a guest trap, not a load or link error: {error}"
+    );
+}
+
+/// G2: direct and escaping uses of the same function coexist. A function used both directly and as a first-class value is emitted once as `$func/<N>` (the direct callee) and once as `$clsr/<N>` (the escaping wrapper) under the same index, so the set of directly-called `$func/<N>` indices and the set of allocated `$envr/<N>` environments overlap — the environment carries its wrapper's index, and its allocation is what materializing the closure is now.
 #[test]
 fn direct_and_escaping_uses_coexist() {
     let wat = wat(DIRECT_ESCAPING);
     let called_directly = indices(&wat, "call $func/");
-    let escaped = indices(&wat, "ref.func $clsr/");
+    let escaped = indices(&wat, "struct.new $envr/");
 
     assert!(
         called_directly.intersection(&escaped).next().is_some(),
@@ -759,7 +918,7 @@ fn a_returned_constructor_is_delivered_as_its_fields() {
 ///
 /// All three are asserted because each alone is satisfiable the wrong way. A module that allocated nothing but still dispatched indirectly would have moved the cost rather than removed it; one that dispatched directly while still allocating would pay for a closure nothing reaches; and both hold vacuously of a module where the recursion was simply peeled away, which is what a fixture inside the inline budget produces.
 ///
-/// The `call_ref` exemption is `main`'s and the `$io/` thunks', following [`trees_hot_arithmetic_has_no_indirect_calls`]: a program *is* a description now, so forcing one is structurally an indirect call. It goes through [`user_functions_with`] rather than [`user_allocations`] because the instruction names the closure *type* it calls through and never the callee, leaving the enclosing function as the only thing that says whose call it is.
+/// The `call_indirect` exemption is `main`'s and the `$io/` thunks', following [`trees_hot_arithmetic_has_no_indirect_calls`]: a program *is* a description now, so forcing one is structurally an indirect call. It goes through [`user_functions_with`] rather than [`user_allocations`] because the instruction names the table and the closure *type* it calls through and never the callee, leaving the enclosing function as the only thing that says whose call it is.
 ///
 /// **The environment goes with the closure, and that is lowering's doing rather than this transform's.** A free value reaches a directly-called function as a lifted parameter and an escaping one as an environment field — one decision, taken in `machine::lower` — so absorbing the application moves `walk`'s captured `n` from the second case to the first for free. The emitted pair takes it as a parameter and allocates nothing.
 #[test]
@@ -773,7 +932,7 @@ fn a_returned_closure_every_caller_applies_is_absorbed() {
         "an absorbed closure is never built: {closures:?}"
     );
 
-    let indirect = user_functions_with(&functions, "call_ref");
+    let indirect = user_functions_with(&functions, "call_indirect");
     assert!(
         indirect.is_empty(),
         "nor does the application it received stay indirect: {indirect:?}"

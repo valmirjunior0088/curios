@@ -560,8 +560,17 @@ fn indirect_apply() -> CpsModule {
 }
 
 #[test]
-fn unknown_callee_dispatches_through_call_ref() {
-    assert_contains(&wat(&indirect_apply()), "call_ref");
+fn unknown_callee_dispatches_through_the_closure_table() {
+    let wat = wat(&indirect_apply());
+
+    // The environment's code field is an `i32` table index, so construction writes a constant and dispatch reads it back into `call_indirect` — no funcref is ever materialized in function code.
+    assert_contains(&wat, "call_indirect $clsr ");
+    assert_absent(&wat, "call_ref");
+    assert_absent(&wat, "ref.func");
+
+    // One shared funcref table sized for every closure body plus the null slot 0, filled by one active segment at offset 1 in definition order.
+    assert_contains(&wat, "(table $clsr i32 2 2 (ref null func))");
+    assert_contains(&wat, "(elem $clsr (table $clsr) (offset i32.const 1) func");
 }
 
 #[test]
