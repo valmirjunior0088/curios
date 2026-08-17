@@ -642,11 +642,11 @@ fn cell_two_cells_are_distinct() {
 
 #[test]
 fn accumulation_loops_are_linear_by_construction() {
-    // The rope representation's whole promise: a naive 100k-step packed-concatenation accumulation loop is O(n) with no optimizer recognition anywhere — each step is one node allocation, and the single read at the end forces once. The pre-rope representation copied the accumulator per step (Θ(n²), tens of minutes at this size); a regression fails on the timeout. The final slice + print also pins the force → memo → host-write path end to end.
+    // The rope representation's whole promise: a naive packed-concatenation accumulation loop is O(n) with no optimizer recognition anywhere — each step is one node allocation, and the single read at the end forces once. The pre-rope representation copied the accumulator per step, Θ(n²), which at this count still burns minutes where the loop takes milliseconds; a regression fails on the suite's patience. The final slice + print also pins the force → memo → host-write path end to end.
     //
-    // **`head_of` keeps this a runtime measurement, and that is its whole job — the refusal that once also forced it is gone.** `Bytes/slice` states `10 <= Bytes/len(b)`, a *decided* proposition, so its subject stands in a type and the obligation is discharged by reducing that subject. Written directly as `Bytes/slice(built, 0, 10)`, the compiler evaluates `go(100000, x[])` at the type level — which the closed machine now affords inside the default budget, where it used to be a sixteen-times-over refusal, so the direct spelling *compiles*. It is still the wrong spelling here: it makes this test pay a hundred-thousand-iteration elaboration before the clock starts, and it hands later stages a closed value they may fold, which is everything a runtime measurement must not let happen. Behind `head_of` the subject is a parameter: `b` is opaque, the guard refines it once and generically, and the call site passes an ordinary value, so nothing is computed at elaboration time and what this test times is the emitted program.
+    // **This is the direct spelling, restored, and its compiling at all is the closed machine's living proof.** `Bytes/slice` states `10 <= Bytes/len(b)`, a *decided* proposition, so `built` stands in a type and the compiler runs the whole accumulation at elaboration — a closed evaluation the machine affords inside the default budget where the recursive strategy refused it sixteen times over at the historical count, and where the pre-cap fusion before that exhausted the host. The test therefore proves both halves at once: the type level evaluates a twenty-five-thousand-step closed fold without a frame row, and the emitted program runs the same loop over the rope in linear time. A `head_of` indirection kept the subject opaque through both earlier eras; `tests::numeric`'s `a_bound_behind_a_parameter_evaluates_nothing` still holds that spelling, as the proof that opacity computes nothing rather than as anyone's workaround.
     //
-    // **It has worked around two harder problems in its time, and the descent is worth knowing.** Fusing an all-literal concatenation once recopied the whole accumulator every step, so the direct spelling spent a *quadratic* volume of construction against a linear step count: it did not refuse or time out, it exhausted the machine. `curios-core`'s `FUSION_CAP` and its measure reduced that to an ordinary bounded computation that refused at sixteen times the default budget; the closed machine then removed the frame row that was most of that price, and today the direct spelling simply compiles, slowly. `tests::numeric`'s `a_bound_on_a_small_computed_subject_discharges` writes it directly, which is the spelling a user actually reaches for; `curios`'s `tests::reduction` holds the figures for every stage of this history.
+    // **The count moved from the historical 100 000 when the direct spelling returned**, because the spelling makes elaboration run the loop too, at a measured ~160 units an iteration across the two checkers — the historical count costs the type level sixteen million units and this one four, which keeps the test seconds while leaving a quadratic regression minutes. The discrimination the count exists for is unchanged.
     //
     // `documentation/design/language/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md` states the design this follows from.
     assert_eq!(
@@ -657,14 +657,13 @@ fn accumulation_loops_are_linear_by_construction() {
             | 0 => acc
             | k + 1; ih => go(k, x[..acc, ..Str/to_bytes("0123456789")])
             end;
-        let head_of(b : Bytes) -> Bytes =
-            match 10 <= Bytes/len(b) | true => Bytes/slice(b, 0, 10) | false => x[] end;
-        let built = go(100000, x[]);
-        let _ = Handle/write(Handle/stdout, head_of(built))!;
+        let built = go(25000, x[]);
+        let head = Bytes/slice(built, 0, 10);
+        let _ = Handle/write(Handle/stdout, head)!;
         let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Bytes/len(built))))!;
         /std/Io/pure(())
         "#),
-        b"01234567891000000"
+        b"0123456789250000"
     );
 }
 

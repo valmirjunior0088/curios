@@ -261,7 +261,7 @@ fn a_bound_on_a_small_computed_subject_discharges() {
 
 // The shared figure above and below is *priced reduction work*, not transitions, and it moved with the pricing rather than being preserved: 50 000 transitions became 500 000 units. What the pair asserts is the contrast, and the contrast is untouched — the computed spelling is refused and the opaque one is ample, at one budget.
 //
-// The control: the same program with the bound read off a parameter. `b` is opaque behind `head_of`, the guard refines it once and generically, and nothing computes — so the identical budget that the hundred-thousand-iteration spelling cannot finish inside is ample here. It now says what it always meant: that opacity costs *nothing*, not that opacity is how a computed subject survives. `tests::runtime`'s accumulation measurement still keeps this helper, for the narrower reason stated there — a runtime measurement should not also be an elaboration-time one.
+// The control: the same program with the bound read off a parameter. `b` is opaque behind `head_of`, the guard refines it once and generically, and nothing computes — so the identical budget that the hundred-thousand-iteration spelling cannot finish inside is ample here. It says what it always meant: that opacity costs *nothing*, not that opacity is how a computed subject survives — and this is now the helper's last home, `tests::runtime`'s accumulation measurement having returned to the direct spelling once the closed machine made evaluating its subject an ordinary cost.
 #[test]
 fn a_bound_behind_a_parameter_evaluates_nothing() {
     typecheck_within(
