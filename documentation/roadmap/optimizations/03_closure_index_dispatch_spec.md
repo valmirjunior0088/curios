@@ -12,7 +12,7 @@ Constructing a closure stops paying the engine's funcref machinery: no `ref.func
 
 Which programs trap does not change. A recursive shell dispatched before its back-patch traps today on the null funcref; under this contract its zero-initialized index field must reach an equally loud trap, which is a design boundary below, not an accident.
 
-Not promised: fewer allocations (the environment struct and its captures are untouched), any devirtualization (a known callee is the specializers' and `rewrite_atoms`' subject, and the known-function-argument roadmap item's — this specification only re-prices the calls that stay unknown), and any figure on the browser engine (V8 is unmeasured; the contract there is correctness only).
+Not promised: fewer allocations from the swap itself (the environment struct and its captures are untouched; the one downstream exception is M3's constant-closure interning, an annex the swap enables and which carries its own gate), any devirtualization (a known callee is the specializers' and `rewrite_atoms`' subject, and the known-function-argument roadmap item's — this specification only re-prices the calls that stay unknown), and any figure on the browser engine (V8 is unmeasured; the contract there is correctness only).
 
 ## Evidence
 
@@ -59,6 +59,8 @@ Evidence that would stop the work: the product-level figures in M2 showing no mo
 
 ## Milestones
 
+The spine is `M0 → M1 → M2`. M3 stands beside it as an annex M1 enables; the spine neither waits for it nor depends on its verdict.
+
 ### M0 — Wasm-model substrate
 
 - `curios-wasm` models a table section, active element segments, and `Instr::CallIndirect`/`Instr::ReturnCallIndirect`, each landing in the encoder, parser and printer with round-trip tests.
@@ -78,3 +80,13 @@ Evidence that would stop the work: the product-level figures in M2 showing no mo
 - Product-level before/after on the programs the evidence names — `programs/rng_state.crs`, `state_monad`, the ladder's closure-bearing rungs — and the benchmark pair, recorded beside the probes that reproduce them rather than in prose, per the measurement discipline.
 
 - The two open scale questions above answered with their instrument, wherever they landed.
+
+### M3 — Constant closures intern (annex)
+
+- The swap dissolves the constant hoister's one exclusion: `hoist.rs` leaves closure values in place because hoisting one moves its `ref.func` into the start function — "no measured shape needs it yet". With the code field an ordinary `i32`, a closure whose fields are all interned constants is a constant aggregate like any `Tpl`, and the exclusion's rationale retires alongside the declarative segment.
+
+- The change is one `ConstKey` arm — the closure's target plus its canonicalized field names — riding the existing interner and const-emission machinery unchanged; a capture-free or const-captured closure then materializes once per instantiation instead of allocating per construction. A shell'd recursive closure is naturally outside the condition — it captures itself, and itself is no constant — so the backpatch path is untouched.
+
+- Admission: frequency, not product figures — a census count of closure constructions whose fields are all constant, over the optimized corpus and `/std`, recorded beside its instrument per the measurement discipline. The rewrite is cheap, so any nontrivial population admits it, and an empty one retires the annex without touching the spine.
+
+- Structural probe: a capture-free closure constructed in a loop pins as one module const, with no per-iteration construction left in function code — beside the M1 probes in `curios/src/tests/codegen/structural.rs`.
