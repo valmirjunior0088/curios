@@ -269,3 +269,98 @@ fn a_chain_declines_when_either_member_cannot() {
         );
     }
 }
+
+/// The returned closure is applied — but behind a forwarding jump, in a join point the resume hands it to. The interprocedural demand lattice reads that as `Applied`; this transform moves the application it finds in the resume itself, so admission must recompute the sole-local-application fact syntactically and decline here.
+#[test]
+fn a_forwarded_application_declines_uncurrying() {
+    let mut module = CpsModule::default();
+
+    let inner_param = module.add_value(Some("inner/param".into()));
+    let inner = module.reserve_function();
+    let inner_ret = module.reserve_continuation();
+    let inner_exit = module.add_node(CpsNode::Exit { value: None });
+    module.define_function(
+        inner,
+        CpsFunction {
+            debug_name: Some("inner".into()),
+            params: vec![inner_param],
+            return_cont: inner_ret,
+            body: inner_exit,
+        },
+    );
+
+    let produced_param = module.add_value(Some("producer/param".into()));
+    let producer = module.reserve_function();
+    let producer_ret = module.reserve_continuation();
+    let producer_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        target: producer_ret,
+        args: vec![CpsAtom::Fun(inner)],
+    }));
+    module.define_function(
+        producer,
+        CpsFunction {
+            debug_name: Some("producer".into()),
+            params: vec![produced_param],
+            return_cont: producer_ret,
+            body: producer_body,
+        },
+    );
+
+    let argument = module.add_value(Some("caller/argument".into()));
+    let caller = module.reserve_function();
+    let caller_ret = module.reserve_continuation();
+    let received = module.add_value(Some("resume/closure".into()));
+    let forwarded = module.add_value(Some("join/closure".into()));
+    let resume = module.reserve_continuation();
+    let join = module.reserve_continuation();
+
+    let apply = module.add_node(CpsNode::ApplyFun {
+        callee: CpsCallee::Closure(forwarded),
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(1))],
+        return_to: caller_ret,
+    });
+    module.define_continuation(
+        join,
+        CpsContinuation {
+            debug_name: Some("join".into()),
+            params: vec![forwarded],
+            body: apply,
+        },
+    );
+    let forward = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        target: join,
+        args: vec![CpsAtom::Value(received)],
+    }));
+    module.define_continuation(
+        resume,
+        CpsContinuation {
+            debug_name: Some("resume".into()),
+            params: vec![received],
+            body: forward,
+        },
+    );
+    let call = module.add_node(CpsNode::ApplyFun {
+        callee: CpsCallee::Known(producer),
+        args: vec![CpsAtom::Value(argument)],
+        return_to: resume,
+    });
+    let body = module.add_node(CpsNode::LetCont {
+        continuations: vec![join, resume],
+        body: call,
+    });
+    module.define_function(
+        caller,
+        CpsFunction {
+            debug_name: Some("caller".into()),
+            params: vec![argument],
+            return_cont: caller_ret,
+            body,
+        },
+    );
+    module.set_entry(caller);
+
+    assert!(
+        !uncurryable(&module).contains_key(&producer),
+        "an application behind a forwarding jump is not one the transform can move",
+    );
+}

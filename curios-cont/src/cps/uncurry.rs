@@ -16,7 +16,6 @@ use {
 /// Absence means one of two different things, and [`uncurry_returns`] needs them apart: a function with non-tail callers that do something else with what it returns is *inadmissible*, while one reached only by a class-mate's tail call is merely *unobserved* — it has no callers of its own to disagree, and takes its width from the class. [`rewritable`] is the half of admissibility that does not depend on having been observed.
 pub(super) fn uncurryable(module: &CpsModule) -> BTreeMap<CpsFunId, usize> {
     let calls = analyze_calls(module);
-    let demands = demands(module);
     let mut arity = BTreeMap::<CpsFunId, Option<usize>>::new();
 
     for owner in module.functions.live_ids().collect::<Vec<_>>() {
@@ -42,8 +41,8 @@ pub(super) fn uncurryable(module: &CpsModule) -> BTreeMap<CpsFunId, usize> {
                 *entry = None;
                 continue;
             };
-            // The application has to be the *only* use, and at one arity — which is exactly what the lattice point says.
-            let Demand::Applied(width) = demand_of(&demands, *result) else {
+            // The application has to be the *only* use, and at one arity. The demand lattice stopped answering that when it went interprocedural: `Applied` there may now be earned by a forwarded application in a later continuation, while this transform moves the application it finds *here* — so the sole-local-application fact is recomputed syntactically where it is spent.
+            let Some(width) = locally_applied_at(module, resume.body, *result) else {
                 *entry = None;
                 continue;
             };
@@ -103,6 +102,33 @@ fn returns_functions(module: &CpsModule, function: CpsFunId) -> bool {
         }
     }
     true
+}
+
+/// The one arity every use of `value` beneath `body` applies it at, or `None` when any use does anything else — including appearing as an ordinary operand, which would dangle once the callee returns the answer instead of the closure.
+fn locally_applied_at(module: &CpsModule, body: CpsNodeId, value: CpsValueId) -> Option<usize> {
+    let mut width = None;
+    for node_id in nodes_from(module, body) {
+        let node = module.node(node_id).unwrap();
+        for atom in atoms(node) {
+            if matches!(atom, CpsAtom::Value(used) if *used == value) {
+                return None;
+            }
+        }
+        if let CpsNode::ApplyFun {
+            callee: CpsCallee::Closure(callee),
+            args,
+            ..
+        } = node
+            && *callee == value
+        {
+            match width {
+                None => width = Some(args.len()),
+                Some(seen) if seen == args.len() => {}
+                Some(_) => return None,
+            }
+        }
+    }
+    width
 }
 
 /// The values a continuation's own body binds — what the call site above it cannot see.

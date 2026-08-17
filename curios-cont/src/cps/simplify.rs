@@ -522,7 +522,7 @@ pub(super) fn rewire_node(module: &mut CpsModule, from: CpsNodeId, to: CpsNodeId
 }
 /// Drop one entity's unread parameters, and the arguments every caller passes into them.
 ///
-/// Deadness is read from [`super::demand`]'s lattice rather than from a use count, which is the same question asked at the bottom point of a richer order — the one whose `Projected` point a return protocol needs. It answers identically here by construction: the walk contributes a demand at exactly the occurrences a use count counts, so `Unused` holds precisely when the count is zero. Deferring an argument's demand to the callee's own parameter would find more, and is deliberately not done here, because it would delete parameters this pass leaves alone and so move emitted code.
+/// Deadness is read from [`super::demand`]'s lattice rather than from a use count, which is the same question asked at the bottom point of a richer order — the one whose `Projected` point a return protocol needs. The lattice defers an argument's demand to the receiving parameter, so `Unused` here reaches further than a zero use count: a value threaded only into parameters nobody reads is dead however many edges carry it, and this pass deleting such a chain is the code motion the strengthening was scheduled to cause. The deletion stays well-formed because a parameter is always removed together with the argument every incoming edge passes into it, so no occurrence survives its binding.
 pub(super) fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
     let demands = demands(module);
     let dead_value = |value: &CpsValueId| demand_of(&demands, *value) == Demand::Unused;

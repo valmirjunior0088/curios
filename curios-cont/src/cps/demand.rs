@@ -2,11 +2,12 @@
 //!
 //! Dead-parameter elimination asks only whether a value is used at all, which a use count answers. A return protocol needs more: whether *every* use projects a field, so a constructor could be delivered as its fields rather than as a heap tuple. Those are two points of one order, so they are computed once here rather than by two walks that could drift apart.
 //!
-//! **The fact is deliberately syntactic today.** A value passed as an argument is consumed, whatever the callee does with it. Deferring instead to the callee's own parameter is the interprocedural strengthening — the thing that would make this a fixpoint rather than a scan — and it belongs to its own change, because it finds values dead that a use count cannot and therefore moves emitted code. The round below is written so that strengthening is a change of one rule rather than of the shape.
+//! **The fact is interprocedural.** A value passed to a known call or jumped along an edge asks exactly what the receiving parameter's own uses ask, so an argument's demand defers to that parameter and the round becomes a genuine fixpoint under the shared solver. Two transfers deliberately keep the syntactic reading: an argument to a closure call crosses an indirection this walk does not resolve, and a value on an edge into a bodyless return sentinel is consumed by the caller's resume, whose linkage belongs to the return protocol rather than to this lattice.
 
 use {
     super::{
-        CpsAtom, CpsCallee, CpsIntrinsicOp, CpsModule, CpsNode, CpsValueId, Lattice, Solver, atoms,
+        CpsAtom, CpsCallee, CpsEdge, CpsIntrinsicOp, CpsModule, CpsNode, CpsValueId, Lattice,
+        Solver, atoms,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -58,38 +59,96 @@ pub(crate) fn demand_of(demands: &BTreeMap<CpsValueId, Demand>, value: CpsValueI
     demands.get(&value).cloned().unwrap_or(Demand::Opaque)
 }
 
+/// Join each of an edge's arguments with the demand established so far on the parameter receiving it. A target without a definition is a return sentinel, whose arguments stay opaque — see the module documentation.
+fn defer_edge(module: &CpsModule, solver: &mut Solver<Demand>, edge: &CpsEdge) {
+    let params = module
+        .continuation(edge.target)
+        .map(|continuation| continuation.params.as_slice());
+    for (position, atom) in edge.args.iter().enumerate() {
+        if let CpsAtom::Value(value) = atom {
+            let deferred = params
+                .and_then(|params| params.get(position))
+                .and_then(|param| solver.facts().get(param).cloned())
+                .unwrap_or(Demand::Opaque);
+            solver.join(*value, deferred);
+        }
+    }
+}
+
 /// What every value's uses ask of it.
 pub(crate) fn demands(module: &CpsModule) -> BTreeMap<CpsValueId, Demand> {
     let seeds = module.values.live_ids().collect::<Vec<_>>();
 
     Solver::solve(seeds, |solver| {
         for (_, node) in module.nodes.iter_live() {
-            // A projection reads one field and nothing else — the only use that does not consume the whole value. It is taken before the general walk below, which would otherwise report `Opaque` for the same operand and erase the refinement.
-            if let CpsNode::LetIntrinsic {
-                op: CpsIntrinsicOp::TplGet(index),
-                args,
-                ..
-            } = node
-                && let [CpsAtom::Value(value)] = args.as_slice()
-            {
-                solver.join(*value, Demand::Projected(BTreeSet::from([*index])));
-                continue;
-            }
-
-            for atom in atoms(node) {
-                if let CpsAtom::Value(value) = atom {
-                    solver.join(*value, Demand::Opaque);
+            match node {
+                // A projection reads one field and nothing else — the only use that does not consume the whole value. It is taken before the general fallback below, which would otherwise report `Opaque` for the same operand and erase the refinement.
+                CpsNode::LetIntrinsic {
+                    op: CpsIntrinsicOp::TplGet(index),
+                    args,
+                    ..
+                } if matches!(args.as_slice(), [CpsAtom::Value(_)]) => {
+                    if let [CpsAtom::Value(value)] = args.as_slice() {
+                        solver.join(*value, Demand::Projected(BTreeSet::from([*index])));
+                    }
                 }
-            }
 
-            // A closure callee lives in a value `atoms` does not reach. Calling through it is a *use of the whole* value but not an opaque one: the arity is what a caller would have to pass if the application moved into whatever produced it.
-            if let CpsNode::ApplyFun {
-                callee: CpsCallee::Closure(value),
-                args,
-                ..
-            } = node
-            {
-                solver.join(*value, Demand::Applied(args.len()));
+                // The deferral: a known call's argument asks what the receiving parameter's uses ask. A parameter is a seeded live value, so an absent fact can only mean a malformed call, and opaque is the reading that only ever excludes.
+                CpsNode::ApplyFun {
+                    callee: CpsCallee::Known(callee),
+                    args,
+                    ..
+                } => {
+                    let params = module
+                        .function(*callee)
+                        .map(|function| function.params.as_slice());
+                    for (position, atom) in args.iter().enumerate() {
+                        if let CpsAtom::Value(value) = atom {
+                            let deferred = params
+                                .and_then(|params| params.get(position))
+                                .and_then(|param| solver.facts().get(param).cloned())
+                                .unwrap_or(Demand::Opaque);
+                            solver.join(*value, deferred);
+                        }
+                    }
+                }
+
+                // A closure callee is a *use of the whole* value but not an opaque one: the arity is what a caller would have to pass if the application moved into whatever produced it. Its arguments stay opaque — the callee is not resolved here, so no parameter exists to defer to.
+                CpsNode::ApplyFun {
+                    callee: CpsCallee::Closure(closure),
+                    args,
+                    ..
+                } => {
+                    for atom in args {
+                        if let CpsAtom::Value(value) = atom {
+                            solver.join(*value, Demand::Opaque);
+                        }
+                    }
+                    solver.join(*closure, Demand::Applied(args.len()));
+                }
+
+                CpsNode::ApplyCont(edge) => defer_edge(module, solver, edge),
+
+                CpsNode::Switch {
+                    scrutinee,
+                    cases,
+                    default,
+                } => {
+                    if let CpsAtom::Value(value) = scrutinee {
+                        solver.join(*value, Demand::Opaque);
+                    }
+                    for edge in cases.values().chain(default.as_ref()) {
+                        defer_edge(module, solver, edge);
+                    }
+                }
+
+                _ => {
+                    for atom in atoms(node) {
+                        if let CpsAtom::Value(value) = atom {
+                            solver.join(*value, Demand::Opaque);
+                        }
+                    }
+                }
             }
         }
     })

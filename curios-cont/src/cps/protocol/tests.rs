@@ -137,6 +137,57 @@ fn a_result_read_only_through_projections_is_returned_as_its_fields() {
     assert_eq!(protocols[&caller], ReturnProtocol::Tuple);
 }
 
+/// The interprocedural read: the resume itself projects nothing — it hands its parameter to a join point, and the projections live there. Deferred demand carries the refinement back through the jump, so the callee is split exactly as if the projections were local.
+#[test]
+fn a_result_projected_only_behind_a_forwarding_jump_is_returned_as_its_fields() {
+    let mut module = CpsModule::default();
+    let callee = returning_callee(&mut module, "callee");
+    let downstream = projecting_resume(&mut module, "downstream");
+
+    let result = module.add_value(Some("resume/result".into()));
+    let resume = module.reserve_continuation();
+    let forward = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        target: downstream,
+        args: vec![CpsAtom::Value(result)],
+    }));
+    module.define_continuation(
+        resume,
+        CpsContinuation {
+            debug_name: Some("resume".into()),
+            params: vec![result],
+            body: forward,
+        },
+    );
+
+    let argument = module.add_value(Some("caller/argument".into()));
+    let caller = module.reserve_function();
+    let sentinel = module.reserve_continuation();
+    let call = module.add_node(CpsNode::ApplyFun {
+        callee: CpsCallee::Known(callee),
+        args: vec![CpsAtom::Value(argument)],
+        return_to: resume,
+    });
+    let body = module.add_node(CpsNode::LetCont {
+        continuations: vec![downstream, resume],
+        body: call,
+    });
+    module.define_function(
+        caller,
+        CpsFunction {
+            debug_name: Some("caller".into()),
+            params: vec![argument],
+            return_cont: sentinel,
+            body,
+        },
+    );
+    module.set_entry(caller);
+
+    assert_eq!(
+        return_protocols(&module)[&callee],
+        ReturnProtocol::Fields(2)
+    );
+}
+
 #[test]
 fn a_result_consumed_whole_stays_a_tuple() {
     let mut module = CpsModule::default();
