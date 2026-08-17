@@ -1,6 +1,6 @@
 //! The lowering into the landed Cont interface — the one-way door from meaning to mechanism.
 //!
-//! Every encoding decision the erasure deliberately deferred is made here, exactly once, per the specification's normative desugar table: `Unit`, `Bool`, and `Byte` ride the `Nat` carrier (`Bool` operations become `Nat` bit operations, `Byte` comparisons `Nat` comparisons, `NatToByte` a mask, `ByteToNat` the identity); a `Handle` token is its little-endian bytes as a byte-grain binary and `HandleEql` that grain's binary equality; products and variants are generic tuples (a variant is `(tag, payload…)`, the tag the constructor's position in its family); matches and switches are one `Nat`-keyed `Switch` behind the tag projection; the fold forms are synthesized accumulator loops; recursive groups are `LetFun`/`RecInit`, with value-only knots tied through compiler-internal cells.
+//! Every encoding decision the erasure deliberately deferred is made here, exactly once, per the specification's normative desugar table: `Unit`, `Bool`, and `Byte` ride the `Nat` carrier (`Bool` operations become `Nat` bit operations, `Byte` comparisons `Nat` comparisons, `NatToByte` a mask, `ByteToNat` the identity); a `Handle` token is its little-endian bytes as a byte-grain binary and `HandleEql` that grain's binary equality; products and variants are generic tuples (a variant is `(tag, payload…)`, the tag the constructor's position in its family); a single-constructor family collapses instead — nothing ever needs discriminating, so the tag is never minted and it encodes as the struct with the same relevant row would (one payload the bare value, several an untagged tuple, none the `Nat` zero, matches dispatch-free); a family whose one immediate-unary constructor stands beside boxed siblings rides that constructor bare too, matches discriminating with an `IsImmediate` test instead of a tag read; matches and switches are otherwise one `Nat`-keyed `Switch` behind the tag projection; the fold forms are synthesized accumulator loops; recursive groups are `LetFun`/`RecInit`, with value-only knots tied through compiler-internal cells. The per-family choice is [`FamilyEncoding`], a pure function of the registered schema; see `documentation/design/toolchain/a-variant-collapses-when-nothing-needs-to-distinguish-it.md` for the decision.
 //!
 //! The lowering is target-continuation shaped: each arena block is lowered against the continuation that receives its result — its terminator delivers there, and its statements build the node chain in front. Because the arena is already ANF, every operand is an atom and maps directly to a [`curios_cont::CpsAtom`]; no administrative continuation is introduced merely to evaluate an operand. Only a genuine control split — an application return, a switch or match, a fold loop, a host call — opens a join continuation whose parameter receives the split's result and whose body is the rest of the block.
 //!
@@ -12,9 +12,9 @@ mod tests;
 use {
     super::{
         Analysis, Atom, Block, BlockId, CellOperation, Constant, ConstantId, ConstructorId,
-        FoldNatStep, FoldSequenceStep, Function, FunctionId, Intrinsic, Module, Operation,
-        RecGroup, RecGroupId, Rhs, SequenceGrain, SequenceOp, Statement, StatementId, Terminator,
-        ValueId, VariantArm,
+        FamilyId, FieldShape, FoldNatStep, FoldSequenceStep, Function, FunctionId, Intrinsic,
+        Module, Operation, RecGroup, RecGroupId, Rhs, SequenceGrain, SequenceOp, Statement,
+        StatementId, Terminator, ValueId, VariantArm,
     },
     curios_abi::ForeignFunction,
     curios_num::Natural,
@@ -60,6 +60,17 @@ pub fn lower_to_cont(source: &Module) -> curios_cont::CpsModule {
         .verify()
         .unwrap_or_else(|error| panic!("arena lowering produced invalid Cont: {error}"));
     lowerer.module
+}
+
+/// How a variant family is encoded at runtime, decided per family from its registered schema alone — see [`Lowerer::family_encoding`].
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum FamilyEncoding {
+    /// Every constructor a tagged tuple `(tag, payload…)` — the general encoding.
+    Tagged,
+    /// A single-constructor family: nothing ever needs discriminating, so it encodes as the struct with the same relevant row would — one payload is the bare value, several are an untagged tuple, none is the `Nat` zero — and a match on it never dispatches.
+    Collapsed,
+    /// A multi-constructor family whose one immediate-unary constructor rides as its bare payload; every other constructor keeps its tagged tuple. Discrimination is an `IsImmediate` test — the payload is always an immediate and every other constructor a struct, so the two answers are disjoint by construction, and exactly one such constructor is admitted because two would collide on the same immediates.
+    Immediate { constructor: ConstructorId },
 }
 
 struct Lowerer<'a> {
@@ -678,21 +689,48 @@ impl Lowerer<'_> {
             Rhs::Construct {
                 constructor,
                 fields,
-            } => {
-                let tag = self.constructor_tag(*constructor);
-                let mut atoms = Vec::with_capacity(fields.len() + 1);
-                atoms.push(curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(
-                    tag,
-                )));
-                atoms.extend(fields.iter().map(|&atom| self.lower_atom(atom)));
-                self.straight(result, rest, terminator, target, move |bound, next| {
-                    curios_cont::CpsNode::LetValue {
-                        result: bound,
-                        value: curios_cont::CpsValueExpr::Tuple(atoms),
-                        next,
-                    }
-                })
-            }
+            } => match self.family_encoding(self.constructor_family(*constructor)) {
+                // A collapsed construction with at most one payload builds nothing: the result is the payload atom itself (or the interned zero), recorded as an alias in the value map, so downstream code reads the value where the tuple would have been.
+                FamilyEncoding::Collapsed if fields.len() <= 1 => {
+                    let value = match fields.first() {
+                        Some(&payload) => self.lower_atom(payload),
+                        None => curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(0)),
+                    };
+                    self.values.insert(result, value);
+                    self.lower_statements(rest, terminator, target)
+                }
+                FamilyEncoding::Collapsed => {
+                    let atoms = fields.iter().map(|&atom| self.lower_atom(atom)).collect();
+                    self.straight(result, rest, terminator, target, move |bound, next| {
+                        curios_cont::CpsNode::LetValue {
+                            result: bound,
+                            value: curios_cont::CpsValueExpr::Tuple(atoms),
+                            next,
+                        }
+                    })
+                }
+                // The immediate-unary constructor rides bare: the payload is always an immediate, so the value *is* the payload and the tag is never minted.
+                FamilyEncoding::Immediate { constructor: bare } if bare == *constructor => {
+                    let payload = self.lower_atom(fields[0]);
+                    self.values.insert(result, payload);
+                    self.lower_statements(rest, terminator, target)
+                }
+                FamilyEncoding::Tagged | FamilyEncoding::Immediate { .. } => {
+                    let tag = self.constructor_tag(*constructor);
+                    let mut atoms = Vec::with_capacity(fields.len() + 1);
+                    atoms.push(curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(
+                        tag,
+                    )));
+                    atoms.extend(fields.iter().map(|&atom| self.lower_atom(atom)));
+                    self.straight(result, rest, terminator, target, move |bound, next| {
+                        curios_cont::CpsNode::LetValue {
+                            result: bound,
+                            value: curios_cont::CpsValueExpr::Tuple(atoms),
+                            next,
+                        }
+                    })
+                }
+            },
             Rhs::Project {
                 schema: _,
                 product,
@@ -710,12 +748,13 @@ impl Lowerer<'_> {
                 })
             }
             Rhs::MatchVariant {
-                family: _,
+                family,
                 scrutinee,
                 arms,
                 default,
-            } => self
-                .lower_match_variant(result, *scrutinee, arms, *default, rest, terminator, target),
+            } => self.lower_match_variant(
+                *family, result, *scrutinee, arms, *default, rest, terminator, target,
+            ),
             Rhs::SwitchBool {
                 scrutinee,
                 if_false,
@@ -963,10 +1002,11 @@ impl Lowerer<'_> {
         })
     }
 
-    /// Lower a variant match: the tag (`TplGet(0)`) selects an arm through a `Switch`; each arm binds its payload positionally (`TplGet(1 + i)`) and delivers to the join.
+    /// Lower a variant match: the tag (`TplGet(0)`) selects an arm through a `Switch`; each arm binds its payload positionally (`TplGet(1 + i)`) and delivers to the join. A [`FamilyEncoding::Collapsed`] family has nothing to decide — its single arm (or the default, when the arm is absent) runs unconditionally, inline rather than behind a dispatch.
     #[allow(clippy::too_many_arguments)]
     fn lower_match_variant(
         &mut self,
+        family: FamilyId,
         result: ValueId,
         scrutinee: Atom,
         arms: &[VariantArm],
@@ -976,6 +1016,41 @@ impl Lowerer<'_> {
         target: curios_cont::CpsContId,
     ) -> curios_cont::CpsNodeId {
         let scrutinee = self.lower_atom(scrutinee);
+
+        match self.family_encoding(family) {
+            FamilyEncoding::Collapsed => {
+                let (join, fresh) = self.open_join(result, rest, terminator, target);
+                let body = match arms.first() {
+                    Some(arm) => self.lower_collapsed_arm(arm, scrutinee, join),
+                    None => {
+                        let block = default.expect("a variant match covers its family");
+                        self.lower_block(block, join)
+                    }
+                };
+                return match fresh {
+                    true => self.module.add_node(curios_cont::CpsNode::LetCont {
+                        continuations: vec![join],
+                        body,
+                    }),
+                    false => body,
+                };
+            }
+            FamilyEncoding::Immediate { constructor } => {
+                return self.lower_immediate_match(
+                    family,
+                    constructor,
+                    result,
+                    scrutinee,
+                    arms,
+                    default,
+                    rest,
+                    terminator,
+                    target,
+                );
+            }
+            FamilyEncoding::Tagged => {}
+        }
+
         let (join, fresh) = self.open_join(result, rest, terminator, target);
 
         let mut continuations = if fresh { vec![join] } else { Vec::new() };
@@ -1016,6 +1091,163 @@ impl Lowerer<'_> {
             continuations,
             body: dispatch,
         })
+    }
+
+    /// Lower a match on a [`FamilyEncoding::Immediate`] family: an `IsImmediate` test splits immediate from struct. The immediate side is the bare-payload arm with its binder aliased to the scrutinee; the boxed side keeps the ordinary tagged dispatch minus the immediate case — elided entirely when the family has exactly one boxed constructor, since the test already decided everything.
+    #[allow(clippy::too_many_arguments)]
+    fn lower_immediate_match(
+        &mut self,
+        family: FamilyId,
+        immediate: ConstructorId,
+        result: ValueId,
+        scrutinee: curios_cont::CpsAtom,
+        arms: &[VariantArm],
+        default: Option<BlockId>,
+        rest: &[StatementId],
+        terminator: &Terminator,
+        target: curios_cont::CpsContId,
+    ) -> curios_cont::CpsNodeId {
+        let (join, fresh) = self.open_join(result, rest, terminator, target);
+        let mut continuations = if fresh { vec![join] } else { Vec::new() };
+
+        let default_cont = default.map(|block| {
+            let continuation = self.plain_arm(block, join);
+            continuations.push(continuation);
+            continuation
+        });
+
+        let immediate_target = match arms.iter().find(|arm| arm.constructor == immediate) {
+            Some(arm) => {
+                let body = self.lower_collapsed_arm(arm, scrutinee.clone(), join);
+                let continuation = self.module.reserve_continuation();
+                self.module.define_continuation(
+                    continuation,
+                    curios_cont::CpsContinuation {
+                        debug_name: None,
+                        params: Vec::new(),
+                        body,
+                    },
+                );
+                continuations.push(continuation);
+                continuation
+            }
+            None => default_cont.expect("a variant match covers its family"),
+        };
+
+        let boxed: Vec<ConstructorId> = self
+            .source
+            .family(family)
+            .expect("live family")
+            .constructors
+            .iter()
+            .copied()
+            .filter(|&constructor| constructor != immediate)
+            .collect();
+        let boxed_target = match boxed.as_slice() {
+            [only] => match arms.iter().find(|arm| arm.constructor == *only) {
+                Some(arm) => {
+                    let continuation = self.lower_variant_arm(arm, scrutinee.clone(), join);
+                    continuations.push(continuation);
+                    continuation
+                }
+                None => default_cont.expect("a variant match covers its family"),
+            },
+            _ => {
+                let mut cases = BTreeMap::new();
+                for arm in arms.iter().filter(|arm| arm.constructor != immediate) {
+                    let continuation = self.lower_variant_arm(arm, scrutinee.clone(), join);
+                    continuations.push(continuation);
+                    cases.insert(
+                        self.constructor_tag(arm.constructor),
+                        curios_cont::CpsEdge {
+                            target: continuation,
+                            args: Vec::new(),
+                        },
+                    );
+                }
+                let default = default_cont.map(|continuation| curios_cont::CpsEdge {
+                    target: continuation,
+                    args: Vec::new(),
+                });
+                let tag = self.module.add_value(None);
+                let switch = self.module.add_node(curios_cont::CpsNode::Switch {
+                    scrutinee: curios_cont::CpsAtom::Value(tag),
+                    cases,
+                    default,
+                });
+                let body = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
+                    result: tag,
+                    op: curios_cont::CpsIntrinsicOp::TplGet(0),
+                    args: vec![scrutinee.clone()],
+                    next: switch,
+                });
+                let continuation = self.module.reserve_continuation();
+                self.module.define_continuation(
+                    continuation,
+                    curios_cont::CpsContinuation {
+                        debug_name: None,
+                        params: Vec::new(),
+                        body,
+                    },
+                );
+                continuations.push(continuation);
+                continuation
+            }
+        };
+
+        let kind = self.module.add_value(None);
+        let switch = self.module.add_node(curios_cont::CpsNode::Switch {
+            scrutinee: curios_cont::CpsAtom::Value(kind),
+            cases: BTreeMap::from([(
+                1,
+                curios_cont::CpsEdge {
+                    target: immediate_target,
+                    args: Vec::new(),
+                },
+            )]),
+            default: Some(curios_cont::CpsEdge {
+                target: boxed_target,
+                args: Vec::new(),
+            }),
+        });
+        let dispatch = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
+            result: kind,
+            op: curios_cont::CpsIntrinsicOp::IsImmediate,
+            args: vec![scrutinee],
+            next: switch,
+        });
+        self.module.add_node(curios_cont::CpsNode::LetCont {
+            continuations,
+            body: dispatch,
+        })
+    }
+
+    /// One bare-payload arm body: a lone payload aliases the scrutinee, which *is* the payload under both the collapsed and the immediate encodings; a wider row projects untagged fields, which only the collapsed encoding produces — an immediate-family arm always has exactly one binding, so its calls never reach the projection branch. Returns a body rather than a continuation because the collapsed caller inlines it with no dispatch to target it; the immediate-family caller wraps it itself.
+    fn lower_collapsed_arm(
+        &mut self,
+        arm: &VariantArm,
+        scrutinee: curios_cont::CpsAtom,
+        join: curios_cont::CpsContId,
+    ) -> curios_cont::CpsNodeId {
+        if let [binder] = arm.bindings.as_slice() {
+            self.values.insert(*binder, scrutinee);
+            return self.lower_block(arm.block, join);
+        }
+        let bindings: Vec<curios_cont::CpsValueId> = arm
+            .bindings
+            .iter()
+            .map(|&binder| self.bind_value(binder))
+            .collect();
+        let mut body = self.lower_block(arm.block, join);
+        for index in (0..bindings.len()).rev() {
+            body = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
+                result: bindings[index],
+                op: curios_cont::CpsIntrinsicOp::TplGet(index),
+                args: vec![scrutinee.clone()],
+                next: body,
+            });
+        }
+        body
     }
 
     fn lower_variant_arm(
@@ -1472,6 +1704,38 @@ impl Lowerer<'_> {
         self.source
             .value(id)
             .and_then(|value| value.debug_name.clone())
+    }
+
+    /// The encoding of `family`: a pure function of the registered schema, so every construction and match site computes the same answer and no state has to keep them agreeing.
+    fn family_encoding(&self, family: FamilyId) -> FamilyEncoding {
+        let constructors = &self
+            .source
+            .family(family)
+            .expect("live family")
+            .constructors;
+        if let [_] = constructors.as_slice() {
+            return FamilyEncoding::Collapsed;
+        }
+        let mut immediate_unary = constructors.iter().filter(|&&constructor| {
+            let fields = &self
+                .source
+                .constructor(constructor)
+                .expect("live constructor")
+                .fields;
+            matches!(fields.as_slice(), [field] if field.shape == FieldShape::Immediate)
+        });
+        match (immediate_unary.next(), immediate_unary.next()) {
+            (Some(&constructor), None) => FamilyEncoding::Immediate { constructor },
+            _ => FamilyEncoding::Tagged,
+        }
+    }
+
+    /// The family a constructor belongs to.
+    fn constructor_family(&self, constructor: ConstructorId) -> FamilyId {
+        self.source
+            .constructor(constructor)
+            .expect("live constructor")
+            .family
     }
 
     /// The runtime tag of a constructor: its position within its family.

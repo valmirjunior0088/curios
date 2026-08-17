@@ -103,33 +103,33 @@ const MUTUAL_RECURSION: &str = r#"
     /std/print(Nat/to_str(match start : (_) => Nat | true => ping(n) | false => pong(n) end))
     "#;
 
-/// A callee returning two distinct constructors to two different callers — the intersection no existing pass reaches. Two external call sites is one too many for contification, whose whole admissibility rests on there being a single return context; the body is past the multi-site inline budget; and neither caller can see the construction, since it is built inside `advance` and arrives as an opaque continuation parameter. `more` carries two fields and `done` one, so the class is three slots wide and the shorter constructor exercises the filler.
+/// A callee returning two distinct constructors to two different callers — the intersection no existing pass reaches. Two external call sites is one too many for contification, whose whole admissibility rests on there being a single return context; the body is past the multi-site inline budget; and neither caller can see the construction, since it is built inside `advance` and arrives as an opaque continuation parameter. `more` carries three fields and `done` two, so the class is four slots wide and the shorter constructor exercises the filler. Neither constructor is unary on purpose: the immediate encoding hands a lone `done(Nat)` edge back as a bare payload rather than a construction, which would quietly retire this fixture's premise — exactly the decay the test's premise check exists to catch, and how it caught the encoding when it landed.
 ///
 /// **The arithmetic in `advance` is sized, not decorative.** The middle premise is a claim about `MULTI_SITE_INLINE_LIMIT`, and the fixture stopped holding it once when that constant moved — so the body carries enough operations to stay well clear rather than to just clear the value of the day. Each of the three functions also owns a distinct modulus, which is what lets [`a_returned_constructor_is_delivered_as_its_fields`] state that the callee is a different function from its callers instead of merely that some function exists.
 const SPLIT_RETURN: &str = r#"
     use /std/{Handle, Nat, List, proc};
     induct Step : Type
-    | more(Nat, Nat)
-    | done(Nat)
+    | more(Nat, Nat, Nat)
+    | done(Nat, Nat)
     end
     let advance(x : Nat) -> Step =
         match x % 7 : (_) => Step
-        | 0 => Step/done((x * 3 + 1) * 13 % 20011)
+        | 0 => Step/done((x * 3 + 1) * 13 % 20011, (x * 7 + 3) % 20011)
         | k + 1 =>
             let u = (x * 5 + 7) % 20011;
             let v = (u * 3 + 2) % 20011;
             let w = (k * 2 + 11) % 20011;
-            Step/more((v * 9 + 4) % 20011, (w * 6 + 5) % 20011)
+            Step/more((v * 9 + 4) % 20011, (w * 6 + 5) % 20011, (u * 2 + 9) % 20011)
         end;
     let first(a : Nat) -> Nat =
         match advance(a) : (_) => Nat
-        | more(p, q) => (p + q) % 30011
-        | done(r) => r % 30011
+        | more(p, q, t) => (p + q + t) % 30011
+        | done(r, s) => (r + s) % 30011
         end;
     let second(b : Nat) -> Nat =
         match advance(b + 1) : (_) => Nat
-        | more(p, q) => (p * 2 + q) % 40009
-        | done(r) => (r * 3) % 40009
+        | more(p, q, t) => (p * 2 + q + t) % 40009
+        | done(r, s) => (r * 3 + s) % 40009
         end;
     let taint = List/len(proc/args!);
     let n : Nat = taint;
@@ -602,6 +602,48 @@ fn trees_constructor_payloads_stay_boxed() {
     );
 }
 
+/// T6: the leaf constructor rides its payload — the immediate encoding. `build`'s leaf arm returns the payload with no allocation, so its body holds exactly one construction (the node's), and `sum` discriminates leaf from node with `ref.test (ref i31)` in place of a tag read — with only one boxed constructor the tag is never read, so no `$tpl/1` cast survives in `sum`.
+///
+/// # What the encoding was worth, and how to retake it
+///
+/// Native binaries, the ladder's protocol — `cargo run --package curios -- compile curios-benchmarks/programs/trees/trees.crs -o /tmp/trees`, then `echo 21 | /usr/bin/time -v /tmp/trees`, five runs, `user` seconds and max RSS. Taken **2026-08-17** on x86-64 Linux, the before row the same day at the commit before the encoding:
+///
+/// | Encoding | `user` | Max RSS |
+/// | --- | --- | --- |
+/// | tagged leaves | 0.47–0.53 s | 266 MB |
+/// | leaves ride their payloads | 0.25–0.27 s | 134 MB |
+///
+/// Leaves are half of a perfect tree's 2^(D+1)−1 objects, and under the all-live semi-space collector halving the live bytes also halves what every collection copies — which is why the time falls with the memory rather than by the allocation count alone. `lcg` is unmoved (no variants). Both programs printed their anchors (`trees(10) = 96122`, `trees(21) = 536864`, `lcg(8) = 9345`) before either figure was read.
+#[test]
+fn trees_leaf_rides_its_payload() {
+    let wat = wat(TREES);
+    let functions = functions(&wat);
+
+    let sum = function_with(&functions, "1000003");
+    assert!(
+        sum.body.contains("ref.test (ref i31)"),
+        "sum dispatches on the value's kind: {}",
+        sum.body
+    );
+    assert!(
+        !sum.body.contains("$tpl/1"),
+        "no tag read survives in sum: {}",
+        sum.body
+    );
+
+    let build = functions
+        .iter()
+        .filter(|f| f.name.starts_with("$func/") && !f.body.contains("1000003"))
+        .find(|f| f.self_calls() >= 2)
+        .expect("build recurses directly on both subtrees");
+    assert_eq!(
+        build.body.matches("struct.new").count(),
+        1,
+        "build allocates the node and nothing else: {}",
+        build.body
+    );
+}
+
 // -- general corpus ---------------------------------------------------------
 
 /// G1: a genuinely unknown higher-order call retains the closure ABI and emits `call_ref`. `f` is selected at runtime, so it cannot be devirtualized: the module declares `$clsr/…` closure types, materializes the branches with `ref.func`, and dispatches through `call_ref`.
@@ -702,8 +744,8 @@ fn a_returned_constructor_is_delivered_as_its_fields() {
     assert!(
         advance
             .body
-            .contains("(result (ref any) (ref any) (ref any))"),
-        "the callee must return the class's three slots: {}",
+            .contains("(result (ref any) (ref any) (ref any) (ref any))"),
+        "the callee must return the class's four slots: {}",
         advance.name,
     );
     assert!(

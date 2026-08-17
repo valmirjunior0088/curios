@@ -104,7 +104,11 @@ fn a_variant_match_lowers_to_tag_dispatch() {
     let mut builder = ErsdBuilder::new();
     let family = builder.family(Some("Opt".into()));
     let none = builder.constructor(family, Some("none".into()), vec![]);
-    let some = builder.constructor(family, Some("some".into()), vec![Some("x".into())]);
+    let some = builder.constructor(
+        family,
+        Some("some".into()),
+        vec![ConstructorField::opaque(Some("x".into()))],
+    );
 
     builder.open_block();
     let six = nat(&mut builder, 6);
@@ -150,6 +154,318 @@ fn a_variant_match_lowers_to_tag_dispatch() {
     assert!(printed.contains("TplGet(0)"), "{printed}");
     assert!(printed.contains("TplGet(1)"), "{printed}");
     assert!(printed.contains("switch"), "{printed}");
+}
+
+#[test]
+fn a_single_constructor_family_collapses_to_its_bare_payload() {
+    let mut builder = ErsdBuilder::new();
+    let family = builder.family(Some("Id".into()));
+    let wrap = builder.constructor(
+        family,
+        Some("wrap".into()),
+        vec![ConstructorField::immediate(Some("x".into()))],
+    );
+
+    builder.open_block();
+    let six = nat(&mut builder, 6);
+    let value = builder.let_value(
+        None,
+        Rhs::Construct {
+            constructor: wrap,
+            fields: vec![six],
+        },
+    );
+    builder.open_block();
+    let x = builder.value(Some("x".into()));
+    let arm = builder.seal_block(Terminator::Return(Atom::Value(x)));
+    let matched = builder.let_value(
+        None,
+        Rhs::MatchVariant {
+            family,
+            scrutinee: Atom::Value(value),
+            arms: vec![VariantArm {
+                constructor: wrap,
+                bindings: vec![x],
+                block: arm,
+            }],
+            default: None,
+        },
+    );
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(matched)));
+    builder.set_entry(entry);
+    let module = builder.finalize().expect("verifies");
+
+    let printed = lowered(&module);
+    // The collapsed value is the payload itself: no tuple is built, no tag is read, and the match never dispatches.
+    assert!(!printed.contains("Tuple"), "{printed}");
+    assert!(!printed.contains("TplGet"), "{printed}");
+    assert!(!printed.contains("switch"), "{printed}");
+}
+
+#[test]
+fn an_immediate_constructor_rides_its_payload() {
+    let mut builder = ErsdBuilder::new();
+    let family = builder.family(Some("Tree".into()));
+    let leaf = builder.constructor(
+        family,
+        Some("leaf".into()),
+        vec![ConstructorField::immediate(Some("n".into()))],
+    );
+    let node = builder.constructor(
+        family,
+        Some("node".into()),
+        vec![
+            ConstructorField::immediate(Some("v".into())),
+            ConstructorField::opaque(Some("l".into())),
+            ConstructorField::opaque(Some("r".into())),
+        ],
+    );
+
+    builder.open_block();
+    let six = nat(&mut builder, 6);
+    let value = builder.let_value(
+        None,
+        Rhs::Construct {
+            constructor: leaf,
+            fields: vec![six],
+        },
+    );
+    builder.open_block();
+    let n = builder.value(Some("n".into()));
+    let leaf_arm = builder.seal_block(Terminator::Return(Atom::Value(n)));
+    builder.open_block();
+    let v = builder.value(Some("v".into()));
+    let l = builder.value(Some("l".into()));
+    let r = builder.value(Some("r".into()));
+    let node_arm = builder.seal_block(Terminator::Return(Atom::Value(v)));
+    let matched = builder.let_value(
+        None,
+        Rhs::MatchVariant {
+            family,
+            scrutinee: Atom::Value(value),
+            arms: vec![
+                VariantArm {
+                    constructor: leaf,
+                    bindings: vec![n],
+                    block: leaf_arm,
+                },
+                VariantArm {
+                    constructor: node,
+                    bindings: vec![v, l, r],
+                    block: node_arm,
+                },
+            ],
+            default: None,
+        },
+    );
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(matched)));
+    builder.set_entry(entry);
+    let module = builder.finalize().expect("verifies");
+
+    let printed = lowered(&module);
+    // The leaf construct builds nothing, the dispatch is an `IsImmediate` test, and with exactly one boxed constructor the tag is never read — the node arm's payloads still project at their tagged offsets.
+    assert!(!printed.contains("Tuple"), "{printed}");
+    assert!(printed.contains("IsImmediate"), "{printed}");
+    assert!(!printed.contains("TplGet(0)"), "{printed}");
+    assert!(printed.contains("TplGet(1)"), "{printed}");
+}
+
+#[test]
+fn an_immediate_family_with_two_boxed_constructors_keeps_the_inner_tag_dispatch() {
+    let mut builder = ErsdBuilder::new();
+    let family = builder.family(Some("Wide".into()));
+    let one = builder.constructor(
+        family,
+        Some("one".into()),
+        vec![ConstructorField::immediate(Some("n".into()))],
+    );
+    let empty = builder.constructor(family, Some("empty".into()), vec![]);
+    let pair = builder.constructor(
+        family,
+        Some("pair".into()),
+        vec![
+            ConstructorField::opaque(Some("a".into())),
+            ConstructorField::opaque(Some("b".into())),
+        ],
+    );
+
+    builder.open_block();
+    let six = nat(&mut builder, 6);
+    let value = builder.let_value(
+        None,
+        Rhs::Construct {
+            constructor: one,
+            fields: vec![six],
+        },
+    );
+    builder.open_block();
+    let n = builder.value(Some("n".into()));
+    let one_arm = builder.seal_block(Terminator::Return(Atom::Value(n)));
+    builder.open_block();
+    let zero = nat(&mut builder, 0);
+    let empty_arm = builder.seal_block(Terminator::Return(zero));
+    builder.open_block();
+    let a = builder.value(Some("a".into()));
+    let b = builder.value(Some("b".into()));
+    let pair_arm = builder.seal_block(Terminator::Return(Atom::Value(a)));
+    let matched = builder.let_value(
+        None,
+        Rhs::MatchVariant {
+            family,
+            scrutinee: Atom::Value(value),
+            arms: vec![
+                VariantArm {
+                    constructor: one,
+                    bindings: vec![n],
+                    block: one_arm,
+                },
+                VariantArm {
+                    constructor: empty,
+                    bindings: vec![],
+                    block: empty_arm,
+                },
+                VariantArm {
+                    constructor: pair,
+                    bindings: vec![a, b],
+                    block: pair_arm,
+                },
+            ],
+            default: None,
+        },
+    );
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(matched)));
+    builder.set_entry(entry);
+    let module = builder.finalize().expect("verifies");
+
+    let printed = lowered(&module);
+    // Two boxed constructors remain behind the test, so the tag dispatch survives on that side.
+    assert!(printed.contains("IsImmediate"), "{printed}");
+    assert!(printed.contains("TplGet(0)"), "{printed}");
+}
+
+#[test]
+fn two_immediate_constructors_decline_the_encoding() {
+    let mut builder = ErsdBuilder::new();
+    let family = builder.family(Some("Either".into()));
+    let left = builder.constructor(
+        family,
+        Some("left".into()),
+        vec![ConstructorField::immediate(Some("a".into()))],
+    );
+    let _right = builder.constructor(
+        family,
+        Some("right".into()),
+        vec![ConstructorField::immediate(Some("b".into()))],
+    );
+
+    builder.open_block();
+    let six = nat(&mut builder, 6);
+    let value = builder.let_value(
+        None,
+        Rhs::Construct {
+            constructor: left,
+            fields: vec![six],
+        },
+    );
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(value)));
+    builder.set_entry(entry);
+    let module = builder.finalize().expect("verifies");
+
+    let printed = lowered(&module);
+    // Two immediate constructors would collide on the same i31 values, so the family stays tagged.
+    assert!(printed.contains("Tuple"), "{printed}");
+    assert!(!printed.contains("IsImmediate"), "{printed}");
+}
+
+#[test]
+fn a_collapsed_pair_is_an_untagged_tuple() {
+    let mut builder = ErsdBuilder::new();
+    let family = builder.family(Some("Pair".into()));
+    let both = builder.constructor(
+        family,
+        Some("both".into()),
+        vec![
+            ConstructorField::immediate(Some("a".into())),
+            ConstructorField::immediate(Some("b".into())),
+        ],
+    );
+
+    builder.open_block();
+    let six = nat(&mut builder, 6);
+    let seven = nat(&mut builder, 7);
+    let value = builder.let_value(
+        None,
+        Rhs::Construct {
+            constructor: both,
+            fields: vec![six, seven],
+        },
+    );
+    builder.open_block();
+    let a = builder.value(Some("a".into()));
+    let b = builder.value(Some("b".into()));
+    let arm = builder.seal_block(Terminator::Return(Atom::Value(b)));
+    let matched = builder.let_value(
+        None,
+        Rhs::MatchVariant {
+            family,
+            scrutinee: Atom::Value(value),
+            arms: vec![VariantArm {
+                constructor: both,
+                bindings: vec![a, b],
+                block: arm,
+            }],
+            default: None,
+        },
+    );
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(matched)));
+    builder.set_entry(entry);
+    let module = builder.finalize().expect("verifies");
+
+    let printed = lowered(&module);
+    // Untagged: the second payload reads at index 1, where the tagged encoding would put it at 2 — and nothing dispatches.
+    assert!(printed.contains("TplGet(1)"), "{printed}");
+    assert!(!printed.contains("TplGet(2)"), "{printed}");
+    assert!(!printed.contains("switch"), "{printed}");
+}
+
+#[test]
+fn a_collapsed_nullary_constructor_is_the_interned_zero() {
+    let mut builder = ErsdBuilder::new();
+    let family = builder.family(Some("One".into()));
+    let only = builder.constructor(family, Some("only".into()), vec![]);
+
+    builder.open_block();
+    let value = builder.let_value(
+        None,
+        Rhs::Construct {
+            constructor: only,
+            fields: vec![],
+        },
+    );
+    builder.open_block();
+    let five = nat(&mut builder, 5);
+    let arm = builder.seal_block(Terminator::Return(five));
+    let matched = builder.let_value(
+        None,
+        Rhs::MatchVariant {
+            family,
+            scrutinee: Atom::Value(value),
+            arms: vec![VariantArm {
+                constructor: only,
+                bindings: vec![],
+                block: arm,
+            }],
+            default: None,
+        },
+    );
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(matched)));
+    builder.set_entry(entry);
+    let module = builder.finalize().expect("verifies");
+
+    let printed = lowered(&module);
+    // The value carries zero information and rides the cheapest carrier — the Unit encoding — so nothing is allocated and nothing dispatches.
+    assert!(!printed.contains("Tuple"), "{printed}");
+    assert!(!printed.contains("switch"), "{printed}");
 }
 
 #[test]

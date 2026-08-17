@@ -7,8 +7,8 @@ mod tests;
 
 use {
     super::{
-        Atom, BlockId, Constant, FunctionId, Module, Rhs, Statement, StatementId, Terminator,
-        ValueId,
+        Atom, BlockId, Constant, ConstructorField, FieldShape, FunctionId, Module, Rhs, Statement,
+        StatementId, Terminator, ValueId,
     },
     curios_utilities::Grain,
     std::fmt,
@@ -64,7 +64,7 @@ impl Printer<'_, '_, '_> {
                     format!(
                         "{constructor}{}({})",
                         hint(&definition.debug_name),
-                        fields(&definition.fields)
+                        constructor_fields(&definition.fields)
                     )
                 })
                 .collect::<Vec<_>>()
@@ -417,6 +417,24 @@ fn fields(row: &[Option<String>]) -> String {
         .map(|(index, field)| match field {
             Some(name) => name.clone(),
             None => format!("{index}"),
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// A constructor's payload row: the field name (or its index), with recorded immediate carriers marked so the erasure-side classification is legible in a dump.
+fn constructor_fields(row: &[ConstructorField]) -> String {
+    row.iter()
+        .enumerate()
+        .map(|(index, field)| {
+            let name = match &field.debug_name {
+                Some(name) => name.clone(),
+                None => format!("{index}"),
+            };
+            match field.shape {
+                FieldShape::Immediate => format!("{name}:immediate"),
+                FieldShape::Opaque => name,
+            }
         })
         .collect::<Vec<_>>()
         .join(", ")

@@ -7,8 +7,8 @@
 use {
     super::{
         ConstructorRow, Context, Error, FamilyRow, Field, Lowering, Outcome, ProductRow, Proj,
-        Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, Variant, emitted,
-        erasure_mask, infer, reduce_with, signature_entries,
+        Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, Variant,
+        constructor_entries, emitted, erasure_mask, infer, reduce_with, signature_entries,
     },
     curios_core::Bound,
 };
@@ -92,17 +92,20 @@ impl Lowering {
                 let telescope = induct_decl
                     .instantiate(tag, &params)
                     .expect("erase: constructor instantiates at its inductive's parameters");
-                signature_entries(context, telescope)
+                constructor_entries(context, telescope)
             })?;
-            let entries: Vec<(Option<String>, bool)> = entries
+            let entries: Vec<(Option<String>, bool, curios_ersd::FieldShape)> = entries
                 .into_iter()
-                .map(|(label, erased)| (label, erased || proof_family))
+                .map(|(label, erased, shape)| (label, erased || proof_family, shape))
                 .collect();
-            let mask: Vec<bool> = entries.iter().map(|(_, erased)| *erased).collect();
-            let relevant: Vec<Option<String>> = entries
+            let mask: Vec<bool> = entries.iter().map(|(_, erased, _)| *erased).collect();
+            let relevant: Vec<curios_ersd::ConstructorField> = entries
                 .into_iter()
-                .filter(|(_, erased)| !erased)
-                .map(|(label, _)| label)
+                .filter(|(_, erased, _)| !erased)
+                .map(|(label, _, shape)| curios_ersd::ConstructorField {
+                    debug_name: label,
+                    shape,
+                })
                 .collect();
             let id = self
                 .builder

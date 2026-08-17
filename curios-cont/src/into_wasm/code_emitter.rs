@@ -1003,6 +1003,13 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 });
                 self.emit_store(dest, &op.result_repr());
             }
+            CpsIntrinsicOp::IsImmediate => {
+                self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::NonNull));
+                self.emit_instr(curios_wasm::Instr::RefTest {
+                    ref_type: Table::int_type(false),
+                });
+                self.emit_store(dest, &op.result_repr());
+            }
         }
     }
 }

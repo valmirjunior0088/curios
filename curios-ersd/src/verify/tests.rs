@@ -247,8 +247,16 @@ fn a_two_parameter_mapper_is_rejected() {
 fn a_match_missing_a_constructor_is_rejected() {
     let mut builder = ErsdBuilder::new();
     let family = builder.family(Some("Shape".into()));
-    let circle = builder.constructor(family, Some("circle".into()), vec![None]);
-    let _square = builder.constructor(family, Some("square".into()), vec![None]);
+    let circle = builder.constructor(
+        family,
+        Some("circle".into()),
+        vec![ConstructorField::opaque(None)],
+    );
+    let _square = builder.constructor(
+        family,
+        Some("square".into()),
+        vec![ConstructorField::opaque(None)],
+    );
 
     builder.open_block();
     let one = nat_atom(&mut builder, 1);

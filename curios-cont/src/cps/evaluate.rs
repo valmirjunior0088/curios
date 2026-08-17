@@ -106,6 +106,11 @@ pub(super) fn evaluate(op: CpsIntrinsicOp, args: &[CpsAtom]) -> Option<CpsLitera
         CpsIntrinsicOp::FltCopysign => Some(CpsLiteral::Flt(flt(0)?.copysign(flt(1)?))),
         CpsIntrinsicOp::FltToNat => Some(CpsLiteral::Nat(flt_to_nat(flt(0)?)?)),
         CpsIntrinsicOp::FltToInt => Some(CpsLiteral::Int(flt_to_int(flt(0)?)?)),
+        // Folds over the *runtime* representation, not the literal's kind: `Nat` and `Int` ride i31, while an `Flt` is a boxed struct and a `Bin` a rope reference, so both answer 0.
+        CpsIntrinsicOp::IsImmediate => Some(CpsLiteral::Nat(match literals[0] {
+            CpsLiteral::Nat(_) | CpsLiteral::Int(_) => 1,
+            CpsLiteral::Flt(_) | CpsLiteral::Bin(_, _) => 0,
+        })),
         _ => None,
     }
 }

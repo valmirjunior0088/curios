@@ -119,8 +119,16 @@ fn functions_reserve_before_they_define() {
 fn constructors_register_in_discriminant_order() {
     let mut module = Module::new();
     let family = module.add_family(Some("Shape".into()));
-    let circle = module.add_constructor(family, Some("circle".into()), vec![Some("radius".into())]);
-    let square = module.add_constructor(family, Some("square".into()), vec![Some("side".into())]);
+    let circle = module.add_constructor(
+        family,
+        Some("circle".into()),
+        vec![ConstructorField::opaque(Some("radius".into()))],
+    );
+    let square = module.add_constructor(
+        family,
+        Some("square".into()),
+        vec![ConstructorField::opaque(Some("side".into()))],
+    );
     assert_eq!(
         module.family(family).unwrap().constructors,
         vec![circle, square]

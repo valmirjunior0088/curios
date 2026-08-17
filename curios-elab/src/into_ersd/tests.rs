@@ -475,7 +475,7 @@ fn a_variant_constructs_with_its_registered_schema() {
     assert_eq!(
         erased.to_string(),
         "\
-family ~d0$/Opt { ~t0$none() ~t1$some(x) }
+family ~d0$/Opt { ~t0$none() ~t1$some(x:immediate) }
 entry {
     ~v0 = construct ~t1(6)
     return ~v0
@@ -764,7 +764,7 @@ fn a_variant_match_binds_payload_without_projections() {
     assert_eq!(
         erased.to_string(),
         "\
-family ~d0$/Opt { ~t0$none() ~t1$some(x) }
+family ~d0$/Opt { ~t0$none() ~t1$some(x:immediate) }
 entry {
     ~v0$scrutinee = construct ~t1(6)
     ~v2 = match ~d0 ~v0$scrutinee {
@@ -969,4 +969,138 @@ function ~f0$/go(~v0$x) {
 }
 "
     );
+}
+
+/// A no-parameter single-field struct declaration — the classifier fixtures' newtype link.
+fn newtype_struct(field: &str, type_: Term) -> StructDecl {
+    let mut context = context();
+    let f = context.fresh(Some(field));
+    StructDecl {
+        universe_context: UniverseContext::empty(),
+        arity: Telescope::done(Telescope::build([(f, type_)], ())),
+        result_sort: Term::type_ground(),
+        module: Qualifier::empty(),
+        rep_public: true,
+        polarities: Vec::new(),
+    }
+}
+
+fn struct_type_of(name: &str) -> Term {
+    Term::from(Subterm::StructType(StructType {
+        name: nominal(name),
+        universes: Vec::new(),
+        params: Vec::new(),
+    }))
+}
+
+/// A no-parameter family with the single unary constructor `mk(x: payload)`.
+fn unary_induct(payload: Term) -> InductDecl {
+    let mut context = context();
+    let x = context.fresh(Some("x"));
+    InductDecl {
+        universe_context: UniverseContext::empty(),
+        arity: Telescope::done(Telescope::done(())),
+        constructors: Vec::from([(
+            Atom::from("mk"),
+            InductParam {
+                telescope: Telescope::build([(x, payload)], Vec::new()),
+                plicities: vec![Plicity::Explicit],
+            },
+        )]),
+        result_sort: Term::type_ground(),
+        module: Qualifier::empty(),
+        rep_public: true,
+        polarities: Vec::new(),
+    }
+}
+
+/// The payload-shape classifier chases newtype chains and terminates on cycles: a payload wrapped in two single-field structs lands on `Nat` and records `Immediate`; a payload whose struct names itself is `Opaque` because the visited guard cuts the cycle (a self-referential struct elaborates — it is merely uninhabited); a boxed `Flt` payload stays `Opaque`.
+#[test]
+fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
+    let mut context = context();
+    let mut struct_decls = BTreeMap::new();
+    struct_decls.insert(
+        nominal("Meters"),
+        newtype_struct("m", Term::intrinsic(Intrinsic::NatType)),
+    );
+    struct_decls.insert(
+        nominal("Outer"),
+        newtype_struct("o", struct_type_of("Meters")),
+    );
+    struct_decls.insert(nominal("Loop"), newtype_struct("s", struct_type_of("Loop")));
+    let induct_type =
+        |family: &str| Term::induct_type(nominal(family), Vec::<Term>::new(), Vec::<Term>::new());
+    let mut induct_decls = BTreeMap::new();
+    induct_decls.insert(nominal("Wrapped"), unary_induct(struct_type_of("Outer")));
+    induct_decls.insert(nominal("Knotted"), unary_induct(struct_type_of("Loop")));
+    induct_decls.insert(
+        nominal("Boxed"),
+        unary_induct(Term::intrinsic(Intrinsic::FltType)),
+    );
+    // A payload whose type is itself a single-constructor family chases through it — the collapsed encoding makes such a family *be* its payload — while a recursive single-constructor family terminates at the visited guard.
+    induct_decls.insert(
+        nominal("Inner"),
+        unary_induct(Term::intrinsic(Intrinsic::NatType)),
+    );
+    induct_decls.insert(nominal("Chained"), unary_induct(induct_type("Inner")));
+    induct_decls.insert(nominal("Selfy"), unary_induct(induct_type("Selfy")));
+
+    // The families register lazily on first construction, and the classifier reads the declared field types, never the operands — so a `Nat` literal stands in for every payload value.
+    let construct = |family: &str| {
+        Term::variant(
+            nominal(family),
+            Vec::<Term>::new(),
+            Atom::from("mk"),
+            [nat_lit(6)],
+        )
+    };
+    let a = context.fresh(Some("a"));
+    let b = context.fresh(Some("b"));
+    let c = context.fresh(Some("c"));
+    let d = context.fresh(Some("d"));
+    let e = context.fresh(Some("e"));
+    let body = Term::tuple([
+        construct("Wrapped"),
+        construct("Knotted"),
+        construct("Boxed"),
+        construct("Chained"),
+        construct("Selfy"),
+    ]);
+    let expected = Term::tuple_type([
+        (a, induct_type("Wrapped")),
+        (b, induct_type("Knotted")),
+        (c, induct_type("Boxed")),
+        (d, induct_type("Chained")),
+        (e, induct_type("Selfy")),
+    ]);
+    let erased = erase_module(
+        &mut context,
+        &Module {
+            mounts: Vec::new(),
+            items: Vec::new(),
+            universe_seeds: vec![],
+            induct_decls,
+            struct_decls,
+            concepts: BTreeMap::new(),
+            witnesses: BTreeSet::new(),
+            binder_floor: 0,
+            type_: None,
+            body: Some(body),
+        },
+        &expected,
+    )
+    .expect("the module erases");
+
+    let printed = erased.to_string();
+    assert!(
+        printed.contains("$/Wrapped { ~t0$mk(x:immediate) }"),
+        "{printed}"
+    );
+    assert!(printed.contains("$/Knotted { ~t1$mk(x) }"), "{printed}");
+    assert!(printed.contains("$/Boxed { ~t2$mk(x) }"), "{printed}");
+    assert!(
+        printed.contains("$/Chained { ~t3$mk(x:immediate) }"),
+        "{printed}"
+    );
+    assert!(printed.contains("$/Selfy { ~t4$mk(x) }"), "{printed}");
 }

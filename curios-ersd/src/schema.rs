@@ -34,8 +34,8 @@ pub struct VariantFamily {
 pub struct Constructor {
     pub debug_name: Option<String>,
     pub family: FamilyId,
-    /// One entry per relevant payload field, in declaration order; the entry is the field's optional debug name.
-    pub fields: Vec<Option<String>>,
+    /// One entry per relevant payload field, in declaration order.
+    pub fields: Vec<ConstructorField>,
 }
 
 impl Constructor {
@@ -43,4 +43,38 @@ impl Constructor {
     pub fn width(&self) -> usize {
         self.fields.len()
     }
+}
+
+/// One relevant payload field of a [`Constructor`]: its optional debug name, and its recorded carrier shape.
+#[derive(Debug, Clone)]
+#[curios_archive::archived]
+pub struct ConstructorField {
+    pub debug_name: Option<String>,
+    pub shape: FieldShape,
+}
+
+impl ConstructorField {
+    /// A field whose values are immediates at runtime.
+    pub fn immediate(debug_name: Option<String>) -> Self {
+        Self {
+            debug_name,
+            shape: FieldShape::Immediate,
+        }
+    }
+
+    /// A field with no immediate guarantee — the conservative shape.
+    pub fn opaque(debug_name: Option<String>) -> Self {
+        Self {
+            debug_name,
+            shape: FieldShape::Opaque,
+        }
+    }
+}
+
+/// The erased carrier of one constructor payload, recorded by erasure — the one walk that still holds the Core field types — and read by the lowering into Cont when it decides a family's encoding. `Immediate` means every runtime value of the field's declared type lives in the uniform carrier's immediate population: an intrinsic head riding the i31 carrier, or a chain of single-relevant-field collapses landing on one. Everything else is `Opaque` — no guarantee, which covers boxed and polymorphic fields alike — and `Opaque` never misencodes: a wrongly conservative field only misses an encoding, where a wrongly `Immediate` one would corrupt it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[curios_archive::archived]
+pub enum FieldShape {
+    Immediate,
+    Opaque,
 }

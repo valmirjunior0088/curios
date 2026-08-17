@@ -771,3 +771,97 @@ fn recursive_group_signature_reduces_concrete_type_family() {
         b"3"
     );
 }
+
+#[test]
+fn a_collapsed_wrapper_survives_storage_and_retrieval() {
+    // The collapsed encoding end to end, at rest — the case no call-pattern specializer reaches: single-constructor wrapper values stored in a `List` and read back, a two-payload constructor riding an untagged tuple, and a nullary one riding the `Nat` zero. Every payload is runtime-tainted through stdin so nothing folds at compile time, and the printed sum proves each value round-tripped through its collapsed representation.
+    let (system, io) = MockHost::builder().stdin_lines(["3"]).build();
+    run_text(
+        r#"
+        use /std/{Str, Nat, Option, List, Io};
+        induct Meters : Type
+        | m(Nat)
+        end
+        induct Both : Type
+        | both(Nat, Meters)
+        end
+        induct Only : Type
+        | only()
+        end
+        let input = /std/read()!;
+        match input : (_) => Io({})
+        | some(bytes) =>
+            match Str/of_bytes(bytes) : (_) => Io({})
+            | some(s) =>
+                match Nat/of_str(Str/trim(s)) : (_) => Io({})
+                | some(d) =>
+                    let stored : List(Meters) = [Meters/m(d), Meters/m(d + 1)];
+                    let sum = List/fold(stored, 0, (x, acc) =>
+                        match x : (_) => Nat
+                        | m(n) => acc + n
+                        end);
+                    let extra =
+                        match Both/both(d + 2, Meters/m(d + 3)) : (_) => Nat
+                        | both(a, w) =>
+                            match w : (_) => Nat
+                            | m(n) => a + n
+                            end
+                        end;
+                    let z =
+                        match Only/only() : (_) => Nat
+                        | only() => d
+                        end;
+                    /std/print(Nat/to_str(sum + extra + z))
+                | none() => /std/print("bad input")
+                end
+            | none() => /std/print("bad utf8")
+            end
+        | none() => /std/print("no input")
+        end
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output().to_vec(), b"21");
+}
+
+#[test]
+fn an_immediate_leaf_tree_builds_and_sums_at_runtime() {
+    // The immediate encoding end to end: leaves ride bare i31 payloads, nodes stay tagged tuples, and the match's kind test reunites them — over a runtime-tainted depth so the tree is genuinely built and walked in emitted code. Depth 4 numbers its 31 nodes 1..31, so the sum prints 496.
+    let (system, io) = MockHost::builder().stdin_lines(["4"]).build();
+    run_text(
+        r#"
+        use /std/{Str, Nat, Option, Io};
+        induct Tree : Type
+        | leaf(Nat)
+        | node(Nat, Tree, Tree)
+        end
+        rec build(d : Nat, v : Nat) -> Tree =
+            match d : (_) => Tree
+            | 0 => Tree/leaf(v)
+            | dp + 1; ih => Tree/node(v, build(dp, v * 2), build(dp, v * 2 + 1))
+            end;
+        rec sum(t : Tree) -> Nat =
+            match t : (_) => Nat
+            | leaf(n) => n % 1000003
+            | node(n, l, r) => (n + sum(l) + sum(r)) % 1000003
+            end;
+        let input = /std/read()!;
+        match input : (_) => Io({})
+        | some(bytes) =>
+            match Str/of_bytes(bytes) : (_) => Io({})
+            | some(s) =>
+                match Nat/of_str(Str/trim(s)) : (_) => Io({})
+                | some(d) => /std/print(Nat/to_str(sum(build(d, 1))))
+                | none() => /std/print("bad input")
+                end
+            | none() => /std/print("bad utf8")
+            end
+        | none() => /std/print("no input")
+        end
+        "#,
+        system,
+    )
+    .expect("expected result");
+    assert_eq!(io.output().to_vec(), b"496");
+}

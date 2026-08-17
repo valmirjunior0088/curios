@@ -136,6 +136,8 @@ pub enum CpsIntrinsicOp {
     TplGet(usize),
     /// The virtual-window bounds guard: `(s, e, len) -> e - s`, trapping unless `s <= e <= len` — the eager trap a physical slice would have performed, kept at the original evaluation point when the slice itself is virtualized away.
     WindowExtent,
+    /// Whether the operand is an unboxed scalar (1) or an aggregate reference (0) — the dispatch of a variant encoding whose one scalar-payload constructor rides bare. A representation question, which is why it exists in this crate's vocabulary and not in Ersd: the lowering that chose the encoding is the only producer, and it guarantees the two answers are disjoint over every value the test can reach.
+    IsImmediate,
 }
 
 /// The representation a value is read or produced at — the carrier, not the type.
@@ -176,6 +178,8 @@ impl CpsIntrinsicOp {
             (ListAppend, _) => Repr::Ref,
             (BinConcat(_, _), _) | (BinEql(_) | BinLen(_), _) | (FltOfLeBytes, _) => Repr::Bytes,
             (WindowExtent, _) => Repr::Nat,
+            // The whole point of the test is to look at the reference uncoerced.
+            (IsImmediate, _) => Repr::Ref,
             (ListConcat(_) | ListLen, _) => Repr::List,
             (TplGet(index), _) => Repr::Tpl(index + 1),
 
@@ -226,7 +230,8 @@ impl CpsIntrinsicOp {
             | FltSqrt | FltFloor | FltCeil | FltTrunc | FltNearest | FltCopysign | NatToFlt
             | IntToFlt | FltOfLeBytes => Repr::Flt,
 
-            BinGet(_) | WindowExtent => Repr::Nat,
+            // `IsImmediate` joins the predicates: it answers a `Bool`, whose carrier is a `Nat`.
+            BinGet(_) | WindowExtent | IsImmediate => Repr::Nat,
             BinSlice(_) | BinAppend(_) | BinConcat(_, _) | FltToLeBytes => Repr::Bytes,
             ListSlice | ListAppend | ListConcat(_) => Repr::List,
             // A list read and a tuple projection both yield whatever was stored, uninterpreted.
@@ -270,7 +275,8 @@ impl CpsIntrinsicOp {
             | Self::FltToInt
             | Self::BinLen(_)
             | Self::ListLen
-            | Self::TplGet(_) => 1,
+            | Self::TplGet(_)
+            | Self::IsImmediate => 1,
             Self::BinSlice(_) | Self::ListSlice | Self::WindowExtent => 3,
             Self::BinConcat(_, arity) | Self::ListConcat(arity) => arity,
             _ => 2,
@@ -374,7 +380,8 @@ impl CpsIntrinsicOp {
             | Self::FltCopysign
             | Self::BinLen(_)
             | Self::BinEql(_)
-            | Self::ListLen => CpsIntrinsicEffect::Total,
+            | Self::ListLen
+            | Self::IsImmediate => CpsIntrinsicEffect::Total,
         }
     }
 
