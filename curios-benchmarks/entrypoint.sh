@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Build every contestant, cross-check that they all agree, then time them with hyperfine in eight tables: {lcg, binary-trees, chain, churn} x {native, wasm-on-wasmtime}.
+# Build every contestant, cross-check that they all agree, then time them with hyperfine in ten tables: {lcg, binary-trees, chain, churn, spines} x {native, wasm-on-wasmtime}.
 # Curios is the subject compared in both halves of each program.
 #
-# Knobs (env vars): N_LCG, D_TREES, K_CHAIN, N_CHURN, RUNS, WARMUP.
+# Knobs (env vars): N_LCG, D_TREES, K_CHAIN, N_CHURN, N_SPINES, RUNS, WARMUP.
 set -uo pipefail
 cd "$(dirname "$0")"
 ROOT="$PWD"          # absolute benchmarks dir; asc is invoked from elsewhere (see below)
@@ -20,6 +20,7 @@ N_LCG="${N_LCG:-100000000}"   # LCG iterations (~0.45s of Curios compute)
 D_TREES="${D_TREES:-21}"      # tree depth: ~4.2M nodes; sums taken mod 1000003
 K_CHAIN="${K_CHAIN:-1600}"    # transform rounds over a fixed 10 000-cell chain: ~16M cells reborn
 N_CHURN="${N_CHURN:-75000000}" # record-update steps over a six-field record (~0.33s of Curios compute)
+N_SPINES="${N_SPINES:-75000}"  # map inserts; the live set plateaus toward 65 536 entries (~0.35s of Curios compute)
 RUNS="${RUNS:-5}"
 WARMUP="${WARMUP:-1}"
 
@@ -92,12 +93,14 @@ build lcg   lcg
 build trees trees
 build chain chain
 build churn churn
+build spines spines
 
 echo
 check lcg   lcg   8  programs/lcg/lcg.js
 check trees trees 10 programs/trees/trees.js
 check chain chain 8  programs/chain/chain.js
 check churn churn 8  programs/churn/churn.js
+check spines spines 8 programs/spines/spines.js
 
 # --- LCG --------------------------------------------------------------------
 table "LCG (N=$N_LCG) — native targets" \
@@ -154,3 +157,17 @@ table "churn (N=$N_CHURN) — wasm on wasmtime" \
   "wasmtime run .artifacts/churn_rust.wasm $N_CHURN" \
   "wasmtime run .artifacts/churn_grain.wasm $N_CHURN" \
   "wasmtime run .artifacts/churn_asc.wasm $N_CHURN"
+
+# --- spines ------------------------------------------------------------------
+table "spines (N=$N_SPINES) — native targets" \
+  ".artifacts/spines_rust $N_SPINES" \
+  ".artifacts/spines_ocaml $N_SPINES" \
+  "node programs/spines/spines.js $N_SPINES" \
+  "$(lean_bin spines spines) $N_SPINES" \
+  "echo $N_SPINES | .artifacts/spines_curios"
+
+table "spines (N=$N_SPINES) — wasm on wasmtime" \
+  "echo $N_SPINES | .artifacts/spines_curios" \
+  "wasmtime run .artifacts/spines_rust.wasm $N_SPINES" \
+  "wasmtime run .artifacts/spines_grain.wasm $N_SPINES" \
+  "wasmtime run .artifacts/spines_asc.wasm $N_SPINES"

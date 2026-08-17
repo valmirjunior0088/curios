@@ -1,0 +1,30 @@
+// spines: N LCG-keyed inserts into a map, then fold the values. Grain's Map is
+// a mutable hash map keyed by the number itself — no boundary encoding, no
+// per-insert structure rebuild — under its linear-memory reference counting.
+//
+// APIs verified against the grain-v0.7.2 stdlib; confirm `grain compile` at build.
+// VERIFY: `Map.set`'s data-last argument order and `Map.forEach`'s callback
+// shape, and that assigning a captured `mut` from the callback compiles.
+module Spines
+
+from "wasi/process" include Process
+from "array" include Array
+from "number" include Number
+from "result" include Result
+from "map" include Map
+
+let args = Result.unwrap(Process.argv())
+let s = args[Array.length(args) - 1]
+let n = Result.unwrap(Number.parseInt(s, 10))
+
+let m = Map.make()
+let mut x = (n + 1) % 65537
+let mut i = 0
+while (i < n) {
+  x = 75 * x % 65537
+  Map.set(x, i % 1000003, m)
+  i += 1
+}
+let mut acc = 0
+Map.forEach((_, v) => acc = (acc + v) % 1000003, m)
+print(acc)

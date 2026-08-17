@@ -1,0 +1,37 @@
+-- spines: N LCG-keyed inserts into /std/Map, then fold the values — death-birth
+-- churn on a persistent map's spine, under a live set that plateaus at the LCG's
+-- key population (at most 65536 entries) while inserts keep rebuilding root-to-leaf
+-- paths that die with the operation. Two confounds, recorded plainly: the table
+-- compares map algorithms as much as memory management (a crit-bit trie here, hash
+-- maps in the imperative contestants, balanced trees in the functional ones), and
+-- /std/Map deliberately has no Key(Nat) — the injectivity a witness owes is
+-- unprovable for a division-based encoding under unary elimination, see the module —
+-- so keys enter through Nat/to_str at the boundary, a per-insert cost no int-keyed
+-- hash map mirrors. It orients rather than proves. N is read from stdin; the seed
+-- derives from N so nothing is a closed term. Values are the step index, so later
+-- writes to a returning key are observable in the printed sum.
+use /std/{Str, Nat, Option, Map, Io};
+
+rec walk(n: Nat, i: Nat, x: Nat, m: Map(Nat)) -> Map(Nat) =
+    match n: (_) => Map(Nat)
+    | 0 => m
+    | k + 1; ih =>
+        let y = 75 * x % 65537;
+        walk(k, i + 1, y, Map/insert(m, Nat/to_str(y), i % 1000003))
+    end;
+
+let input = /std/read()!;
+match input: (_) => Io({})
+| some(bytes) =>
+    match Str/of_bytes(bytes): (_) => Io({})
+    | some(s) =>
+        match Nat/of_str(Str/trim(s)): (_) => Io({})
+        | some(n) =>
+            let m = walk(n, 0, (n + 1) % 65537, Map/empty());
+            /std/print(Str/concat(Nat/to_str(Map/fold(m, 0, (_, v, acc) => (acc + v) % 1000003)), "\n"))
+        | none() => /std/print("bad input\n")
+        end
+    | none() => /std/print("invalid utf-8\n")
+    end
+| none() => /std/print("no input\n")
+end

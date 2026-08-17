@@ -22,7 +22,7 @@ Each results file is a single-sitting snapshot with its own commentary:
 
 ### Curios across runs
 
-Mean ± std dev in milliseconds from each run's results file, one row appended per capture; `× 00` compares against run 00's mean and `× prev` against the previous run's mean, in the same column. A workload that enters later is based at its own first capture, since there is no run 00 figure to divide by; `chain` and `churn` have no capture yet, so they have no table here.
+Mean ± std dev in milliseconds from each run's results file, one row appended per capture; `× 00` compares against run 00's mean and `× prev` against the previous run's mean, in the same column. A workload that enters later is based at its own first capture, since there is no run 00 figure to divide by; the workloads without a capture yet — `chain`, `churn`, `spines` — have no table here.
 
 The workload and the execution setup are fixed across runs, but the *toolchains* are not: each capture installs current versions, so the wasm engine under both Curios columns has changed between some rows. A row-to-row move is therefore Curios plus its engine, not Curios alone — run 04's `trees` improvement landed alongside a wasmtime major bump and is explicitly left unattributed for that reason.
 
@@ -209,7 +209,7 @@ Curios only targets WebAssembly, so its presence in both sections is not two bac
 
 ## Workloads
 
-All four are (a) expressible in a total, structurally-recursive language, (b) immune to constant-folding and closed-form shortcuts — the input arrives at runtime — and (c) bit-identical in output across every implementation, so a mismatch flags a mistranslation before any timing is trusted. `entrypoint.sh` enforces that cross-check at the start of every run.
+All five are (a) expressible in a total, structurally-recursive language, (b) immune to constant-folding and closed-form shortcuts — the input arrives at runtime — and (c) bit-identical in output across every implementation, so a mismatch flags a mistranslation before any timing is trusted. `entrypoint.sh` enforces that cross-check at the start of every run.
 
 - **`lcg`** — iterate `x = (75 · x) mod 65537` N times from `x = 1`. One multiply + one modulo per iteration; the max intermediate is 75·65536 ≈ 4.9M, far under i31. Measures integer ALU + loop/call overhead. Default `N = 100_000_000` (≈ 0.45s of Curios compute; below ~10⁷ it is startup-dominated). Anchor: `lcg(10⁸) = 17662`.
 - **`trees`** (the classic binary-trees allocation stress) — build a perfect tree of depth D whose nodes carry unique heap-numbered payloads (root `1`, children `2v` / `2v+1`), then reduce to `sum mod 1000003`. The unique payloads make every node distinct, defeating any structural subtree-sharing and forcing 2^(D+1)−1 real allocations; the modulus keeps the checksum inside i31. Measures allocation + GC and heap traversal. Default `D = 21` (≈ 4.2M nodes, ≈ 0.25s; D=23 ≈ 1s). Anchor: `trees(21) = 536864`.
@@ -218,6 +218,8 @@ All four are (a) expressible in a total, structurally-recursive language, (b) im
   Two asymmetries belong beside its ratio rather than inside it. A Curios cons cell is **three** slots to Lean's two, since a tagged constructor carries its discriminant — real, and not what the workload is about. And the chain's live set is small by design, so the collector's marking half is barely exercised: what is measured is the allocation rate and the young-collection frequency that churn drives, which is the half reuse removes.
 
 - **`churn`** — thread a six-field record through N LCG-fed steps, two fields updated per step, the written pair rotating over three phases so every field keeps circulating; print one field at the end. The purest record-update signal: the imperative contestants mutate a struct in place and allocate nothing, OCaml's and Grain's functional updates allocate a fresh record per step, and Lean's structure update is the shape Perceus's reset-and-reuse rewrites in place. Curios spells the update as a spread — and its optimizer erases the record entirely: the threaded record travels as fields, the loop allocates nothing (pinned by `churn_threaded_record_allocates_nothing` in `curios/src/tests/codegen/churn.rs`), so its column prices dispatch and checked i31 arithmetic against the mutation floor rather than allocation. The record-update tax this workload was specified to price therefore lives only where a record *rests*, which is the census's and the coming `spines` workload's territory. Default `N = 75_000_000` (≈ 0.33s of Curios compute). Anchors: `churn(8) = 897441`, `churn(75000000) = 762495`.
+
+- **`spines`** — N LCG-keyed inserts into a map, then fold the values; the keys revisit a 65 536-value orbit, so the live set plateaus while every insert keeps rebuilding a root-to-leaf spine that dies with the operation — the live-set-under-churn dimension `chain` deliberately lacks. Two confounds are part of the design and the reason it orients rather than proves: the table compares map algorithms as much as memory management (Curios's crit-bit trie against imperative hash maps and the functional contestants' balanced trees), and `/std/Map` deliberately has no `Key(Nat)` — the injectivity a `Key` witness owes is unprovable for a division-based encoding under unary elimination, as the module records — so Curios keys pay a `Nat/to_str` boundary encoding no int-keyed hash map mirrors. Lean's `Std.TreeMap` is the reuse-on-spines column: a persistent tree whose dying path Perceus rewrites in place. Default `N = 75_000` (≈ 0.35s of Curios compute). Anchors: `spines(8) = 28`, `spines(75000) = 675283`.
 
 ### Why the constants are small
 
@@ -229,7 +231,7 @@ Curios's `Nat` and `Int` are unbounded in the type checker but ride an **i31** �
 curios-benchmarks/
   Dockerfile                 kitchen-sink arm64 image with all 8 toolchains + curios
   Dockerfile.dockerignore    what the build context excludes (target/, .artifacts/, .git)
-  entrypoint.sh              build all, cross-check outputs, then 8 hyperfine tables
+  entrypoint.sh              build all, cross-check outputs, then 10 hyperfine tables
   programs/
     lcg/                     lcg.{crs,rs,ml,js,ts,gr}  Lcg.lean  lakefile.toml
     trees/                   trees.{crs,rs,ml,js,ts,gr}  Trees.lean  lakefile.toml
@@ -243,12 +245,12 @@ The image build needs the Curios sources, which live _above_ `curios-benchmarks/
 make curios/benchmarks
 
 # tune the workloads:
-docker run --rm --cpuset-cpus 0 -e N_LCG=200000000 -e D_TREES=23 -e K_CHAIN=3200 -e N_CHURN=150000000 -e RUNS=7 curios-benchmarks
+docker run --rm --cpuset-cpus 0 -e N_LCG=200000000 -e D_TREES=23 -e K_CHAIN=3200 -e N_CHURN=150000000 -e N_SPINES=150000 -e RUNS=7 curios-benchmarks
 ```
 
 The run splits its two audiences across the two streams, which is how a `--rm` container hands back a document without a bind mount:
 
-- **stdout** carries the eight markdown tables and nothing the harness adds to them, so `docker run … > run.md` is the whole capture, ready to paste into a results file. Through `make curios/benchmarks > run.md` the two echoed recipe lines land above the first table; delete them and the rest is the document.
+- **stdout** carries the ten markdown tables and nothing the harness adds to them, so `docker run … > run.md` is the whole capture, ready to paste into a results file. Through `make curios/benchmarks > run.md` the two echoed recipe lines land above the first table; delete them and the rest is the document.
 - **stderr** carries the build log, the correctness cross-check (all eight outputs must be identical), and hyperfine's own comparison with its relative "x times faster than" ratios. Watch this stream while it runs; read the ratio to Rust as the headline "where are we" number.
 
 A table hyperfine fails to produce is absent from stdout rather than empty in it, and its error is on stderr.

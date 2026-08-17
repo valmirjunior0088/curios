@@ -1,0 +1,6 @@
+name = "spines"
+defaultTargets = ["spines"]
+
+[[lean_exe]]
+name = "spines"
+root = "Spines"
