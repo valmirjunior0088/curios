@@ -14,7 +14,7 @@ use {
     curios_utilities::recurse,
 };
 
-/// The elaborator's side of the closed-machine seam: the same delta [`reduce_var`] and [`reduce_universe_inst`] perform, handed to the shared machine so a closed term evaluates at machine depth under this strategy's own charges.
+/// The elaborator's side of the closed-machine seam: the same delta `reduce_var` and `reduce_universe_inst` perform, handed to the shared machine so a closed term evaluates at machine depth under this strategy's own charges.
 impl ClosedHost for Context {
     fn closed_body(&self, name: &Free) -> Option<&Term> {
         self.var_reduct(name)

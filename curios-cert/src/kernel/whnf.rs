@@ -20,7 +20,7 @@ use {
     curios_utilities::recurse,
 };
 
-/// The kernel's side of the closed-machine seam: the same delta [`step_var`] and [`step_universe_inst`] perform, handed to the shared machine so a closed term evaluates at machine depth under this strategy's own charges.
+/// The kernel's side of the closed-machine seam: the same delta `step_var` and `step_universe_inst` perform, handed to the shared machine so a closed term evaluates at machine depth under this strategy's own charges.
 impl ClosedHost for Kernel {
     fn closed_body(&self, name: &Free) -> Option<&Term> {
         self.value(name)
