@@ -11,6 +11,8 @@
 //! So `digits − bindless` is the bind, `bindless − manual` is the closure plus the scan, and the bottom rung is a *ceiling rather than an equivalent* — it declines work the abstraction performs rather than performing it more cheaply.
 //!
 //! **The ladder existed for the length of three roadmap items before anything ran it.** These are real programs rather than fixtures precisely because the question is what idiomatic code costs, and a fixture written to be measured tends to answer a question nobody asked.
+//!
+//! Timings that a walk-directed change produces are recorded here, controls included: a campaign that moves this ladder owes a reading of the two harness workloads beside it, because "moved the column it aimed at" is only a claim if the other columns were looked at.
 
 use {
     super::structural::{compile_raw, functions, user_allocations, wat},
@@ -159,7 +161,7 @@ const WALK_MIRROR_INDEXED: &str = include_str!(concat!(
 ///
 /// The `struct.new $tpl/4` row above was a spelling, not a compiler obligation. The cont arm passed `step(h, Scan/cont(rem, lo, hi))` with `sc` — the parameter holding exactly that value — in scope, and match refinement makes the two spellings definitionally equal, so `/std` now passes the held parameter at every such site: `fold`, `at`, `utf8/drop_width`, `utf8/count_scalars`, and their proof twins, which keeps function and proof unfolding in the same spelling. The kernel recertified the prelude over the change, and the walk, `len` and `slice` each lost a per-continuation-byte allocation at once.
 ///
-/// The emitted fold body for `programs/parse_multibyte.crs` now holds five `struct.new $tpl/2`, no `struct.new $tpl/4`, three `call $bytes/slice`, three `call $bytes/read` and two `call_ref $clsr/2`, and the only arity-4 constructions left in that module are the two genuine transitions inside `/syn/Str/step` — [`returned_scan_constructions_live_in_step`] holds both facts. Timed **2026-08-17** with the native-binary protocol above, five runs each, `user` seconds:
+/// The emitted fold body for `programs/parse_multibyte.crs` now holds five `struct.new $tpl/2`, no `struct.new $tpl/4`, three `call $bytes/slice`, three `call $bytes/read` and two `call_ref $clsr/2`, and the only arity-4 constructions left in that module are the two genuine transitions inside `/syn/Str/step` — the probe now spelled [`the_per_character_walk_carries_its_scan_without_allocating`] held both facts. Timed **2026-08-17** with the native-binary protocol above, five runs each, `user` seconds:
 ///
 /// | Program | before | after |
 /// | --- | --- | --- |
@@ -203,15 +205,39 @@ const WALK_MIRROR_INDEXED: &str = include_str!(concat!(
 ///
 /// Against the pre-campaign baseline the digit walk is fifteen percent faster and the multi-byte walk twenty-three, with the variant-width scan rebuild the one obligation left on the per-character path. The spec's ordering held: the window was the destination, and the tuple work was its substrate.
 ///
+/// ## After the scan crossed as fields (variant-width, 2026-08-17)
+///
+/// The last obligation on the per-character path. The loop's scan parameter travels as a discriminant and three payload slots with the interned nullary constructors filled, and `/syn/Str/step` takes those four slots as parameters, so the emitted `/std/Str/fold` body holds no `struct.new` of any kind.
+///
+/// **This row carries its own control, and every row above it should be read as though it did not.** The rows above compare against figures taken days and several commits apart — the closure-table swap alone moved these walks by 27% and 11% — so a delta read across two of them is not attributable to the change named beside it. Both columns here were built from the same tree at two commits and timed in one interleaved session on one machine: the control is `9e7e81e8`, the campaign's own base.
+///
+/// | Program | control (`9e7e81e8`) | after variant-width |
+/// | --- | --- | --- |
+/// | `parse_digits` at N = 1 000 000 | 0.66 0.68 0.67 0.67 0.65 | 0.46 0.47 0.48 0.47 0.47 |
+/// | `parse_multibyte` at N = 300 000 | 0.55 ×5 | 0.43 0.42 0.43 0.42 0.42 |
+///
+/// **The digit walk gains more than the multi-byte one — 29% against 23% — and that inversion is the point.** A digit walk never enters the `cont` arm, so before this change its scan was the interned `lead()` constant, which is exactly what M1a stopped being able to hand back for free: the row above records the digit walk *regressing* five percent when the return protocol reached `step`, because dynamic result fields admit no interning and every resume reboxed. That relocation is what this change collects, and it collects most where the constant used to be free.
+///
+/// **The two harness workloads are the controls, and both are flat** — same protocol, same session, same control commit, outputs compared before any figure was read:
+///
+/// | Program | Input | control (`9e7e81e8`) | after variant-width |
+/// | --- | --- | --- | --- |
+/// | `lcg` | 100 000 000 | 0.31 ×5 | 0.31 ×5 |
+/// | `trees` | 21 | 0.26 0.24 0.24 0.25 0.25 | 0.26 0.26 0.26 0.25 0.24 |
+///
+/// `trees` max RSS was flat too, ~134.5 MB on both arms. Each is flat for its own stated reason rather than by luck. `lcg`'s hot loop matches on `Nat`, an intrinsic riding the i31 carrier, so the program contains no variant family for a width to reach. `trees` contains one — but a node is stored in its parent, so its values *rest*, and a rewrite that only removes objects in flight has nothing to take: the same fact, observed dynamically, that the census's return gate reports statically and that refuses the return milestone.
+///
 /// ## The static half, and why it divides almost nothing
 ///
+/// Retaken **2026-08-17** after variant-width splitting. The figures it replaces predate the window split and the closure table and had not been retaken, so read the block as a fresh reading rather than as a delta:
+///
 /// ```text
-/// parse_digits:   0 closure sites, 4 env sites, 0 shell sites, 17 slice calls, 362098 bytes of wat
-/// parse_bindless: 0 closure sites, 5 env sites, 0 shell sites, 17 slice calls, 377561 bytes of wat
-/// parse_manual:   0 closure sites, 4 env sites, 0 shell sites, 17 slice calls, 403921 bytes of wat
+/// parse_digits:   0 closure sites, 2 env sites, 0 shell sites, 10 slice calls, 443738 bytes of wat
+/// parse_bindless: 0 closure sites, 3 env sites, 0 shell sites, 10 slice calls, 458940 bytes of wat
+/// parse_manual:   0 closure sites, 2 env sites, 0 shell sites, 10 slice calls, 496933 bytes of wat
 /// ```
 ///
-/// Four, five and four env sites span a sixfold spread in runtime, and the remaining ones belong to `/std/Str/utf8/check` and `/std/Nat/of_str` in all three programs — `parse_manual` included, because every rung parses its stdin the same way. **A site count cannot see a loop.** It is kept because it is the half that survives a machine change, and because a site appearing or vanishing is a real event — the `Str/fold` environments vanishing is how the walk's chain was confirmed gone. It is never the half that answers "what does this cost".
+/// Two, three and two env sites span a sixfold spread in runtime, and the ones that remain belong to `/std/Nat/of_str/1` and `/std/Str/trim_bounds/1` in all three programs — `parse_manual` included, because every rung parses its stdin the same way. **A site count cannot see a loop.** It is kept because it is the half that survives a machine change, and because a site appearing or vanishing is a real event — the `Str/fold` environments vanishing is how the walk's chain was confirmed gone. It is never the half that answers "what does this cost".
 ///
 /// **Two comparisons this does not license.** An earlier record in `structural.rs` timed `parse_digits` at 0.92–0.95 s with `/usr/bin/time -l`, which is macOS syntax; these are Linux figures from another machine, so only the ratios transfer. And the roadmap's "roughly eightfold" for this gap has no probe at all — fourteenfold is what this tree and this machine report.
 #[test]
@@ -308,9 +334,13 @@ fn walk_mirror_family_isolates_each_obligation() {
     );
 }
 
-/// Probe one of the four attributions: the returned scan state, tracked by where its construction lives. M1a's interprocedural demand made `split_returns` eligible on the step component — once the first-order `check` rework removed the one caller that captured the scan into a closure chain — so `/syn/Str/step` returns four fields without constructing the `Scan` it hands back, and each caller's resume rebuilds the tuple before entering its continuation. That rebuild is one construction per character, exactly what the callee used to pay: M1a relocates the allocation, and removing the caller-side reconstruction by splitting the receiving continuation is M2's acceptance case, which is when this probe flips again.
+/// Probe one of the four attributions: the returned scan state, tracked by where its construction lives — and the rung at which it stops having one.
+///
+/// M1a's interprocedural demand made `split_returns` eligible on the step component, so `/syn/Str/step` hands its `Scan` back as four results rather than a tuple; each caller's resume then rebuilt that tuple once per arm, which is the allocation this probe used to pin at three sites. Variant-width splitting removed them in two moves. The fold's loop carries the scan as a discriminant and three payload slots, the interned nullary constructors entering it as one field and filler — which left exactly one construction, the head materialization the known call to `step` kept alive, because `step` took the aggregate whole. Splitting `step`'s own parameter removed that boundary too.
+///
+/// **So the per-character path of an idiomatic UTF-8 walk allocates nothing.** `step` takes four field parameters beside its byte and hands back four results, constructing no scan at either end, and the fold's whole body carries no `struct.new` of any kind: not the accumulator, not the suffix view, not the scan. That last assertion is the strongest form this probe can take and is deliberately about *every* allocation rather than the tuple shapes the campaign named, because a rewrite that moved the cost into some other object would satisfy the narrow reading and fail this one.
 #[test]
-fn returned_scan_is_delivered_as_fields_and_rebuilt_by_callers() {
+fn the_per_character_walk_carries_its_scan_without_allocating() {
     let wat = wat(PARSE_MULTIBYTE);
     let split = functions(&wat);
     let count_in = |body: &str, needle: &str| {
@@ -325,30 +355,33 @@ fn returned_scan_is_delivered_as_fields_and_rebuilt_by_callers() {
         .find(|function| function.name.contains("/syn/Str/step"))
         .expect("step survives as a function in this module");
     assert!(
-        step.body.contains("(type $func/2/4)"),
-        "step's signature carries four results: the split return protocol is live on its component",
+        step.body.contains("(type $func/5/4)"),
+        "step takes the scan as four field parameters beside its byte and hands back four results — both halves of the protocol live on its component: {}",
+        step.body.lines().next().unwrap_or_default(),
     );
     assert_eq!(
-        count_in(step.body, "struct.new $tpl/4"),
+        count_in(step.body, "struct.new"),
         0,
-        "and step constructs no scan of its own",
+        "and step constructs no scan at either end",
     );
 
-    // The fold's per-character shape after M4, pinned so the campaign's milestones flip it deliberately. The accumulator travels as fields (M2), and the suffix view is virtualized (M4): the walk carries `(base, offset, length)` through the loop, its slice is an extent guard plus an offset sum, and the per-character view allocation vanished together with the helper call that built it — the half an allocation count does not see. The scan rebuild remains, for a recorded reason rather than a gap: the loop's scan parameter mixes arity-1 interned constants with the resumes' arity-4 rebuilds — the variant-width shape no exact product describes — so removing it awaits either variant-aware splitting or a uniform-width variant lowering, each a measured decision the spec records.
+    // The fold's per-character shape. The accumulator travels as fields, the suffix view is virtualized — the walk carries `(base, offset, length)` through the loop, its slice an extent guard plus an offset sum — and the scan travels as a discriminant and three payload slots through the loop *and* through the call that consumes it.
     let fold = split
         .iter()
         .find(|function| function.name.contains("$/std/Str/fold"))
         .expect("the fold survives as a function in this module");
     let in_fold = |needle: &str| count_in(fold.body, needle);
     assert_eq!(
-        in_fold("struct.new $tpl/4"),
-        3,
-        "each arm's resume still rebuilds the variant-width scan it passes back",
-    );
-    assert_eq!(
-        in_fold("struct.new $tpl/2"),
+        in_fold("struct.new"),
         0,
-        "the accumulator travels as fields on every path, seed included",
+        "the walk's body allocates nothing at all:\n{}",
+        fold.body,
+    );
+    // Matched on the name rather than through `in_fold`, because the emitted call spells the callee's index before its hint and that index is not stable across passes.
+    assert_eq!(
+        fold.body.matches("$/syn/Str/step").count(),
+        3,
+        "the scan step is still a known call per arm — the fields travel through it rather than around it",
     );
     assert_eq!(
         in_fold("call $bytes/slice"),

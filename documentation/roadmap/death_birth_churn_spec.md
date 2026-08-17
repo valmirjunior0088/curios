@@ -12,11 +12,11 @@ Purity makes death-birth overlap the sanctioned idiom rather than a code smell: 
 
 The question is what that idiom costs a regular user writing obvious code, measured against the one harness contestant whose compiler exploits the overlap, and where in real Curios code the overlap concentrates. Both numbers exist before any lever is picked, because the levers below move different costs and only measurement says which cost is the one being paid.
 
-Not in scope: in-flight representation, which is the sibling specification's subject ([01_variant_width_spec.md](01_variant_width_spec.md)), and any reuse mechanism ahead of the M2 gate.
+Not in scope: in-flight representation, which the sibling campaign settled and retired as [A variant travels as the fields of its widest constructor](../design/toolchain/a-variant-travels-as-the-fields-of-its-widest-constructor.md), and any reuse mechanism ahead of the M2 gate.
 
 ## Evidence
 
-The trees campaign measured the semi-space collector's share of the allocation workload and recorded it beside its probes; the landed encoding decision ([A variant collapses when nothing needs to distinguish it](../../design/toolchain/a-variant-collapses-when-nothing-needs-to-distinguish-it.md)) then removed the leaf half of that population outright. What survives — interior nodes, records, spines — is exactly the death-birth population, and neither landed campaign can reach it: the value-lifetime work erases identities never observed, the encoding work erases identities that fit an immediate, and a record that persists between iterations or a spine that lives in a map is kept, boxed, and reborn each step.
+The trees campaign measured the semi-space collector's share of the allocation workload and recorded it beside its probes; the landed encoding decision ([A variant collapses when nothing needs to distinguish it](../design/toolchain/a-variant-collapses-when-nothing-needs-to-distinguish-it.md)) then removed the leaf half of that population outright. What survives — interior nodes, records, spines — is exactly the death-birth population, and neither landed campaign can reach it: the value-lifetime work erases identities never observed, the encoding work erases identities that fit an immediate, and a record that persists between iterations or a spine that lives in a map is kept, boxed, and reborn each step.
 
 The TOML decoder is the in-corpus spine-churn consumer: table construction rebuilds `/std/Map` spines the way any user counting words would.
 
