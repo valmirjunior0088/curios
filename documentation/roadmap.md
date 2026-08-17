@@ -58,7 +58,6 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Final `| _ =>` catch-all in dispatching matches (bare/final/top-level only, after any run of dispatching arms — inductive constructors, `Bool`, `Nat` shapes, list and packed cases — and not after tuple or struct arms)
 - [x] Destructuring patterns at `let`/lambda-parameter/function-sugar-parameter position (tuple/struct only, irrefutable; desugars to projections)
 - [x] Irrefutable patterns at the `;` fold-hypothesis binder (`| pred + 1; (count, live) =>` — the hypothesis binds the fold result rather than scrutinee shape, so it takes the same patterns a `let` binder does, desugared to projections)
-- [ ] [Anonymous match functions](roadmap/capabilities/03_anonymous_match_function_spec.md) (`match =>`, lowering to an ordinary one-argument lambda and headed match)
 
 ## Syntax Sugar
 
@@ -199,7 +198,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Decimal numeric conversions (`of_str`/`to_str` for `Nat`, `Int`, and `Flt`; `Flt/to_str` renders the shortest round-trip binary32 decimal through exact `BigNat` digit generation)
 - [x] JSON codec (`std/Json`)
 - [x] TOML 1.0.0 codec over native `Int` and binary32 `Flt` (`std/Toml`; explicitly not fully TOML-conforming because numeric storage is native-width)
-  - [ ] [Full TOML conformance over exact numerics](roadmap/capabilities/04_toml_full_conformance_spec.md) _(not refined; after the general rational `BigFlt` sequence)_
+  - [ ] [Full TOML conformance over exact numerics](roadmap/toml_full_conformance_spec.md) _(not refined; after the general rational `BigFlt` sequence)_
 - [x] Async combinators for `/std/Async`
   - [x] `map`
   - [x] concurrent `both`/`race`/`select`
