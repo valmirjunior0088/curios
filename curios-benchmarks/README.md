@@ -17,6 +17,7 @@ Each results file is a single-sitting snapshot with its own commentary:
 | [02 — The debt got paid back, with interest](02_RESULTS.md)      | 2026-07-20 |
 | [03 — Nothing moved, and that was the point](03_RESULTS.md)      | 2026-07-31 |
 | [04 — The run that had to fix the compiler first](04_RESULTS.md) | 2026-08-09 |
+| [05 — The plateau broke, and only where it was aimed](05_RESULTS.md) | 2026-08-17 |
 
 ### Curios across runs
 
@@ -88,6 +89,15 @@ The workload and the execution setup are fixed across runs, but the *toolchains*
       <td align="right">0.98×</td>
       <td align="right">0.99×</td>
     </tr>
+    <tr>
+      <td>05</td>
+      <td align="right">296.3 ± 1.0</td>
+      <td align="right">0.66×</td>
+      <td align="right">0.68×</td>
+      <td align="right">296.7 ± 5.1</td>
+      <td align="right">0.67×</td>
+      <td align="right">0.68×</td>
+    </tr>
   </tbody>
 </table>
 
@@ -154,6 +164,15 @@ The workload and the execution setup are fixed across runs, but the *toolchains*
       <td align="right">244.5 ± 2.3</td>
       <td align="right">0.76×</td>
       <td align="right">0.94×</td>
+    </tr>
+    <tr>
+      <td>05</td>
+      <td align="right">245.9 ± 1.1</td>
+      <td align="right">0.78×</td>
+      <td align="right">1.02×</td>
+      <td align="right">249.6 ± 3.8</td>
+      <td align="right">0.77×</td>
+      <td align="right">1.02×</td>
     </tr>
   </tbody>
 </table>
