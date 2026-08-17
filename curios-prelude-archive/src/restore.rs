@@ -361,6 +361,10 @@ mod tests {
     /// A partial retake, of the certification row alone, taken on both sides of the kernel's `whnf`/`forced` memo hits becoming free — which came with those two tables cleared at every declaration boundary, so 1107 clearings over this walk is what needed checking. **6.2 s before, 6.1 s after**, 0 refusals both times, and `kernel_memo_parity` passing on both sides. The clearing costs nothing measurable.
     ///
     /// **It also says the twelve seconds above is stale by roughly a factor of two, for reasons that are not this.** Both readings here are of the unchanged kernel and both are near six seconds. Nothing in that change could halve a whole-unit walk — it only ever *reduces* what a judgment spends, and this corpus exhausts nowhere — so the drift belongs to something between 2026-08-10 and now that the row above has not been re-run against. The rest of the table is not retaken and is not corrected on the strength of one row.
+    ///
+    /// # Certification, retaken 2026-08-16
+    ///
+    /// Taken on `x86_64-unknown-linux-gnu` — a different host from every figure above, so wall clocks compare only within this section — on both sides of the closed machine entering the kernel's reduction path. **Certifying one whole unit: 12.6 s, 0 refusals**, in release, with the machine live. The units-denominated rows moved where wall clock cannot be compared: the heaviest declaration a whole-unit certification makes went from **189 294 to 512 455 units**, peak depth 6 on both sides, and total retention stayed at 108.4M units. That rise is the machine re-deriving within a run where the strategy's memo hits replayed for free — the trade that buys a closed fold's check back a thousandfold — and at sixty times under the default budget it decides nothing; it is recorded so the next reader of the heaviest-declaration figure knows which evaluator produced it.
     #[test]
     #[ignore = "measurement: reports timings over the stored image rather than asserting"]
     fn stored_prelude_measurements() {

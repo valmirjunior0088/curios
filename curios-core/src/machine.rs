@@ -1,6 +1,6 @@
 //! Closed-term evaluation on an explicit stack: the machine that makes a fold cost what it computes rather than what the recursive strategy spends walking it.
 //!
-//! Both checkers' reducers are recursive functions that re-enter themselves once per operand of a nested intrinsic and once per link of a match tower, and both substitute arguments unreduced. On *closed* terms those are the two habits that manufacture cost the term never asked for: the re-entry puts one native frame — priced at [`Cost::FRAME`] — on the stack per element of a data-shaped walk, and the unreduced substitution threads accumulator chains that make every memo entry linear in how far the walk has come. This module evaluates the same terms with the recursion reified into a [`Frame`] stack and every substituted term taken to a value first, so depth costs the small frame it takes and chains are never built.
+//! Both checkers' reducers are recursive functions that re-enter themselves once per operand of a nested intrinsic and once per link of a match tower, and both substitute arguments unreduced. On *closed* terms those are the two habits that manufacture cost the term never asked for: the re-entry puts one native frame — priced at [`Cost::FRAME`] — on the stack per element of a data-shaped walk, and the unreduced substitution threads accumulator chains that make every memo entry linear in how far the walk has come. This module evaluates the same terms with the recursion reified into a [`Frame`] stack and every substituted term taken to a value first, so depth costs the small frame it takes and the chains an unreduced substitution would thread are never built — an accumulator that is *genuinely* a growing closed neutral is the value itself, and the run-scoped memo below keeps re-encountering one linear.
 //!
 //! # Why this is representation, not judgment
 //!
@@ -20,7 +20,7 @@
 //!
 //! # What a step costs
 //!
-//! A dispatch spends [`Cost::STEP`], an opening spends the kernel's beta formula, and a frame is charged per new *peak* of machine depth at [`machine_frame`] — the few slots a [`Frame`] takes, priced honestly the way [`Cost::FRAME`] prices the native frame the recursive strategy takes. That difference is the whole yield: a fold's per-element price falls from the native frame row to the transitions and openings the fold actually performs.
+//! A dispatch spends [`Cost::STEP`], an opening spends the kernel's beta formula, a frame is charged per new *peak* of machine depth at [`machine_frame`] — the few slots a [`Frame`] takes, priced honestly the way [`Cost::FRAME`] prices the native frame the recursive strategy takes — and every write to the run-scoped memo is charged as the two handles it stores. That difference is the whole yield: a fold's per-element price falls from the native frame row to the transitions and openings the fold actually performs, and what the strategy amortized through its compilation-scoped memos the machine amortizes through the run-scoped one, since its internal steps bypass the hosts' tables.
 
 use {
     super::{

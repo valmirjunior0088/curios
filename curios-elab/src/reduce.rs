@@ -163,8 +163,20 @@ pub(crate) fn unfold_rec_apply(
 /// The group is `folded`'s own, deliberately: what this protects is the idempotence of forcing *this* term, so the cycle to rule out is the reduct re-mentioning the group whose call was demanded. All three outcomes are idempotent — `force(force(t)) = force(t)` — so what this clause decides is completeness, not whether the reducer stops; the budget spent per iteration already does that.
 fn force_rec(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
     // A closed term takes the machine at the eliminator's demand; the recursive loop below is the strategy for everything the gate declines.
+    //
+    // The forced value is stored in the compilation-scoped reduction cache unless it is a folded recursive spelling — a `reduce` probe must never be served a fold it expects to keep folded, but any other forced value is a weak-head form like any cached reduct. Without this store the elaborator re-ran the machine for every position that demanded the same closed value — checking, conversion, and re-validation each paid a `Str` literal's full scan while the kernel replayed its memo — and the two checkers' costs for one literal drifted to a multiple.
     if machine_admissible(context, &term) {
-        return reduce_closed(context, term, Demand::Forced);
+        let entry = term.clone();
+        let result = reduce_closed(context, term, Demand::Forced)?;
+        let folded = result.as_rec_proj().is_some()
+            || matches!(&*result, Subterm::Rec(_))
+            || matches!(&*result, Subterm::Apply(apply) if apply.head.as_rec_proj().is_some());
+
+        if !folded {
+            context.reduce(entry, &result);
+        }
+
+        return Ok(result);
     }
 
     let folded = term.clone();
