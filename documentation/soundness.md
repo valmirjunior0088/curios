@@ -63,7 +63,7 @@ Grades only. Each entry's evidence is the entry it links to.
 
 | What the kernel consults | Grade |
 | --- | --- |
-| [The evaluation memo](soundness/what-the-kernel-consults/the-evaluation-memo.md) | **argued** |
+| [The evaluation memo](soundness/what-the-kernel-consults/the-evaluation-memo.md) | **argued**, and **probed** at the case-equation interlock |
 | [Case equations inside an arm](soundness/what-the-kernel-consults/case-equations-inside-an-arm.md) | **argued** |
 | [The refinement key](soundness/what-the-kernel-consults/the-refinement-key.md) | **argued in a code comment only** |
 | [Recorded positions and sort-hood](soundness/what-the-kernel-consults/recorded-positions-and-sort-hood.md) | **argued** |

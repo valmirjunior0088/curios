@@ -554,6 +554,82 @@ fn cached_spend_never_exceeds_uncached() {
     assert!(with_memos < without, "{with_memos} against {without}");
 }
 
+/// Reduce an open term and a closed one inside an arm refining `n` to `0`, then both again after the arm retracts: the two inside reducts followed by the two outside ones.
+fn across_an_arm(kernel: &mut Kernel) -> [Term; 4] {
+    let n = binder(1, "n");
+    kernel.assume(&n, &nat_type());
+
+    let open = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&n), nat(1)));
+    let closed = chain(8);
+
+    let (inside_open, inside_closed) = kernel.scoped(|kernel| {
+        kernel.refine(Term::free_var(&n), nat(0));
+
+        (
+            kernel.reduce_forced(open.clone()).expect("reduces"),
+            kernel.reduce_forced(closed.clone()).expect("reduces"),
+        )
+    });
+
+    [
+        inside_open,
+        inside_closed,
+        kernel.reduce_forced(open).expect("reduces"),
+        kernel.reduce_forced(closed).expect("reduces"),
+    ]
+}
+
+/// An arm's case equation reaches the reduct and not the table.
+///
+/// This is the load-bearing half of the memos' first invariant, and it is a claim held in one component about another: [`Memos::storable`](super::super::Memos) admits only a *local-free* term, while [`Scope::refine`](super::super::Scope) records only a *local-bearing* scrutinee, so the two sets are disjoint and no remembered reduct can rest on an equation later retracted. What stood behind that pair was `curios-prelude-archive`'s `kernel_memo_parity`, which averages the whole prelude rather than aiming at the interlock — coverage by corpus, the standard the perimeter declines to accept elsewhere.
+///
+/// Both terms are needed and they check different halves. The open one is the equation's subject: inside the arm it reduces to `1` where nothing outside makes it anything but stuck, so the retraction has something to fail to survive — without that inequality the assertion below would hold of a kernel that had never refined anything. The closed one crosses the *other* gate: `machine_admissible` declines the closed machine while any equation is live, so its inside reduct comes from the recursive strategy, and the outside call — where the machine would otherwise run — is served by the table entry that strategy stored. Both routes have to reach the same value as a kernel that never entered the arm at all, which is what `control` is.
+///
+/// The whole sequence then runs again with the memos off, which is the parity half: with nothing remembered, an equation that leaked into a table cannot leak, so the two kernels agreeing on all four reducts is the property `kernel_memo_parity` asserts over the prelude, asked here of terms chosen to reach the gate.
+///
+/// Mutation-checked: dropping the local-free test from `Memos::storable` remembers the arm's answer for the open term under the `forced` table, and the outside reduction hands back `1` where the stuck successor of `n` is what the term reduces to — failing at the retraction assertion below and leaving the closed half green. Two cost fixtures in this module move under the same mutation, `an_unfold_hit_is_charged_what_it_replaces` and `restoring_the_budget_refills_it`; both are resource assertions, and this is the only one that sees the false equation.
+#[test]
+fn a_case_equation_reaches_the_reduct_and_not_the_memos() {
+    let mut cached = kernel();
+    let [inside_open, inside_closed, outside_open, outside_closed] = across_an_arm(&mut cached);
+
+    // The control: the same two terms under a kernel that never assumed an equation, which is what both outside reducts have to be.
+    let mut control = kernel();
+    let n = binder(1, "n");
+    control.assume(&n, &nat_type());
+    let untouched_open = control
+        .reduce_forced(Term::intrinsic(Intrinsic::nat_add(
+            Term::free_var(&n),
+            nat(1),
+        )))
+        .expect("reduces");
+    let untouched_closed = control.reduce_forced(chain(8)).expect("reduces");
+
+    assert_eq!(inside_open, nat(1), "the equation answers the open term");
+    assert_ne!(
+        inside_open, untouched_open,
+        "the equation has to change the open term, or the retraction below proves nothing"
+    );
+    assert_eq!(
+        outside_open, untouched_open,
+        "the arm's answer did not outlive the arm"
+    );
+    assert_eq!(
+        inside_closed, untouched_closed,
+        "the strategy and the machine agree on the closed term across the gate between them"
+    );
+    assert_eq!(outside_closed, untouched_closed);
+
+    let mut uncached = Kernel::uncached(1_000_000);
+    uncached.set_local_floor(1_000);
+
+    assert_eq!(
+        across_an_arm(&mut uncached),
+        [inside_open, inside_closed, outside_open, outside_closed],
+        "the memos changed no reduct on either side of the arm"
+    );
+}
+
 /// Depth is refused by the counter, and the refusal says so. Before the frame row, a reduction driven deep took real stack and the budget observed none of it — `recurse` grows rather than aborting, so what bounded depth was the host's memory rather than anything the program could be told about.
 ///
 /// The subject is a chain of nested intrinsic operands over an *open* tip — a term the closed machine's gate declines, so the recursive strategy re-enters reduction once per link and the budget affords a handful of levels and no more. The closed twin of this chain no longer trips the row at all, which is the machine's whole yield and is asserted by its own tests.
