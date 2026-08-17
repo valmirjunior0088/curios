@@ -778,6 +778,8 @@ fn survey(label: &str, source: &str) -> Vec<Region> {
 /// - Reachable regions outside `/std` and `/syn` are owned by `io/bind` and the programs' own `main`s.
 ///
 /// Retaken after M2 landed (same day): 681 regions — 574 blocked, 50 continuation-only, 57 needs-workers. Continuation scalar replacement dissolved about 170 regions corpus-wide, the fold accumulator's among them; what it left concentrates the surviving continuation-only candidates near the growth ceiling or behind arity mixing, and promotes some previously blocked flows into needs-workers as their continuation legs cleared.
+///
+/// Retaken after M4 landed (same day): the buckets read the same by coincidence of sums, but the slice sites underneath them halved — 19 to 10 in each standard string program, 41 to 29 in `monad_async` — because the window split virtualizes a suffix walk's views before the survey sees them.
 #[test]
 #[ignore = "measurement: surveys the corpus rather than asserting"]
 fn aggregate_flow_census() {
@@ -842,7 +844,7 @@ fn step_specialization_extent() {
     }
 }
 
-/// Pins the census machinery to the shapes the string walk still carries. The `/std/Str/fold` accumulator region this test originally pinned — five arity-2 constructions meeting the contified loop's parameter — is deliberately *absent* now: continuation scalar replacement (M2) dissolves it before the survey runs, which is the campaign's acceptance echoed by its own instrument. What remains, and what M4 flips next, is the suffix-view rope region: slice results circulating by continuation transfer under the window-read consumer set.
+/// Pins the census machinery to the shapes the string walk still carries — and to the two it no longer does. The accumulator region dissolved when continuation scalar replacement landed (M2), and the suffix-view rope region dissolved when the window split landed (M4): both absences are the campaign's acceptance echoed by its own instrument. What survives, until a variant-width capability exists, is the scan-state flow: a blocked tuple region whose parameters receive call results.
 #[test]
 fn census_surveys_the_fold_accumulator_region() {
     let source = r#"
@@ -868,13 +870,16 @@ fn census_surveys_the_fold_accumulator_region() {
         "the accumulator region dissolved into fields before the survey: {accumulator:#?}",
     );
 
-    // The reads themselves land on a further alias in this program's grouping, so the pin is the region's existence and its travel, not its consumer set.
-    regions
-        .iter()
-        .find(|region| {
-            region.slice_sites.len() >= 2
-                && !region.params.is_empty()
-                && region.classes.contains("continuation-transfer")
-        })
-        .unwrap_or_else(|| panic!("the suffix-view rope region is surveyed; got {regions:#?}"));
+    let rope = regions.iter().find(|region| {
+        region.slice_sites.len() >= 2
+            && !region.params.is_empty()
+            && region.classes.contains("continuation-transfer")
+    });
+    assert!(
+        rope.is_none(),
+        "the suffix-view region virtualized into window fields before the survey: {rope:#?}",
+    );
+
+    // What survives in this all-ASCII fixture is the Io plumbing no mechanism claims — enough to pin that the machinery still surveys; the variant-width scan flow needs multi-byte text and is the corpus survey's to report.
+    assert!(!regions.is_empty(), "the census still surveys the walk");
 }

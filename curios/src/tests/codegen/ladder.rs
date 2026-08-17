@@ -192,6 +192,17 @@ const WALK_MIRROR_INDEXED: &str = include_str!(concat!(
 ///
 /// The digit walk lands *below* every figure this ladder has recorded for it, and the multi-byte walk gains about thirteen percent against its pre-campaign baseline. The scan rebuild remains — three arity-4 constructions, one per arm — and for a recorded reason: the loop's scan parameter mixes arity-1 interned constants with the resumes' arity-4 rebuilds, the variant-width shape no exact product describes, so its removal awaits either variant-aware splitting or a uniform-width variant lowering, each a measured decision the value-lifetime spec records. The suffix view is M4's, and it is now the walk's dominant remaining obligation.
 ///
+/// ## After the suffix crossed as a window (M4, 2026-08-17)
+///
+/// The window split virtualizes the suffix: the loop carries `(base, offset, length)`, the per-character `call $bytes/slice` and the view it allocated are gone together — the half an allocation count does not see — and every read is an index into one payload:
+///
+/// | Program | after M2 | after M4 |
+/// | --- | --- | --- |
+/// | `parse_digits` at N = 1 000 000 | 0.88 0.88 0.87 0.87 0.87 | 0.77 0.76 0.77 0.76 0.77 |
+/// | `parse_multibyte` at N = 300 000 | 0.65 0.65 0.68 0.65 0.65 | 0.59 0.58 0.59 0.59 0.59 |
+///
+/// Against the pre-campaign baseline the digit walk is fifteen percent faster and the multi-byte walk twenty-three, with the variant-width scan rebuild the one obligation left on the per-character path. The spec's ordering held: the window was the destination, and the tuple work was its substrate.
+///
 /// ## The static half, and why it divides almost nothing
 ///
 /// ```text
@@ -323,7 +334,7 @@ fn returned_scan_is_delivered_as_fields_and_rebuilt_by_callers() {
         "and step constructs no scan of its own",
     );
 
-    // The fold's per-character shape after M2, pinned so the campaign's milestones flip it deliberately. The accumulator is gone: continuation scalar replacement threads `{A, Nat}` as fields through the contified loop, seed included. The scan rebuild remains, and for a recorded reason rather than a gap: the loop's scan parameter mixes arity-1 interned constants with the resumes' arity-4 rebuilds — the variant-width shape no exact product describes — so removing it awaits either variant-aware splitting or a uniform-width variant lowering, each a measured decision the spec records. The suffix view is M4's.
+    // The fold's per-character shape after M4, pinned so the campaign's milestones flip it deliberately. The accumulator travels as fields (M2), and the suffix view is virtualized (M4): the walk carries `(base, offset, length)` through the loop, its slice is an extent guard plus an offset sum, and the per-character view allocation vanished together with the helper call that built it — the half an allocation count does not see. The scan rebuild remains, for a recorded reason rather than a gap: the loop's scan parameter mixes arity-1 interned constants with the resumes' arity-4 rebuilds — the variant-width shape no exact product describes — so removing it awaits either variant-aware splitting or a uniform-width variant lowering, each a measured decision the spec records.
     let fold = split
         .iter()
         .find(|function| function.name.contains("$/std/Str/fold"))
@@ -339,7 +350,11 @@ fn returned_scan_is_delivered_as_fields_and_rebuilt_by_callers() {
         0,
         "the accumulator travels as fields on every path, seed included",
     );
-    assert_eq!(in_fold("call $bytes/slice"), 3, "the suffix view per arm");
+    assert_eq!(
+        in_fold("call $bytes/slice"),
+        0,
+        "the suffix view is a virtual window: no helper call, no view allocation",
+    );
     assert_eq!(in_fold("call $bytes/read"), 3, "the byte read per arm");
     assert_eq!(in_fold("call_ref $clsr/2"), 2, "the user's step closure");
 }

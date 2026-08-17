@@ -10,7 +10,9 @@ M0 is complete (2026-08-17): the census, attribution and extent instruments are 
 
 M1a is complete (2026-08-17): the deferral is one rule under the shared solver, `split_returns` delivers `/syn/Str/step`'s result as four fields — unlocked by reworking `/std/Str/utf8/check` to thread its scan by recursion — and the relocated caller-side rebuild is measured and accepted as the intermediate M2 removes where the shape allows.
 
-M1b and M2 are complete (2026-08-17): the forward origin analysis, the recorded fields representation with its verifier rule, and continuation scalar replacement are landed, the fold's accumulator travels as fields, the digit walk beats every figure the ladder ever recorded, and the multi-byte walk gains about thirteen percent against its pre-campaign baseline. The scan rebuild is recorded retained cost — a variant-width flow, per M2's verdict — and the spine proceeds at M4.
+M1b and M2 are complete (2026-08-17): the forward origin analysis, the recorded fields representation with its verifier rule, and continuation scalar replacement are landed, the fold's accumulator travels as fields, the digit walk beats every figure the ladder ever recorded, and the multi-byte walk gains about thirteen percent against its pre-campaign baseline. The scan rebuild is recorded retained cost — a variant-width flow, per M2's verdict.
+
+M4 is complete (2026-08-17): the suffix view is a virtual window — no per-character view, no helper call — carried as `(base, offset, length)` under the same recorded representation, with the eager bounds trap preserved by the `WindowExtent` guard. Against the pre-campaign baseline the digit walk is fifteen percent faster and the multi-byte walk twenty-three. The spine proceeds at M5.
 
 ## Cost contract
 
@@ -291,6 +293,8 @@ M3 stands beside the spine as a conditional annex, presumed stopped until M0 arg
 - Thread prepared windows through continuation parameters and backedges as clients of M2's recorded representation — the suffix that rides the loop is the case the spine exists for, and it must not grow a second coordination discipline of its own.
 
 - Materialize at opaque boundaries and remove the recursive suffix-view allocation in raw pre-Binaryen output — together with the helper call that produced it, which is the half an allocation count does not see.
+
+- **Done (2026-08-17), smaller than specified, and the specification's own argument is corrected by the evidence.** The descriptor prescribed here — a dedicated preparing operation with one successor per `Empty`/`Whole`/`Proper` case — proved unnecessary: a universal `(base, offset, length)` triple suffices once the base is always a valid rope reference, because any rope opens as its own whole window with one length read, a virtual slice is offset arithmetic behind the new `WindowExtent` guard — which keeps the eager bounds trap at the original evaluation point and refuses to constant-fold a trap away — and an opaque boundary would materialize through the existing slice helper, which reproduces the empty, whole and proper representation choices exactly. The three cases are behavioral facts of the triple, not IR constructors. Forcing defers from slice time to first read, and the read helper's own memoized force makes that value-identical; the emitted fold body carries no `call $bytes/slice` and no view construction, the walk-mirror slice sites halve corpus-wide, and the first implementation is region-atomic — a region with any hostile use is declined whole, the conservative limit this document allows. The window split shares `fields.rs`, the `FieldGroup` record, and the growth ceiling with the product split, so no second coordination discipline grew.
 
 ### M5 — Cost contract
 
