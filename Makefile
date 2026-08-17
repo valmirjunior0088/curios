@@ -1,3 +1,8 @@
+.PHONY: clean
+
+clean:
+	git clean -xffd
+
 CARGO_TARGET_DIR ?= target
 
 .PHONY: curios/runtime
