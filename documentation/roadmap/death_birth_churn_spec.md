@@ -56,7 +56,7 @@ The spine is `M0 → M1 → M2`. M0 and M1 are independent and may land in eithe
 
 - `spines`: N LCG-keyed inserts into `/std/Map` followed by a fold, printing modulo a prime. Adds the live-set-under-churn dimension — `chain` keeps almost nothing alive and `trees` keeps everything, and a collector's economics live between — and its header records two confounds plainly: it compares map algorithms across contestants, and `/std/Map` deliberately has no `Key(Nat)`, so LCG keys enter through a byte-string encoding at the boundary that no imperative contestant's hash map mirrors. It orients rather than proves.
 
-- No M0 workload churns the array substrate, so lever B's M0 clause cannot be read off this enumeration: either a builder workload — packed accumulation over `Bytes` — joins M0, or the lever's copy-bound evidence reroutes to M1's census. Open, to be decided before M2 reads M0.
+- No M0 workload churns the array substrate, and by decision none joins yet: the rope amortizes idiomatic accumulation into O(1) nodes with one force-time fill, so a synthetic builder workload would price a shape no measurement yet shows users writing. Lever B's copy-bound evidence therefore comes from M1's census, and a builder workload joins M0 only if the census finds the population first.
 
 - All take their iteration counts from runtime input, per the harness's discipline that keeps a closed program from const-folding away, and every contestant must print the same number.
 
@@ -74,7 +74,7 @@ The spine is `M0 → M1 → M2`. M0 and M1 are independent and may land in eithe
 
 - Lever A — the engine: a wasmtime pin bump and heap sizing now, a generational collector upstream as the horizon. Admission: the churn class — not one workload — is collection-bound. An engine knob was already refused once as a single-benchmark overfit; it enters here only as the class-wide answer the WasmGC mainstream ships.
 
-- Lever B — static array-scoped reuse: optimizer-proven non-escaping, linearly threaded array builders reuse their dying predecessor in place, over the already-mutable array substrate only. Admission: M1 shows the builder population in real code, and M0 shows the gap is copy-bound where arrays churn.
+- Lever B — static array-scoped reuse: optimizer-proven non-escaping, linearly threaded array builders reuse their dying predecessor in place, over the already-mutable array substrate only. Admission: M1 shows the builder population in real code and shows its churn copy-bound — both halves census questions, per M0's array decision.
 
 - Lever C — construction avoidance: spread coalescing (several updates in one body fold to one construction) and constructor-tail rewrites. Admission: M1 shows multi-spread bodies or constructor-tail recursions at any nontrivial frequency, because the rewrites are cheap.
 
