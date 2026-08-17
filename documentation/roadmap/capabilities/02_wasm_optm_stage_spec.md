@@ -9,10 +9,9 @@ Binaryen is the last transformation the emitted module undergoes (`curios-binary
 ## Constraints, verified
 
 - `optimize` consumes and produces *binary* bytes. `curios-wasm`'s existing parser is a **text-format** parser (built on the shared text combinators), paired with `print.rs`; the binary side has only the encoder, `writer.rs`/`to_bytes`. Parsing Binaryen's output therefore means writing the encoder's inverse, not extending the wat parser — Binaryen's own text output is a folded s-expression dialect, a second grammar with no other consumer.
-- The conformance target is bounded and explicit: `optimize` pins the feature set to exactly what the emitter may produce and Wasmtime's engine enables — the mask's eight features today (mutable globals, nontrapping float-to-int, bulk memory, sign extension, tail calls, reference types, multivalue, GC), ten once [01_wasm_full_conformance_spec.md](01_wasm_full_conformance_spec.md)'s M1 adds multi-memory and memory64 — deliberately not `BinaryenFeatureAll`. The reader must cover *this envelope*, never all of WebAssembly: no threads, SIMD, or exceptions.
+- The conformance target is bounded and explicit: `optimize` pins the feature set to exactly what the emitter may produce and Wasmtime's engine enables — the mask's eleven features (mutable globals, nontrapping float-to-int, bulk memory and its `memory.copy`/`memory.fill` carve-out, sign extension, tail calls, reference types, multivalue, multi-memory, memory64, GC), deliberately not `BinaryenFeatureAll`. The reader must cover *this envelope*, never all of WebAssembly: no threads, SIMD, exceptions, extended constant expressions, custom page sizes, or stack switching.
 - `curios-pipeline` must not depend on Binaryen (the pure-pipeline invariant). The `Stage` enum is plain data, so the pipeline may *define* the variant while only the `curios` crate ever *constructs* it.
-- The instruction roster already models the envelope's breadth in most places — `Select`, `BrTable`, the tail calls, the sign-extension and saturating-truncation families — and the writer already emits the name custom section for the module, functions, locals, types, and fields ([01_wasm_full_conformance_spec.md](01_wasm_full_conformance_spec.md) completes the remaining index spaces), which is what lets Binaryen preserve names so a parsed-back module displays readably rather than as bare indices.
-- The known representation gaps are exactly [01_wasm_full_conformance_spec.md](01_wasm_full_conformance_spec.md)'s verified gap list — the memory, table, data, and element sections with their instruction families, name subsections, and encodings — forms bulk-memory-enabled optimization can legitimately rewrite into. The reader cannot land before the representation can hold them.
+- The representation is complete over that envelope, so the reader has nothing to wait for: every declared item, segment mode, and instruction family the mask admits is modeled, encoded, printed and parsed, and the writer emits a name-section subsection for every index space — which is what lets Binaryen preserve names so a parsed-back module displays readably rather than as bare indices. What the reader owes is the inverse of `writer.rs` as it stands, including the encodings only the optimizer's own rewrites reach: an elem or data segment in a flag form the emitter never chooses, a memarg carrying an explicit memory index, a 64-bit limits header.
 
 ## Design
 
@@ -29,11 +28,10 @@ The reader trusts shape rather than re-validating: its input is Binaryen's alrea
 
 ## Sequencing and milestones
 
-- **M1 — representation fullness.** Implement [01_wasm_full_conformance_spec.md](01_wasm_full_conformance_spec.md): sections, instructions, writer, text parser, printer, and round-trip tests for every gap it names.
-- **M2 — the reader.** `reader.rs`/`from_bytes` over the complete representation, with both laws pinned and the name-section recovery tested.
-- **M3 — the stage.** The enum variant, the `NAMES` entry, the `to_cwasm`-path construction, and the CLI wiring.
+- **M1 — the reader.** `reader.rs`/`from_bytes` over the complete representation, with both laws pinned and the name-section recovery tested.
+- **M2 — the stage.** The enum variant, the `NAMES` entry, the `to_cwasm`-path construction, and the CLI wiring.
 
-M1 is [01_wasm_full_conformance_spec.md](01_wasm_full_conformance_spec.md)'s to deliver; M2 is the bulk; M3 is small and strictly last.
+M1 is the bulk; M2 is small and strictly last. The representation fullness both depend on landed separately and is no longer a milestone here.
 
 ## Non-goals
 
@@ -50,11 +48,11 @@ M1 is [01_wasm_full_conformance_spec.md](01_wasm_full_conformance_spec.md)'s to 
 
 ## Tests
 
-- Per-construct binary round trips (`from_bytes ∘ to_bytes`) as each M1 gap lands, beside the existing text round trips.
+- Per-construct binary round trips (`from_bytes ∘ to_bytes`) beside the existing text round trips, one for every construct those already cover — and, once the reader exists, they supersede `curios/src/tests/wasm_conformance.rs`'s standing-in-for-a-reader validation probes, which exist only because acceptance by the engine was the strongest binary-side check available without one.
 - The optimize round trip over the codegen corpus: every module the test suite emits, optimized then parsed, with the existing behavioral assertions untouched.
 - Name recovery: a module with named functions, locals, types, and fields keeps those names through `optimize` and `from_bytes`; a Binaryen-minted local displays under the `~`-scheme fallback.
 - CLI: `--print wasm-optm` renders; `--print wasm,wasm-optm` renders both; an unrequested `wasm-optm` parses nothing.
 
 ## Retirement criteria
 
-- Before this specification is deleted: the reader's contract, envelope, and laws are recorded in `curios-wasm`'s documentation and tests; the downstream-constructed-stage deviation is recorded on the `Stage` enum; [01_wasm_full_conformance_spec.md](01_wasm_full_conformance_spec.md) is implemented and retired; the roadmap subitem is a checked unlinked summary; and no reference to this filename remains.
+- Before this specification is deleted: the reader's contract, envelope, and laws are recorded in `curios-wasm`'s documentation and tests; the downstream-constructed-stage deviation is recorded on the `Stage` enum; the roadmap subitem is a checked unlinked summary; and no reference to this filename remains.
