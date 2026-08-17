@@ -47,7 +47,7 @@ Grades only. Each entry's evidence is the entry it links to.
 | [Type former well-formedness](soundness/per-term-rules/type-former-well-formedness.md) | **probed** |
 | [Scrutinee refinement](soundness/per-term-rules/scrutinee-refinement.md) | **probed** |
 | [Intrinsic signatures](soundness/per-term-rules/intrinsic-signatures.md) | auditable only |
-| [Intrinsic fold laws and the free-monoid peel](soundness/per-term-rules/intrinsic-fold-laws-and-the-free-monoid-peel.md) | **argued** in code comments only, except the `Nat` division family and its bounds oracle, which are **probed** |
+| [Intrinsic fold laws and the free-monoid peel](soundness/per-term-rules/intrinsic-fold-laws-and-the-free-monoid-peel.md) | **probed** at the `Nat` peel's three verdicts, the division family and its bounds oracle; **argued** in code comments only for the `Bin`/`List` fold laws |
 | [The closed machine](soundness/per-term-rules/the-closed-machine.md) | **probed** — behavioral battery, kernel differential at both demands, whole-prelude certification; one memo-keying divergence found and closed |
 | [Telescope instantiation](soundness/per-term-rules/telescope-instantiation.md) | **probed** incidentally, never directly |
 | [Checked rules at deferred child positions](soundness/per-term-rules/checked-rules-at-deferred-child-positions.md) | **argued** |

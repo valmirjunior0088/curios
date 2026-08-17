@@ -2051,7 +2051,10 @@ mod tests {
             Comparison, Reducer, compare_nat, from_ordering, nat_bound, nat_euclid_split,
             reduce_intrinsic,
         },
-        crate::{Category, Cost, Free, Intrinsic, Nat, One, ReduceError, Scope, Subterm, Term},
+        crate::{
+            Category, Cost, Free, Intrinsic, Nat, One, Peel, ReduceError, Scope, Subterm, Term,
+            peel_nat,
+        },
         curios_num::{Integer, Natural},
         curios_utilities::{Grain, PackedBin},
     };
@@ -2481,6 +2484,13 @@ mod tests {
         Scope::close(One, &[binder], term).open(&[&value])
     }
 
+    fn as_nat(term: &Term) -> Nat {
+        match &**term {
+            Subterm::Intrinsic(Intrinsic::Nat(nat)) => nat.clone(),
+            _ => unreachable!("a folded `Nat` carrying a successor floor"),
+        }
+    }
+
     // Soundness gate: whatever the split returns must satisfy the Euclidean specification — `n·quotient + remainder` equals the dividend at every instantiation, and the remainder is provably below `n`. Those two together *are* the definition of division, so a split passing both cannot be a false equation whatever its symbolic parts take.
     #[test]
     fn nat_euclid_split_is_a_euclidean_division() {
@@ -2520,6 +2530,139 @@ mod tests {
                 );
             }
         }
+    }
+
+    // Soundness gate for the peel's own verdicts over values, which nothing stated before this: `Nat::cancel_common` decides all three, and the perimeter grades the law behind them argued in code comments only.
+    //
+    // Each verdict is believed by a different consumer, so each has its own obligation. A `Peel::Equal` reaches conversion as a definitional equation, and congruence carries a false one to `False`. A `Peel::Clash` reaches inversion as *impossible*, which excuses an omitted arm — the vacuous-elimination route. `Peel::Continue` is the one with no property stated anywhere, and it needs the strongest: the caller compares the residuals and reports *their* verdict as the original pair's, so the residuals must be equi-satisfiable with the pair they replaced, not merely implied by it. A residual pair that disagreed where the originals agreed would turn a later clash into a clash on the originals.
+    //
+    // So each verdict is checked against ground truth at every closed instantiation of its symbols, which is the only thing that can distinguish a valid equation from a plausible one. The grid reaches what cancelling *summands* newly decides rather than the successor spine alone: a commuted sum, a summand carried at multiplicity two, a floor surviving over shared summands, and two spellings of one number that share no summand syntactically. `Peel::Stuck` is asserted unreachable here, which is the claim `peel_nat`'s documentation makes and no fixture held.
+    #[test]
+    fn every_nat_peel_verdict_holds_at_every_closed_instantiation() {
+        let (first, second) = (Free::local(0, Some("x")), Free::local(1, Some("y")));
+        let (x, y) = (Term::free_var(&first), Term::free_var(&second));
+
+        let value_at = |term: &Term, a: u32, b: u32| {
+            let closed = fold(at(at(term.clone(), &first, lit(a)), &second, lit(b)));
+            let (floor, inner) = Nat::decompose(&closed);
+            assert!(Nat::is_zero(&inner), "a closed Nat folds to a literal");
+            floor
+        };
+
+        let cases = [
+            (
+                "x + y + 1 ~ y + x + 1",
+                fold(plus(plus(x.clone(), y.clone()), lit(1))),
+                fold(plus(plus(y.clone(), x.clone()), lit(1))),
+            ),
+            (
+                "x + 2 ~ x + 1",
+                fold(plus(x.clone(), lit(2))),
+                fold(plus(x.clone(), lit(1))),
+            ),
+            (
+                "x + 1 ~ y + 1",
+                fold(plus(x.clone(), lit(1))),
+                fold(plus(y.clone(), lit(1))),
+            ),
+            (
+                "x + x + 1 ~ x + 1",
+                fold(plus(plus(x.clone(), x.clone()), lit(1))),
+                fold(plus(x.clone(), lit(1))),
+            ),
+            (
+                "x + y + 3 ~ y + 1",
+                fold(plus(plus(x.clone(), y.clone()), lit(3))),
+                fold(plus(y.clone(), lit(1))),
+            ),
+            (
+                "x + x + y + 1 ~ x + y + 1",
+                fold(plus(plus(plus(x.clone(), x.clone()), y.clone()), lit(1))),
+                fold(plus(plus(x.clone(), y.clone()), lit(1))),
+            ),
+            ("0 ~ x + 1", lit(0), fold(plus(x.clone(), lit(1)))),
+            (
+                "2·x + 1 ~ x + x + 1",
+                fold(plus(scaled(2, x.clone()), lit(1))),
+                fold(plus(plus(x.clone(), x.clone()), lit(1))),
+            ),
+        ];
+
+        let (mut equal, mut clash, mut carried) = (0, 0, 0);
+
+        for (label, left, right) in cases {
+            let peel = peel_nat(&as_nat(&left), &as_nat(&right));
+
+            match &peel {
+                Peel::Equal => equal += 1,
+                Peel::Clash => clash += 1,
+                Peel::Continue(..) => carried += 1,
+                Peel::Stuck => {}
+            }
+
+            for a in [0u32, 1, 2, 5] {
+                for b in [0u32, 1, 2, 5] {
+                    let agree = value_at(&left, a, b) == value_at(&right, a, b);
+
+                    match &peel {
+                        Peel::Equal => assert!(
+                            agree,
+                            "`{label}` was decided equal but differs at x = {a}, y = {b}"
+                        ),
+                        Peel::Clash => assert!(
+                            !agree,
+                            "`{label}` was decided impossible but holds at x = {a}, y = {b}"
+                        ),
+                        Peel::Continue(residual_left, residual_right) => assert_eq!(
+                            value_at(residual_left, a, b) == value_at(residual_right, a, b),
+                            agree,
+                            "`{label}`'s residuals disagree with the pair they replaced at x = {a}, y = {b}",
+                        ),
+                        Peel::Stuck => unreachable!("`{label}`: peeling a `Nat` never declines"),
+                    }
+                }
+            }
+        }
+
+        // Every verdict above holds vacuously of a grid that reaches only one of them, and `Continue` is the one a shape falls to when nothing fires — so a grid that decided nothing would pass while checking nothing. This is the count that says otherwise, and it is an assertion rather than a comment because the perimeter's own record is that inert rules are what hide defects.
+        assert_eq!(
+            (equal, clash, carried),
+            (1, 3, 4),
+            "the grid stopped reaching every peel verdict",
+        );
+    }
+
+    // What matching summands *up to universe instances* actually decides, stated over a term rather than in a comment. Two occurrences of one polymorphic name carry independently minted instances, so `Nat::cancel_common` and `compare_nat` both key through `project_erased_universes` to stop a bound mentioning one from stalling forever — and the equation that buys is this one: two summands the ordinary structural comparison would refuse, because it reaches the differing levels, are cancelled against each other and the sums decide equal.
+    //
+    // **The premise is that no `Nat` value can depend on a level, and the projection is unsound the moment that stops holding.** The same projection, read as a quotient by definitional equality, is what let the certifier's refinement key certify a coercion between distinct types, because a *type* can depend on a level: `Type u` embeds one in a term, so `wrap(Type u)` is genuinely two values at two instances (`curios-cert`'s `recheck::tests::a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance`). What stops the same argument here is narrower than the comment beside the code claims: not that instances are erased before anything runs, but that Core offers no elimination from a type or a level into a `Nat`, so the two summands below denote one number however they are spelled. Adding one — any intrinsic reading a level or a sort as a count — makes this fixture a witness rather than a record.
+    //
+    // The control is the second pair, which shares that shape in every respect except the one that matters: distinct *arguments* under one instance must not cancel, or the key would be collapsing terms wholesale rather than levels.
+    #[test]
+    fn summands_cancel_across_a_universe_instance_and_not_across_an_argument() {
+        let instanced =
+            |level: u32| Term::universe_inst(symbol(0, "g"), vec![crate::Level::constant(level)]);
+
+        let peel = peel_nat(
+            &as_nat(&fold(plus(instanced(0), lit(1)))),
+            &as_nat(&fold(plus(instanced(1), lit(1)))),
+        );
+
+        assert!(
+            matches!(peel, Peel::Equal),
+            "`g<0> + 1` and `g<1> + 1` differ only in a level, which is not part of a number",
+        );
+
+        let applied = |argument: Term| Term::apply(instanced(0), vec![argument]);
+
+        let peel = peel_nat(
+            &as_nat(&fold(plus(applied(symbol(1, "x")), lit(1)))),
+            &as_nat(&fold(plus(applied(symbol(2, "y")), lit(1)))),
+        );
+
+        assert!(
+            matches!(peel, Peel::Continue(..)),
+            "`g<0>(x) + 1` and `g<0>(y) + 1` are undecided, not one number",
+        );
     }
 
     // The rule the base-256 encodings need: a digit whose carrier bounds it below the divisor cannot carry, so the scaled symbol divides out exactly and the digit is the whole remainder.
