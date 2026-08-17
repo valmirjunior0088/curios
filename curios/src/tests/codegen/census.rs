@@ -1,4 +1,4 @@
-//! Aggregate-flow census over optimized CPS — the corpus survey `documentation/roadmap/technical_debt/03_value_lifetime_cost_spec.md` names in M0.
+//! Aggregate-flow census over optimized CPS — the corpus survey behind `documentation/design/toolchain/a-value-costs-when-it-is-kept-not-when-it-is-named.md`.
 //!
 //! For every corpus program this classifies each tuple construction and rope-slice result by how its value travels: projection, continuation transfer, known-function transfer, return, closure capture, heap storage, unknown call, and mixed flow. Values that merge at a parameter are surveyed as one region, because eligibility in the spec is a property of the merged flow rather than of a single construction site — the fold accumulator's arm constructions and the loop parameter they meet at are one candidate, not five.
 //! The census is a measurement, not an assertion: the ignored test prints the classification, and the machinery is pinned by the focused test below rather than by the survey's own figures.
@@ -810,7 +810,7 @@ fn aggregate_flow_census() {
     println!("  reachable-region owners outside /std and /syn: {reachable_outside:?}");
 }
 
-/// The clone extent the specializer's budget compares, measured on the functions the value-lifetime spec names. `specialize_call_patterns` refuses a clone when the callee's copied extent plus one exceeds `BRANCH_SPECIALIZATION_GROWTH_LIMIT` (`curios-cont/src/cps/optimize.rs`), and the spec's claim that the scan-state candidate is declined *on a budget rather than on a rule* is a claim about these numbers. Run explicitly:
+/// The clone extent the specializer's budget compares, measured on the functions the value-lifetime decision names. `specialize_call_patterns` refuses a clone when the callee's copied extent plus one exceeds `BRANCH_SPECIALIZATION_GROWTH_LIMIT` (`curios-cont/src/cps/optimize.rs`), and the claim that the scan-state candidate is declined *on a budget rather than on a rule* is a claim about these numbers. Run explicitly:
 ///
 /// ```sh
 /// cargo test --package curios --lib --all-features -- --ignored --nocapture step_specialization_extent

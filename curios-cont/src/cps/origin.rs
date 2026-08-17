@@ -1,6 +1,6 @@
 //! Where a value comes from, followed forward: whether every flow reaching it is an exact tuple construction of one arity, or something the rewrite cannot see through.
 //!
-//! The demand lattice is the backward half — how a received value is *used*. This is the forward half the value-lifetime specification separates from it: whether a parameter's every incoming edge carries a visible construction or an alias of one, which is what makes a merged flow *exclusive* and a scalar-replacement rewrite able to say what fields exist on every path. The two halves have separate tests and separate lattices, even though the eventual rewrite consumes them together.
+//! The demand lattice is the backward half — how a received value is *used*. This is the forward half the value-lifetime decision separates from it: whether a parameter's every incoming edge carries a visible construction or an alias of one, which is what makes a merged flow *exclusive* and a scalar-replacement rewrite able to say what fields exist on every path. The two halves have separate tests and separate lattices, even though the eventual rewrite consumes them together.
 //!
 //! A region is entered by constructions but circulates through aliases: a loop arm that passes the loop's own parameter back unchanged contributes that parameter's own fact, which the fixpoint resolves to the constructions that entered it — so an every-edge-constructs reading is not expressible here by design, because it would decline exactly the loops the specification exists for.
 //!
