@@ -18,6 +18,7 @@ Each results file is a single-sitting snapshot with its own commentary:
 | [03 — Nothing moved, and that was the point](03_RESULTS.md)      | 2026-07-31 |
 | [04 — The run that had to fix the compiler first](04_RESULTS.md) | 2026-08-09 |
 | [05 — The plateau broke, and only where it was aimed](05_RESULTS.md) | 2026-08-17 |
+| [06 — The other column halved, and one commit did it](06_RESULTS.md) | 2026-08-17 |
 
 ### Curios across runs
 
@@ -98,6 +99,15 @@ The workload and the execution setup are fixed across runs, but the *toolchains*
       <td align="right">0.67×</td>
       <td align="right">0.68×</td>
     </tr>
+    <tr>
+      <td>06</td>
+      <td align="right">293.1 ± 1.1</td>
+      <td align="right">0.66×</td>
+      <td align="right">0.99×</td>
+      <td align="right">293.2 ± 1.4</td>
+      <td align="right">0.66×</td>
+      <td align="right">0.99×</td>
+    </tr>
   </tbody>
 </table>
 
@@ -173,6 +183,15 @@ The workload and the execution setup are fixed across runs, but the *toolchains*
       <td align="right">249.6 ± 3.8</td>
       <td align="right">0.77×</td>
       <td align="right">1.02×</td>
+    </tr>
+    <tr>
+      <td>06</td>
+      <td align="right">121.1 ± 1.5</td>
+      <td align="right">0.38×</td>
+      <td align="right">0.49×</td>
+      <td align="right">121.4 ± 0.6</td>
+      <td align="right">0.38×</td>
+      <td align="right">0.49×</td>
     </tr>
   </tbody>
 </table>
