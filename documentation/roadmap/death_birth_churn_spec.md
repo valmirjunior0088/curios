@@ -2,9 +2,9 @@
 
 ## Status
 
-This specification defines a measurement program — two benchmark workloads and a static census — and the lever gate any mechanism addressing allocation churn must pass. It is deliberately mechanism-blocking: no milestone below changes a representation, an encoding, or the runtime, and the levers in M2 are admitted or refused on M0's and M1's numbers alone.
+This specification defines a measurement program — benchmark workloads and a static census — and the lever gate any mechanism addressing allocation churn must pass. It is deliberately mechanism-blocking: no milestone below changes a representation, an encoding, or the runtime, and the levers in M2 are admitted or refused on M0's and M1's numbers alone.
 
-Nothing is started.
+M0's substrate workload, `chain`, landed in the harness on 2026-08-17 and awaits its first capture. Everything else — the two named workloads, the census, the gate — is not started.
 
 ## The question under measurement
 
@@ -48,13 +48,17 @@ The spine is `M0 → M1 → M2`. M0 and M1 are independent and may land in eithe
 
 ### M0 — The workloads
 
-- Add two workload directories beside `lcg/` and `trees/`, each with the per-contestant sources the harness's layout prescribes.
+- The substrate workload exists: `chain`, landed 2026-08-17 beside `lcg/` and `trees/`, rebuilds a cons spine K times with nothing surviving the step that replaces it. It prices death-birth churn against every contestant's allocator and nothing more — on this shape the imperative contestants' obvious spelling also rebuilds cell by cell, so `chain` compares memory-management strategies, not purity against mutation. Its first capture is pending.
 
-- `churn`: a record of about six fields threaded through N LCG-fed steps, two fields updated per step via spread, printing one field modulo a prime. The purest record-update signal — the imperative contestants mutate a struct, Lean's structure update gets reuse, Curios reconstructs — with the minimal algorithmic confound.
+- Two workload directories remain to add, each with the per-contestant sources the harness's layout prescribes.
 
-- `spines`: N LCG-keyed inserts into `/std/Map` followed by a fold, printing modulo a prime. Adds the live-set-under-churn dimension, and its header records the confound plainly: it also compares map algorithms across contestants, so it orients rather than proves.
+- `churn`: a record of about six fields threaded through N LCG-fed steps, two fields updated per step via spread, printing one field modulo a prime. The purest record-update signal, and the one workload where the purity tax appears as users feel it — the imperative contestants mutate a struct in place and allocate nothing, Lean's structure update gets reuse, Curios reconstructs — with the minimal algorithmic confound.
 
-- Both take their iteration counts from runtime input, per the harness's discipline that keeps a closed program from const-folding away, and every contestant must print the same number.
+- `spines`: N LCG-keyed inserts into `/std/Map` followed by a fold, printing modulo a prime. Adds the live-set-under-churn dimension — `chain` keeps almost nothing alive and `trees` keeps everything, and a collector's economics live between — and its header records two confounds plainly: it compares map algorithms across contestants, and `/std/Map` deliberately has no `Key(Nat)`, so LCG keys enter through a byte-string encoding at the boundary that no imperative contestant's hash map mirrors. It orients rather than proves.
+
+- No M0 workload churns the array substrate, so lever B's M0 clause cannot be read off this enumeration: either a builder workload — packed accumulation over `Bytes` — joins M0, or the lever's copy-bound evidence reroutes to M1's census. Open, to be decided before M2 reads M0.
+
+- All take their iteration counts from runtime input, per the harness's discipline that keeps a closed program from const-folding away, and every contestant must print the same number.
 
 - Deliverable: the workloads in the harness and their first capture in a results file; every figure lives there, none here.
 
