@@ -761,12 +761,12 @@ where
             Instr::ArrayLen => self.gc_op(15)?,
             Instr::ArrayFill { type_name } => self.gc_type_op(16, type_name)?,
             Instr::ArrayCopy {
-                source_name,
                 target_name,
+                source_name,
             } => {
                 self.gc_op(17)?;
-                self.write_type_name(source_name)?;
                 self.write_type_name(target_name)?;
+                self.write_type_name(source_name)?;
             }
             Instr::ArrayInitData {
                 type_name,

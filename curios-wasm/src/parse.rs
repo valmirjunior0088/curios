@@ -645,9 +645,9 @@ fn parse_aggregate_instr<'a>() -> Parser<'a, Instr> {
     .or(parse_literal("array.copy")
         .and_keep(parse_type_name())
         .and(parse_type_name())
-        .map(|(source_name, target_name)| Instr::ArrayCopy {
-            source_name,
+        .map(|(target_name, source_name)| Instr::ArrayCopy {
             target_name,
+            source_name,
         }))
     .or(parse_literal("array.init_data")
         .and_keep(parse_type_name())

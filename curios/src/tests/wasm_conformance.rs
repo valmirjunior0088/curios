@@ -1,4 +1,4 @@
-//! `curios-wasm`'s memory, table, and segment surface, checked against the engine that has to accept it.
+//! `curios-wasm`'s encoder, checked against the engine that has to accept what it writes — chiefly the memory, table, and segment surface, and anything else whose encoding the engine can tell apart from a plausible wrong one.
 //!
 //! These probes live here rather than in `curios-wasm` because that crate must not name wasmtime — the pin is `curios-runtime`'s single row — and `curios_runtime::validate` is the only thing that reads an encoded module back. Until a binary reader exists (`Stage::WasmOptm`'s specification owns it), acceptance by the engine *is* the binary-side check: a flag byte, a limits header, or a memarg written wrong is a validation failure here rather than a silent miscompile later.
 //!
@@ -223,6 +223,32 @@ fn the_indirect_calls_are_accepted() {
                 i32.const 0
                 return_call_indirect $t $f)
             (table $t i32 1 (ref null func)))
+"#,
+    );
+}
+
+/// `array.copy` writes its *destination* type index first, and the two array types here differ in exactly the way that makes the direction observable: copying *into* an immutable array is invalid, so an encoder writing the source index first is rejected. The inversion this pins went unnoticed for as long as it did because both emitting call sites pass one type for both operands, where a swap is invisible.
+///
+/// Run as a positive control on 2026-08-17: with `write_instr`'s two `write_type_name` calls exchanged, this probe fails with `invalid array modification: array is immutable (at offset 0x3c)`. Reproduce by exchanging them again.
+#[test]
+fn array_copy_writes_its_destination_first() {
+    validates(
+        r#"
+        (module $array_copy
+            (type $f (func))
+            (type $dst (array (mut i8)))
+            (type $src (array i8))
+            (func $a (type $f)
+                i32.const 1
+                array.new_default $dst
+                i32.const 0
+                i32.const 0
+                i32.const 1
+                array.new_data $src $d
+                i32.const 0
+                i32.const 1
+                array.copy $dst $src)
+            (data $d passive "\00"))
 "#,
     );
 }

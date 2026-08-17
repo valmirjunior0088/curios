@@ -479,6 +479,30 @@ fn array_data_segment_instructions() {
     );
 }
 
+/// `array.copy` names its destination type before its source, in the printed order and the encoded one alike.
+#[test]
+fn array_copy_instruction() {
+    round_trips(
+        r#"
+        (module $array_copy
+            (type $f (func))
+            (type $dst (array (mut i8)))
+            (type $src (array i8))
+            (func $a (type $f)
+                i32.const 1
+                array.new_default $dst
+                i32.const 0
+                i32.const 0
+                i32.const 1
+                array.new_data $src $d
+                i32.const 0
+                i32.const 1
+                array.copy $dst $src)
+            (data $d passive "\00"))
+"#,
+    );
+}
+
 #[test]
 fn array_element_segment_instructions() {
     round_trips(

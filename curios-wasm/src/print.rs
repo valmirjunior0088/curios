@@ -536,13 +536,13 @@ fn print_instr(instr: &Instr) -> Printer {
         Instr::ArraySet { type_name } => flat([pure("array.set "), print_type_name(type_name)]),
         Instr::ArrayFill { type_name } => flat([pure("array.fill "), print_type_name(type_name)]),
         Instr::ArrayCopy {
-            source_name,
             target_name,
+            source_name,
         } => flat([
             pure("array.copy "),
-            print_type_name(source_name),
-            pure(" "),
             print_type_name(target_name),
+            pure(" "),
+            print_type_name(source_name),
         ]),
         Instr::MemorySize { mem_name } => flat([pure("memory.size "), print_mem_name(mem_name)]),
         Instr::MemoryGrow { mem_name } => flat([pure("memory.grow "), print_mem_name(mem_name)]),

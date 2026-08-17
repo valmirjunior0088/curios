@@ -14,6 +14,8 @@ pub struct MemArg {
 /// The backend's instruction set, one variant per wasm opcode the crate can encode. Every operand the binary format expresses as an index — labels, functions, types, struct fields, locals, globals, tables, memories, element and data segments — is carried here as a name and resolved by the encoder, so emitters never track index spaces.
 ///
 /// The roster covers the whole envelope's table and memory surface and enforces nothing about how it is used. That program values live in GC references rather than linear memory is the *emitter's* discipline, stated by [WebAssembly-GC is the only target](../../documentation/design/toolchain/webassembly-gc-is-the-only-target.md); it was once enforced twice, because the roster physically could not express the alternative, and this crate is no longer the second enforcer.
+///
+/// Field order mirrors operand order in the encoding wherever the two could disagree. The three copies — `ArrayCopy`, `MemoryCopy`, `TableCopy` — each name their *target* before their source, because that is the order the format writes the two indices in; a variant that listed them the other way would put the field called `source_name` in the destination slot, which is what `ArrayCopy` did until both of its consumers happened to pass one type for both.
 #[derive(Debug, Clone)]
 pub enum Instr {
     Unreachable,
@@ -147,8 +149,8 @@ pub enum Instr {
         type_name: TypeName,
     },
     ArrayCopy {
-        source_name: TypeName,
         target_name: TypeName,
+        source_name: TypeName,
     },
     ArrayInitData {
         type_name: TypeName,
@@ -247,7 +249,6 @@ pub enum Instr {
     MemoryFill {
         mem_name: MemName,
     },
-    // Target before source, matching the operand order of the encoding.
     MemoryCopy {
         target_name: MemName,
         source_name: MemName,
@@ -274,7 +275,6 @@ pub enum Instr {
     TableFill {
         table_name: TableName,
     },
-    // Target before source, matching the operand order of the encoding.
     TableCopy {
         target_name: TableName,
         source_name: TableName,

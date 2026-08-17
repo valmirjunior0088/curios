@@ -271,8 +271,8 @@ impl<'r> ForceWalk<'r> {
                     curios_wasm::Instr::I32Const { value: 0 },
                     get(&self.sp),
                     curios_wasm::Instr::ArrayCopy {
-                        source_name: self.elems.clone(),
                         target_name: self.elems.clone(),
+                        source_name: self.elems.clone(),
                     },
                     get(&self.grown),
                     set(&self.stack),
@@ -516,8 +516,8 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             get(&walk.src_off),
             get(&walk.count),
             curios_wasm::Instr::ArrayCopy {
-                source_name: rope.payload.clone(),
                 target_name: rope.payload.clone(),
+                source_name: rope.payload.clone(),
             },
             get(&walk.offset),
             get(&walk.count),
