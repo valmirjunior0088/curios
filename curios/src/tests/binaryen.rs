@@ -1,7 +1,7 @@
 use {
     curios_binaryen::optimize,
     curios_pipeline::DEFAULT_STEP_BUDGET,
-    curios_pipeline::compile_with_prelude,
+    curios_pipeline::{Stage, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
     curios_wasm::{Module, to_bytes},
 };
@@ -48,6 +48,53 @@ fn optimizes_to_a_smaller_valid_module() {
         "expected the named module ({} bytes) to retain the name section the unnamed one ({} bytes) drops",
         named.len(),
         optimized.len()
+    );
+}
+
+/// `to_cwasm_dumped` emits `Stage::WasmOptm` at its production site — the second and only other emission site beside the driver's — and its payload is Binaryen's own rendering, captured in the session that optimized. The `(module` head pins that the payload is the folded text form; the export string pins that it renders *this* module, since exports survive optimization and print verbatim.
+#[test]
+fn dumping_emits_the_optimized_module_as_text() {
+    let source = r#"
+        rec sum(n : /std/Nat) -> /std/Nat =
+            match n : (_) => /std/Nat
+            | 0 => 0
+            | pred + 1; ih => /std/Nat/add(/std/Nat/succ(pred), ih)
+            end;
+
+        /std/Fmt/print("%")(sum(10))
+    "#;
+
+    let entrypoint = source
+        .parse::<Entrypoint>()
+        .expect("failed to parse source");
+
+    let (module, _foreigns) =
+        compile_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none(), |_| {})
+            .expect("expected wasm module");
+
+    let mut text = None;
+
+    let cwasm = crate::to_cwasm_dumped(&module, |stage| match stage {
+        Stage::WasmOptm(dump) => text = Some(dump.to_string()),
+        other => panic!("expected only Stage::WasmOptm, got {:?}", other.name()),
+    })
+    .expect("binaryen path precompiles");
+
+    assert!(!cwasm.is_empty());
+
+    let text = text.expect("Stage::WasmOptm observed");
+
+    assert!(
+        text.starts_with("(module"),
+        "expected Binaryen's folded text form, got {:?}...",
+        &text[..text.len().min(40)]
+    );
+
+    let (export, _) = &module.exports()[0];
+
+    assert!(
+        text.contains(&format!("(export \"{export}\"")),
+        "expected the optimized module to keep the {export:?} export"
     );
 }
 

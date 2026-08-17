@@ -256,7 +256,8 @@ fn every_stage_is_observed_once_in_names_order() {
     )
     .unwrap();
 
-    assert_eq!(seen, Stage::NAMES);
+    // Every name but the last: `wasm-optm` is the downstream-constructed observation `Stage::WasmOptm`'s rustdoc records — the pure pipeline has no Binaryen, so its absence here is the deliberate deviation, pinned rather than allowed.
+    assert_eq!(seen, &Stage::NAMES[..Stage::NAMES.len() - 1]);
 }
 
 #[test]

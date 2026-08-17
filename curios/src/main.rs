@@ -14,10 +14,10 @@ use report::*;
 
 use {
     clap::Parser,
-    curios::{run_wasm, to_cwasm},
+    curios::{to_cwasm, to_cwasm_dumped},
     curios_package::{Governing, Target, curate, scaffold},
     curios_pipeline::CompileError,
-    curios_runtime::{ForeignBindings, OsHost},
+    curios_runtime::{ForeignBindings, OsHost, run_bytes},
     curios_text::Formatted,
     std::{
         fs, iter,
@@ -73,10 +73,16 @@ fn dispatch() -> Result<(), Failure> {
             let subject = subject_of(&target);
             let module = compile_target(budget, &print, &units, target)?;
 
+            // Chosen before optimizing rather than filtered after, unlike the driver's stages: this one's payload costs — Binaryen's text capture, and the name section riding into the artifact.
+            let cwasm = match print.split(',').any(|name| name == "wasm-optm") {
+                true => to_cwasm_dumped(&module, stage_printer(&print)?)?,
+                false => to_cwasm(&module)?,
+            };
+
             fact(Heading::Running, &subject);
 
-            let code = run_wasm(
-                &module,
+            let code = run_bytes(
+                &cwasm,
                 OsHost::with_args(
                     iter::once(entry.to_string_lossy().into_owned().into_bytes())
                         .chain(args.into_iter().map(String::into_bytes))
@@ -109,7 +115,12 @@ fn dispatch() -> Result<(), Failure> {
 
             let started = Instant::now();
             let module = compile_target(budget, &print, &units, target)?;
-            let cwasm = to_cwasm(&module)?;
+
+            // Chosen before optimizing rather than filtered after, unlike the driver's stages: this one's payload costs — Binaryen's text capture, and the name section riding into the artifact.
+            let cwasm = match print.split(',').any(|name| name == "wasm-optm") {
+                true => to_cwasm_dumped(&module, stage_printer(&print)?)?,
+                false => to_cwasm(&module)?,
+            };
 
             emit_exe(&cwasm, &output)?;
 

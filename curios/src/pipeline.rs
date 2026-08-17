@@ -10,8 +10,8 @@ use {
     std::path::{Path, PathBuf},
 };
 
-/// Build the observer closure that prints each requested IR stage to stderr. `print` is the comma-separated stage list from `--print`; empty segments are dropped (the flag's absence arrives as `""`), and an unknown stage name is an error rather than a silently empty selection.
-fn stage_printer(print: &str) -> Result<impl Fn(Stage<'_>) + '_, String> {
+/// Build the observer closure that prints each requested IR stage to stderr. `print` is the comma-separated stage list from `--print`; empty segments are dropped (the flag's absence arrives as `""`), and an unknown stage name is an error rather than a silently empty selection. `main` builds a second one for the stage `to_cwasm_dumped` emits downstream of the pipeline, so the two rendering paths cannot drift.
+pub(crate) fn stage_printer(print: &str) -> Result<impl Fn(Stage<'_>) + '_, String> {
     let stages = print
         .split(',')
         .filter(|name| !name.is_empty())

@@ -175,5 +175,6 @@ The budget is restored at every declaration boundary, so it bounds the heaviest 
 | `cont` | the continuation IR |
 | `cont-optm` | the continuation IR after optimization |
 | `wasm` | the emitted WebAssembly module |
+| `wasm-optm` | the module after Binaryen optimization, rendered by Binaryen's own text writer — `run` and `compile` only, since only the native back end optimizes |
 
 `--manifest` overrides exactly which manifest is the package's. Which umbrella governs is still enumeration's answer, because a manifest cannot declare itself governed.

@@ -25,6 +25,20 @@ pub fn to_cwasm(module: &curios_wasm::Module) -> Result<Vec<u8>, String> {
     curios_runtime::precompile(&bytes)
 }
 
+/// [`to_cwasm`], emitting `Stage::WasmOptm` — Binaryen's own text rendering of the optimized module — through `observe` at its production site, exactly as the driver emits every other stage at its. This is the one stage the pure pipeline cannot emit, produced here because this crate is where Binaryen runs; the caller chose this function over [`to_cwasm`] *because* it wants the dump, so names ride unconditionally, and the price is only that an explicitly-requested debugging run precompiles name-carrying bytes.
+pub fn to_cwasm_dumped<O>(module: &curios_wasm::Module, mut observe: O) -> Result<Vec<u8>, String>
+where
+    O: FnMut(curios_pipeline::Stage<'_>),
+{
+    let raw = curios_wasm::to_bytes(module);
+    validate(&raw);
+    let (bytes, text) = curios_binaryen::optimize_with_text(raw, true);
+
+    observe(curios_pipeline::Stage::WasmOptm(&text));
+
+    curios_runtime::precompile(&bytes)
+}
+
 /// Run a compiled module in-process: precompile to `.cwasm`, then deserialize and run it on the shared runtime engine — the identical path a bundled executable takes. `bindings` supplies the `ffi`-tier implementations for the module's own `foreign` declarations (pass [`curios_runtime::ForeignBindings::empty`] for a program that declares none). Returns the process exit code.
 pub fn run_wasm<H: curios_runtime::HostOps + Send + Sync + 'static>(
     module: &curios_wasm::Module,

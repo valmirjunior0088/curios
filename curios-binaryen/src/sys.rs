@@ -62,6 +62,9 @@ unsafe extern "C" {
     /// Whether the writer preserves the name section. Applies to all modules, globally, and defaults to *off* — which silently discards the names `curios-wasm` emitted, and with them any hope of a readable runtime profile.
     pub(crate) fn BinaryenSetDebugInfo(on: bool);
 
+    /// Whether printed output carries ANSI color codes. Applies to all modules, globally.
+    pub(crate) fn BinaryenSetColorsEnabled(enabled: bool);
+
     pub(crate) fn BinaryenModuleOptimize(module: BinaryenModuleRef);
 
     pub(crate) fn BinaryenModuleValidate(module: BinaryenModuleRef) -> bool;
@@ -71,8 +74,11 @@ unsafe extern "C" {
         source_map_url: *const c_char,
     ) -> BinaryenModuleAllocateAndWriteResult;
 
+    /// Serialize the module in Binaryen's folded s-expression text form, as a NUL-terminated `malloc`ed buffer to be released with [`free`].
+    pub(crate) fn BinaryenModuleAllocateAndWriteText(module: BinaryenModuleRef) -> *mut c_char;
+
     pub(crate) fn BinaryenModuleDispose(module: BinaryenModuleRef);
 
-    /// libc `free`, for the buffers returned by [`BinaryenModuleAllocateAndWrite`].
+    /// libc `free`, for the buffers returned by the allocate-and-write functions.
     pub(crate) fn free(pointer: *mut c_void);
 }
