@@ -22,7 +22,7 @@ Each results file is a single-sitting snapshot with its own commentary:
 
 ### Curios across runs
 
-Mean ± std dev in milliseconds from each run's results file, one row appended per capture; `× 00` compares against run 00's mean and `× prev` against the previous run's mean, in the same column.
+Mean ± std dev in milliseconds from each run's results file, one row appended per capture; `× 00` compares against run 00's mean and `× prev` against the previous run's mean, in the same column. A workload that enters later is based at its own first capture, since there is no run 00 figure to divide by; `chain` has no capture yet, so it has no table here.
 
 The workload and the execution setup are fixed across runs, but the *toolchains* are not: each capture installs current versions, so the wasm engine under both Curios columns has changed between some rows. A row-to-row move is therefore Curios plus its engine, not Curios alone — run 04's `trees` improvement landed alongside a wasmtime major bump and is explicitly left unattributed for that reason.
 
@@ -213,7 +213,7 @@ All three are (a) expressible in a total, structurally-recursive language, (b) i
 
 - **`lcg`** — iterate `x = (75 · x) mod 65537` N times from `x = 1`. One multiply + one modulo per iteration; the max intermediate is 75·65536 ≈ 4.9M, far under i31. Measures integer ALU + loop/call overhead. Default `N = 100_000_000` (≈ 0.45s of Curios compute; below ~10⁷ it is startup-dominated). Anchor: `lcg(10⁸) = 17662`.
 - **`trees`** (the classic binary-trees allocation stress) — build a perfect tree of depth D whose nodes carry unique heap-numbered payloads (root `1`, children `2v` / `2v+1`), then reduce to `sum mod 1000003`. The unique payloads make every node distinct, defeating any structural subtree-sharing and forcing 2^(D+1)−1 real allocations; the modulus keeps the checksum inside i31. Measures allocation + GC and heap traversal. Default `D = 21` (≈ 4.2M nodes, ≈ 0.25s; D=23 ≈ 1s). Anchor: `trees(21) = 536864`.
-- **`chain`** — build a cons list of 10 000 cells once, then transform it K times, each round rebuilding every cell from a predecessor that dies with the operation. Measures *death-birth churn*: unlike `trees`, where every allocation survives to be traversed, nothing here outlives the step that replaces it. That is the pairing [Perceus](https://dl.acm.org/doi/10.1145/3453483.3454032) reference counting turns into an in-place write, so the Lean column is a direct price on what reuse would buy and the ratio to it is the number this workload exists for. The seed is derived from K so nothing is a closed term, each round reverses the order (which the sum ignores), and every walk is tail-recursive or a loop so no contestant's stack depends on the 10 000. Default `K = 640` (≈ 6.4M cells reborn, ≈ 0.33s). Anchors: `chain(8) = 819185`, `chain(640) = 511784`.
+- **`chain`** — build a cons list of 10 000 cells once, then transform it K times, each round rebuilding every cell from a predecessor that dies with the operation. Measures *death-birth churn*: unlike `trees`, where every allocation survives to be traversed, nothing here outlives the step that replaces it. That is the pairing [Perceus](https://dl.acm.org/doi/10.1145/3453483.3454032) reference counting turns into an in-place write, so the Lean column prices dynamic reuse and the ratio to it is the number this workload exists for. The seed is derived from K so nothing is a closed term, each round reverses the order (which the sum ignores), and every walk is tail-recursive or a loop so no contestant's stack depends on the 10 000. Default `K = 1600` (≈ 16M cells reborn, ≈ 0.33s). Anchors: `chain(8) = 819185`, `chain(1600) = 457407`.
 
   Two asymmetries belong beside its ratio rather than inside it. A Curios cons cell is **three** slots to Lean's two, since a tagged constructor carries its discriminant — real, and not what the workload is about. And the chain's live set is small by design, so the collector's marking half is barely exercised: what is measured is the allocation rate and the young-collection frequency that churn drives, which is the half reuse removes.
 
@@ -232,7 +232,7 @@ curios-benchmarks/
     lcg/                     lcg.{crs,rs,ml,js,ts,gr}  Lcg.lean  lakefile.toml
     trees/                   trees.{crs,rs,ml,js,ts,gr}  Trees.lean  lakefile.toml
     chain/                   chain.{crs,rs,ml,js,ts,gr}  Chain.lean  lakefile.toml
-  .artifacts/                built contestants and exported tables (created by a run)
+  .artifacts/                built contestants — inside the container only; a run leaves nothing on the host
 ```
 
 The image build needs the Curios sources, which live _above_ `curios-benchmarks/`, so it must run with the **repo root as the build context**. The `curios/benchmarks` Makefile target does that, from the repo root:
@@ -241,10 +241,15 @@ The image build needs the Curios sources, which live _above_ `curios-benchmarks/
 make curios/benchmarks
 
 # tune the workloads:
-docker run --rm --cpuset-cpus 0 -e N_LCG=200000000 -e D_TREES=23 -e K_CHAIN=1280 -e RUNS=7 curios-benchmarks
+docker run --rm --cpuset-cpus 0 -e N_LCG=200000000 -e D_TREES=23 -e K_CHAIN=3200 -e RUNS=7 curios-benchmarks
 ```
 
-`entrypoint.sh` first prints the correctness cross-check (all eight outputs must be identical), then hyperfine's comparison — with relative "x times faster than" ratios — for each table, and writes `.artifacts/*.md`. Read the ratio to Rust as the headline "where are we" number.
+The run splits its two audiences across the two streams, which is how a `--rm` container hands back a document without a bind mount:
+
+- **stdout** carries the six markdown tables and nothing the harness adds to them, so `docker run … > run.md` is the whole capture, ready to paste into a results file. Through `make curios/benchmarks > run.md` the two echoed recipe lines land above the first table; delete them and the rest is the document.
+- **stderr** carries the build log, the correctness cross-check (all eight outputs must be identical), and hyperfine's own comparison with its relative "x times faster than" ratios. Watch this stream while it runs; read the ratio to Rust as the headline "where are we" number.
+
+A table hyperfine fails to produce is absent from stdout rather than empty in it, and its error is on stderr.
 
 ## Toolchains — installed the perf-correct way
 
@@ -262,4 +267,4 @@ docker run --rm --cpuset-cpus 0 -e N_LCG=200000000 -e D_TREES=23 -e K_CHAIN=1280
 - **"Same engine" is approximate.** Each WebAssembly language brings its own host/ABI, so the WebAssembly section is "the same Cranelift engine core in different runners," not one controlled invocation. Fine for a ballpark; don't oversell it.
 - **Whole-process wall-clock.** Startup (Node's V8 warmup, Curios's wasmtime instantiate, etc.) is included, because that is what running a program costs. The workloads are sized so the inner loop dominates startup; hyperfine's `--warmup` also primes caches. Keep the workloads large.
 - **macOS → Linux VM.** On Apple Silicon, Docker runs in a VM. That is fine here because _every_ contestant — Curios included — shares the same virtualized guest, so the numbers are relative to each other. Keep everything `linux/arm64`; one stray amd64 image emulated under qemu makes that row meaningless.
-- **binary-trees measures allocation + heap traversal, not steady-state collection.** It builds one big tree and exits. For churn/collection pressure, loop the build over distinct seeds — an easy extension left out to keep v1 simple.
+- **binary-trees measures allocation + heap traversal, not steady-state collection.** It builds one big tree and exits, so every allocation survives to be traversed. Churn and collection pressure are `chain`'s half of the harness, and the two tables answer different questions about the same collector.

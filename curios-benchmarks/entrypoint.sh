@@ -8,7 +8,8 @@ cd "$(dirname "$0")"
 ROOT="$PWD"          # absolute benchmarks dir; asc is invoked from elsewhere (see below)
 mkdir -p .artifacts
 
-# Allowlist, not a blocklist: default stdout to stderr for the whole script, so every command's output — this script's own or any subprocess's, present or future — lands on stderr unless explicitly reopened. `table` below reopens fd 3 (the real stdout) around just the `hyperfine` call, the one thing meant to reach it.
+# Allowlist, not a blocklist: default stdout to stderr for the whole script, so every command's output — this script's own or any subprocess's, present or future — lands on stderr unless explicitly reopened. `table` below reopens fd 3 (the real stdout) for one thing only: the markdown tables.
+# That split is what makes the run's product retrievable without a bind mount. The container is `--rm` and takes its filesystem with it, so a table exported to a file inside it is gone; a table on stdout is captured by `docker run … > run.md` from the host. Everything else — the build log, the cross-check, hyperfine's own comparison — stays on stderr, so a failed run says why there and the document stays empty rather than half-written.
 exec 3>&1
 exec 1>&2
 
@@ -17,7 +18,7 @@ eval "$(opam env 2>/dev/null)" || true
 
 N_LCG="${N_LCG:-100000000}"   # LCG iterations (~0.45s of Curios compute)
 D_TREES="${D_TREES:-21}"      # tree depth: ~4.2M nodes; sums taken mod 1000003
-K_CHAIN="${K_CHAIN:-640}"     # transform rounds over a fixed 10 000-cell chain: ~6.4M cells reborn
+K_CHAIN="${K_CHAIN:-1600}"    # transform rounds over a fixed 10 000-cell chain: ~16M cells reborn
 RUNS="${RUNS:-5}"
 WARMUP="${WARMUP:-1}"
 
@@ -76,7 +77,14 @@ table() {  # table "<title>" <hyperfine args...>
   local title=$1; shift
   echo; echo "============================================================"
   echo "$title"; echo "============================================================"
-  hyperfine --warmup "$WARMUP" --runs "$RUNS" "$@" 1>&3
+
+  # Exported through a temp file rather than straight to /dev/fd/3: hyperfine opens its export path itself, and when fd 3 is a regular file rather than a pipe that second open starts writing at offset zero, so six tables would overwrite each other. A table that hyperfine failed to produce contributes nothing to the document; its error is already on stderr.
+  local md; md="$(mktemp)"
+  hyperfine --warmup "$WARMUP" --runs "$RUNS" --export-markdown "$md" "$@"
+  if [[ -s $md ]]; then
+    { printf '## %s\n\n' "$title"; cat "$md"; echo; } >&3
+  fi
+  rm -f "$md"
 }
 
 build lcg   lcg
@@ -89,45 +97,43 @@ check trees trees 10 programs/trees/trees.js
 check chain chain 8  programs/chain/chain.js
 
 # --- LCG --------------------------------------------------------------------
-table "LCG (N=$N_LCG) — native targets" --export-markdown .artifacts/lcg-native.md \
+table "LCG (N=$N_LCG) — native targets" \
   ".artifacts/lcg_rust $N_LCG" \
   ".artifacts/lcg_ocaml $N_LCG" \
   "node programs/lcg/lcg.js $N_LCG" \
   "$(lean_bin lcg lcg) $N_LCG" \
   "echo $N_LCG | .artifacts/lcg_curios"
 
-table "LCG (N=$N_LCG) — wasm on wasmtime" --export-markdown .artifacts/lcg-wasm.md \
+table "LCG (N=$N_LCG) — wasm on wasmtime" \
   "echo $N_LCG | .artifacts/lcg_curios" \
   "wasmtime run .artifacts/lcg_rust.wasm $N_LCG" \
   "wasmtime run .artifacts/lcg_grain.wasm $N_LCG" \
   "wasmtime run .artifacts/lcg_asc.wasm $N_LCG"
 
 # --- trees -------------------------------------------------------------------
-table "trees (D=$D_TREES) — native targets" --export-markdown .artifacts/trees-native.md \
+table "trees (D=$D_TREES) — native targets" \
   ".artifacts/trees_rust $D_TREES" \
   ".artifacts/trees_ocaml $D_TREES" \
   "node programs/trees/trees.js $D_TREES" \
   "$(lean_bin trees trees) $D_TREES" \
   "echo $D_TREES | .artifacts/trees_curios"
 
-table "trees (D=$D_TREES) — wasm on wasmtime" --export-markdown .artifacts/trees-wasm.md \
+table "trees (D=$D_TREES) — wasm on wasmtime" \
   "echo $D_TREES | .artifacts/trees_curios" \
   "wasmtime run .artifacts/trees_rust.wasm $D_TREES" \
   "wasmtime run .artifacts/trees_grain.wasm $D_TREES" \
   "wasmtime run .artifacts/trees_asc.wasm $D_TREES"
 
 # --- chain -------------------------------------------------------------------
-table "chain (K=$K_CHAIN) — native targets" --export-markdown .artifacts/chain-native.md \
+table "chain (K=$K_CHAIN) — native targets" \
   ".artifacts/chain_rust $K_CHAIN" \
   ".artifacts/chain_ocaml $K_CHAIN" \
   "node programs/chain/chain.js $K_CHAIN" \
   "$(lean_bin chain chain) $K_CHAIN" \
   "echo $K_CHAIN | .artifacts/chain_curios"
 
-table "chain (K=$K_CHAIN) — wasm on wasmtime" --export-markdown .artifacts/chain-wasm.md \
+table "chain (K=$K_CHAIN) — wasm on wasmtime" \
   "echo $K_CHAIN | .artifacts/chain_curios" \
   "wasmtime run .artifacts/chain_rust.wasm $K_CHAIN" \
   "wasmtime run .artifacts/chain_grain.wasm $K_CHAIN" \
   "wasmtime run .artifacts/chain_asc.wasm $K_CHAIN"
-
-echo; echo "Markdown tables written to .artifacts/*.md"

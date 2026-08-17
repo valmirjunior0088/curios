@@ -4,7 +4,7 @@
 #   docker build --platform linux/arm64 -f curios-benchmarks/Dockerfile -t curios-benchmarks .
 # Run on a single pinned core so the numbers are stable:
 #   docker run --rm --cpuset-cpus 0 curios-benchmarks
-#   docker run --rm --cpuset-cpus 0 -e D_TREES=23 -e N_LCG=100000000 -e K_CHAIN=640 curios-benchmarks
+#   docker run --rm --cpuset-cpus 0 -e D_TREES=23 -e N_LCG=100000000 -e K_CHAIN=1600 curios-benchmarks
 #
 # Toolchains are installed the perf-correct way (flambda OCaml, fresh V8). Grain ships no arm64 binary and its source build needs esy (also arm64-less), so its wasm is cross-compiled in the amd64 stage below. The first build is heavy but fully layer-cached. Spots flagged "VERIFY:" may need a version nudge.
 
