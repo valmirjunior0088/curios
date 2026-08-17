@@ -3724,3 +3724,209 @@ fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
         "a bare occurrence of a monomorphic definition was refused",
     );
 }
+
+/// How `coerce`'s body below reaches its declared result type.
+enum Route {
+    /// Directly, with no arm open — so no case equation is in scope and conversion answers about the two indices honestly.
+    Direct,
+    /// Through a `match` on `f<0>(x)` under a motive constant at the declared result, so the arm's case equation is the only thing the body's conversion can be consulting.
+    ConstantMotive,
+    /// Through a `match` on `f<0>(x)` under the dependent motive `(s) => Q(s)`, where the equation is *load-bearing*: the arm body has type `Q(f<0>(x))` and must check at `Q(wrap(T))`, which nothing but the equation can bridge.
+    DependentMotive,
+}
+
+/// A stuck scrutinee whose two spellings differ in nothing but a universe level, and a coercion between the two types they index.
+///
+/// `induct E : Type 3 | wrap(T : Type 2) end` is an ordinary `Type`-sorted family whose payload is a universe, `induct Q : (e : E) -> Type 0` has no constructors and exists only to be indexed by one, and `f<u | u + 1 <= 2> : (x : Nat) -> E = (x) => match x | 0 => wrap(Type u) | _ => wrap(Type 0) end` mentions its universe parameter in a *payload* position. Both `f<0>` and `f<1>` discharge the constraint, and `f<u>(x)` sticks on the local `x` — so `f<0>(x)` and `f<1>(x)` are two stuck terms that differ only in a level and whose reducts genuinely differ, which is the pair the key must keep apart.
+///
+/// The item under test is `coerce : (x : Nat, q : Q(f<0>(x))) -> Q(f<target>(x))`.
+fn universe_refinement_module(target: Level, route: Route) -> Module {
+    let one = Level::zero().succ().expect("level zero has a successor");
+    let two = one.clone().succ().expect("level one has a successor");
+    let three = two.clone().succ().expect("level two has a successor");
+
+    let e_name = Global::Authored(Qualifier::from(["E"]));
+    let q_name = Global::Authored(Qualifier::from(["Q"]));
+    let f_name = Global::Authored(Qualifier::from(["f"]));
+
+    let e_type = Term::induct_type(e_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+
+    let e_decl = InductDecl {
+        universe_context: UniverseContext::default(),
+        arity: Telescope::done(Telescope::done(())),
+        constructors: vec![(
+            Atom::from("wrap"),
+            InductParam {
+                telescope: Telescope::build(
+                    [(Free::local(610, Some("T")), Term::type_at(two.clone()))],
+                    Vec::new(),
+                ),
+                plicities: vec![Plicity::Explicit],
+            },
+        )],
+        result_sort: Term::type_at(three),
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+    };
+
+    let q_decl = InductDecl {
+        universe_context: UniverseContext::default(),
+        arity: Telescope::done(Telescope::build(
+            [(Free::local(611, Some("e")), e_type.clone())],
+            (),
+        )),
+        constructors: Vec::new(),
+        result_sort: Term::type_ground(),
+        module: Qualifier::default(),
+        rep_public: true,
+        polarities: Vec::new(),
+    };
+
+    let bounded = UniverseConstraint {
+        lower: Level::param(UniverseParam(0))
+            .succ()
+            .expect("level has a successor"),
+        upper: two,
+        origin: UniverseConstraintOrigin::new(UniverseConstraintKind::Cumulativity),
+    };
+
+    let wrap_at = |level: Level| {
+        Term::variant(
+            e_name.clone(),
+            Vec::<Term>::new(),
+            "wrap",
+            [Term::type_at(level)],
+        )
+    };
+
+    let x = Free::local(620, Some("x"));
+    let s = Free::local(621, Some("s"));
+    let f_item = Item::Let(Definition {
+        name: f_name.clone(),
+        kind: DefinitionKind::Authored,
+        universe_context: UniverseContext {
+            parameter_count: 1,
+            constraints: vec![bounded],
+        },
+        island: Qualifier::default(),
+        totality: Totality::Total,
+        type_: Term::func_type(
+            [(
+                Free::local(622, Some("x")),
+                Term::intrinsic(Intrinsic::NatType),
+            )],
+            e_type.clone(),
+        ),
+        body: Term::func(
+            [(x.clone(), Term::intrinsic(Intrinsic::NatType))],
+            Term::switch_scoped(
+                Term::free_var(&x),
+                Scope::close(Many(1), &[&s], e_type.clone()),
+                [(0u32, wrap_at(Level::param(UniverseParam(0))))],
+                wrap_at(Level::zero()),
+            ),
+        ),
+    });
+
+    let f_at = |level: Level, arg: &Free| {
+        Term::apply(
+            Term::universe_inst(Term::free_var(&Free::from(&f_name)), vec![level]),
+            [Term::free_var(arg)],
+        )
+    };
+    let q_at = |index: Term| Term::induct_type(q_name.clone(), Vec::<Term>::new(), [index]);
+
+    let cx = Free::local(630, Some("x"));
+    let cq = Free::local(631, Some("q"));
+    let cs = Free::local(632, Some("s"));
+    let ct = Free::local(633, Some("T"));
+
+    let declared = q_at(f_at(target, &cx));
+    let arm = |motive: Term| {
+        Term::induct_match_scoped_marked(
+            f_at(Level::zero(), &cx),
+            Scope::close(Many(1), &[&cs], motive),
+            [(
+                "wrap",
+                vec![(Plicity::Explicit, ct.clone())],
+                Term::free_var(&cq),
+            )],
+            None,
+        )
+    };
+    let body = match route {
+        Route::Direct => Term::free_var(&cq),
+        Route::ConstantMotive => arm(declared.clone()),
+        Route::DependentMotive => arm(q_at(Term::free_var(&cs))),
+    };
+
+    let parameters = [
+        (cx.clone(), Term::intrinsic(Intrinsic::NatType)),
+        (cq.clone(), q_at(f_at(Level::zero(), &cx))),
+    ];
+    let coerce = authored(
+        &Global::Authored(Qualifier::from(["coerce"])),
+        Term::func_type(parameters.clone(), declared),
+        Term::func(parameters, body),
+    );
+
+    Module {
+        mounts: Vec::new(),
+        items: vec![f_item, coerce],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::from([(e_name, e_decl), (q_name, q_decl)]),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 1_000,
+        type_: None,
+        body: Some(Term::intrinsic(Intrinsic::NatType)),
+    }
+}
+
+/// An arm's case equation refined an occurrence that merely *projected* onto its scrutinee, so a coercion between two types the kernel itself calls distinct was certified.
+///
+/// The store keyed both sides through `project_erased_universes`, which rebuilds every `Type` payload at one canonical ground level — a projection written for the Core-to-Ersd hand-off, where levels really are irrelevant, and read here as if it were a quotient by definitional equality. It is not one: `Type 0` and `Type 1` are distinct terms, and the whole universe hierarchy is the claim that they are not interchangeable. So scrutinizing `f<0>(x)` recorded the equation under the key `f(x)`, and the *unrelated* stuck term `f<1>(x)` probed to that same key and was refined to the arm's `wrap(T)` — a case value it was never shown to have.
+///
+/// Level 1 is what makes the two indices genuinely different rather than merely differently spelled: `f`'s body carries its parameter into a constructor payload, so `f<0>(x)` and `f<1>(x)` reduce to `wrap(Type 0)` and `wrap(Type 1)`. [`Route::Direct`] below is that fact stated as an assertion — with no arm open, the kernel refuses the very same coercion — so the arm is the whole of what admitted it. That the premise "a universe argument cannot affect computation" is false is the finding: Core has no eliminator *over* levels, but `Type u` embeds one in a term, and a payload position is where it becomes a value difference.
+///
+/// Verified while the hole was open: `recheck_module_verdicts` returned **zero refusals** for the [`Route::ConstantMotive`] module at level 1, while the [`Route::Direct`] module — the same coercion with the arm removed and nothing else changed — was refused as a `Mismatch` between `Q(f<0>(x))` and `Q(f<1>(x))`. Deleting the projection from both `Scope::refine` and `Scope::refinement_of` made the arm module refuse identically, which is what identified the key rather than some other rule as the admitting one. It is a constructed module and never a `.crs`: the elaborator mints its own levels, so no surface program spells the two instances this pair needs, which is why the second checker had never been put to it.
+///
+/// The control is [`a_case_equation_still_refines_the_occurrence_it_scrutinized`], and it is what proves the rule was not shut by disabling refinement outright.
+#[test]
+fn a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance() {
+    let one = Level::zero().succ().expect("level zero has a successor");
+
+    for (label, route) in [
+        ("through the arm", Route::ConstantMotive),
+        ("with no arm open", Route::Direct),
+    ] {
+        let module = universe_refinement_module(one.clone(), route);
+        let verdicts = recheck_module_verdicts(&module, 10_000_000, &Globals::default());
+
+        assert!(
+            verdicts.iter().any(|verdict| {
+                verdict.name == Some(Global::Authored(Qualifier::from(["coerce"])))
+                    && matches!(verdict.error, KernelError::Mismatch { .. })
+            }),
+            "{label}: the kernel certified a coercion between two types it calls distinct: {verdicts:?}",
+        );
+    }
+}
+
+/// The control: an equation still refines the occurrence the arm actually scrutinized.
+///
+/// [`Route::DependentMotive`] is the shape where the equation is load-bearing rather than incidental — the arm body is `q : Q(f<0>(x))` and the motive puts it at `Q(wrap(T))`, and nothing but `f<0>(x) ≡ wrap(T)` bridges those. So a key strict enough to refuse the witness above and *also* strict enough to miss its own scrutinee would fail here, which is the brick this fixture exists to catch: the convoy pattern is what the store is for, and refusing everything would take it with the fix.
+///
+/// Mutation-checked while the fix was written: emptying `Scope::refinement_of` to `None` leaves the witness above passing and fails this, so the two are not testing one thing twice.
+#[test]
+fn a_case_equation_still_refines_the_occurrence_it_scrutinized() {
+    let module = universe_refinement_module(Level::zero(), Route::DependentMotive);
+
+    assert_eq!(
+        recheck_module_verdicts(&module, 10_000_000, &Globals::default()),
+        Vec::new(),
+        "the arm's own case equation stopped refining its scrutinee",
+    );
+}

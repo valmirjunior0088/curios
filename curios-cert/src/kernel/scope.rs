@@ -4,7 +4,7 @@
 //!
 //! `mark` and `retract` are `pub(super)` and `Kernel::scoped` is their only caller anywhere — that is what makes the bracket the one way to open a binder scope, and the reason this component exposes no other way to shrink either stack.
 
-use curios_core::{Free, Term, project_erased_universes};
+use curios_core::{Free, Term};
 
 /// A checkpoint into both stacks, restored together so neither can outlive the arm that opened it.
 #[derive(Clone, Copy)]
@@ -36,28 +36,23 @@ impl Scope {
     ///
     /// A local-free scrutinee is skipped rather than recorded: local-free terms reduce to their case values instead of sticking, and the skip is also what keeps the evaluation memos sound — they store local-free terms only, and reduction of a local-free term never encounters a local-bearing stuck form, so no memoized reduct can depend on an equation that was later retracted.
     ///
-    /// Keyed with universe instances erased, which is the rule `canonical_scrutinee` keys the elaborator's store by and for the same reason: a universe argument cannot affect computation, so two occurrences of one applied definition differing only in the levels inference happened to mint are one key. Comparing verbatim made them two, and the divergence was doing unearned work — the elaborator would accept a program the kernel then refused for a spelling difference, which reads as a disagreement about the *rule* and is not one.
+    /// Keyed by the scrutinee itself. An equation is a claim about *one* term, so the only sound key is one that identifies terms already definitionally equal, and structural equality is the under-approximation of that which costs nothing to justify.
+    ///
+    /// This used to key through `project_erased_universes`, on the premise that a universe argument cannot affect computation. The premise is false: Core has no eliminator over levels, but `Type u` embeds one *in a term*, so a definition carrying its parameter into a constructor payload reduces to genuinely different values at two instances — and that projection rebuilds every `Type` payload at one ground level, because it was written for the Core-to-Ersd hand-off where levels really are irrelevant. Read as a quotient by definitional equality it identified `Type 0` with `Type 1`, which is the universe hierarchy's whole content. See `crate::recheck::tests::a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance`.
     pub(super) fn refine(&mut self, scrutinee: Term, value: Term) {
         if scrutinee.has_local_free() {
-            self.refinements
-                .push((project_erased_universes(&scrutinee), value));
+            self.refinements.push((scrutinee, value));
         }
     }
 
     /// The case value the stuck form `term` is refined to, innermost arm first.
     ///
-    /// The empty check is what keeps the projection off the reducer's hot path: `whnf` asks this at every stuck form it reaches, and outside an arm there is nothing to ask about.
+    /// Probed by the same key [`Scope::refine`] stores under, which is the term itself.
     pub(super) fn refinement_of(&self, term: &Term) -> Option<Term> {
-        if self.refinements.is_empty() {
-            return None;
-        }
-
-        let probe = project_erased_universes(term);
-
         self.refinements
             .iter()
             .rev()
-            .find(|(key, _)| *key == probe)
+            .find(|(key, _)| key == term)
             .map(|(_, value)| value.clone())
     }
 

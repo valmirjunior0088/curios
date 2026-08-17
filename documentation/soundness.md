@@ -65,7 +65,7 @@ Grades only. Each entry's evidence is the entry it links to.
 | --- | --- |
 | [The evaluation memo](soundness/what-the-kernel-consults/the-evaluation-memo.md) | **argued**, and **probed** at the case-equation interlock |
 | [Case equations inside an arm](soundness/what-the-kernel-consults/case-equations-inside-an-arm.md) | **argued** |
-| [The refinement key](soundness/what-the-kernel-consults/the-refinement-key.md) | **argued in a code comment only** |
+| [The refinement key](soundness/what-the-kernel-consults/the-refinement-key.md) | **probed** — its premise was false and the kernel certified a coercion between distinct types; closed, and the elaborator's copy is open |
 | [Recorded positions and sort-hood](soundness/what-the-kernel-consults/recorded-positions-and-sort-hood.md) | **argued** |
 | [The carried totality verdicts](soundness/what-the-kernel-consults/the-carried-totality-verdicts.md) | **probed** |
 
