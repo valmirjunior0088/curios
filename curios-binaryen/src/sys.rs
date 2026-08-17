@@ -27,6 +27,9 @@ unsafe extern "C" {
 
     pub(crate) fn BinaryenFeatureBulkMemory() -> BinaryenFeatures;
 
+    /// Just `memory.copy` and `memory.fill`. Binaryen carves them out of bulk memory and *asserts* that a feature set holding the latter holds this too, so the two are one row in practice.
+    pub(crate) fn BinaryenFeatureBulkMemoryOpt() -> BinaryenFeatures;
+
     pub(crate) fn BinaryenFeatureSignExt() -> BinaryenFeatures;
 
     pub(crate) fn BinaryenFeatureTailCall() -> BinaryenFeatures;
@@ -34,6 +37,10 @@ unsafe extern "C" {
     pub(crate) fn BinaryenFeatureReferenceTypes() -> BinaryenFeatures;
 
     pub(crate) fn BinaryenFeatureMultivalue() -> BinaryenFeatures;
+
+    pub(crate) fn BinaryenFeatureMultiMemory() -> BinaryenFeatures;
+
+    pub(crate) fn BinaryenFeatureMemory64() -> BinaryenFeatures;
 
     pub(crate) fn BinaryenFeatureGC() -> BinaryenFeatures;
 

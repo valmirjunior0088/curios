@@ -7,22 +7,24 @@ use encoding::*;
 mod state;
 use state::*;
 
-mod table;
-use table::*;
+mod indices;
+use indices::*;
 
 use {
     super::{
-        AbsHeapType, ArrayType, BlockType, CompType, DataName, DataSegment, Export, Expr,
-        FieldName, FieldType, Func, FuncName, FuncType, Global, GlobalName, GlobalType, HeapType,
-        Import, Instr, LabelName, LocalName, Module, Mutability, NumType, PackedType, RecType,
-        RefType, ResultType, StorageType, StructType, SubType, TypeName, ValType,
+        AbsHeapType, AddressType, ArrayType, BlockType, CompType, DataMode, DataName, DataSegment,
+        ElemList, ElemMode, ElemName, ElemSegment, Export, Expr, FieldName, FieldType, Func,
+        FuncName, FuncType, Global, GlobalName, GlobalType, HeapType, Import, Instr, LabelName,
+        Limits, LocalName, MemArg, MemName, MemType, Module, Mutability, NumType, PackedType,
+        RecType, RefType, ResultType, StorageType, StructType, SubType, Table, TableName,
+        TableType, TypeName, ValType,
     },
     std::io::{Result, Write},
 };
 
 #[derive(Debug)]
 struct Writer<'t, 'w, W> {
-    table: &'t Table<'t>,
+    indices: &'t Indices<'t>,
     buffer: Buffer<'w, W>,
 }
 
@@ -30,9 +32,9 @@ impl<'t, 'w, W> Writer<'t, 'w, W>
 where
     W: Write,
 {
-    fn new(table: &'t Table<'t>, writer: &'w mut W) -> Self {
+    fn new(indices: &'t Indices<'t>, writer: &'w mut W) -> Self {
         Self {
-            table,
+            indices,
             buffer: Buffer::new(writer),
         }
     }
@@ -41,7 +43,7 @@ where
     where
         U: Write,
     {
-        Writer::new(self.table, writer)
+        Writer::new(self.indices, writer)
     }
 
     fn write_vec<'a, A, I, F>(&mut self, i: I, mut f: F) -> Result<()>
@@ -73,18 +75,18 @@ where
     }
 
     fn write_type_name(&mut self, type_name: &TypeName) -> Result<()> {
-        self.write_index(self.table.resolve_type(type_name))
+        self.write_index(self.indices.resolve_type(type_name))
     }
 
     fn write_type_name_signed(&mut self, type_name: &TypeName) -> Result<()> {
         self.buffer
-            .push_leb128_signed(self.table.resolve_type(type_name) as i64)?;
+            .push_leb128_signed(self.indices.resolve_type(type_name) as i64)?;
 
         Ok(())
     }
 
     fn write_field_name(&mut self, type_name: &TypeName, field_name: &FieldName) -> Result<()> {
-        self.write_index(self.table.resolve_field(type_name, field_name))
+        self.write_index(self.indices.resolve_field(type_name, field_name))
     }
 
     /// Emit the `0xfb` GC-opcode prefix and its sub-opcode.
@@ -93,7 +95,7 @@ where
         self.buffer.push_leb128_unsigned(sub)
     }
 
-    /// Emit the `0xfc` miscellaneous-opcode prefix and its sub-opcode (the saturating truncations).
+    /// Emit the `0xfc` miscellaneous-opcode prefix and its sub-opcode: the saturating truncations (0–7) and the bulk-memory and table families (8–17).
     fn fc_op(&mut self, sub: u64) -> Result<()> {
         self.buffer.push_byte(0xfc)?;
         self.buffer.push_leb128_unsigned(sub)
@@ -118,19 +120,31 @@ where
     }
 
     fn write_func_name(&mut self, func_name: &FuncName) -> Result<()> {
-        self.write_index(self.table.resolve_func(func_name))
+        self.write_index(self.indices.resolve_func(func_name))
     }
 
     fn write_local_name(&mut self, func_name: &FuncName, local_name: &LocalName) -> Result<()> {
-        self.write_index(self.table.resolve_local(func_name, local_name))
+        self.write_index(self.indices.resolve_local(func_name, local_name))
+    }
+
+    fn write_table_name(&mut self, table_name: &TableName) -> Result<()> {
+        self.write_index(self.indices.resolve_table(table_name))
     }
 
     fn write_global_name(&mut self, global_name: &GlobalName) -> Result<()> {
-        self.write_index(self.table.resolve_global(global_name))
+        self.write_index(self.indices.resolve_global(global_name))
+    }
+
+    fn write_elem_name(&mut self, elem_name: &ElemName) -> Result<()> {
+        self.write_index(self.indices.resolve_elem(elem_name))
+    }
+
+    fn write_mem_name(&mut self, mem_name: &MemName) -> Result<()> {
+        self.write_index(self.indices.resolve_mem(mem_name))
     }
 
     fn write_data_name(&mut self, data_name: &DataName) -> Result<()> {
-        self.write_index(self.table.resolve_data(data_name))
+        self.write_index(self.indices.resolve_data(data_name))
     }
 
     fn write_name_map<'a, I>(&mut self, i: I) -> Result<()>
@@ -409,6 +423,65 @@ where
         Ok(())
     }
 
+    /// A resizable item's bounds: the flag byte (bit 0 a maximum follows, bit 2 the addresses are 64-bit — bit 1 is the shared-memory flag, outside the envelope), then the minimum and any maximum.
+    fn write_limits(&mut self, address_type: &AddressType, limits: &Limits) -> Result<()> {
+        let has_max = u8::from(limits.max.is_some());
+
+        let is_64_bit = match address_type {
+            AddressType::I32 => 0,
+            AddressType::I64 => 0b100,
+        };
+
+        self.buffer.push_byte(has_max | is_64_bit)?;
+        self.buffer.push_leb128_unsigned(limits.min)?;
+
+        if let Some(max) = limits.max {
+            self.buffer.push_leb128_unsigned(max)?;
+        }
+
+        Ok(())
+    }
+
+    fn write_table_type(&mut self, table_type: &TableType) -> Result<()> {
+        self.write_ref_type(&table_type.ref_type)?;
+        self.write_limits(&table_type.address_type, &table_type.limits)?;
+
+        Ok(())
+    }
+
+    fn write_mem_type(&mut self, mem_type: &MemType) -> Result<()> {
+        self.write_limits(&mem_type.address_type, &mem_type.limits)?;
+
+        Ok(())
+    }
+
+    /// A load or store's immediate. The alignment field's bit 6 says an explicit memory index follows it, which is how multi-memory extended a field that had no room left; the index is left implicit at memory 0 so a module reaching only its first memory encodes exactly as it did before the proposal.
+    fn write_mem_arg(&mut self, mem_arg: &MemArg) -> Result<()> {
+        let index = self.indices.resolve_mem(&mem_arg.mem_name);
+
+        match index {
+            0 => {
+                self.buffer.push_leb128_unsigned(mem_arg.align as u64)?;
+            }
+            index => {
+                self.buffer
+                    .push_leb128_unsigned(mem_arg.align as u64 | 0x40)?;
+
+                self.write_index(index)?;
+            }
+        }
+
+        self.buffer.push_leb128_unsigned(mem_arg.offset)?;
+
+        Ok(())
+    }
+
+    /// A load or store: its opcode, then its immediate.
+    fn mem_op(&mut self, opcode: u8, mem_arg: &MemArg) -> Result<()> {
+        self.buffer.push_byte(opcode)?;
+        self.write_mem_arg(mem_arg)
+    }
+
     fn write_import(&mut self, module_name: &str, name: &str, import: &Import) -> Result<()> {
         self.write_name(module_name)?;
         self.write_name(name)?;
@@ -417,6 +490,14 @@ where
             Import::Func { type_name, .. } => {
                 self.buffer.push_byte(0x00)?;
                 self.write_type_name(type_name)?;
+            }
+            Import::Table { table_type, .. } => {
+                self.buffer.push_byte(0x01)?;
+                self.write_table_type(table_type)?;
+            }
+            Import::Memory { mem_type, .. } => {
+                self.buffer.push_byte(0x02)?;
+                self.write_mem_type(mem_type)?;
             }
             Import::Global { global_type, .. } => {
                 self.buffer.push_byte(0x03)?;
@@ -560,6 +641,14 @@ where
                 self.buffer.push_byte(0x14)?;
                 self.write_type_name(type_name)?;
             }
+            Instr::CallIndirect {
+                table_name,
+                type_name,
+            } => {
+                self.buffer.push_byte(0x11)?;
+                self.write_type_name(type_name)?;
+                self.write_table_name(table_name)?;
+            }
             Instr::ReturnCall { func_name } => {
                 self.buffer.push_byte(0x12)?;
                 self.write_func_name(func_name)?;
@@ -567,6 +656,14 @@ where
             Instr::ReturnCallRef { type_name } => {
                 self.buffer.push_byte(0x15)?;
                 self.write_type_name(type_name)?;
+            }
+            Instr::ReturnCallIndirect {
+                table_name,
+                type_name,
+            } => {
+                self.buffer.push_byte(0x13)?;
+                self.write_type_name(type_name)?;
+                self.write_table_name(table_name)?;
             }
             Instr::BrOnNull { label_name } => {
                 self.buffer.push_byte(0xd5)?;
@@ -650,6 +747,13 @@ where
                 self.gc_type_op(9, type_name)?;
                 self.write_data_name(data_name)?;
             }
+            Instr::ArrayNewElem {
+                type_name,
+                elem_name,
+            } => {
+                self.gc_type_op(10, type_name)?;
+                self.write_elem_name(elem_name)?;
+            }
             Instr::ArrayGet { type_name } => self.gc_type_op(11, type_name)?,
             Instr::ArrayGetS { type_name } => self.gc_type_op(12, type_name)?,
             Instr::ArrayGetU { type_name } => self.gc_type_op(13, type_name)?,
@@ -664,6 +768,20 @@ where
                 self.write_type_name(source_name)?;
                 self.write_type_name(target_name)?;
             }
+            Instr::ArrayInitData {
+                type_name,
+                data_name,
+            } => {
+                self.gc_type_op(18, type_name)?;
+                self.write_data_name(data_name)?;
+            }
+            Instr::ArrayInitElem {
+                type_name,
+                elem_name,
+            } => {
+                self.gc_type_op(19, type_name)?;
+                self.write_elem_name(elem_name)?;
+            }
             Instr::RefTest { ref_type } => {
                 self.gc_op(if ref_type.is_nullable { 21 } else { 20 })?;
                 self.write_heap_type(&ref_type.heap_type)?;
@@ -677,24 +795,100 @@ where
             Instr::RefI31 => self.gc_op(28)?,
             Instr::I31GetS => self.gc_op(29)?,
             Instr::I31GetU => self.gc_op(30)?,
-            // The memory lane's memargs are constant: align 0, offset 0.
-            Instr::I32Load8U => {
-                self.buffer.push_byte(0x2d)?;
-                self.buffer.push_byte(0x00)?;
-                self.buffer.push_byte(0x00)?;
-            }
-            Instr::I32Store8 => {
-                self.buffer.push_byte(0x3a)?;
-                self.buffer.push_byte(0x00)?;
-                self.buffer.push_byte(0x00)?;
-            }
-            Instr::MemorySize => {
+            Instr::I32Load { mem_arg } => self.mem_op(0x28, mem_arg)?,
+            Instr::I64Load { mem_arg } => self.mem_op(0x29, mem_arg)?,
+            Instr::F32Load { mem_arg } => self.mem_op(0x2a, mem_arg)?,
+            Instr::F64Load { mem_arg } => self.mem_op(0x2b, mem_arg)?,
+            Instr::I32Load8S { mem_arg } => self.mem_op(0x2c, mem_arg)?,
+            Instr::I32Load8U { mem_arg } => self.mem_op(0x2d, mem_arg)?,
+            Instr::I32Load16S { mem_arg } => self.mem_op(0x2e, mem_arg)?,
+            Instr::I32Load16U { mem_arg } => self.mem_op(0x2f, mem_arg)?,
+            Instr::I64Load8S { mem_arg } => self.mem_op(0x30, mem_arg)?,
+            Instr::I64Load8U { mem_arg } => self.mem_op(0x31, mem_arg)?,
+            Instr::I64Load16S { mem_arg } => self.mem_op(0x32, mem_arg)?,
+            Instr::I64Load16U { mem_arg } => self.mem_op(0x33, mem_arg)?,
+            Instr::I64Load32S { mem_arg } => self.mem_op(0x34, mem_arg)?,
+            Instr::I64Load32U { mem_arg } => self.mem_op(0x35, mem_arg)?,
+            Instr::I32Store { mem_arg } => self.mem_op(0x36, mem_arg)?,
+            Instr::I64Store { mem_arg } => self.mem_op(0x37, mem_arg)?,
+            Instr::F32Store { mem_arg } => self.mem_op(0x38, mem_arg)?,
+            Instr::F64Store { mem_arg } => self.mem_op(0x39, mem_arg)?,
+            Instr::I32Store8 { mem_arg } => self.mem_op(0x3a, mem_arg)?,
+            Instr::I32Store16 { mem_arg } => self.mem_op(0x3b, mem_arg)?,
+            Instr::I64Store8 { mem_arg } => self.mem_op(0x3c, mem_arg)?,
+            Instr::I64Store16 { mem_arg } => self.mem_op(0x3d, mem_arg)?,
+            Instr::I64Store32 { mem_arg } => self.mem_op(0x3e, mem_arg)?,
+            Instr::MemorySize { mem_name } => {
                 self.buffer.push_byte(0x3f)?;
-                self.buffer.push_byte(0x00)?;
+                self.write_mem_name(mem_name)?;
             }
-            Instr::MemoryGrow => {
+            Instr::MemoryGrow { mem_name } => {
                 self.buffer.push_byte(0x40)?;
-                self.buffer.push_byte(0x00)?;
+                self.write_mem_name(mem_name)?;
+            }
+            Instr::MemoryFill { mem_name } => {
+                self.fc_op(11)?;
+                self.write_mem_name(mem_name)?;
+            }
+            Instr::MemoryCopy {
+                target_name,
+                source_name,
+            } => {
+                self.fc_op(10)?;
+                self.write_mem_name(target_name)?;
+                self.write_mem_name(source_name)?;
+            }
+            Instr::MemoryInit {
+                mem_name,
+                data_name,
+            } => {
+                self.fc_op(8)?;
+                self.write_data_name(data_name)?;
+                self.write_mem_name(mem_name)?;
+            }
+            Instr::DataDrop { data_name } => {
+                self.fc_op(9)?;
+                self.write_data_name(data_name)?;
+            }
+            Instr::TableGet { table_name } => {
+                self.buffer.push_byte(0x25)?;
+                self.write_table_name(table_name)?;
+            }
+            Instr::TableSet { table_name } => {
+                self.buffer.push_byte(0x26)?;
+                self.write_table_name(table_name)?;
+            }
+            Instr::TableSize { table_name } => {
+                self.fc_op(16)?;
+                self.write_table_name(table_name)?;
+            }
+            Instr::TableGrow { table_name } => {
+                self.fc_op(15)?;
+                self.write_table_name(table_name)?;
+            }
+            Instr::TableFill { table_name } => {
+                self.fc_op(17)?;
+                self.write_table_name(table_name)?;
+            }
+            Instr::TableCopy {
+                target_name,
+                source_name,
+            } => {
+                self.fc_op(14)?;
+                self.write_table_name(target_name)?;
+                self.write_table_name(source_name)?;
+            }
+            Instr::TableInit {
+                table_name,
+                elem_name,
+            } => {
+                self.fc_op(12)?;
+                self.write_elem_name(elem_name)?;
+                self.write_table_name(table_name)?;
+            }
+            Instr::ElemDrop { elem_name } => {
+                self.fc_op(13)?;
+                self.write_elem_name(elem_name)?;
             }
             Instr::Drop => self.buffer.push_byte(0x1a)?,
             Instr::Select { val_types } => {
@@ -931,13 +1125,17 @@ where
                 self.buffer.push_byte(0x00)?;
                 self.write_func_name(func_name)?;
             }
+            Export::Table(table_name) => {
+                self.buffer.push_byte(0x01)?;
+                self.write_table_name(table_name)?;
+            }
+            Export::Memory(mem_name) => {
+                self.buffer.push_byte(0x02)?;
+                self.write_mem_name(mem_name)?;
+            }
             Export::Global(global_name) => {
                 self.buffer.push_byte(0x03)?;
                 self.write_global_name(global_name)?;
-            }
-            Export::Memory => {
-                self.buffer.push_byte(0x02)?;
-                self.buffer.push_leb128_unsigned(0)?;
             }
         }
 
@@ -988,12 +1186,40 @@ where
         })
     }
 
-    /// The single always-emitted memory: empty (`min 0`) and growable (no max) — the host-boundary bulk-copy lane. Binaryen strips it from modules that never touch it.
-    fn write_memory_section(&mut self) -> Result<()> {
+    /// A table with no initializer takes the plain type encoding; one with an initializer takes the function-references form, whose `0x40 0x00` prefix distinguishes it from a reference type's first byte. An initializer is mandatory for a non-defaultable element type and optional otherwise, so the model's `Option` decides which form is written.
+    fn write_table(&mut self, table: &Table) -> Result<()> {
+        match &table.expr {
+            None => self.write_table_type(&table.table_type)?,
+            Some(expr) => {
+                self.buffer.push_byte(0x40)?;
+                self.buffer.push_byte(0x00)?;
+                self.write_table_type(&table.table_type)?;
+                self.write_global_expr(expr)?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn write_table_section(&mut self, tables: &[(TableName, Table)]) -> Result<()> {
+        if tables.is_empty() {
+            return Ok(());
+        }
+
+        self.write_section_with(4, |writer| {
+            writer.write_vec(tables, |writer, (_, table)| writer.write_table(table))
+        })
+    }
+
+    fn write_memory_section(&mut self, mems: &[(MemName, MemType)]) -> Result<()> {
+        if mems.is_empty() {
+            return Ok(());
+        }
+
         self.write_section_with(5, |writer| {
-            writer.buffer.push_leb128_unsigned(1)?;
-            writer.buffer.push_byte(0x00)?;
-            writer.buffer.push_leb128_unsigned(0)
+            writer.write_vec(mems, |writer, (_, mem_type)| {
+                writer.write_mem_type(mem_type)
+            })
         })
     }
 
@@ -1015,17 +1241,97 @@ where
         self.write_section_with(8, |writer| writer.write_func_name(start))
     }
 
-    /// A single declarative element segment listing the funcs eligible for `ref.func`. Flags `0x03` selects "declarative, element kind + func indices"; element kind `0x00` is `funcref`.
-    fn write_element_section(&mut self, elems: &[FuncName]) -> Result<()> {
+    /// One element segment. Its leading flag byte is the mode in bits 0–1 plus bit 2 for an expression list, and the flag decides which operands follow:
+    ///
+    /// | flag | mode | list | operands, in order |
+    /// | --- | --- | --- | --- |
+    /// | `0x00` | active at table 0 | func indices | offset |
+    /// | `0x01` | passive | func indices | element kind |
+    /// | `0x02` | active at a named table | func indices | table index, offset, element kind |
+    /// | `0x03` | declarative | func indices | element kind |
+    /// | `0x04` | active at table 0 | expressions | offset |
+    /// | `0x05` | passive | expressions | element type |
+    /// | `0x06` | active at a named table | expressions | table index, offset, element type |
+    /// | `0x07` | declarative | expressions | element type |
+    ///
+    /// The two table-0 forms spell no element type at all, so they are reachable only for a `funcref` list. That is what makes preferring them the smallest *correct* encoding rather than a preference: an expression list of any other reference type must take `0x06` even at table 0, because `0x04` has nowhere to put the type.
+    fn write_elem_segment(&mut self, segment: &ElemSegment) -> Result<()> {
+        let expr_bit = match &segment.list {
+            ElemList::Funcs(_) => 0x00,
+            ElemList::Exprs(..) => 0x04,
+        };
+
+        let is_typed = match &segment.mode {
+            ElemMode::Passive => {
+                self.buffer.push_byte(0x01 | expr_bit)?;
+
+                true
+            }
+            ElemMode::Declarative => {
+                self.buffer.push_byte(0x03 | expr_bit)?;
+
+                true
+            }
+            ElemMode::Active { table_name, offset } => {
+                let is_implicit = self.indices.resolve_table(table_name) == 0
+                    && match &segment.list {
+                        ElemList::Funcs(_) => true,
+                        ElemList::Exprs(ref_type, _) => matches!(
+                            (ref_type.is_nullable, &ref_type.heap_type),
+                            (true, HeapType::Abstract(AbsHeapType::Func))
+                        ),
+                    };
+
+                match is_implicit {
+                    true => {
+                        self.buffer.push_byte(expr_bit)?;
+                        self.write_global_expr(offset)?;
+
+                        false
+                    }
+                    false => {
+                        self.buffer.push_byte(0x02 | expr_bit)?;
+                        self.write_table_name(table_name)?;
+                        self.write_global_expr(offset)?;
+
+                        true
+                    }
+                }
+            }
+        };
+
+        match &segment.list {
+            ElemList::Funcs(func_names) => {
+                if is_typed {
+                    // Element kind `0x00` is `funcref`, the only kind the format defines.
+                    self.buffer.push_byte(0x00)?;
+                }
+
+                self.write_vec(func_names, |writer, func_name| {
+                    writer.write_func_name(func_name)
+                })?;
+            }
+            ElemList::Exprs(ref_type, exprs) => {
+                if is_typed {
+                    self.write_ref_type(ref_type)?;
+                }
+
+                self.write_vec(exprs, |writer, expr| writer.write_global_expr(expr))?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn write_element_section(&mut self, elems: &[(ElemName, ElemSegment)]) -> Result<()> {
         if elems.is_empty() {
             return Ok(());
         }
 
         self.write_section_with(9, |writer| {
-            writer.buffer.push_leb128_unsigned(1)?;
-            writer.buffer.push_byte(0x03)?;
-            writer.buffer.push_byte(0x00)?;
-            writer.write_vec(elems, |writer, func_name| writer.write_func_name(func_name))
+            writer.write_vec(elems, |writer, (_, segment)| {
+                writer.write_elem_segment(segment)
+            })
         })
     }
 
@@ -1043,13 +1349,32 @@ where
         })
     }
 
+    /// One data segment. Its leading flag byte is `0x00` for active at memory 0, `0x01` for passive, and `0x02` for active at a named memory whose index follows — the smallest correct encoding, since `0x00` has nowhere to put an index.
+    fn write_data_segment(&mut self, segment: &DataSegment) -> Result<()> {
+        match &segment.mode {
+            DataMode::Passive => self.buffer.push_byte(0x01)?,
+            DataMode::Active { mem_name, offset } => {
+                match self.indices.resolve_mem(mem_name) {
+                    0 => self.buffer.push_byte(0x00)?,
+                    index => {
+                        self.buffer.push_byte(0x02)?;
+                        self.write_index(index)?;
+                    }
+                }
+
+                self.write_global_expr(offset)?;
+            }
+        }
+
+        self.buffer.push_vec_bytes(&segment.bytes)?;
+
+        Ok(())
+    }
+
     fn write_data_section(&mut self, datas: &[(DataName, DataSegment)]) -> Result<()> {
         self.write_section_with(11, |writer| {
             writer.write_vec(datas, |writer, (_, segment)| {
-                writer.buffer.push_byte(0x01)?; // passive flag
-                writer.buffer.push_vec_bytes(&segment.bytes)?;
-
-                Ok(())
+                writer.write_data_segment(segment)
             })
         })
     }
@@ -1071,7 +1396,7 @@ where
                     .chain(funcs.iter().map(|(func_name, _)| func_name))
                     .map(|func_name| {
                         (
-                            writer.table.resolve_func(func_name) as u64,
+                            writer.indices.resolve_func(func_name) as u64,
                             func_name.as_str(),
                         )
                     })
@@ -1087,15 +1412,113 @@ where
                     .iter()
                     .map(|(func_name, func)| {
                         (
-                            writer.table.resolve_func(func_name) as u64,
+                            writer.indices.resolve_func(func_name) as u64,
                             func.local_names()
                                 .map(|local_name| {
                                     (
-                                        writer.table.resolve_local(func_name, local_name) as u64,
+                                        writer.indices.resolve_local(func_name, local_name) as u64,
                                         local_name.as_str(),
                                     )
                                 })
                                 .collect::<Vec<_>>(),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        })
+    }
+
+    fn write_table_name_section(
+        &mut self,
+        imports: &[(String, String, Import)],
+        tables: &[(TableName, Table)],
+    ) -> Result<()> {
+        self.write_section_with(5, |writer| {
+            writer.write_name_map(
+                imports
+                    .iter()
+                    .flat_map(|(_, _, import)| import.table_name())
+                    .chain(tables.iter().map(|(table_name, _)| table_name))
+                    .map(|table_name| {
+                        (
+                            writer.indices.resolve_table(table_name) as u64,
+                            table_name.as_str(),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        })
+    }
+
+    fn write_memory_name_section(
+        &mut self,
+        imports: &[(String, String, Import)],
+        mems: &[(MemName, MemType)],
+    ) -> Result<()> {
+        self.write_section_with(6, |writer| {
+            writer.write_name_map(
+                imports
+                    .iter()
+                    .flat_map(|(_, _, import)| import.mem_name())
+                    .chain(mems.iter().map(|(mem_name, _)| mem_name))
+                    .map(|mem_name| {
+                        (
+                            writer.indices.resolve_mem(mem_name) as u64,
+                            mem_name.as_str(),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        })
+    }
+
+    fn write_global_name_section(
+        &mut self,
+        imports: &[(String, String, Import)],
+        globals: &[(GlobalName, Global)],
+    ) -> Result<()> {
+        self.write_section_with(7, |writer| {
+            writer.write_name_map(
+                imports
+                    .iter()
+                    .flat_map(|(_, _, import)| import.global_name())
+                    .chain(globals.iter().map(|(global_name, _)| global_name))
+                    .map(|global_name| {
+                        (
+                            writer.indices.resolve_global(global_name) as u64,
+                            global_name.as_str(),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        })
+    }
+
+    fn write_elem_name_section(&mut self, elems: &[(ElemName, ElemSegment)]) -> Result<()> {
+        self.write_section_with(8, |writer| {
+            writer.write_name_map(
+                elems
+                    .iter()
+                    .map(|(elem_name, _)| {
+                        (
+                            writer.indices.resolve_elem(elem_name) as u64,
+                            elem_name.as_str(),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            )
+        })
+    }
+
+    fn write_data_name_section(&mut self, datas: &[(DataName, DataSegment)]) -> Result<()> {
+        self.write_section_with(9, |writer| {
+            writer.write_name_map(
+                datas
+                    .iter()
+                    .map(|(data_name, _)| {
+                        (
+                            writer.indices.resolve_data(data_name) as u64,
+                            data_name.as_str(),
                         )
                     })
                     .collect::<Vec<_>>(),
@@ -1111,7 +1534,7 @@ where
                     .flat_map(|rec_type| rec_type.sub_types.iter())
                     .map(|(type_name, _)| {
                         (
-                            writer.table.resolve_type(type_name) as u64,
+                            writer.indices.resolve_type(type_name) as u64,
                             type_name.as_str(),
                         )
                     })
@@ -1129,13 +1552,13 @@ where
                     .filter_map(|(type_name, sub_type)| {
                         sub_type.struct_type().map(|struct_type| {
                             (
-                                writer.table.resolve_type(type_name) as u64,
+                                writer.indices.resolve_type(type_name) as u64,
                                 struct_type
                                     .fields
                                     .iter()
                                     .map(|(field_name, _)| {
                                         (
-                                            writer.table.resolve_field(type_name, field_name)
+                                            writer.indices.resolve_field(type_name, field_name)
                                                 as u64,
                                             field_name.as_str(),
                                         )
@@ -1160,6 +1583,11 @@ where
             writer.write_func_name_section(module.imports(), module.funcs())?;
             writer.write_local_name_section(module.funcs())?;
             writer.write_type_name_section(module.types())?;
+            writer.write_table_name_section(module.imports(), module.tables())?;
+            writer.write_memory_name_section(module.imports(), module.mems())?;
+            writer.write_global_name_section(module.imports(), module.globals())?;
+            writer.write_elem_name_section(module.elems())?;
+            writer.write_data_name_section(module.datas())?;
             writer.write_field_name_section(module.types())?;
         }
 
@@ -1174,7 +1602,8 @@ where
         self.write_type_section(module.types())?;
         self.write_import_section(module.imports())?;
         self.write_func_section(module.funcs())?;
-        self.write_memory_section()?;
+        self.write_table_section(module.tables())?;
+        self.write_memory_section(module.mems())?;
         self.write_global_section(module.globals())?;
         self.write_export_section(module.exports())?;
         if let Some(start) = module.start() {
@@ -1190,11 +1619,11 @@ where
     }
 }
 
-/// Encodes a [`Module`] to the wasm binary format. This is where the crate's symbolic names become numbers: a resolution table is built once from the module's declaration order (imports leading), every name in the tree is resolved through it — a dangling reference panics with the missing name — and a trailing custom name section records the module, function, local, type, and field names so disassemblers and profilers show the same identifiers the compiler emitted.
+/// Encodes a [`Module`] to the wasm binary format. This is where the crate's symbolic names become numbers: every index space is derived once from the module's declaration order (imports leading), every name in the tree is resolved through it — a dangling reference panics with the missing name — and a trailing custom name section records every index space's names, so disassemblers and profilers show the same identifiers the compiler emitted.
 pub fn to_bytes(module: &Module) -> Vec<u8> {
     let mut bytes = Vec::new();
 
-    Writer::new(&Table::new(module), &mut bytes)
+    Writer::new(&Indices::new(module), &mut bytes)
         .write_module(module)
         .unwrap();
 

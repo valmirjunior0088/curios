@@ -13,13 +13,18 @@ pub fn optimize(mut bytes: Vec<u8>, names: bool) -> Vec<u8> {
 
     unsafe {
         // Exactly the features the pipeline targets and Wasmtime's engine enables — not `BinaryenFeatureAll`, which lets the optimizer emit post-GC proposals (e.g. exact reference types) that the runtime does not accept.
+        //
+        // `BulkMemoryOpt` is not a choice: Binaryen carves `memory.copy`/`memory.fill` out of bulk memory and asserts that a set holding bulk memory holds the carve-out too. Setting one without the other aborts the process the first time a pass asks — which stayed latent for as long as nothing emitted either instruction.
         let features = sys::BinaryenFeatureMutableGlobals()
             | sys::BinaryenFeatureNontrappingFPToInt()
             | sys::BinaryenFeatureBulkMemory()
+            | sys::BinaryenFeatureBulkMemoryOpt()
             | sys::BinaryenFeatureSignExt()
             | sys::BinaryenFeatureTailCall()
             | sys::BinaryenFeatureReferenceTypes()
             | sys::BinaryenFeatureMultivalue()
+            | sys::BinaryenFeatureMultiMemory()
+            | sys::BinaryenFeatureMemory64()
             | sys::BinaryenFeatureGC();
 
         let module =

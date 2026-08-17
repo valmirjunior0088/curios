@@ -1,9 +1,11 @@
 use {
     super::{
-        AbsHeapType, ArrayType, BlockType, CompType, DataName, DataSegment, Export, Expr,
-        FieldName, FieldType, Func, FuncName, FuncType, Global, GlobalName, GlobalType, HeapType,
-        Import, Instr, LabelName, LocalName, Module, Mutability, NumType, PackedType, RecType,
-        RefType, ResultType, StorageType, StructType, SubType, TypeName, ValType,
+        AbsHeapType, AddressType, ArrayType, BlockType, CompType, DataMode, DataName, DataSegment,
+        ElemList, ElemMode, ElemName, ElemSegment, Export, Expr, FieldName, FieldType, Func,
+        FuncName, FuncType, Global, GlobalName, GlobalType, HeapType, Import, Instr, LabelName,
+        Limits, LocalName, MemAccess, MemName, MemType, Module, Mutability, NumType, PackedType,
+        RecType, RefType, ResultType, StorageType, StructType, SubType, Table, TableName,
+        TableType, TypeName, ValType,
     },
     curios_print::{Printer, flat, group, hard_line, indent, line, pure, sep_flat},
 };
@@ -34,6 +36,18 @@ fn print_local_name(local_name: &LocalName) -> Printer {
 
 fn print_label_name(label_name: &LabelName) -> Printer {
     print_dollar_ident(label_name.as_str())
+}
+
+fn print_table_name(table_name: &TableName) -> Printer {
+    print_dollar_ident(table_name.as_str())
+}
+
+fn print_elem_name(elem_name: &ElemName) -> Printer {
+    print_dollar_ident(elem_name.as_str())
+}
+
+fn print_mem_name(mem_name: &MemName) -> Printer {
+    print_dollar_ident(mem_name.as_str())
 }
 
 fn print_data_name(data_name: &DataName) -> Printer {
@@ -245,6 +259,60 @@ fn print_global_type(global_type: &GlobalType) -> Printer {
     }
 }
 
+/// The address type is always spelled, rather than left implicit at `i32` the way the binary format's flag bit is: a resizable item's text form then says its own address width, and the parser needs no default to reconstruct.
+fn print_address_type(address_type: &AddressType) -> Printer {
+    pure(match address_type {
+        AddressType::I32 => "i32",
+        AddressType::I64 => "i64",
+    })
+}
+
+fn print_limits(limits: &Limits) -> Printer {
+    flat([
+        pure(limits.min.to_string()),
+        flat(
+            limits
+                .max
+                .map(|max| flat([pure(" "), pure(max.to_string())])),
+        ),
+    ])
+}
+
+fn print_table_type(table_type: &TableType) -> Printer {
+    flat([
+        print_address_type(&table_type.address_type),
+        pure(" "),
+        print_limits(&table_type.limits),
+        pure(" "),
+        print_ref_type(&table_type.ref_type),
+    ])
+}
+
+fn print_mem_type(mem_type: &MemType) -> Printer {
+    flat([
+        print_address_type(&mem_type.address_type),
+        pure(" "),
+        print_limits(&mem_type.limits),
+    ])
+}
+
+/// A load or store: its spelling, then the memory it reaches, then only the parts of its immediate that are not the default — an offset of zero and the access width's natural alignment are omitted, the way `wat` writes them. The memory is *always* spelled, unlike the binary encoding's implicit index 0: the parser sees module items in written order and would have no first memory to default to yet.
+fn print_mem_access(access: MemAccess<'_>) -> Printer {
+    flat([
+        pure(access.mnemonic),
+        pure(" "),
+        print_mem_name(&access.mem_arg.mem_name),
+        flat(match access.mem_arg.offset {
+            0 => None,
+            offset => Some(pure(format!(" offset={offset}"))),
+        }),
+        flat(match access.mem_arg.align == access.natural_align {
+            true => None,
+            false => Some(pure(format!(" align={}", 1_u64 << access.mem_arg.align))),
+        }),
+    ])
+}
+
 fn print_block_type(block_type: &BlockType) -> Printer {
     flat(match block_type {
         BlockType::Empty => None,
@@ -324,10 +392,28 @@ fn print_instr(instr: &Instr) -> Printer {
         ])),
         Instr::Call { func_name } => flat([pure("call "), print_func_name(func_name)]),
         Instr::CallRef { type_name } => flat([pure("call_ref "), print_type_name(type_name)]),
+        Instr::CallIndirect {
+            table_name,
+            type_name,
+        } => flat([
+            pure("call_indirect "),
+            print_table_name(table_name),
+            pure(" "),
+            print_type_name(type_name),
+        ]),
         Instr::ReturnCall { func_name } => flat([pure("return_call "), print_func_name(func_name)]),
         Instr::ReturnCallRef { type_name } => {
             flat([pure("return_call_ref "), print_type_name(type_name)])
         }
+        Instr::ReturnCallIndirect {
+            table_name,
+            type_name,
+        } => flat([
+            pure("return_call_indirect "),
+            print_table_name(table_name),
+            pure(" "),
+            print_type_name(type_name),
+        ]),
         Instr::BrOnNull { label_name } => flat([pure("br_on_null "), print_label_name(label_name)]),
         Instr::BrOnNonNull { label_name } => {
             flat([pure("br_on_non_null "), print_label_name(label_name)])
@@ -417,6 +503,33 @@ fn print_instr(instr: &Instr) -> Printer {
             pure(" "),
             print_data_name(data_name),
         ]),
+        Instr::ArrayInitData {
+            type_name,
+            data_name,
+        } => flat([
+            pure("array.init_data "),
+            print_type_name(type_name),
+            pure(" "),
+            print_data_name(data_name),
+        ]),
+        Instr::ArrayNewElem {
+            type_name,
+            elem_name,
+        } => flat([
+            pure("array.new_elem "),
+            print_type_name(type_name),
+            pure(" "),
+            print_elem_name(elem_name),
+        ]),
+        Instr::ArrayInitElem {
+            type_name,
+            elem_name,
+        } => flat([
+            pure("array.init_elem "),
+            print_type_name(type_name),
+            pure(" "),
+            print_elem_name(elem_name),
+        ]),
         Instr::ArrayGet { type_name } => flat([pure("array.get "), print_type_name(type_name)]),
         Instr::ArrayGetS { type_name } => flat([pure("array.get_s "), print_type_name(type_name)]),
         Instr::ArrayGetU { type_name } => flat([pure("array.get_u "), print_type_name(type_name)]),
@@ -431,6 +544,58 @@ fn print_instr(instr: &Instr) -> Printer {
             pure(" "),
             print_type_name(target_name),
         ]),
+        Instr::MemorySize { mem_name } => flat([pure("memory.size "), print_mem_name(mem_name)]),
+        Instr::MemoryGrow { mem_name } => flat([pure("memory.grow "), print_mem_name(mem_name)]),
+        Instr::MemoryFill { mem_name } => flat([pure("memory.fill "), print_mem_name(mem_name)]),
+        Instr::MemoryCopy {
+            target_name,
+            source_name,
+        } => flat([
+            pure("memory.copy "),
+            print_mem_name(target_name),
+            pure(" "),
+            print_mem_name(source_name),
+        ]),
+        Instr::MemoryInit {
+            mem_name,
+            data_name,
+        } => flat([
+            pure("memory.init "),
+            print_mem_name(mem_name),
+            pure(" "),
+            print_data_name(data_name),
+        ]),
+        Instr::DataDrop { data_name } => flat([pure("data.drop "), print_data_name(data_name)]),
+        Instr::TableGet { table_name } => flat([pure("table.get "), print_table_name(table_name)]),
+        Instr::TableSet { table_name } => flat([pure("table.set "), print_table_name(table_name)]),
+        Instr::TableSize { table_name } => {
+            flat([pure("table.size "), print_table_name(table_name)])
+        }
+        Instr::TableGrow { table_name } => {
+            flat([pure("table.grow "), print_table_name(table_name)])
+        }
+        Instr::TableFill { table_name } => {
+            flat([pure("table.fill "), print_table_name(table_name)])
+        }
+        Instr::TableCopy {
+            target_name,
+            source_name,
+        } => flat([
+            pure("table.copy "),
+            print_table_name(target_name),
+            pure(" "),
+            print_table_name(source_name),
+        ]),
+        Instr::TableInit {
+            table_name,
+            elem_name,
+        } => flat([
+            pure("table.init "),
+            print_table_name(table_name),
+            pure(" "),
+            print_elem_name(elem_name),
+        ]),
+        Instr::ElemDrop { elem_name } => flat([pure("elem.drop "), print_elem_name(elem_name)]),
         Instr::RefTest { ref_type } => flat([pure("ref.test "), print_ref_type(ref_type)]),
         Instr::RefCast { ref_type } => flat([pure("ref.cast "), print_ref_type(ref_type)]),
         Instr::Select { val_types } => flat([
@@ -461,12 +626,13 @@ fn print_instr(instr: &Instr) -> Printer {
         Instr::I64Const { value } => flat([pure("i64.const "), pure(value.to_string())]),
         Instr::F32Const { value } => flat([pure("f32.const "), pure(value.to_string())]),
         Instr::F64Const { value } => flat([pure("f64.const "), pure(value.to_string())]),
-        // Everything else is operand-less and spelled by the mnemonic table beside `Instr`; a variant in neither place is a bug in that table.
-        other => {
-            pure(other.mnemonic().unwrap_or_else(|| {
+        // Everything else is table-driven beside `Instr`: a load or store from the memory-access table, and otherwise an operand-less instruction from the mnemonic table. A variant in neither place is a bug in those tables.
+        other => match other.mem_access() {
+            Some(access) => print_mem_access(access),
+            None => pure(other.mnemonic().unwrap_or_else(|| {
                 panic!("instruction missing from the mnemonic table: {other:?}")
-            }))
-        }
+            })),
+        },
     }
 }
 
@@ -495,6 +661,23 @@ fn print_import<'a>(module_name: &'a str, name: &'a str, import: &'a Import) -> 
                 pure(" (type "),
                 print_type_name(type_name),
                 pure(")"),
+                pure(")"),
+            ]),
+            Import::Table {
+                table_name,
+                table_type,
+            } => flat([
+                pure(" (table "),
+                print_table_name(table_name),
+                pure(" "),
+                print_table_type(table_type),
+                pure(")"),
+            ]),
+            Import::Memory { mem_name, mem_type } => flat([
+                pure(" (memory "),
+                print_mem_name(mem_name),
+                pure(" "),
+                print_mem_type(mem_type),
                 pure(")"),
             ]),
             Import::Global {
@@ -589,6 +772,83 @@ fn print_global<'a>(global_name: &'a GlobalName, global: &'a Global) -> Printer 
     ]))
 }
 
+/// A table as a group: the initializer, when there is one, shares the declaration's line while it fits and breaks onto the next when it does not — the layout [`print_global`] uses for the same shape.
+fn print_table<'a>(table_name: &'a TableName, table: &'a Table) -> Printer {
+    group(flat([
+        pure("(table "),
+        print_table_name(table_name),
+        pure(" "),
+        print_table_type(&table.table_type),
+        indent(flat(
+            table
+                .expr
+                .as_ref()
+                .map(|expr| flat([line(), print_expr(expr)])),
+        )),
+        pure(")"),
+    ]))
+}
+
+/// A constant expression in an operand position — a segment's offset, or one element of an expression list — parenthesized under its keyword so the flat instruction sequence inside has an end the parser can find.
+fn print_const_expr(keyword: &'static str, expr: &Expr) -> Printer {
+    flat([
+        pure("("),
+        pure(keyword),
+        pure(" "),
+        print_expr(expr),
+        pure(")"),
+    ])
+}
+
+/// An element segment as a group: the elements share the segment's line while they fit and break one per line when they do not, the layout `br_table` uses for its labels.
+fn print_elem_segment<'a>(elem_name: &'a ElemName, segment: &'a ElemSegment) -> Printer {
+    group(flat([
+        pure("(elem "),
+        print_elem_name(elem_name),
+        pure(" "),
+        match &segment.mode {
+            ElemMode::Passive => pure("passive"),
+            ElemMode::Declarative => pure("declare"),
+            ElemMode::Active { table_name, offset } => flat([
+                pure("(table "),
+                print_table_name(table_name),
+                pure(") "),
+                print_const_expr("offset", offset),
+            ]),
+        },
+        match &segment.list {
+            ElemList::Funcs(func_names) => flat([
+                pure(" func"),
+                indent(flat(
+                    func_names
+                        .iter()
+                        .map(|func_name| flat([line(), print_func_name(func_name)])),
+                )),
+            ]),
+            ElemList::Exprs(ref_type, exprs) => flat([
+                pure(" "),
+                print_ref_type(ref_type),
+                indent(flat(
+                    exprs
+                        .iter()
+                        .map(|expr| flat([line(), print_const_expr("item", expr)])),
+                )),
+            ]),
+        },
+        pure(")"),
+    ]))
+}
+
+fn print_memory<'a>(mem_name: &'a MemName, mem_type: &'a MemType) -> Printer {
+    flat([
+        pure("(memory "),
+        print_mem_name(mem_name),
+        pure(" "),
+        print_mem_type(mem_type),
+        pure(")"),
+    ])
+}
+
 fn print_data_segment<'a>(name: &'a DataName, segment: &'a DataSegment) -> Printer {
     let encoded: String = segment
         .bytes
@@ -598,6 +858,16 @@ fn print_data_segment<'a>(name: &'a DataName, segment: &'a DataSegment) -> Print
     flat([
         pure("(data "),
         print_data_name(name),
+        pure(" "),
+        match &segment.mode {
+            DataMode::Passive => pure("passive"),
+            DataMode::Active { mem_name, offset } => flat([
+                pure("(memory "),
+                print_mem_name(mem_name),
+                pure(") "),
+                print_const_expr("offset", offset),
+            ]),
+        },
         pure(" \""),
         pure(encoded),
         pure("\")"),
@@ -612,10 +882,15 @@ fn print_export<'a>(name: &'a str, export: &'a Export) -> Printer {
             Export::Func(func_name) => {
                 flat([pure(" (func "), print_func_name(func_name), pure(")")])
             }
+            Export::Table(table_name) => {
+                flat([pure(" (table "), print_table_name(table_name), pure(")")])
+            }
+            Export::Memory(mem_name) => {
+                flat([pure(" (memory "), print_mem_name(mem_name), pure(")")])
+            }
             Export::Global(global_name) => {
                 flat([pure(" (global "), print_global_name(global_name), pure(")")])
             }
-            Export::Memory => pure(" (memory)"),
         },
         pure(")"),
     ])
@@ -633,6 +908,17 @@ pub(crate) fn print_module(module: &Module) -> Printer {
             .chain(module.imports().iter().map(|(module_name, name, import)| {
                 flat([pure("\n"), print_import(module_name, name, import)])
             }))
+            .chain(
+                module
+                    .tables()
+                    .iter()
+                    .map(|(table_name, table)| flat([pure("\n"), print_table(table_name, table)])),
+            )
+            .chain(
+                module.mems().iter().map(|(mem_name, mem_type)| {
+                    flat([pure("\n"), print_memory(mem_name, mem_type)])
+                }),
+            )
             .chain(
                 module.funcs().iter().map(|(func_name, func)| {
                     flat([pure("\n"), print_func(module, func_name, func)])
@@ -660,14 +946,8 @@ pub(crate) fn print_module(module: &Module) -> Printer {
                     .start()
                     .map(|start| flat([pure("\n(start "), print_func_name(start), pure(")")])),
             )
-            .chain((!module.elems().is_empty()).then(|| {
-                let mut parts = vec![pure("\n(elem declare func")];
-                for func_name in module.elems() {
-                    parts.push(pure(" "));
-                    parts.push(print_func_name(func_name));
-                }
-                parts.push(pure(")"));
-                flat(parts)
+            .chain(module.elems().iter().map(|(elem_name, segment)| {
+                flat([pure("\n"), print_elem_segment(elem_name, segment)])
             })),
         )),
         pure(")"),

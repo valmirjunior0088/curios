@@ -24,7 +24,7 @@ fn from_str() {
                 local.get $tmp)
             (global $answer (mut i32)
                 i32.const 41)
-            (data $greeting "\68\65\6c\6c\6f")
+            (data $greeting passive "\68\65\6c\6c\6f")
             (export "demo" (func $demo))
             (export "answer" (global $answer)))
     "#

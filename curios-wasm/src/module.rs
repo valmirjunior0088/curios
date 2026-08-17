@@ -3,19 +3,27 @@ mod tests;
 
 use {
     super::{
-        DataName, Expr, FuncName, GlobalName, GlobalType, LocalName, RecType, SubType, TypeName,
-        ValType, print_module,
+        DataName, ElemName, Expr, FuncName, GlobalName, GlobalType, LocalName, MemName, MemType,
+        RecType, RefType, SubType, TableName, TableType, TypeName, ValType, print_module,
     },
     curios_print::{run_printer, run_printer_within},
     std::fmt,
 };
 
-/// An imported item: a function (typed by reference to a declared func type) or a global. The name bound here is how the rest of the module refers to the item; the encoder gives imports the leading indices of their respective index spaces.
+/// An imported item: a function (typed by reference to a declared func type), a table, a memory, or a global. The name bound here is how the rest of the module refers to the item; the encoder gives imports the leading indices of their respective index spaces.
 #[derive(Debug)]
 pub enum Import {
     Func {
         func_name: FuncName,
         type_name: TypeName,
+    },
+    Table {
+        table_name: TableName,
+        table_type: TableType,
+    },
+    Memory {
+        mem_name: MemName,
+        mem_type: MemType,
     },
     Global {
         global_name: GlobalName,
@@ -27,14 +35,43 @@ impl Import {
     pub(crate) fn func_name(&self) -> Option<&FuncName> {
         match self {
             Import::Func { func_name, .. } => Some(func_name),
-            Import::Global { .. } => None,
+            Import::Table { .. } | Import::Memory { .. } | Import::Global { .. } => None,
+        }
+    }
+
+    pub(crate) fn table_name(&self) -> Option<&TableName> {
+        match self {
+            Import::Table { table_name, .. } => Some(table_name),
+            Import::Func { .. } | Import::Memory { .. } | Import::Global { .. } => None,
+        }
+    }
+
+    pub(crate) fn mem_name(&self) -> Option<&MemName> {
+        match self {
+            Import::Memory { mem_name, .. } => Some(mem_name),
+            Import::Func { .. } | Import::Table { .. } | Import::Global { .. } => None,
+        }
+    }
+
+    pub(crate) fn global_name(&self) -> Option<&GlobalName> {
+        match self {
+            Import::Global { global_name, .. } => Some(global_name),
+            Import::Func { .. } | Import::Table { .. } | Import::Memory { .. } => None,
         }
     }
 }
 
-/// A passive data segment: raw bytes with no memory to be loaded into (the backend has none). Its content enters the program only through `array.new_data` — the emitter uses this to materialize literal byte strings as GC arrays.
+/// What instantiation does with a data segment: copy it into a memory at a constant offset (`Active`), or keep it for a later `memory.init`, `array.new_data` or `array.init_data` (`Passive`).
+#[derive(Debug)]
+pub enum DataMode {
+    Passive,
+    Active { mem_name: MemName, offset: Expr },
+}
+
+/// A data segment: what instantiation does with it, and the raw bytes it holds.
 #[derive(Debug)]
 pub struct DataSegment {
+    pub mode: DataMode,
     pub bytes: Vec<u8>,
 }
 
@@ -62,12 +99,42 @@ pub struct Global {
     pub expr: Expr,
 }
 
-/// The internal target of an export — a function or global by name, or the module's single memory. The host-visible export string lives alongside it in the module's export list, so the same item can be exported under any name.
+/// A module-defined table: its type plus the constant expression every slot starts at. `None` starts them at the element type's default, which only a nullable element type has — a table of a non-defaultable element type must carry the expression, which is the function-references extension to the table section.
+#[derive(Debug)]
+pub struct Table {
+    pub table_type: TableType,
+    pub expr: Option<Expr>,
+}
+
+/// What instantiation does with an element segment: drop it into a table at a constant offset (`Active`), keep it for a later `table.init` (`Passive`), or neither — `Declarative` contributes no elements at all and exists only to make the functions it lists eligible for `ref.func`.
+#[derive(Debug)]
+pub enum ElemMode {
+    Passive,
+    Declarative,
+    Active { table_name: TableName, offset: Expr },
+}
+
+/// An element segment's contents: functions by name, whose element type is `funcref` implicitly, or constant expressions under an explicit element type — the only form a table of a typed reference admits.
+#[derive(Debug)]
+pub enum ElemList {
+    Funcs(Vec<FuncName>),
+    Exprs(RefType, Vec<Expr>),
+}
+
+/// An element segment: what instantiation does with it, and what it holds. Named like every other item, because `table.init` and `elem.drop` refer to one.
+#[derive(Debug)]
+pub struct ElemSegment {
+    pub mode: ElemMode,
+    pub list: ElemList,
+}
+
+/// The internal target of an export — a function, table, memory, or global, by name. The host-visible export string lives alongside it in the module's export list, so the same item can be exported under any name.
 #[derive(Debug)]
 pub enum Export {
     Func(FuncName),
+    Table(TableName),
+    Memory(MemName),
     Global(GlobalName),
-    Memory,
 }
 
 /// An in-memory wasm-GC module under construction — the crate's central type and the emitter's build target. Every item is registered under a symbolic name and every cross-reference is by name; numeric index spaces exist only inside the binary encoder, which derives them from insertion order (imports leading). Render it as WAT-style text via `Display`, parse that text back via `FromStr`, or encode it with [`to_bytes`](crate::to_bytes).
@@ -77,12 +144,13 @@ pub struct Module {
     types: Vec<RecType>,
     imports: Vec<(String, String, Import)>,
     funcs: Vec<(FuncName, Func)>,
+    tables: Vec<(TableName, Table)>,
+    mems: Vec<(MemName, MemType)>,
     globals: Vec<(GlobalName, Global)>,
     datas: Vec<(DataName, DataSegment)>,
     exports: Vec<(String, Export)>,
     start: Option<FuncName>,
-    // Functions made eligible for `ref.func` by a declarative element segment, without exporting them. `ref.func $f` validates only if `$f` is declared.
-    elems: Vec<FuncName>,
+    elems: Vec<(ElemName, ElemSegment)>,
 }
 
 impl Module {
@@ -96,6 +164,8 @@ impl Module {
             types: Default::default(),
             imports: Default::default(),
             funcs: Default::default(),
+            tables: Default::default(),
+            mems: Default::default(),
             globals: Default::default(),
             datas: Default::default(),
             exports: Default::default(),
@@ -152,6 +222,24 @@ impl Module {
         self.funcs.push((func_name, func));
     }
 
+    pub(crate) fn tables(&self) -> &[(TableName, Table)] {
+        &self.tables
+    }
+
+    /// Adds a module-defined table. Its index-space position is its insertion order among defined tables, after all imported ones.
+    pub fn add_table(&mut self, table_name: TableName, table: Table) {
+        self.tables.push((table_name, table));
+    }
+
+    pub(crate) fn mems(&self) -> &[(MemName, MemType)] {
+        &self.mems
+    }
+
+    /// Adds a module-defined memory. A module that declares none, and imports none, gets no memory section at all — nothing here is emitted on a program's behalf.
+    pub fn add_memory(&mut self, mem_name: MemName, mem_type: MemType) {
+        self.mems.push((mem_name, mem_type));
+    }
+
     pub(crate) fn globals(&self) -> &[(GlobalName, Global)] {
         &self.globals
     }
@@ -161,12 +249,12 @@ impl Module {
         self.globals.push((global_name, global));
     }
 
-    /// The passive data segments in insertion order, which is also their index order in the data section.
+    /// The data segments in insertion order, which is also their index order in the data section.
     pub fn datas(&self) -> &[(DataName, DataSegment)] {
         &self.datas
     }
 
-    /// Adds a passive data segment; code reaches its bytes only through an `array.new_data` instruction naming `data_name`.
+    /// Adds a data segment; its insertion order is its index order, which is what `memory.init`, `data.drop`, `array.new_data` and `array.init_data` resolve `data_name` against.
     pub fn add_data(&mut self, data_name: DataName, data_segment: DataSegment) {
         self.datas.push((data_name, data_segment));
     }
@@ -193,13 +281,13 @@ impl Module {
         self.start = Some(func_name);
     }
 
-    pub(crate) fn elems(&self) -> &[FuncName] {
+    pub(crate) fn elems(&self) -> &[(ElemName, ElemSegment)] {
         &self.elems
     }
 
-    /// Declare a function for `ref.func` use via the declarative element segment.
-    pub fn declare_func(&mut self, func_name: FuncName) {
-        self.elems.push(func_name);
+    /// Adds an element segment; its insertion order is its index order, which is what `table.init` and `elem.drop` resolve `elem_name` against.
+    pub fn add_elem(&mut self, elem_name: ElemName, elem_segment: ElemSegment) {
+        self.elems.push((elem_name, elem_segment));
     }
 }
 

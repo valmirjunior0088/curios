@@ -187,6 +187,35 @@ pub struct GlobalType {
     pub mutability: Mutability,
 }
 
+/// The width of the addresses an item is indexed by. From the memory64 proposal, which covers tables as well as memories — so both a [`TableType`] and a memory carry one, and the address operands of every instruction reaching the item follow it.
+#[derive(Debug, PartialEq, Clone)]
+pub enum AddressType {
+    I32,
+    I64,
+}
+
+/// A resizable item's size bounds, in the format's own units: pages for a memory, elements for a table. `max` absent is the format's "no maximum" flag, not an implicit ceiling.
+#[derive(Debug, PartialEq, Clone)]
+pub struct Limits {
+    pub min: u64,
+    pub max: Option<u64>,
+}
+
+/// The type of a table: the reference type every slot holds, the width of the addresses indexing it, and its size bounds.
+#[derive(Debug, PartialEq, Clone)]
+pub struct TableType {
+    pub address_type: AddressType,
+    pub ref_type: RefType,
+    pub limits: Limits,
+}
+
+/// The type of a memory: the width of the addresses indexing it, and its size bounds in pages. There is no page-size field — custom page sizes sit outside the envelope, so every memory's page is the format's default 64 KiB.
+#[derive(Debug, PartialEq, Clone)]
+pub struct MemType {
+    pub address_type: AddressType,
+    pub limits: Limits,
+}
+
 /// The signature of a `block`/`loop`/`if`: `Empty` and `Inline` cover the parameterless cases the binary format expresses directly, while `Concrete` names a declared func type for blocks that take parameters or produce multiple results.
 #[derive(Debug, Clone)]
 pub enum BlockType {

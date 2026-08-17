@@ -3,8 +3,9 @@
 use {
     curios_cont::bytes_sub_type,
     curios_wasm::{
-        BlockType, CompType, Export, Expr, Func, FuncName, FuncType, HeapType, Instr, LabelName,
-        LocalName, Module, NumType, RefType, ResultType, SubType, TypeName, ValType, to_bytes,
+        AddressType, BlockType, CompType, Export, Expr, Func, FuncName, FuncType, HeapType, Instr,
+        LabelName, Limits, LocalName, MemArg, MemName, MemType, Module, NumType, RefType,
+        ResultType, SubType, TypeName, ValType, to_bytes,
     },
 };
 
@@ -63,7 +64,7 @@ fn set(local: &LocalName) -> Instr {
     }
 }
 
-/// The bridge as a `curios_wasm::Module`: the canonical `bytes` type, the four accessor exports (`bytes_len`, `bytes_get`, `bytes_new`, `bytes_set` — each body its parameters' `local.get`s followed by one array op), and the bulk lane — the exported memory plus `bytes_load`/`bytes_store`, which copy a whole byte string between a `bytes` array and the memory at offset 0 so JS pays one boundary call per string instead of one per byte.
+/// The bridge as a `curios_wasm::Module`: the canonical `bytes` type, the four accessor exports (`bytes_len`, `bytes_get`, `bytes_new`, `bytes_set` — each body its parameters' `local.get`s followed by one array op), and the bulk lane — a memory this module declares and exports, plus `bytes_load`/`bytes_store`, which copy a whole byte string between a `bytes` array and the memory at offset 0 so JS pays one boundary call per string instead of one per byte. The memory is declared here because it is this module's, and nothing in `curios-wasm` supplies one: a compiled program declares none and carries no memory section at all.
 pub(crate) fn bridge_module() -> Module {
     let mut module = Module::new("bridge");
 
@@ -154,7 +155,25 @@ pub(crate) fn bridge_module() -> Module {
         module.add_export(name, Export::Func(func_name));
     }
 
-    module.add_export("memory", Export::Memory);
+    // Empty and unbounded: the harness grows it to whatever the byte string in flight needs.
+    let memory = MemName::from("memory");
+
+    module.add_memory(
+        memory.clone(),
+        MemType {
+            address_type: AddressType::I32,
+            limits: Limits { min: 0, max: None },
+        },
+    );
+
+    module.add_export("memory", Export::Memory(memory.clone()));
+
+    // Byte-granular access at the copy loop's running index, which is the address itself.
+    let byte_at = || MemArg {
+        mem_name: memory.clone(),
+        align: 0,
+        offset: 0,
+    };
 
     let func_type = |inputs: Vec<ValType>, outputs: Vec<ValType>| SubType {
         is_final: true,
@@ -201,7 +220,7 @@ pub(crate) fn bridge_module() -> Module {
                         Instr::ArrayGetU {
                             type_name: bytes.clone(),
                         },
-                        Instr::I32Store8,
+                        Instr::I32Store8 { mem_arg: byte_at() },
                     ],
                 ),
                 get(&len),
@@ -235,7 +254,7 @@ pub(crate) fn bridge_module() -> Module {
                         get(&out),
                         get(&i),
                         get(&i),
-                        Instr::I32Load8U,
+                        Instr::I32Load8U { mem_arg: byte_at() },
                         Instr::ArraySet {
                             type_name: bytes.clone(),
                         },

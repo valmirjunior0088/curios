@@ -33,6 +33,7 @@ mod structs;
 mod throw;
 mod toml;
 mod universes;
+mod wasm_conformance;
 
 use {
     crate::run_wasm,

@@ -138,8 +138,13 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     value_name.as_string(),
                     self.module.datas().len()
                 ));
-                self.module
-                    .add_data(data_name.clone(), curios_wasm::DataSegment { bytes });
+                self.module.add_data(
+                    data_name.clone(),
+                    curios_wasm::DataSegment {
+                        mode: curios_wasm::DataMode::Passive,
+                        bytes,
+                    },
+                );
                 // A literal is a leaf: tag 0, the static length, the payload.
                 self.emit_instr(curios_wasm::Instr::I32Const { value: 0 });
                 self.emit_instr(curios_wasm::Instr::I32Const { value: length });

@@ -397,8 +397,13 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             self.module.datas().len()
         ));
 
-        self.module
-            .add_data(data_name.clone(), curios_wasm::DataSegment { bytes });
+        self.module.add_data(
+            data_name.clone(),
+            curios_wasm::DataSegment {
+                mode: curios_wasm::DataMode::Passive,
+                bytes,
+            },
+        );
 
         // The placeholder init is an empty leaf — a wasm constant expression cannot read a data segment (or call), so the real payload is built in the start function below.
         let mut init_expr: curios_wasm::Expr = Default::default();
@@ -524,10 +529,27 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 expr,
             },
         );
+    }
 
-        // Closures are referenced by `ref.func` when their values are built, so they must be declared even though they are not exported.
-        self.module
-            .declare_func(self.table.find_clsr(name).func_name());
+    /// Closures are referenced by `ref.func` when their values are built, and `ref.func $f` validates only if `$f` is declared. Nothing exports them and nothing puts them in a table, so a declarative element segment — which contributes no elements at all — is what makes them eligible. `curios-wasm` mints no such segment on a module's behalf: needing one is a fact about *this* lowering, so it is stated here.
+    fn emit_declared_clsrs(&mut self, module: &'a EmissionModule) {
+        let func_names: Vec<_> = module
+            .clsrs()
+            .iter()
+            .map(|(name, _)| self.table.find_clsr(name).func_name())
+            .collect();
+
+        if func_names.is_empty() {
+            return;
+        }
+
+        self.module.add_elem(
+            curios_wasm::ElemName::from("clsr"),
+            curios_wasm::ElemSegment {
+                mode: curios_wasm::ElemMode::Declarative,
+                list: curios_wasm::ElemList::Funcs(func_names),
+            },
+        );
     }
 
     fn emit_let_func(&mut self, name: &'a EmissionFunctionName, func: &'a EmissionFunction) {
@@ -673,6 +695,8 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         for (name, clsr) in module.clsrs() {
             self.emit_let_clsr(name, clsr);
         }
+
+        self.emit_declared_clsrs(module);
 
         for (name, func) in module.funcs() {
             self.emit_let_func(name, func);

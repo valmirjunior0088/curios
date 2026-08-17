@@ -1,19 +1,26 @@
 use {
-    crate::{DataName, FieldName, FuncName, GlobalName, Import, LocalName, Module, TypeName},
+    crate::{
+        DataName, ElemName, FieldName, FuncName, GlobalName, LocalName, MemName, Module, TableName,
+        TypeName,
+    },
     std::collections::HashMap,
 };
 
+/// Every index space the binary format is defined over, derived once from the module's declaration order with imports leading — the only place a numeric index exists. A name absent from it is a dangling cross-reference, which every resolver reports by panicking with the name rather than encoding a wrong number.
 #[derive(Debug, Clone)]
-pub(super) struct Table<'a> {
+pub(super) struct Indices<'a> {
     types: HashMap<&'a TypeName, usize>,
     fields: HashMap<(&'a TypeName, &'a FieldName), usize>,
     funcs: HashMap<&'a FuncName, usize>,
     locals: HashMap<(&'a FuncName, &'a LocalName), usize>,
+    tables: HashMap<&'a TableName, usize>,
+    mems: HashMap<&'a MemName, usize>,
     globals: HashMap<&'a GlobalName, usize>,
+    elems: HashMap<&'a ElemName, usize>,
     datas: HashMap<&'a DataName, usize>,
 }
 
-impl<'a> Table<'a> {
+impl<'a> Indices<'a> {
     pub(super) fn new(module: &'a Module) -> Self {
         let mut types = HashMap::new();
         let mut fields = HashMap::new();
@@ -53,15 +60,42 @@ impl<'a> Table<'a> {
             }
         }
 
+        let mut tables = HashMap::new();
+
+        for (index, table_name) in module
+            .imports()
+            .iter()
+            .flat_map(|(_, _, import)| import.table_name())
+            .enumerate()
+        {
+            tables.insert(table_name, index);
+        }
+
+        for (index, (table_name, _)) in (tables.len()..).zip(module.tables()) {
+            tables.insert(table_name, index);
+        }
+
+        let mut mems = HashMap::new();
+
+        for (index, mem_name) in module
+            .imports()
+            .iter()
+            .flat_map(|(_, _, import)| import.mem_name())
+            .enumerate()
+        {
+            mems.insert(mem_name, index);
+        }
+
+        for (index, (mem_name, _)) in (mems.len()..).zip(module.mems()) {
+            mems.insert(mem_name, index);
+        }
+
         let mut globals = HashMap::new();
 
         for (index, global_name) in module
             .imports()
             .iter()
-            .filter_map(|(_, _, import)| match import {
-                Import::Global { global_name, .. } => Some(global_name),
-                Import::Func { .. } => None,
-            })
+            .flat_map(|(_, _, import)| import.global_name())
             .enumerate()
         {
             globals.insert(global_name, index);
@@ -69,6 +103,12 @@ impl<'a> Table<'a> {
 
         for (index, (global_name, _)) in (globals.len()..).zip(module.globals()) {
             globals.insert(global_name, index);
+        }
+
+        let mut elems = HashMap::new();
+
+        for (index, (elem_name, _)) in module.elems().iter().enumerate() {
+            elems.insert(elem_name, index);
         }
 
         let mut datas = HashMap::new();
@@ -82,7 +122,10 @@ impl<'a> Table<'a> {
             fields,
             funcs,
             locals,
+            tables,
+            mems,
             globals,
+            elems,
             datas,
         }
     }
@@ -91,41 +134,62 @@ impl<'a> Table<'a> {
         self.types
             .get(name)
             .copied()
-            .unwrap_or_else(|| panic!("`Table` lacks type `{}`", name))
+            .unwrap_or_else(|| panic!("`Indices` lacks type `{}`", name))
     }
 
     pub(super) fn resolve_field(&self, parent_name: &'a TypeName, name: &'a FieldName) -> usize {
         self.fields
             .get(&(parent_name, name))
             .copied()
-            .unwrap_or_else(|| panic!("`Table` lacks field `{}` of type `{}`", name, parent_name))
+            .unwrap_or_else(|| panic!("`Indices` lacks field `{}` of type `{}`", name, parent_name))
     }
 
     pub(super) fn resolve_func(&self, name: &'a FuncName) -> usize {
         self.funcs
             .get(name)
             .copied()
-            .unwrap_or_else(|| panic!("`Table` lacks func `{}`", name))
+            .unwrap_or_else(|| panic!("`Indices` lacks func `{}`", name))
     }
 
     pub(super) fn resolve_local(&self, parent_name: &'a FuncName, name: &'a LocalName) -> usize {
         self.locals
             .get(&(parent_name, name))
             .copied()
-            .unwrap_or_else(|| panic!("`Table` lacks local `{}` of func `{}`", name, parent_name))
+            .unwrap_or_else(|| panic!("`Indices` lacks local `{}` of func `{}`", name, parent_name))
+    }
+
+    pub(super) fn resolve_table(&self, name: &'a TableName) -> usize {
+        self.tables
+            .get(name)
+            .copied()
+            .unwrap_or_else(|| panic!("`Indices` lacks table `{}`", name))
+    }
+
+    pub(super) fn resolve_mem(&self, name: &'a MemName) -> usize {
+        self.mems
+            .get(name)
+            .copied()
+            .unwrap_or_else(|| panic!("`Indices` lacks memory `{}`", name))
     }
 
     pub(super) fn resolve_global(&self, name: &'a GlobalName) -> usize {
         self.globals
             .get(name)
             .copied()
-            .unwrap_or_else(|| panic!("`Table` lacks global `{}`", name))
+            .unwrap_or_else(|| panic!("`Indices` lacks global `{}`", name))
+    }
+
+    pub(super) fn resolve_elem(&self, name: &'a ElemName) -> usize {
+        self.elems
+            .get(name)
+            .copied()
+            .unwrap_or_else(|| panic!("`Indices` lacks elem `{}`", name))
     }
 
     pub(super) fn resolve_data(&self, name: &'a DataName) -> usize {
         self.datas
             .get(name)
             .copied()
-            .unwrap_or_else(|| panic!("`Table` lacks data `{}`", name))
+            .unwrap_or_else(|| panic!("`Indices` lacks data `{}`", name))
     }
 }

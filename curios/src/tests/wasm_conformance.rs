@@ -1,71 +1,25 @@
-use crate::*;
+//! `curios-wasm`'s memory, table, and segment surface, checked against the engine that has to accept it.
+//!
+//! These probes live here rather than in `curios-wasm` because that crate must not name wasmtime — the pin is `curios-runtime`'s single row — and `curios_runtime::validate` is the only thing that reads an encoded module back. Until a binary reader exists (`Stage::WasmOptm`'s specification owns it), acceptance by the engine *is* the binary-side check: a flag byte, a limits header, or a memarg written wrong is a validation failure here rather than a silent miscompile later.
+//!
+//! Each module is written in the crate's own WAT dialect and parsed, so one source string exercises the parser, the printer's inverse, and the encoder at once.
 
-/// Printing a parsed module, parsing that text, and printing it again must reach the same text. The fixed point is what pins a construct's text form against both halves at once: a printer and a parser that disagree cannot both survive it.
-fn round_trips(source: &str) {
-    let first = source
-        .parse::<Module>()
-        .expect("expected first module")
-        .to_string();
+use {
+    curios_runtime::validate,
+    curios_wasm::{Module, to_bytes},
+};
 
-    let second = first
-        .parse::<Module>()
-        .expect("expected second module")
-        .to_string();
+fn validates(source: &str) {
+    let module = source.parse::<Module>().expect("expected a module");
 
-    assert_eq!(first, second);
+    if let Err(error) = validate(&to_bytes(&module)) {
+        panic!("expected a valid module: {error}");
+    }
 }
 
 #[test]
-fn round_trip() {
-    round_trips(
-        r#"
-        (module $round_trip
-            (type $id (func (param i32) (result i32)))
-            (type $point (struct (field $x i32) (field $y (mut i32))))
-            (type $bytes (array (mut i8)))
-            (import "env" "ext_add" (func $ext_add (type $id)))
-            (func $demo (type $id) (param $x i32) (result i32)
-                (local $tmp i32)
-                i32.const 41
-                local.set $tmp
-                local.get $x
-                i32.const 1
-                i32.add
-                i32.const 2
-                struct.new $point
-                drop
-                i32.const 3
-                array.new_fixed $bytes 1
-                drop
-                i32.const 0
-                i32.const 5
-                array.new_data $bytes $greeting$0
-                drop
-                i32.const 0
-                i32.load8_u $mem
-                i32.const 7
-                i32.store8 $mem
-                memory.size $mem
-                drop
-                i32.const 1
-                memory.grow $mem
-                drop
-                local.get $tmp)
-            (memory $mem i32 0)
-            (global $answer (mut i32)
-                i32.const 41)
-            (data $greeting$0 passive "\68\65\6c\6c\6f")
-            (export "demo" (func $demo))
-            (export "answer" (global $answer))
-            (export "memory" (memory $mem))
-            (elem $declared declare func $demo))
-"#,
-    );
-}
-
-#[test]
-fn table_declared_imported_and_exported() {
-    round_trips(
+fn tables_are_declared_imported_and_exported() {
+    validates(
         r#"
         (module $tables
             (import "env" "given" (table $given i32 1 8 (ref null func)))
@@ -75,9 +29,10 @@ fn table_declared_imported_and_exported() {
     );
 }
 
+/// A non-defaultable element type has no default slot value, so the table must carry an initializer — the function-references form of the table section.
 #[test]
-fn table_with_an_initializer() {
-    round_trips(
+fn a_table_carries_an_initializer() {
+    validates(
         r#"
         (module $table_init
             (type $f (func))
@@ -89,21 +44,24 @@ fn table_with_an_initializer() {
     );
 }
 
-/// A 64-bit table, which the memory64 proposal admits beside a 64-bit memory.
+/// A 64-bit table, which memory64 admits beside a 64-bit memory: `table.size` answers `i64` there.
 #[test]
-fn table_with_sixty_four_bit_addresses() {
-    round_trips(
+fn a_table_is_addressed_by_sixty_four_bits() {
+    validates(
         r#"
         (module $table64
+            (type $f (func (result i64)))
+            (func $a (type $f)
+                table.size $t)
             (table $t i64 1 (ref null func)))
 "#,
     );
 }
 
-/// Element-segment flag `0x00`: active at the first table, function indices.
+/// Element-segment flag `0x00`: active at the first table, function indices, no element type spelled.
 #[test]
-fn elem_active_at_the_first_table_with_funcs() {
-    round_trips(
+fn elem_flag_00_is_accepted() {
+    validates(
         r#"
         (module $elem
             (type $f (func))
@@ -114,10 +72,10 @@ fn elem_active_at_the_first_table_with_funcs() {
     );
 }
 
-/// Element-segment flag `0x01`: passive, function indices — what `table.init` copies from.
+/// Element-segment flag `0x01`: passive, function indices under an element kind.
 #[test]
-fn elem_passive_with_funcs() {
-    round_trips(
+fn elem_flag_01_is_accepted() {
+    validates(
         r#"
         (module $elem
             (type $f (func))
@@ -127,10 +85,10 @@ fn elem_passive_with_funcs() {
     );
 }
 
-/// Element-segment flag `0x02`: active at a table that is not the first, so the table index is spelled out.
+/// Element-segment flag `0x02`: active at a table that is not the first, so the table index is written out.
 #[test]
-fn elem_active_at_a_later_table_with_funcs() {
-    round_trips(
+fn elem_flag_02_is_accepted() {
+    validates(
         r#"
         (module $elem
             (type $f (func))
@@ -142,23 +100,25 @@ fn elem_active_at_a_later_table_with_funcs() {
     );
 }
 
-/// Element-segment flag `0x03`: declarative, function indices — `ref.func` eligibility and nothing else.
+/// Element-segment flag `0x03`: declarative, function indices — what makes `ref.func` in a function body legal.
 #[test]
-fn elem_declarative_with_funcs() {
-    round_trips(
+fn elem_flag_03_is_accepted() {
+    validates(
         r#"
         (module $elem
             (type $f (func))
-            (func $a (type $f))
+            (func $a (type $f)
+                ref.func $a
+                drop)
             (elem $e declare func $a))
 "#,
     );
 }
 
-/// Element-segment flag `0x04`: active at the first table, expressions of nullable `funcref` — the one expression list the format lets go untyped.
+/// Element-segment flag `0x04`: active at the first table, expressions of nullable `funcref` — the untyped expression form.
 #[test]
-fn elem_active_at_the_first_table_with_exprs() {
-    round_trips(
+fn elem_flag_04_is_accepted() {
+    validates(
         r#"
         (module $elem
             (type $f (func))
@@ -171,8 +131,8 @@ fn elem_active_at_the_first_table_with_exprs() {
 
 /// Element-segment flag `0x05`: passive, expressions under an explicit element type.
 #[test]
-fn elem_passive_with_exprs() {
-    round_trips(
+fn elem_flag_05_is_accepted() {
+    validates(
         r#"
         (module $elem
             (type $f (func))
@@ -182,10 +142,10 @@ fn elem_passive_with_exprs() {
     );
 }
 
-/// Element-segment flag `0x06`: active with an element type other than `funcref`, which the untyped `0x04` form cannot express even at the first table.
+/// Element-segment flag `0x06`: active with an element type other than `funcref`, which flag `0x04` cannot express even at the first table.
 #[test]
-fn elem_active_with_typed_exprs() {
-    round_trips(
+fn elem_flag_06_is_accepted() {
+    validates(
         r#"
         (module $elem
             (type $f (func))
@@ -198,26 +158,31 @@ fn elem_active_with_typed_exprs() {
 
 /// Element-segment flag `0x07`: declarative, expressions under an explicit element type.
 #[test]
-fn elem_declarative_with_exprs() {
-    round_trips(
+fn elem_flag_07_is_accepted() {
+    validates(
         r#"
         (module $elem
             (type $f (func))
-            (func $a (type $f))
+            (func $a (type $f)
+                ref.func $a
+                drop)
             (elem $e declare (ref null $f) (item ref.func $a)))
 "#,
     );
 }
 
 #[test]
-fn table_instructions() {
-    round_trips(
+fn the_table_instructions_are_accepted() {
+    validates(
         r#"
         (module $table_instrs
             (type $f (func))
             (func $a (type $f)
                 i32.const 0
                 table.get $first
+                drop
+                i32.const 0
+                ref.null func
                 table.set $first
                 table.size $first
                 drop
@@ -227,11 +192,11 @@ fn table_instructions() {
                 drop
                 i32.const 0
                 ref.null func
-                i32.const 1
+                i32.const 0
                 table.fill $first
                 i32.const 0
                 i32.const 0
-                i32.const 1
+                i32.const 0
                 table.copy $first $second
                 i32.const 0
                 i32.const 0
@@ -246,14 +211,15 @@ fn table_instructions() {
 }
 
 #[test]
-fn indirect_call_instructions() {
-    round_trips(
+fn the_indirect_calls_are_accepted() {
+    validates(
         r#"
         (module $indirect
             (type $f (func))
             (func $a (type $f)
                 i32.const 0
-                call_indirect $t $f
+                call_indirect $t $f)
+            (func $b (type $f)
                 i32.const 0
                 return_call_indirect $t $f)
             (table $t i32 1 (ref null func)))
@@ -262,8 +228,28 @@ fn indirect_call_instructions() {
 }
 
 #[test]
-fn memory_declared_imported_and_exported() {
-    round_trips(
+fn the_element_segment_array_operations_are_accepted() {
+    validates(
+        r#"
+        (module $array_elems
+            (type $f (func))
+            (type $funcs (array (mut (ref null func))))
+            (func $a (type $f)
+                i32.const 0
+                i32.const 1
+                array.new_elem $funcs $e
+                i32.const 0
+                i32.const 0
+                i32.const 1
+                array.init_elem $funcs $e)
+            (elem $e passive func $a))
+"#,
+    );
+}
+
+#[test]
+fn memories_are_declared_imported_and_exported() {
+    validates(
         r#"
         (module $memories
             (import "env" "given" (memory $given i32 1 8))
@@ -273,64 +259,26 @@ fn memory_declared_imported_and_exported() {
     );
 }
 
-/// A 64-bit memory, whose address operands are `i64` rather than `i32`.
+/// A 64-bit memory: its address operands are `i64`, and so is what `memory.size` answers.
 #[test]
-fn memory_with_sixty_four_bit_addresses() {
-    round_trips(
+fn a_memory_is_addressed_by_sixty_four_bits() {
+    validates(
         r#"
         (module $memory64
-            (type $f (func))
+            (type $f (func (result i64)))
             (func $a (type $f)
                 i64.const 0
                 i32.load8_u $m
                 drop
-                memory.size $m
-                drop)
+                memory.size $m)
             (memory $m i64 1))
 "#,
     );
 }
 
-/// Data-segment flag `0x01`: passive, what `memory.init` and `array.new_data` read from.
 #[test]
-fn data_passive() {
-    round_trips(
-        r#"
-        (module $data
-            (data $d passive "\00\01"))
-"#,
-    );
-}
-
-/// Data-segment flag `0x00`: active at the first memory, whose index the encoding leaves implicit.
-#[test]
-fn data_active_at_the_first_memory() {
-    round_trips(
-        r#"
-        (module $data
-            (memory $m i32 1)
-            (data $d (memory $m) (offset i32.const 0) "\00\01"))
-"#,
-    );
-}
-
-/// Data-segment flag `0x02`: active at a memory that is not the first, so the memory index is spelled out.
-#[test]
-fn data_active_at_a_later_memory() {
-    round_trips(
-        r#"
-        (module $data
-            (memory $first i32 1)
-            (memory $second i32 1)
-            (data $d (memory $second) (offset i32.const 0) "\00\01"))
-"#,
-    );
-}
-
-/// Every load and store, each at its natural alignment and zero offset — the immediate the printer writes as nothing but the memory.
-#[test]
-fn memory_access_instructions() {
-    round_trips(
+fn the_memory_access_family_is_accepted() {
+    validates(
         r#"
         (module $accesses
             (type $f (func))
@@ -409,10 +357,10 @@ fn memory_access_instructions() {
     );
 }
 
-/// A memarg's non-default parts: an offset, an alignment below the natural one, and a memory that is not the first.
+/// A memarg's three parts: an offset, an alignment below the access width's natural one, and a memory that is not the first — the case that sets the alignment field's memory-index bit.
 #[test]
-fn memory_access_immediates() {
-    round_trips(
+fn a_memarg_reaches_a_later_memory_at_an_offset() {
+    validates(
         r#"
         (module $immediates
             (type $f (func))
@@ -433,8 +381,8 @@ fn memory_access_immediates() {
 }
 
 #[test]
-fn bulk_memory_instructions() {
-    round_trips(
+fn the_bulk_memory_instructions_are_accepted() {
+    validates(
         r#"
         (module $bulk
             (type $f (func))
@@ -459,9 +407,45 @@ fn bulk_memory_instructions() {
     );
 }
 
+/// Data-segment flag `0x01`: passive, and needing no memory at all.
 #[test]
-fn array_data_segment_instructions() {
-    round_trips(
+fn data_flag_01_is_accepted() {
+    validates(
+        r#"
+        (module $data
+            (data $d passive "\00\01"))
+"#,
+    );
+}
+
+/// Data-segment flag `0x00`: active at the first memory, whose index the encoding leaves implicit.
+#[test]
+fn data_flag_00_is_accepted() {
+    validates(
+        r#"
+        (module $data
+            (memory $m i32 1)
+            (data $d (memory $m) (offset i32.const 0) "\00\01"))
+"#,
+    );
+}
+
+/// Data-segment flag `0x02`: active at a memory that is not the first, so the memory index is written out.
+#[test]
+fn data_flag_02_is_accepted() {
+    validates(
+        r#"
+        (module $data
+            (memory $first i32 1)
+            (memory $second i32 1)
+            (data $d (memory $second) (offset i32.const 0) "\00\01"))
+"#,
+    );
+}
+
+#[test]
+fn the_data_segment_array_operations_are_accepted() {
+    validates(
         r#"
         (module $array_datas
             (type $f (func))
@@ -475,26 +459,6 @@ fn array_data_segment_instructions() {
                 i32.const 1
                 array.init_data $bytes $d)
             (data $d passive "\00"))
-"#,
-    );
-}
-
-#[test]
-fn array_element_segment_instructions() {
-    round_trips(
-        r#"
-        (module $array_elems
-            (type $f (func))
-            (type $funcs (array (mut (ref null func))))
-            (func $a (type $f)
-                i32.const 0
-                i32.const 1
-                array.new_elem $funcs $e
-                i32.const 0
-                i32.const 0
-                i32.const 1
-                array.init_elem $funcs $e)
-            (elem $e passive func $a))
 "#,
     );
 }

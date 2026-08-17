@@ -3,10 +3,12 @@ mod tests;
 
 use {
     super::{
-        AbsHeapType, ArrayType, BlockType, CompType, DataName, DataSegment, Export, Expr,
-        FieldName, FieldType, Func, FuncName, FuncType, Global, GlobalName, GlobalType, HeapType,
-        Import, Instr, LabelName, LocalName, Module, Mutability, NumType, PackedType, RecType,
-        RefType, ResultType, StorageType, StructType, SubType, TypeName, ValType,
+        AbsHeapType, AddressType, ArrayType, BlockType, CompType, DataMode, DataName, DataSegment,
+        ElemList, ElemMode, ElemName, ElemSegment, Export, Expr, FieldName, FieldType, Func,
+        FuncName, FuncType, Global, GlobalName, GlobalType, HeapType, Import, Instr, LabelName,
+        Limits, LocalName, MemArg, MemName, MemType, Module, Mutability, NumType, PackedType,
+        RecType, RefType, ResultType, StorageType, StructType, SubType, Table, TableName,
+        TableType, TypeName, ValType,
     },
     curios_parse::{
         Parser, ParserError, catch, fail, many0, many1, pure, run_parser, take_eof, take_exact,
@@ -84,6 +86,18 @@ fn parse_func_name<'a>() -> Parser<'a, FuncName> {
 
 fn parse_field_name<'a>() -> Parser<'a, FieldName> {
     parse_name().map(FieldName::from)
+}
+
+fn parse_table_name<'a>() -> Parser<'a, TableName> {
+    parse_name().map(TableName::from)
+}
+
+fn parse_elem_name<'a>() -> Parser<'a, ElemName> {
+    parse_name().map(ElemName::from)
+}
+
+fn parse_mem_name<'a>() -> Parser<'a, MemName> {
+    parse_name().map(MemName::from)
 }
 
 fn parse_data_name<'a>() -> Parser<'a, DataName> {
@@ -282,6 +296,102 @@ fn parse_global_type<'a>() -> Parser<'a, GlobalType> {
     }))
 }
 
+fn parse_address_type<'a>() -> Parser<'a, AddressType> {
+    (parse_literal("i32").map(|()| AddressType::I32))
+        .or(parse_literal("i64").map(|()| AddressType::I64))
+}
+
+/// A minimum and an optional maximum. The maximum's absence is read off the next token failing to be a number, which is why every construct spelling limits puts something that is not one — a reference type, or a closing paren — immediately after them.
+fn parse_limits<'a>() -> Parser<'a, Limits> {
+    parse_number::<u64>()
+        .and(catch(parse_number::<u64>()).map(Some).or(pure(None)))
+        .map(|(min, max)| Limits { min, max })
+}
+
+fn parse_table_type<'a>() -> Parser<'a, TableType> {
+    parse_address_type()
+        .and(parse_limits())
+        .and(parse_ref_type())
+        .map(|((address_type, limits), ref_type)| TableType {
+            address_type,
+            ref_type,
+            limits,
+        })
+}
+
+fn parse_mem_type<'a>() -> Parser<'a, MemType> {
+    parse_address_type()
+        .and(parse_limits())
+        .map(|(address_type, limits)| MemType {
+            address_type,
+            limits,
+        })
+}
+
+/// An `align=` byte count, as the log2 exponent the model carries. The text form spells bytes because that is what a wasm reader expects to see; anything but a power of two is a text the printer could not have produced.
+fn parse_align<'a>() -> Parser<'a, u32> {
+    catch(take_exact("align="))
+        .and_keep(parse_number::<u64>())
+        .flat_map(|bytes| match bytes.is_power_of_two() {
+            true => pure(bytes.trailing_zeros()),
+            false => fail(format!("Expected 'a power of two', obtained '{bytes}'")),
+        })
+}
+
+/// A load or store's immediate, in the order the printer writes it: the memory, then an offset defaulting to zero, then an alignment defaulting to the access width's natural one.
+fn parse_mem_arg<'a>(natural_align: u32) -> Parser<'a, MemArg> {
+    parse_mem_name()
+        .and((catch(take_exact("offset=")).and_keep(parse_number::<u64>())).or(pure(0)))
+        .and(parse_align().or(pure(natural_align)))
+        .map(|((mem_name, offset), align)| MemArg {
+            mem_name,
+            align,
+            offset,
+        })
+}
+
+/// Any load or store: one delimiter-bounded token looked up in the memory-access table beside `Instr`, then its immediate — whole-token dispatch, so no spelling can prefix-shadow another the way an ordered chain of literal probes can.
+fn parse_mem_access_instr<'a>() -> Parser<'a, Instr> {
+    catch(
+        take_while(|char| !is_delimiter(char))
+            .flat_map(|token| match Instr::from_mem_mnemonic(token) {
+                Some(access) => pure(access),
+                None => fail(format!("Expected 'memory instruction', obtained '{token}'")),
+            })
+            .and_drop(parse_whitespace()),
+    )
+    .flat_map(|(natural_align, build)| parse_mem_arg(natural_align).map(build))
+}
+
+fn parse_memory_instr<'a>() -> Parser<'a, Instr> {
+    (parse_literal("memory.size")
+        .and_keep(parse_mem_name())
+        .map(|mem_name| Instr::MemorySize { mem_name }))
+    .or(parse_literal("memory.grow")
+        .and_keep(parse_mem_name())
+        .map(|mem_name| Instr::MemoryGrow { mem_name }))
+    .or(parse_literal("memory.fill")
+        .and_keep(parse_mem_name())
+        .map(|mem_name| Instr::MemoryFill { mem_name }))
+    .or(parse_literal("memory.copy")
+        .and_keep(parse_mem_name())
+        .and(parse_mem_name())
+        .map(|(target_name, source_name)| Instr::MemoryCopy {
+            target_name,
+            source_name,
+        }))
+    .or(parse_literal("memory.init")
+        .and_keep(parse_mem_name())
+        .and(parse_data_name())
+        .map(|(mem_name, data_name)| Instr::MemoryInit {
+            mem_name,
+            data_name,
+        }))
+    .or(parse_literal("data.drop")
+        .and_keep(parse_data_name())
+        .map(|data_name| Instr::DataDrop { data_name }))
+}
+
 fn parse_block_type<'a>() -> Parser<'a, BlockType> {
     (catch(parse_literal("(").and_drop(parse_literal("result")))
         .and_keep(parse_val_type())
@@ -380,18 +490,67 @@ fn parse_control_instr<'a>() -> Parser<'a, Instr> {
     .or(parse_literal("br")
         .and_keep(parse_label_name())
         .map(|label_name| Instr::Br { label_name }))
+    .or(parse_literal("return_call_indirect")
+        .and_keep(parse_table_name())
+        .and(parse_type_name())
+        .map(|(table_name, type_name)| Instr::ReturnCallIndirect {
+            table_name,
+            type_name,
+        }))
     .or(parse_literal("return_call_ref")
         .and_keep(parse_type_name())
         .map(|type_name| Instr::ReturnCallRef { type_name }))
     .or(parse_literal("return_call")
         .and_keep(parse_func_name())
         .map(|func_name| Instr::ReturnCall { func_name }))
+    .or(parse_literal("call_indirect")
+        .and_keep(parse_table_name())
+        .and(parse_type_name())
+        .map(|(table_name, type_name)| Instr::CallIndirect {
+            table_name,
+            type_name,
+        }))
     .or(parse_literal("call_ref")
         .and_keep(parse_type_name())
         .map(|type_name| Instr::CallRef { type_name }))
     .or(parse_literal("call")
         .and_keep(parse_func_name())
         .map(|func_name| Instr::Call { func_name }))
+}
+
+fn parse_table_instr<'a>() -> Parser<'a, Instr> {
+    (parse_literal("table.get")
+        .and_keep(parse_table_name())
+        .map(|table_name| Instr::TableGet { table_name }))
+    .or(parse_literal("table.set")
+        .and_keep(parse_table_name())
+        .map(|table_name| Instr::TableSet { table_name }))
+    .or(parse_literal("table.size")
+        .and_keep(parse_table_name())
+        .map(|table_name| Instr::TableSize { table_name }))
+    .or(parse_literal("table.grow")
+        .and_keep(parse_table_name())
+        .map(|table_name| Instr::TableGrow { table_name }))
+    .or(parse_literal("table.fill")
+        .and_keep(parse_table_name())
+        .map(|table_name| Instr::TableFill { table_name }))
+    .or(parse_literal("table.copy")
+        .and_keep(parse_table_name())
+        .and(parse_table_name())
+        .map(|(target_name, source_name)| Instr::TableCopy {
+            target_name,
+            source_name,
+        }))
+    .or(parse_literal("table.init")
+        .and_keep(parse_table_name())
+        .and(parse_elem_name())
+        .map(|(table_name, elem_name)| Instr::TableInit {
+            table_name,
+            elem_name,
+        }))
+    .or(parse_literal("elem.drop")
+        .and_keep(parse_elem_name())
+        .map(|elem_name| Instr::ElemDrop { elem_name }))
 }
 
 fn parse_reference_instr<'a>() -> Parser<'a, Instr> {
@@ -455,6 +614,13 @@ fn parse_aggregate_instr<'a>() -> Parser<'a, Instr> {
             type_name,
             data_name,
         }))
+    .or(parse_literal("array.new_elem")
+        .and_keep(parse_type_name())
+        .and(parse_elem_name())
+        .map(|(type_name, elem_name)| Instr::ArrayNewElem {
+            type_name,
+            elem_name,
+        }))
     .or(parse_literal("array.new_default")
         .and_keep(parse_type_name())
         .map(|type_name| Instr::ArrayNewDefault { type_name }))
@@ -482,6 +648,20 @@ fn parse_aggregate_instr<'a>() -> Parser<'a, Instr> {
         .map(|(source_name, target_name)| Instr::ArrayCopy {
             source_name,
             target_name,
+        }))
+    .or(parse_literal("array.init_data")
+        .and_keep(parse_type_name())
+        .and(parse_data_name())
+        .map(|(type_name, data_name)| Instr::ArrayInitData {
+            type_name,
+            data_name,
+        }))
+    .or(parse_literal("array.init_elem")
+        .and_keep(parse_type_name())
+        .and(parse_elem_name())
+        .map(|(type_name, elem_name)| Instr::ArrayInitElem {
+            type_name,
+            elem_name,
         }))
 }
 
@@ -533,6 +713,9 @@ fn parse_instr<'a>() -> Parser<'a, Instr> {
         .or(parse_const_instr())
         .or(parse_reference_instr())
         .or(parse_aggregate_instr())
+        .or(parse_mem_access_instr())
+        .or(parse_memory_instr())
+        .or(parse_table_instr())
         .or(parse_select_instr())
         .or(parse_variable_instr())
         .or(parse_control_instr())
@@ -557,6 +740,25 @@ fn parse_func_import_desc<'a>() -> Parser<'a, Import> {
         })
 }
 
+fn parse_table_import_desc<'a>() -> Parser<'a, Import> {
+    catch(parse_literal("(").and_drop(parse_literal("table")))
+        .and_keep(parse_table_name())
+        .and(parse_table_type())
+        .and_drop(parse_literal(")"))
+        .map(|(table_name, table_type)| Import::Table {
+            table_name,
+            table_type,
+        })
+}
+
+fn parse_memory_import_desc<'a>() -> Parser<'a, Import> {
+    catch(parse_literal("(").and_drop(parse_literal("memory")))
+        .and_keep(parse_mem_name())
+        .and(parse_mem_type())
+        .and_drop(parse_literal(")"))
+        .map(|(mem_name, mem_type)| Import::Memory { mem_name, mem_type })
+}
+
 fn parse_global_import_desc<'a>() -> Parser<'a, Import> {
     catch(parse_literal("(").and_drop(parse_literal("global")))
         .and_keep(parse_global_name())
@@ -572,7 +774,12 @@ fn parse_import<'a>() -> Parser<'a, (String, String, Import)> {
     catch(parse_literal("(").and_drop(parse_literal("import")))
         .and_keep(parse_string().map(str::to_string))
         .and(parse_string().map(str::to_string))
-        .and(parse_func_import_desc().or(parse_global_import_desc()))
+        .and(
+            (parse_func_import_desc())
+                .or(parse_table_import_desc())
+                .or(parse_memory_import_desc())
+                .or(parse_global_import_desc()),
+        )
         .and_drop(parse_literal(")"))
         .map(|((module_name, name), import)| (module_name, name, import))
 }
@@ -618,11 +825,82 @@ fn parse_func<'a>() -> Parser<'a, (FuncName, Func)> {
         })
 }
 
+fn parse_table<'a>() -> Parser<'a, (TableName, Table)> {
+    catch(parse_literal("(").and_drop(parse_literal("table")))
+        .and_keep(parse_table_name())
+        .and(parse_table_type())
+        .and(parse_expr())
+        .and_drop(parse_literal(")"))
+        .map(|((table_name, table_type), expr)| {
+            (
+                table_name,
+                Table {
+                    table_type,
+                    expr: (!expr.instrs.is_empty()).then_some(expr),
+                },
+            )
+        })
+}
+
+/// A parenthesized constant expression in an operand position — `(offset …)` or `(item …)`, holding a flat instruction sequence like every other body.
+fn parse_const_expr<'a>(keyword: &'static str) -> Parser<'a, Expr> {
+    catch(parse_literal("(").and_drop(parse_literal(keyword)))
+        .and_keep(parse_expr())
+        .and_drop(parse_literal(")"))
+}
+
+fn parse_elem_mode<'a>() -> Parser<'a, ElemMode> {
+    (parse_literal("passive").map(|()| ElemMode::Passive))
+        .or(parse_literal("declare").map(|()| ElemMode::Declarative))
+        .or(catch(parse_literal("(").and_drop(parse_literal("table")))
+            .and_keep(parse_table_name())
+            .and_drop(parse_literal(")"))
+            .and(parse_const_expr("offset"))
+            .map(|(table_name, offset)| ElemMode::Active { table_name, offset }))
+}
+
+fn parse_elem_list<'a>() -> Parser<'a, ElemList> {
+    (parse_literal("func")
+        .and_keep(many0(parse_func_name))
+        .map(ElemList::Funcs))
+    .or(parse_ref_type()
+        .and(many0(|| parse_const_expr("item")))
+        .map(|(ref_type, exprs)| ElemList::Exprs(ref_type, exprs)))
+}
+
+fn parse_elem_segment<'a>() -> Parser<'a, (ElemName, ElemSegment)> {
+    catch(parse_literal("(").and_drop(parse_literal("elem")))
+        .and_keep(parse_elem_name())
+        .and(parse_elem_mode())
+        .and(parse_elem_list())
+        .and_drop(parse_literal(")"))
+        .map(|((elem_name, mode), list)| (elem_name, ElemSegment { mode, list }))
+}
+
+fn parse_memory<'a>() -> Parser<'a, (MemName, MemType)> {
+    catch(parse_literal("(").and_drop(parse_literal("memory")))
+        .and_keep(parse_mem_name())
+        .and(parse_mem_type())
+        .and_drop(parse_literal(")"))
+}
+
+fn parse_data_mode<'a>() -> Parser<'a, DataMode> {
+    (parse_literal("passive").map(|()| DataMode::Passive)).or(catch(
+        parse_literal("(").and_drop(parse_literal("memory")),
+    )
+    .and_keep(parse_mem_name())
+    .and_drop(parse_literal(")"))
+    .and(parse_const_expr("offset"))
+    .map(|(mem_name, offset)| DataMode::Active { mem_name, offset }))
+}
+
 fn parse_data_segment<'a>() -> Parser<'a, (DataName, DataSegment)> {
     catch(parse_literal("(").and_drop(parse_literal("data")))
         .and_keep(parse_data_name())
-        .and(parse_bytes().map(|bytes| DataSegment { bytes }))
+        .and(parse_data_mode())
+        .and(parse_bytes())
         .and_drop(parse_literal(")"))
+        .map(|((data_name, mode), bytes)| (data_name, DataSegment { mode, bytes }))
 }
 
 fn parse_global<'a>() -> Parser<'a, (GlobalName, Global)> {
@@ -648,10 +926,18 @@ fn parse_global_export_desc<'a>() -> Parser<'a, Export> {
         .map(Export::Global)
 }
 
+fn parse_table_export_desc<'a>() -> Parser<'a, Export> {
+    catch(parse_literal("(").and_drop(parse_literal("table")))
+        .and_keep(parse_table_name())
+        .and_drop(parse_literal(")"))
+        .map(Export::Table)
+}
+
 fn parse_memory_export_desc<'a>() -> Parser<'a, Export> {
     catch(parse_literal("(").and_drop(parse_literal("memory")))
+        .and_keep(parse_mem_name())
         .and_drop(parse_literal(")"))
-        .map(|()| Export::Memory)
+        .map(Export::Memory)
 }
 
 fn parse_export<'a>() -> Parser<'a, (String, Export)> {
@@ -659,6 +945,7 @@ fn parse_export<'a>() -> Parser<'a, (String, Export)> {
         .and_keep(parse_string().map(str::to_string))
         .and(
             (parse_func_export_desc())
+                .or(parse_table_export_desc())
                 .or(parse_global_export_desc())
                 .or(parse_memory_export_desc()),
         )
@@ -671,24 +958,17 @@ fn parse_start<'a>() -> Parser<'a, FuncName> {
         .and_drop(parse_literal(")"))
 }
 
-/// A declarative element segment: `(elem declare func $a $b ...)`.
-fn parse_elem<'a>() -> Parser<'a, Vec<FuncName>> {
-    catch(parse_literal("(").and_drop(parse_literal("elem")))
-        .and_drop(parse_literal("declare"))
-        .and_drop(parse_literal("func"))
-        .and_keep(many0(parse_func_name))
-        .and_drop(parse_literal(")"))
-}
-
 enum ModuleItem {
     RecType(RecType),
     Import(String, String, Import),
     Func(FuncName, Func),
+    Table(TableName, Table),
+    Memory(MemName, MemType),
     Global(GlobalName, Global),
+    ElemSegment(ElemName, ElemSegment),
     DataSegment(DataName, DataSegment),
     Export(String, Export),
     Start(FuncName),
-    Elem(Vec<FuncName>),
 }
 
 fn parse_module_item<'a>() -> Parser<'a, ModuleItem> {
@@ -697,12 +977,15 @@ fn parse_module_item<'a>() -> Parser<'a, ModuleItem> {
         .or(parse_import()
             .map(|(module_name, name, import)| ModuleItem::Import(module_name, name, import)))
         .or(parse_func().map(|(func_name, func)| ModuleItem::Func(func_name, func)))
+        .or(parse_table().map(|(table_name, table)| ModuleItem::Table(table_name, table)))
+        .or(parse_memory().map(|(mem_name, mem_type)| ModuleItem::Memory(mem_name, mem_type)))
         .or(parse_global().map(|(global_name, global)| ModuleItem::Global(global_name, global)))
+        .or(parse_elem_segment()
+            .map(|(elem_name, elem_segment)| ModuleItem::ElemSegment(elem_name, elem_segment)))
         .or(parse_data_segment()
             .map(|(data_name, data_segment)| ModuleItem::DataSegment(data_name, data_segment)))
         .or(parse_export().map(|(name, export)| ModuleItem::Export(name, export)))
         .or(parse_start().map(ModuleItem::Start))
-        .or(parse_elem().map(ModuleItem::Elem))
 }
 
 fn parse_module<'a>() -> Parser<'a, Module> {
@@ -718,19 +1001,19 @@ fn parse_module<'a>() -> Parser<'a, Module> {
                         module.add_import(module_name, name, import)
                     }
                     ModuleItem::Func(func_name, func) => module.add_func(func_name, func),
+                    ModuleItem::Table(table_name, table) => module.add_table(table_name, table),
+                    ModuleItem::Memory(mem_name, mem_type) => module.add_memory(mem_name, mem_type),
                     ModuleItem::Global(global_name, global) => {
                         module.add_global(global_name, global)
+                    }
+                    ModuleItem::ElemSegment(elem_name, elem_segment) => {
+                        module.add_elem(elem_name, elem_segment)
                     }
                     ModuleItem::DataSegment(data_name, data_segment) => {
                         module.add_data(data_name, data_segment)
                     }
                     ModuleItem::Export(name, export) => module.add_export(name, export),
                     ModuleItem::Start(func_name) => module.set_start(func_name),
-                    ModuleItem::Elem(func_names) => {
-                        for func_name in func_names {
-                            module.declare_func(func_name);
-                        }
-                    }
                 }
             }
 

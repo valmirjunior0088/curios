@@ -1,9 +1,19 @@
 use super::{
-    BlockType, DataName, FieldName, FuncName, GlobalName, HeapType, LabelName, LocalName, RefType,
-    TypeName, ValType,
+    BlockType, DataName, ElemName, FieldName, FuncName, GlobalName, HeapType, LabelName, LocalName,
+    MemName, RefType, TableName, TypeName, ValType,
 };
 
-/// The backend's instruction set, one variant per wasm opcode the crate can encode. Every operand the binary format expresses as an index — labels, functions, types, struct fields, locals, globals, data segments — is carried here as a name and resolved by the encoder, so emitters never track index spaces. The roster is deliberately GC-only for program values: struct/array/ref/`i31` operations plus the full numeric core, and the only route from raw bytes into values is `ArrayNewData` reading a passive data segment. The four memory instructions (`I32Load8U`/`I32Store8`/`MemorySize`/`MemoryGrow`) are not an exception to that rule — they serve the module's single always-emitted memory (empty until grown), a host-boundary bulk-copy lane that program values never inhabit.
+/// The immediate every load and store carries: the memory it reaches, the alignment its address is promised to have — as the binary format's log2 exponent, not a byte count — and a static offset added to the dynamic address operand, wide enough for a 64-bit memory. The memory is named like every other cross-reference, so the encoder is the only place that knows one of them is index 0 and may leave the index implicit.
+#[derive(Debug, Clone)]
+pub struct MemArg {
+    pub mem_name: MemName,
+    pub align: u32,
+    pub offset: u64,
+}
+
+/// The backend's instruction set, one variant per wasm opcode the crate can encode. Every operand the binary format expresses as an index — labels, functions, types, struct fields, locals, globals, tables, memories, element and data segments — is carried here as a name and resolved by the encoder, so emitters never track index spaces.
+///
+/// The roster covers the whole envelope's table and memory surface and enforces nothing about how it is used. That program values live in GC references rather than linear memory is the *emitter's* discipline, stated by [WebAssembly-GC is the only target](../../documentation/design/toolchain/webassembly-gc-is-the-only-target.md); it was once enforced twice, because the roster physically could not express the alternative, and this crate is no longer the second enforcer.
 #[derive(Debug, Clone)]
 pub enum Instr {
     Unreachable,
@@ -41,10 +51,18 @@ pub enum Instr {
     CallRef {
         type_name: TypeName,
     },
+    CallIndirect {
+        table_name: TableName,
+        type_name: TypeName,
+    },
     ReturnCall {
         func_name: FuncName,
     },
     ReturnCallRef {
+        type_name: TypeName,
+    },
+    ReturnCallIndirect {
+        table_name: TableName,
         type_name: TypeName,
     },
     BrOnNull {
@@ -108,6 +126,10 @@ pub enum Instr {
         type_name: TypeName,
         data_name: DataName,
     },
+    ArrayNewElem {
+        type_name: TypeName,
+        elem_name: ElemName,
+    },
     ArrayGet {
         type_name: TypeName,
     },
@@ -128,6 +150,14 @@ pub enum Instr {
         source_name: TypeName,
         target_name: TypeName,
     },
+    ArrayInitData {
+        type_name: TypeName,
+        data_name: DataName,
+    },
+    ArrayInitElem {
+        type_name: TypeName,
+        elem_name: ElemName,
+    },
     RefTest {
         ref_type: RefType,
     },
@@ -139,11 +169,123 @@ pub enum Instr {
     RefI31,
     I31GetS,
     I31GetU,
-    // The memory lane: byte-granular access (align 0, offset 0) plus size/grow against the module's single always-emitted memory.
-    I32Load8U,
-    I32Store8,
-    MemorySize,
-    MemoryGrow,
+    I32Load {
+        mem_arg: MemArg,
+    },
+    I64Load {
+        mem_arg: MemArg,
+    },
+    F32Load {
+        mem_arg: MemArg,
+    },
+    F64Load {
+        mem_arg: MemArg,
+    },
+    I32Load8S {
+        mem_arg: MemArg,
+    },
+    I32Load8U {
+        mem_arg: MemArg,
+    },
+    I32Load16S {
+        mem_arg: MemArg,
+    },
+    I32Load16U {
+        mem_arg: MemArg,
+    },
+    I64Load8S {
+        mem_arg: MemArg,
+    },
+    I64Load8U {
+        mem_arg: MemArg,
+    },
+    I64Load16S {
+        mem_arg: MemArg,
+    },
+    I64Load16U {
+        mem_arg: MemArg,
+    },
+    I64Load32S {
+        mem_arg: MemArg,
+    },
+    I64Load32U {
+        mem_arg: MemArg,
+    },
+    I32Store {
+        mem_arg: MemArg,
+    },
+    I64Store {
+        mem_arg: MemArg,
+    },
+    F32Store {
+        mem_arg: MemArg,
+    },
+    F64Store {
+        mem_arg: MemArg,
+    },
+    I32Store8 {
+        mem_arg: MemArg,
+    },
+    I32Store16 {
+        mem_arg: MemArg,
+    },
+    I64Store8 {
+        mem_arg: MemArg,
+    },
+    I64Store16 {
+        mem_arg: MemArg,
+    },
+    I64Store32 {
+        mem_arg: MemArg,
+    },
+    MemorySize {
+        mem_name: MemName,
+    },
+    MemoryGrow {
+        mem_name: MemName,
+    },
+    MemoryFill {
+        mem_name: MemName,
+    },
+    // Target before source, matching the operand order of the encoding.
+    MemoryCopy {
+        target_name: MemName,
+        source_name: MemName,
+    },
+    MemoryInit {
+        mem_name: MemName,
+        data_name: DataName,
+    },
+    DataDrop {
+        data_name: DataName,
+    },
+    TableGet {
+        table_name: TableName,
+    },
+    TableSet {
+        table_name: TableName,
+    },
+    TableSize {
+        table_name: TableName,
+    },
+    TableGrow {
+        table_name: TableName,
+    },
+    TableFill {
+        table_name: TableName,
+    },
+    // Target before source, matching the operand order of the encoding.
+    TableCopy {
+        target_name: TableName,
+        source_name: TableName,
+    },
+    TableInit {
+        table_name: TableName,
+        elem_name: ElemName,
+    },
+    ElemDrop {
+        elem_name: ElemName,
+    },
     Drop,
     Select {
         val_types: Vec<ValType>,
@@ -349,10 +491,6 @@ mnemonics! {
     RefI31 => "ref.i31",
     I31GetS => "i31.get_s",
     I31GetU => "i31.get_u",
-    I32Load8U => "i32.load8_u",
-    I32Store8 => "i32.store8",
-    MemorySize => "memory.size",
-    MemoryGrow => "memory.grow",
     Drop => "drop",
     I32Eqz => "i32.eqz",
     I32Eq => "i32.eq",
@@ -492,7 +630,69 @@ mnemonics! {
     I64TruncSatF64U => "i64.trunc_sat_f64_u",
 }
 
-/// A flat instruction sequence — a function body or a global's constant initializer. The encoder appends the terminating `end` opcode itself, so builders supply only the instructions.
+/// One memory-access instruction's text facts, from the table beside [`Instr`]: its WAT spelling, the log2 alignment its access width makes natural — which the printer omits and the parser defaults to — and the memarg it carries. Opcodes are deliberately absent: they live in the encoder beside every other instruction's, so this table holds nothing a second place also holds.
+pub(crate) struct MemAccess<'a> {
+    pub(crate) mnemonic: &'static str,
+    pub(crate) natural_align: u32,
+    pub(crate) mem_arg: &'a MemArg,
+}
+
+/// Declares the memory-access instructions' WAT spellings and natural alignments from one table, the way [`mnemonics!`] declares the operand-less ones — the printer and the parser both read it, so neither can drift from the other or from the alignment defaulting rule.
+macro_rules! memory_accesses {
+    ($($variant:ident => $mnemonic:literal, $natural_align:literal,)+) => {
+        impl Instr {
+            /// This instruction's memory-access facts, or `None` for every instruction that is not a load or a store.
+            pub(crate) fn mem_access(&self) -> Option<MemAccess<'_>> {
+                match self {
+                    $(Instr::$variant { mem_arg } => Some(MemAccess {
+                        mnemonic: $mnemonic,
+                        natural_align: $natural_align,
+                        mem_arg,
+                    }),)+
+                    _ => None,
+                }
+            }
+
+            /// The load or store spelled `token`, as its natural log2 alignment and the constructor awaiting its memarg — [`Instr::mem_access`]'s reverse, for the parser's whole-token dispatch.
+            pub(crate) fn from_mem_mnemonic(token: &str) -> Option<(u32, fn(MemArg) -> Instr)> {
+                match token {
+                    $($mnemonic => Some(($natural_align, |mem_arg| Instr::$variant { mem_arg })),)+
+                    _ => None,
+                }
+            }
+        }
+    };
+}
+
+memory_accesses! {
+    I32Load => "i32.load", 2,
+    I64Load => "i64.load", 3,
+    F32Load => "f32.load", 2,
+    F64Load => "f64.load", 3,
+    I32Load8S => "i32.load8_s", 0,
+    I32Load8U => "i32.load8_u", 0,
+    I32Load16S => "i32.load16_s", 1,
+    I32Load16U => "i32.load16_u", 1,
+    I64Load8S => "i64.load8_s", 0,
+    I64Load8U => "i64.load8_u", 0,
+    I64Load16S => "i64.load16_s", 1,
+    I64Load16U => "i64.load16_u", 1,
+    I64Load32S => "i64.load32_s", 2,
+    I64Load32U => "i64.load32_u", 2,
+    I32Store => "i32.store", 2,
+    I64Store => "i64.store", 3,
+    F32Store => "f32.store", 2,
+    F64Store => "f64.store", 3,
+    I32Store8 => "i32.store8", 0,
+    I32Store16 => "i32.store16", 1,
+    I64Store8 => "i64.store8", 0,
+    I64Store16 => "i64.store16", 1,
+    I64Store32 => "i64.store32", 2,
+}
+
+/// A flat instruction sequence — a function body, or a constant expression: a global's initializer, a table's, a segment's offset, one element of an expression list. The encoder appends the terminating `end` opcode itself, so builders supply only the instructions.
+///
+/// One type serves both, so the constant-expression restriction is a contract on the builder rather than something this type can refuse. A constant expression must stay inside the *base* grammar — a single `t.const`, `global.get` of an immutable import, `ref.null`, `ref.func`, or GC constructor — because the extended-constant-expressions proposal sits outside the pinned envelope: Wasmtime's engine happens to accept it, `curios-binaryen`'s mask deliberately does not, so a wider expression would validate and then abort the optimizer. `optimize`'s round-trip over the emitted corpus is what detects a breach.
 #[derive(Debug, Default, Clone)]
 pub struct Expr {
     pub instrs: Vec<Instr>,

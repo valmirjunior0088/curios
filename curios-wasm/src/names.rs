@@ -8,4 +8,7 @@ name!(FuncName);
 name!(LocalName);
 name!(GlobalName);
 name!(LabelName);
+name!(TableName);
+name!(ElemName);
+name!(MemName);
 name!(DataName);

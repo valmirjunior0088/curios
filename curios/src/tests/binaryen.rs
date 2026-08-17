@@ -3,7 +3,7 @@ use {
     curios_pipeline::DEFAULT_STEP_BUDGET,
     curios_pipeline::compile_with_prelude,
     curios_text::{Entrypoint, RootSource},
-    curios_wasm::to_bytes,
+    curios_wasm::{Module, to_bytes},
 };
 
 #[test]
@@ -49,4 +49,89 @@ fn optimizes_to_a_smaller_valid_module() {
         named.len(),
         optimized.len()
     );
+}
+
+/// The feature mask is what keeps the emitter and the optimizer agreeing on the envelope, and `optimize` aborts the process on a module it cannot read rather than returning an error — so a mask missing a feature `curios-wasm` can now emit fails hard here rather than surprising a caller later. Each module reaches one construct the mask had to grow for, or one the grown mask must still accept beside it.
+#[test]
+fn passes_the_full_memory_and_table_surface_through() {
+    let sources = [
+        (
+            "an active data segment",
+            r#"
+            (module $active_data
+                (memory $m i32 1)
+                (data $d (memory $m) (offset i32.const 0) "\68\69"))
+"#,
+        ),
+        (
+            "the bulk-memory instructions over two memories",
+            r#"
+            (module $bulk
+                (type $f (func))
+                (func $a (type $f)
+                    i32.const 0
+                    i32.const 0
+                    i32.const 1
+                    memory.copy $first $second
+                    i32.const 0
+                    i32.const 0
+                    i32.const 1
+                    memory.fill $first
+                    i32.const 0
+                    i32.const 0
+                    i32.const 1
+                    memory.init $first $d
+                    data.drop $d)
+                (memory $first i32 1)
+                (memory $second i32 1)
+                (data $d passive "\00")
+                (export "a" (func $a)))
+"#,
+        ),
+        (
+            "a table called through `call_indirect`",
+            r#"
+            (module $indirect
+                (type $f (func))
+                (func $a (type $f)
+                    i32.const 0
+                    call_indirect $t $f)
+                (table $t i32 1 (ref null func))
+                (elem $e (table $t) (offset i32.const 0) func $a)
+                (export "a" (func $a)))
+"#,
+        ),
+        (
+            "a 64-bit memory",
+            r#"
+            (module $memory64
+                (type $f (func (result i64)))
+                (func $a (type $f)
+                    memory.size $m)
+                (memory $m i64 1)
+                (export "a" (func $a)))
+"#,
+        ),
+        (
+            "a 64-bit table",
+            r#"
+            (module $table64
+                (type $f (func (result i64)))
+                (func $a (type $f)
+                    table.size $t)
+                (table $t i64 1 (ref null func))
+                (export "a" (func $a)))
+"#,
+        ),
+    ];
+
+    for (construct, source) in sources {
+        let module = source.parse::<Module>().expect("expected a module");
+        let optimized = optimize(to_bytes(&module), false);
+
+        assert!(
+            optimized.starts_with(b"\0asm"),
+            "expected {construct} to survive optimization"
+        );
+    }
 }
