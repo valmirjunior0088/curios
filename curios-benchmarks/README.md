@@ -209,14 +209,17 @@ Curios only targets WebAssembly, so its presence in both sections is not two bac
 
 ## Workloads
 
-Both are (a) expressible in a total, structurally-recursive language, (b) immune to constant-folding and closed-form shortcuts — the input arrives at runtime — and (c) bit-identical in output across every implementation, so a mismatch flags a mistranslation before any timing is trusted. `entrypoint.sh` enforces that cross-check at the start of every run.
+All three are (a) expressible in a total, structurally-recursive language, (b) immune to constant-folding and closed-form shortcuts — the input arrives at runtime — and (c) bit-identical in output across every implementation, so a mismatch flags a mistranslation before any timing is trusted. `entrypoint.sh` enforces that cross-check at the start of every run.
 
 - **`lcg`** — iterate `x = (75 · x) mod 65537` N times from `x = 1`. One multiply + one modulo per iteration; the max intermediate is 75·65536 ≈ 4.9M, far under i31. Measures integer ALU + loop/call overhead. Default `N = 100_000_000` (≈ 0.45s of Curios compute; below ~10⁷ it is startup-dominated). Anchor: `lcg(10⁸) = 17662`.
 - **`trees`** (the classic binary-trees allocation stress) — build a perfect tree of depth D whose nodes carry unique heap-numbered payloads (root `1`, children `2v` / `2v+1`), then reduce to `sum mod 1000003`. The unique payloads make every node distinct, defeating any structural subtree-sharing and forcing 2^(D+1)−1 real allocations; the modulus keeps the checksum inside i31. Measures allocation + GC and heap traversal. Default `D = 21` (≈ 4.2M nodes, ≈ 0.25s; D=23 ≈ 1s). Anchor: `trees(21) = 536864`.
+- **`chain`** — build a cons list of 10 000 cells once, then transform it K times, each round rebuilding every cell from a predecessor that dies with the operation. Measures *death-birth churn*: unlike `trees`, where every allocation survives to be traversed, nothing here outlives the step that replaces it. That is the pairing [Perceus](https://dl.acm.org/doi/10.1145/3453483.3454032) reference counting turns into an in-place write, so the Lean column is a direct price on what reuse would buy and the ratio to it is the number this workload exists for. The seed is derived from K so nothing is a closed term, each round reverses the order (which the sum ignores), and every walk is tail-recursive or a loop so no contestant's stack depends on the 10 000. Default `K = 640` (≈ 6.4M cells reborn, ≈ 0.33s). Anchors: `chain(8) = 819185`, `chain(640) = 511784`.
+
+  Two asymmetries belong beside its ratio rather than inside it. A Curios cons cell is **three** slots to Lean's two, since a tagged constructor carries its discriminant — real, and not what the workload is about. And the chain's live set is small by design, so the collector's marking half is barely exercised: what is measured is the allocation rate and the young-collection frequency that churn drives, which is the half reuse removes.
 
 ### Why the constants are small
 
-Curios's `Nat` and `Int` are unbounded in the type checker but ride an **i31** — the unboxed WebAssembly-GC 31-bit integer — at runtime, and arithmetic is _checked_: a result that leaves i31 traps. Why it traps rather than wrapping is [Numeric carriers narrow by refusing, never by changing a value](../documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md). (`Flt`/`f64` has the range but heap-allocates per value — the wrong tool for a tight integer loop.) So both workloads are deliberately sized to keep **every intermediate, including products,** within i31, and every other language uses its native integer to compute the identical values. The upshot: the integer comparison is like-for-like on values, and it honestly folds Curios's per-op overflow check into the measured cost rather than hiding it.
+Curios's `Nat` and `Int` are unbounded in the type checker but ride an **i31** — the unboxed WebAssembly-GC 31-bit integer — at runtime, and arithmetic is _checked_: a result that leaves i31 traps. Why it traps rather than wrapping is [Numeric carriers narrow by refusing, never by changing a value](../documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md). (`Flt`/`f64` has the range but heap-allocates per value — the wrong tool for a tight integer loop.) So every workload is deliberately sized to keep **every intermediate, including products,** within i31, and every other language uses its native integer to compute the identical values. The upshot: the integer comparison is like-for-like on values, and it honestly folds Curios's per-op overflow check into the measured cost rather than hiding it.
 
 ## Run it
 
@@ -224,10 +227,11 @@ Curios's `Nat` and `Int` are unbounded in the type checker but ride an **i31** �
 curios-benchmarks/
   Dockerfile                 kitchen-sink arm64 image with all 8 toolchains + curios
   Dockerfile.dockerignore    what the build context excludes (target/, .artifacts/, .git)
-  entrypoint.sh              build all, cross-check outputs, then 4 hyperfine tables
+  entrypoint.sh              build all, cross-check outputs, then 6 hyperfine tables
   programs/
     lcg/                     lcg.{crs,rs,ml,js,ts,gr}  Lcg.lean  lakefile.toml
     trees/                   trees.{crs,rs,ml,js,ts,gr}  Trees.lean  lakefile.toml
+    chain/                   chain.{crs,rs,ml,js,ts,gr}  Chain.lean  lakefile.toml
   .artifacts/                built contestants and exported tables (created by a run)
 ```
 
@@ -237,7 +241,7 @@ The image build needs the Curios sources, which live _above_ `curios-benchmarks/
 make curios/benchmarks
 
 # tune the workloads:
-docker run --rm --cpuset-cpus 0 -e N_LCG=200000000 -e D_TREES=23 -e RUNS=7 curios-benchmarks
+docker run --rm --cpuset-cpus 0 -e N_LCG=200000000 -e D_TREES=23 -e K_CHAIN=1280 -e RUNS=7 curios-benchmarks
 ```
 
 `entrypoint.sh` first prints the correctness cross-check (all eight outputs must be identical), then hyperfine's comparison — with relative "x times faster than" ratios — for each table, and writes `.artifacts/*.md`. Read the ratio to Rust as the headline "where are we" number.

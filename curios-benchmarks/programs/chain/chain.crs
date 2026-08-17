@@ -1,0 +1,58 @@
+-- chain: build a cons list of 10 000 cells once, then transform it K times.
+-- Every round rebuilds every cell from a predecessor that dies with the operation
+-- — the death-birth overlap Perceus reuses in place and a tracing collector must
+-- re-allocate. Unlike `trees`, nothing here survives the step that replaces it.
+-- Each round reverses the order, which the final sum ignores, so a contestant is
+-- free to walk the chain either way; the reverse-accumulate spelling is used
+-- everywhere because it is the one that is tail-recursive in every language.
+-- K is read from stdin; the seed is derived from it so nothing is a closed term.
+use /std/{Str, Nat, Option, Io};
+
+induct Chain: Type
+| nil()
+| cons(Nat, Chain)
+end
+
+-- Long enough that a round's live set is real, short enough that a contestant
+-- without tail-call elimination still walks it without overflowing its stack.
+let cells: Nat = 10000;
+
+rec build(n: Nat, x: Nat, acc: Chain) -> Chain =
+    match n: (_) => Chain
+    | 0 => acc
+    | m + 1; ih => build(m, 75 * x % 65537, Chain/cons(x, acc))
+    end;
+
+rec step(rest: Chain, acc: Chain) -> Chain =
+    match rest: (_) => Chain
+    | nil() => acc
+    | cons(v, tail) => step(tail, Chain/cons((75 * v + 13) % 65537, acc))
+    end;
+
+rec rounds(k: Nat, c: Chain) -> Chain =
+    match k: (_) => Chain
+    | 0 => c
+    | m + 1; ih => rounds(m, step(c, Chain/nil()))
+    end;
+
+rec total(c: Chain, acc: Nat) -> Nat =
+    match c: (_) => Nat
+    | nil() => acc
+    | cons(v, tail) => total(tail, (acc + v) % 1000003)
+    end;
+
+let input = /std/read()!;
+match input: (_) => Io({})
+| some(bytes) =>
+    match Str/of_bytes(bytes): (_) => Io({})
+    | some(s) =>
+        match Nat/of_str(Str/trim(s)): (_) => Io({})
+        | some(k) =>
+            let chain = rounds(k, build(cells, (k + 1) % 65537, Chain/nil()));
+            /std/print(Str/concat(Nat/to_str(total(chain, 0)), "\n"))
+        | none() => /std/print("bad input\n")
+        end
+    | none() => /std/print("invalid utf-8\n")
+    end
+| none() => /std/print("no input\n")
+end

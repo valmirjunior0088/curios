@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Build every contestant, cross-check that they all agree, then time them with hyperfine in four tables: {lcg, binary-trees} x {native, wasm-on-wasmtime}.
+# Build every contestant, cross-check that they all agree, then time them with hyperfine in six tables: {lcg, binary-trees, chain} x {native, wasm-on-wasmtime}.
 # Curios is the subject compared in both halves of each program.
 #
-# Knobs (env vars): N_LCG, D_TREES, RUNS, WARMUP.
+# Knobs (env vars): N_LCG, D_TREES, K_CHAIN, RUNS, WARMUP.
 set -uo pipefail
 cd "$(dirname "$0")"
 ROOT="$PWD"          # absolute benchmarks dir; asc is invoked from elsewhere (see below)
@@ -17,6 +17,7 @@ eval "$(opam env 2>/dev/null)" || true
 
 N_LCG="${N_LCG:-100000000}"   # LCG iterations (~0.45s of Curios compute)
 D_TREES="${D_TREES:-21}"      # tree depth: ~4.2M nodes; sums taken mod 1000003
+K_CHAIN="${K_CHAIN:-640}"     # transform rounds over a fixed 10 000-cell chain: ~6.4M cells reborn
 RUNS="${RUNS:-5}"
 WARMUP="${WARMUP:-1}"
 
@@ -80,10 +81,12 @@ table() {  # table "<title>" <hyperfine args...>
 
 build lcg   lcg
 build trees trees
+build chain chain
 
 echo
 check lcg   lcg   8  programs/lcg/lcg.js
 check trees trees 10 programs/trees/trees.js
+check chain chain 8  programs/chain/chain.js
 
 # --- LCG --------------------------------------------------------------------
 table "LCG (N=$N_LCG) — native targets" --export-markdown .artifacts/lcg-native.md \
@@ -112,5 +115,19 @@ table "trees (D=$D_TREES) — wasm on wasmtime" --export-markdown .artifacts/tre
   "wasmtime run .artifacts/trees_rust.wasm $D_TREES" \
   "wasmtime run .artifacts/trees_grain.wasm $D_TREES" \
   "wasmtime run .artifacts/trees_asc.wasm $D_TREES"
+
+# --- chain -------------------------------------------------------------------
+table "chain (K=$K_CHAIN) — native targets" --export-markdown .artifacts/chain-native.md \
+  ".artifacts/chain_rust $K_CHAIN" \
+  ".artifacts/chain_ocaml $K_CHAIN" \
+  "node programs/chain/chain.js $K_CHAIN" \
+  "$(lean_bin chain chain) $K_CHAIN" \
+  "echo $K_CHAIN | .artifacts/chain_curios"
+
+table "chain (K=$K_CHAIN) — wasm on wasmtime" --export-markdown .artifacts/chain-wasm.md \
+  "echo $K_CHAIN | .artifacts/chain_curios" \
+  "wasmtime run .artifacts/chain_rust.wasm $K_CHAIN" \
+  "wasmtime run .artifacts/chain_grain.wasm $K_CHAIN" \
+  "wasmtime run .artifacts/chain_asc.wasm $K_CHAIN"
 
 echo; echo "Markdown tables written to .artifacts/*.md"

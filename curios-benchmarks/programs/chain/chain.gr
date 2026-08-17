@@ -1,0 +1,52 @@
+// chain: build a cons list of 10 000 cells once, then transform it K times, every
+// round rebuilding each cell from a predecessor that dies with it. Grain -> wasm
+// (linear-memory reference-counting GC), on wasmtime — a third point between
+// Curios's tracing collector and Lean's Perceus reuse: counted like Lean's, but
+// with no reset-and-reuse pass, so a dying cell is freed rather than rewritten.
+//
+// APIs verified against the grain-v0.7.2 stdlib; confirm `grain compile` at build.
+// VERIFY: every walk below is self-tail-recursive and relies on Grain eliminating
+// the call — 10 000 live frames would otherwise exhaust the wasm stack.
+module Chain
+
+from "wasi/process" include Process
+from "array" include Array
+from "number" include Number
+from "result" include Result
+
+let cells = 10000
+
+let rec build = (n, x, acc) => {
+  if (n == 0) {
+    acc
+  } else {
+    build(n - 1, 75 * x % 65537, [x, ...acc])
+  }
+}
+
+let rec step = (rest, acc) => {
+  match (rest) {
+    [] => acc,
+    [v, ...tail] => step(tail, [(75 * v + 13) % 65537, ...acc]),
+  }
+}
+
+let rec rounds = (k, c) => {
+  if (k == 0) {
+    c
+  } else {
+    rounds(k - 1, step(c, []))
+  }
+}
+
+let rec total = (c, acc) => {
+  match (c) {
+    [] => acc,
+    [v, ...tail] => total(tail, (acc + v) % 1000003),
+  }
+}
+
+let args = Result.unwrap(Process.argv())
+let s = args[Array.length(args) - 1]
+let k = Result.unwrap(Number.parseInt(s, 10))
+print(total(rounds(k, build(cells, (k + 1) % 65537, [])), 0))
