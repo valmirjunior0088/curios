@@ -4,7 +4,7 @@
 
 This specification defines a measurement program — benchmark workloads and a static census — and the lever gate any mechanism addressing allocation churn must pass. It is deliberately mechanism-blocking: no milestone below changes a representation, an encoding, or the runtime, and the levers in M2 are admitted or refused on M0's and M1's numbers alone.
 
-M0's substrate workload, `chain`, landed in the harness on 2026-08-17 and awaits its first capture. Everything else — the two named workloads, the census, the gate — is not started.
+M0's substrate workload, `chain`, and its record workload, `churn`, are in the harness as of 2026-08-17, awaiting their first capture. The `spines` workload, the census, and the gate are not started.
 
 ## The question under measurement
 
@@ -50,9 +50,9 @@ The spine is `M0 → M1 → M2`. M0 and M1 are independent and may land in eithe
 
 - The substrate workload exists: `chain`, landed 2026-08-17 beside `lcg/` and `trees/`, rebuilds a cons spine K times with nothing surviving the step that replaces it. It prices death-birth churn against every contestant's allocator and nothing more — on this shape the imperative contestants' obvious spelling also rebuilds cell by cell, so `chain` compares memory-management strategies, not purity against mutation. Its first capture is pending.
 
-- Two workload directories remain to add, each with the per-contestant sources the harness's layout prescribes.
+- The record workload exists: `churn`, landed 2026-08-17, threads a six-field record through N LCG-fed steps, two fields updated per step via spread, printing one field modulo a prime — the purest record-update signal, with the minimal algorithmic confound: the imperative contestants mutate a struct in place and allocate nothing, and Lean's structure update gets reuse. The landing answered part of its question before any table: the emitted Curios loop allocates nothing either, the threaded record travelling as fields through the landed in-flight campaigns — pinned by `churn_threaded_record_allocates_nothing` in `curios/src/tests/codegen/churn.rs` — so the capture prices the erased spelling against the mutation floor, and the record-update tax lives only where a record rests, which is `spines`' and the census's territory.
 
-- `churn`: a record of about six fields threaded through N LCG-fed steps, two fields updated per step via spread, printing one field modulo a prime. The purest record-update signal, and the one workload where the purity tax appears as users feel it — the imperative contestants mutate a struct in place and allocate nothing, Lean's structure update gets reuse, Curios reconstructs — with the minimal algorithmic confound.
+- One workload directory remains to add, with the per-contestant sources the harness's layout prescribes.
 
 - `spines`: N LCG-keyed inserts into `/std/Map` followed by a fold, printing modulo a prime. Adds the live-set-under-churn dimension — `chain` keeps almost nothing alive and `trees` keeps everything, and a collector's economics live between — and its header records two confounds plainly: it compares map algorithms across contestants, and `/std/Map` deliberately has no `Key(Nat)`, so LCG keys enter through a byte-string encoding at the boundary that no imperative contestant's hash map mirrors. It orients rather than proves.
 
@@ -72,7 +72,7 @@ The spine is `M0 → M1 → M2`. M0 and M1 are independent and may land in eithe
 
 - Levers are admitted or refused on M0's and M1's numbers; each admitted lever becomes its own design decision with its own evidence, and this specification retires when every lever is dispositioned.
 
-- Lever A — the engine: a wasmtime pin bump and heap sizing now, a generational collector upstream as the horizon. Admission: the churn class — not one workload — is collection-bound. An engine knob was already refused once as a single-benchmark overfit; it enters here only as the class-wide answer the WasmGC mainstream ships.
+- Lever A — the engine: a wasmtime pin bump and heap sizing now, a generational collector upstream as the horizon. Admission: the churn class — not one workload — is collection-bound. An engine knob was already refused once as a single-benchmark overfit; it enters here only as the class-wide answer the WasmGC mainstream ships. `chain`'s own half of that answer is recorded beside `chain_collection_decomposition` in `curios/src/tests/codegen/churn.rs`: about two thirds of its churn time is collection work under the heap the engine's grow-only-on-overflow policy parks at barely twice the live set, recoverable by right-sizing — and non-monotonically, a 16 MiB heap beating a 256 MiB one, so the sizing half of this lever is a policy, not a maximal pre-grow.
 
 - Lever B — static array-scoped reuse: optimizer-proven non-escaping, linearly threaded array builders reuse their dying predecessor in place, over the already-mutable array substrate only. Admission: M1 shows the builder population in real code and shows its churn copy-bound — both halves census questions, per M0's array decision.
 
