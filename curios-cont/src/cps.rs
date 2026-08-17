@@ -565,6 +565,15 @@ impl fmt::Display for CpsVerifyError {
 
 impl std::error::Error for CpsVerifyError {}
 
+/// The recorded fields representation: `width` consecutive parameters of a continuation, starting at `start`, that *are* the fields of one former aggregate parameter.
+///
+/// The record is what makes a split a fact of the program rather than a convention between passes: [`CpsModule::verify`] holds every group to its continuation's parameter list the way it already holds arities, so a pass that reshapes a recorded parameter list without maintaining the record fails loudly instead of silently disagreeing with the split.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FieldGroup {
+    pub start: usize,
+    pub width: usize,
+}
+
 /// The production Cont representation. Arena slots never move or get reused; deletion writes `None` and deterministic compaction is explicit.
 #[derive(Debug, Clone, Default)]
 pub struct CpsModule {
@@ -572,6 +581,7 @@ pub struct CpsModule {
     values: Arena<CpsValueId, CpsValueDef>,
     functions: Arena<CpsFunId, CpsFunction>,
     continuations: Arena<CpsContId, CpsContinuation>,
+    field_groups: BTreeMap<CpsContId, Vec<FieldGroup>>,
     entry: Option<CpsFunId>,
 }
 
@@ -582,6 +592,42 @@ impl CpsModule {
 
     pub fn entry(&self) -> Option<CpsFunId> {
         self.entry
+    }
+
+    /// The recorded fields representations, by continuation.
+    pub fn field_groups(&self) -> &BTreeMap<CpsContId, Vec<FieldGroup>> {
+        &self.field_groups
+    }
+
+    /// Record that `continuation`'s parameters `start..start + width` are one former aggregate's fields. Groups are kept sorted by start; [`CpsModule::verify`] holds them to the parameter list.
+    pub fn record_field_group(&mut self, continuation: CpsContId, group: FieldGroup) {
+        let groups = self.field_groups.entry(continuation).or_default();
+        groups.push(group);
+        groups.sort_by_key(|group| group.start);
+    }
+
+    /// Maintain the record across a parameter removal: shift groups past each removed index down, shrink groups losing a member, and drop groups emptied entirely. The caller removes the parameters; this keeps the record telling the truth about what remains.
+    pub fn remove_params_from_record(
+        &mut self,
+        continuation: CpsContId,
+        removed: &BTreeSet<usize>,
+    ) {
+        let Some(groups) = self.field_groups.get_mut(&continuation) else {
+            return;
+        };
+        for group in groups.iter_mut() {
+            let inside = removed
+                .iter()
+                .filter(|&&index| index >= group.start && index < group.start + group.width)
+                .count();
+            let before = removed.iter().filter(|&&index| index < group.start).count();
+            group.start -= before;
+            group.width -= inside;
+        }
+        groups.retain(|group| group.width > 0);
+        if groups.is_empty() {
+            self.field_groups.remove(&continuation);
+        }
     }
 
     pub fn set_entry(&mut self, entry: CpsFunId) {
@@ -870,6 +916,37 @@ impl CpsModule {
             return Err(CpsVerifyError(
                 "local-continuation arena and lexical LetCont bindings disagree".into(),
             ));
+        }
+
+        // The recorded fields representations hold: every group names a live continuation and lies inside its parameter list without overlapping a neighbour, so a pass that reshaped a recorded parameter list without maintaining the record fails here rather than silently disagreeing with the split.
+        for (continuation, groups) in &self.field_groups {
+            let Some(definition) = self.continuation(*continuation) else {
+                return Err(CpsVerifyError(format!(
+                    "field group records dead continuation {continuation}"
+                )));
+            };
+            let mut end = 0;
+            for group in groups {
+                if group.width == 0 {
+                    return Err(CpsVerifyError(format!(
+                        "{continuation} records an empty field group at {}",
+                        group.start
+                    )));
+                }
+                if group.start < end {
+                    return Err(CpsVerifyError(format!(
+                        "{continuation} records overlapping field groups at {}",
+                        group.start
+                    )));
+                }
+                end = group.start + group.width;
+            }
+            if end > definition.params.len() {
+                return Err(CpsVerifyError(format!(
+                    "{continuation} records a field group past its {} parameters",
+                    definition.params.len()
+                )));
+            }
         }
 
         Ok(())
@@ -1499,8 +1576,10 @@ mod cse;
 mod dataflow;
 mod demand;
 mod evaluate;
+mod fields;
 mod inline;
 mod optimize;
+mod origin;
 mod protocol;
 mod reachable;
 pub(crate) mod represent;
@@ -1510,6 +1589,7 @@ mod uncurry;
 pub(crate) use dataflow::*;
 pub(crate) use demand::*;
 pub use optimize::optimize;
+pub(crate) use origin::*;
 
 impl fmt::Display for CpsModule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

@@ -561,6 +561,7 @@ pub(super) fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
             &mut module.continuations.get_mut(continuation).unwrap().params,
             &dead,
         );
+        module.remove_params_from_record(continuation, &dead);
         for (_, node) in module.nodes.iter_live_mut() {
             match node {
                 CpsNode::ApplyCont(edge) if edge.target == continuation => {

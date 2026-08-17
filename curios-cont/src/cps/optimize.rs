@@ -10,6 +10,7 @@ use super::{
     analysis::known_values,
     contify::contify_calls,
     cse::dedupe_intrinsics,
+    fields::split_parameters,
     inline::{inline_known_calls, inline_single_use_continuations},
     protocol::split_returns,
     reachable::prune_unreachable,
@@ -29,6 +30,8 @@ use super::{
 /// That argues for nine. The value is twice the old one instead, because a budget tuned to clear one measured callee is a budget that clears exactly that callee, and the next one a node larger pays the same price with nobody watching.
 pub(super) const MULTI_SITE_INLINE_LIMIT: usize = 16;
 pub(super) const BRANCH_SPECIALIZATION_GROWTH_LIMIT: usize = 24;
+/// How many parameters a continuation may hold after a fields split. The M0 census's largest admitted aggregate is the four-field scan state riding beside loop state, so sixteen clears every observed candidate with headroom for one level of nesting — while refusing the unbounded flattening a recursive structure's constructions would otherwise invite, which is what makes the split's termination independent of `ROUND_LIMIT`.
+pub(super) const PARAM_SPLIT_GROWTH_LIMIT: usize = 16;
 pub(super) const SCC_CLONE_LIMIT: usize = 64;
 pub(super) const SCC_CLONE_NODE_LIMIT: usize = 256;
 pub(super) const BRANCH_CLONE_LIMIT: usize = 64;
@@ -69,6 +72,7 @@ pub fn optimize(module: &mut CpsModule) {
             | specialize_call_patterns(module, &mut branch_clone_budget)
             | specialize_jump_patterns(module, &mut jump_clone_budget)
             | split_returns(module)
+            | split_parameters(module)
             | uncurry_returns(module)
             | dissolve_rec_init(module)
             | prune_unreachable(module);

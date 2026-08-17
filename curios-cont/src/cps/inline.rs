@@ -233,6 +233,7 @@ pub(super) fn inline_continuation(
     let body = module.nodes.remove(definition.body).unwrap();
     module.nodes.set(call, body);
     module.continuations.remove(continuation);
+    module.field_groups.remove(&continuation);
     for param in definition.params {
         module.values.remove(param);
     }

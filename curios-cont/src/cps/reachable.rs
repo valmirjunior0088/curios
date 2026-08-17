@@ -79,6 +79,9 @@ pub(super) fn prune_unreachable(module: &mut CpsModule) -> bool {
     );
     module.functions.retain(&functions);
     module.continuations.retain(&continuations);
+    module
+        .field_groups
+        .retain(|continuation, _| continuations.contains(continuation));
     module.nodes.retain(&nodes);
     for (_, node) in module.nodes.iter_live_mut() {
         match node {
