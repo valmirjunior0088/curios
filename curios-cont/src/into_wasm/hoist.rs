@@ -20,6 +20,8 @@ enum ConstKey {
     Bin(u8, usize, Vec<u8>),
     List(Vec<String>),
     Tpl(Vec<String>),
+    /// A closure is its target plus its canonicalized captures: with the code field an ordinary table index, a const-captured closure is a constant aggregate like any `Tpl`, materialized once per instantiation instead of per construction.
+    Clsr(String, Vec<String>),
 }
 
 fn bin_key(grain: Grain, value: &PackedBin) -> ConstKey {
@@ -124,8 +126,18 @@ fn collect_consts(body: &EmissionBody, interner: &mut ConstInterner, consts: &mu
                     consts.renames.insert(name.clone(), interned);
                 }
             }
-            // A closure value is left in place: hoisting one moves its `ref.func` into the start function, and no measured shape needs it yet.
-            EmissionData::Closure(_, _) => {}
+            // A recursive shell's fill is naturally outside the condition: a cyclic closure's captures include a cycle member — its own shell'd name or a partner's — which is neither an interned const nor a kept scalar, so `intern_elements` refuses it and the shell + backpatch path is untouched.
+            EmissionData::Closure(target, fields) => {
+                if let Some(canonical) = intern_elements(fields, interner, consts) {
+                    let key = ConstKey::Clsr(
+                        target.as_string(),
+                        canonical.iter().map(|name| name.as_string()).collect(),
+                    );
+                    let interned =
+                        interner.intern(key, EmissionData::Closure(target.clone(), canonical));
+                    consts.renames.insert(name.clone(), interned);
+                }
+            }
         }
     }
     for (_, block) in &body.blocks {

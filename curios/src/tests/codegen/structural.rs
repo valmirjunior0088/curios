@@ -164,6 +164,24 @@ const UNCURRY: &str = r#"
     /std/print(Nat/to_str(walk(n)(1)))
     "#;
 
+/// A capture-free closure selected and applied inside a loop — the constant-closure interning shape. Each iteration picks one of two lambdas by a runtime condition, so the call stays genuinely unknown (the parameter joins two closures, exactly [`HIGHER_ORDER`]'s conflict), but neither lambda captures anything: with the code field an ordinary `i32`, both are constant aggregates, so the loop must reference two module consts rather than construct an environment per iteration.
+const LOOPED_PICK: &str = r#"
+    use /std/{Handle, Nat, Bool, List, proc};
+    rec spin(k : Nat, acc : Nat) -> Nat =
+        match k : (_) => Nat
+        | 0 => acc
+        | p + 1; ih =>
+            let f = match acc % 2 <= 0 : (_) => (Nat) -> Nat
+                | true => (y) => (y * 7 + 1) % 30011
+                | false => (y) => (y * 3 + 5) % 30011
+                end;
+            spin(p, f(acc) % 40009)
+        end;
+    let taint = List/len(proc/args!);
+    let n : Nat = taint;
+    /std/print(Nat/to_str(spin(n, 1)))
+    "#;
+
 /// An idiomatic string walk: `/std/Str/fold` over a string the program derives at runtime.
 ///
 /// The string comes from `Nat/to_str` rather than a literal or `Str/of_bytes`, and both choices are load-bearing. A literal would let partial evaluation unroll the walk over known bytes, so the fixture would assert nothing about a loop; `of_bytes` would drag in `/std/Str/utf8/check`, whose own encoding still returns a function per byte and whose allocations would swamp the claim. What is left is the walk itself.
@@ -675,6 +693,7 @@ fn closures_carry_their_code_as_a_table_index() {
         ("split-return", SPLIT_RETURN),
         ("uncurry", UNCURRY),
         ("string-walk", STRING_WALK),
+        ("looped-pick", LOOPED_PICK),
     ] {
         let wat = wat(source);
         assert!(
@@ -699,6 +718,34 @@ fn closures_carry_their_code_as_a_table_index() {
     assert!(
         wat.contains("(elem $clsr (table $clsr) (offset i32.const 1) func"),
         "one active segment fills it from slot 1, leaving slot 0 null",
+    );
+}
+
+/// A capture-free closure constructed in a loop pins as a module const: the constant hoister interns it like any constant aggregate — the swap made its code field an `i32`, dissolving the exclusion that kept closures inline to keep `ref.func` out of the start function — so the loop's arms reference globals and no per-iteration environment construction survives in function code. The environments are built exactly once, in `$start`.
+#[test]
+fn a_capture_free_closure_in_a_loop_interns_as_a_const() {
+    let wat = wat(LOOPED_PICK);
+
+    // `spin` owns the 40009 modulus and is contified into the entry, so the claim is made of the loop itself; the two lambdas own 30011 and are lifted to their own functions.
+    let kernel = loop_containing(&wat, "40009");
+    assert!(
+        !kernel.contains("struct.new $envr/"),
+        "the loop constructs no environment per iteration: {kernel}",
+    );
+    assert!(
+        kernel.contains("global.get $const/"),
+        "the arms reference the interned consts instead: {kernel}",
+    );
+
+    let functions = functions(&wat);
+    let start = functions
+        .iter()
+        .find(|function| function.name == "$start")
+        .expect("the module has a start function");
+    assert!(
+        start.body.matches("struct.new $envr/").count() >= 2,
+        "both lambdas materialize once, at instantiation: {}",
+        start.body,
     );
 }
 
@@ -989,6 +1036,10 @@ fn a_returned_closure_every_caller_applies_is_absorbed() {
 /// # The two scale questions, answered by the corpus
 ///
 /// The design record owed two measurements: `call_indirect` against many distinct final subtypes in one table, and instantiation of a table at hundreds of entries. The optimized corpus never builds either shape — the largest table any measured program emits is 22 slots (printed below), because dead-code elimination keeps only reachable closure bodies. At that size the answers are subsumed by the product rows above: `monad_io`'s 5.9× is measured *through* a table whose every entry is its own final subtype, and `rng_state`'s startup-dominated 0.04 s is unchanged with the table present, so neither the per-call check nor instantiation is an attributable share at the sizes this compiler emits. A future program with hundreds of live closures re-opens the question; nothing in the corpus can.
+///
+/// # The constant-closure annex's admission, 2026-08-17
+///
+/// The final column counts environments materialized once in `$start` — closures whose captures are all interned constants, which the hoister interns now that the code field is an `i32`. Its gate was frequency, and the population is everywhere: at least one per corpus fixture, and 9 of the 19–21 environment constructions in each stdin-driven program (the `/std` description machinery's capture-free thunks are most of them). The rewrite stays.
 #[test]
 #[ignore = "measurement: records what the closure table costs and saves rather than asserting"]
 fn closure_index_dispatch_measurements() {
@@ -1023,8 +1074,13 @@ fn closure_index_dispatch_measurements() {
             .unwrap_or_else(|| "none".to_string());
         let dispatches = wat.matches("call_indirect $clsr ").count();
         let environments = wat.matches("struct.new $envr/").count();
+        // The constant-closure annex's admission census: environments materialized once at instantiation, each a construction the swap moved out of function code.
+        let interned = functions(&wat)
+            .iter()
+            .find(|function| function.name == "$start")
+            .map_or(0, |start| start.body.matches("struct.new $envr/").count());
         println!(
-            "{label}: {slots} table slots, {dispatches} dispatch sites, {environments} environment constructions"
+            "{label}: {slots} table slots, {dispatches} dispatch sites, {environments} environment constructions, {interned} interned as consts"
         );
     }
 }
@@ -1151,6 +1207,7 @@ fn raw_wasm_validates_and_executes_without_binaryen() {
         ("function-only", FUNCTION_ONLY),
         ("mutual-recursion", MUTUAL_RECURSION),
         ("split-return", SPLIT_RETURN),
+        ("looped-pick", LOOPED_PICK),
     ] {
         let args = ["prog", "a", "b", "c"];
         let raw = run_raw(source, &args);
