@@ -957,6 +957,78 @@ fn a_returned_closure_every_caller_applies_is_absorbed() {
     }
 }
 
+/// What the closure table index is worth at product level, and where the profile's attribution had already expired.
+///
+/// Run it with:
+///
+/// ```sh
+/// cargo test --package curios --lib -- --ignored --nocapture closure_index_dispatch_measurements
+/// ```
+///
+/// It asserts nothing. The structural claims are [`closures_carry_their_code_as_a_table_index`]'s and [`a_shell_dispatched_before_backpatch_traps`]'s to make; this prints the static shape of the swap over the corpus — table slots, dispatch sites, environment allocations — so the timings below stay pinned to the modules that produced them.
+///
+/// # The native timings, taken 2026-08-17
+///
+/// Native binaries, debug-profile compiler, x86-64 Linux: `target/debug/curios compile <program> -o <path>` at the swap commit (after) and at its parent `1e079440` (before), then `echo <N> | /usr/bin/time -v <bin>`, five runs per arm, `user` seconds, arms interleaved run-by-run to keep thermal drift out of the comparison (a first non-interleaved pass showed parse_digits's before arm drifting 1.14 → 0.80 across five runs; the interleaved figures below are the stable ones). Every pair printed identical output before any figure was read. Max RSS was flat on every pair (~7 MB; trees 134 MB both arms).
+///
+/// | Program | Input | before | after |
+/// | --- | --- | --- | --- |
+/// | `monad_io` | 10 000 000 | 1.26 1.26 1.26 1.26 1.29 | 0.22 0.21 0.21 0.22 0.22 |
+/// | `parse_digits` | 1 000 000 | 0.80 0.80 0.79 0.78 0.80 | 0.59 0.58 0.59 0.58 0.58 |
+/// | `parse_multibyte` | 300 000 | 0.63 0.60 0.60 0.60 0.61 | 0.55 0.54 0.53 0.55 0.54 |
+/// | `rng_state` | 10 000 000 | 0.04–0.06 | 0.04–0.06 |
+/// | `rng_manual` | 10 000 000 | 0.03 | 0.03 |
+/// | `state_monad` | 1 000 000 | 0.00 | 0.00 |
+/// | `lcg` | 100 000 000 | 0.31 | 0.31 |
+/// | `trees` | 21 | 0.32–0.38 | 0.27–0.36 |
+///
+/// **The monadic loop the mechanism was priced for moved 5.9×** — `monad_io` binds a description per step, so each iteration built one closure and forced it, and 1.26 s of that was the funcref machinery. The string walks moved too (parse_digits −27%, parse_multibyte −11%): two `call_indirect` per character replaced two funcref constructions' interns. The controls behaved — `lcg` and `rng_manual` build no closures and are flat.
+///
+/// **Where the profile's attribution had expired:** the 2026-08-10 profile named `rng_state` at ~75% interning, but the inline-budget raise recorded in `cps/optimize.rs` has since absorbed that program's `State/bind` chain entirely — its loop is scalar now, closures survive only at its few effect boundaries, and both arms time identically. `state_monad`'s trivial-bind loop specializes the same way. The population the swap re-prices is what the specializers *cannot* reach: the per-step `Io` description and the genuinely unknown per-character step closure — which is exactly the spec's "only re-prices the calls that stay unknown".
+///
+/// # The two scale questions, answered by the corpus
+///
+/// The design record owed two measurements: `call_indirect` against many distinct final subtypes in one table, and instantiation of a table at hundreds of entries. The optimized corpus never builds either shape — the largest table any measured program emits is 22 slots (printed below), because dead-code elimination keeps only reachable closure bodies. At that size the answers are subsumed by the product rows above: `monad_io`'s 5.9× is measured *through* a table whose every entry is its own final subtype, and `rng_state`'s startup-dominated 0.04 s is unchanged with the table present, so neither the per-call check nor instantiation is an attributable share at the sizes this compiler emits. A future program with hundreds of live closures re-opens the question; nothing in the corpus can.
+#[test]
+#[ignore = "measurement: records what the closure table costs and saves rather than asserting"]
+fn closure_index_dispatch_measurements() {
+    const MONAD_IO: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../programs/monad_io.crs"
+    ));
+    const PARSE_DIGITS: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../programs/parse_digits.crs"
+    ));
+    const RNG_STATE: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../programs/rng_state.crs"
+    ));
+
+    for (label, source) in [
+        ("lcg", LCG),
+        ("trees", TREES),
+        ("higher-order", HIGHER_ORDER),
+        ("uncurry", UNCURRY),
+        ("string-walk", STRING_WALK),
+        ("monad_io", MONAD_IO),
+        ("parse_digits", PARSE_DIGITS),
+        ("rng_state", RNG_STATE),
+    ] {
+        let wat = wat(source);
+        let slots = wat
+            .lines()
+            .find_map(|line| line.trim().strip_prefix("(table $clsr i32 "))
+            .and_then(|rest| rest.split_whitespace().next().map(str::to_string))
+            .unwrap_or_else(|| "none".to_string());
+        let dispatches = wat.matches("call_indirect $clsr ").count();
+        let environments = wat.matches("struct.new $envr/").count();
+        println!(
+            "{label}: {slots} table slots, {dispatches} dispatch sites, {environments} environment constructions"
+        );
+    }
+}
+
 /// What the return protocol removes from the corpus, and what that is worth.
 ///
 /// Run it with:
