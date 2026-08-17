@@ -4,6 +4,7 @@ use {
         CpsAtom, CpsCallee, CpsContinuation, CpsEdge, CpsFunction, CpsLiteral, CpsModule, CpsNode,
         CpsValueExpr, CpsValueId,
     },
+    std::collections::BTreeSet,
 };
 
 /// One function whose body is `body_of(&mut module)`, so each test states only the flow it is about.
@@ -62,8 +63,8 @@ fn a_construction_reaches_its_parameter_exactly() {
     });
 
     let origins = origins(&module);
-    assert_eq!(origins[&built], Origin::Exact(2));
-    assert_eq!(origins[&param], Origin::Exact(2));
+    assert_eq!(origins[&built], Origin::of_width(2));
+    assert_eq!(origins[&param], Origin::of_width(2));
 }
 
 /// The loop the specification exists for: one edge enters the join with a construction and the backedge passes the join's own parameter back unchanged. The alias contributes the parameter's own fact, so the region stays exact rather than demanding a construction on every edge.
@@ -116,12 +117,12 @@ fn a_loop_alias_edge_keeps_the_region_exact() {
     });
 
     let origins = origins(&module);
-    assert_eq!(origins[&param], Origin::Exact(2));
+    assert_eq!(origins[&param], Origin::of_width(2));
 }
 
-/// Two constructions of different arities merging at one parameter: no single shape describes the flow.
+/// Two constructions of different arities merging at one parameter: the flow is a variant, and the fact carries both widths so the rewrite can travel it at the wider one and fill the narrower edge. This read *replaced* one that answered `Opaque` — merging widths is what the variant-width capability is, and the pair below is the shape of every tagged family whose constructors carry different payload counts.
 #[test]
-fn merged_arities_are_opaque() {
+fn merged_arities_travel_as_a_variant() {
     let mut param = CpsValueId(0);
     let module = module_with(|module| {
         let pair = module.add_value(Some("pair".into()));
@@ -176,7 +177,10 @@ fn merged_arities_are_opaque() {
         })
     });
 
-    assert_eq!(origins(&module)[&param], Origin::Opaque);
+    assert_eq!(
+        origins(&module)[&param],
+        Origin::Constructed(BTreeSet::from([2, 3]))
+    );
 }
 
 /// A resume parameter receives whatever an unsplit return interface delivers, and forwarding it poisons the join it lands in.
@@ -325,7 +329,7 @@ fn a_known_call_argument_reaches_the_callee_parameter_unless_it_escapes() {
         let expected = if escapes {
             Origin::Opaque
         } else {
-            Origin::Exact(2)
+            Origin::of_width(2)
         };
         assert_eq!(
             origins(&module)[&callee_param],

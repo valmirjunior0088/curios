@@ -308,7 +308,9 @@ fn walk_mirror_family_isolates_each_obligation() {
     );
 }
 
-/// Probe one of the four attributions: the returned scan state, tracked by where its construction lives. M1a's interprocedural demand made `split_returns` eligible on the step component — once the first-order `check` rework removed the one caller that captured the scan into a closure chain — so `/syn/Str/step` returns four fields without constructing the `Scan` it hands back, and each caller's resume rebuilds the tuple before entering its continuation. That rebuild is one construction per character, exactly what the callee used to pay: M1a relocates the allocation, and removing the caller-side reconstruction by splitting the receiving continuation is M2's acceptance case, which is when this probe flips again.
+/// Probe one of the four attributions: the returned scan state, tracked by where its construction lives. M1a's interprocedural demand made `split_returns` eligible on the step component — once the first-order `check` rework removed the one caller that captured the scan into a closure chain — so `/syn/Str/step` returns four fields without constructing the `Scan` it hands back.
+///
+/// Each caller's resume then rebuilt the tuple, once per arm, and variant-width splitting removed those: the fold's loop now carries the scan as a discriminant and three payload slots, the interned nullary constructors entering it as one field and filler. **What survives is one construction at the loop's head, and it is a boundary rather than a gap** — `/syn/Str/step` is a known call that takes the scan whole, so the region materializes there, which is exactly what the cost contract prescribes at a boundary the region cannot cross. Removing it means giving `step` a worker that takes the fields, and that is the known-function milestone the census admits; this probe flips a third time when it lands.
 #[test]
 fn returned_scan_is_delivered_as_fields_and_rebuilt_by_callers() {
     let wat = wat(PARSE_MULTIBYTE);
@@ -334,7 +336,7 @@ fn returned_scan_is_delivered_as_fields_and_rebuilt_by_callers() {
         "and step constructs no scan of its own",
     );
 
-    // The fold's per-character shape after M4, pinned so the campaign's milestones flip it deliberately. The accumulator travels as fields (M2), and the suffix view is virtualized (M4): the walk carries `(base, offset, length)` through the loop, its slice is an extent guard plus an offset sum, and the per-character view allocation vanished together with the helper call that built it — the half an allocation count does not see. The scan rebuild remains, for a recorded reason rather than a gap: the loop's scan parameter mixes arity-1 interned constants with the resumes' arity-4 rebuilds — the variant-width shape no exact product describes — so removing it awaits either variant-aware splitting or a uniform-width variant lowering, each a measured decision the spec records.
+    // The fold's per-character shape, pinned so the campaign's milestones flip it deliberately. The accumulator travels as fields and the suffix view is virtualized: the walk carries `(base, offset, length)` through the loop, its slice is an extent guard plus an offset sum, and the per-character view allocation vanished together with the helper call that built it — the half an allocation count does not see. The scan now travels the loop as fields too; the one construction left is the head materialization the known call to `step` keeps alive.
     let fold = split
         .iter()
         .find(|function| function.name.contains("$/std/Str/fold"))
@@ -342,8 +344,14 @@ fn returned_scan_is_delivered_as_fields_and_rebuilt_by_callers() {
     let in_fold = |needle: &str| count_in(fold.body, needle);
     assert_eq!(
         in_fold("struct.new $tpl/4"),
+        1,
+        "the three per-arm rebuilds became one materialization at the loop's head",
+    );
+    // Matched on the name rather than through `in_fold`, because the emitted call spells the callee's index before its hint and that index is not stable across passes.
+    assert_eq!(
+        fold.body.matches("$/syn/Str/step").count(),
         3,
-        "each arm's resume still rebuilds the variant-width scan it passes back",
+        "and what keeps that one alive is the known call taking the scan whole",
     );
     assert_eq!(
         in_fold("struct.new $tpl/2"),

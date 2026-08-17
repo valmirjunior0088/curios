@@ -1,8 +1,10 @@
 //! Continuation scalar replacement: a tuple that travels a join point as one aggregate parameter becomes that many field parameters, and the record in [`FieldGroup`] is what makes the change a fact of the program.
 //!
-//! Admission composes the two halves `documentation/design/toolchain/a-value-costs-when-it-is-kept-not-when-it-is-named.md` keeps separate: the backward half says every use of the parameter is a projection or an eligible transfer (`demands`, `Projected`), and the forward half says every flow reaching it is a construction of one exact arity or an alias of one (`origins`, `Exact`). Loop backedges are the central case rather than an exclusion — an edge carrying the join's own parameter reads as the constructions that entered it, which is precisely what the forward fixpoint establishes.
+//! Admission composes the two halves `documentation/design/toolchain/a-value-costs-when-it-is-kept-not-when-it-is-named.md` keeps separate: the backward half says every use of the parameter is a projection or an eligible transfer (`demands`, `Projected`), and the forward half says every flow reaching it is a construction or an alias of one (`origins`, `Constructed`). Loop backedges are the central case rather than an exclusion — an edge carrying the join's own parameter reads as the constructions that entered it, which is precisely what the forward fixpoint establishes.
 //!
-//! The rewrite is three local edits, and the existing chain finishes the job, exactly as `split_returns` works: the parameter list is spliced and the group recorded; the continuation's head rebuilds the aggregate from the new field parameters and every occurrence of the old parameter is redirected to that rebuild; and every incoming edge projects its argument into fields above the jump. Projection forwarding then collapses the inserted reads through the constructions they see, dead-binding elimination removes the constructions nothing reads any more — and the head rebuild survives exactly where a whole-value use survives, which makes it the materialization boundary the cost contract prescribes rather than a leak.
+//! **A variant is the same rewrite at the widest of several widths.** Where the constructions reaching a parameter disagree about arity — a tagged family's nullary constructor arriving as a one-tuple beside its three-payload sibling's four — the region travels as the widest, and each narrower edge carries its own fields followed by filler. The per-edge width is the same forward fact read at that edge's argument, so a projection is never emitted past what a construction carries, and the filler is unread for the reason the return protocol's is: a read at that index is reachable only where the discriminant says a wider constructor travelled.
+//!
+//! The rewrite is three local edits, and the existing chain finishes the job, exactly as `split_returns` works: the parameter list is spliced and the group recorded; the continuation's head rebuilds the aggregate from the new field parameters and every occurrence of the old parameter is redirected to that rebuild; and every incoming edge projects its argument into fields above the jump. Projection forwarding then collapses the inserted reads through the constructions they see, dead-binding elimination removes the constructions nothing reads any more — and the head rebuild survives exactly where a whole-value use survives, which makes it the materialization boundary the cost contract prescribes rather than a leak. For a variant that materialization is *wider* than the constructor that travelled, which is the one place the rewrite spends rather than saves: a surviving whole-value use of a narrow constructor gets its widest sibling's object. It is bounded by the same demand condition that admits the region at all — every use a projection or an eligible transfer — so the rebuild survives only where a boundary the region cannot cross keeps it.
 //!
 //! Resume continuations are excluded: their parameter list is the call interface the return protocol owns. Splitting inside an already-recorded group is declined — one aggregate is exposed one level per round at fresh joins, and the growth ceiling is what stops recursive structures from flattening without end.
 
@@ -19,18 +21,17 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// One admitted split: which parameter of which continuation, and the exact arity every flow agrees on.
+/// One admitted split: which parameter of which continuation, and the width every flow travels at — the widest construction reaching it, which is the region's own arity where they agree and the class-merged variant width where they do not.
 struct Split {
     continuation: CpsContId,
     position: usize,
     param: CpsValueId,
-    arity: usize,
+    width: usize,
 }
 
 /// The first admissible split in deterministic order, if any.
-fn admit(module: &CpsModule) -> Option<Split> {
+fn admit(module: &CpsModule, origins: &BTreeMap<CpsValueId, Origin>) -> Option<Split> {
     let demands = demands(module);
-    let origins = origins(module);
 
     // A resume's parameters are the call interface the return protocol owns, whatever their demand says.
     let resumes = resume_targets(module);
@@ -48,24 +49,23 @@ fn admit(module: &CpsModule) -> Option<Split> {
             }) {
                 continue;
             }
-            let Origin::Exact(arity) = origins.get(&param).copied().unwrap_or(Origin::Opaque)
-            else {
+            let Some(width) = origins.get(&param).and_then(Origin::width) else {
                 continue;
             };
             let Demand::Projected(read) = demand_of(&demands, param) else {
                 continue;
             };
-            if arity == 0 || read.last().is_some_and(|&last| last >= arity) {
+            if width == 0 || read.last().is_some_and(|&last| last >= width) {
                 continue;
             }
-            if definition.params.len() - 1 + arity > PARAM_SPLIT_GROWTH_LIMIT {
+            if definition.params.len() - 1 + width > PARAM_SPLIT_GROWTH_LIMIT {
                 continue;
             }
             return Some(Split {
                 continuation,
                 position,
                 param,
-                arity,
+                width,
             });
         }
     }
@@ -74,12 +74,13 @@ fn admit(module: &CpsModule) -> Option<Split> {
 
 /// Split one admissible continuation parameter into its fields, record the group, and leave the cleanup to the chain. One split per invocation keeps the pass deterministic and lets the optimizer's own fixpoint drive region-wide convergence; termination is independent of the round limit because every split consumes an unrecorded aggregate parameter and the growth ceiling bounds how many parameters any continuation can accrue.
 pub(super) fn split_parameters(module: &mut CpsModule) -> bool {
-    let Some(split) = admit(module) else {
+    let origins = origins(module);
+    let Some(split) = admit(module, &origins) else {
         return false;
     };
 
     // The field parameters, and the group that records them.
-    let fields = (0..split.arity)
+    let fields = (0..split.width)
         .map(|index| {
             module.add_value(Some(format!(
                 "field/{}/{index}",
@@ -99,7 +100,7 @@ pub(super) fn split_parameters(module: &mut CpsModule) -> bool {
         split.continuation,
         FieldGroup {
             start: split.position,
-            width: split.arity,
+            width: split.width,
         },
     );
     // Existing groups after the spliced position widen their offsets by the net parameter growth.
@@ -109,7 +110,7 @@ pub(super) fn split_parameters(module: &mut CpsModule) -> bool {
         .expect("the group was just recorded");
     for group in groups.iter_mut() {
         if group.start > split.position {
-            group.start += split.arity - 1;
+            group.start += split.width - 1;
         }
     }
     groups.sort_by_key(|group| group.start);
@@ -148,19 +149,25 @@ pub(super) fn split_parameters(module: &mut CpsModule) -> bool {
                 continue;
             }
             let CpsAtom::Value(source) = &edge.args[split.position] else {
-                unreachable!("an exact origin admits only value arguments");
+                unreachable!("a construction origin admits only value arguments");
             };
             let source = *source;
-            let projections = (0..split.arity)
-                .map(|index| module.add_value(Some(format!("field/{}/{index}", carrier.index()))))
-                .collect::<Vec<_>>();
-            for (index, &projection) in projections.iter().enumerate() {
+            // How wide *this* edge's argument is, which is the region's width where every construction agrees and a narrower constructor's own arity where they do not. The head rebuild minted above is absent from the pre-rewrite facts and is the region's full width by construction; so is a value the fixpoint never reached, which only unreachable code can hold.
+            let carried = origins
+                .get(&source)
+                .and_then(Origin::width)
+                .unwrap_or(split.width);
+            let mut replacement = Vec::with_capacity(split.width);
+            for index in 0..carried {
+                let projection =
+                    module.add_value(Some(format!("field/{}/{index}", carrier.index())));
                 chain.push((projection, index, source));
+                replacement.push(CpsAtom::Value(projection));
             }
-            edge.args.splice(
-                split.position..=split.position,
-                projections.iter().copied().map(CpsAtom::Value),
-            );
+            // The per-edge filler. Nothing reads it: a read at that index is reachable only where the discriminant says a wider constructor travelled, which is the same guard the return protocol's filler rides behind.
+            replacement.resize(split.width, CpsAtom::Literal(CpsLiteral::Nat(0)));
+            edge.args
+                .splice(split.position..=split.position, replacement);
         }
         let ids = chain
             .iter()
