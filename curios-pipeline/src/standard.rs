@@ -17,7 +17,7 @@ use {
 pub fn compile_with_prelude<O>(
     budget: u64,
     entrypoint: &curios_text::Entrypoint,
-    loader: curios_text::RootSource,
+    loader: &curios_text::RootSource,
     observe: O,
 ) -> Result<(curios_wasm::Module, curios_abi::ForeignStore), CompileError>
 where
@@ -33,7 +33,7 @@ pub fn compile_with_units<O, P>(
     budget: u64,
     units: &[curios_text::RootSource],
     entrypoint: &curios_text::Entrypoint,
-    loader: curios_text::RootSource,
+    loader: &curios_text::RootSource,
     cache: Option<&dyn Cache>,
     observe: O,
     mut progress: P,
@@ -79,7 +79,7 @@ where
 pub fn typecheck_with_prelude(
     budget: u64,
     entrypoint: &curios_text::Entrypoint,
-    loader: curios_text::RootSource,
+    loader: &curios_text::RootSource,
 ) -> Result<(curios_core::Module, Vec<String>), CompileError> {
     with_prelude(|prelude| {
         crate::typecheck_reporting(
@@ -96,7 +96,7 @@ pub fn typecheck_with_prelude(
 pub fn typecheck_with_prelude_measured(
     budget: u64,
     entrypoint: &curios_text::Entrypoint,
-    loader: curios_text::RootSource,
+    loader: &curios_text::RootSource,
 ) -> Result<
     (
         curios_core::Module,

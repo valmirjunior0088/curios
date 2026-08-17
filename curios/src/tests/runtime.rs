@@ -152,7 +152,7 @@ fn bang_std_parse_threads_bangs_left_to_right() {
     let loader = RootSource::none();
 
     let (system, io) = MockHost::builder().build();
-    run_entrypoint(&entrypoint, loader, system).expect("expected result");
+    run_entrypoint(&entrypoint, &loader, system).expect("expected result");
     assert_eq!(io.output(), b"1");
 }
 
@@ -184,7 +184,7 @@ fn bang_region_mixes_action_types() {
     let loader = RootSource::none();
 
     let (system, io) = MockHost::builder().build();
-    run_entrypoint(&entrypoint, loader, system).expect("expected result");
+    run_entrypoint(&entrypoint, &loader, system).expect("expected result");
     assert_eq!(io.output(), b"AB");
 }
 
@@ -203,7 +203,7 @@ fn folds_constant_arg_through_let_function() {
     compile_with_prelude(
         curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
-        RootSource::none(),
+        &RootSource::none(),
         |stage| {
             if let Stage::ContOptm(module) = stage {
                 optimized = Some(module.clone());
@@ -250,7 +250,7 @@ fn fmt_print_partial_evaluation_reduces_residual() {
     let (wasm_module, _foreigns) = compile_with_prelude(
         curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
-        RootSource::none(),
+        &RootSource::none(),
         |stage| {
             if let Stage::ContOptm(module) = stage {
                 cont_optm = Some(format!("{module}"));
@@ -298,7 +298,7 @@ fn fmt_print_runtime_args_specializes_spine() {
     let (wasm_module, _foreigns) = compile_with_prelude(
         curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
-        RootSource::none(),
+        &RootSource::none(),
         |stage| {
             if let Stage::ErsdOptm(module) = stage {
                 ersd_optm = Some(format!("{module}"));
@@ -355,7 +355,7 @@ fn fmt_print_constant_args_collapses_at_ersd() {
     let (wasm_module, _foreigns) = compile_with_prelude(
         curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
-        RootSource::none(),
+        &RootSource::none(),
         |stage| match stage {
             Stage::ErsdOptm(module) => ersd_optm = Some(format!("{module}")),
             Stage::ContOptm(module) => cont_optm = Some(format!("{module}")),

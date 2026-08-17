@@ -223,7 +223,7 @@ fn proc_exit_halts_with_code() {
     let (module, _foreigns) = compile_with_prelude(
         curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
-        RootSource::none(),
+        &RootSource::none(),
         |_| {},
     )
     .expect("compile succeeded");
@@ -254,7 +254,7 @@ fn proc_exit_in_local_binding_halts() {
     let (module, _foreigns) = compile_with_prelude(
         curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
-        RootSource::none(),
+        &RootSource::none(),
         |_| {},
     )
     .expect("compile succeeded");

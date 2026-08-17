@@ -20,7 +20,7 @@ fn reused(root: &std::path::Path) -> bool {
 /// The same, for a project whose dependency is mounted from somewhere other than beside it.
 fn reused_from(root: &std::path::Path, shape: &std::path::Path) -> bool {
     let library = curios_package::mounted(&[shape.to_path_buf()]).expect("a mountable package");
-    let (entrypoint, loader) =
+    let (entrypoint, loader, _source) =
         Entrypoint::opened(&root.join("exe.crs")).expect("an openable entrypoint");
 
     let mut reused = false;
@@ -28,7 +28,7 @@ fn reused_from(root: &std::path::Path, shape: &std::path::Path) -> bool {
         1_000_000,
         &library,
         &entrypoint,
-        loader,
+        &loader,
         Some(&Verdicts::at(root.to_path_buf()) as &dyn Cache),
         |_| {},
         |progress| {

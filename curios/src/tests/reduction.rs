@@ -134,7 +134,7 @@ fn budget_floor(source: &str) -> Result<u64, u64> {
 
 /// [`floor`] for elaboration alone, with the kernel not asked.
 fn elaborator_floor(entrypoint: &Entrypoint) -> Result<u64, u64> {
-    floor(|budget| typecheck_with_prelude(budget, entrypoint, RootSource::none()).is_ok())
+    floor(|budget| typecheck_with_prelude(budget, entrypoint, &RootSource::none()).is_ok())
 }
 
 /// [`floor`] for the kernel alone, over a module elaboration already produced.
@@ -142,7 +142,7 @@ fn elaborator_floor(entrypoint: &Entrypoint) -> Result<u64, u64> {
 /// Elaborating once at the default budget and re-certifying the result is what separates the two counters: the module does not change with the budget the kernel is then given, so the sweep measures the kernel's own spend rather than a compile that fails earlier.
 fn kernel_floor(entrypoint: &Entrypoint) -> Result<u64, u64> {
     let (module, _obligations) =
-        typecheck_with_prelude(DEFAULT_STEP_BUDGET, entrypoint, RootSource::none())
+        typecheck_with_prelude(DEFAULT_STEP_BUDGET, entrypoint, &RootSource::none())
             .expect("the arm elaborates within the default budget");
 
     floor(|budget| recheck_with_prelude(&module, budget).is_empty())
@@ -546,7 +546,7 @@ fn bytes_literal(n: usize) -> String {
 fn declaration_cost(source: &str) -> (Consumption, u64, Consumption, u64) {
     let entrypoint = source.parse::<Entrypoint>().expect("the program parses");
     let (module, _obligations, elaborator, elaborator_retained) =
-        typecheck_with_prelude_measured(DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none())
+        typecheck_with_prelude_measured(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
             .expect("the program elaborates within the default budget");
     let (verdicts, kernel) = recheck_with_prelude_measured(&module, DEFAULT_STEP_BUDGET);
 

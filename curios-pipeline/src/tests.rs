@@ -18,9 +18,14 @@ fn entrypoint_type_is_used_as_expected_type() {
         .unwrap()
         .with_type("/std/Bool".parse().unwrap());
 
-    let error = compile_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none(), |_| {})
-        .map_err(String::from)
-        .unwrap_err();
+    let error = compile_with_prelude(
+        DEFAULT_STEP_BUDGET,
+        &entrypoint,
+        &RootSource::none(),
+        |_| {},
+    )
+    .map_err(String::from)
+    .unwrap_err();
 
     assert!(error.contains("type mismatch"));
 }
@@ -51,9 +56,14 @@ fn with_entrypoint_type(source: &str, type_: Option<&str>) -> Entrypoint {
 fn compile(source: &str, type_: Option<&str>) -> Result<curios_wasm::Module, String> {
     let entrypoint = with_entrypoint_type(source, type_);
 
-    compile_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none(), |_| {})
-        .map(|(module, _foreigns)| module)
-        .map_err(String::from)
+    compile_with_prelude(
+        DEFAULT_STEP_BUDGET,
+        &entrypoint,
+        &RootSource::none(),
+        |_| {},
+    )
+    .map(|(module, _foreigns)| module)
+    .map_err(String::from)
 }
 
 #[test]
@@ -61,13 +71,13 @@ fn a_goal_batch_classifies_as_incomplete_and_a_hard_error_as_failure() {
     // The typed split the CLI's exit codes rest on: a written-goal batch is incomplete development state, a type mismatch a hard failure.
     let goals = with_entrypoint_type("let m : /std/Nat = ?; m", Some("/std/Nat"));
     assert!(matches!(
-        compile_with_prelude(DEFAULT_STEP_BUDGET, &goals, RootSource::none(), |_| {}),
+        compile_with_prelude(DEFAULT_STEP_BUDGET, &goals, &RootSource::none(), |_| {}),
         Err(CompileError::Incomplete(_))
     ));
 
     let mismatch = with_entrypoint_type("let bad : /std/Nat = true; bad", Some("/std/Nat"));
     assert!(matches!(
-        compile_with_prelude(DEFAULT_STEP_BUDGET, &mismatch, RootSource::none(), |_| {}),
+        compile_with_prelude(DEFAULT_STEP_BUDGET, &mismatch, &RootSource::none(), |_| {}),
         Err(CompileError::Failure(_))
     ));
 }
@@ -251,7 +261,7 @@ fn every_stage_is_observed_once_in_names_order() {
     compile_with_prelude(
         DEFAULT_STEP_BUDGET,
         &entrypoint,
-        RootSource::none(),
+        &RootSource::none(),
         |stage| seen.push(stage.name()),
     )
     .unwrap();
@@ -321,7 +331,7 @@ fn compile_printed_stages(source: &str, type_: Option<&str>) -> Result<(String, 
     compile_with_prelude(
         DEFAULT_STEP_BUDGET,
         &entrypoint,
-        RootSource::none(),
+        &RootSource::none(),
         |stage| match stage {
             Stage::Ersd(stage) => ersd = format!("{stage}"),
             Stage::Cont(stage) => cont = format!("{stage}"),
@@ -1712,7 +1722,7 @@ fn typecheck(source: &str, type_: Option<&str>) -> Result<(), String> {
             Prefix::over(from_ref(&prelude)),
             &SYNTAX,
             &entrypoint,
-            RootSource::none(),
+            &RootSource::none(),
             &mut |_| {},
         )
     })
@@ -1920,7 +1930,7 @@ fn erase_to_ir(source: &str, type_: Option<&str>) -> curios_ersd::Module {
             Prefix::over(from_ref(&prelude)),
             &SYNTAX,
             &entrypoint,
-            RootSource::none(),
+            &RootSource::none(),
             &mut |_| {},
         )
     })
@@ -2028,7 +2038,7 @@ fn compile_with_units(
             Prefix::over(&scope),
             &SYNTAX,
             &entry,
-            RootSource::none(),
+            &RootSource::none(),
             |_| {},
         )
         .map(|(module, _foreigns)| module)

@@ -87,7 +87,7 @@ pub fn typecheck_reporting(
     scope: Prefix<'_>,
     syntax: &SyntaxRegistry,
     entrypoint: &Entrypoint,
-    loader: RootSource,
+    loader: &RootSource,
 ) -> Result<(curios_core::Module, Vec<String>), CompileError> {
     typecheck_measured(budget, scope, syntax, entrypoint, loader)
         .map(|(module, obligations, _, _)| (module, obligations))
@@ -103,12 +103,12 @@ pub fn typecheck_measured(
     scope: Prefix<'_>,
     syntax: &SyntaxRegistry,
     entrypoint: &Entrypoint,
-    loader: RootSource,
+    loader: &RootSource,
 ) -> Result<(curios_core::Module, Vec<String>, Consumption, u64), CompileError> {
     let text = scope.text();
     let cores = scope.cores();
     let (lowered, metavars, universe_floor, _foreigns) =
-        into_core_with_prelude(entrypoint, &loader, &text, syntax)
+        into_core_with_prelude(entrypoint, loader, &text, syntax)
             .map_err(|error| CompileError::Failure(error.format()))?;
 
     let core_mode = match &lowered.type_ {
@@ -148,7 +148,7 @@ pub(crate) fn elaborate_and_zonk<O>(
     scope: Prefix<'_>,
     syntax: &SyntaxRegistry,
     entrypoint: &Entrypoint,
-    loader: RootSource,
+    loader: &RootSource,
     observe: &mut O,
 ) -> Result<(curios_core::Module, Term, ForeignStore), CompileError>
 where
@@ -160,7 +160,7 @@ where
     let text = scope.text();
     let cores = scope.cores();
     let (lowered, metavars, universe_floor, user_foreigns) =
-        into_core_with_prelude(entrypoint, &loader, &text, syntax)
+        into_core_with_prelude(entrypoint, loader, &text, syntax)
             .map_err(|error| CompileError::Failure(error.format()))?;
 
     observe(Stage::Core(&lowered));
@@ -347,12 +347,14 @@ pub enum Progress<'a> {
 /// Compile a parsed entrypoint through the full pipeline to a wasm module, feeding every [`Stage`] to `observe` in order. The result pairs the module with the [`ForeignStore`] harvested from the program's own `foreign` declarations — an embedder that will run the module builds its `ffi`-tier bindings (`curios-runtime`'s `ForeignBindings`) from exactly this store, or drops it when the program declares none. Binaryen optimization and Cranelift precompilation are deliberately *not* here — they live downstream in the `curios` crate (`to_cwasm`), keeping this crate free of native backends.
 ///
 /// Production runs the arena erased representation: the archived erased prelude is restored and replayed, only the entry's own items erase, the arena transformations shrink and rebase the module, and the lowering into Cont makes every encoding decision once (see `curios_ersd::lower_to_cont`).
+///
+/// **`loader` is borrowed rather than taken, so the caller still owns it when this returns.** Resolution records what it read through `&self` — the log is interior-mutable precisely so that lowering never has to thread `&mut` — and a caller filing what this compilation produced needs that log *after* the fold, exactly as it needs the cache handle's refusal after the fold. Consuming the loader would put the read set out of reach at the only moment it is worth anything, and nothing here wants ownership of it.
 pub fn compile_entrypoint<O>(
     budget: u64,
     scope: Prefix<'_>,
     syntax: &SyntaxRegistry,
     entrypoint: &Entrypoint,
-    loader: RootSource,
+    loader: &RootSource,
     mut observe: O,
 ) -> Result<(curios_wasm::Module, ForeignStore), CompileError>
 where

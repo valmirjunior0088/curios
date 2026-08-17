@@ -338,22 +338,31 @@ pub(crate) fn parse_for_format(source: &Rc<Source>) -> Result<FormatInput, Parse
 impl Entrypoint {
     /// Reads and parses `path` as an entrypoint (top-level items followed by a tail expression). The file-path counterpart of the `FromStr` impl below, distinguished by keeping the real path in the [`Source`](Source) so diagnostics name the file; a parsed `Entrypoint` resolves its file-backed `mod` declarations separately, through whatever [`RootSource`](crate::RootSource) the caller pairs it with.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, LoadError> {
+        Self::sourced(path).map(|(entrypoint, _)| entrypoint)
+    }
+
+    /// [`from_path`](Self::from_path), handing back the text that was parsed as well as what it parsed to.
+    fn sourced(path: impl AsRef<Path>) -> Result<(Self, Rc<Source>), LoadError> {
         let path = path.as_ref();
         let source = Source::read(path).map_err(|error| LoadError::Read {
             path: path.into(),
             error,
         })?;
 
-        Entrypoint::parse(&source).map_err(LoadError::Parse)
+        Entrypoint::parse(&source)
+            .map(|entrypoint| (entrypoint, source))
+            .map_err(LoadError::Parse)
     }
 
-    /// Reads `path` as an entrypoint, paired with the [`RootSource`](crate::RootSource) its own stem directory anchors — a bare file is a header like any other, so `mod util` in `main.crs` reads `main/util.crs`.
+    /// Reads `path` as an entrypoint, paired with the [`RootSource`](crate::RootSource) its own stem directory anchors and the text that was parsed — a bare file is a header like any other, so `mod util` in `main.crs` reads `main/util.crs`.
     ///
     /// The pairing is the point: [`from_path`](Self::from_path) leaves a parsed entrypoint's file-backed `mod` declarations unresolved, and every caller that opens a file then has to know which `RootSource` goes with it. That is one answer, not a caller's choice, so it lives beside the two calls it makes.
-    pub fn opened(path: &Path) -> Result<(Self, RootSource), String> {
-        let entrypoint = Self::from_path(path).map_err(|error| error.format())?;
+    ///
+    /// **The source comes back because the entry's own header is the one file no loader records.** A `RootSource` logs what it resolves, and the entry's header is deliberately never resolved through it — the caller already has the body. A cache that verifies a compilation against what it read therefore has to be handed the entry separately, and it must be *this* text rather than a re-read of the path: re-reading races an edit landing between the parse and the digest, and records newer text against an older artifact, which is the one direction that admits stale.
+    pub fn opened(path: &Path) -> Result<(Self, RootSource, Rc<Source>), String> {
+        let (entrypoint, source) = Self::sourced(path).map_err(|error| error.format())?;
 
-        Ok((entrypoint, RootSource::entry(path)))
+        Ok((entrypoint, RootSource::entry(path), source))
     }
 }
 

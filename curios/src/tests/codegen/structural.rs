@@ -202,7 +202,7 @@ pub(super) fn compile_raw(source: &str) -> Module {
     let (module, _foreigns) = compile_with_prelude(
         curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
-        RootSource::none(),
+        &RootSource::none(),
         |_| {},
     )
     .expect("fixture compiles");

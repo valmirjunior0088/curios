@@ -85,7 +85,7 @@ fn every_body_replaced_by_a_foreign_term_is_refused() {
         let (module, obligations) = curios_pipeline::typecheck_with_prelude(
             curios_pipeline::DEFAULT_STEP_BUDGET,
             &entrypoint,
-            RootSource::none(),
+            &RootSource::none(),
         )
         .unwrap_or_else(|error| panic!("{description}: the subject type-checks:\n{error}"));
         assert!(
@@ -140,7 +140,7 @@ fn every_type_replaced_by_another_item_s_is_refused() {
         let (module, _) = curios_pipeline::typecheck_with_prelude(
             curios_pipeline::DEFAULT_STEP_BUDGET,
             &entrypoint,
-            RootSource::none(),
+            &RootSource::none(),
         )
         .unwrap_or_else(|error| panic!("{description}: the subject type-checks:\n{error}"));
 
@@ -223,7 +223,7 @@ fn elaborated(description: &str, source: &str) -> Module {
     let (module, _) = curios_pipeline::typecheck_with_prelude(
         curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
-        RootSource::none(),
+        &RootSource::none(),
     )
     .unwrap_or_else(|error| panic!("{description}: the subject type-checks:\n{error}"));
 

@@ -23,9 +23,13 @@ fn optimizes_to_a_smaller_valid_module() {
         .parse::<Entrypoint>()
         .expect("failed to parse source");
 
-    let (module, _foreigns) =
-        compile_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none(), |_| {})
-            .expect("expected wasm module");
+    let (module, _foreigns) = compile_with_prelude(
+        DEFAULT_STEP_BUDGET,
+        &entrypoint,
+        &RootSource::none(),
+        |_| {},
+    )
+    .expect("expected wasm module");
 
     let bytes = to_bytes(&module);
     // `optimize` validates the result internally (asserting on an invalid module).
@@ -68,9 +72,13 @@ fn dumping_emits_the_optimized_module_as_text() {
         .parse::<Entrypoint>()
         .expect("failed to parse source");
 
-    let (module, _foreigns) =
-        compile_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, RootSource::none(), |_| {})
-            .expect("expected wasm module");
+    let (module, _foreigns) = compile_with_prelude(
+        DEFAULT_STEP_BUDGET,
+        &entrypoint,
+        &RootSource::none(),
+        |_| {},
+    )
+    .expect("expected wasm module");
 
     let mut text = None;
 

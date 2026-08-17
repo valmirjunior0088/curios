@@ -19,7 +19,7 @@ fn foreign_declaration_runs_through_supplied_bindings() {
     let (module, foreigns) = compile_with_prelude(
         curios_pipeline::DEFAULT_STEP_BUDGET,
         &source,
-        RootSource::none(),
+        &RootSource::none(),
         |_| {},
     )
     .expect("compile succeeded");

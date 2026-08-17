@@ -47,7 +47,7 @@ use {
 /// Drops any `foreign` declarations' `ForeignStore` — this is the fused compile-and-run path the suites want, with no point to hand it back; a test that has `foreign` declarations to satisfy calls [`compile_with_prelude`] itself, builds [`ForeignBindings`] from the returned store, and calls [`run_wasm`].
 fn run_entrypoint<H: HostOps + Send + Sync + 'static>(
     entrypoint: &Entrypoint,
-    loader: RootSource,
+    loader: &RootSource,
     host: H,
 ) -> Result<(), String> {
     let (module, _foreigns) =
@@ -62,7 +62,7 @@ fn run_text<H: HostOps + Send + Sync + 'static>(source: &str, host: H) -> Result
         .parse::<Entrypoint>()
         .map_err(|error| error.format())?;
 
-    run_entrypoint(&entrypoint, RootSource::none(), host)
+    run_entrypoint(&entrypoint, &RootSource::none(), host)
 }
 
 fn run(source: &str) -> Vec<u8> {
@@ -84,7 +84,7 @@ fn typecheck_within(budget: u64, source: &str) -> Result<(), String> {
         .parse::<Entrypoint>()
         .expect("failed to parse source");
 
-    compile_with_prelude(budget, &entrypoint, RootSource::none(), |_| {})
+    compile_with_prelude(budget, &entrypoint, &RootSource::none(), |_| {})
         .map(|_| ())
         .map_err(|error| error.to_string())
 }
@@ -106,7 +106,7 @@ fn cont_optm(source: &str) -> String {
     compile_with_prelude(
         DEFAULT_STEP_BUDGET,
         &entrypoint,
-        RootSource::none(),
+        &RootSource::none(),
         |stage| {
             if let Stage::ContOptm(module) = stage {
                 printed = module.to_string();

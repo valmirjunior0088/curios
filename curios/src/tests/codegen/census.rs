@@ -123,7 +123,7 @@ fn cont_optm_module(source: &str) -> CpsModule {
     compile_with_prelude(
         DEFAULT_STEP_BUDGET,
         &entrypoint,
-        RootSource::none(),
+        &RootSource::none(),
         |stage| {
             if let Stage::ContOptm(module) = stage {
                 captured = Some(module.clone());

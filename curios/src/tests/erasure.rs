@@ -112,7 +112,7 @@ fn char_and_str_certificates_erase_to_their_existing_carriers() {
     compile_with_prelude(
         curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
-        RootSource::none(),
+        &RootSource::none(),
         |stage| {
             if let Stage::Ersd(module) = stage {
                 ersd = Some(format!("{module}"));

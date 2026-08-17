@@ -35,7 +35,7 @@ pub fn compile(source: &str) -> Result<Uint8Array, String> {
         .map_err(|error| error.format())?;
 
     let (module, _foreigns) =
-        compile_with_prelude(BUDGET, &entrypoint, RootSource::none(), |_| {})?;
+        compile_with_prelude(BUDGET, &entrypoint, &RootSource::none(), |_| {})?;
 
     Ok(Uint8Array::from(to_bytes(&module).as_slice()))
 }

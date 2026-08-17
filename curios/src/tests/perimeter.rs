@@ -1155,7 +1155,7 @@ fn both_checkers(source: &str) -> (Verdict, Verdict) {
     match curios_pipeline::typecheck_with_prelude(
         curios_pipeline::DEFAULT_STEP_BUDGET,
         &entrypoint,
-        RootSource::none(),
+        &RootSource::none(),
     ) {
         // Refused before a module existed: type-checking proper, not an erasure obligation.
         Err(error) => (Verdict::Refuses(error.into()), Verdict::NotAsked),

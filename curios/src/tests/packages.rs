@@ -46,12 +46,12 @@ fn cached(directory: &Path, target: Option<&str>, cache: Option<&dyn Cache>) -> 
         Target::File(path) => (path, Vec::new()),
     };
 
-    let (entrypoint, loader) = Entrypoint::opened(&entry).expect("the entry parses");
+    let (entrypoint, loader, _source) = Entrypoint::opened(&entry).expect("the entry parses");
     let (module, _foreigns) = compile_with_units(
         DEFAULT_STEP_BUDGET,
         &units,
         &entrypoint,
-        loader,
+        &loader,
         cache,
         |_| {},
         |_| {},
@@ -198,13 +198,13 @@ fn a_file_argument_compiles_standalone_inside_a_package() {
     };
     assert!(units.is_empty(), "a file argument mounts nothing");
 
-    let (entrypoint, loader) = Entrypoint::opened(&entry).expect("the entry parses");
+    let (entrypoint, loader, _source) = Entrypoint::opened(&entry).expect("the entry parses");
     assert!(
         compile_with_units(
             DEFAULT_STEP_BUDGET,
             &units,
             &entrypoint,
-            loader,
+            &loader,
             None,
             |_| {},
             |_| {}
