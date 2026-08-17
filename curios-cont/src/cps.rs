@@ -134,6 +134,8 @@ pub enum CpsIntrinsicOp {
     ListAppend,
     ListConcat(usize),
     TplGet(usize),
+    /// The virtual-window bounds guard: `(s, e, len) -> e - s`, trapping unless `s <= e <= len` — the eager trap a physical slice would have performed, kept at the original evaluation point when the slice itself is virtualized away.
+    WindowExtent,
 }
 
 /// The representation a value is read or produced at — the carrier, not the type.
@@ -173,6 +175,7 @@ impl CpsIntrinsicOp {
             // A list element is carried, never interpreted — unlike a `Bytes` element, which is a `Nat` grain.
             (ListAppend, _) => Repr::Ref,
             (BinConcat(_, _), _) | (BinEql(_) | BinLen(_), _) | (FltOfLeBytes, _) => Repr::Bytes,
+            (WindowExtent, _) => Repr::Nat,
             (ListConcat(_) | ListLen, _) => Repr::List,
             (TplGet(index), _) => Repr::Tpl(index + 1),
 
@@ -223,7 +226,7 @@ impl CpsIntrinsicOp {
             | FltSqrt | FltFloor | FltCeil | FltTrunc | FltNearest | FltCopysign | NatToFlt
             | IntToFlt | FltOfLeBytes => Repr::Flt,
 
-            BinGet(_) => Repr::Nat,
+            BinGet(_) | WindowExtent => Repr::Nat,
             BinSlice(_) | BinAppend(_) | BinConcat(_, _) | FltToLeBytes => Repr::Bytes,
             ListSlice | ListAppend | ListConcat(_) => Repr::List,
             // A list read and a tuple projection both yield whatever was stored, uninterpreted.
@@ -268,7 +271,7 @@ impl CpsIntrinsicOp {
             | Self::BinLen(_)
             | Self::ListLen
             | Self::TplGet(_) => 1,
-            Self::BinSlice(_) | Self::ListSlice => 3,
+            Self::BinSlice(_) | Self::ListSlice | Self::WindowExtent => 3,
             Self::BinConcat(_, arity) | Self::ListConcat(arity) => arity,
             _ => 2,
         }
@@ -294,6 +297,7 @@ impl CpsIntrinsicOp {
             | Self::ListGet
             | Self::ListSlice
             | Self::TplGet(_)
+            | Self::WindowExtent
             // Total in the language, guarded by the emitter because the result can leave the i31 envelope. `NatSub` is monus and `NatShr`/`IntShr` only clear bits, so neither needs a guard.
             | Self::NatAdd
             | Self::NatMul

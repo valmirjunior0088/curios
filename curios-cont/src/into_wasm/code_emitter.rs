@@ -462,6 +462,27 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instr(curios_wasm::Instr::I32WrapI64);
                 self.emit_store(dest, &op.result_repr());
             }
+            // The virtual-window bounds guard: trap unless s <= e <= len, then hand back the window's extent e - s. This is the eager trap a physical slice would have performed, kept at the original evaluation point.
+            CpsIntrinsicOp::WindowExtent => {
+                let (s, e, len) = (&args[0], &args[1], &args[2]);
+                self.emit_instrs(self.context.load_value_instrs(s, LoadAs::Nat));
+                self.emit_instrs(self.context.load_value_instrs(e, LoadAs::Nat));
+                self.emit_instr(curios_wasm::Instr::I32GtU);
+                self.emit_instrs(self.context.load_value_instrs(e, LoadAs::Nat));
+                self.emit_instrs(self.context.load_value_instrs(len, LoadAs::Nat));
+                self.emit_instr(curios_wasm::Instr::I32GtU);
+                self.emit_instr(curios_wasm::Instr::I32Or);
+                self.emit_instr(curios_wasm::Instr::If {
+                    label_name: self.context.table().special_label(),
+                    block_type: curios_wasm::BlockType::Empty,
+                    then_instructions: vec![curios_wasm::Instr::Unreachable],
+                    else_instructions: vec![],
+                });
+                self.emit_instrs(self.context.load_value_instrs(e, LoadAs::Nat));
+                self.emit_instrs(self.context.load_value_instrs(s, LoadAs::Nat));
+                self.emit_instr(curios_wasm::Instr::I32Sub);
+                self.emit_store(dest, &op.result_repr());
+            }
             CpsIntrinsicOp::NatLt => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32LtU)
             }

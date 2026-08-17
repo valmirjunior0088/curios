@@ -292,3 +292,164 @@ fn optimization_maintains_every_record() {
     optimize(&mut module);
     module.verify().expect("the optimized module verifies");
 }
+
+/// The suffix walk in miniature: a rope enters a loop as a whole window, each iteration reads its head and recurses on its tail slice. After the window split the loop carries `(base, offset, length)`, the slice is an extent guard plus an offset sum, and no physical view is ever constructed.
+fn walk_module() -> (CpsModule, crate::CpsContId) {
+    let mut module = CpsModule::default();
+    let rope = module.add_value(Some("rope".into()));
+    let scrutinee = module.add_value(Some("scrutinee".into()));
+    let window = module.add_value(Some("window".into()));
+    let length = module.add_value(Some("length".into()));
+    let head = module.add_value(Some("head".into()));
+    let tail = module.add_value(Some("tail".into()));
+
+    let function = module.reserve_function();
+    let return_cont = module.reserve_continuation();
+    let header = module.reserve_continuation();
+
+    let spin = module.add_node(CpsNode::Switch {
+        scrutinee: CpsAtom::Value(scrutinee),
+        cases: [(
+            0,
+            CpsEdge {
+                target: header,
+                args: vec![CpsAtom::Value(tail)],
+            },
+        )]
+        .into(),
+        default: Some(CpsEdge {
+            target: return_cont,
+            args: vec![CpsAtom::Value(head)],
+        }),
+    });
+    let slice = module.add_node(CpsNode::LetIntrinsic {
+        result: tail,
+        op: CpsIntrinsicOp::BinSlice(curios_utilities::Grain::X),
+        args: vec![
+            CpsAtom::Value(window),
+            CpsAtom::Literal(CpsLiteral::Nat(1)),
+            CpsAtom::Value(length),
+        ],
+        next: spin,
+    });
+    let read = module.add_node(CpsNode::LetIntrinsic {
+        result: head,
+        op: CpsIntrinsicOp::BinGet(curios_utilities::Grain::X),
+        args: vec![CpsAtom::Value(window), CpsAtom::Literal(CpsLiteral::Nat(0))],
+        next: slice,
+    });
+    let measure = module.add_node(CpsNode::LetIntrinsic {
+        result: length,
+        op: CpsIntrinsicOp::BinLen(curios_utilities::Grain::X),
+        args: vec![CpsAtom::Value(window)],
+        next: read,
+    });
+    module.define_continuation(
+        header,
+        CpsContinuation {
+            debug_name: Some("header".into()),
+            params: vec![window],
+            body: measure,
+        },
+    );
+    let enter = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        target: header,
+        args: vec![CpsAtom::Value(rope)],
+    }));
+    let body = module.add_node(CpsNode::LetCont {
+        continuations: vec![header],
+        body: enter,
+    });
+    module.define_function(
+        function,
+        CpsFunction {
+            debug_name: Some("main".into()),
+            params: vec![rope, scrutinee],
+            return_cont,
+            body,
+        },
+    );
+    module.set_entry(function);
+    (module, header)
+}
+
+/// One invocation virtualizes the whole region: three window parameters under a recorded group, the slice gone in favour of a guarded extent, the read reaching the base, and the entry opening the rope as its own whole window.
+#[test]
+fn a_suffix_walk_virtualizes_its_windows() {
+    let (mut module, header) = walk_module();
+    module.verify().expect("the fixture is well-formed");
+
+    assert!(super::split_windows(&mut module));
+    module
+        .verify()
+        .expect("the window split preserves well-formedness");
+
+    let definition = module.continuation(header).expect("the header survives");
+    assert_eq!(definition.params.len(), 3, "one window became three fields");
+    assert_eq!(
+        module.field_groups().get(&header),
+        Some(&vec![FieldGroup { start: 0, width: 3 }]),
+        "and the split is recorded",
+    );
+
+    let mut slices = 0;
+    let mut extents = 0;
+    for node in module.nodes().iter().flatten() {
+        if let CpsNode::LetIntrinsic { op, .. } = node {
+            match op {
+                CpsIntrinsicOp::BinSlice(_) => slices += 1,
+                CpsIntrinsicOp::WindowExtent => extents += 1,
+                _ => {}
+            }
+        }
+    }
+    assert_eq!(slices, 0, "no physical view is ever prepared:\n{module}");
+    assert_eq!(
+        extents, 1,
+        "the eager bounds trap stays, as the extent guard"
+    );
+}
+
+/// A region with one hostile use — the window escaping into a return — is declined whole, the first implementation's documented limit.
+#[test]
+fn a_window_region_with_a_hostile_use_declines() {
+    let (mut module, header) = walk_module();
+    // Return the window itself on the default edge instead of the head: an escape through the return interface.
+    let escape = module
+        .continuation(header)
+        .expect("the header is live")
+        .params[0];
+    let mut hostile = None;
+    for (id, node) in module.nodes().iter().enumerate() {
+        if let Some(CpsNode::Switch {
+            default: Some(_), ..
+        }) = node
+        {
+            hostile = Some(crate::CpsNodeId(id as u32));
+        }
+    }
+    let hostile = hostile.expect("the fixture switches");
+    let Some(CpsNode::Switch {
+        scrutinee,
+        cases,
+        default: Some(default),
+    }) = module.node(hostile).cloned()
+    else {
+        unreachable!()
+    };
+    let mut default = default;
+    default.args = vec![CpsAtom::Value(escape)];
+    module.nodes.set(
+        hostile,
+        CpsNode::Switch {
+            scrutinee,
+            cases,
+            default: Some(default),
+        },
+    );
+
+    assert!(
+        !super::split_windows(&mut module),
+        "a window returned through the sentinel is not a candidate",
+    );
+}

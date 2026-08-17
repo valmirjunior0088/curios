@@ -31,6 +31,11 @@ pub(super) fn evaluate(op: CpsIntrinsicOp, args: &[CpsAtom]) -> Option<CpsLitera
 
     match op {
         CpsIntrinsicOp::NatEql => bool_(nat(0)? == nat(1)?),
+        // Fold only when the bounds hold; a constant that would trap stays an instruction so the trap keeps its place.
+        CpsIntrinsicOp::WindowExtent => {
+            let (s, e, len) = (nat(0)?, nat(1)?, nat(2)?);
+            (s <= e && e <= len).then(|| CpsLiteral::Nat(e - s))
+        }
         CpsIntrinsicOp::NatNeq => bool_(nat(0)? != nat(1)?),
         CpsIntrinsicOp::NatAdd => Some(CpsLiteral::Nat(nat_add(nat(0)?, nat(1)?))),
         CpsIntrinsicOp::NatSub => Some(CpsLiteral::Nat(nat_sub(nat(0)?, nat(1)?))),
