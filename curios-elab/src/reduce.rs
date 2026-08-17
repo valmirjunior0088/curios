@@ -253,6 +253,12 @@ pub(crate) fn reduce_forced(context: &mut Context, term: Term) -> Result<Term, R
 /// [`canonical_scrutinee`] additionally reduces each argument, which is what collapses occurrences differing only in argument spelling — and what makes *recording* a refinement cost whatever its operands cost to evaluate. A guard over an expensive operand then pays for the very computation it was written to avoid, when the arm is entered and before any probe happens; `10 <= Bytes/len(built)` forces `built` to register a fact about it. Both sites therefore key on this form first and escalate to the canonical one only on a miss, which is a strict superset: every occurrence that matched before still matches, and the ones that used to spend the declaration's whole budget on the way in now match without reducing anything.
 ///
 /// Zonking and universe erasure stay eager because they are cheap by construction — the walk returns at a cached `has_metavar` bit — and because the key is wrong without them for the reason each states.
+///
+/// The universe erasure is **known unsound and deliberately still here**, which `curios-cert`'s copy of this key was not: `Type u` embeds a level in a term, so two instances of one applied definition can reduce to different values, and erasing identifies them. That copy was corrected — `curios-cert`'s `Scope::refine`, with `recheck::tests::a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance` as the regression — which is what makes this one fail closed rather than admit: the kernel re-checks on the compile path and refuses what this key lets through, so the cost here is a refusal arriving from the certifier instead of a diagnostic arriving from elaboration.
+///
+/// Deleting it here is not the repair, and that was measured rather than supposed. Every polymorphic occurrence mints fresh universe metavariables (`UniverseSolver::instantiate`) and this walk materializes *term* metas only, so the verbatim key splits two occurrences of one scrutinee: the prelude stops elaborating at `/std/List.crs`'s `match i < len(a)`, whose `true` arm supplies `/sys/List/at`'s implicit `ok` by exactly this refinement.
+///
+/// The rule is not in dispute, and the kernel states it exactly — identify only terms already definitionally equal — because it judges a module whose levels are settled. This key is asked to obey it *while* they are being solved, so what it needs is a sound approximation of that rule: concrete levels kept apart, undecided ones collapsed. None is written. Until one is, the looseness is safe for exactly as long as the kernel keeps checking everything it checks today.
 pub(crate) fn shallow_scrutinee(context: &Context, term: &Term) -> Term {
     project_erased_universes(&zonk_solved_term_metas(context, term))
 }
@@ -289,7 +295,7 @@ pub(crate) fn canonical_scrutinee(context: &mut Context, term: &Term) -> Result<
     }?;
     // A *solved* metavariable is materialized rather than left standing as its identity, for the same reason the levels below are erased: two occurrences of one written term elaborate to two independently minted metavariables, and an inferred implicit one level down — `g(@?m, b)` against `g(@?m', b)` with both solved to `Bool` — then stores a key no probe can match. The refinement silently did not fire, while the identical term with the implicit supplied explicitly did. Cheap where it does not apply: the walk returns at a cached `has_metavar` bit.
     let canonical = zonk_solved_term_metas(context, &canonical);
-    // Universe arguments cannot affect computation: Curios has no universe reflection and erasure removes them. Refinement keys therefore compare the same applied definition across independently fresh scheme instances by its computational spelling, not by inference-local level ids.
+    // Erased for the same reason, and unsound for the same reason, as in [`shallow_scrutinee`] — which carries the account and the measurement that says deleting it is not the repair.
     Ok(project_erased_universes(&canonical))
 }
 
