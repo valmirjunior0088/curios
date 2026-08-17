@@ -9,14 +9,21 @@ description = "Programmatic profiling for the Curios workspace: span macros and 
 workspace = true
 
 [features]
-enabled = ["dep:tracing", "dep:tracing-subscriber"]
+enabled = ["dep:tracing", "dep:tracing-subscriber", "dep:tracing-log"]
 
 # The one place in the workspace these are named, so the pins live here
 # rather than in the workspace table. No `attributes` feature: the workspace
 # instruments through `profile!`/`profile_span!`, never the proc macro.
+# `tracing-log` also carries the workspace's only naming of the `log` facade,
+# through its re-export: the engine underneath the runtime reports through
+# `log`, and `host.rs` is where those records are heard.
 [dependencies]
 tracing = { version = "0.1.44", default-features = false, features = ["std"], optional = true }
 tracing-subscriber = { version = "0.3.23", default-features = false, features = [
     "std",
     "registry",
+], optional = true }
+tracing-log = { version = "0.2.0", default-features = false, features = [
+    "log-tracer",
+    "std",
 ], optional = true }

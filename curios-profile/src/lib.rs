@@ -6,6 +6,7 @@
 //! - [`profile_span!`] wraps one expression, for the per-step breakdown of a loop where timing the stepped function would aggregate every call.
 //! - [`profile_group!`] times a function like [`profile!`] but aggregates each distinct group separately, which is how a per-item span answers *which item* rather than *how long in total*.
 //! - `capture` — present under `enabled`, so it carries no link here — runs a closure under a thread-local subscriber and returns aggregate per-span timings, without touching the process-global subscriber. It is the only consumer; profiling is configured where it is used, in code — there is deliberately no environment-variable switch, because a measurement is already specified at its call sites and a second, out-of-band specification could only disagree with the first.
+//! - `capture_host_records` — beside it under `enabled` — is the same scoping for what a *host library* says through the `log` facade rather than through spans: the engine announces each collection at trace level, and the bridge raises `log` only for the duration of one closure, so everything outside a capture pays one relaxed atomic load per suppressed record at most.
 //! - [`sample!`] records a *magnitude* — how many, how wide, how deep — and the report returns that site's count, total, min, max, and mean.
 //! - `CountingAllocator`, under `enabled` beside it and unlinked for the same reason, adds the memory half of that report. A binary installs it as its `#[global_allocator]` under its own `profile` feature and every span gains what it retained and what it allocated; a binary that installs nothing still gets its timings, with the memory columns reading zero.
 //!
@@ -95,3 +96,7 @@ pub use collect::*;
 mod count;
 #[cfg(feature = "enabled")]
 pub use count::*;
+#[cfg(feature = "enabled")]
+mod host;
+#[cfg(feature = "enabled")]
+pub use host::*;
