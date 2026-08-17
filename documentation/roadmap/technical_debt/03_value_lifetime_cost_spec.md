@@ -6,6 +6,8 @@ This specification defines the cost contract, evidence gate, design boundaries a
 
 The work belongs in `curios-cont`: erasure has exposed the runtime fields, CPS still knows continuations and direct callees, and the transformation can feed projection forwarding, simplification, dead-parameter elimination, specialization and raw-scalar representation before WebAssembly emission loses those facts.
 
+M0 is complete (2026-08-17): the census, attribution and extent instruments are in `curios/src/tests/codegen/`, the multi-byte fixture and the walk-mirror family in `programs/`, and the stopping evidence was not met — the accumulator and the returned scan each measure about a fifth of the walk. The scan argument reconstruction turned out to be a source spelling rather than a compiler obligation and was cured in `/std` during M0, which retires M3; the spine proceeds at M1a.
+
 ## Cost contract
 
 An immutable aggregate does not require a heap object while every observable use can be served from its fields and every transfer stays within control flow whose representation Curios can coordinate.
@@ -30,7 +32,9 @@ The argument reconstruction was missed while the other sites were being counted,
 
 The four obligations are also not uniform across inputs, and the corpus that found them cannot exercise them all. `Scan/lead()` and `Scan/bad()` are nullary and arrive as interned constants, and the argument reconstruction sits in the `cont` arm alone — so a pure-ASCII walk allocates only the suffix view and the accumulator per character, and both `Scan` obligations execute only while decoding multi-byte characters. The ladder's programs decode digit strings, which is why M0 below owes a multi-byte fixture beside them: on the existing corpus the two `Scan` shares are not small, they are unmeasured.
 
-None of the four obligations is confined to the lexical expression that constructs it: each value crosses a call, continuation edge or loop backedge, so the relevant region is compiler-controlled control flow rather than one lexical iteration.
+**M0 dissolved the fourth obligation at its source (2026-08-16).** The reconstruction was a spelling: the cont arm wrote `step(h, Scan/cont(rem, lo, hi))` with `sc` — the parameter holding exactly that value — in scope, and match refinement makes the two spellings definitionally equal, so `/std` now passes the held parameter at every such site (`fold`, `at`, `utf8/drop_width`, `utf8/count_scalars`, and their proof twins, kept in the same spelling so function and proof unfold alike). The kernel recertified the prelude over the change, the per-continuation-byte allocation left the walk, `len` and `slice` at once, and the multi-byte control measured it at about two percent of the walk (`curios/src/tests/codegen/ladder.rs`). Three obligations remain, and they are the spine's.
+
+None of the remaining obligations is confined to the lexical expression that constructs it: each value crosses a call, continuation edge or loop backedge, so the relevant region is compiler-controlled control flow rather than one lexical iteration.
 
 `go` is not a function by the time the optimizer sees it. It has exactly one external call site and its recursion is a tail call, so `contify_calls` turns it into a continuation, and the accumulator arrives as a continuation parameter while the scan state is an argument to a known call. That difference is not incidental to the spelling — it is what decides which capability below removes which object.
 
@@ -50,7 +54,7 @@ The shared demand lattice already distinguishes projection-only use from opaque 
 
 The return protocol already coordinates multi-value results over tail-call-connected function components, and call-pattern specialization already uses worker/wrapper-shaped clones that thread dynamic tuple fields through parameters.
 
-**Specialization already matches the scan-state reconstruction and declines it, on a budget rather than on a rule.** The rebuilt `Scan` carries a literal tag, `step` deconstructs the parameter it lands in, and every other condition holds; the callee exceeds the current `BRANCH_SPECIALIZATION_GROWTH_LIMIT`. That refusal is correct for the mechanism doing the asking — SpecConstr must duplicate the callee once per tag to thread its fields — and it is the clearest argument that a distinct mechanism is warranted, because rewriting the signature threads the same fields while cloning nothing. The exact extent and budget comparison belong beside the M0 probe that reproduces them. A budget that declines a per-character allocation is evidence about the *mechanism*, not about the candidate.
+**Specialization already matches the scan-state reconstruction and declines it, on a budget rather than on a rule.** The rebuilt `Scan` carries a literal tag, `step` deconstructs the parameter it lands in, and every other condition holds; the callee exceeds the current `BRANCH_SPECIALIZATION_GROWTH_LIMIT`. That refusal is correct for the mechanism doing the asking — SpecConstr must duplicate the callee once per tag to thread its fields — and it is the clearest argument that a distinct mechanism is warranted, because rewriting the signature threads the same fields while cloning nothing. The exact extent and budget comparison live beside `step_specialization_extent` in `curios/src/tests/codegen/census.rs`: extent 37 against a limit of 24 at the time of taking, a refusal by less than a factor of two. A budget that declines a per-character allocation is evidence about the *mechanism*, not about the candidate.
 
 `represent.rs` decides raw representation for locals only, correctly refusing unilateral decisions that cross a signature; this work must coordinate every rewritten caller and callee or retain a wrapper speaking the original boxed ABI.
 
@@ -158,9 +162,9 @@ A wrapper is also where this capability's failure mode concentrates: every call 
 
 Opaque recursive calls, indirect calls and host-visible functions remain on the boxed interface.
 
-The `/std/Str/fold` scan state is this capability's acceptance case. The `cont` arm projects `rem`, `lo` and `hi` out of the loop's parameter and rebuilds the four-field `Scan` solely to pass it into `step`, which deconstructs it again — a reconstruction that exists because the two sides agree on an object rather than on fields. It must disappear from the recursive path, and it must disappear by rewriting one signature rather than by duplicating the over-budget callee once per tag, which is what the existing specializer would have to do and correctly declines to.
+This capability's motivating acceptance case — the fold's scan argument reconstruction — was cured at source during M0 (see *Evidence*), which is what retired M3 below; and the census recorded a second disqualifier the cure exposed: the scan flow was never one exact product, because its nullary constructors lower to one-field tuples beside `cont`'s four, so a worker signature had no single shape to carry. The section stands as the design record for the reinstate condition.
 
-Its fields stay boxed at the worker boundary unless a separate decision widens what a signature may carry, per *Existing substrate* above; that limit is a property of this capability and belongs in the tests, not a defect of the rewrite.
+Fields stay boxed at any worker boundary unless a separate decision widens what a signature may carry, per *Existing substrate* above; that limit is a property of this capability and belongs in the tests, not a defect of the rewrite.
 
 ### Results
 
@@ -200,7 +204,9 @@ The survey must report which candidates continuation-only splitting reaches, whi
 
 The string ladder must attribute the returned `Scan`, caller-side return reconstruction, accumulator tuple, scan argument reconstruction and suffix view using four isolated mechanisms: one probe may track the returned `Scan` as its construction moves from callee to caller, while the other three each require their own instrument or isolated transformation. Their shares must not be inferred from the number of operations in the loop or from a count scoped only to the emitted fold body — and the attribution input must include multi-byte text, because on the ladder's digit corpus the two `Scan` obligations never execute and a digit-only instrument would report their absence as yield.
 
-Raw pre-Binaryen and optimized native artifacts must be compared so the work distinguishes an upstream optimization unlock from an allocation Binaryen already removes. M0 must also establish an automated browser execution smoke fixture for a raw compiler-produced module, because building `curios-js` alone does not demonstrate that the browser accepts or executes the result.
+M0 delivered the attribution as the walk-mirror family plus the returned-`Scan` probe, with one negative result recorded in place of a share: indexing away the suffix view costs more than the view, because `Bytes/get`'s checked path outweighs it, so the suffix share is measurable only by M4's own transformation and is read structurally — three slice calls per character — until then.
+
+Raw pre-Binaryen and optimized native artifacts must be compared so the work distinguishes an upstream optimization unlock from an allocation Binaryen already removes. A browser execution smoke fixture was specified here and struck (2026-08-16): acceptance is judged on the native artifacts, and `curios-js`'s execution-coverage gap is its own backlog item rather than a gate of this campaign.
 
 Any field-count, signature-growth, clone or reboxing-balance budget must be selected from that survey and recorded beside the test or instrument that justifies it.
 
@@ -222,9 +228,9 @@ M3 stands beside the spine as a conditional annex, presumed stopped until M0 arg
 
 - Record raw-versus-Binaryen structural deltas, measure the specialization clone extent beside the probe that reports its current refusal, and choose the growth policy from the observed candidates.
 
-- Establish the automated raw-module browser execution smoke fixture used by acceptance.
-
 - Report how many candidates lie outside `/std`, and report the known-function-transfer class explicitly: that report is M3's admission gate, and an empty one retires M3 without touching the spine. The stopping evidence below is a real possible outcome of this milestone, and reaching it is a result rather than a failure.
+
+- **Done (2026-08-17).** The census (`aggregate_flow_census`), the extent probe (`step_specialization_extent`), the attribution family (`programs/walk_mirror_*.crs` under `walk_mirror_family_isolates_each_obligation` and `walk_mirror_attribution_measurements`), the returned-`Scan` probe (`returned_scan_constructions_live_in_step`) and the multi-byte fixture (`programs/parse_multibyte.crs`) are in the tree, every figure beside its command. The stopping evidence was not met — the accumulator and the returned scan each measure about a fifth of the walk — and the spine's ordering stands with one correction: the suffix view's dynamic share resisted rung isolation and is deferred to M4's own transformation.
 
 ### M1a — Interprocedural use demand
 
@@ -258,19 +264,11 @@ M3 stands beside the spine as a conditional annex, presumed stopped until M0 arg
 
 - Remove the caller-side `Scan` reconstruction exposed by M1a by splitting the continuation that receives its returned fields.
 
-### M3 — Known-function workers, conditional on the survey
+### M3 — Known-function workers, retired by the survey (2026-08-17)
 
-- Presumed stopped: this milestone proceeds only on M0's known-function-transfer report, and a report empty beyond `/std/Str/fold` retires it with the verdict and its reinstate condition recorded. The spine does not wait for either outcome.
+- Retired. The motivating obligation — the scan argument reconstruction — was a source spelling and was cured in `/std` during M0, so no known-function rewrite has an acceptance case here. The census's needs-workers regions (`/std/Async`'s drains, `/std/Handle/write/1`, `io/bind`, program `main`s) are Io-carrier plumbing with no measured share, and the scan flow itself was never an exact product: its nullary constructors lower to one-field tuples beside `cont`'s four, the mixed-arity shape this capability's eligibility rule excludes.
 
-- Gate each split on the measured reboxing balance: materializations introduced at retained boxed boundaries counted against constructions removed, with a refusal recorded beside the probe that measured it.
-
-- Extend the same field flow through direct function calls and recursive components, as further clients of M2's recorded representation.
-
-- Preserve boxed wrappers wherever the original ABI remains reachable.
-
-- Preserve tail calls, continuation arities and the existing return-protocol ownership boundary.
-
-- Remove the `/std/Str/fold` scan argument reconstruction in raw pre-Binaryen output, and check the emitted callee is rewritten rather than duplicated — a clone that happens to remove the allocation has not demonstrated this capability.
+- Reinstate condition: a measured hot candidate whose flow crosses known direct calls with one exact shape. If reinstated, the design above applies as written — field flow through direct calls as further clients of M2's recorded representation, each split gated on the measured reboxing balance, boxed wrappers wherever the original ABI remains reachable, and tail calls, continuation arities and the return-protocol ownership boundary preserved.
 
 ### M4 — Prepared rope windows
 
@@ -306,19 +304,13 @@ The campaign is complete only when all of the following hold on the spine:
 
 - Empty, whole, nested, uncached and out-of-bounds slice fixtures preserve the existing result, eager trap and memoization behavior.
 
-- Raw and Binaryen-optimized native execution agree, and an automated browser smoke fixture compiles and executes the raw module without depending on a postpass.
+- Raw and Binaryen-optimized native execution agree.
 
 - The isolated probes show the contribution of each removed allocation and keep every figure beside the command that reproduces it.
 
 - The corpus survey demonstrates that the accepted mechanism reaches enough non-library or independently shaped candidates to justify remaining general compiler machinery rather than a `/std/Str/fold` peephole.
 
-And M3 has resolved, in one direction or the other:
-
-- If admitted: a focused CPS fixture carries a product through a known recursive or mutually recursive function component and emits a worker path without the product allocation; escaping and indirectly called functions retain a correct boxed wrapper while eligible known calls use the worker; tail-recursive fixtures remain tail calls after signature rewriting; and the scan argument reconstruction disappears from the raw per-character path with the emitted callee rewritten rather than duplicated.
-
-- If admitted, additionally: the same `Nat` member split through a *worker signature* is asserted to stay boxed, and the test says why — a function parameter offers no carrier, and widening what a signature may carry is a separate decision this campaign does not take. An acceptance criterion that quietly expected raw here would be asserting the successor's work.
-
-- If stopped: the survey report that stopped it is recorded beside the probes, and the scan argument reconstruction is recorded as retained cost with its reinstate condition stated.
+And M3 has resolved: retired (2026-08-17), with the survey report recorded beside the probes and no cost retained — the scan argument reconstruction was cured at source during M0 rather than carried. The reinstate condition is a measured hot known-function-transfer candidate of one exact shape; a reinstated M3 answers the worker criteria formerly listed here — a focused fixture emitting a worker path without the product allocation, correct boxed wrappers at escaping entries, tail calls surviving signature rewriting, the emitted callee rewritten rather than duplicated, and a `Nat` member split through a worker signature asserted to stay boxed because a function parameter offers no carrier.
 
 ## Refused alternatives
 
