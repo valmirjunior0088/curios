@@ -2,14 +2,19 @@
 //!
 //! **This crate is the workspace's only `wasmtime` dependency**, and nothing above it names a wasmtime type at all. The pin and the feature set live in its manifest — the arrangement `curios-archive` and `curios-num` use for rkyv and num-bigint — so the version `curios` precompiles a `.cwasm` against and the version the launcher deserializes it with cannot drift: there is only one row to change.
 //!
-//! Nothing is re-exported to achieve that. The wasmtime vocabulary appears in [`Lift`] and [`Lower`], which no crate outside this one implements, and every operation an outside caller needs has a wasmtime-free signature: [`validate`], [`precompile`], [`run_bytes`], and — under `test-support`, so it carries no link here — `test_support::GuestInstance` for driving a module by hand.
+//! Nothing is re-exported to achieve that. The wasmtime vocabulary appears in [`Lift`] and [`Lower`], which no crate outside this one implements, and every operation an outside caller needs has a wasmtime-free signature: [`validate`], [`precompile`], [`run_bytes`], [`engine_compatibility`], and — under `test-support`, so it carries no link here — `test_support::GuestInstance` for driving a module by hand.
 //!
 //! **Runtime-only is a property of the default build, and it is checked.** The `cranelift` feature is never in `default`, so the isolated `cargo build -p curios-runtime` that `make curios/runtime` runs cannot reach a compiler; `curios` turns it on for itself to get [`precompile`]. What enforces this is not the feature declaration but `curios/src/bundle.rs`, whose guards scan the launcher image that actually ships for backend markers and hold it under a size ceiling — a Cranelift-carrying launcher was built and measured against them, and both refuse it.
 //!
-//! The split of the two AOT operations follows wasmtime's own: [`validate`] needs no compiler and is always present, [`precompile`] is gated. Binaryen is named nowhere here and never will be — optimization belongs to the native product.
+//! The split of the AOT operations follows wasmtime's own: [`validate`] needs no compiler and is always present, while everything that does need one lives in the `cranelift` module, gated once on the module rather than item by item. Binaryen is named nowhere here and never will be — optimization belongs to the native product.
 
 mod bundle;
 pub use bundle::*;
+
+#[cfg(feature = "cranelift")]
+mod cranelift;
+#[cfg(feature = "cranelift")]
+pub use cranelift::*;
 
 mod host;
 pub use host::*;
