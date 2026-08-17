@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Build every contestant, cross-check that they all agree, then time them with
-# hyperfine in four tables: {lcg, binary-trees} x {native, wasm-on-wasmtime}.
+# Build every contestant, cross-check that they all agree, then time them with hyperfine in four tables: {lcg, binary-trees} x {native, wasm-on-wasmtime}.
 # Curios is the subject compared in both halves of each program.
 #
 # Knobs (env vars): N_LCG, D_TREES, RUNS, WARMUP.
@@ -9,11 +8,7 @@ cd "$(dirname "$0")"
 ROOT="$PWD"          # absolute benchmarks dir; asc is invoked from elsewhere (see below)
 mkdir -p .artifacts
 
-# Allowlist, not a blocklist: default stdout to stderr for the whole script, so
-# every command's output — this script's own or any subprocess's, present or
-# future — lands on stderr unless explicitly reopened. `table` below reopens
-# fd 3 (the real stdout) around just the `hyperfine` call, the one thing meant
-# to reach it.
+# Allowlist, not a blocklist: default stdout to stderr for the whole script, so every command's output — this script's own or any subprocess's, present or future — lands on stderr unless explicitly reopened. `table` below reopens fd 3 (the real stdout) around just the `hyperfine` call, the one thing meant to reach it.
 exec 3>&1
 exec 1>&2
 
@@ -25,8 +20,7 @@ D_TREES="${D_TREES:-21}"      # tree depth: ~4.2M nodes; sums taken mod 1000003
 RUNS="${RUNS:-5}"
 WARMUP="${WARMUP:-1}"
 
-# The wasi-shim's asconfig sets `lib: ./assembly`, a glob that only resolves when
-# asc runs with the shim's install dir as cwd — so we invoke it from there.
+# The wasi-shim's asconfig sets `lib: ./assembly`, a glob that only resolves when asc runs with the shim's install dir as cwd — so we invoke it from there.
 AS_DIR=/opt/as
 AS_CONFIG=./node_modules/@assemblyscript/wasi-shim/asconfig.json
 
@@ -50,9 +44,7 @@ build() {
   # Lean — a Lake package living in this program's dir. VERIFY: elan default toolchain.
   ( cd "$dir" && lake build )
 
-  # AssemblyScript — wasm via WASI shim. Run from $AS_DIR (so the shim's relative
-  # `lib` glob resolves); in/out are absolute since cwd changes. The shim patches
-  # the built-in process/console, so the .ts uses them as globals (no imports).
+  # AssemblyScript — wasm via WASI shim. Run from $AS_DIR (so the shim's relative `lib` glob resolves); in/out are absolute since cwd changes. The shim patches the built-in process/console, so the .ts uses them as globals (no imports).
   ( cd "$AS_DIR" && asc "$ROOT/$dir/$stem.ts" --config "$AS_CONFIG" -O3 \
       -o "$ROOT/.artifacts/${stem}_asc.wasm" )
 

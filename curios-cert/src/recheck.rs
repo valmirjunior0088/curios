@@ -6,7 +6,7 @@
 //!
 //! A refusal here is *not* automatically an elaborator bug, and treating it as one would be the wrong reflex. The kernel is deliberately incomplete in several places — coverage is unverified, free-monoid elimination arms are unchecked, conversion compares some positions syntactically — and each of those refuses valid programs. So a disagreement is a question, and the two answers are "the kernel needs strengthening here" and "the elaborator admitted something it should not have". Both are worth knowing, which is why this runs at all.
 //!
-//! What a disagreement is *never* is noise to be suppressed. If a rule here has to be weakened to make a real module pass, that weakening is a decision about the trusted base and belongs in `documentation/design.md`.
+//! What a disagreement is *never* is noise to be suppressed. If a rule here has to be weakened to make a real module pass, that weakening is a decision about the trusted base and belongs in a decision file of its own under `documentation/design/language/`, beside `an-independent-kernel-re-checks-what-the-elaborator-accepts.md`.
 //!
 //! # On the compile path
 //!

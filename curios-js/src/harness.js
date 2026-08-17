@@ -1,13 +1,6 @@
-// The browser run harness: instantiates a compiled curios program against a
-// JS implementation of the host boundary and drives its entrypoint. Like any
-// embedder, this file spells the wire names itself — the `sys.*` import
-// keys, the `sys`/`ffi` namespaces, the `func/main` export; the contract is
-// pinned by the Rust test suite. Only the numeric status/stdio codes arrive
-// via `config`, built Rust-side from curios-abi (see src/abi.rs).
+// The browser run harness: instantiates a compiled curios program against a JS implementation of the host boundary and drives its entrypoint. Like any embedder, this file spells the wire names itself — the `sys.*` import keys, the `sys`/`ffi` namespaces, the `func/main` export; the contract is pinned by the Rust test suite. Only the numeric status/stdio codes arrive via `config`, built Rust-side from curios-abi (see src/abi.rs).
 //
-// The browser host is deliberately shallow: stdout/stderr accumulate (and
-// stream via hooks), stdin is at EOF, the clocks and randomness are real, and
-// everything filesystem/network answers PERMISSION_DENIED.
+// The browser host is deliberately shallow: stdout/stderr accumulate (and stream via hooks), stdin is at EOF, the clocks and randomness are real, and everything filesystem/network answers PERMISSION_DENIED.
 
 /** Thrown by the `exit` import to unwind the wasm stack with an exit code. */
 export class ExitSignal extends Error {
@@ -19,27 +12,17 @@ export class ExitSignal extends Error {
 
 /**
  * Run a compiled program. `config` carries:
- * - `program`, `bridge`: the module bytes (the program from `compile`, the
- *   bridge from `bridge_bytes`);
+ * - `program`, `bridge`: the module bytes (the program from `compile`, the bridge from `bridge_bytes`);
  * - `status`, `stdio`: the wire code tables from `abi`;
- * - `hooks`: optional `{ onStdout?, onStderr?, foreign? }` — `onStdout`/
- *   `onStderr` are streaming callbacks, each receiving a `Uint8Array` per
- *   write; `foreign` implements the program's own `foreign` declarations,
- *   keyed by fully qualified name (e.g. `{ "/frobnicate": fn }`) — it is
- *   passed through as the `ffi` import object, so a missing implementation
- *   surfaces as a `LinkError` naming the import.
+ * - `hooks`: optional `{ onStdout?, onStderr?, foreign? }` — `onStdout`/`onStderr` are streaming callbacks, each receiving a `Uint8Array` per write; `foreign` implements the program's own `foreign` declarations, keyed by fully qualified name (e.g. `{ "/frobnicate": fn }`) — it is passed through as the `ffi` import object, so a missing implementation surfaces as a `LinkError` naming the import.
  *
- * Resolves to `{ stdout, stderr, exitCode, trap }`: the accumulated output
- * bytes, the code the program exited with (0 when `main` returns), and the
- * trap message if execution failed instead.
+ * Resolves to `{ stdout, stderr, exitCode, trap }`: the accumulated output bytes, the code the program exited with (0 when `main` returns), and the trap message if execution failed instead.
  */
 export async function run(config) {
   const bridge = (await WebAssembly.instantiate(config.bridge, {})).instance
     .exports;
 
-  // Byte strings cross the boundary through the bridge's memory in one
-  // `bytes_load`/`bytes_store` call per string; the memory starts empty and grows
-  // here, JS-side, to fit the largest string seen so far.
+  // Byte strings cross the boundary through the bridge's memory in one `bytes_load`/`bytes_store` call per string; the memory starts empty and grows here, JS-side, to fit the largest string seen so far.
   const memory = bridge.memory;
 
   const ensureCapacity = (length) => {
@@ -65,8 +48,7 @@ export async function run(config) {
     return bridge.bytes_store(bytes.length);
   };
 
-  // A handle's wire encoding is the little-endian bytes of its token, so the
-  // empty byte string decodes to 0 (stdin).
+  // A handle's wire encoding is the little-endian bytes of its token, so the empty byte string decodes to 0 (stdin).
   const tokenOf = (handle) => {
     const bytes = decodeBytes(handle);
     let token = 0;
@@ -96,8 +78,7 @@ export async function run(config) {
         output.stderr.push(bytes);
         hooks.onStderr?.(bytes);
         break;
-      // Writing to stdin is a loud tripwire (a trap), mirroring MockHost's
-      // panic; the browser has no fd 0 for OsHost's POSIX passthrough.
+      // Writing to stdin is a loud tripwire (a trap), mirroring MockHost's panic; the browser has no fd 0 for OsHost's POSIX passthrough.
       case config.stdio.STDIN:
         throw new Error("write to stdin");
       default:
@@ -115,9 +96,7 @@ export async function run(config) {
     throw new Error(`${name} is not supported in the browser playground`);
   };
 
-  // The `sys` import object, keyed by wire name. A `host_ops` row without a
-  // browser implementation surfaces as a `LinkError` naming the import when
-  // a program calls it.
+  // The `sys` import object, keyed by wire name. A `host_ops` row without a browser implementation surfaces as a `LinkError` naming the import when a program calls it.
   const sysEnv = {
     read: () => [config.status.EOF, emptyBytes()],
     write: write,
@@ -152,9 +131,7 @@ export async function run(config) {
     clock_mono: () => {
       const millis = performance.now();
 
-      // Floor, not round: a fractional millisecond just below 1000 would
-      // otherwise round the nanos limb up to exactly 10⁹, which the seconds
-      // limb owns.
+      // Floor, not round: a fractional millisecond just below 1000 would otherwise round the nanos limb up to exactly 10⁹, which the seconds limb owns.
       return [
         Math.floor(millis / 1000),
         Math.floor((millis % 1000) * 1_000_000),

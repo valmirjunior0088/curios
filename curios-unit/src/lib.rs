@@ -1,4 +1,4 @@
-//! The compilation unit: what one unit provides to its successors, and the two stages that produce it without judging it.
+//! The compilation unit: what one unit provides to its successors, one opaque artifact per stage, and the prefix of borrowed predecessors each stage is compiled against.
 //!
 //! A compilation is a set of units folded over a dependency order. Each stage takes a *scope* — what earlier units established — and one unit, and a [`Unit`] is defined by what it hands the next one rather than by what it is. The standard library is a unit; a package is a unit; the program you asked for is the unit with no successors, which is what lets it own the empty prefix and carry the entrypoint.
 //!

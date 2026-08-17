@@ -1,6 +1,6 @@
 # curios-core
 
-The Curios core language: the term representation both checkers build on — what a term *is*, with no rule that judges one. The judgments live on either side: `curios-cert` holds the kernel and the shared analyses, `curios-elab` everything that makes the surface language work, and both depend on this crate with neither dependency ever reversing. The two-checker architecture is a cross-cutting decision recorded in [An independent kernel re-checks what the elaborator accepts](../documentation/design/language/an-independent-kernel-re-checks-what-the-elaborator-accepts.md); local architecture belongs to the crate rustdoc.
+The Curios core language: the term representation both checkers build on — what a term *is*, with no rule that judges one. The judgments live on either side: `curios-analysis` holds the rules both checkers run, `curios-cert` the kernel that only one of them does, `curios-elab` everything that makes the surface language work, and both depend on this crate with neither dependency ever reversing. The two-checker architecture is a cross-cutting decision recorded in [An independent kernel re-checks what the elaborator accepts](../documentation/design/language/an-independent-kernel-re-checks-what-the-elaborator-accepts.md); local architecture belongs to the crate rustdoc.
 
 ## Design
 

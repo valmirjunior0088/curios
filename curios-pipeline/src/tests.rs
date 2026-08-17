@@ -1910,7 +1910,7 @@ fn dead_user_definition_is_still_typechecked() {
 
 /// Elaborate `source` to its meta-free Core module and erase it exactly as `compile_entrypoint` does — the archived erased prelude replayed, the entry's own items erased onto it.
 ///
-/// It used to erase *fresh*, passing the whole module to `erase_module`, which worked only because a compiled module carried the prelude spliced into its items. It no longer does, and a from-scratch erasure of the entry alone leaves every prelude name unbound. Replaying is also the path production takes, so what these tests exercise is what actually runs; erasing the prelude fresh is `erase_prelude_prefix`'s job at archive-build time, where a failure panics the build.
+/// It used to erase *fresh*, passing the whole module to `erase_module`, which worked only because a compiled module carried the prelude spliced into its items. It no longer does, and a from-scratch erasure of the entry alone leaves every prelude name unbound. Replaying is also the path production takes, so what these tests exercise is what actually runs; erasing the prelude fresh is `erase_unit`'s job at archive-build time, where a failure panics the build.
 fn erase_to_ir(source: &str, type_: Option<&str>) -> curios_ersd::Module {
     let entrypoint = with_entrypoint_type(source, type_);
     let (module, core_type, _foreigns) = with_prelude(|prelude| {
@@ -1982,10 +1982,7 @@ fn arena_erasure_handles_deep_input_on_the_default_stack() {
 
 // --- The unit boundary ----------------------------------------------------
 //
-// These are the tests the specification insists come in a pair. A unit boundary is not packaging: it is where
-// coherence is enforced, so the same three declarations are *refused* across units and *accepted* across modules
-// of one unit. Either half alone proves nothing — the first could pass because the fixture is malformed, the
-// second because the rule never ran.
+// These are the tests the specification insists come in a pair. A unit boundary is not packaging: it is where coherence is enforced, so the same three declarations are *refused* across units and *accepted* across modules of one unit. Either half alone proves nothing — the first could pass because the fixture is malformed, the second because the rule never ran.
 
 /// Compile `sources` as units in order, then `entrypoint` as the entry against all of them.
 fn compile_with_units(
@@ -2120,14 +2117,9 @@ fn an_entry_reaches_a_mounted_units_public_name() {
 
 /// The unit boundary **is** semantic, and this pair is what says so.
 ///
-/// A witness declared in ordinary unit `A` for a concept declared in ordinary unit `B` over a type declared in
-/// ordinary unit `C` is an orphan: no unit involved owns the pair, and two unrelated authors could otherwise each
-/// `satisfy` it and collide unfixably once both are linked. Written as modules of one unit the same three
-/// declarations are accepted, because one unit owns all of them.
+/// A witness declared in ordinary unit `A` for a concept declared in ordinary unit `B` over a type declared in ordinary unit `C` is an orphan: no unit involved owns the pair, and two unrelated authors could otherwise each `satisfy` it and collide unfixably once both are linked. Written as modules of one unit the same three declarations are accepted, because one unit owns all of them.
 ///
-/// Either half alone proves nothing. The refusal could come from a malformed fixture; the acceptance could come
-/// from a rule that never runs. Only together do they say the boundary is where coherence is enforced — which is
-/// why the earlier claim that N units compile identically to N modules was exactly backwards.
+/// Either half alone proves nothing. The refusal could come from a malformed fixture; the acceptance could come from a rule that never runs. Only together do they say the boundary is where coherence is enforced — which is why the earlier claim that N units compile identically to N modules was exactly backwards.
 #[test]
 fn the_orphan_rule_fires_across_units_and_not_across_modules() {
     let concept = "pub concept Show(A: Type): pub Type {\n    show(A) -> /std/Nat,\n}";
@@ -2144,8 +2136,7 @@ fn the_orphan_rule_fires_across_units_and_not_across_modules() {
         "expected an orphan refusal, got: {across}"
     );
 
-    // The control. One unit owning all three is the sanctioned shape, and it must still compile — otherwise the
-    // refusal above would only show that the fixture is broken.
+    // The control. One unit owning all three is the sanctioned shape, and it must still compile — otherwise the refusal above would only show that the fixture is broken.
     let together = format!(
         "pub mod b\n{concept}\nend\npub mod c\n{type_}\nend\npub mod a\nsatisfy /one/b/Show(/one/c/Widget) {{\n    show = (w) => 0,\n}}\nend"
     );

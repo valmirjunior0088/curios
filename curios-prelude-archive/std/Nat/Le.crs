@@ -11,10 +11,7 @@ pub let refl(n: Nat) -> Le(n, n) =
 
 -- Both arms land on something the comparison settles — `0 <= n` outright, and a shared successor by cancellation — so the recursion only walks the evidence it was handed.
 pub rec of_lte(@a: Nat, @b: Nat, p: Lte(a, b)) -> Le(a, b) =
-    match p: (x, y, w) => Le(x, y)
-    | z(@_) => True/qed()
-    | s(@_, @_, prev) => of_lte(prev)
-    end;
+    match p: (x, y, w) => Le(x, y) | z(@_) => True/qed() | s(@_, @_, prev) => of_lte(prev) end;
 
 -- The other direction, by cases rather than by walking evidence there is none of: a decided proposition has no constructors, so the recursion is on the numbers, and the case where the bound has run out is `False` under the hypothesis.
 pub rec to_lte(a: Nat, b: Nat, p: Le(a, b)) -> Lte(a, b) =

@@ -1,6 +1,6 @@
 # curios-cont
 
-The Curios continuation-passing IR and its WebAssembly backend: `curios_ersd::into_cont` constructs the CPS graph, the optimizer rewrites it, and `into_wasm` performs delayed closure conversion and structurizes control into Wasm blocks and loops. The representation invariants and the backend pipeline belong to the crate rustdoc.
+The Curios continuation-passing IR and its WebAssembly backend: `curios_ersd::lower_to_cont` constructs the CPS graph, the optimizer rewrites it, and `into_wasm` performs delayed closure conversion and structurizes control into Wasm blocks and loops. The representation invariants and the backend pipeline belong to the crate rustdoc.
 
 ## Design
 

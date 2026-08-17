@@ -101,7 +101,4 @@ pub let comm(p: NonZero, q: NonZero) -> Eq(add(p, q), add(q, p)) =
     NonZero/eq(add(p, q), add(q, p), BigNat/add/comm(p.value, q.value));
 
 pub let assoc(p: NonZero, q: NonZero, r: NonZero) -> Eq(add(add(p, q), r), add(p, add(q, r))) =
-    NonZero/eq(
-        add(add(p, q), r),
-        add(p, add(q, r)),
-        BigNat/add/assoc(p.value, q.value, r.value));
+    NonZero/eq(add(add(p, q), r), add(p, add(q, r)), BigNat/add/assoc(p.value, q.value, r.value));

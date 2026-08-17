@@ -3,7 +3,7 @@ name = "curios-unit"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The Curios compilation unit: what one unit provides to its successors, and the stages that produce it without judging it"
+description = "The Curios compilation unit: what one unit provides to its successors, and the prefix of predecessors each stage is compiled against"
 
 [lints]
 workspace = true

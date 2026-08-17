@@ -71,7 +71,7 @@ pub(crate) fn as_sort(kernel: &mut Kernel, universe: &Term) -> Result<Sort, Kern
 }
 
 impl Sort {
-    /// The sort of `type_`.
+    /// Classify `type_`, which the caller must already have checked to be a type — the **lookup** of the two roles the module header separates, never a judgment.
     pub(crate) fn of(kernel: &mut Kernel, type_: &Term) -> Result<Sort, KernelError> {
         let reduced = kernel.reduce_forced(type_.clone())?;
 

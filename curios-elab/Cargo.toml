@@ -22,10 +22,6 @@ curios-core = { workspace = true }
 curios-ersd = { workspace = true }
 curios-num = { workspace = true }
 
-# The kernel is a *dev*-dependency, and that is the point of the split rather than
-# an accident of it: three tests here put a fixture to both checkers, and a
-# dev-dependency does not propagate — so nothing whose build script reaches
-# elaboration reaches `curios-cert` through it. See
-# `curios-prelude-archive/README.md`, "Why this is not `curios-prelude`".
+# The kernel is a *dev*-dependency, and that is the point of the split rather than an accident of it: three tests here put a fixture to both checkers, and a dev-dependency does not propagate — so nothing whose build script reaches elaboration reaches `curios-cert` through it. See `curios-prelude-archive/README.md`, "Why this is not `curios-prelude`".
 [dev-dependencies]
 curios-cert = { workspace = true }

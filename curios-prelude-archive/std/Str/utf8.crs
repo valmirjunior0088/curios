@@ -204,7 +204,9 @@ pub rec peel_byte(
     @b: Bytes,
     nz: Nat/Lt(0, Bytes/len(b)),
     w: Utf8(s, b),
-) -> Utf8(step(Bytes/at(b, 0, @nz), s), Bytes/slice(b, 1, Bytes/len(b), @Nat/Lt/le_one_of_positive(nz))) =
+) -> Utf8(
+    step(Bytes/at(b, 0, @nz), s),
+    Bytes/slice(b, 1, Bytes/len(b), @Nat/Lt/le_one_of_positive(nz))) =
     match w
     | stop() => match nz end
     | more(c, st, t, rest) => rest
@@ -246,4 +248,3 @@ pub let certify_decoded(code: Nat) -> Char =
 
 pub let decode_head(c: Byte, @t: Bytes, w: Utf8(Scan/lead(), x[c, ..t])) -> Char =
     certify_decoded(decode_head_raw(c, w));
-

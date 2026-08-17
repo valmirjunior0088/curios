@@ -1,6 +1,6 @@
 //! End-to-end coverage for strict positivity modulo polarity.
 //!
-//! The check exists to make `induct` and `struct` sound: an inductive declaration claims its functor has an initial algebra, and without the gate `induct Bad | c(f : (Bad) -> False) end` inhabits `False`. The lattice itself is unit-tested in `curios-elab/src/positivity/tests.rs`; these check what a *user* can observe.
+//! The check exists to make `induct` and `struct` sound: an inductive declaration claims its functor has an initial algebra, and without the gate `induct Bad | c(f : (Bad) -> False) end` inhabits `False`. The lattice itself is unit-tested in `curios-analysis/src/positivity/tests.rs`; these check what a *user* can observe.
 //!
 //! Every shape here is one the standard library already relies on. The prelude build exercises them through the from-scratch elaboration path, so it fails loudly on a regression; these run the same shapes through the prelude-replay path a user program actually takes, where the analysis sees only the user suffix and reads the prelude's polarity vectors back from the archive.
 
@@ -303,7 +303,7 @@ fn a_negative_occurrence_of_an_unrelated_type_is_admitted() {
 
 // A declaration reaching itself through a *type-former parameter* is refused, and this pins that it is refused rather than assumed.
 //
-// `curios-cert/src/positivity.rs` names this obligation deliberately out of scope: `F` is a binder with no known polarity, so `Mu` cannot be checked from its own body, and discharging it properly needs an inferred per-binder obligation in a side store. Out of scope leaves open which way the analysis falls, and only one way is safe — an unknown former must read as `Mixed`, never as `Strict`. Nothing in the corpus takes a type-former parameter on an `induct`, so nothing exercised the choice, and a later improvement to `occurrences` that taught it to see through `F(Mu(F))` would flip it silently.
+// `curios-analysis/src/positivity.rs` names this obligation deliberately out of scope: `F` is a binder with no known polarity, so `Mu` cannot be checked from its own body, and discharging it properly needs an inferred per-binder obligation in a side store. Out of scope leaves open which way the analysis falls, and only one way is safe — an unknown former must read as `Mixed`, never as `Strict`. Nothing in the corpus takes a type-former parameter on an `induct`, so nothing exercised the choice, and a later improvement to `occurrences` that taught it to see through `F(Mu(F))` would flip it silently.
 //
 // What the wrong direction costs is Curry's paradox with no recursion in sight. Admitting `Mu` lets it be instantiated at a negative former — `let Neg(X : Type) -> Type = (X) -> False` — and `Mu(Neg)`'s constructor is then `fix : ((Mu(Neg)) -> False) -> Mu(Neg)`, the negative occurrence this gate exists to forbid, spelled through a parameter instead of directly. `out(m) = match m | fix(f) => f end` and `delta(m) = out(m)(m)` give `delta(Mu/fix(delta)) : False`.
 //

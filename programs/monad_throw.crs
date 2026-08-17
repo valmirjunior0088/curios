@@ -1,8 +1,5 @@
--- One of four programs running the *same* N-step monadic loop in a different
--- monad, to find whether the cost `state_monad.crs` measures is a fact about
--- `bind` or about the carrier `bind` builds. `Throw(E, A)` wraps `Result(A, E)`,
--- so its `bind` is a `match` over data and allocates no closure — this is the
--- control the function-carrier monads are read against.
+-- One of four programs running the *same* N-step monadic loop in a different monad, to find whether the cost `state_monad.crs` measures is a fact about `bind` or about the carrier `bind` builds. `Throw(E, A)` wraps `Result(A, E)`,
+-- so its `bind` is a `match` over data and allocates no closure — this is the control the function-carrier monads are read against.
 -- N is read from stdin so the loop survives constant folding; output is 3N.
 use /std/{Str, Nat, Option, Result, Throw, Io};
 

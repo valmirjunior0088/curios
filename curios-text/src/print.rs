@@ -201,13 +201,19 @@ fn print_func_param((plicity, name, annotation): (Plicity, String, Option<Term>)
 
 /// A tuple-literal / struct-literal field: positional, `label = value`, or the definition sugar `label(params) = value` re-sugared from the retained parameter list.
 fn print_tuple_field(field: TupleField) -> Printer {
+    // A labeled field's label carries no span, so the claim is what keeps a comment written above the field from being claimed by the value and printed inside it. An unlabeled field *is* its value, and `print_term` already claims at the right place.
+    let claim = member_claim_offset([&field.value]);
     match (field.label, field.func_params) {
-        (Some(label), Some(params)) => flat([
-            pure(label),
-            listed("(", params.into_iter().map(print_func_param).collect(), ")"),
-            attached_body(" =", print_term(field.value)),
-        ]),
-        (Some(label), None) => flat([pure(label), attached_body(" =", print_term(field.value))]),
+        (Some(label), Some(params)) => claimed_before(claim, || {
+            flat([
+                pure(label),
+                listed("(", params.into_iter().map(print_func_param).collect(), ")"),
+                attached_body(" =", print_term(field.value)),
+            ])
+        }),
+        (Some(label), None) => claimed_before(claim, || {
+            flat([pure(label), attached_body(" =", print_term(field.value))])
+        }),
         (None, _) => print_term(field.value),
     }
 }
@@ -691,6 +697,18 @@ fn claimed_before(offset: Option<usize>, build: impl FnOnce() -> Printer) -> Pri
     flat(parts)
 }
 
+/// Where a member of a delimited list claims its leading comments: a `match` or `choose` arm, a tuple or struct-literal field, a concept or witness field, an `induct` case.
+///
+/// None of these records a span of its own — an arm is a pattern and a body, a field a bare label and a value — so without a claim at the member's own head the first spanned *descendant* claims instead, and a comment written above the member surfaces inside the member's body. [`signature_claim_offset`] is this same rule for `let` and `rec` clauses, and its doc records the convergence failure both exist to prevent.
+///
+/// The earliest spanned component bounds the claim, for the reason it does there: a comment above the member precedes every component, so any one of them would claim it, and taking the earliest keeps a comment written *inside* the member's head with the component it leads. A member whose components are all spanless claims nothing, exactly as a signature with no spanned component does.
+fn member_claim_offset<'a>(terms: impl IntoIterator<Item = &'a Term>) -> Option<usize> {
+    terms
+        .into_iter()
+        .filter_map(|term| term.span().map(|span| span.start))
+        .min()
+}
+
 /// Where a `let` binding or a `rec` clause claims its leading comments: the start of its earliest spanned component, since none of the introducer keyword, the binder pattern, and the clause label records a span. A comment above the binding precedes all of these, so any of them bounds the claim; taking the earliest keeps comments written inside the signature with the component they lead.
 ///
 /// A clause that does not claim at its own head does not thereby keep its comment: the first *descendant* with a span claims it instead, which is how a comment above an `and` clause once surfaced between a parameter and its type. It then reparsed as a leading comment somewhere new, so the next format run moved it again — the one way this formatter can fail to converge.
@@ -847,26 +865,40 @@ fn print_term_inner(term: Term) -> Printer {
                 pure("choose"),
                 flat(
                     arms.into_iter()
-                        .map(|ChooseArm { test, body }| {
-                            let head = match test {
-                                ChooseTest::Cond(condition) => {
-                                    flat([separator(), pure("| "), print_term(condition)])
-                                }
-                                ChooseTest::Bind { pattern, value } => flat([
-                                    separator(),
-                                    pure("| "),
-                                    print_match_pattern(pattern),
-                                    pure(" = "),
-                                    print_term(value),
-                                ]),
-                            };
-                            flat([head, attached_body(" =>", print_term(body))])
+                        .map(|arm| {
+                            // A choose arm's test is spanned and precedes its body, so it is the earliest component; the head is built *inside* the claim so that printing the test cannot claim this arm's leading comment first.
+                            let claim = member_claim_offset([
+                                match &arm.test {
+                                    ChooseTest::Cond(condition) => condition,
+                                    ChooseTest::Bind { value, .. } => value,
+                                },
+                                &arm.body,
+                            ]);
+                            let ChooseArm { test, body } = arm;
+                            flat([
+                                separator(),
+                                claimed_before(claim, || {
+                                    let head = match test {
+                                        ChooseTest::Cond(condition) => {
+                                            flat([pure("| "), print_term(condition)])
+                                        }
+                                        ChooseTest::Bind { pattern, value } => flat([
+                                            pure("| "),
+                                            print_match_pattern(pattern),
+                                            pure(" = "),
+                                            print_term(value),
+                                        ]),
+                                    };
+                                    flat([head, attached_body(" =>", print_term(body))])
+                                }),
+                            ])
                         })
                         .collect::<Vec<_>>(),
                 ),
                 separator(),
-                pure("| _"),
-                attached_body(" =>", print_term(default)),
+                claimed_before(member_claim_offset([&default]), || {
+                    flat([pure("| _"), attached_body(" =>", print_term(default))])
+                }),
                 separator(),
                 pure("end"),
             ]))
@@ -885,11 +917,17 @@ fn print_term_inner(term: Term) -> Printer {
                 flat(
                     arms.into_iter()
                         .map(|arm| {
+                            // The claim sits *after* the separator: it is what breaks the line, so a comment claimed before it would ride the end of the previous arm's body instead of leading this one.
+                            let claim = member_claim_offset([&arm.body]);
                             flat([
                                 separator(),
-                                pure("| "),
-                                print_match_pattern(arm.pattern),
-                                attached_body(" =>", print_term(arm.body)),
+                                claimed_before(claim, || {
+                                    flat([
+                                        pure("| "),
+                                        print_match_pattern(arm.pattern),
+                                        attached_body(" =>", print_term(arm.body)),
+                                    ])
+                                }),
                             ])
                         })
                         .collect::<Vec<_>>(),
@@ -1166,6 +1204,13 @@ pub(crate) fn print_module_items(items: Vec<TopItem>) -> Printer {
 }
 
 fn print_top_induct_case(case: TopCase) -> Printer {
+    // Computed before anything below builds a document, since printing a payload type would otherwise claim this case's leading comment into the payload list.
+    let claim = member_claim_offset(
+        case.payload
+            .iter()
+            .map(|param| &param.type_)
+            .chain(case.target.iter().flatten()),
+    );
     let payload = case
         .payload
         .into_iter()
@@ -1192,9 +1237,13 @@ fn print_top_induct_case(case: TopCase) -> Printer {
 
     flat([
         hard_line(),
-        pure(format!("| {}", case.label)),
-        listed("(", payload, ")"),
-        target,
+        claimed_before(claim, || {
+            flat([
+                pure(format!("| {}", case.label)),
+                listed("(", payload, ")"),
+                target,
+            ])
+        }),
     ])
 }
 
@@ -1329,18 +1378,23 @@ fn print_concept_field(field: ConceptField) -> Printer {
         return flat([pure("use "), print_term(field.type_)]);
     }
     // The signature sugar `label(params) -> type` re-sugars from the retained parameter list (never set on a super field).
+    let claim = member_claim_offset([&field.type_]);
     match field.func_params {
-        Some(params) => flat([
-            pure(field.label),
-            listed(
-                "(",
-                params.into_iter().map(print_func_type_param).collect(),
-                ")",
-            ),
-            pure(" -> "),
-            print_term(field.type_),
-        ]),
-        None => flat([pure(field.label), pure(": "), print_term(field.type_)]),
+        Some(params) => claimed_before(claim, || {
+            flat([
+                pure(field.label),
+                listed(
+                    "(",
+                    params.into_iter().map(print_func_type_param).collect(),
+                    ")",
+                ),
+                pure(" -> "),
+                print_term(field.type_),
+            ])
+        }),
+        None => claimed_before(claim, || {
+            flat([pure(field.label), pure(": "), print_term(field.type_)])
+        }),
     }
 }
 
@@ -1410,16 +1464,21 @@ fn print_witness_entry(entry: WitnessEntry) -> Printer {
         WitnessEntry::Field(field) => field,
     };
 
+    let claim = member_claim_offset([&field.value]);
     match field.func_params {
-        Some(params) => flat([
-            pure(field.label),
-            listed("(", params.into_iter().map(print_func_param).collect(), ")"),
-            attached_body(" =", print_term(field.value)),
-        ]),
-        None => flat([
-            pure(field.label),
-            attached_body(" =", print_term(field.value)),
-        ]),
+        Some(params) => claimed_before(claim, || {
+            flat([
+                pure(field.label),
+                listed("(", params.into_iter().map(print_func_param).collect(), ")"),
+                attached_body(" =", print_term(field.value)),
+            ])
+        }),
+        None => claimed_before(claim, || {
+            flat([
+                pure(field.label),
+                attached_body(" =", print_term(field.value)),
+            ])
+        }),
     }
 }
 

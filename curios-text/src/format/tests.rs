@@ -79,6 +79,63 @@ fn a_comment_above_an_induct_clause_stays_above_and() {
     assert_eq!(formatted(source), source);
 }
 
+/// A member of a delimited list — a `match` or `choose` arm, a struct-literal, concept or witness field, an `induct` case — records no span of its own, exactly as an `and` clause does not. A comment leading one therefore used to fall to the first spanned *descendant*, which is the member's body, and printed *inside* it: `injective(a, b, same) =` on one line and the comment that was written above the field on the next. Each fixture below is already canonical, so asserting the placement and the fixed point pins both halves.
+#[test]
+fn a_comment_above_a_match_arm_stays_above_the_bar() {
+    let source = "let f(n: /std/Nat) -> /std/Nat =\n    match n\n    | 0 => 1\n    -- the successor case\n    | p + 1 => p\n    end;\n\nf(1)\n";
+    let output = formatted(source);
+    assert!(
+        output.contains("\n    -- the successor case\n    | p + 1"),
+        "unexpected output: {output}"
+    );
+    assert_eq!(formatted(&output), output);
+}
+
+#[test]
+fn a_comment_above_a_choose_arm_stays_above_the_bar() {
+    let source = "let f(n: /std/Nat) -> /std/Nat =\n    choose\n    | n == 0 => 1\n    -- the fallback\n    | _ => n\n    end;\n\nf(1)\n";
+    let output = formatted(source);
+    assert!(
+        output.contains("\n    -- the fallback\n    | _"),
+        "unexpected output: {output}"
+    );
+    assert_eq!(formatted(&output), output);
+}
+
+#[test]
+fn a_comment_above_a_witness_field_stays_above_it() {
+    let source = "concept Key(K: Type): Type {\n    to_bin(K) -> /std/Bytes,\n}\n\nsatisfy Key(/std/Bytes) {\n    -- the identity encoding\n    to_bin(b) = b,\n}\n\n1\n";
+    let output = formatted(source);
+    assert!(
+        output.contains("\n    -- the identity encoding\n    to_bin(b) = b,"),
+        "unexpected output: {output}"
+    );
+    assert_eq!(formatted(&output), output);
+}
+
+#[test]
+fn a_comment_above_a_concept_field_stays_above_it() {
+    let source = "concept Key(K: Type): Type {\n    to_bin(K) -> /std/Bytes,\n    -- the injectivity obligation\n    injective(a: K) -> K,\n}\n\n1\n";
+    let output = formatted(source);
+    assert!(
+        output.contains("\n    -- the injectivity obligation\n    injective(a: K) -> K,"),
+        "unexpected output: {output}"
+    );
+    assert_eq!(formatted(&output), output);
+}
+
+/// The repair half: a comment already sitting between a member's `=>` and its body is claimed by the member and lifted back out. That is what makes the fix retroactive — the corpus carries instances an earlier formatter run relocated, and re-running the formatter now returns each to the arm it documents.
+#[test]
+fn a_comment_relocated_into_an_arm_body_is_lifted_back_out() {
+    let source = "let f(n: /std/Nat) -> /std/Nat =\n    match n\n    | 0 => 1\n    | p + 1 =>\n        -- what the successor case does\n        p\n    end;\n\nf(1)\n";
+    let output = formatted(source);
+    assert!(
+        output.contains("\n    -- what the successor case does\n    | p + 1"),
+        "unexpected output: {output}"
+    );
+    assert_eq!(formatted(&output), output);
+}
+
 #[test]
 fn an_interior_comment_survives_and_forces_a_break() {
     // The comment claims into the argument's document; its hard break keeps the call broken. `f` is unbound as far as formatting cares — formatting is syntax-only — so this must format, conserve the comment, and reparse.

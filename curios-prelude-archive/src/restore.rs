@@ -118,7 +118,7 @@ mod tests {
     /// So what stays pinned is what a literal still emits per byte: nothing. The type itself is checked because a polymorphic `Str` would put a level on every literal value.
     #[test]
     fn string_literal_machinery_is_monomorphic() {
-        // Selected by name because these are exactly the hidden lowering targets `curios-prelude/src/syntax.rs` registers that are emitted more than once per literal; nothing infers behavior from the spelling. `of_scan_eq` and `refl_scan` are deliberately absent — see above.
+        // Selected by name because these are exactly the hidden lowering targets `curios-prelude-archive/src/syntax.rs` registers that are emitted more than once per literal; nothing infers behavior from the spelling. `of_scan_eq` and `refl_scan` are deliberately absent — see above.
         let lowering_targets = ["/syn/Str", "/syn/Str/scan_from", "/syn/Char"];
 
         with_prelude(|prelude| {

@@ -33,8 +33,7 @@ let upgrade(h: Handle, host: Str, tls: Bool) -> Io(Nat) =
     | false => Io/pure(/sys/status/ok)
     end;
 
--- Every step here is a syscall and none of them suspends, so this is an `Io` chain the caller lifts
--- into a single `Async` step rather than a fiber that could yield partway through connecting.
+-- Every step here is a syscall and none of them suspends, so this is an `Io` chain the caller lifts into a single `Async` step rather than a fiber that could yield partway through connecting.
 let connect_addr(settings: Settings, host: Str, addr: Bytes) -> Io(Result(Socket, Handle/Error)) =
     let s = /sys/socket/open(addr)!;
     match s.status == /sys/status/ok
@@ -45,8 +44,8 @@ let connect_addr(settings: Settings, host: Str, addr: Bytes) -> Io(Result(Socket
         | true =>
             let upgraded = upgrade(s.handle, host, settings.tls)!;
             match upgraded == /sys/status/ok
+            -- A TLS stream is driven by rustls, not polled at the socket layer, so it is left blocking on purpose.
             | true =>
-                -- A TLS stream is driven by rustls, not polled at the socket layer, so it is left blocking on purpose.
                 match settings.tls
                 | true => Io/pure(Result/success(Socket { s.handle }))
                 | false =>

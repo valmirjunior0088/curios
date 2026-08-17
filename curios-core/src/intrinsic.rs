@@ -143,9 +143,9 @@ pub enum Intrinsic {
     Handle(u32),
     // (a, b) -> Bool: identity of two handles. The one pure operation on `Handle` -- handles are opaque i31 tokens, so this erases to the `Nat` equality op.
     HandleEql(Term, Term),
-    // `(Nat) -> {}`: end the process. Effectful, so reducing one at the type level is an error; it becomes a host call only at erasure.
+    // `(Nat) -> Io({})`: end the process. Like every host operation it denotes an inert description here and becomes a host call only at erasure.
     //
-    // The result is the unit type, not the caller's choice. `exit` never returns, and a non-returning term is unsound exactly when it inhabits a type nothing total inhabits — it is the forgery that is the problem, not the non-return. At `{}` there is nothing to forge, which is the same property `Foreign` has for free by reading its result off an ABI row.
+    // The description's payload is the unit type, not the caller's choice. `exit` never returns, and a non-returning term is unsound exactly when it inhabits a type nothing total inhabits — it is the forgery that is the problem, not the non-return. At `{}` there is nothing to forge, which is the same property `Foreign` has for free by reading its result off an ABI row.
     ProcExit(Term),
     CellType(Term),
     Cell(Term, Term),          // type, init

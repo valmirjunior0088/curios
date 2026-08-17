@@ -46,10 +46,7 @@ pub let comm(p: NonZero, q: NonZero) -> Eq(mul(p, q), mul(q, p)) =
     NonZero/eq(mul(p, q), mul(q, p), BigNat/mul/comm(p.value, q.value));
 
 pub let assoc(p: NonZero, q: NonZero, r: NonZero) -> Eq(mul(mul(p, q), r), mul(p, mul(q, r))) =
-    NonZero/eq(
-        mul(mul(p, q), r),
-        mul(p, mul(q, r)),
-        BigNat/mul/assoc(p.value, q.value, r.value));
+    NonZero/eq(mul(mul(p, q), r), mul(p, mul(q, r)), BigNat/mul/assoc(p.value, q.value, r.value));
 
 pub let distrib_l(
     p: NonZero,

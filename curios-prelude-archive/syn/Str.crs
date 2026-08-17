@@ -65,12 +65,10 @@ pub rec scan_from(s: Scan, b: Bytes) -> Scan =
 -- The recursion is on `b` and not on a derivation, which is what keeps `/std/Str/utf8`'s lemmas — every one of which recurses on the derivation — working untouched.
 pub rec of_scan_eq_from(s: Scan, b: Bytes, p: Eq(scan_from(s, b), Scan/lead())) -> Utf8(s, b) =
     match b
-    | x[] =>
-        -- `scan_from(s, x[])` is `s`, so `p` already says `s` is `lead`; `stop` inhabits the goal there and transport carries it back.
-        Eq/subst((q) => Utf8(q, x[]), Eq/sym(p), Utf8/stop())
-    | x[h, ..t] =>
-        -- `scan_from(s, x[h, ..t])` is `scan_from(step(h, s), t)`, so `p` *is* the premise the recursive call wants, with no rewriting.
-        Utf8/more(h, s, t, of_scan_eq_from(step(h, s), t, p))
+    -- `scan_from(s, x[])` is `s`, so `p` already says `s` is `lead`; `stop` inhabits the goal there and transport carries it back.
+    | x[] => Eq/subst((q) => Utf8(q, x[]), Eq/sym(p), Utf8/stop())
+    -- `scan_from(s, x[h, ..t])` is `scan_from(step(h, s), t)`, so `p` *is* the premise the recursive call wants, with no rewriting.
+    | x[h, ..t] => Utf8/more(h, s, t, of_scan_eq_from(step(h, s), t, p))
     end;
 
 pub let of_scan_eq(b: Bytes, p: Eq(scan_from(Scan/lead(), b), Scan/lead())) -> Valid(b) =

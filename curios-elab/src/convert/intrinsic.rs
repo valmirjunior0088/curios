@@ -62,7 +62,6 @@ fn packed_literal_view(cmp: &mut Convert, this: &Intrinsic, that: &Intrinsic) ->
     }
 }
 
-/// The grain and packed payload of a `Bin` literal.
 fn literal_of(intrinsic: &Intrinsic) -> Option<(Grain, &PackedBin)> {
     match intrinsic {
         Intrinsic::Bin(grain, value) => Some((*grain, value)),

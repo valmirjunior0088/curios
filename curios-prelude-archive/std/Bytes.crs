@@ -12,8 +12,8 @@ pub let fold(@A: Type, b: Bytes, init: A, f: (Byte, A) -> A) -> A =
     rec go(k: Nat, i: Nat, acc: A, inv: Eq(i + k, n)) -> A =
         match k
         | 0 => acc
+        -- `i < n` transported along the loop invariant: `i + (kp + 1) = n` gives `i ≤ i + kp`, whose successor is the bound `at` demands.
         | kp + 1 =>
-            -- `i < n` transported along the loop invariant: `i + (kp + 1) = n` gives `i ≤ i + kp`, whose successor is the bound `at` demands.
             let below =
                 Eq/subst((x) => Nat/Lt(i, x), inv, Nat/Lt/succ_of_lte(Nat/Lte/add_r(i, kp)));
             go(kp, i + 1, f(at(b, i, @below), acc), inv)

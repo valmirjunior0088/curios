@@ -3,7 +3,7 @@ name = "curios-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The Curios core language: the term representation and the independent kernel that re-checks it"
+description = "The Curios core language: the term representation, its binder discipline, and the finished-program module both checkers walk"
 
 [lints]
 workspace = true

@@ -184,11 +184,13 @@ Curios's `Nat` and `Int` are unbounded in the type checker but ride an **i31** â
 
 ```
 curios-benchmarks/
-  Dockerfile           kitchen-sink arm64 image with all 8 toolchains + curios
-  entrypoint.sh        build all, cross-check outputs, then 4 hyperfine tables
+  Dockerfile                 kitchen-sink arm64 image with all 8 toolchains + curios
+  Dockerfile.dockerignore    what the build context excludes (target/, .artifacts/, .git)
+  entrypoint.sh              build all, cross-check outputs, then 4 hyperfine tables
   programs/
-    lcg/               lcg.{crs,rs,ml,js,ts,gr}  Lcg.lean  lakefile.toml
-    trees/             trees.{crs,rs,ml,js,ts,gr}  Trees.lean  lakefile.toml
+    lcg/                     lcg.{crs,rs,ml,js,ts,gr}  Lcg.lean  lakefile.toml
+    trees/                   trees.{crs,rs,ml,js,ts,gr}  Trees.lean  lakefile.toml
+  .artifacts/                built contestants and exported tables (created by a run)
 ```
 
 The image build needs the Curios sources, which live _above_ `curios-benchmarks/`, so it must run with the **repo root as the build context**. The `curios/benchmarks` Makefile target does that, from the repo root:

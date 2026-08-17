@@ -41,8 +41,7 @@ let listen(host: Str, port: Nat) -> Async(Result(Listener, Handle/Error)) =
     | success(addr) => Async/lift(bind_listen(addr))
     end;
 
--- A body of its own, so its sequencing does not hoist into `listen_loop`'s region ahead of the
--- `using` that owns the listener's lifetime.
+-- A body of its own, so its sequencing does not hoist into `listen_loop`'s region ahead of the `using` that owns the listener's lifetime.
 let accept_loop(l: Listener, on_conn: (Handle) -> Async({})) -> Async({}) =
     rec go() -> Async({}) =
         let r = Async/accept(l.0)!;
@@ -70,9 +69,8 @@ let listen_loop(
 let serve_conn(h: Handle, handler: (Socket) -> Async({})) -> Async({}) =
     let nb = Async/nonblocking(h)!;
     match nb
-    | failure(_) =>
-        -- The connection cannot be served without non-blocking mode; drop it rather than stalling the scheduler on it.
-        Async/lift(/sys/Handle/close(h))
+    -- The connection cannot be served without non-blocking mode; drop it rather than stalling the scheduler on it.
+    | failure(_) => Async/lift(/sys/Handle/close(h))
     | success(_) => Async/go(Async/using(h, /sys/Handle/close(h), handler(Socket/new(h))))
     end;
 

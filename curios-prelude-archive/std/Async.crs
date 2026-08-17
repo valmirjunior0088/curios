@@ -317,8 +317,8 @@ let poll_ready(blocked: List(Parked), timeout: Int) -> Io({List(Job), List(Parke
             | true =>
                 let _ = run_guards(p.guards)!;
                 walk(tail, i + 1, woken, still)
+            -- The index is in range because `poll` answers one result per handle, which is the host's promise rather than a fact about this program: `results` crosses the boundary, so it is read through the checked accessor and a missing entry reads as no events, leaving the job parked.
             | false =>
-                -- The index is in range because `poll` answers one result per handle, which is the host's promise rather than a fact about this program: `results` crosses the boundary, so it is read through the checked accessor and a missing entry reads as no events, leaving the job parked.
                 match is_ready(Option/unwrap_or(List/get(results, i), 0), p.interest)
                 | true =>
                     walk(
@@ -434,8 +434,7 @@ let park_on_waker(q: Queues, job: Job, register: (Waker) -> Io({})) -> Io({}) =
     let slot = Cell/new(Option/some(job))!;
     let current = Cell/get(q.parked)!;
     let _ = Cell/set(q.parked, [slot, ..current])!;
-    -- Built with explicit `bind`, not `!`: the waker is a description the scheduler runs when the
-    -- slot is woken, and a `!` here would hoist the reads into *this* region and perform them now.
+    -- Built with explicit `bind`, not `!`: the waker is a description the scheduler runs when the slot is woken, and a `!` here would hoist the reads into *this* region and perform them now.
     -- Emptying the slot before enqueueing is what makes a second wake a no-op.
     let waker =
         Io/bind(
@@ -469,8 +468,8 @@ and resume_after(q: Queues, job: Job, pause: Pause, next: Io(Step({}))) -> Io({}
         let _ = enqueue(q, resumed)!;
         enqueue(q, Job { resume = Async { child }, token = child_token, guards = [] })
     | park(register) => park_on_waker(q, resumed, register)
+    -- Acquiring and releasing a guard are bookkeeping, not suspension: the fiber is served again immediately rather than going back through the queue.
     | acquire(h, release) =>
-        -- Acquiring and releasing a guard are bookkeeping, not suspension: the fiber is served again immediately rather than going back through the queue.
         serve(
             q,
             Job { ..resumed, guards = [Guard { handle = h, release = release }, ..job.guards] })
@@ -535,8 +534,8 @@ rec drive(@A: Type, q: Queues, answer: Cell(Option(A))) -> Io(Result(A, Deadlock
             let _ = forget_cancelled_wakers(q)!;
             let stalled = is_stalled(q)!;
             match stalled
+            -- Reported to the caller rather than fatal: terminating the process is `run`'s decision, not the scheduler's.
             | true =>
-                -- Reported to the caller rather than fatal: terminating the process is `run`'s decision, not the scheduler's.
                 let _ = release_everything(q)!;
                 Io/pure(Result/failure(Deadlock {}))
             | false =>

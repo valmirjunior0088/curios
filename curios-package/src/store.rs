@@ -13,7 +13,7 @@
 //!
 //! Separated because the alternative re-invites a collision that nesting otherwise removes: a hash has to be transformed to sit in a directory name at all — `c1:<digest>` most naturally becoming `c1/<digest>` — and a package legitimately named `c1` would then land on top of it.
 //!
-//! Above this sits a shared content-addressed cache keyed by the same hash, so two projects pinning one revision materialize and compile it once. Content-derived keys are what make that upper layer shareable at all; a path-keyed store could only ever have been local.
+//! That tree is what a project gets when nothing points elsewhere. Setting `CURIOS_CACHE` moves the `src/` and `unit/` families — never `bin/`, which belongs to the package that declares the executable — into a cache keyed by the same hash and shared across projects, so two projects pinning one revision materialize and compile it once. See `shared` below for why there is no divined default.
 
 #[cfg(test)]
 mod tests;

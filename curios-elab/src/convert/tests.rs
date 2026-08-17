@@ -860,7 +860,6 @@ fn convert_partial_projection_tuple_at_narrow_type() {
     context.define(&p, &Term::tuple([nat(1), nat(2)]), None);
     context.define(&q, &Term::tuple([nat(1), nat(3)]), None);
 
-    // A 1-field tuple type {x : Nat}.
     let type_: Term = Term::tuple_type([(x.clone(), Term::intrinsic(Intrinsic::NatType))]);
 
     // this = (p.0), that = (q.0). At the 1-field type both denote (a), so conversion should return true.

@@ -6,7 +6,7 @@
 //!
 //! The tree is deliberately literal: sugar — function-definition signatures, infix operators, destructuring patterns, postfix `!`, string and spread literals — is kept verbatim so [`Term`]s print back as written, and is undone only during lowering. Every lowering is [`into_core_unit`], over a [`UnitSource`] pairing a resolver with the entrypoint the one unit that has one carries; [`into_core`], [`prepare_prelude`] and [`into_core_with_prelude`] are the three spellings its callers want, differing only in what they hand back. All four take an explicit [`SyntaxRegistry`](curios_utilities::SyntaxRegistry), whose slots this stage reads but never fills.
 //!
-//! Universe syntax is deliberately absent. Lowering owns a lexical universe allocator and assigns exactly one `curios_elab::UniverseMetaId` plus a role-and-origin seed to each written nullary `Type`; it never remints that identity during elaboration. [`PreparedText`] archives the seed table and allocator floor alongside the binder floor, and entrypoint lowering resumes above both so restored prelude and user nodes cannot collide. Core alone solves, generalizes, validates, and erases the resulting levels.
+//! Universe syntax is deliberately absent. Lowering owns a lexical universe allocator and assigns exactly one `curios_core::UniverseMetaId` plus a role-and-origin seed to each written nullary `Type`; it never remints that identity during elaboration. [`PreparedText`] archives the seed table and allocator floor alongside the binder floor, and entrypoint lowering resumes above both so restored prelude and user nodes cannot collide. Core alone solves, generalizes, validates, and erases the resulting levels.
 
 mod error;
 pub use error::*;

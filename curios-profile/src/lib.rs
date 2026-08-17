@@ -11,7 +11,7 @@
 //!
 //! The three answer different questions, and the third exists because the first two cannot settle the one that matters most about a slow pass: *whether the operation is wasteful, or whether it is being handed inputs it should never have seen*. A duration and a byte count are equally consistent with both, and optimizing the wrong one buys a constant factor against something structural. Reach for [`sample!`] on the input sizes — elements walked, entries rewritten, candidates considered — before optimizing a hot span, and let the distribution choose the fix.
 //!
-//! Both macros are token templates gated on the *invoking* crate's `profile` feature, so a disabled build strips the guard and pays nothing. Stage entrypoints and optimizer passes carry permanent spans; a span added to isolate one investigation is temporary instrumentation, removed once the question is answered, never left as a metrics API.
+//! Each macro above is a token template gated on the *invoking* crate's `profile` feature, so a disabled build strips the guard and pays nothing. Stage entrypoints and optimizer passes carry permanent spans; a span added to isolate one investigation is temporary instrumentation, removed once the question is answered, never left as a metrics API.
 
 #[cfg(feature = "enabled")]
 pub use tracing;

@@ -37,7 +37,7 @@ const RECORD: &str = "record.rkyv";
 // `always`: a product that reads and writes archives unconditionally has no `archive` feature for a `cfg_attr` to gate on.
 #[curios_archive::archived(always)]
 struct Record {
-    /// Each file the compilation read, by canonical path, with the digest of the text that was parsed from it. Sorted, because `RootSource::reads` yields a map.
+    /// Each file the compilation read, by canonical path, with the digest of the text that was parsed from it. Sorted, because `RootSource::reads` collects its vector out of a `BTreeMap`.
     reads: Vec<(String, String)>,
     /// What each predecessor contained, in fold order — the digest of the bytes its own slot holds. Ordered for the same reason the address orders their slots: two orders of one set are two lowerings.
     predecessors: Vec<String>,

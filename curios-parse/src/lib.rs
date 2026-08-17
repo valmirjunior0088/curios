@@ -1,6 +1,6 @@
 //! The parser combinator DSL: `FnOnce`-based, with ordered choice under progress-based commitment (an alternative that consumed input owns the error unless [`catch`]ed), packrat memoization via [`memoize`], and byte-offset errors rendered as caret snippets. The engine behind both the `.crs` surface grammar (`curios-text`) and the WAT parser (`curios-wasm`).
 //!
-//! This and `curios-print` are separate crates rather than two modules of one, and the reason is naming. Both are monads and both name their unit `pure`, so while they shared a crate they had to stay unflattened namespaces — the single documented exception to this workspace's rule that a crate is a flat namespace — purely so that `parser::pure` and `printer::pure` stayed distinguishable. Split, the crate name does that work: [`curios_parse::pure`](pure) and `curios_print::pure` are unambiguous at every use site, and each crate is flat like every other. A crate that exists to hold a name apart is cheaper than an exception to a layout rule.
+//! This and `curios-print` are separate crates rather than two modules of one, so that [`curios_parse::pure`](pure) and `curios_print::pure` are unambiguous at every use site and each crate stays flat like every other. `curios-print/README.md` states the decision and what it replaced.
 
 use {
     curios_utilities::{Source, Span},

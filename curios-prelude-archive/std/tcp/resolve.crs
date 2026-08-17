@@ -1,8 +1,7 @@
 use /std/{Str, Nat, Bytes, Handle, Result, Option, List, Async, Io};
 
 -- Split out so its sequencing is a body of its own. A `!` in an argument position hoists into the
--- *enclosing* region, which would perform the wait before `using` had acquired the handle; a call
--- hands `using` an inert description instead.
+-- *enclosing* region, which would perform the wait before `using` had acquired the handle; a call hands `using` an inert description instead.
 let resolved_address(h: Handle) -> Async(Result(Bytes, Handle/Error)) =
     let _ = Async/wait(h, /sys/poll/read)!;
     let a = /sys/dns/resolve(h)!;

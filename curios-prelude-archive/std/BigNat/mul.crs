@@ -324,7 +324,10 @@ pub let distrib_l(
                 Eq/trans(
                     Eq/sym(trim_add_raw_trim_l(raw(a.bits, b.bits), raw(a.bits, c.bits), false)),
                     Eq/sym(
-                        trim_add_raw_trim_r(trim(raw(a.bits, b.bits)), raw(a.bits, c.bits), false))))));
+                        trim_add_raw_trim_r(
+                            trim(raw(a.bits, b.bits)),
+                            raw(a.bits, c.bits),
+                            false))))));
 
 pub let distrib_r(
     a: BigNat,
@@ -341,7 +344,10 @@ pub let distrib_r(
                 Eq/trans(
                     Eq/sym(trim_add_raw_trim_l(raw(b.bits, a.bits), raw(c.bits, a.bits), false)),
                     Eq/sym(
-                        trim_add_raw_trim_r(trim(raw(b.bits, a.bits)), raw(c.bits, a.bits), false))))));
+                        trim_add_raw_trim_r(
+                            trim(raw(b.bits, a.bits)),
+                            raw(c.bits, a.bits),
+                            false))))));
 
 let cong_dbl(@s: BigNat, @t: BigNat, p: Eq(s, t)) -> Eq(dbl(s), dbl(t)) =
     Eq/cong(dbl, p);

@@ -1,8 +1,4 @@
--- The `Io` arm of the four-monad comparison begun in `state_monad.crs`. `Io` is
--- not a library struct at all but a compiler intrinsic (`Io.pure`/`Io.bind`), so
--- its carrier is erasure's choice rather than a written one — and it is the
--- monad every Curios program's tail is written in, which makes it the arm that
--- matters most if the per-`bind` cost turns out to be general.
+-- The `Io` arm of the four-monad comparison begun in `state_monad.crs`. `Io` is not a library struct at all but a compiler intrinsic (`Io.pure`/`Io.bind`), so its carrier is erasure's choice rather than a written one — and it is the monad every Curios program's tail is written in, which makes it the arm that matters most if the per-`bind` cost turns out to be general.
 -- N is read from stdin so the loop survives constant folding; output is 3N.
 use /std/{Str, Nat, Option, Io};
 

@@ -4,11 +4,7 @@
 //!
 //! What each checker supplies for itself is [`Env`] — reduction, unfolding, fresh binders, and the registry fallback for declarations outside the analyzed set. `curios-elab` implements it over its elaboration `Context`; `curios-cert` implements it over its `Kernel`.
 //!
-//! # Why this is not part of `curios-cert`
-//!
-//! It was, and the split is about *rebuilds* rather than about trust. Elaboration needs these analyses, so `curios-elab` depended on `curios-cert`, so every crate whose build script reaches elaboration reached the kernel too — and Cargo re-runs a build script whenever any dependency changes. The fixed prelude's image was therefore re-elaborated for every certifier edit: 469 s of a ~570 s build, spent re-deriving something no kernel rule can affect.
-//!
-//! The trusted base is unchanged and is now two crates rather than one. These rules admit terms, so they are inside it; `cargo tree -p curios-cert` still enumerates them, one level further out. What the split buys is that a kernel edit no longer invalidates elaboration.
+//! The trusted base is unchanged by this crate existing, and is now two crates rather than one: these rules admit terms, so they are inside it, and `cargo tree -p curios-cert -e normal` still enumerates them one level further out. Why the split was made at all — it is about rebuild granularity, not about trust — is `README.md`'s to state, with the figure that motivated it.
 
 mod judge;
 pub use judge::*;

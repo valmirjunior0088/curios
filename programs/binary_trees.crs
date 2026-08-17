@@ -1,5 +1,4 @@
--- Build a perfect tree of depth D with unique per-node payloads
--- (heap-numbered: root 1, children 2v / 2v+1), then sum every payload.
+-- Build a perfect tree of depth D with unique per-node payloads (heap-numbered: root 1, children 2v / 2v+1), then sum every payload.
 -- The distinct payloads make every node structurally unique, so Curios's pure
 -- IR cannot share/CSE the two subtrees -> 2^(D+1)-1 real allocations.
 -- D is read from stdin; output is the payload sum mod 1000003 (bounded to i31).

@@ -4,9 +4,9 @@
 //!
 //! The order is load-bearing and it is the module's, not a convenience. A definition placed after its use would go unnoticed by a checker that seeded every name up front; here it is an [`Unbound`](crate::KernelError::Unbound).
 //!
-//! # This crate does not know what a module is
+//! # This module does not know what a module is
 //!
-//! `Module` is `curios-elab`'s type, and `curios-core` does not depend on it. So what lives here is the *rule* for an item — check, then define — and the caller walks its own representation. That keeps the kernel free of the elaborator's export metadata, islands, roots, and totality flags, none of which bear on whether a term is well-typed.
+//! `Module` is `curios-core`'s, and nothing here names it: what lives here is the *rule* for an item — check, then define — while `recheck.rs` walks the representation and hands each item's parts down. That keeps the rule free of the elaborator's export metadata, islands, and roots, none of which bear on whether a term is well-typed. The totality an item carries does bear on it, but not here — `obligation.rs` is where it is read.
 
 #[cfg(test)]
 mod tests;

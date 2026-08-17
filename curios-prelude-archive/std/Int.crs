@@ -39,11 +39,7 @@ pub let non_neg(n: Int) -> Option(/syn/Int/NonNeg(n)) =
 pub let abs(n: Int) -> Nat =
     match non_neg(n)
     | some(ok) => to_nat(n, @ok)
-    | none() =>
-        match non_neg(+0 - n)
-        | some(ok) => to_nat(+0 - n, @ok)
-        | none() => 0
-        end
+    | none() => match non_neg(+0 - n) | some(ok) => to_nat(+0 - n, @ok) | none() => 0 end
     end;
 
 pub let cmp(x: Int, y: Int) -> Order =

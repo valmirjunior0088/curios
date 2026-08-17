@@ -4,18 +4,15 @@
 -- Pure integer ALU + a tail-recursive counted loop. Output matches all langs.
 use /std/{Str, Nat, Option, Io};
 
-rec loop(k : Nat, x : Nat) -> Nat =
-    match k : (_) => Nat
-    | 0 => x
-    | kp + 1; ih => loop(kp, 75 * x % 65537)
-    end;
+rec loop(k: Nat, x: Nat) -> Nat =
+    match k: (_) => Nat | 0 => x | kp + 1; ih => loop(kp, 75 * x % 65537) end;
 
 let input = /std/read()!;
-match input : (_) => Io({})
+match input: (_) => Io({})
 | some(bytes) =>
-    match Str/of_bytes(bytes) : (_) => Io({})
+    match Str/of_bytes(bytes): (_) => Io({})
     | some(s) =>
-        match Nat/of_str(Str/trim(s)) : (_) => Io({})
+        match Nat/of_str(Str/trim(s)): (_) => Io({})
         | some(n) => /std/print(Str/concat(Nat/to_str(loop(n, 1)), "\n"))
         | none() => /std/print("bad input\n")
         end

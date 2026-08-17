@@ -150,9 +150,7 @@ pub(super) fn parse_string_chunk<'a>() -> Parser<'a, String> {
             .or(take_exact("r").map(|()| "\r".to_string()))
             .or(take_exact("\\").map(|()| "\\".to_string()))
             .or(take_exact("\"").map(|()| "\"".to_string()))
-            // An unrecognized escape is not an error: the backslash and the
-            // following character both stand for themselves, so e.g. `\%`
-            // in source yields the two literal characters `\` and `%`.
+            // An unrecognized escape is not an error: the backslash and the following character both stand for themselves, so e.g. `\%` in source yields the two literal characters `\` and `%`.
             .or(take_n(1).map(|char| format!("\\{char}"))),
     ))
 }

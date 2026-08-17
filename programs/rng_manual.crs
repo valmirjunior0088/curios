@@ -1,5 +1,4 @@
--- The control for `rng_state.crs`: the same LCG sum with the seed threaded as an
--- ordinary parameter. Identical arithmetic, identical output, no monad.
+-- The control for `rng_state.crs`: the same LCG sum with the seed threaded as an ordinary parameter. Identical arithmetic, identical output, no monad.
 -- N is read from stdin; output is the sum mod 1000003.
 use /std/{Str, Nat, Option, Io};
 

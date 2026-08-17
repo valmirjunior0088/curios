@@ -29,7 +29,7 @@ case "$os $arch" in
     "Linux x86_64" | "Linux amd64") asset="curios-linux-x86_64" ;;
     "Linux aarch64" | "Linux arm64") asset="curios-linux-aarch64" ;;
     "Darwin arm64" | "Darwin aarch64") asset="curios-macos-aarch64" ;;
-    *) die "no prebuilt binary for $os $arch; build from source with: cargo build --release --package curios" ;;
+    *) die "no prebuilt binary for $os $arch; build from source with: make curios" ;;
 esac
 
 if command -v curl > /dev/null 2>&1; then
@@ -69,7 +69,7 @@ chmod +x "$work/curios"
 
 # Run it before installing it, never after. The usual failure here is a system whose glibc is older than the one the release was built against, and a binary that cannot start should not reach PATH first and fail on somebody's real invocation.
 version=$("$work/curios" --version 2> /dev/null) ||
-    die "the downloaded binary does not run on this system (usually an older glibc than the release was built against); build from source with: cargo build --release --package curios"
+    die "the downloaded binary does not run on this system (usually an older glibc than the release was built against); build from source with: make curios"
 
 # Read before the rename overwrites it. An install that silently replaces a working toolchain is one the reader cannot audit afterwards, and "which one did I have?" is exactly the question a version bump makes urgent.
 previous=""

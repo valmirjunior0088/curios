@@ -141,7 +141,7 @@ fn build() {
         )
     });
 
-    // Every universe invariant the archive is trusted to satisfy is asserted here, on the value about to be serialized, and nowhere else. Restoration establishes that the bytes it reads are exactly the bytes written from this value — schema, source fingerprint, and bytecheck — so re-deriving the invariants per compilation only re-answers a question already settled. `erase_prelude_prefix` below happens to project through the same check, but inheriting the guarantee from an unrelated call is not the same as stating it.
+    // Every universe invariant the archive is trusted to satisfy is asserted here, on the value about to be serialized, and nowhere else. Restoration establishes that the bytes it reads are exactly the bytes written from this value — schema, source fingerprint, and bytecheck — so re-deriving the invariants per compilation only re-answers a question already settled. `erase_unit` below happens to project through the same check, but inheriting the guarantee from an unrelated call is not the same as stating it.
     validate_universes(&core)
         .unwrap_or_else(|error| panic!("elaborated fixed prelude universes are invalid: {error}"));
 

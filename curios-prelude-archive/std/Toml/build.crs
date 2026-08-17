@@ -171,8 +171,7 @@ rec walk(
                                                     items,
                                                     index + 1,
                                                     count,
-                                                    @Nat/Lt/le_succ_of_lt(
-                                                        index, count, in_range),
+                                                    @Nat/Lt/le_succ_of_lt(index, count, in_range),
                                                     @Nat/Le/refl(count))];
                                         Result/success(
                                             (
@@ -275,7 +274,9 @@ rec walk(
                                                         index,
                                                         @True/qed(),
                                                         @Nat/Lt/le_of_lt(
-                                                            index, List/len(items), in_range)),
+                                                            index,
+                                                            List/len(items),
+                                                            in_range)),
                                                     Toml/table(inner2)];
                                             Result/success(
                                                 (

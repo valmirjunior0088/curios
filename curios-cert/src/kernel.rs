@@ -446,12 +446,12 @@ impl Kernel {
         self.spend.heaviest()
     }
 
-    /// A consumption snapshot, for measuring what a computation charges.
+    /// See [`Spend::consumption`].
     pub(crate) fn consumption(&self) -> (u64, usize) {
         self.spend.snapshot()
     }
 
-    /// The [`Replay`] for `reduct`, measured against the snapshot taken before the computation ran.
+    /// See [`Spend::replay_since`].
     pub(crate) fn replay_since(&self, reduct: Term, before: (u64, usize)) -> Replay {
         self.spend.replay_since(reduct, before)
     }
@@ -649,12 +649,12 @@ impl Kernel {
         self.spend.enter_level(Cost::FRAME)
     }
 
-    /// Leave a guarded reduction level.
+    /// See [`Spend::leave_level`].
     pub(crate) fn leave_level(&mut self) {
         self.spend.leave_level();
     }
 
-    /// A fresh binder identity, rendering as `hint`.
+    /// See [`Spend::fresh`].
     pub(crate) fn fresh(&self, hint: Option<&str>) -> Free {
         self.spend.fresh(hint)
     }

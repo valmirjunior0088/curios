@@ -5,7 +5,7 @@ use {
     std::{fs, os::unix::fs::PermissionsExt, path::Path},
 };
 
-/// The slim `curios-runtime` launcher stub, embedded at build time. Produced by `make curios/runtime` (an isolated `--package curios-runtime` build, kept Cranelift/Binaryen-free) under Cargo's target directory. If the file is absent this `include_bytes!` fails the build — run `make`. So `compile` needs no launcher lookup at runtime.
+/// The slim `curios-runtime` launcher stub, embedded at build time. Produced by `make curios/runtime` (an isolated `--package curios-runtime` build, kept Cranelift/Binaryen-free) into `curios/.artifacts/<triple>`, which is outside Cargo's target tree so `cargo clean` cannot remove it. Absence is caught before this line: `build.rs` emits a `cargo::error` naming the command to run. So `compile` needs no launcher lookup at runtime.
 const LAUNCHER: &[u8] = include_bytes!(env!("CURIOS_RUNTIME_BIN"));
 
 /// Build a self-contained executable: the embedded launcher stub with the `.cwasm` payload and its footer appended to the tail (see [`curios_runtime::append_payload`]).

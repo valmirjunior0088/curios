@@ -1,6 +1,6 @@
 //! The arena-level transformations — the three the specification forces and nothing else.
 //!
-//! Today this driver runs pruning; partial evaluation and the monoid worker/wrapper join it as their phases land. All structural and local optimization — folding, dead code, inlining, contification, specialization — belongs to Cont, which runs after the lowering; the arena's leverage is semantic: don't hand Cont work (pruning), run what is already decided (partial evaluation), and re-base what would exhaust the stack (worker/wrapper).
+//! This driver runs all three, plus literal-spine specialization beside the partial evaluator. All structural and local optimization — folding, dead code, inlining, contification, specialization — belongs to Cont, which runs after the lowering; the arena's leverage is semantic: don't hand Cont work (pruning), run what is already decided (partial evaluation), and re-base what would exhaust the stack (worker/wrapper).
 
 mod prune;
 

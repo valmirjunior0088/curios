@@ -683,7 +683,7 @@ fn a_non_injective_index_target_does_not_force_its_binder() {
 
 // Proof irrelevance and index inversion disagree about a `Prop`-valued index, and the disagreement is a closed inhabitant of `False`. Conversion identifies `Two/a()` with `Two/b()` — any two inhabitants of a proposition are equal — so `Ind(Two/a())` and `Ind(Two/b())` are the same type and `coerce` is well typed. Inversion decides a case is impossible by *syntactic* constructor clash (`invert_indices` decomposes constructor forms and clashes on distinct tags, with no sort condition), so it reads `only`'s target `Two/a()` against the actual index `Two/b()` as disjoint and accepts the arm-less elimination as vacuous — at a type conversion just proved inhabited.
 //
-// Verified against the compiler of the day, while the hole was open: this source compiled (`curios compile` exited 0, and `recheck_module_suffix` on the compile path certified `let /bad : False = boom(coerce(only()))`), and running it trapped at the `unreachable` the vacuous elimination emitted, which is the runtime witness that the impossibility claim was false. The rule that refuses it now exists: a clash may only be concluded at a position whose type distinguishes its inhabitants, and the shared walk both checkers reach decides that from the declaration's own `result_sort` (`curios-cert/src/invert.rs`), deriving nothing at all — no clash, no equations — at a `Prop`-valued position.
+// Verified against the compiler of the day, while the hole was open: this source compiled (`curios compile` exited 0, and `recheck_module_suffix` on the compile path certified `let /bad : False = boom(coerce(only()))`), and running it trapped at the `unreachable` the vacuous elimination emitted, which is the runtime witness that the impossibility claim was false. The rule that refuses it now exists: a clash may only be concluded at a position whose type distinguishes its inhabitants, and the shared walk both checkers reach decides that from the declaration's own `result_sort` (`curios-analysis/src/invert.rs`), deriving nothing at all — no clash, no equations — at a `Prop`-valued position.
 //
 // The refusal is the coverage rule's: with the clash retracted, `only` is an ordinary reachable constructor, and an elimination with no arm for it is missing one it cannot prove absent.
 #[test]
@@ -1257,8 +1257,7 @@ const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         Expect::Refuses("cannot eliminate the proposition"),
         Expect::NotAsked,
     ),
-    // `NotAsked` here is the elaborator gating first, not the kernel being silent: its half of both
-    // rules is guarded in `curios-cert`'s own tests, which reach it by building the module directly.
+    // `NotAsked` here is the elaborator gating first, not the kernel being silent: its half of both rules is guarded in `curios-cert`'s own tests, which reach it by building the module directly.
     (
         "singleton_carrying_a_type",
         A_SINGLETON_CARRYING_A_TYPE_DOES_NOT_ELIMINATE,
@@ -1271,9 +1270,7 @@ const CORPUS: &[(&str, &str, Expect, Expect)] = &[
         Expect::Refuses("is informative"),
         Expect::NotAsked,
     ),
-    // Both accepted this one: the sort of a parameterized intrinsic former was implemented twice on
-    // each side, and the typing rule's copy disagreed with `Sort::of`'s. Its kernel half is guarded
-    // where the rule lives, in `curios_cert::kernel::infer::tests`.
+    // Both accepted this one: the sort of a parameterized intrinsic former was implemented twice on each side, and the typing rule's copy disagreed with `Sort::of`'s. Its kernel half is guarded where the rule lives, in `curios_cert::kernel::infer::tests`.
     (
         "list_of_proofs_is_not_a_prop",
         A_LIST_OF_PROOFS_IS_NOT_A_PROPOSITION,

@@ -1,12 +1,6 @@
--- The middle point between `parse_digits.crs` and `parse_manual.crs`: the same
--- `Str/fold` over the same codepoints, so the UTF-8 scan is held constant, with
--- `let n = acc!` written out as an explicit match so no `/syn/Monad/bind` is
--- generated. The fold's step function is still a closure invoked per character.
--- So the three programs separate what one gap could not: against
--- `parse_digits.crs` this isolates the bind, and against `parse_manual.crs` it
--- isolates the closure plus the scan.
--- N is read from stdin so the loop survives constant folding; the output matches
--- the other two exactly for the same input.
+-- The middle point between `parse_digits.crs` and `parse_manual.crs`: the same `Str/fold` over the same codepoints, so the UTF-8 scan is held constant, with `let n = acc!` written out as an explicit match so no `/syn/Monad/bind` is generated. The fold's step function is still a closure invoked per character.
+-- So the three programs separate what one gap could not: against `parse_digits.crs` this isolates the bind, and against `parse_manual.crs` it isolates the closure plus the scan.
+-- N is read from stdin so the loop survives constant folding; the output matches the other two exactly for the same input.
 use /std/{Str, Nat, Char, Option, Io};
 
 let decode(s: Str) -> Option(Nat) =

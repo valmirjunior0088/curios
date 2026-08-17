@@ -130,7 +130,8 @@ let rest: Parse(Bytes) =
             | none() => Result/failure("position past the end of input")
             | some(within) =>
                 Result/success(
-                    (Bytes/len(input),
+                    (
+                        Bytes/len(input),
                         Bytes/slice(
                             input,
                             pos,

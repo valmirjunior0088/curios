@@ -1,6 +1,6 @@
 //! The transactional universe constraint solver.
 //!
-//! Elaboration machinery, not representation: it owns the live inequality store, the difference graph that decides consistency, and the marks that roll a speculative branch back. The levels, contexts, and schemes it solves over live in `universe`, which knows nothing about any of this.
+//! Elaboration machinery, not representation: it owns the live inequality store, the difference graph that decides consistency, and the marks that roll a speculative branch back. The levels, contexts, and schemes it solves over live in `curios-core`'s `universe`, which knows nothing about any of this.
 
 mod constraints;
 use constraints::{ConstraintStore, StoreMark, StoreScope};

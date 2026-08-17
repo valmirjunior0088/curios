@@ -1,6 +1,6 @@
 //! The elaborator's driver for the shared size-change totality analysis.
 //!
-//! The analysis itself lives in `curios-cert` (see that module for the size-change principle and its rationale) and is run by both checkers; what belongs here is the driving: seeding the two erased-half obligations — (T) from written type positions, (V) from the proof positions elaboration recorded — and classifying every top-level definition transitively against the group verdicts, with `ProcExit` and inherited prelude partiality folded in.
+//! The analysis itself lives in `curios-analysis/src/totality.rs` (see that module for the size-change principle and its rationale) and is run by both checkers; what belongs here is the driving: seeding the two erased-half obligations — (T) from written type positions, (V) from the proof positions elaboration recorded — and classifying every top-level definition transitively against the group verdicts, with `ProcExit` and inherited prelude partiality folded in.
 //!
 //! Rejection is a **classification, not an error**. `/std/Async` is corecursive, `/std/Json/decode`'s parsers are nullary and productive, and `/std/BigNat/convert/to_str_go` recurses on a computed quotient; none passes this check and none needs to. They stay usable everywhere erasure keeps them. Only [`crate::check_type_totality`] and [`crate::check_proof_totality`] turn a `Partial` classification into a rejection, and only for the positions that erase.
 

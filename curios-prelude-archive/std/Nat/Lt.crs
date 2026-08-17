@@ -11,7 +11,10 @@ pub let try(a: Nat, b: Nat) -> Option(Lt(a, b)) =
 
 -- `0 < n` and `1 <= n` are one fact, but the two decided propositions scrutinise different machine comparisons, and cancellation relates operands rather than operators — so neither reduces into the other. Casing on `n` settles it without induction: at zero the hypothesis is already `False`, and above it the shared successor cancels on both sides.
 pub let le_one_of_positive(@n: Nat, p: Lt(0, n)) -> Nat/Le(1, n) =
-    match n | 0 => match p end | pred + 1 => True/qed() end;
+    match n
+    | 0 => match p end
+    | pred + 1 => True/qed()
+    end;
 
 pub rec succ_of_lte(@a: Nat, @b: Nat, p: Lte(a, b)) -> Lt(a, b + 1) =
     match p: (x, y, w) => Lt(x, y + 1)
@@ -41,8 +44,7 @@ pub let le_of_lt(a: Nat, b: Nat, p: Lt(a, b)) -> Nat/Le(a, b) =
 pub rec lte_succ_of_lt(i: Nat, n: Nat, p: Lt(i, n)) -> Lte(i + 1, n) =
     match n
     | 0 => match p end
-    | np + 1 =>
-        match i | 0 => Lte/s(Lte/z()) | ip + 1 => Lte/s(lte_succ_of_lt(ip, np, p)) end
+    | np + 1 => match i | 0 => Lte/s(Lte/z()) | ip + 1 => Lte/s(lte_succ_of_lt(ip, np, p)) end
     end;
 
 -- The same, decided: what a window opened just past a checked index demands.

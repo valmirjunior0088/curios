@@ -135,7 +135,8 @@ pub let take_while(pred: (Byte) -> Bool) -> Parse(Bytes) =
             | some(within) =>
                 let (stop, from_pos, at_stop, _) =
                     match Bytes/len(input) - pos: (_) =>
-                        {cur: Nat,
+                        {
+                            cur: Nat,
                             from_pos: Nat/Le(pos, cur),
                             at_cur: Nat/Le(cur, Bytes/len(input)),
                             stopped: Bool}
@@ -150,7 +151,8 @@ pub let take_while(pred: (Byte) -> Bool) -> Parse(Bytes) =
                             | some(ok) =>
                                 match pred(Bytes/at(input, cur, @ok))
                                 | true =>
-                                    (cur + 1,
+                                    (
+                                        cur + 1,
                                         Nat/Le/succ_r(pos, cur, from_pos),
                                         Nat/Lt/le_succ_of_lt(cur, Bytes/len(input), ok),
                                         false)
@@ -159,8 +161,7 @@ pub let take_while(pred: (Byte) -> Bool) -> Parse(Bytes) =
                             end
                         end
                     end;
-                Result/success(
-                    (stop, Bytes/slice(input, pos, stop, @from_pos, @at_stop)))
+                Result/success((stop, Bytes/slice(input, pos, stop, @from_pos, @at_stop)))
             end,
     };
 
