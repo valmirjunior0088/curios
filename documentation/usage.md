@@ -4,15 +4,16 @@ The complete command-line and package reference. The [README](../README.md) cove
 
 ## Running and compiling
 
-`run` and `compile` take the same three forms, so what a bare invocation means never depends on which one you asked.
+`run` and `compile` take the same four forms, so what a bare invocation means never depends on which one you asked.
 
 | Argument | Means |
 | --- | --- |
 | *(none)* | the governing package's sole executable, or the one `default` names when it declares several |
 | an identifier | the executable declared under that name |
 | anything ending in `.crs`, or holding a path separator | that file, standalone |
+| `-` | the program on standard input, standalone |
 
-The dispatch is lexical and never probes the disk: an executable's name is a single identifier, so it can hold neither `.crs` nor a path separator, and the two spaces cannot overlap. `curios run scratch.crs` therefore means the file even when the package declares an executable called `scratch`.
+The dispatch is lexical and never probes the disk: an executable's name is a single identifier, so it can hold neither `.crs` nor a path separator nor be `-`, and the spaces cannot overlap. `curios run scratch.crs` therefore means the file even when the package declares an executable called `scratch`.
 
 Everything after the target belongs to the program, not to `curios`, and reaches it through `/std/proc/args`:
 
@@ -22,9 +23,36 @@ curios run serve --port 8080
 
 Everything from the target onward is collected verbatim, hyphens included, so a program's own flags never collide with the compiler's — which is also why every `curios` flag must precede the subcommand.
 
-`compile` writes its executable beside you, named after the executable it built or after the input file's stem; `-o`/`--output <PATH>` names it something else.
+`compile` writes its executable beside you, named after the executable it built or after the input file's stem; `-o`/`--output <PATH>` names it something else, and is required when there is no stem to take a name from.
 
 A file argument brings no project with it — no manifest, no dependencies, not even the library of the package you are standing in. That is deliberate: project scope is reachable only through something a manifest declares, so a scratch file cannot quietly acquire one. When a scratch program does want the library, one `[[executables]]` line gives it one.
+
+## Programs on standard input
+
+`-` runs or compiles whatever arrives on standard input, which is what makes a heredoc a program:
+
+```sh
+curios run - <<'EOF'
+/std/print("Hello, Curios!\n")
+EOF
+```
+
+It is standalone in the same sense a file argument is, and answers before anything looks for a manifest — so `-` means the same thing inside a package as outside one, and never the package's default executable.
+
+Standard input is asked for rather than assumed. A bare `curios run` already means the governing package's default executable, so reading a pipe when one happens to be attached would decide between the two by whether a terminal is present — making one command line mean different things in a shell and in a pipeline, and leaving `curios run < input.txt` compiling the input it was meant to be fed. The spelling costs one character and removes the question.
+
+Two things follow from the program being anonymous, and both are refusals rather than guesses:
+
+- **`compile -` requires `-o`.** There is no stem to name an executable after, and a default would claim a path the invocation never mentioned.
+- **It resolves no file-backed modules.** `mod util;` looks in the header's stem directory, and there is no header on disk to take a stem from, so it fails as an unfound module. Inline modules — `mod util … end` — work normally, so a program on standard input can still be structured, just not spread across files.
+
+Diagnostics name it `<stdin>` where they would name a file, keeping line and column:
+
+```
+   --> <stdin>:1:19
+```
+
+The program's own standard input is spent on reading the source, so `/std/read()` reports end-of-input. A program that reads its input wants a file, or a path the shell mints for it — `curios run <(your_generator)` is an ordinary file argument, and leaves standard input alone.
 
 ## What a package is made of
 

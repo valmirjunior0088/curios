@@ -31,6 +31,13 @@ impl Source {
         })
     }
 
+    /// A source whose text arrived with a name but no file — the program handed to the compiler on standard input. Diagnostics render `label` in the `--> label:line:column` header exactly as they render a path, which is the whole point: text that never touched the disk still has line numbers worth naming, and [`inline`](Self::inline) drops them.
+    ///
+    /// The label is a display name and is never opened. Nothing reads a source back, and the only paths any consumer *records* are those of module files, which arrive through [`read`](Self::read) — so a label that no filesystem would answer for cannot be mistaken later for one that would.
+    pub fn labelled(label: &str, text: impl Into<String>) -> Rc<Self> {
+        Self::new(label, text)
+    }
+
     /// Loads the file at `path` as a source, keeping the path so diagnostics can print a `--> path:line` header.
     pub fn read(path: impl Into<PathBuf>) -> io::Result<Rc<Self>> {
         let path = path.into();

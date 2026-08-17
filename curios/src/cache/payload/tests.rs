@@ -45,7 +45,9 @@ fn invoke(directory: &Path, target: Option<&str>, mounted: &[PathBuf]) -> Invoca
 
                 (entry, package, name, root)
             }
-            curios_package::Target::File(_) => panic!("these fixtures declare their executables"),
+            curios_package::Target::File(_) | curios_package::Target::Stdin => {
+                panic!("these fixtures declare their executables")
+            }
         };
 
     let verdicts = Verdicts::at(root);

@@ -29,6 +29,7 @@ fn tree(name: &str, files: &[(&str, &str)]) -> PathBuf {
 /// The entry file `argument` resolves to inside `directory`, or the refusal it earns.
 fn entry(argument: Option<&str>, directory: &Path) -> Result<PathBuf, String> {
     match Target::of(argument, None, directory)? {
+        Target::Stdin => panic!("standard input has no entry file"),
         Target::File(path) => Ok(path),
         Target::Executable { entry, .. } => Ok(entry),
     }
@@ -179,10 +180,13 @@ fn a_declared_executable_builds_into_the_store() {
     let target = Target::of(None, None, &root.join("json")).expect("an enumerated member");
 
     // The umbrella governs, so the store is its own — but the path *within* the store names the package, so it would not move if the member left.
+    let output = target
+        .output()
+        .expect("a declared executable has a default output");
     assert!(
-        target.output().ends_with(".curios/bin/json/serve"),
+        output.ends_with(".curios/bin/json/serve"),
         "{}",
-        target.output().display()
+        output.display()
     );
 
     fs::remove_dir_all(root).unwrap();
@@ -193,7 +197,45 @@ fn a_declared_executable_builds_into_the_store() {
 fn a_bare_file_builds_beside_itself() {
     let target = Target::of(Some("hello.crs"), None, Path::new(".")).expect("a file argument");
 
-    assert_eq!(target.output(), PathBuf::from("hello"));
+    assert_eq!(target.output(), Some(PathBuf::from("hello")));
+}
+
+/// `-` is standard input, and it answers before anything looks for a manifest — so it means the same thing in a package as outside one, which is the whole point of dispatching lexically.
+#[test]
+fn a_dash_is_standard_input_everywhere() {
+    let root = tree(
+        "run-stdin",
+        &[
+            (
+                "curios.toml",
+                "name = \"app\"\n\n[[executables]]\nname = \"serve\"\n",
+            ),
+            ("lib.crs", ""),
+            ("serve.crs", ""),
+        ],
+    );
+
+    for directory in [root.as_path(), Path::new(".")] {
+        assert!(
+            matches!(
+                Target::of(Some("-"), None, directory).expect("standard input needs no project"),
+                Target::Stdin
+            ),
+            "`-` should dispatch as standard input in {}",
+            directory.display()
+        );
+    }
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+/// An anonymous program has neither a file to read nor a stem to name an executable after, so both answers are absent rather than invented — `compile` turns the second into a refusal that names `-o`.
+#[test]
+fn standard_input_has_neither_an_entry_nor_an_output() {
+    let target = Target::of(Some("-"), None, Path::new(".")).expect("standard input");
+
+    assert_eq!(target.entry(), None);
+    assert_eq!(target.output(), None);
 }
 
 /// A package of nothing but programs compiles them against its dependencies alone — there is no library of its own to put last.

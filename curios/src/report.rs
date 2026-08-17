@@ -19,6 +19,9 @@ use {
     std::{fmt, path::PathBuf, time::Instant},
 };
 
+/// What a program read from standard input is called: in a status line, and — because the source it is parsed from is labelled with this too — in the `--> <stdin>:2:1` header of any diagnostic about it. One constant, so a reader is never told two names for one program. Angle brackets because no file is spelled that way, so neither line reads as naming something openable.
+pub(crate) const STDIN_LABEL: &str = "<stdin>";
+
 /// What a status line is about.
 ///
 /// Three namespaces, and only the first is the program's — which is where a leading `/` comes from, and the only place one is ever written. A mount prefix is a name a program can spell, an executable's is an identifier its manifest chose, and a file's is whatever was typed or wherever it landed. Rendering all three through one type is what keeps a print site from spelling a slash it did not derive.
@@ -29,6 +32,8 @@ pub(crate) enum Subject {
     Executable(String),
     /// A file, as it was written on the command line or as it landed on disk.
     File(PathBuf),
+    /// The program on standard input, which was asked for as `-` and is reported as what that means: `Building -` reads as a line the compiler failed to finish writing.
+    Stdin,
 }
 
 impl Subject {
@@ -44,6 +49,7 @@ impl fmt::Display for Subject {
             Self::Mounted(prefix) => formatter.write_str(&prefix.join()),
             Self::Executable(name) => formatter.write_str(name),
             Self::File(path) => write!(formatter, "{}", path.display()),
+            Self::Stdin => formatter.write_str(STDIN_LABEL),
         }
     }
 }

@@ -44,6 +44,7 @@ fn cached(directory: &Path, target: Option<&str>, cache: Option<&dyn Cache>) -> 
     let (entry, units) = match Target::of(target, None, directory).expect("a governed package") {
         Target::Executable { entry, units, .. } => (entry, units),
         Target::File(path) => (path, Vec::new()),
+        Target::Stdin => panic!("these fixtures name a target on disk"),
     };
 
     let (entrypoint, loader, _source) = Entrypoint::opened(&entry).expect("the entry parses");
@@ -195,6 +196,7 @@ fn a_file_argument_compiles_standalone_inside_a_package() {
     let (entry, units) = match Target::of(Some(orphan.to_str().unwrap()), None, &root).unwrap() {
         Target::Executable { entry, units, .. } => (entry, units),
         Target::File(path) => (path, Vec::new()),
+        Target::Stdin => panic!("these fixtures name a target on disk"),
     };
     assert!(units.is_empty(), "a file argument mounts nothing");
 

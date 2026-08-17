@@ -11,12 +11,12 @@ static NAMES: LazyLock<String> = LazyLock::new(|| Stage::NAMES.join(","));
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Mode {
-    /// Three forms, dispatched lexically: no argument is the governing package's default executable, an identifier is one it declares by name, and anything ending in `.crs` or holding a path separator is a bare file — standalone everywhere, captured by no manifest.
-    #[command(about = "Execute an executable, or a .crs file")]
+    /// Four forms, dispatched lexically: no argument is the governing package's default executable, an identifier is one it declares by name, `-` is the program on standard input, and anything ending in `.crs` or holding a path separator is a bare file — the last two standalone everywhere, captured by no manifest.
+    #[command(about = "Execute an executable, a .crs file, or standard input")]
     Run {
         #[arg(
             value_name = "TARGET",
-            help = "A declared executable's name, or a path to a .crs file (default: the governing package's sole or `default` executable)"
+            help = "A declared executable's name, a path to a .crs file, or `-` for standard input (default: the governing package's sole or `default` executable)"
         )]
         target: Option<String>,
 
@@ -29,12 +29,14 @@ pub(crate) enum Mode {
         args: Vec<String>,
     },
 
-    /// The same three forms `run` dispatches, for the same reason: what a bare invocation means inside a package should not depend on which subcommand asked.
-    #[command(about = "Compile an executable, or a .crs file, to a native executable")]
+    /// The same four forms `run` dispatches, for the same reason: what a bare invocation means inside a package should not depend on which subcommand asked.
+    #[command(
+        about = "Compile an executable, a .crs file, or standard input, to a native executable"
+    )]
     Compile {
         #[arg(
             value_name = "TARGET",
-            help = "A declared executable's name, or a path to a .crs file (default: the governing package's sole or `default` executable)"
+            help = "A declared executable's name, a path to a .crs file, or `-` for standard input (default: the governing package's sole or `default` executable)"
         )]
         target: Option<String>,
 
@@ -42,7 +44,7 @@ pub(crate) enum Mode {
             short = 'o',
             long = "output",
             value_name = "PATH",
-            help = "Write the executable to PATH (default: the executable's declared name, or the input file's stem)"
+            help = "Write the executable to PATH (default: the executable's declared name, or the input file's stem; required for `-`)"
         )]
         output_path: Option<PathBuf>,
     },

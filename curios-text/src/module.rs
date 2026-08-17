@@ -364,6 +364,18 @@ impl Entrypoint {
 
         Ok((entrypoint, RootSource::entry(path), source))
     }
+
+    /// Parses `text` as an entrypoint, paired with the [`RootSource`] that resolves nothing — the counterpart of [`opened`](Self::opened) for a program that arrived as text rather than as a file. `label` names it in diagnostics, where a file's path would go.
+    ///
+    /// **Nothing resolves because there is nowhere to resolve from.** A header's file-backed modules live in its stem directory, and text has no stem, so `mod util;` fails here as an unfound module rather than reading a directory somebody upstream had to invent. Inline modules are untouched, which leaves a supplied program able to declare everything it uses — it just cannot spread itself over files it has no name for.
+    ///
+    /// The pairing lives here for the reason [`opened`](Self::opened)'s does: which `RootSource` goes with an entrypoint is one answer, not a caller's choice. The source comes back for the same reason too, though nothing verifies a supplied program against it — text that was never on disk cannot go stale, so what a caller has here is the third element of one shape rather than a second one to handle.
+    pub fn supplied(label: &str, text: &str) -> Result<(Self, RootSource, Rc<Source>), String> {
+        let source = Source::labelled(label, text);
+        let entrypoint = Self::parse(&source).map_err(|error| error.format())?;
+
+        Ok((entrypoint, RootSource::none(), source))
+    }
 }
 
 impl FromStr for Entrypoint {
@@ -387,5 +399,47 @@ impl fmt::Display for Entrypoint {
             ])
         };
         run_printer(printer, formatter, 4)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use {super::Entrypoint, crate::Error, curios_utilities::Qualifier};
+
+    /// Text has no file, but it has line numbers — so a diagnostic about it still says where, with the label standing exactly where a path would.
+    #[test]
+    fn supplied_text_names_itself_in_diagnostics() {
+        let Err(error) = Entrypoint::supplied("<stdin>", "/std/print(\"unclosed\n") else {
+            panic!("the string literal never closes");
+        };
+
+        assert!(error.contains("<stdin>:2:1"), "{error}");
+    }
+
+    /// A file-backed `mod` has nowhere to resolve from, and answers as a missing module rather than by reading a directory invented from a stem nothing has.
+    #[test]
+    fn supplied_text_resolves_no_file_backed_modules() {
+        let (_, loader, _) = Entrypoint::supplied("<stdin>", "mod util;\n()").expect("it parses");
+
+        assert!(
+            loader.directories().is_empty(),
+            "supplied text reads from nowhere on disk"
+        );
+        assert!(matches!(
+            loader.load(&Qualifier::from(["util"])),
+            Err(Error::ModuleNotFound { .. })
+        ));
+    }
+
+    /// What a supplied program cannot do is spread itself over files — not declare modules. An inline one is untouched.
+    #[test]
+    fn supplied_text_keeps_inline_modules() {
+        let (entrypoint, _, _) = Entrypoint::supplied(
+            "<stdin>",
+            "mod util\n    pub let greeting: Str = \"hi\";\nend\n\nutil/greeting",
+        )
+        .expect("it parses");
+
+        assert_eq!(entrypoint.module.items.len(), 1);
     }
 }

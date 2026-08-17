@@ -3,17 +3,19 @@
 //! **The payload, not the wasm module, is what this hands back**, and that is what lets one stored artifact serve `run` and `compile` alike: `run` executes it in-process exactly as it executes a fresh one, and `compile` appends it to the embedded launcher. Optimization and precompilation therefore happen here rather than in `main`, which is left dispatching.
 
 use {
-    crate::{Heading, Line, Subject, fact},
+    crate::{Heading, Line, STDIN_LABEL, Subject, fact},
     curios::{Program, Verdicts, to_cwasm, to_cwasm_dumped},
     curios_package::Target,
     curios_pipeline::{Cache, CompileError, Progress, Stage, compile_with_units},
     curios_text::{Entrypoint, RootSource, UnitSource},
+    curios_utilities::Source,
     curios_wasm::Module,
-    std::path::PathBuf,
+    std::{
+        io,
+        path::{Path, PathBuf},
+        rc::Rc,
+    },
 };
-
-#[cfg(feature = "profile")]
-use std::path::Path;
 
 /// Build the observer closure that prints each requested IR stage to stderr. `print` is the comma-separated stage list from `--print`; empty segments are dropped (the flag's absence arrives as `""`), and an unknown stage name is an error rather than a silently empty selection. The stage `to_cwasm_dumped` emits downstream of the pipeline goes through a second one built the same way, so the two rendering paths cannot drift.
 pub(crate) fn stage_printer(print: &str) -> Result<impl Fn(Stage<'_>) + '_, String> {
@@ -48,9 +50,10 @@ pub(crate) fn payload_of(
     let mut scope = load_units(units)?;
     let subject = subject_of(&target);
 
-    // A bare file has no project, so it has no store to consult: what it may reuse is a fact about the project it is in, and it is in none.
+    // Neither standalone form has a project, so neither has a store to consult: what a compilation may reuse is a fact about the project it is in, and these are in none.
     let (entry, declared, cache) = match target {
-        Target::File(path) => (path, None, None),
+        Target::Stdin => (None, None, None),
+        Target::File(path) => (Some(path), None, None),
         Target::Executable {
             entry,
             units,
@@ -61,25 +64,30 @@ pub(crate) fn payload_of(
         } => {
             scope.extend(units);
 
-            (entry, Some((package, name)), Some(Verdicts::at(root)))
+            (Some(entry), Some((package, name)), Some(Verdicts::at(root)))
         }
     };
 
     // Opened before the store is consulted, because the entry's own text is half of what a stored payload is verified against — and it has to be the text that was *parsed*, not a re-read taken afterwards.
-    let (entrypoint, loader, source) = Entrypoint::opened(&entry).map_err(CompileError::Failure)?;
+    let (entrypoint, loader, source) = open(entry.as_deref()).map_err(CompileError::Failure)?;
 
-    let filed = cache.as_ref().zip(declared.as_ref()).map(|(cache, name)| {
-        (
-            cache,
-            Program {
-                package: &name.0,
-                executable: &name.1,
-                entry: &entry,
-                text: &source.text,
-                loader: &loader,
-            },
-        )
-    });
+    // A payload is filed only where all three exist: a store to put it in, a declared name to file it under, and an entry file to verify it against. Standard input has none of them, and reaches this as the `None` that skips both the get and the put.
+    let filed = cache
+        .as_ref()
+        .zip(declared.as_ref())
+        .zip(entry.as_deref())
+        .map(|((cache, name), path)| {
+            (
+                cache,
+                Program {
+                    package: &name.0,
+                    executable: &name.1,
+                    entry: path,
+                    text: &source.text,
+                    loader: &loader,
+                },
+            )
+        });
 
     // `--print` skips the get and still puts: a stage dump exists only when compilation runs, so asking for one is asking for the work — and filing what a real compilation produced is always safe.
     if print.is_empty()
@@ -136,12 +144,27 @@ fn precompiled(print: &str, module: &Module) -> Result<Vec<u8>, CompileError> {
 
 /// What a target is reported as — the name that was asked for, never the file it resolved to.
 ///
-/// A declared executable resolves to an absolute path somewhere under the governing root, and echoing that back fills a status line with what the reader already knew. A bare file *is* what was asked for, so it reports as written.
+/// A declared executable resolves to an absolute path somewhere under the governing root, and echoing that back fills a status line with what the reader already knew. A bare file *is* what was asked for, so it reports as written. Standard input was asked for as `-`, which reports as nothing a reader can act on, so it is the one subject named rather than echoed.
 pub(crate) fn subject_of(target: &Target) -> Subject {
     match target {
+        Target::Stdin => Subject::Stdin,
         Target::File(path) => Subject::File(path.clone()),
         Target::Executable { name, .. } => Subject::Executable(name.clone()),
     }
+}
+
+/// The entry program, what its own modules resolve against, and the text it was parsed from: a file when there is one, and otherwise standard input, drained to end.
+///
+/// Draining is why this is worth naming rather than inlining. The program's own standard input is gone once the compiler has read the source out of it, so `/std/read()` reports end-of-input — unavoidable when both want one descriptor, and the reason a program that reads its input belongs in a file.
+fn open(entry: Option<&Path>) -> Result<(Entrypoint, RootSource, Rc<Source>), String> {
+    let Some(path) = entry else {
+        let text = io::read_to_string(io::stdin())
+            .map_err(|error| format!("failed to read standard input: {error}"))?;
+
+        return Entrypoint::supplied(STDIN_LABEL, &text);
+    };
+
+    Entrypoint::opened(path)
 }
 
 /// Compile `entrypoint` against `units` in the order given, printing any requested IR stages along the way.

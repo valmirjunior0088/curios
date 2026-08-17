@@ -1,8 +1,10 @@
 //! What `curios run` was asked to run.
 //!
-//! **Dispatch is lexical, never probed.** An argument ending in `.crs` or holding a path separator is a file; anything else is an executable name. The two spaces cannot overlap, because an executable's name is a single identifier — so no reserved names, no magic filenames, and no case where the answer depends on what happens to exist on disk.
+//! **Dispatch is lexical, never probed.** `-` is standard input; an argument ending in `.crs` or holding a path separator is a file; anything else is an executable name. The three spaces cannot overlap, because an executable's name is a single identifier and `-` is not one — so no reserved names, no magic filenames, and no case where the answer depends on what happens to exist on disk, or on what happens to be attached to a descriptor.
 //!
-//! **A file argument triggers no walk at all.** A bare `.crs` file compiles standalone *everywhere*, with no manifest, no dependencies and no project, which is what makes project scope reachable only through a declared artifact. The scratch-file hazard is not mitigated but unconstructible, at the price of one `[[executables]]` line when a scratch program wants the library.
+//! That last clause is why `-` is spelled at all, rather than a bare invocation reading standard input when one is piped in. A bare invocation already means the governing package's default executable, and deciding between the two would mean asking whether a terminal is attached — which makes one command line mean different things in a shell and in a pipeline, and leaves `curios run < input.txt` compiling the input it was meant to be fed.
+//!
+//! **Neither a file argument nor `-` triggers a walk at all.** Both compile standalone *everywhere*, with no manifest, no dependencies and no project, which is what makes project scope reachable only through a declared artifact. The scratch-file hazard is not mitigated but unconstructible, at the price of one `[[executables]]` line when a scratch program wants the library.
 
 #[cfg(test)]
 mod tests;
@@ -15,6 +17,8 @@ use {
 
 /// What an invocation resolved to.
 pub enum Target {
+    /// The program on standard input, standalone for the same reason a file argument is — and anonymous besides, so it has neither an entry path nor a name to write an executable to.
+    Stdin,
     /// A bare file, standalone: no manifest captures a file argument.
     File(PathBuf),
     /// A declared executable of the governing package, and the units it is compiled against — its own library last, everything it depends on before that.
@@ -32,21 +36,26 @@ pub enum Target {
 }
 
 impl Target {
-    /// The `.crs` file this target is compiled from.
-    pub fn entry(&self) -> &Path {
+    /// How standard input is asked for. Not an identifier, so it cannot collide with an executable's name, and not path-shaped, so it cannot collide with a file's.
+    pub const STDIN: &'static str = "-";
+
+    /// The `.crs` file this target is compiled from, and `None` for a program that is not in a file.
+    pub fn entry(&self) -> Option<&Path> {
         match self {
-            Self::File(path) => path,
-            Self::Executable { entry, .. } => entry,
+            Self::Stdin => None,
+            Self::File(path) => Some(path),
+            Self::Executable { entry, .. } => Some(entry),
         }
     }
 
-    /// Where a native build of this target is written by default.
+    /// Where a native build of this target is written by default, and `None` when there is no default to have.
     ///
-    /// A declared executable goes into the governing root's store, nested under the package that declares it. A bare file has no project, hence no governing root and no store, so it lands beside the working directory under its own stem — the same declared-artifact-versus-bare-file split as everywhere else.
-    pub fn output(&self) -> PathBuf {
+    /// A declared executable goes into the governing root's store, nested under the package that declares it. A bare file has no project, hence no governing root and no store, so it lands beside the working directory under its own stem — the same declared-artifact-versus-bare-file split as everywhere else. Standard input has no stem either, and a name invented for it would be a name nobody asked for that overwrites whatever already holds it, so it has no default at all and the caller must supply one.
+    pub fn output(&self) -> Option<PathBuf> {
         match self {
-            Self::File(path) => PathBuf::from(path.file_stem().unwrap_or(path.as_os_str())),
-            Self::Executable { output, .. } => output.clone(),
+            Self::Stdin => None,
+            Self::File(path) => Some(PathBuf::from(path.file_stem().unwrap_or(path.as_os_str()))),
+            Self::Executable { output, .. } => Some(output.clone()),
         }
     }
 
@@ -58,10 +67,11 @@ impl Target {
         manifest: Option<&Path>,
         directory: &Path,
     ) -> Result<Self, String> {
-        if let Some(argument) = argument
-            && is_file(argument)
-        {
-            return Ok(Self::File(PathBuf::from(argument)));
+        // Both standalone forms answer here, before anything looks for a manifest — which is what "triggers no walk at all" means operationally.
+        match argument {
+            Some(Self::STDIN) => return Ok(Self::Stdin),
+            Some(argument) if is_file(argument) => return Ok(Self::File(PathBuf::from(argument))),
+            _ => {}
         }
 
         let governing = Governing::found(manifest, directory)?;

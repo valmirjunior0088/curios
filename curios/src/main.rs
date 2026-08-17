@@ -1,6 +1,6 @@
-//! The `curios` CLI. `run` obtains an entrypoint's precompiled payload and executes it in-process, forwarding the trailing arguments as the program's argv (the entry path as argv[0]) and its exit code as the process's; `compile` appends that same payload to the embedded launcher stub and writes a self-contained native executable. Both take the same target three ways — no argument for the governing package's default executable, an identifier for one it declares, and a path for a bare `.crs` file — because what a bare invocation means inside a package should not depend on which subcommand asked.
+//! The `curios` CLI. `run` obtains an entrypoint's precompiled payload and executes it in-process, forwarding the trailing arguments as the program's argv (the entry path, or `-`, as argv[0]) and its exit code as the process's; `compile` appends that same payload to the embedded launcher stub and writes a self-contained native executable. Both take the same target four ways — no argument for the governing package's default executable, an identifier for one it declares, a path for a bare `.crs` file, and `-` for the program on standard input — because what a bare invocation means inside a package should not depend on which subcommand asked.
 //!
-//! **Neither subcommand compiles unconditionally.** A manifest target's payload is filed in the project's store, so an invocation whose entry, whose entry's modules and whose dependencies are all unchanged is served from it — one slot for both subcommands, which is what makes `compile` after `run` a file write. A bare file has no project and so consults nothing. `pipeline` owns that decision and everything downstream of it.
+//! **Neither subcommand compiles unconditionally.** A manifest target's payload is filed in the project's store, so an invocation whose entry, whose entry's modules and whose dependencies are all unchanged is served from it — one slot for both subcommands, which is what makes `compile` after `run` a file write. Neither standalone form has a project, so neither consults anything. `pipeline` owns that decision and everything downstream of it.
 //!
 //! Argument parsing lives in `cli`, target resolution, compilation and payload reuse in `pipeline`, executable emission in `bundle` — this file only dispatches, mapping any error to stderr and a failure exit.
 
@@ -24,6 +24,7 @@ use {
     curios_text::Formatted,
     std::{
         fs, iter,
+        path::Path,
         process::{self, ExitCode},
         time::Instant,
     },
@@ -72,7 +73,11 @@ fn dispatch() -> Result<(), Failure> {
     match mode {
         Mode::Run { target, args } => {
             let target = Target::here(target.as_deref(), manifest.as_deref())?;
-            let entry = target.entry().to_path_buf();
+            // argv[0] is how the program was invoked, so a program on standard input passes on the `-` that invoked it rather than the name the compiler reports it by.
+            let entry = target.entry().map_or_else(
+                || Target::STDIN.to_string(),
+                |path| path.to_string_lossy().into_owned(),
+            );
             let subject = subject_of(&target);
             let cwasm = payload_of(budget, &print, &units, target)?;
 
@@ -81,7 +86,7 @@ fn dispatch() -> Result<(), Failure> {
             let code = run_bytes(
                 &cwasm,
                 OsHost::with_args(
-                    iter::once(entry.to_string_lossy().into_owned().into_bytes())
+                    iter::once(entry.into_bytes())
                         .chain(args.into_iter().map(String::into_bytes))
                         .collect(),
                 ),
@@ -97,11 +102,19 @@ fn dispatch() -> Result<(), Failure> {
             output_path,
         } => {
             let target = Target::here(target.as_deref(), manifest.as_deref())?;
-            let entry = target.entry().to_path_buf();
-            let output = output_path.unwrap_or_else(|| target.output());
+            let entry = target.entry().map(Path::to_path_buf);
+
+            // An anonymous program has no stem to name its executable after, and inventing one would silently claim a path the invocation never mentioned. Refuse instead, naming the flag that answers it.
+            let Some(output) = output_path.or_else(|| target.output()) else {
+                return Err(Failure::Error(format!(
+                    "compiling {} produces an executable with no name to take; pass `-o PATH`",
+                    Subject::Stdin
+                )));
+            };
 
             // Nothing enforces a `.crs` extension, so an extensionless input's default output is the input itself — and `-o` can name it explicitly. Refuse before compiling rather than destroy the source.
-            if let (Ok(input), Ok(written)) = (entry.canonicalize(), output.canonicalize())
+            if let Some(entry) = &entry
+                && let (Ok(input), Ok(written)) = (entry.canonicalize(), output.canonicalize())
                 && input == written
             {
                 return Err(Failure::Error(format!(
