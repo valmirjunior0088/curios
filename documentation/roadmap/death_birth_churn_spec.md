@@ -4,7 +4,7 @@
 
 This specification defines a measurement program — benchmark workloads and a static census — and the lever gate any mechanism addressing allocation churn must pass. It is deliberately mechanism-blocking: no milestone below changes a representation, an encoding, or the runtime, and the levers in M2 are admitted or refused on M0's and M1's numbers alone.
 
-M0's substrate workload, `chain`, and its record workload, `churn`, are in the harness as of 2026-08-17, awaiting their first capture. The `spines` workload, the census, and the gate are not started.
+M0 is complete in the harness as of 2026-08-17: `chain`, `churn`, and `spines` await their first capture. The census and the gate are not started.
 
 ## The question under measurement
 
@@ -52,9 +52,7 @@ The spine is `M0 → M1 → M2`. M0 and M1 are independent and may land in eithe
 
 - The record workload exists: `churn`, landed 2026-08-17, threads a six-field record through N LCG-fed steps, two fields updated per step via spread, printing one field modulo a prime — the purest record-update signal, with the minimal algorithmic confound: the imperative contestants mutate a struct in place and allocate nothing, and Lean's structure update gets reuse. The landing answered part of its question before any table: the emitted Curios loop allocates nothing either, the threaded record travelling as fields through the landed in-flight campaigns — pinned by `churn_threaded_record_allocates_nothing` in `curios/src/tests/codegen/churn.rs` — so the capture prices the erased spelling against the mutation floor, and the record-update tax lives only where a record rests, which is `spines`' and the census's territory.
 
-- One workload directory remains to add, with the per-contestant sources the harness's layout prescribes.
-
-- `spines`: N LCG-keyed inserts into `/std/Map` followed by a fold, printing modulo a prime. Adds the live-set-under-churn dimension — `chain` keeps almost nothing alive and `trees` keeps everything, and a collector's economics live between — and its header records two confounds plainly: it compares map algorithms across contestants, and `/std/Map` deliberately has no `Key(Nat)`, so LCG keys enter through a byte-string encoding at the boundary that no imperative contestant's hash map mirrors. It orients rather than proves.
+- The map workload exists: `spines`, landed 2026-08-17, drives N LCG-keyed inserts into `/std/Map` followed by a fold, printing modulo a prime. It adds the live-set-under-churn dimension — `chain` keeps almost nothing alive and `trees` keeps everything, and a collector's economics live between — and its header records two confounds plainly: it compares map algorithms across contestants, and `/std/Map` deliberately has no `Key(Nat)`, so LCG keys enter through `Nat/to_str` at the boundary, a per-insert cost no int-keyed hash map mirrors. It orients rather than proves.
 
 - No M0 workload churns the array substrate, and by decision none joins yet: the rope amortizes idiomatic accumulation into O(1) nodes with one force-time fill, so a synthetic builder workload would price a shape no measurement yet shows users writing. Lever B's copy-bound evidence therefore comes from M1's census, and a builder workload joins M0 only if the census finds the population first.
 
