@@ -11,6 +11,8 @@
 //! So `digits − bindless` is the bind, `bindless − manual` is the closure plus the scan, and the bottom rung is a *ceiling rather than an equivalent* — it declines work the abstraction performs rather than performing it more cheaply.
 //!
 //! **The ladder existed for the length of three roadmap items before anything ran it.** These are real programs rather than fixtures precisely because the question is what idiomatic code costs, and a fixture written to be measured tends to answer a question nobody asked.
+//!
+//! Timings that a walk-directed change produces are recorded here, controls included: a campaign that moves this ladder owes a reading of the two harness workloads beside it, because "moved the column it aimed at" is only a claim if the other columns were looked at.
 
 use {
     super::structural::{compile_raw, functions, user_allocations, wat},
@@ -203,15 +205,39 @@ const WALK_MIRROR_INDEXED: &str = include_str!(concat!(
 ///
 /// Against the pre-campaign baseline the digit walk is fifteen percent faster and the multi-byte walk twenty-three, with the variant-width scan rebuild the one obligation left on the per-character path. The spec's ordering held: the window was the destination, and the tuple work was its substrate.
 ///
+/// ## After the scan crossed as fields (variant-width, 2026-08-17)
+///
+/// The last obligation on the per-character path. The loop's scan parameter travels as a discriminant and three payload slots with the interned nullary constructors filled, and `/syn/Str/step` takes those four slots as parameters, so the emitted `/std/Str/fold` body holds no `struct.new` of any kind.
+///
+/// **This row carries its own control, and every row above it should be read as though it did not.** The rows above compare against figures taken days and several commits apart — the closure-table swap alone moved these walks by 27% and 11% — so a delta read across two of them is not attributable to the change named beside it. Both columns here were built from the same tree at two commits and timed in one interleaved session on one machine: the control is `9e7e81e8`, the campaign's own base.
+///
+/// | Program | control (`9e7e81e8`) | after variant-width |
+/// | --- | --- | --- |
+/// | `parse_digits` at N = 1 000 000 | 0.66 0.68 0.67 0.67 0.65 | 0.46 0.47 0.48 0.47 0.47 |
+/// | `parse_multibyte` at N = 300 000 | 0.55 ×5 | 0.43 0.42 0.43 0.42 0.42 |
+///
+/// **The digit walk gains more than the multi-byte one — 29% against 23% — and that inversion is the point.** A digit walk never enters the `cont` arm, so before this change its scan was the interned `lead()` constant, which is exactly what M1a stopped being able to hand back for free: the row above records the digit walk *regressing* five percent when the return protocol reached `step`, because dynamic result fields admit no interning and every resume reboxed. That relocation is what this change collects, and it collects most where the constant used to be free.
+///
+/// **The two harness workloads are the controls, and both are flat** — same protocol, same session, same control commit, outputs compared before any figure was read:
+///
+/// | Program | Input | control (`9e7e81e8`) | after variant-width |
+/// | --- | --- | --- | --- |
+/// | `lcg` | 100 000 000 | 0.31 ×5 | 0.31 ×5 |
+/// | `trees` | 21 | 0.26 0.24 0.24 0.25 0.25 | 0.26 0.26 0.26 0.25 0.24 |
+///
+/// `trees` max RSS was flat too, ~134.5 MB on both arms. Each is flat for its own stated reason rather than by luck. `lcg`'s hot loop matches on `Nat`, an intrinsic riding the i31 carrier, so the program contains no variant family for a width to reach. `trees` contains one — but a node is stored in its parent, so its values *rest*, and a rewrite that only removes objects in flight has nothing to take: the same fact, observed dynamically, that the census's return gate reports statically and that refuses the return milestone.
+///
 /// ## The static half, and why it divides almost nothing
 ///
+/// Retaken **2026-08-17** after variant-width splitting. The figures it replaces predate the window split and the closure table and had not been retaken, so read the block as a fresh reading rather than as a delta:
+///
 /// ```text
-/// parse_digits:   0 closure sites, 4 env sites, 0 shell sites, 17 slice calls, 362098 bytes of wat
-/// parse_bindless: 0 closure sites, 5 env sites, 0 shell sites, 17 slice calls, 377561 bytes of wat
-/// parse_manual:   0 closure sites, 4 env sites, 0 shell sites, 17 slice calls, 403921 bytes of wat
+/// parse_digits:   0 closure sites, 2 env sites, 0 shell sites, 10 slice calls, 443738 bytes of wat
+/// parse_bindless: 0 closure sites, 3 env sites, 0 shell sites, 10 slice calls, 458940 bytes of wat
+/// parse_manual:   0 closure sites, 2 env sites, 0 shell sites, 10 slice calls, 496933 bytes of wat
 /// ```
 ///
-/// Four, five and four env sites span a sixfold spread in runtime, and the remaining ones belong to `/std/Str/utf8/check` and `/std/Nat/of_str` in all three programs — `parse_manual` included, because every rung parses its stdin the same way. **A site count cannot see a loop.** It is kept because it is the half that survives a machine change, and because a site appearing or vanishing is a real event — the `Str/fold` environments vanishing is how the walk's chain was confirmed gone. It is never the half that answers "what does this cost".
+/// Two, three and two env sites span a sixfold spread in runtime, and the ones that remain belong to `/std/Nat/of_str/1` and `/std/Str/trim_bounds/1` in all three programs — `parse_manual` included, because every rung parses its stdin the same way. **A site count cannot see a loop.** It is kept because it is the half that survives a machine change, and because a site appearing or vanishing is a real event — the `Str/fold` environments vanishing is how the walk's chain was confirmed gone. It is never the half that answers "what does this cost".
 ///
 /// **Two comparisons this does not license.** An earlier record in `structural.rs` timed `parse_digits` at 0.92–0.95 s with `/usr/bin/time -l`, which is macOS syntax; these are Linux figures from another machine, so only the ratios transfer. And the roadmap's "roughly eightfold" for this gap has no probe at all — fourteenfold is what this tree and this machine report.
 #[test]
