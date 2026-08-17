@@ -1,0 +1,47 @@
+-- churn: thread a six-field record through N LCG-fed steps, two fields updated
+-- per step via spread — the purest record-update signal, and the one workload
+-- where the purity tax appears as users feel it: the imperative contestants
+-- mutate a struct in place and allocate nothing, Lean's structure update gets
+-- Perceus reuse, Curios reconstructs. The written pair rotates over three
+-- phases so every field keeps circulating, and each phase reads only fields
+-- outside its own pair, so simultaneous and sequential update agree and no
+-- field is dead or loop-invariant. N is read from stdin; the seed derives from
+-- N so nothing is a closed term.
+use /std/{Str, Nat, Option, Io};
+
+struct Churn: Type {
+    a: Nat,
+    b: Nat,
+    c: Nat,
+    d: Nat,
+    e: Nat,
+    f: Nat,
+}
+
+rec walk(n: Nat, p: Nat, x: Nat, r: Churn) -> Churn =
+    match n: (_) => Churn
+    | 0 => r
+    | m + 1; ih =>
+        let y = 75 * x % 65537;
+        match p
+        | 0 => walk(m, 1, y, Churn { ..r, a = (r.c + r.e + y) % 1000003, b = (r.d + r.f + y) % 1000003 })
+        | 1 => walk(m, 2, y, Churn { ..r, c = (r.e + r.a + y) % 1000003, d = (r.f + r.b + y) % 1000003 })
+        | _ => walk(m, 0, y, Churn { ..r, e = (r.a + r.c + y) % 1000003, f = (r.b + r.d + y) % 1000003 })
+        end
+    end;
+
+let input = /std/read()!;
+match input: (_) => Io({})
+| some(bytes) =>
+    match Str/of_bytes(bytes): (_) => Io({})
+    | some(s) =>
+        match Nat/of_str(Str/trim(s)): (_) => Io({})
+        | some(n) =>
+            let r = walk(n, 0, (n + 1) % 65537, Churn { a = 1, b = 2, c = 3, d = 4, e = 5, f = 6 });
+            /std/print(Str/concat(Nat/to_str(r.a), "\n"))
+        | none() => /std/print("bad input\n")
+        end
+    | none() => /std/print("invalid utf-8\n")
+    end
+| none() => /std/print("no input\n")
+end

@@ -1,0 +1,37 @@
+// churn: thread a six-field record through N LCG-fed steps, two fields updated
+// per step. Grain -> wasm (linear-memory reference-counting GC), on wasmtime.
+// Grain's records are immutable and `{ ...r, field: v }` is the obvious
+// functional spelling, so this column allocates a fresh record per step,
+// counted like Lean's but with no reset-and-reuse pass to rewrite it in place.
+//
+// APIs verified against the grain-v0.7.2 stdlib; confirm `grain compile` at build.
+// VERIFY: record spread `{ ...r, field: v }` under grain-v0.7.2, and that the
+// tail-recursive walk is eliminated — millions of live frames would otherwise
+// exhaust the wasm stack.
+module Churn
+
+from "wasi/process" include Process
+from "array" include Array
+from "number" include Number
+from "result" include Result
+
+record Churn { a: Number, b: Number, c: Number, d: Number, e: Number, f: Number }
+
+let rec walk = (i, p, x, r) => {
+  if (i == 0) {
+    r
+  } else {
+    let y = 75 * x % 65537
+    match (p) {
+      0 => walk(i - 1, 1, y, { ...r, a: (r.c + r.e + y) % 1000003, b: (r.d + r.f + y) % 1000003 }),
+      1 => walk(i - 1, 2, y, { ...r, c: (r.e + r.a + y) % 1000003, d: (r.f + r.b + y) % 1000003 }),
+      _ => walk(i - 1, 0, y, { ...r, e: (r.a + r.c + y) % 1000003, f: (r.b + r.d + y) % 1000003 }),
+    }
+  }
+}
+
+let args = Result.unwrap(Process.argv())
+let s = args[Array.length(args) - 1]
+let n = Result.unwrap(Number.parseInt(s, 10))
+let r = walk(n, 0, (n + 1) % 65537, { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6 })
+print(r.a)

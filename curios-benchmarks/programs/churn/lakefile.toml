@@ -1,0 +1,6 @@
+name = "churn"
+defaultTargets = ["churn"]
+
+[[lean_exe]]
+name = "churn"
+root = "Churn"

@@ -4,7 +4,7 @@
 #   docker build --platform linux/arm64 -f curios-benchmarks/Dockerfile -t curios-benchmarks .
 # Run on a single pinned core so the numbers are stable:
 #   docker run --rm --cpuset-cpus 0 curios-benchmarks
-#   docker run --rm --cpuset-cpus 0 -e D_TREES=23 -e N_LCG=100000000 -e K_CHAIN=1600 curios-benchmarks
+#   docker run --rm --cpuset-cpus 0 -e D_TREES=23 -e N_LCG=100000000 -e K_CHAIN=1600 -e N_CHURN=75000000 curios-benchmarks
 #
 # Toolchains are installed the perf-correct way (flambda OCaml, fresh V8). Grain ships no arm64 binary and its source build needs esy (also arm64-less), so its wasm is cross-compiled in the amd64 stage below. The first build is heavy but fully layer-cached. Spots flagged "VERIFY:" may need a version nudge.
 
@@ -19,10 +19,12 @@ RUN curl -sSL -o /usr/local/bin/grain \
 COPY curios-benchmarks/programs/lcg/lcg.gr     /w/lcg.gr
 COPY curios-benchmarks/programs/trees/trees.gr /w/trees.gr
 COPY curios-benchmarks/programs/chain/chain.gr /w/chain.gr
+COPY curios-benchmarks/programs/churn/churn.gr /w/churn.gr
 RUN cd /w \
     && grain compile lcg.gr   -o lcg_grain.wasm \
     && grain compile trees.gr -o trees_grain.wasm \
-    && grain compile chain.gr -o chain_grain.wasm
+    && grain compile chain.gr -o chain_grain.wasm \
+    && grain compile churn.gr -o churn_grain.wasm
 
 # --- main image (arm64) -----------------------------------------------------
 FROM rust:1-bookworm
@@ -113,4 +115,5 @@ WORKDIR /curios/curios-benchmarks
 COPY --from=grain /w/lcg_grain.wasm   prebuilt/lcg_grain.wasm
 COPY --from=grain /w/trees_grain.wasm prebuilt/trees_grain.wasm
 COPY --from=grain /w/chain_grain.wasm prebuilt/chain_grain.wasm
+COPY --from=grain /w/churn_grain.wasm prebuilt/churn_grain.wasm
 ENTRYPOINT ["bash", "entrypoint.sh"]

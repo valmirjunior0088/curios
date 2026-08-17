@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Build every contestant, cross-check that they all agree, then time them with hyperfine in six tables: {lcg, binary-trees, chain} x {native, wasm-on-wasmtime}.
+# Build every contestant, cross-check that they all agree, then time them with hyperfine in eight tables: {lcg, binary-trees, chain, churn} x {native, wasm-on-wasmtime}.
 # Curios is the subject compared in both halves of each program.
 #
-# Knobs (env vars): N_LCG, D_TREES, K_CHAIN, RUNS, WARMUP.
+# Knobs (env vars): N_LCG, D_TREES, K_CHAIN, N_CHURN, RUNS, WARMUP.
 set -uo pipefail
 cd "$(dirname "$0")"
 ROOT="$PWD"          # absolute benchmarks dir; asc is invoked from elsewhere (see below)
@@ -19,6 +19,7 @@ eval "$(opam env 2>/dev/null)" || true
 N_LCG="${N_LCG:-100000000}"   # LCG iterations (~0.45s of Curios compute)
 D_TREES="${D_TREES:-21}"      # tree depth: ~4.2M nodes; sums taken mod 1000003
 K_CHAIN="${K_CHAIN:-1600}"    # transform rounds over a fixed 10 000-cell chain: ~16M cells reborn
+N_CHURN="${N_CHURN:-75000000}" # record-update steps over a six-field record (~0.33s of Curios compute)
 RUNS="${RUNS:-5}"
 WARMUP="${WARMUP:-1}"
 
@@ -90,11 +91,13 @@ table() {  # table "<title>" <hyperfine args...>
 build lcg   lcg
 build trees trees
 build chain chain
+build churn churn
 
 echo
 check lcg   lcg   8  programs/lcg/lcg.js
 check trees trees 10 programs/trees/trees.js
 check chain chain 8  programs/chain/chain.js
+check churn churn 8  programs/churn/churn.js
 
 # --- LCG --------------------------------------------------------------------
 table "LCG (N=$N_LCG) — native targets" \
@@ -137,3 +140,17 @@ table "chain (K=$K_CHAIN) — wasm on wasmtime" \
   "wasmtime run .artifacts/chain_rust.wasm $K_CHAIN" \
   "wasmtime run .artifacts/chain_grain.wasm $K_CHAIN" \
   "wasmtime run .artifacts/chain_asc.wasm $K_CHAIN"
+
+# --- churn -------------------------------------------------------------------
+table "churn (N=$N_CHURN) — native targets" \
+  ".artifacts/churn_rust $N_CHURN" \
+  ".artifacts/churn_ocaml $N_CHURN" \
+  "node programs/churn/churn.js $N_CHURN" \
+  "$(lean_bin churn churn) $N_CHURN" \
+  "echo $N_CHURN | .artifacts/churn_curios"
+
+table "churn (N=$N_CHURN) — wasm on wasmtime" \
+  "echo $N_CHURN | .artifacts/churn_curios" \
+  "wasmtime run .artifacts/churn_rust.wasm $N_CHURN" \
+  "wasmtime run .artifacts/churn_grain.wasm $N_CHURN" \
+  "wasmtime run .artifacts/churn_asc.wasm $N_CHURN"
