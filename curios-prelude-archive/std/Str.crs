@@ -12,7 +12,7 @@ pub let to_bytes(s: Str) -> Bytes =
     s.bytes;
 
 pub let of_bytes(b: Bytes) -> Option(Str) =
-    match check(b)(Scan/lead())
+    match check(Scan/lead(), b)
     | some(v) => Option/some(Str { bytes = b, valid = v })
     | none() => Option/none()
     end;

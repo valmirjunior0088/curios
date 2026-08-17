@@ -168,6 +168,19 @@ const WALK_MIRROR_INDEXED: &str = include_str!(concat!(
 ///
 /// The digit control is unchanged within layout noise — its walk never enters the cont arm — and the multi-byte walk, 16 of whose 28 bytes are continuation bytes, gains about two percent. One heap construction per continuation byte is therefore worth about two percent of this walk, a calibration [`walk_mirror_attribution_measurements`] cross-checks from the outside.
 ///
+/// ## After step's result crossed as fields (M1a, 2026-08-17)
+///
+/// Interprocedural demand made `split_returns` eligible on `/syn/Str/step`'s component — once `check` stopped capturing the scan into a closure chain — so step returns four fields and constructs nothing. What each caller does with them is the measured story: every resume must rebuild the tuple to jump it into the loop, and dynamic fields admit no interning, so the digit walk that used to receive an interned `lead()` for free now reboxes per character:
+///
+/// | Program | after the sweep | after M1a |
+/// | --- | --- | --- |
+/// | `parse_digits` at N = 1 000 000 | 0.91 0.91 1.07 0.91 0.91 | 0.96 ×5 |
+/// | `parse_multibyte` at N = 300 000 | 0.75 0.75 0.76 0.75 0.75 | 0.78 0.77 0.77 0.77 0.78 |
+///
+/// This is the reboxing mode GHC's boxity analysis names, measured live at about five percent, and it is deliberate: the value-lifetime spec ships M1a first because it is the cheapest change that measures the fact, and M2's continuation splitting is what turns the relocated construction into flowing fields — the ASCII path then rebuilds nothing, and the cont arm materializes once per multi-byte character at the step call alone.
+///
+/// The `check` rework in the same change also removes a closure per validated byte from every `of_bytes`: the validator was an induction returning a function of the scan, and now threads the scan by recursion exactly as the fold does.
+///
 /// ## The static half, and why it divides almost nothing
 ///
 /// ```text
@@ -280,49 +293,43 @@ fn walk_mirror_family_isolates_each_obligation() {
     );
 }
 
-/// Probe one of the four attributions: the returned scan state, tracked by where its construction lives. After the `/std` spelling sweep the only arity-4 tuple constructions in the multi-byte module are the two genuine state transitions inside `/syn/Str/step` — the fold, `at`, `utf8/drop_width` and `utf8/count_scalars` rebuilds are gone at the source. M1a moves these two to the caller's resume when `split_returns` becomes eligible on the step component, and M2 removes that caller-side reconstruction; this probe is the instrument that watches the move, so its assertions are exactly the ones those milestones flip.
+/// Probe one of the four attributions: the returned scan state, tracked by where its construction lives. M1a's interprocedural demand made `split_returns` eligible on the step component — once the first-order `check` rework removed the one caller that captured the scan into a closure chain — so `/syn/Str/step` returns four fields without constructing the `Scan` it hands back, and each caller's resume rebuilds the tuple before entering its continuation. That rebuild is one construction per character, exactly what the callee used to pay: M1a relocates the allocation, and removing the caller-side reconstruction by splitting the receiving continuation is M2's acceptance case, which is when this probe flips again.
 #[test]
-fn returned_scan_constructions_live_in_step() {
+fn returned_scan_is_delivered_as_fields_and_rebuilt_by_callers() {
     let wat = wat(PARSE_MULTIBYTE);
     let split = functions(&wat);
-
-    let mut carriers = Vec::new();
-    for function in &split {
-        let count = function
-            .body
-            .lines()
-            .map(str::trim)
-            .filter(|line| line.starts_with("struct.new $tpl/4"))
-            .count();
-        if count > 0 {
-            carriers.push((function.name, count));
-        }
-    }
-    assert_eq!(
-        carriers.iter().map(|(_, count)| count).sum::<usize>(),
-        2,
-        "two genuine scan transitions: {carriers:?}",
-    );
-    assert!(
-        carriers
-            .iter()
-            .all(|(name, _)| name.contains("/syn/Str/step")),
-        "both live in step, none in its callers: {carriers:?}",
-    );
-
-    // The fold's per-character shape after the sweep, pinned so the campaign's milestones flip it deliberately: the accumulator constructions and the suffix view are M2's and M4's acceptance subjects.
-    let fold = split
-        .iter()
-        .find(|function| function.name.contains("$/std/Str/fold"))
-        .expect("the fold survives as a function in this module");
-    let in_fold = |needle: &str| {
-        fold.body
-            .lines()
+    let count_in = |body: &str, needle: &str| {
+        body.lines()
             .map(str::trim)
             .filter(|line| line.starts_with(needle))
             .count()
     };
-    assert_eq!(in_fold("struct.new $tpl/4"), 0, "no scan rebuild");
+
+    let step = split
+        .iter()
+        .find(|function| function.name.contains("/syn/Str/step"))
+        .expect("step survives as a function in this module");
+    assert!(
+        step.body.contains("(type $func/2/4)"),
+        "step's signature carries four results: the split return protocol is live on its component",
+    );
+    assert_eq!(
+        count_in(step.body, "struct.new $tpl/4"),
+        0,
+        "and step constructs no scan of its own",
+    );
+
+    // The fold's per-character shape after M1a, pinned so the campaign's milestones flip it deliberately: the scan rebuild and the accumulator constructions are M2's acceptance subjects, the suffix view M4's.
+    let fold = split
+        .iter()
+        .find(|function| function.name.contains("$/std/Str/fold"))
+        .expect("the fold survives as a function in this module");
+    let in_fold = |needle: &str| count_in(fold.body, needle);
+    assert_eq!(
+        in_fold("struct.new $tpl/4"),
+        3,
+        "each arm's resume rebuilds the scan it passes back — relocated, not removed",
+    );
     assert_eq!(in_fold("struct.new $tpl/2"), 5, "four arms plus the seed");
     assert_eq!(in_fold("call $bytes/slice"), 3, "the suffix view per arm");
     assert_eq!(in_fold("call $bytes/read"), 3, "the byte read per arm");

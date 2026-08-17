@@ -6,7 +6,9 @@ This specification defines the cost contract, evidence gate, design boundaries a
 
 The work belongs in `curios-cont`: erasure has exposed the runtime fields, CPS still knows continuations and direct callees, and the transformation can feed projection forwarding, simplification, dead-parameter elimination, specialization and raw-scalar representation before WebAssembly emission loses those facts.
 
-M0 is complete (2026-08-17): the census, attribution and extent instruments are in `curios/src/tests/codegen/`, the multi-byte fixture and the walk-mirror family in `programs/`, and the stopping evidence was not met — the accumulator and the returned scan each measure about a fifth of the walk. The scan argument reconstruction turned out to be a source spelling rather than a compiler obligation and was cured in `/std` during M0, which retires M3; the spine proceeds at M1a.
+M0 is complete (2026-08-17): the census, attribution and extent instruments are in `curios/src/tests/codegen/`, the multi-byte fixture and the walk-mirror family in `programs/`, and the stopping evidence was not met — the accumulator and the returned scan each measure about a fifth of the walk. The scan argument reconstruction turned out to be a source spelling rather than a compiler obligation and was cured in `/std` during M0, which retires M3.
+
+M1a is complete (2026-08-17): the deferral is one rule under the shared solver, `split_returns` delivers `/syn/Str/step`'s result as four fields — unlocked by reworking `/std/Str/utf8/check` to thread its scan by recursion — and the relocated caller-side rebuild is measured and accepted as the intermediate M2 removes. The spine proceeds at M1b and M2.
 
 ## Cost contract
 
@@ -241,6 +243,8 @@ M3 stands beside the spine as a conditional annex, presumed stopped until M0 arg
 - Then let it move code on its own: with arguments no longer opaque, `split_returns` becomes eligible on components it currently pins, and the returned scan state is the first of them. Ship that before any new rewrite exists, because it is the cheapest change in this document and it measures the fact.
 
 - Assert the intermediate shape explicitly: `/syn/Str/step` returns four fields without constructing a `Scan`, while the current caller resume reconstructs it before entering the continuation. M1a relocates this allocation; it does not claim to remove it.
+
+- **Done (2026-08-17).** The deferral landed as one rule under the shared solver, with chain, sentinel and closure-argument tests beside it; `uncurryable` now recomputes its sole-local-application fact syntactically, because interprocedural `Applied` may be earned behind a forwarding jump the transform cannot move. Two facts the milestone surfaced: the split fired only after `/std/Str/utf8/check` was reworked to thread its scan by recursion — the curried validator captured the scan into a closure chain and held the whole component opaque — and the relocated construction costs about five percent on the digit walk until M2 removes it, the reboxing mode the adopted GHC precedent names, measured in `curios/src/tests/codegen/ladder.rs` and accepted as the intermediate state the spine's ordering already prices in.
 
 ### M1b — Aggregate origin and exclusivity
 
