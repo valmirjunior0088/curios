@@ -619,6 +619,13 @@ fn a_declined_insertion_costs_the_next_reduction_a_re_derivation() {
     );
 }
 
+/// The strategy arm of the differential fixture below: the ordinary test kernel with its closed machine off, so every closed term is walked by the recursive strategy. Beside its one consumer on purpose — nothing else may evaluate with the machine disabled.
+fn strategy_kernel() -> Kernel {
+    let mut kernel = kernel();
+    kernel.machine = false;
+    kernel
+}
+
 /// **The differential fixture the machine's perimeter entry names.** The same closed terms are put to a kernel with the closed machine and to one without it — the recursive strategy — and the reducts must be identical, term for term. The battery covers each rule the machine implements on its own: beta over eagerly-evaluated arguments, zeta's left-to-right release, all four match families, projection, recursive unfolding to a value, and the two fold recursion encodings over a packed carrier. Results are first-order values, the shape both evaluators determine completely, so equality here is syntactic rather than up-to-anything.
 #[test]
 fn the_closed_machine_agrees_with_the_strategy() {
@@ -765,8 +772,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
         induct,
     ] {
         let mut machined = kernel();
-        let mut strategy = Kernel::without_closed_machine(1_000_000);
-        strategy.set_local_floor(1_000);
+        let mut strategy = strategy_kernel();
 
         assert_eq!(
             machined.reduce_forced(term.clone()),

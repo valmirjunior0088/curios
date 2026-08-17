@@ -35,9 +35,9 @@ impl ClosedHost for Kernel {
     }
 }
 
-/// Whether the closed machine may take `term` under this judgment: the kernel admits it at all (false only in the differential fixture's strategy arm), the representation-side gate ([`accelerable`]) holds, and no case equation is in scope — because inside an arm a closed scrutinee *is* the arm's assumed value.
+/// Whether the closed machine may take `term` under this judgment: the kernel admits it at all (the `machine` field is false only in the differential fixture's strategy arm), the representation-side gate ([`accelerable`]) holds, and no case equation is in scope — because inside an arm a closed scrutinee *is* the arm's assumed value.
 fn machine_admissible(kernel: &Kernel, term: &Term) -> bool {
-    kernel.machine_enabled() && accelerable(term) && !kernel.has_refinements()
+    kernel.machine && accelerable(term) && !kernel.has_refinements()
 }
 
 /// The kernel's reduction strategy: everything unfolds, and what a local-free term unfolds to is remembered — see the `memos` and `spend` modules for what that does and does not concede, and for why a hit on this entry point is free while a definition unfold's is charged.

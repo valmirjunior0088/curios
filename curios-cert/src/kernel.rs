@@ -368,19 +368,6 @@ impl Kernel {
         }
     }
 
-    /// A kernel whose closed machine is off — every closed term walked by the recursive strategy. Exists for one purpose: the differential fixture that holds the machine's reducts against the strategy's, which is the evidence the perimeter entry for the machine names.
-    pub(crate) fn without_closed_machine(budget: u64) -> Self {
-        Self {
-            machine: false,
-            ..Self::new(budget)
-        }
-    }
-
-    /// Whether the closed machine may run under this kernel — false only in the differential fixture's strategy arm.
-    pub(crate) fn machine_enabled(&self) -> bool {
-        self.machine
-    }
-
     /// Start this kernel's environment from `globals` — the scope an earlier walk established — rather than from nothing.
     ///
     /// Set wholesale where [`Kernel::define`] has to report an overwrite, because a kernel is seeded before it has judged anything: there are no remembered reducts yet for a replaced name to invalidate.
