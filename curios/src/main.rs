@@ -1,4 +1,8 @@
-//! The `curios` CLI. `run` compiles an entrypoint and executes it in-process, forwarding the trailing arguments as the program's argv (the entry path as argv[0]) and its exit code as the process's; `compile` emits a self-contained native executable (the embedded launcher stub with the `.cwasm` payload appended). Both take the same target three ways — no argument for the governing package's default executable, an identifier for one it declares, and a path for a bare `.crs` file — because what a bare invocation means inside a package should not depend on which subcommand asked. Argument parsing lives in `cli`, target resolution and stage printing in `pipeline`, executable emission in `bundle` — this file only dispatches, mapping any error to stderr and a failure exit.
+//! The `curios` CLI. `run` obtains an entrypoint's precompiled payload and executes it in-process, forwarding the trailing arguments as the program's argv (the entry path as argv[0]) and its exit code as the process's; `compile` appends that same payload to the embedded launcher stub and writes a self-contained native executable. Both take the same target three ways — no argument for the governing package's default executable, an identifier for one it declares, and a path for a bare `.crs` file — because what a bare invocation means inside a package should not depend on which subcommand asked.
+//!
+//! **Neither subcommand compiles unconditionally.** A manifest target's payload is filed in the project's store, so an invocation whose entry, whose entry's modules and whose dependencies are all unchanged is served from it — one slot for both subcommands, which is what makes `compile` after `run` a file write. A bare file has no project and so consults nothing. `pipeline` owns that decision and everything downstream of it.
+//!
+//! Argument parsing lives in `cli`, target resolution, compilation and payload reuse in `pipeline`, executable emission in `bundle` — this file only dispatches, mapping any error to stderr and a failure exit.
 
 mod bundle;
 use bundle::*;
@@ -14,7 +18,6 @@ use report::*;
 
 use {
     clap::Parser,
-    curios::{to_cwasm, to_cwasm_dumped},
     curios_package::{Governing, Target, curate, scaffold},
     curios_pipeline::CompileError,
     curios_runtime::{ForeignBindings, OsHost, run_bytes},
@@ -71,13 +74,7 @@ fn dispatch() -> Result<(), Failure> {
             let target = Target::here(target.as_deref(), manifest.as_deref())?;
             let entry = target.entry().to_path_buf();
             let subject = subject_of(&target);
-            let module = compile_target(budget, &print, &units, target)?;
-
-            // Chosen before optimizing rather than filtered after, unlike the driver's stages: this one's payload costs — Binaryen's text capture, and the name section riding into the artifact.
-            let cwasm = match print.split(',').any(|name| name == "wasm-optm") {
-                true => to_cwasm_dumped(&module, stage_printer(&print)?)?,
-                false => to_cwasm(&module)?,
-            };
+            let cwasm = payload_of(budget, &print, &units, target)?;
 
             fact(Heading::Running, &subject);
 
@@ -114,13 +111,7 @@ fn dispatch() -> Result<(), Failure> {
             }
 
             let started = Instant::now();
-            let module = compile_target(budget, &print, &units, target)?;
-
-            // Chosen before optimizing rather than filtered after, unlike the driver's stages: this one's payload costs — Binaryen's text capture, and the name section riding into the artifact.
-            let cwasm = match print.split(',').any(|name| name == "wasm-optm") {
-                true => to_cwasm_dumped(&module, stage_printer(&print)?)?,
-                false => to_cwasm(&module)?,
-            };
+            let cwasm = payload_of(budget, &print, &units, target)?;
 
             emit_exe(&cwasm, &output)?;
 
@@ -175,7 +166,7 @@ fn dispatch() -> Result<(), Failure> {
             let scope = load_units(&units)?;
             let subject = Subject::File(input_path.clone());
             let (compilation, report) =
-                capture(|| compile_entry(budget, &print, scope, &input_path, &subject, None));
+                capture(|| compile_file(budget, &print, scope, &input_path, &subject));
 
             println!(
                 "total_ms\tcalls\tmin_ms\tmax_ms\tretained_mb\tallocated_mb\tallocs\ttarget\tname\t(peak {:.1} MiB)",

@@ -2,18 +2,19 @@
 //!
 //! `.curios/` sits beside the governing root — the umbrella's manifest when one governs the invocation, the package's otherwise — and it is **the only generated directory in the tree**: member directories hold user files and nothing else.
 //!
-//! It holds three families, each in its own subtree rather than sharing one namespace:
+//! It holds four families, each in its own subtree rather than sharing one namespace:
 //!
 //! ```text
 //! .curios/
-//!   bin/    json/serve            what `curios compile` emits
-//!   src/    c1/<digest>/          materialized source trees, keyed by their manifest hash
-//!   unit/   <slot>/               compiled units, one slot per mount, compiler and predecessor chain
+//!   bin/      json/serve          what `curios compile` emits
+//!   src/      c1/<digest>/        materialized source trees, keyed by their manifest hash
+//!   unit/     <slot>/             compiled units, one slot per mount, compiler and predecessor chain
+//!   payload/  <slot>/             precompiled `.cwasm` payloads, one slot per executable, chain and engine
 //! ```
 //!
 //! Separated because the alternative re-invites a collision that nesting otherwise removes: a hash has to be transformed to sit in a directory name at all — `c1:<digest>` most naturally becoming `c1/<digest>` — and a package legitimately named `c1` would then land on top of it.
 //!
-//! That tree is what a project gets when nothing points elsewhere. Setting `CURIOS_CACHE` moves the `src/` and `unit/` families — never `bin/`, which belongs to the package that declares the executable — into a cache keyed by the same hash and shared across projects, so two projects pinning one revision materialize and compile it once. See `shared` below for why there is no divined default.
+//! That tree is what a project gets when nothing points elsewhere. Setting `CURIOS_CACHE` moves the `src/`, `unit/` and `payload/` families — never `bin/`, which belongs to the package that declares the executable — into a cache keyed by the same hash and shared across projects, so two projects pinning one revision materialize and compile it once. See `shared` below for why there is no divined default.
 
 #[cfg(test)]
 mod tests;
@@ -22,7 +23,7 @@ use {
     crate::TreeHash,
     curios_utilities::{Mount, RootKind},
     sha2::{Digest, Sha256},
-    std::path::PathBuf,
+    std::{hash::Hasher, path::PathBuf},
 };
 
 /// The generated directory itself.
@@ -30,7 +31,7 @@ pub const STORE: &str = ".curios";
 
 /// Where a project's generated things go: one family beside it, two in a cache it shares with every other project.
 ///
-/// **The split is not arbitrary, and it follows from the keys.** A materialized tree is named by its `c1:` hash and a judged unit by an address over its mounts, its compiler and its predecessors — neither says anything about *which* project asked, so both name the same thing wherever they are computed and both are shareable. A unit's address says nothing about *which source*, either, which is why opening its slot verifies the files it was compiled from and refuses any that the asking compilation could not itself have read. A built executable is named by the package that declared it and belongs to the project that built it, so it stays local. Content-derived keys are what make an upper layer possible at all; a path-keyed store could only ever have been local.
+/// **The split is not arbitrary, and it follows from the keys.** A materialized tree is named by its `c1:` hash, a judged unit by an address over its mounts, its compiler and its predecessors, and a precompiled payload by an address over that chain, the executable's identity and the engine that will run it — none of them says anything about *which* project asked, so each names the same thing wherever it is computed and all three are shareable. A unit's address says nothing about *which source*, either, which is why opening its slot verifies the files it was compiled from and refuses any that the asking compilation could not itself have read; a payload's slot is opened the same way. A built executable is named by the package that declared it and belongs to the project that built it, so it stays local. Content-derived keys are what make an upper layer possible at all; a path-keyed store could only ever have been local.
 pub struct Store {
     /// The governing root — the umbrella's directory when one governs, the package's otherwise.
     project: PathBuf,
@@ -72,6 +73,13 @@ impl Store {
         self.shared.join("unit").join(slot)
     }
 
+    /// Where an executable's precompiled payload is filed, under the address its predecessor chain, its own identity and the engine decide. What it was compiled *from* is verified when the slot is opened, exactly as a unit's is.
+    ///
+    /// Shared rather than project-local, for the reason the type states: the address says nothing about which project asked. `bin/` stays local because a built executable's identity *is* project-relative; the payload inside it is not.
+    pub fn payload(&self, slot: &str) -> PathBuf {
+        self.shared.join("payload").join(slot)
+    }
+
     /// Where this machine's memo of its compiler's digest lives — a fact about the machine, so it belongs beside the things every project shares.
     pub fn compiler(&self) -> PathBuf {
         self.shared.join("compiler")
@@ -87,10 +95,13 @@ fn shared() -> Option<PathBuf> {
     std::env::var_os("CURIOS_CACHE").map(PathBuf::from)
 }
 
-/// What version of this store's layout a key names.
+/// What version of the unit family's layout a key names.
 ///
 /// In the key rather than in a file beside it, so an entry written by an older layout is not found rather than found and misread. Bump it whenever what a slot holds, or what a hit is verified against, changes.
 const SCHEMA: &str = "u2";
+
+/// The same, for the payload family — its own tag, because the two families version independently and neither should invalidate the other by moving.
+const PAYLOAD_SCHEMA: &str = "p1";
 
 /// The slot a unit compiled by `compiler`, after `predecessors`, claiming `mounts`, is filed under.
 ///
@@ -125,6 +136,35 @@ pub fn unit_slot(compiler: &str, predecessors: &[String], mounts: &[Mount]) -> S
     hex(digest)
 }
 
+/// The slot the precompiled payload of `package`'s `executable`, built by `compiler` after `predecessors` and run by the engine `engine` fingerprints, is filed under.
+///
+/// **The same address-and-record split [`unit_slot`] states, one level up.** This names a place — "the payload for this executable, by this compiler, after this chain, for this engine" — and carries no file contents, so an edit changes what the slot is verified against rather than where it is looked for. Predecessor slots are themselves stable across source edits, so this is too: one slot per executable per chain per compiler per engine, overwritten in place, bounded exactly as the unit family is.
+///
+/// **The executable's identity is its package's name and its own**, never a path. That pair is the one identity in a compilation that cannot collide (law 2), which is why two executables of one package occupy two slots and why nothing has to refuse an umbrella whose members both declare `serve`. A path here would re-import the store growth the unit key's own replacement records.
+///
+/// **The engine fingerprint is the part [`unit_slot`] has no counterpart for.** A unit is a judgment and travels anywhere the compiler binary does; a payload is machine code, and Cranelift compiled it for the host's ISA — the one input neither the compiler digest nor any recorded source file covers. It rides here as an opaque string because deciding what makes two engines compatible is `curios-runtime`'s to answer, this crate's only job being to keep the answer in the address.
+pub fn payload_slot(
+    compiler: &str,
+    predecessors: &[String],
+    package: &str,
+    executable: &str,
+    engine: &str,
+) -> String {
+    let mut digest = Sha256::new();
+
+    feed(&mut digest, PAYLOAD_SCHEMA);
+    feed(&mut digest, compiler);
+    feed(&mut digest, &predecessors.len().to_string());
+    for predecessor in predecessors {
+        feed(&mut digest, predecessor);
+    }
+    feed(&mut digest, package);
+    feed(&mut digest, executable);
+    feed(&mut digest, engine);
+
+    hex(digest)
+}
+
 /// The digest of `bytes`, for a caller checking one thing against a record of it.
 ///
 /// Deliberately not a [`TreeHash`]: that answers what a delivered tree *is*, and carries a scheme prefix because it is written into manifests and compared across machines. This answers whether some bytes are the bytes something was made from, is never published, and would be a lie in the other's spelling.
@@ -133,6 +173,43 @@ pub fn digest(bytes: &[u8]) -> String {
     digest.update(bytes);
 
     hex(digest)
+}
+
+/// A [`Hasher`] that finishes into a digest, for a key part whose producer speaks `std::hash` and whose consumer speaks SHA-256.
+///
+/// One part of the payload address is not a string anybody here can build: the engine compatibility stamp, which only `curios-runtime` can describe and which it hands over by *writing into* a hasher rather than by returning a digest — keeping `sha2` out of that crate and `wasmtime` out of the one that assembles the address. This is the adapter between the two vocabularies, and it lives beside [`digest`] because what it produces is one.
+///
+/// [`Hasher::finish`] is not how a value is taken out of this. It has to exist, and a `u64` is not what a store key is spelled in, so it answers with the leading eight bytes of the digest so far and [`Fingerprint::hex`] is what a caller uses. Nothing in `std::hash` calls `finish` on the caller's behalf — `Hash::hash` only ever writes — so the narrow answer is never the one that reaches a key.
+pub struct Fingerprint(Sha256);
+
+impl Fingerprint {
+    /// A fingerprint with nothing folded into it yet.
+    pub fn new() -> Self {
+        Self(Sha256::new())
+    }
+
+    /// Everything written so far, as the hex digest a key part is spelled in.
+    pub fn hex(self) -> String {
+        hex(self.0)
+    }
+}
+
+impl Default for Fingerprint {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Hasher for Fingerprint {
+    fn write(&mut self, bytes: &[u8]) {
+        self.0.update(bytes);
+    }
+
+    fn finish(&self) -> u64 {
+        let digest = self.0.clone().finalize();
+
+        u64::from_le_bytes(digest[..8].try_into().expect("a digest is 32 bytes wide"))
+    }
 }
 
 /// A finished digest, in hex.

@@ -59,6 +59,7 @@ Grades only. Each entry's evidence is the entry it links to.
 | Admission without judgment | Grade |
 | --- | --- |
 | [Cached verdicts](soundness/admission-without-judgment/cached-verdicts.md) | **argued** |
+| [Reused payloads](soundness/admission-without-judgment/reused-payloads.md) | **argued**, inheriting the entry above; **probed** at every clause of the record |
 | [Judging only what is not in scope](soundness/admission-without-judgment/judging-only-what-is-not-in-scope.md) | **argued** at the premise, discharged in another crate; **probed** at the consequence |
 
 | What the kernel consults | Grade |

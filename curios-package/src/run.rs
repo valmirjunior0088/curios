@@ -20,6 +20,8 @@ pub enum Target {
     /// A declared executable of the governing package, and the units it is compiled against — its own library last, everything it depends on before that.
     Executable {
         name: String,
+        /// The package that declares it. Carried beside `name` because the two together are the one identity in a compilation that cannot collide, which is what the store addresses a built artifact by; neither alone will do, since an umbrella's members may each declare a `serve`.
+        package: String,
         entry: PathBuf,
         /// Where a native build of it is written, under the governing root's store.
         output: PathBuf,
@@ -75,6 +77,7 @@ impl Target {
                 .bin(&governing.package.name, &executable.name),
             root: governing.root.clone(),
             name: executable.name.clone(),
+            package: governing.package.name.clone(),
             entry: governing.directory.join(&executable.path),
             units: order(&governing)?,
         })

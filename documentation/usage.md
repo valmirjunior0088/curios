@@ -147,9 +147,17 @@ Only the umbrella is looked for further up, and only one that enumerates you gov
 
 ## Where things go
 
-Everything generated lands under `.curios/`, beside the governing manifest — built executables, materialized sources, and compiled units. It is the only directory the toolchain writes into, unless `CURIOS_CACHE` names another for the content-addressed half.
+Everything generated lands under `.curios/`, beside the governing manifest — built executables, materialized sources, compiled units, and precompiled payloads. It is the only directory the toolchain writes into, unless `CURIOS_CACHE` names another for the content-addressed half.
 
 Set `CURIOS_CACHE` to share the content-addressed half across projects; unset, each project keeps its own. There is deliberately no divined default, because a toolchain that writes into a home directory nobody pointed it at is doing something the person who ran it did not ask for.
+
+## Reusing what was already built
+
+Neither `run` nor `compile` recompiles a declared executable nothing has changed. The precompiled payload is filed in the store beside the units, and an invocation whose entry file, whose entry's own modules and whose dependencies all still hold what they held is served from it — reported as `reused` on the target's line. One slot serves both subcommands, so `compile` after `run` only writes the executable, and `run` after `compile` compiles nothing.
+
+An edit anywhere the program was built from is a miss, and so is a damaged or half-written store entry; the invocation that misses recompiles and refiles, and the one after it is fast again. `--print` always compiles, since a stage dump only exists when the work runs, and files what it built. A bare `.crs` file consults and writes nothing: it has no project, hence no store — the same declared-versus-bare split as everywhere else.
+
+Payloads are native code for the machine that built them, so an entry is found only by an engine that can run it; two machines share one only when their engines agree. Nothing has to be cleaned up by hand as sources change: each executable occupies one slot per dependency chain, overwritten in place.
 
 ## Global flags
 
