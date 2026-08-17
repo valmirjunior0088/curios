@@ -702,7 +702,9 @@ fn strategy_kernel() -> Kernel {
     kernel
 }
 
-/// **The differential fixture the machine's perimeter entry names.** The same closed terms are put to a kernel with the closed machine and to one without it — the recursive strategy — and the reducts must be identical, term for term. The battery covers each rule the machine implements on its own: beta over eagerly-evaluated arguments, zeta's left-to-right release, all four match families, projection, recursive unfolding to a value, and the two fold recursion encodings over a packed carrier. Results are first-order values, the shape both evaluators determine completely, so equality here is syntactic rather than up-to-anything.
+/// **The differential fixture the machine's perimeter entry names.** The same closed terms are put to a kernel with the closed machine and to one without it — the recursive strategy — and the reducts must be identical, term for term, **at both demands**. The battery covers each rule the machine implements on its own: beta over eagerly-evaluated arguments, zeta's left-to-right release, all four match families, projection, recursive unfolding to a value, and the two fold recursion encodings over a packed carrier. Both evaluators determine these completely — a first-order value at the forced demand, and at the plain one either that or the folded spelling the demand stops at — so equality here is syntactic rather than up-to-anything.
+///
+/// It asked `reduce_forced` alone until the plain demand was found to be where the machine and the strategy could disagree, on `forced_then_plain` below. Every recursive term in the battery before it is a `rec` block that both evaluators leave unopened at a plain demand, so the comparison ran but reached nothing.
 #[test]
 fn the_closed_machine_agrees_with_the_strategy() {
     let bin_type = Term::intrinsic(Intrinsic::BinType(Grain::X));
@@ -837,6 +839,42 @@ fn the_closed_machine_agrees_with_the_strategy() {
         )
     };
 
+    // A run that forces a *bare* member selection and then asks a plain demand for a call on the same member. Both demands are exercised in one term because the machine's value memo is run-scoped: the `let` value is an intrinsic operand, which is forced, and its tail is an ordinary application, which must come back folded. The memo is keyed on the term alone, so a projection recorded at the forced demand was answered to the plain probe, and the machine ran the whole fold where the strategy stops at the folded spelling.
+    let forced_then_plain = {
+        let (go, b, x) = (binder(0, "go"), binder(1, "b"), binder(6, "x"));
+        let (h, t, ih) = (binder(2, "h"), binder(3, "t"), binder(4, "ih"));
+        let body = Term::func(
+            [(b.clone(), bin_type.clone())],
+            Term::bin_match_scoped(
+                Grain::X,
+                Term::free_var(&b),
+                motive(),
+                nat(0),
+                &h,
+                &t,
+                &ih,
+                Term::apply(Term::free_var(&go), [Term::free_var(&t)]),
+            ),
+        );
+        let Subterm::Rec(rec) = Term::unwrap_or_clone(Term::rec(
+            [(
+                go.clone(),
+                Term::func_type([(b.clone(), bin_type.clone())], nat_type()),
+                body,
+            )],
+            Term::let_(
+                &x,
+                nat_type(),
+                Term::intrinsic(Intrinsic::nat_add(Term::free_var(&go), nat(1))),
+                Term::apply(Term::free_var(&go), [bytes(vec![1, 2, 3])]),
+            ),
+        )) else {
+            unreachable!("built as a rec")
+        };
+
+        unfold_rec(rec)
+    };
+
     for term in [
         chain(64),
         ih_fold,
@@ -846,6 +884,7 @@ fn the_closed_machine_agrees_with_the_strategy() {
         switch,
         projection,
         induct,
+        forced_then_plain,
     ] {
         let mut machined = kernel();
         let mut strategy = strategy_kernel();
@@ -854,6 +893,16 @@ fn the_closed_machine_agrees_with_the_strategy() {
             machined.reduce_forced(term.clone()),
             strategy.reduce_forced(term.clone()),
             "the machine and the strategy disagreed on {term}",
+        );
+
+        // The plain demand is a separate contract, not a weaker reading of the one above: it is where a folded recursive spelling is the answer rather than a step on the way to one, so a machine that unfolds here computes a value the strategy never offers. Asking only the forced demand left that whole half of the machine uncompared.
+        let mut machined = kernel();
+        let mut strategy = strategy_kernel();
+
+        assert_eq!(
+            machined.reduce(term.clone()),
+            strategy.reduce(term.clone()),
+            "the machine and the strategy disagreed at a plain demand on {term}",
         );
     }
 }

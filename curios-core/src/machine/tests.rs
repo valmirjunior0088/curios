@@ -229,6 +229,88 @@ fn whnf_keeps_a_recursive_application_folded() {
     assert_eq!(forced, Ok(nat(0)));
 }
 
+/// A forced *bare* member selection must not answer a later plain probe for the same selection: the run-scoped value memo is keyed on the term alone, so a value recorded under a `rec` projection was served back whatever demand asked for it, and at [`Demand::Whnf`] a projection's value is the folded spelling itself. [`Frame::Memo`]'s guard does not reach this — it tests the recorded *value* for a folded spelling, and here it is the *key* that is one.
+///
+/// The two probes are in one run because the memo is run-scoped. The `let` value is an intrinsic operand, which the machine evaluates at [`Demand::Forced`], so the bare selection takes the member-body path that records; the tail is an ordinary application at the run's plain demand, which must come back folded.
+///
+/// While the hole was open this returned `0` — the machine took the recorded member body for the projection's plain value, beta-reduced the recursive call and ran the whole fold — where the recursive strategy returns `go(x[\01, \02, \03])` unopened. That was confirmed against the strategy itself, not against a reading of it: `curios-cert`'s `the_closed_machine_agrees_with_the_strategy` carries the same term and disagreed at the plain demand, which is also why that fixture now asks both demands rather than the forced one alone.
+///
+/// The forced probe on the same term is the control, and it is what stops the fix from being a brick: answering a projection from its shape at *every* demand, or declining the machine for `rec` altogether, shuts the hole above and fails here, because the member's body still has to be stepped into when a value is what was asked for.
+#[test]
+fn a_forced_bare_selection_does_not_answer_a_plain_probe() {
+    let mut host = Host::new(1_000_000);
+    let (go, b, x) = (binder(0, "go"), binder(1, "b"), binder(6, "x"));
+    let (h, t, ih) = (binder(2, "h"), binder(3, "t"), binder(4, "ih"));
+
+    let body = Term::func(
+        [(b.clone(), bin_type())],
+        Term::bin_match_scoped(
+            Grain::X,
+            Term::free_var(&b),
+            motive(),
+            nat(0),
+            &h,
+            &t,
+            &ih,
+            Term::apply(Term::free_var(&go), [Term::free_var(&t)]),
+        ),
+    );
+    let group = [(
+        go.clone(),
+        Term::func_type([(b.clone(), bin_type())], nat_type()),
+        body,
+    )];
+
+    let Subterm::Rec(rec) = Term::unwrap_or_clone(Term::rec(
+        group,
+        Term::let_(
+            &x,
+            nat_type(),
+            Term::intrinsic(Intrinsic::nat_add(Term::free_var(&go), nat(1))),
+            Term::apply(Term::free_var(&go), [bytes(vec![1, 2, 3])]),
+        ),
+    )) else {
+        unreachable!("built as a rec")
+    };
+
+    let folded = reduce_closed(&mut host, unfold_rec(rec.clone()), Demand::Whnf)
+        .expect("weak-head reduction succeeds");
+
+    assert!(
+        matches!(&*folded, Subterm::Apply(apply) if apply.head.as_rec_proj().is_some()),
+        "a plain probe was served a forced value: {folded}"
+    );
+
+    // The same term at a demand for its value still computes one: the fix withholds the member's body from a plain probe, not from the eliminator.
+    assert_eq!(
+        reduce_closed(&mut host, unfold_rec(rec), Demand::Forced),
+        Ok(nat(0))
+    );
+
+    // The control, on the branch the fix touches rather than on a call that reaches the member through an application: a *bare* selection is the folded spelling at a plain demand and the member's value at a forced one. Answering a projection from its shape at every demand shuts the hole above and fails the second of these.
+    let v = binder(7, "v");
+    let Subterm::Rec(value_rec) = Term::unwrap_or_clone(Term::rec(
+        [(v.clone(), nat_type(), nat(5))],
+        Term::free_var(&v),
+    )) else {
+        unreachable!("built as a rec")
+    };
+    let selection = unfold_rec(value_rec);
+    assert!(
+        selection.as_rec_proj().is_some(),
+        "the tail is the selection"
+    );
+
+    assert_eq!(
+        reduce_closed(&mut host, selection.clone(), Demand::Whnf),
+        Ok(selection.clone())
+    );
+    assert_eq!(
+        reduce_closed(&mut host, selection, Demand::Forced),
+        Ok(nat(5))
+    );
+}
+
 /// The substitution positions catch: an argument whose evaluation errors falls back to its unreduced spelling, so a dead erroring argument costs nothing observable — exactly the deferral the hosts get by substituting unreduced. The demanded twin below is the control: the same error at a demanded position surfaces.
 #[test]
 fn a_dead_erroring_argument_defers_and_a_demanded_one_surfaces() {

@@ -284,22 +284,24 @@ impl Machine {
             eprintln!("eval depth={} {}", self.stack.len(), term);
         }
 
+        // A projection is the fixed point of `rec` unfolding: opening its tail yields the same term, so at a plain demand it *is* its own weak-head form.
+        //
+        // Decided from the shape, ahead of the memo, because a projection is the one key whose value differs by demand and the memo does not tag demands. The forced arm below records the member's body under the projection, so a run that forced a bare selection and then asked a plain demand for it — a `let` value at an intrinsic operand, then an ordinary call on the same member — was served that body, and the machine unfolded a recursive call the strategy leaves folded. The guard on [`Frame::Memo`] does not cover this: it tests the recorded *value* for a folded spelling, and here it is the *key* that is one.
+        if matches!(demand, Demand::Whnf) && term.as_rec_proj().is_some() {
+            return Ok(Step::Value(term));
+        }
+
         if let Some(value) = self.values.get(&term) {
             return Ok(Step::Value(value.clone()));
         }
 
-        // A projection is the fixed point of `rec` unfolding: opening its tail yields the same term, so it is its own weak-head form and only a demand for its value steps into the member's body. The forced body is remembered under the projection, so a recursive member's body is opened and eta-probed once per run rather than once per call.
-        if term.as_rec_proj().is_some() {
-            return match demand {
-                Demand::Whnf => Ok(Step::Value(term)),
-                Demand::Forced => {
-                    let (group, index) = term.as_rec_proj().expect("checked above");
-                    let body = group.member_body(index);
-                    let key = term.clone();
-                    self.push(host, Frame::Memo { key })?;
-                    Ok(Step::Eval(body, Demand::Forced))
-                }
-            };
+        // The forced demand steps into the member's body, and the value is remembered under the projection so a recursive member's body is opened and eta-probed once per run rather than once per call.
+        if let Some((group, index)) = term.as_rec_proj() {
+            let body = group.member_body(index);
+            let key = term.clone();
+            self.push(host, Frame::Memo { key })?;
+
+            return Ok(Step::Eval(body, Demand::Forced));
         }
 
         match Term::unwrap_or_clone(term) {
