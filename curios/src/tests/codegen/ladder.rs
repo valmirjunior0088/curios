@@ -12,11 +12,50 @@
 //!
 //! **The ladder existed for the length of three roadmap items before anything ran it.** These are real programs rather than fixtures precisely because the question is what idiomatic code costs, and a fixture written to be measured tends to answer a question nobody asked.
 
-use super::structural::{user_allocations, wat};
+use {
+    super::structural::{compile_raw, functions, user_allocations, wat},
+    curios_runtime::{ForeignBindings, MockHost, precompile, run_bytes},
+    curios_wasm::to_bytes,
+    std::time::Instant,
+};
 
-const PARSE_DIGITS: &str = include_str!("../../../../programs/parse_digits.crs");
-const PARSE_BINDLESS: &str = include_str!("../../../../programs/parse_bindless.crs");
-const PARSE_MANUAL: &str = include_str!("../../../../programs/parse_manual.crs");
+const PARSE_DIGITS: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../programs/parse_digits.crs"
+));
+const PARSE_BINDLESS: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../programs/parse_bindless.crs"
+));
+const PARSE_MANUAL: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../programs/parse_manual.crs"
+));
+const PARSE_MULTIBYTE: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../programs/parse_multibyte.crs"
+));
+
+const WALK_MIRROR_BASELINE: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../programs/walk_mirror_baseline.crs"
+));
+const WALK_MIRROR_FLAT_ACC: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../programs/walk_mirror_flat_acc.crs"
+));
+const WALK_MIRROR_HELD_SCAN: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../programs/walk_mirror_held_scan.crs"
+));
+const WALK_MIRROR_INLINE_STEP: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../programs/walk_mirror_inline_step.crs"
+));
+const WALK_MIRROR_INDEXED: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../programs/walk_mirror_indexed.crs"
+));
 
 /// Every static figure this attribution leans on, taken over the three programs above.
 ///
@@ -116,6 +155,19 @@ const PARSE_MANUAL: &str = include_str!("../../../../programs/parse_manual.crs")
 ///
 /// **The split between those six is unmeasured**, and dividing it needs one instrument each rather than another rung: removing the three allocations measures them, specializing `f` measures the call, and what remains is the scan.
 ///
+/// ## After the scan argument stopped being rebuilt (2026-08-16)
+///
+/// The `struct.new $tpl/4` row above was a spelling, not a compiler obligation. The cont arm passed `step(h, Scan/cont(rem, lo, hi))` with `sc` — the parameter holding exactly that value — in scope, and match refinement makes the two spellings definitionally equal, so `/std` now passes the held parameter at every such site: `fold`, `at`, `utf8/drop_width`, `utf8/count_scalars`, and their proof twins, which keeps function and proof unfolding in the same spelling. The kernel recertified the prelude over the change, and the walk, `len` and `slice` each lost a per-continuation-byte allocation at once.
+///
+/// The emitted fold body for `programs/parse_multibyte.crs` now holds five `struct.new $tpl/2`, no `struct.new $tpl/4`, three `call $bytes/slice`, three `call $bytes/read` and two `call_ref $clsr/2`, and the only arity-4 constructions left in that module are the two genuine transitions inside `/syn/Str/step` — [`returned_scan_constructions_live_in_step`] holds both facts. Timed **2026-08-17** with the native-binary protocol above, five runs each, `user` seconds:
+///
+/// | Program | before | after |
+/// | --- | --- | --- |
+/// | `parse_digits` at N = 1 000 000 | 0.90 0.89 0.89 0.89 0.89 | 0.91 0.91 1.07 0.91 0.91 |
+/// | `parse_multibyte` at N = 300 000 | 0.77 0.77 0.76 0.77 0.76 | 0.75 0.75 0.76 0.75 0.75 |
+///
+/// The digit control is unchanged within layout noise — its walk never enters the cont arm — and the multi-byte walk, 16 of whose 28 bytes are continuation bytes, gains about two percent. One heap construction per continuation byte is therefore worth about two percent of this walk, a calibration [`walk_mirror_attribution_measurements`] cross-checks from the outside.
+///
 /// ## The static half, and why it divides almost nothing
 ///
 /// ```text
@@ -163,6 +215,177 @@ fn string_walk_ladder_measurements() {
         walk.sort_unstable();
         for name in walk {
             println!("    {name}");
+        }
+    }
+}
+
+// -- the mirror family -------------------------------------------------------
+//
+// `programs/walk_mirror_*.crs` are five user-level mirrors of the fold's walk over the same multi-byte text: a faithful baseline, and one program per removed obligation — the accumulator tuple (`flat_acc`), the scan argument reconstruction (`held_scan`), the returned scan state (`inline_step`), and the suffix view (`indexed`). They exist because the fold's own obligations cannot be removed one at a time without the compiler capabilities this family is measuring the case for, and they are bounds rather than equivalents: each removal necessarily reshapes the arms around it, and the mirrors carry no validity witness.
+
+/// The module-wide counts the family's claims are stated over: arity-4 tuple constructions (the scan shape), arity-2 tuple constructions (the accumulator shape), rope-slice calls, and calls to the mirror's own `mstep`.
+fn mirror_counts(wat: &str) -> (usize, usize, usize, usize) {
+    let lines = |needle: &str| {
+        wat.lines()
+            .map(str::trim)
+            .filter(|line| line.starts_with(needle))
+            .count()
+    };
+    (
+        lines("struct.new $tpl/4"),
+        lines("struct.new $tpl/2"),
+        lines("call $bytes/slice"),
+        wat.lines()
+            .map(str::trim)
+            .filter(|line| line.starts_with("call $func/") && line.contains("mstep"))
+            .count(),
+    )
+}
+
+/// What each mirror removes, checked structurally. Only the held-scan pair is an exact isolation — one arity-4 construction gone and nothing else moved, the same one-token spelling change the `/std` sweep applied to the real fold. The other three rungs necessarily restructure the arms around their removal (a flattened accumulator forces one tail call per acc arm, an inlined step changes what the specializer sees), so their assertions are directional and their exact figures belong to the measurement below.
+#[test]
+fn walk_mirror_family_isolates_each_obligation() {
+    let baseline = mirror_counts(&wat(WALK_MIRROR_BASELINE));
+    let flat_acc = mirror_counts(&wat(WALK_MIRROR_FLAT_ACC));
+    let held_scan = mirror_counts(&wat(WALK_MIRROR_HELD_SCAN));
+    let inline_step = mirror_counts(&wat(WALK_MIRROR_INLINE_STEP));
+    let indexed = mirror_counts(&wat(WALK_MIRROR_INDEXED));
+
+    assert_eq!(
+        baseline.0 - held_scan.0,
+        1,
+        "held_scan removes exactly the reconstruction: baseline {baseline:?}, held_scan {held_scan:?}",
+    );
+    assert_eq!(
+        (held_scan.1, held_scan.2, held_scan.3),
+        (baseline.1, baseline.2, baseline.3),
+        "and nothing else moves: baseline {baseline:?}, held_scan {held_scan:?}",
+    );
+
+    assert!(
+        flat_acc.1 < baseline.1,
+        "flat_acc sheds accumulator constructions: baseline {baseline:?}, flat_acc {flat_acc:?}",
+    );
+    assert_eq!(
+        inline_step.3, 0,
+        "inline_step calls no step at all: {inline_step:?}",
+    );
+    assert!(
+        baseline.3 >= 3,
+        "the baseline pays a step call per arm: {baseline:?}",
+    );
+    assert!(
+        indexed.2 < baseline.2,
+        "indexed sheds the walk's slice calls: baseline {baseline:?}, indexed {indexed:?}",
+    );
+}
+
+/// Probe one of the four attributions: the returned scan state, tracked by where its construction lives. After the `/std` spelling sweep the only arity-4 tuple constructions in the multi-byte module are the two genuine state transitions inside `/syn/Str/step` — the fold, `at`, `utf8/drop_width` and `utf8/count_scalars` rebuilds are gone at the source. M1a moves these two to the caller's resume when `split_returns` becomes eligible on the step component, and M2 removes that caller-side reconstruction; this probe is the instrument that watches the move, so its assertions are exactly the ones those milestones flip.
+#[test]
+fn returned_scan_constructions_live_in_step() {
+    let wat = wat(PARSE_MULTIBYTE);
+    let split = functions(&wat);
+
+    let mut carriers = Vec::new();
+    for function in &split {
+        let count = function
+            .body
+            .lines()
+            .map(str::trim)
+            .filter(|line| line.starts_with("struct.new $tpl/4"))
+            .count();
+        if count > 0 {
+            carriers.push((function.name, count));
+        }
+    }
+    assert_eq!(
+        carriers.iter().map(|(_, count)| count).sum::<usize>(),
+        2,
+        "two genuine scan transitions: {carriers:?}",
+    );
+    assert!(
+        carriers
+            .iter()
+            .all(|(name, _)| name.contains("/syn/Str/step")),
+        "both live in step, none in its callers: {carriers:?}",
+    );
+
+    // The fold's per-character shape after the sweep, pinned so the campaign's milestones flip it deliberately: the accumulator constructions and the suffix view are M2's and M4's acceptance subjects.
+    let fold = split
+        .iter()
+        .find(|function| function.name.contains("$/std/Str/fold"))
+        .expect("the fold survives as a function in this module");
+    let in_fold = |needle: &str| {
+        fold.body
+            .lines()
+            .map(str::trim)
+            .filter(|line| line.starts_with(needle))
+            .count()
+    };
+    assert_eq!(in_fold("struct.new $tpl/4"), 0, "no scan rebuild");
+    assert_eq!(in_fold("struct.new $tpl/2"), 5, "four arms plus the seed");
+    assert_eq!(in_fold("call $bytes/slice"), 3, "the suffix view per arm");
+    assert_eq!(in_fold("call $bytes/read"), 3, "the byte read per arm");
+    assert_eq!(in_fold("call_ref $clsr/2"), 2, "the user's step closure");
+}
+
+/// The attribution measurement over the mirror family: static counts, raw-and-Binaryen agreement at a small input, and the recorded native timing protocol. Run explicitly:
+///
+/// ```sh
+/// cargo test --package curios --lib --all-features -- --ignored --nocapture walk_mirror_attribution_measurements
+/// ```
+///
+/// # The dynamic half, and how to retake it
+///
+/// Timings are taken over native binaries, same protocol as [`string_walk_ladder_measurements`]; the in-process route was tried and rejected, because the debug-built runtime executes the same modules fourteen to forty times slower than the native binaries — the GC libcalls compile at opt-level zero — which overweights exactly the allocation shares this family exists to divide.
+///
+/// ```sh
+/// make curios
+/// ./target/release/curios compile programs/walk_mirror_baseline.crs -o /tmp/wm-baseline    # and the other four
+/// echo 300000 | /usr/bin/time -f "%U" /tmp/wm-baseline                                    # five runs each
+/// ```
+///
+/// # What it last measured
+///
+/// Taken **2026-08-17**, native binaries, Linux, N = 300 000, five runs each, `user` seconds:
+///
+/// | Rung | `user` | Isolates | Reading |
+/// | --- | --- | --- | --- |
+/// | `baseline` | 0.76 0.76 0.84 0.73 0.71 | — | within noise of `parse_multibyte`'s 0.75–0.76, so the mirror calibrates against the real fold |
+/// | `flat_acc` | 0.62 0.60 0.53 0.59 0.65 | the accumulator tuple | roughly a fifth of the walk |
+/// | `held_scan` | 0.69 0.68 0.75 0.67 0.66 | the scan argument reconstruction | roughly 7% here; the real fold's own sweep measured ~2%, and the real figure is the sweep's — the mirror's smaller step inlines differently |
+/// | `inline_step` | 0.57 0.58 0.74 0.64 0.59 | the returned scan state and its call | roughly a fifth, read as a bound: inlining also deduplicates a range test |
+/// | `indexed` | 1.22 1.22 1.19 1.23 1.01 | nothing — a negative result | `Bytes/get`'s checked `Option` path costs more than the suffix view it replaces, so this rung cannot attribute the suffix view; M4's own transformation is that obligation's only honest instrument |
+///
+/// The two shares this family does measure — the accumulator and the returned scan — are each around twenty percent of the walk, which is the yield evidence M2 and M1a proceed on.
+#[test]
+#[ignore = "measurement: attributes the walk's obligations rather than asserting"]
+fn walk_mirror_attribution_measurements() {
+    let input = "2000";
+    let mut agreed = None;
+    for (label, source) in [
+        ("baseline", WALK_MIRROR_BASELINE),
+        ("flat_acc", WALK_MIRROR_FLAT_ACC),
+        ("held_scan", WALK_MIRROR_HELD_SCAN),
+        ("inline_step", WALK_MIRROR_INLINE_STEP),
+        ("indexed", WALK_MIRROR_INDEXED),
+    ] {
+        let module = compile_raw(source);
+        println!("{label:12} {:?} (tpl4, tpl2, slice, mstep calls)", {
+            let printed = module.to_string();
+            mirror_counts(&printed)
+        });
+        let raw = precompile(&to_bytes(&module)).expect("raw module precompiles");
+        let optimized = crate::to_cwasm(&module).expect("binaryen path precompiles");
+        for (kind, cwasm) in [("raw", &raw), ("binaryen", &optimized)] {
+            let (system, io) = MockHost::builder().stdin_lines([input]).build();
+            let start = Instant::now();
+            run_bytes(cwasm, system, ForeignBindings::empty()).expect("mirror executes");
+            let elapsed = start.elapsed().as_secs_f64();
+            let printed = String::from_utf8_lossy(&io.output()).trim().to_string();
+            println!("{label:12} {kind:9} {elapsed:.3}s prints {printed}");
+            let agreed = agreed.get_or_insert_with(|| printed.clone());
+            assert_eq!(*agreed, printed, "{label} disagrees with the family");
         }
     }
 }

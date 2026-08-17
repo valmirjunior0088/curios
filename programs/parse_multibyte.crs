@@ -1,0 +1,28 @@
+-- Fold a mixed-width UTF-8 string N times, summing code points mod 1000003.
+-- The digit-parsing rungs never leave the ASCII arm of `/std/Str/fold`, so the two `Scan` obligations — the scan state returned by `/syn/Str/step` and the argument reconstruction in the `cont` arm — execute zero times there. This fixture walks 1-, 2-, 3- and 4-byte characters so those obligations run once per continuation byte and their shares are measurable rather than absent.
+-- The text is derived from stdin rather than written as a literal, so closed-term evaluation cannot fold the walk away.
+-- N is read from stdin so the loop survives constant folding; output stays bounded well inside i31.
+use /std/{Str, Char, Nat, Option, Io};
+
+rec loop(k: Nat, text: Str, acc: Nat) -> Nat =
+    match k: (_) => Nat
+    | 0 => acc
+    | m + 1 => loop(m, text, (acc + Str/fold(text, 0, (c, a) => a + Char/to_nat(c))) % 1000003)
+    end;
+
+let total(n: Nat) -> Nat =
+    loop(n, Str/concat(Nat/to_str(n), "é→𝄞é→𝄞"), 0);
+
+let input = /std/read()!;
+match input: (_) => Io({})
+| some(bytes) =>
+    match Str/of_bytes(bytes): (_) => Io({})
+    | some(s) =>
+        match Nat/of_str(Str/trim(s)): (_) => Io({})
+        | some(n) => /std/print(Str/concat(Nat/to_str(total(n)), "\n"))
+        | none() => /std/print("bad input\n")
+        end
+    | none() => /std/print("invalid utf-8\n")
+    end
+| none() => /std/print("no input\n")
+end

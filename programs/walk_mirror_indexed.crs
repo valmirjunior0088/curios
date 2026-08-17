@@ -1,0 +1,111 @@
+-- The suffix view removed from the baseline mirror: the walk indexes the original bytes instead of consuming suffixes.
+-- One of five mirror programs attributing `/std/Str/fold`'s allocation obligations; the family is documented in `curios/src/tests/codegen/ladder.rs` and every member prints the same sum for the same input.
+-- N is read from stdin so the loop survives constant folding; output stays bounded well inside i31.
+use /std/{Str, Nat, Byte, Bytes, Bool, Option, Io};
+
+induct MClass: Type
+| ascii()
+| lead(count: Nat, lo: Nat, hi: Nat, payload: Nat)
+| bad()
+end
+
+induct MScan: Type
+| lead()
+| cont(remaining: Nat, lo: Nat, hi: Nat)
+| bad()
+end
+
+let mclassify(c: Byte) -> MClass =
+    let n = Byte/to_nat(c);
+    choose
+    | Nat/in_range(n, 0x0, 0x7F) => MClass/ascii()
+    | Nat/in_range(n, 0xC2, 0xDF) => MClass/lead(1, 0x80, 0xBF, n - 0xC0)
+    | Nat/in_range(n, 0xE0, 0xEF) =>
+        let lo = choose | n == 0xE0 => 0xA0 | _ => 0x80 end;
+        let hi = choose | n == 0xED => 0x9F | _ => 0xBF end;
+        MClass/lead(2, lo, hi, n - 0xE0)
+    | Nat/in_range(n, 0xF0, 0xF4) =>
+        let lo = choose | n == 0xF0 => 0x90 | _ => 0x80 end;
+        let hi = choose | n == 0xF4 => 0x8F | _ => 0xBF end;
+        MClass/lead(3, lo, hi, n - 0xF0)
+    | _ => MClass/bad()
+    end;
+
+let mstep(c: Byte, s: MScan) -> MScan =
+    let n = Byte/to_nat(c);
+    match s
+    | bad() => MScan/bad()
+    | cont(rem, lo, hi) =>
+        choose
+        | Bool/not(Nat/in_range(n, lo, hi)) => MScan/bad()
+        | rem == 1 => MScan/lead()
+        | _ => MScan/cont(rem - 1, 0x80, 0xBF)
+        end
+    | lead() =>
+        match mclassify(c)
+        | ascii() => MScan/lead()
+        | lead(cont, lo, hi, _) => MScan/cont(cont, lo, hi)
+        | bad() => MScan/bad()
+        end
+    end;
+
+rec walk4(b: Bytes, i: Nat, remaining: Nat, sc: MScan, acc: {Nat, Nat}) -> {Nat, Nat} =
+    match remaining: (_) => {Nat, Nat}
+    | 0 => acc
+    | m + 1 =>
+        match Bytes/get(b, i): (_) => {Nat, Nat}
+        | some(h) =>
+            match sc: (_) => {Nat, Nat}
+            | lead() =>
+                walk4(
+                    b,
+                    i + 1,
+                    m,
+                    mstep(h, MScan/lead()),
+                    match mclassify(h): (_) => {Nat, Nat}
+                    | ascii() => ((acc.0 + Byte/to_nat(h)) % 1000003, 0)
+                    | lead(_, _, _, payload) => (acc.0, payload)
+                    | bad() => acc
+                    end)
+            | cont(rem, lo, hi) =>
+                let partial = acc.1 * 0x40 + (Byte/to_nat(h) - 0x80);
+                walk4(
+                    b,
+                    i + 1,
+                    m,
+                    mstep(h, MScan/cont(rem, lo, hi)),
+                    match rem == 1: (_) => {Nat, Nat}
+                    | true => ((acc.0 + partial) % 1000003, 0)
+                    | false => (acc.0, partial)
+                    end)
+            | bad() => walk4(b, i + 1, m, mstep(h, MScan/bad()), acc)
+            end
+        | none() => acc
+        end
+    end;
+
+let text_of(n: Nat) -> Bytes =
+    Str/to_bytes(Str/concat(Nat/to_str(n), "é→𝄞é→𝄞"));
+
+rec iterate(k: Nat, b: Bytes, acc: Nat) -> Nat =
+    match k: (_) => Nat
+    | 0 => acc
+    | m + 1 => iterate(m, b, (acc + walk4(b, 0, Bytes/len(b), MScan/lead(), (0, 0)).0) % 1000003)
+    end;
+
+let total(n: Nat) -> Nat =
+    iterate(n, text_of(n), 0);
+
+let input = /std/read()!;
+match input: (_) => Io({})
+| some(bytes) =>
+    match Str/of_bytes(bytes): (_) => Io({})
+    | some(s) =>
+        match Nat/of_str(Str/trim(s)): (_) => Io({})
+        | some(n) => /std/print(Str/concat(Nat/to_str(total(n)), "\n"))
+        | none() => /std/print("bad input\n")
+        end
+    | none() => /std/print("invalid utf-8\n")
+    end
+| none() => /std/print("no input\n")
+end

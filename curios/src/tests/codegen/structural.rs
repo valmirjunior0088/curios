@@ -173,7 +173,7 @@ const STRING_WALK: &str = r#"
 // -- helpers ----------------------------------------------------------------
 
 /// Compile `source` (no external modules) to the raw, pre-Binaryen wasm module. The returned `.0` of `compile_entrypoint` is the module `into_wasm` produces; Binaryen only runs later, in `crate::to_cwasm`.
-fn compile_raw(source: &str) -> Module {
+pub(super) fn compile_raw(source: &str) -> Module {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
 
     let (module, _foreigns) = compile_with_prelude(
@@ -221,9 +221,9 @@ fn user_functions_with<'a>(functions: &'a [Function<'a>], needle: &str) -> Vec<&
 }
 
 /// One emitted function: its `$name` and full text.
-struct Function<'a> {
-    name: &'a str,
-    body: &'a str,
+pub(super) struct Function<'a> {
+    pub(super) name: &'a str,
+    pub(super) body: &'a str,
 }
 
 impl Function<'_> {
@@ -234,7 +234,7 @@ impl Function<'_> {
 }
 
 /// Split the module WAT into its emitted functions. Each starts at a `    (func ` line (module indent); its text runs to the next one. Module items after the last function (exports, `$start`) never open a `    (func ` line, so they ride along on the final entry without introducing calls or refs of their own.
-fn functions(wat: &str) -> Vec<Function<'_>> {
+pub(super) fn functions(wat: &str) -> Vec<Function<'_>> {
     const MARKER: &str = "\n    (func ";
     let mut starts = Vec::new();
     let mut cursor = 0;

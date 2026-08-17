@@ -35,7 +35,7 @@ pub rec drop_width(n: Nat, s: Scan, b: Bytes) -> Nat =
     | x[h, ..t] =>
         match s
         | lead() => match n | 0 => 0 | pred + 1 => 1 + drop_width(pred, step(h, Scan/lead()), t) end
-        | cont(rem, lo, hi) => 1 + drop_width(n, step(h, Scan/cont(rem, lo, hi)), t)
+        | cont(rem, lo, hi) => 1 + drop_width(n, step(h, s), t)
         | bad() => 1 + drop_width(n, step(h, Scan/bad()), t)
         end
     end;
@@ -51,7 +51,7 @@ pub rec drop_width_within(n: Nat, s: Scan, b: Bytes) -> Nat/Le(drop_width(n, s, 
             | 0 => True/qed()
             | pred + 1 => drop_width_within(pred, step(h, Scan/lead()), t)
             end
-        | cont(rem, lo, hi) => drop_width_within(n, step(h, Scan/cont(rem, lo, hi)), t)
+        | cont(rem, lo, hi) => drop_width_within(n, step(h, s), t)
         | bad() => drop_width_within(n, step(h, Scan/bad()), t)
         end
     end;
@@ -73,7 +73,7 @@ pub rec drop_valid(
             end
         end
     | cont(rem, lo, hi) =>
-        match d | more(c, st, t, rest) => drop_valid(n, step(c, Scan/cont(rem, lo, hi)), rest) end
+        match d | more(c, st, t, rest) => drop_valid(n, step(c, s), rest) end
     | bad() => match d | more(c, st, t, rest) => drop_valid(n, step(c, Scan/bad()), rest) end
     end;
 
@@ -112,10 +112,10 @@ pub rec take_valid(
                 Bytes/slice(
                     t,
                     0,
-                    drop_width(n, step(c, Scan/cont(rem, lo, hi)), t),
+                    drop_width(n, step(c, s), t),
                     @True/qed(),
-                    @drop_width_within(n, step(c, Scan/cont(rem, lo, hi)), t)),
-                take_valid(n, step(c, Scan/cont(rem, lo, hi)), rest))
+                    @drop_width_within(n, step(c, s), t)),
+                take_valid(n, step(c, s), rest))
         end
     | bad() =>
         match d
@@ -218,7 +218,7 @@ pub rec count_scalars(s: Scan, b: Bytes) -> Nat =
     | x[h, ..t] =>
         match s
         | lead() => count_scalars(step(h, Scan/lead()), t) + 1
-        | cont(rem, lo, hi) => count_scalars(step(h, Scan/cont(rem, lo, hi)), t)
+        | cont(rem, lo, hi) => count_scalars(step(h, s), t)
         | bad() => count_scalars(step(h, Scan/bad()), t)
         end
     end;
