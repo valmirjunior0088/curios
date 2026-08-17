@@ -1,5 +1,5 @@
 use {
-    super::split_parameters,
+    super::{split_parameters, split_workers},
     crate::{
         CpsAtom, CpsCallee, CpsContId, CpsContinuation, CpsEdge, CpsFunId, CpsFunction,
         CpsIntrinsicOp, CpsLiteral, CpsModule, CpsNode, CpsValueExpr, CpsValueId, FieldGroup,
@@ -471,11 +471,208 @@ fn a_loop_carried_variant_erases_through_the_chain() {
     );
 }
 
+/// A known function whose variant argument is *itself* a merged flow — `Handle/Read`'s three constructors joining at a `choose` before the call, which is where this fixture comes from.
+fn merged_argument_module() -> (CpsModule, CpsFunId, CpsValueId) {
+    let mut module = CpsModule::default();
+    let callee_param = module.add_value(Some("callee/param".into()));
+    let callee_read = module.add_value(Some("callee/read".into()));
+    let callee = module.reserve_function();
+    let callee_ret = module.reserve_continuation();
+
+    // callee(r): x = r.0; return x
+    let callee_return = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        target: callee_ret,
+        args: vec![CpsAtom::Value(callee_read)],
+    }));
+    let callee_body = module.add_node(CpsNode::LetIntrinsic {
+        result: callee_read,
+        op: CpsIntrinsicOp::TplGet(0),
+        args: vec![CpsAtom::Value(callee_param)],
+        next: callee_return,
+    });
+    module.define_function(
+        callee,
+        CpsFunction {
+            debug_name: Some("callee".into()),
+            params: vec![callee_param],
+            return_cont: callee_ret,
+            body: callee_body,
+        },
+    );
+
+    let narrow = module.add_value(Some("narrow".into()));
+    let wide = module.add_value(Some("wide".into()));
+    let merged = module.add_value(Some("merged".into()));
+    let received = module.add_value(Some("received".into()));
+    let scrutinee = module.add_value(Some("scrutinee".into()));
+    let caller = module.reserve_function();
+    let caller_ret = module.reserve_continuation();
+    let join = module.reserve_continuation();
+    let resume = module.reserve_continuation();
+
+    let done = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        target: caller_ret,
+        args: vec![CpsAtom::Value(received)],
+    }));
+    module.define_continuation(
+        resume,
+        CpsContinuation {
+            debug_name: Some("resume".into()),
+            params: vec![received],
+            body: done,
+        },
+    );
+
+    // join(merged): callee(merged) -> resume
+    let call = module.add_node(CpsNode::ApplyFun {
+        callee: CpsCallee::Known(callee),
+        args: vec![CpsAtom::Value(merged)],
+        return_to: resume,
+    });
+    module.define_continuation(
+        join,
+        CpsContinuation {
+            debug_name: Some("join".into()),
+            params: vec![merged],
+            body: call,
+        },
+    );
+
+    // caller(scrutinee): narrow = (1); wide = (0, 5); switch scrutinee { 0 => join(wide), _ => join(narrow) }
+    let pick = module.add_node(CpsNode::Switch {
+        scrutinee: CpsAtom::Value(scrutinee),
+        cases: [(
+            0,
+            CpsEdge {
+                target: join,
+                args: vec![CpsAtom::Value(wide)],
+            },
+        )]
+        .into(),
+        default: Some(CpsEdge {
+            target: join,
+            args: vec![CpsAtom::Value(narrow)],
+        }),
+    });
+    let build_wide = module.add_node(CpsNode::LetValue {
+        result: wide,
+        value: CpsValueExpr::Tuple(vec![
+            CpsAtom::Literal(CpsLiteral::Nat(0)),
+            CpsAtom::Literal(CpsLiteral::Nat(5)),
+        ]),
+        next: pick,
+    });
+    let build_narrow = module.add_node(CpsNode::LetValue {
+        result: narrow,
+        value: CpsValueExpr::Tuple(vec![CpsAtom::Literal(CpsLiteral::Nat(1))]),
+        next: build_wide,
+    });
+    let scope = module.add_node(CpsNode::LetCont {
+        continuations: vec![join, resume],
+        body: build_narrow,
+    });
+    let body = module.add_node(CpsNode::LetFun {
+        functions: vec![callee],
+        body: scope,
+    });
+    module.define_function(
+        caller,
+        CpsFunction {
+            debug_name: Some("caller".into()),
+            params: vec![scrutinee],
+            return_cont: caller_ret,
+            body,
+        },
+    );
+    module.set_entry(caller);
+    (module, callee, callee_param)
+}
+
+/// Every projection in `module` that reads a visible construction, paired with that construction's arity. A read past the arity is the miscompile a site-blind width would produce: `$tpl/n` extends `$tpl/(n-1)`, so the emitter casts a projection's operand to the tuple type of `index + 1` and a narrower object fails that cast at runtime rather than at build time.
+fn projections_within_bounds(module: &CpsModule) -> bool {
+    let built = module
+        .nodes()
+        .iter()
+        .flatten()
+        .filter_map(|node| match node {
+            CpsNode::LetValue {
+                result,
+                value: CpsValueExpr::Tuple(atoms),
+                ..
+            } => Some((*result, atoms.len())),
+            _ => None,
+        })
+        .collect::<std::collections::BTreeMap<_, _>>();
+    module.nodes().iter().flatten().all(|node| match node {
+        CpsNode::LetIntrinsic {
+            op: CpsIntrinsicOp::TplGet(index),
+            args,
+            ..
+        } => match args.as_slice() {
+            [CpsAtom::Value(value)] => built.get(value).is_none_or(|arity| *index < *arity),
+            _ => true,
+        },
+        _ => true,
+    })
+}
+
+/// A call site whose argument merges two widths cannot be taken apart there, because no fixed number of projections is right on both paths — and the narrow one would be read past its end.
+///
+/// **This is a regression fixture with a runtime failure behind it.** Splitting at the region's widest width and projecting every edge at that width compiled cleanly, verified cleanly, and trapped `programs`-level `Handle/Read` handling at run time, where `eof()` rides a one-tuple beside `chunk(b)`'s two. The decline is not permanent: the merging join is a region of its own, and once it is split the call's argument is a materialization of one settled width.
+#[test]
+fn a_call_whose_argument_merges_widths_is_declined_until_the_merge_is_split() {
+    let (mut module, callee, param) = merged_argument_module();
+    module.verify().expect("the fixture is well-formed");
+    assert!(
+        !split_workers(&mut module),
+        "the argument's own flow merges a one-tuple and a two-tuple, so the call site cannot say how many fields to read",
+    );
+
+    // Splitting the merging join first settles the argument, and the worker split then follows.
+    assert!(split_parameters(&mut module));
+    assert!(
+        split_workers(&mut module),
+        "with the merge materialized at one width, the callee's parameter travels as fields",
+    );
+    assert_eq!(
+        module
+            .function(callee)
+            .expect("the callee survives")
+            .params
+            .len(),
+        2,
+    );
+    assert!(
+        !module
+            .function(callee)
+            .expect("the callee survives")
+            .params
+            .contains(&param),
+    );
+    module.verify().expect("both splits preserve the module");
+    assert!(
+        projections_within_bounds(&module),
+        "no projection reads past the construction it is applied to:\n{module}",
+    );
+}
+
+/// The whole chain over the same fixture: it optimizes, it verifies, and nothing reads past a construction it can see.
+#[test]
+fn a_merged_argument_optimizes_without_reading_past_a_construction() {
+    let (mut module, ..) = merged_argument_module();
+    optimize(&mut module);
+    module.verify().expect("the optimized module verifies");
+    assert!(
+        projections_within_bounds(&module),
+        "no projection reads past the construction it is applied to:\n{module}",
+    );
+}
+
 /// The verifier holds the record to the parameter list: a group past the parameters is an invariant break, not a curiosity.
 #[test]
 fn the_verifier_rejects_a_stale_record() {
     let (mut module, _, header, _) = loop_module();
-    module.record_field_group(header, FieldGroup { start: 0, width: 9 });
+    module.record_split(header, 0, 9);
     assert!(module.verify().is_err());
 }
 

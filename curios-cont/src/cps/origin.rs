@@ -35,12 +35,30 @@ impl Origin {
         Origin::Constructed(BTreeSet::from([width]))
     }
 
-    /// How wide a value of this origin travels: its widest construction, and `None` where no construction describes the flow at all.
+    /// How wide a *region* of this origin travels: its widest construction, and `None` where no construction describes the flow at all.
     pub(crate) fn width(&self) -> Option<usize> {
         match self {
             Origin::Constructed(widths) => widths.last().copied(),
             Origin::Unreached | Origin::Opaque => None,
         }
+    }
+
+    /// The one width every flow agrees on, and `None` where they do not.
+    ///
+    /// This is the fact a *site* may take a value apart by, and it is deliberately not [`Origin::width`]: a value the fixpoint reports at several widths is a variant whose constructor is undecided there, so projecting it at the widest reads past whatever the narrower constructor carries and traps. The widest is what a region travels at; the settled one is what an edge into that region may project.
+    pub(crate) fn settled_width(&self) -> Option<usize> {
+        match self {
+            Origin::Constructed(widths) => match widths.len() {
+                1 => widths.last().copied(),
+                _ => None,
+            },
+            Origin::Unreached | Origin::Opaque => None,
+        }
+    }
+
+    /// Whether a site may take a value of this origin apart — see [`Origin::settled_width`] for why a merged variant may not.
+    pub(crate) fn is_settled(&self) -> bool {
+        !matches!(self, Origin::Constructed(widths) if widths.len() > 1)
     }
 }
 

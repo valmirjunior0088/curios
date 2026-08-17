@@ -10,7 +10,7 @@ use super::{
     analysis::known_values,
     contify::contify_calls,
     cse::dedupe_intrinsics,
-    fields::{split_parameters, split_windows},
+    fields::{split_parameters, split_windows, split_workers},
     inline::{inline_known_calls, inline_single_use_continuations},
     protocol::split_returns,
     reachable::prune_unreachable,
@@ -73,6 +73,7 @@ pub fn optimize(module: &mut CpsModule) {
             | specialize_jump_patterns(module, &mut jump_clone_budget)
             | split_returns(module)
             | split_parameters(module)
+            | split_workers(module)
             | split_windows(module)
             | uncurry_returns(module)
             | dissolve_rec_init(module)

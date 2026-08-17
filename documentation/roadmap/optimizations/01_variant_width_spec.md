@@ -6,7 +6,18 @@ This specification defines the cost contract, evidence gate, design boundaries a
 
 It is the successor capability named twice by landed work: [A value costs when it is kept, not when it is named](../../design/toolchain/a-value-costs-when-it-is-kept-not-when-it-is-named.md) records the caller-side scan rebuild as a variant-width flow whose removal is "either variant-aware splitting with per-tag padding or a uniform-width variant lowering, each a measured decision not taken here", and [A variant collapses when nothing needs to distinguish it](../../design/toolchain/a-variant-collapses-when-nothing-needs-to-distinguish-it.md) records the split-return protocol's variant-width decline as the place the two decisions meet. This document adopts the first mechanism and gates the choice on M0's survey; the second is recorded below with its reinstate condition.
 
-Nothing is started.
+**M0, M1 and M3 have landed; M2 is refused on M0's measurement.** The spine ran `M0 → M1 → M3`: the census admitted the conditional annex and refused the return milestone, which is the gate working rather than the plan surviving.
+
+Where the code corrected this document, each correction traceable to the instrument that forced it:
+
+- **The discriminant is not a literal on every edge.** This specification says the origin analysis should learn that "a `Construct` of a known family is exact, and its discriminant is a literal on that edge". By the time a region reaches CPS the return protocol has already delivered constructors as fields, so a resume rebuilds the tuple with its tag in a *parameter*: seven of the scan region's seventeen constructions carry no literal at slot zero. An origin lattice demanding a tag-led construction would decline the one flow this campaign exists for. The fact merges construction *widths* and records no discriminant at all; constant discriminants are then found by the passes that already fold them.
+- **The class merge is degenerate, so no width budget was selected.** `curios-cont` types every tuple field `(ref null any)`, so there is exactly one representation class and the class-merged width is the plain maximum arity. The largest observed is 4 against a `PARAM_SPLIT_GROWTH_LIMIT` of 16; inventing a second budget beside it would have been a constant with no measurement behind it.
+- **M1's acceptance case needed M3.** The scan's flow class is *known-call*, not continuation-only. Splitting the loop parameter turned three per-arm rebuilds into one materialization at the loop's head, kept alive by `/syn/Str/step` taking the scan whole — a relocation, not a removal. Splitting `step`'s own parameter removed it, and the per-character path now allocates nothing.
+- **A site may take a source apart only at a width its own flows settle on.** Projecting every edge at the region's widest compiled, verified, and trapped at run time where `Handle/Read`'s `eof()` rides a one-tuple beside `chunk(b)`'s two. A source that is itself a merged variant is declined at that site until it is split as a region of its own.
+
+What M2 measured, and why it is refused, is below.
+
+Nothing further is planned; this specification retires with the design decision it produced.
 
 ## Cost contract
 
@@ -76,9 +87,9 @@ Evidence that would stop the campaign: the survey showing variant-width flows ra
 
 ## Milestones
 
-The spine is `M0 → M1 → M2`. M3 stands beside it as a conditional annex, presumed stopped until M0 argues otherwise.
+The spine as written was `M0 → M1 → M2`, with M3 a conditional annex presumed stopped. The spine as run was `M0 → M1 → M3`: the census admitted the annex and refused the return milestone.
 
-### M0 — Census extension
+### M0 — Census extension — **landed**
 
 - Extend the census with the variant flow classification above, over the corpus and `/std`, with multi-byte fixtures in the attribution set.
 
@@ -90,17 +101,21 @@ The spine is `M0 → M1 → M2`. M3 stands beside it as a conditional annex, pre
 
 - Measure the boxed-tag annex: how often an Immediate family's boxed constructor's tag field is written and never read, for the encoding decision's deferred item to consume.
 
-### M1 — Join parameters
+What it reported is recorded beside `aggregate_flow_census` itself. In summary: thirty-eight variant regions over fourteen programs but only three distinct shapes, the class merge degenerate at one representation class, the known-call gate non-empty and naming the scan, and the return gate three functions of which none is evidence for a return mechanism.
+
+### M1 — Join parameters — **landed**
 
 - Extend the recorded fields representation with the discriminant slot and roster, and give the verifier the rule that holds every incoming edge to the region's shape.
 
 - Teach the forward origin analysis variant origins, and split variant regions through continuation parameters and loop backedges — the central case, exactly as it was for products.
 
-- Acceptance case: the caller-side scan rebuild leaves the per-character path — the loop's scan parameter becomes a discriminant plus three slots, the interned-constant edges carry filler, and `returned_scan_is_delivered_as_fields_and_rebuilt_by_callers` flips to pin the new shape.
+- Acceptance case: the caller-side scan rebuild leaves the per-character path — the loop's scan parameter becomes a discriminant plus three slots, the interned-constant edges carry filler, and the ladder's scan probe flips to pin the new shape.
 
 - Evidence: the ladder's walk figures beside their probes, an encoding-level test pinning the recorded variant representation, and verifier tests for the new rule.
 
-### M2 — Returns
+**What landed instead of the first bullet.** No discriminant or roster is recorded, because none is needed: a `FieldGroup` already says which parameters are one former aggregate's fields, and the verifier already holds every incoming edge to the continuation's arity. What the fact had to gain was the *set of widths* reaching a parameter, which lives in the origin lattice rather than in the record. The third bullet landed as a relocation rather than a removal — see M3.
+
+### M2 — Returns — **refused on M0's measurement**
 
 - Add variant-width classes to `split_returns`: one discriminant slot plus the class-merged payload slots per tail-call component, per-edge filler, coordinated over the same undirected components the protocol already owns.
 
@@ -108,12 +123,16 @@ The spine is `M0 → M1 → M2`. M3 stands beside it as a conditional annex, pre
 
 - Acceptance case: an Immediate-family component splits — the exact shape the landed encoding created and the protocol declines today.
 
-- Evidence: the structural probe over the fixture, and a codegen probe pinning a split immediate-family return in the emitted module.
+**The population is three functions corpus-wide and none of them is evidence for the mechanism.** `/decode/1` and `/std/Nat/of_str/1` hand back `{Tuple(1), Tuple(2)}` and both *escape*, so the protocol declines them for the escaping reason and no width class would reach them. `/build` hands back `{Tuple(4), Bare}` — the immediate-family shape this milestone was written for — but a `binary_trees` node is stored in its parent, so its values rest: splitting that return would relocate the allocation into the caller rather than remove it, which is exactly the reboxing balance M3's own admission clause names as disqualifying. Building the mechanism would also cost more than the join-parameter one: an immediate family's at-rest encoding is not a tuple, so a resume would have to materialize it behind a switch on the discriminant, and nothing in the chain correlates that switch with the caller's own `IsImmediate` test.
 
-### M3 — Known-function variant workers (conditional annex)
+Reinstate condition: a variant-width return component whose values do not rest, reported by the census's return gate — which is the instrument to re-run, not a judgement to re-make.
+
+### M3 — Known-function variant workers — **landed, promoted into the spine**
 
 - Admission-gated on M0's known-call report, exactly as the product campaign's worker milestone was gated, and additionally on the reboxing balance its adopted GHC precedent names: a split whose callers keep rebuilding the box costs more than the box it removed.
 
 - Inherits the product worker rules wholesale — wrapper ABI for escaping callers, consistent rewrite of the recursive argument-flow component, tail-call preservation, growth bounds.
 
 - The spine neither waits for it nor depends on its verdict.
+
+**The last bullet is what the measurement overturned: the spine did depend on it.** M0's known-call report is non-empty and names the scan, so M1's own acceptance case — the rebuild leaving the per-character path — was M3's to finish. There is also no wrapper: the product rules assumed one for escaping callers, and refusing an escaping function outright is both narrower and sufficient, since a non-escaping function's every call site is a `Known` one the rewrite reaches.

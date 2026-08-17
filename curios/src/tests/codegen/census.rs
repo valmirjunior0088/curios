@@ -978,6 +978,8 @@ fn survey(label: &str, source: &str) -> Survey {
 /// **The uniform-width alternative's gate** reports both never-resting populations as the two flows above (`tags {0,1} width 2` ×14, `tags {0,2} width 4` ×12) — so padding at the door would be paid by no stored value in this corpus, but it would also buy nothing that in-flight splitting does not, since neither population rests either way.
 ///
 /// **The boxed-tag annex**, for the encoding decision's deferred item: 552 tag-led constructions, of which 429 are never read back at slot zero *within their own merged flow*. Read that as an upper bound rather than a count of dead tags — a construction that comes to rest and is discriminated after a reload is in no flow at all, and this instrument cannot see the read.
+///
+/// Retaken once the campaign had landed (same day): **12 variant regions, every one of them blocked.** The continuation-only and known-call classes are empty, which is the acceptance case stated as absence — every variant-width flow the corpus reaches now travels as fields. The survivors are the `(2, 3)` shape, blocked by parameters that receive call results and by an unknown call, and the buckets underneath fell with them: 573 blocked to 546 and 57 needs-workers to 28. The return gate is unchanged at three functions, which is the point of refusing that milestone rather than deferring it.
 #[test]
 #[ignore = "measurement: surveys the corpus rather than asserting"]
 fn aggregate_flow_census() {
@@ -1091,7 +1093,7 @@ fn aggregate_flow_census() {
 ///
 /// # What it last printed
 ///
-/// Taken **2026-08-17**, when the limit read 24: `/syn/Str/step` extent 37, `/syn/Str/classify` 52, `/std/Str/fold` 76. So specializing `step` per tag would clone 37 nodes against a budget of 24 — a refusal by less than a factor of two, confirming the budget rather than any rule is what declines it, and that raising the limit to admit `step` would also be admitting per-tag clones of everything else this size. Retaken after M1a and M2 (same day): step 30, classify 52, fold 70 — the split protocol and the fields split slimmed both walkers, and the refusal stands.
+/// Taken **2026-08-17**, when the limit read 24: `/syn/Str/step` extent 37, `/syn/Str/classify` 52, `/std/Str/fold` 76. So specializing `step` per tag would clone 37 nodes against a budget of 24 — a refusal by less than a factor of two, confirming the budget rather than any rule is what declines it, and that raising the limit to admit `step` would also be admitting per-tag clones of everything else this size. Retaken after M1a and M2 (same day): step 30, classify 52, fold 70 — the split protocol and the fields split slimmed both walkers, and the refusal stands. Retaken again after variant-width splitting (same day): step 26, classify 52, fold 63 — the refusal stands by a wider margin, and the reason it no longer matters is that the reconstruction the specializer was being weighed against is gone.
 #[test]
 #[ignore = "measurement: reports the extents the specializer's budget compares"]
 fn step_specialization_extent() {

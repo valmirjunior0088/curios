@@ -13,9 +13,10 @@ mod tests;
 
 use {
     super::{
-        CpsAtom, CpsCallee, CpsContId, CpsEdge, CpsIntrinsicOp, CpsLiteral, CpsModule, CpsNode,
-        CpsNodeId, CpsUseTarget, CpsValueExpr, CpsValueId, Demand, FieldGroup, Origin, demand_of,
-        demands, optimize::PARAM_SPLIT_GROWTH_LIMIT, origins, simplify::rewire_node,
+        CpsAtom, CpsCallee, CpsContId, CpsEdge, CpsFunId, CpsIntrinsicOp, CpsLiteral, CpsModule,
+        CpsNode, CpsNodeId, CpsUseTarget, CpsValueExpr, CpsValueId, Demand, Origin,
+        analysis::analyze_calls, demand_of, demands, optimize::PARAM_SPLIT_GROWTH_LIMIT, origins,
+        simplify::rewire_node,
     },
     curios_utilities::Grain,
     std::collections::{BTreeMap, BTreeSet},
@@ -29,12 +30,32 @@ struct Split {
     width: usize,
 }
 
+/// Whether a site may take `source` apart into fields.
+///
+/// A source the fixpoint reports at several widths is a variant whose constructor is undecided *there*, so no fixed number of projections is safe: the widest reads past a narrower constructor and traps, and the narrowest drops fields the wider one carries. Such a source is a region of its own, and a round that splits it first turns it into a materialization of one settled width — which is why this is a decline rather than a disqualification. The region's own parameter is the exception it looks like: by the time the edges are rewritten it names the head rebuild, whose width is the region's by construction.
+fn takeable(origins: &BTreeMap<CpsValueId, Origin>, param: CpsValueId, source: &CpsAtom) -> bool {
+    match source {
+        CpsAtom::Value(value) => {
+            *value == param || origins.get(value).is_none_or(Origin::is_settled)
+        }
+        CpsAtom::Fun(_) | CpsAtom::Literal(_) => false,
+    }
+}
+
 /// The first admissible split in deterministic order, if any.
 fn admit(module: &CpsModule, origins: &BTreeMap<CpsValueId, Origin>) -> Option<Split> {
     let demands = demands(module);
 
     // A resume's parameters are the call interface the return protocol owns, whatever their demand says.
     let resumes = resume_targets(module);
+
+    // Every edge into each continuation, so the per-position source check below is one pass rather than one per candidate parameter.
+    let mut incoming = BTreeMap::<CpsContId, Vec<&CpsEdge>>::new();
+    for (_, node) in module.nodes.iter_live() {
+        for edge in edges_of(node) {
+            incoming.entry(edge.target).or_default().push(edge);
+        }
+    }
 
     for (continuation, definition) in module.continuations.iter_live() {
         if resumes.contains(&continuation) {
@@ -59,6 +80,18 @@ fn admit(module: &CpsModule, origins: &BTreeMap<CpsValueId, Origin>) -> Option<S
                 continue;
             }
             if definition.params.len() - 1 + width > PARAM_SPLIT_GROWTH_LIMIT {
+                continue;
+            }
+            if !incoming
+                .get(&continuation)
+                .map_or(&[][..], Vec::as_slice)
+                .iter()
+                .all(|edge| {
+                    edge.args
+                        .get(position)
+                        .is_some_and(|atom| takeable(origins, param, atom))
+                })
+            {
                 continue;
             }
             return Some(Split {
@@ -96,24 +129,7 @@ pub(super) fn split_parameters(module: &mut CpsModule) -> bool {
         .params
         .splice(split.position..=split.position, fields.iter().copied());
     let body = definition.body;
-    module.record_field_group(
-        split.continuation,
-        FieldGroup {
-            start: split.position,
-            width: split.width,
-        },
-    );
-    // Existing groups after the spliced position widen their offsets by the net parameter growth.
-    let groups = module
-        .field_groups
-        .get_mut(&split.continuation)
-        .expect("the group was just recorded");
-    for group in groups.iter_mut() {
-        if group.start > split.position {
-            group.start += split.width - 1;
-        }
-    }
-    groups.sort_by_key(|group| group.start);
+    module.record_split(split.continuation, split.position, split.width);
 
     // The head rebuild: the aggregate reconstructed from its fields, standing in for the old parameter everywhere. It survives exactly where a whole-value use survives, and is the materialization the cost contract allows at such a boundary.
     let rebuilt = module.add_value(Some(format!("rebuilt/{}", split.continuation.index())));
@@ -152,10 +168,10 @@ pub(super) fn split_parameters(module: &mut CpsModule) -> bool {
                 unreachable!("a construction origin admits only value arguments");
             };
             let source = *source;
-            // How wide *this* edge's argument is, which is the region's width where every construction agrees and a narrower constructor's own arity where they do not. The head rebuild minted above is absent from the pre-rewrite facts and is the region's full width by construction; so is a value the fixpoint never reached, which only unreachable code can hold.
+            // How wide *this* edge's argument is: the one width its own flows settle on, admission having refused any edge whose source has no such width. The head rebuild minted above is absent from the pre-rewrite facts and is the region's full width by construction; so is a value the fixpoint never reached, which only unreachable code can hold.
             let carried = origins
                 .get(&source)
-                .and_then(Origin::width)
+                .and_then(Origin::settled_width)
                 .unwrap_or(split.width);
             let mut replacement = Vec::with_capacity(split.width);
             for index in 0..carried {
@@ -189,6 +205,153 @@ pub(super) fn split_parameters(module: &mut CpsModule) -> bool {
             );
         }
         module.nodes.set(carrier, node);
+    }
+
+    true
+}
+
+// -- known-function workers --------------------------------------------------
+//
+// The same rewrite one boundary over. A join parameter's split stops at a known call, because the callee takes the aggregate whole and the head rebuild has to materialize it — which is exactly where the UTF-8 scan's last per-character construction lives once the loop carries it as fields. Splitting the *callee's* parameter removes that boundary, and the census is what admits it: the known-call flow class is non-empty and names the scan.
+//
+// **There is no wrapper, because there are no unknown callers.** A worker/wrapper pair exists to keep a retained ABI for a caller the rewrite cannot see; an escaping function is refused outright here instead, so every call site is a `Known` one the rewrite reaches. That is a narrower mechanism than the precedent's and it is the whole of what the measurement asked for.
+//
+// **The width-two floor is a termination property, not tidiness** — the same one `split_returns` records. A continuation's split is stopped from repeating by the recorded `FieldGroup`; a function carries no such record, so what bounds it is growth: every admitted split adds at least one parameter and `PARAM_SPLIT_GROWTH_LIMIT` caps the total. A width-one split would add none and could be re-admitted forever.
+
+/// One admitted worker split: which parameter of which known function, and the width its flows travel at.
+struct Worker {
+    function: CpsFunId,
+    position: usize,
+    param: CpsValueId,
+    width: usize,
+}
+
+/// The first admissible worker split in deterministic order, if any.
+fn admit_worker(module: &CpsModule, origins: &BTreeMap<CpsValueId, Origin>) -> Option<Worker> {
+    let demands = demands(module);
+    let calls = analyze_calls(module);
+
+    for (function, definition) in module.functions.iter_live() {
+        // An escaping function is reached by callers this rewrite cannot see, and the module entry by the host, which is not rewritten with the module.
+        if calls.escaping.contains(&function) || module.entry() == Some(function) {
+            continue;
+        }
+        for (position, &param) in definition.params.iter().enumerate() {
+            let Some(width) = origins.get(&param).and_then(Origin::width) else {
+                continue;
+            };
+            let Demand::Projected(read) = demand_of(&demands, param) else {
+                continue;
+            };
+            if width < 2 || read.last().is_some_and(|&last| last >= width) {
+                continue;
+            }
+            if definition.params.len() - 1 + width > PARAM_SPLIT_GROWTH_LIMIT {
+                continue;
+            }
+            if !calls
+                .call_sites
+                .get(&function)
+                .map_or(&[][..], Vec::as_slice)
+                .iter()
+                .all(|site| match module.node(*site) {
+                    Some(CpsNode::ApplyFun { args, .. }) => args
+                        .get(position)
+                        .is_some_and(|atom| takeable(origins, param, atom)),
+                    _ => false,
+                })
+            {
+                continue;
+            }
+            return Some(Worker {
+                function,
+                position,
+                param,
+                width,
+            });
+        }
+    }
+    None
+}
+
+/// Split one admissible known function's parameter into its fields, and leave the cleanup to the chain — the same three local edits [`split_parameters`] performs, with call sites in place of edges.
+pub(super) fn split_workers(module: &mut CpsModule) -> bool {
+    let origins = origins(module);
+    let Some(worker) = admit_worker(module, &origins) else {
+        return false;
+    };
+
+    let fields = (0..worker.width)
+        .map(|index| module.add_value(Some(format!("worker/{}/{index}", worker.function.index()))))
+        .collect::<Vec<_>>();
+    let definition = module
+        .functions
+        .get_mut(worker.function)
+        .expect("admitted function is live");
+    definition
+        .params
+        .splice(worker.position..=worker.position, fields.iter().copied());
+    let body = definition.body;
+
+    // The head rebuild, standing in for the old parameter everywhere. Projection forwarding erases it wherever the body only reads fields, which the admitted demand guarantees it does.
+    let rebuilt = module.add_value(Some(format!("rebuilt/{}", worker.function.index())));
+    let head = module.add_node(CpsNode::LetValue {
+        result: rebuilt,
+        value: CpsValueExpr::Tuple(fields.iter().copied().map(CpsAtom::Value).collect()),
+        next: body,
+    });
+    module
+        .functions
+        .get_mut(worker.function)
+        .expect("admitted function is live")
+        .body = head;
+    module.replace_atom(CpsUseTarget::Value(worker.param), CpsAtom::Value(rebuilt));
+    module.values.remove(worker.param);
+
+    // Every call site projects its argument into fields above the call, filling what its own construction does not carry.
+    let callers = module
+        .nodes
+        .iter_live()
+        .filter(|(_, node)| {
+            matches!(
+                node,
+                CpsNode::ApplyFun { callee: CpsCallee::Known(callee), .. } if *callee == worker.function
+            )
+        })
+        .map(|(id, _)| id)
+        .collect::<Vec<_>>();
+    for caller in callers {
+        let mut node = module.node(caller).expect("caller is live").clone();
+        let CpsNode::ApplyFun { args, .. } = &mut node else {
+            unreachable!("the callers were selected as known applications");
+        };
+        let CpsAtom::Value(source) = &args[worker.position] else {
+            unreachable!("a construction origin admits only value arguments");
+        };
+        let source = *source;
+        let carried = origins
+            .get(&source)
+            .and_then(Origin::settled_width)
+            .unwrap_or(worker.width);
+        let mut inserted = Vec::new();
+        let mut replacement = Vec::with_capacity(worker.width);
+        for index in 0..carried {
+            let projection = module.add_value(Some(format!("worker/{}/{index}", caller.index())));
+            inserted.push(CpsNode::LetIntrinsic {
+                result: projection,
+                op: CpsIntrinsicOp::TplGet(index),
+                args: vec![CpsAtom::Value(source)],
+                next: caller,
+            });
+            replacement.push(CpsAtom::Value(projection));
+        }
+        replacement.resize(worker.width, CpsAtom::Literal(CpsLiteral::Nat(0)));
+        let CpsNode::ApplyFun { args, .. } = &mut node else {
+            unreachable!("the callers were selected as known applications");
+        };
+        args.splice(worker.position..=worker.position, replacement);
+        insert_above(module, caller, inserted);
+        module.nodes.set(caller, node);
     }
 
     true
@@ -463,13 +626,7 @@ pub(super) fn split_windows(module: &mut CpsModule) -> bool {
         definition
             .params
             .splice(position..=position, [base, offset, length]);
-        module.record_field_group(
-            continuation,
-            FieldGroup {
-                start: position,
-                width: 3,
-            },
-        );
+        module.record_split(continuation, position, 3);
         fields.insert(
             param,
             [

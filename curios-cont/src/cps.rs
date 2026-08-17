@@ -610,10 +610,17 @@ impl CpsModule {
         &self.field_groups
     }
 
-    /// Record that `continuation`'s parameters `start..start + width` are one former aggregate's fields. Groups are kept sorted by start; [`CpsModule::verify`] holds them to the parameter list.
-    pub fn record_field_group(&mut self, continuation: CpsContId, group: FieldGroup) {
+    /// Record that `continuation`'s parameter at `start` was spliced into `width` fields: the new group, *and* every group past it shifted by the parameters the splice added.
+    ///
+    /// Recording and shifting are one operation because they are one fact. They were two, and the shift lived in the one caller that had needed it so far — which left every other caller silently recording stale starts, reachable as soon as two parameters of one continuation were split in the same pass. Groups are kept sorted by start; [`CpsModule::verify`] holds them to the parameter list.
+    pub fn record_split(&mut self, continuation: CpsContId, start: usize, width: usize) {
         let groups = self.field_groups.entry(continuation).or_default();
-        groups.push(group);
+        for group in groups.iter_mut() {
+            if group.start > start {
+                group.start += width - 1;
+            }
+        }
+        groups.push(FieldGroup { start, width });
         groups.sort_by_key(|group| group.start);
     }
 
@@ -1724,9 +1731,26 @@ impl fmt::Display for CpsDisplayNode<'_> {
 #[cfg(test)]
 mod tests {
     use super::{
-        CpsAtom, CpsContinuation, CpsEdge, CpsFunId, CpsFunction, CpsIntrinsicOp, CpsLiteral,
-        CpsModule, CpsNode, CpsNodeId, CpsUseTarget, CpsValueExpr, CpsValueId,
+        CpsAtom, CpsContId, CpsContinuation, CpsEdge, CpsFunId, CpsFunction, CpsIntrinsicOp,
+        CpsLiteral, CpsModule, CpsNode, CpsNodeId, CpsUseTarget, CpsValueExpr, CpsValueId,
+        FieldGroup,
     };
+
+    /// Splitting a lower parameter after a higher one moves the higher group along: recording a start without shifting what follows it leaves a record the verifier reads as overlapping, which is how this was found.
+    #[test]
+    fn a_later_split_moves_every_group_past_it() {
+        let mut module = CpsModule::new();
+        let continuation = CpsContId(0);
+        module.record_split(continuation, 3, 3);
+        module.record_split(continuation, 1, 3);
+        assert_eq!(
+            module.field_groups().get(&continuation),
+            Some(&vec![
+                FieldGroup { start: 1, width: 3 },
+                FieldGroup { start: 5, width: 3 },
+            ]),
+        );
+    }
 
     fn minimal_module() -> CpsModule {
         let mut module = CpsModule::new();
