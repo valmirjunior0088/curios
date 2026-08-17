@@ -776,6 +776,8 @@ fn survey(label: &str, source: &str) -> Vec<Region> {
 /// - The suffix-view rope region is `[blocked]` with `{rope-get, rope-len, rope-slice}` consumers and one continuation also receiving an empty-`Bytes` literal beside whole originals — the `Empty`/`Whole`/`Proper` mixing M4's descriptor form exists to carry.
 /// - The needs-workers bucket — M3's admission gate — is owned by `/std/Async/resume_after/2`, `/std/Async/run_guards/1`, `/std/Async/serve/1/1`, `/std/Handle/write/1`, `io/bind`, and `main`; the scan state is *not* in it, for the shape reason above.
 /// - Reachable regions outside `/std` and `/syn` are owned by `io/bind` and the programs' own `main`s.
+///
+/// Retaken after M2 landed (same day): 681 regions — 574 blocked, 50 continuation-only, 57 needs-workers. Continuation scalar replacement dissolved about 170 regions corpus-wide, the fold accumulator's among them; what it left concentrates the surviving continuation-only candidates near the growth ceiling or behind arity mixing, and promotes some previously blocked flows into needs-workers as their continuation legs cleared.
 #[test]
 #[ignore = "measurement: surveys the corpus rather than asserting"]
 fn aggregate_flow_census() {
@@ -814,7 +816,7 @@ fn aggregate_flow_census() {
 ///
 /// # What it last printed
 ///
-/// Taken **2026-08-17**, when the limit read 24: `/syn/Str/step` extent 37, `/syn/Str/classify` 52, `/std/Str/fold` 76. So specializing `step` per tag would clone 37 nodes against a budget of 24 — a refusal by less than a factor of two, confirming the budget rather than any rule is what declines it, and that raising the limit to admit `step` would also be admitting per-tag clones of everything else this size.
+/// Taken **2026-08-17**, when the limit read 24: `/syn/Str/step` extent 37, `/syn/Str/classify` 52, `/std/Str/fold` 76. So specializing `step` per tag would clone 37 nodes against a budget of 24 — a refusal by less than a factor of two, confirming the budget rather than any rule is what declines it, and that raising the limit to admit `step` would also be admitting per-tag clones of everything else this size. Retaken after M1a and M2 (same day): step 30, classify 52, fold 70 — the split protocol and the fields split slimmed both walkers, and the refusal stands.
 #[test]
 #[ignore = "measurement: reports the extents the specializer's budget compares"]
 fn step_specialization_extent() {
@@ -840,7 +842,7 @@ fn step_specialization_extent() {
     }
 }
 
-/// Pins the census machinery to the shape it exists to see: the `/std/Str/fold` accumulator — its arm constructions, its seed, and the contified loop's parameter — is surveyed as one continuation-only region. The owner is `main` rather than the fold, because a single-call-site fold is inlined before the survey runs.
+/// Pins the census machinery to the shapes the string walk still carries. The `/std/Str/fold` accumulator region this test originally pinned — five arity-2 constructions meeting the contified loop's parameter — is deliberately *absent* now: continuation scalar replacement (M2) dissolves it before the survey runs, which is the campaign's acceptance echoed by its own instrument. What remains, and what M4 flips next, is the suffix-view rope region: slice results circulating by continuation transfer under the window-read consumer set.
 #[test]
 fn census_surveys_the_fold_accumulator_region() {
     let source = r#"
@@ -853,19 +855,26 @@ fn census_surveys_the_fold_accumulator_region() {
     let module = cont_optm_module(source);
     let census = Census::of(&module);
     let regions = census.regions();
-    let fold = regions
+
+    let accumulator = regions.iter().find(|region| {
+        region.tuple_sites.len() >= 2
+            && region.arities == BTreeSet::from([2])
+            && !region.params.is_empty()
+            && region.classes.contains("continuation-transfer")
+            && region.classes.contains("projection")
+    });
+    assert!(
+        accumulator.is_none(),
+        "the accumulator region dissolved into fields before the survey: {accumulator:#?}",
+    );
+
+    // The reads themselves land on a further alias in this program's grouping, so the pin is the region's existence and its travel, not its consumer set.
+    regions
         .iter()
         .find(|region| {
-            region.tuple_sites.len() >= 2
-                && region.arities == BTreeSet::from([2])
+            region.slice_sites.len() >= 2
                 && !region.params.is_empty()
                 && region.classes.contains("continuation-transfer")
-                && region.classes.contains("projection")
         })
-        .unwrap_or_else(|| panic!("the fold accumulator region is surveyed; got {regions:#?}"));
-    assert_eq!(
-        fold.bucket(),
-        "continuation-only",
-        "the accumulator is reachable by continuation splitting alone: {fold:#?}",
-    );
+        .unwrap_or_else(|| panic!("the suffix-view rope region is surveyed; got {regions:#?}"));
 }

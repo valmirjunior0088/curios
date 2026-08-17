@@ -181,6 +181,17 @@ const WALK_MIRROR_INDEXED: &str = include_str!(concat!(
 ///
 /// The `check` rework in the same change also removes a closure per validated byte from every `of_bytes`: the validator was an induction returning a function of the scan, and now threads the scan by recursion exactly as the fold does.
 ///
+/// ## After the accumulator crossed as fields (M2, 2026-08-17)
+///
+/// Continuation scalar replacement threads the `{A, Nat}` accumulator through the contified loop as two field parameters, seed included — the emitted fold body holds no `struct.new $tpl/2` at all — and with it the M1a reboxing recedes on every path that stopped carrying the tuple:
+///
+/// | Program | after M1a | after M2 |
+/// | --- | --- | --- |
+/// | `parse_digits` at N = 1 000 000 | 0.96 ×5 | 0.88 0.88 0.87 0.87 0.87 |
+/// | `parse_multibyte` at N = 300 000 | 0.78 0.77 0.77 0.77 0.78 | 0.65 0.65 0.68 0.65 0.65 |
+///
+/// The digit walk lands *below* every figure this ladder has recorded for it, and the multi-byte walk gains about thirteen percent against its pre-campaign baseline. The scan rebuild remains — three arity-4 constructions, one per arm — and for a recorded reason: the loop's scan parameter mixes arity-1 interned constants with the resumes' arity-4 rebuilds, the variant-width shape no exact product describes, so its removal awaits either variant-aware splitting or a uniform-width variant lowering, each a measured decision the value-lifetime spec records. The suffix view is M4's, and it is now the walk's dominant remaining obligation.
+///
 /// ## The static half, and why it divides almost nothing
 ///
 /// ```text
@@ -255,7 +266,7 @@ fn mirror_counts(wat: &str) -> (usize, usize, usize, usize) {
     )
 }
 
-/// What each mirror removes, checked structurally. Only the held-scan pair is an exact isolation — one arity-4 construction gone and nothing else moved, the same one-token spelling change the `/std` sweep applied to the real fold. The other three rungs necessarily restructure the arms around their removal (a flattened accumulator forces one tail call per acc arm, an inlined step changes what the specializer sees), so their assertions are directional and their exact figures belong to the measurement below.
+/// What the family guards changed when the compiler caught up with it (M2, 2026-08-17). The two allocation rungs were built to isolate obligations by *removing* them at the source — and continuation scalar replacement now erases those obligations from the baseline itself, so `held_scan` compiles to counts identical to the baseline's and `flat_acc` no longer saves a single accumulator construction. That equality is the campaign's headliner delivered for these spellings — naming the value stopped costing — and this guard now holds it. The two call rungs keep their spelling-structural facts: inlining the step removes its calls, and indexing removes the walk's slices.
 #[test]
 fn walk_mirror_family_isolates_each_obligation() {
     let baseline = mirror_counts(&wat(WALK_MIRROR_BASELINE));
@@ -265,19 +276,12 @@ fn walk_mirror_family_isolates_each_obligation() {
     let indexed = mirror_counts(&wat(WALK_MIRROR_INDEXED));
 
     assert_eq!(
-        baseline.0 - held_scan.0,
-        1,
-        "held_scan removes exactly the reconstruction: baseline {baseline:?}, held_scan {held_scan:?}",
+        held_scan, baseline,
+        "naming the reconstruction no longer costs: the spellings compile identically",
     );
-    assert_eq!(
-        (held_scan.1, held_scan.2, held_scan.3),
-        (baseline.1, baseline.2, baseline.3),
-        "and nothing else moves: baseline {baseline:?}, held_scan {held_scan:?}",
-    );
-
     assert!(
-        flat_acc.1 < baseline.1,
-        "flat_acc sheds accumulator constructions: baseline {baseline:?}, flat_acc {flat_acc:?}",
+        baseline.1 <= flat_acc.1,
+        "the idiomatic accumulator pays no more tuples than the hand-flattened spelling: baseline {baseline:?}, flat_acc {flat_acc:?}",
     );
     assert_eq!(
         inline_step.3, 0,
@@ -319,7 +323,7 @@ fn returned_scan_is_delivered_as_fields_and_rebuilt_by_callers() {
         "and step constructs no scan of its own",
     );
 
-    // The fold's per-character shape after M1a, pinned so the campaign's milestones flip it deliberately: the scan rebuild and the accumulator constructions are M2's acceptance subjects, the suffix view M4's.
+    // The fold's per-character shape after M2, pinned so the campaign's milestones flip it deliberately. The accumulator is gone: continuation scalar replacement threads `{A, Nat}` as fields through the contified loop, seed included. The scan rebuild remains, and for a recorded reason rather than a gap: the loop's scan parameter mixes arity-1 interned constants with the resumes' arity-4 rebuilds — the variant-width shape no exact product describes — so removing it awaits either variant-aware splitting or a uniform-width variant lowering, each a measured decision the spec records. The suffix view is M4's.
     let fold = split
         .iter()
         .find(|function| function.name.contains("$/std/Str/fold"))
@@ -328,9 +332,13 @@ fn returned_scan_is_delivered_as_fields_and_rebuilt_by_callers() {
     assert_eq!(
         in_fold("struct.new $tpl/4"),
         3,
-        "each arm's resume rebuilds the scan it passes back — relocated, not removed",
+        "each arm's resume still rebuilds the variant-width scan it passes back",
     );
-    assert_eq!(in_fold("struct.new $tpl/2"), 5, "four arms plus the seed");
+    assert_eq!(
+        in_fold("struct.new $tpl/2"),
+        0,
+        "the accumulator travels as fields on every path, seed included",
+    );
     assert_eq!(in_fold("call $bytes/slice"), 3, "the suffix view per arm");
     assert_eq!(in_fold("call $bytes/read"), 3, "the byte read per arm");
     assert_eq!(in_fold("call_ref $clsr/2"), 2, "the user's step closure");

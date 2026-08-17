@@ -8,7 +8,9 @@ The work belongs in `curios-cont`: erasure has exposed the runtime fields, CPS s
 
 M0 is complete (2026-08-17): the census, attribution and extent instruments are in `curios/src/tests/codegen/`, the multi-byte fixture and the walk-mirror family in `programs/`, and the stopping evidence was not met — the accumulator and the returned scan each measure about a fifth of the walk. The scan argument reconstruction turned out to be a source spelling rather than a compiler obligation and was cured in `/std` during M0, which retires M3.
 
-M1a is complete (2026-08-17): the deferral is one rule under the shared solver, `split_returns` delivers `/syn/Str/step`'s result as four fields — unlocked by reworking `/std/Str/utf8/check` to thread its scan by recursion — and the relocated caller-side rebuild is measured and accepted as the intermediate M2 removes. The spine proceeds at M1b and M2.
+M1a is complete (2026-08-17): the deferral is one rule under the shared solver, `split_returns` delivers `/syn/Str/step`'s result as four fields — unlocked by reworking `/std/Str/utf8/check` to thread its scan by recursion — and the relocated caller-side rebuild is measured and accepted as the intermediate M2 removes where the shape allows.
+
+M1b and M2 are complete (2026-08-17): the forward origin analysis, the recorded fields representation with its verifier rule, and continuation scalar replacement are landed, the fold's accumulator travels as fields, the digit walk beats every figure the ladder ever recorded, and the multi-byte walk gains about thirteen percent against its pre-campaign baseline. The scan rebuild is recorded retained cost — a variant-width flow, per M2's verdict — and the spine proceeds at M4.
 
 ## Cost contract
 
@@ -254,6 +256,8 @@ M3 stands beside the spine as a conditional annex, presumed stopped until M0 arg
 
 - Prove the forward fact with focused tests before either scalar-replacement rewrite consumes it.
 
+- **Done (2026-08-17).** `origins` in `curios-cont/src/cps/origin.rs`: `Unreached < Exact(arity) < Opaque` under the shared solver, with boundaries stated by injection — resume parameters, escaping functions' parameters, the entry, knot-tied values — so a surviving bottom means unreached rather than assumed exact, and the loop alias resolves to the constructions that entered it exactly as the eligibility rule demands. Landed together with its first consumer, since an analysis nothing reads is dead code the gate refuses.
+
 ### M2 — Continuation scalar replacement
 
 - Introduce the fields representation on rewritten parameters and the verifier rule that holds every incoming edge to it, before the first rewrite lands — the rewrite then changes a recorded representation rather than maintaining a convention.
@@ -267,6 +271,8 @@ M3 stands beside the spine as a conditional annex, presumed stopped until M0 arg
 - Remove the `/std/Str/fold` accumulator allocation in raw pre-Binaryen output, and with it the seed construction the exit continuation leaves dead.
 
 - Remove the caller-side `Scan` reconstruction exposed by M1a by splitting the continuation that receives its returned fields.
+
+- **Done (2026-08-17), with one correction the census had already predicted.** The fields representation, its verifier rule, and the maintenance obligations landed first; the split is three local edits and the existing chain finishes the job, exactly as `split_returns` works, with the head rebuild surviving precisely where a whole-value use survives — which makes it the materialization the cost contract prescribes rather than a leak. The accumulator bullet holds: the emitted fold body carries no `{A, Nat}` construction, the walk-mirror family now compiles the idiomatic and hand-flattened spellings to identical counts, and the digit walk lands below every figure the ladder ever recorded for it. The scan-reconstruction bullet does not hold, for the shape reason recorded at M3's retirement: the loop's scan parameter mixes arity-1 interned constants with arity-4 rebuilds, and no exact product describes a variant-width flow. Its removal is a successor capability — variant-aware splitting with per-tag padding, or a uniform-width variant lowering — and each is a measured design decision this campaign does not take; the residual is one arity-4 construction per multi-byte character, priced in the ladder.
 
 ### M3 — Known-function workers, retired by the survey (2026-08-17)
 
@@ -304,7 +310,7 @@ The campaign is complete only when all of the following hold on the spine:
 
 - The `Nat` member of a product split through *continuation* parameters reaches raw scalar representation when its uses demand it.
 
-- `/std/Str/fold` emits neither the accumulator tuple nor the returned `Scan`'s caller-side reconstruction on the raw pre-Binaryen per-character path — with `/syn/Str/step` returning fields rather than constructing the `Scan` it hands back — and the proper suffix-view object disappears together with the helper call that builds it, the half an allocation count does not see.
+- `/std/Str/fold` emits no accumulator tuple on the raw pre-Binaryen per-character path, `/syn/Str/step` returns fields rather than constructing the `Scan` it hands back, and the proper suffix-view object disappears together with the helper call that builds it, the half an allocation count does not see. The caller-side `Scan` rebuild is recorded retained cost rather than an acceptance subject (amended 2026-08-17): the scan is a variant-width flow no exact product describes, its residual is one construction per multi-byte character priced in the ladder, and its removal is the successor capability M2's verdict names.
 
 - Empty, whole, nested, uncached and out-of-bounds slice fixtures preserve the existing result, eager trap and memoization behavior.
 
