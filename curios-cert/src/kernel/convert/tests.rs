@@ -570,3 +570,196 @@ fn irrelevance_does_not_fire_at_a_computed_relevant_type() {
         "irrelevance leaked into a relevant type the motive computes",
     );
 }
+
+/// `induct Wit(P : <param_sort>) : (p : P)` — a family whose index type *is* its own parameter.
+///
+/// `induct_type_args` compares two index actuals at the type the declaration's telescope assigns, opened at the left instance's preceding actuals, so here the index pair is compared at whatever term stands in the parameter position. That makes the parameter's assumed type the whole of what decides the index goal, which is exactly the question a binder opened at a stand-in answers with the stand-in.
+fn declare_indexed(kernel: &mut Kernel, path: &str, param_sort: Term) -> Global {
+    let name = Global::Authored(Qualifier::from([path]));
+    let param = binder(90, "P");
+
+    kernel.declare_induct(
+        &name,
+        &InductDecl {
+            universe_context: UniverseContext::default(),
+            arity: Telescope::build(
+                [(param.clone(), param_sort)],
+                Telescope::build([(binder(91, "p"), Term::free_var(&param))], ()),
+            ),
+            constructors: Vec::new(),
+            result_sort: Term::type_ground(),
+            module: Qualifier::from([path]),
+            rep_public: true,
+            polarities: Vec::new(),
+        },
+    );
+
+    name
+}
+
+/// **The stand-in `ground_scope` opens its binders at, held against the types those binders really carry.**
+///
+/// `ground_scope` opens both scopes at one shared set of binders and assumes every one of them at `Type`, whatever it really is. Its own comment licenses that by an inventory — "a binder's recorded type feeds only the conversion history's context key, identically on both sides" — and the inventory is false. [`synth_neutral`](super::super::sort::synth_neutral) reads the same recorded type through `Kernel::type_of`, so it reaches `Sort::of`, and `Sort::of` is what [`compare`] asks before *every* goal: the proof-irrelevance test at the top of the rule.
+///
+/// What actually holds the stand-in up is narrower, and is about the value rather than about the readers: `Type` is the least informative answer `Sort::of` can return for a binder. Irrelevance fires on `Sort::Prop` and on nothing else, and eta dispatches on the goal type's own *shape* rather than on the binder's, so a binder recorded at `Type` can only lose the accepting rules, never gain one. This walks one goal at each type the binder could really carry and records what each decides.
+///
+/// The grid is two side-pairs against four assumed types, because a single pair cannot separate the two things being asked. Distinct sides expose which types *discharge* the goal without comparing — only `Prop` does — and convertible-but-not-identical sides expose which types get as far as comparing at all. The stand-in's row matches the relevant-sort row in both, which is the null: it decides every goal the way a real relevant type decides it.
+///
+/// **One row is not a forfeiture, and it is the one to carry forward.** A binder whose real type is not a sort at all leaves `Sort::of` with nothing to decode, and the typed opening refuses the whole certification with `NotASort` — while the stand-in classifies it `Type 0` and goes on to accept. There the stand-in is strictly *more* permissive than the truth. Nothing in `ground_scope` fences that off; what does is a property of its callers, the same shape as the one `struct_eta`'s neutral restriction turned out to rest on. A match motive is typed under its real binders by `infer`'s `check_motive` before any comparison grounds it, so a motive using a `Bool`-typed binder as a type never reaches here. That is written in neither place, and it is what this row exists to record.
+#[test]
+fn a_binders_stand_in_type_decides_a_goal_the_way_a_relevant_type_does() {
+    let distinct = || {
+        (
+            Term::free_var(&binder(70, "u")),
+            Term::free_var(&binder(71, "v")),
+        )
+    };
+
+    // Convertible without being syntactically equal, so the goal survives `compare`'s reflexivity fast path and has to be decided by a rule.
+    let convertible = || {
+        let x = binder(72, "x");
+
+        (
+            Term::apply(
+                Term::func([(x.clone(), nat_type())], Term::free_var(&x)),
+                [nat(1)],
+            ),
+            nat(1),
+        )
+    };
+
+    let at = |assumed: Term, sides: (Term, Term)| {
+        let mut kernel = kernel();
+        let hypothesis = binder(73, "h");
+        kernel.assume(&hypothesis, &assumed);
+
+        convert(
+            &mut kernel,
+            &Term::free_var(&hypothesis),
+            &sides.0,
+            &sides.1,
+        )
+    };
+
+    let relevant = Term::type_at(Level::constant(3));
+    let stand_in = Term::type_ground();
+    let not_a_sort = || Err(KernelError::NotASort(nat_type()));
+
+    // Distinct sides: only a proposition discharges them, and the stand-in is not one.
+    assert_eq!(
+        at(Term::prop(), distinct()),
+        Ok(true),
+        "a hypothesis really at `Prop` stopped licensing irrelevance",
+    );
+    assert_eq!(
+        at(relevant.clone(), distinct()),
+        Ok(false),
+        "a hypothesis at a relevant sort discharged two distinct inhabitants",
+    );
+    assert_eq!(
+        at(stand_in.clone(), distinct()),
+        Ok(false),
+        "the stand-in discharged a goal a relevant type refuses",
+    );
+    assert_eq!(
+        at(nat_type(), distinct()),
+        not_a_sort(),
+        "a hypothesis at a non-sort was classified rather than refused",
+    );
+
+    // Convertible sides: every sort compares and accepts, and the non-sort still refuses before comparing.
+    assert_eq!(
+        at(Term::prop(), convertible()),
+        Ok(true),
+        "a proposition stopped discharging its inhabitants",
+    );
+    assert_eq!(
+        at(relevant, convertible()),
+        Ok(true),
+        "a relevant sort refused two convertible terms",
+    );
+    assert_eq!(
+        at(stand_in, convertible()),
+        Ok(true),
+        "the stand-in refused a goal a relevant type accepts",
+    );
+    assert_eq!(
+        at(nat_type(), convertible()),
+        not_a_sort(),
+        "the non-sort row stopped being the one place the stand-in is the more permissive of the two",
+    );
+}
+
+/// The same stand-in reached through [`ground_scope`] itself rather than through an assumption written by hand.
+///
+/// Two stuck `bool_match`es differing only inside their motive scopes. Each motive body is `Wit(<motive binder>, i)`, and `Wit`'s index type is its own parameter, so the index pair is compared at the motive binder — which `ground_scope` has opened at `Type`. The pair is refused, matching the grid's stand-in row above rather than its `Prop` row, which is what pins that the production path really does record the stand-in and not something the term carries.
+///
+/// The counterfactual is the second half: assume that same binder at `Prop` and compare the two motive bodies directly, and the goal is discharged by irrelevance. So the verdict does move when the binder's real type differs from the stand-in, and it moves toward refusal — which is the direction this row's **Assumes** claims and the direction the two-checker matrix already records one instance of, in `curios`'s `a_grounded_argument_forfeits_irrelevance`.
+///
+/// The control between them is a motive pair that differs only by a beta redex. It must still converge through the same `ground_scope`, so the refusal above is `u ≠ v` decided at a relevant sort rather than the grounded scope declining to compare its bodies at all.
+#[test]
+fn a_grounded_motive_binder_carries_the_stand_in_rather_than_its_real_type() {
+    let mut kernel = kernel();
+    let wit = declare_indexed(&mut kernel, "Wit", Term::prop());
+
+    let scrutinee = binder(80, "b");
+    kernel.assume(&scrutinee, &Term::intrinsic(Intrinsic::BoolType));
+
+    let carried = binder(81, "P");
+    let (u, v) = (binder(82, "u"), binder(83, "v"));
+
+    let body = |index: Term| Term::induct_type(wit.clone(), [Term::free_var(&carried)], [index]);
+    let elimination = |index: Term| {
+        Term::bool_match(
+            Term::free_var(&scrutinee),
+            Some(&carried),
+            body(index),
+            nat(0),
+            nat(0),
+        )
+    };
+
+    let redex = |name: &Free| {
+        let x = binder(84, "x");
+
+        Term::apply(
+            Term::func([(x.clone(), nat_type())], Term::free_var(&x)),
+            [Term::free_var(name)],
+        )
+    };
+
+    assert_eq!(
+        convert(
+            &mut kernel,
+            &Term::type_ground(),
+            &elimination(Term::free_var(&u)),
+            &elimination(Term::free_var(&v)),
+        ),
+        Ok(false),
+        "a grounded motive binder discharged two distinct index actuals",
+    );
+
+    assert_eq!(
+        convert(
+            &mut kernel,
+            &Term::type_ground(),
+            &elimination(Term::free_var(&u)),
+            &elimination(redex(&u)),
+        ),
+        Ok(true),
+        "the grounded scope stopped comparing its bodies up to reduction",
+    );
+
+    kernel.assume(&carried, &Term::prop());
+
+    assert_eq!(
+        convert(
+            &mut kernel,
+            &Term::type_ground(),
+            &body(Term::free_var(&u)),
+            &body(Term::free_var(&v)),
+        ),
+        Ok(true),
+        "the same binder at its real `Prop` stopped licensing the irrelevance grounding forfeits",
+    );
+}

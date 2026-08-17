@@ -41,7 +41,7 @@ Grades only. Each entry's evidence is the entry it links to.
 | [Definitional proof irrelevance](soundness/per-term-rules/definitional-proof-irrelevance.md) | **argued** |
 | [Index inversion and K](soundness/per-term-rules/index-inversion-and-k.md) | auditable only |
 | [Conversion recurrence](soundness/per-term-rules/conversion-recurrence.md) | **argued** |
-| [Eta and untyped child positions](soundness/per-term-rules/eta-and-untyped-child-positions.md) | **argued** and **probed** |
+| [Eta and untyped child positions](soundness/per-term-rules/eta-and-untyped-child-positions.md) | **argued** and **probed**, the grounded scope's stand-in included; **argued** for the caller-side fence beneath it |
 | [Elimination carrier agreement](soundness/per-term-rules/elimination-carrier-agreement.md) | **probed** |
 | [Nominal occurrence well-formedness](soundness/per-term-rules/nominal-occurrence-well-formedness.md) | **probed** |
 | [Type former well-formedness](soundness/per-term-rules/type-former-well-formedness.md) | **probed** |
