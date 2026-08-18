@@ -630,6 +630,78 @@ fn a_case_equation_reaches_the_reduct_and_not_the_memos() {
     );
 }
 
+/// The probe before decomposition is what makes an equation's answer independent of affording the reduction it spares.
+///
+/// The key is stored as written — the shape `assume_case_value`'s error path records, and the shape whose folding the early ask exists to spare — over an accumulation this budget cannot fold. The subject answers the case value in one step; the control differs from it only in never assuming the equation, and exhausts on the same term under the same budget, which is the demonstration that the subject's answer did not come from the reduction. Without the control, the assertion would hold of a budget that simply afforded the fold.
+///
+/// Mutation-checked against the probe points one at a time: with the ask before decomposition removed from `whnf_within`, the subject exhausted exactly as the control does, so this is the fixture that distinguishes that point; with the ask at the stuck reduct removed instead, it still passed, which is `the_two_consultation_points_answer_one_equation_alike`'s half to see.
+#[test]
+fn a_case_equation_answers_a_term_the_budget_cannot_reduce() {
+    let budget = Cost::FRAME.get() * 4;
+    let n = binder(1, "n");
+    let key = Term::intrinsic(Intrinsic::nat_add(chain(100_000), Term::free_var(&n)));
+
+    let mut control = Kernel::new(budget);
+    control.set_local_floor(1_000);
+    control.assume(&n, &nat_type());
+    assert!(
+        whnf(&mut control, key.clone()).is_err_and(|spent| spent.is_exhausted()),
+        "the fold has to be unaffordable, or the subject's answer proves nothing"
+    );
+
+    let mut subject = Kernel::new(budget);
+    subject.set_local_floor(1_000);
+    subject.assume(&n, &nat_type());
+    let answered = subject.scoped(|kernel| {
+        kernel.refine(key.clone(), nat(0));
+        whnf(kernel, key.clone())
+    });
+
+    assert_eq!(answered, Ok(nat(0)));
+}
+
+/// The two consultation points answer one equation alike, and the match between them is structural — universe instances included, since the key stopped being a universe-erased projection.
+///
+/// The key is taken as the kernel's own reduct of a written term whose inner operand folds, so it is a spelling that exists only as a reduct: the written form can reach it through reduction alone, which is what makes the ask at the stuck value the only probe that can see it. The control kernel — the same two reductions with no equation assumed — pins the two premises the subject rests on: the key differs from the written spelling, so the two probes below genuinely take different routes to it, and the key re-reduces to itself, which is the idempotence argument for merging the points in executable form.
+///
+/// Mutation-checked the other way around from `a_case_equation_answers_a_term_the_budget_cannot_reduce`: with the ask at the stuck reduct removed from `whnf_within`, the written probe handed back the unrefined key, so this is the fixture that distinguishes that point; with the ask before decomposition removed instead, both probes still answered, the key's own spelling being re-derived by decomposition and caught at the reduct. Neither pre-existing case-equation fixture moved under either mutation, which is the coverage gap this pair was written to close.
+#[test]
+fn the_two_consultation_points_answer_one_equation_alike() {
+    let n = binder(1, "n");
+    let written = Term::intrinsic(Intrinsic::nat_add(
+        Term::free_var(&n),
+        Term::intrinsic(Intrinsic::nat_add(nat(30), nat(34))),
+    ));
+
+    let mut control = kernel();
+    control.assume(&n, &nat_type());
+    let key = whnf(&mut control, written.clone()).expect("reduces");
+    assert_ne!(
+        key, written,
+        "the inner operand has to fold, or the two probes below are one probe"
+    );
+    assert_eq!(
+        whnf(&mut control, key.clone()),
+        Ok(key.clone()),
+        "a stored key is a normal form, so re-reducing it is identity"
+    );
+
+    let mut subject = kernel();
+    subject.assume(&n, &nat_type());
+    let (at_key, at_written) = subject.scoped(|kernel| {
+        kernel.refine(key.clone(), nat(0));
+
+        (whnf(kernel, key.clone()), whnf(kernel, written.clone()))
+    });
+
+    assert_eq!(at_key, Ok(nat(0)), "the term is the key: the early ask");
+    assert_eq!(
+        at_written,
+        Ok(nat(0)),
+        "reduction reaches the key: the ask at the stuck reduct"
+    );
+}
+
 /// Depth is refused by the counter, and the refusal says so. Before the frame row, a reduction driven deep took real stack and the budget observed none of it — `recurse` grows rather than aborting, so what bounded depth was the host's memory rather than anything the program could be told about.
 ///
 /// The subject is a chain of nested intrinsic operands over an *open* tip — a term the closed machine's gate declines, so the recursive strategy re-enters reduction once per link and the budget affords a handful of levels and no more. The closed twin of this chain no longer trips the row at all, which is the machine's whole yield and is asserted by its own tests.
