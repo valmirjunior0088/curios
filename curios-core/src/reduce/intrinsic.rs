@@ -398,6 +398,8 @@ fn reduce_int_division(
 }
 
 /// `Flt` operations are opaque at the type level: operands reduce, the operation never folds — `FltAdd(1.0, 1.0)` is its own normal form, so `Eq(@Flt, 1.0 + 1.0, 2.0)` is deliberately unprovable. IEEE semantics inside definitional equality is a soundness hazard with no consumer: the corpus proves nothing about floats, and IEEE equality identifies values (`0.0`, `-0.0`) that `FltToLeBytes` observes apart — the exact shape the singleton guard exists to forbid. Runtime-faithful constant folding belongs downstream in `curios-ersd`'s partial evaluator, which is untrusted. The rule this instance establishes: an intrinsic needs a fold here only if a type or a proof can depend on its value.
+///
+/// One fact escapes the opacity without breaching it, and `free_monoid::bin_measure` is where: `Bin/len(Flt/to_le_bytes(x))` is `4` for every `x`. That is the arity of the operation's result rather than anything about the float — it folds no value, distinguishes no `0.0` from `-0.0`, and is what makes `Flt/of_le_bytes`'s length precondition dischargeable over the operation it inverts.
 fn reduce_flt_binary(
     reducer: &mut impl Reducer,
     left: &Term,

@@ -2,7 +2,7 @@
 //!
 //! For `Bin` and `List`, the same front decode also feeds the operation level: `Bin/get`/`Bin/slice` and `List/get`/`List/slice` peel one generator at a time via `peel_first_byte`/`peel_first_elem`. Each carrier's two destructors share one structural traversal (`peel_front`, `peel_front_list`); `Bin` reflects the peeled head two ways — a `Nat` byte for the eliminator, a one-byte `Bin` chunk for the operations — while `List`'s head is the element term for both.
 //!
-//! Beside the destructors, this module owns the free monoid's *product* and its *measure*, because both are walks over the same spine. [`normalize_concat`] is the product: it collapses a concatenation under the unit and associativity laws and fuses literal operands up to [`FUSION_CAP`], past which a value keeps its `Concat` node rather than being recopied into a longer run. [`bin_measure`] and [`list_measure`] are the measure — how many generators a value carries, folded off the spine — and `Bin/len`, `Bin/get` and `Bin/slice` are its three consumers. Neither the measure nor the walks take a [`crate::Reducer`]: measuring or peeling cannot re-enter reduction, and that is enforced by the signatures rather than asserted in a comment.
+//! Beside the destructors, this module owns the free monoid's *product* and its *measure*, because both are walks over the same spine. [`normalize_concat`] is the product: it collapses a concatenation under the unit and associativity laws and fuses literal operands up to [`FUSION_CAP`], past which a value keeps its `Concat` node rather than being recopied into a longer run. The measure is how many generators a value carries, folded off the spine, and it is read two ways: `Bin/get` and `Bin/slice` locate an index or a window through [`bin_segments`], which yields the operands they will read *into*, while `Bin/len` goes through [`bin_measure`], which answers for strictly more values because a length can be known where a generator cannot. Neither the measure nor the walks take a [`crate::Reducer`]: measuring or peeling cannot re-enter reduction, and that is enforced by the signatures rather than asserted in a comment.
 
 use {
     super::{Intrinsic, Nat, Subterm, Term},
@@ -440,9 +440,35 @@ fn list_segments(value: &Term) -> Option<Vec<(&Term, usize)>> {
     Some(segments)
 }
 
-/// How many generators an already-reduced `Bin` value carries — the sum of [`bin_segments`]. `None` where the value is not wholly measurable, or where the total does not fit a `usize`.
+/// How many generators an already-reduced `Bin` value carries. `None` where the value is not wholly measurable, or where the total does not fit a `usize`.
+///
+/// **Deliberately a superset of [`bin_segments`] rather than a fold over it.** A *segment* is something `Bin/get` and `Bin/slice` may read *into*; this walk additionally credits an operation whose result arity is fixed by the operation rather than by any operand. Today that is `Flt/to_le_bytes` alone, which writes four bytes for every float, NaN and both zeros included.
+///
+/// Crediting it as a segment instead would be wrong twice over: `bin_locate` would hand the node back to `Bin/get` as the operand holding the index, which re-enters this same node and never terminates, and `bin_window` would try to narrow a value it cannot read.
+///
+/// The length is the one thing about such a node knowable without observing the float, which is what keeps `reduce::intrinsic`'s `Flt` opacity intact — no float is folded here and `0.0`/`-0.0` stay apart. Without it `Flt/of_le_bytes`'s length precondition is undischargeable over the very operation it inverts, so the pair's round trip could not be written at all.
 pub(crate) fn bin_measure(grain: Grain, value: &Term) -> Option<usize> {
-    measure(&bin_segments(grain, value)?)
+    let mut total = 0usize;
+    let mut pending = vec![value];
+
+    while let Some(term) = pending.pop() {
+        let length = match &**term {
+            Subterm::Intrinsic(Intrinsic::Bin(found, run)) if *found == grain => run.len(grain),
+            Subterm::Intrinsic(Intrinsic::BinConcat {
+                grain: found,
+                operands,
+            }) if *found == grain => {
+                // Order is irrelevant to a sum, so this walk does not reverse the way `bin_segments` must.
+                pending.extend(operands.iter());
+                continue;
+            }
+            Subterm::Intrinsic(Intrinsic::FltToLeBytes(_)) if grain == Grain::X => 4,
+            _ => return None,
+        };
+        total = total.checked_add(length)?;
+    }
+
+    Some(total)
 }
 
 /// [`bin_measure`] over the element carrier.
