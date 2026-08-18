@@ -50,7 +50,7 @@ fn run_optimizer(mut bytes: Vec<u8>, names: bool, want_text: bool) -> (Vec<u8>, 
         sys::BinaryenSetClosedWorld(true);
         sys::BinaryenSetOptimizeLevel(2);
         sys::BinaryenSetShrinkLevel(1);
-        // Off by default, and deliberately: the name section is 22 KB on a program the size of `binary_trees`, which a shipped binary should not carry. But dropping it is what left every runtime profile of a Curios program showing bare addresses, so the caller that is profiling asks for it back.
+        // Off by default, and deliberately: the name section is 22 KB on a program the size of `trees`, which a shipped binary should not carry. But dropping it is what left every runtime profile of a Curios program showing bare addresses, so the caller that is profiling asks for it back.
         sys::BinaryenSetDebugInfo(names);
         // The buffered text writer never reaches a terminal, so this should already be moot — but it is a process-global setting like every other one above, so it is pinned rather than left to a tty probe.
         sys::BinaryenSetColorsEnabled(false);

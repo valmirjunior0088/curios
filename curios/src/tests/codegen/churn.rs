@@ -9,15 +9,15 @@ use {
     std::time::Instant,
 };
 
-/// The harness's own workloads, included from their source of truth so the probes measure the programs the results files time.
+/// The cross-language workloads, read from the corpus so the probes measure the programs the results files time.
 const CHAIN: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../curios-benchmarks/programs/chain/chain.crs"
+    "/../programs/chain/chain.crs"
 ));
 
 const CHURN: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../curios-benchmarks/programs/churn/churn.crs"
+    "/../programs/churn/churn.crs"
 ));
 
 /// `chain` behind a dead ballast: a BALLAST_CELLS-cell chain is built and totalled before the unchanged churn phase, so the heap has already grown to hold it when the churn runs — the guest-side spelling of a pre-grown heap, valid because the pinned engine's copying heap grows and never shrinks. The ballast seed derives from K so nothing is closed enough for the optimizer to fold, and its total is folded into the printed number so the ballast cannot be dead.
@@ -222,7 +222,7 @@ fn churn_threaded_record_allocates_nothing() {
 
 const SPINES: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../curios-benchmarks/programs/spines/spines.crs"
+    "/../programs/spines/spines.crs"
 ));
 
 /// `spines` behind the same dead ballast `CHAIN_BALLAST` carries: a BALLAST_CELLS-cell chain is built and drained before the unchanged insert phase, pre-growing the heap the inserts then churn inside. The ballast total is folded into the printed number so nothing is dead, and the seed derives from N so nothing folds.

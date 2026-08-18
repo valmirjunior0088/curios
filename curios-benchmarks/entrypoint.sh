@@ -6,6 +6,7 @@
 set -uo pipefail
 cd "$(dirname "$0")"
 ROOT="$PWD"          # absolute benchmarks dir; asc is invoked from elsewhere (see below)
+PROGRAMS=../programs  # the corpus lives one level up: this harness times the programs, it does not own them
 mkdir -p .artifacts
 
 # Allowlist, not a blocklist: default stdout to stderr for the whole script, so every command's output — this script's own or any subprocess's, present or future — lands on stderr unless explicitly reopened. `table` below reopens fd 3 (the real stdout) for one thing only: the markdown tables.
@@ -29,12 +30,12 @@ AS_DIR=/opt/as
 AS_CONFIG=./node_modules/@assemblyscript/wasi-shim/asconfig.json
 
 # path to a program's Lean exe (built by the Lake package in its own dir)
-lean_bin() { echo "programs/$1/.lake/build/bin/$2"; }
+lean_bin() { echo "$PROGRAMS/$1/.lake/build/bin/$2"; }
 
 # --- build one program in every language ------------------------------------
 build() {
   local prog=$1 stem=$2
-  local dir="programs/$prog"
+  local dir="$PROGRAMS/$prog"
   echo ">> building $prog"
 
   # Rust — native + wasm from one source
@@ -96,17 +97,17 @@ build churn churn
 build spines spines
 
 echo
-check lcg   lcg   8  programs/lcg/lcg.js
-check trees trees 10 programs/trees/trees.js
-check chain chain 8  programs/chain/chain.js
-check churn churn 8  programs/churn/churn.js
-check spines spines 8 programs/spines/spines.js
+check lcg   lcg   8  $PROGRAMS/lcg/lcg.js
+check trees trees 10 $PROGRAMS/trees/trees.js
+check chain chain 8  $PROGRAMS/chain/chain.js
+check churn churn 8  $PROGRAMS/churn/churn.js
+check spines spines 8 $PROGRAMS/spines/spines.js
 
 # --- LCG --------------------------------------------------------------------
 table "LCG (N=$N_LCG) — native targets" \
   ".artifacts/lcg_rust $N_LCG" \
   ".artifacts/lcg_ocaml $N_LCG" \
-  "node programs/lcg/lcg.js $N_LCG" \
+  "node $PROGRAMS/lcg/lcg.js $N_LCG" \
   "$(lean_bin lcg lcg) $N_LCG" \
   "echo $N_LCG | .artifacts/lcg_curios"
 
@@ -120,7 +121,7 @@ table "LCG (N=$N_LCG) — wasm on wasmtime" \
 table "trees (D=$D_TREES) — native targets" \
   ".artifacts/trees_rust $D_TREES" \
   ".artifacts/trees_ocaml $D_TREES" \
-  "node programs/trees/trees.js $D_TREES" \
+  "node $PROGRAMS/trees/trees.js $D_TREES" \
   "$(lean_bin trees trees) $D_TREES" \
   "echo $D_TREES | .artifacts/trees_curios"
 
@@ -134,7 +135,7 @@ table "trees (D=$D_TREES) — wasm on wasmtime" \
 table "chain (K=$K_CHAIN) — native targets" \
   ".artifacts/chain_rust $K_CHAIN" \
   ".artifacts/chain_ocaml $K_CHAIN" \
-  "node programs/chain/chain.js $K_CHAIN" \
+  "node $PROGRAMS/chain/chain.js $K_CHAIN" \
   "$(lean_bin chain chain) $K_CHAIN" \
   "echo $K_CHAIN | .artifacts/chain_curios"
 
@@ -148,7 +149,7 @@ table "chain (K=$K_CHAIN) — wasm on wasmtime" \
 table "churn (N=$N_CHURN) — native targets" \
   ".artifacts/churn_rust $N_CHURN" \
   ".artifacts/churn_ocaml $N_CHURN" \
-  "node programs/churn/churn.js $N_CHURN" \
+  "node $PROGRAMS/churn/churn.js $N_CHURN" \
   "$(lean_bin churn churn) $N_CHURN" \
   "echo $N_CHURN | .artifacts/churn_curios"
 
@@ -162,7 +163,7 @@ table "churn (N=$N_CHURN) — wasm on wasmtime" \
 table "spines (N=$N_SPINES) — native targets" \
   ".artifacts/spines_rust $N_SPINES" \
   ".artifacts/spines_ocaml $N_SPINES" \
-  "node programs/spines/spines.js $N_SPINES" \
+  "node $PROGRAMS/spines/spines.js $N_SPINES" \
   "$(lean_bin spines spines) $N_SPINES" \
   "echo $N_SPINES | .artifacts/spines_curios"
 

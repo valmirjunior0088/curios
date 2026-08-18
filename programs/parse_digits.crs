@@ -1,6 +1,6 @@
 -- Decode a digit string N times, summing the results mod 1000003.
 -- `Nat/of_str` folds an `Option(Nat)` accumulator through postfix `!`, so every character allocates a transient `Option` that the next fold step immediately destructs and drops. Those sums are returned, matched, and never stored --
--- unlike `binary_trees.crs`, whose allocations are the data structure itself and are therefore semantically necessary. What separates the two is what a transient sum costs.
+-- unlike `trees/trees.crs`, whose allocations are the data structure itself and are therefore semantically necessary. What separates the two is what a transient sum costs.
 -- The parsed string is derived from stdin rather than written as a literal, so closed-term evaluation cannot fold the parse away.
 -- N is read from stdin so the loop survives constant folding; output stays bounded well inside i31.
 use /std/{Str, Nat, Option, Io};

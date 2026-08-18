@@ -16,11 +16,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certifi
 RUN curl -sSL -o /usr/local/bin/grain \
       https://github.com/grain-lang/grain/releases/download/grain-v0.7.2/grain-linux-x64 \
     && chmod +x /usr/local/bin/grain
-COPY curios-benchmarks/programs/lcg/lcg.gr     /w/lcg.gr
-COPY curios-benchmarks/programs/trees/trees.gr /w/trees.gr
-COPY curios-benchmarks/programs/chain/chain.gr /w/chain.gr
-COPY curios-benchmarks/programs/churn/churn.gr /w/churn.gr
-COPY curios-benchmarks/programs/spines/spines.gr /w/spines.gr
+COPY programs/lcg/lcg.gr     /w/lcg.gr
+COPY programs/trees/trees.gr /w/trees.gr
+COPY programs/chain/chain.gr /w/chain.gr
+COPY programs/churn/churn.gr /w/churn.gr
+COPY programs/spines/spines.gr /w/spines.gr
 RUN cd /w \
     && grain compile lcg.gr   -o lcg_grain.wasm \
     && grain compile trees.gr -o trees_grain.wasm \
@@ -110,7 +110,9 @@ RUN make curios/runtime \
     && cargo build --release --package curios
 ENV PATH="/curios/target/release:${PATH}"
 
-# --- the benchmark harness --------------------------------------------------
+# --- the corpus and the harness ---------------------------------------------
+# Both land after the compiler build, so editing a program or the harness invalidates neither it nor the vendored Binaryen underneath it. Safe because the release build never reads `programs/` — `curios`'s test modules are behind `#[cfg(test)]`.
+COPY programs programs
 COPY curios-benchmarks curios-benchmarks
 WORKDIR /curios/curios-benchmarks
 # Grain wasm, precompiled in the amd64 stage (no arm64 Grain toolchain exists).

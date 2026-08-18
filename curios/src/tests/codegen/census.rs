@@ -18,13 +18,6 @@ use {
 
 const CORPUS: [(&str, &str); 14] = [
     (
-        "binary_trees",
-        include_str!(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/../programs/binary_trees.crs"
-        )),
-    ),
-    (
         "dependent_vectors",
         include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
@@ -113,6 +106,13 @@ const CORPUS: [(&str, &str); 14] = [
         include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/../programs/state_monad.crs"
+        )),
+    ),
+    (
+        "trees",
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../programs/trees/trees.crs"
         )),
     ),
 ];
@@ -973,7 +973,7 @@ fn survey(label: &str, source: &str) -> Survey {
 ///
 /// The class merge is degenerate, which is why no width budget is selected here: `curios-cont` types every tuple field `(ref null any)`, so there is exactly one representation class and the class-merged width is the plain maximum arity. The largest observed is 4, against a `PARAM_SPLIT_GROWTH_LIMIT` of 16, so the existing ceiling clears every candidate and no second budget was invented to sit beside it.
 ///
-/// **The M2 gate — variant-width return components — is three functions corpus-wide, and none of them is evidence for a return-side mechanism.** `/decode/1` and `/std/Nat/of_str/1` hand back `{Tuple(1), Tuple(2)}` and both *escape*, so the protocol declines them for the escaping reason and no width class would reach them. `/build` hands back `{Tuple(4), Bare}` — the immediate-family shape the encoding decision created, and the acceptance case M2 was written for — but a `binary_trees` node is stored in its parent, so its values rest: splitting that return relocates the allocation into the caller rather than removing it, which is the reboxing balance the specification's own M3 clause names as disqualifying.
+/// **The M2 gate — variant-width return components — is three functions corpus-wide, and none of them is evidence for a return-side mechanism.** `/decode/1` and `/std/Nat/of_str/1` hand back `{Tuple(1), Tuple(2)}` and both *escape*, so the protocol declines them for the escaping reason and no width class would reach them. `/build` hands back `{Tuple(4), Bare}` — the immediate-family shape the encoding decision created, and the acceptance case M2 was written for — but a `trees` node is stored in its parent, so its values rest: splitting that return relocates the allocation into the caller rather than removing it, which is the reboxing balance the specification's own M3 clause names as disqualifying.
 ///
 /// **The uniform-width alternative's gate** reports both never-resting populations as the two flows above (`tags {0,1} width 2` ×14, `tags {0,2} width 4` ×12) — so padding at the door would be paid by no stored value in this corpus, but it would also buy nothing that in-flight splitting does not, since neither population rests either way.
 ///
@@ -1280,27 +1280,27 @@ fn rebirth(census: &Census) -> Rebirth {
     tally
 }
 
-/// The M0 workloads, included from the harness so the classifier reads the programs the results files time.
+/// The M0 workloads — the corpus's cross-language entries, so the classifier reads the programs the results files time.
 const WORKLOADS: [(&str, &str); 3] = [
     (
         "chain",
         include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../curios-benchmarks/programs/chain/chain.crs"
+            "/../programs/chain/chain.crs"
         )),
     ),
     (
         "churn",
         include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../curios-benchmarks/programs/churn/churn.crs"
+            "/../programs/churn/churn.crs"
         )),
     ),
     (
         "spines",
         include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
-            "/../curios-benchmarks/programs/spines/spines.crs"
+            "/../programs/spines/spines.crs"
         )),
     ),
 ];

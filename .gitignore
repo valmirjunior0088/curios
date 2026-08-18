@@ -6,3 +6,4 @@
 /.antigravitycli
 /*.wasm
 **/.artifacts
+**/.lake

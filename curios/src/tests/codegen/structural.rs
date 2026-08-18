@@ -629,7 +629,7 @@ fn trees_constructor_payloads_stay_boxed() {
 ///
 /// # What the encoding was worth, and how to retake it
 ///
-/// Native binaries, the ladder's protocol — `cargo run --package curios -- compile curios-benchmarks/programs/trees/trees.crs -o /tmp/trees`, then `echo 21 | /usr/bin/time -v /tmp/trees`, five runs, `user` seconds and max RSS. Taken **2026-08-17** on x86-64 Linux, the before row the same day at the commit before the encoding:
+/// Native binaries, the ladder's protocol — `cargo run --package curios -- compile programs/trees/trees.crs -o /tmp/trees`, then `echo 21 | /usr/bin/time -v /tmp/trees`, five runs, `user` seconds and max RSS. Taken **2026-08-17** on x86-64 Linux, the before row the same day at the commit before the encoding:
 ///
 /// | Encoding | `user` | Max RSS |
 /// | --- | --- | --- |
@@ -1164,7 +1164,7 @@ fn split_return_measurements() {
 ///
 /// # Which instrument sees what
 ///
-/// **Peak memory cannot see a transient allocation, and it is not a shortcoming of the measurement.** The return protocol removes roughly one five-field object per character; running `programs/parse_digits.crs` at 1000000 with that pass toggled and nothing else changed gives a maximum resident set of 5 734 400 bytes without it and 5 767 168 bytes with it — flat, and if anything slightly up from the code that replaced it. Transient garbage never accumulates, so its cost is allocation *work* rather than footprint, and that lands on the clock. Retention is the opposite: `binary_trees` holds what it builds, and its resident set moves from 5.77 MB at depth 18 to 271.68 MB at depth 21 on nothing but what it keeps.
+/// **Peak memory cannot see a transient allocation, and it is not a shortcoming of the measurement.** The return protocol removes roughly one five-field object per character; running `programs/parse_digits.crs` at 1000000 with that pass toggled and nothing else changed gives a maximum resident set of 5 734 400 bytes without it and 5 767 168 bytes with it — flat, and if anything slightly up from the code that replaced it. Transient garbage never accumulates, so its cost is allocation *work* rather than footprint, and that lands on the clock. Retention is the opposite: `trees` holds what it builds, and its resident set moves from 5.77 MB at depth 18 to 271.68 MB at depth 21 on nothing but what it keeps.
 ///
 /// So: **time for a change to transient allocation, resident set for a change to retention, emitted size for a change that copies.** Reaching for the wrong one reports a confident null.
 ///
@@ -1175,7 +1175,7 @@ fn split_return_measurements() {
 /// | Program | Input | `user` | Max RSS | Binary |
 /// | --- | --- | --- | --- | --- |
 /// | `parse_digits` | 1000000 | 0.92 s | 5 767 168 B | 3 786 408 B |
-/// | `binary_trees` | 21 | 0.23 s | 271 679 488 B | 3 786 504 B |
+/// | `trees` | 21 | 0.23 s | 271 679 488 B | 3 786 504 B |
 ///
 /// What this test itself prints is the third unit — the raw pre-Binaryen module size for each structural fixture, which is where code growth shows up first and without a runtime at all. At the same revision: `lcg` 6708, `trees` 7706, `higher-order` 7160, `direct/escaping` 7174, `function-only` 6632, `mutual-recursion` 6834, `split-return` 8367 bytes.
 #[test]
