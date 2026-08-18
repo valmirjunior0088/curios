@@ -2053,7 +2053,7 @@ mod tests {
         },
         crate::{
             Category, Cost, Free, Intrinsic, Nat, One, Peel, ReduceError, Scope, Subterm, Term,
-            peel_nat,
+            peel_bin, peel_list, peel_nat,
         },
         curios_num::{Integer, Natural},
         curios_utilities::{Grain, PackedBin},
@@ -2897,6 +2897,594 @@ mod tests {
                     element,
                     Term::unwrap_or_clone(symbol(*expected, "e")),
                     "index {index} is the same element however the run is grouped",
+                );
+            }
+        }
+    }
+
+    /// A literal `List` run of `Nat` literals — [`list_of`]'s twin for the grids below, whose ground truth needs closed elements rather than symbols.
+    fn nat_list(elements: &[u32]) -> Term {
+        Term::intrinsic(Intrinsic::List(
+            symbol(1000, "T"),
+            elements.iter().map(|n| lit(*n)).collect(),
+        ))
+    }
+
+    /// Fold a closed `Bin` term to its literal run — the ground truth the peel grids compare, so it must land on a literal or the instantiation was not closed.
+    fn bin_value(term: Term) -> Term {
+        let folded = fold(term);
+        assert!(
+            matches!(
+                &*folded,
+                Subterm::Intrinsic(Intrinsic::Bin(Grain::X, _))
+                    | Subterm::Intrinsic(Intrinsic::Byte(_))
+            ),
+            "a closed instantiation folds to a literal, got {folded:?}",
+        );
+        folded
+    }
+
+    /// Fold a closed `List` term to its element run, folding each element too — a fused literal keeps its elements as written, so `[2 + 3]` and `[5]` are one value and must compare as one.
+    fn list_value(term: Term) -> Vec<Term> {
+        let folded = fold(term);
+        match &*folded {
+            Subterm::Intrinsic(Intrinsic::List(_, elems)) => {
+                elems.iter().map(|elem| fold(elem.clone())).collect()
+            }
+            other => unreachable!("a closed List folds to a literal run, got {other:?}"),
+        }
+    }
+
+    // Soundness gate for the `Bin` peel's verdicts over values — the `Bin` half of what `every_nat_peel_verdict_holds_at_every_closed_instantiation` states for `Nat`, written because the perimeter graded these laws argued in code comments only. The obligations are the same three. A `Peel::Equal` reaches conversion as a definitional equation, and congruence carries a false one to `False`. A `Peel::Clash` reaches inversion as *impossible*, which excuses an omitted arm — the vacuous-elimination route. A `Peel::Continue`'s residuals must be equi-satisfiable with the pair they replaced, since the caller compares the residuals and reports their verdict as the originals'. `Peel::Stuck` promises nothing and is only tallied.
+    //
+    // The shapes reach the laws the code comments assert and nothing else stated: symbolic chunks cancelling by syntactic equality with a byte clash surviving past them, window fusion across a shared seam (`slice(w, s, m) ++ slice(w, m, e) = slice(w, s, e)`), the empty-window drop (`slice(w, i, i)` vanishing), append-as-concatenation (`append(b, c) = b ++ append(x[], c)`), and a near-miss control beside each: windows meeting at no seam must not fuse, and a one-byte symbolic cons against the identity stays undecided. Ground truth is the folded value at every closed instantiation of the symbols — instantiations respect `/sys/slice`'s `s <= e <= len(b)` preconditions, since a program outside them cannot be written, and that typing fact is exactly what makes the window laws unconditional.
+    //
+    // Mutation-checked: fusing two windows of one base without the seam check (`*seam == lo` dropped from `push`) turns the no-seam control into a false `Equal` and this grid fails it at the first anchor whose seam bytes differ. The tally is the anti-inertness assertion the perimeter asks of a sole-reach fixture: `Stuck` is where a pair falls when nothing fires, so a grid that decided nothing would otherwise pass while checking nothing.
+    #[test]
+    fn every_bin_peel_verdict_holds_at_every_closed_instantiation() {
+        let bin_left = Free::local(0, Some("x"));
+        let bin_right = Free::local(1, Some("y"));
+        let byte_free = Free::local(2, Some("c"));
+        let anchor_free = Free::local(3, Some("w"));
+        let x = Term::free_var(&bin_left);
+        let y = Term::free_var(&bin_right);
+        let w = Term::free_var(&anchor_free);
+        let c = Term::free_var(&byte_free);
+
+        let cat = |parts: Vec<Term>| Term::intrinsic(Intrinsic::BinConcat(Grain::X, parts));
+        let window = |lo: u32, hi: u32| {
+            Term::intrinsic(Intrinsic::bin_slice(Grain::X, w.clone(), lit(lo), lit(hi)))
+        };
+        let chunk = Term::intrinsic(Intrinsic::bin_append(Grain::X, run_bytes(&[]), c.clone()));
+
+        let cases = [
+            (
+                "x ++ x[05] ~ x ++ x[05]",
+                cat(vec![x.clone(), run_bytes(&[5])]),
+                cat(vec![x.clone(), run_bytes(&[5])]),
+            ),
+            (
+                "x[05] ++ x ~ x[09] ++ x",
+                cat(vec![run_bytes(&[5]), x.clone()]),
+                cat(vec![run_bytes(&[9]), x.clone()]),
+            ),
+            (
+                "x ++ x[05] ~ x ++ x[09]",
+                cat(vec![x.clone(), run_bytes(&[5])]),
+                cat(vec![x.clone(), run_bytes(&[9])]),
+            ),
+            (
+                "x[05] ++ x ~ x[05] ++ y",
+                cat(vec![run_bytes(&[5]), x.clone()]),
+                cat(vec![run_bytes(&[5]), y.clone()]),
+            ),
+            (
+                "x[0509] ~ x[05] ++ x",
+                run_bytes(&[5, 9]),
+                cat(vec![run_bytes(&[5]), x.clone()]),
+            ),
+            (
+                "x[05] ++ x ~ x ++ x[05]",
+                cat(vec![run_bytes(&[5]), x.clone()]),
+                cat(vec![x.clone(), run_bytes(&[5])]),
+            ),
+            (
+                "append(x, c) ~ x ++ append(x[], c)",
+                Term::intrinsic(Intrinsic::bin_append(Grain::X, x.clone(), c.clone())),
+                cat(vec![x.clone(), chunk.clone()]),
+            ),
+            (
+                "slice(w, 0, 2) ++ slice(w, 2, 4) ~ slice(w, 0, 4)",
+                cat(vec![window(0, 2), window(2, 4)]),
+                window(0, 4),
+            ),
+            (
+                "slice(w, 0, 2) ++ slice(w, 3, 4) ~ slice(w, 0, 4)",
+                cat(vec![window(0, 2), window(3, 4)]),
+                window(0, 4),
+            ),
+            (
+                "slice(w, 1, 1) ++ x ~ x ++ slice(w, 2, 2)",
+                cat(vec![window(1, 1), x.clone()]),
+                cat(vec![x.clone(), window(2, 2)]),
+            ),
+            (
+                "append(x[], c) ++ x ~ append(x[], c) ++ y",
+                cat(vec![chunk.clone(), x.clone()]),
+                cat(vec![chunk.clone(), y.clone()]),
+            ),
+            ("append(x[], c) ~ x[]", chunk.clone(), run_bytes(&[])),
+        ];
+
+        let as_intrinsic = |term: &Term| match &**term {
+            Subterm::Intrinsic(intrinsic) => intrinsic.clone(),
+            other => unreachable!("every side of the grid is an intrinsic, got {other:?}"),
+        };
+
+        let runs: [&[u8]; 5] = [&[], &[5], &[9], &[9, 8], &[1, 1]];
+        let anchors: [&[u8]; 2] = [&[9, 8, 7, 6], &[9, 8, 7, 7, 3]];
+
+        let (mut equal, mut clash, mut carried, mut stuck) = (0, 0, 0, 0);
+
+        for (label, left, right) in &cases {
+            let peel =
+                peel_bin(&as_intrinsic(left), &as_intrinsic(right)).expect("two Bin values peel");
+
+            match &peel {
+                Peel::Equal => equal += 1,
+                Peel::Clash => clash += 1,
+                Peel::Continue(..) => carried += 1,
+                Peel::Stuck => stuck += 1,
+            }
+
+            for left_run in runs {
+                for right_run in runs {
+                    for byte_value in [0u8, 7, 255] {
+                        for anchor in anchors {
+                            let close = |term: &Term| {
+                                let term = at(term.clone(), &bin_left, run_bytes(left_run));
+                                let term = at(term, &bin_right, run_bytes(right_run));
+                                let term = at(
+                                    term,
+                                    &byte_free,
+                                    Term::intrinsic(Intrinsic::Byte(byte_value)),
+                                );
+                                bin_value(at(term, &anchor_free, run_bytes(anchor)))
+                            };
+
+                            let agree = close(left) == close(right);
+
+                            match &peel {
+                                Peel::Equal => assert!(
+                                    agree,
+                                    "`{label}` was decided equal but differs at x = {left_run:?}, y = {right_run:?}, c = {byte_value}, w = {anchor:?}",
+                                ),
+                                Peel::Clash => assert!(
+                                    !agree,
+                                    "`{label}` was decided impossible but holds at x = {left_run:?}, y = {right_run:?}, c = {byte_value}, w = {anchor:?}",
+                                ),
+                                Peel::Continue(residual_left, residual_right) => assert_eq!(
+                                    close(residual_left) == close(residual_right),
+                                    agree,
+                                    "`{label}`'s residuals disagree with the pair they replaced at x = {left_run:?}, y = {right_run:?}, c = {byte_value}, w = {anchor:?}",
+                                ),
+                                Peel::Stuck => {}
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        assert_eq!(
+            (equal, clash, carried, stuck),
+            (4, 2, 3, 3),
+            "the grid stopped reaching every peel verdict",
+        );
+    }
+
+    // The `List` half of the grid above, separate because the two carriers differ exactly where a copied rule would be wrong: `List` literals hold *terms*, so two leading runs whose heads differ syntactically are NOT a clash — the elements may still be convertible — while a leftover run against the exhausted identity is still a definite length clash whatever its elements are. The first shape pins that difference over values: `[a + b]` and `[b + a]` denote one list at every instantiation, so the `Bin` byte-disagreement rule applied here would be a false impossibility, which is the vacuous-elimination route to `False`. Mutation-checked: clashing two differing literal heads the way `peel_bin` does fails that shape at its first instantiation. The other shapes and the tally mirror the `Bin` grid's obligations: append-as-concatenation with a symbolic element, window fusion over the element carrier, a genuine length clash, and residual equi-satisfiability.
+    #[test]
+    fn every_list_peel_verdict_holds_at_every_closed_instantiation() {
+        let list_left = Free::local(0, Some("xs"));
+        let list_right = Free::local(1, Some("ys"));
+        let nat_a = Free::local(2, Some("a"));
+        let nat_b = Free::local(3, Some("b"));
+        let anchor_free = Free::local(4, Some("ws"));
+        let xs = Term::free_var(&list_left);
+        let ys = Term::free_var(&list_right);
+        let a = Term::free_var(&nat_a);
+        let b = Term::free_var(&nat_b);
+        let ws = Term::free_var(&anchor_free);
+
+        let elem = symbol(1000, "T");
+        let cat = |parts: Vec<Term>| Term::intrinsic(Intrinsic::ListConcat(elem.clone(), parts));
+        let one = |element: Term| Term::intrinsic(Intrinsic::List(elem.clone(), vec![element]));
+        let window = |lo: u32, hi: u32| {
+            Term::intrinsic(Intrinsic::list_slice(
+                elem.clone(),
+                ws.clone(),
+                lit(lo),
+                lit(hi),
+            ))
+        };
+
+        let cases = [
+            (
+                "[a + b] ++ xs ~ [b + a] ++ xs",
+                cat(vec![one(plus(a.clone(), b.clone())), xs.clone()]),
+                cat(vec![one(plus(b.clone(), a.clone())), xs.clone()]),
+            ),
+            (
+                "xs ++ [7] ~ xs ++ []",
+                cat(vec![xs.clone(), nat_list(&[7])]),
+                cat(vec![xs.clone(), nat_list(&[])]),
+            ),
+            (
+                "[7] ++ xs ~ [7] ++ ys",
+                cat(vec![nat_list(&[7]), xs.clone()]),
+                cat(vec![nat_list(&[7]), ys.clone()]),
+            ),
+            (
+                "append(xs, a) ~ xs ++ [a]",
+                Term::intrinsic(Intrinsic::list_append(elem.clone(), xs.clone(), a.clone())),
+                cat(vec![xs.clone(), one(a.clone())]),
+            ),
+            (
+                "slice(ws, 0, 2) ++ slice(ws, 2, 4) ~ slice(ws, 0, 4)",
+                cat(vec![window(0, 2), window(2, 4)]),
+                window(0, 4),
+            ),
+            (
+                "[7, 8] ~ [7] ++ xs",
+                nat_list(&[7, 8]),
+                cat(vec![nat_list(&[7]), xs.clone()]),
+            ),
+        ];
+
+        let as_intrinsic = |term: &Term| match &**term {
+            Subterm::Intrinsic(intrinsic) => intrinsic.clone(),
+            other => unreachable!("every side of the grid is an intrinsic, got {other:?}"),
+        };
+
+        let runs: [&[u32]; 4] = [&[], &[8], &[7, 8], &[1, 2]];
+        let anchors: [&[u32]; 2] = [&[9, 8, 7, 6], &[6, 6, 5, 4, 3]];
+
+        let (mut equal, mut clash, mut carried, mut stuck) = (0, 0, 0, 0);
+
+        for (label, left, right) in &cases {
+            let peel =
+                peel_list(&as_intrinsic(left), &as_intrinsic(right)).expect("two List values peel");
+
+            match &peel {
+                Peel::Equal => equal += 1,
+                Peel::Clash => clash += 1,
+                Peel::Continue(..) => carried += 1,
+                Peel::Stuck => stuck += 1,
+            }
+
+            for left_run in runs {
+                for right_run in runs {
+                    for first in [0u32, 1, 2] {
+                        for second in [0u32, 1, 2] {
+                            for anchor in anchors {
+                                let close = |term: &Term| {
+                                    let term = at(term.clone(), &list_left, nat_list(left_run));
+                                    let term = at(term, &list_right, nat_list(right_run));
+                                    let term = at(term, &nat_a, lit(first));
+                                    let term = at(term, &nat_b, lit(second));
+                                    list_value(at(term, &anchor_free, nat_list(anchor)))
+                                };
+
+                                let agree = close(left) == close(right);
+
+                                match &peel {
+                                    Peel::Equal => assert!(
+                                        agree,
+                                        "`{label}` was decided equal but differs at xs = {left_run:?}, ys = {right_run:?}, a = {first}, b = {second}",
+                                    ),
+                                    Peel::Clash => assert!(
+                                        !agree,
+                                        "`{label}` was decided impossible but holds at xs = {left_run:?}, ys = {right_run:?}, a = {first}, b = {second}",
+                                    ),
+                                    Peel::Continue(residual_left, residual_right) => assert_eq!(
+                                        close(residual_left) == close(residual_right),
+                                        agree,
+                                        "`{label}`'s residuals disagree with the pair they replaced at xs = {left_run:?}, ys = {right_run:?}, a = {first}, b = {second}",
+                                    ),
+                                    Peel::Stuck => {}
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        assert_eq!(
+            (equal, clash, carried, stuck),
+            (2, 1, 2, 1),
+            "the grid stopped reaching every peel verdict",
+        );
+    }
+
+    /// Fold a closed term to the value the commutation grid compares: a `List` literal folds its elements too, since a fused run keeps them as written, and every other carrier's closed fold is already the value.
+    fn closed_value(term: Term) -> Term {
+        let folded = fold(term);
+        match &*folded {
+            Subterm::Intrinsic(Intrinsic::List(elem, elems)) => Term::intrinsic(Intrinsic::List(
+                elem.clone(),
+                elems.iter().map(|element| fold(element.clone())).collect(),
+            )),
+            _ => folded,
+        }
+    }
+
+    // Soundness gate for the open-term reduction laws the code comments beside the folds assert and nothing else stated: the subtraction borrow within the floor, the literal-factor distribution of `·` on either side, the full-window collapse `slice(b, 0, len(b)) = b`, the empty window `slice(b, i, i) = x[]` over a symbolic base and bound, the cons peels of `get` and `slice` over a symbolic tail and symbolic bounds, and the `len`/`map` homomorphisms over an append and a concatenation. Each case states the law's own reduct and holds the pair to two obligations. The open fold must land on exactly that reduct — so the law demonstrably fired, and where its comment claims, which is what keeps a case from passing vacuously when a rule stops firing. And the original and the reduct must agree as values at every closed instantiation, which is what a definitional equation promises and the only thing a false one fails. Instantiations respect the operations' `/sys` preconditions (`i < len` for `get`, `s <= e <= len` for `slice`), since a program outside them cannot be written.
+    //
+    // `map`'s ground truth is structural rather than numeric: the mapped function stays a free symbol, so both sides fold to element runs of identical stuck applications, and their agreement says no element was dropped, duplicated or reordered — which is the whole of what the distribution law claims. Mutation-checked: misstating the append measure (`nat_add(2, base)` for `nat_add(1, base)` in the `BinLen` slot) fails the length case on both obligations at once.
+    #[test]
+    fn every_open_fold_law_preserves_the_value_at_every_closed_instantiation() {
+        let nat_x = Free::local(0, Some("x"));
+        let nat_y = Free::local(1, Some("y"));
+        let bin_base = Free::local(2, Some("b"));
+        let bin_tail = Free::local(3, Some("t"));
+        let byte_free = Free::local(4, Some("c"));
+        let nat_end = Free::local(5, Some("e"));
+        let nat_start = Free::local(6, Some("s"));
+        let list_base = Free::local(7, Some("xs"));
+        let nat_elem = Free::local(8, Some("a"));
+        let fun = Free::local(9, Some("f"));
+        let x = Term::free_var(&nat_x);
+        let y = Term::free_var(&nat_y);
+        let b = Term::free_var(&bin_base);
+        let t = Term::free_var(&bin_tail);
+        let c = Term::free_var(&byte_free);
+        let e = Term::free_var(&nat_end);
+        let s = Term::free_var(&nat_start);
+        let xs = Term::free_var(&list_base);
+        let a = Term::free_var(&nat_elem);
+        let f = Term::free_var(&fun);
+
+        let sub = |left: Term, right: Term| Term::intrinsic(Intrinsic::nat_sub(left, right));
+        let mul = |left: Term, right: Term| Term::intrinsic(Intrinsic::nat_mul(left, right));
+        let cat = |parts: Vec<Term>| Term::intrinsic(Intrinsic::BinConcat(Grain::X, parts));
+        let bin_slice = |base: Term, lo: Term, hi: Term| {
+            Term::intrinsic(Intrinsic::bin_slice(Grain::X, base, lo, hi))
+        };
+        let bin_get =
+            |base: Term, index: Term| Term::intrinsic(Intrinsic::bin_get(Grain::X, base, index));
+        let bin_len = |base: Term| Term::intrinsic(Intrinsic::bin_len(Grain::X, base));
+        let chunk = Term::intrinsic(Intrinsic::bin_append(Grain::X, run_bytes(&[]), c.clone()));
+        let elem = symbol(1000, "T");
+        let list_append = |base: Term, element: Term| {
+            Term::intrinsic(Intrinsic::list_append(elem.clone(), base, element))
+        };
+        let list_len = |base: Term| Term::intrinsic(Intrinsic::list_len(elem.clone(), base));
+        let list_map = |base: Term| {
+            Term::intrinsic(Intrinsic::list_map(
+                elem.clone(),
+                elem.clone(),
+                base,
+                f.clone(),
+            ))
+        };
+        let byte = |value: u8| Term::intrinsic(Intrinsic::Byte(value));
+
+        let cases = vec![
+            (
+                "(x + 5) - 3 = x + 2",
+                sub(plus(x.clone(), lit(5)), lit(3)),
+                plus(x.clone(), lit(2)),
+                vec![
+                    vec![(&nat_x, lit(0))],
+                    vec![(&nat_x, lit(1))],
+                    vec![(&nat_x, lit(9))],
+                ],
+            ),
+            (
+                "(x + 1) - (x + 2) = 0",
+                sub(plus(x.clone(), lit(1)), plus(x.clone(), lit(2))),
+                lit(0),
+                vec![vec![(&nat_x, lit(0))], vec![(&nat_x, lit(4))]],
+            ),
+            (
+                "(x + y + 3) - (y + 1) = x + 2",
+                sub(
+                    plus(plus(x.clone(), y.clone()), lit(3)),
+                    plus(y.clone(), lit(1)),
+                ),
+                plus(x.clone(), lit(2)),
+                vec![
+                    vec![(&nat_x, lit(0)), (&nat_y, lit(0))],
+                    vec![(&nat_x, lit(2)), (&nat_y, lit(5))],
+                    vec![(&nat_x, lit(7)), (&nat_y, lit(1))],
+                ],
+            ),
+            (
+                "(x + 1) * 2 = x * 2 + 2",
+                mul(plus(x.clone(), lit(1)), lit(2)),
+                plus(mul(x.clone(), lit(2)), lit(2)),
+                vec![vec![(&nat_x, lit(0))], vec![(&nat_x, lit(3))]],
+            ),
+            (
+                "3 * (x + 2) = 3 * x + 6",
+                mul(lit(3), plus(x.clone(), lit(2))),
+                plus(mul(lit(3), x.clone()), lit(6)),
+                vec![vec![(&nat_x, lit(0))], vec![(&nat_x, lit(3))]],
+            ),
+            (
+                "slice(b, 0, len(b)) = b",
+                bin_slice(b.clone(), lit(0), bin_len(b.clone())),
+                b.clone(),
+                vec![
+                    vec![(&bin_base, run_bytes(&[]))],
+                    vec![(&bin_base, run_bytes(&[9, 8, 7]))],
+                ],
+            ),
+            (
+                "slice(b, e, e) = x[]",
+                bin_slice(b.clone(), e.clone(), e.clone()),
+                run_bytes(&[]),
+                vec![
+                    vec![(&bin_base, run_bytes(&[])), (&nat_end, lit(0))],
+                    vec![(&bin_base, run_bytes(&[9, 8, 7])), (&nat_end, lit(2))],
+                    vec![(&bin_base, run_bytes(&[9, 8, 7])), (&nat_end, lit(3))],
+                ],
+            ),
+            (
+                "slice(cons(c, b), 0, e + 1) = cons(c, x[]) ++ slice(b, 0, e)",
+                bin_slice(
+                    cat(vec![chunk.clone(), b.clone()]),
+                    lit(0),
+                    plus(e.clone(), lit(1)),
+                ),
+                cat(vec![chunk.clone(), bin_slice(b.clone(), lit(0), e.clone())]),
+                vec![
+                    vec![
+                        (&bin_base, run_bytes(&[])),
+                        (&byte_free, byte(7)),
+                        (&nat_end, lit(0)),
+                    ],
+                    vec![
+                        (&bin_base, run_bytes(&[8, 9])),
+                        (&byte_free, byte(255)),
+                        (&nat_end, lit(1)),
+                    ],
+                    vec![
+                        (&bin_base, run_bytes(&[8, 9])),
+                        (&byte_free, byte(0)),
+                        (&nat_end, lit(2)),
+                    ],
+                ],
+            ),
+            (
+                "slice(cons(c, b), s + 1, e + 1) = slice(b, s, e)",
+                bin_slice(
+                    cat(vec![chunk.clone(), b.clone()]),
+                    plus(s.clone(), lit(1)),
+                    plus(e.clone(), lit(1)),
+                ),
+                bin_slice(b.clone(), s.clone(), e.clone()),
+                vec![
+                    vec![
+                        (&bin_base, run_bytes(&[8, 9])),
+                        (&byte_free, byte(7)),
+                        (&nat_start, lit(0)),
+                        (&nat_end, lit(0)),
+                    ],
+                    vec![
+                        (&bin_base, run_bytes(&[8, 9])),
+                        (&byte_free, byte(7)),
+                        (&nat_start, lit(0)),
+                        (&nat_end, lit(2)),
+                    ],
+                    vec![
+                        (&bin_base, run_bytes(&[8, 9])),
+                        (&byte_free, byte(7)),
+                        (&nat_start, lit(1)),
+                        (&nat_end, lit(2)),
+                    ],
+                    vec![
+                        (&bin_base, run_bytes(&[8, 9])),
+                        (&byte_free, byte(7)),
+                        (&nat_start, lit(2)),
+                        (&nat_end, lit(2)),
+                    ],
+                ],
+            ),
+            (
+                "get(cons(c, x[]), 0) = c",
+                bin_get(chunk.clone(), lit(0)),
+                c.clone(),
+                vec![
+                    vec![(&byte_free, byte(0))],
+                    vec![(&byte_free, byte(7))],
+                    vec![(&byte_free, byte(255))],
+                ],
+            ),
+            (
+                "get(cons(c, b), e + 1) = get(b, e)",
+                bin_get(cat(vec![chunk.clone(), b.clone()]), plus(e.clone(), lit(1))),
+                bin_get(b.clone(), e.clone()),
+                vec![
+                    vec![
+                        (&bin_base, run_bytes(&[8, 9])),
+                        (&byte_free, byte(7)),
+                        (&nat_end, lit(0)),
+                    ],
+                    vec![
+                        (&bin_base, run_bytes(&[8, 9])),
+                        (&byte_free, byte(7)),
+                        (&nat_end, lit(1)),
+                    ],
+                ],
+            ),
+            (
+                "len(append(b, c)) = len(b) + 1",
+                bin_len(Term::intrinsic(Intrinsic::bin_append(
+                    Grain::X,
+                    b.clone(),
+                    c.clone(),
+                ))),
+                plus(bin_len(b.clone()), lit(1)),
+                vec![
+                    vec![(&bin_base, run_bytes(&[])), (&byte_free, byte(0))],
+                    vec![(&bin_base, run_bytes(&[9, 8])), (&byte_free, byte(255))],
+                ],
+            ),
+            (
+                "len(b ++ x[0509] ++ t) = len(b) + len(t) + 2",
+                bin_len(cat(vec![b.clone(), run_bytes(&[5, 9]), t.clone()])),
+                plus(plus(bin_len(b.clone()), bin_len(t.clone())), lit(2)),
+                vec![
+                    vec![(&bin_base, run_bytes(&[])), (&bin_tail, run_bytes(&[]))],
+                    vec![
+                        (&bin_base, run_bytes(&[7])),
+                        (&bin_tail, run_bytes(&[1, 2])),
+                    ],
+                ],
+            ),
+            (
+                "map(append(xs, a), f) = append(map(xs, f), f(a))",
+                list_map(list_append(xs.clone(), a.clone())),
+                list_append(list_map(xs.clone()), Term::apply(f.clone(), [a.clone()])),
+                vec![
+                    vec![(&list_base, nat_list(&[])), (&nat_elem, lit(5))],
+                    vec![(&list_base, nat_list(&[1, 2])), (&nat_elem, lit(5))],
+                ],
+            ),
+            (
+                "len(append(xs, a)) = len(xs) + 1",
+                list_len(list_append(xs.clone(), a.clone())),
+                plus(list_len(xs.clone()), lit(1)),
+                vec![
+                    vec![(&list_base, nat_list(&[])), (&nat_elem, lit(5))],
+                    vec![(&list_base, nat_list(&[1, 2])), (&nat_elem, lit(5))],
+                ],
+            ),
+        ];
+
+        for (label, term, reduct, samples) in cases {
+            assert_eq!(
+                fold(term.clone()),
+                fold(reduct.clone()),
+                "`{label}`: the open fold did not land on the law's stated reduct",
+            );
+
+            for (index, sample) in samples.iter().enumerate() {
+                let close = |term: &Term| {
+                    let mut closed = term.clone();
+                    for (binder, value) in sample {
+                        closed = at(closed, binder, value.clone());
+                    }
+                    closed_value(closed)
+                };
+
+                assert_eq!(
+                    close(&term),
+                    close(&reduct),
+                    "`{label}` changed its value at closed instantiation {index}",
                 );
             }
         }
