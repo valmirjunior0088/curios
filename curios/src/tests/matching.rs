@@ -705,3 +705,48 @@ fn an_inferred_implicit_does_not_break_a_refinement_key() {
 
     assert_eq!(run(source), b"refined");
 }
+
+// An arm is opened at the forced constructor's own payload, so a matched payload reduces to the value that constructor carried. Opening it at projections of the scrutinee instead reduces to the same value but leaves a residual Core cannot type — `Proj` has no rule for an inductive — and the difference is invisible until such a residual reaches conversion as a metavariable solution candidate, where re-validation refuses it as `NotATuple`: a hard verdict that fails the goal outright rather than parking it. A parameterized family is what keeps the projection from reducing away first, and a phantom parameter suffices, so this reached `/std/Option/map` and every container whose operation returns what a match arm bound.
+#[test]
+fn a_matched_payload_converts_against_the_value_it_carried() {
+    let source = r#"
+        use /std/{Nat, Option, Eq};
+
+        induct L(V : Type) : Type
+        | nil()
+        | cons(V, L(V))
+        end
+
+        let head_opt(@V : Type, l : L(V)) -> Option(V) =
+            match l | nil() => Option/none() | cons(h, t) => Option/some(h) end;
+
+        let carried : Eq(head_opt(L/cons(7, L/nil())), Option/some(7)) = Eq/refl();
+
+        /std/print("carried")
+        "#;
+
+    assert_eq!(run(source), b"carried");
+}
+
+// The companion to the arm binding above: opening an arm at the constructor's payload must not make conversion accept an equation that is merely false.
+#[test]
+fn a_matched_payload_still_refuses_a_false_equation() {
+    let source = r#"
+        use /std/{Nat, Option, Eq};
+
+        induct L(V : Type) : Type
+        | nil()
+        | cons(V, L(V))
+        end
+
+        let head_opt(@V : Type, l : L(V)) -> Option(V) =
+            match l | nil() => Option/none() | cons(h, t) => Option/some(h) end;
+
+        let carried : Eq(head_opt(L/cons(7, L/nil())), Option/some(8)) = Eq/refl();
+
+        /std/print("carried")
+        "#;
+
+    let error = error(source);
+    assert!(error.contains("type mismatch"), "unexpected error: {error}");
+}

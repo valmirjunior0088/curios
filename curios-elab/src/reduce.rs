@@ -341,7 +341,7 @@ fn reduce_proj(context: &mut Context, proj: Proj) -> Result<Reduce, ReduceError>
                 .nth(index)
                 .expect("Proj: index out of bounds"),
         )),
-        // The untyped reducer's flat view of a constructor value, mirroring the runtime layout `(tag, payload...)`: field i + 1 is the i-th payload component. `reduce_induct_match` relies on this to bind arms by projection (call-by-name). Field 0 (the tag) is never projected at the term level — dispatch inspects the `Variant` directly.
+        // The untyped reducer's flat view of a constructor value, mirroring the runtime layout `(tag, payload...)`: field i + 1 is the i-th payload component. Field 0 (the tag) is never projected at the term level — dispatch inspects the `Variant` directly. Nothing in this module builds such a projection any more (see [`reduce_match`]'s rejected alternative); the view stays because a `Proj` over a constructor value can still arrive from elsewhere, and answering it is strictly better than leaving it stuck.
         Subterm::Variant(ctor) if (1..=ctor.payload.len()).contains(&index) => {
             Ok(Reduce::Continue(
                 ctor.payload
@@ -394,10 +394,10 @@ fn reduce_func_eta(context: &mut Context, func: Func) -> Result<Reduce, ReduceEr
     }
 }
 
-/// Dispatch a `match` over its scrutinee's already-reduced-and-forced value. `head` is the *original* scrutinee term, which the `Induct` arm projects (call-by-name — see its comment); `forced` is what `reduce_forced` produced for it.
+/// Dispatch a `match` over its scrutinee's already-reduced-and-forced value, where `forced` is what `reduce_forced` produced for it.
 ///
-/// Taking both is where this strategy visibly parts from the kernel's, which passes only the forced value: the kernel binds an arm at the payload directly, having no zonker for the annotation holes a reduced payload can carry.
-fn reduce_match(head: Term, forced: Term, motive: Scope<Many>, cases: Cases) -> Reduce {
+/// **Rejected — binding an arm to projections of the original scrutinee.** This took the unreduced scrutinee alongside `forced` and opened the arm at `head.(i + 1)`, the flat view in [`reduce_proj`], so that a reduced payload could not carry evaluated definition internals — local-`let` annotation holes elaboration never births — into types flowing on to `zonk`. It buys that at the cost of emitting a term Core cannot type: `Proj` has no rule for an inductive value, so the residual is well-formed only to the untyped reducer. One escaping into a metavariable solution candidate is refused by the re-validation in `convert`'s `solve` as `NotATuple`, which is a *hard* verdict — the goal fails outright instead of parking, and an ordinary program comparing a matched payload against its value is rejected. Binding the payload directly is also what the kernel does, so the two strategies no longer differ here.
+fn reduce_match(forced: Term, motive: Scope<Many>, cases: Cases) -> Reduce {
     match cases {
         Cases::Bool {
             false_case,
@@ -437,17 +437,13 @@ fn reduce_match(head: Term, forced: Term, motive: Scope<Many>, cases: Cases) -> 
             }
         }
 
-        // Dispatch on the reduced scrutinee — a `Variant` directly, or one reached through a match-arm refinement (`refine_head` registers `head := ctor_val`, which `reduce` follows). The selected arm's binders are bound to *projections of the original head term* (`head.(i + 1)`, the flat view in `reduce_proj`), not to the reduced payload values: call-by-name. Substituting reduced payloads would inline evaluated definition internals (including local-`let` annotation holes that elaboration never births) into types that flow on to `zonk`.
+        // Dispatch on the reduced scrutinee — a `Variant` directly, or one reached through a match-arm refinement (`refine_head` registers `head := ctor_val`, which `reduce` follows). The selected arm is opened at the constructor's own payload components; `Scope::open` is what holds an arm and the constructor it dispatches on to the same arity.
         Cases::Induct { cases, default } => {
             if let Subterm::Variant(ctor) = &*forced {
                 if let Some((_, scope)) = cases.iter().find(|(tag, _)| tag == &ctor.tag) {
-                    let projections = (0..scope.arity())
-                        .map(|i| Term::proj(head.clone(), i + 1))
-                        .collect::<Vec<_>>();
+                    let payload = ctor.payload.iter().collect::<Vec<_>>();
 
-                    let projection_refs = projections.iter().collect::<Vec<_>>();
-
-                    return Reduce::Continue(scope.open(&projection_refs));
+                    return Reduce::Continue(scope.open(&payload));
                 }
 
                 // A concrete constructor with no enumerated arm takes the catch-all default, which binds nothing (no scope to open).
@@ -650,9 +646,9 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
                 }
                 // The scrutinee is reduced by a nested call, so a tower of matches over a deep closed spine costs one native frame per link. That is data-shaped depth, which is what [`recurse`] at the entry point is for. The nested call probes and stores the reduction cache under the scrutinee itself, which is what a warm-scrutinee special case here used to do by hand.
                 Subterm::Match(m) => {
-                    let value = reduce(context, m.head.clone())?;
+                    let value = reduce(context, m.head)?;
 
-                    reduce_match(m.head, force_rec(context, value)?, m.motive, m.cases)
+                    reduce_match(force_rec(context, value)?, m.motive, m.cases)
                 }
                 Subterm::Apply(apply) => reduce_apply(context, apply)?,
                 Subterm::Proj(proj) => reduce_proj(context, proj)?,
