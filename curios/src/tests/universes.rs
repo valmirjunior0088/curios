@@ -2,9 +2,39 @@
 //!
 //! The hierarchy exists to remove one source of unsoundness: under `Type : Type` a type could classify itself, which admits Girard's paradox. The solver's own rules are unit-tested in `curios-analysis/src/satisfy/tests.rs`; these check what a *user* can observe.
 //!
-//! There is deliberately no "the paradox is rejected" test here. Every declaration generalizes over its levels, so a self-reference like `Box/wrap(Box)` instantiates `Box` at two different levels and is admitted — correctly, since that is stratification working. And `syntax.md` gives no syntax for universe variables or explicit arguments, so a program cannot force two occurrences to share a level. Whether *any* surface program can reach `UniverseInconsistency` is an open question; until it is answered, asserting a rejection here would only pin behavior that holds for the wrong reason. Stratification itself is covered at unit level by `a_polymorphic_definition_instantiates_at_prop_and_type`, which pins `id(Prop)` to level 1 and `id(Type)` to level 2.
+//! There is deliberately no "the paradox is rejected" test here. A declaration generalizes over the levels its *interface* carries, so a self-reference like `Box/wrap(Box)` instantiates `Box` at two different levels and is admitted — correctly, since that is stratification working. And `syntax.md` gives no syntax for universe variables or explicit arguments, so a program cannot force two occurrences to share a level. Whether *any* surface program can reach `UniverseInconsistency` is an open question; until it is answered, asserting a rejection here would only pin behavior that holds for the wrong reason. Stratification itself is covered at unit level by `a_polymorphic_definition_instantiates_at_prop_and_type`, which pins `id(Prop)` to level 1 and `id(Type)` to level 2.
+//!
+//! "Interface" is load-bearing in that sentence and is what `a_body_carried_level_is_minimized_rather_than_generalized` pins: the levels reachable only through a body are *minimized* instead, so the set of declarations a use site can instantiate at two levels is narrower than "every declaration".
 
-use super::run;
+use {
+    super::run,
+    curios_core::Module,
+    curios_pipeline::{DEFAULT_STEP_BUDGET, typecheck_with_prelude},
+    curios_text::{Entrypoint, RootSource},
+    std::collections::BTreeMap,
+};
+
+/// Every definition's finalized universe parameter count, keyed by the name its item describes itself with.
+fn universe_parameters(source: &str) -> BTreeMap<String, usize> {
+    let entrypoint = source.parse::<Entrypoint>().expect("the fixture parses");
+    let (module, _): (Module, _) =
+        typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
+            .expect("the fixture type-checks");
+
+    module
+        .items
+        .iter()
+        .flat_map(|item| {
+            let described = item.describe();
+            item.definitions().into_iter().map(move |definition| {
+                (
+                    described.clone(),
+                    definition.universe_context.parameter_count,
+                )
+            })
+        })
+        .collect()
+}
 
 // `Unit` is an ordinary level-0 type, and storing it in `Box` requires it where a higher level is expected. Cumulativity is what admits this, and it is the reason a declaration whose level is determined can be minimized rather than generalized — the lower level is usable wherever a higher one is required.
 #[test]
@@ -36,4 +66,35 @@ fn one_declaration_serves_two_universe_levels() {
         "#;
 
     assert_eq!(run(source), b"both");
+}
+
+// A universe parameter is minted only from a declaration's *interface* — its type and the registry signatures a use site instantiates. A level reachable only through the body is minimized to a constant instead (`UniverseSolver::finalize`'s `internal` set, which no occurrence could choose a value for), so `carrier`, whose sole sort occurrence is the `Type` it stores, is monomorphic, while `holder`, whose level is tied to a `Type`-sorted parameter, generalizes.
+//
+// That asymmetry is what shuts [The refinement key](../../../documentation/soundness/what-the-kernel-consults/the-refinement-key.md)'s still-open elaborator-side copy against *source*. The defect needs two occurrences of one definition at differing instances whose values differ by level, and only a level carried into a payload can make a value differ — `Type u` embedded in a term is the entry's own counterexample. Such a level is body-only, so it never becomes a parameter, so no occurrence can choose one and the pair has no surface spelling. The entry records that nothing in the corpus spells it; what this pins is the stronger claim that nothing *can*, which is the half that does not decay when the corpus changes.
+//
+// The counts are asserted rather than a printout matched, because the parameter count is the thing the argument turns on and a printer is free to render it differently.
+#[test]
+fn a_body_carried_level_is_minimized_rather_than_generalized() {
+    let source = r#"
+        use /std/{Nat, Str, Handle};
+        induct Box : pub Type
+        | wrap(Type)
+        end
+        let carrier : Box = Box/wrap(Type);
+        let holder(@A : Type) -> Box = Box/wrap(A);
+        /std/print("both")
+        "#;
+
+    let parameters = universe_parameters(source);
+
+    assert_eq!(
+        parameters.get("/carrier"),
+        Some(&0),
+        "a body-carried level became a parameter a use site can choose: {parameters:?}",
+    );
+    assert_eq!(
+        parameters.get("/holder"),
+        Some(&1),
+        "an interface level stopped generalizing, so the control no longer separates the two: {parameters:?}",
+    );
 }
