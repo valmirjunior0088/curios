@@ -1,6 +1,6 @@
 pub use /sys/{Byte};
 pub use /sys/Byte/{to_nat, eql, lt, lte, gt, gte};
-use /sys/Bytes/{let Bytes, at};
+use /sys/Bytes/{let Bytes, get};
 use /std/{Order, Eql, Cmp, Nat, Bool, Show, Ord};
 
 -- The 256 byte values in order, so a computed `Nat` becomes a `Byte` by indexing.
@@ -22,9 +22,9 @@ let atoms: Bytes =
       0xe0, 0xe1, 0xe2, 0xe3, 0xe4, 0xe5, 0xe6, 0xe7, 0xe8, 0xe9, 0xea, 0xeb, 0xec, 0xed, 0xee, 0xef,
       0xf0, 0xf1, 0xf2, 0xf3, 0xf4, 0xf5, 0xf6, 0xf7, 0xf8, 0xf9, 0xfa, 0xfb, 0xfc, 0xfd, 0xfe, 0xff];
 
--- The computed inverse of `to_nat`. The proof parameter mirrors `Bytes/at`'s: a closed argument discharges by reduction, and an open one by refining `n < 256` at the call site — and once `len` of the table reduces, the bound demanded here is exactly the bound `at` demands, so the body is a pass-through. Refusal rather than saturation or wrapping is the carrier law's choice: a value never changes to fit its carrier.
+-- The computed inverse of `to_nat`. The proof parameter mirrors `Bytes/get`'s: a closed argument discharges by reduction, and an open one by refining `n < 256` at the call site — and once `len` of the table reduces, the bound demanded here is exactly the bound `get` demands, so the body is a pass-through. Refusal rather than saturation or wrapping is the carrier law's choice: a value never changes to fit its carrier.
 pub let of_nat(n: Nat, @ok: Nat/Lt(n, 256)) -> Byte =
-    at(atoms, n, @ok);
+    get(atoms, n, @ok);
 
 pub let cmp(a: Byte, b: Byte) -> Order =
     choose | lt(a, b) => Order/lt() | eql(a, b) => Order/eq() | _ => Order/gt() end;

@@ -319,7 +319,7 @@ let poll_ready(blocked: List(Parked), timeout: Int) -> Io({List(Job), List(Parke
                 walk(tail, i + 1, woken, still)
             -- The index is in range because `poll` answers one result per handle, which is the host's promise rather than a fact about this program: `results` crosses the boundary, so it is read through the checked accessor and a missing entry reads as no events, leaving the job parked.
             | false =>
-                match is_ready(Option/unwrap_or(List/get(results, i), 0), p.interest)
+                match is_ready(Option/unwrap_or(List/try_get(results, i), 0), p.interest)
                 | true =>
                     walk(
                         tail,
@@ -604,7 +604,7 @@ pub let join_all(@A: Type, tasks: List(Async(A))) -> Async(List(A)) =
         match Nat/Lt/try(i, List/len(tasks))
         | none() => pure([])
         | some(ok) =>
-            let h = spawn(List/at(@Async(A), tasks, i, @ok))!;
+            let h = spawn(List/get(@Async(A), tasks, i, @ok))!;
             let rest = go(i + 1)!;
             let a = join(h)!;
             pure([a, ..rest])
@@ -623,7 +623,7 @@ pub let select(@A: Type, tasks: List(Async(A))) -> Async({Nat, A}) =
                 fork_with(
                     Async {
                         bind_raw(
-                            List/at(@Async(A), tasks, i, @ok).0,
+                            List/get(@Async(A), tasks, i, @ok).0,
                             (a) => bind(lift(Future/fulfill(winner, (i, a))), (_) => pure(())).0),
                     },
                     t)!;

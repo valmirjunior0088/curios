@@ -31,7 +31,7 @@ let magnitude_scan(
     digit_of: (Nat) -> Option(Nat),
 ) -> Result({Nat, Nat}, Str) =
     rec go(cur: Nat, acc: Nat, seen: Bool, pend: Bool) -> Result({Nat, Nat}, Str) =
-        match Bytes/get(input, cur)
+        match Bytes/try_get(input, cur)
         | none() => magnitude_stop(cur, acc, seen, pend)
         | some(b) =>
             let n = Byte/to_nat(b);
@@ -59,7 +59,7 @@ let dec_leading_zero(input: Bytes, cur: Nat) -> Bool =
         && byte_at_is(input, cur + 1, (n) => Nat/in_range(n, 0x30, 0x39) || n == 0x5F);
 
 let sign_read(input: Bytes, pos: Nat) -> {Nat, Bool, Bool} =
-    match Bytes/get(input, pos)
+    match Bytes/try_get(input, pos)
     | some(b) =>
         match Byte/to_nat(b)
         | 43 => (pos + 1, false, true)
@@ -79,7 +79,7 @@ pub let int_value: Parse(Toml) =
                 | false =>
                     match byte_at_is(input, cur, (n) => n == 0x30)
                     | true =>
-                        match Bytes/get(input, cur + 1)
+                        match Bytes/try_get(input, cur + 1)
                         | none() => Option/none()
                         | some(b) =>
                             match Byte/to_nat(b)
@@ -145,7 +145,7 @@ rec flt_digits(
             | false => Result/failure("expected digit")
             end
         end;
-    match Bytes/get(input, cur)
+    match Bytes/try_get(input, cur)
     | none() => stop
     | some(b) =>
         let n = Byte/to_nat(b);
@@ -189,7 +189,7 @@ rec exp_digits(
             | false => Result/failure("expected digit")
             end
         end;
-    match Bytes/get(input, cur)
+    match Bytes/try_get(input, cur)
     | none() => stop
     | some(b) =>
         let n = Byte/to_nat(b);
@@ -211,16 +211,12 @@ pub let flt_special: Parse(Toml) =
             let (cur, negative, _) = sign_read(input, pos);
             match Parse/take_literal("inf").run(input, cur)
             | success((next, _)) =>
-                let bits: Bytes =
-                    match negative
-                    | true => x[0x00, 0x00, 0x80, 0xff]
-                    | false => x[0x00, 0x00, 0x80, 0x7f]
-                    end;
-                Result/success((next, Toml/flt(Flt/of_le_bytes(bits))))
+                let value = match negative | true => Flt/neg_inf | false => Flt/pos_inf end;
+                Result/success((next, Toml/flt(value)))
             | failure(_) =>
                 match Parse/take_literal("nan").run(input, cur)
                 | success((next, _)) =>
-                    Result/success((next, Toml/flt(Flt/of_le_bytes(x[0x00, 0x00, 0xc0, 0x7f]))))
+                    Result/success((next, Toml/flt(Flt/nan)))
                 | failure(msg) => Result/failure(msg)
                 end
             end,

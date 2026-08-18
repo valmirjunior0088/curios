@@ -7,7 +7,7 @@ rec fixed_scan(input: Bytes, cur: Nat, count: Nat, acc: Nat) -> Result({Nat, Nat
     match count
     | 0 => Result/success((cur, acc))
     | pred + 1 =>
-        match Bytes/get(input, cur)
+        match Bytes/try_get(input, cur)
         | none() => Result/failure("expected digit")
         | some(b) =>
             let n = Byte/to_nat(b);
@@ -61,7 +61,7 @@ rec frac_ns(input: Bytes, cur: Nat, taken: Nat, acc: Nat, seen: Bool) -> Result(
         | true => Result/success((cur, acc * nat_pow10(9 - taken)))
         | false => Result/failure("expected digit")
         end;
-    match Bytes/get(input, cur)
+    match Bytes/try_get(input, cur)
     | none() => stop
     | some(b) =>
         let n = Byte/to_nat(b);
@@ -115,7 +115,7 @@ let offset_scan(input: Bytes, pos: Nat) -> Result({Nat, Int}, Str) =
     match byte_at_is(input, pos, (n) => n == 0x5A || n == 0x7A)
     | true => Result/success((pos + 1, +0))
     | false =>
-        match Bytes/get(input, pos)
+        match Bytes/try_get(input, pos)
         | none() => Result/failure("expected offset")
         | some(b) =>
             let n = Byte/to_nat(b);

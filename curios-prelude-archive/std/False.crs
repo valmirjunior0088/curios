@@ -1,2 +1,1 @@
-pub use /syn/{False};
-pub use /syn/False/{Not};
+pub use /syn/{False, Not};

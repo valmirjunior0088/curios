@@ -1,5 +1,0 @@
-pub induct True: pub Prop
-| qed()
-end
-
-pub use True/*;

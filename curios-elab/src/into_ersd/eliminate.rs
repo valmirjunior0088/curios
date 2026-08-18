@@ -44,9 +44,10 @@ impl SeqCarrier<'_> {
     /// The empty sequence — the value the empty arm refines the scrutinee to.
     fn empty_value(self) -> Term {
         match self {
-            SeqCarrier::List { element } => {
-                Term::intrinsic(Intrinsic::List(element.clone(), vec![]))
-            }
+            SeqCarrier::List { element } => Term::intrinsic(Intrinsic::List {
+                element: element.clone(),
+                items: vec![],
+            }),
             SeqCarrier::Bin { grain } => Term::intrinsic(Intrinsic::Bin(grain, PackedBin::empty())),
         }
     }
@@ -54,33 +55,37 @@ impl SeqCarrier<'_> {
     /// The cons value `head :: tail` — the monoid operation on a singleton and the tail, the same shape elaboration checked the arm under, so the arm refines the scrutinee to the term it was elaborated against.
     fn cons_value(self, head: &Term, tail: &Term) -> Term {
         match self {
-            SeqCarrier::List { element } => Term::intrinsic(Intrinsic::ListConcat(
-                element.clone(),
-                vec![
-                    Term::intrinsic(Intrinsic::List(element.clone(), vec![head.clone()])),
+            SeqCarrier::List { element } => Term::intrinsic(Intrinsic::ListConcat {
+                element: element.clone(),
+                operands: vec![
+                    Term::intrinsic(Intrinsic::List {
+                        element: element.clone(),
+                        items: vec![head.clone()],
+                    }),
                     tail.clone(),
                 ],
-            )),
-            SeqCarrier::Bin { grain } => Term::intrinsic(Intrinsic::BinConcat(
+            }),
+            SeqCarrier::Bin { grain } => Term::intrinsic(Intrinsic::BinConcat {
                 grain,
-                vec![
-                    Term::intrinsic(Intrinsic::BinAppend(
+                operands: vec![
+                    Term::intrinsic(Intrinsic::BinAppend {
                         grain,
-                        Term::intrinsic(Intrinsic::Bin(grain, PackedBin::empty())),
-                        head.clone(),
-                    )),
+                        bin: Term::intrinsic(Intrinsic::Bin(grain, PackedBin::empty())),
+                        element: head.clone(),
+                    }),
                     tail.clone(),
                 ],
-            )),
+            }),
         }
     }
 
     /// The length of `sequence` — the case-split peel's dispatch key.
     fn len(self, sequence: &Term) -> Term {
         match self {
-            SeqCarrier::List { element } => {
-                Term::intrinsic(Intrinsic::ListLen(element.clone(), sequence.clone()))
-            }
+            SeqCarrier::List { element } => Term::intrinsic(Intrinsic::ListLen {
+                element: element.clone(),
+                list: sequence.clone(),
+            }),
             SeqCarrier::Bin { grain } => {
                 Term::intrinsic(Intrinsic::BinLen(grain, sequence.clone()))
             }
@@ -90,27 +95,34 @@ impl SeqCarrier<'_> {
     /// The element of `sequence` at `index`.
     fn get(self, sequence: &Term, index: Term) -> Term {
         match self {
-            SeqCarrier::List { element } => {
-                Term::intrinsic(Intrinsic::ListGet(element.clone(), sequence.clone(), index))
-            }
-            SeqCarrier::Bin { grain } => {
-                Term::intrinsic(Intrinsic::BinGet(grain, sequence.clone(), index))
-            }
+            SeqCarrier::List { element } => Term::intrinsic(Intrinsic::ListGet {
+                element: element.clone(),
+                list: sequence.clone(),
+                index,
+            }),
+            SeqCarrier::Bin { grain } => Term::intrinsic(Intrinsic::BinGet {
+                grain,
+                bin: sequence.clone(),
+                index,
+            }),
         }
     }
 
     /// The sub-slice `sequence[lo .. hi]`.
     fn slice(self, sequence: &Term, lo: Term, hi: Term) -> Term {
         match self {
-            SeqCarrier::List { element } => Term::intrinsic(Intrinsic::ListSlice(
-                element.clone(),
-                sequence.clone(),
-                lo,
-                hi,
-            )),
-            SeqCarrier::Bin { grain } => {
-                Term::intrinsic(Intrinsic::BinSlice(grain, sequence.clone(), lo, hi))
-            }
+            SeqCarrier::List { element } => Term::intrinsic(Intrinsic::ListSlice {
+                element: element.clone(),
+                list: sequence.clone(),
+                start: lo,
+                end: hi,
+            }),
+            SeqCarrier::Bin { grain } => Term::intrinsic(Intrinsic::BinSlice {
+                grain,
+                bin: sequence.clone(),
+                start: lo,
+                end: hi,
+            }),
         }
     }
 }

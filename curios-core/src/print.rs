@@ -661,8 +661,17 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
         )),
         Intrinsic::BinLen(Grain::X, b) => print_unary("Bytes.len ", b, frame),
         Intrinsic::BinEql(Grain::X, l, r) => print_infix("==", l, r, frame),
-        Intrinsic::BinGet(Grain::X, b, i) => print_binary("Bytes.get ", b, i, frame),
-        Intrinsic::BinSlice(Grain::X, bin, start, end) => flat([
+        Intrinsic::BinGet {
+            grain: Grain::X,
+            bin: b,
+            index: i,
+        } => print_binary("Bytes.get ", b, i, frame),
+        Intrinsic::BinSlice {
+            grain: Grain::X,
+            bin,
+            start,
+            end,
+        } => flat([
             pure("Bytes.slice "),
             sub(bin, frame),
             pure(" "),
@@ -670,8 +679,15 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             pure(" "),
             sub(end, frame),
         ]),
-        Intrinsic::BinAppend(Grain::X, b, byte) => print_binary("Bytes.append ", b, byte, frame),
-        Intrinsic::BinConcat(Grain::X, operands) => flat([
+        Intrinsic::BinAppend {
+            grain: Grain::X,
+            bin: b,
+            element: byte,
+        } => print_binary("Bytes.append ", b, byte, frame),
+        Intrinsic::BinConcat {
+            grain: Grain::X,
+            operands,
+        } => flat([
             pure("Bytes.concat "),
             sep_flat(operands.into_iter().map(move |e| sub(e, frame)), || {
                 pure(", ")
@@ -690,8 +706,17 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
         )),
         Intrinsic::BinLen(Grain::B, b) => print_unary("Bits.len ", b, frame),
         Intrinsic::BinEql(Grain::B, l, r) => print_infix("==", l, r, frame),
-        Intrinsic::BinGet(Grain::B, b, i) => print_binary("Bits.get ", b, i, frame),
-        Intrinsic::BinSlice(Grain::B, bin, start, end) => flat([
+        Intrinsic::BinGet {
+            grain: Grain::B,
+            bin: b,
+            index: i,
+        } => print_binary("Bits.get ", b, i, frame),
+        Intrinsic::BinSlice {
+            grain: Grain::B,
+            bin,
+            start,
+            end,
+        } => flat([
             pure("Bits.slice "),
             sub(bin, frame),
             pure(" "),
@@ -699,21 +724,35 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             pure(" "),
             sub(end, frame),
         ]),
-        Intrinsic::BinAppend(Grain::B, b, bit) => print_binary("Bits.append ", b, bit, frame),
-        Intrinsic::BinConcat(Grain::B, operands) => flat([
+        Intrinsic::BinAppend {
+            grain: Grain::B,
+            bin: b,
+            element: bit,
+        } => print_binary("Bits.append ", b, bit, frame),
+        Intrinsic::BinConcat {
+            grain: Grain::B,
+            operands,
+        } => flat([
             pure("Bits.concat "),
             sep_flat(operands.into_iter().map(move |e| sub(e, frame)), || {
                 pure(", ")
             }),
         ]),
         Intrinsic::ListType(elem) => print_unary("List ", elem, frame),
-        Intrinsic::List(_, elems) => flat([
+        Intrinsic::List {
+            element: _,
+            items: elems,
+        } => flat([
             pure("["),
             sep_flat(elems.into_iter().map(move |e| sub(e, frame)), || pure(", ")),
             pure("]"),
         ]),
-        Intrinsic::ListLen(ty, list) => print_binary("List.len ", ty, list, frame),
-        Intrinsic::ListGet(ty, list, index) => flat([
+        Intrinsic::ListLen { element: ty, list } => print_binary("List.len ", ty, list, frame),
+        Intrinsic::ListGet {
+            element: ty,
+            list,
+            index,
+        } => flat([
             pure("List.get "),
             sub(ty, frame),
             pure(" "),
@@ -721,7 +760,12 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             pure(" "),
             sub(index, frame),
         ]),
-        Intrinsic::ListSlice(ty, list, start, end) => flat([
+        Intrinsic::ListSlice {
+            element: ty,
+            list,
+            start,
+            end,
+        } => flat([
             pure("List.slice "),
             sub(ty, frame),
             pure(" "),
@@ -731,7 +775,11 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             pure(" "),
             sub(end, frame),
         ]),
-        Intrinsic::ListAppend(ty, list, elem) => flat([
+        Intrinsic::ListAppend {
+            element: ty,
+            list,
+            item: elem,
+        } => flat([
             pure("List.append "),
             sub(ty, frame),
             pure(" "),
@@ -739,7 +787,10 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             pure(" "),
             sub(elem, frame),
         ]),
-        Intrinsic::ListConcat(ty, operands) => flat([
+        Intrinsic::ListConcat {
+            element: ty,
+            operands,
+        } => flat([
             pure("List.concat "),
             sub(ty, frame),
             pure(" "),
@@ -747,7 +798,12 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
                 pure(", ")
             }),
         ]),
-        Intrinsic::ListMap(a, b, list, f) => flat([
+        Intrinsic::ListMap {
+            from: a,
+            to: b,
+            list,
+            function: f,
+        } => flat([
             pure("List.map "),
             sub(a, frame),
             pure(" "),
@@ -761,8 +817,15 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
         Intrinsic::Handle(token) => pure(format!("Handle({token})")),
         Intrinsic::ProcExit(code) => print_unary("proc.exit ", code, frame),
         Intrinsic::CellType(elem) => print_unary("Cell ", elem, frame),
-        Intrinsic::Cell(type_, init) => print_binary("Cell.new ", type_, init, frame),
-        Intrinsic::CellSet(type_, cell, value) => flat([
+        Intrinsic::Cell {
+            element: type_,
+            initial: init,
+        } => print_binary("Cell.new ", type_, init, frame),
+        Intrinsic::CellSet {
+            element: type_,
+            cell,
+            value,
+        } => flat([
             pure("Cell.set "),
             sub(type_, frame),
             pure(" "),
@@ -770,10 +833,21 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             pure(" "),
             sub(value, frame),
         ]),
-        Intrinsic::CellGet(type_, cell) => print_binary("Cell.get ", type_, cell, frame),
+        Intrinsic::CellGet {
+            element: type_,
+            cell,
+        } => print_binary("Cell.get ", type_, cell, frame),
         Intrinsic::IoType(result) => print_unary("Io ", result, frame),
-        Intrinsic::IoPure(type_, value) => print_binary("Io.pure ", type_, value, frame),
-        Intrinsic::IoBind(a, b, action, f) => flat([
+        Intrinsic::IoPure {
+            result: type_,
+            value,
+        } => print_binary("Io.pure ", type_, value, frame),
+        Intrinsic::IoBind {
+            from: a,
+            to: b,
+            action,
+            continuation: f,
+        } => flat([
             pure("Io.bind "),
             sub(a, frame),
             pure(" "),

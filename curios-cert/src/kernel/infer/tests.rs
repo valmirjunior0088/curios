@@ -413,7 +413,10 @@ fn a_list_literal_checks_its_elements_against_its_carried_type() {
     assert_eq!(
         infer(
             &mut kernel,
-            &Term::intrinsic(Intrinsic::List(nat_type(), vec![nat(1), nat(2)])),
+            &Term::intrinsic(Intrinsic::List {
+                element: nat_type(),
+                items: vec![nat(1), nat(2)]
+            }),
         ),
         Ok(Term::intrinsic(Intrinsic::ListType(nat_type()))),
     );
@@ -421,10 +424,10 @@ fn a_list_literal_checks_its_elements_against_its_carried_type() {
     assert!(matches!(
         infer(
             &mut kernel,
-            &Term::intrinsic(Intrinsic::List(
-                nat_type(),
-                vec![nat(1), Term::intrinsic(Intrinsic::Bool(true))],
-            )),
+            &Term::intrinsic(Intrinsic::List {
+                element: nat_type(),
+                items: vec![nat(1), Term::intrinsic(Intrinsic::Bool(true))]
+            }),
         ),
         Err(KernelError::Mismatch { .. }),
     ));
@@ -432,7 +435,10 @@ fn a_list_literal_checks_its_elements_against_its_carried_type() {
     assert_eq!(
         infer(
             &mut kernel,
-            &Term::intrinsic(Intrinsic::List(nat_type(), Vec::new()))
+            &Term::intrinsic(Intrinsic::List {
+                element: nat_type(),
+                items: Vec::new()
+            })
         ),
         Ok(Term::intrinsic(Intrinsic::ListType(nat_type()))),
     );

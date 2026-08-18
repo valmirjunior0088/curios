@@ -38,6 +38,11 @@ pub concept Cmp(A: Type): pub Type {
     gte(A, A) -> Bool,
 }
 
+pub concept Eql(A: Type): pub Type {
+    eql(A, A) -> Bool,
+    neq(A, A) -> Bool,
+}
+
 pub concept Monad(M: (Type) -> Type): pub Type {
     pure(@A: Type, A) -> M(A),
     bind(@A: Type, @B: Type, M(A), (A) -> M(B)) -> M(B),
@@ -49,14 +54,15 @@ pub concept Lift(M: (Type) -> Type, N: (Type) -> Type): pub Type {
     lift(@A: Type, M(A)) -> N(A),
 }
 
-pub mod Eql;
-pub use Eql/{let Eql};
+pub induct True: pub Prop
+| qed()
+end
 
-pub mod True;
-pub use True/{let True};
+pub induct False: pub Prop
+end
 
-pub mod False;
-pub use False/{let False};
+pub let Not(P: Type) -> Type =
+    (P) -> False;
 
 pub mod Char;
 pub use Char/{let Char};
@@ -67,3 +73,5 @@ pub use Str/{let Str};
 pub mod Nat;
 
 pub mod Int;
+
+pub mod Flt;

@@ -1,8 +1,27 @@
 pub use /sys/{Flt};
+pub use /syn/Flt/{FourBytes};
 pub use /sys/Flt/{add, sub, mul, div, rem, min, max, eql, neq, lt, gt, lte, gte, neg, abs, sqrt,
     floor, ceil, trunc, nearest, copysign, to_nat, to_int, to_le_bytes, of_le_bytes};
 use /std/{Nat, Byte, Int, Str, Bool, Option, Bytes, List, Order, BigNat, Eql, Cmp, Add, Sub, Mul,
-    Div, Rem, Show, Ord, True};
+    Div, Rem, Show, Ord, True, False};
+
+-- The two infinities are spelled by division rather than by their bit patterns, and that is a dependency fact rather than a style preference: `of_le_bytes` states a length precondition, so building an infinity from bytes would make these depend on the very operation whose bound wants naming an infinity. `div` states no precondition — `Flt` division is total, an IEEE infinity being a value rather than a failure — so this direction has no edge back.
+pub let pos_inf: Flt =
+    div(1.0, 0.0);
+
+pub let neg_inf: Flt =
+    div(-1.0, 0.0);
+
+-- `nan` keeps its bit pattern, because `0.0 / 0.0` is *a* NaN whose payload the standard leaves to the implementation while `Flt` preserves bits and compares them — and `/std/Toml` promises one encoding. Nothing here depends on it: no precondition mentions NaN, since every comparison already rejects one. The literal operand settles `of_le_bytes`'s length bound by reduction, so the obligation is discharged with nothing written.
+pub let nan: Flt =
+    of_le_bytes(x[0x00, 0x00, 0xc0, 0x7f]);
+
+-- The total form of the reinterpretation, deciding the bound the bounded one states — the pairing every checked accessor carries, as `Bytes/get` does over `Bytes/try_get`.
+pub let try_of_le_bytes(b: Bytes) -> Option(Flt) =
+    match Nat/eql(Bytes/len(b), 4): (_) => Option(Flt)
+    | true => Option/some(of_le_bytes(b, @True/qed()))
+    | false => Option/none()
+    end;
 
 let pow2(k: Nat) -> BigNat =
     BigNat/mul/pow2(BigNat/of_nat(1), k);
@@ -139,10 +158,10 @@ pub let cmp(x: Flt, y: Flt) -> Order =
 
 pub let to_str(f: Flt) -> Str =
     let b = to_le_bytes(f);
-    let b0 = Byte/to_nat(Option/unwrap_or(Bytes/get(b, 0), 0));
-    let b1 = Byte/to_nat(Option/unwrap_or(Bytes/get(b, 1), 0));
-    let b2 = Byte/to_nat(Option/unwrap_or(Bytes/get(b, 2), 0));
-    let b3 = Byte/to_nat(Option/unwrap_or(Bytes/get(b, 3), 0));
+    let b0 = Byte/to_nat(Option/unwrap_or(Bytes/try_get(b, 0), 0));
+    let b1 = Byte/to_nat(Option/unwrap_or(Bytes/try_get(b, 1), 0));
+    let b2 = Byte/to_nat(Option/unwrap_or(Bytes/try_get(b, 2), 0));
+    let b3 = Byte/to_nat(Option/unwrap_or(Bytes/try_get(b, 3), 0));
     let exp_field = b3 % 0x80 * 2 + b2 / 0x80;
     let mant_field = b2 % 0x80 * 0x10000 + b1 * 0x100 + b0;
     let sign = match b3 >= 0x80 | true => "-" | false => "+" end;
@@ -178,7 +197,7 @@ pub let of_str(s: Str) -> Option(Flt) =
     match Str/is_empty(s)
     | true => Option/none()
     | false =>
-        let first = Str/get(s, 0)!;
+        let first = Str/try_get(s, 0)!;
         let is_neg = first == '-';
         let start = choose | first == '+' => 1 | first == '-' => 1 | _ => 0 end;
         let len = Str/len(s);

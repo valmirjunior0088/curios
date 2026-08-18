@@ -111,7 +111,7 @@ and inline_scan(input: Bytes, pos: Nat) -> Result({Nat, Toml}, Str) =
     | false => Result/failure("expected inline table")
     end
 pub and value_scan(input: Bytes, pos: Nat) -> Result({Nat, Toml}, Str) =
-    match Bytes/get(input, pos)
+    match Bytes/try_get(input, pos)
     | none() => Result/failure("expected value")
     | some(b) =>
         match Byte/to_nat(b)

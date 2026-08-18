@@ -15,7 +15,7 @@ let is_comment_byte(b: Byte) -> Bool =
     n == 0x9 || Nat/in_range(n, 0x20, 0x7E) || n >= 0x80;
 
 pub let byte_at_is(input: Bytes, i: Nat, pred: (Nat) -> Bool) -> Bool =
-    match Bytes/get(input, i) | some(b) => pred(Byte/to_nat(b)) | none() => false end;
+    match Bytes/try_get(input, i) | some(b) => pred(Byte/to_nat(b)) | none() => false end;
 
 pub let hex_val(n: Nat) -> Option(Nat) =
     choose

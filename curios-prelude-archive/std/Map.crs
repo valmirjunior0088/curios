@@ -33,7 +33,7 @@ satisfy Key(Str) {
 -- Rocq's answer is not to encode into a binary representation but to *work* in one — `positive` is this library's `NonZero` and `N` its `BigNat` — where digit injectivity comes from the representation rather than from arithmetic. Its bridge from unary `nat` is proved by successor (`Pos.of_nat (S n) = Pos.succ (Pos.of_nat n)`), which is affordable exactly because that bridge is only ever needed inside proofs. Agda and Lean instead give the digit expansion its own well-founded or fuel-based recursion, and neither form exists here.
 --
 -- So a caller wanting numeric keys encodes them at the boundary, and a future `Key` for a binary carrier is the shape worth building.
--- The range test is written `g < len` rather than as a refuted `g >= len` so that the in-range arm can index through `Bytes/at`: `Nat/Lt` is decided on exactly this comparison, so refining it to `true` reduces the proposition away and the bound is discharged with nothing written. Spelling the same fact the other way round leaves the refinement on `>=`, where nothing reduces `<`, and the index becomes unpayable.
+-- The range test is written `g < len` rather than as a refuted `g >= len` so that the in-range arm can index through `Bytes/get`: `Nat/Lt` is decided on exactly this comparison, so refining it to `true` reduces the proposition away and the bound is discharged with nothing written. Spelling the same fact the other way round leaves the refinement on `>=`, where nothing reduces `<`, and the index becomes unpayable.
 let bit(k: Bytes, j: Nat) -> Nat =
     let g = j / 9;
     let o = j % 9;
@@ -42,7 +42,7 @@ let bit(k: Bytes, j: Nat) -> Nat =
     | true =>
         match o == 0
         | true => 1
-        | false => Nat/and(Nat/shr(Byte/to_nat(Bytes/at(k, g)), 8 - o), 1)
+        | false => Nat/and(Nat/shr(Byte/to_nat(Bytes/get(k, g)), 8 - o), 1)
         end
     end;
 
@@ -52,7 +52,7 @@ let crit(a: Bytes, b: Bytes) -> Nat =
         | true => bits(x, y, g, o + 1)
         | false => g * 9 + o
         end;
-    -- Nested rather than conjoined, for the reason `bit` states: a refinement records the term it scrutinised, so a true `x && y` says nothing about `x`, and each bound has to be refined on its own before `Bytes/at` will take it. Both exhausted branches agree, so the split changes nothing but what is provable inside them.
+    -- Nested rather than conjoined, for the reason `bit` states: a refinement records the term it scrutinised, so a true `x && y` says nothing about `x`, and each bound has to be refined on its own before `Bytes/get` will take it. Both exhausted branches agree, so the split changes nothing but what is provable inside them.
     rec bytes(g: Nat) -> Nat =
         match g < Bytes/len(a)
         | false => g * 9
@@ -60,8 +60,8 @@ let crit(a: Bytes, b: Bytes) -> Nat =
             match g < Bytes/len(b)
             | false => g * 9
             | true =>
-                let x = Byte/to_nat(Bytes/at(a, g));
-                let y = Byte/to_nat(Bytes/at(b, g));
+                let x = Byte/to_nat(Bytes/get(a, g));
+                let y = Byte/to_nat(Bytes/get(b, g));
                 match x == y | true => bytes(g + 1) | false => bits(x, y, g, 1) end
             end
         end;

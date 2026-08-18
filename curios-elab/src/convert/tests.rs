@@ -669,22 +669,22 @@ fn convert_intrinsic_nat_to_int_recurses_into_operand() {
 fn convert_intrinsic_list_compares_element_wise() {
     let mut context = context();
 
-    let this = Subterm::Intrinsic(Intrinsic::List(
-        Term::intrinsic(Intrinsic::NatType),
-        vec![
+    let this = Subterm::Intrinsic(Intrinsic::List {
+        element: Term::intrinsic(Intrinsic::NatType),
+        items: vec![
             Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))).into(),
             Subterm::Intrinsic(Intrinsic::Nat(Nat::new(2usize))).into(),
         ],
-    ))
+    })
     .into();
 
-    let that = Subterm::Intrinsic(Intrinsic::List(
-        Term::intrinsic(Intrinsic::NatType),
-        vec![
+    let that = Subterm::Intrinsic(Intrinsic::List {
+        element: Term::intrinsic(Intrinsic::NatType),
+        items: vec![
             Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))).into(),
             Subterm::Intrinsic(Intrinsic::Nat(Nat::new(2usize))).into(),
         ],
-    ))
+    })
     .into();
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
@@ -694,19 +694,19 @@ fn convert_intrinsic_list_compares_element_wise() {
 fn convert_intrinsic_list_rejects_different_lengths() {
     let mut context = context();
 
-    let this = Subterm::Intrinsic(Intrinsic::List(
-        Term::intrinsic(Intrinsic::NatType),
-        vec![Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))).into()],
-    ))
+    let this = Subterm::Intrinsic(Intrinsic::List {
+        element: Term::intrinsic(Intrinsic::NatType),
+        items: vec![Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))).into()],
+    })
     .into();
 
-    let that = Subterm::Intrinsic(Intrinsic::List(
-        Term::intrinsic(Intrinsic::NatType),
-        vec![
+    let that = Subterm::Intrinsic(Intrinsic::List {
+        element: Term::intrinsic(Intrinsic::NatType),
+        items: vec![
             Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))).into(),
             Subterm::Intrinsic(Intrinsic::Nat(Nat::new(2usize))).into(),
         ],
-    ))
+    })
     .into();
 
     assert_eq!(conv(&mut context, &this, &that), Ok(false));

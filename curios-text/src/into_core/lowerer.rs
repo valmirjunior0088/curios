@@ -838,10 +838,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     curios_core::Intrinsic::list_append(element(), base, elem),
                 ));
             }
-            _ => operands.push(curios_core::Term::intrinsic(curios_core::Intrinsic::List(
-                element(),
-                std::mem::take(run),
-            ))),
+            _ => operands.push(curios_core::Term::intrinsic(curios_core::Intrinsic::List {
+                element: element(),
+                items: std::mem::take(run),
+            })),
         }
     }
 
@@ -868,7 +868,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
 
         if operands.is_empty() {
-            return Ok(curios_core::Intrinsic::List(element(), run));
+            return Ok(curios_core::Intrinsic::List {
+                element: element(),
+                items: run,
+            });
         }
 
         self.flush_list_run(&mut operands, &mut run);
@@ -877,13 +880,19 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             // A lone list-shaped operand is the value itself; the concatenation would only be normalised away. Only the family the literal builds may collapse: any other lone operand keeps its wrapper, which is what makes elaboration check a spread (`[..b]`) against a list type instead of adopting the operand's own — `[..true]` once collapsed to `true` and typechecked as `Bool`.
             1 => match &*operands[0] {
                 curios_core::Subterm::Intrinsic(
-                    intrinsic @ (curios_core::Intrinsic::List(..)
-                    | curios_core::Intrinsic::ListAppend(..)
-                    | curios_core::Intrinsic::ListConcat(..)),
+                    intrinsic @ (curios_core::Intrinsic::List { .. }
+                    | curios_core::Intrinsic::ListAppend { .. }
+                    | curios_core::Intrinsic::ListConcat { .. }),
                 ) => Ok(intrinsic.clone()),
-                _ => Ok(curios_core::Intrinsic::ListConcat(element(), operands)),
+                _ => Ok(curios_core::Intrinsic::ListConcat {
+                    element: element(),
+                    operands,
+                }),
             },
-            _ => Ok(curios_core::Intrinsic::ListConcat(element(), operands)),
+            _ => Ok(curios_core::Intrinsic::ListConcat {
+                element: element(),
+                operands,
+            }),
         }
     }
 
@@ -978,15 +987,15 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             && matches!(
                 intrinsic,
                 curios_core::Intrinsic::Bin(g, _)
-                | curios_core::Intrinsic::BinAppend(g, ..)
-                | curios_core::Intrinsic::BinConcat(g, ..)
+                | curios_core::Intrinsic::BinAppend { grain: g, .. }
+                | curios_core::Intrinsic::BinConcat { grain: g, .. }
                 if *g == grain
             )
         {
             return Ok(intrinsic.clone());
         }
 
-        Ok(curios_core::Intrinsic::BinConcat(grain, operands))
+        Ok(curios_core::Intrinsic::BinConcat { grain, operands })
     }
 
     pub(super) fn intrinsic(&self, intrinsic: &Intrinsic) -> Result<curios_core::Intrinsic, Error> {
@@ -1228,69 +1237,111 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Intrinsic::BinEql(grain, left, right) => {
                 curios_core::Intrinsic::bin_eql(*grain, self.term(left)?, self.term(right)?)
             }
-            Intrinsic::BinGet(grain, bin, index) => {
+            Intrinsic::BinGet { grain, bin, index } => {
                 curios_core::Intrinsic::bin_get(*grain, self.term(bin)?, self.term(index)?)
             }
-            Intrinsic::BinSlice(grain, bin, start, end) => curios_core::Intrinsic::bin_slice(
+            Intrinsic::BinSlice {
+                grain,
+                bin,
+                start,
+                end,
+            } => curios_core::Intrinsic::bin_slice(
                 *grain,
                 self.term(bin)?,
                 self.term(start)?,
                 self.term(end)?,
             ),
-            Intrinsic::BinAppend(grain, bin, atom) => {
-                curios_core::Intrinsic::bin_append(*grain, self.term(bin)?, self.term(atom)?)
-            }
-            Intrinsic::BinConcat(grain, left, right) => {
+            Intrinsic::BinAppend {
+                grain,
+                bin,
+                element: atom,
+            } => curios_core::Intrinsic::bin_append(*grain, self.term(bin)?, self.term(atom)?),
+            Intrinsic::BinConcat { grain, left, right } => {
                 curios_core::Intrinsic::bin_concat(*grain, [self.term(left)?, self.term(right)?])
             }
             Intrinsic::ListType(inner) => curios_core::Intrinsic::list_type(self.term(inner)?),
             Intrinsic::List(entries) => self.lower_list_literal(entries, |term| self.term(term))?,
-            Intrinsic::ListLen(ty, inner) => {
-                curios_core::Intrinsic::list_len(self.term(ty)?, self.term(inner)?)
-            }
-            Intrinsic::ListGet(ty, list, index) => curios_core::Intrinsic::list_get(
+            Intrinsic::ListLen {
+                element: ty,
+                list: inner,
+            } => curios_core::Intrinsic::list_len(self.term(ty)?, self.term(inner)?),
+            Intrinsic::ListGet {
+                element: ty,
+                list,
+                index,
+            } => curios_core::Intrinsic::list_get(
                 self.term(ty)?,
                 self.term(list)?,
                 self.term(index)?,
             ),
-            Intrinsic::ListSlice(ty, list, start, end) => curios_core::Intrinsic::list_slice(
+            Intrinsic::ListSlice {
+                element: ty,
+                list,
+                start,
+                end,
+            } => curios_core::Intrinsic::list_slice(
                 self.term(ty)?,
                 self.term(list)?,
                 self.term(start)?,
                 self.term(end)?,
             ),
-            Intrinsic::ListAppend(ty, list, elem) => curios_core::Intrinsic::list_append(
+            Intrinsic::ListAppend {
+                element: ty,
+                list,
+                item: elem,
+            } => curios_core::Intrinsic::list_append(
                 self.term(ty)?,
                 self.term(list)?,
                 self.term(elem)?,
             ),
-            Intrinsic::ListConcat(ty, left, right) => curios_core::Intrinsic::list_concat(
+            Intrinsic::ListConcat {
+                element: ty,
+                left,
+                right,
+            } => curios_core::Intrinsic::list_concat(
                 self.term(ty)?,
                 [self.term(left)?, self.term(right)?],
             ),
-            Intrinsic::ListMap(a, b, list, f) => curios_core::Intrinsic::list_map(
+            Intrinsic::ListMap {
+                from: a,
+                to: b,
+                list,
+                function: f,
+            } => curios_core::Intrinsic::list_map(
                 self.term(a)?,
                 self.term(b)?,
                 self.term(list)?,
                 self.term(f)?,
             ),
             Intrinsic::CellType(inner) => curios_core::Intrinsic::cell_type(self.term(inner)?),
-            Intrinsic::Cell(type_, init) => {
-                curios_core::Intrinsic::cell_new(self.term(type_)?, self.term(init)?)
-            }
-            Intrinsic::CellSet(type_, cell, value) => curios_core::Intrinsic::cell_set(
+            Intrinsic::Cell {
+                element: type_,
+                initial: init,
+            } => curios_core::Intrinsic::cell_new(self.term(type_)?, self.term(init)?),
+            Intrinsic::CellSet {
+                element: type_,
+                cell,
+                value,
+            } => curios_core::Intrinsic::cell_set(
                 self.term(type_)?,
                 self.term(cell)?,
                 self.term(value)?,
             ),
-            Intrinsic::CellGet(type_, cell) => {
-                curios_core::Intrinsic::cell_get(self.term(type_)?, self.term(cell)?)
-            }
+            Intrinsic::CellGet {
+                element: type_,
+                cell,
+            } => curios_core::Intrinsic::cell_get(self.term(type_)?, self.term(cell)?),
             Intrinsic::IoType(result) => curios_core::Intrinsic::io_type(self.term(result)?),
-            Intrinsic::IoPure(type_, value) => {
-                curios_core::Intrinsic::io_pure(self.term(type_)?, self.term(value)?)
-            }
-            Intrinsic::IoBind(from, to, action, f) => curios_core::Intrinsic::io_bind(
+            Intrinsic::IoPure {
+                result: type_,
+                value,
+            } => curios_core::Intrinsic::io_pure(self.term(type_)?, self.term(value)?),
+            Intrinsic::IoBind {
+                from,
+                to,
+                action,
+                continuation: f,
+            } => curios_core::Intrinsic::io_bind(
                 self.term(from)?,
                 self.term(to)?,
                 self.term(action)?,

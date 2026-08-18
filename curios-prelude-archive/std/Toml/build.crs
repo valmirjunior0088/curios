@@ -145,7 +145,7 @@ rec walk(
                         | arr(items) =>
                             match Nat/Lt/try(index, List/len(items))
                             | some(in_range) =>
-                                match List/at(@Toml, items, index, @in_range)
+                                match List/get(@Toml, items, index, @in_range)
                                 | table(inner) =>
                                     match walk(
                                         inner,
@@ -261,7 +261,7 @@ rec walk(
                                 let seg2 = Seg/at(name, index);
                                 match Nat/Lt/try(index, List/len(items))
                                 | some(in_range) =>
-                                    match List/at(@Toml, items, index, @in_range)
+                                    match List/get(@Toml, items, index, @in_range)
                                     | table(inner) =>
                                         match walk(inner, side, seg_key(pre, seg2), rest, 0, act)
                                         | success((inner2, side2, res)) =>

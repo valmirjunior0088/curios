@@ -311,13 +311,18 @@ pub(super) fn erase_intrinsic(
             &[(l, bin_type(*grain)), (r, bin_type(*grain))],
             hint,
         ),
-        Intrinsic::BinGet(grain, bin, index) => lowering.sequence(
+        Intrinsic::BinGet { grain, bin, index } => lowering.sequence(
             context,
             curios_ersd::SequenceOp::BinGet(*grain),
             &[(bin, bin_type(*grain)), (index, nat_type())],
             hint,
         ),
-        Intrinsic::BinSlice(grain, bin, start, end) => lowering.sequence(
+        Intrinsic::BinSlice {
+            grain,
+            bin,
+            start,
+            end,
+        } => lowering.sequence(
             context,
             curios_ersd::SequenceOp::BinSlice(*grain),
             &[
@@ -327,7 +332,11 @@ pub(super) fn erase_intrinsic(
             ],
             hint,
         ),
-        Intrinsic::BinAppend(grain, bin, element) => lowering.sequence(
+        Intrinsic::BinAppend {
+            grain,
+            bin,
+            element,
+        } => lowering.sequence(
             context,
             curios_ersd::SequenceOp::BinAppend(*grain),
             &[
@@ -336,7 +345,7 @@ pub(super) fn erase_intrinsic(
             ],
             hint,
         ),
-        Intrinsic::BinConcat(grain, operands) => {
+        Intrinsic::BinConcat { grain, operands } => {
             let pairs = operands
                 .iter()
                 .map(|operand| (operand, bin_type(*grain)))
@@ -349,26 +358,41 @@ pub(super) fn erase_intrinsic(
             )
         }
 
-        Intrinsic::List(element_type, elements) => {
+        Intrinsic::List {
+            element: element_type,
+            items: elements,
+        } => {
             let pairs = elements
                 .iter()
                 .map(|element| (element, element_type.clone()))
                 .collect::<Vec<_>>();
             lowering.sequence(context, curios_ersd::SequenceOp::ListBuild, &pairs, hint)
         }
-        Intrinsic::ListLen(element_type, list) => lowering.sequence(
+        Intrinsic::ListLen {
+            element: element_type,
+            list,
+        } => lowering.sequence(
             context,
             curios_ersd::SequenceOp::ListLen,
             &[(list, list_type(element_type.clone()))],
             hint,
         ),
-        Intrinsic::ListGet(element_type, list, index) => lowering.sequence(
+        Intrinsic::ListGet {
+            element: element_type,
+            list,
+            index,
+        } => lowering.sequence(
             context,
             curios_ersd::SequenceOp::ListGet,
             &[(list, list_type(element_type.clone())), (index, nat_type())],
             hint,
         ),
-        Intrinsic::ListSlice(element_type, list, start, end) => lowering.sequence(
+        Intrinsic::ListSlice {
+            element: element_type,
+            list,
+            start,
+            end,
+        } => lowering.sequence(
             context,
             curios_ersd::SequenceOp::ListSlice,
             &[
@@ -378,7 +402,11 @@ pub(super) fn erase_intrinsic(
             ],
             hint,
         ),
-        Intrinsic::ListAppend(element_type, list, element) => lowering.sequence(
+        Intrinsic::ListAppend {
+            element: element_type,
+            list,
+            item: element,
+        } => lowering.sequence(
             context,
             curios_ersd::SequenceOp::ListAppend,
             &[
@@ -387,14 +415,22 @@ pub(super) fn erase_intrinsic(
             ],
             hint,
         ),
-        Intrinsic::ListConcat(element_type, operands) => {
+        Intrinsic::ListConcat {
+            element: element_type,
+            operands,
+        } => {
             let pairs = operands
                 .iter()
                 .map(|operand| (operand, list_type(element_type.clone())))
                 .collect::<Vec<_>>();
             lowering.sequence(context, curios_ersd::SequenceOp::ListConcat, &pairs, hint)
         }
-        Intrinsic::ListMap(domain, codomain, list, mapper) => {
+        Intrinsic::ListMap {
+            from: domain,
+            to: codomain,
+            list,
+            function: mapper,
+        } => {
             let list_atom =
                 emitted!(lowering.walk(context, list, &list_type(domain.clone()), None)?);
             let mapper_type = Term::func_type(
@@ -423,7 +459,10 @@ pub(super) fn erase_intrinsic(
             })
         }
 
-        Intrinsic::Cell(type_, initial) => {
+        Intrinsic::Cell {
+            element: type_,
+            initial,
+        } => {
             let initial_atom = emitted!(lowering.walk(context, initial, type_, None)?);
             lowering.thunk(hint.or(Some("io/cell_new")), move |lowering| {
                 Ok(lowering.bind(
@@ -435,7 +474,11 @@ pub(super) fn erase_intrinsic(
                 ))
             })
         }
-        Intrinsic::CellSet(type_, cell, value) => {
+        Intrinsic::CellSet {
+            element: type_,
+            cell,
+            value,
+        } => {
             let cell_type: Term = Subterm::Intrinsic(Intrinsic::CellType(type_.clone())).into();
             let cell_atom = emitted!(lowering.walk(context, cell, &cell_type, None)?);
             let value_atom = emitted!(lowering.walk(context, value, type_, None)?);
@@ -449,7 +492,10 @@ pub(super) fn erase_intrinsic(
                 ))
             })
         }
-        Intrinsic::CellGet(type_, cell) => {
+        Intrinsic::CellGet {
+            element: type_,
+            cell,
+        } => {
             let cell_type: Term = Subterm::Intrinsic(Intrinsic::CellType(type_.clone())).into();
             let cell_atom = emitted!(lowering.walk(context, cell, &cell_type, None)?);
             lowering.thunk(hint.or(Some("io/cell_get")), move |lowering| {
@@ -466,14 +512,22 @@ pub(super) fn erase_intrinsic(
         // The description that performs nothing: a closure yielding an already-computed value.
         //
         // The operand is erased at the construction site like every other intrinsic's, not inside the thunk. The language is eager: `/sys/Io/pure` is an ordinary call-by-value wrapper, so a surface `Io/pure(e)` has evaluated `e` before this node exists at all, and erasing the operand inside the closure would delay nothing while making this one arm's evaluation order differ from the rest of the roster. What delays a program's effect is `IoBind`.
-        Intrinsic::IoPure(type_, value) => {
+        Intrinsic::IoPure {
+            result: type_,
+            value,
+        } => {
             let value = emitted!(lowering.walk(context, value, type_, None)?);
             lowering.thunk(hint.or(Some("io/pure")), move |_| {
                 Ok(Outcome::Emitted(value))
             })
         }
         // The description that performs `action`, then the description `continuation` computes from its result. The operands erase at the construction site like the rest of the roster (see `thunk`'s placement rule); the two forces and the continuation's application are the performance, and only they stay inside.
-        Intrinsic::IoBind(from, to, action, continuation) => {
+        Intrinsic::IoBind {
+            from,
+            to,
+            action,
+            continuation,
+        } => {
             let io_from: Term = Subterm::Intrinsic(Intrinsic::IoType(from.clone())).into();
             let action_atom = emitted!(lowering.walk(context, action, &io_from, None)?);
 

@@ -23,7 +23,7 @@ fn list_map_fills_every_slot() {
     let source = r#"
         use /std/{Handle, Str, Nat, List, Option};
         let xs : List(Nat) = List/map([10, 20, 30], (n) => Nat/add(n, 1));
-        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Option/unwrap_or(List/get(xs, 0), 0), Option/unwrap_or(List/get(xs, 2), 0)))))!;
+        let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Option/unwrap_or(List/try_get(xs, 0), 0), Option/unwrap_or(List/try_get(xs, 2), 0)))))!;
         /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"42");
@@ -143,7 +143,7 @@ fn a_length_and_a_window_do_not_depend_on_grouping() {
             Eq/refl();
         let third : Byte = 0x33;
         let split_index
-            : Eq(Bytes/get(x[..x[0x30, 0x31], ..x[0x32, 0x33, 0x34]], 3), Option/some(third)) =
+            : Eq(Bytes/try_get(x[..x[0x30, 0x31], ..x[0x32, 0x33, 0x34]], 3), Option/some(third)) =
             Eq/refl();
         let list_length(p : Nat, q : Nat, r : Nat)
             -> Eq(List/len([..[p, q], ..[r]]), 3) = Eq/refl();
@@ -311,7 +311,7 @@ fn packed_atom_splices_are_the_cons_and_append_spellings() {
         let cons_len(h : Byte, t : Bytes)
             -> Eq(Bytes/len(x[h, ..t]), Nat/add(1, Bytes/len(t))) = Eq/refl();
         let cons_head(h : Byte, t : Bytes)
-            -> Eq(Bytes/get(x[h, ..t], 0), Option/some(h)) = Eq/refl();
+            -> Eq(Bytes/try_get(x[h, ..t], 0), Option/some(h)) = Eq/refl();
         let bits_len(h : Bool, t : Bits)
             -> Eq(Bits/len(b[h, ..t]), Nat/add(1, Bits/len(t))) = Eq/refl();
         let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
@@ -326,9 +326,9 @@ fn an_append_over_a_nonempty_base_still_decodes_its_first_atom() {
     let source = r#"
         use /std/{Handle, Str, Eq, Byte, Bytes, Bool, Bits, Option};
         let lead : Byte = 0x48;
-        let byte_head(b : Byte) -> Eq(Bytes/get(x[0x48, b], 0), Option/some(lead)) = Eq/refl();
-        let bit_head(b : Bool) -> Eq(Bits/get(b[1, b], 0), Option/some(true)) = Eq/refl();
-        let chained(a : Byte, b : Byte) -> Eq(Bytes/get(x[0x48, a, b], 0), Option/some(lead)) = Eq/refl();
+        let byte_head(b : Byte) -> Eq(Bytes/try_get(x[0x48, b], 0), Option/some(lead)) = Eq/refl();
+        let bit_head(b : Bool) -> Eq(Bits/try_get(b[1, b], 0), Option/some(true)) = Eq/refl();
+        let chained(a : Byte, b : Byte) -> Eq(Bytes/try_get(x[0x48, a, b], 0), Option/some(lead)) = Eq/refl();
         let chained_len(a : Byte, b : Byte) -> Eq(Bytes/len(x[a, b]), 2) = Eq/refl();
         let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
         /std/Io/pure(())

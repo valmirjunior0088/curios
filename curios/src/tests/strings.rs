@@ -174,9 +174,9 @@ fn str_get_indexes_codepoints_of_every_width() {
         | some(s) =>
             /std/print(Str/flatten([
                 Nat/to_str(Str/len(s)), ",",
-                Nat/to_str(Char/to_nat(Option/unwrap_or(Str/get(s, 0), '?'))), ",",
-                Nat/to_str(Char/to_nat(Option/unwrap_or(Str/get(s, 1), '?'))), ",",
-                Nat/to_str(Char/to_nat(Option/unwrap_or(Str/get(s, 2), '?')))
+                Nat/to_str(Char/to_nat(Option/unwrap_or(Str/try_get(s, 0), '?'))), ",",
+                Nat/to_str(Char/to_nat(Option/unwrap_or(Str/try_get(s, 1), '?'))), ",",
+                Nat/to_str(Char/to_nat(Option/unwrap_or(Str/try_get(s, 2), '?')))
             ]))
         | none() => /std/print("bad")
         end
@@ -185,7 +185,7 @@ fn str_get_indexes_codepoints_of_every_width() {
     assert_eq!(run(source), b"3,97,8364,128512");
 }
 
-// `Str/at` is the proof-carrying indexer: `ok : Lt(i, len s)` flows (erased) into the `Bytes/at` bound, so it reads each codepoint with no fallback. Indexing `a€😀` at 0, 1, 2 yields U+0061, U+20AC, U+1F600 — same widths as `get`, but total.
+// `Str/get` is the proof-carrying indexer: `ok : Lt(i, len s)` flows (erased) into the `Bytes/get` bound, so it reads each codepoint with no fallback. Indexing `a€😀` at 0, 1, 2 yields U+0061, U+20AC, U+1F600 — same widths as `get`, but total.
 #[test]
 fn str_at_reads_codepoints_with_the_proof() {
     let source = r#"
@@ -203,9 +203,9 @@ fn str_at_reads_codepoints_with_the_proof() {
                 | some(p1) => match r2 : (_) => Option(Str)
                 | none() => Option/none()
                 | some(p2) => Option/some(Str/flatten([
-                    Nat/to_str(Char/to_nat(Str/at(s, 0, p0))), ",",
-                    Nat/to_str(Char/to_nat(Str/at(s, 1, p1))), ",",
-                    Nat/to_str(Char/to_nat(Str/at(s, 2, p2)))]))
+                    Nat/to_str(Char/to_nat(Str/get(s, 0, p0))), ",",
+                    Nat/to_str(Char/to_nat(Str/get(s, 1, p1))), ",",
+                    Nat/to_str(Char/to_nat(Str/get(s, 2, p2)))]))
                 end end end;
             /std/print(Option/unwrap_or(out, "oob"))
         | none() => /std/print("bad")
@@ -323,7 +323,7 @@ fn str_logical_operations_use_certified_chars() {
         use /std/{Char, Str, Nat, Option, Show, Handle};
         let s = "a€😀";
         let rebuilt = Str/fold(s, "", (c, acc) => Str/concat(acc, Show/show(c)));
-        let second = Show/show(Option/unwrap_or(Str/get(s, 1), '?'));
+        let second = Show/show(Option/unwrap_or(Str/try_get(s, 1), '?'));
         let euro = Option/unwrap_or(Str/find(s, '€'), 99);
         let supplementary = Option/unwrap_or(Str/find_index(s, (c) => Char/to_nat(c) > 0xFFFF), 99);
         let shown = Show/show('😀');

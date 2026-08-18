@@ -54,7 +54,7 @@ let ns_str(ns: Nat) -> Str =
             match k <= 1
             | true => 1
             | false =>
-                match Option/unwrap_or(Str/get(digits, k - 1), '1') == '0'
+                match Option/unwrap_or(Str/try_get(digits, k - 1), '1') == '0'
                 | true => keep(k - 1)
                 | false => k
                 end
@@ -89,10 +89,10 @@ let int_str(n: Int) -> Str =
 
 let flt_str(f: Flt) -> Str =
     let b = Flt/to_le_bytes(f);
-    let b0 = Byte/to_nat(Option/unwrap_or(Bytes/get(b, 0), 0));
-    let b1 = Byte/to_nat(Option/unwrap_or(Bytes/get(b, 1), 0));
-    let b2 = Byte/to_nat(Option/unwrap_or(Bytes/get(b, 2), 0));
-    let b3 = Byte/to_nat(Option/unwrap_or(Bytes/get(b, 3), 0));
+    let b0 = Byte/to_nat(Option/unwrap_or(Bytes/try_get(b, 0), 0));
+    let b1 = Byte/to_nat(Option/unwrap_or(Bytes/try_get(b, 1), 0));
+    let b2 = Byte/to_nat(Option/unwrap_or(Bytes/try_get(b, 2), 0));
+    let b3 = Byte/to_nat(Option/unwrap_or(Bytes/try_get(b, 3), 0));
     let exp_field = b3 % 0x80 * 2 + b2 / 0x80;
     choose
     | exp_field == 0xFF && b0 == 0 && b1 == 0 && b2 % 0x80 == 0 =>
@@ -101,7 +101,7 @@ let flt_str(f: Flt) -> Str =
     | _ =>
         let raw = Flt/to_str(f);
         let unsigned =
-            match Option/unwrap_or(Str/get(raw, 0), '0') == '+'
+            match Option/unwrap_or(Str/try_get(raw, 0), '0') == '+'
             | true => Str/slice(raw, 1, Str/len(raw))
             | false => raw
             end;

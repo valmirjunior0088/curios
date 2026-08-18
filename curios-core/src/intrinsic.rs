@@ -125,20 +125,63 @@ pub enum Intrinsic {
     Bin(Grain, PackedBin),
     BinLen(Grain, Term),
     BinEql(Grain, Term, Term),
-    BinGet(Grain, Term, Term),
-    BinSlice(Grain, Term, Term, Term),
-    BinAppend(Grain, Term, Term),
-    BinConcat(Grain, Vec<Term>),
+    BinGet {
+        grain: Grain,
+        bin: Term,
+        index: Term,
+    },
+    BinSlice {
+        grain: Grain,
+        bin: Term,
+        start: Term,
+        end: Term,
+    },
+    BinAppend {
+        grain: Grain,
+        bin: Term,
+        element: Term,
+    },
+    BinConcat {
+        grain: Grain,
+        operands: Vec<Term>,
+    },
     ListType(Term),
     // A list literal, carrying its element type: the one value form whose elements alone cannot name it — `[]` has nothing to read a type from.
-    List(Term, Vec<Term>),
-    ListLen(Term, Term),
-    ListGet(Term, Term, Term),
-    ListSlice(Term, Term, Term, Term),
-    ListAppend(Term, Term, Term),
-    ListConcat(Term, Vec<Term>),
+    List {
+        element: Term,
+        items: Vec<Term>,
+    },
+    ListLen {
+        element: Term,
+        list: Term,
+    },
+    ListGet {
+        element: Term,
+        list: Term,
+        index: Term,
+    },
+    ListSlice {
+        element: Term,
+        list: Term,
+        start: Term,
+        end: Term,
+    },
+    ListAppend {
+        element: Term,
+        list: Term,
+        item: Term,
+    },
+    ListConcat {
+        element: Term,
+        operands: Vec<Term>,
+    },
     // (@A, @B, list : List(A), f : (A) -> B) -> List(B): a structural map. Opaque under reduction on a symbolic operand, so it never unfolds a variable during type-checking. Erases to a single O(n) fill loop.
-    ListMap(Term, Term, Term, Term),
+    ListMap {
+        from: Term,
+        to: Term,
+        list: Term,
+        function: Term,
+    },
     HandleType,
     Handle(u32),
     // (a, b) -> Bool: identity of two handles. The one pure operation on `Handle` -- handles are opaque i31 tokens, so this erases to the `Nat` equality op.
@@ -148,19 +191,37 @@ pub enum Intrinsic {
     // The description's payload is the unit type, not the caller's choice. `exit` never returns, and a non-returning term is unsound exactly when it inhabits a type nothing total inhabits — it is the forgery that is the problem, not the non-return. At `{}` there is nothing to forge, which is the same property `Foreign` has for free by reading its result off an ABI row.
     ProcExit(Term),
     CellType(Term),
-    Cell(Term, Term),          // type, init
-    CellSet(Term, Term, Term), // type, cell, value
-    CellGet(Term, Term),       // type, cell
+    Cell {
+        element: Term,
+        initial: Term,
+    },
+    CellSet {
+        element: Term,
+        cell: Term,
+        value: Term,
+    },
+    CellGet {
+        element: Term,
+        cell: Term,
+    },
     // The opaque carrier of a host effect: `Io(T)` is a *description* of a computation that yields a `T`, never the `T` itself.
     //
     // There is deliberately no eliminator from `Io(T)` to `T`, and there never may be. That absence is the whole of the referential-transparency story: a closure that performs an effect can only be given an `Io`-returning type, so every term of non-`Io` type denotes one value, and a scrutinee's spelling fixes it. The only consumer of an `Io(A)` is `IoBind`, which returns an `Io(B)`; nothing lowers the carrier to its content but the emitted entrypoint boundary, which forces the program's whole description exactly once.
     IoType(Term),
     // (@T, x : T) -> Io(T): the description that performs nothing and yields `x`.
-    IoPure(Term, Term), // type, value
+    IoPure {
+        result: Term,
+        value: Term,
+    },
     // (@A, @B, m : Io(A), f : (A) -> Io(B)) -> Io(B): the description that performs `m`, then the description `f` computes from its result.
     //
     // Non-dependent in `B`, matching the `/syn/Monad` field it satisfies. Inert like the other two: no monad law holds definitionally, since nothing can be proven about an `Io` for a law to be useful about.
-    IoBind(Term, Term, Term, Term), // from, to, action, continuation
+    IoBind {
+        from: Term,
+        to: Term,
+        action: Term,
+        continuation: Term,
+    },
 }
 
 impl Intrinsic {
@@ -268,7 +329,11 @@ impl Intrinsic {
         B: Into<Term>,
         I: Into<Term>,
     {
-        Self::BinGet(grain, bin.into(), index.into())
+        Self::BinGet {
+            grain,
+            bin: bin.into(),
+            index: index.into(),
+        }
     }
 
     /// A `BinSlice` node from term-shaped bytes, start, and end.
@@ -278,7 +343,12 @@ impl Intrinsic {
         S: Into<Term>,
         E: Into<Term>,
     {
-        Self::BinSlice(grain, bin.into(), start.into(), end.into())
+        Self::BinSlice {
+            grain,
+            bin: bin.into(),
+            start: start.into(),
+            end: end.into(),
+        }
     }
 
     /// A `BinAppend` node from term-shaped bytes and byte.
@@ -287,7 +357,11 @@ impl Intrinsic {
         B: Into<Term>,
         E: Into<Term>,
     {
-        Self::BinAppend(grain, bin.into(), byte.into())
+        Self::BinAppend {
+            grain,
+            bin: bin.into(),
+            element: byte.into(),
+        }
     }
 
     /// A `BinConcat` node from any iterator of term-shaped operands.
@@ -296,7 +370,10 @@ impl Intrinsic {
         I: IntoIterator,
         I::Item: Into<Term>,
     {
-        Self::BinConcat(grain, operands.into_iter().map(|e| e.into()).collect())
+        Self::BinConcat {
+            grain,
+            operands: operands.into_iter().map(|e| e.into()).collect(),
+        }
     }
 
     /// A `ListType` node from a term-shaped element type.
@@ -313,7 +390,10 @@ impl Intrinsic {
         T: Into<Term>,
         L: Into<Term>,
     {
-        Self::ListLen(type_.into(), list.into())
+        Self::ListLen {
+            element: type_.into(),
+            list: list.into(),
+        }
     }
 
     /// A `ListGet` node from term-shaped element type, list, and index.
@@ -323,7 +403,11 @@ impl Intrinsic {
         L: Into<Term>,
         I: Into<Term>,
     {
-        Self::ListGet(type_.into(), list.into(), index.into())
+        Self::ListGet {
+            element: type_.into(),
+            list: list.into(),
+            index: index.into(),
+        }
     }
 
     /// A `ListSlice` node from term-shaped element type, list, start, and end.
@@ -334,7 +418,12 @@ impl Intrinsic {
         S: Into<Term>,
         E: Into<Term>,
     {
-        Self::ListSlice(type_.into(), list.into(), start.into(), end.into())
+        Self::ListSlice {
+            element: type_.into(),
+            list: list.into(),
+            start: start.into(),
+            end: end.into(),
+        }
     }
 
     /// A `ListAppend` node from term-shaped element type, list, and element.
@@ -344,7 +433,11 @@ impl Intrinsic {
         L: Into<Term>,
         E: Into<Term>,
     {
-        Self::ListAppend(type_.into(), list.into(), elem.into())
+        Self::ListAppend {
+            element: type_.into(),
+            list: list.into(),
+            item: elem.into(),
+        }
     }
 
     /// A `ListConcat` node from a term-shaped element type and any iterator of term-shaped operands.
@@ -354,10 +447,10 @@ impl Intrinsic {
         O: IntoIterator,
         O::Item: Into<Term>,
     {
-        Self::ListConcat(
-            type_.into(),
-            operands.into_iter().map(|e| e.into()).collect(),
-        )
+        Self::ListConcat {
+            element: type_.into(),
+            operands: operands.into_iter().map(|e| e.into()).collect(),
+        }
     }
 
     /// A `ListMap` node from term-shaped source element type, target element type, list, and function — the collection first, like every other sequence operation.
@@ -368,7 +461,12 @@ impl Intrinsic {
         R: Into<Term>,
         F: Into<Term>,
     {
-        Self::ListMap(a.into(), b.into(), list.into(), f.into())
+        Self::ListMap {
+            from: a.into(),
+            to: b.into(),
+            list: list.into(),
+            function: f.into(),
+        }
     }
 
     /// A `CellType` node from a term-shaped element type.
@@ -393,7 +491,10 @@ impl Intrinsic {
         T: Into<Term>,
         V: Into<Term>,
     {
-        Self::IoPure(type_.into(), value.into())
+        Self::IoPure {
+            result: type_.into(),
+            value: value.into(),
+        }
     }
 
     /// An `IoBind` node from term-shaped source result type, target result type, action, and continuation.
@@ -404,7 +505,12 @@ impl Intrinsic {
         M: Into<Term>,
         F: Into<Term>,
     {
-        Self::IoBind(a.into(), b.into(), action.into(), f.into())
+        Self::IoBind {
+            from: a.into(),
+            to: b.into(),
+            action: action.into(),
+            continuation: f.into(),
+        }
     }
 
     /// Visit each `Term` operand of `self`, in field order. The single source of truth for which fields of an intrinsic are its term operands — `reach`, `any_metavar`, and `collect_construction_names` all read it. (`traverse` keeps its own match: it rebuilds rather than visits.) The closure is taken `impl FnMut` so it monomorphises and inlines, leaving the de Bruijn / region hot path allocation- and indirection-free.
@@ -520,50 +626,128 @@ impl Intrinsic {
             | Intrinsic::FltMax(a, b)
             | Intrinsic::FltCopysign(a, b)
             | Intrinsic::BinEql(Grain::X, a, b)
-            | Intrinsic::BinGet(Grain::X, a, b)
-            | Intrinsic::BinAppend(Grain::X, a, b)
+            | Intrinsic::BinGet {
+                grain: Grain::X,
+                bin: a,
+                index: b,
+            }
+            | Intrinsic::BinAppend {
+                grain: Grain::X,
+                bin: a,
+                element: b,
+            }
             | Intrinsic::BinEql(Grain::B, a, b)
-            | Intrinsic::BinGet(Grain::B, a, b)
-            | Intrinsic::BinAppend(Grain::B, a, b)
-            | Intrinsic::ListLen(a, b)
-            | Intrinsic::IoPure(a, b) => {
+            | Intrinsic::BinGet {
+                grain: Grain::B,
+                bin: a,
+                index: b,
+            }
+            | Intrinsic::BinAppend {
+                grain: Grain::B,
+                bin: a,
+                element: b,
+            }
+            | Intrinsic::ListLen {
+                element: a,
+                list: b,
+            }
+            | Intrinsic::IoPure {
+                result: a,
+                value: b,
+            } => {
                 visit(a);
                 visit(b);
             }
 
-            Intrinsic::BinSlice(Grain::X, a, b, c)
-            | Intrinsic::BinSlice(Grain::B, a, b, c)
-            | Intrinsic::ListGet(a, b, c)
-            | Intrinsic::ListAppend(a, b, c) => {
+            Intrinsic::BinSlice {
+                grain: Grain::X,
+                bin: a,
+                start: b,
+                end: c,
+            }
+            | Intrinsic::BinSlice {
+                grain: Grain::B,
+                bin: a,
+                start: b,
+                end: c,
+            }
+            | Intrinsic::ListGet {
+                element: a,
+                list: b,
+                index: c,
+            }
+            | Intrinsic::ListAppend {
+                element: a,
+                list: b,
+                item: c,
+            } => {
                 visit(a);
                 visit(b);
                 visit(c);
             }
 
-            Intrinsic::ListSlice(a, b, c, d)
-            | Intrinsic::ListMap(a, b, c, d)
-            | Intrinsic::IoBind(a, b, c, d) => {
+            Intrinsic::ListSlice {
+                element: a,
+                list: b,
+                start: c,
+                end: d,
+            }
+            | Intrinsic::ListMap {
+                from: a,
+                to: b,
+                list: c,
+                function: d,
+            }
+            | Intrinsic::IoBind {
+                from: a,
+                to: b,
+                action: c,
+                continuation: d,
+            } => {
                 visit(a);
                 visit(b);
                 visit(c);
                 visit(d);
             }
 
-            Intrinsic::BinConcat(Grain::X, terms) | Intrinsic::BinConcat(Grain::B, terms) => {
-                terms.iter().for_each(&mut *visit)
+            Intrinsic::BinConcat {
+                grain: Grain::X,
+                operands: terms,
             }
+            | Intrinsic::BinConcat {
+                grain: Grain::B,
+                operands: terms,
+            } => terms.iter().for_each(&mut *visit),
 
-            Intrinsic::List(ty, terms) | Intrinsic::ListConcat(ty, terms) => {
+            Intrinsic::List {
+                element: ty,
+                items: terms,
+            }
+            | Intrinsic::ListConcat {
+                element: ty,
+                operands: terms,
+            } => {
                 visit(ty);
                 terms.iter().for_each(&mut *visit);
             }
 
             Intrinsic::CellType(a) => visit(a),
-            Intrinsic::Cell(a, b) | Intrinsic::CellGet(a, b) => {
+            Intrinsic::Cell {
+                element: a,
+                initial: b,
+            }
+            | Intrinsic::CellGet {
+                element: a,
+                cell: b,
+            } => {
                 visit(a);
                 visit(b);
             }
-            Intrinsic::CellSet(a, b, c) => {
+            Intrinsic::CellSet {
+                element: a,
+                cell: b,
+                value: c,
+            } => {
                 visit(a);
                 visit(b);
                 visit(c);
@@ -720,73 +904,146 @@ impl Intrinsic {
             Intrinsic::BinEql(grain, l, r) => {
                 traverse_binary(l, r, visit, |l, r| Intrinsic::BinEql(*grain, l, r))
             }
-            Intrinsic::BinGet(grain, b, i) => {
-                traverse_binary(b, i, visit, |b, i| Intrinsic::BinGet(*grain, b, i))
-            }
-            Intrinsic::BinSlice(grain, bin, start, end) => Intrinsic::BinSlice(
-                *grain,
-                visit.visit_subterm(bin),
-                visit.visit_subterm(start),
-                visit.visit_subterm(end),
-            ),
-            Intrinsic::BinAppend(grain, b, atom) => traverse_binary(b, atom, visit, |b, atom| {
-                Intrinsic::BinAppend(*grain, b, atom)
+            Intrinsic::BinGet {
+                grain,
+                bin: b,
+                index: i,
+            } => traverse_binary(b, i, visit, |b, i| Intrinsic::BinGet {
+                grain: *grain,
+                bin: b,
+                index: i,
             }),
-            Intrinsic::BinConcat(grain, operands) => Intrinsic::BinConcat(
-                *grain,
-                operands.iter().map(|e| visit.visit_subterm(e)).collect(),
-            ),
+            Intrinsic::BinSlice {
+                grain,
+                bin,
+                start,
+                end,
+            } => Intrinsic::BinSlice {
+                grain: *grain,
+                bin: visit.visit_subterm(bin),
+                start: visit.visit_subterm(start),
+                end: visit.visit_subterm(end),
+            },
+            Intrinsic::BinAppend {
+                grain,
+                bin: b,
+                element: atom,
+            } => traverse_binary(b, atom, visit, |b, atom| Intrinsic::BinAppend {
+                grain: *grain,
+                bin: b,
+                element: atom,
+            }),
+            Intrinsic::BinConcat { grain, operands } => Intrinsic::BinConcat {
+                grain: *grain,
+                operands: operands.iter().map(|e| visit.visit_subterm(e)).collect(),
+            },
             Intrinsic::ListType(elem) => Intrinsic::ListType(visit.visit_subterm(elem)),
-            Intrinsic::List(elem, elems) => Intrinsic::List(
-                visit.visit_subterm(elem),
-                elems.iter().map(|e| visit.visit_subterm(e)).collect(),
-            ),
-            Intrinsic::ListLen(ty, list) => traverse_binary(ty, list, visit, Intrinsic::ListLen),
-            Intrinsic::ListGet(ty, list, index) => Intrinsic::ListGet(
-                visit.visit_subterm(ty),
-                visit.visit_subterm(list),
-                visit.visit_subterm(index),
-            ),
-            Intrinsic::ListSlice(ty, list, start, end) => Intrinsic::ListSlice(
-                visit.visit_subterm(ty),
-                visit.visit_subterm(list),
-                visit.visit_subterm(start),
-                visit.visit_subterm(end),
-            ),
-            Intrinsic::ListAppend(ty, list, elem) => Intrinsic::ListAppend(
-                visit.visit_subterm(ty),
-                visit.visit_subterm(list),
-                visit.visit_subterm(elem),
-            ),
-            Intrinsic::ListConcat(ty, operands) => Intrinsic::ListConcat(
-                visit.visit_subterm(ty),
-                operands.iter().map(|e| visit.visit_subterm(e)).collect(),
-            ),
-            Intrinsic::ListMap(a, b, list, f) => Intrinsic::ListMap(
-                visit.visit_subterm(a),
-                visit.visit_subterm(b),
-                visit.visit_subterm(list),
-                visit.visit_subterm(f),
-            ),
+            Intrinsic::List {
+                element: elem,
+                items: elems,
+            } => Intrinsic::List {
+                element: visit.visit_subterm(elem),
+                items: elems.iter().map(|e| visit.visit_subterm(e)).collect(),
+            },
+            Intrinsic::ListLen { element: ty, list } => {
+                traverse_binary(ty, list, visit, |element, list| Intrinsic::ListLen {
+                    element,
+                    list,
+                })
+            }
+            Intrinsic::ListGet {
+                element: ty,
+                list,
+                index,
+            } => Intrinsic::ListGet {
+                element: visit.visit_subterm(ty),
+                list: visit.visit_subterm(list),
+                index: visit.visit_subterm(index),
+            },
+            Intrinsic::ListSlice {
+                element: ty,
+                list,
+                start,
+                end,
+            } => Intrinsic::ListSlice {
+                element: visit.visit_subterm(ty),
+                list: visit.visit_subterm(list),
+                start: visit.visit_subterm(start),
+                end: visit.visit_subterm(end),
+            },
+            Intrinsic::ListAppend {
+                element: ty,
+                list,
+                item: elem,
+            } => Intrinsic::ListAppend {
+                element: visit.visit_subterm(ty),
+                list: visit.visit_subterm(list),
+                item: visit.visit_subterm(elem),
+            },
+            Intrinsic::ListConcat {
+                element: ty,
+                operands,
+            } => Intrinsic::ListConcat {
+                element: visit.visit_subterm(ty),
+                operands: operands.iter().map(|e| visit.visit_subterm(e)).collect(),
+            },
+            Intrinsic::ListMap {
+                from: a,
+                to: b,
+                list,
+                function: f,
+            } => Intrinsic::ListMap {
+                from: visit.visit_subterm(a),
+                to: visit.visit_subterm(b),
+                list: visit.visit_subterm(list),
+                function: visit.visit_subterm(f),
+            },
             Intrinsic::HandleType => Intrinsic::HandleType,
             Intrinsic::Handle(token) => Intrinsic::Handle(*token),
             Intrinsic::ProcExit(code) => Intrinsic::ProcExit(visit.visit_subterm(code)),
             Intrinsic::CellType(a) => Intrinsic::CellType(visit.visit_subterm(a)),
-            Intrinsic::Cell(a, b) => traverse_binary(a, b, visit, Intrinsic::Cell),
-            Intrinsic::CellGet(a, b) => traverse_binary(a, b, visit, Intrinsic::CellGet),
-            Intrinsic::CellSet(a, b, c) => Intrinsic::CellSet(
-                visit.visit_subterm(a),
-                visit.visit_subterm(b),
-                visit.visit_subterm(c),
-            ),
+            Intrinsic::Cell {
+                element: a,
+                initial: b,
+            } => traverse_binary(a, b, visit, |element, initial| Intrinsic::Cell {
+                element,
+                initial,
+            }),
+            Intrinsic::CellGet {
+                element: a,
+                cell: b,
+            } => traverse_binary(a, b, visit, |element, cell| Intrinsic::CellGet {
+                element,
+                cell,
+            }),
+            Intrinsic::CellSet {
+                element: a,
+                cell: b,
+                value: c,
+            } => Intrinsic::CellSet {
+                element: visit.visit_subterm(a),
+                cell: visit.visit_subterm(b),
+                value: visit.visit_subterm(c),
+            },
             Intrinsic::IoType(a) => Intrinsic::IoType(visit.visit_subterm(a)),
-            Intrinsic::IoPure(a, b) => traverse_binary(a, b, visit, Intrinsic::IoPure),
-            Intrinsic::IoBind(a, b, action, f) => Intrinsic::IoBind(
-                visit.visit_subterm(a),
-                visit.visit_subterm(b),
-                visit.visit_subterm(action),
-                visit.visit_subterm(f),
-            ),
+            Intrinsic::IoPure {
+                result: a,
+                value: b,
+            } => traverse_binary(a, b, visit, |result, value| Intrinsic::IoPure {
+                result,
+                value,
+            }),
+            Intrinsic::IoBind {
+                from: a,
+                to: b,
+                action,
+                continuation: f,
+            } => Intrinsic::IoBind {
+                from: visit.visit_subterm(a),
+                to: visit.visit_subterm(b),
+                action: visit.visit_subterm(action),
+                continuation: visit.visit_subterm(f),
+            },
         }
     }
 }

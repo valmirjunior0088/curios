@@ -424,12 +424,12 @@ impl Sort {
                 //
                 // Listed exhaustively rather than caught by a wildcard, because the wildcard's answer is *wrong* for any former added after it: it pins the level at 0 while `curios-cert`'s `sort_of_intrinsic` reads the parameter's, and nothing catches the disagreement until the fixed prelude's kernel recheck reports a ground `Type` against a `Type.{u}`, naming no item. Every other intrinsic match in the workspace is exhaustive; this one has to be too, so a new former forces a level decision at compile time instead of inheriting a default.
                 Intrinsic::Bin(..)
-                | Intrinsic::BinAppend(..)
-                | Intrinsic::BinConcat(..)
+                | Intrinsic::BinAppend { .. }
+                | Intrinsic::BinConcat { .. }
                 | Intrinsic::BinEql(..)
-                | Intrinsic::BinGet(..)
+                | Intrinsic::BinGet { .. }
                 | Intrinsic::BinLen(..)
-                | Intrinsic::BinSlice(..)
+                | Intrinsic::BinSlice { .. }
                 | Intrinsic::Bool(..)
                 | Intrinsic::BoolAnd(..)
                 | Intrinsic::BoolEql(..)
@@ -443,9 +443,9 @@ impl Sort {
                 | Intrinsic::ByteLt(..)
                 | Intrinsic::ByteLte(..)
                 | Intrinsic::ByteToNat(..)
-                | Intrinsic::Cell(..)
-                | Intrinsic::CellGet(..)
-                | Intrinsic::CellSet(..)
+                | Intrinsic::Cell { .. }
+                | Intrinsic::CellGet { .. }
+                | Intrinsic::CellSet { .. }
                 | Intrinsic::ProcExit(..)
                 | Intrinsic::Flt(..)
                 | Intrinsic::FltAbs(..)
@@ -499,15 +499,15 @@ impl Sort {
                 | Intrinsic::IntToFlt(..)
                 | Intrinsic::IntToNat(..)
                 | Intrinsic::IntXor(..)
-                | Intrinsic::IoBind(..)
-                | Intrinsic::IoPure(..)
-                | Intrinsic::List(..)
-                | Intrinsic::ListAppend(..)
-                | Intrinsic::ListConcat(..)
-                | Intrinsic::ListGet(..)
-                | Intrinsic::ListLen(..)
-                | Intrinsic::ListMap(..)
-                | Intrinsic::ListSlice(..)
+                | Intrinsic::IoBind { .. }
+                | Intrinsic::IoPure { .. }
+                | Intrinsic::List { .. }
+                | Intrinsic::ListAppend { .. }
+                | Intrinsic::ListConcat { .. }
+                | Intrinsic::ListGet { .. }
+                | Intrinsic::ListLen { .. }
+                | Intrinsic::ListMap { .. }
+                | Intrinsic::ListSlice { .. }
                 | Intrinsic::Nat(..)
                 | Intrinsic::NatAdd(..)
                 | Intrinsic::NatAnd(..)

@@ -428,14 +428,14 @@ fn reduce_flt_mul_stays_stuck() {
 fn reduce_list_get_returns_element_at_index() {
     let mut context = context();
 
-    let list = Subterm::Intrinsic(Intrinsic::List(
-        Term::intrinsic(Intrinsic::NatType),
-        vec![
+    let list = Subterm::Intrinsic(Intrinsic::List {
+        element: Term::intrinsic(Intrinsic::NatType),
+        items: vec![
             Subterm::Intrinsic(Intrinsic::Nat(Nat::new(10usize))).into(),
             Subterm::Intrinsic(Intrinsic::Nat(Nat::new(20usize))).into(),
             Subterm::Intrinsic(Intrinsic::Nat(Nat::new(30usize))).into(),
         ],
-    ));
+    });
 
     assert_eq!(
         reduce(
@@ -467,10 +467,10 @@ fn reduce_list_get_returns_element_at_index() {
 fn reduce_list_get_errors_on_out_of_bounds() {
     let mut context = context();
 
-    let list = Subterm::Intrinsic(Intrinsic::List(
-        Term::intrinsic(Intrinsic::NatType),
-        vec![Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))).into()],
-    ));
+    let list = Subterm::Intrinsic(Intrinsic::List {
+        element: Term::intrinsic(Intrinsic::NatType),
+        items: vec![Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))).into()],
+    });
 
     assert!(matches!(
         reduce(
@@ -534,13 +534,13 @@ fn reduce_bin_append_adds_the_full_byte_range() {
 fn reduce_list_append_adds_element() {
     let mut context = context();
 
-    let list = Subterm::Intrinsic(Intrinsic::List(
-        Term::intrinsic(Intrinsic::NatType),
-        vec![
+    let list = Subterm::Intrinsic(Intrinsic::List {
+        element: Term::intrinsic(Intrinsic::NatType),
+        items: vec![
             Subterm::Intrinsic(Intrinsic::Nat(Nat::new(10usize))).into(),
             Subterm::Intrinsic(Intrinsic::Nat(Nat::new(20usize))).into(),
         ],
-    ));
+    });
 
     assert_eq!(
         reduce(
@@ -552,14 +552,14 @@ fn reduce_list_append_adds_element() {
             ))
             .into()
         ),
-        Ok(Subterm::Intrinsic(Intrinsic::List(
-            Term::intrinsic(Intrinsic::NatType),
-            vec![
+        Ok(Subterm::Intrinsic(Intrinsic::List {
+            element: Term::intrinsic(Intrinsic::NatType),
+            items: vec![
                 Subterm::Intrinsic(Intrinsic::Nat(Nat::new(10usize))).into(),
                 Subterm::Intrinsic(Intrinsic::Nat(Nat::new(20usize))).into(),
                 Subterm::Intrinsic(Intrinsic::Nat(Nat::new(30usize))).into(),
             ]
-        ))
+        })
         .into())
     );
 }
@@ -1059,10 +1059,10 @@ mod intrinsic {
         Term::intrinsic(Intrinsic::list_concat(
             Term::intrinsic(Intrinsic::NatType),
             [
-                Term::intrinsic(Intrinsic::List(
-                    Term::intrinsic(Intrinsic::NatType),
-                    vec![lit(7)],
-                )),
+                Term::intrinsic(Intrinsic::List {
+                    element: Term::intrinsic(Intrinsic::NatType),
+                    items: vec![lit(7)],
+                }),
                 xs.clone(),
             ],
         ))
@@ -1097,7 +1097,7 @@ mod intrinsic {
                     lit(1)
                 ))
             ),
-            Subterm::Intrinsic(Intrinsic::ListGet(..)),
+            Subterm::Intrinsic(Intrinsic::ListGet { .. }),
         ));
     }
 
@@ -1118,10 +1118,10 @@ mod intrinsic {
                     lit(1)
                 ))
             ),
-            Subterm::Intrinsic(Intrinsic::List(
-                Term::intrinsic(Intrinsic::NatType),
-                vec![lit(7)]
-            )),
+            Subterm::Intrinsic(Intrinsic::List {
+                element: Term::intrinsic(Intrinsic::NatType),
+                items: vec![lit(7)]
+            }),
         );
 
         // `slice(cons(7, xs), 1, 1) = []` — the empty-slice identity.
@@ -1135,10 +1135,10 @@ mod intrinsic {
                     lit(1)
                 ))
             ),
-            Subterm::Intrinsic(Intrinsic::List(
-                Term::intrinsic(Intrinsic::NatType),
-                Vec::new()
-            )),
+            Subterm::Intrinsic(Intrinsic::List {
+                element: Term::intrinsic(Intrinsic::NatType),
+                items: Vec::new()
+            }),
         );
     }
 
@@ -1168,10 +1168,10 @@ mod intrinsic {
                 &mut context,
                 Term::intrinsic(Intrinsic::list_len(
                     Term::intrinsic(Intrinsic::NatType),
-                    Term::intrinsic(Intrinsic::List(
-                        Term::intrinsic(Intrinsic::NatType),
-                        vec![lit(1), lit(2), lit(3)]
-                    ))
+                    Term::intrinsic(Intrinsic::List {
+                        element: Term::intrinsic(Intrinsic::NatType),
+                        items: vec![lit(1), lit(2), lit(3)]
+                    })
                 )),
             ),
             Subterm::Intrinsic(Intrinsic::Nat(Nat::new(3usize))),

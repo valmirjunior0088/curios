@@ -208,14 +208,14 @@ fn sequences_transcribe_without_carrier_choices() {
     let body = Term::let_(
         &list,
         Term::intrinsic(Intrinsic::ListType(Term::intrinsic(Intrinsic::NatType))),
-        Term::intrinsic(Intrinsic::List(
-            Term::intrinsic(Intrinsic::NatType),
-            vec![nat_lit(1), nat_lit(2)],
-        )),
-        Term::intrinsic(Intrinsic::ListLen(
-            Term::intrinsic(Intrinsic::NatType),
-            Term::free_var(&list),
-        )),
+        Term::intrinsic(Intrinsic::List {
+            element: Term::intrinsic(Intrinsic::NatType),
+            items: vec![nat_lit(1), nat_lit(2)],
+        }),
+        Term::intrinsic(Intrinsic::ListLen {
+            element: Term::intrinsic(Intrinsic::NatType),
+            list: Term::free_var(&list),
+        }),
     );
     let erased = erase(
         &mut context,
@@ -682,10 +682,10 @@ fn a_live_hypothesis_list_match_erases_to_a_sequence_fold() {
     let items = vec![definition(
         "xs",
         list_ty.clone(),
-        Term::intrinsic(Intrinsic::List(
-            Term::intrinsic(Intrinsic::NatType),
-            vec![nat_lit(1)],
-        )),
+        Term::intrinsic(Intrinsic::List {
+            element: Term::intrinsic(Intrinsic::NatType),
+            items: vec![nat_lit(1)],
+        }),
     )];
     let body = Term::list_match(
         Term::free_var(&global("xs")),

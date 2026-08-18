@@ -182,4 +182,6 @@ pub struct ProofSyntax {
     pub int_non_zero: SyntaxName,
     /// `0 <= a` over `Int`, the precondition narrowing to `Nat` states.
     pub int_non_neg: SyntaxName,
+    /// `len(b) = 4` over `Bytes`, the precondition reinterpreting one as a binary32 states. Decided on the length alone, which is the whole of what the reinterpretation needs.
+    pub bytes_four: SyntaxName,
 }

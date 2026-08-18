@@ -1,4 +1,5 @@
 pub use /sys/{Int};
+pub use /syn/Int/{NonZero, NonNeg};
 pub use /sys/Int/{eql, neq, add, sub, mul, div, rem, lt, gt, lte, gte, and, or, xor, shl, shr, rotl,
     rotr, clz, ctz, popcnt, to_nat, to_flt};
 use /std/{Nat, Str, Option, Order, Eql, Cmp, Add, Sub, Mul, Div, Rem, Show, Ord, True, False};
@@ -14,7 +15,7 @@ pub let of_str(s: Str) -> Option(Int) =
     match Str/is_empty(s)
     | true => Option/none()
     | false =>
-        let first = Str/get(s, 0)!;
+        let first = Str/try_get(s, 0)!;
         let digits =
             match first == '+' || first == '-'
             | true => Str/slice(s, 1, Str/len(s))
@@ -29,7 +30,7 @@ pub let of_str(s: Str) -> Option(Int) =
     end;
 
 -- The procedure that decides `0 <= n`, the `Int` twin of `Nat/Lt/try`. `Int` carries no inductive ordering family — `Nat/Lte` has constructors a proof can recurse over, and there is no counterpart here — so an `Int` bound is *decided* or it is not had at all.
-pub let non_neg(n: Int) -> Option(/syn/Int/NonNeg(n)) =
+pub let non_neg(n: Int) -> Option(NonNeg(n)) =
     match n >= +0: (r) => Option(match r: (_) => Prop | true => True | false => False end)
     | true => Option/some(True/qed())
     | false => Option/none()
@@ -70,12 +71,12 @@ satisfy Mul(Int) {
 }
 
 satisfy Div(Int) {
-    Ok(b) = /syn/Int/NonZero(b),
+    Ok(b) = NonZero(b),
     div = div,
 }
 
 satisfy Rem(Int) {
-    Ok(b) = /syn/Int/NonZero(b),
+    Ok(b) = NonZero(b),
     rem = rem,
 }
 

@@ -316,15 +316,15 @@ fn a_peeled_prefix_keeps_its_binder_tail() {
         calls: Vec::new(),
     };
 
-    let single = Term::intrinsic(Intrinsic::BinAppend(
-        Grain::X,
-        Term::intrinsic(Intrinsic::Bin(Grain::X, PackedBin::empty())),
-        Term::free_var(&h),
-    ));
-    let cons = Term::intrinsic(Intrinsic::BinConcat(
-        Grain::X,
-        vec![single, Term::free_var(&t)],
-    ));
+    let single = Term::intrinsic(Intrinsic::BinAppend {
+        grain: Grain::X,
+        bin: Term::intrinsic(Intrinsic::Bin(Grain::X, PackedBin::empty())),
+        element: Term::free_var(&h),
+    });
+    let cons = Term::intrinsic(Intrinsic::BinConcat {
+        grain: Grain::X,
+        operands: vec![single, Term::free_var(&t)],
+    });
 
     let shape = walk.shape_of(&cons);
     assert!(

@@ -574,7 +574,7 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             ),
             vec![left, right],
         ),
-        Intrinsic::BinGet(grain, bin, index) => print_intrinsic_call(
+        Intrinsic::BinGet { grain, bin, index } => print_intrinsic_call(
             format!(
                 "{}.get",
                 match grain {
@@ -584,7 +584,12 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             ),
             vec![bin, index],
         ),
-        Intrinsic::BinSlice(grain, bin, start, end) => print_intrinsic_call(
+        Intrinsic::BinSlice {
+            grain,
+            bin,
+            start,
+            end,
+        } => print_intrinsic_call(
             format!(
                 "{}.slice",
                 match grain {
@@ -594,7 +599,11 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             ),
             vec![bin, start, end],
         ),
-        Intrinsic::BinAppend(grain, bin, atom) => print_intrinsic_call(
+        Intrinsic::BinAppend {
+            grain,
+            bin,
+            element: atom,
+        } => print_intrinsic_call(
             format!(
                 "{}.append",
                 match grain {
@@ -604,7 +613,7 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             ),
             vec![bin, atom],
         ),
-        Intrinsic::BinConcat(grain, left, right) => print_intrinsic_call(
+        Intrinsic::BinConcat { grain, left, right } => print_intrinsic_call(
             format!(
                 "{}.concat",
                 match grain {
@@ -626,35 +635,66 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
                 .collect(),
             "]",
         ),
-        Intrinsic::ListLen(ty, operand) => print_intrinsic_call("List.len", vec![ty, operand]),
-        Intrinsic::ListGet(ty, list, index) => {
-            print_intrinsic_call("List.get", vec![ty, list, index])
-        }
-        Intrinsic::ListSlice(ty, list, start, end) => {
-            print_intrinsic_call("List.slice", vec![ty, list, start, end])
-        }
-        Intrinsic::ListAppend(ty, list, elem) => {
-            print_intrinsic_call("List.append", vec![ty, list, elem])
-        }
-        Intrinsic::ListConcat(ty, left, right) => {
-            print_intrinsic_call("List.concat", vec![ty, left, right])
-        }
-        Intrinsic::ListMap(a, b, list, f) => print_intrinsic_call("List.map", vec![a, b, list, f]),
+        Intrinsic::ListLen {
+            element: ty,
+            list: operand,
+        } => print_intrinsic_call("List.len", vec![ty, operand]),
+        Intrinsic::ListGet {
+            element: ty,
+            list,
+            index,
+        } => print_intrinsic_call("List.get", vec![ty, list, index]),
+        Intrinsic::ListSlice {
+            element: ty,
+            list,
+            start,
+            end,
+        } => print_intrinsic_call("List.slice", vec![ty, list, start, end]),
+        Intrinsic::ListAppend {
+            element: ty,
+            list,
+            item: elem,
+        } => print_intrinsic_call("List.append", vec![ty, list, elem]),
+        Intrinsic::ListConcat {
+            element: ty,
+            left,
+            right,
+        } => print_intrinsic_call("List.concat", vec![ty, left, right]),
+        Intrinsic::ListMap {
+            from: a,
+            to: b,
+            list,
+            function: f,
+        } => print_intrinsic_call("List.map", vec![a, b, list, f]),
         Intrinsic::HandleType => pure("Handle"),
         Intrinsic::Handle(token) => pure(format!("Handle({token})")),
         Intrinsic::HandleEql(left, right) => print_intrinsic_call("Handle.eql", vec![left, right]),
         Intrinsic::ProcExit(code) => print_intrinsic_call("proc.exit", vec![code]),
         Intrinsic::CellType(elem) => print_intrinsic_call("Cell", vec![elem]),
-        Intrinsic::Cell(type_, init) => print_intrinsic_call("Cell.new", vec![type_, init]),
-        Intrinsic::CellSet(type_, cell, value) => {
-            print_intrinsic_call("Cell.set", vec![type_, cell, value])
-        }
-        Intrinsic::CellGet(type_, cell) => print_intrinsic_call("Cell.get", vec![type_, cell]),
+        Intrinsic::Cell {
+            element: type_,
+            initial: init,
+        } => print_intrinsic_call("Cell.new", vec![type_, init]),
+        Intrinsic::CellSet {
+            element: type_,
+            cell,
+            value,
+        } => print_intrinsic_call("Cell.set", vec![type_, cell, value]),
+        Intrinsic::CellGet {
+            element: type_,
+            cell,
+        } => print_intrinsic_call("Cell.get", vec![type_, cell]),
         Intrinsic::IoType(result) => print_intrinsic_call("Io", vec![result]),
-        Intrinsic::IoPure(type_, value) => print_intrinsic_call("Io.pure", vec![type_, value]),
-        Intrinsic::IoBind(from, to, action, f) => {
-            print_intrinsic_call("Io.bind", vec![from, to, action, f])
-        }
+        Intrinsic::IoPure {
+            result: type_,
+            value,
+        } => print_intrinsic_call("Io.pure", vec![type_, value]),
+        Intrinsic::IoBind {
+            from,
+            to,
+            action,
+            continuation: f,
+        } => print_intrinsic_call("Io.bind", vec![from, to, action, f]),
     }
 }
 

@@ -6,7 +6,7 @@ let resolved_address(h: Handle) -> Async(Result(Bytes, Handle/Error)) =
     let _ = Async/wait(h, /sys/poll/read)!;
     let a = /sys/dns/resolve(h)!;
     match a.status == /sys/status/ok
-    | true => Async/pure(Result/success(Option/unwrap_or(List/get(a.addresses, 0), x[])))
+    | true => Async/pure(Result/success(Option/unwrap_or(List/try_get(a.addresses, 0), x[])))
     | false => Async/pure(Result/failure(Handle/error_of(a.status)))
     end;
 

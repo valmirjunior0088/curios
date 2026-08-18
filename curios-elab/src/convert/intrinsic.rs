@@ -76,10 +76,15 @@ fn known_len(grain: Grain, term: &Term) -> Option<usize> {
     };
     match intrinsic {
         Intrinsic::Bin(found, value) if *found == grain => Some(literal_len(grain, value)),
-        Intrinsic::BinAppend(found, base, _) if *found == grain => {
-            known_len(grain, base).map(|len| len + 1)
-        }
-        Intrinsic::BinConcat(found, operands) if *found == grain => operands
+        Intrinsic::BinAppend {
+            grain: found,
+            bin: base,
+            element: _,
+        } if *found == grain => known_len(grain, base).map(|len| len + 1),
+        Intrinsic::BinConcat {
+            grain: found,
+            operands,
+        } if *found == grain => operands
             .iter()
             .map(|operand| known_len(grain, operand))
             .sum(),
@@ -126,7 +131,11 @@ fn split_against(
     let len = literal_len(grain, lit);
     match spine {
         // `append(base, atom) = base ++ [atom]`: the last literal atom pairs with `atom`, the rest with `base`. An empty literal against an always-nonempty `append` is a definite clash.
-        Intrinsic::BinAppend(found, base, atom) if *found == grain => {
+        Intrinsic::BinAppend {
+            grain: found,
+            bin: base,
+            element: atom,
+        } if *found == grain => {
             if len == 0 {
                 return Some(false);
             }
@@ -143,7 +152,10 @@ fn split_against(
             Some(true)
         }
         // `concat` splits at its segments' known lengths, consumed left to right; one trailing unknown-length segment takes the remainder. An unknown-length segment anywhere else abstains — the split is not determined.
-        Intrinsic::BinConcat(found, operands) if *found == grain => {
+        Intrinsic::BinConcat {
+            grain: found,
+            operands,
+        } if *found == grain => {
             let mut offset = 0usize;
             for (index, operand) in operands.iter().enumerate() {
                 match known_len(grain, operand) {

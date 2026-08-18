@@ -1427,95 +1427,190 @@ fn zonk_intrinsic(context: &Context, intrinsic: &Intrinsic) -> Result<Intrinsic,
         Intrinsic::BinEql(Grain::X, a, b) => {
             Intrinsic::BinEql(Grain::X, zonk_term(context, a)?, zonk_term(context, b)?)
         }
-        Intrinsic::BinGet(Grain::X, a, b) => {
-            Intrinsic::BinGet(Grain::X, zonk_term(context, a)?, zonk_term(context, b)?)
-        }
-        Intrinsic::BinAppend(Grain::X, a, b) => {
-            Intrinsic::BinAppend(Grain::X, zonk_term(context, a)?, zonk_term(context, b)?)
-        }
-        Intrinsic::BinSlice(Grain::X, a, b, c) => Intrinsic::BinSlice(
-            Grain::X,
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-            zonk_term(context, c)?,
-        ),
-        Intrinsic::BinConcat(Grain::X, terms) => {
-            Intrinsic::BinConcat(Grain::X, zonk_terms(context, terms)?)
-        }
+        Intrinsic::BinGet {
+            grain: Grain::X,
+            bin: a,
+            index: b,
+        } => Intrinsic::BinGet {
+            grain: Grain::X,
+            bin: zonk_term(context, a)?,
+            index: zonk_term(context, b)?,
+        },
+        Intrinsic::BinAppend {
+            grain: Grain::X,
+            bin: a,
+            element: b,
+        } => Intrinsic::BinAppend {
+            grain: Grain::X,
+            bin: zonk_term(context, a)?,
+            element: zonk_term(context, b)?,
+        },
+        Intrinsic::BinSlice {
+            grain: Grain::X,
+            bin: a,
+            start: b,
+            end: c,
+        } => Intrinsic::BinSlice {
+            grain: Grain::X,
+            bin: zonk_term(context, a)?,
+            start: zonk_term(context, b)?,
+            end: zonk_term(context, c)?,
+        },
+        Intrinsic::BinConcat {
+            grain: Grain::X,
+            operands: terms,
+        } => Intrinsic::BinConcat {
+            grain: Grain::X,
+            operands: zonk_terms(context, terms)?,
+        },
         Intrinsic::BinLen(Grain::B, t) => Intrinsic::BinLen(Grain::B, zonk_term(context, t)?),
         Intrinsic::BinEql(Grain::B, a, b) => {
             Intrinsic::BinEql(Grain::B, zonk_term(context, a)?, zonk_term(context, b)?)
         }
-        Intrinsic::BinGet(Grain::B, a, b) => {
-            Intrinsic::BinGet(Grain::B, zonk_term(context, a)?, zonk_term(context, b)?)
-        }
-        Intrinsic::BinAppend(Grain::B, a, b) => {
-            Intrinsic::BinAppend(Grain::B, zonk_term(context, a)?, zonk_term(context, b)?)
-        }
-        Intrinsic::BinSlice(Grain::B, a, b, c) => Intrinsic::BinSlice(
-            Grain::B,
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-            zonk_term(context, c)?,
-        ),
-        Intrinsic::BinConcat(Grain::B, terms) => {
-            Intrinsic::BinConcat(Grain::B, zonk_terms(context, terms)?)
-        }
+        Intrinsic::BinGet {
+            grain: Grain::B,
+            bin: a,
+            index: b,
+        } => Intrinsic::BinGet {
+            grain: Grain::B,
+            bin: zonk_term(context, a)?,
+            index: zonk_term(context, b)?,
+        },
+        Intrinsic::BinAppend {
+            grain: Grain::B,
+            bin: a,
+            element: b,
+        } => Intrinsic::BinAppend {
+            grain: Grain::B,
+            bin: zonk_term(context, a)?,
+            element: zonk_term(context, b)?,
+        },
+        Intrinsic::BinSlice {
+            grain: Grain::B,
+            bin: a,
+            start: b,
+            end: c,
+        } => Intrinsic::BinSlice {
+            grain: Grain::B,
+            bin: zonk_term(context, a)?,
+            start: zonk_term(context, b)?,
+            end: zonk_term(context, c)?,
+        },
+        Intrinsic::BinConcat {
+            grain: Grain::B,
+            operands: terms,
+        } => Intrinsic::BinConcat {
+            grain: Grain::B,
+            operands: zonk_terms(context, terms)?,
+        },
 
         Intrinsic::ListType(t) => Intrinsic::ListType(zonk_term(context, t)?),
-        Intrinsic::List(elem, elems) => {
-            Intrinsic::List(zonk_term(context, elem)?, zonk_terms(context, elems)?)
-        }
-        Intrinsic::ListLen(a, b) => {
-            Intrinsic::ListLen(zonk_term(context, a)?, zonk_term(context, b)?)
-        }
-        Intrinsic::ListGet(a, b, c) => Intrinsic::ListGet(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-            zonk_term(context, c)?,
-        ),
-        Intrinsic::ListAppend(a, b, c) => Intrinsic::ListAppend(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-            zonk_term(context, c)?,
-        ),
-        Intrinsic::ListSlice(a, b, c, d) => Intrinsic::ListSlice(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-            zonk_term(context, c)?,
-            zonk_term(context, d)?,
-        ),
-        Intrinsic::ListConcat(ty, operands) => {
-            Intrinsic::ListConcat(zonk_term(context, ty)?, zonk_terms(context, operands)?)
-        }
-        Intrinsic::ListMap(a, b, list, f) => Intrinsic::ListMap(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-            zonk_term(context, list)?,
-            zonk_term(context, f)?,
-        ),
+        Intrinsic::List {
+            element: elem,
+            items: elems,
+        } => Intrinsic::List {
+            element: zonk_term(context, elem)?,
+            items: zonk_terms(context, elems)?,
+        },
+        Intrinsic::ListLen {
+            element: a,
+            list: b,
+        } => Intrinsic::ListLen {
+            element: zonk_term(context, a)?,
+            list: zonk_term(context, b)?,
+        },
+        Intrinsic::ListGet {
+            element: a,
+            list: b,
+            index: c,
+        } => Intrinsic::ListGet {
+            element: zonk_term(context, a)?,
+            list: zonk_term(context, b)?,
+            index: zonk_term(context, c)?,
+        },
+        Intrinsic::ListAppend {
+            element: a,
+            list: b,
+            item: c,
+        } => Intrinsic::ListAppend {
+            element: zonk_term(context, a)?,
+            list: zonk_term(context, b)?,
+            item: zonk_term(context, c)?,
+        },
+        Intrinsic::ListSlice {
+            element: a,
+            list: b,
+            start: c,
+            end: d,
+        } => Intrinsic::ListSlice {
+            element: zonk_term(context, a)?,
+            list: zonk_term(context, b)?,
+            start: zonk_term(context, c)?,
+            end: zonk_term(context, d)?,
+        },
+        Intrinsic::ListConcat {
+            element: ty,
+            operands,
+        } => Intrinsic::ListConcat {
+            element: zonk_term(context, ty)?,
+            operands: zonk_terms(context, operands)?,
+        },
+        Intrinsic::ListMap {
+            from: a,
+            to: b,
+            list,
+            function: f,
+        } => Intrinsic::ListMap {
+            from: zonk_term(context, a)?,
+            to: zonk_term(context, b)?,
+            list: zonk_term(context, list)?,
+            function: zonk_term(context, f)?,
+        },
 
         Intrinsic::ProcExit(code) => Intrinsic::ProcExit(zonk_term(context, code)?),
         Intrinsic::CellType(a) => Intrinsic::CellType(zonk_term(context, a)?),
-        Intrinsic::Cell(a, b) => Intrinsic::Cell(zonk_term(context, a)?, zonk_term(context, b)?),
-        Intrinsic::CellSet(a, b, c) => Intrinsic::CellSet(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-            zonk_term(context, c)?,
-        ),
-        Intrinsic::CellGet(a, b) => {
-            Intrinsic::CellGet(zonk_term(context, a)?, zonk_term(context, b)?)
-        }
+        Intrinsic::Cell {
+            element: a,
+            initial: b,
+        } => Intrinsic::Cell {
+            element: zonk_term(context, a)?,
+            initial: zonk_term(context, b)?,
+        },
+        Intrinsic::CellSet {
+            element: a,
+            cell: b,
+            value: c,
+        } => Intrinsic::CellSet {
+            element: zonk_term(context, a)?,
+            cell: zonk_term(context, b)?,
+            value: zonk_term(context, c)?,
+        },
+        Intrinsic::CellGet {
+            element: a,
+            cell: b,
+        } => Intrinsic::CellGet {
+            element: zonk_term(context, a)?,
+            cell: zonk_term(context, b)?,
+        },
         Intrinsic::IoType(a) => Intrinsic::IoType(zonk_term(context, a)?),
-        Intrinsic::IoPure(a, b) => {
-            Intrinsic::IoPure(zonk_term(context, a)?, zonk_term(context, b)?)
-        }
-        Intrinsic::IoBind(a, b, action, f) => Intrinsic::IoBind(
-            zonk_term(context, a)?,
-            zonk_term(context, b)?,
-            zonk_term(context, action)?,
-            zonk_term(context, f)?,
-        ),
+        Intrinsic::IoPure {
+            result: a,
+            value: b,
+        } => Intrinsic::IoPure {
+            result: zonk_term(context, a)?,
+            value: zonk_term(context, b)?,
+        },
+        Intrinsic::IoBind {
+            from: a,
+            to: b,
+            action,
+            continuation: f,
+        } => Intrinsic::IoBind {
+            from: zonk_term(context, a)?,
+            to: zonk_term(context, b)?,
+            action: zonk_term(context, action)?,
+            continuation: zonk_term(context, f)?,
+        },
     })
 }
 

@@ -16,7 +16,7 @@ fn tainted(body: &str) -> String {
             | eof() => x[]
             | error(_) => x[]
             end;
-        let n = Nat/sub(Byte/to_nat(Option/unwrap_or(Bytes/get(bytes, 0), 0)), 65);
+        let n = Nat/sub(Byte/to_nat(Option/unwrap_or(Bytes/try_get(bytes, 0), 0)), 65);
         let i = Nat/to_int(n);
         let to_nat_or(x : Int, d : Nat) -> Nat =
             match x >= +0 | true => Int/to_nat(x) | false => d end;
@@ -300,7 +300,7 @@ fn byte_of_nat_inverts_to_nat_and_refuses_the_bound() {
             | eof() => x[]
             | error(_) => x[]
             end;
-        let n = Byte/to_nat(Option/unwrap_or(Bytes/get(bytes, 0), 0));
+        let n = Byte/to_nat(Option/unwrap_or(Bytes/try_get(bytes, 0), 0));
         match n < 256
         | true => /std/print(Nat/to_str(Byte/to_nat(Byte/of_nat(n))))
         | false => /std/print("out")

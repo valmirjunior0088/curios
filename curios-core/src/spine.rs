@@ -210,9 +210,9 @@ pub fn peel_list(left: &Intrinsic, right: &Intrinsic) -> Option<Peel> {
 fn bin_grain(intrinsic: &Intrinsic) -> Option<Grain> {
     match intrinsic {
         Intrinsic::Bin(grain, _)
-        | Intrinsic::BinConcat(grain, _)
-        | Intrinsic::BinSlice(grain, ..)
-        | Intrinsic::BinAppend(grain, ..) => Some(*grain),
+        | Intrinsic::BinConcat { grain, operands: _ }
+        | Intrinsic::BinSlice { grain, .. }
+        | Intrinsic::BinAppend { grain, .. } => Some(*grain),
         _ => None,
     }
 }
@@ -229,10 +229,16 @@ fn bin_atom(grain: Grain, term: &Term) -> Option<u8> {
 /// The `List` analogue of [`bin_grain`] — [`peel_list`]'s gate, doubling as the element type residuals rebuild with (every atom of a `List(T)` value shares `T`, so one suffices for the whole list). `List` and `ListConcat` carry the monoid's literals and juxtaposition, `ListSlice` rides in as a measured `Window` (like `BinSlice`), and `ListAppend` rides in as its base followed by a length-1 literal run — so `append(xs, e) ≡ concat(xs, single(e))`. Any other producer is `None` and stays an opaque chunk left to the caller's comparison.
 fn list_elem(intrinsic: &Intrinsic) -> Option<Term> {
     match intrinsic {
-        Intrinsic::List(elem, _)
-        | Intrinsic::ListConcat(elem, _)
-        | Intrinsic::ListSlice(elem, ..)
-        | Intrinsic::ListAppend(elem, ..) => Some(elem.clone()),
+        Intrinsic::List {
+            element: elem,
+            items: _,
+        }
+        | Intrinsic::ListConcat {
+            element: elem,
+            operands: _,
+        }
+        | Intrinsic::ListSlice { element: elem, .. }
+        | Intrinsic::ListAppend { element: elem, .. } => Some(elem.clone()),
         _ => None,
     }
 }
@@ -282,10 +288,18 @@ fn bin_collect_intrinsic(grain: Grain, intrinsic: &Intrinsic, out: &mut Vec<Atom
                         Grain::X => value.to_bytes().unwrap(),
                     }),
                 ),
-                Intrinsic::BinConcat(found, operands) if *found == grain => {
+                Intrinsic::BinConcat {
+                    grain: found,
+                    operands,
+                } if *found == grain => {
                     pending.extend(operands.iter().rev().map(BinPending::Term));
                 }
-                Intrinsic::BinSlice(found, base, lo, hi) if *found == grain => push(
+                Intrinsic::BinSlice {
+                    grain: found,
+                    bin: base,
+                    start: lo,
+                    end: hi,
+                } if *found == grain => push(
                     out,
                     Atom::Window {
                         base: base.clone(),
@@ -294,7 +308,11 @@ fn bin_collect_intrinsic(grain: Grain, intrinsic: &Intrinsic, out: &mut Vec<Atom
                     },
                 ),
                 // `append(base, b) = base ++ [b]`: decode the base, then the appended byte.
-                Intrinsic::BinAppend(found, base, atom) if *found == grain => {
+                Intrinsic::BinAppend {
+                    grain: found,
+                    bin: base,
+                    element: atom,
+                } if *found == grain => {
                     pending.push(BinPending::Appended(atom));
                     pending.push(BinPending::Term(base));
                 }
@@ -330,11 +348,22 @@ fn list_collect_intrinsic(intrinsic: &Intrinsic, out: &mut Vec<Atom<Term>>) {
             // The appended element of a `ListAppend`, as a length-1 literal run, so it merges with an abutting run and unifies with `concat(base, single(e))`.
             ListPending::Appended(elem) => push(out, Atom::Literal(vec![elem.clone()])),
             ListPending::Intrinsic(intrinsic) => match intrinsic {
-                Intrinsic::List(_, elems) => push(out, Atom::Literal(elems.clone())),
-                Intrinsic::ListConcat(_, operands) => {
+                Intrinsic::List {
+                    element: _,
+                    items: elems,
+                } => push(out, Atom::Literal(elems.clone())),
+                Intrinsic::ListConcat {
+                    element: _,
+                    operands,
+                } => {
                     pending.extend(operands.iter().rev().map(ListPending::Term));
                 }
-                Intrinsic::ListSlice(_, base, lo, hi) => push(
+                Intrinsic::ListSlice {
+                    element: _,
+                    list: base,
+                    start: lo,
+                    end: hi,
+                } => push(
                     out,
                     Atom::Window {
                         base: base.clone(),
@@ -343,7 +372,11 @@ fn list_collect_intrinsic(intrinsic: &Intrinsic, out: &mut Vec<Atom<Term>>) {
                     },
                 ),
                 // `append(base, e) = base ++ [e]`: decode the base, then the appended element.
-                Intrinsic::ListAppend(_, base, elem) => {
+                Intrinsic::ListAppend {
+                    element: _,
+                    list: base,
+                    item: elem,
+                } => {
                     pending.push(ListPending::Appended(elem));
                     pending.push(ListPending::Term(base));
                 }
@@ -369,10 +402,10 @@ fn reassemble_bin(grain: Grain, atoms: VecDeque<Atom<u8>>) -> Term {
 
     match atoms.len() {
         1 => into_term(atoms.into_iter().next().unwrap()),
-        _ => Term::intrinsic(Intrinsic::BinConcat(
+        _ => Term::intrinsic(Intrinsic::BinConcat {
             grain,
-            atoms.into_iter().map(into_term).collect(),
-        )),
+            operands: atoms.into_iter().map(into_term).collect(),
+        }),
     }
 }
 
@@ -380,7 +413,10 @@ fn reassemble_bin(grain: Grain, atoms: VecDeque<Atom<u8>>) -> Term {
 fn reassemble_list(atoms: VecDeque<Atom<Term>>, elem: Term) -> Term {
     fn into_term(atom: Atom<Term>, elem: &Term) -> Term {
         match atom {
-            Atom::Literal(elems) => Term::intrinsic(Intrinsic::List(elem.clone(), elems)),
+            Atom::Literal(elems) => Term::intrinsic(Intrinsic::List {
+                element: elem.clone(),
+                items: elems,
+            }),
             Atom::Window { base, lo, hi } => {
                 Term::intrinsic(Intrinsic::list_slice(elem.clone(), base, lo, hi))
             }
@@ -396,7 +432,10 @@ fn reassemble_list(atoms: VecDeque<Atom<Term>>, elem: Term) -> Term {
                 .map(|atom| into_term(atom, &elem))
                 .collect::<Vec<Term>>();
 
-            Term::intrinsic(Intrinsic::ListConcat(elem, parts))
+            Term::intrinsic(Intrinsic::ListConcat {
+                element: elem,
+                operands: parts,
+            })
         }
     }
 }
@@ -466,7 +505,10 @@ mod tests {
 
     fn nats(run: impl IntoIterator<Item = u32>) -> Term {
         let elems = run.into_iter().map(|n| sym(n, "e")).collect();
-        Term::intrinsic(Intrinsic::List(sym(1000, "T"), elems))
+        Term::intrinsic(Intrinsic::List {
+            element: sym(1000, "T"),
+            items: elems,
+        })
     }
 
     fn as_intrinsic(term: &Term) -> &Intrinsic {
@@ -500,8 +542,14 @@ mod tests {
                 vec![bits([true, false, true, true, false]), tail.clone()],
             ),
         ] {
-            let split = Intrinsic::BinConcat(grain, split);
-            let whole = Intrinsic::BinConcat(grain, whole);
+            let split = Intrinsic::BinConcat {
+                grain,
+                operands: split,
+            };
+            let whole = Intrinsic::BinConcat {
+                grain,
+                operands: whole,
+            };
 
             assert!(
                 matches!(peel_bin(&split, &whole), Some(Peel::Equal)),
@@ -515,23 +563,26 @@ mod tests {
     fn peel_bin_decides_a_left_nested_concat_against_a_flat_one() {
         let tail = sym(0, "b");
         let nest = |left: Term, right: Term| {
-            Term::intrinsic(Intrinsic::BinConcat(Grain::X, vec![left, right]))
+            Term::intrinsic(Intrinsic::BinConcat {
+                grain: Grain::X,
+                operands: vec![left, right],
+            })
         };
 
-        let nested = Intrinsic::BinConcat(
-            Grain::X,
-            vec![
+        let nested = Intrinsic::BinConcat {
+            grain: Grain::X,
+            operands: vec![
                 nest(
                     nest(bytes([0x30]), bytes([0x31, 0x32])),
                     bytes([0x33, 0x34, 0x35]),
                 ),
                 tail.clone(),
             ],
-        );
-        let flat = Intrinsic::BinConcat(
-            Grain::X,
-            vec![bytes([0x30, 0x31, 0x32, 0x33, 0x34, 0x35]), tail],
-        );
+        };
+        let flat = Intrinsic::BinConcat {
+            grain: Grain::X,
+            operands: vec![bytes([0x30, 0x31, 0x32, 0x33, 0x34, 0x35]), tail],
+        };
 
         assert!(
             matches!(peel_bin(&nested, &flat), Some(Peel::Equal)),
@@ -544,11 +595,14 @@ mod tests {
     fn peel_list_decides_a_split_literal_run_against_a_whole_one() {
         let tail = sym(0, "xs");
 
-        let split = Intrinsic::ListConcat(
-            sym(1000, "T"),
-            vec![nats([1, 2]), nats([3]), nats([4, 5]), tail.clone()],
-        );
-        let whole = Intrinsic::ListConcat(sym(1000, "T"), vec![nats([1, 2, 3, 4, 5]), tail]);
+        let split = Intrinsic::ListConcat {
+            element: sym(1000, "T"),
+            operands: vec![nats([1, 2]), nats([3]), nats([4, 5]), tail.clone()],
+        };
+        let whole = Intrinsic::ListConcat {
+            element: sym(1000, "T"),
+            operands: vec![nats([1, 2, 3, 4, 5]), tail],
+        };
 
         assert!(
             matches!(peel_list(&split, &whole), Some(Peel::Equal)),
@@ -559,7 +613,10 @@ mod tests {
     // The control the three above would be worthless without: the peel must not decide *everything* equal. Regrouping preserves the element order, so a genuine reordering has to clash rather than merge.
     #[test]
     fn peel_bin_still_clashes_a_reordered_run() {
-        let split = Intrinsic::BinConcat(Grain::X, vec![bytes([0x30]), bytes([0x31])]);
+        let split = Intrinsic::BinConcat {
+            grain: Grain::X,
+            operands: vec![bytes([0x30]), bytes([0x31])],
+        };
         let swapped = bytes([0x31, 0x30]);
 
         assert!(

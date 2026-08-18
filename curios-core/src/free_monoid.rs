@@ -174,19 +174,24 @@ fn peel_front(grain: Grain, bin: &Term) -> Front {
                 };
             }
             // `append(base, atom) = base ++ [atom]`: peel the base's leading generator, and the appended atom rejoins the residual. An empty base is the canonical one-atom chunk, which is where the symbolic head comes from; any other base decodes as far as it can, so a chained `append(append(x[], a), b)` and a run-based `append(x[0x48], b)` both expose their first generator instead of going opaque. `core::spine`'s two-value peel has always decoded an append this way, so without this level the same term was transparent to conversion and opaque to reduction.
-            Subterm::Intrinsic(Intrinsic::BinAppend(found, base, atom)) if *found == grain => {
+            Subterm::Intrinsic(Intrinsic::BinAppend {
+                grain: found,
+                bin: base,
+                element: atom,
+            }) if *found == grain => {
                 levels.push(BinLevel::Appended(atom));
                 current = base;
             }
-            Subterm::Intrinsic(Intrinsic::BinConcat(found, operands)) if *found == grain => {
-                match operands.split_first() {
-                    Some((first, rest)) => {
-                        levels.push(BinLevel::Concat(rest));
-                        current = first;
-                    }
-                    None => break Front::Empty,
+            Subterm::Intrinsic(Intrinsic::BinConcat {
+                grain: found,
+                operands,
+            }) if *found == grain => match operands.split_first() {
+                Some((first, rest)) => {
+                    levels.push(BinLevel::Concat(rest));
+                    current = first;
                 }
-            }
+                None => break Front::Empty,
+            },
             _ => break Front::Opaque,
         }
     };
@@ -199,7 +204,12 @@ fn peel_front(grain: Grain, bin: &Term) -> Front {
             },
             (BinLevel::Appended(atom), Front::Cons { head, tail }) => Front::Cons {
                 head,
-                tail: Subterm::Intrinsic(Intrinsic::BinAppend(grain, tail, atom.clone())).into(),
+                tail: Subterm::Intrinsic(Intrinsic::BinAppend {
+                    grain,
+                    bin: tail,
+                    element: atom.clone(),
+                })
+                .into(),
             },
             (
                 BinLevel::Concat(rest),
@@ -216,7 +226,11 @@ fn peel_front(grain: Grain, bin: &Term) -> Front {
                 let tail = match segments.len() {
                     0 => Subterm::Intrinsic(Intrinsic::Bin(grain, PackedBin::empty())).into(),
                     1 => segments.into_iter().next().unwrap(),
-                    _ => Subterm::Intrinsic(Intrinsic::BinConcat(grain, segments)).into(),
+                    _ => Subterm::Intrinsic(Intrinsic::BinConcat {
+                        grain,
+                        operands: segments,
+                    })
+                    .into(),
                 };
                 Front::Cons { head, tail }
             }
@@ -256,30 +270,41 @@ fn peel_front_list(list: &Term) -> ListFront {
 
     let mut front = loop {
         match &**current {
-            Subterm::Intrinsic(Intrinsic::List(elem, elems)) => {
+            Subterm::Intrinsic(Intrinsic::List {
+                element: elem,
+                items: elems,
+            }) => {
                 break match elems.split_first() {
                     None => ListFront::Empty,
                     Some((head, rest)) => ListFront::Cons {
                         head: head.clone(),
-                        tail: Subterm::Intrinsic(Intrinsic::List(elem.clone(), rest.to_vec()))
-                            .into(),
+                        tail: Subterm::Intrinsic(Intrinsic::List {
+                            element: elem.clone(),
+                            items: rest.to_vec(),
+                        })
+                        .into(),
                     },
                 };
             }
             // `append(base, e) = base ++ [e]`: peel the base's leading element, and the appended element rejoins the residual. An empty base's front is the appended element itself; a decodable base exposes its own head instead. The element-typed twin of the `BinAppend` level above, closing the same gap: `core::spine`'s two-value peel decodes an append as `concat(base, [e])`, so without this level the same term was transparent to conversion and opaque to reduction.
-            Subterm::Intrinsic(Intrinsic::ListAppend(elem, base, appended)) => {
+            Subterm::Intrinsic(Intrinsic::ListAppend {
+                element: elem,
+                list: base,
+                item: appended,
+            }) => {
                 levels.push(ListLevel::Appended { elem, appended });
                 current = base;
             }
-            Subterm::Intrinsic(Intrinsic::ListConcat(elem, segments)) => {
-                match segments.split_first() {
-                    Some((first, rest)) => {
-                        levels.push(ListLevel::Concat { elem, rest });
-                        current = first;
-                    }
-                    None => break ListFront::Empty,
+            Subterm::Intrinsic(Intrinsic::ListConcat {
+                element: elem,
+                operands: segments,
+            }) => match segments.split_first() {
+                Some((first, rest)) => {
+                    levels.push(ListLevel::Concat { elem, rest });
+                    current = first;
                 }
-            }
+                None => break ListFront::Empty,
+            },
             _ => break ListFront::Opaque,
         }
     };
@@ -288,16 +313,20 @@ fn peel_front_list(list: &Term) -> ListFront {
         front = match (level, front) {
             (ListLevel::Appended { elem, appended }, ListFront::Empty) => ListFront::Cons {
                 head: appended.clone(),
-                tail: Subterm::Intrinsic(Intrinsic::List(elem.clone(), vec![])).into(),
+                tail: Subterm::Intrinsic(Intrinsic::List {
+                    element: elem.clone(),
+                    items: vec![],
+                })
+                .into(),
             },
             (ListLevel::Appended { elem, appended }, ListFront::Cons { head, tail }) => {
                 ListFront::Cons {
                     head,
-                    tail: Subterm::Intrinsic(Intrinsic::ListAppend(
-                        elem.clone(),
-                        tail,
-                        appended.clone(),
-                    ))
+                    tail: Subterm::Intrinsic(Intrinsic::ListAppend {
+                        element: elem.clone(),
+                        list: tail,
+                        item: appended.clone(),
+                    })
                     .into(),
                 }
             }
@@ -314,9 +343,17 @@ fn peel_front_list(list: &Term) -> ListFront {
                 }
                 kept.extend(rest.iter().cloned());
                 let tail = match kept.len() {
-                    0 => Subterm::Intrinsic(Intrinsic::List(elem.clone(), vec![])).into(),
+                    0 => Subterm::Intrinsic(Intrinsic::List {
+                        element: elem.clone(),
+                        items: vec![],
+                    })
+                    .into(),
                     1 => kept.into_iter().next().unwrap(),
-                    _ => Subterm::Intrinsic(Intrinsic::ListConcat(elem.clone(), kept)).into(),
+                    _ => Subterm::Intrinsic(Intrinsic::ListConcat {
+                        element: elem.clone(),
+                        operands: kept,
+                    })
+                    .into(),
                 };
                 ListFront::Cons { head, tail }
             }
@@ -344,7 +381,7 @@ fn is_empty_bin(grain: Grain, term: &Term) -> bool {
 
 // `cons` injects an element at the front as the singleton literal `[h]`; `peel_front_list`'s concat recursion decodes that encoding through the literal case.
 fn is_empty_list(term: &Term) -> bool {
-    matches!(&**term, Subterm::Intrinsic(Intrinsic::List(_, elems)) if elems.is_empty())
+    matches!(&**term, Subterm::Intrinsic(Intrinsic::List { element: _, items: elems }) if elems.is_empty())
 }
 
 /// The operands of an already-reduced value, left to right, each with the number of generators it carries — `None` where any operand's length is not statically known.
@@ -366,7 +403,10 @@ fn bin_segments(grain: Grain, value: &Term) -> Option<Vec<(&Term, usize)>> {
                 segments.push((term, run.len(grain)));
             }
             // Pushed in reverse so they come back off left to right: a segment list is ordered, unlike the sum taken over it.
-            Subterm::Intrinsic(Intrinsic::BinConcat(found, operands)) if *found == grain => {
+            Subterm::Intrinsic(Intrinsic::BinConcat {
+                grain: found,
+                operands,
+            }) if *found == grain => {
                 pending.extend(operands.iter().rev());
             }
             _ => return None,
@@ -383,8 +423,14 @@ fn list_segments(value: &Term) -> Option<Vec<(&Term, usize)>> {
 
     while let Some(term) = pending.pop() {
         match &**term {
-            Subterm::Intrinsic(Intrinsic::List(_, elems)) => segments.push((term, elems.len())),
-            Subterm::Intrinsic(Intrinsic::ListConcat(_, operands)) => {
+            Subterm::Intrinsic(Intrinsic::List {
+                element: _,
+                items: elems,
+            }) => segments.push((term, elems.len())),
+            Subterm::Intrinsic(Intrinsic::ListConcat {
+                element: _,
+                operands,
+            }) => {
                 pending.extend(operands.iter().rev());
             }
             _ => return None,
@@ -577,7 +623,11 @@ mod tests {
         };
 
         (0..depth).fold(leaf(0x30), |acc, _| {
-            Subterm::Intrinsic(Intrinsic::BinConcat(grain, vec![acc, leaf(0x31)])).into()
+            Subterm::Intrinsic(Intrinsic::BinConcat {
+                grain,
+                operands: vec![acc, leaf(0x31)],
+            })
+            .into()
         })
     }
 
@@ -585,14 +635,18 @@ mod tests {
     fn deep_list(depth: usize) -> Term {
         let elem = Term::free_var(&crate::Free::local(0, Some("T")));
         let leaf = |index: u32| {
-            Term::from(Subterm::Intrinsic(Intrinsic::List(
-                elem.clone(),
-                vec![Term::free_var(&crate::Free::local(index, Some("e")))],
-            )))
+            Term::from(Subterm::Intrinsic(Intrinsic::List {
+                element: elem.clone(),
+                items: vec![Term::free_var(&crate::Free::local(index, Some("e")))],
+            }))
         };
 
         (0..depth).fold(leaf(1), |acc, _| {
-            Subterm::Intrinsic(Intrinsic::ListConcat(elem.clone(), vec![acc, leaf(2)])).into()
+            Subterm::Intrinsic(Intrinsic::ListConcat {
+                element: elem.clone(),
+                operands: vec![acc, leaf(2)],
+            })
+            .into()
         })
     }
 

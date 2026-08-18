@@ -75,7 +75,7 @@ fn join_all_runs_children_concurrently_and_collects_in_order() {
                 Async/bind(Async/lift(Handle/write(Handle/stdout, Str/to_bytes("a;"))), (_) => Async/pure(1)),
                 Async/bind(Async/lift(Handle/write(Handle/stdout, Str/to_bytes("b;"))), (_) => Async/pure(2))
             ])!;
-            let s = Async/lift(Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(/std/Option/unwrap_or(List/get(rs, 0), 0), /std/Option/unwrap_or(List/get(rs, 1), 0))))))!;
+            let s = Async/lift(Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(/std/Option/unwrap_or(List/try_get(rs, 0), 0), /std/Option/unwrap_or(List/try_get(rs, 1), 0))))))!;
             Async/pure(());
         Async/run(main)
         "#),

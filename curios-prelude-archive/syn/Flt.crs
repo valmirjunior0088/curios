@@ -1,0 +1,5 @@
+use /std/{Nat, Bytes};
+use /syn/{True, False};
+
+pub let FourBytes(b: Bytes) -> Prop =
+    match Nat/eql(Bytes/len(b), 4) | true => True | false => False end;

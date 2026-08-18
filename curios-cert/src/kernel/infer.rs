@@ -669,7 +669,10 @@ fn check_free_monoid(
 
             at(
                 kernel,
-                Term::intrinsic(Intrinsic::List(elem.clone(), Vec::new())),
+                Term::intrinsic(Intrinsic::List {
+                    element: elem.clone(),
+                    items: Vec::new(),
+                }),
                 empty_case,
             )?;
 
@@ -677,13 +680,16 @@ fn check_free_monoid(
             let tail = kernel.fresh(cons_case.second_hint());
             let ih = kernel.fresh(cons_case.third_hint());
             let tail_occurrence = Term::free_var(&tail);
-            let cons_value = Term::intrinsic(Intrinsic::ListConcat(
-                elem.clone(),
-                vec![
-                    Term::intrinsic(Intrinsic::List(elem.clone(), vec![Term::free_var(&head)])),
+            let cons_value = Term::intrinsic(Intrinsic::ListConcat {
+                element: elem.clone(),
+                operands: vec![
+                    Term::intrinsic(Intrinsic::List {
+                        element: elem.clone(),
+                        items: vec![Term::free_var(&head)],
+                    }),
                     tail_occurrence.clone(),
                 ],
-            ));
+            });
             let body = cons_case.open(&[
                 &Term::free_var(&head),
                 &tail_occurrence,
@@ -723,12 +729,15 @@ fn check_free_monoid(
             let tail = kernel.fresh(cons_case.second_hint());
             let ih = kernel.fresh(cons_case.third_hint());
             let tail_occurrence = Term::free_var(&tail);
-            let singleton =
-                Term::intrinsic(Intrinsic::BinAppend(*grain, empty, Term::free_var(&head)));
-            let cons_value = Term::intrinsic(Intrinsic::BinConcat(
-                *grain,
-                vec![singleton, tail_occurrence.clone()],
-            ));
+            let singleton = Term::intrinsic(Intrinsic::BinAppend {
+                grain: *grain,
+                bin: empty,
+                element: Term::free_var(&head),
+            });
+            let cons_value = Term::intrinsic(Intrinsic::BinConcat {
+                grain: *grain,
+                operands: vec![singleton, tail_occurrence.clone()],
+            });
             let body = cons_case.open(&[
                 &Term::free_var(&head),
                 &tail_occurrence,

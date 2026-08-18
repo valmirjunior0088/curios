@@ -152,7 +152,11 @@ fn elaborate_list_match(
     seed_motive(context, term, &motive, &head_elaborated, &mode)?;
 
     // Refine the scrutinee to its value in each arm (as `Nat`/`Bool`/`Switch` already do), so a hypothesis whose type mentions the scrutinee reduces at the arm's value without a hand-written convoy.
-    let empty_value: Term = Subterm::Intrinsic(Intrinsic::List(elem.clone(), vec![])).into();
+    let empty_value: Term = Subterm::Intrinsic(Intrinsic::List {
+        element: elem.clone(),
+        items: vec![],
+    })
+    .into();
     let empty_elaborated = context.with_frame(|context| {
         refine_head(context, &head_elaborated, &empty_value)?;
         check(context, empty_case, motive.open(&[&empty_value]))
@@ -168,17 +172,17 @@ fn elaborate_list_match(
         context.assume(&ih_label, &motive.open(&[&Term::free_var(&tail_label)]));
 
         // The cons value `head :: tail`, encoded as the monoid operation on a singleton and the tail (no separate prepend intrinsic).
-        let cons_value: Term = Subterm::Intrinsic(Intrinsic::ListConcat(
-            elem.clone(),
-            vec![
-                Subterm::Intrinsic(Intrinsic::List(
-                    elem.clone(),
-                    vec![Term::free_var(&head_label)],
-                ))
+        let cons_value: Term = Subterm::Intrinsic(Intrinsic::ListConcat {
+            element: elem.clone(),
+            operands: vec![
+                Subterm::Intrinsic(Intrinsic::List {
+                    element: elem.clone(),
+                    items: vec![Term::free_var(&head_label)],
+                })
                 .into(),
                 Term::free_var(&tail_label),
             ],
-        ))
+        })
         .into();
         refine_head(context, &head_elaborated, &cons_value)?;
 
@@ -253,16 +257,16 @@ fn elaborate_bin_match(
         context.assume(&ih_label, &motive.open(&[&Term::free_var(&tail_label)]));
 
         // The cons value `head :: tail`, encoded as the monoid operation on the singleton `[head]` and the tail. A `Bits`/`Bytes` literal holds only concrete bytes, so the singleton of the symbolic byte `head` is `append(x[], head)` (an atom appended to the empty packed sequence), not a literal run.
-        let singleton: Term = Subterm::Intrinsic(Intrinsic::BinAppend(
+        let singleton: Term = Subterm::Intrinsic(Intrinsic::BinAppend {
             grain,
-            Subterm::Intrinsic(Intrinsic::Bin(grain, PackedBin::empty())).into(),
-            Term::free_var(&head_label),
-        ))
+            bin: Subterm::Intrinsic(Intrinsic::Bin(grain, PackedBin::empty())).into(),
+            element: Term::free_var(&head_label),
+        })
         .into();
-        let cons_value: Term = Subterm::Intrinsic(Intrinsic::BinConcat(
+        let cons_value: Term = Subterm::Intrinsic(Intrinsic::BinConcat {
             grain,
-            vec![singleton, Term::free_var(&tail_label)],
-        ))
+            operands: vec![singleton, Term::free_var(&tail_label)],
+        })
         .into();
         refine_head(context, &head_elaborated, &cons_value)?;
 

@@ -187,26 +187,35 @@ pub(super) fn infer_intrinsic(
         // `Bin`: a sequence of bytes or of bits, depending on the grain.
         Intrinsic::BinLen(grain, bin) => unary(kernel, bin, bin_type(*grain), nat_type()),
         Intrinsic::BinEql(grain, l, r) => binary(kernel, l, r, bin_type(*grain), bool_type()),
-        Intrinsic::BinGet(grain, bin, index) => {
+        Intrinsic::BinGet { grain, bin, index } => {
             check(kernel, bin, &bin_type(*grain))?;
             check(kernel, index, &nat_type())?;
 
             Ok(grain_element(*grain))
         }
-        Intrinsic::BinSlice(grain, bin, start, end) => {
+        Intrinsic::BinSlice {
+            grain,
+            bin,
+            start,
+            end,
+        } => {
             check(kernel, bin, &bin_type(*grain))?;
             check(kernel, start, &nat_type())?;
             check(kernel, end, &nat_type())?;
 
             Ok(bin_type(*grain))
         }
-        Intrinsic::BinAppend(grain, bin, element) => {
+        Intrinsic::BinAppend {
+            grain,
+            bin,
+            element,
+        } => {
             check(kernel, bin, &bin_type(*grain))?;
             check(kernel, element, &grain_element(*grain))?;
 
             Ok(bin_type(*grain))
         }
-        Intrinsic::BinConcat(grain, operands) => {
+        Intrinsic::BinConcat { grain, operands } => {
             for operand in operands {
                 check(kernel, operand, &bin_type(*grain))?;
             }
@@ -215,7 +224,10 @@ pub(super) fn infer_intrinsic(
         }
 
         // A list literal carries its element type like every other `List` operation — `[]` included, which is the case that used to be refused for having no element to read a type from.
-        Intrinsic::List(element, elements) => {
+        Intrinsic::List {
+            element,
+            items: elements,
+        } => {
             let element = check_is_type(kernel, element)?;
             for entry in elements {
                 check(kernel, entry, &element)?;
@@ -223,20 +235,29 @@ pub(super) fn infer_intrinsic(
 
             Ok(list_type(element))
         }
-        Intrinsic::ListLen(element, list) => {
+        Intrinsic::ListLen { element, list } => {
             let element = check_is_type(kernel, element)?;
             check(kernel, list, &list_type(element))?;
 
             Ok(nat_type())
         }
-        Intrinsic::ListGet(element, list, index) => {
+        Intrinsic::ListGet {
+            element,
+            list,
+            index,
+        } => {
             let element = check_is_type(kernel, element)?;
             check(kernel, list, &list_type(element.clone()))?;
             check(kernel, index, &nat_type())?;
 
             Ok(element)
         }
-        Intrinsic::ListSlice(element, list, start, end) => {
+        Intrinsic::ListSlice {
+            element,
+            list,
+            start,
+            end,
+        } => {
             let element = check_is_type(kernel, element)?;
             check(kernel, list, &list_type(element.clone()))?;
             check(kernel, start, &nat_type())?;
@@ -244,14 +265,18 @@ pub(super) fn infer_intrinsic(
 
             Ok(list_type(element))
         }
-        Intrinsic::ListAppend(element, list, value) => {
+        Intrinsic::ListAppend {
+            element,
+            list,
+            item: value,
+        } => {
             let element = check_is_type(kernel, element)?;
             check(kernel, list, &list_type(element.clone()))?;
             check(kernel, value, &element)?;
 
             Ok(list_type(element))
         }
-        Intrinsic::ListConcat(element, operands) => {
+        Intrinsic::ListConcat { element, operands } => {
             let element = check_is_type(kernel, element)?;
             for operand in operands {
                 check(kernel, operand, &list_type(element.clone()))?;
@@ -259,7 +284,12 @@ pub(super) fn infer_intrinsic(
 
             Ok(list_type(element))
         }
-        Intrinsic::ListMap(from, to, list, function) => {
+        Intrinsic::ListMap {
+            from,
+            to,
+            list,
+            function,
+        } => {
             let from = check_is_type(kernel, from)?;
             let to = check_is_type(kernel, to)?;
             check(kernel, list, &list_type(from.clone()))?;
@@ -277,19 +307,23 @@ pub(super) fn infer_intrinsic(
         // A mutable cell. Its identity is what makes a `Cell` of proofs relevant — see `Sort::of`.
         //
         // All three operations are host effects and so describe rather than do. `CellGet` returning `Io(T)` rather than `T` is what makes `match Cell/get(c)` ill-typed, which is the whole of what the purity analysis used to decide by walking the scrutinee.
-        Intrinsic::Cell(element, initial) => {
+        Intrinsic::Cell { element, initial } => {
             let element = check_is_type(kernel, element)?;
             check(kernel, initial, &element)?;
 
             Ok(io_type(cell_type(element)))
         }
-        Intrinsic::CellGet(element, cell) => {
+        Intrinsic::CellGet { element, cell } => {
             let element = check_is_type(kernel, element)?;
             check(kernel, cell, &cell_type(element.clone()))?;
 
             Ok(io_type(element))
         }
-        Intrinsic::CellSet(element, cell, value) => {
+        Intrinsic::CellSet {
+            element,
+            cell,
+            value,
+        } => {
             let element = check_is_type(kernel, element)?;
             check(kernel, cell, &cell_type(element.clone()))?;
             check(kernel, value, &element)?;
@@ -307,13 +341,18 @@ pub(super) fn infer_intrinsic(
         }
 
         // The two constructors of the opaque effect carrier. There is no third: nothing here or anywhere lowers an `Io(T)` to its `T`, which is what makes every term of non-`Io` type pure by typing.
-        Intrinsic::IoPure(result, value) => {
+        Intrinsic::IoPure { result, value } => {
             let result = check_is_type(kernel, result)?;
             check(kernel, value, &result)?;
 
             Ok(io_type(result))
         }
-        Intrinsic::IoBind(from, to, action, continuation) => {
+        Intrinsic::IoBind {
+            from,
+            to,
+            action,
+            continuation,
+        } => {
             let from = check_is_type(kernel, from)?;
             let to = check_is_type(kernel, to)?;
             check(kernel, action, &io_type(from.clone()))?;

@@ -53,7 +53,7 @@ rec walk4(b: Bytes, i: Nat, remaining: Nat, sc: MScan, acc: {Nat, Nat}) -> {Nat,
     match remaining: (_) => {Nat, Nat}
     | 0 => acc
     | m + 1 =>
-        match Bytes/get(b, i): (_) => {Nat, Nat}
+        match Bytes/try_get(b, i): (_) => {Nat, Nat}
         | some(h) =>
             match sc: (_) => {Nat, Nat}
             | lead() =>

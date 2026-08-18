@@ -7,7 +7,7 @@ rec walk(b: Bytes, i: Nat, remaining: Nat, acc: Nat) -> Option(Nat) =
     match remaining: (_) => Option(Nat)
     | 0 => Option/some(acc)
     | m + 1 =>
-        match Bytes/get(b, i): (_) => Option(Nat)
+        match Bytes/try_get(b, i): (_) => Option(Nat)
         | some(byte) =>
             match 0x30 <= Byte/to_nat(byte): (_) => Option(Nat)
             | true =>

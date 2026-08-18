@@ -157,7 +157,7 @@ pub let read() -> Io(Option(Bytes)) =
         choose
         | r.status != /sys/status/ok && Bytes/len(acc) == 0 => Io/pure(Option/none())
         | r.status != /sys/status/ok => Io/pure(Option/some(acc))
-        | Byte/to_nat(Option/unwrap_or(Bytes/get(r.bytes, 0), 0)) == 0xA =>
+        | Byte/to_nat(Option/unwrap_or(Bytes/try_get(r.bytes, 0), 0)) == 0xA =>
             Io/pure(Option/some(acc))
         | _ => go(x[..acc, ..r.bytes])
         end;

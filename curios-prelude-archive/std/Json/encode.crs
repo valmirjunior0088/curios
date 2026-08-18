@@ -3,7 +3,7 @@ use /std/Json/{Json};
 
 let encode_num(n: Flt) -> Str =
     let raw = Flt/to_str(n);
-    match Option/unwrap_or(Str/get(raw, 0), '0') == '+'
+    match Option/unwrap_or(Str/try_get(raw, 0), '0') == '+'
     | true => Str/slice(raw, 1, Str/len(raw))
     | false => raw
     end;

@@ -1,5 +1,0 @@
-pub induct False: pub Prop
-end
-
-pub let Not(P: Type) -> Type =
-    (P) -> False;

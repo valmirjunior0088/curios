@@ -60,7 +60,7 @@ fn nat_bitwise_ops_execute() {
             | eof() => x[]
             | error(_) => x[]
             end;
-        let x = Byte/to_nat(Option/unwrap_or(Bytes/get(bytes, 0), 0));
+        let x = Byte/to_nat(Option/unwrap_or(Bytes/try_get(bytes, 0), 0));
         let r = Str/flatten([
             Nat/to_str(Nat/and(x, 15)), ",",
             Nat/to_str(Nat/or(x, 128)), ",",
@@ -90,7 +90,7 @@ fn int_bitwise_ops_execute() {
             | eof() => x[]
             | error(_) => x[]
             end;
-        let x = Nat/to_int(Byte/to_nat(Option/unwrap_or(Bytes/get(bytes, 0), 0)));
+        let x = Nat/to_int(Byte/to_nat(Option/unwrap_or(Bytes/try_get(bytes, 0), 0)));
         let neg = Int/sub(+0, x);
         let r = Str/flatten([
             Int/to_str(Int/and(x, +15)), ",",

@@ -316,6 +316,24 @@ fn guarded_binary(
     )
 }
 
+fn guarded_unary(
+    label: &str,
+    input: Term,
+    output: Term,
+    bound: Term,
+    ctor: fn(Term) -> Intrinsic,
+) -> TopItem {
+    pub_fn_marked(
+        label,
+        vec![
+            (Plicity::Explicit, "a", input),
+            (Plicity::Implicit, "ok", bound),
+        ],
+        output,
+        intrinsic(ctor(name("a"))),
+    )
+}
+
 fn unary(label: &str, input: Term, output: Term, ctor: fn(Term) -> Intrinsic) -> TopItem {
     pub_fn(
         label,
@@ -441,7 +459,7 @@ fn int_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
     ]
 }
 
-fn flt_ops() -> Vec<TopItem> {
+fn flt_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
     vec![
         binary("add", flt(), flt(), Intrinsic::FltAdd),
         binary("sub", flt(), flt(), Intrinsic::FltSub),
@@ -467,7 +485,13 @@ fn flt_ops() -> Vec<TopItem> {
         unary("to_nat", flt(), nat(), Intrinsic::FltToNat),
         unary("to_int", flt(), int(), Intrinsic::FltToInt),
         unary("to_le_bytes", flt(), bin(Grain::X), Intrinsic::FltToLeBytes),
-        unary("of_le_bytes", bin(Grain::X), flt(), Intrinsic::FltOfLeBytes),
+        guarded_unary(
+            "of_le_bytes",
+            bin(Grain::X),
+            flt(),
+            applied(registered(syntax.proof.bytes_four), vec![name("a")]),
+            Intrinsic::FltOfLeBytes,
+        ),
     ]
 }
 
@@ -498,14 +522,18 @@ fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<TopItem> {
             intrinsic(Intrinsic::BinEql(grain, name("a"), name("b"))),
         ),
         pub_fn_marked(
-            "at",
+            "get",
             vec![
                 (Plicity::Explicit, "b", type_.clone()),
                 (Plicity::Explicit, "i", nat()),
                 (Plicity::Implicit, "ok", in_range),
             ],
             atom.clone(),
-            intrinsic(Intrinsic::BinGet(grain, name("b"), name("i"))),
+            intrinsic(Intrinsic::BinGet {
+                grain,
+                bin: name("b"),
+                index: name("i"),
+            }),
         ),
         // A window is a length-`e - s` chunk, which is meaningful only when `s <= e <= len(b)`. Stated in two parts rather than one conjunction because a refinement records the term it scrutinised: a caller guards each bound separately, so each has to be dischargeable separately.
         pub_fn_marked(
@@ -529,19 +557,32 @@ fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<TopItem> {
                 ),
             ],
             type_.clone(),
-            intrinsic(Intrinsic::BinSlice(grain, name("b"), name("s"), name("e"))),
+            intrinsic(Intrinsic::BinSlice {
+                grain,
+                bin: name("b"),
+                start: name("s"),
+                end: name("e"),
+            }),
         ),
         pub_fn(
             "append",
             vec![("b", type_.clone()), ("x", atom)],
             type_.clone(),
-            intrinsic(Intrinsic::BinAppend(grain, name("b"), name("x"))),
+            intrinsic(Intrinsic::BinAppend {
+                grain,
+                bin: name("b"),
+                element: name("x"),
+            }),
         ),
         pub_fn(
             "concat",
             vec![("a", type_.clone()), ("b", type_.clone())],
             type_,
-            intrinsic(Intrinsic::BinConcat(grain, name("a"), name("b"))),
+            intrinsic(Intrinsic::BinConcat {
+                grain,
+                left: name("a"),
+                right: name("b"),
+            }),
         ),
     ]
 }
@@ -555,10 +596,13 @@ fn list_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
                 (Plicity::Explicit, "a", list_of(name("T"))),
             ],
             nat(),
-            intrinsic(Intrinsic::ListLen(name("T"), name("a"))),
+            intrinsic(Intrinsic::ListLen {
+                element: name("T"),
+                list: name("a"),
+            }),
         ),
         pub_fn_marked(
-            "at",
+            "get",
             vec![
                 (Plicity::Implicit, "T", type_()),
                 (Plicity::Explicit, "a", list_of(name("T"))),
@@ -573,7 +617,11 @@ fn list_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
                 ),
             ],
             name("T"),
-            intrinsic(Intrinsic::ListGet(name("T"), name("a"), name("i"))),
+            intrinsic(Intrinsic::ListGet {
+                element: name("T"),
+                list: name("a"),
+                index: name("i"),
+            }),
         ),
         pub_fn_marked(
             "slice",
@@ -597,12 +645,12 @@ fn list_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
                 ),
             ],
             list_of(name("T")),
-            intrinsic(Intrinsic::ListSlice(
-                name("T"),
-                name("a"),
-                name("s"),
-                name("e"),
-            )),
+            intrinsic(Intrinsic::ListSlice {
+                element: name("T"),
+                list: name("a"),
+                start: name("s"),
+                end: name("e"),
+            }),
         ),
         pub_fn_marked(
             "append",
@@ -612,7 +660,11 @@ fn list_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
                 (Plicity::Explicit, "x", name("T")),
             ],
             list_of(name("T")),
-            intrinsic(Intrinsic::ListAppend(name("T"), name("a"), name("x"))),
+            intrinsic(Intrinsic::ListAppend {
+                element: name("T"),
+                list: name("a"),
+                item: name("x"),
+            }),
         ),
         pub_fn_marked(
             "concat",
@@ -622,7 +674,11 @@ fn list_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
                 (Plicity::Explicit, "b", list_of(name("T"))),
             ],
             list_of(name("T")),
-            intrinsic(Intrinsic::ListConcat(name("T"), name("a"), name("b"))),
+            intrinsic(Intrinsic::ListConcat {
+                element: name("T"),
+                left: name("a"),
+                right: name("b"),
+            }),
         ),
         pub_fn_marked(
             "map",
@@ -633,12 +689,12 @@ fn list_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
                 (Plicity::Explicit, "f", fn_of(name("A"), name("B"))),
             ],
             list_of(name("B")),
-            intrinsic(Intrinsic::ListMap(
-                name("A"),
-                name("B"),
-                name("a"),
-                name("f"),
-            )),
+            intrinsic(Intrinsic::ListMap {
+                from: name("A"),
+                to: name("B"),
+                list: name("a"),
+                function: name("f"),
+            }),
         ),
     ]
 }
@@ -653,7 +709,10 @@ fn cell_ops() -> Vec<TopItem> {
                 (Plicity::Explicit, "x", name("T")),
             ],
             io_of(cell_of(name("T"))),
-            intrinsic(Intrinsic::Cell(name("T"), name("x"))),
+            intrinsic(Intrinsic::Cell {
+                element: name("T"),
+                initial: name("x"),
+            }),
         ),
         pub_fn_marked(
             "set",
@@ -663,7 +722,11 @@ fn cell_ops() -> Vec<TopItem> {
                 (Plicity::Explicit, "v", name("T")),
             ],
             io_of(unit()),
-            intrinsic(Intrinsic::CellSet(name("T"), name("c"), name("v"))),
+            intrinsic(Intrinsic::CellSet {
+                element: name("T"),
+                cell: name("c"),
+                value: name("v"),
+            }),
         ),
         pub_fn_marked(
             "get",
@@ -672,7 +735,10 @@ fn cell_ops() -> Vec<TopItem> {
                 (Plicity::Explicit, "c", cell_of(name("T"))),
             ],
             io_of(name("T")),
-            intrinsic(Intrinsic::CellGet(name("T"), name("c"))),
+            intrinsic(Intrinsic::CellGet {
+                element: name("T"),
+                cell: name("c"),
+            }),
         ),
     ]
 }
@@ -687,7 +753,10 @@ fn io_ops() -> Vec<TopItem> {
                 (Plicity::Explicit, "x", name("T")),
             ],
             io_of(name("T")),
-            intrinsic(Intrinsic::IoPure(name("T"), name("x"))),
+            intrinsic(Intrinsic::IoPure {
+                result: name("T"),
+                value: name("x"),
+            }),
         ),
         pub_fn_marked(
             "bind",
@@ -698,12 +767,12 @@ fn io_ops() -> Vec<TopItem> {
                 (Plicity::Explicit, "f", fn_of(name("A"), io_of(name("B")))),
             ],
             io_of(name("B")),
-            intrinsic(Intrinsic::IoBind(
-                name("A"),
-                name("B"),
-                name("m"),
-                name("f"),
-            )),
+            intrinsic(Intrinsic::IoBind {
+                from: name("A"),
+                to: name("B"),
+                action: name("m"),
+                continuation: name("f"),
+            }),
         ),
     ]
 }
@@ -850,7 +919,10 @@ pub fn sys_module(foreigns: &ForeignStore, syntax: &SyntaxRegistry) -> Module {
             with_type(pub_let("Int", type_(), int()), int_ops(syntax)),
         ),
         pub_use("Int"),
-        pub_mod("Flt", with_type(pub_let("Flt", type_(), flt()), flt_ops())),
+        pub_mod(
+            "Flt",
+            with_type(pub_let("Flt", type_(), flt()), flt_ops(syntax)),
+        ),
         pub_use("Flt"),
         pub_mod(
             "Bits",

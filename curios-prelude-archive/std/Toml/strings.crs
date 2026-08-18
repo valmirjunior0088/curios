@@ -5,7 +5,7 @@ rec hex_scan(input: Bytes, cur: Nat, count: Nat, acc: Nat) -> Result({Nat, Nat},
     match count
     | 0 => Result/success((cur, acc))
     | pred + 1 =>
-        match Bytes/get(input, cur)
+        match Bytes/try_get(input, cur)
         | none() => Result/failure("unterminated escape")
         | some(b) =>
             match hex_val(Byte/to_nat(b))
@@ -23,7 +23,7 @@ let scalar_utf8(code: Nat) -> Result(Bytes, Str) =
 
 -- one basic-string escape, `cur` positioned after the backslash
 let escape_scan(input: Bytes, cur: Nat) -> Result({Nat, Bytes}, Str) =
-    match Bytes/get(input, cur)
+    match Bytes/try_get(input, cur)
     | none() => Result/failure("unterminated escape")
     | some(b) =>
         match Byte/to_nat(b)
@@ -52,7 +52,7 @@ let basic_str_scan: Parse(Bytes) =
     Parse {
         run(input, pos) =
             rec go(cur: Nat, acc: Bytes) -> Result({Nat, Bytes}, Str) =
-                match Bytes/get(input, cur)
+                match Bytes/try_get(input, cur)
                 | none() => Result/failure("unterminated string")
                 | some(b) =>
                     let n = Byte/to_nat(b);
@@ -79,7 +79,7 @@ let literal_str_scan: Parse(Bytes) =
     Parse {
         run(input, pos) =
             rec go(cur: Nat, acc: Bytes) -> Result({Nat, Bytes}, Str) =
-                match Bytes/get(input, cur)
+                match Bytes/try_get(input, cur)
                 | none() => Result/failure("unterminated string")
                 | some(b) =>
                     let n = Byte/to_nat(b);
@@ -113,7 +113,7 @@ let is_crlf_at(input: Bytes, cur: Nat) -> Bool =
 rec trim_scan(input: Bytes, cur: Nat, seen_nl: Bool) -> Result(Nat, Str) =
     let stop: Result(Nat, Str) =
         match seen_nl | true => Result/success(cur) | false => Result/failure("invalid escape") end;
-    match Bytes/get(input, cur)
+    match Bytes/try_get(input, cur)
     | none() => stop
     | some(b) =>
         let n = Byte/to_nat(b);
@@ -135,7 +135,7 @@ let ml_basic_scan: Parse(Bytes) =
     Parse {
         run(input, pos) =
             rec go(cur: Nat, acc: Bytes) -> Result({Nat, Bytes}, Str) =
-                match Bytes/get(input, cur)
+                match Bytes/try_get(input, cur)
                 | none() => Result/failure("unterminated string")
                 | some(b) =>
                     let n = Byte/to_nat(b);
@@ -189,7 +189,7 @@ let ml_literal_scan: Parse(Bytes) =
     Parse {
         run(input, pos) =
             rec go(cur: Nat, acc: Bytes) -> Result({Nat, Bytes}, Str) =
-                match Bytes/get(input, cur)
+                match Bytes/try_get(input, cur)
                 | none() => Result/failure("unterminated string")
                 | some(b) =>
                     let n = Byte/to_nat(b);

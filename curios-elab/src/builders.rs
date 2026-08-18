@@ -585,7 +585,10 @@ impl IntrinsicBuilders for Intrinsic {
         T: Into<Term>,
         I: Into<Term>,
     {
-        Self::Cell(type_.into(), init.into())
+        Self::Cell {
+            element: type_.into(),
+            initial: init.into(),
+        }
     }
 
     fn cell_set<T, C, V>(type_: T, cell: C, value: V) -> Self
@@ -594,7 +597,11 @@ impl IntrinsicBuilders for Intrinsic {
         C: Into<Term>,
         V: Into<Term>,
     {
-        Self::CellSet(type_.into(), cell.into(), value.into())
+        Self::CellSet {
+            element: type_.into(),
+            cell: cell.into(),
+            value: value.into(),
+        }
     }
 
     fn cell_get<T, C>(type_: T, cell: C) -> Self
@@ -602,7 +609,10 @@ impl IntrinsicBuilders for Intrinsic {
         T: Into<Term>,
         C: Into<Term>,
     {
-        Self::CellGet(type_.into(), cell.into())
+        Self::CellGet {
+            element: type_.into(),
+            cell: cell.into(),
+        }
     }
 }
 

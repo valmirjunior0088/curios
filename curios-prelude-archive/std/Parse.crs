@@ -61,7 +61,7 @@ pub let any_byte: Parse(Byte) =
         run(input, pos) =
             match Nat/Lt/try(pos, Bytes/len(input))
             | none() => Result/failure("unexpected end of input")
-            | some(ok) => Result/success((pos + 1, Bytes/at(input, pos, @ok)))
+            | some(ok) => Result/success((pos + 1, Bytes/get(input, pos, @ok)))
             end,
     };
 
@@ -70,7 +70,7 @@ pub let peek_byte: Parse(Byte) =
         run(input, pos) =
             match Nat/Lt/try(pos, Bytes/len(input))
             | none() => Result/failure("unexpected end of input")
-            | some(ok) => Result/success((pos, Bytes/at(input, pos, @ok)))
+            | some(ok) => Result/success((pos, Bytes/get(input, pos, @ok)))
             end,
     };
 
@@ -80,7 +80,7 @@ pub let take_byte(expected: Byte) -> Parse(Byte) =
             match Nat/Lt/try(pos, Bytes/len(input))
             | none() => Result/failure("unexpected end of input")
             | some(ok) =>
-                let byte = Bytes/at(input, pos, @ok);
+                let byte = Bytes/get(input, pos, @ok);
                 match byte == expected
                 | true => Result/success((pos + 1, byte))
                 | false => Result/failure("unexpected byte")
@@ -102,8 +102,8 @@ pub let take_literal(literal: Str) -> Parse({}) =
                         match Nat/Lt/try(cur, Bytes/len(input))
                         | none() => (cur, false)
                         | some(ok) =>
-                            match Option/unwrap_or(Bytes/get(lit, step), 0)
-                                == Bytes/at(input, cur, @ok)
+                            match Option/unwrap_or(Bytes/try_get(lit, step), 0)
+                                == Bytes/get(input, cur, @ok)
                             | true => (cur + 1, true)
                             | false => (cur, false)
                             end
@@ -149,7 +149,7 @@ pub let take_while(pred: (Byte) -> Bool) -> Parse(Bytes) =
                             match Nat/Lt/try(cur, Bytes/len(input))
                             | none() => (cur, from_pos, at_cur, true)
                             | some(ok) =>
-                                match pred(Bytes/at(input, cur, @ok))
+                                match pred(Bytes/get(input, cur, @ok))
                                 | true =>
                                     (
                                         cur + 1,

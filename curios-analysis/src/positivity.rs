@@ -735,25 +735,25 @@ impl<E: Env> Walk<'_, E> {
             | Intrinsic::Bin(..)
             | Intrinsic::BinLen(..)
             | Intrinsic::BinEql(..)
-            | Intrinsic::BinGet(..)
-            | Intrinsic::BinSlice(..)
-            | Intrinsic::BinAppend(..)
-            | Intrinsic::BinConcat(..)
-            | Intrinsic::List(..)
-            | Intrinsic::ListLen(..)
-            | Intrinsic::ListGet(..)
-            | Intrinsic::ListSlice(..)
-            | Intrinsic::ListAppend(..)
-            | Intrinsic::ListConcat(..)
-            | Intrinsic::ListMap(..)
+            | Intrinsic::BinGet { .. }
+            | Intrinsic::BinSlice { .. }
+            | Intrinsic::BinAppend { .. }
+            | Intrinsic::BinConcat { .. }
+            | Intrinsic::List { .. }
+            | Intrinsic::ListLen { .. }
+            | Intrinsic::ListGet { .. }
+            | Intrinsic::ListSlice { .. }
+            | Intrinsic::ListAppend { .. }
+            | Intrinsic::ListConcat { .. }
+            | Intrinsic::ListMap { .. }
             | Intrinsic::Handle(_)
             | Intrinsic::HandleEql(..)
             | Intrinsic::ProcExit(..)
-            | Intrinsic::Cell(..)
-            | Intrinsic::CellSet(..)
-            | Intrinsic::CellGet(..)
-            | Intrinsic::IoPure(..)
-            | Intrinsic::IoBind(..) => self.opaque(term),
+            | Intrinsic::Cell { .. }
+            | Intrinsic::CellSet { .. }
+            | Intrinsic::CellGet { .. }
+            | Intrinsic::IoPure { .. }
+            | Intrinsic::IoBind { .. } => self.opaque(term),
         }
     }
 }

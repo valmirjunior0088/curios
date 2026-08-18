@@ -261,16 +261,16 @@ impl<E: Env> Walk<'_, E> {
 
             Subterm::Intrinsic(
                 Intrinsic::Bin(grain, _)
-                | Intrinsic::BinAppend(grain, ..)
-                | Intrinsic::BinConcat(grain, ..)
-                | Intrinsic::BinSlice(grain, ..),
+                | Intrinsic::BinAppend { grain, .. }
+                | Intrinsic::BinConcat { grain, .. }
+                | Intrinsic::BinSlice { grain, .. },
             ) => self.monoid_shape(FreeMonoid::Bin(*grain), term),
 
             Subterm::Intrinsic(
-                Intrinsic::List(..)
-                | Intrinsic::ListAppend(..)
-                | Intrinsic::ListConcat(..)
-                | Intrinsic::ListSlice(..),
+                Intrinsic::List { .. }
+                | Intrinsic::ListAppend { .. }
+                | Intrinsic::ListConcat { .. }
+                | Intrinsic::ListSlice { .. },
             ) => self.monoid_shape(FreeMonoid::List, term),
 
             // Arithmetic descent. Both operations are monotone and floor-like on Core's unbounded `Nat` — `NatDiv` folds through `Natural` division and `NatSub` truncates at zero — so each is below its left operand whenever that operand is nonzero.

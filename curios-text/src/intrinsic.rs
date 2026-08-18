@@ -119,27 +119,87 @@ pub enum Intrinsic {
     Bin(Grain, Vec<BinSegment>),
     BinLen(Grain, Term),
     BinEql(Grain, Term, Term),
-    BinGet(Grain, Term, Term),
-    BinSlice(Grain, Term, Term, Term),
-    BinAppend(Grain, Term, Term),
-    BinConcat(Grain, Term, Term),
+    BinGet {
+        grain: Grain,
+        bin: Term,
+        index: Term,
+    },
+    BinSlice {
+        grain: Grain,
+        bin: Term,
+        start: Term,
+        end: Term,
+    },
+    BinAppend {
+        grain: Grain,
+        bin: Term,
+        element: Term,
+    },
+    BinConcat {
+        grain: Grain,
+        left: Term,
+        right: Term,
+    },
     ListType(Term),
     List(Vec<ListEntry>),
-    ListLen(Term, Term),
-    ListGet(Term, Term, Term),
-    ListSlice(Term, Term, Term, Term),
-    ListAppend(Term, Term, Term),
-    ListConcat(Term, Term, Term),
-    ListMap(Term, Term, Term, Term),
+    ListLen {
+        element: Term,
+        list: Term,
+    },
+    ListGet {
+        element: Term,
+        list: Term,
+        index: Term,
+    },
+    ListSlice {
+        element: Term,
+        list: Term,
+        start: Term,
+        end: Term,
+    },
+    ListAppend {
+        element: Term,
+        list: Term,
+        item: Term,
+    },
+    ListConcat {
+        element: Term,
+        left: Term,
+        right: Term,
+    },
+    ListMap {
+        from: Term,
+        to: Term,
+        list: Term,
+        function: Term,
+    },
     HandleType,
     Handle(u32),
     HandleEql(Term, Term),
     ProcExit(Term),
     CellType(Term),
-    Cell(Term, Term),          // type, init
-    CellSet(Term, Term, Term), // type, cell, value
-    CellGet(Term, Term),       // type, cell
+    Cell {
+        element: Term,
+        initial: Term,
+    },
+    CellSet {
+        element: Term,
+        cell: Term,
+        value: Term,
+    },
+    CellGet {
+        element: Term,
+        cell: Term,
+    },
     IoType(Term),
-    IoPure(Term, Term),             // type, value
-    IoBind(Term, Term, Term, Term), // from, to, action, continuation
+    IoPure {
+        result: Term,
+        value: Term,
+    },
+    IoBind {
+        from: Term,
+        to: Term,
+        action: Term,
+        continuation: Term,
+    },
 }

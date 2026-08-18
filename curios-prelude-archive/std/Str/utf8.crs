@@ -189,7 +189,7 @@ pub rec take_continuations(
             pred,
             acc * 0x40
                 + (Byte/to_nat(
-                    Bytes/at(
+                    Bytes/get(
                         b,
                         off,
                         @Nat/Lt/of_lte_succ(
@@ -204,7 +204,7 @@ pub rec peel_byte(
     nz: Nat/Lt(0, Bytes/len(b)),
     w: Utf8(s, b),
 ) -> Utf8(
-    step(Bytes/at(b, 0, @nz), s),
+    step(Bytes/get(b, 0, @nz), s),
     Bytes/slice(b, 1, Bytes/len(b), @Nat/Lt/le_one_of_positive(nz))) =
     match w
     | stop() => match nz end

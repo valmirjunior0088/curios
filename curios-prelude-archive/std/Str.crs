@@ -132,7 +132,7 @@ pub let find_index(s: Str, pred: (Char) -> Bool) -> Option(Nat) =
 pub let find(s: Str, target: Char) -> Option(Nat) =
     find_index(s, (codepoint) => codepoint == target);
 
-pub let get(s: Str, i: Nat) -> Option(Char) =
+pub let try_get(s: Str, i: Nat) -> Option(Char) =
     let (_, found): {Nat, Option(Char)} =
         fold(
             s,
@@ -148,7 +148,7 @@ pub let get(s: Str, i: Nat) -> Option(Char) =
                 end);
     found;
 
-pub let at(s: Str, i: Nat, ok: Nat/Lt(i, len(s))) -> Char =
+pub let get(s: Str, i: Nat, ok: Nat/Lt(i, len(s))) -> Char =
     rec go(
         sc: Scan,
         b: Bytes,
@@ -187,7 +187,7 @@ pub let join(sep: Str, parts: List(Str)) -> Str =
     List/balanced(
         List/len(parts),
         "",
-        (i) => Option/unwrap_or(List/get(parts, i), ""),
+        (i) => Option/unwrap_or(List/try_get(parts, i), ""),
         (l, r) => concat(concat(l, sep), r));
 
 let trim_bounds(s: Str) -> {Nat, Nat} =

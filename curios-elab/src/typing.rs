@@ -223,7 +223,7 @@ pub(crate) fn blocked_on_metavar(
     expected_ground: bool,
 ) -> Result<bool, Error> {
     let is_lambda = matches!(&**arg, Subterm::Func(_));
-    let is_list = matches!(&**arg, Subterm::Intrinsic(Intrinsic::List(..)));
+    let is_list = matches!(&**arg, Subterm::Intrinsic(Intrinsic::List { .. }));
     let is_tuple = matches!(&**arg, Subterm::Tuple(_));
     if !is_lambda && !is_list && !is_tuple {
         return Ok(false);
