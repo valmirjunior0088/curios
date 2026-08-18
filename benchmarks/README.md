@@ -209,21 +209,9 @@ Curios only targets WebAssembly, so its presence in both sections is not two bac
 
 ## Workloads
 
-All five are (a) expressible in a total, structurally-recursive language, (b) immune to constant-folding and closed-form shortcuts — the input arrives at runtime — and (c) bit-identical in output across every implementation, so a mismatch flags a mistranslation before any timing is trusted. `entrypoint.sh` enforces that cross-check at the start of every run.
+Five workloads, one directory each, carrying the same program in eight spellings. What each computes, its anchors and defaults, and why the constants are small are [the corpus's to state](../programs/README.md#the-cross-language-workloads) — they are properties of the programs, not of this harness.
 
-- **`lcg`** — iterate `x = (75 · x) mod 65537` N times from `x = 1`. One multiply + one modulo per iteration; the max intermediate is 75·65536 ≈ 4.9M, far under i31. Measures integer ALU + loop/call overhead. Default `N = 100_000_000` (≈ 0.45s of Curios compute; below ~10⁷ it is startup-dominated). Anchor: `lcg(10⁸) = 17662`.
-- **`trees`** (the classic binary-trees allocation stress) — build a perfect tree of depth D whose nodes carry unique heap-numbered payloads (root `1`, children `2v` / `2v+1`), then reduce to `sum mod 1000003`. The unique payloads make every node distinct, defeating any structural subtree-sharing and forcing 2^(D+1)−1 real allocations; the modulus keeps the checksum inside i31. Measures allocation + GC and heap traversal. Default `D = 21` (≈ 4.2M nodes, ≈ 0.25s; D=23 ≈ 1s). Anchor: `trees(21) = 536864`.
-- **`chain`** — build a cons list of 10 000 cells once, then transform it K times, each round rebuilding every cell from a predecessor that dies with the operation. Measures *death-birth churn*: unlike `trees`, where every allocation survives to be traversed, nothing here outlives the step that replaces it. That is the pairing [Perceus](https://dl.acm.org/doi/10.1145/3453483.3454032) reference counting turns into an in-place write, so the Lean column prices dynamic reuse and the ratio to it is the number this workload exists for. The seed is derived from K so nothing is a closed term, each round reverses the order (which the sum ignores), and every walk is tail-recursive or a loop so no contestant's stack depends on the 10 000. Default `K = 1600` (≈ 16M cells reborn, ≈ 0.33s). Anchors: `chain(8) = 819185`, `chain(1600) = 457407`.
-
-  Two asymmetries belong beside its ratio rather than inside it. A Curios cons cell is **three** slots to Lean's two, since a tagged constructor carries its discriminant — real, and not what the workload is about. And the chain's live set is small by design, so the collector's marking half is barely exercised: what is measured is the allocation rate and the young-collection frequency that churn drives, which is the half reuse removes.
-
-- **`churn`** — thread a six-field record through N LCG-fed steps, two fields updated per step, the written pair rotating over three phases so every field keeps circulating; print one field at the end. The purest record-update signal: the imperative contestants mutate a struct in place and allocate nothing, OCaml's and Grain's functional updates allocate a fresh record per step, and Lean's structure update is the shape Perceus's reset-and-reuse rewrites in place. Curios spells the update as a spread — and its optimizer erases the record entirely: the threaded record travels as fields, the loop allocates nothing (pinned by `churn_threaded_record_allocates_nothing` in `curios/src/tests/codegen/churn.rs`), so its column prices dispatch and checked i31 arithmetic against the mutation floor rather than allocation. The record-update tax this workload was specified to price therefore lives only where a record *rests*, which is the census's and the coming `spines` workload's territory. Default `N = 75_000_000` (≈ 0.33s of Curios compute). Anchors: `churn(8) = 897441`, `churn(75000000) = 762495`.
-
-- **`spines`** — N LCG-keyed inserts into a map, then fold the values; the keys revisit a 65 536-value orbit, so the live set plateaus while every insert keeps rebuilding a root-to-leaf spine that dies with the operation — the live-set-under-churn dimension `chain` deliberately lacks. Two confounds are part of the design and the reason it orients rather than proves: the table compares map algorithms as much as memory management (Curios's crit-bit trie against imperative hash maps and the functional contestants' balanced trees), and `/std/Map` deliberately has no `Key(Nat)` — the injectivity a `Key` witness owes is unprovable for a division-based encoding under unary elimination, as the module records — so Curios keys enter through `Bytes/of_nat`: minimal big-endian, a division and a table index per byte, a boundary cost of a few arithmetic operations no int-keyed hash map quite mirrors. Lean's `Std.TreeMap` is the reuse-on-spines column: a persistent tree whose dying path Perceus rewrites in place. Default `N = 75_000` (≈ 0.3s of Curios compute). Anchors: `spines(8) = 28`, `spines(75000) = 675283`.
-
-### Why the constants are small
-
-Curios's `Nat` and `Int` are unbounded in the type checker but ride an **i31** — the unboxed WebAssembly-GC 31-bit integer — at runtime, and arithmetic is _checked_: a result that leaves i31 traps. Why it traps rather than wrapping is [Numeric carriers narrow by refusing, never by changing a value](../documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md). (`Flt`/`f64` has the range but heap-allocates per value — the wrong tool for a tight integer loop.) So every workload is deliberately sized to keep **every intermediate, including products,** within i31, and every other language uses its native integer to compute the identical values. The upshot: the integer comparison is like-for-like on values, and it honestly folds Curios's per-op overflow check into the measured cost rather than hiding it.
+What belongs here is the guarantee: `entrypoint.sh` cross-checks all eight outputs before timing anything, so a mistranslation surfaces as a failed run rather than a wrong number. Co-location never provided that, which is why the Curios spelling lives in the corpus with every other measured program.
 
 ## Run it
 
@@ -232,14 +220,14 @@ benchmarks/
   Dockerfile                 kitchen-sink arm64 image with all 8 toolchains + curios
   Dockerfile.dockerignore    what the build context excludes (target/, .artifacts/, .git)
   entrypoint.sh              build all, cross-check outputs, then 10 hyperfine tables
-  programs/
-    lcg/                     lcg.{crs,rs,ml,js,ts,gr}  Lcg.lean  lakefile.toml
-    trees/                   trees.{crs,rs,ml,js,ts,gr}  Trees.lean  lakefile.toml
-    chain/                   chain.{crs,rs,ml,js,ts,gr}  Chain.lean  lakefile.toml
+  NN_RESULTS.md              one single-sitting capture each, with its own commentary
   .artifacts/                built contestants — inside the container only; a run leaves nothing on the host
+
+../programs/
+  lcg/ trees/ chain/ churn/ spines/    the timed programs, one directory per workload
 ```
 
-The image build needs the Curios sources, which live _above_ `benchmarks/`, so it must run with the **repo root as the build context**. The `curios/benchmarks` Makefile target does that, from the repo root:
+The image build needs the Curios sources *and* the corpus, both of which live _above_ `benchmarks/`, so it must run with the **repo root as the build context**. The `curios/benchmarks` Makefile target does that, from the repo root:
 
 ```sh
 make curios/benchmarks
