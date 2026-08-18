@@ -39,7 +39,7 @@ Grades only. Each entry's evidence is the entry it links to.
 | [Witness coherence and the orphan rule](soundness/per-term-rules/witness-coherence-and-the-orphan-rule.md) | **probed** |
 | [Foreign wire contract](soundness/per-term-rules/foreign-wire-contract.md) | **probed** |
 | [Definitional proof irrelevance](soundness/per-term-rules/definitional-proof-irrelevance.md) | **argued** |
-| [Index inversion and K](soundness/per-term-rules/index-inversion-and-k.md) | auditable only |
+| [Index inversion and K](soundness/per-term-rules/index-inversion-and-k.md) | auditable only from the surface, **probed** by construction at the deletion rule and the clash rule's license |
 | [Conversion recurrence](soundness/per-term-rules/conversion-recurrence.md) | **argued** |
 | [Eta and untyped child positions](soundness/per-term-rules/eta-and-untyped-child-positions.md) | **argued** and **probed**, the grounded scope's stand-in included; **argued** for the caller-side fence beneath it |
 | [Elimination carrier agreement](soundness/per-term-rules/elimination-carrier-agreement.md) | **probed** |

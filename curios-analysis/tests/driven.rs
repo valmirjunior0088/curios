@@ -167,6 +167,57 @@ fn a_binder_whose_type_is_out_of_scope_drops_its_forcings() {
     );
 }
 
+/// The clash rule's license is the registry, and a family the registry cannot answer for must not clash.
+///
+/// Two different constructors of one family definitely clash only when the family is *relevant*: at a `Prop`-sorted family irrelevance makes every inhabitant the same value, so reading tag disjointness there contradicts conversion, and an arm excused as impossible on that reading is the vacuous-elimination route to a closed inhabitant of `False` that `documentation/soundness/per-term-rules/index-inversion-and-k.md` records. The sort is read out of `induct_decl`, so the whole of that protection rests on the lookup answering — and a lookup that answered nothing used to fall through to the tag check and answer `Impossible`: the analysis deciding the strong verdict *because* it was blind, where every other blindness on this seam — an unknown positivity name, an undecodable size, an unassumed binder — turns into a refusal. The branch is unreachable from either checker as far as the walks are known, a well-typed variant's family being registered wherever the term came from, but the fixture above pins an equally unreachable branch for the same reason: the conservative answer is not the obvious one to write, and nothing else in the workspace would notice the wrong one.
+///
+/// Verified while the branch was wrong: the subject below answered `Impossible` for a family absent from the registry. The control pair holds what the correction must not have moved — the same position with the declaration present still clashes at a relevant sort, and still yields nothing at `Prop`.
+#[test]
+fn a_family_the_registry_cannot_answer_for_does_not_clash() {
+    let inhabitant = |family: &Global, tag: &str| {
+        Term::variant(family.clone(), Vec::<Term>::new(), tag, Vec::<Term>::new())
+    };
+
+    // The subject: the family was never declared, so the sort read is blind.
+    let mut blind = kernel();
+    let family = Global::Authored(Qualifier::from(["Blind"]));
+    let outcome = invert_indices(
+        &mut blind,
+        &[inhabitant(&family, "a")],
+        &[inhabitant(&family, "b")],
+        &[],
+    )
+    .expect("inversion is a total function of finished terms");
+    assert!(
+        matches!(outcome, Invert::Solved(ref solutions) if solutions.is_empty()),
+        "a family the registry cannot answer for was decided rather than refused",
+    );
+
+    for (label, sort, impossible) in [
+        (
+            "a relevant family's two constructors definitely clash",
+            Term::type_ground(),
+            true,
+        ),
+        (
+            "a proposition's two constructors are one value and yield nothing",
+            Term::prop(),
+            false,
+        ),
+    ] {
+        let mut sighted = kernel();
+        let family = declare(&mut sighted, "Blind", sort);
+        let outcome = invert_indices(
+            &mut sighted,
+            &[inhabitant(&family, "a")],
+            &[inhabitant(&family, "b")],
+            &[],
+        )
+        .expect("inversion is a total function of finished terms");
+        assert_eq!(matches!(outcome, Invert::Impossible), impossible, "{label}");
+    }
+}
+
 /// A single-constructor family whose one payload is `payload_type`.
 fn single_payload(payload_type: Term, result_sort: Term) -> InductDecl {
     let binder = Free::local(0, Some("f"));

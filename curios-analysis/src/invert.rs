@@ -197,10 +197,11 @@ fn unify_index<J: Judge>(
             //
             // Only a variant can reach this: an `Intrinsic` carrier is a relevant type, and a `Prop`-sorted tuple or structure has none but non-informative components, so decomposing one yields equations between proofs, which any inhabitant satisfies.
             // Matched on the nose rather than reduced: `check_induct_decl` requires a declared result sort to be a literal sort, which is the clause this test is licensed by. Without it a family declared at a redex unfolding to `Prop` reads as relevant here and as a proposition everywhere else, and the clash below excuses an arm that irrelevance says is reachable.
-            if judge
-                .induct_decl(&a.name)
-                .is_some_and(|declaration| matches!(&*declaration.result_sort, Subterm::Prop))
-            {
+            // A family the registry cannot answer for is refused rather than read as relevant: the tag test's license is the declared sort, so a lookup that answers nothing licenses nothing — falling through to the clash would decide the strong verdict out of blindness, the one direction the analyses on this seam never take.
+            let Some(declaration) = judge.induct_decl(&a.name) else {
+                return Ok(Step::Refuse);
+            };
+            if matches!(&*declaration.result_sort, Subterm::Prop) {
                 return Ok(Step::Ok);
             }
             if a.tag != t.tag {
