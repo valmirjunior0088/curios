@@ -11,13 +11,15 @@ use {
         Apply, Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Intrinsic,
         Level, Match, Metavar, Proj, Rec, ReduceError, Scope, Struct, StructType, Subterm,
         Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, UniverseInst, Variant, Visit, instantiate_universe_levels_scoped,
-        project_erased_universes,
+        UniverseContext, UniverseError, UniverseInst, Variant, Visit,
+        instantiate_universe_levels_scoped, rewrite_universe_levels_scoped,
     },
     curios_utilities::Plicity,
     std::{
+        cell::RefCell,
         collections::{HashMap, HashSet, VecDeque},
         mem,
+        rc::Rc,
     },
 };
 
@@ -73,6 +75,82 @@ pub(crate) enum Outcome {
     Mismatch,
     /// Quiesced with constraints still blocked on unsolved metavariables: undecided either way. The blocked goals are surrendered to the caller — the elaboration turnaround parks them on the `Context` to be retried when a watched metavariable is solved.
     Blocked(Vec<Goal>),
+}
+
+/// Decide a goal whose sides differ only in universe levels by *identifying* the levels: commit every differing pair as the same `Conversion` equality constraint the structural path emits for a type's vectors, and accept — after the commitment the two spellings are one term, which is the license the acceptance stands on. Neither side is reduced, which is the point: two spellings of one computation are identified without running it, so registering the fact does not cost the fact's own subject — a partial definition at two fresh instances, an accumulation under a strict operation.
+///
+/// This replaces a rule that compared the two sides through `project_erased_universes` and accepted on projection equality, on the premise that a universe instance cannot affect computation. That premise is false, and `documentation/soundness/what-the-kernel-consults/the-refinement-key.md` records the kernel's copy of it falling: `Type u` embeds a level *in a term*, so a definition carrying a level into a constructor payload reduces to genuinely different values at two instances — and the projection accepted such pairs with no residue for the declaration boundary to refuse. Identification leaves the residue.
+///
+/// Declines — answering `false` with **nothing inserted**, so the structural path below judges the goal instead — on a pair of unequal ground levels, where there is nothing to identify and the goal may still hold by value, and on a differing pair under a universe binder, whose bound parameters the ambient solver cannot constrain. Every pair is checked before any is committed, because a decline that had already inserted would not be a fall-through.
+fn identify_universe_levels(
+    context: &mut Context,
+    this: &Term,
+    that: &Term,
+) -> Result<bool, ReduceError> {
+    // One traversal per side: collect every level with its universe-binder depth, rewriting it to ground on the way — the stripped terms then compare equal exactly when the sides differ in nothing but levels, and equality of the stripped terms is what aligns the two collections positionally.
+    fn strip_collecting(term: &Term) -> Result<(Term, Vec<(usize, Level)>), UniverseError> {
+        let levels = Rc::new(RefCell::new(Vec::new()));
+        let sink = Rc::clone(&levels);
+        let stripped = rewrite_universe_levels_scoped(term, move |depth, level: &Level| {
+            sink.borrow_mut().push((depth, level.clone()));
+            Ok::<_, UniverseError>(Level::zero())
+        })?;
+
+        let levels = match Rc::try_unwrap(levels) {
+            Ok(cell) => cell.into_inner(),
+            Err(shared) => shared.borrow().clone(),
+        };
+
+        Ok((stripped, levels))
+    }
+
+    let (this_stripped, this_levels) = strip_collecting(this).map_err(ReduceError::Universe)?;
+    let (that_stripped, that_levels) = strip_collecting(that).map_err(ReduceError::Universe)?;
+
+    if this_stripped != that_stripped || this_levels.len() != that_levels.len() {
+        return Ok(false);
+    }
+
+    let mut pending = Vec::new();
+    for ((this_depth, this_level), (that_depth, that_level)) in this_levels.iter().zip(&that_levels)
+    {
+        if this_level == that_level {
+            continue;
+        }
+        if *this_depth > 0 || *that_depth > 0 {
+            return Ok(false);
+        }
+
+        let this_level = context
+            .universes()
+            .zonk(this_level)
+            .map_err(ReduceError::Universe)?;
+        let that_level = context
+            .universes()
+            .zonk(that_level)
+            .map_err(ReduceError::Universe)?;
+        if this_level == that_level {
+            continue;
+        }
+        if this_level.atoms.is_empty() && that_level.atoms.is_empty() {
+            return Ok(false);
+        }
+
+        pending.push((this_level, that_level));
+    }
+
+    for (this_level, that_level) in pending {
+        context
+            .universes_mut()
+            .add_eq(
+                this_level,
+                that_level,
+                UniverseConstraintOrigin::new(UniverseConstraintKind::Conversion),
+            )
+            .map_err(ReduceError::Universe)?;
+    }
+
+    Ok(true)
 }
 
 /// Binders opened locally by [`Sort::of`] while walking a telescope, innermost last.
@@ -1899,10 +1977,9 @@ impl Convert {
                 continue;
             }
 
-            // Universe instantiations are computationally irrelevant: Curios has no universe reflection, and erasure removes every instance, nominal level vector, and `Type` payload. For values (goals not checked at `Type` itself), identical erased spellings are definitionally equal without unfolding their shared head. This also prevents independently fresh instances of a partial definition from being evaluated merely to rediscover the same value. Type expressions still take the structural path below, where their level vectors generate equality constraints.
+            // Sides differing only in universe levels are decided by identifying the levels, never by erasing them — see `identify_universe_levels` for the rule, its license, and the refuted premise of the projection comparison it replaces. Sound at every goal type, universes included: `Type a ~ Type b` gets the same equality constraint the structural arm below would emit, without the descent.
             if (this.has_universe_data() || that.has_universe_data())
-                && project_erased_universes(&this) == project_erased_universes(&that)
-                && !matches!(&*reduce(context, type_.clone())?, Subterm::Type(_))
+                && identify_universe_levels(context, &this, &that)?
             {
                 continue;
             }

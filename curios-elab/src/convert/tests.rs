@@ -22,6 +22,11 @@ fn nat(n: usize) -> Term {
     Term::intrinsic(Intrinsic::Nat(Nat::new(n)))
 }
 
+/// The value fast path's sound population, pinned together with the license that makes it sound.
+///
+/// One partial computation at two fresh instances — `bin_get` past the end of an empty `Bin`, whose evaluation refuses — must convert *without being evaluated*: deciding that two spellings of one computation agree may not cost the computation. That is the verdict-and-method half, and any rewrite of `identify_universe_levels` that starts reducing here turns the `Ok(true)` below into an error.
+///
+/// The second assertion is the license, and it is what separates the sound mechanism from the one `value_conversion_does_not_identify_distinct_type_payloads` records falling: acceptance must come *with* the level identification that justifies it — after the call the two metas are one level, so the accepted goal is literally reflexive. The old projection comparison accepted while leaving the metas untouched, acceptance with no residue, and this assertion was red under it (mutation-checked by restoring that comparison). A deliberately more complete future rule — say, accepting rigid-distinct instances on a head whose levels provably never reach a value — would also fail this assertion, and revisiting it then is a deliberate expectation change, not a regression.
 #[test]
 fn value_conversion_does_not_unfold_terms_differing_only_by_universes() {
     let mut context = context();
@@ -42,12 +47,11 @@ fn value_conversion_does_not_unfold_terms_differing_only_by_universes() {
         ),
         None,
     );
-    let applied = |universe| {
+    let u0 = context.universes_mut().fresh(UniverseRole::Flexible, None);
+    let u1 = context.universes_mut().fresh(UniverseRole::Flexible, None);
+    let applied = |meta: UniverseMetaId| {
         Term::apply(
-            Term::universe_inst(
-                Term::free_var(&partial),
-                vec![Level::meta(UniverseMetaId(universe))],
-            ),
+            Term::universe_inst(Term::free_var(&partial), vec![Level::meta(meta)]),
             [nat(0)],
         )
     };
@@ -56,10 +60,96 @@ fn value_conversion_does_not_unfold_terms_differing_only_by_universes() {
         convert(
             &mut context,
             &Term::intrinsic(Intrinsic::ByteType),
-            &applied(0),
-            &applied(1),
+            &applied(u0),
+            &applied(u1),
         ),
         Ok(true)
+    );
+
+    let identified = context
+        .universes()
+        .zonk(&Level::meta(u0))
+        .expect("levels zonk")
+        == context
+            .universes()
+            .zonk(&Level::meta(u1))
+            .expect("levels zonk");
+    assert!(
+        identified,
+        "acceptance must carry the level identification that licenses it",
+    );
+}
+
+/// The value-conversion fast path used to read `project_erased_universes` as a quotient by definitional equality, and its premise was the one `documentation/soundness/what-the-kernel-consults/the-refinement-key.md` refuted for the kernel's copy of the same reading: a `Type` payload embeds a level *in a term*, so two spellings the projection identifies can be two genuinely different values. `wrap(Type 0)` and `wrap(Type 1)` at a relevant `E` are the direct witness — two constructor values differing in a relevant payload, which the projection collapsed to one spelling and accepted with no residue for the declaration boundary to refuse.
+///
+/// Verified while the hole was open: on the identical goal, seeded with the identical declaration, this side's `convert` answered true and `curios_cert::convert` answered false — the goal-level conversion differential `documentation/soundness/across-the-perimeter.md` named as missing, put to the one rule the two sides spelled most differently. The false acceptance was fenced twice — no surface program reaches it, a body-carried level being minimized rather than generalized (`curios`'s `tests::universes` holds that construction), and a module elaborated through it would still have been refused by the kernel on the compile path — but each fence is a fact about the neighbours, not about the rule.
+///
+/// Under `identify_universe_levels` the pair of unequal ground levels declines the fast path with nothing inserted, and the structural payload comparison then refuses the goal as the universe inconsistency `1 ≤ 0` — which is what the assertion pins: an `Err` naming the universe arithmetic, where the kernel's boolean spells the same refusal as `Ok(false)`. The control is this file's first fixture, `value_conversion_does_not_unfold_terms_differing_only_by_universes`: the fast path's sound population — one computation at two identifiable instances — must keep converting without being evaluated.
+#[test]
+fn value_conversion_does_not_identify_distinct_type_payloads() {
+    let e = nominal("E");
+    let two = Level::zero()
+        .succ()
+        .and_then(|one| one.succ())
+        .expect("small levels have successors");
+    let three = two.clone().succ().expect("small levels have successors");
+    let declaration = InductDecl {
+        universe_context: UniverseContext::default(),
+        arity: Telescope::done(Telescope::done(())),
+        constructors: vec![(
+            Atom::from("wrap"),
+            InductParam {
+                telescope: Telescope::build(
+                    [(Free::local(0, Some("T")), Term::type_at(two))],
+                    Vec::new(),
+                ),
+                plicities: vec![Plicity::Explicit],
+            },
+        )],
+        result_sort: Term::type_at(three),
+        module: Qualifier::from(["E"]),
+        rep_public: true,
+        polarities: Vec::new(),
+    };
+
+    let e_type = Term::induct_type(e.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let wrap = |level: Level| {
+        Term::variant(
+            e.clone(),
+            Vec::<Term>::new(),
+            "wrap",
+            vec![Term::type_at(level)],
+        )
+    };
+    let one = Level::zero().succ().expect("level zero has a successor");
+
+    // The differential's fixed side: the kernel, handed the identical declaration and the identical goal, refuses it at the payloads.
+    let mut kernel = curios_cert::Kernel::new(100_000);
+    kernel.set_local_floor(1_000);
+    kernel.declare_induct(&e, &declaration);
+    assert!(
+        matches!(
+            curios_cert::convert(
+                &mut kernel,
+                &e_type,
+                &wrap(Level::zero()),
+                &wrap(one.clone())
+            ),
+            Ok(false)
+        ),
+        "the kernel refuses two constructor values differing in a relevant Type payload",
+    );
+
+    let mut context = context();
+    context
+        .register_induct(&e, declaration)
+        .expect("the family registers");
+    assert!(
+        matches!(
+            convert(&mut context, &e_type, &wrap(Level::zero()), &wrap(one)),
+            Err(ReduceError::Universe(_))
+        ),
+        "two constructor values differing in a relevant Type payload are refused by the universe arithmetic",
     );
 }
 
