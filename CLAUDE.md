@@ -237,7 +237,8 @@ Document each fact at the narrowest authoritative level and link to it elsewhere
 | Crate `README.md` files | The crate's mission and its crate-scoped design decisions, rationale, and rejected alternatives |
 | Crate and module rustdoc | Local architecture, algorithms, invariants, and public APIs |
 | `Cargo.toml` descriptions | One-line crate purposes for Cargo tooling |
-| `curios-benchmarks/README.md` | Benchmark harness mechanics |
+| `programs/README.md` | The measurement corpus: the layout rule, the instrument families, and the cross-language workloads |
+| `benchmarks/README.md` | Benchmark harness mechanics, results, and the caveats that belong beside a number |
 
 Do not hardwrap Markdown prose. Write one source line per paragraph or list item and let the renderer soft-wrap it. Fenced code blocks and tables retain their deliberate line structure.
 
@@ -251,7 +252,7 @@ Do not hardwrap Markdown prose. Write one source line per paragraph or list item
 ## Known build constraints
 
 - `curios-binaryen` downloads, verifies, and builds a pinned Binaryen source release with CMake, which requires a C++ toolchain. Subsequent Cargo modes must reuse `curios-binaryen/.artifacts/<triple>`, which sits beside the crate rather than under `target/` precisely so `cargo clean` cannot remove a build measured in minutes.
-- **A build product that outlives the build that made it lives in `.artifacts/` beside its owning crate**, never under `target/`. Four do: `curios-binaryen/.artifacts/<triple>` holds the Binaryen build, `curios/.artifacts/<triple>` the embedded launcher, `curios-js/.artifacts/<triple>` the wasm-bindgen bundle, and `curios-benchmarks/.artifacts` every contestant the harness builds. The first two are read by build scripts and are found through `CARGO_MANIFEST_DIR`, so nothing reconstructs Cargo's internal directory layout; the other two are written by `make` and by the harness. One `**/.artifacts` line in `.gitignore` covers all four, and `cargo clean` is an ordinary command again. Delete any of them by hand when you want it rebuilt.
+- **A build product that outlives the build that made it lives in `.artifacts/` beside its owner**, never under `target/`. Four do: `curios-binaryen/.artifacts/<triple>` holds the Binaryen build, `curios/.artifacts/<triple>` the embedded launcher, `curios-js/.artifacts/<triple>` the wasm-bindgen bundle, and `benchmarks/.artifacts` every contestant the harness builds. The first two are read by build scripts and are found through `CARGO_MANIFEST_DIR`, so nothing reconstructs Cargo's internal directory layout; the other two are written by `make` and by the harness. One `**/.artifacts` line in `.gitignore` covers all four, and `cargo clean` is an ordinary command again. Delete any of them by hand when you want it rebuilt.
 - `target/debug/incremental` is pure rustc cache and safe to delete outright, provided no build is running — and it holds a large share of `target/debug`, since Cargo enables incremental compilation for `dev` and `test` while this workspace's edit pattern rebuilds every downstream crate in full anyway; `CARGO_INCREMENTAL=0` suppresses it per invocation.
 - `curios-js` deliberately uses plain `cargo build` plus `wasm-bindgen-cli`; do not introduce `wasm-pack` or `wasm-opt` without an explicit design decision. Binaryen optimization belongs only to the native `curios` product.
 - The wasm32 build requires the installed `wasm-bindgen-cli` version to match the `wasm-bindgen` crate version in `Cargo.lock` exactly.

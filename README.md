@@ -140,7 +140,7 @@ The resulting CLI is `target/release/curios`. The build has two stages — a sli
 - [Design decisions](documentation/design.md) — one file per decision under [`design/`](documentation/design), when you want to know *why* Curios is the way it is; a decision scoped to one crate lives in that crate's `README.md`
 - [Soundness perimeter](documentation/soundness.md) — every rule that can admit a term, what it assumes, and how far it has actually been checked
 - [Development roadmap](documentation/roadmap.md) — what exists, what is pending, and the specifications for the pending half
-- [Benchmark methodology and results](curios-benchmarks/README.md)
+- [Benchmark methodology and results](benchmarks/README.md)
 
 ## Contributing
 

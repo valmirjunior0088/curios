@@ -1,7 +1,7 @@
 # Kitchen-sink benchmark image — every toolchain in one arm64 container.
 #
 # Build from the REPO ROOT (the build needs the curios sources):
-#   docker build --platform linux/arm64 -f curios-benchmarks/Dockerfile -t curios-benchmarks .
+#   docker build --platform linux/arm64 -f benchmarks/Dockerfile -t curios-benchmarks .
 # Run on a single pinned core so the numbers are stable:
 #   docker run --rm --cpuset-cpus 0 curios-benchmarks
 #   docker run --rm --cpuset-cpus 0 -e D_TREES=23 -e N_LCG=100000000 -e K_CHAIN=1600 -e N_CHURN=75000000 -e N_SPINES=75000 curios-benchmarks
@@ -113,8 +113,8 @@ ENV PATH="/curios/target/release:${PATH}"
 # --- the corpus and the harness ---------------------------------------------
 # Both land after the compiler build, so editing a program or the harness invalidates neither it nor the vendored Binaryen underneath it. Safe because the release build never reads `programs/` — `curios`'s test modules are behind `#[cfg(test)]`.
 COPY programs programs
-COPY curios-benchmarks curios-benchmarks
-WORKDIR /curios/curios-benchmarks
+COPY benchmarks benchmarks
+WORKDIR /curios/benchmarks
 # Grain wasm, precompiled in the amd64 stage (no arm64 Grain toolchain exists).
 COPY --from=grain /w/lcg_grain.wasm   prebuilt/lcg_grain.wasm
 COPY --from=grain /w/trees_grain.wasm prebuilt/trees_grain.wasm

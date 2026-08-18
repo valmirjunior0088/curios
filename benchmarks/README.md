@@ -1,4 +1,4 @@
-# curios-benchmarks — where is Curios, roughly, on performance?
+# Benchmarks — where is Curios, roughly, on performance?
 
 A throwaway, run-once-every-never harness to place Curios against industry languages with a single number per workload. It is **not** a rigorous benchmark suite — its job is orientation: "Curios is ~Nx off Rust on integer loops, ~Mx on allocation." Everything runs in one kitchen-sink arm64 container so nothing has to be installed locally.
 
@@ -228,7 +228,7 @@ Curios's `Nat` and `Int` are unbounded in the type checker but ride an **i31** �
 ## Run it
 
 ```
-curios-benchmarks/
+benchmarks/
   Dockerfile                 kitchen-sink arm64 image with all 8 toolchains + curios
   Dockerfile.dockerignore    what the build context excludes (target/, .artifacts/, .git)
   entrypoint.sh              build all, cross-check outputs, then 10 hyperfine tables
@@ -239,7 +239,7 @@ curios-benchmarks/
   .artifacts/                built contestants — inside the container only; a run leaves nothing on the host
 ```
 
-The image build needs the Curios sources, which live _above_ `curios-benchmarks/`, so it must run with the **repo root as the build context**. The `curios/benchmarks` Makefile target does that, from the repo root:
+The image build needs the Curios sources, which live _above_ `benchmarks/`, so it must run with the **repo root as the build context**. The `curios/benchmarks` Makefile target does that, from the repo root:
 
 ```sh
 make curios/benchmarks

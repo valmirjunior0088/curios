@@ -1,2 +1,2 @@
-curios-benchmarks/** linguist-vendored
+benchmarks/** linguist-vendored
 programs/** linguist-vendored

@@ -64,7 +64,7 @@ CURIOS_BENCHMARKS_TAG ?= curios-benchmarks
 curios/benchmarks:
 	docker build \
 	    --platform linux/arm64 \
-		--file curios-benchmarks/Dockerfile \
+		--file benchmarks/Dockerfile \
 		--tag "$(CURIOS_BENCHMARKS_TAG)" .
 
 	docker run \
