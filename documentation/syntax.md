@@ -60,7 +60,7 @@ Integer literals may be decimal, hexadecimal, or binary. An optional sign must t
 +3
 ```
 
-Elaboration chooses `Nat`, `Byte`, `Int`, or `Flt` from context. A written sign excludes `Nat` and `Byte`. `Byte` is selected only by an expected `Byte` type and accepts values from `0` through `255`. An unconstrained unsigned integer defaults to `Nat`; an unconstrained signed integer defaults to `Int`.
+Elaboration chooses `Nat`, `Bool`, `Byte`, `Int`, or `Flt` from context. A written sign excludes `Nat`, `Bool`, and `Byte`. `Byte` is selected only by an expected `Byte` type and accepts values from `0` through `255`; `Bool` is selected only by an expected `Bool` type and accepts `0` and `1`. An unconstrained unsigned integer defaults to `Nat`; an unconstrained signed integer defaults to `Int`.
 
 `-42` is one literal. `- 42` is parsed as an operator occurrence and is not a signed literal.
 
@@ -123,22 +123,20 @@ Spreads may appear in any position and may be repeated. Every element and spread
 
 Packed literals are bracketed like [list literals](#list-literals) and selected by a grain letter glued to the bracket: `b[…]` builds `Bits`, `x[…]` builds `Bytes`. A bare `[…]` remains `List`.
 
-An entry is a constant atom, a term, or a spread. A constant atom is escaped: `\0` or `\1` in a `Bits` literal, `\` followed by exactly two hexadecimal digits in a `Bytes` literal.
+An entry is a term contributing one atom — a `Bool` in a `Bits` literal, a `Byte` in a `Bytes` literal — or a `..` spread contributing a whole packed value of the same kind. A constant atom is a [numeric literal](#numeric-literals) realized at the grain's element type: `0` or `1` in a `Bits` literal, `0` through `255` (any radix) in a `Bytes` literal.
 
 ```crs
 b[]                -- empty Bits
-b[\0, \1, \1]
+b[0, 1, 1]
 x[]                -- empty Bytes
-x[\48, \69]
+x[0x48, 0x69]
 ```
 
 Packed atoms are written least-significant first. The first bit written occupies the least-significant available packed bit.
 
-An unescaped entry is an ordinary term contributing one atom — a `Bool` in a `Bits` literal, a `Byte` in a `Bytes` literal — and `..` spreads a whole packed value of the same kind:
-
 ```crs
 b[head, ..tail]
-x[\48, ..suffix, \00]
+x[0x48, ..suffix, 0x00]
 x[..header.bytes]
 x[..make_bytes(n)]
 x[..prefix, b]
@@ -147,9 +145,9 @@ x[pick(flag, a, b)]
 
 `b[h, ..t]` is the cons of `h` onto `t`, and `x[..acc, b]` appends `b` to `acc`; neither operation has a separate named form.
 
-Only the grain letter's junction with `[` is tight: `b [\1]` is the binder `b` followed by a list literal, and an identifier merely ending in the grain letter never begins a packed literal. Past the `[`, the literal lexes like any other bracketed list — whitespace is free, one trailing comma is admitted, and entry and spread operands are arbitrary terms needing no parentheses. `Bits` and `Bytes` cannot be mixed.
+Only the grain letter's junction with `[` is tight: `b [1]` is the binder `b` followed by a list literal, and an identifier merely ending in the grain letter never begins a packed literal. Past the `[`, the literal lexes like any other bracketed list — whitespace is free, one trailing comma is admitted, and entry and spread operands are arbitrary terms needing no parentheses. `Bits` and `Bytes` cannot be mixed.
 
-A `Byte`-typed numeric literal is also a legal entry, so `x[0x48]` and `x[\48]` denote the same value; the escape is the spelling that marks constant data, and the compiler folds a constant term entry into the same packed run.
+Adjacent constant atoms lower to a single packed constant rather than a chain of appends, so a literal written entirely from numerals is compile-time constant data with no marker needed to say so.
 
 ## Sorts and types
 

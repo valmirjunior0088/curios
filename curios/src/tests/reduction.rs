@@ -525,7 +525,7 @@ fn str_literal(n: usize, uses: usize) -> String {
 /// The same `n` bytes written as a raw `Bytes` literal — the derivation-free control, and the whole of what a `Str` literal would cost if its validity were not checked by running a fold.
 fn bytes_literal(n: usize) -> String {
     let entries = (0..n)
-        .map(|index| format!("\\{:02x}", b'0' + (index % 10) as u8))
+        .map(|index| format!("0x{:02x}", b'0' + (index % 10) as u8))
         .collect::<Vec<_>>()
         .join(", ");
 
@@ -719,7 +719,7 @@ fn a_str_literal_costs_transitions_rather_than_frames() {
 /// The proof is bound by a `let` rather than packed into a dependent record deliberately: checking a *struct declaration* whose field applies a fold to an earlier field costs native stack this fixture does not measure, and overflows the default test-thread stack in debug builds with or without the closed machine — the pre-existing cliff [`a_struct_refinement_field_overflows_the_test_thread_stack`] reproduces, hit nowhere else only because the prelude's own instance of the shape (`/std/BigNat`) is checked on a main thread with four times the stack.
 fn ascii_refinement(n: usize) -> String {
     let entries = (0..n)
-        .map(|index| format!("\\{:02x}", b'a' + (index % 26) as u8))
+        .map(|index| format!("0x{:02x}", b'a' + (index % 26) as u8))
         .collect::<Vec<_>>()
         .join(", ");
 
@@ -756,7 +756,7 @@ fn a_struct_refinement_field_overflows_the_test_thread_stack() {
             bytes: Bytes,
             ok: Certified(bytes),
         }
-        let w : Wrapped = Wrapped { bytes = x[\61], ok = True/qed() };
+        let w : Wrapped = Wrapped { bytes = x[0x61], ok = True/qed() };
         /std/print("ok")
     "#;
 

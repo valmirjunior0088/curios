@@ -468,3 +468,29 @@ fn a_num_lit_that_overflows_flt_is_refused() {
     let (term, _) = elaborate(&mut context, &small, Mode::Check(flt())).unwrap();
     assert_eq!(term, Term::intrinsic(Intrinsic::Flt(Flt::from_f32(42.0))));
 }
+
+#[test]
+fn a_num_lit_realizes_at_bool_only_for_zero_and_one() {
+    let mut context = context();
+    let bool_ = || Term::intrinsic(Intrinsic::BoolType);
+
+    // `0` and `1` are the two bits, selected only by an expected `Bool` — the rule that lets a packed literal's constant atoms be numerals.
+    let zero = Term::num_lit(Natural::from(0u32), false, false);
+    let (term, _) = elaborate(&mut context, &zero, Mode::Check(bool_())).unwrap();
+    assert_eq!(term, Term::intrinsic(Intrinsic::Bool(false)));
+
+    let one = Term::num_lit(Natural::from(1u32), false, false);
+    let (term, _) = elaborate(&mut context, &one, Mode::Check(bool_())).unwrap();
+    assert_eq!(term, Term::intrinsic(Intrinsic::Bool(true)));
+
+    // Anything past a bit is refused, like an out-of-range Byte.
+    let two = Term::num_lit(Natural::from(2u32), false, false);
+    assert!(matches!(
+        elaborate(&mut context, &two, Mode::Check(bool_())),
+        Err(Error::BoolLiteralOutOfRange { .. })
+    ));
+
+    // A negative literal has no `Bool` realization: it reports a mismatch rather than realizing.
+    let negative = Term::num_lit(Natural::from(1u32), true, true);
+    assert!(elaborate(&mut context, &negative, Mode::Check(bool_())).is_err());
+}

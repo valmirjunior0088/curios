@@ -27,13 +27,13 @@ let escape_scan(input: Bytes, cur: Nat) -> Result({Nat, Bytes}, Str) =
     | none() => Result/failure("unterminated escape")
     | some(b) =>
         match Byte/to_nat(b)
-        | 98 => Result/success((cur + 1, x[\08]))
-        | 116 => Result/success((cur + 1, x[\09]))
-        | 110 => Result/success((cur + 1, x[\0a]))
-        | 102 => Result/success((cur + 1, x[\0c]))
-        | 114 => Result/success((cur + 1, x[\0d]))
-        | 34 => Result/success((cur + 1, x[\22]))
-        | 92 => Result/success((cur + 1, x[\5c]))
+        | 98 => Result/success((cur + 1, x[0x08]))
+        | 116 => Result/success((cur + 1, x[0x09]))
+        | 110 => Result/success((cur + 1, x[0x0a]))
+        | 102 => Result/success((cur + 1, x[0x0c]))
+        | 114 => Result/success((cur + 1, x[0x0d]))
+        | 34 => Result/success((cur + 1, x[0x22]))
+        | 92 => Result/success((cur + 1, x[0x5c]))
         | 117 =>
             match hex_scan(input, cur + 1, 4, 0)
             | success((next, code)) => Result/map_success(scalar_utf8(code), (u) => (next, u))
@@ -166,7 +166,7 @@ let ml_basic_scan: Parse(Bytes) =
                     | n == 0xA => go(cur + 1, x[..acc, b])
                     | n == 0xD =>
                         match is_crlf_at(input, cur)
-                        | true => go(cur + 2, x[..acc, \0d, \0a])
+                        | true => go(cur + 2, x[..acc, 0x0d, 0x0a])
                         | false => Result/failure("bare carriage return")
                         end
                     | n == 0x9 => go(cur + 1, x[..acc, b])
@@ -204,7 +204,7 @@ let ml_literal_scan: Parse(Bytes) =
                     | n == 0xA => go(cur + 1, x[..acc, b])
                     | n == 0xD =>
                         match is_crlf_at(input, cur)
-                        | true => go(cur + 2, x[..acc, \0d, \0a])
+                        | true => go(cur + 2, x[..acc, 0x0d, 0x0a])
                         | false => Result/failure("bare carriage return")
                         end
                     | n == 0x9 => go(cur + 1, x[..acc, b])

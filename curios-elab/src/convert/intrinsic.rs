@@ -33,7 +33,7 @@ pub(crate) fn convert_intrinsic(
         }
     }
 
-    // The packed-literal view: a `Bin` literal opposite an `append`/`concat` spine decomposes length-directedly, undoing exactly the constant folding that removed the spine spelling from the literal side (`append(b[], true)` folds to `b[\1]`, and no shape congruence can relate the folded form to `append(b[], ?h)`). Solving-side only: the reducer's laws are untouched, and once the minted goals commit their solutions the folded spellings agree by plain reduction, so the kernel needs no matching rule.
+    // The packed-literal view: a `Bin` literal opposite an `append`/`concat` spine decomposes length-directedly, undoing exactly the constant folding that removed the spine spelling from the literal side (`append(b[], true)` folds to `b[1]`, and no shape congruence can relate the folded form to `append(b[], ?h)`). Solving-side only: the reducer's laws are untouched, and once the minted goals commit their solutions the folded spellings agree by plain reduction, so the kernel needs no matching rule.
     if let Some(view) = packed_literal_view(cmp, &this, &that) {
         return Ok(view);
     }

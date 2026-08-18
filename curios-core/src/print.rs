@@ -655,7 +655,7 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
                 .as_bytes()
                 .unwrap()
                 .iter()
-                .map(|b| format!("\\{:02x}", b))
+                .map(|b| format!("0x{b:X}"))
                 .collect::<Vec<_>>()
                 .join(", ")
         )),
@@ -682,8 +682,8 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             "b[{}]",
             (0..bits.bit_length())
                 .map(|index| match bits.bit(index).unwrap() {
-                    true => "\\1",
-                    false => "\\0",
+                    true => "1",
+                    false => "0",
                 })
                 .collect::<Vec<_>>()
                 .join(", ")

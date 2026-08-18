@@ -9,7 +9,7 @@ pub rec raw(x: Bits, y: Bits, carry: Bool) -> Bits =
     match x
     | b[] =>
         match y
-        | b[] => match carry | true => b[\1] | false => b[] end
+        | b[] => match carry | true => b[1] | false => b[] end
         | b[yh, ..yt] => b[xor3(false, yh, carry), ..raw(b[], yt, maj3(false, yh, carry))]
         end
     | b[xh, ..xt] =>
@@ -275,7 +275,7 @@ pub rec raw_succ_out_l(
     | b[uh, ..ut] =>
         match uh
         | true =>
-            match v: (b) => Eq(raw(succ/raw(b[\1, ..ut]), b, c), succ/raw(raw(b[\1, ..ut], b, c)))
+            match v: (b) => Eq(raw(succ/raw(b[1, ..ut]), b, c), succ/raw(raw(b[1, ..ut], b, c)))
             | b[] =>
                 match c
                 | true =>
@@ -305,7 +305,7 @@ pub rec raw_succ_out_l(
                 end
             end
         | false =>
-            match v: (b) => Eq(raw(succ/raw(b[\0, ..ut]), b, c), succ/raw(raw(b[\0, ..ut], b, c)))
+            match v: (b) => Eq(raw(succ/raw(b[0, ..ut]), b, c), succ/raw(raw(b[0, ..ut], b, c)))
             | b[] =>
                 match c
                 | true => cong_cons2(refl_at(false), raw_carry_spec(ut, b[]))
@@ -354,7 +354,7 @@ pub rec raw_succ_out_r(
     | b[vh, ..vt] =>
         match vh
         | true =>
-            match u: (a) => Eq(raw(a, succ/raw(b[\1, ..vt]), c), succ/raw(raw(a, b[\1, ..vt], c)))
+            match u: (a) => Eq(raw(a, succ/raw(b[1, ..vt]), c), succ/raw(raw(a, b[1, ..vt], c)))
             | b[] =>
                 match c
                 | true =>
@@ -384,7 +384,7 @@ pub rec raw_succ_out_r(
                 end
             end
         | false =>
-            match u: (a) => Eq(raw(a, succ/raw(b[\0, ..vt]), c), succ/raw(raw(a, b[\0, ..vt], c)))
+            match u: (a) => Eq(raw(a, succ/raw(b[0, ..vt]), c), succ/raw(raw(a, b[0, ..vt], c)))
             | b[] =>
                 match c
                 | true => cong_cons2(refl_at(false), raw_carry_spec(b[], vt))
@@ -1096,8 +1096,8 @@ pub rec raw_assoc(
         end
     end;
 
-pub rec raw_one_r(x: Bits) -> Eq(raw(x, b[\1], false), succ/raw(x)) =
-    match x: (a) => Eq(raw(a, b[\1], false), succ/raw(a))
+pub rec raw_one_r(x: Bits) -> Eq(raw(x, b[1], false), succ/raw(x)) =
+    match x: (a) => Eq(raw(a, b[1], false), succ/raw(a))
     | b[] => Eq/refl()
     | b[h, ..t] =>
         match h

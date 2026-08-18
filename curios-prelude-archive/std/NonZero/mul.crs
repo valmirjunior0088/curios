@@ -16,7 +16,7 @@ rec raw_trim_cons(
     | b[] => match np end
     | b[ph, ..pt] =>
         match ph
-        | true => add/trim_non_zero(q, b[\0, ..BigNat/mul/raw(pt, q)], false, tq, nq)
+        | true => add/trim_non_zero(q, b[0, ..BigNat/mul/raw(pt, q)], false, tq, nq)
         | false =>
             match pt
             | b[] => match false_neq_true(tp) end

@@ -73,7 +73,7 @@ fn arena_deferred_context_recursion_is_stack_safe_at_depth() {
         rec build(n : Nat, acc : Bytes) -> Bytes =
             match n : (_) => Bytes
             | 0 => acc
-            | p + 1; ih => build(p, x[\61, ..acc])
+            | p + 1; ih => build(p, x[0x61, ..acc])
             end;
         let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(count(build({depth}, x[])))))!;
         /std/Io/pure(())

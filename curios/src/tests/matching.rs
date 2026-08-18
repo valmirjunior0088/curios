@@ -22,7 +22,7 @@ fn a_fold_hypothesis_destructures_directly() {
                 | x[h, ..t]; (acc, live) => (acc + Byte/to_nat(h), live)
                 end;
             s;
-        /std/print(Nat/to_str(count(5) + sum(x[\01, \02, \03])))
+        /std/print(Nat/to_str(count(5) + sum(x[0x01, 0x02, 0x03])))
         "#;
 
     let (system, io) = MockHost::builder().build();
@@ -100,7 +100,7 @@ fn bits_structural_fold_preserves_heads_and_bit_unit_tails() {
                 let digit : Nat = match head | false => 0 | true => 1 end;
                 digit + 2 * ih
             end;
-        /std/print(Nat/to_str(value(b[\1, \0, \1, \1, \0, \0, \1, \0, \1, \1])))
+        /std/print(Nat/to_str(value(b[1, 0, 1, 1, 0, 0, 1, 0, 1, 1])))
         "#;
 
     assert_eq!(run(source), b"845");

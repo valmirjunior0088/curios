@@ -54,18 +54,18 @@ let combine_true_non_zero(w: Bits) -> is_cons(combine(true, w)) =
 let trim_head_non_zero(h: Bool, r: Bits, ne: is_cons(trim(r))) -> is_cons(trim(b[h, ..r])) =
     combine_non_zero(h, trim(r), ne);
 
-let trim_head_true(r: Bits) -> is_cons(trim(b[\1, ..r])) =
+let trim_head_true(r: Bits) -> is_cons(trim(b[1, ..r])) =
     combine_true_non_zero(trim(r));
 
 -- ===================== smart constructors =====================
 pub let one: NonZero =
-    NonZero { value = of_trimmed_bits(b[\1], Eq/refl()), non_zero = True/qed() };
+    NonZero { value = of_trimmed_bits(b[1], Eq/refl()), non_zero = True/qed() };
 
 pub let dbl(t: NonZero) -> NonZero =
     NonZero {
         value =
             of_trimmed_bits(
-                b[\0, ..t.value.bits],
+                b[0, ..t.value.bits],
                 cons_low_trimmed(false, t.value.bits, nz_trimmed(t), t.non_zero)),
         non_zero = True/qed(),
     };
@@ -74,7 +74,7 @@ pub let dbl_succ(t: NonZero) -> NonZero =
     NonZero {
         value =
             of_trimmed_bits(
-                b[\1, ..t.value.bits],
+                b[1, ..t.value.bits],
                 cons_low_trimmed(true, t.value.bits, nz_trimmed(t), t.non_zero)),
         non_zero = True/qed(),
     };

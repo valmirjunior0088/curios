@@ -539,7 +539,7 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             Grain::B => "Bits",
             Grain::X => "Bytes",
         }),
-        // Entries are comma-delimited, so an operand is an ordinary term needing no parenthesization, and a coalesced run prints one escaped atom per entry — the glued spelling has no bracketed counterpart, and lowering re-coalesces the run either way. An empty segment list prints `b[]`/`x[]` on its own.
+        // Entries are comma-delimited, so an operand is an ordinary term needing no parenthesization — a constant atom is a numeral term and prints as written. An empty segment list prints `b[]`/`x[]` on its own.
         Intrinsic::Bin(grain, segments) => listed(
             match grain {
                 Grain::B => "b[",
@@ -547,18 +547,9 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             },
             segments
                 .into_iter()
-                .flat_map(move |segment| match segment {
-                    BinSegment::Bytes(atoms) => atoms
-                        .into_iter()
-                        .map(move |atom| {
-                            pure(match grain {
-                                Grain::B => format!("\\{atom}"),
-                                Grain::X => format!("\\{atom:02x}"),
-                            })
-                        })
-                        .collect::<Vec<_>>(),
-                    BinSegment::Atom(operand) => vec![print_term(operand)],
-                    BinSegment::Spread(operand) => vec![flat([pure(".."), print_term(operand)])],
+                .map(|segment| match segment {
+                    BinSegment::Atom(operand) => print_term(operand),
+                    BinSegment::Spread(operand) => flat([pure(".."), print_term(operand)]),
                 })
                 .collect(),
             "]",

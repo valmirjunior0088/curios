@@ -213,14 +213,14 @@ pub let flt_special: Parse(Toml) =
             | success((next, _)) =>
                 let bits: Bytes =
                     match negative
-                    | true => x[\00, \00, \80, \ff]
-                    | false => x[\00, \00, \80, \7f]
+                    | true => x[0x00, 0x00, 0x80, 0xff]
+                    | false => x[0x00, 0x00, 0x80, 0x7f]
                     end;
                 Result/success((next, Toml/flt(Flt/of_le_bytes(bits))))
             | failure(_) =>
                 match Parse/take_literal("nan").run(input, cur)
                 | success((next, _)) =>
-                    Result/success((next, Toml/flt(Flt/of_le_bytes(x[\00, \00, \c0, \7f]))))
+                    Result/success((next, Toml/flt(Flt/of_le_bytes(x[0x00, 0x00, 0xc0, 0x7f]))))
                 | failure(msg) => Result/failure(msg)
                 end
             end,
