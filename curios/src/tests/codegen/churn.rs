@@ -1,4 +1,4 @@
-//! Runtime measurements for the death-birth churn campaign (`documentation/roadmap/death_birth_churn_spec.md`): the collection decomposition of `chain` behind lever A, and the pinned absence of allocation in `churn`'s threaded-record loop. Both hear the engine's own per-collection announcements through `curios-profile`'s log bridge, which is why this module lives behind the `profile` feature.
+//! Runtime measurements for the death-birth churn campaign, retired into `documentation/design/toolchain/the-heap-is-sized-ahead-of-its-churn.md`: the collection decomposition of `chain` behind lever A, and the pinned absence of allocation in `churn`'s threaded-record loop. Both hear the engine's own per-collection announcements through `curios-profile`'s log bridge, which is why this module lives behind the `profile` feature.
 
 use {
     crate::to_cwasm,
@@ -152,6 +152,19 @@ fn collections(cwasm: &[u8], k: u64) -> (usize, Option<String>) {
 /// # The reading
 ///
 /// The engine grows the heap only when a single post-collection allocation cannot fit, so under a workload whose live set is tiny the heap parks barely above that live set — the stock arrangement's ~320 KB chain in a 1 MiB heap leaves the semi-space half ~190 KB of allocation room, a collection fires about 1.6 times per round, and every cell is copied more often than it is born. Right-sizing the heap (the 16 MiB arm) removes almost every collection and with it roughly two thirds of the churn cost, at a few MB of RSS; over-sizing it (the 256 MiB arm) gives half that win back to cold pages and TLB misses, so the lever is a sizing *policy*, not a maximal pre-grow. The residual warm-heap floor is the compiler-side birth path. Collection counts are deterministic and transport across machines; the time shares are this machine's.
+///
+/// # Retaken under the sizing decision
+///
+/// Same day, same box, wasmtime 47.0.3 with the sixteen-mebibyte default this measurement chose (see `the-heap-is-sized-ahead-of-its-churn.md`):
+///
+/// ```text
+/// == chain collection decomposition (K = 400)
+///   stock: churn 0.176 ms/round, 0.030 collections/round, no heap growth recorded
+///   ballast 250k (~16 MiB heap): churn 0.143 ms/round, 0.040 collections/round, no heap growth recorded
+///   ballast 4M (~256 MiB heap): churn 0.345 ms/round, 0.003 collections/round, -> grew GC heap by 0x8000000 bytes: new size is 0x10000000 bytes
+/// ```
+///
+/// Stock now *is* the sized arrangement — no growth is ever recorded because the initial size absorbs the whole run — and it reproduces the old 16 MiB ballast arm's figure, which is the ballast-to-initial-size equivalence this probe's method assumed, verified. The 250k arm reads slightly under stock because its ballast phase pre-touches the pages stock first meets cold, and the 256 MiB arm still carries the cold-sweep tax. The 46-era figures above stay as the record of what admitted the lever.
 #[test]
 #[ignore = "measurement: times the churn workload rather than asserting"]
 fn chain_collection_decomposition() {
@@ -277,6 +290,20 @@ end
 /// # The reading
 ///
 /// Same policy, same verdict as `chain`: the heap parks within a doubling of the live set, and about two thirds of the churn cost is collection work — 6.82 µs per insert falling to 2.26 pre-grown. Two facts are new. The stock per-insert cost is superlinear (6.04 at half the inserts, 6.82 at all of them) because every collection copies the *growing* map, which is what a plateauing live set under churn buys the collector. And the two ballast arms tie, where `chain`'s split by two: a trie walk is cache-scattered whichever heap it runs in, so the cold-page tax that made chain's sizing non-monotonic barely registers here — the non-monotonicity is a hot-loop artifact, not a law of the lever.
+///
+/// # Retaken under the sizing decision
+///
+/// Same day, same box, wasmtime 47.0.3 with the sixteen-mebibyte default:
+///
+/// ```text
+/// == spines collection decomposition
+///   stock, N=12500: churn 2.65 us/insert, 0.1 collections per 1000 inserts, no heap growth recorded
+///   stock, N=25000: churn 2.70 us/insert, 0.1 collections per 1000 inserts, no heap growth recorded
+///   ballast 250k, N=25000: churn 2.36 us/insert, 0.1 collections per 1000 inserts, no heap growth recorded
+///   ballast 4M, N=25000: churn 2.17 us/insert, 0.0 collections per 1000 inserts, -> grew GC heap by 0x8000000 bytes: new size is 0x10000000 bytes
+/// ```
+///
+/// The sized stock reproduces the pre-grown arms — collections effectively gone, and the per-insert cost flat across N where it was superlinear — with the small residual over the 46-era ballast figure being the 47 pin's own cost plus first-touch. The figures above stay as the admission record.
 #[test]
 #[ignore = "measurement: times the spines workload rather than asserting"]
 fn spines_collection_decomposition() {
