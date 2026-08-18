@@ -22,7 +22,7 @@ test-support = ["cranelift"]
 [dependencies]
 curios-abi = { workspace = true }        # for the host<->guest wire ABI constants
 # The one place in the workspace wasmtime is named, so the pin and the feature set live here rather than in the workspace table — the arrangement `curios-archive` and `curios-num` use for rkyv and num-bigint. It also makes the version-match invariant structural: `curios` precompiles a `.cwasm` and the launcher deserializes it, and with a single row they cannot drift.
-wasmtime = { version = "46.0.1", default-features = false, features = [
+wasmtime = { version = "47.0.3", default-features = false, features = [
     "runtime",
     "gc",
     "gc-copying",
