@@ -279,3 +279,60 @@ fn a_bound_behind_a_parameter_evaluates_nothing() {
     )
     .expect("a bound over an opaque parameter reduces nothing");
 }
+
+/// `Byte/of_nat` is the computed inverse of `to_nat`: a closed argument discharges its bound by reduction, an open one by refining `n < 256` at the call site, and past the bound the refusal is a typecheck fact rather than a runtime one.
+#[test]
+fn byte_of_nat_inverts_to_nat_and_refuses_the_bound() {
+    // Closed: the comparison reduces, so the proof is written nowhere.
+    let output = run(r#"
+        use /std/{Byte, Nat, Str};
+        /std/print(Nat/to_str(Byte/to_nat(Byte/of_nat(72))))
+        "#);
+    assert_eq!(output, b"72");
+
+    // Open: the read keeps the argument out of the fold, and the refinement discharges the bound.
+    let (system, io) = MockHost::builder().stdin_lines(["A"]).build();
+    run_text(
+        r#"
+        use /std/{Handle, Byte, Bytes, Nat, Str, Option};
+        let bytes = match Handle/read(Handle/stdin, 16)! : (_) => Bytes
+            | chunk(b) => b
+            | eof() => x[]
+            | error(_) => x[]
+            end;
+        let n = Byte/to_nat(Option/unwrap_or(Bytes/get(bytes, 0), 0));
+        match n < 256
+        | true => /std/print(Nat/to_str(Byte/to_nat(Byte/of_nat(n))))
+        | false => /std/print("out")
+        end
+        "#,
+        system,
+    )
+    .expect("the refined conversion elaborates and runs");
+    assert_eq!(io.output(), b"65");
+
+    // Past the bound the proof has no inhabitant, so the literal is refused where it is written.
+    assert!(
+        typecheck_within(DEFAULT_STEP_BUDGET, "use /std/{Byte}; Byte/of_nat(256)").is_err(),
+        "an out-of-range conversion typechecks nowhere"
+    );
+}
+
+/// `Bytes/of_nat` emits minimal big-endian bytes — empty at zero, no leading zero, distinct per value — pinned across the byte-width boundaries.
+#[test]
+fn bytes_of_nat_is_minimal_big_endian() {
+    let output = run(r#"
+        use /std/{Bytes, Byte, Nat, Str, List};
+        let probe(n: Nat) -> Str =
+            let b = Bytes/of_nat(n);
+            Str/concat(
+                Nat/to_str(Bytes/len(b)),
+                Bytes/fold(b, "", (byte, acc) =>
+                    Str/concat(acc, Str/concat(":", Nat/to_str(Byte/to_nat(byte))))));
+        /std/print(List/fold(
+            [probe(0), probe(1), probe(255), probe(256), probe(65536), probe(65537)],
+            "",
+            (s, acc) => Str/concat(acc, Str/concat(s, " "))))
+        "#);
+    assert_eq!(output, b"0 1:1 1:255 2:1:0 3:1:0:0 3:1:0:1 ");
+}
