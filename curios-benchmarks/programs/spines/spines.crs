@@ -6,18 +6,20 @@
 -- maps in the imperative contestants, balanced trees in the functional ones), and
 -- /std/Map deliberately has no Key(Nat) — the injectivity a witness owes is
 -- unprovable for a division-based encoding under unary elimination, see the module —
--- so keys enter through Nat/to_str at the boundary, a per-insert cost no int-keyed
--- hash map mirrors. It orients rather than proves. N is read from stdin; the seed
--- derives from N so nothing is a closed term. Values are the step index, so later
--- writes to a returning key are observable in the printed sum.
-use /std/{Str, Nat, Option, Map, Io};
+-- so keys enter through Bytes/of_nat at the boundary: minimal big-endian, a division
+-- and a table index per byte, injective by construction under Key(Bytes)'s identity
+-- witness. That shrinks the encoding confound to a few arithmetic operations no
+-- int-keyed hash map quite mirrors. It orients rather than proves. N is read from
+-- stdin; the seed derives from N so nothing is a closed term. Values are the step
+-- index, so later writes to a returning key are observable in the printed sum.
+use /std/{Str, Nat, Bytes, Option, Map, Io};
 
 rec walk(n: Nat, i: Nat, x: Nat, m: Map(Nat)) -> Map(Nat) =
     match n: (_) => Map(Nat)
     | 0 => m
     | k + 1; ih =>
         let y = 75 * x % 65537;
-        walk(k, i + 1, y, Map/insert(m, Nat/to_str(y), i % 1000003))
+        walk(k, i + 1, y, Map/insert(m, Bytes/of_nat(y), i % 1000003))
     end;
 
 let input = /std/read()!;

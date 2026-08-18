@@ -20,7 +20,7 @@ N_LCG="${N_LCG:-100000000}"   # LCG iterations (~0.45s of Curios compute)
 D_TREES="${D_TREES:-21}"      # tree depth: ~4.2M nodes; sums taken mod 1000003
 K_CHAIN="${K_CHAIN:-1600}"    # transform rounds over a fixed 10 000-cell chain: ~16M cells reborn
 N_CHURN="${N_CHURN:-75000000}" # record-update steps over a six-field record (~0.33s of Curios compute)
-N_SPINES="${N_SPINES:-75000}"  # map inserts; the live set plateaus toward 65 536 entries (~0.35s of Curios compute)
+N_SPINES="${N_SPINES:-75000}"  # map inserts; the live set plateaus toward 65 536 entries (~0.3s of Curios compute)
 RUNS="${RUNS:-5}"
 WARMUP="${WARMUP:-1}"
 
