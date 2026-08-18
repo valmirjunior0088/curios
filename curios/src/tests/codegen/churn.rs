@@ -206,3 +206,110 @@ fn churn_threaded_record_allocates_nothing() {
         "the spread-update loop reached the collector"
     );
 }
+
+const SPINES: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../curios-benchmarks/programs/spines/spines.crs"
+));
+
+/// `spines` behind the same dead ballast `CHAIN_BALLAST` carries: a BALLAST_CELLS-cell chain is built and drained before the unchanged insert phase, pre-growing the heap the inserts then churn inside. The ballast total is folded into the printed number so nothing is dead, and the seed derives from N so nothing folds.
+const SPINES_BALLAST: &str = r#"use /std/{Str, Nat, Bytes, Option, Map, Io};
+
+induct Chain: Type
+| nil()
+| cons(Nat, Chain)
+end
+
+let ballast_cells: Nat = BALLAST_CELLS;
+
+rec build(n: Nat, x: Nat, acc: Chain) -> Chain =
+    match n: (_) => Chain
+    | 0 => acc
+    | m + 1; ih => build(m, 75 * x % 65537, Chain/cons(x, acc))
+    end;
+
+rec drain(c: Chain, acc: Nat) -> Nat =
+    match c: (_) => Nat
+    | nil() => acc
+    | cons(v, tail) => drain(tail, (acc + v) % 1000003)
+    end;
+
+rec walk(n: Nat, i: Nat, x: Nat, m: Map(Nat)) -> Map(Nat) =
+    match n: (_) => Map(Nat)
+    | 0 => m
+    | k + 1; ih =>
+        let y = 75 * x % 65537;
+        walk(k, i + 1, y, Map/insert(m, Bytes/of_nat(y), i % 1000003))
+    end;
+
+let input = /std/read()!;
+match input: (_) => Io({})
+| some(bytes) =>
+    match Str/of_bytes(bytes): (_) => Io({})
+    | some(s) =>
+        match Nat/of_str(Str/trim(s)): (_) => Io({})
+        | some(n) =>
+            let ballast = drain(build(ballast_cells, (n + 2) % 65537, Chain/nil()), 0);
+            let m = walk(n, 0, (n + 1) % 65537, Map/empty());
+            /std/print(Str/concat(Nat/to_str((ballast + Map/fold(m, 0, (_, v, acc) => (acc + v) % 1000003)) % 1000003), "\n"))
+        | none() => /std/print("bad input\n")
+        end
+    | none() => /std/print("invalid utf-8\n")
+    end
+| none() => /std/print("no input\n")
+end
+"#;
+
+/// The `spines` half of lever A's class evidence, by the method `chain_collection_decomposition` documents — `--release`, `--all-features`, timed and counted runs separate. The one difference is the subject: `spines`' live set grows toward the map's plateau instead of holding still, so the stock arrangement's collections copy a growing structure and the per-insert cost is superlinear until the plateau.
+///
+/// # What it last printed
+///
+/// Taken **2026-08-17**, x86-64 Linux dev machine:
+///
+/// ```text
+/// == spines collection decomposition
+///   stock, N=12500: churn 6.04 us/insert, 15.9 collections per 1000 inserts, -> grew GC heap by 0x200000 bytes: new size is 0x400000 bytes
+///   stock, N=25000: churn 6.82 us/insert, 10.0 collections per 1000 inserts, -> grew GC heap by 0x400000 bytes: new size is 0x800000 bytes
+///   ballast 250k, N=25000: churn 2.26 us/insert, 0.2 collections per 1000 inserts, -> grew GC heap by 0x800000 bytes: new size is 0x1000000 bytes
+///   ballast 4M, N=25000: churn 2.29 us/insert, 0.0 collections per 1000 inserts, -> grew GC heap by 0x8000000 bytes: new size is 0x10000000 bytes
+/// ```
+///
+/// # The reading
+///
+/// Same policy, same verdict as `chain`: the heap parks within a doubling of the live set, and about two thirds of the churn cost is collection work — 6.82 µs per insert falling to 2.26 pre-grown. Two facts are new. The stock per-insert cost is superlinear (6.04 at half the inserts, 6.82 at all of them) because every collection copies the *growing* map, which is what a plateauing live set under churn buys the collector. And the two ballast arms tie, where `chain`'s split by two: a trie walk is cache-scattered whichever heap it runs in, so the cold-page tax that made chain's sizing non-monotonic barely registers here — the non-monotonicity is a hot-loop artifact, not a law of the lever.
+#[test]
+#[ignore = "measurement: times the spines workload rather than asserting"]
+fn spines_collection_decomposition() {
+    let stock = cwasm_of(SPINES);
+
+    // The documented cross-language anchor, so a mistranslation fails before any figure is read.
+    let (_, output) = run(&stock, 8);
+    assert_eq!(output, b"28\n", "spines(8) anchor");
+
+    println!("== spines collection decomposition");
+
+    let arrangements: [(&str, Option<u64>, u64); 4] = [
+        ("stock, N=12500", None, 12_500),
+        ("stock, N=25000", None, 25_000),
+        ("ballast 250k, N=25000", Some(250_000), 25_000),
+        ("ballast 4M, N=25000", Some(4_000_000), 25_000),
+    ];
+
+    for (label, ballast, inserts) in arrangements {
+        let cwasm = match ballast {
+            None => stock.clone(),
+            Some(cells) => cwasm_of(&SPINES_BALLAST.replace("BALLAST_CELLS", &cells.to_string())),
+        };
+
+        let churn_ms = timed(&cwasm, inserts) - timed(&cwasm, 0);
+        let (gc_churn, heap) = collections(&cwasm, inserts);
+        let (gc_base, _) = collections(&cwasm, 0);
+
+        println!(
+            "  {label}: churn {:.2} us/insert, {:.1} collections per 1000 inserts, {}",
+            churn_ms * 1000.0 / inserts as f64,
+            (gc_churn as f64 - gc_base as f64) * 1000.0 / inserts as f64,
+            heap.as_deref().unwrap_or("no heap growth recorded"),
+        );
+    }
+}
