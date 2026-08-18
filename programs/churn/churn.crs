@@ -25,23 +25,14 @@ rec walk(n: Nat, p: Nat, x: Nat, r: Churn) -> Churn =
         let y = 75 * x % 65537;
         match p
         | 0 =>
-            walk(
-                m,
-                1,
-                y,
-                Churn { ..r, a = (r.c + r.e + y) % 1000003, b = (r.d + r.f + y) % 1000003 })
+            let s = Churn { ..r, a = (r.c + r.e + y) % 1000003, b = (r.d + r.f + y) % 1000003 };
+            walk(m, 1, y, s)
         | 1 =>
-            walk(
-                m,
-                2,
-                y,
-                Churn { ..r, c = (r.e + r.a + y) % 1000003, d = (r.f + r.b + y) % 1000003 })
+            let s = Churn { ..r, c = (r.e + r.a + y) % 1000003, d = (r.f + r.b + y) % 1000003 };
+            walk(m, 2, y, s)
         | _ =>
-            walk(
-                m,
-                0,
-                y,
-                Churn { ..r, e = (r.a + r.c + y) % 1000003, f = (r.b + r.d + y) % 1000003 })
+            let s = Churn { ..r, e = (r.a + r.c + y) % 1000003, f = (r.b + r.d + y) % 1000003 };
+            walk(m, 0, y, s)
         end
     end;
 
