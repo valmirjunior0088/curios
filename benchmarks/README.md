@@ -19,10 +19,11 @@ Each results file is a single-sitting snapshot with its own commentary:
 | [04 — The run that had to fix the compiler first](04_RESULTS.md) | 2026-08-09 |
 | [05 — The plateau broke, and only where it was aimed](05_RESULTS.md) | 2026-08-17 |
 | [06 — The other column halved, and one commit did it](06_RESULTS.md) | 2026-08-17 |
+| [07 — Three columns arrived, and one of them is a wall](07_RESULTS.md) | 2026-08-18 |
 
 ### Curios across runs
 
-Mean ± std dev in milliseconds from each run's results file, one row appended per capture; `× 00` compares against run 00's mean and `× prev` against the previous run's mean, in the same column. A workload that enters later is based at its own first capture, since there is no run 00 figure to divide by; the workloads without a capture yet — `chain`, `churn`, `spines` — have no table here.
+Mean ± std dev in milliseconds from each run's results file, one row appended per capture; `× 00` compares against run 00's mean and `× prev` against the previous run's mean, in the same column. A workload that enters later is based at its own first capture, since there is no run 00 figure to divide by — `chain`, `churn` and `spines` debuted in run 07 and are based there, so their `× 07` column is what `× 00` is for the other two.
 
 The workload and the execution setup are fixed across runs, but the *toolchains* are not: each capture installs current versions, so the wasm engine under both Curios columns has changed between some rows. A row-to-row move is therefore Curios plus its engine, not Curios alone — run 04's `trees` improvement landed alongside a wasmtime major bump and is explicitly left unattributed for that reason.
 
@@ -108,6 +109,15 @@ The workload and the execution setup are fixed across runs, but the *toolchains*
       <td align="right">0.66×</td>
       <td align="right">0.99×</td>
     </tr>
+    <tr>
+      <td>07</td>
+      <td align="right">297.8 ± 2.4</td>
+      <td align="right">0.67×</td>
+      <td align="right">1.02×</td>
+      <td align="right">295.1 ± 3.5</td>
+      <td align="right">0.66×</td>
+      <td align="right">1.01×</td>
+    </tr>
   </tbody>
 </table>
 
@@ -192,6 +202,108 @@ The workload and the execution setup are fixed across runs, but the *toolchains*
       <td align="right">121.4 ± 0.6</td>
       <td align="right">0.38×</td>
       <td align="right">0.49×</td>
+    </tr>
+    <tr>
+      <td>07</td>
+      <td align="right">117.5 ± 2.3</td>
+      <td align="right">0.37×</td>
+      <td align="right">0.97×</td>
+      <td align="right">115.5 ± 1.0</td>
+      <td align="right">0.36×</td>
+      <td align="right">0.95×</td>
+    </tr>
+  </tbody>
+</table>
+
+#### `chain`
+
+<table>
+  <thead>
+    <tr>
+      <th rowspan="2">Run</th>
+      <th colspan="3">Native</th>
+      <th colspan="3">WebAssembly</th>
+    </tr>
+    <tr>
+      <th>mean (ms)</th>
+      <th>× 07</th>
+      <th>× prev</th>
+      <th>mean (ms)</th>
+      <th>× 07</th>
+      <th>× prev</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>07</td>
+      <td align="right">134.4 ± 1.1</td>
+      <td align="right">1.00×</td>
+      <td align="right">—</td>
+      <td align="right">134.8 ± 1.3</td>
+      <td align="right">1.00×</td>
+      <td align="right">—</td>
+    </tr>
+  </tbody>
+</table>
+
+#### `churn`
+
+<table>
+  <thead>
+    <tr>
+      <th rowspan="2">Run</th>
+      <th colspan="3">Native</th>
+      <th colspan="3">WebAssembly</th>
+    </tr>
+    <tr>
+      <th>mean (ms)</th>
+      <th>× 07</th>
+      <th>× prev</th>
+      <th>mean (ms)</th>
+      <th>× 07</th>
+      <th>× prev</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>07</td>
+      <td align="right">274.9 ± 2.1</td>
+      <td align="right">1.00×</td>
+      <td align="right">—</td>
+      <td align="right">273.8 ± 0.4</td>
+      <td align="right">1.00×</td>
+      <td align="right">—</td>
+    </tr>
+  </tbody>
+</table>
+
+#### `spines`
+
+<table>
+  <thead>
+    <tr>
+      <th rowspan="2">Run</th>
+      <th colspan="3">Native</th>
+      <th colspan="3">WebAssembly</th>
+    </tr>
+    <tr>
+      <th>mean (ms)</th>
+      <th>× 07</th>
+      <th>× prev</th>
+      <th>mean (ms)</th>
+      <th>× 07</th>
+      <th>× prev</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>07</td>
+      <td align="right">206.7 ± 1.0</td>
+      <td align="right">1.00×</td>
+      <td align="right">—</td>
+      <td align="right">207.0 ± 1.0</td>
+      <td align="right">1.00×</td>
+      <td align="right">—</td>
     </tr>
   </tbody>
 </table>

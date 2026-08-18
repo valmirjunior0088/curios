@@ -1,3 +1,5 @@
+import Std.Data.TreeMap
+
 -- spines: N LCG-keyed inserts into a map, then fold the values.
 --
 -- This is the reuse-on-spines column the workload exists for: Std.TreeMap is a

@@ -82,9 +82,9 @@ table() {  # table "<title>" <hyperfine args...>
   echo "$title"; echo "============================================================"
 
   # Exported through a temp file rather than straight to /dev/fd/3: hyperfine opens its export path itself, and when fd 3 is a regular file rather than a pipe that second open starts writing at offset zero, so six tables would overwrite each other. A table that hyperfine failed to produce contributes nothing to the document; its error is already on stderr.
+  # The exit status is part of that condition, not just a non-empty file: hyperfine exports the rows it finished before aborting, so a contestant that fails to launch yields a *short* table rather than no table — a document that looks complete while silently missing the subject. Discarding the whole table is what makes an absent one the only failure mode a reader can be handed.
   local md; md="$(mktemp)"
-  hyperfine --warmup "$WARMUP" --runs "$RUNS" --export-markdown "$md" "$@"
-  if [[ -s $md ]]; then
+  if hyperfine --warmup "$WARMUP" --runs "$RUNS" --export-markdown "$md" "$@" && [[ -s $md ]]; then
     { printf '## %s\n\n' "$title"; cat "$md"; echo; } >&3
   fi
   rm -f "$md"
