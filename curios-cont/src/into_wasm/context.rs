@@ -1,8 +1,9 @@
 use {
     super::{
         BlockData, ClsrData, EmissionBlockName, EmissionCallTarget, EmissionCellTarget,
-        EmissionFunctionName, EmissionHostTarget, EmissionJumpTarget, EmissionMatchTarget,
-        EmissionTail, EmissionValueName, FieldData, Frame, FuncData, LocalData, Table,
+        EmissionFunctionName, EmissionHostTarget, EmissionJumpArg, EmissionJumpTarget,
+        EmissionMatchTarget, EmissionTail, EmissionValueName, FieldData, Frame, FuncData,
+        LocalData, Table,
     },
     crate::Repr,
     curios_abi::{WireLeaf, WireType},
@@ -366,8 +367,14 @@ impl<'a, 'b> Context<'a, 'b> {
 
         // The bare-forwarder sentinel is the function's own return, so whatever it carries leaves boxed however it was held. The count is the target's own, not a fixed one: a function returning a constructor as its fields returns as many values as the shape has, and the arity a jump carries is the arity the return delivers.
         if self.is_resume(&target.target) {
-            for value_name in &target.params {
-                output.extend(self.load_value_instrs(value_name, LoadAs::NonNull));
+            for arg in &target.params {
+                output.extend(match arg {
+                    EmissionJumpArg::Value(value_name) => {
+                        self.load_value_instrs(value_name, LoadAs::NonNull)
+                    }
+                    // A resume block's parameters are held boxed by construction, so a return filler's carrier was never in question.
+                    EmissionJumpArg::Filler => zero_instrs(None),
+                });
             }
             output.push(curios_wasm::Instr::Return);
 
@@ -376,13 +383,22 @@ impl<'a, 'b> Context<'a, 'b> {
 
         // Each argument is loaded the way the parameter it feeds is held, so an edge between two register-held parameters moves a register to a register. That is what carries a decision around a loop: without it the back edge would box on the way out and unbox on the way in, every iteration.
         let block_data = self.find_block(&target.target);
-        for (index, value_name) in target.params.iter().enumerate() {
-            let load = match block_data.params().get(index) {
-                Some((param, _)) => self.param_load(param),
-                None => LoadAs::NonNull,
-            };
+        for (index, arg) in target.params.iter().enumerate() {
+            let param = block_data.params().get(index).map(|(param, _)| param);
 
-            output.extend(self.load_value_instrs(value_name, load));
+            output.extend(match arg {
+                EmissionJumpArg::Value(value_name) => {
+                    let load = match param {
+                        Some(param) => self.param_load(param),
+                        None => LoadAs::NonNull,
+                    };
+                    self.load_value_instrs(value_name, load)
+                }
+                // The one position whose carrier could not be known upstream. A filler inhabits the slot rather than merely going unread there, so it is built at the carrier the parameter's local is declared as — raw where the analysis raised it, boxed otherwise.
+                EmissionJumpArg::Filler => {
+                    zero_instrs(param.and_then(|param| self.table().raw_carrier(param)))
+                }
+            });
         }
 
         output.extend(block_data.enter(target.params.len()));
@@ -791,6 +807,20 @@ pub(crate) enum LoadAs {
 /// How a value in its register carrier is boxed back into a reference: an `i31ref` for the scalar carriers, the `Flt` struct for `f32`, and nothing at all for a representation that already names one.
 ///
 /// The dual of [`LoadAs::of`], and the reason this reads a [`Repr`] rather than a dedicated two-variant enum: a projection or a list read yields whatever was stored, so "no boxing" is a representation rather than a missing one.
+/// The zero of `carrier`, or the boxed zero when the destination holds a reference.
+///
+/// This is what a filler is materialised as, and the reason it is a function of the *destination* rather than of the filler: a slot's carrier is settled by the representation analysis from the uses of the parameter it feeds, long after the pass that placed the filler. The arms mirror [`Table::local_type`] exactly, including the reference carriers that analysis never answers — a local declared at the top reference type takes the boxed zero, whichever way it got there.
+pub(crate) fn zero_instrs(carrier: Option<Repr>) -> Vec<curios_wasm::Instr> {
+    match carrier {
+        Some(Repr::Nat | Repr::Int) => vec![curios_wasm::Instr::I32Const { value: 0 }],
+        Some(Repr::Flt) => vec![curios_wasm::Instr::F32Const { value: 0.0 }],
+        Some(Repr::Bytes | Repr::List | Repr::Tpl(_) | Repr::Ref) | None => vec![
+            curios_wasm::Instr::I32Const { value: 0 },
+            curios_wasm::Instr::RefI31,
+        ],
+    }
+}
+
 pub(crate) fn box_instr(repr: &Repr, table: &Table) -> Option<curios_wasm::Instr> {
     match repr {
         Repr::Nat | Repr::Int => Some(curios_wasm::Instr::RefI31),

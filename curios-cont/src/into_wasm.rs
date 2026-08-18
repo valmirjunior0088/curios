@@ -110,11 +110,21 @@ pub(crate) struct EmissionBlock {
     pub(crate) region: EmissionBody,
 }
 
-/// One branch edge: the destination block plus the values feeding its parameters, positionally. This is the IR's φ-mechanism — a block parameter's value is whatever the taken edge passed for it.
+/// One branch edge: the destination block plus the arguments feeding its parameters, positionally. This is the IR's φ-mechanism — a block parameter's value is whatever the taken edge passed for it.
 #[derive(Debug, Clone)]
 pub(crate) struct EmissionJumpTarget {
     pub(crate) target: EmissionBlockName,
-    pub(crate) params: Vec<EmissionValueName>,
+    pub(crate) params: Vec<EmissionJumpArg>,
+}
+
+/// What one edge passes for one block parameter.
+///
+/// A named value in every ordinary case. [`EmissionJumpArg::Filler`] is the exception, and it exists because this is the first point at which the destination parameter's carrier is knowable: an edge coerces each argument to that carrier (see `Context::jump_instrs`), so a filler chosen upstream as a literal would be coerced as one, which is what trapped an `i31` zero standing in a raw `Flt` slot.
+#[derive(Debug, Clone)]
+pub(crate) enum EmissionJumpArg {
+    Value(EmissionValueName),
+    /// No value: the slot belongs to a wider constructor than this edge's. Materialised as the zero of whatever carrier the destination parameter is held at.
+    Filler,
 }
 
 /// A multi-way branch on a scalar: `operand` is read as an unsigned `u32` (a constructor tag or nat), each case maps one value to its edge, and `default` catches the rest — `None` means the cases are exhaustive, and a match with no cases and no default lowers to a trap. Codegen picks the dispatch shape (a `br_table` for dense-from-zero tags, an `if` for two-way, a binary search otherwise); the IR just states the table.

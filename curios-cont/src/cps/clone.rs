@@ -268,6 +268,7 @@ pub(super) fn copy_bodies(
         CpsAtom::Value(value) => CpsAtom::Value(map_value(*value)),
         CpsAtom::Fun(function) => CpsAtom::Fun(map_function(*function)),
         CpsAtom::Literal(literal) => CpsAtom::Literal(literal.clone()),
+        CpsAtom::Filler => CpsAtom::Filler,
     };
     // A seeded continuation is copied as a *peeled* entry: it gets a fresh identity, but a transfer to it from inside the copy keeps naming the original. A join copy exists to specialize one entry, and a back-edge that followed the copy would re-enter parameters its caller is about to resplice. A seeded *function* is the opposite and maps internally, because an SCC copy has to be a self-contained recursive unit for the arguments it was specialized on to survive the recursion.
     let map_cont = |id: CpsContId| {

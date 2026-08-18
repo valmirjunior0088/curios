@@ -2,7 +2,9 @@
 //!
 //! Admission composes the two halves `documentation/design/toolchain/a-value-costs-when-it-is-kept-not-when-it-is-named.md` keeps separate: the backward half says every use of the parameter is a projection or an eligible transfer (`demands`, `Projected`), and the forward half says every flow reaching it is a construction or an alias of one (`origins`, `Constructed`). Loop backedges are the central case rather than an exclusion — an edge carrying the join's own parameter reads as the constructions that entered it, which is precisely what the forward fixpoint establishes.
 //!
-//! **A variant is the same rewrite at the widest of several widths.** Where the constructions reaching a parameter disagree about arity — a tagged family's nullary constructor arriving as a one-tuple beside its three-payload sibling's four — the region travels as the widest, and each narrower edge carries its own fields followed by filler. The per-edge width is the same forward fact read at that edge's argument, so a projection is never emitted past what a construction carries, and the filler is unread for the reason the return protocol's is: a read at that index is reachable only where the discriminant says a wider constructor travelled.
+//! **A variant is the same rewrite at the widest of several widths.** Where the constructions reaching a parameter disagree about arity — a tagged family's nullary constructor arriving as a one-tuple beside its three-payload sibling's four — the region travels as the widest, and each narrower edge carries its own fields followed by filler. The per-edge width is the same forward fact read at that edge's argument, so a projection is never emitted past what a construction carries.
+//!
+//! What makes the filler safe is that it *inhabits* the slot, not that nothing reads it. Unreadness was the stated justification and it is false: the value is passed, and an edge into a raw-carried parameter coerces every argument to that carrier before the discriminant is consulted, so an `i31` zero standing in a `Flt` slot trapped on the `ref.cast`. [`CpsAtom::Filler`] carries no value for exactly that reason — the carrier is settled after this pass, and the emitter materialises the filler as the zero of whichever one the destination turns out to hold.
 //!
 //! The rewrite is three local edits, and the existing chain finishes the job, exactly as `split_returns` works: the parameter list is spliced and the group recorded; the continuation's head rebuilds the aggregate from the new field parameters and every occurrence of the old parameter is redirected to that rebuild; and every incoming edge projects its argument into fields above the jump. Projection forwarding then collapses the inserted reads through the constructions they see, dead-binding elimination removes the constructions nothing reads any more — and the head rebuild survives exactly where a whole-value use survives, which makes it the materialization boundary the cost contract prescribes rather than a leak. For a variant that materialization is *wider* than the constructor that travelled, which is the one place the rewrite spends rather than saves: a surviving whole-value use of a narrow constructor gets its widest sibling's object. It is bounded by the same demand condition that admits the region at all — every use a projection or an eligible transfer — so the rebuild survives only where a boundary the region cannot cross keeps it.
 //!
@@ -38,7 +40,7 @@ fn takeable(origins: &BTreeMap<CpsValueId, Origin>, param: CpsValueId, source: &
         CpsAtom::Value(value) => {
             *value == param || origins.get(value).is_none_or(Origin::is_settled)
         }
-        CpsAtom::Fun(_) | CpsAtom::Literal(_) => false,
+        CpsAtom::Fun(_) | CpsAtom::Literal(_) | CpsAtom::Filler => false,
     }
 }
 
@@ -180,8 +182,8 @@ pub(super) fn split_parameters(module: &mut CpsModule) -> bool {
                 chain.push((projection, index, source));
                 replacement.push(CpsAtom::Value(projection));
             }
-            // The per-edge filler. Nothing reads it: a read at that index is reachable only where the discriminant says a wider constructor travelled, which is the same guard the return protocol's filler rides behind.
-            replacement.resize(split.width, CpsAtom::Literal(CpsLiteral::Nat(0)));
+            // The per-edge filler, which says "no value" rather than naming one: the carrier this slot is held at is settled after this pass, so the zero it is materialised as is the emitter's to pick. See [`CpsAtom::Filler`].
+            replacement.resize(split.width, CpsAtom::Filler);
             edge.args
                 .splice(split.position..=split.position, replacement);
         }
@@ -345,7 +347,7 @@ pub(super) fn split_workers(module: &mut CpsModule) -> bool {
             });
             replacement.push(CpsAtom::Value(projection));
         }
-        replacement.resize(worker.width, CpsAtom::Literal(CpsLiteral::Nat(0)));
+        replacement.resize(worker.width, CpsAtom::Filler);
         let CpsNode::ApplyFun { args, .. } = &mut node else {
             unreachable!("the callers were selected as known applications");
         };

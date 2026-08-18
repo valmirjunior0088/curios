@@ -18,6 +18,7 @@ enum AtomKey {
     Int(i32),
     Flt(u32),
     Bin(u8, usize, Vec<u8>),
+    Filler,
 }
 
 fn atom_key(atom: &CpsAtom) -> AtomKey {
@@ -40,6 +41,7 @@ fn atom_key(atom: &CpsAtom) -> AtomKey {
             };
             AtomKey::Bin(grain, bytes.len(), bytes)
         }
+        CpsAtom::Filler => AtomKey::Filler,
     }
 }
 

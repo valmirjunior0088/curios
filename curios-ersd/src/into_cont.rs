@@ -1758,7 +1758,7 @@ impl Lowerer<'_> {
         match self.lower_atom(atom) {
             curios_cont::CpsAtom::Fun(function) => curios_cont::CpsCallee::Known(function),
             curios_cont::CpsAtom::Value(value) => curios_cont::CpsCallee::Closure(value),
-            curios_cont::CpsAtom::Literal(_) => {
+            curios_cont::CpsAtom::Literal(_) | curios_cont::CpsAtom::Filler => {
                 panic!("arena application head lowered to a literal")
             }
         }

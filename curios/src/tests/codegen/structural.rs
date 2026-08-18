@@ -182,6 +182,29 @@ const LOOPED_PICK: &str = r#"
     /std/print(Nat/to_str(spin(n, 1)))
     "#;
 
+/// A variant carried round a loop whose payload the analysis holds in a register — the shape that puts a variant-width filler in a *raw* slot.
+///
+/// [`SPLIT_RETURN`] exercises the filler too, but only through the return protocol, whose slots are boxed by construction; that is why it never caught this. Here the variant reaches a continuation parameter instead, and the parameter's uses demand an unboxed `Flt`, so the edges carry `f32` and the `none` edge has no value to carry. The payload must be a `Flt` rather than a `Nat`: a `Nat` filler and its slot share the `i31` carrier, so the wrong-carrier constant is indistinguishable from a right one.
+///
+/// **The `none` edge has to be taken, and taken while other iterations take `some`.** A loop is what buys that: `o` is genuinely joined from both constructors, and the payload is read only under the tag. `p % 3` alternates the two so neither edge is dead, and the final iteration lands on `some`, so a run that reads the filler is reading something the program never stored.
+const VARIANT_FILLER: &str = r#"
+    use /std/{Handle, Nat, Flt, Option, List, proc};
+    rec spin(k : Nat, o : Option(Flt)) -> Flt =
+        match k : (_) => Flt
+        | 0 => Option/unwrap_or(o, +0.25)
+        | p + 1; ih =>
+            let next =
+                match Nat/eql(p % 3, 0) : (_) => Option(Flt)
+                | true => Option/some(Nat/to_flt(p) * +1.5 + +2.0)
+                | false => Option/none()
+                end;
+            spin(p, next)
+        end;
+    let taint = List/len(proc/args!);
+    let n : Nat = taint * 4 + 4;
+    /std/print(Flt/to_str(spin(n, Option/none())))
+    "#;
+
 /// An idiomatic string walk: `/std/Str/fold` over a string the program derives at runtime.
 ///
 /// The string comes from `Nat/to_str` rather than a literal or `Str/of_bytes`, and both choices are load-bearing. A literal would let partial evaluation unroll the walk over known bytes, so the fixture would assert nothing about a loop; `of_bytes` would drag in `/std/Str/utf8/check`, whose own encoding still returns a function per byte and whose allocations would swamp the claim. What is left is the walk itself.
@@ -961,6 +984,29 @@ fn a_returned_constructor_is_delivered_as_its_fields() {
     );
 }
 
+/// A variant-width filler is built at the carrier its destination slot is held at, not at the filler's own.
+///
+/// `fields.rs` justified the filler by unreadness — "a read at that index is reachable only where the discriminant says a wider constructor travelled" — and that was false of the emitted code, because `Context::jump_instrs` coerces *every* edge argument to the destination parameter's carrier before the tag is examined. A literal `Nat(0)` standing in a raw `Flt` slot therefore reached a `ref.cast (ref $flt)` over an `i31` and trapped, on the `none` edge, for a value nothing would have read.
+///
+/// The premise is asserted before the claim, and it is the half that decays: a pass that stopped raising this parameter to a register, or stopped splitting the variant at all, would leave a fixture that passes while measuring nothing. `f32.const 0` in the loop is the filler — the fixture's own float constants are `0.25`, `1.5` and `2`, none of them zero — so its presence says both that the split fired and that the slot is raw.
+///
+/// **Positive control, run 2026-08-18.** Restoring `CpsAtom::Literal(CpsLiteral::Nat(0))` at the `split_parameters` filler site and rebuilding makes this fixture fail as `execution failed: error while executing at wasm backtrace: 0: 0x70b - <wasm function 4>`. Reproduce by reverting that one line.
+#[test]
+fn a_variant_filler_is_built_at_its_destination_carrier() {
+    let wat = wat(VARIANT_FILLER);
+    assert!(
+        wat.contains("f32.const 0\n"),
+        "the premise: a filler must reach a register-held `Flt` slot, or this fixture measures nothing",
+    );
+
+    let args = ["prog", "a", "b", "c"];
+    assert_eq!(
+        run_raw(VARIANT_FILLER, &args),
+        b"+2".to_vec(),
+        "the `none` edge must carry a filler the destination can hold, rather than one it casts and traps on",
+    );
+}
+
 /// A returned closure that every caller applies is absorbed into the callee, so nothing allocates it and nothing calls through it.
 ///
 /// All three are asserted because each alone is satisfiable the wrong way. A module that allocated nothing but still dispatched indirectly would have moved the cost rather than removed it; one that dispatched directly while still allocating would pay for a closure nothing reaches; and both hold vacuously of a module where the recursion was simply peeled away, which is what a fixture inside the inline budget produces.
@@ -1208,6 +1254,7 @@ fn raw_wasm_validates_and_executes_without_binaryen() {
         ("mutual-recursion", MUTUAL_RECURSION),
         ("split-return", SPLIT_RETURN),
         ("looped-pick", LOOPED_PICK),
+        ("variant-filler", VARIANT_FILLER),
     ] {
         let args = ["prog", "a", "b", "c"];
         let raw = run_raw(source, &args);

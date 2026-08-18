@@ -407,7 +407,7 @@ impl<'m> Census<'m> {
                 CpsAtom::Fun(fun) => {
                     self.closure_funs.insert(*fun);
                 }
-                CpsAtom::Literal(_) => {}
+                CpsAtom::Literal(_) | CpsAtom::Filler => {}
             }
             if !returning {
                 self.incoming_cont
@@ -453,7 +453,7 @@ impl<'m> Census<'m> {
                             CpsAtom::Fun(fun) => {
                                 self.closure_funs.insert(*fun);
                             }
-                            CpsAtom::Literal(_) => {}
+                            CpsAtom::Literal(_) | CpsAtom::Filler => {}
                         }
                     }
                 }
@@ -488,7 +488,7 @@ impl<'m> Census<'m> {
                             CpsAtom::Fun(fun) => {
                                 self.closure_funs.insert(*fun);
                             }
-                            CpsAtom::Literal(_) => {}
+                            CpsAtom::Literal(_) | CpsAtom::Filler => {}
                         }
                     }
                 }
@@ -520,7 +520,7 @@ impl<'m> Census<'m> {
                             CpsAtom::Fun(fun) => {
                                 self.closure_funs.insert(*fun);
                             }
-                            CpsAtom::Literal(_) => {}
+                            CpsAtom::Literal(_) | CpsAtom::Filler => {}
                         }
                         if let Some(fun) = known {
                             self.incoming_fun
@@ -584,7 +584,7 @@ impl<'m> Census<'m> {
                 CpsAtom::Fun(fun) => {
                     self.closure_funs.insert(*fun);
                 }
-                CpsAtom::Literal(_) => {}
+                CpsAtom::Literal(_) | CpsAtom::Filler => {}
             }
         }
     }

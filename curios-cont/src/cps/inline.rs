@@ -225,7 +225,7 @@ pub(super) fn inline_continuation(
             *callee = match replacement {
                 CpsAtom::Value(value) => CpsCallee::Closure(*value),
                 CpsAtom::Fun(function) => CpsCallee::Known(*function),
-                CpsAtom::Literal(_) => unreachable!(),
+                CpsAtom::Literal(_) | CpsAtom::Filler => unreachable!(),
             };
         }
     }
@@ -335,7 +335,7 @@ pub(super) fn inline_call(
     let map_atom = |atom: &CpsAtom| match atom {
         CpsAtom::Value(value) => values.get(value).cloned().unwrap_or(CpsAtom::Value(*value)),
         CpsAtom::Fun(function) => CpsAtom::Fun(map_function(*function)),
-        CpsAtom::Literal(_) => atom.clone(),
+        CpsAtom::Literal(_) | CpsAtom::Filler => atom.clone(),
     };
     let map_value = |value: CpsValueId| match values.get(&value) {
         Some(CpsAtom::Value(value)) => *value,
@@ -360,7 +360,7 @@ pub(super) fn inline_call(
             CpsAtom::Value(value) => CpsCallee::Closure(value),
             CpsAtom::Fun(function) => CpsCallee::Known(function),
             // The pre-minting bail above already rejected every literal-mapped closure callee, and bailing here would leak the minted values and reserved slots.
-            CpsAtom::Literal(_) => unreachable!(),
+            CpsAtom::Literal(_) | CpsAtom::Filler => unreachable!(),
         },
     };
     let map = Mapping {

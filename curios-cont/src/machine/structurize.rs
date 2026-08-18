@@ -11,8 +11,9 @@ use {
         into_wasm::{
             EmissionArgument, EmissionBlock, EmissionBlockName, EmissionBody, EmissionCallTarget,
             EmissionCellTarget, EmissionClosure, EmissionClosureName, EmissionCode, EmissionData,
-            EmissionFunction, EmissionFunctionName, EmissionHostTarget, EmissionJumpTarget,
-            EmissionMatchTarget, EmissionModule, EmissionTail, EmissionValue, EmissionValueName,
+            EmissionFunction, EmissionFunctionName, EmissionHostTarget, EmissionJumpArg,
+            EmissionJumpTarget, EmissionMatchTarget, EmissionModule, EmissionTail, EmissionValue,
+            EmissionValueName,
         },
     },
     curios_utilities::Entropy,
@@ -230,10 +231,7 @@ impl<'a> MachineFunctionBridge<'a> {
         match terminator {
             MachineTerminator::Return(operands) => EmissionTail::Jump(EmissionJumpTarget {
                 target: self.resume.clone(),
-                params: operands
-                    .iter()
-                    .map(|operand| self.operand(operand, values))
-                    .collect(),
+                params: self.jump_args(operands, values),
             }),
             MachineTerminator::Jump(edge) => EmissionTail::Jump(self.edge(edge, values)),
             MachineTerminator::Switch {
@@ -353,8 +351,18 @@ impl<'a> MachineFunctionBridge<'a> {
                 ))
             })
             .collect::<Vec<_>>();
-        let mut params = results.clone();
-        params.extend(captures.iter().copied().map(value_name));
+        let mut params = results
+            .iter()
+            .cloned()
+            .map(EmissionJumpArg::Value)
+            .collect::<Vec<_>>();
+        params.extend(
+            captures
+                .iter()
+                .copied()
+                .map(value_name)
+                .map(EmissionJumpArg::Value),
+        );
         blocks.push((
             resume.clone(),
             EmissionBlock {
@@ -417,7 +425,7 @@ impl<'a> MachineFunctionBridge<'a> {
         ));
         EmissionTail::Jump(EmissionJumpTarget {
             target: resume,
-            params: vec![result],
+            params: vec![EmissionJumpArg::Value(result)],
         })
     }
 
@@ -426,17 +434,33 @@ impl<'a> MachineFunctionBridge<'a> {
         edge: &MachineEdge,
         values: &mut Vec<(EmissionValueName, EmissionValue)>,
     ) -> EmissionJumpTarget {
-        let mut params = self.operands(&edge.args, values);
+        let mut params = self.jump_args(&edge.args, values);
         params.extend(
             self.block_captures[&edge.target]
                 .iter()
                 .copied()
-                .map(value_name),
+                .map(value_name)
+                .map(EmissionJumpArg::Value),
         );
         EmissionJumpTarget {
             target: self.block_name(edge.target),
             params,
         }
+    }
+
+    /// The arguments one edge passes, with a filler left unmaterialised: an edge is the only position whose destination carrier is decided later, so it is the only one that may defer.
+    fn jump_args(
+        &mut self,
+        operands: &[MachineOperand],
+        values: &mut Vec<(EmissionValueName, EmissionValue)>,
+    ) -> Vec<EmissionJumpArg> {
+        operands
+            .iter()
+            .map(|operand| match operand {
+                MachineOperand::Filler => EmissionJumpArg::Filler,
+                operand => EmissionJumpArg::Value(self.operand(operand, values)),
+            })
+            .collect()
     }
 
     fn operands(
@@ -458,6 +482,8 @@ impl<'a> MachineFunctionBridge<'a> {
         match operand {
             MachineOperand::Value(value) => value_name(*value),
             MachineOperand::Literal(literal) => self.literal(literal, values),
+            // Every non-edge position a filler reaches is a function argument, and a function parameter arrives through a `func/N` signature that is uniformly `anyref` — so the carrier this one has to inhabit is settled here, and it is the boxed zero.
+            MachineOperand::Filler => self.literal(&CpsLiteral::Nat(0), values),
         }
     }
 

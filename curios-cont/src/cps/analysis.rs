@@ -333,6 +333,8 @@ pub(super) fn resolve_atom(
     match atom {
         CpsAtom::Literal(literal) => Knowledge::Known(CpsAtom::Literal(literal.clone())),
         CpsAtom::Fun(function) => Knowledge::Known(CpsAtom::Fun(*function)),
+        // A filler is unobservable rather than known: propagating it would substitute "no value" into a position that reads one.
+        CpsAtom::Filler => Knowledge::Conflict,
         CpsAtom::Value(value) => {
             if let Some(knowledge) = class.get(value) {
                 knowledge.clone()

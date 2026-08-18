@@ -12,7 +12,7 @@
 //!
 //! **Every return edge must carry a construction the rewrite can read fields off.** A returned value that is merely some other value — `/std/Str/fold` returns a projection of its accumulator — has no statically known field count, so delivering *n* slots from it would mean projecting indices that need not exist at runtime. This is the condition that keeps a generic combinator out, and it is why a component containing one cannot be split however uniform its callers look.
 //!
-//! **A construction shorter than the width fills the rest with a literal zero**, because a function's results are non-nullable and there is no empty value to pass. Nothing observes the filler: a caller reading slot *i* does so through a projection that already had to be reachable only where the tuple has that field, since the same projection on the same value is what runs today.
+//! **A construction shorter than the width fills the rest with [`CpsAtom::Filler`]**, because a function's results are non-nullable and there is no empty value to pass. A caller reading slot *i* does so through a projection that already had to be reachable only where the tuple has that field, since the same projection on the same value is what runs today — but the filler is still *passed*, so it is written as "no value" rather than as a zero at a guessed carrier, and the emitter picks the zero once the destination's carrier is known. A return slot lands boxed either way; `fields.rs` is where the distinction became a trap.
 //!
 //! **A resume continuation is only widened when every entry to it is a call inside the same class.** A continuation has one arity, so one shared between a split call and anything else could not serve both — and since a split callee's every call site *must* be rewritten, one unwidenable site pins the whole class rather than being skipped.
 //!
@@ -228,12 +228,7 @@ fn split_fields(
         return args.to_vec();
     };
     (0..width)
-        .map(|index| {
-            fields
-                .get(index)
-                .cloned()
-                .unwrap_or(CpsAtom::Literal(CpsLiteral::Nat(0)))
-        })
+        .map(|index| fields.get(index).cloned().unwrap_or(CpsAtom::Filler))
         .collect()
 }
 

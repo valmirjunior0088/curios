@@ -27,6 +27,8 @@ id!(MachineValueId, "~v", mint);
 pub(crate) enum MachineOperand {
     Value(MachineValueId),
     Literal(CpsLiteral),
+    /// [`CpsAtom::Filler`] carried through unchanged: still no value, still waiting for the destination's carrier to be known.
+    Filler,
 }
 
 #[derive(Debug, Clone)]
@@ -789,6 +791,7 @@ impl<'a> MachineFunctionLowerer<'a> {
         match atom {
             CpsAtom::Value(value) => MachineOperand::Value(value_id(*value)),
             CpsAtom::Literal(literal) => MachineOperand::Literal(literal.clone()),
+            CpsAtom::Filler => MachineOperand::Filler,
             CpsAtom::Fun(function) => {
                 if let Some(shell) = self.recursive_closures.get(function) {
                     return MachineOperand::Value(*shell);

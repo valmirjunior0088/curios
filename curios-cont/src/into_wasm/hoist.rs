@@ -5,7 +5,8 @@
 use {
     super::{
         EmissionBody, EmissionCallTarget, EmissionCellTarget, EmissionCode, EmissionData,
-        EmissionHostTarget, EmissionModule, EmissionTail, EmissionValue, EmissionValueName,
+        EmissionHostTarget, EmissionJumpArg, EmissionModule, EmissionTail, EmissionValue,
+        EmissionValueName,
     },
     curios_utilities::{Grain, PackedBin},
     std::collections::HashMap,
@@ -201,6 +202,18 @@ fn rename_names(
     }
 }
 
+fn rename_jump_args(
+    args: &mut [EmissionJumpArg],
+    renames: &HashMap<EmissionValueName, EmissionValueName>,
+) {
+    for arg in args {
+        // A filler names nothing, so there is nothing to intern it against.
+        if let EmissionJumpArg::Value(name) = arg {
+            rename_name(name, renames);
+        }
+    }
+}
+
 fn rename_value(
     value: &mut EmissionValue,
     renames: &HashMap<EmissionValueName, EmissionValueName>,
@@ -226,11 +239,11 @@ fn rename_value(
 
 fn rename_tail(tail: &mut EmissionTail, renames: &HashMap<EmissionValueName, EmissionValueName>) {
     match tail {
-        EmissionTail::Jump(target) => rename_names(&mut target.params, renames),
+        EmissionTail::Jump(target) => rename_jump_args(&mut target.params, renames),
         EmissionTail::Match(target) => {
             rename_name(&mut target.operand, renames);
             for target in target.cases.values_mut().chain(target.default.iter_mut()) {
-                rename_names(&mut target.params, renames);
+                rename_jump_args(&mut target.params, renames);
             }
         }
         EmissionTail::Call(EmissionCallTarget::Direct { params, .. }) => {

@@ -83,7 +83,7 @@ impl Lattice for Origin {
 fn flow(solver: &mut Solver<Origin>, atom: &CpsAtom, target: CpsValueId) {
     let incoming = match atom {
         CpsAtom::Value(value) => solver.facts().get(value).cloned().unwrap_or(Origin::Opaque),
-        CpsAtom::Fun(_) | CpsAtom::Literal(_) => Origin::Opaque,
+        CpsAtom::Fun(_) | CpsAtom::Literal(_) | CpsAtom::Filler => Origin::Opaque,
     };
     solver.join(target, incoming);
 }
