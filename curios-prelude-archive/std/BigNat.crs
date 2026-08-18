@@ -100,10 +100,10 @@ pub let is_zero(a: BigNat) -> Bool =
     match view(a) | zero() => true | succ(_, _) => false end;
 
 let dbl_raw(x: Bits) -> Bits =
-    b[\0, ..x];
+    b[0, ..x];
 
 let dbl_succ_raw(x: Bits) -> Bits =
-    b[\1, ..x];
+    b[1, ..x];
 
 let dbl(a: BigNat) -> BigNat =
     of_bits(dbl_raw(a.bits));

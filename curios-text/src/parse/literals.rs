@@ -183,79 +183,24 @@ pub(super) fn parse_string_literal<'a>() -> Parser<'a, Term> {
         .map(Into::into)
 }
 
-// One segment of a `Bits`/`Bytes` literal: an escaped constant atom, a term contributing one atom, or a spread contributing a whole packed value. Adjacent bytes are coalesced into `BinSegment::Bytes` runs by the literal parser.
-pub(super) enum RawBinSegment {
-    Byte(u8),
-    Atom(Term),
-    Spread(Term),
+// One entry of a `Bits`/`Bytes` literal, mirroring `parse_list_entry`: a `..` spread contributing a whole packed value, or a plain term contributing a single atom. A constant atom has no spelling of its own — `1` in a `Bits` literal and `0x48` in a `Bytes` literal are ordinary numeral terms realized at `Bool` and `Byte` by elaboration, and lowering folds adjacent constants into a packed run rather than a chain of appends (see `into_core`'s `lower_bin_literal`).
+fn parse_bin_entry<'a>() -> Parser<'a, BinSegment> {
+    catch(parse_literal(".."))
+        .and_keep(lazy(parse_term))
+        .map(BinSegment::Spread)
+        .or(lazy(parse_term).map(BinSegment::Atom))
 }
 
-// A `\`-escaped constant atom: `\0`/`\1` for `Bits`, `\` and exactly two hexadecimal digits for `Bytes`. `\` begins an atom and nothing else — no term does — so the parser commits once it sees one and reports a malformed atom rather than backtracking into the term case and blaming the leftovers.
-fn parse_bin_atom<'a>(grain: Grain) -> Parser<'a, RawBinSegment> {
-    catch(take_exact("\\"))
-        .and_keep(match grain {
-            Grain::B => parse_bit_atom(),
-            Grain::X => parse_hex_atom(),
-        })
-        .and_drop(parse_whitespace())
-        .map(RawBinSegment::Byte)
-}
-
-fn parse_bit_atom<'a>() -> Parser<'a, u8> {
-    take_exact("0")
-        .map(|()| 0u8)
-        .or(take_exact("1").map(|()| 1u8))
-        .map_err("Expected '\\0' or '\\1' in a Bits literal")
-}
-
-fn parse_hex_atom<'a>() -> Parser<'a, u8> {
-    take_while(|char: char| char.is_ascii_hexdigit()).flat_map(|hex| match hex.len() {
-        2 => pure(u8::from_str_radix(hex, 16).expect("valid hex pair")),
-        _ => fail("Expected exactly 2 hexadecimal digits after '\\' in a Bytes literal"),
-    })
-}
-
-// One entry of a `Bits`/`Bytes` literal, mirroring `parse_list_entry`: an escaped constant atom, a `..` spread contributing a whole packed value, or a plain term contributing a single atom. The escape has no term spelling of its own on purpose — it is what marks compile-time constant data, which lowering keeps as a packed run rather than a chain of appends (see `into_core`'s `lower_bin_literal`).
-fn parse_bin_entry<'a>(grain: Grain) -> Parser<'a, RawBinSegment> {
-    parse_bin_atom(grain)
-        .or(catch(parse_literal(".."))
-            .and_keep(lazy(parse_term))
-            .map(RawBinSegment::Spread))
-        .or(lazy(parse_term).map(RawBinSegment::Atom))
-}
-
-pub(super) fn coalesce_bin_segments(raw: Vec<RawBinSegment>) -> Vec<BinSegment> {
-    let mut segments = Vec::new();
-
-    for segment in raw {
-        match segment {
-            RawBinSegment::Byte(byte) => match segments.last_mut() {
-                Some(BinSegment::Bytes(run)) => run.push(byte),
-                _ => segments.push(BinSegment::Bytes(vec![byte])),
-            },
-            RawBinSegment::Atom(term) => segments.push(BinSegment::Atom(term)),
-            RawBinSegment::Spread(term) => segments.push(BinSegment::Spread(term)),
-        }
-    }
-
-    segments
-}
-
-// A `Bits`/`Bytes` literal `b[\1, flag, ..rest]` (empty `b[]`) — the packed siblings of the `List` literal, told apart by the grain letter glued to the bracket. Only that junction is tight: past the `[` the literal lexes like any other bracketed list, so whitespace, a trailing comma, and arbitrary (unparenthesized) element and spread terms are all free. The glue is what keeps `b` and `x` usable as ordinary binders — `b [1]` is the binder `b` followed by a list, not a `Bits` literal — and an identifier merely ending in the grain letter never starts one, since the name parser reaches `nb[…]` first.
+// A `Bits`/`Bytes` literal `b[1, flag, ..rest]` (empty `b[]`) — the packed siblings of the `List` literal, told apart by the grain letter glued to the bracket. Only that junction is tight: past the `[` the literal lexes like any other bracketed list, so whitespace, a trailing comma, and arbitrary (unparenthesized) element and spread terms are all free. The glue is what keeps `b` and `x` usable as ordinary binders — `b [1]` is the binder `b` followed by a list, not a `Bits` literal — and an identifier merely ending in the grain letter never starts one, since the name parser reaches `nb[…]` first.
 pub(super) fn parse_bin_literal<'a>() -> Parser<'a, Term> {
     parse_bin_literal_grain(Grain::B, "b[").or(parse_bin_literal_grain(Grain::X, "x["))
 }
 
 fn parse_bin_literal_grain<'a>(grain: Grain, prefix: &'static str) -> Parser<'a, Term> {
     catch(parse_literal(prefix))
-        .and_keep(sep_by0_trailing(
-            move || parse_bin_entry(grain),
-            || parse_literal(","),
-        ))
+        .and_keep(sep_by0_trailing(parse_bin_entry, || parse_literal(",")))
         .and_drop(parse_literal("]"))
-        .map(move |segments| {
-            Subterm::Intrinsic(Intrinsic::Bin(grain, coalesce_bin_segments(segments)))
-        })
+        .map(move |segments| Subterm::Intrinsic(Intrinsic::Bin(grain, segments)))
         .map(Into::into)
 }
 

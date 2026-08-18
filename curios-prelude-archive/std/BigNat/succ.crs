@@ -6,8 +6,8 @@ use /std/BigNat/{BigNat, cong_cons2, cons_inj_head, cons_inj_tail, is_trimmed, i
 
 pub rec raw(x: Bits) -> Bits =
     match x
-    | b[] => b[\1]
-    | b[h, ..t] => match h | true => b[\0, ..raw(t)] | false => b[\1, ..t] end
+    | b[] => b[1]
+    | b[h, ..t] => match h | true => b[0, ..raw(t)] | false => b[1, ..t] end
     end;
 
 pub let succ(a: BigNat) -> BigNat =
@@ -28,7 +28,7 @@ pub rec raw_trimmed(x: Bits, p: Eq(is_trimmed(x), true)) -> Eq(is_trimmed(raw(x)
     | b[h, ..t] =>
         match h
         | true =>
-            match t: (u) => Eq(is_trimmed(raw(b[\1, ..u])), true)
+            match t: (u) => Eq(is_trimmed(raw(b[1, ..u])), true)
             | b[] => Eq/refl()
             | b[th, ..tt] =>
                 is_trimmed_cons(
@@ -38,7 +38,7 @@ pub rec raw_trimmed(x: Bits, p: Eq(is_trimmed(x), true)) -> Eq(is_trimmed(raw(x)
                     raw_nonempty(b[th, ..tt]))
             end
         | false =>
-            match t: (u) => Eq(is_trimmed(raw(b[\0, ..u])), true)
+            match t: (u) => Eq(is_trimmed(raw(b[0, ..u])), true)
             | b[] => Eq/refl()
             | b[_, .._] => p
             end

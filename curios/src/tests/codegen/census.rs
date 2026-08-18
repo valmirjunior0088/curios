@@ -1158,3 +1158,280 @@ fn census_surveys_the_fold_accumulator_region() {
     // What survives in this all-ASCII fixture is the Io plumbing no mechanism claims — enough to pin that the machinery still surveys; the variant-width scan flow needs multi-byte text and is the corpus survey's to report.
     assert!(!regions.is_empty(), "the census still surveys the walk");
 }
+
+/// The death-birth tally for one program — the churn specification's M1 instrument, the sibling of [`survey`]. Within one function, a construction of some layout beside a value of matching layout whose every use takes it apart is the pairing Perceus turns into an in-place write and a tracing collector re-allocates. The classifier locates that population per substrate; it proves no pairing — order inside the function is deliberately not consulted, so every count is an upper bound on what a reuse mechanism could establish.
+#[derive(Debug, Default)]
+struct Rebirth {
+    /// Tuple constructions in the program.
+    tuple_sites: usize,
+    /// Constructions beside a co-resident dying value whose exact constructed arity matches.
+    constructed_pairs: usize,
+    /// Constructions beside a co-resident dying value whose projected width matches — the cross-frame shape: `chain`'s dying cell was the caller's construction, so its width arrives through the projections that take it apart.
+    projected_pairs: usize,
+    /// The pairs above owned under `/std/Map` — the map-spine substrate.
+    spine_pairs: usize,
+    /// Rope extends: appends, and every operand a concat merges.
+    extends: usize,
+    /// Extends whose base's only use is that extend — the linearly threaded builder lever B recognizes.
+    linear_extends: usize,
+    /// The functions that carry pairs, for locating concentrations.
+    owners: BTreeSet<String>,
+}
+
+/// A value whose every recorded use takes it apart — projection or scrutinee — inside one function: the death half of a pair, with its width known exactly when it is itself a visible construction and by its widest projection otherwise.
+struct Dying {
+    value: CpsValueId,
+    fun: CpsFunId,
+    constructed: Option<usize>,
+    projected: Option<usize>,
+}
+
+fn rebirth(census: &Census) -> Rebirth {
+    let mut tally = Rebirth::default();
+
+    let mut dying: Vec<Dying> = Vec::new();
+    for (value, uses) in &census.uses {
+        if uses.is_empty() {
+            continue;
+        }
+        let deconstructive = uses
+            .iter()
+            .all(|(_, use_)| matches!(use_, Consumption::Projection(_) | Consumption::Scrutinee));
+        if !deconstructive {
+            continue;
+        }
+        let mut owners = uses
+            .iter()
+            .map(|(node, _)| census.owner_of_node.get(node).copied());
+        let Some(Some(fun)) = owners.next() else {
+            continue;
+        };
+        if !owners.all(|owner| owner == Some(fun)) {
+            continue;
+        }
+        dying.push(Dying {
+            value: *value,
+            fun,
+            constructed: census.tuple_sites.get(value).map(|site| site.arity),
+            projected: uses
+                .iter()
+                .filter_map(|(_, use_)| match use_ {
+                    Consumption::Projection(field) => Some(field + 1),
+                    _ => None,
+                })
+                .max(),
+        });
+    }
+
+    for (value, site) in &census.tuple_sites {
+        let Some(fun) = census.owner_of_node.get(&site.node) else {
+            continue;
+        };
+        tally.tuple_sites += 1;
+
+        let constructed = dying.iter().any(|death| {
+            death.value != *value && death.fun == *fun && death.constructed == Some(site.arity)
+        });
+        let projected = dying.iter().any(|death| {
+            death.value != *value
+                && death.fun == *fun
+                && death.constructed.is_none()
+                && death.projected == Some(site.arity)
+        });
+        if constructed {
+            tally.constructed_pairs += 1;
+        }
+        if projected {
+            tally.projected_pairs += 1;
+        }
+        if constructed || projected {
+            let owner = census.owner_name(*fun);
+            if owner.contains("/std/Map") {
+                tally.spine_pairs += 1;
+            }
+            tally.owners.insert(owner);
+        }
+    }
+
+    // The rope substrate needs no pairing search: an extend consumes its base into a same-layout successor by construction, so the only question is whether the base was threaded linearly — one use, this extend — or shared.
+    for (index, slot) in census.module.nodes().iter().enumerate() {
+        let Some(node) = slot else { continue };
+        let node_id = CpsNodeId::from_index(index);
+        let CpsNode::LetIntrinsic { op, args, .. } = node else {
+            continue;
+        };
+        let bases: &[CpsAtom] = match op {
+            CpsIntrinsicOp::BinAppend(_) | CpsIntrinsicOp::ListAppend => &args[..1],
+            CpsIntrinsicOp::BinConcat(_, _) | CpsIntrinsicOp::ListConcat(_) => args.as_slice(),
+            _ => continue,
+        };
+        for base in bases {
+            let CpsAtom::Value(base) = base else { continue };
+            tally.extends += 1;
+            let uses = census.uses.get(base).map_or(&[][..], Vec::as_slice);
+            if let [(node, _)] = uses
+                && *node == node_id
+            {
+                tally.linear_extends += 1;
+            }
+        }
+    }
+
+    tally
+}
+
+/// The M0 workloads, included from the harness so the classifier reads the programs the results files time.
+const WORKLOADS: [(&str, &str); 3] = [
+    (
+        "chain",
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../curios-benchmarks/programs/chain/chain.crs"
+        )),
+    ),
+    (
+        "churn",
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../curios-benchmarks/programs/churn/churn.crs"
+        )),
+    ),
+    (
+        "spines",
+        include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../curios-benchmarks/programs/spines/spines.crs"
+        )),
+    ),
+];
+
+/// The in-corpus spine-churn consumer the specification's evidence names: a driver that pulls the whole TOML decoder — and with it `/std/Map`'s table construction — into the surveyed module. The classifier only compiles it; nothing runs.
+const TOML_DRIVER: &str = r#"
+use /std/{Str, Nat, Map, Toml, Option, Result, Io};
+
+let input = /std/read()!;
+match input: (_) => Io({})
+| some(bytes) =>
+    match Str/of_bytes(bytes): (_) => Io({})
+    | some(s) =>
+        match Toml/decode(s): (_) => Io({})
+        | success(m) => /std/print(Nat/to_str(Map/len(m)))
+        | failure(e) => /std/print(e)
+        end
+    | none() => /std/print("invalid utf-8")
+    end
+| none() => /std/print("no input")
+end
+"#;
+
+/// The M1 death-birth census. Run explicitly:
+///
+/// ```sh
+/// cargo test --package curios --all-features -- codegen::census::death_birth_census --ignored --nocapture
+/// ```
+///
+/// # What it last printed
+///
+/// Taken **2026-08-17**, over the fourteen-program corpus, the three M0 workloads, and the TOML driver:
+///
+/// ```text
+/// == death-birth totals: 1168 tuple sites, 0 constructed-width pairs, 509 projected-width pairs, 24 under /std/Map; 136/256 extends linear
+/// ```
+///
+/// with `chain` at 16 pairs of 46 sites, `spines` at 24 of 59 with 9 under `/std/Map`, and the TOML driver at 313 of 470 with 70 of its 125 extends linear.
+///
+/// # The reading
+///
+/// The population is real and pervasive — 509 of 1168 constructions stand beside a dying matching-width value, so the specification's stop-evidence clause (the population rare outside the workloads) does not fire. It is also *entirely* the cross-frame shape: zero constructed-width pairs means no dying value pairs with a construction from its own function — every death arrives as a parameter taken apart where the matching birth happens, which is exactly a tail-recursive rebuild loop, and which any reuse mechanism keyed to intra-function allocation sites would miss completely. The map-spine substrate concentrates where the specification's evidence said: `/std/Map`'s `insert`/`insert_node`/`replace` and the TOML decoder's build and scan functions, the decoder alone holding three fifths of all pairs. And lever B's admission population exists: over half of all rope extends are linearly threaded — the base's only use is the extend that consumes it.
+#[test]
+#[ignore = "measurement: surveys the corpus rather than asserting"]
+fn death_birth_census() {
+    let mut owners = BTreeSet::new();
+    let mut totals = Rebirth::default();
+
+    for (label, source) in CORPUS
+        .iter()
+        .chain(WORKLOADS.iter())
+        .chain([("toml_decode", TOML_DRIVER)].iter())
+    {
+        let module = cont_optm_module(source);
+        let census = Census::of(&module);
+        let tally = rebirth(&census);
+
+        println!(
+            "  {label}: {sites} tuple sites, {constructed} constructed-width pairs, {projected} projected-width pairs, {spines} under /std/Map; {linear}/{extends} extends linear",
+            sites = tally.tuple_sites,
+            constructed = tally.constructed_pairs,
+            projected = tally.projected_pairs,
+            spines = tally.spine_pairs,
+            linear = tally.linear_extends,
+            extends = tally.extends,
+        );
+
+        totals.tuple_sites += tally.tuple_sites;
+        totals.constructed_pairs += tally.constructed_pairs;
+        totals.projected_pairs += tally.projected_pairs;
+        totals.spine_pairs += tally.spine_pairs;
+        totals.extends += tally.extends;
+        totals.linear_extends += tally.linear_extends;
+        owners.extend(tally.owners);
+    }
+
+    println!(
+        "== death-birth totals: {sites} tuple sites, {constructed} constructed-width pairs, {projected} projected-width pairs, {spines} under /std/Map; {linear}/{extends} extends linear",
+        sites = totals.tuple_sites,
+        constructed = totals.constructed_pairs,
+        projected = totals.projected_pairs,
+        spines = totals.spine_pairs,
+        linear = totals.linear_extends,
+        extends = totals.extends,
+    );
+    println!("== pair owners: {owners:?}");
+}
+
+/// The classifier pinned on the canonical pair, so the census above stays a measurement: a cons rebuilt from a predecessor dying in the same function pairs at projected width, and a program whose constructions never see a dying same-layout value reports none.
+#[test]
+fn death_birth_classifier_pins_the_canonical_pair() {
+    let paired = r#"
+        use /std/{Str, Nat, Option, Io};
+        induct Chain: Type
+        | nil()
+        | cons(Nat, Chain)
+        end
+        rec step(rest: Chain, acc: Chain) -> Chain =
+            match rest: (_) => Chain
+            | nil() => acc
+            | cons(v, tail) => step(tail, Chain/cons(v + 1, acc))
+            end;
+        rec build(n: Nat, acc: Chain) -> Chain =
+            match n: (_) => Chain
+            | 0 => acc
+            | m + 1; ih => build(m, Chain/cons(n, acc))
+            end;
+        rec total(c: Chain, acc: Nat) -> Nat =
+            match c: (_) => Nat
+            | nil() => acc
+            | cons(v, tail) => total(tail, (acc + v) % 1000003)
+            end;
+        let input = /std/read()!;
+        match input: (_) => Io({})
+        | some(bytes) =>
+            match Str/of_bytes(bytes): (_) => Io({})
+            | some(s) =>
+                match Nat/of_str(Str/trim(s)): (_) => Io({})
+                | some(n) => /std/print(Nat/to_str(total(step(build(n, Chain/nil()), Chain/nil()), 0)))
+                | none() => /std/print("bad input")
+                end
+            | none() => /std/print("invalid utf-8")
+            end
+        | none() => /std/print("no input")
+        end
+    "#;
+    let module = cont_optm_module(paired);
+    let census = Census::of(&module);
+    let tally = rebirth(&census);
+    assert!(
+        tally.projected_pairs >= 1,
+        "the rebuilt cons beside its dying predecessor pairs: {tally:?}",
+    );
+}

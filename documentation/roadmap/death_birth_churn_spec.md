@@ -4,7 +4,7 @@
 
 This specification defines a measurement program — benchmark workloads and a static census — and the lever gate any mechanism addressing allocation churn must pass. It is deliberately mechanism-blocking: no milestone below changes a representation, an encoding, or the runtime, and the levers in M2 are admitted or refused on M0's and M1's numbers alone.
 
-M0 is complete in the harness as of 2026-08-17: `chain`, `churn`, and `spines` await their first capture. The census and the gate are not started.
+M0 is complete in the harness as of 2026-08-17: `chain`, `churn`, and `spines` await their first capture. The census landed the same day; the gate is not started.
 
 ## The question under measurement
 
@@ -52,19 +52,19 @@ The spine is `M0 → M1 → M2`. M0 and M1 are independent and may land in eithe
 
 - The record workload exists: `churn`, landed 2026-08-17, threads a six-field record through N LCG-fed steps, two fields updated per step via spread, printing one field modulo a prime — the purest record-update signal, with the minimal algorithmic confound: the imperative contestants mutate a struct in place and allocate nothing, and Lean's structure update gets reuse. The landing answered part of its question before any table: the emitted Curios loop allocates nothing either, the threaded record travelling as fields through the landed in-flight campaigns — pinned by `churn_threaded_record_allocates_nothing` in `curios/src/tests/codegen/churn.rs` — so the capture prices the erased spelling against the mutation floor, and the record-update tax lives only where a record rests, which is `spines`' and the census's territory.
 
-- The map workload exists: `spines`, landed 2026-08-17, drives N LCG-keyed inserts into `/std/Map` followed by a fold, printing modulo a prime. It adds the live-set-under-churn dimension — `chain` keeps almost nothing alive and `trees` keeps everything, and a collector's economics live between — and its header records two confounds plainly: it compares map algorithms across contestants, and `/std/Map` deliberately has no `Key(Nat)`, so LCG keys enter through `Nat/to_str` at the boundary, a per-insert cost no int-keyed hash map mirrors. It orients rather than proves.
+- The map workload exists: `spines`, landed 2026-08-17, drives N LCG-keyed inserts into `/std/Map` followed by a fold, printing modulo a prime. It adds the live-set-under-churn dimension — `chain` keeps almost nothing alive and `trees` keeps everything, and a collector's economics live between — and its header records two confounds plainly: it compares map algorithms across contestants, and `/std/Map` deliberately has no `Key(Nat)`, so LCG keys enter through `Bytes/of_nat` at the boundary — a per-insert cost of a few divisions and table reads no int-keyed hash map quite mirrors. It orients rather than proves.
 
 - No M0 workload churns the array substrate, and by decision none joins yet: the rope amortizes idiomatic accumulation into O(1) nodes with one force-time fill, so a synthetic builder workload would price a shape no measurement yet shows users writing. Lever B's copy-bound evidence therefore comes from M1's census, and a builder workload joins M0 only if the census finds the population first.
 
 - All take their iteration counts from runtime input, per the harness's discipline that keeps a closed program from const-folding away, and every contestant must print the same number.
 
-- Deliverable: the workloads in the harness and their first capture in a results file; every figure lives there, none here.
+- Deliverable: the workloads in the harness and their first capture in a results file; every figure lives there, none here. The capture is sequenced last deliberately — after the census and the gate's verdicts, whose admission questions the in-repo probes already answer with deterministic collection counts, and before any admitted lever's implementation lands, so run 08 is the clean pre-lever baseline the across-runs tables need.
 
 ### M1 — The census
 
-- Add the death-birth classifier beside the aggregate-flow census: over optimized CPS, a value of some layout whose last use is in scope with a construction of matching layout, reported per substrate — records and tuples, arrays, map spines — over the corpus, `/std`, and the M0 workloads.
+- The classifier exists: `death_birth_census`, landed 2026-08-17 beside the aggregate-flow census in `curios/src/tests/codegen/census.rs` — over optimized CPS, a construction beside a co-resident value of matching width whose every use takes it apart, reported per substrate over the corpus, the M0 workloads, and a TOML-decoding driver, with the figures, the command, and their reading beside the probe.
 
-- Record the figures beside an ignored probe carrying the command, the date, and what it last printed, per the repository's measurement discipline.
+- What the measurement decided, for the gate to read: the population is pervasive rather than rare, so the stop-evidence clause does not fire; it is entirely the cross-frame shape — the dying value always arrives as a parameter taken apart where the matching birth happens, never from the constructing function's own sites, so a reuse mechanism keyed to intra-function allocation would see none of it; the map-spine and TOML concentrations sit where the evidence predicted; and the linearly threaded builder population lever B's admission asks after exists, at over half of all rope extends.
 
 ### M2 — The lever gate
 

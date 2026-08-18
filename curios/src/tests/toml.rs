@@ -295,7 +295,7 @@ fn toml_encode_rejects_a_non_utf8_key() {
         let taint = Bytes/len(rand/bytes(0)!);
         let opaque = Nat/to_int(taint + 1);
         let outcome : Str =
-            match Toml/encode(Map/insert(Map/empty(@Toml), x[\ff], Toml/int(opaque)))
+            match Toml/encode(Map/insert(Map/empty(@Toml), x[0xff], Toml/int(opaque)))
             | success(_) => "accepted"
             | failure(msg) => msg
             end;
@@ -346,8 +346,8 @@ fn parse_eof_accepts_only_end_of_input() {
             | failure(_) => "rejected"
             end;
         /std/print(Str/flatten([
-            check(x[..rand/bytes(0)!, \41]), ";",
-            check(x[..rand/bytes(0)!, \41, \42]), ";",
+            check(x[..rand/bytes(0)!, 0x41]), ";",
+            check(x[..rand/bytes(0)!, 0x41, 0x42]), ";",
             check(x[..rand/bytes(0)!])
         ]))
         "#;

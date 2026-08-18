@@ -2181,17 +2181,18 @@ fn nat_literal_mixed_with_succ_is_rejected() {
 
 #[test]
 fn constant_atoms_fold_into_the_packed_run() {
-    // A constant written as a term denotes the same packed value as the escaped spelling: `fold_bin_constants` rejoins it to the neighbouring run, so the literal stays one `Intrinsic::Bin` rather than an append onto one. Conversion equates the two spellings either way — `core::spine` decodes a concrete appended atom as a length-1 literal run — so this pins the compaction, not the meaning. (Names need not resolve: lowering precedes name resolution.)
-    assert_eq!(run(r"x[\48, 0x69]"), run(r"x[\48, \69]"));
-    assert_eq!(run(r"b[\1, false]"), run(r"b[\1, \0]"));
-    assert!(!format!("{:?}", run(r"x[\48, 0x69]")).contains("BinAppend"));
+    // A constant atom folds into the neighbouring run whether it is spelled as a numeral or as a `true`/`false` literal, so the literal stays one `Intrinsic::Bin` rather than an append onto one. Conversion equates the spellings either way — `core::spine` decodes a concrete appended atom as a length-1 literal run — so this pins the compaction, not the meaning. (Names need not resolve: lowering precedes name resolution.)
+    assert_eq!(run(r"x[0x48, 0x69]"), run(r"x[72, 105]"));
+    assert_eq!(run(r"b[1, false]"), run(r"b[1, 0]"));
+    assert!(!format!("{:?}", run(r"x[0x48, 0x69]")).contains("BinAppend"));
 
     // A symbolic atom cannot fold, and keeps the append the fold exists to avoid.
-    assert!(format!("{:?}", run(r"x[\48, b]")).contains("BinAppend"));
+    assert!(format!("{:?}", run(r"x[0x48, b]")).contains("BinAppend"));
 
-    // Past `Byte` range, or carrying a written sign, an entry stays an atom — elaboration reports it against the expected element type instead of the fold silently truncating it.
+    // Past `Byte` range — or past a bit, or carrying a written sign — an entry stays an atom: elaboration reports it against the expected element type instead of the fold silently truncating it.
     assert!(format!("{:?}", run(r"x[300]")).contains("BinAppend"));
     assert!(format!("{:?}", run(r"x[+1]")).contains("BinAppend"));
+    assert!(format!("{:?}", run(r"b[2]")).contains("BinAppend"));
 }
 
 #[test]
@@ -2199,11 +2200,11 @@ fn a_lone_non_sequence_spread_keeps_its_concat_wrapper() {
     // `[..true]` once collapsed to the bare operand: the literal lowered to `true` and typechecked as `Bool`, never having been a list at all. Only the family the literal itself builds may collapse; anything else keeps its `ListConcat`/`BinConcat` wrapper so elaboration checks the spread against the sequence type — grain included, since a bits value spread into a bytes literal is not a bytes value. (Names need not resolve: lowering precedes name resolution.)
     assert!(format!("{:?}", run("[..true]")).contains("ListConcat"));
     assert!(format!("{:?}", run(r"x[..true]")).contains("BinConcat"));
-    assert!(format!("{:?}", run(r"x[..b[\1]]")).contains("BinConcat"));
+    assert!(format!("{:?}", run(r"x[..b[1]]")).contains("BinConcat"));
 
     // A lone sequence-shaped spread still collapses to the value it already is.
     assert_eq!(run("[..[1, 2]]"), run("[1, 2]"));
-    assert!(!format!("{:?}", run(r"x[..x[\48]]")).contains("BinConcat"));
+    assert!(!format!("{:?}", run(r"x[..x[0x48]]")).contains("BinConcat"));
 }
 
 #[test]
@@ -2256,7 +2257,7 @@ fn foreign_declaration_call_lowers() {
     // Declaring and calling a foreign function lowers end to end (`run` panics on failure) — the `Intrinsic::Foreign` body `foreign_signature` builds is well typed against the same wire-typed signature the call site checks against.
     let _ = run(r#"
         foreign frobnicate : (Nat, Bytes) -> Nat;
-        frobnicate(5, x[\00, \01])
+        frobnicate(5, x[0x00, 0x01])
     "#);
 }
 

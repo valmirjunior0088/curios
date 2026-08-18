@@ -4,6 +4,13 @@ use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Eql, Show};
 pub let get(b: Bytes, i: Nat) -> Option(Byte) =
     match i < len(b) | true => Option/some(at(b, i)) | false => Option/none() end;
 
+-- Minimal big-endian bytes of `n` — empty for zero, no leading zero otherwise — so distinct naturals encode to distinct sequences, and the result serves as a map key under `Key(Bytes)`'s identity witness with no proof obligation of its own. The dividing recursion is `Nat/to_str`'s shape at base 256, and `of_nat`'s bound needs no refinement here: the reducer knows `n % 256` by its remainder bound, so the comparison decides definitionally and the proof is written nowhere.
+pub rec of_nat(n: Nat) -> Bytes =
+    match n == 0
+    | true => x[]
+    | false => x[..of_nat(n / 256), Byte/of_nat(n % 256)]
+    end;
+
 pub let flatten(parts: List(Bytes)) -> Bytes =
     List/fold(parts, x[], (b, acc) => x[..acc, ..b]);
 

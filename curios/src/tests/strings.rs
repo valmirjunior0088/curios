@@ -80,7 +80,7 @@ fn utf8_slice_proof_aligns_with_byte_walk() {
                     end
                 end;
             go(d);
-        let _ = Handle/write(Handle/stdout, x[\6F, \6B])!;
+        let _ = Handle/write(Handle/stdout, x[0x6F, 0x6B])!;
         /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"ok");
@@ -115,7 +115,7 @@ fn long_str_literal_compiles_on_the_default_test_stack() {
 fn str_of_bytes_accepts_multibyte_utf8() {
     let source = r#"
         use /std/{Str, Handle};
-        match Str/of_bytes(x[\c3, \a9]) : (_) => /std/Io({})
+        match Str/of_bytes(x[0xc3, 0xa9]) : (_) => /std/Io({})
         | some(s) => /std/print(s)
         | none() => /std/print("bad")
         end
@@ -129,7 +129,7 @@ fn str_of_bytes_accepts_multibyte_utf8() {
 fn str_of_bytes_rejects_invalid_utf8() {
     let source = r#"
         use /std/{Str, Handle};
-        match Str/of_bytes(x[\ff]) : (_) => /std/Io({})
+        match Str/of_bytes(x[0xff]) : (_) => /std/Io({})
         | some(s) => /std/print(s)
         | none() => /std/print("rejected")
         end
@@ -143,7 +143,7 @@ fn str_of_bytes_rejects_invalid_utf8() {
 fn str_of_bytes_rejects_truncated_multibyte() {
     let source = r#"
         use /std/{Str, Handle};
-        match Str/of_bytes(x[\c3]) : (_) => /std/Io({})
+        match Str/of_bytes(x[0xc3]) : (_) => /std/Io({})
         | some(s) => /std/print(s)
         | none() => /std/print("rejected")
         end
@@ -170,7 +170,7 @@ fn utf8_decode_lemmas_type_check() {
 fn str_get_indexes_codepoints_of_every_width() {
     let source = r#"
         use /std/{Str, Char, Nat, Handle, Option};
-        match Str/of_bytes(x[\61, \e2, \82, \ac, \f0, \9f, \98, \80]) : (_) => /std/Io({})
+        match Str/of_bytes(x[0x61, 0xe2, 0x82, 0xac, 0xf0, 0x9f, 0x98, 0x80]) : (_) => /std/Io({})
         | some(s) =>
             /std/print(Str/flatten([
                 Nat/to_str(Str/len(s)), ",",
@@ -190,7 +190,7 @@ fn str_get_indexes_codepoints_of_every_width() {
 fn str_at_reads_codepoints_with_the_proof() {
     let source = r#"
         use /std/{Str, Char, Nat, Handle, Option};
-        match Str/of_bytes(x[\61, \e2, \82, \ac, \f0, \9f, \98, \80]) : (_) => /std/Io({})
+        match Str/of_bytes(x[0x61, 0xe2, 0x82, 0xac, 0xf0, 0x9f, 0x98, 0x80]) : (_) => /std/Io({})
         | some(s) =>
             let out =
                 let r0 = Nat/Lt/try(0, Str/len(s));
@@ -220,7 +220,7 @@ fn str_at_reads_codepoints_with_the_proof() {
 fn str_slice_cuts_on_codepoint_boundaries() {
     let source = r#"
         use /std/{Str, Handle};
-        match Str/of_bytes(x[\61, \e2, \82, \ac, \f0, \9f, \98, \80]) : (_) => /std/Io({})
+        match Str/of_bytes(x[0x61, 0xe2, 0x82, 0xac, 0xf0, 0x9f, 0x98, 0x80]) : (_) => /std/Io({})
         | some(s) => /std/print(Str/slice(s, 1, 2))
         | none() => /std/print("bad")
         end
@@ -234,7 +234,7 @@ fn str_slice_cuts_on_codepoint_boundaries() {
 fn str_slice_spans_every_codepoint_width() {
     let source = r#"
         use /std/{Str, Handle};
-        match Str/of_bytes(x[\61, \c3, \a9, \e2, \82, \ac, \f0, \9f, \98, \80, \62]) : (_) => /std/Io({})
+        match Str/of_bytes(x[0x61, 0xc3, 0xa9, 0xe2, 0x82, 0xac, 0xf0, 0x9f, 0x98, 0x80, 0x62]) : (_) => /std/Io({})
         | some(s) => /std/print(Str/slice(s, 1, 4))
         | none() => /std/print("bad")
         end
@@ -251,7 +251,7 @@ fn str_slice_spans_every_codepoint_width() {
 fn str_trim_keeps_interior_multibyte() {
     let source = r#"
         use /std/{Str, Handle};
-        match Str/of_bytes(x[\20, \20, \63, \61, \66, \c3, \a9, \20, \20]) : (_) => /std/Io({})
+        match Str/of_bytes(x[0x20, 0x20, 0x63, 0x61, 0x66, 0xc3, 0xa9, 0x20, 0x20]) : (_) => /std/Io({})
         | some(s) => /std/print(Str/trim(s))
         | none() => /std/print("bad")
         end
@@ -265,7 +265,7 @@ fn str_trim_keeps_interior_multibyte() {
 fn str_trim_all_whitespace_is_empty() {
     let source = r#"
         use /std/{Str, Handle};
-        match Str/of_bytes(x[\20, \09, \20]) : (_) => /std/Io({})
+        match Str/of_bytes(x[0x20, 0x09, 0x20]) : (_) => /std/Io({})
         | some(s) => /std/print(Str/concat(Str/trim(s), "!"))
         | none() => /std/print("bad")
         end
@@ -350,8 +350,8 @@ fn str_rejects_every_invalid_utf8_shape() {
             | none() => true
             end;
         /std/print(Bool/to_str(List/fold([
-            x[\c0, \af], x[\e0, \80, \80], x[\ed, \a0, \80], x[\f4, \90, \80, \80],
-            x[\80], x[\c2], x[\e2, \82], x[\f0, \9f, \98]
+            x[0xc0, 0xaf], x[0xe0, 0x80, 0x80], x[0xed, 0xa0, 0x80], x[0xf4, 0x90, 0x80, 0x80],
+            x[0x80], x[0xc2], x[0xe2, 0x82], x[0xf0, 0x9f, 0x98]
         ], true, (bytes, ok) => ok && rejected(bytes))))
         "#;
 
@@ -538,7 +538,7 @@ fn utf8_concat_closed_holds_for_the_real_automaton() {
 
 #[test]
 fn utf8_of_bin_checker_decides_and_builds_derivations() {
-    // INCREMENT B of the Str migration: the `of_bin` decision procedure. It must both DECIDE validity at runtime and BUILD a real `Utf8` derivation in the `some` case. The native `Bytes` eliminator is a fold (its `ih` is the fold-of-tail with fixed parameters), but the checker threads a changing `Scan` state — so we fold `b` into a FUNCTION `(s) -> Option(Utf8(s, b))` (foldl-as-foldr convoy), letting each step receive its state from the caller. `of_bin_valid(b) = check(b)(lead)`. The runtime `decide` proves the automaton actually runs: "hi" (ASCII) is accepted, a lone `x[\80]` continuation byte is rejected — output "yesno".
+    // INCREMENT B of the Str migration: the `of_bin` decision procedure. It must both DECIDE validity at runtime and BUILD a real `Utf8` derivation in the `some` case. The native `Bytes` eliminator is a fold (its `ih` is the fold-of-tail with fixed parameters), but the checker threads a changing `Scan` state — so we fold `b` into a FUNCTION `(s) -> Option(Utf8(s, b))` (foldl-as-foldr convoy), letting each step receive its state from the caller. `of_bin_valid(b) = check(b)(lead)`. The runtime `decide` proves the automaton actually runs: "hi" (ASCII) is accepted, a lone `x[0x80]` continuation byte is rejected — output "yesno".
     let source = r#"
         use /std/{Handle, Str, Nat, Bytes, Bool, Option};
 
@@ -624,7 +624,7 @@ fn utf8_of_bin_checker_decides_and_builds_derivations() {
             | some(_) => Str/to_bytes("yes")
             | none() => Str/to_bytes("no")
             end;
-        let _ = Handle/write(Handle/stdout, x[..decide(x[\68, \69]), ..decide(x[\80])])!;
+        let _ = Handle/write(Handle/stdout, x[..decide(x[0x68, 0x69]), ..decide(x[0x80])])!;
         /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"yesno");

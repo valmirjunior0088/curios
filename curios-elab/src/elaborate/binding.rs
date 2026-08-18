@@ -199,6 +199,7 @@ pub(super) fn elaborate_num_lit(
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
     let nat_type: Term = Subterm::Intrinsic(Intrinsic::NatType).into();
+    let bool_type: Term = Subterm::Intrinsic(Intrinsic::BoolType).into();
     let byte_type: Term = Subterm::Intrinsic(Intrinsic::ByteType).into();
     let int_type: Term = Subterm::Intrinsic(Intrinsic::IntType).into();
     let flt_type: Term = Subterm::Intrinsic(Intrinsic::FltType).into();
@@ -236,6 +237,19 @@ pub(super) fn elaborate_num_lit(
                 });
             };
             (Intrinsic::Byte(value), byte_type)
+        }
+        // A bit is a `Bool` in this language — `Bits` is the packed carrier of `Bool` — so `0` and `1` realize where a `Bool` is expected, which is what lets a packed literal's constant atoms be spelled as numerals.
+        Subterm::Intrinsic(Intrinsic::BoolType) if !num_lit.negative => {
+            let value = match num_lit.magnitude.to_u8() {
+                Some(0) => false,
+                Some(1) => true,
+                _ => {
+                    return Err(Error::BoolLiteralOutOfRange {
+                        value: num_lit.magnitude.to_string(),
+                    });
+                }
+            };
+            (Intrinsic::Bool(value), bool_type)
         }
         Subterm::Intrinsic(Intrinsic::IntType) => {
             let magnitude = Integer::from(num_lit.magnitude.clone());

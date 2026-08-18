@@ -1675,27 +1675,29 @@ fn list_literal_spread_entries() {
 fn bin_literal_spread_segments() {
     let name = |n: &str| -> Term { Subterm::Name(Name::from([n.to_string()])).into() };
 
-    // Bytes coalesce into runs around the spread segments.
+    // Constant atoms are ordinary numeral terms around the spread segments: the surface keeps what was written, and lowering folds adjacent constants into packed runs.
     assert_eq!(
-        r"x[\00, ..xs, \01]".parse::<Term>().unwrap(),
+        r"x[0, ..xs, 1]".parse::<Term>().unwrap(),
         Subterm::Intrinsic(Intrinsic::Bin(
             Grain::X,
             vec![
-                BinSegment::Bytes(vec![0x00]),
+                BinSegment::Atom(num_lit(0, false, false)),
                 BinSegment::Spread(name("xs")),
-                BinSegment::Bytes(vec![0x01]),
+                BinSegment::Atom(num_lit(1, false, false)),
             ]
         ))
         .into()
     );
     assert_eq!(
-        r"x[\00, \01, ..x, \02, \03]".parse::<Term>().unwrap(),
+        r"x[0, 1, ..x, 2, 3]".parse::<Term>().unwrap(),
         Subterm::Intrinsic(Intrinsic::Bin(
             Grain::X,
             vec![
-                BinSegment::Bytes(vec![0x00, 0x01]),
+                BinSegment::Atom(num_lit(0, false, false)),
+                BinSegment::Atom(num_lit(1, false, false)),
                 BinSegment::Spread(name("x")),
-                BinSegment::Bytes(vec![0x02, 0x03]),
+                BinSegment::Atom(num_lit(2, false, false)),
+                BinSegment::Atom(num_lit(3, false, false)),
             ]
         ))
         .into()
@@ -1726,15 +1728,17 @@ fn bin_literal_spread_segments() {
     assert!(matches!(operand.as_subterm(), Subterm::Name(name) if name.is_abs()));
 
     // Commas delimit, so an operand that the tight grammar could only take parenthesized — an infix chain — is now written bare.
-    let term = r"x[..x + y, \01]".parse::<Term>().unwrap();
+    let term = r"x[..x + y, 0x01]".parse::<Term>().unwrap();
     let Subterm::Intrinsic(Intrinsic::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
     assert!(
         matches!(&segments[0], BinSegment::Spread(operand) if matches!(operand.as_subterm(), Subterm::Infix(_)))
     );
-    assert!(matches!(&segments[1], BinSegment::Bytes(bytes) if bytes == &vec![0x01]));
-    let term = r"x[..read()!, \01]".parse::<Term>().unwrap();
+    assert!(
+        matches!(&segments[1], BinSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::NumLit(_)))
+    );
+    let term = r"x[..read()!, 0x01]".parse::<Term>().unwrap();
     let Subterm::Intrinsic(Intrinsic::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
@@ -1754,21 +1758,31 @@ fn bin_literal_spread_segments() {
 
     // Past the `[` the literal lexes like any other bracketed list: interior whitespace is invisible and one trailing comma is admitted.
     assert_eq!(
-        r"x[ \00 , ..xs , \01 ]".parse::<Term>().unwrap(),
-        r"x[\00, ..xs, \01]".parse::<Term>().unwrap()
+        r"x[ 0x00 , ..xs , 0x01 ]".parse::<Term>().unwrap(),
+        r"x[0x00, ..xs, 0x01]".parse::<Term>().unwrap()
     );
     assert_eq!(
-        r"x[\00,]".parse::<Term>().unwrap(),
-        r"x[\00]".parse::<Term>().unwrap()
+        r"x[0x00,]".parse::<Term>().unwrap(),
+        r"x[0x00]".parse::<Term>().unwrap()
     );
 
     // Only the prefix-to-bracket junction is tight. Spaced, `b` is an ordinary binder followed by a list (leaving trailing junk here), and an identifier merely ending in the grain letter never starts a literal.
-    assert!(r"b [\1]".parse::<Term>().is_err());
-    assert!(r"nb[\1]".parse::<Term>().is_err());
+    assert!(r"b [1]".parse::<Term>().is_err());
+    assert!(r"nb[1]".parse::<Term>().is_err());
 
-    // The tight spelling is gone rather than deprecated.
-    for tight in [r"x\00", r"b\1", r"x\", r"b\", r"x\..xs", r"b\.h\..t"] {
-        assert!(tight.parse::<Term>().is_err());
+    // The tight spelling and the escaped atom are both gone rather than deprecated.
+    for gone in [
+        r"x\00",
+        r"b\1",
+        r"x\",
+        r"b\",
+        r"x\..xs",
+        r"b\.h\..t",
+        r"x[\00]",
+        r"b[\1]",
+        r"x[\48, 0x69]",
+    ] {
+        assert!(gone.parse::<Term>().is_err());
     }
 }
 
@@ -1776,27 +1790,27 @@ fn bin_literal_spread_segments() {
 fn bin_literal_atom_segments() {
     let name = |n: &str| -> Term { Subterm::Name(Name::from([n.to_string()])).into() };
 
-    // A bare term entry splices one generator between literal runs, in either grain.
+    // A bare term entry splices one generator; constant and non-constant atoms alike stay entries, in either grain.
     assert_eq!(
-        r"x[\48, b, \00]".parse::<Term>().unwrap(),
+        r"x[72, b, 0]".parse::<Term>().unwrap(),
         Subterm::Intrinsic(Intrinsic::Bin(
             Grain::X,
             vec![
-                BinSegment::Bytes(vec![0x48]),
+                BinSegment::Atom(num_lit(72, false, false)),
                 BinSegment::Atom(name("b")),
-                BinSegment::Bytes(vec![0x00]),
+                BinSegment::Atom(num_lit(0, false, false)),
             ]
         ))
         .into()
     );
     assert_eq!(
-        r"b[\1, flag, \0]".parse::<Term>().unwrap(),
+        r"b[1, flag, 0]".parse::<Term>().unwrap(),
         Subterm::Intrinsic(Intrinsic::Bin(
             Grain::B,
             vec![
-                BinSegment::Bytes(vec![1]),
+                BinSegment::Atom(num_lit(1, false, false)),
                 BinSegment::Atom(name("flag")),
-                BinSegment::Bytes(vec![0]),
+                BinSegment::Atom(num_lit(0, false, false)),
             ]
         ))
         .into()
@@ -1817,15 +1831,17 @@ fn bin_literal_atom_segments() {
     );
 
     // An atom operand is an ordinary term, exactly as a spread operand is.
-    let term = r"x[hdr.byte, \01]".parse::<Term>().unwrap();
+    let term = r"x[hdr.byte, 0x01]".parse::<Term>().unwrap();
     let Subterm::Intrinsic(Intrinsic::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
     assert!(
         matches!(&segments[0], BinSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::Proj(_)))
     );
-    assert!(matches!(&segments[1], BinSegment::Bytes(bytes) if bytes == &vec![0x01]));
-    let term = r"x[f( x , y ), \01]".parse::<Term>().unwrap();
+    assert!(
+        matches!(&segments[1], BinSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::NumLit(_)))
+    );
+    let term = r"x[f( x , y ), 0x01]".parse::<Term>().unwrap();
     let Subterm::Intrinsic(Intrinsic::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
@@ -1833,44 +1849,50 @@ fn bin_literal_atom_segments() {
         matches!(&segments[0], BinSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::Apply(_)))
     );
 
-    // The escape is the only constant spelling the parser recognises. A numeric element stays an `Atom` here — the surface keeps what was written, and `into_core` folds a constant one back into the run — so the two spellings stay distinguishable in the text IR.
-    let term = r"x[\48, 0x69]".parse::<Term>().unwrap();
+    // A numeral is the only constant spelling, and it stays an `Atom` here: the surface keeps what was written — radix included — and `into_core` folds constants into packed runs.
+    let term = r"x[0x48, 0x69]".parse::<Term>().unwrap();
     let Subterm::Intrinsic(Intrinsic::Bin(Grain::X, segments)) = term.as_subterm() else {
         panic!("expected a Bin literal");
     };
-    assert!(matches!(&segments[0], BinSegment::Bytes(bytes) if bytes == &vec![0x48]));
-    assert!(matches!(&segments[1], BinSegment::Atom(_)));
+    assert!(
+        matches!(&segments[0], BinSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::NumLit(_)))
+    );
+    assert!(
+        matches!(&segments[1], BinSegment::Atom(operand) if matches!(operand.as_subterm(), Subterm::NumLit(_)))
+    );
 
-    // `\` begins an atom and nothing else, so a malformed one is an error rather than a backtrack into the term case.
-    for malformed in [r"x[\]", r"x[\0]", r"x[\000]", r"b[\2]", r"b[\00]"] {
+    // `\` spells nothing anymore — in an atom position or anywhere else.
+    for malformed in [
+        r"x[\]", r"x[\0]", r"x[\000]", r"b[\2]", r"b[\00]", r"x[\48]", r"b[\1]",
+    ] {
         assert!(malformed.parse::<Term>().is_err());
     }
 }
 
 #[test]
 fn list_bits_and_bytes_spreads_round_trip() {
-    // String equality pins the printer's canonical bracketed form for all three carriers, including their distinct empty literals. A coalesced run prints one escaped atom per entry, and a numeric element prints back as written rather than as an escape. Operands print in the ordinary term style — projection and bang heads bare, parenthesized only where the grammar demands it.
+    // String equality pins the printer's canonical bracketed form for all three carriers, including their distinct empty literals. A constant atom prints back as a numeral in its written radix, in the numeral printer's canonical width and case. Operands print in the ordinary term style — projection and bang heads bare, parenthesized only where the grammar demands it.
     for source in [
         "[1, ..xs, 2]",
         "[..xs]",
-        r"x[\00, ..xs, \01]",
+        "x[0x0, ..xs, 0x1]",
         "x[..hdr.bytes]",
         r"x[../std/x]",
         r"x[..f(x)]",
         "x[..Io/read!.bytes]",
         r"x[..x + y]",
         "x[]",
-        r"b[\0, ..xs, \1]",
+        "b[0, ..xs, 1]",
         r"b[..bits]",
         "b[]",
-        r"x[\48, b, \00]",
+        "x[0x48, b, 0x0]",
         "x[b]",
         r"x[..acc, b]",
         "x[hdr.byte]",
         "x[pick(f, a, b)]",
-        r"b[\1, flag, \0]",
+        "b[1, flag, 0]",
         "b[h, ..t]",
-        r"x[\48, 0x69]",
+        "x[0x48, 0x69]",
     ] {
         assert_eq!(source.parse::<Term>().unwrap().to_string(), source);
     }

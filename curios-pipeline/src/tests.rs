@@ -13,10 +13,9 @@ use {
 
 #[test]
 fn entrypoint_type_is_used_as_expected_type() {
-    let entrypoint = "0"
-        .parse::<Entrypoint>()
-        .unwrap()
-        .with_type("/std/Bool".parse().unwrap());
+    // A `Str` literal, because a numeral no longer serves: `0` realizes at an expected `Bool` since numerals became the packed literals' constant-atom spelling, so the mismatch needs a shape no expectation can absorb.
+    let entrypoint =
+        r#""zero""#.parse::<Entrypoint>().unwrap().with_type("/std/Bool".parse().unwrap());
 
     let error = compile_with_prelude(
         DEFAULT_STEP_BUDGET,
@@ -149,7 +148,7 @@ fn a_metavariable_blocked_match_comparison_parks_until_the_index_lands() {
 
 #[test]
 fn a_packed_literal_decomposes_against_its_folded_spine() {
-    // The packed-literal view's acceptance shape, distilled from `BigNat/succ.crs`: `raw(b[])` folds to the literal `b[\1]`, so recovering the injectivity lemma's implicits needs `append(b[], ?h) ≡ b[\1]` and the concat suffix against the same literal — the length-directed decomposition, since no shape congruence relates `Bin` to `BinAppend`/`BinConcat`.
+    // The packed-literal view's acceptance shape, distilled from `BigNat/succ.crs`: `raw(b[])` folds to the literal `b[1]`, so recovering the injectivity lemma's implicits needs `append(b[], ?h) ≡ b[1]` and the concat suffix against the same literal — the length-directed decomposition, since no shape congruence relates `Bin` to `BinAppend`/`BinConcat`.
     let source = r#"
         use /std/{Bool, Bits, Eq, False, True, Io};
         use /std/Bool/{false_neq_true};
@@ -168,8 +167,8 @@ fn a_packed_literal_decomposes_against_its_folded_spine() {
 
         rec raw(x: Bits) -> Bits =
             match x
-            | b[] => b[\1]
-            | b[h, ..t] => match h | true => b[\0, ..raw(t)] | false => b[\1, ..t] end
+            | b[] => b[1]
+            | b[h, ..t] => match h | true => b[0, ..raw(t)] | false => b[1, ..t] end
             end;
 
         let probe(zt: Bits, p: Eq(raw(b[]), raw(b[true, ..zt]))) -> False =
@@ -276,7 +275,7 @@ fn foreign_declaration_produces_a_wasm_import() {
     let module = compile(
         r#"
             foreign frobnicate : (Nat, Bytes) -> Nat;
-            let n = frobnicate(5, x[\00, \01])!;
+            let n = frobnicate(5, x[0x00, 0x01])!;
             /std/print(/std/Nat/to_str(n))
         "#,
         None,
@@ -299,7 +298,7 @@ fn sys_and_foreign_calls_import_under_separate_namespaces() {
     let module = compile(
         r#"
             foreign frobnicate : (Nat) -> Nat;
-            let _ = /std/Handle/write(/std/Handle/stdout, x[\00])!;
+            let _ = /std/Handle/write(/std/Handle/stdout, x[0x00])!;
             let n = frobnicate(5)!;
             /std/print(/std/Nat/to_str(n))
         "#,

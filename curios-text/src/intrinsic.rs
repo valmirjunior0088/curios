@@ -14,9 +14,7 @@ pub enum ListEntry {
 /// One entry of a `Bytes` literal `x[\00, byte, ..bytes, \01]` — a run of escaped literal bytes, a term contributing one atom, or a `..`-spread whose term contributes a whole `Bytes` run. Entries are comma-delimited, so an atom or spread operand is an arbitrary term.
 #[derive(Debug, Clone, PartialEq)]
 pub enum BinSegment {
-    /// A run of literal bytes, written `\XX` (or `\0`/`\1` under `Grain::B`). Invariant (maintained by the parser): never empty, and never adjacent to another `Bytes` run.
-    Bytes(Vec<u8>),
-    /// A single atom given by a term: a `Bool` under `Grain::B`, a `Byte` under `Grain::X`. The free monoid's generator, where [`BinSegment::Spread`] carries a whole element — a literal run is this same generator at values the parser already knows, which is why lowering folds a constant term back into the neighbouring run.
+    /// A single atom given by a term: a `Bool` under `Grain::B`, a `Byte` under `Grain::X`. The free monoid's generator, where [`BinSegment::Spread`] carries a whole element. A constant atom is an ordinary numeral term — `Byte` and `Bool` both realize numerals — and lowering folds adjacent constant atoms into one packed run, so the AST needs no constant-run variant of its own.
     Atom(Term),
     Spread(Term),
 }

@@ -78,6 +78,9 @@ pub enum Error {
     ByteLiteralOutOfRange {
         value: String,
     },
+    BoolLiteralOutOfRange {
+        value: String,
+    },
     FltLiteralOutOfRange {
         value: String,
     },
@@ -1839,6 +1842,9 @@ impl fmt::Display for Displayed<'_> {
             }
             Error::ByteLiteralOutOfRange { value } => {
                 write!(f, "Byte literal {value} is out of range (expected 0..=255)")
+            }
+            Error::BoolLiteralOutOfRange { value } => {
+                write!(f, "Bool literal {value} is out of range (expected 0..=1)")
             }
             Error::FltLiteralOutOfRange { value } => {
                 write!(f, "Flt literal {value} overflows the finite range")

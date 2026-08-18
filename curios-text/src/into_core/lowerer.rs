@@ -893,6 +893,16 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     fn bin_constant_atom(grain: Grain, term: &Term) -> Option<u8> {
         match (grain, term.as_subterm()) {
             (Grain::B, Subterm::Intrinsic(Intrinsic::Bool(bit))) => Some(u8::from(*bit)),
+            // Only `0` and `1` are bits; anything else stays an atom term, so elaboration owns the range refusal exactly as it does for an out-of-range byte below.
+            (
+                Grain::B,
+                Subterm::NumLit(NumLit {
+                    magnitude, signed, ..
+                }),
+            ) => match signed {
+                true => None,
+                false => magnitude.to_u8().filter(|bit| *bit <= 1),
+            },
             (Grain::X, Subterm::Intrinsic(Intrinsic::Byte(byte))) => Some(*byte),
             (
                 Grain::X,
@@ -907,75 +917,37 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
-    /// Constant atoms rejoined to their neighbouring runs, so [`Self::lower_bin_literal`]'s spread-free fast path sees `x[\48, 0x69]` as the one packed value it is. The merge itself mirrors `parse::coalesce_bin_segments`, which does the same for the atoms the parser already knew were constant.
-    fn fold_bin_constants(grain: Grain, segments: &[BinSegment]) -> Vec<BinSegment> {
-        let mut folded = Vec::new();
-
-        for segment in segments {
-            let run = match segment {
-                BinSegment::Bytes(run) => Some(run.clone()),
-                BinSegment::Atom(term) => {
-                    Self::bin_constant_atom(grain, term).map(|atom| vec![atom])
-                }
-                BinSegment::Spread(_) => None,
-            };
-
-            match run {
-                Some(run) => match folded.last_mut() {
-                    Some(BinSegment::Bytes(previous)) => previous.extend(run),
-                    _ => folded.push(BinSegment::Bytes(run)),
-                },
-                None => folded.push(segment.clone()),
-            }
-        }
-
-        folded
-    }
-
-    /// The `Bits`/`Bytes` sibling of [`Self::lower_list_literal`]: a spread-free literal lowers to one packed value, and atom and spread segments splice into an n-ary `BinConcat` (the shared internal intrinsic has no element-type slot).
+    /// The `Bits`/`Bytes` sibling of [`Self::lower_list_literal`]: a constant literal lowers to one packed value, and atom and spread segments splice into an n-ary `BinConcat` (the shared internal intrinsic has no element-type slot). Adjacent constant atoms — the values [`Self::bin_constant_atom`] recognizes — fold into packed runs as they are met, so `x[0x48, 0x69]` is the one packed value it is rather than a chain of appends.
     ///
-    /// An atom is the free monoid's generator at a value the parser cannot know, so it lowers to a `BinAppend` onto whatever precedes it, with no carve-out: `x[\48, b]` is one append rather than a two-operand concatenation, `x[..acc, b]` is the append it spells out, and adjacent atoms chain. Leading a literal it appends onto the empty packed value — the singleton spelling `curios_elab`'s packed-match refinement builds for a cons scrutinee, so `b[h, ..t]` meets a refined motive without unfolding anything.
+    /// A non-constant atom is the free monoid's generator at a value lowering cannot know, so it lowers to a `BinAppend` onto whatever precedes it, with no carve-out: `x[0x48, b]` is one append rather than a two-operand concatenation, `x[..acc, b]` is the append it spells out, and adjacent atoms chain. Leading a literal it appends onto the empty packed value — the singleton spelling `curios_elab`'s packed-match refinement builds for a cons scrutinee, so `b[h, ..t]` meets a refined motive without unfolding anything.
     pub(super) fn lower_bin_literal(
         grain: Grain,
         segments: &[BinSegment],
         mut lower: impl FnMut(&Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Intrinsic, Error> {
-        let segments = Self::fold_bin_constants(grain, segments);
-
-        if segments
-            .iter()
-            .all(|segment| matches!(segment, BinSegment::Bytes(_)))
-        {
-            // Zero or one run in practice (the parser coalesces); flattening keeps this robust for hand-built literals too.
-            let atoms: Vec<u8> = segments
-                .iter()
-                .flat_map(|segment| match segment {
-                    BinSegment::Bytes(run) => run.iter().copied(),
-                    BinSegment::Atom(_) | BinSegment::Spread(_) => {
-                        unreachable!("all segments are byte runs")
-                    }
-                })
-                .collect();
-
-            let value = match grain {
-                Grain::B => PackedBin::from_bits(atoms.into_iter().map(|atom| atom != 0)),
-                Grain::X => PackedBin::from_bytes(atoms),
-            };
-            return Ok(curios_core::Intrinsic::Bin(grain, value));
-        }
-
-        let packed = |run: &[u8]| match grain {
-            Grain::B => PackedBin::from_bits(run.iter().map(|atom| *atom != 0)),
-            Grain::X => PackedBin::from_bytes(run.to_vec()),
+        let packed = |run: Vec<u8>| match grain {
+            Grain::B => PackedBin::from_bits(run.into_iter().map(|atom| atom != 0)),
+            Grain::X => PackedBin::from_bytes(run),
+        };
+        let flush = |operands: &mut Vec<curios_core::Term>, run: &mut Vec<u8>| {
+            if !run.is_empty() {
+                let value = packed(std::mem::take(run));
+                operands.push(curios_core::Term::intrinsic(curios_core::Intrinsic::Bin(
+                    grain, value,
+                )));
+            }
         };
 
         let mut operands: Vec<curios_core::Term> = Vec::new();
-        for segment in &segments {
+        let mut run: Vec<u8> = Vec::new();
+        for segment in segments {
             match segment {
-                BinSegment::Bytes(run) => operands.push(curios_core::Term::intrinsic(
-                    curios_core::Intrinsic::Bin(grain, packed(run)),
-                )),
                 BinSegment::Atom(term) => {
+                    if let Some(atom) = Self::bin_constant_atom(grain, term) {
+                        run.push(atom);
+                        continue;
+                    }
+                    flush(&mut operands, &mut run);
                     let base = operands.pop().unwrap_or_else(|| {
                         curios_core::Term::intrinsic(curios_core::Intrinsic::Bin(
                             grain,
@@ -987,9 +959,18 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                         curios_core::Intrinsic::bin_append(grain, base, atom),
                     ));
                 }
-                BinSegment::Spread(term) => operands.push(lower(term)?),
+                BinSegment::Spread(term) => {
+                    flush(&mut operands, &mut run);
+                    operands.push(lower(term)?);
+                }
             }
         }
+
+        // A literal of constants alone — the empty literal included — is the packed value itself.
+        if operands.is_empty() {
+            return Ok(curios_core::Intrinsic::Bin(grain, packed(run)));
+        }
+        flush(&mut operands, &mut run);
 
         // A lone packed-shaped operand at this literal's own grain is the value itself; wrapping it in a concatenation only leaves reduction something to normalise away. Only that family may collapse: any other lone operand keeps its wrapper, which is what makes elaboration check a spread (`x[..b]`) against the packed type instead of adopting the operand's own — `x[..true]` once collapsed to `true`, and a bits value spread into a bytes literal adopted the wrong grain.
         if operands.len() == 1
