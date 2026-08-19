@@ -63,7 +63,13 @@ fn an_unsatisfiable_universe_context_is_refused() {
     };
 
     assert!(
-        !recheck_module_verdicts(&module, 1_000_000, &Globals::default()).is_empty(),
+        !recheck_module_verdicts(
+            &module,
+            1_000_000,
+            &Globals::default(),
+            crate::fixture::SYNTAX
+        )
+        .is_empty(),
         "the kernel assumed a contradiction as a hypothesis without noticing",
     );
 }
@@ -107,7 +113,13 @@ fn a_constraint_naming_an_undeclared_parameter_is_refused() {
     };
 
     assert!(
-        !recheck_module_verdicts(&module, 1_000_000, &Globals::default()).is_empty(),
+        !recheck_module_verdicts(
+            &module,
+            1_000_000,
+            &Globals::default(),
+            crate::fixture::SYNTAX
+        )
+        .is_empty(),
         "the kernel assumed a constraint about a parameter the declaration does not have",
     );
 }
@@ -119,7 +131,12 @@ fn a_constraint_naming_an_undeclared_parameter_is_refused() {
 /// While the hole was open `recheck_module_verdicts` returned zero refusals for exactly this module, with the evaluation memos on and off, and `check_induct_decl` accepted the declaration. It never compiled and never ran: `curios-elab`'s `singleton_eliminable` refused `unbox` at every surface spelling, which is what kept the certifier's copy of the rule unobserved. The fixtures in `crate::kernel::infer::eliminate::tests` pin the predicate; this pins the consequence, and it is the reason the predicate's two call sites are worth guarding separately.
 #[test]
 fn a_derivation_through_a_type_carrying_proposition_is_refused() {
-    let verdicts = recheck_module_verdicts(&forgery(), 1_000_000, &Globals::default());
+    let verdicts = recheck_module_verdicts(
+        &forgery(),
+        1_000_000,
+        &Globals::default(),
+        crate::fixture::SYNTAX,
+    );
 
     assert!(
         verdicts
@@ -449,8 +466,12 @@ fn a_recursive_member_is_certified_only_with_its_group() {
             "expected",
         ),
     ] {
-        let verdicts =
-            recheck_module_verdicts(&selection_module(body), 1_000_000, &Globals::default());
+        let verdicts = recheck_module_verdicts(
+            &selection_module(body),
+            1_000_000,
+            &Globals::default(),
+            crate::fixture::SYNTAX,
+        );
 
         assert!(
             verdicts
@@ -504,7 +525,12 @@ fn a_member_of_a_legal_group_is_still_accepted() {
     };
 
     assert_eq!(
-        recheck_module_verdicts(&module, 1_000_000, &Globals::default()),
+        recheck_module_verdicts(
+            &module,
+            1_000_000,
+            &Globals::default(),
+            crate::fixture::SYNTAX
+        ),
         Vec::new(),
         "general recursion at a relevant type is legal however it is spelled",
     );
@@ -561,6 +587,7 @@ fn a_registry_index_target_is_checked_rather_than_believed() {
         &indexed_module(Term::metavar(7_usize)),
         1_000_000,
         &Globals::default(),
+        crate::fixture::SYNTAX,
     );
 
     assert!(
@@ -577,7 +604,12 @@ fn a_registry_index_target_of_a_real_term_is_accepted() {
     let target = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
 
     assert_eq!(
-        recheck_module_verdicts(&indexed_module(target), 1_000_000, &Globals::default()),
+        recheck_module_verdicts(
+            &indexed_module(target),
+            1_000_000,
+            &Globals::default(),
+            crate::fixture::SYNTAX
+        ),
         Vec::new(),
         "the boundary pass refused a registry entry that carries nothing elaboration-only",
     );
@@ -641,7 +673,12 @@ fn a_level_holding_an_unsolved_universe_metavariable_is_refused() {
         ("a definition's declared type", level_definition(&residue)),
         ("a registry entry's result sort", level_registry(&residue)),
     ] {
-        let verdicts = recheck_module_verdicts(&module, 1_000_000, &Globals::default());
+        let verdicts = recheck_module_verdicts(
+            &module,
+            1_000_000,
+            &Globals::default(),
+            crate::fixture::SYNTAX,
+        );
 
         assert!(
             verdicts
@@ -662,7 +699,12 @@ fn a_ground_level_in_the_same_positions_is_accepted() {
         ("a registry entry's result sort", level_registry(&ground)),
     ] {
         assert_eq!(
-            recheck_module_verdicts(&module, 1_000_000, &Globals::default()),
+            recheck_module_verdicts(
+                &module,
+                1_000_000,
+                &Globals::default(),
+                crate::fixture::SYNTAX
+            ),
             Vec::new(),
             "{label}: the boundary pass refused a level that holds no residue",
         );
@@ -736,7 +778,12 @@ fn level_registry(level: &Level) -> Module {
 #[test]
 fn a_partial_proof_in_a_registry_index_target_is_refused() {
     let family = Global::Authored(Qualifier::from(["Indexed"]));
-    let verdicts = recheck_module_verdicts(&indexed_by_proof(true), 1_000_000, &Globals::default());
+    let verdicts = recheck_module_verdicts(
+        &indexed_by_proof(true),
+        1_000_000,
+        &Globals::default(),
+        crate::fixture::SYNTAX,
+    );
 
     assert!(
         verdicts.iter().any(|verdict| {
@@ -751,7 +798,12 @@ fn a_partial_proof_in_a_registry_index_target_is_refused() {
 #[test]
 fn a_real_proof_in_a_registry_index_target_is_accepted() {
     assert_eq!(
-        recheck_module_verdicts(&indexed_by_proof(false), 1_000_000, &Globals::default()),
+        recheck_module_verdicts(
+            &indexed_by_proof(false),
+            1_000_000,
+            &Globals::default(),
+            crate::fixture::SYNTAX
+        ),
         Vec::new(),
         "a constructor aimed at a genuine proof was refused",
     );
@@ -829,7 +881,12 @@ fn indexed_by_proof(diverging: bool) -> Module {
 /// The control is the same module with `Two` at `Type 0`, where the clash is genuine and the empty elimination must stay accepted — general vacuous elimination is how an indexed family rules its impossible cases out, and refusing it is how this hole would be shut with a brick.
 #[test]
 fn a_result_sort_that_only_reduces_to_a_sort_is_refused() {
-    let verdicts = recheck_module_verdicts(&aliased_sort_forgery(), 1_000_000, &Globals::default());
+    let verdicts = recheck_module_verdicts(
+        &aliased_sort_forgery(),
+        1_000_000,
+        &Globals::default(),
+        crate::fixture::SYNTAX,
+    );
 
     assert!(
         verdicts
@@ -841,8 +898,12 @@ fn a_result_sort_that_only_reduces_to_a_sort_is_refused() {
 
 #[test]
 fn a_vacuous_elimination_at_a_relevant_index_is_still_accepted() {
-    let verdicts =
-        recheck_module_verdicts(&relevant_index_control(), 1_000_000, &Globals::default());
+    let verdicts = recheck_module_verdicts(
+        &relevant_index_control(),
+        1_000_000,
+        &Globals::default(),
+        crate::fixture::SYNTAX,
+    );
 
     assert!(
         verdicts.is_empty(),
@@ -1035,6 +1096,7 @@ fn a_family_that_declares_one_tag_twice_is_refused() {
         &shadowed_constructor(["mk", "mk"]),
         1_000_000,
         &Globals::default(),
+        crate::fixture::SYNTAX,
     );
 
     assert!(
@@ -1051,6 +1113,7 @@ fn a_vacuous_elimination_over_two_distinct_tags_is_still_accepted() {
         &shadowed_constructor(["mk", "mk2"]),
         1_000_000,
         &Globals::default(),
+        crate::fixture::SYNTAX,
     );
 
     assert!(
@@ -1172,7 +1235,12 @@ fn a_level_naming_an_undeclared_universe_parameter_is_refused() {
             scheme_registry(&escaping, 0),
         ),
     ] {
-        let verdicts = recheck_module_verdicts(&module, 1_000_000, &Globals::default());
+        let verdicts = recheck_module_verdicts(
+            &module,
+            1_000_000,
+            &Globals::default(),
+            crate::fixture::SYNTAX,
+        );
 
         assert!(
             verdicts
@@ -1199,7 +1267,12 @@ fn a_level_naming_a_declared_universe_parameter_is_accepted() {
         ),
     ] {
         assert_eq!(
-            recheck_module_verdicts(&module, 1_000_000, &Globals::default()),
+            recheck_module_verdicts(
+                &module,
+                1_000_000,
+                &Globals::default(),
+                crate::fixture::SYNTAX
+            ),
             Vec::new(),
             "{label}: the boundary pass refused a parameter the declaration declares",
         );
@@ -1276,7 +1349,12 @@ fn scheme_registry(level: &Level, parameter_count: usize) -> Module {
 /// The control is [`a_universe_instance_of_the_declared_width_is_accepted`], the same occurrence supplying both levels. It is load-bearing: every occurrence of a universe-polymorphic declaration in the prelude carries an instance, so a width check that got the bound wrong would reject the standard library rather than this.
 #[test]
 fn a_universe_instance_narrower_than_its_scheme_is_refused() {
-    let verdicts = recheck_module_verdicts(&instance_of_width(1), 1_000_000, &Globals::default());
+    let verdicts = recheck_module_verdicts(
+        &instance_of_width(1),
+        1_000_000,
+        &Globals::default(),
+        crate::fixture::SYNTAX,
+    );
 
     assert!(
         verdicts
@@ -1290,7 +1368,12 @@ fn a_universe_instance_narrower_than_its_scheme_is_refused() {
 #[test]
 fn a_universe_instance_of_the_declared_width_is_accepted() {
     assert_eq!(
-        recheck_module_verdicts(&instance_of_width(2), 1_000_000, &Globals::default()),
+        recheck_module_verdicts(
+            &instance_of_width(2),
+            1_000_000,
+            &Globals::default(),
+            crate::fixture::SYNTAX
+        ),
         Vec::new(),
         "the boundary refused an occurrence that supplies exactly the levels its scheme declares",
     );
@@ -1365,6 +1448,7 @@ fn a_forged_foreign_row_cannot_inhabit_a_proposition() {
         &forged_foreign(&false_type, &false_name),
         1_000_000,
         &Globals::default(),
+        crate::fixture::SYNTAX,
     );
 
     assert!(
@@ -1387,7 +1471,8 @@ fn a_forged_foreign_row_still_inhabits_its_wire_type() {
                 &false_name
             ),
             1_000_000,
-            &Globals::default()
+            &Globals::default(),
+            crate::fixture::SYNTAX,
         ),
         Vec::new(),
         "the boundary refused a host call at the type its own wire signature denotes",
@@ -1451,7 +1536,8 @@ fn a_registry_and_its_type_former_may_declare_different_schemes() {
             recheck_module_verdicts(
                 &disagreeing_schemes(registry, definition),
                 1_000_000,
-                &Globals::default()
+                &Globals::default(),
+                crate::fixture::SYNTAX,
             ),
             Vec::new(),
             "{label}: the kernel refused a disagreement it never consults",
@@ -1509,7 +1595,12 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
         body: Some(Term::tuple(Vec::<Term>::new())),
     };
 
-    let verdicts = recheck_module_verdicts(&module, 1_000_000, &Globals::default());
+    let verdicts = recheck_module_verdicts(
+        &module,
+        1_000_000,
+        &Globals::default(),
+        crate::fixture::SYNTAX,
+    );
 
     assert!(
         verdicts
@@ -1584,8 +1675,12 @@ fn disagreeing_schemes(registry: usize, definition: usize) -> Module {
 /// The control is [`an_honest_motive_still_refuses_the_large_elimination`], the same module with the motive stating `Type` — where the motive is honest, the guard does fire, and the elimination is refused for the reason it should be. Together they pin that what was being skipped is the guard, and that closing the bypass did not close the guard itself.
 #[test]
 fn a_motive_that_misreports_its_sort_does_not_skip_the_large_elimination_guard() {
-    let verdicts =
-        recheck_module_verdicts(&lying_motive(Term::prop()), 1_000_000, &Globals::default());
+    let verdicts = recheck_module_verdicts(
+        &lying_motive(Term::prop()),
+        1_000_000,
+        &Globals::default(),
+        crate::fixture::SYNTAX,
+    );
 
     assert!(
         verdicts
@@ -1602,6 +1697,7 @@ fn an_honest_motive_still_refuses_the_large_elimination() {
         &lying_motive(Term::type_ground()),
         1_000_000,
         &Globals::default(),
+        crate::fixture::SYNTAX,
     );
 
     assert!(
@@ -1798,7 +1894,12 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
         body: Some(Term::tuple(Vec::<Term>::new())),
     };
 
-    let verdicts = recheck_module_verdicts(&module, 1_000_000, &Globals::default());
+    let verdicts = recheck_module_verdicts(
+        &module,
+        1_000_000,
+        &Globals::default(),
+        crate::fixture::SYNTAX,
+    );
 
     assert!(
         verdicts
@@ -1824,6 +1925,7 @@ fn an_occurrence_whose_arity_is_not_its_declarations_is_refused() {
             &occurrence_module(params, indices),
             1_000_000,
             &Globals::default(),
+            crate::fixture::SYNTAX,
         );
 
         assert!(
@@ -1844,7 +1946,12 @@ fn an_occurrence_at_its_declared_arity_is_accepted() {
     );
 
     assert_eq!(
-        recheck_module_verdicts(&module, 1_000_000, &Globals::default()),
+        recheck_module_verdicts(
+            &module,
+            1_000_000,
+            &Globals::default(),
+            crate::fixture::SYNTAX
+        ),
         Vec::new(),
         "the boundary refused an occurrence at exactly the arity its declaration states",
     );
@@ -1935,7 +2042,12 @@ fn occurrence_module(params: Vec<Term>, indices: Vec<Term>) -> Module {
 #[test]
 fn a_nominal_value_whose_arity_is_not_its_declarations_is_refused() {
     for (label, module) in nominal_value_cases() {
-        let verdicts = recheck_module_verdicts(&module, 1_000_000, &Globals::default());
+        let verdicts = recheck_module_verdicts(
+            &module,
+            1_000_000,
+            &Globals::default(),
+            crate::fixture::SYNTAX,
+        );
 
         assert!(
             verdicts
@@ -1955,7 +2067,8 @@ fn a_nominal_value_at_its_declared_arity_is_accepted() {
         recheck_module_verdicts(
             &struct_value_module(vec![nat.clone()]),
             1_000_000,
-            &Globals::default()
+            &Globals::default(),
+            crate::fixture::SYNTAX,
         ),
         Vec::new(),
         "a record literal at exactly its declared parameters was refused",
@@ -1964,7 +2077,8 @@ fn a_nominal_value_at_its_declared_arity_is_accepted() {
         recheck_module_verdicts(
             &variant_value_module(vec![nat]),
             1_000_000,
-            &Globals::default()
+            &Globals::default(),
+            crate::fixture::SYNTAX,
         ),
         Vec::new(),
         "a constructor application at exactly its declared parameters was refused",
@@ -2106,7 +2220,12 @@ fn variant_value_module(params: Vec<Term>) -> Module {
 #[test]
 fn a_count_a_term_carries_is_refused_rather_than_indexed_with() {
     for (label, module) in unsaturated_cases() {
-        let verdicts = recheck_module_verdicts(&module, 1_000_000, &Globals::default());
+        let verdicts = recheck_module_verdicts(
+            &module,
+            1_000_000,
+            &Globals::default(),
+            crate::fixture::SYNTAX,
+        );
 
         assert!(
             verdicts.iter().any(|verdict| matches!(
@@ -2175,7 +2294,12 @@ fn a_saturated_application_in_a_type_position_is_accepted() {
     };
 
     assert_eq!(
-        recheck_module_verdicts(&module, 1_000_000, &Globals::default()),
+        recheck_module_verdicts(
+            &module,
+            1_000_000,
+            &Globals::default(),
+            crate::fixture::SYNTAX
+        ),
         Vec::new(),
         "a saturated application in a type position was refused",
     );
@@ -2276,7 +2400,12 @@ fn a_binder_set_is_not_opened_at_a_count_the_term_supplied() {
     for (label, module) in unguarded_opener_cases() {
         // The demonstrated defect is the *abort*: `recheck_module_verdicts` is documented as walking to the end with each verdict independent of the others, and a panic makes that false.
         let verdicts = catch_unwind(AssertUnwindSafe(|| {
-            recheck_module_verdicts(&module, 1_000_000, &Globals::default())
+            recheck_module_verdicts(
+                &module,
+                1_000_000,
+                &Globals::default(),
+                crate::fixture::SYNTAX,
+            )
         }))
         .unwrap_or_else(|_| panic!("{label}: reduction aborted the walk instead of refusing"));
 
@@ -2293,7 +2422,12 @@ fn an_arm_matching_its_payload_still_reduces() {
     let module = arm_module(vec![(Plicity::Explicit, Free::local(996, Some("a")))]);
 
     assert_eq!(
-        recheck_module_verdicts(&module, 1_000_000, &Globals::default()),
+        recheck_module_verdicts(
+            &module,
+            1_000_000,
+            &Globals::default(),
+            crate::fixture::SYNTAX
+        ),
         Vec::new(),
         "an arm binding exactly its payload was refused",
     );
@@ -2426,8 +2560,12 @@ fn rec_apply_module() -> Module {
 /// The control is the same module with `()` in place of the exit, which must stay accepted — a rule refusing every `Prop`-typed constructor application would satisfy the assertion above and nothing else here would notice.
 #[test]
 fn an_exit_inside_a_proof_is_refused_with_no_definition_to_blame() {
-    let verdicts =
-        recheck_module_verdicts(&proof_carrying_unit(true), 1_000_000, &Globals::default());
+    let verdicts = recheck_module_verdicts(
+        &proof_carrying_unit(true),
+        1_000_000,
+        &Globals::default(),
+        crate::fixture::SYNTAX,
+    );
 
     assert!(
         verdicts.iter().any(|verdict| matches!(
@@ -2445,7 +2583,12 @@ fn an_exit_inside_a_proof_is_refused_with_no_definition_to_blame() {
 #[test]
 fn a_proof_carrying_the_unit_value_is_accepted() {
     assert_eq!(
-        recheck_module_verdicts(&proof_carrying_unit(false), 1_000_000, &Globals::default()),
+        recheck_module_verdicts(
+            &proof_carrying_unit(false),
+            1_000_000,
+            &Globals::default(),
+            crate::fixture::SYNTAX
+        ),
         Vec::new(),
         "an ordinary proof at a unit-carrying proposition was refused",
     );
@@ -2462,6 +2605,7 @@ fn a_totality_stamp_contradicted_only_by_the_closure_is_refused() {
         &stamp_trial_module(Totality::Total, false),
         1_000_000,
         &Globals::default(),
+        crate::fixture::SYNTAX,
     );
 
     assert!(
@@ -2487,6 +2631,7 @@ fn an_honest_stamp_on_a_definition_reaching_a_partial_one_is_accepted() {
             &stamp_trial_module(Totality::Partial, false),
             1_000_000,
             &Globals::default(),
+            crate::fixture::SYNTAX,
         ),
         Vec::new(),
         "an honestly stamped definition reaching a partial one was refused",
@@ -2502,6 +2647,7 @@ fn a_lying_totality_stamp_is_believed_when_carried_and_refused_when_judged() {
         &carried_proof_module(),
         1_000_000,
         &Globals::of(&stamp_trial_module(Totality::Total, false), 1_000),
+        crate::fixture::SYNTAX,
     );
     assert_eq!(
         carried,
@@ -2513,6 +2659,7 @@ fn a_lying_totality_stamp_is_believed_when_carried_and_refused_when_judged() {
         &stamp_trial_module(Totality::Total, true),
         1_000_000,
         &Globals::default(),
+        crate::fixture::SYNTAX,
     );
     assert!(
         judged.iter().any(|verdict| {
@@ -2742,12 +2889,27 @@ fn proof_carrying_unit(exiting: bool) -> Module {
 #[test]
 fn a_registry_plicity_vector_is_read_by_no_kernel_rule() {
     assert_eq!(
-        recheck_module_verdicts(&plicity_module(true, 1), 1_000_000, &Globals::default()),
-        recheck_module_verdicts(&plicity_module(false, 1), 1_000_000, &Globals::default()),
+        recheck_module_verdicts(
+            &plicity_module(true, 1),
+            1_000_000,
+            &Globals::default(),
+            crate::fixture::SYNTAX
+        ),
+        recheck_module_verdicts(
+            &plicity_module(false, 1),
+            1_000_000,
+            &Globals::default(),
+            crate::fixture::SYNTAX
+        ),
         "a plicity vector no kernel rule reads changed a verdict",
     );
     assert_eq!(
-        recheck_module_verdicts(&plicity_module(false, 1), 1_000_000, &Globals::default()),
+        recheck_module_verdicts(
+            &plicity_module(false, 1),
+            1_000_000,
+            &Globals::default(),
+            crate::fixture::SYNTAX
+        ),
         Vec::new(),
         "both sides must be accepted, or the equality above is two refusals agreeing",
     );
@@ -2757,8 +2919,13 @@ fn a_registry_plicity_vector_is_read_by_no_kernel_rule() {
 #[test]
 fn a_wrong_payload_count_is_still_refused_under_a_lying_plicity_vector() {
     assert!(
-        !recheck_module_verdicts(&plicity_module(false, 0), 1_000_000, &Globals::default())
-            .is_empty(),
+        !recheck_module_verdicts(
+            &plicity_module(false, 0),
+            1_000_000,
+            &Globals::default(),
+            crate::fixture::SYNTAX
+        )
+        .is_empty(),
         "the kernel accepted a constructor application at the wrong payload count",
     );
 }
@@ -2984,7 +3151,12 @@ fn index_forgery() -> Module {
 /// Its control is [`an_indexed_occurrence_at_a_well_typed_index_is_accepted`], which keeps the same family at an index that genuinely inhabits `Nat`: without it, refusing every indexed occurrence would pass this.
 #[test]
 fn a_nominal_occurrence_types_its_arguments() {
-    let verdicts = recheck_module_verdicts(&index_forgery(), 1_000_000, &Globals::default());
+    let verdicts = recheck_module_verdicts(
+        &index_forgery(),
+        1_000_000,
+        &Globals::default(),
+        crate::fixture::SYNTAX,
+    );
 
     assert!(
         !verdicts.is_empty(),
@@ -3032,7 +3204,12 @@ fn an_indexed_occurrence_at_a_well_typed_index_is_accepted() {
     };
 
     assert_eq!(
-        recheck_module_verdicts(&module, 1_000_000, &Globals::default()),
+        recheck_module_verdicts(
+            &module,
+            1_000_000,
+            &Globals::default(),
+            crate::fixture::SYNTAX
+        ),
         Vec::new()
     );
 }
@@ -3094,7 +3271,12 @@ fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
         body: Some(Term::intrinsic(Intrinsic::NatType)),
     };
 
-    let verdicts = recheck_module_verdicts(&module, 1_000_000, &Globals::default());
+    let verdicts = recheck_module_verdicts(
+        &module,
+        1_000_000,
+        &Globals::default(),
+        crate::fixture::SYNTAX,
+    );
 
     assert!(
         !verdicts.is_empty(),
@@ -3117,8 +3299,12 @@ fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
 /// The refusal is required to name `Wrap` and not merely to exist, because every later item in the derivation is built on the forged field and would mismatch for a downstream reason once anything at all went wrong. What has to be refused is the *declaration*, at the arm the motive lied about: a `Nat` at `Type 0` checked against the `Prop` the motive claims.
 #[test]
 fn a_proposition_may_not_carry_a_computed_relevant_field() {
-    let verdicts =
-        recheck_module_verdicts(&computed_field_forgery(), 1_000_000, &Globals::default());
+    let verdicts = recheck_module_verdicts(
+        &computed_field_forgery(),
+        1_000_000,
+        &Globals::default(),
+        crate::fixture::SYNTAX,
+    );
     let wrap = Global::Authored(Qualifier::from(["Wrap"]));
 
     assert!(
@@ -3167,7 +3353,12 @@ fn a_proposition_carrying_a_computed_proof_is_still_accepted() {
     };
 
     assert_eq!(
-        recheck_module_verdicts(&module, 1_000_000, &Globals::default()),
+        recheck_module_verdicts(
+            &module,
+            1_000_000,
+            &Globals::default(),
+            crate::fixture::SYNTAX
+        ),
         Vec::new()
     );
 }
@@ -3186,7 +3377,12 @@ fn a_proposition_carrying_a_computed_proof_is_still_accepted() {
 #[test]
 fn no_type_position_admits_a_lying_motive() {
     for (position, module) in lying_type_positions() {
-        let verdicts = recheck_module_verdicts(&module, 1_000_000, &Globals::default());
+        let verdicts = recheck_module_verdicts(
+            &module,
+            1_000_000,
+            &Globals::default(),
+            crate::fixture::SYNTAX,
+        );
 
         assert!(
             verdicts.iter().any(|verdict| matches!(
@@ -3656,7 +3852,12 @@ fn a_bare_occurrence_of_a_universe_scheme_is_refused() {
         ),
     ] {
         let module = universe_scheme_module(Some((open_context(), body)));
-        let verdicts = recheck_module_verdicts(&module, 1_000_000, &Globals::default());
+        let verdicts = recheck_module_verdicts(
+            &module,
+            1_000_000,
+            &Globals::default(),
+            crate::fixture::SYNTAX,
+        );
 
         assert!(
             verdicts
@@ -3678,7 +3879,8 @@ fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
         recheck_module_verdicts(
             &universe_scheme_module(None),
             1_000_000,
-            &Globals::default()
+            &Globals::default(),
+            crate::fixture::SYNTAX,
         ),
         Vec::new(),
         "the universe scheme was refused standing alone",
@@ -3689,6 +3891,7 @@ fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
             &universe_scheme_module(Some((scheme_context(), instance))),
             1_000_000,
             &Globals::default(),
+            crate::fixture::SYNTAX,
         ),
         Vec::new(),
         "an occurrence discharging its scheme's constraint was refused",
@@ -3720,7 +3923,12 @@ fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
     };
 
     assert_eq!(
-        recheck_module_verdicts(&monomorphic, 1_000_000, &Globals::default()),
+        recheck_module_verdicts(
+            &monomorphic,
+            1_000_000,
+            &Globals::default(),
+            crate::fixture::SYNTAX
+        ),
         Vec::new(),
         "a bare occurrence of a monomorphic definition was refused",
     );
@@ -3904,7 +4112,12 @@ fn a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance() 
         ("with no arm open", Route::Direct),
     ] {
         let module = universe_refinement_module(one.clone(), route);
-        let verdicts = recheck_module_verdicts(&module, 10_000_000, &Globals::default());
+        let verdicts = recheck_module_verdicts(
+            &module,
+            10_000_000,
+            &Globals::default(),
+            crate::fixture::SYNTAX,
+        );
 
         assert!(
             verdicts.iter().any(|verdict| {
@@ -3926,7 +4139,12 @@ fn a_case_equation_still_refines_the_occurrence_it_scrutinized() {
     let module = universe_refinement_module(Level::zero(), Route::DependentMotive);
 
     assert_eq!(
-        recheck_module_verdicts(&module, 10_000_000, &Globals::default()),
+        recheck_module_verdicts(
+            &module,
+            10_000_000,
+            &Globals::default(),
+            crate::fixture::SYNTAX
+        ),
         Vec::new(),
         "the arm's own case equation stopped refining its scrutinee",
     );
@@ -3945,7 +4163,12 @@ fn a_case_equation_still_refines_the_occurrence_it_scrutinized() {
 fn a_definition_under_a_name_already_in_scope_is_replaced_rather_than_judged() {
     let module = shadowing_items();
 
-    let alone = recheck_module_verdicts(&module, 1_000_000, &Globals::default());
+    let alone = recheck_module_verdicts(
+        &module,
+        1_000_000,
+        &Globals::default(),
+        crate::fixture::SYNTAX,
+    );
     assert!(
         alone
             .iter()
@@ -3955,7 +4178,12 @@ fn a_definition_under_a_name_already_in_scope_is_replaced_rather_than_judged() {
     );
 
     assert_eq!(
-        recheck_module_verdicts(&module, 1_000_000, &already_judged(&judged_environment())),
+        recheck_module_verdicts(
+            &module,
+            1_000_000,
+            &already_judged(&judged_environment()),
+            crate::fixture::SYNTAX
+        ),
         Vec::new(),
         "the skip is what this measures: a verdict here means the walk no longer drops an item whose name the environment answers for",
     );
@@ -3974,7 +4202,12 @@ fn a_definition_under_a_name_already_in_scope_is_replaced_rather_than_judged() {
 fn a_declaration_under_a_name_already_in_scope_is_live_but_unchecked() {
     let oversized = shadowing_registry(Term::type_at(Level::constant(5)));
 
-    let alone = recheck_module_verdicts(&oversized, 1_000_000, &Globals::default());
+    let alone = recheck_module_verdicts(
+        &oversized,
+        1_000_000,
+        &Globals::default(),
+        crate::fixture::SYNTAX,
+    );
     assert!(
         alone
             .iter()
@@ -3986,7 +4219,8 @@ fn a_declaration_under_a_name_already_in_scope_is_live_but_unchecked() {
         recheck_module_verdicts(
             &oversized,
             1_000_000,
-            &already_judged(&judged_environment())
+            &already_judged(&judged_environment()),
+            crate::fixture::SYNTAX,
         ),
         Vec::new(),
         "the skip is what this measures: a verdict here means `check_induct_decl` no longer passes over a colliding entry",
@@ -3998,8 +4232,12 @@ fn a_declaration_under_a_name_already_in_scope_is_live_but_unchecked() {
         family,
     ));
 
-    let verdicts =
-        recheck_module_verdicts(&negative, 1_000_000, &already_judged(&judged_environment()));
+    let verdicts = recheck_module_verdicts(
+        &negative,
+        1_000_000,
+        &already_judged(&judged_environment()),
+        crate::fixture::SYNTAX,
+    );
     assert!(
         verdicts
             .iter()

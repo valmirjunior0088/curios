@@ -52,6 +52,7 @@ use {
         LevelHead, Module, Polarity, ReduceError, Reducer, Retention, Spelling, StructDecl, Term,
         UniverseConstraint, UniverseContext, UniverseError, build_shorten,
     },
+    curios_utilities::SyntaxRegistry,
     std::{fmt, rc::Rc},
 };
 
@@ -345,6 +346,10 @@ pub struct Kernel {
     positions: Positions,
     /// Top-level definitions and the nominal registry.
     globals: Globals,
+    /// The `/syn` spellings this walk may need to *state* a type — today the propositions the guarded operations take as bounds, read through `Intrinsic::signature`.
+    ///
+    /// Handed in rather than defaulted, and deliberately not optional. An absent registry could only mean skipping the bound check, and a check that silently does not run is worse than one that is missing outright: the kernel would report a verdict it had not reached.
+    syntax: SyntaxRegistry,
     /// The constraint set of the item being checked — its own declared hypotheses, assumed while its parameters are held abstract. A generic definition is valid exactly when it checks *under* its constraints, so the level judgments below consult these; discarding them was the route by which a correct polymorphic definition was refused.
     ///
     /// The one field with no component of its own: it is a single vector replaced wholesale at each declaration boundary, and wrapping it would state nothing the type does not.
@@ -354,8 +359,8 @@ pub struct Kernel {
 }
 
 impl Kernel {
-    /// A kernel that may spend `budget` reduction steps per judgment.
-    pub fn new(budget: u64) -> Self {
+    /// A kernel that may spend `budget` reduction steps per judgment, stating types through `syntax`.
+    pub fn new(budget: u64, syntax: SyntaxRegistry) -> Self {
         Self {
             scope: Scope::default(),
             spend: Spend::new(budget),
@@ -363,9 +368,15 @@ impl Kernel {
             retention: Retention::new(DEFAULT_RETENTION_QUOTA),
             positions: Positions::default(),
             globals: Globals::default(),
+            syntax,
             assumed: Vec::new(),
             machine: true,
         }
+    }
+
+    /// The `/syn` spellings this walk states types through.
+    pub(crate) fn syntax(&self) -> &SyntaxRegistry {
+        &self.syntax
     }
 
     /// Start this kernel's environment from `globals` — the scope an earlier walk established — rather than from nothing.
@@ -378,18 +389,18 @@ impl Kernel {
     /// A kernel at a stated retention allowance rather than the product default.
     ///
     /// Exists so a test can put the quota under pressure without building a module large enough to reach the shipped figure — which is measured to be unreachable by ordinary compilation, and would therefore make the degradation path untestable.
-    pub fn with_retention(budget: u64, quota: u64) -> Self {
+    pub fn with_retention(budget: u64, quota: u64, syntax: SyntaxRegistry) -> Self {
         Self {
             retention: Retention::new(quota),
-            ..Self::new(budget)
+            ..Self::new(budget, syntax)
         }
     }
 
     /// A kernel whose evaluation memos are off — every reduction re-derived from scratch. Exists for one purpose: asserting that memoization changes no *semantic* verdict. It may change a resource one, since a term-keyed hit is free and an uncached walk therefore spends at least as much; see the `spend` module's documentation for why that is the whole of what was given up.
-    pub fn uncached(budget: u64) -> Self {
+    pub fn uncached(budget: u64, syntax: SyntaxRegistry) -> Self {
         Self {
             memos: Memos::new(false),
-            ..Self::new(budget)
+            ..Self::new(budget, syntax)
         }
     }
 

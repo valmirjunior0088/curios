@@ -16,6 +16,7 @@ fn main() {
             core,
             curios_prelude_archive::DEFAULT_STEP_BUDGET,
             &Globals::default(),
+            curios_prelude_archive::SYNTAX,
         );
 
         if let Some(verdict) = refusals.first() {

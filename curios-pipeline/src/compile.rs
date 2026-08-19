@@ -54,8 +54,13 @@ impl From<CompileError> for String {
 /// Put `module` to the independent kernel with `scope` already in scope, so only what its units do not already answer for is judged — their own items resting on the verdict recorded when each was built.
 ///
 /// The [`Globals`] environment is assembled here rather than in `curios-unit`, because a unit is defined to stay below the kernel and cannot name it. Every caller that wants the compile path's rechecking gets this one rather than reconstructing it.
-pub fn recheck(module: &curios_core::Module, budget: u64, scope: Prefix<'_>) -> Vec<Verdict> {
-    recheck_module_verdicts(module, budget, &globals(scope))
+pub fn recheck(
+    module: &curios_core::Module,
+    budget: u64,
+    scope: Prefix<'_>,
+    syntax: &SyntaxRegistry,
+) -> Vec<Verdict> {
+    recheck_module_verdicts(module, budget, &globals(scope), *syntax)
 }
 
 /// [`recheck`], handing back the walk's own kernel for a measurement to read rather than only its verdicts. See `curios_cert::recheck_module_measured`.
@@ -63,8 +68,9 @@ pub fn recheck_measured(
     module: &curios_core::Module,
     budget: u64,
     scope: Prefix<'_>,
+    syntax: &SyntaxRegistry,
 ) -> (Vec<Verdict>, Kernel) {
-    recheck_module_measured(module, budget, &globals(scope))
+    recheck_module_measured(module, budget, &globals(scope), *syntax)
 }
 
 /// The kernel's environment for `scope`: every unit mounted, at the binder floor its own walk derived.
@@ -246,7 +252,7 @@ pub fn compile_unit(
     )
     .map_err(|error| CompileError::of(&error, error.format_with(lowered.core(), &cores)))?;
 
-    if let Some(verdict) = recheck(&core, budget, scope).into_iter().next() {
+    if let Some(verdict) = recheck(&core, budget, scope, syntax).into_iter().next() {
         let refusal = verdict.error.format_with(&core, &cores);
         return Err(CompileError::Failure(match &verdict.name {
             Some(name) => format!("the kernel refused {name}: {refusal}"),
@@ -368,7 +374,7 @@ where
     // The independent kernel's second opinion, on the compile path: each unit in scope was walked when it was built and arrives here as environment, so only what it does not already answer for is judged — a refusal fails the compile.
     {
         curios_profile::profile!("recheck");
-        if let Some(verdict) = recheck(&module, budget, scope).into_iter().next() {
+        if let Some(verdict) = recheck(&module, budget, scope, syntax).into_iter().next() {
             let refusal = verdict.error.format_with(&module, &cores);
             return Err(CompileError::Failure(match &verdict.name {
                 Some(name) => format!("the kernel refused {name}: {refusal}"),

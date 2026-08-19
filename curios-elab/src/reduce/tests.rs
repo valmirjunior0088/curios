@@ -1385,7 +1385,7 @@ mod kernel_agreement {
 
     /// A kernel minting above every binder these fixtures use.
     fn kernel() -> Kernel {
-        let mut kernel = Kernel::new(100_000);
+        let mut kernel = Kernel::new(100_000, crate::fixture::SYNTAX);
         kernel.set_local_floor(10_000);
         kernel
     }

@@ -8,7 +8,7 @@ use {
 };
 
 fn kernel() -> Kernel {
-    let mut kernel = Kernel::new(100_000);
+    let mut kernel = Kernel::new(100_000, crate::fixture::SYNTAX);
     kernel.set_local_floor(1_000);
     kernel
 }
@@ -341,7 +341,7 @@ fn two_alpha_variant_recursive_groups_convert() {
 /// A recursive call applied to a symbolic argument stays folded, and comparing it with itself terminates rather than unfolding in lockstep forever.
 #[test]
 fn a_folded_recursive_call_converts_without_unfolding_forever() {
-    let mut kernel = Kernel::new(10_000);
+    let mut kernel = Kernel::new(10_000, crate::fixture::SYNTAX);
     kernel.set_local_floor(1_000);
 
     let n = binder(0, "n");
@@ -420,12 +420,12 @@ fn a_metavariable_does_not_convert_with_anything_else() {
 #[test]
 fn conversion_separates_a_constant_from_the_identity_at_a_zero_floor() {
     let colliding = {
-        let mut scout = Kernel::new(100_000);
+        let mut scout = Kernel::new(100_000, crate::fixture::SYNTAX);
         scout.set_local_floor(0);
         scout.fresh(Some("y"))
     };
 
-    let mut kernel = Kernel::new(100_000);
+    let mut kernel = Kernel::new(100_000, crate::fixture::SYNTAX);
     kernel.set_local_floor(0);
 
     let nat = Term::intrinsic(Intrinsic::NatType);

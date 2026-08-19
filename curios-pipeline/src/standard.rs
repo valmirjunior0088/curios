@@ -123,7 +123,7 @@ pub fn recheck_with_prelude_measured(
     budget: u64,
 ) -> (Vec<curios_cert::Verdict>, curios_cert::Kernel) {
     with_prelude(|prelude| {
-        crate::recheck_measured(module, budget, Prefix::over(from_ref(&prelude)))
+        crate::recheck_measured(module, budget, Prefix::over(from_ref(&prelude)), &SYNTAX)
     })
 }
 
@@ -132,5 +132,5 @@ pub fn recheck_with_prelude(
     module: &curios_core::Module,
     budget: u64,
 ) -> Vec<curios_cert::Verdict> {
-    with_prelude(|prelude| recheck(module, budget, Prefix::over(from_ref(&prelude))))
+    with_prelude(|prelude| recheck(module, budget, Prefix::over(from_ref(&prelude)), &SYNTAX))
 }

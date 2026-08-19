@@ -124,7 +124,7 @@ fn value_conversion_does_not_identify_distinct_type_payloads() {
     let one = Level::zero().succ().expect("level zero has a successor");
 
     // The differential's fixed side: the kernel, handed the identical declaration and the identical goal, refuses it at the payloads.
-    let mut kernel = curios_cert::Kernel::new(100_000);
+    let mut kernel = curios_cert::Kernel::new(100_000, crate::fixture::SYNTAX);
     kernel.set_local_floor(1_000);
     kernel.declare_induct(&e, &declaration);
     assert!(

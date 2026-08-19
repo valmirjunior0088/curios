@@ -28,6 +28,7 @@ use {
         UniverseContext, derived_binder_floor_outside, rewrite_universe_levels_scoped,
         universe_metas,
     },
+    curios_utilities::SyntaxRegistry,
     std::collections::{BTreeSet, HashMap, HashSet},
 };
 
@@ -109,8 +110,13 @@ pub struct Verdict {
 /// Re-check `module` with the independent kernel, with `globals` already in scope.
 ///
 /// `budget` is the reduction allowance each item gets, the same figure the elaborator's own `Context` is built with. [`Globals::default()`] is the whole-module walk: nothing in scope, so every item is judged.
-pub fn recheck_module(module: &Module, budget: u64, globals: &Globals) -> Result<(), KernelError> {
-    match recheck_module_verdicts(module, budget, globals)
+pub fn recheck_module(
+    module: &Module,
+    budget: u64,
+    globals: &Globals,
+    syntax: SyntaxRegistry,
+) -> Result<(), KernelError> {
+    match recheck_module_verdicts(module, budget, globals, syntax)
         .into_iter()
         .next()
     {
@@ -140,8 +146,13 @@ pub fn recheck_module(module: &Module, budget: u64, globals: &Globals) -> Result
 /// An item whose declared names `globals` already answers for is defined and not judged. On the compile path that environment is the archived prelude, and the faith placed in it is in the archive's *construction*, not in any per-compile claim: the prelude build runs this same walk from an empty environment and fails the build on any refusal, so an archive that exists is one whose items the kernel accepted. Re-judging them per compile would re-answer a settled question at ~24× the cost of the whole rest of the pipeline.
 ///
 /// Everything module-wide still runs unconditionally — the entrypoint check, strict positivity, and declaration sizing — because a new declaration can reach an old one and those passes cost milliseconds; only the per-item typing judgment consults the environment.
-pub fn recheck_module_verdicts(module: &Module, budget: u64, globals: &Globals) -> Vec<Verdict> {
-    verdicts_from(Kernel::new(budget), module, globals)
+pub fn recheck_module_verdicts(
+    module: &Module,
+    budget: u64,
+    globals: &Globals,
+    syntax: SyntaxRegistry,
+) -> Vec<Verdict> {
+    verdicts_from(Kernel::new(budget, syntax), module, globals)
 }
 
 /// [`recheck_module_verdicts`] with the kernel's evaluation memos off.
@@ -151,8 +162,9 @@ pub fn recheck_module_verdicts_uncached(
     module: &Module,
     budget: u64,
     globals: &Globals,
+    syntax: SyntaxRegistry,
 ) -> Vec<Verdict> {
-    verdicts_from(Kernel::uncached(budget), module, globals)
+    verdicts_from(Kernel::uncached(budget, syntax), module, globals)
 }
 
 /// What a whole-module walk consumed, beside the verdicts it reached — the walk's own kernel, handed back for a measurement to read.
@@ -164,8 +176,9 @@ pub fn recheck_module_measured(
     module: &Module,
     budget: u64,
     globals: &Globals,
+    syntax: SyntaxRegistry,
 ) -> (Vec<Verdict>, Kernel) {
-    let mut kernel = Kernel::new(budget);
+    let mut kernel = Kernel::new(budget, syntax);
     let verdicts = verdicts_into(&mut kernel, module, globals);
 
     (verdicts, kernel)

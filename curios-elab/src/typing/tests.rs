@@ -53,7 +53,7 @@ fn display_parameterless_witness_concept_states_the_rule() {
 #[test]
 fn both_checkers_decide_non_informativeness_alike() {
     let mut context = Context::new(100_000, crate::SYNTAX);
-    let mut kernel = Kernel::new(100_000);
+    let mut kernel = Kernel::new(100_000, crate::fixture::SYNTAX);
     kernel.set_local_floor(1_000);
 
     let nat = || Term::intrinsic(Intrinsic::NatType);

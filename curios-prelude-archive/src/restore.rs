@@ -275,8 +275,12 @@ mod tests {
     #[ignore = "inventory: measures where the kernel disagrees rather than asserting"]
     fn kernel_disagreements() {
         with_prelude(|prelude| {
-            let verdicts =
-                recheck_module_verdicts(prelude.core(), DEFAULT_STEP_BUDGET, &Globals::default());
+            let verdicts = recheck_module_verdicts(
+                prelude.core(),
+                DEFAULT_STEP_BUDGET,
+                &Globals::default(),
+                crate::SYNTAX,
+            );
 
             let mut tally: BTreeMap<String, usize> = BTreeMap::new();
             for verdict in &verdicts {
@@ -311,11 +315,17 @@ mod tests {
     fn kernel_memo_parity() {
         with_prelude(|prelude| {
             assert_eq!(
-                recheck_module_verdicts(prelude.core(), DEFAULT_STEP_BUDGET, &Globals::default()),
+                recheck_module_verdicts(
+                    prelude.core(),
+                    DEFAULT_STEP_BUDGET,
+                    &Globals::default(),
+                    crate::SYNTAX
+                ),
                 recheck_module_verdicts_uncached(
                     prelude.core(),
                     DEFAULT_STEP_BUDGET,
-                    &Globals::default()
+                    &Globals::default(),
+                    crate::SYNTAX,
                 ),
             );
         });
@@ -401,8 +411,12 @@ mod tests {
             let erasure = start.elapsed();
 
             let start = Instant::now();
-            let (verdicts, kernel) =
-                recheck_module_measured(core, DEFAULT_STEP_BUDGET, &Globals::default());
+            let (verdicts, kernel) = recheck_module_measured(
+                core,
+                DEFAULT_STEP_BUDGET,
+                &Globals::default(),
+                crate::SYNTAX,
+            );
             let certification = start.elapsed();
             let retained = kernel.retained();
             let heaviest = kernel.heaviest_declaration();

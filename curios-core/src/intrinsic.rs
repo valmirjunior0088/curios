@@ -538,8 +538,18 @@ impl Intrinsic {
         }
     }
 
+    /// This operation's term operands, in the same order [`for_each_operand`](Self::for_each_operand) visits them — which is the order [`signature`](Self::signature) states their types in.
+    ///
+    /// Collected rather than visited because the checking walks zip it against that table, and a `zip` needs a sequence. Not for the hot paths: `reach` and `any_metavar` keep the visiting form precisely so they allocate nothing.
+    pub fn operands(&self) -> Vec<&Term> {
+        let mut operands = Vec::new();
+        self.for_each_operand(&mut |operand| operands.push(operand));
+
+        operands
+    }
+
     /// Visit each `Term` operand of `self`, in field order. The single source of truth for which fields of an intrinsic are its term operands — `reach`, `any_metavar`, and `collect_construction_names` all read it. (`traverse` keeps its own match: it rebuilds rather than visits.) The closure is taken `impl FnMut` so it monomorphises and inlines, leaving the de Bruijn / region hot path allocation- and indirection-free.
-    fn for_each_operand(&self, visit: &mut impl FnMut(&Term)) {
+    fn for_each_operand<'a>(&'a self, visit: &mut impl FnMut(&'a Term)) {
         match self {
             Intrinsic::BoolType
             | Intrinsic::Bool(_)

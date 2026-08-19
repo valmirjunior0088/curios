@@ -15,11 +15,69 @@ use {
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, MetaId, Metavar, Nat, Polarity,
         Rec, StructType, Subterm, Telescope, Term, Totality, UniverseContext, UniverseInst,
     },
-    curios_utilities::{Plicity, Qualifier},
+    curios_utilities::{
+        CharacterSyntax, ConceptField, LiftSyntax, MonadSyntax, OperatorSyntax, Plicity,
+        ProofSyntax, Qualifier, StringSyntax, SyntaxName, SyntaxRegistry,
+    },
     std::{collections::BTreeMap, rc::Rc, slice},
 };
 
 use Polarity::Strict;
+
+const fn syntax_name(segments: &'static [&'static str]) -> SyntaxName {
+    SyntaxName::new(segments)
+}
+
+const fn concept_field(segments: &'static [&'static str], label: &'static str) -> ConceptField {
+    ConceptField {
+        concept: syntax_name(segments),
+        field: label,
+    }
+}
+
+/// The registry a `Kernel` is built with. Spelled here rather than borrowed because `curios-cert`'s own fixture is `#[cfg(test)]` and an integration test links the library, not its tests. No probe below resolves one of these names — they exist so a kernel can be constructed at all.
+const SYNTAX: SyntaxRegistry = SyntaxRegistry {
+    monad: MonadSyntax {
+        bind: syntax_name(&["syn", "Monad", "bind"]),
+    },
+    lift: LiftSyntax {
+        lift: concept_field(&["syn", "Lift"], "lift"),
+    },
+    operator: OperatorSyntax {
+        add: concept_field(&["syn", "Add"], "add"),
+        sub: concept_field(&["syn", "Sub"], "sub"),
+        mul: concept_field(&["syn", "Mul"], "mul"),
+        div: concept_field(&["syn", "Div"], "div"),
+        rem: concept_field(&["syn", "Rem"], "rem"),
+        eql: concept_field(&["syn", "Eql", "Eql"], "eql"),
+        neq: concept_field(&["syn", "Eql", "Eql"], "neq"),
+        lt: concept_field(&["syn", "Cmp"], "lt"),
+        gt: concept_field(&["syn", "Cmp"], "gt"),
+        lte: concept_field(&["syn", "Cmp"], "lte"),
+        gte: concept_field(&["syn", "Cmp"], "gte"),
+        and: concept_field(&["syn", "And"], "and"),
+        or: concept_field(&["syn", "Or"], "or"),
+    },
+    character: CharacterSyntax {
+        character: syntax_name(&["syn", "Char", "Char"]),
+        scalar_below: syntax_name(&["syn", "Char", "Scalar", "below"]),
+        scalar_above: syntax_name(&["syn", "Char", "Scalar", "above"]),
+    },
+    string: StringSyntax {
+        string: syntax_name(&["syn", "Str", "Str"]),
+        of_scan_eq: syntax_name(&["syn", "Str", "of_scan_eq"]),
+        refl_scan: syntax_name(&["syn", "Str", "refl_scan"]),
+    },
+    proof: ProofSyntax {
+        true_qed: syntax_name(&["syn", "True", "True", "qed"]),
+        true_type: syntax_name(&["syn", "True", "True"]),
+        lt: syntax_name(&["syn", "Nat", "Lt"]),
+        le: syntax_name(&["syn", "Nat", "Le"]),
+        int_non_zero: syntax_name(&["syn", "Int", "NonZero"]),
+        int_non_neg: syntax_name(&["syn", "Int", "NonNeg"]),
+        bytes_four: syntax_name(&["syn", "Flt", "FourBytes"]),
+    },
+};
 
 /// The member every probe below plants a call to.
 fn planted() -> Free {
@@ -27,7 +85,7 @@ fn planted() -> Free {
 }
 
 fn kernel() -> Kernel {
-    let mut kernel = Kernel::new(100_000);
+    let mut kernel = Kernel::new(100_000, SYNTAX);
     kernel.set_local_floor(1_000);
     kernel
 }
@@ -302,7 +360,7 @@ fn a_strict_self_occurrence_is_admitted() {
 #[test]
 fn a_huge_literal_call_argument_grades_without_expansion() {
     // `rec f : (n: Nat) -> Nat = (n) => f(u64::MAX); f` — grading the literal argument must read the packed spine, not peel it: the unary expansion this replaces would loop once per successor, and the value is unbounded by the source that spelled it.
-    let mut kernel = Kernel::new(100_000);
+    let mut kernel = Kernel::new(100_000, SYNTAX);
     let f = Free::local(1, Some("f"));
     let n = Free::local(2, Some("n"));
     let nat = || Term::intrinsic(Intrinsic::NatType);
@@ -332,7 +390,7 @@ fn a_huge_literal_call_argument_grades_without_expansion() {
 ///
 /// The group is `rec f : Nat = <plant(f)>`, whose member takes no lambda and so has an empty parameter vector: a self-call from it is a 0x0 matrix, idempotent with no diagonal, so the verdict is `Partial` exactly when [`Walk::walk`] reached the planted occurrence and `Total` exactly when it did not. Nothing here needs to be well typed — the engine is a total function of post-zonk terms and types nothing — which is what lets one probe cover every child position of every variant.
 fn call_is_seen(body: Term) -> bool {
-    let mut kernel = Kernel::new(100_000);
+    let mut kernel = Kernel::new(100_000, SYNTAX);
     let rec = Term::rec(
         vec![(planted(), Term::intrinsic(Intrinsic::NatType), body)],
         Term::free_var(&planted()),

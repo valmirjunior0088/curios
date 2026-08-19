@@ -10,7 +10,7 @@ use {
 
 /// The kernel every test starts from. The floor keeps the identities minted below out of the range the kernel mints from for eta-contraction, exactly as a real caller must seed it above the lowerer's and the elaborator's binders.
 fn kernel() -> Kernel {
-    let mut kernel = Kernel::new(1_000_000);
+    let mut kernel = Kernel::new(1_000_000, crate::fixture::SYNTAX);
     kernel.set_local_floor(1_000);
     kernel
 }
@@ -343,7 +343,7 @@ fn a_recursive_application_stays_folded_until_forced() {
 /// The kernel is not strongly normalizing, and the budget is what makes every judgment terminate anyway. A group that consumes nothing spins until it runs out, which is an answer rather than a hang.
 #[test]
 fn a_non_productive_recursion_exhausts_the_budget() {
-    let mut kernel = Kernel::new(1_000);
+    let mut kernel = Kernel::new(1_000, crate::fixture::SYNTAX);
     kernel.set_local_floor(1_000);
     let loop_ = binder(0, "loop");
     let n = binder(1, "n");
@@ -376,7 +376,7 @@ fn a_non_productive_recursion_exhausts_the_budget() {
 /// The frame is charged per new *peak* depth, so a second reduction at the same depth would be free of it — which is why the refill matters here twice over: `restore_budget` resets the peak as well as the budget, so the second call pays for its level again exactly as the first did.
 #[test]
 fn restoring_the_budget_refills_it() {
-    let mut kernel = Kernel::new(Cost::FRAME.get() + Cost::STEP.get());
+    let mut kernel = Kernel::new(Cost::FRAME.get() + Cost::STEP.get(), crate::fixture::SYNTAX);
     kernel.set_local_floor(1_000);
     let x = binder(0, "x");
     let occurrence = Term::free_var(&x);
@@ -545,7 +545,7 @@ fn cached_spend_never_exceeds_uncached() {
     let repeated = chain(32);
 
     let mut cached = kernel();
-    let mut uncached = Kernel::uncached(1_000_000);
+    let mut uncached = Kernel::uncached(1_000_000, crate::fixture::SYNTAX);
     uncached.set_local_floor(1_000);
 
     let with_memos = spent(&mut cached, repeated.clone()) + spent(&mut cached, repeated.clone());
@@ -620,7 +620,7 @@ fn a_case_equation_reaches_the_reduct_and_not_the_memos() {
     );
     assert_eq!(outside_closed, untouched_closed);
 
-    let mut uncached = Kernel::uncached(1_000_000);
+    let mut uncached = Kernel::uncached(1_000_000, crate::fixture::SYNTAX);
     uncached.set_local_floor(1_000);
 
     assert_eq!(
@@ -641,7 +641,7 @@ fn a_case_equation_answers_a_term_the_budget_cannot_reduce() {
     let n = binder(1, "n");
     let key = Term::intrinsic(Intrinsic::nat_add(chain(100_000), Term::free_var(&n)));
 
-    let mut control = Kernel::new(budget);
+    let mut control = Kernel::new(budget, crate::fixture::SYNTAX);
     control.set_local_floor(1_000);
     control.assume(&n, &nat_type());
     assert!(
@@ -649,7 +649,7 @@ fn a_case_equation_answers_a_term_the_budget_cannot_reduce() {
         "the fold has to be unaffordable, or the subject's answer proves nothing"
     );
 
-    let mut subject = Kernel::new(budget);
+    let mut subject = Kernel::new(budget, crate::fixture::SYNTAX);
     subject.set_local_floor(1_000);
     subject.assume(&n, &nat_type());
     let answered = subject.scoped(|kernel| {
@@ -707,7 +707,7 @@ fn the_two_consultation_points_answer_one_equation_alike() {
 /// The subject is a chain of nested intrinsic operands over an *open* tip — a term the closed machine's gate declines, so the recursive strategy re-enters reduction once per link and the budget affords a handful of levels and no more. The closed twin of this chain no longer trips the row at all, which is the machine's whole yield and is asserted by its own tests.
 #[test]
 fn a_deep_reduction_is_refused_and_the_refusal_names_depth() {
-    let mut kernel = Kernel::new(Cost::FRAME.get() * 4);
+    let mut kernel = Kernel::new(Cost::FRAME.get() * 4, crate::fixture::SYNTAX);
     kernel.set_local_floor(1_000);
     let tip = binder(0, "tip");
 
@@ -733,7 +733,7 @@ fn a_deep_reduction_is_refused_and_the_refusal_names_depth() {
 #[test]
 fn an_exhausted_retention_quota_leaves_the_answer_alone() {
     let mut warm = kernel();
-    let mut cold = Kernel::with_retention(1_000_000, 0);
+    let mut cold = Kernel::with_retention(1_000_000, 0, crate::fixture::SYNTAX);
     cold.set_local_floor(1_000);
 
     let term = chain(64);
@@ -755,7 +755,7 @@ fn a_declined_insertion_costs_the_next_reduction_a_re_derivation() {
     spent(&mut warm, term.clone());
     let warm_again = spent(&mut warm, term.clone());
 
-    let mut cold = Kernel::with_retention(1_000_000, 0);
+    let mut cold = Kernel::with_retention(1_000_000, 0, crate::fixture::SYNTAX);
     cold.set_local_floor(1_000);
     spent(&mut cold, term.clone());
     let cold_again = spent(&mut cold, term);
