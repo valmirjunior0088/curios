@@ -8,7 +8,7 @@ use {
     super::Convert,
     curios_core::{
         Intrinsic, Operand, Peel, ReduceError, Subterm, Term, Var, Visit, peel_bin, peel_list,
-        peel_nat,
+        peel_nat_pair,
     },
     curios_utilities::{Grain, PackedBin, SyntaxRegistry},
 };
@@ -199,14 +199,6 @@ fn split_against(
                 false => Some(false),
             }
         }
-        _ => None,
-    }
-}
-
-/// The free-monoid peel for two `Nat`s, which unlike `Bin`/`List` is spelled against the carrier rather than the intrinsic.
-fn peel_nat_pair(this: &Intrinsic, that: &Intrinsic) -> Option<Peel> {
-    match (this, that) {
-        (Intrinsic::Nat(left), Intrinsic::Nat(right)) => Some(peel_nat(left, right)),
         _ => None,
     }
 }

@@ -7,7 +7,7 @@
 use {
     super::{History, compare, ground},
     crate::{Kernel, KernelError},
-    curios_core::{Intrinsic, Operand, Peel, Term, Var, Visit, peel_bin, peel_list, peel_nat},
+    curios_core::{Intrinsic, Operand, Peel, Term, Var, Visit, peel_bin, peel_list, peel_nat_pair},
 };
 
 /// Whether `this` and `that` are the same intrinsic operation on convertible operands.
@@ -56,14 +56,6 @@ pub(super) fn convert_intrinsic(
     }
 
     Ok(true)
-}
-
-/// The free-monoid peel for two `Nat`s, which unlike `Bin`/`List` is spelled against the carrier rather than the intrinsic.
-fn peel_nat_pair(this: &Intrinsic, that: &Intrinsic) -> Option<Peel> {
-    match (this, that) {
-        (Intrinsic::Nat(left), Intrinsic::Nat(right)) => Some(peel_nat(left, right)),
-        _ => None,
-    }
 }
 
 /// Split an intrinsic into its shape — itself, with every term operand stood down to one placeholder — and those operands in traversal order.

@@ -1,4 +1,6 @@
-//! The free-monoid peel shared by inversion (`invert`) and conversion (`convert`). An intrinsic whose values are a literal run of generators over a symbolic tail — a `Nat` count, a `Bin` byte run, a `List` element run — reduces two values by stripping their longest common literal head; the residual tails go back to the caller's own recursion. `Bool`/`Int` are the degenerate, zero-generator spines. The point of the seam: a new instance is one `peel_intrinsic` arm and nothing else — the drivers, the `Peel` vocabulary, and the termination argument are shared, and `Bin`/`List` further share the `peel_prefix` step itself (they differ only in element type and whether a stalled literal head is a clash).
+//! The free-monoid peel shared by inversion (`invert`) and conversion (`convert`). An intrinsic whose values are a literal run of generators over a symbolic tail — a `Nat` count or sum, a `Bin` byte run, a `List` element run — reduces two values by stripping what they carry in common; the residual tails go back to the caller's own recursion. `Bool`/`Int` are the degenerate, zero-generator spines. The point of the seam: a new instance is one `peel_intrinsic` arm and nothing else — the drivers, the `Peel` vocabulary, and the termination argument are shared, and `Bin`/`List` further share the `peel_prefix` step itself (they differ only in element type and whether a stalled literal head is a clash).
+//!
+//! `Nat` is the one whose gate is a *shape* rather than a carrier, because it is the one commutative member: its values are also spelled as `NatAdd` spines, which no `Intrinsic::Nat` arm can match. See [`peel_nat_terms`].
 
 use {
     super::{Intrinsic, Nat, Subterm, Term},
@@ -14,19 +16,20 @@ pub enum Peel {
     Continue(Term, Term),
     /// Literal heads differ, or a positive head meets the identity — unequal.
     Clash,
-    /// Undecidable by peeling (a symbolic-length head); the caller falls back. Unreachable for `Nat` — it is the seam the harder intrinsics plug into.
+    /// Undecidable by peeling — a symbolic-length head, or a pair the peel made no progress on; the caller falls back. Every reader treats it as the refusing direction, so declining can only cost reductions.
     Stuck,
 }
 
 /// Classify a reduced intrinsic pair. `None` means the pair is not a matched spine-intrinsic, so the caller keeps its own handling; `Some` is the peel outcome.
 pub fn peel_intrinsic(left: &Intrinsic, right: &Intrinsic) -> Option<Peel> {
     match (left, right) {
-        (Intrinsic::Nat(actual), Intrinsic::Nat(target)) => Some(peel_nat(actual, target)),
         // Finite scalars are the degenerate (zero-generator) spines: no tail.
         (Intrinsic::Bool(actual), Intrinsic::Bool(target)) => Some(decide(actual == target)),
         (Intrinsic::Int(actual), Intrinsic::Int(target)) => Some(decide(actual == target)),
-        // `Bin`/`List` are the free monoids on their bytes/elements: peel the longest common prefix (each returns `None` for the other's shapes).
-        _ => peel_bin(left, right).or_else(|| peel_list(left, right)),
+        // `Nat` is the free commutative monoid on its summands, `Bin`/`List` the free monoids on their bytes/elements (each returns `None` for the other's shapes).
+        _ => peel_nat_pair(left, right)
+            .or_else(|| peel_bin(left, right))
+            .or_else(|| peel_list(left, right)),
     }
 }
 
@@ -37,23 +40,68 @@ fn decide(equal: bool) -> Peel {
     }
 }
 
+/// The `Nat` peel over two reduced intrinsics — [`peel_nat_terms`] at the shape [`peel_intrinsic`] and the two congruences hold their operands in.
+pub fn peel_nat_pair(left: &Intrinsic, right: &Intrinsic) -> Option<Peel> {
+    // Gated before lifting, so a pair that is not a `Nat` at all costs a shape test rather than two allocations.
+    (nat_shaped_intrinsic(left) || nat_shaped_intrinsic(right)).then(|| {
+        classify_nat(
+            &Term::intrinsic(left.clone()),
+            &Term::intrinsic(right.clone()),
+        )
+    })
+}
+
+/// The `Nat` peel over two reduced terms. `None` means neither side is a shape the cancellation can read, so the caller keeps its own handling.
+///
+/// **The gate is a shape, not a carrier, and that is the whole of what floorless sums needed.** `Nat::decompose` reads a successor floor and `Nat::summands` reads a `NatAdd` spine; those two shapes are what the cancellation acts on, and a `Nat`-valued operation that is neither rides in as an opaque summand either way. Admitting a pair where *one* side is one of them is what reaches the mixed case — `(s + 1) + l` reduces to a floored `Succ(1, s + l)` while `s + l` stays a bare `NatAdd`, so a gate demanding both sides be `Intrinsic::Nat` sees neither the reassociation nor the shared floor and hands the pair to a shape congruence that refuses it.
+///
+/// Sound at that width for the reason [`peel_bin`] and [`peel_list`] already rest on: conversion and inversion ask about pairs that inhabit one type, so a side carrying a floor or a sum spine makes both sides `Nat`s.
+pub fn peel_nat_terms(left: &Term, right: &Term) -> Option<Peel> {
+    (nat_shaped(left) || nat_shaped(right)).then(|| classify_nat(left, right))
+}
+
 /// `Nat` is the free commutative monoid on its symbolic summands: `k + a ~ k' + t` cancels everything the two sides carry in common and the leftover rides on whichever side kept it — `2 ~ ?n + 1` becomes `1 ~ ?n`, and `x + a ~ x + b` becomes `a ~ b`.
 ///
 /// The cancellation itself is `Nat::cancel_common`, which the reduction-side comparison and subtraction folds read too — one law, three readers. This function is only its translation into [`Peel`]: both residuals gone is equality, a surviving positive floor against nothing is a definite clash, and anything else is a smaller pair for the caller to keep comparing. The non-canonical `Succ(0, _)` the inverter used to need its own guard against falls out of `Nat::rebuild` collapsing a zero floor, so no arm states it.
 ///
-/// Cancelling *summands* rather than only the successor spine is what lets a commuted sum decide equal here instead of being handed to a structural comparison that would refuse it. `Peel::Stuck` stays unreachable for `Nat`: a residual pair is always something the caller can go on comparing, so peeling never has to decline.
-pub fn peel_nat(actual: &Nat, target: &Nat) -> Peel {
-    let lift = |value: &Nat| Term::intrinsic(Intrinsic::Nat(value.clone()));
-    let (left, right) = Nat::cancel_common(&lift(actual), &lift(target));
+/// Cancelling *summands* rather than only the successor spine is what lets a commuted sum decide equal here instead of being handed to a structural comparison that would refuse it.
+///
+/// **A pass that changed nothing must decline, not carry.** Every `Continue` off a floored pair strips a shared floor, and that structural decrease is the termination argument; a floorless pair sharing no summand comes back from `cancel_common` *identically* — its no-progress arm returns the operands untouched on purpose — and handing that back as `Continue` re-enters the same congruence on the same terms and never settles. So the residuals are compared against what went in, and an unchanged pair falls through as `Stuck` to the caller's shape congruence, exactly as `Bin`'s and `List`'s peels already do. Difference means *decrease* rather than merely change because `cancel_common` only ever rebuilds after removing a summand or a floor, which is the contract `nat_cancellation_is_stable_when_nothing_is_shared` pins.
+///
+/// `Stuck` therefore stays unreachable for a pair of `Nat` *carriers*, which is the narrower claim this used to make of every pair: two `Nat`s that are not both zero and not zero-against-floored are both `Succ`-headed, so they share a positive floor and always progress.
+fn classify_nat(left: &Term, right: &Term) -> Peel {
+    let (residual_left, residual_right) = Nat::cancel_common(left, right);
 
     let floored = |term: &Term| !Nat::decompose(term).0.is_zero();
 
-    match (Nat::is_zero(&left), Nat::is_zero(&right)) {
+    match (Nat::is_zero(&residual_left), Nat::is_zero(&residual_right)) {
         (true, true) => Peel::Equal,
-        (true, false) if floored(&right) => Peel::Clash,
-        (false, true) if floored(&left) => Peel::Clash,
-        _ => Peel::Continue(left, right),
+        (true, false) if floored(&residual_right) => Peel::Clash,
+        (false, true) if floored(&residual_left) => Peel::Clash,
+        _ => match residual_left != *left || residual_right != *right {
+            true => Peel::Continue(residual_left, residual_right),
+            false => Peel::Stuck,
+        },
     }
+}
+
+/// Whether a reduced term is one of the two shapes [`classify_nat`] can act on: a successor floor, or a sum spine.
+fn nat_shaped(term: &Term) -> bool {
+    match &**term {
+        Subterm::Intrinsic(intrinsic) => nat_shaped_intrinsic(intrinsic),
+        _ => false,
+    }
+}
+
+fn nat_shaped_intrinsic(intrinsic: &Intrinsic) -> bool {
+    matches!(intrinsic, Intrinsic::Nat(_) | Intrinsic::NatAdd(..))
+}
+
+/// The `Nat` peel over two carriers — the entry the reduction-side folds and the fixtures reach it at, where a `Nat` is already in hand rather than a term.
+pub fn peel_nat(actual: &Nat, target: &Nat) -> Peel {
+    let lift = |value: &Nat| Term::intrinsic(Intrinsic::Nat(value.clone()));
+
+    classify_nat(&lift(actual), &lift(target))
 }
 
 /// One segment of a flattened free-monoid value: a run of consecutive literal elements — concrete bytes (`Bin`) or terms (`List`) — a `Window` into a base value (a `Bin/slice(base, lo, hi)`: contents symbolic, but length `hi - lo` statically known as a `Nat` term), or an opaque symbolic chunk (a variable, an append: anything whose contents *and* length are unknown). A value is a sequence of these, and the concatenation intrinsic is their juxtaposition; flattening normalises the monoid laws — associativity, the empty identity, re-segmented literal runs, and fused adjacent windows of one base (`slice(b, s, m) ++ slice(b, m, e) = slice(b, s, e)`) — so two definitionally equal values decompose to the same list.

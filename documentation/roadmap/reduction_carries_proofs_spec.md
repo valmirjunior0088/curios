@@ -2,7 +2,9 @@
 
 ## Status
 
-Specified and ready to implement. Nothing is started. An earlier revision of this specification recorded the definitional-equality half as an open rule-set design — a canonical form for symbolic sums, a "float the literal floor" rule, and a confluence argument across `Nat`'s two spellings of addition. The probes below falsified that framing: the decision machinery already exists in the tree, decides every equation this specification needs, and is withheld from the failing case by nothing but a carrier-shaped gate. What remains of that half is widening one gate under two stated contracts; the rest of the work is the reparameterisation and the `/std` bridge, unchanged from the earlier revision.
+**The definitional-equality half has landed.** `curios-core`'s `peel_nat_terms` gates the cancellation on a shape rather than a carrier, so a floorless sum reaches it; the entry criterion below typechecks, the two hand-rolled `peel_nat_pair` copies in `curios-elab` and `curios-cert` are gone, and the grid carries the floorless verdicts plus the `Stuck` case the contract required. What remains is the reparameterisation and the `/std` bridge, unchanged from what is written here, and then the four bound fields.
+
+An earlier revision of this specification recorded the definitional-equality half as an open rule-set design — a canonical form for symbolic sums, a "float the literal floor" rule, and a confluence argument across `Nat`'s two spellings of addition. The probes below falsified that framing: the decision machinery already exists in the tree, decides every equation this specification needs, and is withheld from the failing case by nothing but a carrier-shaped gate. What remains of that half is widening one gate under two stated contracts; the rest of the work is the reparameterisation and the `/std` bridge, unchanged from the earlier revision.
 
 ## Why it exists
 

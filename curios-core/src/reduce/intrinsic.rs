@@ -2227,7 +2227,7 @@ mod tests {
         },
         crate::{
             Category, Cost, Free, Intrinsic, Nat, One, Peel, ReduceError, Scope, Subterm, Term,
-            peel_bin, peel_list, peel_nat,
+            peel_bin, peel_list, peel_nat, peel_nat_terms,
         },
         curios_num::{Integer, Natural},
         curios_utilities::{Grain, PackedBin},
@@ -2720,14 +2720,26 @@ mod tests {
     //
     // Each verdict is believed by a different consumer, so each has its own obligation. A `Peel::Equal` reaches conversion as a definitional equation, and congruence carries a false one to `False`. A `Peel::Clash` reaches inversion as *impossible*, which excuses an omitted arm — the vacuous-elimination route. `Peel::Continue` is the one with no property stated anywhere, and it needs the strongest: the caller compares the residuals and reports *their* verdict as the original pair's, so the residuals must be equi-satisfiable with the pair they replaced, not merely implied by it. A residual pair that disagreed where the originals agreed would turn a later clash into a clash on the originals.
     //
-    // So each verdict is checked against ground truth at every closed instantiation of its symbols, which is the only thing that can distinguish a valid equation from a plausible one. The grid reaches what cancelling *summands* newly decides rather than the successor spine alone: a commuted sum, a summand carried at multiplicity two, a floor surviving over shared summands, and two spellings of one number that share no summand syntactically. `Peel::Stuck` is asserted unreachable here, which is the claim `peel_nat`'s documentation makes and no fixture held.
+    // So each verdict is checked against ground truth at every closed instantiation of its symbols, which is the only thing that can distinguish a valid equation from a plausible one. The grid reaches what cancelling *summands* newly decides rather than the successor spine alone: a commuted sum, a summand carried at multiplicity two, a floor surviving over shared summands, and two spellings of one number that share no summand syntactically.
+    //
+    // It reaches the **floorless** pairs too, which is the coverage widening the peel's gate to a sum spine added. Those are the pairs no `Intrinsic::Nat` carrier can express — `(x + y) + z` reduces to a bare `NatAdd`, not to a successor floor — and the reassociation among them is the equation the window-fusion bound rests on. `Peel::Stuck` is now *reachable* and carries its own case: a floorless pair sharing no summand comes back from `cancel_common` untouched, and returning it as `Continue` would re-enter the same congruence on the same terms forever.
     #[test]
     fn every_nat_peel_verdict_holds_at_every_closed_instantiation() {
-        let (first, second) = (Free::local(0, Some("x")), Free::local(1, Some("y")));
-        let (x, y) = (Term::free_var(&first), Term::free_var(&second));
+        let (first, second, third) = (
+            Free::local(0, Some("x")),
+            Free::local(1, Some("y")),
+            Free::local(2, Some("z")),
+        );
+        let (x, y, z) = (
+            Term::free_var(&first),
+            Term::free_var(&second),
+            Term::free_var(&third),
+        );
 
-        let value_at = |term: &Term, a: u32, b: u32| {
-            let closed = fold(at(at(term.clone(), &first, lit(a)), &second, lit(b)));
+        let value_at = |term: &Term, a: u32, b: u32, c: u32| {
+            let closed = at(term.clone(), &first, lit(a));
+            let closed = at(closed, &second, lit(b));
+            let closed = fold(at(closed, &third, lit(c)));
             let (floor, inner) = Nat::decompose(&closed);
             assert!(Nat::is_zero(&inner), "a closed Nat folds to a literal");
             floor
@@ -2770,39 +2782,67 @@ mod tests {
                 fold(plus(scaled(2, x.clone()), lit(1))),
                 fold(plus(plus(x.clone(), x.clone()), lit(1))),
             ),
+            // The floorless pairs. The first is the equation window fusion's bound rests on, and the one the carrier gate used to hide: both sides reduce to a bare `NatAdd`, so no `Intrinsic::Nat` ever carried them to the cancellation.
+            (
+                "x + y + z ~ x + (y + z)",
+                fold(plus(plus(x.clone(), y.clone()), z.clone())),
+                fold(plus(x.clone(), plus(y.clone(), z.clone()))),
+            ),
+            (
+                "x + y ~ y + x",
+                fold(plus(x.clone(), y.clone())),
+                fold(plus(y.clone(), x.clone())),
+            ),
+            // A floored side against a floorless one, which the carrier gate could not admit either: the shared summands cancel and the floor is what is left to decide on.
+            (
+                "x + y + 1 ~ x + y",
+                fold(plus(plus(x.clone(), y.clone()), lit(1))),
+                fold(plus(x.clone(), y.clone())),
+            ),
+            (
+                "x + y ~ x + z",
+                fold(plus(x.clone(), y.clone())),
+                fold(plus(x.clone(), z.clone())),
+            ),
+            // Nothing shared and no floor to strip: the pair comes back untouched, and declining is the only answer that terminates.
+            ("x + y ~ z", fold(plus(x.clone(), y.clone())), z.clone()),
         ];
 
-        let (mut equal, mut clash, mut carried) = (0, 0, 0);
+        let (mut equal, mut clash, mut carried, mut stuck) = (0, 0, 0, 0);
 
         for (label, left, right) in cases {
-            let peel = peel_nat(&as_nat(&left), &as_nat(&right));
+            let peel = peel_nat_terms(&left, &right).expect("a `Nat`-shaped pair");
 
             match &peel {
                 Peel::Equal => equal += 1,
                 Peel::Clash => clash += 1,
                 Peel::Continue(..) => carried += 1,
-                Peel::Stuck => {}
+                Peel::Stuck => stuck += 1,
             }
 
             for a in [0u32, 1, 2, 5] {
                 for b in [0u32, 1, 2, 5] {
-                    let agree = value_at(&left, a, b) == value_at(&right, a, b);
+                    for c in [0u32, 1, 2, 5] {
+                        let agree = value_at(&left, a, b, c) == value_at(&right, a, b, c);
 
-                    match &peel {
-                        Peel::Equal => assert!(
-                            agree,
-                            "`{label}` was decided equal but differs at x = {a}, y = {b}"
-                        ),
-                        Peel::Clash => assert!(
-                            !agree,
-                            "`{label}` was decided impossible but holds at x = {a}, y = {b}"
-                        ),
-                        Peel::Continue(residual_left, residual_right) => assert_eq!(
-                            value_at(residual_left, a, b) == value_at(residual_right, a, b),
-                            agree,
-                            "`{label}`'s residuals disagree with the pair they replaced at x = {a}, y = {b}",
-                        ),
-                        Peel::Stuck => unreachable!("`{label}`: peeling a `Nat` never declines"),
+                        match &peel {
+                            Peel::Equal => assert!(
+                                agree,
+                                "`{label}` was decided equal but differs at x = {a}, y = {b}, z = {c}"
+                            ),
+                            Peel::Clash => assert!(
+                                !agree,
+                                "`{label}` was decided impossible but holds at x = {a}, y = {b}, z = {c}"
+                            ),
+                            Peel::Continue(residual_left, residual_right) => assert_eq!(
+                                value_at(residual_left, a, b, c)
+                                    == value_at(residual_right, a, b, c),
+                                agree,
+                                "`{label}`'s residuals disagree with the pair they replaced at x = {a}, y = {b}, z = {c}",
+                            ),
+                            // A declined pair claims nothing about its values, so there is nothing to check against ground truth — the obligation it carries is termination, and the count below is what holds the case in the grid.
+                            Peel::Stuck => {}
+                        }
                     }
                 }
             }
@@ -2810,8 +2850,8 @@ mod tests {
 
         // Every verdict above holds vacuously of a grid that reaches only one of them, and `Continue` is the one a shape falls to when nothing fires — so a grid that decided nothing would pass while checking nothing. This is the count that says otherwise, and it is an assertion rather than a comment because the perimeter's own record is that inert rules are what hide defects.
         assert_eq!(
-            (equal, clash, carried),
-            (1, 3, 4),
+            (equal, clash, carried, stuck),
+            (3, 4, 5, 1),
             "the grid stopped reaching every peel verdict",
         );
     }
