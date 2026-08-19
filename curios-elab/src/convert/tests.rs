@@ -43,6 +43,7 @@ fn value_conversion_does_not_unfold_terms_differing_only_by_universes() {
                     PackedBin::from_bytes(Vec::<u8>::new()),
                 )),
                 nat(0),
+                qed(),
             )),
         ),
         None,
@@ -779,6 +780,7 @@ fn convert_intrinsic_bin_get_recurses_into_operands() {
                 Grain::X,
                 Term::free_var(&x),
                 Term::free_var(&a),
+                qed(),
             )),
         ),
     );
@@ -791,6 +793,7 @@ fn convert_intrinsic_bin_get_recurses_into_operands() {
                 Grain::X,
                 Term::free_var(&y),
                 Term::free_var(&b),
+                qed(),
             )),
         ),
     );
@@ -831,6 +834,11 @@ fn convert_intrinsic_bin_concat_recurses_into_operands() {
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
 }
 
+/// A stand-in for a discharged bound. Congruence compares one at its *proposition*, where irrelevance discharges it without looking, so a fixture that only means to exercise the value operands supplies the same term on both sides.
+fn qed() -> Term {
+    Term::free_var(&Free::local(9_999, Some("qed")))
+}
+
 #[test]
 fn convert_intrinsic_bin_slice_recurses_into_operands() {
     let mut context = context();
@@ -852,6 +860,7 @@ fn convert_intrinsic_bin_slice_recurses_into_operands() {
                     Term::free_var(&x),
                     Term::free_var(&a),
                     Term::free_var(&p),
+                    qed(),
                 )),
             ),
         ),
@@ -868,6 +877,7 @@ fn convert_intrinsic_bin_slice_recurses_into_operands() {
                     Term::free_var(&y),
                     Term::free_var(&b),
                     Term::free_var(&q),
+                    qed(),
                 )),
             ),
         ),

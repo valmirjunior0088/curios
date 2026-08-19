@@ -143,12 +143,14 @@ pub enum Intrinsic {
         grain: Grain,
         bin: Term,
         index: Term,
+        in_range: Term,
     },
     BinSlice {
         grain: Grain,
         bin: Term,
         start: Term,
         length: Term,
+        within: Term,
     },
     BinAppend {
         grain: Grain,
@@ -170,12 +172,14 @@ pub enum Intrinsic {
         element: Term,
         list: Term,
         index: Term,
+        in_range: Term,
     },
     ListSlice {
         element: Term,
         list: Term,
         start: Term,
         length: Term,
+        within: Term,
     },
     ListAppend {
         element: Term,

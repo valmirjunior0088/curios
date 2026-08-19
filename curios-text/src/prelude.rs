@@ -579,6 +579,7 @@ fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<TopItem> {
                 grain,
                 bin: name("b"),
                 index: name("i"),
+                in_range: name("ok"),
             }),
         ),
         // A window is a start and a *count*, so a reversed one cannot be spelled and the ordering half of the old bound has no proposition left to state. What survives is that the window ends inside the value.
@@ -606,6 +607,7 @@ fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<TopItem> {
                 bin: name("b"),
                 start: name("s"),
                 length: name("l"),
+                within: name("within"),
             }),
         ),
         pub_fn(
@@ -665,6 +667,7 @@ fn list_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
                 element: name("T"),
                 list: name("a"),
                 index: name("i"),
+                in_range: name("ok"),
             }),
         ),
         // The `List` twin of `Bin/slice`'s window bound; see the comment there for why only one half survives the count.
@@ -693,6 +696,7 @@ fn list_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
                 list: name("a"),
                 start: name("s"),
                 length: name("l"),
+                within: name("within"),
             }),
         ),
         pub_fn_marked(

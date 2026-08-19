@@ -2,10 +2,10 @@ mod signature;
 pub use signature::*;
 
 use {
-    super::{Bound, Free, MetaId, Nat, Subterm, Term, Var, Visit},
+    super::{Bound, MetaId, Nat, Subterm, Term, Var, Visit},
     curios_abi::WireType,
     curios_num::{Flt, Integer},
-    curios_utilities::{Grain, PackedBin, SyntaxName, SyntaxRegistry},
+    curios_utilities::{Grain, PackedBin},
     std::collections::BTreeSet,
 };
 
@@ -46,7 +46,7 @@ pub enum Intrinsic {
     NatSub(Term, Term),
     NatMul(Term, Term),
     NatLt(Term, Term),
-    /// `non_zero` proves `0 < divisor`. Carried as a field rather than left to `/sys`'s declaration so the obligation survives into Core, where the kernel re-checks it; see [`Intrinsic::operand_types`].
+    /// `non_zero` proves `0 < divisor`. Carried as a field rather than left to `/sys`'s declaration so the obligation survives into Core, where the kernel re-checks it; [`Intrinsic::signature`] states the proposition it must inhabit.
     NatDiv {
         dividend: Term,
         divisor: Term,
@@ -150,16 +150,20 @@ pub enum Intrinsic {
     Bin(Grain, PackedBin),
     BinLen(Grain, Term),
     BinEql(Grain, Term, Term),
+    /// `in_range` proves `index < len(bin)`, carried for the reason [`Intrinsic::NatDiv`]'s bound is.
     BinGet {
         grain: Grain,
         bin: Term,
         index: Term,
+        in_range: Term,
     },
+    /// `within` proves `start + length <= len(bin)` — the one bound a window has, since a count cannot spell a reversed range.
     BinSlice {
         grain: Grain,
         bin: Term,
         start: Term,
         length: Term,
+        within: Term,
     },
     BinAppend {
         grain: Grain,
@@ -184,12 +188,14 @@ pub enum Intrinsic {
         element: Term,
         list: Term,
         index: Term,
+        in_range: Term,
     },
     ListSlice {
         element: Term,
         list: Term,
         start: Term,
         length: Term,
+        within: Term,
     },
     ListAppend {
         element: Term,
@@ -349,30 +355,34 @@ impl Intrinsic {
     }
 
     /// A `BinGet` node from term-shaped bytes and index.
-    pub fn bin_get<B, I>(grain: Grain, bin: B, index: I) -> Self
+    pub fn bin_get<B, I, P>(grain: Grain, bin: B, index: I, in_range: P) -> Self
     where
         B: Into<Term>,
         I: Into<Term>,
+        P: Into<Term>,
     {
         Self::BinGet {
             grain,
             bin: bin.into(),
             index: index.into(),
+            in_range: in_range.into(),
         }
     }
 
     /// A `BinSlice` node from term-shaped bytes, start, and length.
-    pub fn bin_slice<B, S, L>(grain: Grain, bin: B, start: S, length: L) -> Self
+    pub fn bin_slice<B, S, L, P>(grain: Grain, bin: B, start: S, length: L, within: P) -> Self
     where
         B: Into<Term>,
         S: Into<Term>,
         L: Into<Term>,
+        P: Into<Term>,
     {
         Self::BinSlice {
             grain,
             bin: bin.into(),
             start: start.into(),
             length: length.into(),
+            within: within.into(),
         }
     }
 
@@ -422,32 +432,36 @@ impl Intrinsic {
     }
 
     /// A `ListGet` node from term-shaped element type, list, and index.
-    pub fn list_get<T, L, I>(type_: T, list: L, index: I) -> Self
+    pub fn list_get<T, L, I, P>(type_: T, list: L, index: I, in_range: P) -> Self
     where
         T: Into<Term>,
         L: Into<Term>,
         I: Into<Term>,
+        P: Into<Term>,
     {
         Self::ListGet {
             element: type_.into(),
             list: list.into(),
             index: index.into(),
+            in_range: in_range.into(),
         }
     }
 
     /// A `ListSlice` node from term-shaped element type, list, start, and length.
-    pub fn list_slice<T, L, S, N>(type_: T, list: L, start: S, length: N) -> Self
+    pub fn list_slice<T, L, S, N, P>(type_: T, list: L, start: S, length: N, within: P) -> Self
     where
         T: Into<Term>,
         L: Into<Term>,
         S: Into<Term>,
         N: Into<Term>,
+        P: Into<Term>,
     {
         Self::ListSlice {
             element: type_.into(),
             list: list.into(),
             start: start.into(),
             length: length.into(),
+            within: within.into(),
         }
     }
 
@@ -656,22 +670,12 @@ impl Intrinsic {
             | Intrinsic::FltMax(a, b)
             | Intrinsic::FltCopysign(a, b)
             | Intrinsic::BinEql(Grain::X, a, b)
-            | Intrinsic::BinGet {
-                grain: Grain::X,
-                bin: a,
-                index: b,
-            }
             | Intrinsic::BinAppend {
                 grain: Grain::X,
                 bin: a,
                 element: b,
             }
             | Intrinsic::BinEql(Grain::B, a, b)
-            | Intrinsic::BinGet {
-                grain: Grain::B,
-                bin: a,
-                index: b,
-            }
             | Intrinsic::BinAppend {
                 grain: Grain::B,
                 bin: a,
@@ -689,24 +693,7 @@ impl Intrinsic {
                 visit(b);
             }
 
-            Intrinsic::BinSlice {
-                grain: Grain::X,
-                bin: a,
-                start: b,
-                length: c,
-            }
-            | Intrinsic::BinSlice {
-                grain: Grain::B,
-                bin: a,
-                start: b,
-                length: c,
-            }
-            | Intrinsic::ListGet {
-                element: a,
-                list: b,
-                index: c,
-            }
-            | Intrinsic::ListAppend {
+            Intrinsic::ListAppend {
                 element: a,
                 list: b,
                 item: c,
@@ -716,13 +703,7 @@ impl Intrinsic {
                 visit(c);
             }
 
-            Intrinsic::ListSlice {
-                element: a,
-                list: b,
-                start: c,
-                length: d,
-            }
-            | Intrinsic::ListMap {
+            Intrinsic::ListMap {
                 from: a,
                 to: b,
                 list: c,
@@ -740,7 +721,7 @@ impl Intrinsic {
                 visit(d);
             }
 
-            // The bounded operations walk their proof beside their value operands, and must: substitution reaches a term only through this walk, and a bound's proposition mentions the very operands around it. Congruence still declines to compare the proof *structurally* — it enqueues it at that proposition instead, where irrelevance applies (see `operand_types`).
+            // The bounded operations walk their proof beside their value operands, and must: substitution reaches a term only through this walk, and a bound's proposition mentions the very operands around it. Congruence still declines to compare the proof *structurally* — it enqueues it at that proposition instead, where irrelevance applies (see [`Intrinsic::signature`]).
             Intrinsic::NatDiv {
                 dividend: a,
                 divisor: b,
@@ -771,6 +752,51 @@ impl Intrinsic {
                 four_bytes: p,
             } => {
                 visit(a);
+                visit(p);
+            }
+
+            // The four sequence accessors, beside the division family for the same reason. Their arity differs by carrier — a `List` operation leads with its element type — so they group by operand count rather than by which one is the proof, and the proof is last in every one of them, matching `signature`'s order.
+            Intrinsic::BinGet {
+                grain: _,
+                bin: a,
+                index: b,
+                in_range: p,
+            } => {
+                visit(a);
+                visit(b);
+                visit(p);
+            }
+
+            Intrinsic::BinSlice {
+                grain: _,
+                bin: a,
+                start: b,
+                length: c,
+                within: p,
+            }
+            | Intrinsic::ListGet {
+                element: a,
+                list: b,
+                index: c,
+                in_range: p,
+            } => {
+                visit(a);
+                visit(b);
+                visit(c);
+                visit(p);
+            }
+
+            Intrinsic::ListSlice {
+                element: a,
+                list: b,
+                start: c,
+                length: d,
+                within: p,
+            } => {
+                visit(a);
+                visit(b);
+                visit(c);
+                visit(d);
                 visit(p);
             }
 
@@ -858,45 +884,6 @@ impl Intrinsic {
     // Recurse into every operand `Term` so a construction nested inside an intrinsic (e.g. `List(Str)`'s element type) still contributes its head name. Intrinsics own no head names of their own.
     pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<crate::Global>) {
         self.for_each_operand(&mut |term| term.collect_construction_names(names));
-    }
-
-    /// The type each traversed operand is stated at, in [`traverse`](Self::traverse) order.
-    ///
-    /// **Sparse on purpose.** An entry is `Some` only where the operand's type is *declared* rather than implied by the operation's shape, which today means the bound fields alone; a vector shorter than the operand list leaves the rest at ground. That is what lets the ninety-odd operations carrying no declared type write nothing here and stay incapable of falling out of step with their own arity.
-    ///
-    /// It exists so congruence can compare a proof **at its proposition** instead of at a flat `Type`, which makes proof irrelevance fire through the ordinary gate rather than through a rule about bounds. Skipping the field instead would have been a new trusted rule; this is a use of one the theory already has, resting on the kernel's check that the field really does inhabit the proposition named here.
-    ///
-    /// It is also the first increment of the operand telescope intrinsics have never had. The same types are already written twice — as checking procedures in `curios-cert`'s `infer_intrinsic` and `curios-elab`'s `elaborate_intrinsic` — which is why a third consumer could not read them. Filling in the remaining entries is what would let both of those collapse into one driver over this.
-    ///
-    /// **The four sequence accessors are absent, and not by choice.** `BinGet`, `BinSlice`, `ListGet` and `ListSlice` carry no bound field, because `spine.rs` fuses adjacent slice windows and the fused bound is one nobody proved — composing it needs the reducer to construct a proof. `documentation/roadmap/symbolic_addition_reassociates_spec.md` records why every route there dead-ends on `(s + a) + c` not being convertible with `s + (a + c)`, and is the work that unblocks them.
-    pub fn operand_types(&self, syntax: &SyntaxRegistry) -> Vec<Option<Term>> {
-        let applied = |slot: SyntaxName, args: Vec<Term>| {
-            Some(Term::apply(
-                Term::var(Var::free(Free::global(slot.qualifier()))),
-                args,
-            ))
-        };
-
-        match self {
-            // `0 < divisor`: a natural is nonzero exactly when zero is below it, which is why `Nat` needs no `NonZero` of its own.
-            Intrinsic::NatDiv { divisor, .. } | Intrinsic::NatRem { divisor, .. } => vec![
-                None,
-                None,
-                applied(
-                    syntax.proof.lt,
-                    vec![Term::intrinsic(Intrinsic::Nat(Nat::Zero)), divisor.clone()],
-                ),
-            ],
-            Intrinsic::IntDiv { divisor, .. } | Intrinsic::IntRem { divisor, .. } => vec![
-                None,
-                None,
-                applied(syntax.proof.int_non_zero, vec![divisor.clone()]),
-            ],
-            Intrinsic::FltOfLeBytes { bin, .. } => {
-                vec![None, applied(syntax.proof.bytes_four, vec![bin.clone()])]
-            }
-            _ => Vec::new(),
-        }
     }
 
     pub fn traverse<F>(&self, visit: &mut Visit<F>) -> Intrinsic
@@ -1044,23 +1031,27 @@ impl Intrinsic {
             }
             Intrinsic::BinGet {
                 grain,
-                bin: b,
-                index: i,
-            } => traverse_binary(b, i, visit, |b, i| Intrinsic::BinGet {
+                bin,
+                index,
+                in_range,
+            } => Intrinsic::BinGet {
                 grain: *grain,
-                bin: b,
-                index: i,
-            }),
+                bin: visit.visit_subterm(bin),
+                index: visit.visit_subterm(index),
+                in_range: visit.visit_subterm(in_range),
+            },
             Intrinsic::BinSlice {
                 grain,
                 bin,
                 start,
                 length,
+                within,
             } => Intrinsic::BinSlice {
                 grain: *grain,
                 bin: visit.visit_subterm(bin),
                 start: visit.visit_subterm(start),
                 length: visit.visit_subterm(length),
+                within: visit.visit_subterm(within),
             },
             Intrinsic::BinAppend {
                 grain,
@@ -1093,21 +1084,25 @@ impl Intrinsic {
                 element: ty,
                 list,
                 index,
+                in_range,
             } => Intrinsic::ListGet {
                 element: visit.visit_subterm(ty),
                 list: visit.visit_subterm(list),
                 index: visit.visit_subterm(index),
+                in_range: visit.visit_subterm(in_range),
             },
             Intrinsic::ListSlice {
                 element: ty,
                 list,
                 start,
                 length,
+                within,
             } => Intrinsic::ListSlice {
                 element: visit.visit_subterm(ty),
                 list: visit.visit_subterm(list),
                 start: visit.visit_subterm(start),
                 length: visit.visit_subterm(length),
+                within: visit.visit_subterm(within),
             },
             Intrinsic::ListAppend {
                 element: ty,

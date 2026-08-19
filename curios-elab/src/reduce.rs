@@ -7,7 +7,7 @@ use {
         Apply, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free, FreeMonoid, Func,
         FuncType, Global, InductDecl, InductType, Intrinsic, Layer, Let, Many, Match, Metavar, Nat,
         One, Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Struct, StructDecl, StructType,
-        Subterm, Telescope, Term, Tuple, TupleType, UniverseInst, Var, Variant, accelerable,
+        Subterm, Telescope, Term, Tuple, TupleType, UniverseInst, Var, Variant, Visit, accelerable,
         instantiate_universe_levels_scoped, project_erased_universes, reduce_closed,
         reduce_intrinsic,
     },
@@ -290,6 +290,37 @@ pub(crate) fn canonical_scrutinee(context: &mut Context, term: &Term) -> Result<
                 plicities: plicities.clone(),
             })
             .into())
+        }
+        // An intrinsic's operands are arguments in the same sense, and a *key* is where it tells: a guard is recorded as written, so `10 <= Bytes/len(b)` keeps the `/sys` application and the concept dispatch it was spelled with, while every occurrence the reducer meets carries the intrinsics they unfold to, the arithmetic normal form they fold to, and — where the base is a local definition — the value it unfolds to. Only reduction reaches all three.
+        //
+        // The operands, never the node: the discipline the `Apply` arm above states as keeping the head verbatim. Reducing the node would meet this very key's refinement and canonicalize it to the arm's own value.
+        //
+        // The two passes agree on what a child is because both are `Intrinsic::traverse`, the one definition of an intrinsic's operands — the correspondence `convert`'s `decompose` already rests on.
+        Subterm::Intrinsic(intrinsic) => {
+            let mut masking = Visit::masking(|_, _: &Var| None, Term::type_ground());
+            intrinsic.traverse(&mut masking);
+
+            let mut operands = Vec::new();
+            for operand in masking.take_masked_children() {
+                operands.push(match reduce(context, operand.clone()) {
+                    Ok(value) => value,
+                    Err(spent) if spent.is_exhausted() => return Err(spent),
+                    Err(_) => operand,
+                });
+            }
+
+            let mut index = 0;
+            let rebuilt = intrinsic.traverse(&mut Visit::rewriting(
+                |_, _: &Var| None,
+                Box::new(move |_, operand: &Term| {
+                    let value = operands.get(index).cloned();
+                    index += 1;
+
+                    Some(value.unwrap_or_else(|| operand.clone()))
+                }),
+            ));
+
+            Ok(Subterm::Intrinsic(rebuilt).into())
         }
         _ => Ok(term.clone()),
     }?;
@@ -574,6 +605,32 @@ fn reduce_universe_inst(context: &Context, instance: UniverseInst) -> Result<Red
     Ok(Reduce::Continue(reduct))
 }
 
+/// What canonicalizing one refinement key may spend before the attempt is abandoned.
+///
+/// A ceiling on *discarded* work, not a limit on what a program may compute: settling a key collapses two spellings of one comparison, and failing to settle it leaves them uncollapsed, so the program means the same either way. Sized to settle the shapes a guard actually takes — a comparison over parameters, over a local definition, over a measured literal — while stopping well short of a subject an accumulation built, which is the case that would otherwise spend a whole declaration on one attempt.
+const CANONICAL_KEY_ALLOWANCE: u64 = 100_000;
+
+/// [`canonical_scrutinee`] of a *registered key*, capped and memoized.
+///
+/// Both halves are load-bearing and neither works alone. The escalation runs per probe while this answer is per key, so without the memo one guard's subject is re-derived at every node of that operation in the declaration. And the first attempt can be the expensive one, so without the cap there is no first success to memoize — a guard over a subject a hundred thousand iterations built consumes the declaration's whole budget on that attempt, which is measured rather than supposed (`tests::numeric::byte_of_nat_inverts_to_nat_and_refuses_the_bound` is where it showed).
+///
+/// A key the allowance stopped short is memoized as *itself*, so the bail is paid once and the key keeps its written spelling — the behaviour that held before any of this existed.
+fn canonical_key(context: &mut Context, key: &Term) -> Result<Term, ReduceError> {
+    if let Some(cached) = context.cached_canonical_key(key) {
+        return Ok(cached);
+    }
+
+    let canonical = context
+        .within_allowance(CANONICAL_KEY_ALLOWANCE, |context| {
+            canonical_scrutinee(context, key)
+        })
+        .unwrap_or_else(|| key.clone());
+
+    context.record_canonical_key(key.clone(), &canonical);
+
+    Ok(canonical)
+}
+
 /// The refinement probe for an intrinsic the loop has just folded — the second look every *other* arm of the dispatch gets for free.
 ///
 /// **Why one arm needs its own.** Each arm returns a [`Reduce`]: on progress it `Continue`s, the loop comes back around, and the probe at the top runs again on the new term. That is how a refinement keeps up with reduction. This arm answers a normal form in one step and breaks, so without this the store is asked exactly once, about a term whose operands have not been reduced yet.
@@ -599,9 +656,9 @@ fn refined_after_fold(context: &mut Context, folded: &Term) -> Result<Option<Ter
         return Ok(Some(value.clone()));
     }
 
-    // The escalation, and the cheap half of it: `reduce_intrinsic` left the operands in weak-head normal form, so the candidate side is canonical already and only the key has to be brought to it — memoized, so once per key rather than once per node.
+    // The escalation, and the cheap half of it: `reduce_intrinsic` left the operands in weak-head normal form, so the candidate side is canonical already and only the key has to be brought to it — capped and memoized, so once per key rather than once per node.
     for (key, value) in context.scrutinee_entries(head) {
-        if canonical_scrutinee(context, &key)? == shallow {
+        if canonical_key(context, &key)? == shallow {
             return Ok(Some(value));
         }
     }
@@ -667,7 +724,7 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
                         let canonical = canonical_scrutinee(context, &term)?;
 
                         for (key, value) in candidates {
-                            if canonical_scrutinee(context, &key)? == canonical {
+                            if canonical_key(context, &key)? == canonical {
                                 break 'step Reduce::Continue(value);
                             }
                         }

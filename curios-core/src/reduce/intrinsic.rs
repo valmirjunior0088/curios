@@ -668,6 +668,25 @@ fn bin_piece(grain: Grain, piece: Piece<'_>) -> Term {
     }
 }
 
+/// The generator a located index names, read straight out of the literal run holding it.
+///
+/// Every segment [`bin_segments`](crate::free_monoid) admits is a literal run, so the read is performed here rather than rebuilt as a `BinGet` over that operand for the next pass to fold into exactly this — which is also what keeps the located path from having to *state* a bound it would then have to prove.
+fn bin_element(grain: Grain, operand: &Term, local: usize) -> Option<Subterm> {
+    let Subterm::Intrinsic(Intrinsic::Bin(found, run)) = &**operand else {
+        unreachable!("a located index lies in a literal run");
+    };
+    debug_assert_eq!(*found, grain, "a located segment shares the value's grain");
+
+    match grain {
+        Grain::X => run
+            .byte(local)
+            .map(|byte| Subterm::Intrinsic(Intrinsic::Byte(byte))),
+        Grain::B => run
+            .bit(local)
+            .map(|bit| Subterm::Intrinsic(Intrinsic::Bool(bit))),
+    }
+}
+
 /// [`bin_piece`] over the element carrier, restoring the element type every `List` value carries.
 fn list_piece(element: &Term, piece: Piece<'_>) -> Term {
     match piece {
@@ -1299,6 +1318,7 @@ pub fn reduce_intrinsic(
             grain: Grain::X,
             bin,
             index,
+            in_range,
         } => {
             let bin = reducer.reduce_forced(bin.clone())?;
             let index_reduced = reducer.reduce_forced(index.clone())?;
@@ -1331,15 +1351,13 @@ pub fn reduce_intrinsic(
             if let Some(i) = i {
                 match bin_locate(Grain::X, &bin, i) {
                     Some(Located::At(operand, local)) => {
-                        let local = Term::intrinsic(Intrinsic::Nat(Nat::new(local)));
-                        let operand = operand.clone();
-                        return reducer
-                            .reduce(Term::intrinsic(Intrinsic::bin_get(
-                                Grain::X,
-                                operand,
-                                local,
-                            )))
-                            .map(Term::unwrap_or_clone);
+                        return bin_element(Grain::X, operand, local).ok_or_else(|| {
+                            ReduceError::BinGetOutOfBounds {
+                                len: local,
+                                index: i,
+                                span: index.span(),
+                            }
+                        });
                     }
                     Some(Located::Past(len)) => {
                         return Err(ReduceError::BinGetOutOfBounds {
@@ -1356,14 +1374,24 @@ pub fn reduce_intrinsic(
                     Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)) => {
                         let zero = Term::intrinsic(Intrinsic::Nat(Nat::Zero));
                         return reducer
-                            .reduce(Term::intrinsic(Intrinsic::bin_get(Grain::X, head, zero)))
+                            .reduce(Term::intrinsic(Intrinsic::bin_get(
+                                Grain::X,
+                                head,
+                                zero,
+                                in_range.clone(),
+                            )))
                             .map(Term::unwrap_or_clone);
                     }
                     Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(..))) => {
                         let one = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
                         let prev = Term::intrinsic(Intrinsic::nat_sub(index_reduced.clone(), one));
                         return reducer
-                            .reduce(Term::intrinsic(Intrinsic::bin_get(Grain::X, tail, prev)))
+                            .reduce(Term::intrinsic(Intrinsic::bin_get(
+                                Grain::X,
+                                tail,
+                                prev,
+                                in_range.clone(),
+                            )))
                             .map(Term::unwrap_or_clone);
                     }
                     _ => {}
@@ -1373,6 +1401,7 @@ pub fn reduce_intrinsic(
                 Grain::X,
                 bin,
                 index_reduced,
+                in_range.clone(),
             )))
         }
         Intrinsic::BinSlice {
@@ -1380,6 +1409,7 @@ pub fn reduce_intrinsic(
             bin,
             start,
             length,
+            within,
         } => {
             let bin = reducer.reduce_forced(bin.clone())?;
             let start_reduced = reducer.reduce_forced(start.clone())?;
@@ -1461,6 +1491,7 @@ pub fn reduce_intrinsic(
                             tail,
                             zero,
                             dec(&length_reduced),
+                            within.clone(),
                         ));
                         let consed = Term::intrinsic(Intrinsic::bin_concat(Grain::X, [head, rest]));
                         return reducer.reduce(consed).map(Term::unwrap_or_clone);
@@ -1471,6 +1502,7 @@ pub fn reduce_intrinsic(
                             tail,
                             dec(&start_reduced),
                             length_reduced.clone(),
+                            within.clone(),
                         ));
                         return reducer.reduce(sliced).map(Term::unwrap_or_clone);
                     }
@@ -1482,6 +1514,7 @@ pub fn reduce_intrinsic(
                 bin,
                 start_reduced,
                 length_reduced,
+                within.clone(),
             )))
         }
         Intrinsic::BinAppend {
@@ -1595,6 +1628,7 @@ pub fn reduce_intrinsic(
             grain: Grain::B,
             bin,
             index,
+            in_range,
         } => {
             let span = index.span();
             let bin = reducer.reduce_forced(bin.clone())?;
@@ -1627,15 +1661,13 @@ pub fn reduce_intrinsic(
             if let Some(i) = as_index(&index_reduced) {
                 match bin_locate(Grain::B, &bin, i) {
                     Some(Located::At(operand, local)) => {
-                        let local = Term::intrinsic(Intrinsic::Nat(Nat::new(local)));
-                        let operand = operand.clone();
-                        return reducer
-                            .reduce(Term::intrinsic(Intrinsic::bin_get(
-                                Grain::B,
-                                operand,
-                                local,
-                            )))
-                            .map(Term::unwrap_or_clone);
+                        return bin_element(Grain::B, operand, local).ok_or_else(|| {
+                            ReduceError::BinGetOutOfBounds {
+                                len: local,
+                                index: i,
+                                span: index.span(),
+                            }
+                        });
                     }
                     Some(Located::Past(len)) => {
                         return Err(ReduceError::BinGetOutOfBounds {
@@ -1655,6 +1687,7 @@ pub fn reduce_intrinsic(
                                 Grain::B,
                                 head,
                                 Term::intrinsic(Intrinsic::Nat(Nat::Zero)),
+                                in_range.clone(),
                             )))
                             .map(Term::unwrap_or_clone);
                     }
@@ -1664,7 +1697,12 @@ pub fn reduce_intrinsic(
                             Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
                         ));
                         return reducer
-                            .reduce(Term::intrinsic(Intrinsic::bin_get(Grain::B, tail, prev)))
+                            .reduce(Term::intrinsic(Intrinsic::bin_get(
+                                Grain::B,
+                                tail,
+                                prev,
+                                in_range.clone(),
+                            )))
                             .map(Term::unwrap_or_clone);
                     }
                     _ => {}
@@ -1674,6 +1712,7 @@ pub fn reduce_intrinsic(
                 grain: Grain::B,
                 bin,
                 index: index_reduced,
+                in_range: in_range.clone(),
             }))
         }
         Intrinsic::BinSlice {
@@ -1681,6 +1720,7 @@ pub fn reduce_intrinsic(
             bin,
             start,
             length,
+            within,
         } => {
             let span = start.span().or_else(|| length.span());
             let bin = reducer.reduce_forced(bin.clone())?;
@@ -1755,6 +1795,7 @@ pub fn reduce_intrinsic(
                             tail,
                             Term::intrinsic(Intrinsic::Nat(Nat::Zero)),
                             dec(&length_reduced),
+                            within.clone(),
                         ));
                         return reducer
                             .reduce(Term::intrinsic(Intrinsic::bin_concat(
@@ -1770,6 +1811,7 @@ pub fn reduce_intrinsic(
                                 tail,
                                 dec(&start_reduced),
                                 length_reduced.clone(),
+                                within.clone(),
                             )))
                             .map(Term::unwrap_or_clone);
                     }
@@ -1781,6 +1823,7 @@ pub fn reduce_intrinsic(
                 bin,
                 start: start_reduced,
                 length: length_reduced,
+                within: within.clone(),
             }))
         }
         Intrinsic::BinAppend {
@@ -1857,6 +1900,7 @@ pub fn reduce_intrinsic(
             element: type_,
             list,
             index,
+            in_range,
         } => {
             let type_ = reducer.reduce(type_.clone())?;
             let list = reducer.reduce_forced(list.clone())?;
@@ -1888,7 +1932,12 @@ pub fn reduce_intrinsic(
                         let local = Term::intrinsic(Intrinsic::Nat(Nat::new(local)));
                         let operand = operand.clone();
                         return reducer
-                            .reduce(Term::intrinsic(Intrinsic::list_get(type_, operand, local)))
+                            .reduce(Term::intrinsic(Intrinsic::list_get(
+                                type_,
+                                operand,
+                                local,
+                                in_range.clone(),
+                            )))
                             .map(Term::unwrap_or_clone);
                     }
                     Some(Located::Past(len)) => {
@@ -1911,7 +1960,12 @@ pub fn reduce_intrinsic(
                         let one = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
                         let prev = Term::intrinsic(Intrinsic::nat_sub(index_reduced.clone(), one));
                         return reducer
-                            .reduce(Term::intrinsic(Intrinsic::list_get(type_, tail, prev)))
+                            .reduce(Term::intrinsic(Intrinsic::list_get(
+                                type_,
+                                tail,
+                                prev,
+                                in_range.clone(),
+                            )))
                             .map(Term::unwrap_or_clone);
                     }
                     _ => {}
@@ -1921,6 +1975,7 @@ pub fn reduce_intrinsic(
                 type_,
                 list,
                 index_reduced,
+                in_range.clone(),
             )))
         }
         Intrinsic::ListSlice {
@@ -1928,6 +1983,7 @@ pub fn reduce_intrinsic(
             list,
             start,
             length,
+            within,
         } => {
             let type_ = reducer.reduce(type_.clone())?;
             let list = reducer.reduce_forced(list.clone())?;
@@ -2019,6 +2075,7 @@ pub fn reduce_intrinsic(
                             tail,
                             zero,
                             dec(&length_reduced),
+                            within.clone(),
                         ));
                         let head_singleton: Term = Subterm::Intrinsic(Intrinsic::List {
                             element: type_.clone(),
@@ -2035,6 +2092,7 @@ pub fn reduce_intrinsic(
                             tail,
                             dec(&start_reduced),
                             length_reduced.clone(),
+                            within.clone(),
                         ));
                         return reducer.reduce(sliced).map(Term::unwrap_or_clone);
                     }
@@ -2046,6 +2104,7 @@ pub fn reduce_intrinsic(
                 list,
                 start_reduced,
                 length_reduced,
+                within.clone(),
             )))
         }
         Intrinsic::ListAppend {
@@ -2348,7 +2407,7 @@ mod tests {
         let empty: Term = Subterm::Intrinsic(Intrinsic::Bin(Grain::B, PackedBin::empty())).into();
         let cons = Term::intrinsic(Intrinsic::bin_append(Grain::B, empty, bit.clone()));
         let zero = Term::intrinsic(Intrinsic::Nat(Nat::Zero));
-        let get = Intrinsic::bin_get(Grain::B, cons, zero);
+        let get = Intrinsic::bin_get(Grain::B, cons, zero, qed());
 
         let reduced = reduce_intrinsic(&mut Inert, &get).expect("reduces");
 
@@ -2589,6 +2648,7 @@ mod tests {
                 )),
                 start: Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
                 length: Term::intrinsic(Intrinsic::Nat(Nat::new(4usize))),
+                within: qed(),
             })
         };
 
@@ -3049,6 +3109,7 @@ mod tests {
                     spelling.clone(),
                     lit(start as u32),
                     lit(count as u32),
+                    qed(),
                 );
 
                 let sliced = reduce_intrinsic(&mut Folding, &window).expect("a window reduces");
@@ -3072,7 +3133,7 @@ mod tests {
 
         for spelling in groupings(whole) {
             for (index, expected) in whole.iter().enumerate() {
-                let read = Intrinsic::bin_get(Grain::X, spelling.clone(), lit(index as u32));
+                let read = Intrinsic::bin_get(Grain::X, spelling.clone(), lit(index as u32), qed());
                 let byte = reduce_intrinsic(&mut Folding, &read).expect("an index reduces");
 
                 assert_eq!(
@@ -3134,6 +3195,7 @@ mod tests {
                     spelling.clone(),
                     lit(start as u32),
                     lit(count as u32),
+                    qed(),
                 );
                 let sliced = reduce_intrinsic(&mut Folding, &window).expect("a window reduces");
 
@@ -3145,7 +3207,8 @@ mod tests {
             }
 
             for (index, expected) in whole.iter().enumerate() {
-                let read = Intrinsic::list_get(elem.clone(), spelling.clone(), lit(index as u32));
+                let read =
+                    Intrinsic::list_get(elem.clone(), spelling.clone(), lit(index as u32), qed());
                 let element = reduce_intrinsic(&mut Folding, &read).expect("an index reduces");
 
                 assert_eq!(
@@ -3193,7 +3256,7 @@ mod tests {
 
     // Soundness gate for the `Bin` peel's verdicts over values — the `Bin` half of what `every_nat_peel_verdict_holds_at_every_closed_instantiation` states for `Nat`, written because the perimeter graded these laws argued in code comments only. The obligations are the same three. A `Peel::Equal` reaches conversion as a definitional equation, and congruence carries a false one to `False`. A `Peel::Clash` reaches inversion as *impossible*, which excuses an omitted arm — the vacuous-elimination route. A `Peel::Continue`'s residuals must be equi-satisfiable with the pair they replaced, since the caller compares the residuals and reports their verdict as the originals'. `Peel::Stuck` promises nothing and is only tallied.
     //
-    // The shapes reach the laws the code comments assert and nothing else stated: symbolic chunks cancelling by syntactic equality with a byte clash surviving past them, window fusion across a shared seam (`slice(w, s, m) ++ slice(w, m, e) = slice(w, s, e)`), the empty-window drop (`slice(w, i, i)` vanishing), append-as-concatenation (`append(b, c) = b ++ append(x[], c)`), and a near-miss control beside each: windows meeting at no seam must not fuse, and a one-byte symbolic cons against the identity stays undecided. Ground truth is the folded value at every closed instantiation of the symbols — instantiations respect `/sys/slice`'s `s <= e <= len(b)` preconditions, since a program outside them cannot be written, and that typing fact is exactly what makes the window laws unconditional.
+    // The shapes reach the laws the code comments assert and nothing else stated: symbolic chunks cancelling by syntactic equality with a byte clash surviving past them, window fusion across a shared seam (`slice(w, s, l₁) ++ slice(w, s + l₁, l₂) = slice(w, s, l₁ + l₂)`), the empty-window drop (`slice(w, i, 0)` vanishing), append-as-concatenation (`append(b, c) = b ++ append(x[], c)`), and a near-miss control beside each: windows meeting at no seam must not fuse, and a one-byte symbolic cons against the identity stays undecided. Ground truth is the folded value at every closed instantiation of the symbols — instantiations respect `/sys/slice`'s `s + l <= len(b)` precondition, since a program outside them cannot be written, and that typing fact is exactly what makes the window laws unconditional.
     //
     // Mutation-checked: fusing two windows of one base without the seam check (`*seam == lo` dropped from `push`) turns the no-seam control into a false `Equal` and this grid fails it at the first anchor whose seam bytes differ. The tally is the anti-inertness assertion the perimeter asks of a sole-reach fixture: `Stuck` is where a pair falls when nothing fires, so a grid that decided nothing would otherwise pass while checking nothing.
     #[test]
@@ -3214,7 +3277,13 @@ mod tests {
             })
         };
         let window = |lo: u32, hi: u32| {
-            Term::intrinsic(Intrinsic::bin_slice(Grain::X, w.clone(), lit(lo), lit(hi)))
+            Term::intrinsic(Intrinsic::bin_slice(
+                Grain::X,
+                w.clone(),
+                lit(lo),
+                lit(hi),
+                qed(),
+            ))
         };
         let chunk = Term::intrinsic(Intrinsic::bin_append(Grain::X, run_bytes(&[]), c.clone()));
 
@@ -3378,6 +3447,7 @@ mod tests {
                 ws.clone(),
                 lit(lo),
                 lit(hi),
+                qed(),
             ))
         };
 
@@ -3495,7 +3565,7 @@ mod tests {
         }
     }
 
-    // Soundness gate for the open-term reduction laws the code comments beside the folds assert and nothing else stated: the subtraction borrow within the floor, the literal-factor distribution of `·` on either side, the full-window collapse `slice(b, 0, len(b)) = b`, the empty window `slice(b, i, i) = x[]` over a symbolic base and bound, the cons peels of `get` and `slice` over a symbolic tail and symbolic bounds, and the `len`/`map` homomorphisms over an append and a concatenation. Each case states the law's own reduct and holds the pair to two obligations. The open fold must land on exactly that reduct — so the law demonstrably fired, and where its comment claims, which is what keeps a case from passing vacuously when a rule stops firing. And the original and the reduct must agree as values at every closed instantiation, which is what a definitional equation promises and the only thing a false one fails. Instantiations respect the operations' `/sys` preconditions (`i < len` for `get`, `s <= e <= len` for `slice`), since a program outside them cannot be written.
+    // Soundness gate for the open-term reduction laws the code comments beside the folds assert and nothing else stated: the subtraction borrow within the floor, the literal-factor distribution of `·` on either side, the full-window collapse `slice(b, 0, len(b)) = b`, the empty window `slice(b, i, 0) = x[]` over a symbolic base and start, the cons peels of `get` and `slice` over a symbolic tail and symbolic bounds, and the `len`/`map` homomorphisms over an append and a concatenation. Each case states the law's own reduct and holds the pair to two obligations. The open fold must land on exactly that reduct — so the law demonstrably fired, and where its comment claims, which is what keeps a case from passing vacuously when a rule stops firing. And the original and the reduct must agree as values at every closed instantiation, which is what a definitional equation promises and the only thing a false one fails. Instantiations respect the operations' `/sys` preconditions (`i < len` for `get`, `s + l <= len` for `slice`), since a program outside them cannot be written.
     //
     // `map`'s ground truth is structural rather than numeric: the mapped function stays a free symbol, so both sides fold to element runs of identical stuck applications, and their agreement says no element was dropped, duplicated or reordered — which is the whole of what the distribution law claims. Mutation-checked: misstating the append measure (`nat_add(2, base)` for `nat_add(1, base)` in the `BinLen` slot) fails the length case on both obligations at once.
     #[test]
@@ -3530,10 +3600,11 @@ mod tests {
             })
         };
         let bin_slice = |base: Term, start: Term, count: Term| {
-            Term::intrinsic(Intrinsic::bin_slice(Grain::X, base, start, count))
+            Term::intrinsic(Intrinsic::bin_slice(Grain::X, base, start, count, qed()))
         };
-        let bin_get =
-            |base: Term, index: Term| Term::intrinsic(Intrinsic::bin_get(Grain::X, base, index));
+        let bin_get = |base: Term, index: Term| {
+            Term::intrinsic(Intrinsic::bin_get(Grain::X, base, index, qed()))
+        };
         let bin_len = |base: Term| Term::intrinsic(Intrinsic::bin_len(Grain::X, base));
         let chunk = Term::intrinsic(Intrinsic::bin_append(Grain::X, run_bytes(&[]), c.clone()));
         let elem = symbol(1000, "T");

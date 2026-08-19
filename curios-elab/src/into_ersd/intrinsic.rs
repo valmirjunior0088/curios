@@ -331,7 +331,12 @@ pub(super) fn erase_intrinsic(
             &[(l, bin_type(*grain)), (r, bin_type(*grain))],
             hint,
         ),
-        Intrinsic::BinGet { grain, bin, index } => lowering.sequence(
+        Intrinsic::BinGet {
+            grain,
+            bin,
+            index,
+            in_range: _,
+        } => lowering.sequence(
             context,
             curios_ersd::SequenceOp::BinGet(*grain),
             &[(bin, bin_type(*grain)), (index, nat_type())],
@@ -342,6 +347,7 @@ pub(super) fn erase_intrinsic(
             bin,
             start,
             length,
+            within: _,
         } => lowering.sequence(
             context,
             curios_ersd::SequenceOp::BinSlice(*grain),
@@ -401,6 +407,7 @@ pub(super) fn erase_intrinsic(
             element: element_type,
             list,
             index,
+            in_range: _,
         } => lowering.sequence(
             context,
             curios_ersd::SequenceOp::ListGet,
@@ -412,6 +419,7 @@ pub(super) fn erase_intrinsic(
             list,
             start,
             length,
+            within: _,
         } => lowering.sequence(
             context,
             curios_ersd::SequenceOp::ListSlice,

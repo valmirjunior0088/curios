@@ -8,6 +8,8 @@
 //!
 //! Measured 2026-08-19 rather than argued: declaring `Nat/div`'s operands `Int` while its body still builds `NatDiv` fails the build with `while elaborating /sys/Nat/div: type mismatch, inferred: Int, expected: Nat`. Reproduce by changing the first `nat()` in `prelude`'s `guarded_binary("div", …)` to `int()`.
 //!
+//! **All nine preconditions are here now, and the four that were missing were missing for a reason worth keeping.** `BinGet`, `BinSlice`, `ListGet` and `ListSlice` carried no bound field while `spine.rs`'s window fusion had to *compose* one — the fused window's `ordered : Le(s, e)` from its two halves, which is transitivity of `<=`, an implication no equality procedure supplies, so the reducer would have had to emit a proof at every fusion. A reducer that constructs proofs is the defect; deleting the degree of freedom removed the need for it. A window is a start and a *count*, so `ordered` has no proposition left to state, and the one bound that survives is carried from window₂ to the fused window unchanged: `spine`'s `push` moves a proof it was handed, and the reassociation that makes the two propositions one is `peel_nat_terms`'s to decide.
+//!
 //! **Totality is the point, not the coverage.** A signature every operation states is one no operation can be forgotten from, which is a stronger property than any individual entry. `Nat`'s successor payload is the standing example: `Nat::Succ` carries a `Term` — that is how `x + 3` is represented — and the kernel's `Intrinsic::Nat(_) => Ok(nat_type())` never checked it, so a successor over a `Bool` typed as a `Nat`. Nothing constructs one today, and the elaborator never would; catching an elaborator that did is the entire reason a second checker exists. Here that check is a consequence of the table being total rather than an arm someone remembered.
 
 use {
@@ -58,6 +60,9 @@ impl Intrinsic {
         let handle_type = || Term::intrinsic(Intrinsic::HandleType);
         let bin_type = |grain| Term::intrinsic(Intrinsic::BinType(grain));
         let list_type = |element: Term| Term::intrinsic(Intrinsic::ListType(element));
+        // A bound is stated over the *intrinsic* measure, not `/sys`'s wrapper: this table sits below `/sys`, and it is the shape a reduced occurrence carries anyway.
+        let bin_len = |grain, bin| Term::intrinsic(Intrinsic::BinLen(grain, bin));
+        let list_len = |element, list| Term::intrinsic(Intrinsic::ListLen { element, list });
         let cell_type = |element: Term| Term::intrinsic(Intrinsic::CellType(element));
         let io_type = |result: Term| Term::intrinsic(Intrinsic::IoType(result));
         let unit = Term::tuple_type_unit;
@@ -183,15 +188,38 @@ impl Intrinsic {
             // `Bin`: a sequence of bytes or of bits, depending on the grain.
             BinLen(grain, _) => un(bin_type(*grain), nat_type()),
             BinEql(grain, ..) => bin_op(bin_type(*grain), bool_type()),
-            BinGet { grain, .. } => sig(
-                vec![Operand::At(bin_type(*grain)), Operand::At(nat_type())],
+            // The two bounded `Bin` accessors. `Bin/len` is the *intrinsic* here rather than `/sys`'s wrapper, because a signature states what the operand must be and this table is below `/sys`.
+            BinGet {
+                grain, bin, index, ..
+            } => sig(
+                vec![
+                    Operand::At(bin_type(*grain)),
+                    Operand::At(nat_type()),
+                    Operand::At(decided(
+                        syntax.proof.lt,
+                        vec![index.clone(), bin_len(*grain, bin.clone())],
+                    )),
+                ],
                 grain_element(*grain),
             ),
-            BinSlice { grain, .. } => sig(
+            BinSlice {
+                grain,
+                bin,
+                start,
+                length,
+                ..
+            } => sig(
                 vec![
                     Operand::At(bin_type(*grain)),
                     Operand::At(nat_type()),
                     Operand::At(nat_type()),
+                    Operand::At(decided(
+                        syntax.proof.le,
+                        vec![
+                            Term::intrinsic(NatAdd(start.clone(), length.clone())),
+                            bin_len(*grain, bin.clone()),
+                        ],
+                    )),
                 ],
                 bin_type(*grain),
             ),
@@ -221,20 +249,42 @@ impl Intrinsic {
                 vec![Operand::IsType, Operand::At(list_type(element.clone()))],
                 nat_type(),
             ),
-            ListGet { element, .. } => sig(
+            ListGet {
+                element,
+                list,
+                index,
+                ..
+            } => sig(
                 vec![
                     Operand::IsType,
                     Operand::At(list_type(element.clone())),
                     Operand::At(nat_type()),
+                    Operand::At(decided(
+                        syntax.proof.lt,
+                        vec![index.clone(), list_len(element.clone(), list.clone())],
+                    )),
                 ],
                 element.clone(),
             ),
-            ListSlice { element, .. } => sig(
+            ListSlice {
+                element,
+                list,
+                start,
+                length,
+                ..
+            } => sig(
                 vec![
                     Operand::IsType,
                     Operand::At(list_type(element.clone())),
                     Operand::At(nat_type()),
                     Operand::At(nat_type()),
+                    Operand::At(decided(
+                        syntax.proof.le,
+                        vec![
+                            Term::intrinsic(NatAdd(start.clone(), length.clone())),
+                            list_len(element.clone(), list.clone()),
+                        ],
+                    )),
                 ],
                 list_type(element.clone()),
             ),

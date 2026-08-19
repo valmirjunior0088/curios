@@ -1261,19 +1261,29 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Intrinsic::BinEql(grain, left, right) => {
                 curios_core::Intrinsic::bin_eql(*grain, self.term(left)?, self.term(right)?)
             }
-            Intrinsic::BinGet { grain, bin, index } => {
-                curios_core::Intrinsic::bin_get(*grain, self.term(bin)?, self.term(index)?)
-            }
+            Intrinsic::BinGet {
+                grain,
+                bin,
+                index,
+                in_range,
+            } => curios_core::Intrinsic::bin_get(
+                *grain,
+                self.term(bin)?,
+                self.term(index)?,
+                self.term(in_range)?,
+            ),
             Intrinsic::BinSlice {
                 grain,
                 bin,
                 start,
                 length,
+                within,
             } => curios_core::Intrinsic::bin_slice(
                 *grain,
                 self.term(bin)?,
                 self.term(start)?,
                 self.term(length)?,
+                self.term(within)?,
             ),
             Intrinsic::BinAppend {
                 grain,
@@ -1293,21 +1303,25 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 element: ty,
                 list,
                 index,
+                in_range,
             } => curios_core::Intrinsic::list_get(
                 self.term(ty)?,
                 self.term(list)?,
                 self.term(index)?,
+                self.term(in_range)?,
             ),
             Intrinsic::ListSlice {
                 element: ty,
                 list,
                 start,
                 length,
+                within,
             } => curios_core::Intrinsic::list_slice(
                 self.term(ty)?,
                 self.term(list)?,
                 self.term(start)?,
                 self.term(length)?,
+                self.term(within)?,
             ),
             Intrinsic::ListAppend {
                 element: ty,

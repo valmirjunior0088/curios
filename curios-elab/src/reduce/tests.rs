@@ -10,6 +10,11 @@ fn nominal(path: &str) -> Global {
     Global::Authored(Qualifier::from([path]))
 }
 
+/// A stand-in for a discharged bound. Reduction never inspects one — proof irrelevance makes its value unobservable, and these tests are about the fold laws rather than the obligation.
+fn qed() -> Term {
+    Term::free_var(&Free::local(9_999, Some("qed")))
+}
+
 fn context() -> Context {
     Context::new(100_000, crate::SYNTAX)
 }
@@ -443,7 +448,8 @@ fn reduce_list_get_returns_element_at_index() {
             Subterm::Intrinsic(Intrinsic::list_get(
                 Subterm::Intrinsic(Intrinsic::NatType),
                 list.clone(),
-                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize)))
+                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+                qed(),
             ))
             .into()
         ),
@@ -455,7 +461,8 @@ fn reduce_list_get_returns_element_at_index() {
             Subterm::Intrinsic(Intrinsic::list_get(
                 Subterm::Intrinsic(Intrinsic::NatType),
                 list,
-                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(2usize)))
+                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(2usize))),
+                qed(),
             ))
             .into()
         ),
@@ -479,6 +486,7 @@ fn reduce_list_get_errors_on_out_of_bounds() {
                 Subterm::Intrinsic(Intrinsic::NatType),
                 list,
                 Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))),
+                qed(),
             ))
             .into(),
         ),
@@ -902,6 +910,8 @@ fn reduce_flt_to_int_stays_stuck() {
 }
 
 mod intrinsic {
+    use super::qed;
+
     use curios_core::*;
     use {
         crate::{Context, reduce},
@@ -1087,7 +1097,8 @@ mod intrinsic {
                 Term::intrinsic(Intrinsic::list_get(
                     Term::intrinsic(Intrinsic::NatType),
                     cons.clone(),
-                    lit(0)
+                    lit(0),
+                    qed(),
                 ))
             ),
             Subterm::Intrinsic(Intrinsic::Nat(Nat::new(7usize))),
@@ -1100,7 +1111,8 @@ mod intrinsic {
                 Term::intrinsic(Intrinsic::list_get(
                     Term::intrinsic(Intrinsic::NatType),
                     cons,
-                    lit(1)
+                    lit(1),
+                    qed(),
                 ))
             ),
             Subterm::Intrinsic(Intrinsic::ListGet { .. }),
@@ -1121,7 +1133,8 @@ mod intrinsic {
                     Term::intrinsic(Intrinsic::NatType),
                     cons.clone(),
                     lit(0),
-                    lit(1)
+                    lit(1),
+                    qed(),
                 ))
             ),
             Subterm::Intrinsic(Intrinsic::List {
@@ -1138,7 +1151,8 @@ mod intrinsic {
                     Term::intrinsic(Intrinsic::NatType),
                     cons,
                     lit(1),
-                    lit(0)
+                    lit(0),
+                    qed(),
                 ))
             ),
             Subterm::Intrinsic(Intrinsic::List {
@@ -1230,7 +1244,8 @@ mod intrinsic {
                     Term::intrinsic(Intrinsic::NatType),
                     xs.clone(),
                     lit(0),
-                    len
+                    len,
+                    qed(),
                 )),
             ),
             reduced(&mut context, xs.clone()),
@@ -1322,14 +1337,20 @@ mod intrinsic {
         assert_eq!(
             reduced(
                 &mut context,
-                Term::intrinsic(Intrinsic::bin_get(Grain::B, cons.clone(), lit(0)))
+                Term::intrinsic(Intrinsic::bin_get(Grain::B, cons.clone(), lit(0), qed()))
             ),
             Subterm::Intrinsic(Intrinsic::Bool(true)),
         );
         assert_eq!(
             reduced(
                 &mut context,
-                Term::intrinsic(Intrinsic::bin_slice(Grain::B, cons.clone(), lit(0), lit(1)))
+                Term::intrinsic(Intrinsic::bin_slice(
+                    Grain::B,
+                    cons.clone(),
+                    lit(0),
+                    lit(1),
+                    qed(),
+                ))
             ),
             Term::unwrap_or_clone(bits(&[true])),
         );

@@ -592,7 +592,12 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             ),
             vec![left, right],
         ),
-        Intrinsic::BinGet { grain, bin, index } => print_intrinsic_call(
+        Intrinsic::BinGet {
+            grain,
+            bin,
+            index,
+            in_range: _,
+        } => print_intrinsic_call(
             format!(
                 "{}.get",
                 match grain {
@@ -607,6 +612,7 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             bin,
             start,
             length,
+            within: _,
         } => print_intrinsic_call(
             format!(
                 "{}.slice",
@@ -661,12 +667,14 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             element: ty,
             list,
             index,
+            in_range: _,
         } => print_intrinsic_call("List.get", vec![ty, list, index]),
         Intrinsic::ListSlice {
             element: ty,
             list,
             start,
             length,
+            within: _,
         } => print_intrinsic_call("List.slice", vec![ty, list, start, length]),
         Intrinsic::ListAppend {
             element: ty,

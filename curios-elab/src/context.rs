@@ -318,6 +318,50 @@ impl Context {
         }
     }
 
+    /// The read half of the canonical-key memo. [`Caches::canonical_keys`] carries why the memo exists.
+    pub(crate) fn cached_canonical_key(&self, key: &Term) -> Option<Term> {
+        if key.has_universe_meta() {
+            return None;
+        }
+        self.caches.canonical_key_get(key)
+    }
+
+    /// The write half, charged as [`Context::reduce`] is.
+    ///
+    /// The unsolved-metavariable condition that gate takes is deliberately absent. It keeps a *reduct* from being substituted into a term after a solve invalidated it; an entry here is only ever a comparison representative, so a stale one compares unequal to the candidate a solve produced — a miss, which is the refusing direction where the reduction cache's would be the admitting one. Keeping the condition would also exclude the entries the memo exists for: a guard over a metavariable-bearing subject is exactly the case whose recomputation is unaffordable.
+    pub(crate) fn record_canonical_key(&mut self, key: Term, canonical: &Term) {
+        let cacheable = key.closed() && !key.has_universe_meta();
+
+        let cost = Cost::collection(1)
+            .saturating_add(Cost::units(key.footprint()))
+            .saturating_add(Cost::units(canonical.footprint()));
+
+        if cacheable && self.retention.admits(cost) {
+            self.caches.canonical_key_insert(key, canonical.clone());
+        }
+    }
+
+    /// Run `attempt` with at most `allowance` units of this declaration's budget in reach, answering `None` when it did not finish inside that.
+    ///
+    /// **For work whose result is optional and whose cost must not be a program's cost.** Canonicalizing a refinement key is the case: settling it collapses two spellings of one comparison, failing to settle it leaves the two uncollapsed, and neither outcome changes what the program means. A guard over an opaque parameter settles in a handful of steps; one over a subject built by a hundred thousand iterations does not settle at all, and without a ceiling that single attempt spends the whole declaration.
+    ///
+    /// **What is spent is spent.** A bail is charged the allowance rather than refunded, so this is a cap and not free work — the invariant `Context::spend` states holds through it. What bounds the total is the memo the one caller keeps: an attempt happens once per key, so a declaration pays at most its guard count times this ceiling.
+    pub(crate) fn within_allowance<T>(
+        &mut self,
+        allowance: u64,
+        attempt: impl FnOnce(&mut Self) -> Result<T, ReduceError>,
+    ) -> Option<T> {
+        let before = self.remaining.get();
+        let granted = before.min(allowance);
+        self.remaining.set(granted);
+
+        let outcome = attempt(self);
+        let spent = granted.saturating_sub(self.remaining.get());
+        self.remaining.set(before.saturating_sub(spent));
+
+        outcome.ok()
+    }
+
     /// How much of this compilation's retention allowance the caches have consumed.
     ///
     /// An observation for a measurement, not a control: nothing in elaboration reads it, and what it is for is setting [`DEFAULT_RETENTION_QUOTA`] against a figure rather than a guess.

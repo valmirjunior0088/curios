@@ -116,6 +116,8 @@ enum Atom<E> {
         base: Term,
         offset: Term,
         length: Term,
+        /// The window's own `within` proof, carried so a residual can be rebuilt as the bounded node it came from — and so fusion can *hand one on* rather than derive one. Never compared: two windows over the same span are the same window whatever proved them, which is proof irrelevance and is why the equality test below reads the span alone.
+        within: Term,
     },
     Symbolic(Term),
 }
@@ -146,11 +148,13 @@ fn peel_prefix<E: PartialEq>(left: &mut VecDeque<Atom<E>>, right: &mut VecDeque<
                     base: b1,
                     offset: o1,
                     length: n1,
+                    within: _,
                 }),
                 Some(Atom::Window {
                     base: b2,
                     offset: o2,
                     length: n2,
+                    within: _,
                 }),
             ) if b1 == b2 && o1 == o2 && n1 == n2 => {
                 peeled = true;
@@ -191,6 +195,7 @@ fn push<E>(out: &mut Vec<Atom<E>>, atom: Atom<E>) {
             base,
             offset,
             length,
+            within,
         } => {
             // Fuse with a preceding window of the same base that this one begins at the end of. Under `(start, length)` that seam is an *arithmetic* fact — `offset = prev.offset + prev.length` — where it used to be a shared term, so it is decided by the `Nat` peel rather than read off syntactic equality. Strictly wider than the test it replaces, which is kept as the cheap first answer; a run of touching windows still collapses left-to-right to one.
             let abuts = match out.last() {
@@ -198,20 +203,29 @@ fn push<E>(out: &mut Vec<Atom<E>>, atom: Atom<E>) {
                     base: prev,
                     offset: at,
                     length: run,
+                    within: _,
                 }) => *prev == base && nat_equal(&offset, &Nat::sum(at, run)),
                 _ => false,
             };
 
             match abuts {
                 true => {
-                    if let Some(Atom::Window { length: run, .. }) = out.last_mut() {
+                    // **The fused window takes the *second* window's proof, unchanged.** Window₂ proved `(s + l₁) + l₂ <= len b` and the fused window needs `s + (l₁ + l₂) <= len b`, which is the same proposition up to a reassociation `peel_nat_terms` decides — so the term that proved one proves the other, and nothing here derives anything. That is the whole of what this file was blocked on: composing the old `(start, end)` window's `ordered` needed transitivity of `<=`, an implication no equality procedure supplies, and a reducer able to prove is the defect the reparameterisation removed rather than accommodated.
+                    if let Some(Atom::Window {
+                        length: run,
+                        within: proof,
+                        ..
+                    }) = out.last_mut()
+                    {
                         *run = Nat::sum(run, &length);
+                        *proof = within;
                     }
                 }
                 false => out.push(Atom::Window {
                     base,
                     offset,
                     length,
+                    within,
                 }),
             }
         }
@@ -369,12 +383,14 @@ fn bin_collect_intrinsic(grain: Grain, intrinsic: &Intrinsic, out: &mut Vec<Atom
                     bin: base,
                     start,
                     length,
+                    within,
                 } if *found == grain => push(
                     out,
                     Atom::Window {
                         base: base.clone(),
                         offset: start.clone(),
                         length: length.clone(),
+                        within: within.clone(),
                     },
                 ),
                 // `append(base, b) = base ++ [b]`: decode the base, then the appended byte.
@@ -433,12 +449,14 @@ fn list_collect_intrinsic(intrinsic: &Intrinsic, out: &mut Vec<Atom<Term>>) {
                     list: base,
                     start,
                     length,
+                    within,
                 } => push(
                     out,
                     Atom::Window {
                         base: base.clone(),
                         offset: start.clone(),
                         length: length.clone(),
+                        within: within.clone(),
                     },
                 ),
                 // `append(base, e) = base ++ [e]`: decode the base, then the appended element.
@@ -470,7 +488,8 @@ fn reassemble_bin(grain: Grain, atoms: VecDeque<Atom<u8>>) -> Term {
             base,
             offset,
             length,
-        } => Term::intrinsic(Intrinsic::bin_slice(grain, base, offset, length)),
+            within,
+        } => Term::intrinsic(Intrinsic::bin_slice(grain, base, offset, length, within)),
         Atom::Symbolic(term) => term,
     };
 
@@ -495,7 +514,14 @@ fn reassemble_list(atoms: VecDeque<Atom<Term>>, elem: Term) -> Term {
                 base,
                 offset,
                 length,
-            } => Term::intrinsic(Intrinsic::list_slice(elem.clone(), base, offset, length)),
+                within,
+            } => Term::intrinsic(Intrinsic::list_slice(
+                elem.clone(),
+                base,
+                offset,
+                length,
+                within,
+            )),
             Atom::Symbolic(term) => term,
         }
     }

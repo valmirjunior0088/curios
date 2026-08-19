@@ -79,8 +79,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Packed `Bits` and `Bytes` (grain-specialized operations over shared immutable windows; O(1) slices and tails)
   - [x] `List`
 - [x] Total `/sys` primitives — every operation whose reduction could fail carries its precondition in its type, in the decided style (see [A partial primitive is totalized by a canonical extension, or it states its domain](design/language/a-partial-primitive-is-totalized-by-a-canonical-extension-or-it-states-its-domain.md) and [A bound is stated in a decided proposition and discharged by reduction](design/language/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md))
-  - [x] The bound reaches Core and the kernel re-checks it, for the five operations whose reduction preserves its operands — `Nat/div`, `Nat/rem`, `Int/div`, `Int/rem`, `Flt/of_le_bytes`
-  - [ ] [Reduction carries proofs, never constructs them](roadmap/reduction_carries_proofs_spec.md) — the four sequence accessors (`Bytes/get`, `Bytes/slice`, `List/get`, `List/slice`) cannot join them _(the `Nat` peel's carrier gate is widened to floorless sums, and windows are `(start, length)` from `/sys` to the emitted rope helper; what remains is the bound fields themselves)_
+  - [x] The bound reaches Core and the kernel re-checks it, for every one of the nine — the five whose reduction preserves its operands (`Nat/div`, `Nat/rem`, `Int/div`, `Int/rem`, `Flt/of_le_bytes`) and the four sequence accessors (`Bytes/get`, `Bytes/slice`, `List/get`, `List/slice`), which reduction rebuilds. A window is a start and a *count*, so an invalid one cannot be written and the surviving bound is *carried* from one window to the next rather than composed — reduction moves a proof it was handed and derives nothing
 
 ## Module System
 
