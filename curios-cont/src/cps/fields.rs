@@ -376,9 +376,11 @@ impl WindowFamily {
             CpsIntrinsicOp::BinLen(grain) => Some((Self::Bin(grain), WindowRead::Len)),
             CpsIntrinsicOp::BinGet(grain) => Some((Self::Bin(grain), WindowRead::Get)),
             CpsIntrinsicOp::BinSlice(grain) => Some((Self::Bin(grain), WindowRead::Slice)),
+            CpsIntrinsicOp::BinRest(grain) => Some((Self::Bin(grain), WindowRead::Rest)),
             CpsIntrinsicOp::ListLen => Some((Self::List, WindowRead::Len)),
             CpsIntrinsicOp::ListGet => Some((Self::List, WindowRead::Get)),
             CpsIntrinsicOp::ListSlice => Some((Self::List, WindowRead::Slice)),
+            CpsIntrinsicOp::ListRest => Some((Self::List, WindowRead::Rest)),
             _ => None,
         }
     }
@@ -403,6 +405,8 @@ enum WindowRead {
     Len,
     Get,
     Slice,
+    /// A suffix: a slice whose extent the value decides. Distinguished from `Slice` only so the rewrite knows to derive that extent from the member's own `length` field, which is the same fact the emitted rope would have read off itself.
+    Rest,
 }
 
 /// One occurrence of a value the window walk classifies.
@@ -429,7 +433,9 @@ fn window_uses(module: &CpsModule) -> BTreeMap<CpsValueId, Vec<WindowUse>> {
                     let this = match (WindowFamily::of(*op), position) {
                         (Some((_, WindowRead::Len)), 0) => WindowUse::Len(id),
                         (Some((_, WindowRead::Get)), 0) => WindowUse::Get(id),
-                        (Some((_, WindowRead::Slice)), 0) => WindowUse::Slice(id),
+                        (Some((_, WindowRead::Slice | WindowRead::Rest)), 0) => {
+                            WindowUse::Slice(id)
+                        }
                         _ => WindowUse::Hostile,
                     };
                     record(*value, this);
@@ -645,7 +651,10 @@ pub(super) fn split_windows(module: &mut CpsModule) -> bool {
         let before = pending.len();
         pending.retain(|&slice| {
             let CpsNode::LetIntrinsic {
-                result, args, next, ..
+                op,
+                result,
+                args,
+                next,
             } = module.node(slice).expect("slice node is live").clone()
             else {
                 unreachable!("the region collected only slice intrinsics");
@@ -659,15 +668,43 @@ pub(super) fn split_windows(module: &mut CpsModule) -> bool {
             let extent = module.add_value(Some(format!("window/{}/extent", slice.index())));
             let sum = module.add_value(Some(format!("window/{}/sum", slice.index())));
             let add = module.reserve_node();
-            module.nodes.set(
-                slice,
-                CpsNode::LetIntrinsic {
-                    result: extent,
-                    op: CpsIntrinsicOp::WindowExtent,
-                    args: vec![args[1].clone(), args[2].clone(), length],
-                    next: add,
-                },
-            );
+
+            // A *suffix* names no count, so one is computed here from the member's own `length` — the same fact the emitted rope would have read off itself, derived in this pass because the physical rope is what it is removing. The guard is the same either way: `WindowExtent` refuses a start past the end, which is exactly what the underflowing difference would ask it for.
+            match matches!(WindowFamily::of(op), Some((_, WindowRead::Rest))) {
+                false => module.nodes.set(
+                    slice,
+                    CpsNode::LetIntrinsic {
+                        result: extent,
+                        op: CpsIntrinsicOp::WindowExtent,
+                        args: vec![args[1].clone(), args[2].clone(), length],
+                        next: add,
+                    },
+                ),
+                true => {
+                    let remaining =
+                        module.add_value(Some(format!("window/{}/rest", slice.index())));
+                    let guard = module.reserve_node();
+
+                    module.nodes.set(
+                        slice,
+                        CpsNode::LetIntrinsic {
+                            result: remaining,
+                            op: CpsIntrinsicOp::NatSub,
+                            args: vec![length.clone(), args[1].clone()],
+                            next: guard,
+                        },
+                    );
+                    module.define_node(
+                        guard,
+                        CpsNode::LetIntrinsic {
+                            result: extent,
+                            op: CpsIntrinsicOp::WindowExtent,
+                            args: vec![args[1].clone(), CpsAtom::Value(remaining), length.clone()],
+                            next: add,
+                        },
+                    );
+                }
+            }
             module.define_node(
                 add,
                 CpsNode::LetIntrinsic {

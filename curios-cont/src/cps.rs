@@ -130,11 +130,15 @@ pub enum CpsIntrinsicOp {
     BinEql(Grain),
     BinGet(Grain),
     BinSlice(Grain),
+    /// `(bin, start) -> bin`: the suffix from `start`, whose extent is the value's own — there is no count operand to supply, so the one thing a caller could get wrong about a suffix it cannot say. Every compiler-emitted window is a suffix (`into_cont`'s peel is the only producer), and this is what keeps two lowerings from having to agree about how a count is derived; the derivation happens once, against the rope's own length.
+    BinRest(Grain),
     BinAppend(Grain),
     BinConcat(Grain, usize),
     ListLen,
     ListGet,
     ListSlice,
+    /// The `List` mirror of [`CpsIntrinsicOp::BinRest`].
+    ListRest,
     ListAppend,
     ListConcat(usize),
     TplGet(usize),
@@ -174,10 +178,10 @@ impl CpsIntrinsicOp {
 
         match (self, index) {
             // The sequence operations are the only ones whose operands differ from one another: a rope first, then positions.
-            (BinGet(_) | BinSlice(_) | BinAppend(_), 0) => Repr::Bytes,
-            (BinGet(_) | BinSlice(_) | BinAppend(_), _) => Repr::Nat,
-            (ListGet | ListSlice | ListAppend, 0) => Repr::List,
-            (ListGet | ListSlice, _) => Repr::Nat,
+            (BinGet(_) | BinSlice(_) | BinRest(_) | BinAppend(_), 0) => Repr::Bytes,
+            (BinGet(_) | BinSlice(_) | BinRest(_) | BinAppend(_), _) => Repr::Nat,
+            (ListGet | ListSlice | ListRest | ListAppend, 0) => Repr::List,
+            (ListGet | ListSlice | ListRest, _) => Repr::Nat,
             // A list element is carried, never interpreted — unlike a `Bytes` element, which is a `Nat` grain.
             (ListAppend, _) => Repr::Ref,
             (BinConcat(_, _), _) | (BinEql(_) | BinLen(_), _) | (FltOfLeBytes, _) => Repr::Bytes,
@@ -235,8 +239,8 @@ impl CpsIntrinsicOp {
 
             // `IsImmediate` joins the predicates: it answers a `Bool`, whose carrier is a `Nat`.
             BinGet(_) | WindowExtent | IsImmediate => Repr::Nat,
-            BinSlice(_) | BinAppend(_) | BinConcat(_, _) | FltToLeBytes => Repr::Bytes,
-            ListSlice | ListAppend | ListConcat(_) => Repr::List,
+            BinSlice(_) | BinRest(_) | BinAppend(_) | BinConcat(_, _) | FltToLeBytes => Repr::Bytes,
+            ListSlice | ListRest | ListAppend | ListConcat(_) => Repr::List,
             // A list read and a tuple projection both yield whatever was stored, uninterpreted.
             ListGet | TplGet(_) => Repr::Ref,
         }
@@ -303,8 +307,10 @@ impl CpsIntrinsicOp {
             | Self::FltOfLeBytes
             | Self::BinGet(_)
             | Self::BinSlice(_)
+            | Self::BinRest(_)
             | Self::ListGet
             | Self::ListSlice
+            | Self::ListRest
             | Self::TplGet(_)
             | Self::WindowExtent
             // Total in the language, guarded by the emitter because the result can leave the i31 envelope. `NatSub` is monus and `NatShr`/`IntShr` only clear bits, so neither needs a guard.

@@ -12,7 +12,7 @@ use {
     crate::{
         Analysis, Atom, BlockId, Constant, FoldNatStep, FoldOutcome, FoldSequenceStep, ForeignId,
         FunctionId, Intrinsic, Module, Operation, RecValue, Rhs, Semantics, SequenceGrain,
-        SequenceOp, Statement, Terminator, ValueId, VariantArm,
+        SequenceOp, Statement, Terminator, UnconsSequenceStep, ValueId, VariantArm,
     },
     curios_utilities::{Grain, PackedBin},
     std::{
@@ -374,6 +374,12 @@ impl<'m> Evaluator<'m> {
                 empty,
                 step,
             } => self.eval_fold_sequence(*grain, *scrutinee, *empty, step, frame),
+            Rhs::UnconsSequence {
+                grain,
+                scrutinee,
+                empty,
+                cons,
+            } => self.eval_uncons_sequence(*grain, *scrutinee, *empty, cons, frame),
             // A host call is an effect: it residualizes in tail position with evaluated operands, and bails everywhere else.
             Rhs::Foreign { foreign, operands } => match self.eval_operands(operands, frame) {
                 Ok(operands) if tail => Outcome::Stuck(Residual::Foreign(*foreign, operands)),
@@ -583,6 +589,47 @@ impl<'m> Evaluator<'m> {
             }
         }
         Outcome::Done(accumulator)
+    }
+
+    /// One peel, evaluated: the empty block on an empty sequence, else the cons block over the head and the suffix after it. The non-looping sibling of [`Interpreter::eval_fold_sequence`], sharing its element view and its suffix view so the two cannot disagree about what a peel exposes.
+    fn eval_uncons_sequence(
+        &mut self,
+        grain: SequenceGrain,
+        scrutinee: Atom,
+        empty: BlockId,
+        cons: &UnconsSequenceStep,
+        frame: &mut Frame,
+    ) -> Outcome {
+        let sequence = match self.eval_atom(scrutinee, frame) {
+            Ok(sequence) => sequence,
+            Err(bail) => return Outcome::Bail(bail),
+        };
+        let elements = match fold_elements(grain, &sequence) {
+            Ok(elements) => elements,
+            Err(bail) => return Outcome::Bail(bail),
+        };
+
+        let Some((element, rest)) = elements.split_first() else {
+            return match self.value_of_block(empty, frame) {
+                Ok(held) => Outcome::Done(held),
+                Err(bail) => Outcome::Bail(bail),
+            };
+        };
+
+        if let Err(bail) = self.budget.charge() {
+            return Outcome::Bail(bail);
+        }
+
+        let mark = frame.mark();
+        frame.push(cons.element, element.clone());
+        frame.push(cons.suffix, suffix_view(grain, rest));
+        let result = self.value_of_block(cons.block, frame);
+        frame.restore(mark);
+
+        match result {
+            Ok(held) => Outcome::Done(held),
+            Err(bail) => Outcome::Bail(bail),
+        }
     }
 
     fn eval_map(&mut self, operands: &[Atom], frame: &mut Frame) -> Outcome {

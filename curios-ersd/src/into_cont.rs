@@ -14,7 +14,7 @@ use {
         Analysis, Atom, Block, BlockId, CellOperation, Constant, ConstantId, ConstructorId,
         FamilyId, FieldShape, FoldNatStep, FoldSequenceStep, Function, FunctionId, Intrinsic,
         Module, Operation, RecGroup, RecGroupId, Rhs, SequenceGrain, SequenceOp, Statement,
-        StatementId, Terminator, ValueId, VariantArm,
+        StatementId, Terminator, UnconsSequenceStep, ValueId, VariantArm,
     },
     curios_abi::ForeignFunction,
     curios_num::Natural,
@@ -801,6 +801,14 @@ impl Lowerer<'_> {
             } => self.lower_fold_sequence(
                 result, *grain, *scrutinee, *empty, step, rest, terminator, target,
             ),
+            Rhs::UnconsSequence {
+                grain,
+                scrutinee,
+                empty,
+                cons,
+            } => self.lower_uncons_sequence(
+                result, *grain, *scrutinee, *empty, cons, rest, terminator, target,
+            ),
             Rhs::Cell {
                 operation,
                 operands,
@@ -1411,6 +1419,118 @@ impl Lowerer<'_> {
         })
     }
 
+    /// Emit a peel: the element at `at`, and — where the arm reads it — the suffix beginning at `after`.
+    ///
+    /// **The one place the compiler says how a sequence is taken apart.** Both eliminations reach it, `FoldSequence`'s step and `UnconsSequence`'s cons arm, where each used to open-code the pair for itself; the convention the two independently encoded is what a window's operands changing under them found. `at` and `after` name one offset a step apart, and both callers already hold both — the fold as its loop's two indices, the peel as the literals `0` and `1`.
+    ///
+    /// Neither read names an extent. `sequence_rest_op` takes a start and lets the value decide how much follows, so there is no count for a caller to derive and none for two of them to derive differently.
+    fn emit_peel(
+        &mut self,
+        grain: SequenceGrain,
+        sequence: &curios_cont::CpsAtom,
+        element: curios_cont::CpsValueId,
+        at: curios_cont::CpsAtom,
+        suffix: Option<(curios_cont::CpsValueId, curios_cont::CpsAtom)>,
+        next: curios_cont::CpsNodeId,
+    ) -> curios_cont::CpsNodeId {
+        let next = match suffix {
+            Some((suffix, after)) => self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
+                result: suffix,
+                op: sequence_rest_op(grain),
+                args: vec![sequence.clone(), after],
+                next,
+            }),
+            None => next,
+        };
+
+        self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
+            result: element,
+            op: sequence_get_op(grain),
+            args: vec![sequence.clone(), at],
+            next,
+        })
+    }
+
+    /// Lower a sequence case split to a length dispatch over one peel: zero takes the empty block, anything else peels the head and the suffix after it.
+    ///
+    /// The reads land *inside* the non-empty arm. Beside the dispatch they would run on the empty sequence too, where both are out of range — a trap where the program has an answer.
+    #[allow(clippy::too_many_arguments)]
+    fn lower_uncons_sequence(
+        &mut self,
+        result: ValueId,
+        grain: SequenceGrain,
+        scrutinee: Atom,
+        empty: BlockId,
+        cons: &UnconsSequenceStep,
+        rest: &[StatementId],
+        terminator: &Terminator,
+        target: curios_cont::CpsContId,
+    ) -> curios_cont::CpsNodeId {
+        let sequence = self.lower_atom(scrutinee);
+        let (join, fresh) = self.open_join(result, rest, terminator, target);
+        let mut continuations = if fresh { vec![join] } else { Vec::new() };
+
+        let length = self.module.add_value(None);
+        let element = self.bind_value(cons.element);
+        // Declined where nothing reads it, for the reason the fold's is: a suffix allocates a rope view, and this is the only place that may decline to build one — a later pass cannot drop a read on the grounds its result is dead.
+        let suffix =
+            (self.analysis.value_uses(cons.suffix) > 0).then(|| self.bind_value(cons.suffix));
+
+        let empty_arm = self.plain_arm(empty, join);
+        continuations.push(empty_arm);
+
+        let cons_arm = self.module.reserve_continuation();
+        let cons_body = self.lower_block(cons.block, join);
+        let cons_body = self.emit_peel(
+            grain,
+            &sequence,
+            element,
+            curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(0)),
+            suffix.map(|suffix| {
+                (
+                    suffix,
+                    curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(1)),
+                )
+            }),
+            cons_body,
+        );
+        self.module.define_continuation(
+            cons_arm,
+            curios_cont::CpsContinuation {
+                debug_name: None,
+                params: Vec::new(),
+                body: cons_body,
+            },
+        );
+        continuations.push(cons_arm);
+
+        let dispatch = self.module.add_node(curios_cont::CpsNode::Switch {
+            scrutinee: curios_cont::CpsAtom::Value(length),
+            cases: BTreeMap::from([(
+                0,
+                curios_cont::CpsEdge {
+                    target: empty_arm,
+                    args: Vec::new(),
+                },
+            )]),
+            default: Some(curios_cont::CpsEdge {
+                target: cons_arm,
+                args: Vec::new(),
+            }),
+        });
+        let dispatch = self.module.add_node(curios_cont::CpsNode::LetCont {
+            continuations,
+            body: dispatch,
+        });
+
+        self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
+            result: length,
+            op: sequence_len_op(grain),
+            args: vec![sequence],
+            next: dispatch,
+        })
+    }
+
     /// Lower a sequence right fold to a backward loop `i = len … 0`: the empty block seeds the accumulator; each step reads `seq[i - 1]` and the suffix `seq[i ..]` and folds it in.
     #[allow(clippy::too_many_arguments)]
     fn lower_fold_sequence(
@@ -1469,39 +1589,14 @@ impl Lowerer<'_> {
             continuations: vec![step_resume],
             body: step_body,
         });
-        let step_body = match suffix {
-            // The suffix is everything from the element's index on. A window is `(start, count)`, so what the slice takes is what *remains* — `length - step_index` — where the sequence's own length used to stand in as the end.
-            Some(suffix) => {
-                let remaining = self.module.add_value(None);
-                let sliced = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
-                    result: suffix,
-                    op: sequence_slice_op(grain),
-                    args: vec![
-                        sequence.clone(),
-                        curios_cont::CpsAtom::Value(step_index),
-                        curios_cont::CpsAtom::Value(remaining),
-                    ],
-                    next: step_body,
-                });
-
-                self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
-                    result: remaining,
-                    op: curios_cont::CpsIntrinsicOp::NatSub,
-                    args: vec![
-                        curios_cont::CpsAtom::Value(length),
-                        curios_cont::CpsAtom::Value(step_index),
-                    ],
-                    next: sliced,
-                })
-            }
-            None => step_body,
-        };
-        let step_body = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
-            result: element,
-            op: sequence_get_op(grain),
-            args: vec![sequence.clone(), curios_cont::CpsAtom::Value(element_index)],
-            next: step_body,
-        });
+        let step_body = self.emit_peel(
+            grain,
+            &sequence,
+            element,
+            curios_cont::CpsAtom::Value(element_index),
+            suffix.map(|suffix| (suffix, curios_cont::CpsAtom::Value(step_index))),
+            step_body,
+        );
         let step_body = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
             result: element_index,
             op: curios_cont::CpsIntrinsicOp::NatSub,
@@ -1949,9 +2044,9 @@ fn sequence_get_op(grain: SequenceGrain) -> curios_cont::CpsIntrinsicOp {
     }
 }
 
-fn sequence_slice_op(grain: SequenceGrain) -> curios_cont::CpsIntrinsicOp {
+fn sequence_rest_op(grain: SequenceGrain) -> curios_cont::CpsIntrinsicOp {
     match grain {
-        SequenceGrain::List => curios_cont::CpsIntrinsicOp::ListSlice,
-        SequenceGrain::Bin(grain) => curios_cont::CpsIntrinsicOp::BinSlice(grain),
+        SequenceGrain::List => curios_cont::CpsIntrinsicOp::ListRest,
+        SequenceGrain::Bin(grain) => curios_cont::CpsIntrinsicOp::BinRest(grain),
     }
 }

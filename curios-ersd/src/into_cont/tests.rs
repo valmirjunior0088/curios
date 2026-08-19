@@ -523,7 +523,7 @@ fn a_sequence_fold_reads_through_its_grain() {
     let suffix = builder.value(Some("t".into()));
     let accumulator = builder.value(Some("ih".into()));
     builder.open_block();
-    // The step reads its suffix, which is what makes the slice part of this claim: an unused one is not emitted at all, per `an_unused_fold_suffix_is_not_sliced`.
+    // The step reads its suffix, which is what makes the suffix read part of this claim: an unused one is not emitted at all, per `an_unused_fold_suffix_is_not_sliced`.
     let remaining = builder.let_value(
         None,
         Rhs::Sequence {
@@ -559,7 +559,9 @@ fn a_sequence_fold_reads_through_its_grain() {
     let printed = lowered(&module);
     assert!(printed.contains("BinLen"), "{printed}");
     assert!(printed.contains("BinGet"), "{printed}");
-    assert!(printed.contains("BinSlice"), "{printed}");
+    // A suffix, not a window: the peel names a start and lets the value decide how much follows, so no lowering derives a count. A `BinSlice` here would mean one had gone back to deriving one.
+    assert!(printed.contains("BinRest"), "{printed}");
+    assert!(!printed.contains("BinSlice"), "{printed}");
 }
 
 /// A fold whose step ignores its suffix pays nothing for it.

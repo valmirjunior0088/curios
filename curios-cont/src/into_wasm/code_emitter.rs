@@ -354,6 +354,32 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         });
     }
 
+    /// A suffix: the same helper as a window, with the count the *rope* decides rather than one an operand supplied.
+    ///
+    /// **This is the only place a compiler-emitted window's extent is derived, and it derives it from the value.** Every window the compiler emits is a suffix — `into_cont`'s peel is the sole producer — and before this each lowering computed `len - start` for itself, which is an agreement between two crates rather than a fact about the rope. A start past the end underflows the subtraction to a count no run could hold, which the slice helper's own bounds test refuses exactly as it refuses the overshoot it is written for.
+    fn emit_rope_rest(
+        &mut self,
+        result_local: &curios_wasm::LocalName,
+        carrier: &'a EmissionValueName,
+        start: &'a EmissionValueName,
+        load: LoadAs,
+        rope: &RopeData,
+        slice_func: curios_wasm::FuncName,
+    ) {
+        self.emit_instrs(self.context.load_value_instrs(carrier, load.clone()));
+        self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Nat));
+        self.emit_instrs(self.context.load_value_instrs(carrier, load));
+        self.emit_instr(Self::rope_get(rope, &rope.len_field));
+        self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Nat));
+        self.emit_instr(curios_wasm::Instr::I32Sub);
+        self.emit_instr(curios_wasm::Instr::Call {
+            func_name: slice_func,
+        });
+        self.emit_instr(curios_wasm::Instr::LocalSet {
+            local_name: result_local.clone(),
+        });
+    }
+
     /// Lower one `EmissionCode` op into the current frame, writing its result into `value_name`'s local.
     pub(crate) fn emit(&mut self, value_name: &'a EmissionValueName, op: &'a EmissionCode) {
         let dest = Dest {
@@ -948,6 +974,21 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     slice,
                 );
             }
+            CpsIntrinsicOp::BinRest(grain) => {
+                let slice = match grain {
+                    Grain::B => self.context.table().bits_slice_func(),
+                    Grain::X => self.context.table().bytes_slice_func(),
+                };
+                let rope = self.context.table().bin_rope();
+                self.emit_rope_rest(
+                    &result_local,
+                    &args[0],
+                    &args[1],
+                    LoadAs::Bytes,
+                    &rope,
+                    slice,
+                );
+            }
             CpsIntrinsicOp::BinAppend(_) => {
                 let rope = self.context.table().bin_rope();
                 let elem_instrs = self.context.load_value_instrs(&args[1], LoadAs::Nat);
@@ -976,6 +1017,18 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     &args[1],
                     &args[2],
                     LoadAs::List,
+                    slice,
+                );
+            }
+            CpsIntrinsicOp::ListRest => {
+                let slice = self.context.table().list_slice_func();
+                let rope = self.context.table().list_rope();
+                self.emit_rope_rest(
+                    &result_local,
+                    &args[0],
+                    &args[1],
+                    LoadAs::List,
+                    &rope,
                     slice,
                 );
             }

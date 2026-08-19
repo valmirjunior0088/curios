@@ -374,12 +374,17 @@ fn recognize(module: &Module, function: FunctionId, body: BlockId) -> Option<(Mo
             .and_then(|&statement| module.statement(statement).map(|s| (statement, s)));
 
         // A trailing dispatch whose result the block returns: its arms are tail positions.
+        //
+        // **This list is a pattern, so nothing checks it is complete.** `UnconsSequence` was missing when it landed, and a sequence case split therefore stopped being walked into — the recursion under it kept its deferred context, stayed non-tail, and overflowed the runtime stack at depth. `FoldSequence` is absent because its step is not a tail position — the accumulator is consumed after it. A new dispatch form belongs here unless it is a loop.
         if let Some((
             _,
             Statement::Let {
                 result,
                 rhs:
-                    rhs @ (Rhs::SwitchBool { .. } | Rhs::SwitchNat { .. } | Rhs::MatchVariant { .. }),
+                    rhs @ (Rhs::SwitchBool { .. }
+                    | Rhs::SwitchNat { .. }
+                    | Rhs::MatchVariant { .. }
+                    | Rhs::UnconsSequence { .. }),
             },
         )) = last
             && returned == Atom::Value(*result)

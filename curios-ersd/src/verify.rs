@@ -418,6 +418,16 @@ impl<'m> Verifier<'m> {
                 self.enter_block(empty)?;
                 self.scoped_block(&[step.element, step.suffix, step.accumulator], step.block)?;
             }
+            Rhs::UnconsSequence {
+                grain: _,
+                scrutinee,
+                empty,
+                cons,
+            } => {
+                self.check_atom(id, scrutinee)?;
+                self.enter_block(empty)?;
+                self.scoped_block(&[cons.element, cons.suffix], cons.block)?;
+            }
             Rhs::Cell {
                 operation,
                 operands,

@@ -1,6 +1,6 @@
 //! Eliminations: the semantic identity selection the specification names.
 //!
-//! Unlike the legacy path, which desugars every elimination onto the `Nat` carrier, each Core elimination erases to its most precise arena form — `SwitchBool`, `SwitchNat`, `FoldNat`, first-class `FoldSequence` over the sequence itself, and schema-carrying `MatchVariant` whose arms bind the payload directly. Both fold forms keep the peel-versus-fold distinction: a cons arm that ignores its induction hypothesis is a case split, peeled to a single-key dispatch rather than an n-step fold, so a non-tail recursive caller does not re-run the whole fold at every level.
+//! Unlike the legacy path, which desugars every elimination onto the `Nat` carrier, each Core elimination erases to its most precise arena form — `SwitchBool`, `SwitchNat`, `FoldNat`, first-class `FoldSequence` over the sequence itself, and schema-carrying `MatchVariant` whose arms bind the payload directly. Both sequence forms keep the peel-versus-fold distinction: a cons arm that ignores its induction hypothesis erases to `UnconsSequence`, one peel rather than an n-step fold, so a non-tail recursive caller does not re-run the whole fold at every level. Neither names a read: how a sequence is taken apart belongs to the lowering that performs it, and this crate names no index, window or length at all — see [A lowering names the elimination it performs](../../../documentation/design/toolchain/a-lowering-names-the-elimination-it-performs.md).
 //!
 //! The scrutinee is erased exactly once. The fold forms alias a non-variable head on the Core side first — a fresh variable defined as the head, its label mapped to the once-erased operand — because their peels re-derive Core terms from the head (`head - 1`, the sequence's length and slices), and walking those must re-resolve to the same operand instead of re-erasing an effectful expression. The dispatch forms (`Bool`, `Switch`, the inductive match) never re-derive from the head, so they refine the *original* head term — arm bodies were elaborated against reductions keyed on that term, and refining an alias in its place would break their re-derived typing. Arm-side refinement is typing-only: it reproduces the context the arm was elaborated in and emits nothing.
 
@@ -76,35 +76,6 @@ impl SeqCarrier<'_> {
                     tail.clone(),
                 ],
             }),
-        }
-    }
-
-    /// The length of `sequence` — the case-split peel's dispatch key.
-    fn len(self, sequence: &Term) -> Term {
-        match self {
-            SeqCarrier::List { element } => Term::intrinsic(Intrinsic::ListLen {
-                element: element.clone(),
-                list: sequence.clone(),
-            }),
-            SeqCarrier::Bin { grain } => {
-                Term::intrinsic(Intrinsic::BinLen(grain, sequence.clone()))
-            }
-        }
-    }
-
-    /// The erased read of one element, for the peel that emits the read instead of writing it as a term.
-    fn get_op(self) -> curios_ersd::SequenceOp {
-        match self {
-            SeqCarrier::List { .. } => curios_ersd::SequenceOp::ListGet,
-            SeqCarrier::Bin { grain } => curios_ersd::SequenceOp::BinGet(grain),
-        }
-    }
-
-    /// The erased window read, the [`get_op`](Self::get_op) twin.
-    fn slice_op(self) -> curios_ersd::SequenceOp {
-        match self {
-            SeqCarrier::List { .. } => curios_ersd::SequenceOp::ListSlice,
-            SeqCarrier::Bin { grain } => curios_ersd::SequenceOp::BinSlice(grain),
         }
     }
 }
@@ -399,7 +370,7 @@ impl Lowering {
         ))
     }
 
-    /// A `List`/`Bin` free-monoid elimination: a cons arm that uses its hypothesis is a first-class `FoldSequence` whose step binds the element, the suffix, and the accumulator; one that ignores it is a case split, peeled to a length dispatch over `seq[0]` and `seq[1..]`.
+    /// A `List`/`Bin` free-monoid elimination: a cons arm that uses its hypothesis is a first-class `FoldSequence` whose step binds the element, the suffix, and the accumulator; one that ignores it is a first-class `UnconsSequence` binding the element and the suffix alone. Both hand the reads to `curios-ersd`'s lowering rather than emitting them, which is what keeps a window's operand convention out of this crate.
     #[allow(clippy::too_many_arguments)]
     fn erase_seq_fold(
         &mut self,
@@ -422,56 +393,27 @@ impl Lowering {
 
         // The hypothesis is dead: a case split over the length, peeling the cons arm at the head element and tail slice.
         //
-        // The peel binds *names* for the element and the suffix and emits their reads, rather than writing `get`/`slice` terms into the arm and letting the walk typecheck them. That is a typing requirement, not a style choice: both reads are bounded operations, and the bound each would have to carry — `0 < len` for the element, `1 <= len` for the window — is exactly what the dispatch being built here establishes, so at the point the terms would be constructed there is no proof to hand them. Emitting the reads leaves no bounded Core term for anything to check.
+        // The peel binds *names* for the element and the suffix rather than writing `get`/`slice` terms into the arm and letting the walk typecheck them. That is a typing requirement, not a style choice: both reads are bounded operations, and the bound each would carry — `0 < len` for the element, `1 <= len` for the window — is exactly what the dispatch establishes, so at the point the terms would be constructed there is no proof to hand them.
         //
         // What the arm loses by it is the definitional connection back to the scrutinee: the binders are opaque assumptions of the element and sequence types rather than the reads themselves. Nothing needs that connection, because the arm is checked at `motive(head)`, which does not mention either.
+        //
+        // **The reads are not emitted here at all.** `UnconsSequence` is one peel, and how a peel is performed belongs to the lowering that performs it — `into_cont`'s `emit_peel`, which the fold reaches too. Open-coding it here meant this crate had to hold a window's operand convention, and a window is the one shape whose operands have changed under it.
         if !cons_case.uses(2) {
-            let length = carrier.len(&head);
-            let index = emitted!(self.walk(
-                context,
-                &length,
-                &Term::intrinsic(Intrinsic::NatType),
-                None
-            )?);
-
+            let sequence_atom = sequence;
             let element_hint = cons_case.first_hint().map(str::to_string);
             let suffix_hint = cons_case.second_hint().map(str::to_string);
             let element_label = context.fresh(element_hint.as_deref());
             let suffix_label = context.fresh(suffix_hint.as_deref());
+            let element = self.builder.value(element_hint);
+            let suffix = self.builder.value(suffix_hint);
 
-            // Both reads are emitted *inside* the non-empty arm, which is the whole reason this branch opens the block by hand instead of calling `open_arm`. Beside the dispatch they would run on the empty sequence too, where `get(seq, 0)` and `slice(seq, 1, len)` are both out of bounds and trap. Passing the terms into the arm used to place them here for free; emitting them does not, and nothing that only *checks* the program can notice — a certified prelude never runs one.
+            self.environment
+                .bind(&element_label, curios_ersd::Atom::Value(element));
+            self.environment
+                .bind(&suffix_label, curios_ersd::Atom::Value(suffix));
+
             self.builder.open_block();
             let outcome = context.with_frame(|context| {
-                let zero = curios_ersd::Atom::Constant(
-                    self.builder.constant(curios_ersd::Constant::Nat(0)),
-                );
-                let one = curios_ersd::Atom::Constant(
-                    self.builder.constant(curios_ersd::Constant::Nat(1)),
-                );
-                let element = curios_ersd::Atom::Value(self.builder.let_value(
-                    element_hint.clone(),
-                    curios_ersd::Rhs::Sequence {
-                        operation: carrier.get_op(),
-                        operands: vec![sequence, zero],
-                    },
-                ));
-                // A window is `(start, count)`, so the suffix takes what remains after the peeled head rather than the length standing in as an end. The subtraction is emitted inside this block for the same reason the two reads are: on the empty sequence it would be computing a count for a window nobody opens.
-                let remaining = curios_ersd::Atom::Value(self.builder.let_value(
-                    None,
-                    curios_ersd::Rhs::Operation {
-                        operation: curios_ersd::Operation::NatSub,
-                        operands: vec![index, one],
-                    },
-                ));
-                let suffix = curios_ersd::Atom::Value(self.builder.let_value(
-                    suffix_hint.clone(),
-                    curios_ersd::Rhs::Sequence {
-                        operation: carrier.slice_op(),
-                        operands: vec![sequence, one, remaining],
-                    },
-                ));
-                self.environment.bind(&element_label, element);
-                self.environment.bind(&suffix_label, suffix);
                 context.assume(&element_label, &carrier.element_type());
                 context.assume(&suffix_label, &head_type);
 
@@ -485,17 +427,19 @@ impl Lowering {
                 let expected = motive.open(&[&head]);
                 self.walk(context, &peeled, &expected, None)
             })?;
-            let default = self.seal(outcome);
+            let cons_block = self.seal(outcome);
 
             return Ok(self.bind(
                 hint,
-                curios_ersd::Rhs::SwitchNat {
-                    scrutinee: index,
-                    cases: vec![curios_ersd::NatCase {
-                        key: 0,
-                        block: empty,
-                    }],
-                    default,
+                curios_ersd::Rhs::UnconsSequence {
+                    grain: carrier.grain(),
+                    scrutinee: sequence_atom,
+                    empty,
+                    cons: curios_ersd::UnconsSequenceStep {
+                        element,
+                        suffix,
+                        block: cons_block,
+                    },
                 },
             ));
         }

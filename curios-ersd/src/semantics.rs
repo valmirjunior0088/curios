@@ -223,9 +223,10 @@ impl Semantics {
             Rhs::Foreign { .. } => LocalBehavior::host(),
             Rhs::Intrinsic { intrinsic, .. } => Self::intrinsic(*intrinsic),
             // Building an aggregate allocates an immutable value; a sequence fold materializes suffix views.
-            Rhs::Product { .. } | Rhs::Construct { .. } | Rhs::FoldSequence { .. } => {
-                LocalBehavior::alloc(Allocation::Immutable)
-            }
+            Rhs::Product { .. }
+            | Rhs::Construct { .. }
+            | Rhs::FoldSequence { .. }
+            | Rhs::UnconsSequence { .. } => LocalBehavior::alloc(Allocation::Immutable),
         }
     }
 

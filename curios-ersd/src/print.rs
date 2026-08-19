@@ -335,6 +335,30 @@ impl Printer<'_, '_, '_> {
                         sequence.push(Job::Dedent);
                         sequence.push(Job::Line("}".into()));
                     }
+                    Rhs::UnconsSequence {
+                        grain,
+                        scrutinee,
+                        empty,
+                        cons,
+                    } => {
+                        sequence.push(Job::Line(format!(
+                            "{bound} = uncons-seq{} {} {{",
+                            sequence_grain(grain),
+                            self.atom(*scrutinee)
+                        )));
+                        sequence.push(Job::Indent);
+                        sequence.push(Job::Blocked("empty =>".into(), *empty));
+                        sequence.push(Job::Blocked(
+                            format!(
+                                "cons({}, {}) =>",
+                                self.value(cons.element),
+                                self.value(cons.suffix)
+                            ),
+                            cons.block,
+                        ));
+                        sequence.push(Job::Dedent);
+                        sequence.push(Job::Line("}".into()));
+                    }
                     Rhs::Cell {
                         operation,
                         operands,

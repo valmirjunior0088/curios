@@ -7,8 +7,8 @@
 use {
     crate::{
         Atom, Block, BlockId, FoldNatStep, FoldSequenceStep, Function, FunctionId, NatCase,
-        RecGroup, RecGroupId, RecValue, Rhs, Statement, StatementId, Terminator, ValueId,
-        VariantArm,
+        RecGroup, RecGroupId, RecValue, Rhs, Statement, StatementId, Terminator,
+        UnconsSequenceStep, ValueId, VariantArm,
     },
     std::collections::BTreeMap,
 };
@@ -199,6 +199,21 @@ impl Remap<'_> {
                     suffix: self.value(step.suffix),
                     accumulator: self.value(step.accumulator),
                     block: self.block(step.block),
+                },
+            },
+            Rhs::UnconsSequence {
+                grain,
+                scrutinee,
+                empty,
+                cons,
+            } => Rhs::UnconsSequence {
+                grain: *grain,
+                scrutinee: self.atom(*scrutinee),
+                empty: self.block(*empty),
+                cons: UnconsSequenceStep {
+                    element: self.value(cons.element),
+                    suffix: self.value(cons.suffix),
+                    block: self.block(cons.block),
                 },
             },
             Rhs::Cell {

@@ -73,6 +73,15 @@ pub enum Rhs {
         empty: BlockId,
         step: FoldSequenceStep,
     },
+    /// Sequence elimination as a *case split*: `empty` computes the result for the empty sequence, and `cons` sees the head element and the suffix after it.
+    ///
+    /// The non-looping sibling of [`Rhs::FoldSequence`], and the form a cons arm that ignores its induction hypothesis erases to. It exists so that the erasure states what the Core eliminator states — one peel — instead of open-coding one out of an index dispatch and two bounded reads, which is a window convention two crates would then each have to hold.
+    UnconsSequence {
+        grain: SequenceGrain,
+        scrutinee: Atom,
+        empty: BlockId,
+        cons: UnconsSequenceStep,
+    },
     /// A mutable-cell operation (see [`CellOperation`]). A cell operation's identity is its program point: it is never deleted for an unused result, never duplicated, and never residualized by evaluation.
     Cell {
         operation: CellOperation,
@@ -113,6 +122,15 @@ pub struct NatCase {
 pub struct FoldNatStep {
     pub predecessor: ValueId,
     pub hypothesis: ValueId,
+    pub block: BlockId,
+}
+
+/// The cons arm of a [`Rhs::UnconsSequence`]: binds the head element and the suffix after it in `block`.
+#[derive(Debug, Clone)]
+#[curios_archive::archived]
+pub struct UnconsSequenceStep {
+    pub element: ValueId,
+    pub suffix: ValueId,
     pub block: BlockId,
 }
 

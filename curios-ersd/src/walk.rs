@@ -29,7 +29,8 @@ impl Rhs {
             | Self::SwitchBool { scrutinee, .. }
             | Self::SwitchNat { scrutinee, .. }
             | Self::FoldNat { scrutinee, .. }
-            | Self::FoldSequence { scrutinee, .. } => vec![*scrutinee],
+            | Self::FoldSequence { scrutinee, .. }
+            | Self::UnconsSequence { scrutinee, .. } => vec![*scrutinee],
         }
     }
 
@@ -59,6 +60,7 @@ impl Rhs {
                 .collect(),
             Self::FoldNat { zero, step, .. } => vec![*zero, step.block],
             Self::FoldSequence { empty, step, .. } => vec![*empty, step.block],
+            Self::UnconsSequence { empty, cons, .. } => vec![*empty, cons.block],
         }
     }
 
@@ -72,6 +74,7 @@ impl Rhs {
             Self::FoldSequence { step, .. } => {
                 vec![step.element, step.suffix, step.accumulator]
             }
+            Self::UnconsSequence { cons, .. } => vec![cons.element, cons.suffix],
             _ => Vec::new(),
         }
     }

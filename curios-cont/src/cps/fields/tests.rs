@@ -714,14 +714,11 @@ fn walk_module() -> (CpsModule, crate::CpsContId) {
             args: vec![CpsAtom::Value(head)],
         }),
     });
+    // A *suffix*, which is what `into_cont`'s peel emits: no count operand, so the fixture exercises the shape the compiler actually produces rather than one it no longer can.
     let slice = module.add_node(CpsNode::LetIntrinsic {
         result: tail,
-        op: CpsIntrinsicOp::BinSlice(curios_utilities::Grain::X),
-        args: vec![
-            CpsAtom::Value(window),
-            CpsAtom::Literal(CpsLiteral::Nat(1)),
-            CpsAtom::Value(length),
-        ],
+        op: CpsIntrinsicOp::BinRest(curios_utilities::Grain::X),
+        args: vec![CpsAtom::Value(window), CpsAtom::Literal(CpsLiteral::Nat(1))],
         next: spin,
     });
     let read = module.add_node(CpsNode::LetIntrinsic {
@@ -784,12 +781,16 @@ fn a_suffix_walk_virtualizes_its_windows() {
         "and the split is recorded",
     );
 
+    // Counted over *every* window-producing shape, not just the one this fixture happens to build: an assertion that a form has vanished passes vacuously the moment the lowering stops emitting that form, which is the inertness this codebase keeps recording.
     let mut slices = 0;
     let mut extents = 0;
     for node in module.nodes().iter().flatten() {
         if let CpsNode::LetIntrinsic { op, .. } = node {
             match op {
-                CpsIntrinsicOp::BinSlice(_) => slices += 1,
+                CpsIntrinsicOp::BinSlice(_)
+                | CpsIntrinsicOp::BinRest(_)
+                | CpsIntrinsicOp::ListSlice
+                | CpsIntrinsicOp::ListRest => slices += 1,
                 CpsIntrinsicOp::WindowExtent => extents += 1,
                 _ => {}
             }
