@@ -380,6 +380,64 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         });
     }
 
+    /// Lower a sequence read with the leaf split inline: a leaf answers `payload[i]` without leaving the function, and every other shape pays the shared `read` helper. Binaryen never produces this split from the module at any level setting, and a wider split reaching cached nodes measured as pure noise on the map wall's own workload — both recorded in `map_wall_spines_slope` — so exactly this invariant lives here and no more. The split changes no trap: a leaf's payload length is its logical length, so the inline read refuses exactly the index the helper's leaf arm refuses.
+    fn emit_seq_get(
+        &mut self,
+        carrier: &'a EmissionValueName,
+        index: &'a EmissionValueName,
+        load: LoadAs,
+        rope: &RopeData,
+        read_func: curios_wasm::FuncName,
+    ) {
+        // Packed payloads read as zero-extended bytes, exactly as `emit_read_func` decides for the helper's own body.
+        let packed = rope.payload == self.context.table().bytes_type();
+        let get_elem = if packed {
+            curios_wasm::Instr::ArrayGetU {
+                type_name: rope.payload.clone(),
+            }
+        } else {
+            curios_wasm::Instr::ArrayGet {
+                type_name: rope.payload.clone(),
+            }
+        };
+        let elem_type = if packed {
+            curios_wasm::ValType::Num(curios_wasm::NumType::I32)
+        } else {
+            Table::top_type(true)
+        };
+
+        self.emit_instrs(self.context.load_value_instrs(carrier, load.clone()));
+        self.emit_instr(Self::rope_get(rope, &rope.tag_field));
+        self.emit_instr(curios_wasm::Instr::I32Eqz);
+
+        let mut leaf_arm = self.context.load_value_instrs(carrier, load.clone());
+        leaf_arm.push(curios_wasm::Instr::RefCast {
+            ref_type: curios_wasm::RefType {
+                is_nullable: false,
+                heap_type: curios_wasm::HeapType::Concrete(rope.leaf.clone()),
+            },
+        });
+        leaf_arm.push(curios_wasm::Instr::StructGet {
+            type_name: rope.leaf.clone(),
+            field_name: rope.payload_field.clone(),
+        });
+        leaf_arm.extend(self.context.load_value_instrs(index, LoadAs::Nat));
+        leaf_arm.push(get_elem);
+
+        let mut read_arm = self.context.load_value_instrs(carrier, load);
+        read_arm.extend(self.context.load_value_instrs(index, LoadAs::Nat));
+        read_arm.push(curios_wasm::Instr::Call {
+            func_name: read_func,
+        });
+
+        self.emit_instr(curios_wasm::Instr::If {
+            label_name: curios_wasm::LabelName::from("seq_get"),
+            block_type: curios_wasm::BlockType::Inline(elem_type),
+            then_instructions: leaf_arm,
+            else_instructions: read_arm,
+        });
+    }
+
     /// Lower one `EmissionCode` op into the current frame, writing its result into `value_name`'s local.
     pub(crate) fn emit(&mut self, value_name: &'a EmissionValueName, op: &'a EmissionCode) {
         let dest = Dest {
@@ -951,13 +1009,20 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_store(dest, &op.result_repr());
             }
             CpsIntrinsicOp::BinGet(grain) => {
-                let read = match grain {
-                    Grain::B => self.context.table().bits_read_func(),
-                    Grain::X => self.context.table().bytes_read_func(),
-                };
-                self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::Bytes));
-                self.emit_instrs(self.context.load_value_instrs(&args[1], LoadAs::Nat));
-                self.emit_instr(curios_wasm::Instr::Call { func_name: read });
+                match grain {
+                    // A bit read stays a call: its leaf arm is the packed extraction, several instructions past the array read, and no hot class-1 consumer walks `Bits`.
+                    Grain::B => {
+                        let read = self.context.table().bits_read_func();
+                        self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::Bytes));
+                        self.emit_instrs(self.context.load_value_instrs(&args[1], LoadAs::Nat));
+                        self.emit_instr(curios_wasm::Instr::Call { func_name: read });
+                    }
+                    Grain::X => {
+                        let rope = self.context.table().bin_rope();
+                        let read = self.context.table().bytes_read_func();
+                        self.emit_seq_get(&args[0], &args[1], LoadAs::Bytes, &rope, read);
+                    }
+                }
                 self.emit_store(dest, &op.result_repr());
             }
             CpsIntrinsicOp::BinSlice(grain) => {
@@ -1003,10 +1068,9 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_unary_op(dest, &op, &args[0], Self::rope_get(&rope, &rope.len_field));
             }
             CpsIntrinsicOp::ListGet => {
+                let rope = self.context.table().list_rope();
                 let read = self.context.table().list_read_func();
-                self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::List));
-                self.emit_instrs(self.context.load_value_instrs(&args[1], LoadAs::Nat));
-                self.emit_instr(curios_wasm::Instr::Call { func_name: read });
+                self.emit_seq_get(&args[0], &args[1], LoadAs::List, &rope, read);
                 self.emit_store(dest, &op.result_repr());
             }
             CpsIntrinsicOp::ListSlice => {

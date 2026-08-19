@@ -916,8 +916,10 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// if r.tag == 0 → r.payload[i]                    ;; leaf
     /// if r.tag == 2 →                                 ;; view: read through
     ///   (r.base.tag == 0 ? r.base.payload : r.base.cache)[r.offset + i]
-    /// force(r)[i]                                     ;; node (memoized)
+    /// (r.cache ?? force(r))[i]                        ;; node: answer the memo, fill it once
     /// ```
+    ///
+    /// The node arm probes the cache before reaching for `force`: a cache is written once and never cleared, so on every walk over an already-forced rope the probe halves the serial call chain a per-element read costs — which is most of what a hot descent pays, per the map-wall decomposition.
     ///
     /// Binary-sequence elements are packed bytes (`array.get_u`, an `i32` result); `List` elements are the top type (`array.get`).
     pub(crate) fn emit_read_func(
@@ -1013,10 +1015,23 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                         ],
                         else_instructions: vec![
                             get(&r),
-                            curios_wasm::Instr::Call {
-                                func_name: force_func,
-                            },
+                            cast(&rope.node),
+                            field_get(&rope.node, &rope.cache_field),
                             set(&p),
+                            get(&p),
+                            curios_wasm::Instr::RefIsNull,
+                            curios_wasm::Instr::If {
+                                label_name: curios_wasm::LabelName::from("settle"),
+                                block_type: curios_wasm::BlockType::Empty,
+                                then_instructions: vec![
+                                    get(&r),
+                                    curios_wasm::Instr::Call {
+                                        func_name: force_func,
+                                    },
+                                    set(&p),
+                                ],
+                                else_instructions: vec![],
+                            },
                         ],
                     },
                 ],

@@ -5,5 +5,6 @@ mod census;
 #[cfg(feature = "profile")]
 mod churn;
 mod ladder;
+mod map_wall;
 mod parity;
 mod structural;
