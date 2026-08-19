@@ -207,6 +207,9 @@ fn lower_with_prelude(src: &str) -> Result<(), String> {
                 pub let NonZero : Type = Type;
                 pub let NonNeg : Type = Type;
             end
+            pub mod Flt
+                pub let FourBytes : Type = Type;
+            end
         "#
         .parse()
         .unwrap(),
