@@ -649,6 +649,41 @@ fn nat_sum(images: Vec<Term>) -> Term {
         })
 }
 
+/// One piece of a located `Bin` window, as a value.
+///
+/// Every segment [`bin_segments`](crate::free_monoid) admits is a literal run, so a narrowed edge is narrowed *here* — `PackedBin::slice` is an O(1) window into the same payload — rather than rebuilt as a `BinSlice` node for the next pass to fold into exactly this. Same value, same operation, one round trip earlier, and the window arm then constructs no bounded node at all.
+fn bin_piece(grain: Grain, piece: Piece<'_>) -> Term {
+    match piece {
+        Piece::Whole(operand) => operand.clone(),
+        Piece::Part(operand, lo, hi) => match &**operand {
+            Subterm::Intrinsic(Intrinsic::Bin(found, run)) if *found == grain => {
+                let narrowed = run
+                    .slice(grain, lo, hi)
+                    .expect("a window's piece lies inside the run it was located in");
+
+                Term::intrinsic(Intrinsic::Bin(grain, narrowed))
+            }
+            _ => unreachable!("a located window's segments are literal runs"),
+        },
+    }
+}
+
+/// [`bin_piece`] over the element carrier, restoring the element type every `List` value carries.
+fn list_piece(element: &Term, piece: Piece<'_>) -> Term {
+    match piece {
+        Piece::Whole(operand) => operand.clone(),
+        Piece::Part(operand, lo, hi) => match &**operand {
+            Subterm::Intrinsic(Intrinsic::List { element: _, items }) => {
+                Term::intrinsic(Intrinsic::List {
+                    element: element.clone(),
+                    items: items[lo..hi].to_vec(),
+                })
+            }
+            _ => unreachable!("a located window's segments are literal runs"),
+        },
+    }
+}
+
 pub fn reduce_intrinsic(
     reducer: &mut impl Reducer,
     intrinsic: &Intrinsic,
@@ -1344,61 +1379,52 @@ pub fn reduce_intrinsic(
             grain: Grain::X,
             bin,
             start,
-            end,
+            length,
         } => {
             let bin = reducer.reduce_forced(bin.clone())?;
             let start_reduced = reducer.reduce_forced(start.clone())?;
-            let end_reduced = reducer.reduce_forced(end.clone())?;
-            // The full slice is the identity: `slice(b, 0, len b) = b`. Sound even for a symbolic `b` — `0..len` is always in range, never trapping — and the runtime partner of `core::spine`'s window-collapse: it lets a bare full-window `BinSlice` reduce to its base, so a `Bin/slice` over the whole value costs no copy and converts against the base directly.
+            let length_reduced = reducer.reduce_forced(length.clone())?;
+            // The full slice is the identity: `slice(b, 0, len b) = b`. Sound even for a symbolic `b` — a window covering everything is always in range, never trapping — and the runtime partner of `core::spine`'s window-collapse: it lets a bare full-window `BinSlice` reduce to its base, so a `Bin/slice` over the whole value costs no copy and converts against the base directly.
             if matches!(
                 &*start_reduced,
                 Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero))
-            ) && matches!(&*end_reduced, Subterm::Intrinsic(Intrinsic::BinLen(Grain::X, whole)) if *whole == bin)
+            ) && matches!(&*length_reduced, Subterm::Intrinsic(Intrinsic::BinLen(Grain::X, whole)) if *whole == bin)
             {
                 return Ok(Term::unwrap_or_clone(bin));
             }
-            // The empty slice is empty: `slice(b, i, i) = x[]`. The dual of the full-window identity and equally sound — an empty range yields no bytes regardless of `b`, and never equates two distinct literals. It lets a codepoint take collapse its zero-width base (`take 0`) to the empty string even over a symbolic cons.
-            if start_reduced == end_reduced {
+            // The empty slice is empty: `slice(b, i, 0) = x[]`. The dual of the full-window identity and equally sound — a zero-length window yields no bytes regardless of `b` or `i`, and never equates two distinct literals. It lets a codepoint take collapse its zero-width base (`take 0`) to the empty string even over a symbolic cons. Reading a *count* is what makes this one test rather than a comparison of two subjects.
+            if Nat::is_zero(&length_reduced) {
                 return Ok(Subterm::Intrinsic(Intrinsic::Bin(
                     Grain::X,
                     PackedBin::empty(),
                 )));
             }
             let s = as_index(&start_reduced);
-            let e = as_index(&end_reduced);
+            let n = as_index(&length_reduced);
             // A concrete slice of a literal run.
-            if let (Subterm::Intrinsic(Intrinsic::Bin(Grain::X, bytes)), Some(s), Some(e)) =
-                (&*bin, s, e)
+            if let (Subterm::Intrinsic(Intrinsic::Bin(Grain::X, bytes)), Some(s), Some(n)) =
+                (&*bin, s, n)
             {
-                return match bytes.slice(Grain::X, s, e) {
+                return match s.checked_add(n).and_then(|e| bytes.slice(Grain::X, s, e)) {
                     Some(slice) => Ok(Subterm::Intrinsic(Intrinsic::Bin(Grain::X, slice))),
                     None => Err(ReduceError::BinSliceOutOfRange {
                         len: bytes.len(Grain::X),
                         start: s,
-                        end: e,
-                        span: start.span().or_else(|| end.span()),
+                        length: n,
+                        span: start.span().or_else(|| length.span()),
                     }),
                 };
             }
-            // A slice over a cons spine peels one byte per `0`/`succ` boundary step — the reduction partner of the `Utf8` cons the validity proofs walk:  `slice(cons(h, t), 0, succ e) = h ++ slice(t, 0, e)`  and `slice(cons(h, t), succ s, e) = slice(t, s, e - 1)`.
             // Locate the window by the operands' own lengths. Every operand it covers whole is handed back untouched and shares its payload; only the two at the edges are narrowed, and everything outside the window is dropped without being read.
-            if let (Some(s), Some(e)) = (s, e) {
-                match bin_window(Grain::X, &bin, s, e) {
+            //
+            // Every segment `bin_segments` admits is a literal run, so a narrowed edge is narrowed *here* rather than rebuilt as a `BinSlice` for the next pass to fold — `PackedBin::slice` is an O(1) window into the same payload, so this is the same value by the same operation, one round trip earlier. It also leaves this arm constructing no bounded node at all, which is what keeps a bound off the reducer once these accessors carry one.
+            if let (Some(s), Some(n)) = (s, n) {
+                match bin_window(Grain::X, &bin, s, n) {
                     Some(Ok(pieces)) => {
-                        let parts: Vec<Term> = pieces
+                        let parts = pieces
                             .into_iter()
-                            .map(|piece| match piece {
-                                Piece::Whole(operand) => operand.clone(),
-                                Piece::Part(operand, lo, hi) => {
-                                    Term::intrinsic(Intrinsic::bin_slice(
-                                        Grain::X,
-                                        operand.clone(),
-                                        Term::intrinsic(Intrinsic::Nat(Nat::new(lo))),
-                                        Term::intrinsic(Intrinsic::Nat(Nat::new(hi))),
-                                    ))
-                                }
-                            })
-                            .collect();
+                            .map(|piece| bin_piece(Grain::X, piece))
+                            .collect::<Vec<Term>>();
                         reducer.spend(Cost::collection(parts.len() as u64))?;
 
                         return reducer
@@ -1409,19 +1435,22 @@ pub fn reduce_intrinsic(
                         return Err(ReduceError::BinSliceOutOfRange {
                             len,
                             start: s,
-                            end: e,
-                            span: start.span().or_else(|| end.span()),
+                            length: n,
+                            span: start.span().or_else(|| length.span()),
                         });
                     }
                     None => {}
                 }
             }
+            // A slice over a cons spine peels one byte per `0`/`succ` boundary step — the reduction partner of the `Utf8` cons the validity proofs walk:  `slice(cons(h, t), 0, succ n) = h ++ slice(t, 0, n)`  and  `slice(cons(h, t), succ s, n) = slice(t, s, n)`.
+            //
+            // Advancing the start no longer touches the length, which is the reparameterisation paying for itself: the count is invariant under peeling the base, so nothing about the window has to be recomputed to move it.
             if let Some((head, tail)) = peel_first_atom(Grain::X, &bin) {
                 let dec = |n: &Term| {
                     let one = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
                     Term::intrinsic(Intrinsic::nat_sub(n.clone(), one))
                 };
-                match (&*start_reduced, &*end_reduced) {
+                match (&*start_reduced, &*length_reduced) {
                     (
                         Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)),
                         Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(..))),
@@ -1431,7 +1460,7 @@ pub fn reduce_intrinsic(
                             Grain::X,
                             tail,
                             zero,
-                            dec(&end_reduced),
+                            dec(&length_reduced),
                         ));
                         let consed = Term::intrinsic(Intrinsic::bin_concat(Grain::X, [head, rest]));
                         return reducer.reduce(consed).map(Term::unwrap_or_clone);
@@ -1441,7 +1470,7 @@ pub fn reduce_intrinsic(
                             Grain::X,
                             tail,
                             dec(&start_reduced),
-                            dec(&end_reduced),
+                            length_reduced.clone(),
                         ));
                         return reducer.reduce(sliced).map(Term::unwrap_or_clone);
                     }
@@ -1452,7 +1481,7 @@ pub fn reduce_intrinsic(
                 Grain::X,
                 bin,
                 start_reduced,
-                end_reduced,
+                length_reduced,
             )))
         }
         Intrinsic::BinAppend {
@@ -1651,56 +1680,47 @@ pub fn reduce_intrinsic(
             grain: Grain::B,
             bin,
             start,
-            end,
+            length,
         } => {
-            let span = start.span().or_else(|| end.span());
+            let span = start.span().or_else(|| length.span());
             let bin = reducer.reduce_forced(bin.clone())?;
             let start_reduced = reducer.reduce_forced(start.clone())?;
-            let end_reduced = reducer.reduce_forced(end.clone())?;
+            let length_reduced = reducer.reduce_forced(length.clone())?;
             if matches!(
                 &*start_reduced,
                 Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero))
-            ) && matches!(&*end_reduced, Subterm::Intrinsic(Intrinsic::BinLen(Grain::B, whole)) if *whole == bin)
+            ) && matches!(&*length_reduced, Subterm::Intrinsic(Intrinsic::BinLen(Grain::B, whole)) if *whole == bin)
             {
                 return Ok(Term::unwrap_or_clone(bin));
             }
-            if start_reduced == end_reduced {
+            if Nat::is_zero(&length_reduced) {
                 return Ok(Subterm::Intrinsic(Intrinsic::Bin(
                     Grain::B,
                     PackedBin::empty(),
                 )));
             }
-            if let (Subterm::Intrinsic(Intrinsic::Bin(Grain::B, bits)), Some(start), Some(end)) =
-                (&*bin, as_index(&start_reduced), as_index(&end_reduced))
+            if let (Subterm::Intrinsic(Intrinsic::Bin(Grain::B, bits)), Some(start), Some(count)) =
+                (&*bin, as_index(&start_reduced), as_index(&length_reduced))
             {
-                return bits
-                    .slice(Grain::B, start, end)
+                return start
+                    .checked_add(count)
+                    .and_then(|end| bits.slice(Grain::B, start, end))
                     .map(|bits| Subterm::Intrinsic(Intrinsic::Bin(Grain::B, bits)))
                     .ok_or_else(|| ReduceError::BinSliceOutOfRange {
                         len: bits.bit_length(),
                         start,
-                        end,
+                        length: count,
                         span,
                     });
             }
             // Locate the window by the operands' own lengths. Every operand it covers whole is handed back untouched and shares its payload; only the two at the edges are narrowed, and everything outside the window is dropped without being read.
-            if let (Some(s), Some(e)) = (as_index(&start_reduced), as_index(&end_reduced)) {
-                match bin_window(Grain::B, &bin, s, e) {
+            if let (Some(s), Some(n)) = (as_index(&start_reduced), as_index(&length_reduced)) {
+                match bin_window(Grain::B, &bin, s, n) {
                     Some(Ok(pieces)) => {
-                        let parts: Vec<Term> = pieces
+                        let parts = pieces
                             .into_iter()
-                            .map(|piece| match piece {
-                                Piece::Whole(operand) => operand.clone(),
-                                Piece::Part(operand, lo, hi) => {
-                                    Term::intrinsic(Intrinsic::bin_slice(
-                                        Grain::B,
-                                        operand.clone(),
-                                        Term::intrinsic(Intrinsic::Nat(Nat::new(lo))),
-                                        Term::intrinsic(Intrinsic::Nat(Nat::new(hi))),
-                                    ))
-                                }
-                            })
-                            .collect();
+                            .map(|piece| bin_piece(Grain::B, piece))
+                            .collect::<Vec<Term>>();
                         reducer.spend(Cost::collection(parts.len() as u64))?;
 
                         return reducer
@@ -1711,7 +1731,7 @@ pub fn reduce_intrinsic(
                         return Err(ReduceError::BinSliceOutOfRange {
                             len,
                             start: s,
-                            end: e,
+                            length: n,
                             span,
                         });
                     }
@@ -1725,7 +1745,7 @@ pub fn reduce_intrinsic(
                         Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
                     ))
                 };
-                match (&*start_reduced, &*end_reduced) {
+                match (&*start_reduced, &*length_reduced) {
                     (
                         Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)),
                         Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(..))),
@@ -1734,7 +1754,7 @@ pub fn reduce_intrinsic(
                             Grain::B,
                             tail,
                             Term::intrinsic(Intrinsic::Nat(Nat::Zero)),
-                            dec(&end_reduced),
+                            dec(&length_reduced),
                         ));
                         return reducer
                             .reduce(Term::intrinsic(Intrinsic::bin_concat(
@@ -1749,7 +1769,7 @@ pub fn reduce_intrinsic(
                                 Grain::B,
                                 tail,
                                 dec(&start_reduced),
-                                dec(&end_reduced),
+                                length_reduced.clone(),
                             )))
                             .map(Term::unwrap_or_clone);
                     }
@@ -1760,7 +1780,7 @@ pub fn reduce_intrinsic(
                 grain: Grain::B,
                 bin,
                 start: start_reduced,
-                end: end_reduced,
+                length: length_reduced,
             }))
         }
         Intrinsic::BinAppend {
@@ -1907,29 +1927,29 @@ pub fn reduce_intrinsic(
             element: type_,
             list,
             start,
-            end,
+            length,
         } => {
             let type_ = reducer.reduce(type_.clone())?;
             let list = reducer.reduce_forced(list.clone())?;
             let start_reduced = reducer.reduce_forced(start.clone())?;
-            let end_reduced = reducer.reduce_forced(end.clone())?;
-            // The full slice is the identity: `slice(a, 0, len a) = a`. Sound even for a symbolic `a` — `0..len` is always in range — the `List` twin of `BinSlice`'s full-window identity, letting a full-length `List/slice` reduce to its base instead of copying.
+            let length_reduced = reducer.reduce_forced(length.clone())?;
+            // The full slice is the identity: `slice(a, 0, len a) = a`. Sound even for a symbolic `a` — a window covering everything is always in range — the `List` twin of `BinSlice`'s full-window identity, letting a full-length `List/slice` reduce to its base instead of copying.
             if matches!(
                 &*start_reduced,
                 Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero))
-            ) && matches!(&*end_reduced, Subterm::Intrinsic(Intrinsic::ListLen { element: _, list: whole }) if *whole == list)
+            ) && matches!(&*length_reduced, Subterm::Intrinsic(Intrinsic::ListLen { element: _, list: whole }) if *whole == list)
             {
                 return Ok(Term::unwrap_or_clone(list));
             }
-            // The empty slice is empty: `slice(a, i, i) = []`. Sound for a symbolic `a` — an empty range yields no elements regardless — and the base case the cons peel below bottoms out on (the `List` twin of `BinSlice`'s empty-slice identity).
-            if start_reduced == end_reduced {
+            // The empty slice is empty: `slice(a, i, 0) = []`. Sound for a symbolic `a` — a zero-length window yields no elements regardless — and the base case the cons peel below bottoms out on (the `List` twin of `BinSlice`'s empty-slice identity).
+            if Nat::is_zero(&length_reduced) {
                 return Ok(Subterm::Intrinsic(Intrinsic::List {
                     element: type_.clone(),
                     items: Vec::new(),
                 }));
             }
             let s = as_index(&start_reduced);
-            let e = as_index(&end_reduced);
+            let n = as_index(&length_reduced);
             // A concrete slice of a literal run.
             if let (
                 Subterm::Intrinsic(Intrinsic::List {
@@ -1937,10 +1957,10 @@ pub fn reduce_intrinsic(
                     items: elems,
                 }),
                 Some(s),
-                Some(e),
-            ) = (&*list, s, e)
+                Some(n),
+            ) = (&*list, s, n)
             {
-                return match elems.get(s..e) {
+                return match s.checked_add(n).and_then(|e| elems.get(s..e)) {
                     Some(slice) => {
                         reducer.spend(Cost::collection(slice.len() as u64))?;
 
@@ -1952,29 +1972,19 @@ pub fn reduce_intrinsic(
                     None => Err(ReduceError::ListSliceOutOfRange {
                         len: elems.len(),
                         start: s,
-                        end: e,
-                        span: start.span().or_else(|| end.span()),
+                        length: n,
+                        span: start.span().or_else(|| length.span()),
                     }),
                 };
             }
-            // The `List` twin of `BinSlice`'s locator: the window's segments, each already narrowed to its overlap.
-            if let (Some(s), Some(e)) = (as_index(&start_reduced), as_index(&end_reduced)) {
-                match list_window(&list, s, e) {
+            // The `List` twin of `BinSlice`'s locator: the window's segments, each already narrowed to its overlap, and — since every segment is a literal run — narrowed here rather than rebuilt as a `ListSlice` node for the next pass to fold.
+            if let (Some(s), Some(n)) = (s, n) {
+                match list_window(&list, s, n) {
                     Some(Ok(pieces)) => {
-                        let parts: Vec<Term> = pieces
+                        let parts = pieces
                             .into_iter()
-                            .map(|piece| match piece {
-                                Piece::Whole(operand) => operand.clone(),
-                                Piece::Part(operand, lo, hi) => {
-                                    Term::intrinsic(Intrinsic::list_slice(
-                                        type_.clone(),
-                                        operand.clone(),
-                                        Term::intrinsic(Intrinsic::Nat(Nat::new(lo))),
-                                        Term::intrinsic(Intrinsic::Nat(Nat::new(hi))),
-                                    ))
-                                }
-                            })
-                            .collect();
+                            .map(|piece| list_piece(&type_, piece))
+                            .collect::<Vec<Term>>();
                         reducer.spend(Cost::collection(parts.len() as u64))?;
 
                         return reducer
@@ -1985,20 +1995,20 @@ pub fn reduce_intrinsic(
                         return Err(ReduceError::ListSliceOutOfRange {
                             len,
                             start: s,
-                            end: e,
-                            span: start.span().or_else(|| end.span()),
+                            length: n,
+                            span: start.span().or_else(|| length.span()),
                         });
                     }
                     None => {}
                 }
             }
-            // A slice over a cons spine peels one element per `0`/`succ` boundary step, the `List` twin of `BinSlice`'s byte peel: `slice(cons(h, t), 0, succ e) = [h] ++ slice(t, 0, e)`  and `slice(cons(h, t), succ s, e) = slice(t, s, e - 1)`.
+            // A slice over a cons spine peels one element per `0`/`succ` boundary step, the `List` twin of `BinSlice`'s element peel: `slice(cons(h, t), 0, succ n) = [h] ++ slice(t, 0, n)`  and  `slice(cons(h, t), succ s, n) = slice(t, s, n)` — the count riding through the second untouched.
             if let Some((head, tail)) = peel_first_elem(&list) {
                 let dec = |n: &Term| {
                     let one = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
                     Term::intrinsic(Intrinsic::nat_sub(n.clone(), one))
                 };
-                match (&*start_reduced, &*end_reduced) {
+                match (&*start_reduced, &*length_reduced) {
                     (
                         Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)),
                         Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(..))),
@@ -2008,7 +2018,7 @@ pub fn reduce_intrinsic(
                             type_.clone(),
                             tail,
                             zero,
-                            dec(&end_reduced),
+                            dec(&length_reduced),
                         ));
                         let head_singleton: Term = Subterm::Intrinsic(Intrinsic::List {
                             element: type_.clone(),
@@ -2024,7 +2034,7 @@ pub fn reduce_intrinsic(
                             type_,
                             tail,
                             dec(&start_reduced),
-                            dec(&end_reduced),
+                            length_reduced.clone(),
                         ));
                         return reducer.reduce(sliced).map(Term::unwrap_or_clone);
                     }
@@ -2035,7 +2045,7 @@ pub fn reduce_intrinsic(
                 type_,
                 list,
                 start_reduced,
-                end_reduced,
+                length_reduced,
             )))
         }
         Intrinsic::ListAppend {
@@ -2578,7 +2588,7 @@ mod tests {
                     PackedBin::from_bytes(vec![7u8; n]),
                 )),
                 start: Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
-                end: Term::intrinsic(Intrinsic::Nat(Nat::new(4usize))),
+                length: Term::intrinsic(Intrinsic::Nat(Nat::new(4usize))),
             })
         };
 
@@ -3033,12 +3043,12 @@ mod tests {
         let whole: &[u8] = &[0x30, 0x31, 0x32, 0x33, 0x34];
 
         for spelling in groupings(whole) {
-            for (start, end) in [(0usize, 5usize), (0, 2), (1, 4), (2, 5), (3, 3), (4, 5)] {
+            for (start, count) in [(0usize, 5usize), (0, 2), (1, 3), (2, 3), (3, 0), (4, 1)] {
                 let window = Intrinsic::bin_slice(
                     Grain::X,
                     spelling.clone(),
                     lit(start as u32),
-                    lit(end as u32),
+                    lit(count as u32),
                 );
 
                 let sliced = reduce_intrinsic(&mut Folding, &window).expect("a window reduces");
@@ -3047,9 +3057,9 @@ mod tests {
                     sliced,
                     Subterm::Intrinsic(Intrinsic::Bin(
                         Grain::X,
-                        PackedBin::from_bytes(whole[start..end].to_vec()),
+                        PackedBin::from_bytes(whole[start..start + count].to_vec()),
                     )),
-                    "the window {start}..{end} is the same bytes however the run is grouped",
+                    "the {count} bytes at {start} are the same however the run is grouped",
                 );
             }
         }
@@ -3118,19 +3128,19 @@ mod tests {
                 "every grouping of the same run is the same length",
             );
 
-            for (start, end) in [(0usize, 5usize), (1, 4), (2, 5), (3, 3)] {
+            for (start, count) in [(0usize, 5usize), (1, 3), (2, 3), (3, 0)] {
                 let window = Intrinsic::list_slice(
                     elem.clone(),
                     spelling.clone(),
                     lit(start as u32),
-                    lit(end as u32),
+                    lit(count as u32),
                 );
                 let sliced = reduce_intrinsic(&mut Folding, &window).expect("a window reduces");
 
                 assert_eq!(
                     sliced,
-                    Term::unwrap_or_clone(list_of(&whole[start..end])),
-                    "the window {start}..{end} is the same elements however the run is grouped",
+                    Term::unwrap_or_clone(list_of(&whole[start..start + count])),
+                    "the {count} elements at {start} are the same however the run is grouped",
                 );
             }
 
@@ -3245,19 +3255,20 @@ mod tests {
                 cat(vec![x.clone(), chunk.clone()]),
             ),
             (
-                "slice(w, 0, 2) ++ slice(w, 2, 4) ~ slice(w, 0, 4)",
-                cat(vec![window(0, 2), window(2, 4)]),
+                "slice(w, 0, 2) ++ slice(w, 2, 2) ~ slice(w, 0, 4)",
+                cat(vec![window(0, 2), window(2, 2)]),
                 window(0, 4),
             ),
+            // The near miss: the second window starts at 3 where the first ends at 0 + 2, so nothing fuses and the two sides genuinely differ.
             (
-                "slice(w, 0, 2) ++ slice(w, 3, 4) ~ slice(w, 0, 4)",
-                cat(vec![window(0, 2), window(3, 4)]),
-                window(0, 4),
+                "slice(w, 0, 2) ++ slice(w, 3, 1) ~ slice(w, 0, 3)",
+                cat(vec![window(0, 2), window(3, 1)]),
+                window(0, 3),
             ),
             (
-                "slice(w, 1, 1) ++ x ~ x ++ slice(w, 2, 2)",
-                cat(vec![window(1, 1), x.clone()]),
-                cat(vec![x.clone(), window(2, 2)]),
+                "slice(w, 1, 0) ++ x ~ x ++ slice(w, 2, 0)",
+                cat(vec![window(1, 0), x.clone()]),
+                cat(vec![x.clone(), window(2, 0)]),
             ),
             (
                 "append(x[], c) ++ x ~ append(x[], c) ++ y",
@@ -3392,8 +3403,8 @@ mod tests {
                 cat(vec![xs.clone(), one(a.clone())]),
             ),
             (
-                "slice(ws, 0, 2) ++ slice(ws, 2, 4) ~ slice(ws, 0, 4)",
-                cat(vec![window(0, 2), window(2, 4)]),
+                "slice(ws, 0, 2) ++ slice(ws, 2, 2) ~ slice(ws, 0, 4)",
+                cat(vec![window(0, 2), window(2, 2)]),
                 window(0, 4),
             ),
             (
@@ -3518,8 +3529,8 @@ mod tests {
                 operands: parts,
             })
         };
-        let bin_slice = |base: Term, lo: Term, hi: Term| {
-            Term::intrinsic(Intrinsic::bin_slice(Grain::X, base, lo, hi))
+        let bin_slice = |base: Term, start: Term, count: Term| {
+            Term::intrinsic(Intrinsic::bin_slice(Grain::X, base, start, count))
         };
         let bin_get =
             |base: Term, index: Term| Term::intrinsic(Intrinsic::bin_get(Grain::X, base, index));
@@ -3591,9 +3602,10 @@ mod tests {
                     vec![(&bin_base, run_bytes(&[9, 8, 7]))],
                 ],
             ),
+            // Decided on the *length* alone now, where a `(start, end)` window had to compare two subjects — which is what a count buys.
             (
-                "slice(b, e, e) = x[]",
-                bin_slice(b.clone(), e.clone(), e.clone()),
+                "slice(b, e, 0) = x[]",
+                bin_slice(b.clone(), e.clone(), lit(0)),
                 run_bytes(&[]),
                 vec![
                     vec![(&bin_base, run_bytes(&[])), (&nat_end, lit(0))],
@@ -3628,11 +3640,12 @@ mod tests {
                 ],
             ),
             (
-                "slice(cons(c, b), s + 1, e + 1) = slice(b, s, e)",
+                // Advancing the start leaves the count alone, which is the reparameterisation paying for itself: peeling the base is invariant for the window's own length, so nothing about it has to be recomputed to move it.
+                "slice(cons(c, b), s + 1, e) = slice(b, s, e)",
                 bin_slice(
                     cat(vec![chunk.clone(), b.clone()]),
                     plus(s.clone(), lit(1)),
-                    plus(e.clone(), lit(1)),
+                    e.clone(),
                 ),
                 bin_slice(b.clone(), s.clone(), e.clone()),
                 vec![
@@ -3652,13 +3665,13 @@ mod tests {
                         (&bin_base, run_bytes(&[8, 9])),
                         (&byte_free, byte(7)),
                         (&nat_start, lit(1)),
-                        (&nat_end, lit(2)),
+                        (&nat_end, lit(1)),
                     ],
                     vec![
                         (&bin_base, run_bytes(&[8, 9])),
                         (&byte_free, byte(7)),
                         (&nat_start, lit(2)),
-                        (&nat_end, lit(2)),
+                        (&nat_end, lit(0)),
                     ],
                 ],
             ),

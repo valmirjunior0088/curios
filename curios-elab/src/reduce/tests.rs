@@ -1113,7 +1113,7 @@ mod intrinsic {
         let xs_binder = context.fresh(Some("xs"));
         let cons = list_cons_seven(&Term::free_var(&xs_binder));
 
-        // `slice(cons(7, xs), 0, 1) = [7] ++ slice(xs, 0, 0) = [7]`.
+        // `slice(cons(7, xs), 0, 1) = [7] ++ slice(xs, 0, 0) = [7]` — one element from the front.
         assert_eq!(
             reduced(
                 &mut context,
@@ -1130,7 +1130,7 @@ mod intrinsic {
             }),
         );
 
-        // `slice(cons(7, xs), 1, 1) = []` — the empty-slice identity.
+        // `slice(cons(7, xs), 1, 0) = []` — the empty-window identity, which a count decides on the length alone.
         assert_eq!(
             reduced(
                 &mut context,
@@ -1138,7 +1138,7 @@ mod intrinsic {
                     Term::intrinsic(Intrinsic::NatType),
                     cons,
                     lit(1),
-                    lit(1)
+                    lit(0)
                 ))
             ),
             Subterm::Intrinsic(Intrinsic::List {

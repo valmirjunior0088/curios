@@ -30,10 +30,9 @@ pub let concat(a: Str, b: Str) -> Str =
 let drop_n(n: Nat, s: Str) -> Str =
     Str {
         bytes =
-            Bytes/slice(
+            Bytes/drop(
                 s.bytes,
                 drop_width(n, Scan/lead(), s.bytes),
-                Bytes/len(s.bytes),
                 @drop_width_within(n, Scan/lead(), s.bytes)),
         valid = drop_valid(n, Scan/lead(), s.valid),
     };
@@ -45,13 +44,13 @@ let take_n(n: Nat, s: Str) -> Str =
                 s.bytes,
                 0,
                 drop_width(n, Scan/lead(), s.bytes),
-                @True/qed(),
                 @drop_width_within(n, Scan/lead(), s.bytes)),
         valid = take_valid(n, Scan/lead(), s.valid),
     };
 
-pub let slice(s: Str, x: Nat, y: Nat) -> Str =
-    take_n(y - x, drop_n(x, s));
+-- A window of `n` characters from `x`, saturating at either end: `take_n` and `drop_n` both stop at what is there, so a window running past the end is the tail rather than a refusal. Unbounded, so it owes no proof — and count-based like the bounded windows, which is what a reversed range being unspellable buys: `slice(s, 5, 3)` used to compute `take_n(0, ..)` on truncating subtraction and answer the empty string for a range nobody meant.
+pub let slice(s: Str, x: Nat, n: Nat) -> Str =
+    take_n(n, drop_n(x, s));
 
 pub let flatten(parts: List(Str)) -> Str =
     List/fold(parts, "", (p, acc) => concat(acc, p));
@@ -207,7 +206,7 @@ let trim_bounds(s: Str) -> {Nat, Nat} =
 
 pub let trim(s: Str) -> Str =
     let (lo, hi) = trim_bounds(s);
-    match lo < hi | true => slice(s, lo, hi) | false => "" end;
+    match lo < hi | true => slice(s, lo, hi - lo) | false => "" end;
 
 satisfy Eql(Str) {
     eql = eql,

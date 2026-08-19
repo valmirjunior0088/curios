@@ -1268,12 +1268,12 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 grain,
                 bin,
                 start,
-                end,
+                length,
             } => curios_core::Intrinsic::bin_slice(
                 *grain,
                 self.term(bin)?,
                 self.term(start)?,
-                self.term(end)?,
+                self.term(length)?,
             ),
             Intrinsic::BinAppend {
                 grain,
@@ -1302,12 +1302,12 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 element: ty,
                 list,
                 start,
-                end,
+                length,
             } => curios_core::Intrinsic::list_slice(
                 self.term(ty)?,
                 self.term(list)?,
                 self.term(start)?,
-                self.term(end)?,
+                self.term(length)?,
             ),
             Intrinsic::ListAppend {
                 element: ty,

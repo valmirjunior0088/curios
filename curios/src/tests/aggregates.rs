@@ -139,7 +139,7 @@ fn a_length_and_a_window_do_not_depend_on_grouping() {
         let nested_length : Eq(Bytes/len(x[..x[..x[0x30], ..x[0x31]], ..x[0x32, 0x33, 0x34]]), 5) =
             Eq/refl();
         let split_window
-            : Eq(Bytes/slice(x[..x[0x30, 0x31], ..x[0x32, 0x33, 0x34]], 1, 4), x[0x31, 0x32, 0x33]) =
+            : Eq(Bytes/slice(x[..x[0x30, 0x31], ..x[0x32, 0x33, 0x34]], 1, 3), x[0x31, 0x32, 0x33]) =
             Eq/refl();
         let third : Byte = 0x33;
         let split_index
@@ -155,23 +155,25 @@ fn a_length_and_a_window_do_not_depend_on_grouping() {
 
 #[test]
 fn bin_slice_is_a_monoid_citizen() {
-    // `Bytes/slice` rides the free-monoid spine (`core::spine`) as a measured `Window` — a length-`hi - lo` chunk whose contents are symbolic — so the slice algebra holds up to *definitional* equality, provable by `refl` for SYMBOLIC operands that `reduce` cannot fold. `split` fuses two adjacent windows of one base across their shared seam; `empty` drops a zero-width window (the monoid identity); `full` collapses `slice(b, 0, len b)` to its base (the `reduce` partner of the spine's window-collapse). Each declared type forces `convert` to peel the windows to a common normal form; without the peel these are stuck, distinct terms and `refl` would not check.
+    // `Bytes/slice` rides the free-monoid spine (`core::spine`) as a measured `Window` — a chunk carrying its own length, whose contents are symbolic — so the slice algebra holds up to *definitional* equality, provable by `refl` for SYMBOLIC operands that `reduce` cannot fold. `split` fuses two adjacent windows of one base across their shared seam; `empty` drops a zero-length window (the monoid identity); `full` collapses `slice(b, 0, len b)` to its base (the `reduce` partner of the spine's window-collapse). Each declared type forces `convert` to peel the windows to a common normal form; without the peel these are stuck, distinct terms and `refl` would not check.
+    //
+    // `split` is where the window's whole bound discipline is visible at once. It takes **one** hypothesis where the `(start, end)` window took three, because a count cannot spell a reversed range; and the fused window is passed `@total` — *the second window's own proof, unchanged*. That only type-checks because `(s + l1) + l2` and `s + (l1 + l2)` are convertible, which is the equation `peel_nat_terms` decides. The first window's bound is the one thing actually derived, and only to weaken the total.
     let source = r#"
-        use /std/{Handle, Str, Eq, Bytes, Nat, True};
-        let split(b : Bytes, s : Nat, m : Nat, e : Nat,
-                  sm : Nat/Le(s, m), me : Nat/Le(m, e), el : Nat/Le(e, Bytes/len(b)))
+        use /std/{Handle, Str, Eq, Bytes, Nat};
+        let split(b : Bytes, s : Nat, l1 : Nat, l2 : Nat,
+                  total : Nat/Le((s + l1) + l2, Bytes/len(b)))
             -> Eq(
                 x[
-                    ..Bytes/slice(b, s, m, @sm, @Nat/Le/trans(me, el)),
-                    ..Bytes/slice(b, m, e, @me, @el)],
-                Bytes/slice(b, s, e, @Nat/Le/trans(sm, me), @el)) =
+                    ..Bytes/slice(
+                        b, s, l1,
+                        @Nat/Le/trans(Nat/Le/of_ind(Nat/Le/Ind/add_r(s + l1, l2)), total)),
+                    ..Bytes/slice(b, s + l1, l2, @total)],
+                Bytes/slice(b, s, l1 + l2, @total)) =
             Eq/refl();
         let empty(b : Bytes, i : Nat, il : Nat/Le(i, Bytes/len(b)))
-            -> Eq(Bytes/slice(b, i, i, @Nat/Le/refl(i), @il), x[]) = Eq/refl();
+            -> Eq(Bytes/slice(b, i, 0, @il), x[]) = Eq/refl();
         let full(b : Bytes)
-            -> Eq(
-                Bytes/slice(b, 0, Bytes/len(b), @True/qed(), @Nat/Le/refl(Bytes/len(b))),
-                b) =
+            -> Eq(Bytes/slice(b, 0, Bytes/len(b), @Nat/Le/refl(Bytes/len(b))), b) =
             Eq/refl();
         let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
         /std/Io/pure(())
@@ -181,17 +183,15 @@ fn bin_slice_is_a_monoid_citizen() {
 
 #[test]
 fn bin_slice_window_seam_mismatch_is_rejected() {
-    // The dual: two windows whose seam does not meet — `slice(b, s, m)` then `slice(b, n, e)` with `m` and `n` distinct — must NOT fuse, so the concat is not convertible to `slice(b, s, e)` and the `refl` is rejected. Guards the fusion's seam check against gluing non-adjacent slices of one base.
+    // The dual: two windows whose seam does not meet — `slice(b, s, l1)` then `slice(b, o, l2)` with `o` unrelated to `s + l1` — must NOT fuse, so the concat is not convertible to `slice(b, s, l1 + l2)` and the `refl` is rejected. Guards the fusion's seam check, which under `(start, length)` is an *arithmetic* test (`o = s + l1`) decided by the `Nat` peel rather than a shared term compared syntactically, against gluing non-adjacent slices of one base.
     let source = r#"
         use /std/{Handle, Str, Eq, Bytes, Nat};
-        let bad(b : Bytes, s : Nat, m : Nat, n : Nat, e : Nat,
-                sm : Nat/Le(s, m), ml : Nat/Le(m, Bytes/len(b)),
-                ne : Nat/Le(n, e), el : Nat/Le(e, Bytes/len(b)), se : Nat/Le(s, e))
+        let bad(b : Bytes, s : Nat, l1 : Nat, o : Nat, l2 : Nat,
+                w1 : Nat/Le(s + l1, Bytes/len(b)), w2 : Nat/Le(o + l2, Bytes/len(b)),
+                w3 : Nat/Le(s + (l1 + l2), Bytes/len(b)))
             -> Eq(
-                x[
-                    ..Bytes/slice(b, s, m, @sm, @ml),
-                    ..Bytes/slice(b, n, e, @ne, @el)],
-                Bytes/slice(b, s, e, @se, @el)) =
+                x[..Bytes/slice(b, s, l1, @w1), ..Bytes/slice(b, o, l2, @w2)],
+                Bytes/slice(b, s, l1 + l2, @w3)) =
             Eq/refl();
         let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
         /std/Io/pure(())
@@ -201,23 +201,23 @@ fn bin_slice_window_seam_mismatch_is_rejected() {
 
 #[test]
 fn list_slice_is_a_monoid_citizen() {
-    // The `List` mirror of `bin_slice_is_a_monoid_citizen`: `List/slice` now rides the free-monoid spine as a measured `Window` (`core::spine`), so `split` fuses two adjacent windows of one base across their seam — the convert-level capability — while `empty` and `full` exercise the reduce-level slice identities.
+    // The `List` mirror of `bin_slice_is_a_monoid_citizen`, count-based like it: `split` takes one hypothesis and hands the fused window the second window's own proof, `empty` drops a zero-length window, and `full` collapses the whole one.
     let source = r#"
-        use /std/{Handle, Str, Eq, List, Nat, True};
-        let split(@T : Type, a : List(T), s : Nat, m : Nat, e : Nat,
-                  sm : Nat/Le(s, m), me : Nat/Le(m, e), el : Nat/Le(e, List/len(a)))
+        use /std/{Handle, Str, Eq, List, Nat};
+        let split(@T : Type, a : List(T), s : Nat, l1 : Nat, l2 : Nat,
+                  total : Nat/Le((s + l1) + l2, List/len(a)))
             -> Eq(
                 [
-                    ..List/slice(@T, a, s, m, @sm, @Nat/Le/trans(me, el)),
-                    ..List/slice(@T, a, m, e, @me, @el)],
-                List/slice(@T, a, s, e, @Nat/Le/trans(sm, me), @el)) =
+                    ..List/slice(
+                        @T, a, s, l1,
+                        @Nat/Le/trans(Nat/Le/of_ind(Nat/Le/Ind/add_r(s + l1, l2)), total)),
+                    ..List/slice(@T, a, s + l1, l2, @total)],
+                List/slice(@T, a, s, l1 + l2, @total)) =
             Eq/refl();
         let empty(@T : Type, a : List(T), i : Nat, il : Nat/Le(i, List/len(a)))
-            -> Eq(List/slice(@T, a, i, i, @Nat/Le/refl(i), @il), []) = Eq/refl();
+            -> Eq(List/slice(@T, a, i, 0, @il), []) = Eq/refl();
         let full(@T : Type, a : List(T))
-            -> Eq(
-                List/slice(@T, a, 0, List/len(a), @True/qed(), @Nat/Le/refl(List/len(a))),
-                a) =
+            -> Eq(List/slice(@T, a, 0, List/len(a), @Nat/Le/refl(List/len(a))), a) =
             Eq/refl();
         let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
         /std/Io/pure(())
@@ -556,7 +556,7 @@ fn bin_spread_concats_segments() {
     let source = r#"
         use /std/{Handle, Nat, Bytes};
         let b : Bytes = x[0x02, 0x03];
-        let _ = Handle/write(Handle/stdout, x[0x01, ..b, 0x04, ..Bytes/slice(b, 1, 2)])!;
+        let _ = Handle/write(Handle/stdout, x[0x01, ..b, 0x04, ..Bytes/slice(b, 1, 1)])!;
         /std/Io/pure(())
         "#;
     assert_eq!(run(source), b"\x01\x02\x03\x04\x03");

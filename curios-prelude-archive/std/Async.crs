@@ -144,12 +144,10 @@ pub let write(h: Handle, b: Bytes) -> Async(Result({}, Handle/Error)) =
             | r.written < Bytes/len(rest) =>
                 let _ = wait(h, /sys/poll/write)!;
                 go(
-                    Bytes/slice(
+                    Bytes/drop(
                         rest,
                         r.written,
-                        Bytes/len(rest),
-                        @Nat/Lt/le_of_lt(r.written, Bytes/len(rest), True/qed()),
-                        @Nat/Le/refl(Bytes/len(rest))))
+                        @Nat/Lt/le_of_lt(r.written, Bytes/len(rest), True/qed())))
             | _ => pure(Result/success(()))
             end;
         go(b)

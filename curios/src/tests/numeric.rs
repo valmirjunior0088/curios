@@ -1,7 +1,7 @@
 //! The numeric envelope gates: every constant folder computes in exact `u32`/`i32` (the numeric law), and the i31 backend boundary appears only as a trap in emitted Wasm — an overflowing computation traps, and a folded literal the carrier cannot box traps at its materialization point. The differential half runs each scalar expression twice — fully constant (folded at compile time) and with a runtime-zero perturbation (executed by the emitted Wasm) — and demands identical output, pinning the folders and the backend to one semantics.
 
 use {
-    super::{run, run_text, typecheck_within},
+    super::{run, run_text, typecheck, typecheck_within},
     curios_pipeline::DEFAULT_STEP_BUDGET,
     curios_runtime::MockHost,
 };
@@ -213,6 +213,39 @@ fn a_bound_over_a_recursion_returning_a_parameter_discharges() {
         /std/print("ok")
         "#),
         b"ok"
+    );
+}
+
+// **A window's bound is stated over a sum, and a guard still discharges it.** `Bytes/slice(b, s, l)` demands `s + l <= len(b)`, so the proposition a guard has to meet contains an addition that folds away — `0 + 10` to `10`, `1 + k` to `k + 1` — and the fold happens inside the intrinsic reduction, one step *after* the refinement store is probed. Keying a probe on the operands as written therefore missed every window bound the moment the window became `(start, length)`; `canonical_scrutinee` reduces an intrinsic's operands for exactly this reason, and these are the shapes that say so.
+//
+// The control is the third: a guard establishing a *different* window must not discharge this one, or the escalation would be collapsing comparisons rather than spellings of one.
+#[test]
+fn a_guard_discharges_a_window_bound_stated_over_a_sum() {
+    assert_eq!(
+        run(r#"
+        use /std/{Handle, Str, Bytes, Nat};
+        let head(b : Bytes) -> Bytes =
+            match 10 <= Bytes/len(b) | true => Bytes/slice(b, 0, 10) | false => x[] end;
+        let interior(b : Bytes, k : Nat) -> Bytes =
+            match 1 + k <= Bytes/len(b) | true => Bytes/slice(b, 1, k) | false => x[] end;
+        /std/print("ok")
+        "#),
+        b"ok"
+    );
+
+    let error = typecheck(
+        r#"
+        use /std/{Handle, Str, Bytes, Nat};
+        let mismatched(b : Bytes, k : Nat) -> Bytes =
+            match 1 + k <= Bytes/len(b) | true => Bytes/slice(b, 2, k) | false => x[] end;
+        /std/print("unreachable")
+        "#,
+    )
+    .expect_err("a guard over one window does not discharge another");
+
+    assert!(
+        error.contains("was not inferred"),
+        "expected an uninferred window bound, got: {error}"
     );
 }
 

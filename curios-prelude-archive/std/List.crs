@@ -5,6 +5,18 @@ use /std/{Nat, Bool, Option, Eq, Str, Show, Monad};
 pub let try_get(@T: Type, a: List(T), i: Nat) -> Option(T) =
     match i < len(a) | true => Option/some(get(a, i)) | false => Option/none() end;
 
+-- The `List` twin of `Bytes/drop`; see there for why the count's bound is spent here rather than at each caller.
+pub let drop(@T: Type, a: List(T), k: Nat, @ok: Nat/Le(k, len(a))) -> List(T) =
+    slice(
+        @T,
+        a,
+        k,
+        len(a) - k,
+        @Eq/subst(
+            (x) => Nat/Le(x, len(a)),
+            Eq/sym(Nat/Le/add_sub_cancel(k, len(a), ok)),
+            Nat/Le/refl(len(a))));
+
 pub let flatten(@T: Type, parts: List(List(T))) -> List(T) =
     fold(parts, [], (a, acc) => [..acc, ..a]);
 

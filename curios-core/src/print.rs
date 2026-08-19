@@ -686,14 +686,14 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             grain: Grain::X,
             bin,
             start,
-            end,
+            length,
         } => flat([
             pure("Bytes.slice "),
             sub(bin, frame),
             pure(" "),
             sub(start, frame),
             pure(" "),
-            sub(end, frame),
+            sub(length, frame),
         ]),
         Intrinsic::BinAppend {
             grain: Grain::X,
@@ -731,14 +731,14 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             grain: Grain::B,
             bin,
             start,
-            end,
+            length,
         } => flat([
             pure("Bits.slice "),
             sub(bin, frame),
             pure(" "),
             sub(start, frame),
             pure(" "),
-            sub(end, frame),
+            sub(length, frame),
         ]),
         Intrinsic::BinAppend {
             grain: Grain::B,
@@ -780,7 +780,7 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             element: ty,
             list,
             start,
-            end,
+            length,
         } => flat([
             pure("List.slice "),
             sub(ty, frame),
@@ -789,7 +789,7 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             pure(" "),
             sub(start, frame),
             pure(" "),
-            sub(end, frame),
+            sub(length, frame),
         ]),
         Intrinsic::ListAppend {
             element: ty,

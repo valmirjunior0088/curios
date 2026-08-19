@@ -50,10 +50,6 @@ pub rec write(h: Handle, b: Bytes) -> Io(Result({}, Error)) =
     | r.written < Bytes/len(b) =>
         write(
             h,
-            Bytes/slice(
-                b,
-                r.written,
-                Bytes/len(b),
-                @Nat/Lt/le_of_lt(r.written, Bytes/len(b), True/qed())))
+            Bytes/drop(b, r.written, @Nat/Lt/le_of_lt(r.written, Bytes/len(b), True/qed())))
     | _ => Io/pure(Result/success(()))
     end;

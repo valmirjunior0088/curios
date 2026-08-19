@@ -157,7 +157,7 @@ let layout(digits_str: Str, k: Int) -> Str =
             | true =>
                 Str/concat(
                     Str/concat(Str/slice(digits_str, 0, kn), "."),
-                    Str/slice(digits_str, kn, len))
+                    Str/slice(digits_str, kn, len - kn))
             | false => Str/concat(digits_str, Str/repeat("0", kn - len))
             end
         end
@@ -210,7 +210,7 @@ let exp_factor(exp_int: Int) -> Flt =
 
 let exp_factor_of(s: Str, e_pos: Nat, len: Nat) -> Option(Flt) =
     match e_pos < len
-    | true => Option/map(Int/of_str(Str/slice(s, e_pos + 1, len)), exp_factor)
+    | true => Option/map(Int/of_str(Str/slice(s, e_pos + 1, len - (e_pos + 1))), exp_factor)
     | false => Option/some(+1.0)
     end;
 
@@ -228,9 +228,12 @@ pub let of_str(s: Str) -> Option(Flt) =
                 Option/unwrap_or(Str/find(s, 'e'), len),
                 Option/unwrap_or(Str/find(s, 'E'), len));
         let int_end = Nat/min(dot_pos, e_pos);
-        let int_slice = Str/slice(s, start, int_end);
+        let int_slice = Str/slice(s, start, int_end - start);
         let frac_slice =
-            match dot_pos < e_pos | true => Str/slice(s, dot_pos + 1, e_pos) | false => "" end;
+            match dot_pos < e_pos
+            | true => Str/slice(s, dot_pos + 1, e_pos - (dot_pos + 1))
+            | false => ""
+            end;
         match Bool/not(Str/is_empty(int_slice)) || Bool/not(Str/is_empty(frac_slice))
         | true =>
             let int_val = digits_or_zero(int_slice)!;

@@ -152,6 +152,19 @@ impl Nat {
         Self::rebuild(floor, inner)
     }
 
+    /// The sum of two already-reduced `Nat` terms, landing in the normal form [`Nat::decompose`] and [`Nat::summands`] read back: the literal floors added and hoisted outward, the symbolic summands juxtaposed.
+    ///
+    /// The one place a sum is needed *without* a reducer in hand. `spine`'s window fusion adds two lengths while flattening a value for comparison, and a flattening walk cannot re-enter reduction — so the form has to be constructed rather than folded into. Stating it here is what keeps it this module's invariant instead of a second opinion about it held next door: a fused window's length is then the same term `NatAdd`'s fold would have produced, which is what lets it still compare against an unfused window's.
+    pub(crate) fn sum(left: &Term, right: &Term) -> Term {
+        let (floor_left, inner_left) = Nat::decompose(left);
+        let (floor_right, inner_right) = Nat::decompose(right);
+
+        let mut summands = Self::summands(&inner_left);
+        summands.extend(Self::summands(&inner_right));
+
+        Self::sum_over_floor(summands, floor_left + floor_right)
+    }
+
     /// Strip what both operands carry in common, so residuals decide where the originals could not: `x + a` against `x + b` becomes `a` against `b`.
     ///
     /// **Why it is sound for every consumer.** `Nat` under `+` is a cancellative commutative monoid. Every order relation reads through it — `x + a ⋈ x + b` iff `a ⋈ b` — and so does truncated subtraction: either `a ≥ b`, where both differences are `a - b` because the `x` cancels in the borrow, or `a < b`, where `x + a < x + b` makes both sides zero. So removing a common addend preserves the answer rather than approximating it.

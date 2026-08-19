@@ -102,7 +102,7 @@ let flt_str(f: Flt) -> Str =
         let raw = Flt/to_str(f);
         let unsigned =
             match Option/unwrap_or(Str/try_get(raw, 0), '0') == '+'
-            | true => Str/slice(raw, 1, Str/len(raw))
+            | true => Str/slice(raw, 1, Str/len(raw) - 1)
             | false => raw
             end;
         match Option/is_some(Str/find(unsigned, '.')) || Option/is_some(Str/find(unsigned, 'e'))

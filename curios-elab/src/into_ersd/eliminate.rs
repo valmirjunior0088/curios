@@ -455,11 +455,19 @@ impl Lowering {
                         operands: vec![sequence, zero],
                     },
                 ));
+                // A window is `(start, count)`, so the suffix takes what remains after the peeled head rather than the length standing in as an end. The subtraction is emitted inside this block for the same reason the two reads are: on the empty sequence it would be computing a count for a window nobody opens.
+                let remaining = curios_ersd::Atom::Value(self.builder.let_value(
+                    None,
+                    curios_ersd::Rhs::Operation {
+                        operation: curios_ersd::Operation::NatSub,
+                        operands: vec![index, one],
+                    },
+                ));
                 let suffix = curios_ersd::Atom::Value(self.builder.let_value(
                     suffix_hint.clone(),
                     curios_ersd::Rhs::Sequence {
                         operation: carrier.slice_op(),
-                        operands: vec![sequence, one, index],
+                        operands: vec![sequence, one, remaining],
                     },
                 ));
                 self.environment.bind(&element_label, element);

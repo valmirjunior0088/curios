@@ -48,7 +48,7 @@ pub enum ReduceError {
     BinSliceOutOfRange {
         len: usize,
         start: usize,
-        end: usize,
+        length: usize,
         span: Option<Span>,
     },
     ListGetOutOfBounds {
@@ -59,7 +59,7 @@ pub enum ReduceError {
     ListSliceOutOfRange {
         len: usize,
         start: usize,
-        end: usize,
+        length: usize,
         span: Option<Span>,
     },
     /// A `Nat`/`Int` division whose divisor reduced to literal zero — mathematically undefined, so reported like [`ReduceError::BinGetOutOfBounds`] rather than panicking the fold. (Runtime *range* limits, by contrast, never error at the type level: `Nat`/`Int` folds are unbounded there.)

@@ -159,7 +159,7 @@ pub enum Intrinsic {
         grain: Grain,
         bin: Term,
         start: Term,
-        end: Term,
+        length: Term,
     },
     BinAppend {
         grain: Grain,
@@ -189,7 +189,7 @@ pub enum Intrinsic {
         element: Term,
         list: Term,
         start: Term,
-        end: Term,
+        length: Term,
     },
     ListAppend {
         element: Term,
@@ -361,18 +361,18 @@ impl Intrinsic {
         }
     }
 
-    /// A `BinSlice` node from term-shaped bytes, start, and end.
-    pub fn bin_slice<B, S, E>(grain: Grain, bin: B, start: S, end: E) -> Self
+    /// A `BinSlice` node from term-shaped bytes, start, and length.
+    pub fn bin_slice<B, S, L>(grain: Grain, bin: B, start: S, length: L) -> Self
     where
         B: Into<Term>,
         S: Into<Term>,
-        E: Into<Term>,
+        L: Into<Term>,
     {
         Self::BinSlice {
             grain,
             bin: bin.into(),
             start: start.into(),
-            end: end.into(),
+            length: length.into(),
         }
     }
 
@@ -435,19 +435,19 @@ impl Intrinsic {
         }
     }
 
-    /// A `ListSlice` node from term-shaped element type, list, start, and end.
-    pub fn list_slice<T, L, S, E>(type_: T, list: L, start: S, end: E) -> Self
+    /// A `ListSlice` node from term-shaped element type, list, start, and length.
+    pub fn list_slice<T, L, S, N>(type_: T, list: L, start: S, length: N) -> Self
     where
         T: Into<Term>,
         L: Into<Term>,
         S: Into<Term>,
-        E: Into<Term>,
+        N: Into<Term>,
     {
         Self::ListSlice {
             element: type_.into(),
             list: list.into(),
             start: start.into(),
-            end: end.into(),
+            length: length.into(),
         }
     }
 
@@ -693,13 +693,13 @@ impl Intrinsic {
                 grain: Grain::X,
                 bin: a,
                 start: b,
-                end: c,
+                length: c,
             }
             | Intrinsic::BinSlice {
                 grain: Grain::B,
                 bin: a,
                 start: b,
-                end: c,
+                length: c,
             }
             | Intrinsic::ListGet {
                 element: a,
@@ -720,7 +720,7 @@ impl Intrinsic {
                 element: a,
                 list: b,
                 start: c,
-                end: d,
+                length: d,
             }
             | Intrinsic::ListMap {
                 from: a,
@@ -1055,12 +1055,12 @@ impl Intrinsic {
                 grain,
                 bin,
                 start,
-                end,
+                length,
             } => Intrinsic::BinSlice {
                 grain: *grain,
                 bin: visit.visit_subterm(bin),
                 start: visit.visit_subterm(start),
-                end: visit.visit_subterm(end),
+                length: visit.visit_subterm(length),
             },
             Intrinsic::BinAppend {
                 grain,
@@ -1102,12 +1102,12 @@ impl Intrinsic {
                 element: ty,
                 list,
                 start,
-                end,
+                length,
             } => Intrinsic::ListSlice {
                 element: visit.visit_subterm(ty),
                 list: visit.visit_subterm(list),
                 start: visit.visit_subterm(start),
-                end: visit.visit_subterm(end),
+                length: visit.visit_subterm(length),
             },
             Intrinsic::ListAppend {
                 element: ty,

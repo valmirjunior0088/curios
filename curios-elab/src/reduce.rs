@@ -574,6 +574,41 @@ fn reduce_universe_inst(context: &Context, instance: UniverseInst) -> Result<Red
     Ok(Reduce::Continue(reduct))
 }
 
+/// The refinement probe for an intrinsic the loop has just folded — the second look every *other* arm of the dispatch gets for free.
+///
+/// **Why one arm needs its own.** Each arm returns a [`Reduce`]: on progress it `Continue`s, the loop comes back around, and the probe at the top runs again on the new term. That is how a refinement keeps up with reduction. This arm answers a normal form in one step and breaks, so without this the store is asked exactly once, about a term whose operands have not been reduced yet.
+///
+/// **And the key sits between the two shapes, which is what makes both probes necessary.** A guard is recorded as written (`shallow_scrutinee`), so `10 <= Bytes/len(b)` registers `10 <= /sys/Bytes/len(b)`. A window bound instantiated at a call arrives as `(0 + 10) <= /sys/Bytes/len(b)` — matching on the right, not the left — and the fold reduces *both* operands at once, to `10 <= Bytes.len b`, matching on the left, not the right. Neither probe point alone ever sees a matching pair, which is why the escalation is what decides it and why it belongs here: after the fold the probe side is already canonical, so only the key has to be reduced, where escalating before the fold would reduce both.
+fn refined_after_fold(context: &mut Context, folded: &Term) -> Result<Option<Term>, ReduceError> {
+    if !context.has_scrutinee_refinements() {
+        return Ok(None);
+    }
+
+    let Some(head) = folded.head_key() else {
+        return Ok(None);
+    };
+
+    if !context.scrutinee_head_refined(head) {
+        return Ok(None);
+    }
+
+    // Suppression needs no arm: `scrutinee_reduct` withholds under it, and breaking on the folded term leaves standing the neutral a suppressed key wants.
+    let shallow = shallow_scrutinee(context, folded);
+
+    if let Some(value) = context.scrutinee_reduct(&shallow) {
+        return Ok(Some(value.clone()));
+    }
+
+    // The escalation, and the cheap half of it: `reduce_intrinsic` left the operands in weak-head normal form, so the candidate side is canonical already and only the key has to be brought to it — memoized, so once per key rather than once per node.
+    for (key, value) in context.scrutinee_entries(head) {
+        if canonical_scrutinee(context, &key)? == shallow {
+            return Ok(Some(value));
+        }
+    }
+
+    Ok(None)
+}
+
 /// Reduce `term` until its head constructor is stable.
 ///
 /// Reduction re-enters itself once per operand of a nested intrinsic, once per link of a spine peel, and once per level of a match tower, so a *data*-shaped term puts its depth on the native stack even though its unrolling does not. Running inside [`recurse`] rather than aborting is what keeps [`DEFAULT_STEP_BUDGET`](crate::DEFAULT_STEP_BUDGET) the only bound that decides whether a term reduces: a stack limit would make acceptance depend on the host's stack size and on frame sizes the optimizer chose, which is exactly the machine-dependence the step budget exists to keep out of the answer.
@@ -641,8 +676,16 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
             }
 
             match Term::unwrap_or_clone(term) {
+                // **The one arm that answers a normal form and breaks, so the one that has to ask the store a second time.** Every other arm `Continue`s when it makes progress and the loop comes back around, which re-runs the probe above on the new term — that is how a refinement keeps up with reduction, and why no other arm needs anything here. This one folds and leaves, so a fold that turns the term *into* the registered shape would never be asked about again: `Le(s + l, len b)` instantiated at a call is `NatLe(0 + n, len b)`, whose sum folds to `n` only inside `reduce_intrinsic`, and every window bound in the language has that shape.
+                //
+                // The shallow key alone. After the fold the term is a normal form, so the escalation the probe above needs — for a candidate spelled differently — has nothing left to collapse, and reducing operands to find out is what the split between `shallow_scrutinee` and `canonical_scrutinee` exists to avoid: an intrinsic's head tag is its *operation*, so one registered guard would put that cost on every comparison of that operation in the declaration. Suppression needs no arm either: `scrutinee_reduct` withholds under it, and breaking on the folded term is already the neutral a suppressed key wants left standing.
                 Subterm::Intrinsic(intrinsic) => {
-                    Reduce::Break(reduce_intrinsic(context, &intrinsic)?.into())
+                    let folded: Term = reduce_intrinsic(context, &intrinsic)?.into();
+
+                    match refined_after_fold(context, &folded)? {
+                        Some(value) => Reduce::Continue(value),
+                        None => Reduce::Break(folded),
+                    }
                 }
                 // The scrutinee is reduced by a nested call, so a tower of matches over a deep closed spine costs one native frame per link. That is data-shaped depth, which is what [`recurse`] at the entry point is for. The nested call probes and stores the reduction cache under the scrutinee itself, which is what a warm-scrutinee special case here used to do by hand.
                 Subterm::Match(m) => {

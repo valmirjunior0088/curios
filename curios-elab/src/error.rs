@@ -52,7 +52,7 @@ pub enum Error {
     BinSliceOutOfRange {
         len: usize,
         start: usize,
-        end: usize,
+        length: usize,
     },
     ListGetOutOfBounds {
         len: usize,
@@ -61,7 +61,7 @@ pub enum Error {
     ListSliceOutOfRange {
         len: usize,
         start: usize,
-        end: usize,
+        length: usize,
     },
     DivisionByZero {
         kind: &'static str,
@@ -433,18 +433,18 @@ impl Error {
             ReduceError::BinSliceOutOfRange {
                 len,
                 start,
-                end,
+                length,
                 span,
-            } => Error::BinSliceOutOfRange { len, start, end }.at_opt(span),
+            } => Error::BinSliceOutOfRange { len, start, length }.at_opt(span),
             ReduceError::ListGetOutOfBounds { len, index, span } => {
                 Error::ListGetOutOfBounds { len, index }.at_opt(span)
             }
             ReduceError::ListSliceOutOfRange {
                 len,
                 start,
-                end,
+                length,
                 span,
-            } => Error::ListSliceOutOfRange { len, start, end }.at_opt(span),
+            } => Error::ListSliceOutOfRange { len, start, length }.at_opt(span),
             ReduceError::DivisionByZero { kind, span } => {
                 Error::DivisionByZero { kind }.at_opt(span)
             }
@@ -1819,19 +1819,19 @@ impl fmt::Display for Displayed<'_> {
             Error::BinGetOutOfBounds { len, index } => {
                 write!(f, "Bin.get index {index} out of bounds (length {len})")
             }
-            Error::BinSliceOutOfRange { len, start, end } => {
+            Error::BinSliceOutOfRange { len, start, length } => {
                 write!(
                     f,
-                    "Bin.slice range {start}..{end} out of range (length {len})"
+                    "Bin.slice window of {length} at {start} out of range (length {len})"
                 )
             }
             Error::ListGetOutOfBounds { len, index } => {
                 write!(f, "List.get index {index} out of bounds (length {len})")
             }
-            Error::ListSliceOutOfRange { len, start, end } => {
+            Error::ListSliceOutOfRange { len, start, length } => {
                 write!(
                     f,
-                    "List.slice range {start}..{end} out of range (length {len})"
+                    "List.slice window of {length} at {start} out of range (length {len})"
                 )
             }
             Error::DivisionByZero { kind } => {

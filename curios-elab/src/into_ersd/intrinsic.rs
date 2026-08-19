@@ -341,14 +341,14 @@ pub(super) fn erase_intrinsic(
             grain,
             bin,
             start,
-            end,
+            length,
         } => lowering.sequence(
             context,
             curios_ersd::SequenceOp::BinSlice(*grain),
             &[
                 (bin, bin_type(*grain)),
                 (start, nat_type()),
-                (end, nat_type()),
+                (length, nat_type()),
             ],
             hint,
         ),
@@ -411,14 +411,14 @@ pub(super) fn erase_intrinsic(
             element: element_type,
             list,
             start,
-            end,
+            length,
         } => lowering.sequence(
             context,
             curios_ersd::SequenceOp::ListSlice,
             &[
                 (list, list_type(element_type.clone())),
                 (start, nat_type()),
-                (end, nat_type()),
+                (length, nat_type()),
             ],
             hint,
         ),

@@ -132,12 +132,7 @@ let rest: Parse(Bytes) =
                 Result/success(
                     (
                         Bytes/len(input),
-                        Bytes/slice(
-                            input,
-                            pos,
-                            Bytes/len(input),
-                            @within,
-                            @Nat/Le/refl(Bytes/len(input)))))
+                        Bytes/drop(input, pos, @within)))
             end,
     };
 
@@ -166,17 +161,17 @@ let header_line: Parse({Str, Str}) =
             Option/unwrap_or(Str/of_bytes(name), ""),
             Str/trim(Option/unwrap_or(Str/of_bytes(value), ""))));
 
+-- The clamp `min(pos + n, len input)` is a branch rather than an arithmetic minimum here, because the two cases want different windows: `n` bytes when they are all there, and everything that remains when they are not. Testing the window's own bound is what decides which, so the clamp and the proof are one test instead of two.
 let take_n(n: Nat) -> Parse(Bytes) =
     Parse {
         run(input, pos) =
-            let stop = Nat/min(pos + n, Bytes/len(input));
-            match Nat/Le/try(pos, stop)
-            | none() => Result/failure("position past the end of input")
-            | some(ordered) =>
-                match Nat/Le/try(stop, Bytes/len(input))
+            match Nat/Le/try(pos + n, Bytes/len(input))
+            | some(within) => Result/success((pos + n, Bytes/slice(input, pos, n, @within)))
+            | none() =>
+                match Nat/Le/try(pos, Bytes/len(input))
                 | none() => Result/failure("position past the end of input")
                 | some(within) =>
-                    Result/success((stop, Bytes/slice(input, pos, stop, @ordered, @within)))
+                    Result/success((Bytes/len(input), Bytes/drop(input, pos, @within)))
                 end
             end,
     };

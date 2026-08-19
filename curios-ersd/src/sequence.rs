@@ -14,7 +14,7 @@ pub enum SequenceOp {
     BinEql(Grain),
     /// `(bin, index) -> element`: the element at `index`; out of bounds traps.
     BinGet(Grain),
-    /// `(bin, start, end) -> bin`: the `[start, end)` view; out of bounds traps.
+    /// `(bin, start, length) -> bin`: the `length`-long view at `start`; running past the end traps. A count rather than a stop, so a reversed window is unrepresentable rather than rejected.
     BinSlice(Grain),
     /// `(bin, element) -> bin`: append one element.
     BinAppend(Grain),
@@ -26,7 +26,7 @@ pub enum SequenceOp {
     ListLen,
     /// `(list, index) -> element`: the element at `index`; out of bounds traps.
     ListGet,
-    /// `(list, start, end) -> list`: the `[start, end)` view; out of bounds traps.
+    /// `(list, start, length) -> list`: the `List` mirror of [`SequenceOp::BinSlice`].
     ListSlice,
     /// `(list, element) -> list`: append one element.
     ListAppend,

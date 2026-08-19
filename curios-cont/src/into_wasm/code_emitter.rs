@@ -339,13 +339,13 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         result_local: &curios_wasm::LocalName,
         carrier: &'a EmissionValueName,
         start: &'a EmissionValueName,
-        end: &'a EmissionValueName,
+        count: &'a EmissionValueName,
         load: LoadAs,
         slice_func: curios_wasm::FuncName,
     ) {
         self.emit_instrs(self.context.load_value_instrs(carrier, load));
         self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Nat));
-        self.emit_instrs(self.context.load_value_instrs(end, LoadAs::Nat));
+        self.emit_instrs(self.context.load_value_instrs(count, LoadAs::Nat));
         self.emit_instr(curios_wasm::Instr::Call {
             func_name: slice_func,
         });
@@ -462,14 +462,16 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instr(curios_wasm::Instr::I32WrapI64);
                 self.emit_store(dest, &op.result_repr());
             }
-            // The virtual-window bounds guard: trap unless s <= e <= len, then hand back the window's extent e - s. This is the eager trap a physical slice would have performed, kept at the original evaluation point.
+            // The virtual-window bounds guard, kept at the original evaluation point — the eager trap a physical slice would have performed. Its operands are a start and a *count*, so the reversed range the `(start, end)` window also had to reject cannot be spelled, and the extent is the count itself rather than a difference. `s > len || n > len - s` rather than `s + n > len`, because the sum is i32 arithmetic and would wrap; the subtraction underflows only in the case the first test has already decided.
             CpsIntrinsicOp::WindowExtent => {
-                let (s, e, len) = (&args[0], &args[1], &args[2]);
-                self.emit_instrs(self.context.load_value_instrs(s, LoadAs::Nat));
-                self.emit_instrs(self.context.load_value_instrs(e, LoadAs::Nat));
-                self.emit_instr(curios_wasm::Instr::I32GtU);
-                self.emit_instrs(self.context.load_value_instrs(e, LoadAs::Nat));
+                let (start, count, len) = (&args[0], &args[1], &args[2]);
+                self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Nat));
                 self.emit_instrs(self.context.load_value_instrs(len, LoadAs::Nat));
+                self.emit_instr(curios_wasm::Instr::I32GtU);
+                self.emit_instrs(self.context.load_value_instrs(count, LoadAs::Nat));
+                self.emit_instrs(self.context.load_value_instrs(len, LoadAs::Nat));
+                self.emit_instrs(self.context.load_value_instrs(start, LoadAs::Nat));
+                self.emit_instr(curios_wasm::Instr::I32Sub);
                 self.emit_instr(curios_wasm::Instr::I32GtU);
                 self.emit_instr(curios_wasm::Instr::I32Or);
                 self.emit_instr(curios_wasm::Instr::If {
@@ -478,9 +480,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     then_instructions: vec![curios_wasm::Instr::Unreachable],
                     else_instructions: vec![],
                 });
-                self.emit_instrs(self.context.load_value_instrs(e, LoadAs::Nat));
-                self.emit_instrs(self.context.load_value_instrs(s, LoadAs::Nat));
-                self.emit_instr(curios_wasm::Instr::I32Sub);
+                self.emit_instrs(self.context.load_value_instrs(count, LoadAs::Nat));
                 self.emit_store(dest, &op.result_repr());
             }
             CpsIntrinsicOp::NatLt => {

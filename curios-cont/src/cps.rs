@@ -138,7 +138,7 @@ pub enum CpsIntrinsicOp {
     ListAppend,
     ListConcat(usize),
     TplGet(usize),
-    /// The virtual-window bounds guard: `(s, e, len) -> e - s`, trapping unless `s <= e <= len` — the eager trap a physical slice would have performed, kept at the original evaluation point when the slice itself is virtualized away.
+    /// The virtual-window bounds guard: `(start, count, len) -> count`, trapping unless the window ends inside `len` — the eager trap a physical slice would have performed, kept at the original evaluation point when the slice itself is virtualized away. It answers the count unchanged rather than a difference, because a window is a start and a count everywhere above this too; what it contributes is the trap, not the arithmetic.
     WindowExtent,
     /// Whether the operand is an unboxed scalar (1) or an aggregate reference (0) — the dispatch of a variant encoding whose one scalar-payload constructor rides bare. A representation question, which is why it exists in this crate's vocabulary and not in Ersd: the lowering that chose the encoding is the only producer, and it guarantees the two answers are disjoint over every value the test can reach.
     IsImmediate,

@@ -683,13 +683,16 @@ fn interpret_list(operation: SequenceOp, operands: &[Value]) -> Result<Value, Ba
             Some(element) => Ok(element.clone()),
             None => Err(Bail::Trap),
         },
+        // A window is `(start, length)`, so there is no reversed range left to reject — only one that runs past the end.
         ListSlice => {
             let elements = list(0)?;
-            let (start, end) = (index(1)?, index(2)?);
-            if start <= end && end <= elements.len() {
-                Ok(Value::List(Rc::new(elements[start..end].to_vec())))
-            } else {
-                Err(Bail::Trap)
+            let (start, count) = (index(1)?, index(2)?);
+            match start
+                .checked_add(count)
+                .filter(|end| *end <= elements.len())
+            {
+                Some(end) => Ok(Value::List(Rc::new(elements[start..end].to_vec()))),
+                None => Err(Bail::Trap),
             }
         }
         ListAppend => {

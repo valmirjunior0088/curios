@@ -163,16 +163,13 @@ rec walk(
                                                     items,
                                                     0,
                                                     index,
-                                                    @True/qed(),
                                                     @Nat/Lt/le_of_lt(index, count, in_range)),
                                                 Toml/table(inner2),
-                                                ..List/slice(
+                                                ..List/drop(
                                                     @Toml,
                                                     items,
                                                     index + 1,
-                                                    count,
-                                                    @Nat/Lt/le_succ_of_lt(index, count, in_range),
-                                                    @Nat/Le/refl(count))];
+                                                    @Nat/Lt/le_succ_of_lt(index, count, in_range))];
                                         Result/success(
                                             (
                                                 Map/insert(m, name, Toml/arr(items2)),
@@ -272,7 +269,6 @@ rec walk(
                                                         items,
                                                         0,
                                                         index,
-                                                        @True/qed(),
                                                         @Nat/Lt/le_of_lt(
                                                             index,
                                                             List/len(items),

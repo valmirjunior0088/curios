@@ -643,7 +643,7 @@ impl<'a> Table<'a> {
         self.list_bytes_embed.get().is_some()
     }
 
-    /// `$bytes/slice (ref $rope/bin, i32, i32) -> (ref $rope/bin)`: the `Bytes` O(1) view constructor — bounds-check, answer the empty leaf or the whole rope on the trivial windows, collapse a view-of-view, and force an uncached node base so every `view` it builds reads through in O(1).
+    /// `$bytes/slice (ref $rope/bin, i32, i32) -> (ref $rope/bin)`, taking a start and a *count*: the `Bytes` O(1) view constructor — bounds-check, answer the empty leaf or the whole rope on the trivial windows, collapse a view-of-view, and force an uncached node base so every `view` it builds reads through in O(1).
     pub(crate) fn bytes_slice_func(&self) -> curios_wasm::FuncName {
         self.bytes_slice
             .get_or_init(|| curios_wasm::FuncName::from("bytes/slice"))

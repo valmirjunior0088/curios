@@ -54,6 +54,11 @@ fn nat_lit(n: u32) -> Term {
     }
 }
 
+/// `left + right` as a `/sys` term. The window bound is the one precondition stated over arithmetic rather than over an operand, so it is the one that has to build a sum.
+fn nat_plus(left: Term, right: Term) -> Term {
+    intrinsic(Intrinsic::NatAdd(left, right))
+}
+
 fn int() -> Term {
     intrinsic(Intrinsic::IntType)
 }
@@ -576,24 +581,22 @@ fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<TopItem> {
                 index: name("i"),
             }),
         ),
-        // A window is a length-`e - s` chunk, which is meaningful only when `s <= e <= len(b)`. Stated in two parts rather than one conjunction because a refinement records the term it scrutinised: a caller guards each bound separately, so each has to be dischargeable separately.
+        // A window is a start and a *count*, so a reversed one cannot be spelled and the ordering half of the old bound has no proposition left to state. What survives is that the window ends inside the value.
         pub_fn_marked(
             "slice",
             vec![
                 (Plicity::Explicit, "b", type_.clone()),
                 (Plicity::Explicit, "s", nat()),
-                (Plicity::Explicit, "e", nat()),
-                (
-                    Plicity::Implicit,
-                    "ordered",
-                    applied(registered(syntax.proof.le), vec![name("s"), name("e")]),
-                ),
+                (Plicity::Explicit, "l", nat()),
                 (
                     Plicity::Implicit,
                     "within",
                     applied(
                         registered(syntax.proof.le),
-                        vec![name("e"), applied(name("len"), vec![name("b")])],
+                        vec![
+                            nat_plus(name("s"), name("l")),
+                            applied(name("len"), vec![name("b")]),
+                        ],
                     ),
                 ),
             ],
@@ -602,7 +605,7 @@ fn bin_ops(grain: Grain, syntax: &SyntaxRegistry) -> Vec<TopItem> {
                 grain,
                 bin: name("b"),
                 start: name("s"),
-                end: name("e"),
+                length: name("l"),
             }),
         ),
         pub_fn(
@@ -664,24 +667,23 @@ fn list_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
                 index: name("i"),
             }),
         ),
+        // The `List` twin of `Bin/slice`'s window bound; see the comment there for why only one half survives the count.
         pub_fn_marked(
             "slice",
             vec![
                 (Plicity::Implicit, "T", type_()),
                 (Plicity::Explicit, "a", list_of(name("T"))),
                 (Plicity::Explicit, "s", nat()),
-                (Plicity::Explicit, "e", nat()),
-                (
-                    Plicity::Implicit,
-                    "ordered",
-                    applied(registered(syntax.proof.le), vec![name("s"), name("e")]),
-                ),
+                (Plicity::Explicit, "l", nat()),
                 (
                     Plicity::Implicit,
                     "within",
                     applied(
                         registered(syntax.proof.le),
-                        vec![name("e"), applied(name("len"), vec![name("a")])],
+                        vec![
+                            nat_plus(name("s"), name("l")),
+                            applied(name("len"), vec![name("a")]),
+                        ],
                     ),
                 ),
             ],
@@ -690,7 +692,7 @@ fn list_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
                 element: name("T"),
                 list: name("a"),
                 start: name("s"),
-                end: name("e"),
+                length: name("l"),
             }),
         ),
         pub_fn_marked(

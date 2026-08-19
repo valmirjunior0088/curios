@@ -735,17 +735,18 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$<carrier>/slice (ref <base>, i32, i32) -> (ref <base>)`.
+    /// `$<carrier>/slice (ref <base>, i32, i32) -> (ref <base>)`, taking a start and a *count*.
     ///
     /// ```wat
-    /// if s > e || e > r.len   → unreachable            ;; the eager bounds trap
-    /// n := e - s
+    /// if s > r.len || n > r.len - s → unreachable      ;; the eager bounds trap
     /// if n == 0               → fresh empty leaf
     /// if s == 0 && n == r.len → r                      ;; whole-window alias
     /// if r.tag == 2           → view{2, n, r.base, r.offset + s}   ;; collapse
     /// if r.tag == 1 && r.cache == null → call force(r) (drop)     ;; memoizes
     /// view{2, n, r, s}
     /// ```
+    ///
+    /// The count arrives as an operand, so nothing here computes one — and a reversed window, which the `(start, end)` form had to reject, cannot be spelled.
     ///
     /// The node arm's force is what maintains the read-through invariant: every `view` base is flat-available from birth, and stays so (a cache is written once, never cleared).
     pub(crate) fn emit_slice_func(
@@ -756,22 +757,26 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     ) {
         let r = curios_wasm::LocalName::from("r");
         let s = curios_wasm::LocalName::from("s");
-        let e = curios_wasm::LocalName::from("e");
         let n = curios_wasm::LocalName::from("n");
 
         let i32_val = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
-        let locals = vec![(n.clone(), i32_val.clone())];
+        let locals = Vec::new();
 
         let mut instrs = Vec::new();
 
-        // Bounds: the pre-window trap `slice` always had (an out-of-range window must not become a deferred — or never-taken — trap).
+        // Bounds: the pre-window trap `slice` always had (an out-of-range window must not become a deferred — or never-taken — trap). A window is `(start, count)`, so the reversed range it also used to reject cannot be spelled, and only running past the end is left.
+        //
+        // Spelled `s > len || n > len - s` rather than `s + n > len` because the sum is i32 arithmetic and would wrap. The subtraction underflows when `s > len`, but the first test has already decided that case and both are evaluated before the `or`.
         instrs.extend([
             get(&s),
-            get(&e),
-            curios_wasm::Instr::I32GtU,
-            get(&e),
             get(&r),
             field_get(&rope.base, &rope.len_field),
+            curios_wasm::Instr::I32GtU,
+            get(&n),
+            get(&r),
+            field_get(&rope.base, &rope.len_field),
+            get(&s),
+            curios_wasm::Instr::I32Sub,
             curios_wasm::Instr::I32GtU,
             curios_wasm::Instr::I32Or,
             curios_wasm::Instr::If {
@@ -782,12 +787,8 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             },
         ]);
 
-        // n = e - s; the empty window is a fresh empty leaf.
+        // The empty window is a fresh empty leaf. The count arrives as an operand, so nothing computes it.
         instrs.extend([
-            get(&e),
-            get(&s),
-            curios_wasm::Instr::I32Sub,
-            set(&n),
             get(&n),
             curios_wasm::Instr::I32Eqz,
             curios_wasm::Instr::If {
@@ -901,7 +902,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             vec![
                 (r, concrete_val(rope.base.clone(), false)),
                 (s, i32_val.clone()),
-                (e, i32_val),
+                (n, i32_val),
             ],
             concrete_val(rope.base.clone(), false),
             locals,

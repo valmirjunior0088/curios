@@ -18,7 +18,7 @@ pub let of_str(s: Str) -> Option(Int) =
         let first = Str/try_get(s, 0)!;
         let digits =
             match first == '+' || first == '-'
-            | true => Str/slice(s, 1, Str/len(s))
+            | true => Str/slice(s, 1, Str/len(s) - 1)
             | false => s
             end;
         let negative = first == '-';

@@ -60,7 +60,7 @@ pub rec drop_valid(
     s: Scan,
     @b: Bytes,
     d: Utf8(s, b),
-) -> Valid(Bytes/slice(b, drop_width(n, s, b), Bytes/len(b), @drop_width_within(n, s, b))) =
+) -> Valid(Bytes/drop(b, drop_width(n, s, b), @drop_width_within(n, s, b))) =
     match s
     | lead() =>
         match d
@@ -81,7 +81,7 @@ pub rec take_valid(
     s: Scan,
     @b: Bytes,
     d: Utf8(s, b),
-) -> Utf8(s, Bytes/slice(b, 0, drop_width(n, s, b), @True/qed(), @drop_width_within(n, s, b))) =
+) -> Utf8(s, Bytes/slice(b, 0, drop_width(n, s, b), @drop_width_within(n, s, b))) =
     match s
     | lead() =>
         match d
@@ -97,7 +97,6 @@ pub rec take_valid(
                         t,
                         0,
                         drop_width(pred, step(c, Scan/lead()), t),
-                        @True/qed(),
                         @drop_width_within(pred, step(c, Scan/lead()), t)),
                     take_valid(pred, step(c, Scan/lead()), rest))
             end
@@ -112,7 +111,6 @@ pub rec take_valid(
                     t,
                     0,
                     drop_width(n, step(c, s), t),
-                    @True/qed(),
                     @drop_width_within(n, step(c, s), t)),
                 take_valid(n, step(c, s), rest))
         end
@@ -126,7 +124,6 @@ pub rec take_valid(
                     t,
                     0,
                     drop_width(n, step(c, Scan/bad()), t),
-                    @True/qed(),
                     @drop_width_within(n, step(c, Scan/bad()), t)),
                 take_valid(n, step(c, Scan/bad()), rest))
         end
@@ -205,7 +202,7 @@ pub rec peel_byte(
     w: Utf8(s, b),
 ) -> Utf8(
     step(Bytes/get(b, 0, @nz), s),
-    Bytes/slice(b, 1, Bytes/len(b), @Nat/Lt/le_one_of_positive(nz))) =
+    Bytes/drop(b, 1, @Nat/Lt/le_one_of_positive(nz))) =
     match w
     | stop() => match nz end
     | more(c, st, t, rest) => rest

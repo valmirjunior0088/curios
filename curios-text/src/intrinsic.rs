@@ -148,7 +148,7 @@ pub enum Intrinsic {
         grain: Grain,
         bin: Term,
         start: Term,
-        end: Term,
+        length: Term,
     },
     BinAppend {
         grain: Grain,
@@ -175,7 +175,7 @@ pub enum Intrinsic {
         element: Term,
         list: Term,
         start: Term,
-        end: Term,
+        length: Term,
     },
     ListAppend {
         element: Term,

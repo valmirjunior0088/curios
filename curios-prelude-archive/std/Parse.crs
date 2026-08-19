@@ -128,40 +128,43 @@ pub let eof: Parse({}) =
 
 pub let take_while(pred: (Byte) -> Bool) -> Parse(Bytes) =
     Parse {
-        -- The window this returns needs both of its bounds, and the walk establishes them rather than testing for them: it starts at `pos` and only ever advances past an index `Nat/Lt/try` has already checked. Only the starting position is tested, because it is the one fact the caller supplies and `Parse` deliberately accepts an unchecked one — the same reason `any_byte` tests rather than demanding a bounded position.
+        -- The walk carries the window's bound rather than testing for it: it counts what it has taken and only ever advances past an index `Nat/Lt/try` has already checked. Only the starting position is tested, because it is the one fact the caller supplies and `Parse` deliberately accepts an unchecked one — the same reason `any_byte` tests rather than demanding a bounded position.
+        --
+        -- Counting rather than tracking a stop is what leaves one invariant where there were two. `Nat/Le(pos + taken, len input)` *is* the window's bound, so it is carried into the slice with nothing done to it, and the ordering half the old `(start, end)` window also demanded has no proposition left to state. The count is what the loop naturally produces; the stop is recovered once, at the end, for the position the parse continues from.
         run(input, pos) =
             match Nat/Le/try(pos, Bytes/len(input))
             | none() => Result/failure("position past the end of input")
             | some(within) =>
-                let (stop, from_pos, at_stop, _) =
+                let (taken, at_stop, _) =
                     match Bytes/len(input) - pos: (_) =>
                         {
-                            cur: Nat,
-                            from_pos: Nat/Le(pos, cur),
-                            at_cur: Nat/Le(cur, Bytes/len(input)),
+                            taken: Nat,
+                            within: Nat/Le(pos + taken, Bytes/len(input)),
                             stopped: Bool}
-                    | 0 => (pos, Nat/Le/refl(pos), within, false)
+                    | 0 => (0, within, false)
                     | step + 1; ih =>
-                        let (cur, from_pos, at_cur, stopped) = ih;
+                        let (taken, at_cur, stopped) = ih;
                         match stopped
                         | true => ih
                         | false =>
-                            match Nat/Lt/try(cur, Bytes/len(input))
-                            | none() => (cur, from_pos, at_cur, true)
+                            match Nat/Lt/try(pos + taken, Bytes/len(input))
+                            | none() => (taken, at_cur, true)
                             | some(ok) =>
-                                match pred(Bytes/get(input, cur, @ok))
+                                match pred(Bytes/get(input, pos + taken, @ok))
                                 | true =>
                                     (
-                                        cur + 1,
-                                        Nat/Le/succ_r(pos, cur, from_pos),
-                                        Nat/Lt/le_succ_of_lt(cur, Bytes/len(input), ok),
+                                        taken + 1,
+                                        Nat/Lt/le_succ_of_lt(
+                                            pos + taken,
+                                            Bytes/len(input),
+                                            ok),
                                         false)
-                                | false => (cur, from_pos, at_cur, true)
+                                | false => (taken, at_cur, true)
                                 end
                             end
                         end
                     end;
-                Result/success((stop, Bytes/slice(input, pos, stop, @from_pos, @at_stop)))
+                Result/success((pos + taken, Bytes/slice(input, pos, taken, @at_stop)))
             end,
     };
 

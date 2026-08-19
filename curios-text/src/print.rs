@@ -606,7 +606,7 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             grain,
             bin,
             start,
-            end,
+            length,
         } => print_intrinsic_call(
             format!(
                 "{}.slice",
@@ -615,7 +615,7 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
                     Grain::X => "Bytes",
                 }
             ),
-            vec![bin, start, end],
+            vec![bin, start, length],
         ),
         Intrinsic::BinAppend {
             grain,
@@ -666,8 +666,8 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             element: ty,
             list,
             start,
-            end,
-        } => print_intrinsic_call("List.slice", vec![ty, list, start, end]),
+            length,
+        } => print_intrinsic_call("List.slice", vec![ty, list, start, length]),
         Intrinsic::ListAppend {
             element: ty,
             list,

@@ -503,10 +503,15 @@ impl Semantics {
                         None => Err(TrapKind::IndexOutOfBounds),
                     });
                 }
+                // A window is `(start, length)`; the packed view takes a half-open range, so the end is computed here and an end past `usize` is the out-of-bounds it would have been anyway.
                 BinSlice(grain) => {
                     let value = bin(0, grain)?;
+                    let (start, count) = (nat(1)? as usize, nat(2)? as usize);
                     return Some(
-                        match value.slice(grain, nat(1)? as usize, nat(2)? as usize) {
+                        match start
+                            .checked_add(count)
+                            .and_then(|end| value.slice(grain, start, end))
+                        {
                             Some(value) => Ok(Constant::Bin(grain, value)),
                             None => Err(TrapKind::SliceOutOfBounds),
                         },

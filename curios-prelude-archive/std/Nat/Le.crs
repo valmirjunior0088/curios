@@ -4,7 +4,7 @@
 --
 -- The inductive form is a *child* of this module rather than its sibling, and the names say which is which: `Nat/Le` is the relation, `Nat/Le/Ind` is the relation done by induction. The pair used to be `Nat/Le` and `Nat/Le/Ind`, two spellings of one abbreviation that named the difference nowhere.
 pub use /syn/Nat/{Le};
-use /std/{Nat, Option, True, False};
+use /std/{Nat, Option, True, False, Eq};
 pub mod Ind;
 pub use Ind/{let Ind};
 
@@ -41,3 +41,16 @@ pub let try(a: Nat, b: Nat) -> Option(Le(a, b)) =
 -- Transitivity, through the family that has constructors to recurse over.
 pub let trans(@a: Nat, @b: Nat, @c: Nat, p: Le(a, b), q: Le(b, c)) -> Le(a, c) =
     of_ind(Ind/trans(to_ind(a, b, p), to_ind(b, c, q)));
+
+-- `a + (b - a) = b`, which holds only under `a <= b`: `Nat` subtraction truncates, so at every `a > b` the difference is zero and the identity fails. It is the bridge a caller holding an *end* needs to reach the count-style window bound, and it is a lemma rather than a reduction for exactly that reason — the hypothesis is what makes it true, and a reduction law cannot carry one.
+--
+-- The recursion is on the numbers rather than on the evidence, like `to_ind`'s and for the same reason: a decided proposition has no constructors to walk. The successor case passes the hypothesis down untouched, because the comparison cancels the shared floor and `a + 1 <= b + 1` already *is* `a <= b`.
+pub rec add_sub_cancel(a: Nat, b: Nat, p: Le(a, b)) -> Eq(a + (b - a), b) =
+    match a
+    | 0 => Eq/refl()
+    | ap + 1 =>
+        match b
+        | 0 => match p end
+        | bp + 1 => Eq/cong((x) => x + 1, add_sub_cancel(ap, bp, p))
+        end
+    end;

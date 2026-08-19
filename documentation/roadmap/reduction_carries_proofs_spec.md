@@ -2,9 +2,17 @@
 
 ## Status
 
-**The definitional-equality half has landed.** `curios-core`'s `peel_nat_terms` gates the cancellation on a shape rather than a carrier, so a floorless sum reaches it; the entry criterion below typechecks, the two hand-rolled `peel_nat_pair` copies in `curios-elab` and `curios-cert` are gone, and the grid carries the floorless verdicts plus the `Stuck` case the contract required. What remains is the reparameterisation and the `/std` bridge, unchanged from what is written here, and then the four bound fields.
+**Both halves have landed; the bound fields have not.** `curios-core`'s `peel_nat_terms` gates the cancellation on a shape rather than a carrier, so a floorless sum reaches it and the entry criterion below typechecks. Windows are `(start, length)` from `/sys` through Core, Ersd and Cont to the emitted rope helper, which lost its `end - start`. What remains is Stage 3: the four accessors carrying their bounds, and the kernel re-checking them.
 
-An earlier revision of this specification recorded the definitional-equality half as an open rule-set design — a canonical form for symbolic sums, a "float the literal floor" rule, and a confluence argument across `Nat`'s two spellings of addition. The probes below falsified that framing: the decision machinery already exists in the tree, decides every equation this specification needs, and is withheld from the failing case by nothing but a carrier-shaped gate. What remains of that half is widening one gate under two stated contracts; the rest of the work is the reparameterisation and the `/std` bridge, unchanged from the earlier revision.
+Three things this specification did not anticipate, recorded because they change what Stage 3 rests on.
+
+**The `/std` migration needed no end-style wrapper.** Counting the seventeen bounded call sites: seven were "the rest of the value" and became `Bytes/drop`/`List/drop`, which spend `Nat/Le/add_sub_cancel` once inside themselves; seven were already counts and merely dropped a now-unstatable ordering proof; and the three that genuinely computed an end had their *producers* rewritten instead — `Parse/take_while` carries `taken` under the single invariant `Le(pos + taken, len input)`, which *is* the slice's bound and is passed to it untouched. An adapter at the seam would have been ceremony at fourteen of seventeen sites.
+
+**Two compiler-emitted slices are below erasure, where bounds do not exist.** `curios-elab`'s cons peel (`into_ersd/eliminate.rs`) and `curios-ersd`'s fold suffix (`into_cont.rs`) mint window operands themselves, and both spoke the old convention silently: the operand is a `Nat` either way, so the whole workspace and the kernel-certified prelude were green while every string program trapped. Stage 3 does not close that — a bound field buys kernel re-verification for what the *user* writes and nothing for what the compiler emits past erasure, which stays guarded by the cross-stage corpus alone.
+
+**The cons-peel bounds do not need the widened peel.** They carry through `compare_nat`'s floor cancellation, which landed before this work. The widening is what *window fusion* needs.
+
+An earlier revision of this specification recorded the definitional-equality half as an open rule-set design — a canonical form for symbolic sums, a "float the literal floor" rule, and a confluence argument across `Nat`'s two spellings of addition. The probes below falsified that framing: the decision machinery already exists in the tree, decides every equation this specification needs, and is withheld from the failing case by nothing but a carrier-shaped gate. What remained of that half was widening one gate under two stated contracts.
 
 ## Why it exists
 

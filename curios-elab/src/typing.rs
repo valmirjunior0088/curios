@@ -5,7 +5,7 @@ use super::{Context, Error, Mode, Outcome, ParkedWork, Sort, elaborate};
 use curios_core::{
     Apply, Bound, Field, Free, Func, FuncType, Global, Intrinsic, IntrinsicHead, Level, Many,
     MetaId, Metavar, MetavarOrigin, Proj, ReduceError, Scope, Subterm, Telescope, Term, Transient,
-    UniverseConstraintKind, UniverseConstraintOrigin, UniverseRole, Visit,
+    UniverseConstraintKind, UniverseConstraintOrigin, UniverseRole, Var, Visit, reduce_intrinsic,
 };
 use std::{
     cell::RefCell,
@@ -582,14 +582,26 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
             let canonical = super::shallow_scrutinee(context, head);
 
             // A concept-dispatched scrutinee (`a <= hi`) elaborates to the method projected out of the witness — `(?w).1(a, hi)` — which is not the shape the reducer probes: by then it has become the intrinsic normal form `NatLe(a, hi)`. Registering only the verbatim key leaves the arm unrefined, silently, while the equivalent `Nat/le(a, hi)` spelling refines. Register the probed form alongside it so both spellings agree.
-            if canonical.head_key().is_none()
-                && let Some(spined) = spine_whnf(context, head)?
-            {
-                let resolved = super::shallow_scrutinee(context, &spined);
+            let resolved = match canonical.head_key().is_none() {
+                true => spine_whnf(context, head)?
+                    .map(|spined| super::shallow_scrutinee(context, &spined))
+                    .filter(|resolved| resolved.head_key().is_some() && *resolved != canonical),
+                false => None,
+            };
 
-                if resolved.head_key().is_some() && resolved != canonical {
-                    context.refine_scrutinee(resolved, value.clone());
+            // The same disagreement one level in, and it is the operands' turn. A guard's operands are recorded as written, so `10 <= Bytes/len(b)` keeps the `/sys/Bytes/len(b)` application and the concept dispatch it was spelled with, while every occurrence the reducer meets carries the `BinLen` intrinsic they unfold to *and* the arithmetic normal form they fold to. A bound stated over those operands — `Le(s + l, len b)`, which is every window in the language — only ever reaches the store in that shape, so without this the probe and the key are never in one form at the same moment: before the fold they differ on the left, after it on the right.
+            //
+            // **Rewriting, never evaluating**, and that distinction is the whole design. Bringing the two together by *reducing* the key is what a first attempt did, and one canonicalisation of `n < 256` over an inferred implicit consumed the entire declaration budget — measured, in `tests::numeric::byte_of_nat_inverts_to_nat_and_refuses_the_bound`. Both differences are reachable without it: `spine_whnf` opens application layers and stops, and [`Structural`] performs the half of an intrinsic fold that acts on operands already in hand. Neither can run away, which is what keeps a guard over an expensive subject free to register — the property `shallow_scrutinee` exists for.
+            for form in [resolved.as_ref(), Some(&canonical)].into_iter().flatten() {
+                if let Some(rewritten) = structural_operands(context, form)?
+                    && rewritten != *form
+                {
+                    context.refine_scrutinee(rewritten, value.clone());
                 }
+            }
+
+            if let Some(resolved) = resolved {
+                context.refine_scrutinee(resolved, value.clone());
             }
 
             context.refine_scrutinee(canonical, value.clone());
@@ -599,11 +611,67 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
     Ok(())
 }
 
-/// Weak-head normal form of the *spine only*: reduce the function position and beta-open it over the arguments, repeating, but never reduce an argument and never evaluate the intrinsic node this lands on.
+/// A reducer that reduces nothing and charges nothing — the *structural* half of an intrinsic fold, with the evaluation left out.
 ///
-/// This is what turns a concept-dispatched comparison `(?w).1(a, hi)` into the `NatLe(a, hi)` the reducer actually probes, while leaving `a` and `hi` exactly as written. Reducing the whole application would do the same, but it forces the arguments — and an argument may legitimately contain an effect at the value level, which must keep being an error at the type level rather than being evaluated here.
+/// [`reduce_intrinsic`] takes its own operands through the [`Reducer`](curios_core::Reducer) seam before folding. Handed one that returns them untouched, what is left is exactly the rewriting a fold performs on operands already in hand: `1 + k` lands in the successor-floor normal form the reducer would produce, a comparison over a stuck operand stays stuck, and nothing is evaluated. Bounded by the term it is given, so the unbudgeted `spend` cannot be spent through.
+struct Structural;
+
+impl curios_core::Reducer for Structural {
+    fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
+        Ok(term)
+    }
+
+    fn reduce_forced(&mut self, term: Term) -> Result<Term, ReduceError> {
+        Ok(term)
+    }
+
+    fn spend(&mut self, _cost: curios_core::Cost) -> Result<(), ReduceError> {
+        Ok(())
+    }
+}
+
+/// `term` with each of an intrinsic's operands brought to the shape the reducer presents it in, without evaluating anything: [`spine_whnf`] to open an elaborated dispatch or a `/sys` wrapper, then [`Structural`] to fold what that exposes. `None` when `term` is not an intrinsic.
 ///
-/// `None` when the head does not resolve to a function, which is every non-dispatch scrutinee: those keep their verbatim key.
+/// An operand that neither step moves rides through as written, and a fold that refuses — an out-of-range window, say — keeps the unfolded spelling rather than reporting: this is a key being canonicalized, so declining leaves the key as it was and the refinement simply does not fire.
+fn structural_operands(context: &mut Context, term: &Term) -> Result<Option<Term>, Error> {
+    let Subterm::Intrinsic(intrinsic) = &**term else {
+        return Ok(None);
+    };
+
+    let mut masking = Visit::masking(|_, _: &Var| None, Term::type_ground());
+    intrinsic.traverse(&mut masking);
+
+    let mut operands = Vec::new();
+    for operand in masking.take_masked_children() {
+        let unfolded = spine_whnf(context, &operand)?.unwrap_or(operand);
+
+        operands.push(match &*unfolded {
+            Subterm::Intrinsic(inner) => match reduce_intrinsic(&mut Structural, inner) {
+                Ok(folded) => Term::from(folded),
+                Err(_) => unfolded,
+            },
+            _ => unfolded,
+        });
+    }
+
+    // The two passes agree on what a child is because both are `Intrinsic::traverse`, the one definition of an intrinsic's operands — the correspondence `convert`'s `decompose` already rests on.
+    let mut index = 0;
+    let rebuilt = intrinsic.traverse(&mut Visit::rewriting(
+        |_, _: &Var| None,
+        Box::new(move |_, operand: &Term| {
+            let value = operands.get(index).cloned();
+            index += 1;
+
+            Some(value.unwrap_or_else(|| operand.clone()))
+        }),
+    ));
+
+    Ok(Some(Subterm::Intrinsic(rebuilt).into()))
+}
+
+/// A scrutinee's applied spine taken to weak-head normal form one application layer at a time, or `None` when it is not an application spine or nothing moved.
+///
+/// Bounded rather than reduced: it opens layers and stops, so it never forces an argument. That is what makes it usable at *registration*, where reducing would cost the guard its subject's evaluation.
 fn spine_whnf(context: &mut Context, term: &Term) -> Result<Option<Term>, Error> {
     let mut current = term.clone();
 

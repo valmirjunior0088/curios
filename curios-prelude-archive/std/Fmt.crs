@@ -13,24 +13,24 @@ pub rec format_type_with(T: Type, f: Fmt) -> Type =
     | show(rest) => (@A: Type, use Show(A), a: A) -> format_type_with(T, rest)
     end;
 
--- The window's bounds are tested rather than demanded, because the callers below reach here from arms where they hold no evidence about `pos` — the exhausted-fuel arm and the past-the-end arm both flush what they have. A span that is not a span yields no literal, which is the answer this already gave when the bytes were not text.
-let flush(bytes: Bytes, start: Nat, stop: Nat, rest: Fmt) -> Fmt =
-    match Nat/Le/try(start, stop)
+-- The window's bound is tested rather than demanded, because the callers below reach here from arms where they hold no evidence about how far the literal ran — the exhausted-fuel arm and the past-the-end arm both flush what they have. A window that runs past the end yields no literal, which is the answer this already gave when the bytes were not text.
+--
+-- One test, where a `(start, end)` window took two: the scan below counts what the literal has taken, so the ordering half is not a fact about this call at all — it cannot be spelled.
+let flush(bytes: Bytes, start: Nat, count: Nat, rest: Fmt) -> Fmt =
+    match Nat/Le/try(start + count, Bytes/len(bytes))
     | none() => Fmt/nil()
-    | some(ordered) =>
-        match Nat/Le/try(stop, Bytes/len(bytes))
+    | some(within) =>
+        match Str/of_bytes(Bytes/slice(bytes, start, count, @within))
+        | some(piece) => Fmt/lit(piece, rest)
         | none() => Fmt/nil()
-        | some(within) =>
-            match Str/of_bytes(Bytes/slice(bytes, start, stop, @ordered, @within))
-            | some(piece) => Fmt/lit(piece, rest)
-            | none() => Fmt/nil()
-            end
         end
     end;
 
 -- These three recur on `pos + 1` and `pos + 2` with `bytes` fixed, so nothing about their arguments gets structurally smaller and no size-change checker can accept them. `parse` feeds `format_type_with(Str, parse(s))`, the result type of `render` and `print`, which puts them in a *type* position — and everything a type reaches has to be total, or type formation may not terminate. The descending `fuel` is what supplies the decrease.
 --
--- Each step either advances `pos` or hands off at the same `pos` (`parse_at` to `parse_lit_at` to `parse_esc_at`), so three units per byte plus a constant is a bound the parse cannot reach; the `0` arms are unreachable in practice and terminate the format rather than truncating a directive mid-way.
+-- Each step either advances the position or hands off at the same one (`parse_at` to `parse_lit_at` to `parse_esc_at`), so three units per byte plus a constant is a bound the parse cannot reach; the `0` arms are unreachable in practice and terminate the format rather than truncating a directive mid-way.
+--
+-- Inside a literal the walk carries how much it has *taken* rather than where it has reached, so the window `flush` opens is the one the walk already holds. The position is `start + taken` wherever a byte is read, which is what the two used to be tracked separately to say.
 rec parse_at(bytes: Bytes, pos: Nat, fuel: Nat) -> Fmt =
     match fuel
     | 0 => Fmt/nil()
@@ -40,34 +40,44 @@ rec parse_at(bytes: Bytes, pos: Nat, fuel: Nat) -> Fmt =
         | some(ok) =>
             match Byte/to_nat(Bytes/get(bytes, pos, @ok))
             | 37 => Fmt/show(parse_at(bytes, pos + 1, rest))
-            | _ => parse_lit_at(bytes, pos, pos, rest)
+            | _ => parse_lit_at(bytes, pos, 0, rest)
             end
         end
     end
-and parse_lit_at(bytes: Bytes, start: Nat, pos: Nat, fuel: Nat) -> Fmt =
+and parse_lit_at(bytes: Bytes, start: Nat, taken: Nat, fuel: Nat) -> Fmt =
     match fuel
-    | 0 => flush(bytes, start, pos, Fmt/nil())
+    | 0 => flush(bytes, start, taken, Fmt/nil())
     | rest + 1 =>
-        match Nat/Lt/try(pos, Bytes/len(bytes))
-        | none() => flush(bytes, start, pos, Fmt/nil())
+        match Nat/Lt/try(start + taken, Bytes/len(bytes))
+        | none() => flush(bytes, start, taken, Fmt/nil())
         | some(ok) =>
-            match Byte/to_nat(Bytes/get(bytes, pos, @ok))
-            | 37 => flush(bytes, start, pos, Fmt/show(parse_at(bytes, pos + 1, rest)))
-            | 92 => parse_esc_at(bytes, start, pos, rest)
-            | _ => parse_lit_at(bytes, start, pos + 1, rest)
+            match Byte/to_nat(Bytes/get(bytes, start + taken, @ok))
+            | 37 =>
+                flush(
+                    bytes,
+                    start,
+                    taken,
+                    Fmt/show(parse_at(bytes, start + taken + 1, rest)))
+            | 92 => parse_esc_at(bytes, start, taken, rest)
+            | _ => parse_lit_at(bytes, start, taken + 1, rest)
             end
         end
     end
-and parse_esc_at(bytes: Bytes, start: Nat, pos: Nat, fuel: Nat) -> Fmt =
+and parse_esc_at(bytes: Bytes, start: Nat, taken: Nat, fuel: Nat) -> Fmt =
     match fuel
-    | 0 => flush(bytes, start, pos, Fmt/nil())
+    | 0 => flush(bytes, start, taken, Fmt/nil())
     | rest + 1 =>
-        match Nat/Lt/try(pos + 1, Bytes/len(bytes))
-        | none() => parse_lit_at(bytes, start, pos + 1, rest)
+        match Nat/Lt/try(start + taken + 1, Bytes/len(bytes))
+        | none() => parse_lit_at(bytes, start, taken + 1, rest)
         | some(ok) =>
-            match Byte/to_nat(Bytes/get(bytes, pos + 1, @ok))
-            | 37 => flush(bytes, start, pos, Fmt/lit("%", parse_at(bytes, pos + 2, rest)))
-            | _ => parse_lit_at(bytes, start, pos + 1, rest)
+            match Byte/to_nat(Bytes/get(bytes, start + taken + 1, @ok))
+            | 37 =>
+                flush(
+                    bytes,
+                    start,
+                    taken,
+                    Fmt/lit("%", parse_at(bytes, start + taken + 2, rest)))
+            | _ => parse_lit_at(bytes, start, taken + 1, rest)
             end
         end
     end;

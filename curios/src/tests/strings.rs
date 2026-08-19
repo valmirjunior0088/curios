@@ -215,13 +215,13 @@ fn str_at_reads_codepoints_with_the_proof() {
     assert_eq!(run(source), b"97,8364,128512");
 }
 
-// `Str/slice` cuts at codepoint boundaries, so slicing `[1, 2)` out of `a€😀` yields the whole 3-byte euro sign — never a split sequence.
+// `Str/slice` cuts at codepoint boundaries, so taking one scalar from index 1 of `a€😀` yields the whole 3-byte euro sign — never a split sequence.
 #[test]
 fn str_slice_cuts_on_codepoint_boundaries() {
     let source = r#"
         use /std/{Str, Handle};
         match Str/of_bytes(x[0x61, 0xe2, 0x82, 0xac, 0xf0, 0x9f, 0x98, 0x80]) : (_) => /std/Io({})
-        | some(s) => /std/print(Str/slice(s, 1, 2))
+        | some(s) => /std/print(Str/slice(s, 1, 1))
         | none() => /std/print("bad")
         end
         "#;
@@ -229,13 +229,13 @@ fn str_slice_cuts_on_codepoint_boundaries() {
     assert_eq!(run(source), [0xe2, 0x82, 0xac]);
 }
 
-// An interior `Str/slice` over a mixed-width string exercises the single-pass O(n) cut: `drop_n` skips the leading `a` (1 byte) and `take_n` keeps the next three scalars (`é€😀`, of widths 2, 3, 4) as one window — never splitting a sequence. `aé€😀b` sliced `[1, 4)` yields `é€😀`.
+// An interior `Str/slice` over a mixed-width string exercises the single-pass O(n) cut: `drop_n` skips the leading `a` (1 byte) and `take_n` keeps the next three scalars (`é€😀`, of widths 2, 3, 4) as one window — never splitting a sequence. Three scalars from index 1 of `aé€😀b` yields `é€😀`.
 #[test]
 fn str_slice_spans_every_codepoint_width() {
     let source = r#"
         use /std/{Str, Handle};
         match Str/of_bytes(x[0x61, 0xc3, 0xa9, 0xe2, 0x82, 0xac, 0xf0, 0x9f, 0x98, 0x80, 0x62]) : (_) => /std/Io({})
-        | some(s) => /std/print(Str/slice(s, 1, 4))
+        | some(s) => /std/print(Str/slice(s, 1, 3))
         | none() => /std/print("bad")
         end
         "#;
@@ -333,7 +333,7 @@ fn str_logical_operations_use_certified_chars() {
             rebuilt, "|", second, "|", Nat/to_str(euro), "|",
             Nat/to_str(supplementary), "|", shown, "|",
             /std/Bool/to_str(folded), "|", /std/Bool/to_str(not_unicode_folded), "|",
-            Nat/to_str(Str/len(s)), "|", Str/slice(s, 1, 2)
+            Nat/to_str(Str/len(s)), "|", Str/slice(s, 1, 1)
         ]))
         "#;
 
@@ -874,9 +874,9 @@ fn utf8_slice_closed_peels_codepoints() {
                 (x[..hd.cp, ..tn.r], concat_closed(@hd.cp, @tn.r, hd.v, tn.v))
             end;
 
-        let slice(@b : Bytes, d : Valid(b), x : Nat, y : Nat) -> { r : Bytes, v : Valid(r) } =
+        let slice(@b : Bytes, d : Valid(b), x : Nat, n : Nat) -> { r : Bytes, v : Valid(r) } =
             let dropped = drop_n(x, d);
-            take_n(Nat/sub(y, x), @dropped.r, dropped.v);
+            take_n(n, @dropped.r, dropped.v);
         let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
         /std/Io/pure(())
         "#;

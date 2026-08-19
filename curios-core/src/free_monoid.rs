@@ -390,7 +390,7 @@ fn is_empty_list(term: &Term) -> bool {
 ///
 /// **It takes no [`crate::Reducer`], and that is the enforcement rather than a comment.** A function that cannot reach the reducer cannot re-enter reduction, cannot spend budget, and cannot rebuild a term to ask about it. The audit is the signature.
 ///
-/// **The notion is not new here — conversion has had it all along.** `crate::spine`'s `Atom::Window` is documented as a chunk whose "contents [are] symbolic, but length `hi - lo` [is] statically known"; deciding equality has always been able to measure what it cannot read. Only reduction lacked the same view.
+/// **The notion is not new here — conversion has had it all along.** `crate::spine`'s `Atom::Window` is documented as a chunk whose contents are symbolic but whose length it carries outright; deciding equality has always been able to measure what it cannot read. Only reduction lacked the same view.
 ///
 /// **Deliberately narrow: literal runs and their concatenations, nothing else.** An append, a window, a variable — anything whose length this cannot read off — answers `None`, and every caller then falls back to exactly the rule it uses today. That keeps this from asserting a single equation that is not already decided: measuring a window as `hi - lo` would be sound on `/sys`'s `s <= e <= len(b)` preconditions, but nothing decides `len(slice(b, s, e)) = e - s` today — conversion holds a window's very emptiness undecidable (`against_identity` answers `Stuck`) — so admitting it would be a *new* definitional equation on the perimeter's weakest row. It buys nothing here, since an accumulation's spine is literals, and it can be taken later on its own evidence.
 fn bin_segments(grain: Grain, value: &Term) -> Option<Vec<(&Term, usize)>> {
@@ -513,25 +513,25 @@ fn locate(segments: Vec<(&Term, usize)>, index: usize) -> Option<Located<'_>> {
     Some(Located::Past(offset))
 }
 
-/// The operands a `[start, end)` window spans, each already narrowed to its overlap — the pieces whose concatenation *is* the window. `None` when the value is not wholly measurable; `Err` carries the measured total when the window is out of range, which the caller reports.
+/// The operands a `count`-long window at `start` spans, each already narrowed to its overlap — the pieces whose concatenation *is* the window. `None` when the value is not wholly measurable; `Err` carries the measured total when the window runs past the end, which the caller reports.
 ///
 /// The point of returning pieces rather than a value: an operand the window covers whole is handed back untouched and shares its payload, and only the two at the edges are narrowed. A window over a spine therefore costs one pass and two slices, where peeling one generator at a time costs a walk of the whole spine per generator read.
 pub(crate) fn bin_window(
     grain: Grain,
     value: &Term,
     start: usize,
-    end: usize,
+    count: usize,
 ) -> Option<Result<Vec<Piece<'_>>, usize>> {
-    window(bin_segments(grain, value)?, start, end)
+    window(bin_segments(grain, value)?, start, count)
 }
 
 /// [`bin_window`] over the element carrier.
 pub(crate) fn list_window(
     value: &Term,
     start: usize,
-    end: usize,
+    count: usize,
 ) -> Option<Result<Vec<Piece<'_>>, usize>> {
-    window(list_segments(value)?, start, end)
+    window(list_segments(value)?, start, count)
 }
 
 /// One operand a window spans: whole, or narrowed to the half-open range within it.
@@ -543,13 +543,14 @@ pub(crate) enum Piece<'a> {
 fn window(
     segments: Vec<(&Term, usize)>,
     start: usize,
-    end: usize,
+    count: usize,
 ) -> Option<Result<Vec<Piece<'_>>, usize>> {
     let total = measure(&segments)?;
 
-    if start > end || end > total {
+    // No reversed-range case to reject: a window is a start and a *count*, so `start > end` is not a shape this can be handed. Only running past the end remains, and an end that overflows `usize` has certainly done so.
+    let Some(end) = start.checked_add(count).filter(|end| *end <= total) else {
         return Some(Err(total));
-    }
+    };
 
     let mut pieces = Vec::new();
     let mut offset = 0usize;

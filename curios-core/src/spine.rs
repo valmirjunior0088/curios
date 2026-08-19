@@ -104,10 +104,19 @@ pub fn peel_nat(actual: &Nat, target: &Nat) -> Peel {
     classify_nat(&lift(actual), &lift(target))
 }
 
-/// One segment of a flattened free-monoid value: a run of consecutive literal elements — concrete bytes (`Bin`) or terms (`List`) — a `Window` into a base value (a `Bin/slice(base, lo, hi)`: contents symbolic, but length `hi - lo` statically known as a `Nat` term), or an opaque symbolic chunk (a variable, an append: anything whose contents *and* length are unknown). A value is a sequence of these, and the concatenation intrinsic is their juxtaposition; flattening normalises the monoid laws — associativity, the empty identity, re-segmented literal runs, and fused adjacent windows of one base (`slice(b, s, m) ++ slice(b, m, e) = slice(b, s, e)`) — so two definitionally equal values decompose to the same list.
+/// Whether two reduced `Nat` terms are one number: syntactic identity first, then the cancellation for the pairs it decides. A `None` or an undecided verdict answers `false`, which is the declining direction at the one caller — a window that does not fuse is compared whole instead.
+fn nat_equal(left: &Term, right: &Term) -> bool {
+    left == right || matches!(peel_nat_terms(left, right), Some(Peel::Equal))
+}
+
+/// One segment of a flattened free-monoid value: a run of consecutive literal elements — concrete bytes (`Bin`) or terms (`List`) — a `Window` into a base value (a `Bin/slice(base, offset, length)`: contents symbolic, but length carried outright as a `Nat` term), or an opaque symbolic chunk (a variable, an append: anything whose contents *and* length are unknown). A value is a sequence of these, and the concatenation intrinsic is their juxtaposition; flattening normalises the monoid laws — associativity, the empty identity, re-segmented literal runs, and fused adjacent windows of one base (`slice(b, s, l₁) ++ slice(b, s + l₁, l₂) = slice(b, s, l₁ + l₂)`) — so two definitionally equal values decompose to the same list.
 enum Atom<E> {
     Literal(Vec<E>),
-    Window { base: Term, lo: Term, hi: Term },
+    Window {
+        base: Term,
+        offset: Term,
+        length: Term,
+    },
     Symbolic(Term),
 }
 
@@ -131,19 +140,19 @@ fn peel_prefix<E: PartialEq>(left: &mut VecDeque<Atom<E>>, right: &mut VecDeque<
                 left.pop_front();
                 right.pop_front();
             }
-            // Two windows into the same base over the same span are equal whole. A shared base/`lo` with differing `hi` (one window extends past the other) could peel too, but that needs ordering the symbolic bounds, so it is left to defer rather than decided here.
+            // Two windows into the same base over the same span are equal whole. A shared base/offset with differing lengths (one window extends past the other) could peel too, but that needs ordering the symbolic bounds, so it is left to defer rather than decided here.
             (
                 Some(Atom::Window {
                     base: b1,
-                    lo: l1,
-                    hi: h1,
+                    offset: o1,
+                    length: n1,
                 }),
                 Some(Atom::Window {
                     base: b2,
-                    lo: l2,
-                    hi: h2,
+                    offset: o2,
+                    length: n2,
                 }),
-            ) if b1 == b2 && l1 == l2 && h1 == h2 => {
+            ) if b1 == b2 && o1 == o2 && n1 == n2 => {
                 peeled = true;
                 left.pop_front();
                 right.pop_front();
@@ -176,28 +185,41 @@ fn push<E>(out: &mut Vec<Atom<E>>, atom: Atom<E>) {
             Some(Atom::Literal(head)) => head.extend(run),
             _ => out.push(Atom::Literal(run)),
         },
-        // An empty window is the identity: equal bounds slice nothing.
-        Atom::Window { lo, hi, .. } if lo == hi => {}
-        Atom::Window { base, lo, hi } => {
-            // Fuse with a preceding window of the same base whose `hi` meets this window's `lo` at a shared seam; the fused span carries through, so a run of touching windows collapses left-to-right to one.
-            let fuses = matches!(
-                out.last(),
-                Some(Atom::Window { base: prev, hi: seam, .. }) if *prev == base && *seam == lo,
-            );
-            match fuses {
+        // An empty window is the identity: a zero-length window slices nothing.
+        Atom::Window { length, .. } if Nat::is_zero(&length) => {}
+        Atom::Window {
+            base,
+            offset,
+            length,
+        } => {
+            // Fuse with a preceding window of the same base that this one begins at the end of. Under `(start, length)` that seam is an *arithmetic* fact — `offset = prev.offset + prev.length` — where it used to be a shared term, so it is decided by the `Nat` peel rather than read off syntactic equality. Strictly wider than the test it replaces, which is kept as the cheap first answer; a run of touching windows still collapses left-to-right to one.
+            let abuts = match out.last() {
+                Some(Atom::Window {
+                    base: prev,
+                    offset: at,
+                    length: run,
+                }) => *prev == base && nat_equal(&offset, &Nat::sum(at, run)),
+                _ => false,
+            };
+
+            match abuts {
                 true => {
-                    if let Some(Atom::Window { hi: seam, .. }) = out.last_mut() {
-                        *seam = hi;
+                    if let Some(Atom::Window { length: run, .. }) = out.last_mut() {
+                        *run = Nat::sum(run, &length);
                     }
                 }
-                false => out.push(Atom::Window { base, lo, hi }),
+                false => out.push(Atom::Window {
+                    base,
+                    offset,
+                    length,
+                }),
             }
         }
         Atom::Symbolic(term) => out.push(Atom::Symbolic(term)),
     }
 }
 
-/// One side peeled down to the empty identity while the other did not: a leftover literal run is a definite length mismatch (`Clash`); a leftover symbolic chunk or window might itself be empty (its length is a symbolic `hi - lo`), so its emptiness is undecidable (`Stuck`).
+/// One side peeled down to the empty identity while the other did not: a leftover literal run is a definite length mismatch (`Clash`); a leftover symbolic chunk or window might itself be empty (a window whose length is symbolic), so its emptiness is undecidable (`Stuck`).
 fn against_identity<E>(atom: &Atom<E>) -> Peel {
     match atom {
         Atom::Literal(_) => Peel::Clash,
@@ -254,7 +276,7 @@ pub fn peel_list(left: &Intrinsic, right: &Intrinsic) -> Option<Peel> {
     })
 }
 
-/// The `Bin`-valued intrinsics `peel_bin` decomposes. `Bin` and `BinConcat` carry the monoid's literals and juxtaposition; `BinSlice` rides in as a measured `Window` (a length-`hi - lo` chunk whose contents are symbolic), so adjacent slices of one base fuse and equal slices cancel; `BinAppend` rides in as its base followed by the appended byte. Any other producer stays an opaque symbolic chunk left to the caller's own (structural) comparison.
+/// The `Bin`-valued intrinsics `peel_bin` decomposes. `Bin` and `BinConcat` carry the monoid's literals and juxtaposition; `BinSlice` rides in as a measured `Window` (a chunk carrying its own length, whose contents are symbolic), so adjacent slices of one base fuse and equal slices cancel; `BinAppend` rides in as its base followed by the appended byte. Any other producer stays an opaque symbolic chunk left to the caller's own (structural) comparison.
 fn bin_grain(intrinsic: &Intrinsic) -> Option<Grain> {
     match intrinsic {
         Intrinsic::Bin(grain, _)
@@ -345,14 +367,14 @@ fn bin_collect_intrinsic(grain: Grain, intrinsic: &Intrinsic, out: &mut Vec<Atom
                 Intrinsic::BinSlice {
                     grain: found,
                     bin: base,
-                    start: lo,
-                    end: hi,
+                    start,
+                    length,
                 } if *found == grain => push(
                     out,
                     Atom::Window {
                         base: base.clone(),
-                        lo: lo.clone(),
-                        hi: hi.clone(),
+                        offset: start.clone(),
+                        length: length.clone(),
                     },
                 ),
                 // `append(base, b) = base ++ [b]`: decode the base, then the appended byte.
@@ -409,14 +431,14 @@ fn list_collect_intrinsic(intrinsic: &Intrinsic, out: &mut Vec<Atom<Term>>) {
                 Intrinsic::ListSlice {
                     element: _,
                     list: base,
-                    start: lo,
-                    end: hi,
+                    start,
+                    length,
                 } => push(
                     out,
                     Atom::Window {
                         base: base.clone(),
-                        lo: lo.clone(),
-                        hi: hi.clone(),
+                        offset: start.clone(),
+                        length: length.clone(),
                     },
                 ),
                 // `append(base, e) = base ++ [e]`: decode the base, then the appended element.
@@ -444,7 +466,11 @@ fn reassemble_bin(grain: Grain, atoms: VecDeque<Atom<u8>>) -> Term {
                 Grain::X => PackedBin::from_bytes(atoms),
             },
         )),
-        Atom::Window { base, lo, hi } => Term::intrinsic(Intrinsic::bin_slice(grain, base, lo, hi)),
+        Atom::Window {
+            base,
+            offset,
+            length,
+        } => Term::intrinsic(Intrinsic::bin_slice(grain, base, offset, length)),
         Atom::Symbolic(term) => term,
     };
 
@@ -465,9 +491,11 @@ fn reassemble_list(atoms: VecDeque<Atom<Term>>, elem: Term) -> Term {
                 element: elem.clone(),
                 items: elems,
             }),
-            Atom::Window { base, lo, hi } => {
-                Term::intrinsic(Intrinsic::list_slice(elem.clone(), base, lo, hi))
-            }
+            Atom::Window {
+                base,
+                offset,
+                length,
+            } => Term::intrinsic(Intrinsic::list_slice(elem.clone(), base, offset, length)),
             Atom::Symbolic(term) => term,
         }
     }

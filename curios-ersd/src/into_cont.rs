@@ -1470,16 +1470,30 @@ impl Lowerer<'_> {
             body: step_body,
         });
         let step_body = match suffix {
-            Some(suffix) => self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
-                result: suffix,
-                op: sequence_slice_op(grain),
-                args: vec![
-                    sequence.clone(),
-                    curios_cont::CpsAtom::Value(step_index),
-                    curios_cont::CpsAtom::Value(length),
-                ],
-                next: step_body,
-            }),
+            // The suffix is everything from the element's index on. A window is `(start, count)`, so what the slice takes is what *remains* — `length - step_index` — where the sequence's own length used to stand in as the end.
+            Some(suffix) => {
+                let remaining = self.module.add_value(None);
+                let sliced = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
+                    result: suffix,
+                    op: sequence_slice_op(grain),
+                    args: vec![
+                        sequence.clone(),
+                        curios_cont::CpsAtom::Value(step_index),
+                        curios_cont::CpsAtom::Value(remaining),
+                    ],
+                    next: step_body,
+                });
+
+                self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
+                    result: remaining,
+                    op: curios_cont::CpsIntrinsicOp::NatSub,
+                    args: vec![
+                        curios_cont::CpsAtom::Value(length),
+                        curios_cont::CpsAtom::Value(step_index),
+                    ],
+                    next: sliced,
+                })
+            }
             None => step_body,
         };
         let step_body = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
