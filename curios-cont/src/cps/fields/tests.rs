@@ -422,7 +422,7 @@ fn a_variant_splits_at_its_widest_constructor_with_per_edge_filler() {
     assert!(
         entry[1..]
             .iter()
-            .all(|atom| matches!(atom, CpsAtom::Literal(CpsLiteral::Nat(0)))),
+            .all(|atom| matches!(atom, CpsAtom::Filler)),
         "and the slots it does not carry are filler: {entry:?}",
     );
 
