@@ -657,8 +657,8 @@ impl<E: Env> Walk<'_, E> {
             | Intrinsic::NatSub(..)
             | Intrinsic::NatMul(..)
             | Intrinsic::NatLt(..)
-            | Intrinsic::NatDiv(..)
-            | Intrinsic::NatRem(..)
+            | Intrinsic::NatDiv { .. }
+            | Intrinsic::NatRem { .. }
             | Intrinsic::NatGt(..)
             | Intrinsic::NatLte(..)
             | Intrinsic::NatGte(..)
@@ -686,8 +686,8 @@ impl<E: Env> Walk<'_, E> {
             | Intrinsic::IntAdd(..)
             | Intrinsic::IntSub(..)
             | Intrinsic::IntMul(..)
-            | Intrinsic::IntDiv(..)
-            | Intrinsic::IntRem(..)
+            | Intrinsic::IntDiv { .. }
+            | Intrinsic::IntRem { .. }
             | Intrinsic::IntLt(..)
             | Intrinsic::IntGt(..)
             | Intrinsic::IntLte(..)
@@ -730,7 +730,7 @@ impl<E: Env> Walk<'_, E> {
             | Intrinsic::IntToFlt(..)
             | Intrinsic::FltToNat(..)
             | Intrinsic::FltToLeBytes(..)
-            | Intrinsic::FltOfLeBytes(..)
+            | Intrinsic::FltOfLeBytes { .. }
             | Intrinsic::FltToInt(..)
             | Intrinsic::Bin(..)
             | Intrinsic::BinLen(..)

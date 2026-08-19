@@ -85,6 +85,11 @@ fn motive() -> Scope<Many> {
 }
 
 /// The induction-hypothesis form: a structural fold whose cons arm combines the recursive result, `count(x[]) = 0`, `count(x[h, ..t]) = count(t) + 1`. Its depth is the hypothesis nesting — the shape only an explicit stack can walk without a native frame per element — so the budget this passes under is the claim: about two hundred units per element where the recursive strategy's frame row alone is [`Cost::FRAME`].
+/// A stand-in for a discharged bound; reduction never inspects one.
+fn qed() -> Term {
+    nat(0)
+}
+
 #[test]
 fn an_ih_fold_costs_transitions_rather_than_frames() {
     let n = 2_000usize;
@@ -322,11 +327,22 @@ fn a_dead_erroring_argument_defers_and_a_demanded_one_surfaces() {
             [(x.clone(), nat_type()), (y.clone(), nat_type())],
             Term::free_var(&x),
         ),
-        [nat(7), Term::intrinsic(Intrinsic::NatDiv(nat(1), nat(0)))],
+        [
+            nat(7),
+            Term::intrinsic(Intrinsic::NatDiv {
+                dividend: nat(1),
+                divisor: nat(0),
+                non_zero: qed(),
+            }),
+        ],
     );
     assert_eq!(reduce_closed(&mut host, first, Demand::Forced), Ok(nat(7)));
 
-    let demanded = Term::intrinsic(Intrinsic::NatDiv(nat(1), nat(0)));
+    let demanded = Term::intrinsic(Intrinsic::NatDiv {
+        dividend: nat(1),
+        divisor: nat(0),
+        non_zero: qed(),
+    });
     assert!(matches!(
         reduce_closed(&mut host, demanded, Demand::Forced),
         Err(ReduceError::DivisionByZero { .. })

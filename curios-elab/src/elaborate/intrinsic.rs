@@ -19,6 +19,33 @@ fn binary(
     Ok((build(left, right), result))
 }
 
+/// The bounded counterpart of [`binary`]: elaborate the two value operands, then the proof against the proposition the operation itself declares.
+///
+/// The proposition is read off [`Intrinsic::operand_types`] rather than spelled here, so elaboration and the kernel check the *same* statement — the node is built once with the proof unelaborated, asked what its bound's type is, and rebuilt once the proof has been checked against it. Duplicating the spelling instead is how the two sides of a checker seam drift.
+fn guarded_binary(
+    context: &mut Context,
+    left: &Term,
+    right: &Term,
+    non_zero: &Term,
+    operand: &Term,
+    result: Term,
+    build: fn(Term, Term, Term) -> Intrinsic,
+) -> Result<(Intrinsic, Term), Error> {
+    let left = elaborate(context, left, Mode::Check(operand.clone()))?.0;
+    let right = elaborate(context, right, Mode::Check(operand.clone()))?.0;
+
+    let provisional = build(left.clone(), right.clone(), non_zero.clone());
+    let bound = provisional
+        .operand_types(&context.syntax())
+        .into_iter()
+        .flatten()
+        .next_back()
+        .expect("a guarded operation declares its bound");
+    let non_zero = elaborate(context, non_zero, Mode::Check(bound))?.0;
+
+    Ok((build(left, right, non_zero), result))
+}
+
 /// The unary counterpart of [`binary`], for single-operand scalar/conversion intrinsics.
 fn unary(
     context: &mut Context,
@@ -29,18 +56,6 @@ fn unary(
 ) -> Result<(Intrinsic, Term), Error> {
     let inner = elaborate(context, inner, Mode::Check(operand.clone()))?.0;
     Ok((build(inner), result))
-}
-
-/// Elaborate a packed binary value, requiring its inferred type to be the requested `Bits` or `Bytes` grain, and return the rebuilt operand. The indexing/slicing intrinsics read their shape off the operand's type, so they infer it rather than checking against a known one.
-fn infer_bin(context: &mut Context, bin: &Term) -> Result<Term, Error> {
-    let (bin, actual) = elaborate(context, bin, Mode::Infer)?;
-    match &*reduce_with(context, &actual)? {
-        Subterm::Intrinsic(Intrinsic::BinType(Grain::X)) => Ok(bin),
-        other => Err(Error::type_mismatch(
-            other.clone(),
-            Subterm::Intrinsic(Intrinsic::BinType(Grain::X)),
-        )),
-    }
 }
 
 fn list_type(elem: Term) -> Term {
@@ -221,21 +236,39 @@ fn synth_intrinsic(
             nat_type.clone(),
             Intrinsic::NatMul,
         )?,
-        Intrinsic::NatDiv(l, r) => binary(
+        Intrinsic::NatDiv {
+            dividend,
+            divisor,
+            non_zero,
+        } => guarded_binary(
             context,
-            l,
-            r,
+            dividend,
+            divisor,
+            non_zero,
             &nat_type,
             nat_type.clone(),
-            Intrinsic::NatDiv,
+            |dividend, divisor, non_zero| Intrinsic::NatDiv {
+                dividend,
+                divisor,
+                non_zero,
+            },
         )?,
-        Intrinsic::NatRem(l, r) => binary(
+        Intrinsic::NatRem {
+            dividend,
+            divisor,
+            non_zero,
+        } => guarded_binary(
             context,
-            l,
-            r,
+            dividend,
+            divisor,
+            non_zero,
             &nat_type,
             nat_type.clone(),
-            Intrinsic::NatRem,
+            |dividend, divisor, non_zero| Intrinsic::NatRem {
+                dividend,
+                divisor,
+                non_zero,
+            },
         )?,
         Intrinsic::NatAnd(l, r) => binary(
             context,
@@ -411,21 +444,39 @@ fn synth_intrinsic(
             int_type.clone(),
             Intrinsic::IntMul,
         )?,
-        Intrinsic::IntDiv(l, r) => binary(
+        Intrinsic::IntDiv {
+            dividend,
+            divisor,
+            non_zero,
+        } => guarded_binary(
             context,
-            l,
-            r,
+            dividend,
+            divisor,
+            non_zero,
             &int_type,
             int_type.clone(),
-            Intrinsic::IntDiv,
+            |dividend, divisor, non_zero| Intrinsic::IntDiv {
+                dividend,
+                divisor,
+                non_zero,
+            },
         )?,
-        Intrinsic::IntRem(l, r) => binary(
+        Intrinsic::IntRem {
+            dividend,
+            divisor,
+            non_zero,
+        } => guarded_binary(
             context,
-            l,
-            r,
+            dividend,
+            divisor,
+            non_zero,
             &int_type,
             int_type.clone(),
-            Intrinsic::IntRem,
+            |dividend, divisor, non_zero| Intrinsic::IntRem {
+                dividend,
+                divisor,
+                non_zero,
+            },
         )?,
         Intrinsic::IntAnd(l, r) => binary(
             context,
@@ -630,14 +681,28 @@ fn synth_intrinsic(
             bin_type.clone(),
             Intrinsic::FltToLeBytes,
         )?,
-        // `Flt/of_le_bytes` assembles a float from its IEEE-754 bytes — the inverse of `to_le_bytes`; traps unless the `Bin` is exactly 4 bytes.
-        Intrinsic::FltOfLeBytes(i) => unary(
-            context,
-            i,
-            &bin_type,
-            flt_type.clone(),
-            Intrinsic::FltOfLeBytes,
-        )?,
+        // `Flt/of_le_bytes` assembles a float from its IEEE-754 bytes — the inverse of `to_le_bytes`. The four-byte length is a stated bound rather than a runtime trap, checked here against the proposition the node itself declares.
+        Intrinsic::FltOfLeBytes { bin, four_bytes } => {
+            let elaborated = elaborate(context, bin, Mode::Check(bin_type.clone()))?.0;
+            let provisional = Intrinsic::FltOfLeBytes {
+                bin: elaborated.clone(),
+                four_bytes: four_bytes.clone(),
+            };
+            let bound = provisional
+                .operand_types(&context.syntax())
+                .into_iter()
+                .flatten()
+                .next_back()
+                .expect("a guarded operation declares its bound");
+            let four_bytes = elaborate(context, four_bytes, Mode::Check(bound))?.0;
+            (
+                Intrinsic::FltOfLeBytes {
+                    bin: elaborated,
+                    four_bytes,
+                },
+                flt_type.clone(),
+            )
+        }
         Intrinsic::NatToInt(i) => {
             unary(context, i, &nat_type, int_type.clone(), Intrinsic::NatToInt)?
         }
@@ -659,7 +724,7 @@ fn synth_intrinsic(
         Intrinsic::BinType(Grain::X) => (intrinsic.clone(), Term::type_ground()),
         Intrinsic::Bin(Grain::X, _) => (intrinsic.clone(), bin_type),
         Intrinsic::BinLen(Grain::X, bin) => {
-            let bin = infer_bin(context, bin)?;
+            let bin = elaborate(context, bin, Mode::Check(bin_type.clone()))?.0;
             (Intrinsic::BinLen(Grain::X, bin), nat_type)
         }
         Intrinsic::BinEql(Grain::X, left, right) => {
@@ -672,7 +737,7 @@ fn synth_intrinsic(
             bin,
             index,
         } => {
-            let bin = infer_bin(context, bin)?;
+            let bin = elaborate(context, bin, Mode::Check(bin_type.clone()))?.0;
             let index = elaborate(context, index, Mode::Check(nat_type.clone()))?.0;
             (
                 Intrinsic::BinGet {
@@ -689,7 +754,7 @@ fn synth_intrinsic(
             start,
             end,
         } => {
-            let bin = infer_bin(context, bin)?;
+            let bin = elaborate(context, bin, Mode::Check(bin_type.clone()))?.0;
             let start = elaborate(context, start, Mode::Check(nat_type.clone()))?.0;
             let end = elaborate(context, end, Mode::Check(nat_type))?.0;
             (
@@ -707,7 +772,7 @@ fn synth_intrinsic(
             bin,
             element: byte,
         } => {
-            let bin = infer_bin(context, bin)?;
+            let bin = elaborate(context, bin, Mode::Check(bin_type.clone()))?.0;
             let byte = elaborate(
                 context,
                 byte,

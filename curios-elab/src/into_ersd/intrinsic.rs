@@ -216,8 +216,18 @@ pub(super) fn erase_intrinsic(
         Intrinsic::NatSub(l, r) => op!(curios_ersd::Operation::NatSub, nat_type, l, r),
         Intrinsic::NatMul(l, r) => op!(curios_ersd::Operation::NatMul, nat_type, l, r),
         Intrinsic::NatLt(l, r) => op!(curios_ersd::Operation::NatLt, nat_type, l, r),
-        Intrinsic::NatDiv(l, r) => op!(curios_ersd::Operation::NatDiv, nat_type, l, r),
-        Intrinsic::NatRem(l, r) => op!(curios_ersd::Operation::NatRem, nat_type, l, r),
+        // The bound is dropped here and nowhere else has to know: erasure is where a proof stops existing.
+        Intrinsic::NatDiv {
+            dividend: l,
+            divisor: r,
+            ..
+        } => op!(curios_ersd::Operation::NatDiv, nat_type, l, r),
+        // The bound is dropped here and nowhere else has to know: erasure is where a proof stops existing.
+        Intrinsic::NatRem {
+            dividend: l,
+            divisor: r,
+            ..
+        } => op!(curios_ersd::Operation::NatRem, nat_type, l, r),
         Intrinsic::NatGt(l, r) => op!(curios_ersd::Operation::NatGt, nat_type, l, r),
         Intrinsic::NatLte(l, r) => op!(curios_ersd::Operation::NatLte, nat_type, l, r),
         Intrinsic::NatGte(l, r) => op!(curios_ersd::Operation::NatGte, nat_type, l, r),
@@ -240,8 +250,18 @@ pub(super) fn erase_intrinsic(
         Intrinsic::IntAdd(l, r) => op!(curios_ersd::Operation::IntAdd, int_type, l, r),
         Intrinsic::IntSub(l, r) => op!(curios_ersd::Operation::IntSub, int_type, l, r),
         Intrinsic::IntMul(l, r) => op!(curios_ersd::Operation::IntMul, int_type, l, r),
-        Intrinsic::IntDiv(l, r) => op!(curios_ersd::Operation::IntDiv, int_type, l, r),
-        Intrinsic::IntRem(l, r) => op!(curios_ersd::Operation::IntRem, int_type, l, r),
+        // The bound is dropped here and nowhere else has to know: erasure is where a proof stops existing.
+        Intrinsic::IntDiv {
+            dividend: l,
+            divisor: r,
+            ..
+        } => op!(curios_ersd::Operation::IntDiv, int_type, l, r),
+        // The bound is dropped here and nowhere else has to know: erasure is where a proof stops existing.
+        Intrinsic::IntRem {
+            dividend: l,
+            divisor: r,
+            ..
+        } => op!(curios_ersd::Operation::IntRem, int_type, l, r),
         Intrinsic::IntLt(l, r) => op!(curios_ersd::Operation::IntLt, int_type, l, r),
         Intrinsic::IntGt(l, r) => op!(curios_ersd::Operation::IntGt, int_type, l, r),
         Intrinsic::IntLte(l, r) => op!(curios_ersd::Operation::IntLte, int_type, l, r),
@@ -289,7 +309,7 @@ pub(super) fn erase_intrinsic(
         Intrinsic::FltToLeBytes(inner) => {
             op!(curios_ersd::Operation::FltToLeBytes, flt_type, inner)
         }
-        Intrinsic::FltOfLeBytes(inner) => lowering.operation(
+        Intrinsic::FltOfLeBytes { bin: inner, .. } => lowering.operation(
             context,
             curios_ersd::Operation::FltOfLeBytes,
             &[(inner, bin_type(Grain::X))],

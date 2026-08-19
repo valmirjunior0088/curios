@@ -455,8 +455,16 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
         Intrinsic::NatSub(left, right) => print_intrinsic_call("Nat.sub", vec![left, right]),
         Intrinsic::NatMul(left, right) => print_intrinsic_call("Nat.mul", vec![left, right]),
         Intrinsic::NatLt(left, right) => print_intrinsic_call("Nat.lt", vec![left, right]),
-        Intrinsic::NatDiv(left, right) => print_intrinsic_call("Nat.div", vec![left, right]),
-        Intrinsic::NatRem(left, right) => print_intrinsic_call("Nat.rem", vec![left, right]),
+        Intrinsic::NatDiv {
+            dividend: left,
+            divisor: right,
+            ..
+        } => print_intrinsic_call("Nat.div", vec![left, right]),
+        Intrinsic::NatRem {
+            dividend: left,
+            divisor: right,
+            ..
+        } => print_intrinsic_call("Nat.rem", vec![left, right]),
         Intrinsic::NatGt(left, right) => print_intrinsic_call("Nat.gt", vec![left, right]),
         Intrinsic::NatLte(left, right) => print_intrinsic_call("Nat.lte", vec![left, right]),
         Intrinsic::NatGte(left, right) => print_intrinsic_call("Nat.gte", vec![left, right]),
@@ -477,8 +485,16 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
         Intrinsic::IntAdd(left, right) => print_intrinsic_call("Int.add", vec![left, right]),
         Intrinsic::IntSub(left, right) => print_intrinsic_call("Int.sub", vec![left, right]),
         Intrinsic::IntMul(left, right) => print_intrinsic_call("Int.mul", vec![left, right]),
-        Intrinsic::IntDiv(left, right) => print_intrinsic_call("Int.div", vec![left, right]),
-        Intrinsic::IntRem(left, right) => print_intrinsic_call("Int.rem", vec![left, right]),
+        Intrinsic::IntDiv {
+            dividend: left,
+            divisor: right,
+            ..
+        } => print_intrinsic_call("Int.div", vec![left, right]),
+        Intrinsic::IntRem {
+            dividend: left,
+            divisor: right,
+            ..
+        } => print_intrinsic_call("Int.rem", vec![left, right]),
         Intrinsic::IntLt(left, right) => print_intrinsic_call("Int.lt", vec![left, right]),
         Intrinsic::IntGt(left, right) => print_intrinsic_call("Int.gt", vec![left, right]),
         Intrinsic::IntLte(left, right) => print_intrinsic_call("Int.lte", vec![left, right]),
@@ -519,7 +535,9 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             print_intrinsic_call("Flt.copysign", vec![left, right])
         }
         Intrinsic::FltToLeBytes(operand) => print_intrinsic_call("Flt.to_le_bytes", vec![operand]),
-        Intrinsic::FltOfLeBytes(operand) => print_intrinsic_call("Flt.of_le_bytes", vec![operand]),
+        Intrinsic::FltOfLeBytes { bin: operand, .. } => {
+            print_intrinsic_call("Flt.of_le_bytes", vec![operand])
+        }
         Intrinsic::NatToInt(operand) => print_intrinsic_call("Nat.to_int", vec![operand]),
         Intrinsic::NatToFlt(operand) => print_intrinsic_call("Nat.to_flt", vec![operand]),
         Intrinsic::ByteType => pure("Byte"),

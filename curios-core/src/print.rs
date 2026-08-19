@@ -430,8 +430,8 @@ fn infix_symbol(intrinsic: &Intrinsic) -> Option<&'static str> {
         Intrinsic::NatAdd(..) | Intrinsic::IntAdd(..) | Intrinsic::FltAdd(..) => "+",
         Intrinsic::NatSub(..) | Intrinsic::IntSub(..) | Intrinsic::FltSub(..) => "-",
         Intrinsic::NatMul(..) | Intrinsic::IntMul(..) | Intrinsic::FltMul(..) => "*",
-        Intrinsic::NatDiv(..) | Intrinsic::IntDiv(..) | Intrinsic::FltDiv(..) => "/",
-        Intrinsic::NatRem(..) | Intrinsic::IntRem(..) | Intrinsic::FltRem(..) => "%",
+        Intrinsic::NatDiv { .. } | Intrinsic::IntDiv { .. } | Intrinsic::FltDiv(..) => "/",
+        Intrinsic::NatRem { .. } | Intrinsic::IntRem { .. } | Intrinsic::FltRem(..) => "%",
         Intrinsic::NatEql(..)
         | Intrinsic::IntEql(..)
         | Intrinsic::FltEql(..)
@@ -570,8 +570,16 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
         Intrinsic::NatSub(l, r) => print_infix("-", l, r, frame),
         Intrinsic::NatMul(l, r) => print_infix("*", l, r, frame),
         Intrinsic::NatLt(l, r) => print_infix("<", l, r, frame),
-        Intrinsic::NatDiv(l, r) => print_infix("/", l, r, frame),
-        Intrinsic::NatRem(l, r) => print_infix("%", l, r, frame),
+        Intrinsic::NatDiv {
+            dividend: l,
+            divisor: r,
+            ..
+        } => print_infix("/", l, r, frame),
+        Intrinsic::NatRem {
+            dividend: l,
+            divisor: r,
+            ..
+        } => print_infix("%", l, r, frame),
         Intrinsic::NatGt(l, r) => print_infix(">", l, r, frame),
         Intrinsic::NatLte(l, r) => print_infix("<=", l, r, frame),
         Intrinsic::NatGte(l, r) => print_infix(">=", l, r, frame),
@@ -601,8 +609,16 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
         Intrinsic::IntAdd(l, r) => print_infix("+", l, r, frame),
         Intrinsic::IntSub(l, r) => print_infix("-", l, r, frame),
         Intrinsic::IntMul(l, r) => print_infix("*", l, r, frame),
-        Intrinsic::IntDiv(l, r) => print_infix("/", l, r, frame),
-        Intrinsic::IntRem(l, r) => print_infix("%", l, r, frame),
+        Intrinsic::IntDiv {
+            dividend: l,
+            divisor: r,
+            ..
+        } => print_infix("/", l, r, frame),
+        Intrinsic::IntRem {
+            dividend: l,
+            divisor: r,
+            ..
+        } => print_infix("%", l, r, frame),
         Intrinsic::IntLt(l, r) => print_infix("<", l, r, frame),
         Intrinsic::IntGt(l, r) => print_infix(">", l, r, frame),
         Intrinsic::IntLte(l, r) => print_infix("<=", l, r, frame),
@@ -641,7 +657,7 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
         Intrinsic::FltTrunc(i) => print_unary("Flt.trunc ", i, frame),
         Intrinsic::FltNearest(i) => print_unary("Flt.nearest ", i, frame),
         Intrinsic::FltToLeBytes(i) => print_unary("Flt.to_le_bytes ", i, frame),
-        Intrinsic::FltOfLeBytes(i) => print_unary("Flt.of_le_bytes ", i, frame),
+        Intrinsic::FltOfLeBytes { bin: i, .. } => print_unary("Flt.of_le_bytes ", i, frame),
         Intrinsic::NatToInt(i) => print_unary("Nat.to_int ", i, frame),
         Intrinsic::NatToFlt(i) => print_unary("Nat.to_flt ", i, frame),
         Intrinsic::IntToNat(i) => print_unary("Int.to_nat ", i, frame),

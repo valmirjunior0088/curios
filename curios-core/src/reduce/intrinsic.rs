@@ -186,10 +186,19 @@ impl Euclid {
         }
     }
 
-    fn rebuild(self, left: Term, right: Term) -> Intrinsic {
+    /// The neutral rebuild carries the *original* proof through unreduced. Its proposition is stated over the operands, which have only been reduced, so the two are convertible and the same proof still inhabits the rebuilt bound — reduction never has to derive one. Leaving it unreduced is deliberate besides: a bound's normal form is unobservable under proof irrelevance, and reducing into it would unfold whatever the caller proved it with, at every division this passes.
+    fn rebuild(self, left: Term, right: Term, non_zero: Term) -> Intrinsic {
         match self {
-            Euclid::Quotient => Intrinsic::NatDiv(left, right),
-            Euclid::Remainder => Intrinsic::NatRem(left, right),
+            Euclid::Quotient => Intrinsic::NatDiv {
+                dividend: left,
+                divisor: right,
+                non_zero,
+            },
+            Euclid::Remainder => Intrinsic::NatRem {
+                dividend: left,
+                divisor: right,
+                non_zero,
+            },
         }
     }
 }
@@ -208,7 +217,7 @@ fn nat_bound(term: &Term) -> Option<Natural> {
         Intrinsic::Nat(Nat::Zero) => Some(Natural::zero()),
         Intrinsic::Nat(Nat::Succ(floor, inner)) => Some(floor + nat_bound(inner)?),
         Intrinsic::ByteToNat(_) => Some(Natural::from(u8::MAX)),
-        Intrinsic::NatRem(_, divisor) => {
+        Intrinsic::NatRem { divisor, .. } => {
             let divisor = divisor.as_nat()?.to_natural()?;
             (!divisor.is_zero()).then(|| divisor - Natural::one())
         }
@@ -298,6 +307,7 @@ fn reduce_nat_division(
     reducer: &mut impl Reducer,
     left: &Term,
     right: &Term,
+    non_zero: &Term,
     euclid: Euclid,
 ) -> Result<Subterm, ReduceError> {
     let span = right.span().or_else(|| left.span());
@@ -329,9 +339,11 @@ fn reduce_nat_division(
         // The floor law alone, for a dividend the split could not close: peel the whole divisors the floor certainly carries and leave the rest neutral.
         let (floor, inner) = Nat::decompose(&left);
         if floor >= *divisor {
-            let peeled = Term::intrinsic(
-                euclid.rebuild(Nat::rebuild(&floor % divisor, inner), right.clone()),
-            );
+            let peeled = Term::intrinsic(euclid.rebuild(
+                Nat::rebuild(&floor % divisor, inner),
+                right.clone(),
+                non_zero.clone(),
+            ));
 
             return Ok(Term::unwrap_or_clone(match euclid {
                 Euclid::Quotient => Nat::rebuild(&floor / divisor, peeled),
@@ -340,7 +352,11 @@ fn reduce_nat_division(
         }
     }
 
-    Ok(Subterm::Intrinsic(euclid.rebuild(left, right)))
+    Ok(Subterm::Intrinsic(euclid.rebuild(
+        left,
+        right,
+        non_zero.clone(),
+    )))
 }
 
 /// `Int` counterpart of [`reduce_nat_binary`]: fold both literal operands or rebuild the neutral term. The fold is partial for the same reason — the shifts decline a negative or oversized literal shift count (`None`); the total ops just wrap their result in `Some`.
@@ -803,12 +819,16 @@ pub fn reduce_intrinsic(
             },
             Intrinsic::nat_lt,
         ),
-        Intrinsic::NatDiv(left, right) => {
-            reduce_nat_division(reducer, left, right, Euclid::Quotient)
-        }
-        Intrinsic::NatRem(left, right) => {
-            reduce_nat_division(reducer, left, right, Euclid::Remainder)
-        }
+        Intrinsic::NatDiv {
+            dividend,
+            divisor,
+            non_zero,
+        } => reduce_nat_division(reducer, dividend, divisor, non_zero, Euclid::Quotient),
+        Intrinsic::NatRem {
+            dividend,
+            divisor,
+            non_zero,
+        } => reduce_nat_division(reducer, dividend, divisor, non_zero, Euclid::Remainder),
         Intrinsic::NatGt(left, right) => reduce_nat_compare(
             reducer,
             left,
@@ -962,21 +982,37 @@ pub fn reduce_intrinsic(
             |left, right| Some(Intrinsic::Int(left * right)),
             Intrinsic::IntMul,
         ),
-        Intrinsic::IntDiv(left, right) => reduce_int_division(
+        Intrinsic::IntDiv {
+            dividend,
+            divisor,
+            non_zero,
+        } => reduce_int_division(
             reducer,
-            left,
-            right,
+            dividend,
+            divisor,
             "Int/div",
             Integer::checked_div,
-            Intrinsic::IntDiv,
+            |dividend, divisor| Intrinsic::IntDiv {
+                dividend,
+                divisor,
+                non_zero: non_zero.clone(),
+            },
         ),
-        Intrinsic::IntRem(left, right) => reduce_int_division(
+        Intrinsic::IntRem {
+            dividend,
+            divisor,
+            non_zero,
+        } => reduce_int_division(
             reducer,
-            left,
-            right,
+            dividend,
+            divisor,
             "Int/rem",
             Integer::checked_rem,
-            Intrinsic::IntRem,
+            |dividend, divisor| Intrinsic::IntRem {
+                dividend,
+                divisor,
+                non_zero: non_zero.clone(),
+            },
         ),
         Intrinsic::IntLt(left, right) => reduce_int_binary(
             reducer,
@@ -1140,9 +1176,12 @@ pub fn reduce_intrinsic(
         Intrinsic::FltTrunc(inner) => reduce_flt_unary(reducer, inner, Intrinsic::FltTrunc),
         Intrinsic::FltNearest(inner) => reduce_flt_unary(reducer, inner, Intrinsic::FltNearest),
         Intrinsic::FltToLeBytes(inner) => reduce_flt_unary(reducer, inner, Intrinsic::FltToLeBytes),
-        Intrinsic::FltOfLeBytes(inner) => {
-            let inner = reducer.reduce_forced(inner.clone())?;
-            Ok(Subterm::Intrinsic(Intrinsic::FltOfLeBytes(inner)))
+        Intrinsic::FltOfLeBytes { bin, four_bytes } => {
+            let bin = reducer.reduce_forced(bin.clone())?;
+            Ok(Subterm::Intrinsic(Intrinsic::FltOfLeBytes {
+                bin,
+                four_bytes: four_bytes.clone(),
+            }))
         }
         // The conversions preserve the number, never the bits — a bit view belongs to explicit `Bin` casts. `Nat/to_int` is total: ℕ embeds in ℤ, and both are unbounded here. The runtime's carrier-range traps stay where they always were, at the `into_wasm` boundary.
         Intrinsic::NatToInt(inner) => reduce_nat_unary(
@@ -2562,6 +2601,11 @@ mod tests {
         Term::intrinsic(Intrinsic::NatType)
     }
 
+    /// A stand-in for a discharged bound. Reduction never inspects one — proof irrelevance makes its value unobservable, and these tests are about the fold laws rather than the obligation — so every bounded operation below states it with the same name.
+    fn qed() -> Term {
+        symbol(9_999, "qed")
+    }
+
     fn symbol(index: u32, hint: &'static str) -> Term {
         Term::free_var(&Free::local(index, Some(hint)))
     }
@@ -2601,13 +2645,18 @@ mod tests {
         }
 
         for divisor in [1u32, 2, 7, 256, 1000] {
-            let shape = Term::intrinsic(Intrinsic::NatRem(symbol(0, "x"), lit(divisor)));
+            let shape = Term::intrinsic(Intrinsic::NatRem {
+                dividend: symbol(0, "x"),
+                divisor: lit(divisor),
+                non_zero: qed(),
+            });
             let bound = nat_bound(&shape).expect("a remainder carries a bound");
             for dividend in [0u32, 1, 5, 255, 999, 100_000] {
-                let value = fold(Term::intrinsic(Intrinsic::NatRem(
-                    lit(dividend),
-                    lit(divisor),
-                )));
+                let value = fold(Term::intrinsic(Intrinsic::NatRem {
+                    dividend: lit(dividend),
+                    divisor: lit(divisor),
+                    non_zero: qed(),
+                }));
                 let value = value
                     .as_nat()
                     .expect("closed")
@@ -2812,14 +2861,19 @@ mod tests {
         let dividend = fold(plus(scaled(256, x.clone()), digit.clone()));
 
         assert_eq!(
-            fold(Term::intrinsic(Intrinsic::NatDiv(
-                dividend.clone(),
-                lit(256)
-            ))),
+            fold(Term::intrinsic(Intrinsic::NatDiv {
+                dividend: dividend.clone(),
+                divisor: lit(256),
+                non_zero: qed(),
+            })),
             x,
         );
         assert_eq!(
-            fold(Term::intrinsic(Intrinsic::NatRem(dividend, lit(256)))),
+            fold(Term::intrinsic(Intrinsic::NatRem {
+                dividend,
+                divisor: lit(256),
+                non_zero: qed(),
+            })),
             digit,
         );
     }
@@ -2832,12 +2886,13 @@ mod tests {
         let indivisible = plus(scaled(100, x.clone()), to_nat_of(symbol(1, "b")));
 
         for dividend in [fold(unbounded), fold(indivisible)] {
-            let divided = fold(Term::intrinsic(Intrinsic::NatDiv(
-                dividend.clone(),
-                lit(256),
-            )));
+            let divided = fold(Term::intrinsic(Intrinsic::NatDiv {
+                dividend: dividend.clone(),
+                divisor: lit(256),
+                non_zero: qed(),
+            }));
             assert!(
-                matches!(&*divided, Subterm::Intrinsic(Intrinsic::NatDiv(..))),
+                matches!(&*divided, Subterm::Intrinsic(Intrinsic::NatDiv { .. })),
                 "a division that is not forced folded anyway: {divided:?}",
             );
         }
@@ -2847,7 +2902,11 @@ mod tests {
     #[test]
     fn a_bounded_operand_decides_a_comparison_against_a_literal() {
         let mut reducer = Folding;
-        let remainder = Term::intrinsic(Intrinsic::NatRem(symbol(0, "x"), lit(256)));
+        let remainder = Term::intrinsic(Intrinsic::NatRem {
+            dividend: symbol(0, "x"),
+            divisor: lit(256),
+            non_zero: qed(),
+        });
 
         assert_eq!(
             compare_nat(&mut reducer, remainder.clone(), lit(256))

@@ -302,7 +302,7 @@ fn guarded_binary(
     operand: Term,
     output: Term,
     bound: Term,
-    ctor: fn(Term, Term) -> Intrinsic,
+    ctor: fn(Term, Term, Term) -> Intrinsic,
 ) -> TopItem {
     pub_fn_marked(
         label,
@@ -312,7 +312,8 @@ fn guarded_binary(
             (Plicity::Implicit, "ok", bound),
         ],
         output,
-        intrinsic(ctor(name("a"), name("b"))),
+        // The proof parameter is named in the body, which is what carries the bound into Core: an implicit nothing referenced would be checked here and forgotten, leaving the kernel nothing to re-verify.
+        intrinsic(ctor(name("a"), name("b"), name("ok"))),
     )
 }
 
@@ -321,7 +322,7 @@ fn guarded_unary(
     input: Term,
     output: Term,
     bound: Term,
-    ctor: fn(Term) -> Intrinsic,
+    ctor: fn(Term, Term) -> Intrinsic,
 ) -> TopItem {
     pub_fn_marked(
         label,
@@ -330,7 +331,7 @@ fn guarded_unary(
             (Plicity::Implicit, "ok", bound),
         ],
         output,
-        intrinsic(ctor(name("a"))),
+        intrinsic(ctor(name("a"), name("ok"))),
     )
 }
 
@@ -375,8 +376,28 @@ fn nat_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
         binary("add", nat(), nat(), Intrinsic::NatAdd),
         binary("sub", nat(), nat(), Intrinsic::NatSub),
         binary("mul", nat(), nat(), Intrinsic::NatMul),
-        guarded_binary("div", nat(), nat(), nat_nonzero(syntax), Intrinsic::NatDiv),
-        guarded_binary("rem", nat(), nat(), nat_nonzero(syntax), Intrinsic::NatRem),
+        guarded_binary(
+            "div",
+            nat(),
+            nat(),
+            nat_nonzero(syntax),
+            |dividend, divisor, non_zero| Intrinsic::NatDiv {
+                dividend,
+                divisor,
+                non_zero,
+            },
+        ),
+        guarded_binary(
+            "rem",
+            nat(),
+            nat(),
+            nat_nonzero(syntax),
+            |dividend, divisor, non_zero| Intrinsic::NatRem {
+                dividend,
+                divisor,
+                non_zero,
+            },
+        ),
         binary("lt", nat(), bool_(), Intrinsic::NatLt),
         binary("gt", nat(), bool_(), Intrinsic::NatGt),
         binary("lte", nat(), bool_(), Intrinsic::NatLte),
@@ -425,8 +446,28 @@ fn int_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
         binary("add", int(), int(), Intrinsic::IntAdd),
         binary("sub", int(), int(), Intrinsic::IntSub),
         binary("mul", int(), int(), Intrinsic::IntMul),
-        guarded_binary("div", int(), int(), int_nonzero(syntax), Intrinsic::IntDiv),
-        guarded_binary("rem", int(), int(), int_nonzero(syntax), Intrinsic::IntRem),
+        guarded_binary(
+            "div",
+            int(),
+            int(),
+            int_nonzero(syntax),
+            |dividend, divisor, non_zero| Intrinsic::IntDiv {
+                dividend,
+                divisor,
+                non_zero,
+            },
+        ),
+        guarded_binary(
+            "rem",
+            int(),
+            int(),
+            int_nonzero(syntax),
+            |dividend, divisor, non_zero| Intrinsic::IntRem {
+                dividend,
+                divisor,
+                non_zero,
+            },
+        ),
         binary("lt", int(), bool_(), Intrinsic::IntLt),
         binary("gt", int(), bool_(), Intrinsic::IntGt),
         binary("lte", int(), bool_(), Intrinsic::IntLte),
@@ -490,7 +531,7 @@ fn flt_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
             bin(Grain::X),
             flt(),
             applied(registered(syntax.proof.bytes_four), vec![name("a")]),
-            Intrinsic::FltOfLeBytes,
+            |bin, four_bytes| Intrinsic::FltOfLeBytes { bin, four_bytes },
         ),
     ]
 }

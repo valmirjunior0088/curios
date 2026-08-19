@@ -274,9 +274,11 @@ impl<E: Env> Walk<'_, E> {
             ) => self.monoid_shape(FreeMonoid::List, term),
 
             // Arithmetic descent. Both operations are monotone and floor-like on Core's unbounded `Nat` — `NatDiv` folds through `Natural` division and `NatSub` truncates at zero — so each is below its left operand whenever that operand is nonzero.
-            Subterm::Intrinsic(Intrinsic::NatDiv(left, right)) => {
-                self.arithmetic_shape(left, right, &Natural::from(2usize))
-            }
+            Subterm::Intrinsic(Intrinsic::NatDiv {
+                dividend: left,
+                divisor: right,
+                ..
+            }) => self.arithmetic_shape(left, right, &Natural::from(2usize)),
 
             Subterm::Intrinsic(Intrinsic::NatSub(left, right)) => {
                 self.arithmetic_shape(left, right, &Natural::from(1usize))

@@ -127,8 +127,6 @@ pub(super) fn infer_intrinsic(
         Intrinsic::NatAdd(l, r)
         | Intrinsic::NatSub(l, r)
         | Intrinsic::NatMul(l, r)
-        | Intrinsic::NatDiv(l, r)
-        | Intrinsic::NatRem(l, r)
         | Intrinsic::NatAnd(l, r)
         | Intrinsic::NatOr(l, r)
         | Intrinsic::NatXor(l, r)
@@ -139,8 +137,6 @@ pub(super) fn infer_intrinsic(
         Intrinsic::IntAdd(l, r)
         | Intrinsic::IntSub(l, r)
         | Intrinsic::IntMul(l, r)
-        | Intrinsic::IntDiv(l, r)
-        | Intrinsic::IntRem(l, r)
         | Intrinsic::IntAnd(l, r)
         | Intrinsic::IntOr(l, r)
         | Intrinsic::IntXor(l, r)
@@ -182,7 +178,21 @@ pub(super) fn infer_intrinsic(
         Intrinsic::FltToInt(i) => unary(kernel, i, flt_type(), int_type()),
         // The IEEE-754 bytes of a float, and its inverse.
         Intrinsic::FltToLeBytes(i) => unary(kernel, i, flt_type(), bin_type(Grain::X)),
-        Intrinsic::FltOfLeBytes(i) => unary(kernel, i, bin_type(Grain::X), flt_type()),
+        Intrinsic::FltOfLeBytes { bin, .. } => unary(kernel, bin, bin_type(Grain::X), flt_type()),
+
+        // The bounded arithmetic. Their value operands check exactly as the unbounded siblings above do; the bound field is checked separately, against the proposition `Intrinsic::operand_types` names for it.
+        Intrinsic::NatDiv {
+            dividend, divisor, ..
+        }
+        | Intrinsic::NatRem {
+            dividend, divisor, ..
+        } => binary(kernel, dividend, divisor, nat_type(), nat_type()),
+        Intrinsic::IntDiv {
+            dividend, divisor, ..
+        }
+        | Intrinsic::IntRem {
+            dividend, divisor, ..
+        } => binary(kernel, dividend, divisor, int_type(), int_type()),
 
         // `Bin`: a sequence of bytes or of bits, depending on the grain.
         Intrinsic::BinLen(grain, bin) => unary(kernel, bin, bin_type(*grain), nat_type()),

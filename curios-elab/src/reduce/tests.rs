@@ -770,6 +770,7 @@ fn reduce_nat_div_by_zero_reports() {
             Term::intrinsic(Intrinsic::nat_div(
                 Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))),
                 Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
             )),
         ),
         Err(ReduceError::DivisionByZero {
@@ -785,6 +786,7 @@ fn reduce_nat_div_by_zero_reports() {
             Term::intrinsic(Intrinsic::nat_div(
                 Term::free_var(&x),
                 Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))),
+                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
             )),
         ),
         Err(ReduceError::DivisionByZero {
@@ -797,6 +799,7 @@ fn reduce_nat_div_by_zero_reports() {
     let stuck = Term::intrinsic(Intrinsic::nat_div(
         Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))),
         Subterm::Var(Var::free(y.clone())),
+        Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
     ));
     assert_eq!(reduce(&mut context, stuck.clone()), Ok(stuck));
 }
@@ -809,6 +812,7 @@ fn reduce_nat_rem_by_zero_reports() {
             &mut context,
             Term::intrinsic(Intrinsic::nat_rem(
                 Subterm::Intrinsic(Intrinsic::Nat(Nat::new(1usize))),
+                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
                 Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
             )),
         ),
@@ -828,6 +832,7 @@ fn reduce_int_div_by_zero_reports() {
             Term::intrinsic(Intrinsic::int_div(
                 Subterm::Intrinsic(Intrinsic::Int(Integer::from(1))),
                 Subterm::Intrinsic(Intrinsic::Int(Integer::from(0))),
+                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
             )),
         ),
         Err(ReduceError::DivisionByZero {
@@ -842,6 +847,7 @@ fn reduce_int_div_by_zero_reports() {
             Term::intrinsic(Intrinsic::int_rem(
                 Subterm::Intrinsic(Intrinsic::Int(Integer::from(1))),
                 Subterm::Intrinsic(Intrinsic::Int(Integer::from(0))),
+                Subterm::Intrinsic(Intrinsic::Nat(Nat::new(0usize))),
             )),
         ),
         Err(ReduceError::DivisionByZero {

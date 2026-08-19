@@ -1246,12 +1246,24 @@ fn zonk_intrinsic(context: &Context, intrinsic: &Intrinsic) -> Result<Intrinsic,
             Intrinsic::NatMul(zonk_term(context, a)?, zonk_term(context, b)?)
         }
         Intrinsic::NatLt(a, b) => Intrinsic::NatLt(zonk_term(context, a)?, zonk_term(context, b)?),
-        Intrinsic::NatDiv(a, b) => {
-            Intrinsic::NatDiv(zonk_term(context, a)?, zonk_term(context, b)?)
-        }
-        Intrinsic::NatRem(a, b) => {
-            Intrinsic::NatRem(zonk_term(context, a)?, zonk_term(context, b)?)
-        }
+        Intrinsic::NatDiv {
+            dividend,
+            divisor,
+            non_zero,
+        } => Intrinsic::NatDiv {
+            dividend: zonk_term(context, dividend)?,
+            divisor: zonk_term(context, divisor)?,
+            non_zero: zonk_term(context, non_zero)?,
+        },
+        Intrinsic::NatRem {
+            dividend,
+            divisor,
+            non_zero,
+        } => Intrinsic::NatRem {
+            dividend: zonk_term(context, dividend)?,
+            divisor: zonk_term(context, divisor)?,
+            non_zero: zonk_term(context, non_zero)?,
+        },
         Intrinsic::NatGt(a, b) => Intrinsic::NatGt(zonk_term(context, a)?, zonk_term(context, b)?),
         Intrinsic::NatLte(a, b) => {
             Intrinsic::NatLte(zonk_term(context, a)?, zonk_term(context, b)?)
@@ -1330,12 +1342,24 @@ fn zonk_intrinsic(context: &Context, intrinsic: &Intrinsic) -> Result<Intrinsic,
         Intrinsic::IntMul(a, b) => {
             Intrinsic::IntMul(zonk_term(context, a)?, zonk_term(context, b)?)
         }
-        Intrinsic::IntDiv(a, b) => {
-            Intrinsic::IntDiv(zonk_term(context, a)?, zonk_term(context, b)?)
-        }
-        Intrinsic::IntRem(a, b) => {
-            Intrinsic::IntRem(zonk_term(context, a)?, zonk_term(context, b)?)
-        }
+        Intrinsic::IntDiv {
+            dividend,
+            divisor,
+            non_zero,
+        } => Intrinsic::IntDiv {
+            dividend: zonk_term(context, dividend)?,
+            divisor: zonk_term(context, divisor)?,
+            non_zero: zonk_term(context, non_zero)?,
+        },
+        Intrinsic::IntRem {
+            dividend,
+            divisor,
+            non_zero,
+        } => Intrinsic::IntRem {
+            dividend: zonk_term(context, dividend)?,
+            divisor: zonk_term(context, divisor)?,
+            non_zero: zonk_term(context, non_zero)?,
+        },
         Intrinsic::IntLt(a, b) => Intrinsic::IntLt(zonk_term(context, a)?, zonk_term(context, b)?),
         Intrinsic::IntGt(a, b) => Intrinsic::IntGt(zonk_term(context, a)?, zonk_term(context, b)?),
         Intrinsic::IntLte(a, b) => {
@@ -1415,7 +1439,10 @@ fn zonk_intrinsic(context: &Context, intrinsic: &Intrinsic) -> Result<Intrinsic,
         Intrinsic::FltNearest(t) => Intrinsic::FltNearest(zonk_term(context, t)?),
 
         Intrinsic::FltToLeBytes(t) => Intrinsic::FltToLeBytes(zonk_term(context, t)?),
-        Intrinsic::FltOfLeBytes(t) => Intrinsic::FltOfLeBytes(zonk_term(context, t)?),
+        Intrinsic::FltOfLeBytes { bin, four_bytes } => Intrinsic::FltOfLeBytes {
+            bin: zonk_term(context, bin)?,
+            four_bytes: zonk_term(context, four_bytes)?,
+        },
         Intrinsic::NatToInt(t) => Intrinsic::NatToInt(zonk_term(context, t)?),
         Intrinsic::NatToFlt(t) => Intrinsic::NatToFlt(zonk_term(context, t)?),
         Intrinsic::IntToNat(t) => Intrinsic::IntToNat(zonk_term(context, t)?),

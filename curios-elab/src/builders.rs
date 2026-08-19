@@ -22,16 +22,18 @@ pub trait IntrinsicBuilders {
         S: Into<Term>;
 
     /// A `NatDiv` node from anything term-shaped.
-    fn nat_div<F, S>(left: F, right: S) -> Self
+    fn nat_div<F, S, P>(left: F, right: S, non_zero: P) -> Self
     where
         F: Into<Term>,
-        S: Into<Term>;
+        S: Into<Term>,
+        P: Into<Term>;
 
     /// A `NatRem` node from anything term-shaped.
-    fn nat_rem<F, S>(left: F, right: S) -> Self
+    fn nat_rem<F, S, P>(left: F, right: S, non_zero: P) -> Self
     where
         F: Into<Term>,
-        S: Into<Term>;
+        S: Into<Term>,
+        P: Into<Term>;
 
     /// An `IntEql` node from anything term-shaped.
     fn int_eql<F, S>(left: F, right: S) -> Self
@@ -64,16 +66,18 @@ pub trait IntrinsicBuilders {
         S: Into<Term>;
 
     /// An `IntDiv` node from anything term-shaped.
-    fn int_div<F, S>(left: F, right: S) -> Self
+    fn int_div<F, S, P>(left: F, right: S, non_zero: P) -> Self
     where
         F: Into<Term>,
-        S: Into<Term>;
+        S: Into<Term>,
+        P: Into<Term>;
 
     /// An `IntRem` node from anything term-shaped.
-    fn int_rem<F, S>(left: F, right: S) -> Self
+    fn int_rem<F, S, P>(left: F, right: S, non_zero: P) -> Self
     where
         F: Into<Term>,
-        S: Into<Term>;
+        S: Into<Term>,
+        P: Into<Term>;
 
     /// An `IntLt` node from anything term-shaped.
     fn int_lt<F, S>(left: F, right: S) -> Self
@@ -242,9 +246,10 @@ pub trait IntrinsicBuilders {
         T: Into<Term>;
 
     /// A `FltOfLeBytes` node (a float assembled from its four little-endian bytes) from anything term-shaped.
-    fn flt_of_le_bytes<T>(inner: T) -> Self
+    fn flt_of_le_bytes<T, P>(bin: T, four_bytes: P) -> Self
     where
-        T: Into<Term>;
+        T: Into<Term>,
+        P: Into<Term>;
 
     /// A cell allocation — the `Intrinsic::Cell` variant — from a term-shaped element type and initial value.
     fn cell_new<T, I>(type_: T, init: I) -> Self
@@ -275,20 +280,30 @@ impl IntrinsicBuilders for Intrinsic {
         Self::HandleEql(left.into(), right.into())
     }
 
-    fn nat_div<F, S>(left: F, right: S) -> Self
+    fn nat_div<F, S, P>(left: F, right: S, non_zero: P) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
+        P: Into<Term>,
     {
-        Self::NatDiv(left.into(), right.into())
+        Self::NatDiv {
+            dividend: left.into(),
+            divisor: right.into(),
+            non_zero: non_zero.into(),
+        }
     }
 
-    fn nat_rem<F, S>(left: F, right: S) -> Self
+    fn nat_rem<F, S, P>(left: F, right: S, non_zero: P) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
+        P: Into<Term>,
     {
-        Self::NatRem(left.into(), right.into())
+        Self::NatRem {
+            dividend: left.into(),
+            divisor: right.into(),
+            non_zero: non_zero.into(),
+        }
     }
 
     fn int_eql<F, S>(left: F, right: S) -> Self
@@ -331,20 +346,30 @@ impl IntrinsicBuilders for Intrinsic {
         Self::IntNeq(left.into(), right.into())
     }
 
-    fn int_div<F, S>(left: F, right: S) -> Self
+    fn int_div<F, S, P>(left: F, right: S, non_zero: P) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
+        P: Into<Term>,
     {
-        Self::IntDiv(left.into(), right.into())
+        Self::IntDiv {
+            dividend: left.into(),
+            divisor: right.into(),
+            non_zero: non_zero.into(),
+        }
     }
 
-    fn int_rem<F, S>(left: F, right: S) -> Self
+    fn int_rem<F, S, P>(left: F, right: S, non_zero: P) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
+        P: Into<Term>,
     {
-        Self::IntRem(left.into(), right.into())
+        Self::IntRem {
+            dividend: left.into(),
+            divisor: right.into(),
+            non_zero: non_zero.into(),
+        }
     }
 
     fn int_lt<F, S>(left: F, right: S) -> Self
@@ -573,11 +598,15 @@ impl IntrinsicBuilders for Intrinsic {
         Self::FltToLeBytes(inner.into())
     }
 
-    fn flt_of_le_bytes<T>(inner: T) -> Self
+    fn flt_of_le_bytes<T, P>(bin: T, four_bytes: P) -> Self
     where
         T: Into<Term>,
+        P: Into<Term>,
     {
-        Self::FltOfLeBytes(inner.into())
+        Self::FltOfLeBytes {
+            bin: bin.into(),
+            four_bytes: four_bytes.into(),
+        }
     }
 
     fn cell_new<T, I>(type_: T, init: I) -> Self

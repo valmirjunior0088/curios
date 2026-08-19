@@ -1059,12 +1059,24 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Intrinsic::NatLt(left, right) => {
                 curios_core::Intrinsic::nat_lt(self.term(left)?, self.term(right)?)
             }
-            Intrinsic::NatDiv(left, right) => {
-                curios_core::Intrinsic::nat_div(self.term(left)?, self.term(right)?)
-            }
-            Intrinsic::NatRem(left, right) => {
-                curios_core::Intrinsic::nat_rem(self.term(left)?, self.term(right)?)
-            }
+            Intrinsic::NatDiv {
+                dividend,
+                divisor,
+                non_zero,
+            } => curios_core::Intrinsic::nat_div(
+                self.term(dividend)?,
+                self.term(divisor)?,
+                self.term(non_zero)?,
+            ),
+            Intrinsic::NatRem {
+                dividend,
+                divisor,
+                non_zero,
+            } => curios_core::Intrinsic::nat_rem(
+                self.term(dividend)?,
+                self.term(divisor)?,
+                self.term(non_zero)?,
+            ),
             Intrinsic::NatGt(left, right) => {
                 curios_core::Intrinsic::nat_gt(self.term(left)?, self.term(right)?)
             }
@@ -1115,12 +1127,24 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Intrinsic::IntMul(left, right) => {
                 curios_core::Intrinsic::int_mul(self.term(left)?, self.term(right)?)
             }
-            Intrinsic::IntDiv(left, right) => {
-                curios_core::Intrinsic::int_div(self.term(left)?, self.term(right)?)
-            }
-            Intrinsic::IntRem(left, right) => {
-                curios_core::Intrinsic::int_rem(self.term(left)?, self.term(right)?)
-            }
+            Intrinsic::IntDiv {
+                dividend,
+                divisor,
+                non_zero,
+            } => curios_core::Intrinsic::int_div(
+                self.term(dividend)?,
+                self.term(divisor)?,
+                self.term(non_zero)?,
+            ),
+            Intrinsic::IntRem {
+                dividend,
+                divisor,
+                non_zero,
+            } => curios_core::Intrinsic::int_rem(
+                self.term(dividend)?,
+                self.term(divisor)?,
+                self.term(non_zero)?,
+            ),
             Intrinsic::IntLt(left, right) => {
                 curios_core::Intrinsic::int_lt(self.term(left)?, self.term(right)?)
             }
@@ -1211,8 +1235,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Intrinsic::FltToLeBytes(inner) => {
                 curios_core::Intrinsic::flt_to_le_bytes(self.term(inner)?)
             }
-            Intrinsic::FltOfLeBytes(inner) => {
-                curios_core::Intrinsic::flt_of_le_bytes(self.term(inner)?)
+            Intrinsic::FltOfLeBytes { bin, four_bytes } => {
+                curios_core::Intrinsic::flt_of_le_bytes(self.term(bin)?, self.term(four_bytes)?)
             }
             Intrinsic::NatToInt(inner) => curios_core::Intrinsic::nat_to_int(self.term(inner)?),
             Intrinsic::HandleType => curios_core::Intrinsic::HandleType,

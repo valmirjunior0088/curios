@@ -1,8 +1,8 @@
 use {
-    super::{Bound, MetaId, Nat, Subterm, Term, Var, Visit},
+    super::{Bound, Free, MetaId, Nat, Subterm, Term, Var, Visit},
     curios_abi::WireType,
     curios_num::{Flt, Integer},
-    curios_utilities::{Grain, PackedBin},
+    curios_utilities::{Grain, PackedBin, SyntaxName, SyntaxRegistry},
     std::collections::BTreeSet,
 };
 
@@ -43,8 +43,17 @@ pub enum Intrinsic {
     NatSub(Term, Term),
     NatMul(Term, Term),
     NatLt(Term, Term),
-    NatDiv(Term, Term),
-    NatRem(Term, Term),
+    /// `non_zero` proves `0 < divisor`. Carried as a field rather than left to `/sys`'s declaration so the obligation survives into Core, where the kernel re-checks it; see [`Intrinsic::operand_types`].
+    NatDiv {
+        dividend: Term,
+        divisor: Term,
+        non_zero: Term,
+    },
+    NatRem {
+        dividend: Term,
+        divisor: Term,
+        non_zero: Term,
+    },
     NatGt(Term, Term),
     NatLte(Term, Term),
     NatGte(Term, Term),
@@ -74,8 +83,17 @@ pub enum Intrinsic {
     IntAdd(Term, Term),
     IntSub(Term, Term),
     IntMul(Term, Term),
-    IntDiv(Term, Term),
-    IntRem(Term, Term),
+    /// The `Int` twin of [`Intrinsic::NatDiv`]'s bound, stated as `divisor != 0` — a negative divisor is fine, so `0 <` will not serve.
+    IntDiv {
+        dividend: Term,
+        divisor: Term,
+        non_zero: Term,
+    },
+    IntRem {
+        dividend: Term,
+        divisor: Term,
+        non_zero: Term,
+    },
     IntLt(Term, Term),
     IntGt(Term, Term),
     IntLte(Term, Term),
@@ -119,7 +137,11 @@ pub enum Intrinsic {
     IntToFlt(Term),
     FltToNat(Term),
     FltToLeBytes(Term),
-    FltOfLeBytes(Term),
+    /// `four_bytes` proves `len(bin) = 4`, which is the whole of what reinterpreting a binary32 needs.
+    FltOfLeBytes {
+        bin: Term,
+        four_bytes: Term,
+    },
     FltToInt(Term),
     BinType(Grain),
     Bin(Grain, PackedBin),
@@ -536,7 +558,6 @@ impl Intrinsic {
             Intrinsic::Nat(Nat::Succ(_, inner)) => visit(inner),
 
             Intrinsic::FltToLeBytes(t)
-            | Intrinsic::FltOfLeBytes(t)
             | Intrinsic::NatToInt(t)
             | Intrinsic::NatToFlt(t)
             | Intrinsic::IntToNat(t)
@@ -576,8 +597,6 @@ impl Intrinsic {
             | Intrinsic::NatSub(a, b)
             | Intrinsic::NatMul(a, b)
             | Intrinsic::NatLt(a, b)
-            | Intrinsic::NatDiv(a, b)
-            | Intrinsic::NatRem(a, b)
             | Intrinsic::NatGt(a, b)
             | Intrinsic::NatLte(a, b)
             | Intrinsic::NatGte(a, b)
@@ -598,8 +617,6 @@ impl Intrinsic {
             | Intrinsic::IntAdd(a, b)
             | Intrinsic::IntSub(a, b)
             | Intrinsic::IntMul(a, b)
-            | Intrinsic::IntDiv(a, b)
-            | Intrinsic::IntRem(a, b)
             | Intrinsic::IntLt(a, b)
             | Intrinsic::IntGt(a, b)
             | Intrinsic::IntLte(a, b)
@@ -710,6 +727,40 @@ impl Intrinsic {
                 visit(d);
             }
 
+            // The bounded operations walk their proof beside their value operands, and must: substitution reaches a term only through this walk, and a bound's proposition mentions the very operands around it. Congruence still declines to compare the proof *structurally* — it enqueues it at that proposition instead, where irrelevance applies (see `operand_types`).
+            Intrinsic::NatDiv {
+                dividend: a,
+                divisor: b,
+                non_zero: p,
+            }
+            | Intrinsic::NatRem {
+                dividend: a,
+                divisor: b,
+                non_zero: p,
+            }
+            | Intrinsic::IntDiv {
+                dividend: a,
+                divisor: b,
+                non_zero: p,
+            }
+            | Intrinsic::IntRem {
+                dividend: a,
+                divisor: b,
+                non_zero: p,
+            } => {
+                visit(a);
+                visit(b);
+                visit(p);
+            }
+
+            Intrinsic::FltOfLeBytes {
+                bin: a,
+                four_bytes: p,
+            } => {
+                visit(a);
+                visit(p);
+            }
+
             Intrinsic::BinConcat {
                 grain: Grain::X,
                 operands: terms,
@@ -796,6 +847,45 @@ impl Intrinsic {
         self.for_each_operand(&mut |term| term.collect_construction_names(names));
     }
 
+    /// The type each traversed operand is stated at, in [`traverse`](Self::traverse) order.
+    ///
+    /// **Sparse on purpose.** An entry is `Some` only where the operand's type is *declared* rather than implied by the operation's shape, which today means the bound fields alone; a vector shorter than the operand list leaves the rest at ground. That is what lets the ninety-odd operations carrying no declared type write nothing here and stay incapable of falling out of step with their own arity.
+    ///
+    /// It exists so congruence can compare a proof **at its proposition** instead of at a flat `Type`, which makes proof irrelevance fire through the ordinary gate rather than through a rule about bounds. Skipping the field instead would have been a new trusted rule; this is a use of one the theory already has, resting on the kernel's check that the field really does inhabit the proposition named here.
+    ///
+    /// It is also the first increment of the operand telescope intrinsics have never had. The same types are already written twice — as checking procedures in `curios-cert`'s `infer_intrinsic` and `curios-elab`'s `elaborate_intrinsic` — which is why a third consumer could not read them. Filling in the remaining entries is what would let both of those collapse into one driver over this.
+    ///
+    /// **The four sequence accessors are absent, and not by choice.** `BinGet`, `BinSlice`, `ListGet` and `ListSlice` carry no bound field, because `spine.rs` fuses adjacent slice windows and the fused bound is one nobody proved — composing it needs the reducer to construct a proof. `documentation/roadmap/symbolic_addition_reassociates_spec.md` records why every route there dead-ends on `(s + a) + c` not being convertible with `s + (a + c)`, and is the work that unblocks them.
+    pub fn operand_types(&self, syntax: &SyntaxRegistry) -> Vec<Option<Term>> {
+        let applied = |slot: SyntaxName, args: Vec<Term>| {
+            Some(Term::apply(
+                Term::var(Var::free(Free::global(slot.qualifier()))),
+                args,
+            ))
+        };
+
+        match self {
+            // `0 < divisor`: a natural is nonzero exactly when zero is below it, which is why `Nat` needs no `NonZero` of its own.
+            Intrinsic::NatDiv { divisor, .. } | Intrinsic::NatRem { divisor, .. } => vec![
+                None,
+                None,
+                applied(
+                    syntax.proof.lt,
+                    vec![Term::intrinsic(Intrinsic::Nat(Nat::Zero)), divisor.clone()],
+                ),
+            ],
+            Intrinsic::IntDiv { divisor, .. } | Intrinsic::IntRem { divisor, .. } => vec![
+                None,
+                None,
+                applied(syntax.proof.int_non_zero, vec![divisor.clone()]),
+            ],
+            Intrinsic::FltOfLeBytes { bin, .. } => {
+                vec![None, applied(syntax.proof.bytes_four, vec![bin.clone()])]
+            }
+            _ => Vec::new(),
+        }
+    }
+
     pub fn traverse<F>(&self, visit: &mut Visit<F>) -> Intrinsic
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
@@ -815,8 +905,24 @@ impl Intrinsic {
             Intrinsic::NatSub(l, r) => traverse_binary(l, r, visit, Intrinsic::NatSub),
             Intrinsic::NatMul(l, r) => traverse_binary(l, r, visit, Intrinsic::NatMul),
             Intrinsic::NatLt(l, r) => traverse_binary(l, r, visit, Intrinsic::NatLt),
-            Intrinsic::NatDiv(l, r) => traverse_binary(l, r, visit, Intrinsic::NatDiv),
-            Intrinsic::NatRem(l, r) => traverse_binary(l, r, visit, Intrinsic::NatRem),
+            Intrinsic::NatDiv {
+                dividend: a,
+                divisor: b,
+                non_zero: p,
+            } => Intrinsic::NatDiv {
+                dividend: visit.visit_subterm(a),
+                divisor: visit.visit_subterm(b),
+                non_zero: visit.visit_subterm(p),
+            },
+            Intrinsic::NatRem {
+                dividend: a,
+                divisor: b,
+                non_zero: p,
+            } => Intrinsic::NatRem {
+                dividend: visit.visit_subterm(a),
+                divisor: visit.visit_subterm(b),
+                non_zero: visit.visit_subterm(p),
+            },
             Intrinsic::NatGt(l, r) => traverse_binary(l, r, visit, Intrinsic::NatGt),
             Intrinsic::NatLte(l, r) => traverse_binary(l, r, visit, Intrinsic::NatLte),
             Intrinsic::NatGte(l, r) => traverse_binary(l, r, visit, Intrinsic::NatGte),
@@ -851,8 +957,24 @@ impl Intrinsic {
             Intrinsic::IntAdd(l, r) => traverse_binary(l, r, visit, Intrinsic::IntAdd),
             Intrinsic::IntSub(l, r) => traverse_binary(l, r, visit, Intrinsic::IntSub),
             Intrinsic::IntMul(l, r) => traverse_binary(l, r, visit, Intrinsic::IntMul),
-            Intrinsic::IntDiv(l, r) => traverse_binary(l, r, visit, Intrinsic::IntDiv),
-            Intrinsic::IntRem(l, r) => traverse_binary(l, r, visit, Intrinsic::IntRem),
+            Intrinsic::IntDiv {
+                dividend: a,
+                divisor: b,
+                non_zero: p,
+            } => Intrinsic::IntDiv {
+                dividend: visit.visit_subterm(a),
+                divisor: visit.visit_subterm(b),
+                non_zero: visit.visit_subterm(p),
+            },
+            Intrinsic::IntRem {
+                dividend: a,
+                divisor: b,
+                non_zero: p,
+            } => Intrinsic::IntRem {
+                dividend: visit.visit_subterm(a),
+                divisor: visit.visit_subterm(b),
+                non_zero: visit.visit_subterm(p),
+            },
             Intrinsic::IntLt(l, r) => traverse_binary(l, r, visit, Intrinsic::IntLt),
             Intrinsic::IntGt(l, r) => traverse_binary(l, r, visit, Intrinsic::IntGt),
             Intrinsic::IntLte(l, r) => traverse_binary(l, r, visit, Intrinsic::IntLte),
@@ -891,7 +1013,10 @@ impl Intrinsic {
             Intrinsic::FltTrunc(inner) => Intrinsic::FltTrunc(visit.visit_subterm(inner)),
             Intrinsic::FltNearest(inner) => Intrinsic::FltNearest(visit.visit_subterm(inner)),
             Intrinsic::FltToLeBytes(inner) => Intrinsic::FltToLeBytes(visit.visit_subterm(inner)),
-            Intrinsic::FltOfLeBytes(inner) => Intrinsic::FltOfLeBytes(visit.visit_subterm(inner)),
+            Intrinsic::FltOfLeBytes { bin, four_bytes } => Intrinsic::FltOfLeBytes {
+                bin: visit.visit_subterm(bin),
+                four_bytes: visit.visit_subterm(four_bytes),
+            },
             Intrinsic::NatToInt(inner) => Intrinsic::NatToInt(visit.visit_subterm(inner)),
             Intrinsic::NatToFlt(inner) => Intrinsic::NatToFlt(visit.visit_subterm(inner)),
             Intrinsic::IntToNat(inner) => Intrinsic::IntToNat(visit.visit_subterm(inner)),
