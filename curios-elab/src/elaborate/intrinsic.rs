@@ -27,8 +27,9 @@ fn check_list_elems(
 /// Rebuild `intrinsic` with its first `done.len()` traversed operands replaced, leaving the rest as written.
 ///
 /// The partial rebuild is what makes the walk below streaming rather than one pass: an operand's declared type may mention an operand before it — `List/get`'s list is at `List(element)`, a division's bound at `0 < divisor` — and elaboration *changes* what it touches, so a type read off the un-elaborated node would be checked against a spelling that no longer exists.
-fn with_elaborated(intrinsic: &Intrinsic, done: &[Term]) -> Intrinsic {
-    let mut ready = done.to_vec().into_iter();
+fn with_elaborated(intrinsic: &Intrinsic, done: Vec<Term>) -> Intrinsic {
+    // Taken by value because the rewrite hook is boxed `'static` and cannot borrow what it yields.
+    let mut ready = done.into_iter();
 
     intrinsic.traverse(&mut Visit::rewriting(
         |_, _: &Var| None,
@@ -46,7 +47,7 @@ fn synth_intrinsic(
     let mut done: Vec<Term> = Vec::new();
 
     loop {
-        let current = with_elaborated(intrinsic, &done);
+        let current = with_elaborated(intrinsic, done.clone());
         let signature = current.signature(&context.syntax());
         let operands = current.operands();
 

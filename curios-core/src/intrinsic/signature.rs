@@ -4,6 +4,10 @@
 //!
 //! This is the one statement. The kernel walks it to check, elaboration walks it to elaborate, and congruence walks it to compare each operand *at its own type* rather than at a flat `Type` — which is what lets proof irrelevance fire on a bound through the ordinary gate instead of through a rule about bounds.
 //!
+//! **The third copy is checked rather than removed, and that is enough.** `/sys` still states every one of these types a second time, as the declarations a user actually calls — and it cannot drift, because elaborating a `/sys` body checks its operands against this table and unifies its result with the declared one. A declaration disagreeing with the operation its body constructs does not compile, and the prelude build is where that is enforced.
+//!
+//! Measured 2026-08-19 rather than argued: declaring `Nat/div`'s operands `Int` while its body still builds `NatDiv` fails the build with `while elaborating /sys/Nat/div: type mismatch, inferred: Int, expected: Nat`. Reproduce by changing the first `nat()` in `prelude`'s `guarded_binary("div", …)` to `int()`.
+//!
 //! **Totality is the point, not the coverage.** A signature every operation states is one no operation can be forgotten from, which is a stronger property than any individual entry. `Nat`'s successor payload is the standing example: `Nat::Succ` carries a `Term` — that is how `x + 3` is represented — and the kernel's `Intrinsic::Nat(_) => Ok(nat_type())` never checked it, so a successor over a `Bool` typed as a `Nat`. Nothing constructs one today, and the elaborator never would; catching an elaborator that did is the entire reason a second checker exists. Here that check is a consequence of the table being total rather than an arm someone remembered.
 
 use {
