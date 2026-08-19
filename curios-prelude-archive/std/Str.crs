@@ -154,7 +154,7 @@ pub let get(s: Str, i: Nat, ok: Nat/Lt(i, len(s))) -> Char =
         b: Bytes,
         valid: Utf8(sc, b),
         i: Nat,
-        le: Nat/Lte(i + 1, count_scalars(sc, b)),
+        le: Nat/Le/Ind(i + 1, count_scalars(sc, b)),
     ) -> Char =
         match b
         | x[] => match le end
@@ -169,7 +169,7 @@ pub let get(s: Str, i: Nat, ok: Nat/Lt(i, len(s))) -> Char =
                         t,
                         peel_byte(True/qed(), valid),
                         pred,
-                        match le: (x, y, le) => Nat/Lte(x - 1, y - 1) | s(@a, @c, prev) => prev end)
+                        match le: (x, y, le) => Nat/Le/Ind(x - 1, y - 1) | s(@a, @c, prev) => prev end)
                 end
             | cont(rem, lo, hi) =>
                 go(step(h, sc), t, peel_byte(True/qed(), valid), i, le)
@@ -181,7 +181,7 @@ pub let get(s: Str, i: Nat, ok: Nat/Lt(i, len(s))) -> Char =
         s.bytes,
         s.valid,
         i,
-        Nat/Lt/lte_succ_of_lt(i, count_scalars(Scan/lead(), s.bytes), ok));
+        Nat/Lt/ind_succ_of_lt(i, count_scalars(Scan/lead(), s.bytes), ok));
 
 pub let join(sep: Str, parts: List(Str)) -> Str =
     List/balanced(

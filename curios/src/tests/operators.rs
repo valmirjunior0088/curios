@@ -377,10 +377,10 @@ fn type_level_operator_indices_stay_convertible() {
     assert_eq!(
         run(r#"
             use /std/{Nat, Handle, Str};
-            pub let step(@a : Nat, @b : Nat, p : Nat/Lte(a, b)) -> Nat/Lte(a + 1, b + 1) =
-                Nat/Lte/s(p);
-            let base : Nat/Lte(0, 1) = Nat/Lte/z();
-            let bumped : Nat/Lte(1, 2) = step(base);
+            pub let step(@a : Nat, @b : Nat, p : Nat/Le/Ind(a, b)) -> Nat/Le/Ind(a + 1, b + 1) =
+                Nat/Le/Ind/s(p);
+            let base : Nat/Le/Ind(0, 1) = Nat/Le/Ind/z();
+            let bumped : Nat/Le/Ind(1, 2) = step(base);
             let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
             /std/Io/pure(())
         "#),

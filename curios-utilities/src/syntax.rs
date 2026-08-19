@@ -176,7 +176,7 @@ pub struct ProofSyntax {
     pub true_type: SyntaxName,
     /// `a < b`, decided — the bound `/sys`'s checked accessors take as their index precondition. Decided rather than inductive is load-bearing: it reduces to `True` on a refined comparison, which is what lets the obligation be discharged without a written proof.
     pub lt: SyntaxName,
-    /// `a <= b`, decided, by the same mechanism — the ordering half of a window bound. Distinct from `/std/Nat/Lte`, which stays inductive so its laws can recurse over the relation's constructors.
+    /// `a <= b`, decided, by the same mechanism — the ordering half of a window bound. Distinct from `/std/Nat/Le/Ind`, which stays inductive so its laws can recurse over the relation's constructors.
     pub le: SyntaxName,
     /// `a != 0` over `Int`, the precondition a division states. `Nat` needs no counterpart: a natural is nonzero exactly when `0 < n`, which [`ProofSyntax::lt`] already states.
     pub int_non_zero: SyntaxName,

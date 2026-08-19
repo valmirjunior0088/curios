@@ -29,7 +29,7 @@ pub let of_str(s: Str) -> Option(Int) =
         end
     end;
 
--- The procedure that decides `0 <= n`, the `Int` twin of `Nat/Lt/try`. `Int` carries no inductive ordering family — `Nat/Lte` has constructors a proof can recurse over, and there is no counterpart here — so an `Int` bound is *decided* or it is not had at all.
+-- The procedure that decides `0 <= n`, the `Int` twin of `Nat/Lt/try`. `Int` carries no inductive ordering family — `Nat/Le/Ind` has constructors a proof can recurse over, and there is no counterpart here — so an `Int` bound is *decided* or it is not had at all.
 pub let non_neg(n: Int) -> Option(NonNeg(n)) =
     match n >= +0: (r) => Option(match r: (_) => Prop | true => True | false => False end)
     | true => Option/some(True/qed())

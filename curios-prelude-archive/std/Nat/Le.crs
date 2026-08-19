@@ -1,32 +1,35 @@
--- `a <= b` as a decided proposition, and the crossings between it and `Nat/Lte`.
+-- `a <= b` as a decided proposition, and the crossings between it and `Nat/Le/Ind`.
 --
--- The proposition itself is `/syn/Nat/Le`, because the compiler states window bounds in it and so must be able to spell it. The two forms are not interchangeable and neither reduces into the other: this one is decided, so a guard already taken discharges it for free but nothing can recurse over it; `Nat/Lte` is inductive, so a proof can walk its constructors but no comparison settles it. Everything here is the passage between them, which is what lets a bound be *established* by induction and then *stated* in the form a precondition wants.
+-- The proposition itself is `/syn/Nat/Le`, because the compiler states window bounds in it and so must be able to spell it. The two forms are not interchangeable and neither reduces into the other: this one is decided, so a guard already taken discharges it for free but nothing can recurse over it; `Ind` is inductive, so a proof can walk its constructors but no comparison settles it. Everything here is the passage between them, which is what lets a bound be *established* by induction and then *stated* in the form a precondition wants.
+--
+-- The inductive form is a *child* of this module rather than its sibling, and the names say which is which: `Nat/Le` is the relation, `Nat/Le/Ind` is the relation done by induction. The pair used to be `Nat/Le` and `Nat/Le/Ind`, two spellings of one abbreviation that named the difference nowhere.
 pub use /syn/Nat/{Le};
 use /std/{Nat, Option, True, False};
-use /std/Nat/{Lte};
+pub mod Ind;
+pub use Ind/{let Ind};
 
 -- Immediate: `lte(n, n)` is decided by the shared inner alone, whatever `n` is.
 pub let refl(n: Nat) -> Le(n, n) =
     True/qed();
 
 -- Both arms land on something the comparison settles — `0 <= n` outright, and a shared successor by cancellation — so the recursion only walks the evidence it was handed.
-pub rec of_lte(@a: Nat, @b: Nat, p: Lte(a, b)) -> Le(a, b) =
-    match p: (x, y, w) => Le(x, y) | z(@_) => True/qed() | s(@_, @_, prev) => of_lte(prev) end;
+pub rec of_ind(@a: Nat, @b: Nat, p: Ind(a, b)) -> Le(a, b) =
+    match p: (x, y, w) => Le(x, y) | z(@_) => True/qed() | s(@_, @_, prev) => of_ind(prev) end;
 
 -- The other direction, by cases rather than by walking evidence there is none of: a decided proposition has no constructors, so the recursion is on the numbers, and the case where the bound has run out is `False` under the hypothesis.
-pub rec to_lte(a: Nat, b: Nat, p: Le(a, b)) -> Lte(a, b) =
+pub rec to_ind(a: Nat, b: Nat, p: Le(a, b)) -> Ind(a, b) =
     match a
-    | 0 => Lte/z()
+    | 0 => Ind/z()
     | ap + 1 =>
         match b
         | 0 => match p end
-        | bp + 1 => Lte/s(to_lte(ap, bp, p))
+        | bp + 1 => Ind/s(to_ind(ap, bp, p))
         end
     end;
 
 -- Weakening on the right, for a bound that has to survive the index advancing past it.
 pub let succ_r(a: Nat, b: Nat, p: Le(a, b)) -> Le(a, b + 1) =
-    of_lte(Lte/succ_r(to_lte(a, b, p)));
+    of_ind(Ind/succ_r(to_ind(a, b, p)));
 
 -- The procedure that decides it, the `Le` twin of `Nat/Lt/try`. What a caller reaches for when it holds a position some other computation produced: the bound is a fact about that value, not about the code that made it, so it is settled by testing rather than by threading evidence back through the producer.
 pub let try(a: Nat, b: Nat) -> Option(Le(a, b)) =
@@ -37,4 +40,4 @@ pub let try(a: Nat, b: Nat) -> Option(Le(a, b)) =
 
 -- Transitivity, through the family that has constructors to recurse over.
 pub let trans(@a: Nat, @b: Nat, @c: Nat, p: Le(a, b), q: Le(b, c)) -> Le(a, c) =
-    of_lte(Lte/trans(to_lte(a, b, p), to_lte(b, c, q)));
+    of_ind(Ind/trans(to_ind(a, b, p), to_ind(b, c, q)));

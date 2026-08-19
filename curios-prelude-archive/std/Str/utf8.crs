@@ -141,16 +141,16 @@ pub rec cont_len(
     @hi: Nat,
     @t: Bytes,
     w: Utf8(Scan/cont(k, lo, hi), t),
-) -> Nat/Lte(k, Bytes/len(t)) =
+) -> Nat/Le/Ind(k, Bytes/len(t)) =
     match k
-    | 0 => Nat/Lte/z()
+    | 0 => Nat/Le/Ind/z()
     | kp + 1 =>
         match w
         | more(c, st, tt, rest) =>
             match kp
-            | 0 => Nat/Lte/s(Nat/Lte/z())
+            | 0 => Nat/Le/Ind/s(Nat/Le/Ind/z())
             | kpp + 1 =>
-                Nat/Lte/s(
+                Nat/Le/Ind/s(
                     match Nat/in_range(Byte/to_nat(c), lo, hi)
                     | true => cont_len(kpp + 1, rest)
                     | false => match bad_uninhabited(rest) end
@@ -178,7 +178,7 @@ pub rec take_continuations(
     off: Nat,
     remaining: Nat,
     acc: Nat,
-    bound: Nat/Lte(off + remaining, Bytes/len(b)),
+    bound: Nat/Le/Ind(off + remaining, Bytes/len(b)),
 ) -> {Nat, Nat} =
     match remaining
     | 0 => (acc, off)
@@ -192,8 +192,8 @@ pub rec take_continuations(
                     Bytes/get(
                         b,
                         off,
-                        @Nat/Lt/of_lte_succ(
-                            Nat/Lte/trans(Nat/Lte/s(Nat/Lte/add_r(off, pred)), bound))))
+                        @Nat/Lt/of_ind_succ(
+                            Nat/Le/Ind/trans(Nat/Le/Ind/s(Nat/Le/Ind/add_r(off, pred)), bound))))
                     - 0x80),
             bound)
     end;

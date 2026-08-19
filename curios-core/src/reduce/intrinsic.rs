@@ -2320,7 +2320,7 @@ mod tests {
         );
     }
 
-    // The bound every indexed loop in the standard library needs: walking `i` up to `n` under an invariant `i + k = n` asks for `i < i + kp + 1` at each step. Before cancellation that was three lemma applications in the prelude (`add_r`, `succ_of_lte`, and the transport); the comparison now decides it outright.
+    // The bound every indexed loop in the standard library needs: walking `i` up to `n` under an invariant `i + k = n` asks for `i < i + kp + 1` at each step. Before cancellation that was three lemma applications in the prelude (`add_r`, `succ_of_ind`, and the transport); the comparison now decides it outright.
     #[test]
     fn compare_nat_decides_the_bound_an_indexed_loop_walks_under() {
         let (i, kp) = (sym(0, "i"), sym(1, "kp"));
