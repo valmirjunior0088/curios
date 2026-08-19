@@ -377,6 +377,33 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     }
 
     fn emit_let_bin_data(&mut self, name: &'a EmissionValueName, grain: Grain, value: &PackedBin) {
+        // A small byte constant is its canonical immediate — a self-contained constant initializer, no data segment, no start-function code — exactly as the inline literal path emits it. Leaving this path on the leaf would mint the one non-canonical small value in the program, and the immediate equality would answer false against it.
+        if matches!(grain, Grain::X) && value.len(Grain::X) <= 3 {
+            let bytes = value
+                .to_bytes()
+                .expect("X constants are always byte-aligned");
+            let packed = bytes
+                .iter()
+                .enumerate()
+                .fold((bytes.len() as i32) << 29, |packed, (index, &byte)| {
+                    packed | (byte as i32) << (8 * index)
+                });
+            let mut init_expr: curios_wasm::Expr = Default::default();
+            init_expr.push(curios_wasm::Instr::I32Const { value: packed });
+            init_expr.push(curios_wasm::Instr::RefI31);
+            self.module.add_global(
+                self.table.find_const(name),
+                curios_wasm::Global {
+                    global_type: curios_wasm::GlobalType {
+                        val_type: Table::top_type(false),
+                        mutability: curios_wasm::Mutability::Var,
+                    },
+                    expr: init_expr,
+                },
+            );
+            return;
+        }
+
         let bytes = value.to_packed_bytes();
         let payload_length = bytes.len() as i32;
         let length = value.len(grain) as i32;
@@ -603,7 +630,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
-    /// Add the rope helpers the emitted code referenced. Helpers whose bodies call other helpers go first: *building* a body references its callees through the table, so the callee used-flags must settle before they are read — deep host-boundary forms, then everything else whose body calls `force` (`eql`, `map`, `slice`, `read`), then `force`/`embed`.
+    /// Add the rope helpers the emitted code referenced. Helpers whose bodies call other helpers go first: *building* a body references its callees through the table, so the callee used-flags must settle before they are read — deep host-boundary forms, then everything else whose body calls `force` (`norm`, `box`, `eql`, `map`, `slice`, `read`), then `force`/`embed`.
     fn emit_rope_funcs(&mut self) {
         let mut ropes = RopeEmitter::new(self.table, self.module);
 
@@ -613,6 +640,14 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
         if self.table.list_bytes_embed_used() {
             ropes.emit_list_bytes_embed_func(self.table.list_bytes_embed_func());
+        }
+
+        if self.table.bytes_norm_used() {
+            ropes.emit_norm_func(self.table.bytes_norm_func(), self.table.bytes_force_func());
+        }
+
+        if self.table.bytes_box_used() {
+            ropes.emit_box_func(self.table.bytes_box_func());
         }
 
         if self.table.bytes_eql_used() {

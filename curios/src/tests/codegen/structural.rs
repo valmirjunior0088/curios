@@ -1386,3 +1386,51 @@ fn indexed_local_concat_fuses_to_flat_build() {
 
     assert_eq!(run(source), b"4\n");
 }
+
+/// The `Immediate` family encoding's admission is pinned against the packed immediates: a family whose unary constructor holds a `Nat` — *always* an i31 — keeps the bare encoding and its `IsImmediate` dispatch, while the same family over `Bytes` stays `Tagged`, because a packed value is only *sometimes* immediate and a bare small `Bytes` beside boxed siblings would collide with the discrimination exactly when it boxes. `FieldShape::Opaque` for packed carriers is the invariant; this is its consequence, stated where a future widening would trip it.
+#[test]
+fn packed_unary_payload_declines_the_immediate_encoding() {
+    let nat_family = r#"
+        use /std/{Nat, List, Str, Handle, proc};
+
+        induct Gauge: Type
+        | tiny(Nat)
+        | pair(Nat, Nat)
+        end
+
+        let taint = List/len(proc/args!);
+        let g = match taint | 0 => Gauge/tiny(7) | _ => Gauge/pair(taint, taint) end;
+        match g
+        | tiny(n) => /std/print(Str/concat(Nat/to_str(n), "\n"))
+        | pair(a, b) => /std/print(Str/concat(Nat/to_str(a + b), "\n"))
+        end
+        "#;
+    let bytes_family = r#"
+        use /std/{Nat, List, Bytes, Str, Handle, proc};
+
+        induct Gauge: Type
+        | tiny(Bytes)
+        | pair(Nat, Nat)
+        end
+
+        let taint = List/len(proc/args!);
+        let g = match taint | 0 => Gauge/tiny(x[7]) | _ => Gauge/pair(taint, taint) end;
+        match g
+        | tiny(inner) => /std/print(Str/concat(Nat/to_str(Bytes/len(inner)), "\n"))
+        | pair(a, b) => /std/print(Str/concat(Nat/to_str(a + b), "\n"))
+        end
+        "#;
+
+    assert!(
+        cont_optm(nat_family).contains("IsImmediate"),
+        "an always-immediate unary payload keeps the bare encoding"
+    );
+    let dump = cont_optm(bytes_family);
+    assert!(
+        !dump.contains("IsImmediate"),
+        "a sometimes-immediate packed payload declines it: {dump}"
+    );
+
+    assert_eq!(run(nat_family), b"7\n");
+    assert_eq!(run(bytes_family), b"1\n");
+}

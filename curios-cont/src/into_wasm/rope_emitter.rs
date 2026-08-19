@@ -1182,7 +1182,6 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
     /// `$list/bytes/force (ref $rope/list) -> (ref $elems)`: force the outer rope, then force every element through `$bytes/force` into a *fresh* payload (the shallow force of a leaf answers its live payload, which must not be element-rewritten in place).
     pub(crate) fn emit_list_bytes_force_func(&mut self, func_name: curios_wasm::FuncName) {
         let elems = self.table.elems_type();
-        let bin = self.table.bin_rope();
 
         let r = curios_wasm::LocalName::from("r");
         let flat = curios_wasm::LocalName::from("flat");
@@ -1235,7 +1234,10 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                         curios_wasm::Instr::ArrayGet {
                             type_name: elems.clone(),
                         },
-                        cast(&bin.base),
+                        // An element is small-canonical, so an immediate is boxed before the deep force — the box is the cast this arm used to make, plus the materialisation.
+                        curios_wasm::Instr::Call {
+                            func_name: self.table.bytes_box_func(),
+                        },
                         curios_wasm::Instr::Call {
                             func_name: self.table.bytes_force_func(),
                         },
@@ -1590,6 +1592,191 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
+    /// `$bytes/box (ref null any) -> (ref $rope/bin)`: a small-canonical `Bytes` as a rope. An immediate — length in the top 2 payload bits, bytes LSB-first below — is materialised into a fresh exact leaf; anything else casts to the rope it must be, trapping on null exactly as the cast this call replaced did.
+    pub(crate) fn emit_box_func(&mut self, func_name: curios_wasm::FuncName) {
+        let rope = self.table.bin_rope();
+        let r = curios_wasm::LocalName::from("r");
+        let v = curios_wasm::LocalName::from("v");
+        let len = curios_wasm::LocalName::from("len");
+        let arr = curios_wasm::LocalName::from("arr");
+
+        let i32_val = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
+        let locals = vec![
+            (v.clone(), i32_val.clone()),
+            (len.clone(), i32_val),
+            (arr.clone(), concrete_val(rope.payload.clone(), true)),
+        ];
+
+        // arr[i] = (v >> 8i) & 0xFF, emitted for each of the up-to-three occupied slots.
+        let set_byte = |index: i32| {
+            let mut instrs = vec![
+                get(&len),
+                curios_wasm::Instr::I32Const { value: index },
+                curios_wasm::Instr::I32GtU,
+            ];
+            let mut body = vec![
+                get(&arr),
+                curios_wasm::Instr::I32Const { value: index },
+                get(&v),
+            ];
+            if index != 0 {
+                body.push(curios_wasm::Instr::I32Const { value: index * 8 });
+                body.push(curios_wasm::Instr::I32ShrU);
+            }
+            body.push(curios_wasm::Instr::I32Const { value: 0xFF });
+            body.push(curios_wasm::Instr::I32And);
+            body.push(curios_wasm::Instr::ArraySet {
+                type_name: rope.payload.clone(),
+            });
+            instrs.push(curios_wasm::Instr::If {
+                label_name: curios_wasm::LabelName::from("occupied"),
+                block_type: curios_wasm::BlockType::Empty,
+                then_instructions: body,
+                else_instructions: vec![],
+            });
+            instrs
+        };
+
+        let mut immediate = vec![
+            get(&r),
+            curios_wasm::Instr::RefCast {
+                ref_type: Table::int_type(false),
+            },
+            curios_wasm::Instr::I31GetU,
+            set(&v),
+            get(&v),
+            curios_wasm::Instr::I32Const { value: 29 },
+            curios_wasm::Instr::I32ShrU,
+            set(&len),
+            get(&len),
+            curios_wasm::Instr::ArrayNewDefault {
+                type_name: rope.payload.clone(),
+            },
+            set(&arr),
+        ];
+        for index in 0..3 {
+            immediate.extend(set_byte(index));
+        }
+        immediate.extend([
+            curios_wasm::Instr::I32Const { value: 0 },
+            get(&len),
+            get(&arr),
+            curios_wasm::Instr::RefAsNonNull,
+            curios_wasm::Instr::StructNew {
+                type_name: rope.leaf.clone(),
+            },
+            curios_wasm::Instr::Return,
+        ]);
+
+        let instrs = vec![
+            get(&r),
+            curios_wasm::Instr::RefTest {
+                ref_type: Table::int_type(false),
+            },
+            curios_wasm::Instr::If {
+                label_name: curios_wasm::LabelName::from("immediate"),
+                block_type: curios_wasm::BlockType::Empty,
+                then_instructions: immediate,
+                else_instructions: vec![],
+            },
+            get(&r),
+            cast(&rope.base),
+        ];
+
+        self.add_helper(
+            func_name,
+            vec![(r, Table::top_type(true))],
+            concrete_val(rope.base.clone(), false),
+            locals,
+            instrs,
+        );
+    }
+
+    /// `$bytes/norm (ref $rope/bin) -> (ref any)`: the canonical form of a byte rope. At most three bytes packs into the i31 — length in the top 2 payload bits, bytes LSB-first below — and anything longer answers itself. Called at every byte-grain producer's exit, which is what makes a mixed-representation pair unrepresentable and the immediate equality one instruction.
+    pub(crate) fn emit_norm_func(
+        &mut self,
+        func_name: curios_wasm::FuncName,
+        force_func: curios_wasm::FuncName,
+    ) {
+        let rope = self.table.bin_rope();
+        let r = curios_wasm::LocalName::from("r");
+        let p = curios_wasm::LocalName::from("p");
+        let len = curios_wasm::LocalName::from("len");
+        let v = curios_wasm::LocalName::from("v");
+
+        let i32_val = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
+        let locals = vec![
+            (p.clone(), concrete_val(rope.payload.clone(), true)),
+            (len.clone(), i32_val.clone()),
+            (v.clone(), i32_val),
+        ];
+
+        // v |= p[i] << 8i, for each occupied slot.
+        let or_byte = |index: i32| {
+            let mut body = vec![
+                get(&v),
+                get(&p),
+                curios_wasm::Instr::I32Const { value: index },
+                curios_wasm::Instr::ArrayGetU {
+                    type_name: rope.payload.clone(),
+                },
+            ];
+            if index != 0 {
+                body.push(curios_wasm::Instr::I32Const { value: index * 8 });
+                body.push(curios_wasm::Instr::I32Shl);
+            }
+            body.push(curios_wasm::Instr::I32Or);
+            body.push(set(&v));
+            vec![
+                get(&len),
+                curios_wasm::Instr::I32Const { value: index },
+                curios_wasm::Instr::I32GtU,
+                curios_wasm::Instr::If {
+                    label_name: curios_wasm::LabelName::from("occupied"),
+                    block_type: curios_wasm::BlockType::Empty,
+                    then_instructions: body,
+                    else_instructions: vec![],
+                },
+            ]
+        };
+
+        let mut instrs = vec![
+            get(&r),
+            field_get(&rope.base, &rope.len_field),
+            set(&len),
+            get(&len),
+            curios_wasm::Instr::I32Const { value: 3 },
+            curios_wasm::Instr::I32GtU,
+            curios_wasm::Instr::If {
+                label_name: curios_wasm::LabelName::from("wide"),
+                block_type: curios_wasm::BlockType::Empty,
+                then_instructions: vec![get(&r), curios_wasm::Instr::Return],
+                else_instructions: vec![],
+            },
+            get(&r),
+            curios_wasm::Instr::Call {
+                func_name: force_func,
+            },
+            set(&p),
+            get(&len),
+            curios_wasm::Instr::I32Const { value: 29 },
+            curios_wasm::Instr::I32Shl,
+            set(&v),
+        ];
+        for index in 0..3 {
+            instrs.extend(or_byte(index));
+        }
+        instrs.extend([get(&v), curios_wasm::Instr::RefI31]);
+
+        self.add_helper(
+            func_name,
+            vec![(r, concrete_val(rope.base.clone(), false))],
+            Table::top_type(false),
+            locals,
+            instrs,
+        );
+    }
+
     /// `$<carrier>/embed (ref <payload>) -> (ref <base>)`: one fresh leaf.
     pub(crate) fn emit_embed_func(&mut self, rope: &RopeData, func_name: curios_wasm::FuncName) {
         let b = curios_wasm::LocalName::from("b");
@@ -1667,6 +1854,10 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                         curios_wasm::Instr::RefAsNonNull,
                         curios_wasm::Instr::StructNew {
                             type_name: bin.leaf.clone(),
+                        },
+                        // A host-built element enters the guest world canonical: a small `Bytes` becomes the i31 here. A `Handle` element is always four bytes, so the call answers it unchanged.
+                        curios_wasm::Instr::Call {
+                            func_name: self.table.bytes_norm_func(),
                         },
                         curios_wasm::Instr::ArraySet {
                             type_name: elems.clone(),

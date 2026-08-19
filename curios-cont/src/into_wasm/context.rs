@@ -252,12 +252,10 @@ impl<'a, 'b> Context<'a, 'b> {
                     },
                 ]
             }
+            // A byte-shaped value is small-canonical — an i31 at up to three bytes, a rope past that — so a position demanding the rope goes through `$bytes/box`, which materialises an immediate and casts (trapping on null) exactly as the bare cast here used to. Bit-grain values ride the same carrier and are never immediate; for them the box is the old cast plus one settled test.
             LoadAs::Bytes => {
-                vec![curios_wasm::Instr::RefCast {
-                    ref_type: curios_wasm::RefType {
-                        is_nullable: false,
-                        heap_type: curios_wasm::HeapType::Concrete(self.table().bin_rope_type()),
-                    },
+                vec![curios_wasm::Instr::Call {
+                    func_name: self.table().bytes_box_func(),
                 }]
             }
             LoadAs::List => {
@@ -674,11 +672,21 @@ impl<'a, 'b> Context<'a, 'b> {
         vec![curios_wasm::Instr::Call { func_name: force }]
     }
 
-    /// The wire→rope step for one host result: a reference re-enters as a host-built flat payload and is embedded into a fresh leaf — deeply for `List(Bytes)`, whose elements the host lowered as raw `$bytes`.
+    /// The wire→rope step for one host result: a reference re-enters as a host-built flat payload and is embedded into a fresh leaf — deeply for `List(Bytes)`, whose elements the host lowered as raw `$bytes`. A `Bytes` result is then normalised, so a small host answer enters the guest world already canonical; a `Handle` is exempt statically — its token is always four bytes, past the immediate envelope.
     fn wire_embed_instrs(&self, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
         let embed = match wire_type {
             WireType::Nat | WireType::Bool | WireType::Int => return vec![],
-            WireType::Bytes | WireType::Handle => self.table().bytes_embed_func(),
+            WireType::Bytes => {
+                return vec![
+                    curios_wasm::Instr::Call {
+                        func_name: self.table().bytes_embed_func(),
+                    },
+                    curios_wasm::Instr::Call {
+                        func_name: self.table().bytes_norm_func(),
+                    },
+                ];
+            }
+            WireType::Handle => self.table().bytes_embed_func(),
             WireType::List(inner) => match inner {
                 WireLeaf::Bytes | WireLeaf::Handle => self.table().list_bytes_embed_func(),
                 WireLeaf::Nat | WireLeaf::Bool | WireLeaf::Int => self.table().list_embed_func(),

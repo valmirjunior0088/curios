@@ -277,6 +277,8 @@ pub(crate) struct Table<'a> {
     list_force: OnceCell<curios_wasm::FuncName>,
     list_bytes_force: OnceCell<curios_wasm::FuncName>,
     bytes_embed: OnceCell<curios_wasm::FuncName>,
+    bytes_box: OnceCell<curios_wasm::FuncName>,
+    bytes_norm: OnceCell<curios_wasm::FuncName>,
     list_embed: OnceCell<curios_wasm::FuncName>,
     list_bytes_embed: OnceCell<curios_wasm::FuncName>,
     bytes_slice: OnceCell<curios_wasm::FuncName>,
@@ -355,6 +357,8 @@ impl<'a> Table<'a> {
             list_force: OnceCell::new(),
             list_bytes_force: OnceCell::new(),
             bytes_embed: OnceCell::new(),
+            bytes_box: OnceCell::new(),
+            bytes_norm: OnceCell::new(),
             list_embed: OnceCell::new(),
             list_bytes_embed: OnceCell::new(),
             bytes_slice: OnceCell::new(),
@@ -477,10 +481,6 @@ impl<'a> Table<'a> {
 
     pub(crate) fn flt_type(&self) -> curios_wasm::TypeName {
         self.flt_type.clone()
-    }
-
-    pub(crate) fn bin_rope_type(&self) -> curios_wasm::TypeName {
-        self.bin_rope_type.clone()
     }
 
     pub(crate) fn list_rope_type(&self) -> curios_wasm::TypeName {
@@ -619,6 +619,28 @@ impl<'a> Table<'a> {
 
     pub(crate) fn bytes_embed_used(&self) -> bool {
         self.bytes_embed.get().is_some()
+    }
+
+    /// `$bytes/box (ref null any) -> (ref $rope/bin)`: a small-canonical `Bytes` as a rope — an immediate is materialised into a fresh leaf, a rope passes through. The entry every rope-shaped consumer pays instead of the `ref.cast` that predates the immediate form.
+    pub(crate) fn bytes_box_func(&self) -> curios_wasm::FuncName {
+        self.bytes_box
+            .get_or_init(|| curios_wasm::FuncName::from("bytes/box"))
+            .clone()
+    }
+
+    pub(crate) fn bytes_box_used(&self) -> bool {
+        self.bytes_box.get().is_some()
+    }
+
+    /// `$bytes/norm (ref $rope/bin) -> (ref any)`: the canonical form of a byte rope — at most 3 bytes becomes the i31 (length in the top 2 payload bits, bytes LSB-first below), anything longer passes through. Every byte-grain producer answers through this, which is what makes a mixed-representation pair unrepresentable.
+    pub(crate) fn bytes_norm_func(&self) -> curios_wasm::FuncName {
+        self.bytes_norm
+            .get_or_init(|| curios_wasm::FuncName::from("bytes/norm"))
+            .clone()
+    }
+
+    pub(crate) fn bytes_norm_used(&self) -> bool {
+        self.bytes_norm.get().is_some()
     }
 
     /// `$list/embed (ref $elems) -> (ref $rope/list)`: the `List` mirror of [`bytes_embed_func`](Self::bytes_embed_func), for scalar-element results.

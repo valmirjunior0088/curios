@@ -124,6 +124,24 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 });
             }
             EmissionData::Bin(grain, value) => {
+                // A small byte literal is its canonical immediate, computed here at compile time: length in the top 2 payload bits, bytes LSB-first below. The bit grain never rides the immediate.
+                if matches!(grain, Grain::X) && value.len(Grain::X) <= 3 {
+                    let bytes = value
+                        .to_bytes()
+                        .expect("X literals are always byte-aligned");
+                    let packed = bytes
+                        .iter()
+                        .enumerate()
+                        .fold((bytes.len() as i32) << 29, |packed, (index, &byte)| {
+                            packed | (byte as i32) << (8 * index)
+                        });
+                    self.emit_instrs([
+                        curios_wasm::Instr::I32Const { value: packed },
+                        curios_wasm::Instr::RefI31,
+                    ]);
+                    return;
+                }
+
                 let rope = self.context.table().bin_rope();
                 let bytes = match grain {
                     Grain::B => value.to_packed_bytes(),

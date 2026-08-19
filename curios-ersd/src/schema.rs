@@ -72,6 +72,8 @@ impl ConstructorField {
 }
 
 /// The erased carrier of one constructor payload, recorded by erasure — the one walk that still holds the Core field types — and read by the lowering into Cont when it decides a family's encoding. `Immediate` means every runtime value of the field's declared type lives in the uniform carrier's immediate population: an intrinsic head riding the i31 carrier, or a chain of single-relevant-field collapses landing on one. Everything else is `Opaque` — no guarantee, which covers boxed and polymorphic fields alike — and `Opaque` never misencodes: a wrongly conservative field only misses an encoding, where a wrongly `Immediate` one would corrupt it.
+///
+/// `Immediate` means *always*, never *sometimes*: since the map-wall campaign a small `Bytes` value rides the i31, so a packed carrier is sometimes-immediate — and sometimes is `Opaque`, because the `Immediate` family encoding's discrimination is disjoint only while the bare payload can never box. `packed_unary_payload_declines_the_immediate_encoding`, in `curios`'s codegen tests, pins the consequence end to end.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[curios_archive::archived]
 pub enum FieldShape {
