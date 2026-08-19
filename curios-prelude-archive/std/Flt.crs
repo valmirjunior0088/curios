@@ -16,10 +16,31 @@ pub let neg_inf: Flt =
 pub let nan: Flt =
     of_le_bytes(x[0x00, 0x00, 0xc0, 0x7f]);
 
+-- Finite is stated as an open interval between the two infinities, which rejects all three non-finite floats with one ordered pair: `+inf` fails the upper bound, `-inf` the lower, and a NaN fails both, since every IEEE comparison with one is false. No `f == f` idiom and no separate NaN test.
+pub let is_finite(f: Flt) -> Bool =
+    f > neg_inf && f < pos_inf;
+
 -- The total form of the reinterpretation, deciding the bound the bounded one states — the pairing every checked accessor carries, as `Bytes/get` does over `Bytes/try_get`.
 pub let try_of_le_bytes(b: Bytes) -> Option(Flt) =
     match Nat/eql(Bytes/len(b), 4): (_) => Option(Flt)
     | true => Option/some(of_le_bytes(b, @True/qed()))
+    | false => Option/none()
+    end;
+
+-- The total forms of the two narrowings, which is where their partiality is answered rather than in a stated precondition. `to_nat` and `to_int` keep trapping: their bounds are the one family in the prelude that could not be *decided*, since `curios-core` folds no `Flt` operation, so stating them would have bought a compile-time refusal only by widening what the kernel folds. The rule that settles it, and the one to apply to the next carrier: bound what is cheap to decide, trap what is not, and pair either with a `try_` form. `Int/to_nat` is on the other side of that line and is bounded, because `Int` comparisons do fold.
+--
+-- `some` means the truncation is *defined*, which is exactly what a precondition would have said. It is deliberately not a promise that the conversion cannot trap: a defined result too large for the runtime carrier still refuses at the narrowing, as `Nat` arithmetic does past the same envelope, and checking for that here would write a backend width into `/std`.
+--
+-- `to_nat` needs no `is_finite`: `f >= +0.0` already rejects a NaN and `-inf`, so only `+inf` is left to exclude.
+pub let try_to_nat(f: Flt) -> Option(Nat) =
+    match f >= +0.0 && f < pos_inf
+    | true => Option/some(to_nat(f))
+    | false => Option/none()
+    end;
+
+pub let try_to_int(f: Flt) -> Option(Int) =
+    match is_finite(f)
+    | true => Option/some(to_int(f))
     | false => Option/none()
     end;
 
