@@ -146,8 +146,8 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] A closed fold no longer costs what its data is long — closed, metavariable-free, refinement-free terms evaluate on one shared explicit-stack machine, `curios-core`'s `reduce_closed`, entered from both checkers' reduction paths, with every charge landing on the host's own counter through the same price list. A user's own fold over a packed carrier gets the same treatment by the same closedness gate, which is what distinguishes this from blessing `Str` the way Lean blesses its strings. **Two pre-existing defects it surfaced are still open:** a struct declaration whose proof field applies a fold to an earlier field overflows the default test-thread stack in debug with the machine on or off (`a_struct_refinement_field_overflows_the_test_thread_stack` is the repro), and the elaborator retains quadratically in a literal's length. See [Evaluating a closed term is representation, not judgment](design/toolchain/evaluating-a-closed-term-is-representation-not-judgment.md), [The closed machine](soundness/per-term-rules/the-closed-machine.md), `curios-core`'s `machine` module, and `curios`'s `tests::reduction` probes for the figures
 - [x] A variant collapses when nothing needs to distinguish it — the tag and its tuple are paid only where discrimination can happen: a single-constructor family encodes as the struct with the same relevant row would, and a family with exactly one immediate-unary constructor rides it as the bare payload behind an `IsImmediate` test, which removes the leaf allocations of tree-shaped data outright. Eligibility is a `FieldShape` recorded per payload field on the ersd constructor schema at erasure. See [A variant collapses when nothing needs to distinguish it](design/toolchain/a-variant-collapses-when-nothing-needs-to-distinguish-it.md), `curios-ersd`'s `into_cont` encoding tests, and `curios`'s `trees_leaf_rides_its_payload` and collapsed-wrapper probes
 - [x] A variant travels as the fields of its widest constructor — a parameter every flow reaches as a construction travels as fields even when the constructions disagree about width, the region taking the widest and each narrower edge carrying its own fields followed by filler, at continuation join parameters and at a non-escaping known function's parameters alike. The per-character path of an idiomatic UTF-8 walk now allocates nothing. See [A variant travels as the fields of its widest constructor](design/toolchain/a-variant-travels-as-the-fields-of-its-widest-constructor.md), `curios-cont`'s `fields` and `origin` modules, and `curios`'s `tests::codegen` ladder and census for the figures
-- [x] A pure program rebuilds what an impure one would mutate — the death-birth churn campaign: two workloads (`churn`, `spines`) joined `chain` in the harness, the death-birth census located the population, the lever gate admitted the engine and refused reuse and coalescing, and the admitted campaign landed as [The heap is sized ahead of its churn](design/toolchain/the-heap-is-sized-ahead-of-its-churn.md). See that decision, the decomposition probes and `death_birth_census` in `curios/src/tests/codegen/`, and the harness's next capture for the cross-language delta; the successor is [A young value dies free](roadmap/generational_nursery_spec.md)
-- [ ] [A young value dies free](roadmap/generational_nursery_spec.md) (deliberately unrefined: only the churn campaign's certain facts — the engine's collector inventory at the 47 pin, the three-site write-barrier surface, the measured recopying and cache economics, the one-row integration seam — recorded for whoever picks it up; the brainstorming is not started)
+- [x] A pure program rebuilds what an impure one would mutate — the death-birth churn campaign: two workloads (`churn`, `spines`) joined `chain` in the harness, the death-birth census located the population, the lever gate admitted the engine and refused reuse and coalescing, and the admitted campaign landed as [The heap is sized ahead of its churn](design/toolchain/the-heap-is-sized-ahead-of-its-churn.md). See that decision, the decomposition probes and `death_birth_census` in `curios/src/tests/codegen/`, and the harness's next capture for the cross-language delta; the successor is [A young value dies free](roadmap/generational-nursery-spec.md)
+- [ ] [A young value dies free](roadmap/generational-nursery-spec.md) (deliberately unrefined: only the churn campaign's certain facts — the engine's collector inventory at the 47 pin, the three-site write-barrier surface, the measured recopying and cache economics, the one-row integration seam — recorded for whoever picks it up; the brainstorming is not started)
 - [x] A closure carries its code as a table index rather than a funcref — the environment's code field is an `i32` slot in one module-level funcref table filled by one active element segment (slot 0 null, so an unfilled recursive shell's zeroed field still traps), dispatched with `call_indirect`/`return_call_indirect`; construction writes a constant instead of paying wasmtime's per-store funcref-to-GC-heap intern. The annex it enabled — a closure whose captures are all interned constants is a constant aggregate like any tuple — retired the constant hoister's one exclusion. See [A closure carries its code as a table index](design/toolchain/a-closure-carries-its-code-as-a-table-index.md) and `curios`'s codegen probes for the figures
 - [x] Recursion restored to the defunctionalized walks — the walks recurse inside `curios-utilities`'s `recurse` instead of driving explicit frame machines (see [Depth is bought with stack, not with hand-rolled frames](design/toolchain/depth-is-bought-with-stack-not-with-hand-rolled-frames.md))
 - [x] Wasm-emission optimizations
@@ -200,7 +200,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Decimal numeric conversions (`of_str`/`to_str` for `Nat`, `Int`, and `Flt`; `Flt/to_str` renders the shortest round-trip binary32 decimal through exact `BigNat` digit generation)
 - [x] JSON codec (`std/Json`)
 - [x] TOML 1.0.0 codec over native `Int` and binary32 `Flt` (`std/Toml`; explicitly not fully TOML-conforming because numeric storage is native-width)
-  - [ ] [Full TOML conformance over exact numerics](roadmap/toml_full_conformance_spec.md) _(not refined; after the general rational `BigFlt` sequence)_
+  - [ ] [Full TOML conformance over exact numerics](roadmap/toml-full-conformance-spec.md) _(not refined; after the general rational `BigFlt` sequence)_
 - [x] Async combinators for `/std/Async`
   - [x] `map`
   - [x] concurrent `both`/`race`/`select`
@@ -216,20 +216,20 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Certified strictly-positive arbitrary-precision naturals (`std/NonZero`)
 - [x] Arbitrary-precision integers (`std/BigInt` over the strictly-positive `std/NonZero`)
 - [ ] Dyadic `BigFlt` exact core
-  - [ ] [Canonical representation, exact operations, comparison, and witnesses](roadmap/big_flt_dyadic/01_core_spec.md)
-  - [ ] [Exact binary32 conversion and correctly rounded output](roadmap/big_flt_dyadic/02_binary32_spec.md)
-- [ ] [`BigInt` certified algebra, order, and binary-scale laws](roadmap/big_flt_dyadic_proofs/01_big_int_laws_spec.md)
+  - [ ] [Canonical representation, exact operations, comparison, and witnesses](roadmap/big-flt-dyadic/01-core-spec.md)
+  - [ ] [Exact binary32 conversion and correctly rounded output](roadmap/big-flt-dyadic/02-binary32-spec.md)
+- [ ] [`BigInt` certified algebra, order, and binary-scale laws](roadmap/big-flt-dyadic-proofs/01-big-int-laws-spec.md)
 - [ ] Dyadic `BigFlt` proof and quotient-boundary completion
-  - [ ] [Algebra and order theorem corpus](roadmap/big_flt_dyadic_proofs/02_laws_spec.md)
-  - [ ] [Correctly rounded exact quotient conversion to binary32](roadmap/big_flt_dyadic_proofs/03_ratio_narrowing_spec.md)
-  - [ ] [Binary32 round-trip and correct-rounding proofs](roadmap/big_flt_dyadic_proofs/04_boundary_proofs_spec.md)
+  - [ ] [Algebra and order theorem corpus](roadmap/big-flt-dyadic-proofs/02-laws-spec.md)
+  - [ ] [Correctly rounded exact quotient conversion to binary32](roadmap/big-flt-dyadic-proofs/03-ratio-narrowing-spec.md)
+  - [ ] [Binary32 round-trip and correct-rounding proofs](roadmap/big-flt-dyadic-proofs/04-boundary-proofs-spec.md)
 - [ ] General rational `BigFlt` sequence _(explicitly after the program-analysis interface; no umbrella-only implementation step)_
-  - [ ] [`BigNat` certified Euclidean division, GCD, divisibility, and coprimality](roadmap/big_flt_general/01_big_nat_euclidean_spec.md)
-  - [ ] [General `BigFlt` reduced rational representation and exact operations](roadmap/big_flt_general/02_core_spec.md)
-  - [ ] [General canonical uniqueness, ring, and order laws](roadmap/big_flt_general/03_laws_spec.md)
-  - [ ] [General division and field laws](roadmap/big_flt_general/04_field_laws_spec.md)
-  - [ ] [General rational binary32 boundaries](roadmap/big_flt_general/05_binary32_spec.md)
-  - [ ] [Exact decimal parsing and presentation](roadmap/big_flt_general/06_decimal_spec.md)
+  - [ ] [`BigNat` certified Euclidean division, GCD, divisibility, and coprimality](roadmap/big-flt-general/01-big-nat-euclidean-spec.md)
+  - [ ] [General `BigFlt` reduced rational representation and exact operations](roadmap/big-flt-general/02-core-spec.md)
+  - [ ] [General canonical uniqueness, ring, and order laws](roadmap/big-flt-general/03-laws-spec.md)
+  - [ ] [General division and field laws](roadmap/big-flt-general/04-field-laws-spec.md)
+  - [ ] [General rational binary32 boundaries](roadmap/big-flt-general/05-binary32-spec.md)
+  - [ ] [Exact decimal parsing and presentation](roadmap/big-flt-general/06-decimal-spec.md)
 
 ## Tooling & Ecosystem
 
