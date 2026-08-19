@@ -1,3 +1,6 @@
+mod signature;
+pub use signature::*;
+
 use {
     super::{Bound, Free, MetaId, Nat, Subterm, Term, Var, Visit},
     curios_abi::WireType,
