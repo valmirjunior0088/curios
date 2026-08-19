@@ -388,7 +388,12 @@ fn the_per_character_walk_carries_its_scan_without_allocating() {
         0,
         "the suffix view is a virtual window: no helper call, no view allocation",
     );
-    assert_eq!(in_fold("call $bytes/read"), 3, "the byte read per arm");
+    // One site, not one per arm, since 2026-08-18. The dead-hypothesis peel in `into_ersd::eliminate` used to *substitute* `get(b, 0)` for the bound head, so the read was copied into every arm that mentioned it; it now emits the read once and binds a name. The per-character cost is unchanged — exactly one arm runs, so it was always one read per character — and the table above still reads correctly; what collapsed is the static site count.
+    assert_eq!(
+        in_fold("call $bytes/read"),
+        1,
+        "the byte is read once and shared by the arms, not re-read per arm",
+    );
     assert_eq!(
         in_fold("call_indirect $clsr $clsr/2"),
         2,

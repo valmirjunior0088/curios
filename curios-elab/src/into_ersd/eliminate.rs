@@ -92,37 +92,19 @@ impl SeqCarrier<'_> {
         }
     }
 
-    /// The element of `sequence` at `index`.
-    fn get(self, sequence: &Term, index: Term) -> Term {
+    /// The erased read of one element, for the peel that emits the read instead of writing it as a term.
+    fn get_op(self) -> curios_ersd::SequenceOp {
         match self {
-            SeqCarrier::List { element } => Term::intrinsic(Intrinsic::ListGet {
-                element: element.clone(),
-                list: sequence.clone(),
-                index,
-            }),
-            SeqCarrier::Bin { grain } => Term::intrinsic(Intrinsic::BinGet {
-                grain,
-                bin: sequence.clone(),
-                index,
-            }),
+            SeqCarrier::List { .. } => curios_ersd::SequenceOp::ListGet,
+            SeqCarrier::Bin { grain } => curios_ersd::SequenceOp::BinGet(grain),
         }
     }
 
-    /// The sub-slice `sequence[lo .. hi]`.
-    fn slice(self, sequence: &Term, lo: Term, hi: Term) -> Term {
+    /// The erased window read, the [`get_op`](Self::get_op) twin.
+    fn slice_op(self) -> curios_ersd::SequenceOp {
         match self {
-            SeqCarrier::List { element } => Term::intrinsic(Intrinsic::ListSlice {
-                element: element.clone(),
-                list: sequence.clone(),
-                start: lo,
-                end: hi,
-            }),
-            SeqCarrier::Bin { grain } => Term::intrinsic(Intrinsic::BinSlice {
-                grain,
-                bin: sequence.clone(),
-                start: lo,
-                end: hi,
-            }),
+            SeqCarrier::List { .. } => curios_ersd::SequenceOp::ListSlice,
+            SeqCarrier::Bin { grain } => curios_ersd::SequenceOp::BinSlice(grain),
         }
     }
 }
@@ -439,6 +421,10 @@ impl Lowering {
         let empty = self.refined_arm(context, &head, &carrier.empty_value(), motive, empty_case)?;
 
         // The hypothesis is dead: a case split over the length, peeling the cons arm at the head element and tail slice.
+        //
+        // The peel binds *names* for the element and the suffix and emits their reads, rather than writing `get`/`slice` terms into the arm and letting the walk typecheck them. That is a typing requirement, not a style choice: both reads are bounded operations, and the bound each would have to carry — `0 < len` for the element, `1 <= len` for the window — is exactly what the dispatch being built here establishes, so at the point the terms would be constructed there is no proof to hand them. Emitting the reads leaves no bounded Core term for anything to check.
+        //
+        // What the arm loses by it is the definitional connection back to the scrutinee: the binders are opaque assumptions of the element and sequence types rather than the reads themselves. Nothing needs that connection, because the arm is checked at `motive(head)`, which does not mention either.
         if !cons_case.uses(2) {
             let length = carrier.len(&head);
             let index = emitted!(self.walk(
@@ -448,17 +434,50 @@ impl Lowering {
                 None
             )?);
 
-            let element = carrier.get(&head, Term::intrinsic(Intrinsic::Nat(Nat::new(0usize))));
-            let suffix = carrier.slice(
-                &head,
-                Term::intrinsic(Intrinsic::Nat(Nat::new(1usize))),
-                length.clone(),
-            );
-            // The hypothesis never appears, so any term serves its slot.
-            let dead_hypothesis = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
-            let peeled = cons_case.open(&[&element, &suffix, &dead_hypothesis]);
-            let expected = motive.open(&[&head]);
-            let default = self.open_arm(context, &expected, &peeled)?;
+            let element_hint = cons_case.first_hint().map(str::to_string);
+            let suffix_hint = cons_case.second_hint().map(str::to_string);
+            let element_label = context.fresh(element_hint.as_deref());
+            let suffix_label = context.fresh(suffix_hint.as_deref());
+
+            // Both reads are emitted *inside* the non-empty arm, which is the whole reason this branch opens the block by hand instead of calling `open_arm`. Beside the dispatch they would run on the empty sequence too, where `get(seq, 0)` and `slice(seq, 1, len)` are both out of bounds and trap. Passing the terms into the arm used to place them here for free; emitting them does not, and nothing that only *checks* the program can notice — a certified prelude never runs one.
+            self.builder.open_block();
+            let outcome = context.with_frame(|context| {
+                let zero = curios_ersd::Atom::Constant(
+                    self.builder.constant(curios_ersd::Constant::Nat(0)),
+                );
+                let one = curios_ersd::Atom::Constant(
+                    self.builder.constant(curios_ersd::Constant::Nat(1)),
+                );
+                let element = curios_ersd::Atom::Value(self.builder.let_value(
+                    element_hint.clone(),
+                    curios_ersd::Rhs::Sequence {
+                        operation: carrier.get_op(),
+                        operands: vec![sequence, zero],
+                    },
+                ));
+                let suffix = curios_ersd::Atom::Value(self.builder.let_value(
+                    suffix_hint.clone(),
+                    curios_ersd::Rhs::Sequence {
+                        operation: carrier.slice_op(),
+                        operands: vec![sequence, one, index],
+                    },
+                ));
+                self.environment.bind(&element_label, element);
+                self.environment.bind(&suffix_label, suffix);
+                context.assume(&element_label, &carrier.element_type());
+                context.assume(&suffix_label, &head_type);
+
+                // The hypothesis never appears, so any term serves its slot.
+                let dead_hypothesis = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
+                let peeled = cons_case.open(&[
+                    &Term::free_var(&element_label),
+                    &Term::free_var(&suffix_label),
+                    &dead_hypothesis,
+                ]);
+                let expected = motive.open(&[&head]);
+                self.walk(context, &peeled, &expected, None)
+            })?;
+            let default = self.seal(outcome);
 
             return Ok(self.bind(
                 hint,
