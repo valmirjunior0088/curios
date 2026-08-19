@@ -17,7 +17,7 @@ pub(super) fn infer_intrinsic(
     kernel: &mut Kernel,
     intrinsic: &Intrinsic,
 ) -> Result<Term, KernelError> {
-    let signature = intrinsic.signature(kernel.syntax());
+    let signature = intrinsic.signature(&kernel.syntax());
     let operands = intrinsic.operands();
 
     // The table and the traversal are two statements of the same operand list, and zipping them is only safe while they agree. A disagreement is this crate's own bug rather than a fault in the term, so it asserts rather than refusing — see `documentation/design/language/an-independent-kernel-re-checks-what-the-elaborator-accepts.md` on what the kernel reports and what it must not.

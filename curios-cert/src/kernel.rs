@@ -375,8 +375,8 @@ impl Kernel {
     }
 
     /// The `/syn` spellings this walk states types through.
-    pub(crate) fn syntax(&self) -> &SyntaxRegistry {
-        &self.syntax
+    pub(crate) fn syntax(&self) -> SyntaxRegistry {
+        self.syntax
     }
 
     /// Start this kernel's environment from `globals` — the scope an earlier walk established — rather than from nothing.

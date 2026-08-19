@@ -7,13 +7,15 @@
 use {
     super::Convert,
     curios_core::{
-        Intrinsic, Peel, ReduceError, Subterm, Term, Var, Visit, peel_bin, peel_list, peel_nat,
+        Intrinsic, Operand, Peel, ReduceError, Subterm, Term, Var, Visit, peel_bin, peel_list,
+        peel_nat,
     },
-    curios_utilities::{Grain, PackedBin},
+    curios_utilities::{Grain, PackedBin, SyntaxRegistry},
 };
 
 pub(crate) fn convert_intrinsic(
     cmp: &mut Convert,
+    syntax: &SyntaxRegistry,
     this: Intrinsic,
     that: Intrinsic,
 ) -> Result<bool, ReduceError> {
@@ -46,8 +48,19 @@ pub(crate) fn convert_intrinsic(
         return Ok(false);
     }
 
-    for (left, right) in this_operands.into_iter().zip(that_operands) {
-        cmp.enqueue(Term::type_ground(), left, right);
+    // Each operand is enqueued at the type its operation declares for it rather than at a flat one — the discipline `compare_variant`, `compare_struct` and `compare_tuple` already follow, and what it buys here is the bounds: a proof is enqueued at its *proposition*, so the irrelevance gate discharges the goal without comparing either side. Two differently-derived proofs of one bound convert, instead of converting only where both happen to be the canonical inhabitant.
+    //
+    // Nothing here is a rule about bounds. The demand comes off `Intrinsic::signature`, and irrelevance fires through the ordinary gate because the goal carries a proposition — exactly as it would for any other operand whose type is one.
+    let signature = this.signature(syntax);
+
+    for (index, (left, right)) in this_operands.into_iter().zip(that_operands).enumerate() {
+        let at = match signature.operands.get(index) {
+            Some(Operand::At(type_)) => type_.clone(),
+            // A type operand and a function operand keep the flat comparison: the first is compared *as* a type, and the second would need a binder minted here to state its own.
+            _ => Term::type_ground(),
+        };
+
+        cmp.enqueue(at, left, right);
     }
 
     Ok(true)

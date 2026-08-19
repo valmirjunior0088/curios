@@ -5,9 +5,9 @@
 //! The rule is stated *generically* rather than as one arm per operation. The roster has upwards of a hundred entries, and a hand-written pair match over it is a list that must be extended every time an operation is added — a list whose omissions are silent. Here the shape and the operands are both read through the traversal that already defines what an intrinsic's operands are, so a new operation is covered the moment it is representable.
 
 use {
-    super::{History, ground},
+    super::{History, compare, ground},
     crate::{Kernel, KernelError},
-    curios_core::{Intrinsic, Peel, Term, Var, Visit, peel_bin, peel_list, peel_nat},
+    curios_core::{Intrinsic, Operand, Peel, Term, Var, Visit, peel_bin, peel_list, peel_nat},
 };
 
 /// Whether `this` and `that` are the same intrinsic operation on convertible operands.
@@ -38,8 +38,19 @@ pub(super) fn convert_intrinsic(
         return Ok(false);
     }
 
-    for (left, right) in this_operands.iter().zip(&that_operands) {
-        if !ground(kernel, history, left, right)? {
+    // Each operand compares at the type its operation declares for it, not at a flat one — the same discipline `convert`'s variant, struct and tuple comparisons already follow, and the reason it matters here is the bounds: a proof compares at its *proposition*, where definitional proof irrelevance discharges the goal without looking at either side. Two differently-derived proofs of one bound are therefore convertible, rather than convertible only when both happen to be the canonical inhabitant.
+    //
+    // Reading the demand off `Intrinsic::signature` is what keeps that from being a rule about bounds. There is no proof-shaped case here; irrelevance fires through the ordinary gate because the goal carries a proposition, exactly as it would for any other operand whose type is one.
+    let signature = this.signature(&kernel.syntax());
+
+    for (index, (left, right)) in this_operands.iter().zip(&that_operands).enumerate() {
+        let converted = match signature.operands.get(index) {
+            Some(Operand::At(type_)) => compare(kernel, history, type_, left, right)?,
+            // A type operand and a function operand keep the flat comparison: the first is compared *as* a type, and the second would need a binder minted here to state its own.
+            _ => ground(kernel, history, left, right)?,
+        };
+
+        if !converted {
             return Ok(false);
         }
     }
