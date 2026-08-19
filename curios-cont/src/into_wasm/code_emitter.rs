@@ -1148,6 +1148,116 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 let rope = self.context.table().list_rope();
                 self.emit_rope_concat(&result_local, args, LoadAs::List, &rope);
             }
+            CpsIntrinsicOp::ListSettle => {
+                let rope = self.context.table().list_rope();
+                let force = self.context.table().list_force_func();
+                let base_ref = curios_wasm::ValType::Ref(curios_wasm::RefType {
+                    is_nullable: false,
+                    heap_type: curios_wasm::HeapType::Concrete(rope.base.clone()),
+                });
+                self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::List));
+                self.emit_instr(Self::rope_get(&rope, &rope.tag_field));
+                self.emit_instr(curios_wasm::Instr::I32Eqz);
+                // A leaf answers itself; anything else answers a fresh leaf over its forced payload — an O(1) wrap, since payload arrays are filled once and never rewritten.
+                let leaf_arm = self.context.load_value_instrs(&args[0], LoadAs::List);
+                let mut build_arm = vec![curios_wasm::Instr::I32Const { value: 0 }];
+                build_arm.extend(self.context.load_value_instrs(&args[0], LoadAs::List));
+                build_arm.push(Self::rope_get(&rope, &rope.len_field));
+                build_arm.extend(self.context.load_value_instrs(&args[0], LoadAs::List));
+                build_arm.push(curios_wasm::Instr::Call { func_name: force });
+                build_arm.push(curios_wasm::Instr::StructNew {
+                    type_name: rope.leaf.clone(),
+                });
+                self.emit_instr(curios_wasm::Instr::If {
+                    label_name: curios_wasm::LabelName::from("settle"),
+                    block_type: curios_wasm::BlockType::Inline(base_ref),
+                    then_instructions: leaf_arm,
+                    else_instructions: build_arm,
+                });
+                self.emit_instr(curios_wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
+            CpsIntrinsicOp::ListFlat(_) => {
+                let rope = self.context.table().list_rope();
+                let force = self.context.table().list_force_func();
+                let i32_val = curios_wasm::ValType::Num(curios_wasm::NumType::I32);
+                let total = self.context.push_local("flat_total", i32_val.clone());
+                let off = self.context.push_local("flat_off", i32_val);
+                let out = self.context.push_local(
+                    "flat_out",
+                    curios_wasm::ValType::Ref(curios_wasm::RefType {
+                        is_nullable: true,
+                        heap_type: curios_wasm::HeapType::Concrete(rope.payload.clone()),
+                    }),
+                );
+
+                // total = Σ operand lengths; out = a zeroed exact array; off restarts at zero because a scratch local persists across executions of one call site.
+                for (index, arg) in args.iter().enumerate() {
+                    self.emit_instrs(self.context.load_value_instrs(arg, LoadAs::List));
+                    self.emit_instr(Self::rope_get(&rope, &rope.len_field));
+                    if index != 0 {
+                        self.emit_instr(curios_wasm::Instr::I32Add);
+                    }
+                }
+                if args.is_empty() {
+                    self.emit_instr(curios_wasm::Instr::I32Const { value: 0 });
+                }
+                self.emit_instr(curios_wasm::Instr::LocalTee {
+                    local_name: total.clone(),
+                });
+                self.emit_instr(curios_wasm::Instr::ArrayNewDefault {
+                    type_name: rope.payload.clone(),
+                });
+                self.emit_instr(curios_wasm::Instr::LocalSet {
+                    local_name: out.clone(),
+                });
+                self.emit_instr(curios_wasm::Instr::I32Const { value: 0 });
+                self.emit_instr(curios_wasm::Instr::LocalSet {
+                    local_name: off.clone(),
+                });
+
+                // Each operand's forced payload is copied at the running offset; a leaf's force answers its payload without walking.
+                for arg in args {
+                    self.emit_instr(curios_wasm::Instr::LocalGet {
+                        local_name: out.clone(),
+                    });
+                    self.emit_instr(curios_wasm::Instr::LocalGet {
+                        local_name: off.clone(),
+                    });
+                    self.emit_instrs(self.context.load_value_instrs(arg, LoadAs::List));
+                    self.emit_instr(curios_wasm::Instr::Call {
+                        func_name: force.clone(),
+                    });
+                    self.emit_instr(curios_wasm::Instr::I32Const { value: 0 });
+                    self.emit_instrs(self.context.load_value_instrs(arg, LoadAs::List));
+                    self.emit_instr(Self::rope_get(&rope, &rope.len_field));
+                    self.emit_instr(curios_wasm::Instr::ArrayCopy {
+                        target_name: rope.payload.clone(),
+                        source_name: rope.payload.clone(),
+                    });
+                    self.emit_instr(curios_wasm::Instr::LocalGet {
+                        local_name: off.clone(),
+                    });
+                    self.emit_instrs(self.context.load_value_instrs(arg, LoadAs::List));
+                    self.emit_instr(Self::rope_get(&rope, &rope.len_field));
+                    self.emit_instr(curios_wasm::Instr::I32Add);
+                    self.emit_instr(curios_wasm::Instr::LocalSet {
+                        local_name: off.clone(),
+                    });
+                }
+
+                self.emit_instr(curios_wasm::Instr::I32Const { value: 0 });
+                self.emit_instr(curios_wasm::Instr::LocalGet { local_name: total });
+                self.emit_instr(curios_wasm::Instr::LocalGet { local_name: out });
+                self.emit_instr(curios_wasm::Instr::RefAsNonNull);
+                self.emit_instr(curios_wasm::Instr::StructNew {
+                    type_name: rope.leaf.clone(),
+                });
+                self.emit_instr(curios_wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
             CpsIntrinsicOp::TplGet(index) => {
                 let tpl_n_type = self.context.table().find_tpl_type(index + 1);
                 let field_name = Table::tpl_field(index);

@@ -467,6 +467,283 @@ pub(super) fn fuse_append_chains(module: &mut CpsModule) -> bool {
     changed
 }
 
+/// The kinds of piece a flattened construction tree contributes: a whole list operand, or a single element an append wrote.
+enum FlatPiece {
+    List(CpsAtom),
+    Elem(CpsAtom),
+}
+
+/// Collect the maximal unshared construction tree under `atom`: a single-use concat contributes its operands' trees in order, a single-use append its base's tree then its element, and anything else — shared, literal, or not a construction — stands as a whole operand. `consumed` receives the tree's own nodes, which the caller splices out.
+fn collect_flat_tree(
+    atom: &CpsAtom,
+    counts: &BTreeMap<CpsValueId, usize>,
+    concats: &BTreeMap<CpsValueId, (CpsNodeId, Vec<CpsAtom>, CpsNodeId)>,
+    appends: &BTreeMap<CpsValueId, (CpsNodeId, CpsAtom, CpsAtom, CpsNodeId)>,
+    consumed: &mut Vec<(CpsNodeId, CpsValueId, CpsNodeId)>,
+    out: &mut Vec<FlatPiece>,
+) {
+    if let CpsAtom::Value(value) = atom
+        && counts.get(value).copied().unwrap_or(0) == 1
+    {
+        if let Some((node, args, next)) = concats.get(value) {
+            consumed.push((*node, *value, *next));
+            for arg in args {
+                collect_flat_tree(arg, counts, concats, appends, consumed, out);
+            }
+            return;
+        }
+        if let Some((node, base, elem, next)) = appends.get(value) {
+            consumed.push((*node, *value, *next));
+            collect_flat_tree(base, counts, concats, appends, consumed, out);
+            out.push(FlatPiece::Elem(elem.clone()));
+            return;
+        }
+    }
+    out.push(FlatPiece::List(atom.clone()));
+}
+
+/// Turn the collected pieces into `ListFlat` operands, interning each run of appended elements as one list literal. Returns the operands and the literal bindings the rewrite chains in front.
+fn flat_operands(
+    module: &mut CpsModule,
+    pieces: Vec<FlatPiece>,
+) -> (Vec<CpsAtom>, Vec<(CpsValueId, Vec<CpsAtom>)>) {
+    let mut operands = Vec::new();
+    let mut literals = Vec::new();
+    let mut run: Vec<CpsAtom> = Vec::new();
+    let flush = |run: &mut Vec<CpsAtom>,
+                 operands: &mut Vec<CpsAtom>,
+                 literals: &mut Vec<(CpsValueId, Vec<CpsAtom>)>,
+                 module: &mut CpsModule| {
+        if !run.is_empty() {
+            let value = module.add_value(None);
+            literals.push((value, std::mem::take(run)));
+            operands.push(CpsAtom::Value(value));
+        }
+    };
+    for piece in pieces {
+        match piece {
+            FlatPiece::List(atom) => {
+                flush(&mut run, &mut operands, &mut literals, module);
+                operands.push(atom);
+            }
+            FlatPiece::Elem(atom) => run.push(atom),
+        }
+    }
+    flush(&mut run, &mut operands, &mut literals, module);
+    (operands, literals)
+}
+
+/// Rewrite the node at `site` into the literal bindings followed by a `ListFlat` binding `result`, keeping `site`'s identity as the chain's head so every incoming edge stays valid, and splice the consumed tree out.
+fn install_flat(
+    module: &mut CpsModule,
+    site: CpsNodeId,
+    result: CpsValueId,
+    next: CpsNodeId,
+    pieces: Vec<FlatPiece>,
+    consumed: Vec<(CpsNodeId, CpsValueId, CpsNodeId)>,
+) {
+    let (operands, literals) = flat_operands(module, pieces);
+    let mut tail = module.add_node(CpsNode::LetIntrinsic {
+        result,
+        op: CpsIntrinsicOp::ListFlat(operands.len()),
+        args: operands,
+        next,
+    });
+    let mut literals = literals.into_iter();
+    let head = literals.next();
+    for (value, elems) in literals.rev() {
+        tail = module.add_node(CpsNode::LetValue {
+            result: value,
+            value: CpsValueExpr::List(elems),
+            next: tail,
+        });
+    }
+    match head {
+        Some((value, elems)) => module.nodes.set(
+            site,
+            CpsNode::LetValue {
+                result: value,
+                value: CpsValueExpr::List(elems),
+                next: tail,
+            },
+        ),
+        None => {
+            // No literal to head the chain: the tail node's content moves into `site` itself.
+            let node = module
+                .node(tail)
+                .cloned()
+                .expect("the flat node was just added");
+            module.nodes.set(site, node);
+            module.nodes.remove(tail);
+        }
+    }
+
+    let redirect = consumed
+        .iter()
+        .map(|&(node, _, next)| (node, next))
+        .collect();
+    splice_dead_nodes(module, &redirect);
+    for (node, value, _) in consumed {
+        module.nodes.remove(node);
+        module.values.remove(value);
+    }
+}
+
+/// Flatten the list constructions whose reads are already in evidence, so the values a program only ever indexes are flat at birth instead of node-rooted with a gather on first read. Two admissions and no others — the demand route's rules, per the map-wall spec's list-half refinement. A settle (inserted by the door on stores into census-marked fields) over a statically flat value forwards the value, and over an unshared construction tree becomes the tree's one exact flat build. A construction whose own demand is `Indexed` — every use an element, length, window, or settle, interprocedurally — builds flat likewise, since its reads would have paid the gather anyway. Growth-shaped consumption is untouched, which is what keeps the builder and patchwork idioms at their O(1) steps.
+pub(super) fn flatten_indexed_lists(module: &mut CpsModule) -> bool {
+    let mut changed = false;
+
+    let collect = |module: &CpsModule| {
+        let mut concats = BTreeMap::new();
+        let mut appends = BTreeMap::new();
+        let mut flat = BTreeSet::new();
+        for (id, node) in module.nodes.iter_live() {
+            match node {
+                CpsNode::LetIntrinsic {
+                    result,
+                    op: CpsIntrinsicOp::ListConcat(_),
+                    args,
+                    next,
+                } => {
+                    concats.insert(*result, (id, args.clone(), *next));
+                }
+                CpsNode::LetIntrinsic {
+                    result,
+                    op: CpsIntrinsicOp::ListAppend,
+                    args,
+                    next,
+                } => {
+                    appends.insert(*result, (id, args[0].clone(), args[1].clone(), *next));
+                }
+                CpsNode::LetIntrinsic {
+                    result,
+                    op: CpsIntrinsicOp::ListFlat(_) | CpsIntrinsicOp::ListSettle,
+                    ..
+                }
+                | CpsNode::LetValue {
+                    result,
+                    value: CpsValueExpr::List(_),
+                    ..
+                } => {
+                    flat.insert(*result);
+                }
+                _ => {}
+            }
+        }
+        (concats, appends, flat)
+    };
+
+    // Settle sites first. Each is re-read at its turn, so a settle-of-settle chain resolves in any order.
+    let settle_sites: Vec<CpsNodeId> = module
+        .nodes
+        .iter_live()
+        .filter_map(|(id, node)| {
+            matches!(
+                node,
+                CpsNode::LetIntrinsic {
+                    op: CpsIntrinsicOp::ListSettle,
+                    ..
+                }
+            )
+            .then_some(id)
+        })
+        .collect();
+    for site in settle_sites {
+        let Some(CpsNode::LetIntrinsic {
+            result,
+            op: CpsIntrinsicOp::ListSettle,
+            args,
+            next,
+        }) = module.node(site).cloned()
+        else {
+            continue;
+        };
+        let counts = module.value_use_counts();
+        let (concats, appends, flat) = collect(module);
+        let operand = args[0].clone();
+        match &operand {
+            CpsAtom::Value(value) if flat.contains(value) => {
+                rewrite_atoms(module, &BTreeMap::from([(result, operand.clone())]));
+                rewire_node(module, site, next);
+                module.nodes.remove(site);
+                module.values.remove(result);
+                changed = true;
+            }
+            CpsAtom::Value(value)
+                if counts.get(value).copied().unwrap_or(0) == 1
+                    && (concats.contains_key(value) || appends.contains_key(value)) =>
+            {
+                let mut consumed = Vec::new();
+                let mut pieces = Vec::new();
+                collect_flat_tree(
+                    &operand,
+                    &counts,
+                    &concats,
+                    &appends,
+                    &mut consumed,
+                    &mut pieces,
+                );
+                install_flat(module, site, result, next, pieces, consumed);
+                changed = true;
+            }
+            _ => {}
+        }
+    }
+
+    // Then the demand rule, over what remains.
+    let demands = super::demand::demands(module);
+    let roots: Vec<CpsNodeId> = module
+        .nodes
+        .iter_live()
+        .filter_map(|(id, node)| match node {
+            CpsNode::LetIntrinsic {
+                result,
+                op: CpsIntrinsicOp::ListConcat(_) | CpsIntrinsicOp::ListAppend,
+                ..
+            } if demand_of(&demands, *result) == Demand::Indexed => Some(id),
+            _ => None,
+        })
+        .collect();
+    for site in roots {
+        let Some(CpsNode::LetIntrinsic {
+            result,
+            op,
+            args,
+            next,
+        }) = module.node(site).cloned()
+        else {
+            continue;
+        };
+        let counts = module.value_use_counts();
+        let (concats, appends, _) = collect(module);
+        let mut consumed = Vec::new();
+        let mut pieces = Vec::new();
+        match op {
+            CpsIntrinsicOp::ListConcat(_) => {
+                for arg in &args {
+                    collect_flat_tree(arg, &counts, &concats, &appends, &mut consumed, &mut pieces);
+                }
+            }
+            CpsIntrinsicOp::ListAppend => {
+                collect_flat_tree(
+                    &args[0],
+                    &counts,
+                    &concats,
+                    &appends,
+                    &mut consumed,
+                    &mut pieces,
+                );
+                pieces.push(FlatPiece::Elem(args[1].clone()));
+            }
+            _ => continue,
+        }
+        install_flat(module, site, result, next, pieces, consumed);
+        changed = true;
+    }
+
+    changed
+}
+
 pub(super) fn forward_aggregate_projections(module: &mut CpsModule) -> bool {
     let mut changed = false;
     loop {

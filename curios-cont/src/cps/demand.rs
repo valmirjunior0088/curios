@@ -23,6 +23,8 @@ pub(crate) enum Demand {
     Projected(BTreeSet<usize>),
     /// Every use so far calls it, at this arity. Disagreeing arities join to `Opaque`, because a function reached at two arities cannot have either absorbed into it.
     Applied(usize),
+    /// Every use so far reads it as a sequence — an element, a length, a window base, an equality side, or a settle — never growing or escaping it. The point the list flattening reads: a construction whose demand is `Indexed` will pay its gather anyway, so building it flat is never asymptotically worse.
+    Indexed,
     /// Some use consumes the value whole.
     Opaque,
 }
@@ -43,10 +45,11 @@ impl Lattice for Demand {
             (Demand::Applied(left), Demand::Applied(right)) if left == right => {
                 Demand::Applied(left)
             }
-            // A projection and a call, or two calls at different arities: nothing narrower than opaque describes both.
+            (Demand::Indexed, Demand::Indexed) => Demand::Indexed,
+            // A projection, a call, or an indexing read in disagreement — including two calls at different arities: nothing narrower than opaque describes both.
             (
-                Demand::Applied(_) | Demand::Projected(_),
-                Demand::Applied(_) | Demand::Projected(_),
+                Demand::Applied(_) | Demand::Projected(_) | Demand::Indexed,
+                Demand::Applied(_) | Demand::Projected(_) | Demand::Indexed,
             ) => Demand::Opaque,
         }
     }
@@ -90,6 +93,47 @@ pub(crate) fn demands(module: &CpsModule) -> BTreeMap<CpsValueId, Demand> {
                 } if matches!(args.as_slice(), [CpsAtom::Value(_)]) => {
                     if let [CpsAtom::Value(value)] = args.as_slice() {
                         solver.join(*value, Demand::Projected(BTreeSet::from([*index])));
+                    }
+                }
+
+                // A sequence read consumes only elements, lengths, or windows of its carrier operand: the carrier's demand stays `Indexed`, while every other operand — an index, a count, an appended element — is consumed whole. `ListSettle` joins the reads because settling is exactly what an `Indexed` construction would have done to itself. The growth forms — concat, append, chunk, flat — are deliberately absent: their carrier operands are consumed into a new value, which is the escape the lattice point exists to exclude.
+                CpsNode::LetIntrinsic {
+                    op:
+                        CpsIntrinsicOp::BinLen(_)
+                        | CpsIntrinsicOp::BinEql(_)
+                        | CpsIntrinsicOp::BinGet(_)
+                        | CpsIntrinsicOp::BinSlice(_)
+                        | CpsIntrinsicOp::BinRest(_)
+                        | CpsIntrinsicOp::ListLen
+                        | CpsIntrinsicOp::ListGet
+                        | CpsIntrinsicOp::ListSlice
+                        | CpsIntrinsicOp::ListRest
+                        | CpsIntrinsicOp::ListSettle,
+                    args,
+                    ..
+                } => {
+                    let carriers = match args.len() {
+                        // Equality reads both sides.
+                        2 if matches!(
+                            node,
+                            CpsNode::LetIntrinsic {
+                                op: CpsIntrinsicOp::BinEql(_),
+                                ..
+                            }
+                        ) =>
+                        {
+                            2
+                        }
+                        _ => 1,
+                    };
+                    for (position, atom) in args.iter().enumerate() {
+                        if let CpsAtom::Value(value) = atom {
+                            let demand = match position < carriers {
+                                true => Demand::Indexed,
+                                false => Demand::Opaque,
+                            };
+                            solver.join(*value, demand);
+                        }
                     }
                 }
 

@@ -16,8 +16,8 @@ use super::{
     reachable::prune_unreachable,
     simplify::{
         dissolve_rec_init, eliminate_dead_bindings, eliminate_dead_parameters,
-        fold_intrinsic_identities, forward_aggregate_projections, forward_continuations,
-        fuse_append_chains, rewrite_atoms, simplify_nodes,
+        flatten_indexed_lists, fold_intrinsic_identities, forward_aggregate_projections,
+        forward_continuations, fuse_append_chains, rewrite_atoms, simplify_nodes,
     },
     specialize::{specialize_call_patterns, specialize_jump_patterns, specialize_scc_calls},
     uncurry::uncurry_returns,
@@ -64,6 +64,7 @@ pub fn optimize(module: &mut CpsModule) {
             | simplify_nodes(module)
             | fold_intrinsic_identities(module)
             | fuse_append_chains(module)
+            | flatten_indexed_lists(module)
             | eliminate_dead_bindings(module)
             | eliminate_dead_parameters(module)
             | inline_single_use_continuations(module)

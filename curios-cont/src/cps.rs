@@ -143,6 +143,10 @@ pub enum CpsIntrinsicOp {
     ListRest,
     ListAppend,
     ListConcat(usize),
+    /// `(list) -> list`: the same value, flat — a leaf answers itself, and anything else answers a fresh leaf over its forced payload (an O(1) wrap, since payload arrays are filled once and never rewritten). Semantically the identity; representationally the settle the door inserts on stores into fields the Ersd census marked indexed-only, so the values a program only ever indexes are flat by the time they are stored.
+    ListSettle,
+    /// `(list…) -> list`: one exact-length flat leaf holding every element of every operand in order — the eager concatenation `fuse_settle_trees` builds where the reads that would have paid the gather are already in evidence. Minted only by the optimizer, like [`CpsIntrinsicOp::BinChunk`].
+    ListFlat(usize),
     TplGet(usize),
     /// The virtual-window bounds guard: `(start, count, len) -> count`, trapping unless the window ends inside `len` — the eager trap a physical slice would have performed, kept at the original evaluation point when the slice itself is virtualized away. It answers the count unchanged rather than a difference, because a window is a start and a count everywhere above this too; what it contributes is the trap, not the arithmetic.
     WindowExtent,
@@ -192,7 +196,7 @@ impl CpsIntrinsicOp {
             (WindowExtent, _) => Repr::Nat,
             // The whole point of the test is to look at the reference uncoerced.
             (IsImmediate, _) => Repr::Ref,
-            (ListConcat(_) | ListLen, _) => Repr::List,
+            (ListConcat(_) | ListLen | ListSettle | ListFlat(_), _) => Repr::List,
             (TplGet(index), _) => Repr::Tpl(index + 1),
 
             (
@@ -249,7 +253,9 @@ impl CpsIntrinsicOp {
             | BinConcat(_, _)
             | BinChunk(_, _)
             | FltToLeBytes => Repr::Bytes,
-            ListSlice | ListRest | ListAppend | ListConcat(_) => Repr::List,
+            ListSlice | ListRest | ListAppend | ListConcat(_) | ListSettle | ListFlat(_) => {
+                Repr::List
+            }
             // A list read and a tuple projection both yield whatever was stored, uninterpreted.
             ListGet | TplGet(_) => Repr::Ref,
         }
@@ -294,7 +300,11 @@ impl CpsIntrinsicOp {
             | Self::TplGet(_)
             | Self::IsImmediate => 1,
             Self::BinSlice(_) | Self::ListSlice | Self::WindowExtent => 3,
-            Self::BinConcat(_, arity) | Self::ListConcat(arity) | Self::BinChunk(_, arity) => arity,
+            Self::BinConcat(_, arity)
+            | Self::ListConcat(arity)
+            | Self::BinChunk(_, arity)
+            | Self::ListFlat(arity) => arity,
+            Self::ListSettle => 1,
             _ => 2,
         }
     }
@@ -343,6 +353,8 @@ impl CpsIntrinsicOp {
             | Self::BinChunk(_, _)
             | Self::ListAppend
             | Self::ListConcat(_)
+            | Self::ListSettle
+            | Self::ListFlat(_)
             | Self::FltToLeBytes => CpsIntrinsicEffect::Allocates,
 
             Self::NatEql

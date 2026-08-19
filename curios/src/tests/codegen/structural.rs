@@ -1296,3 +1296,93 @@ fn tainted_packed_literals_fuse_to_flat_chunks() {
 
     assert_eq!(run(source), b"ok\n");
 }
+
+/// A list stored into a field the Ersd census marks indexed-only settles at the store, and the settle over the literal's unshared construction tree fuses into one exact flat build (`flatten_indexed_lists` in `curios-cont`): the spliced rebuild becomes a `ListFlat` in place of the concat-of-rope-nodes the lowering honestly writes, and the read answers the same element. The reads reach the census through `/std/List/try_get`, so the fixture also pins the census's deferral through saturated known calls — the shape every real read has at the arena.
+#[test]
+fn indexed_field_store_fuses_to_flat_build() {
+    let source = r#"
+        use /std/{Nat, List, Str, Handle, Option, proc};
+
+        induct Box: Type
+        | pack(items: List(Nat))
+        end
+
+        let taint = List/len(proc/args!);
+        let pre = [taint + 1, taint + 2];
+        let post = [taint + 3, taint + 4];
+        let boxed = Box/pack([..pre, taint + 9, ..post]);
+        match boxed
+        | pack(items) =>
+            match List/try_get(items, 2)
+            | some(v) => /std/print(Str/concat(Nat/to_str(v), "\n"))
+            | none() => /std/print("none\n")
+            end
+        end
+        "#;
+
+    let dump = cont_optm(source);
+    assert!(
+        dump.contains("ListFlat(3)"),
+        "the spliced store flattens to one exact build: {dump}"
+    );
+
+    assert_eq!(run(source), b"9\n");
+}
+
+/// The builder idiom is protected: a field whose values are re-grown — the accumulator spelling `[..items, x]` — is poisoned by the census, so no settle is inserted and no flat build fires, and the loop keeps its O(1) append steps.
+#[test]
+fn regrown_field_store_stays_lazy() {
+    let source = r#"
+        use /std/{Nat, List, Str, Handle, proc};
+
+        induct Acc: Type
+        | keep(items: List(Nat))
+        end
+
+        let taint = List/len(proc/args!);
+        rec grow(n: Nat, acc: Acc) -> Acc =
+            match n: (_) => Acc
+            | 0 => acc
+            | m + 1 =>
+                match acc
+                | keep(items) => grow(m, Acc/keep([..items, m + taint]))
+                end
+            end;
+        let result = grow(3, Acc/keep([]));
+        match result
+        | keep(items) => /std/print(Str/concat(Nat/to_str(List/len(items)), "\n"))
+        end
+        "#;
+
+    let dump = cont_optm(source);
+    assert!(
+        !dump.contains("ListSettle") && !dump.contains("ListFlat"),
+        "a re-grown field is never settled: {dump}"
+    );
+
+    assert_eq!(run(source), b"3\n");
+}
+
+/// The demand rule stands alone: a local concatenation whose every use is indexing-shaped — here through `try_get`'s parameter, so the fact is interprocedural — builds flat with no field store involved.
+#[test]
+fn indexed_local_concat_fuses_to_flat_build() {
+    let source = r#"
+        use /std/{Nat, List, Str, Handle, Option, proc};
+        let taint = List/len(proc/args!);
+        let a = [taint + 1, taint + 2];
+        let b = [taint + 3, taint + 4];
+        let joined = [..a, ..b];
+        match List/try_get(joined, 3)
+        | some(v) => /std/print(Str/concat(Nat/to_str(v), "\n"))
+        | none() => /std/print("none\n")
+        end
+        "#;
+
+    let dump = cont_optm(source);
+    assert!(
+        dump.contains("ListFlat(2)"),
+        "the indexed concat flattens: {dump}"
+    );
+
+    assert_eq!(run(source), b"4\n");
+}

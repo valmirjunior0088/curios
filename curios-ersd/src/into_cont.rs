@@ -6,6 +6,8 @@
 //!
 //! Arena identities are globally unique and never shadowed, so flat maps to their Cont counterparts suffice; source hints are carried onto the Cont values and functions they lower to.
 
+mod census;
+
 #[cfg(test)]
 mod tests;
 
@@ -16,6 +18,7 @@ use {
         Module, Operation, RecGroup, RecGroupId, Rhs, SequenceGrain, SequenceOp, Statement,
         StatementId, Terminator, UnconsSequenceStep, ValueId, VariantArm,
     },
+    census::{SequenceFacts, sequence_census},
     curios_abi::ForeignFunction,
     curios_num::Natural,
     curios_utilities::{Grain, PackedBin},
@@ -31,6 +34,7 @@ pub fn lower_to_cont(source: &Module) -> curios_cont::CpsModule {
     let mut lowerer = Lowerer {
         source,
         analysis: Analysis::analyze(source),
+        facts: sequence_census(source),
         module: curios_cont::CpsModule::new(),
         values: BTreeMap::new(),
         functions: BTreeMap::new(),
@@ -77,6 +81,8 @@ struct Lowerer<'a> {
     source: &'a Module,
     /// Use counts over the finished arena, read only to decline emitting a binding nothing reads. The module does not change during lowering, so one analysis taken at entry stays exact throughout.
     analysis: Analysis,
+    /// The sequence-usage census's verdicts, read at every construction site to settle the stores into indexed-only fields.
+    facts: SequenceFacts,
     module: curios_cont::CpsModule,
     values: BTreeMap<ValueId, curios_cont::CpsAtom>,
     functions: BTreeMap<FunctionId, curios_cont::CpsFunId>,
@@ -676,40 +682,65 @@ impl Lowerer<'_> {
                     }
                 })
             }
-            Rhs::Product { schema: _, fields } => {
-                let fields = fields.iter().map(|&atom| self.lower_atom(atom)).collect();
-                self.straight(result, rest, terminator, target, move |bound, next| {
-                    curios_cont::CpsNode::LetValue {
-                        result: bound,
-                        value: curios_cont::CpsValueExpr::Tuple(fields),
-                        next,
-                    }
-                })
+            Rhs::Product { schema, fields } => {
+                let mut atoms: Vec<_> = fields.iter().map(|&atom| self.lower_atom(atom)).collect();
+                let marked: Vec<bool> = (0..fields.len())
+                    .map(|field| self.facts.indexed_only_product(*schema, field))
+                    .collect();
+                let settles = self.settle_stores(&marked, &mut atoms);
+                let bound = self.bind_value(result);
+                let next = self.lower_statements(rest, terminator, target);
+                let node = self.module.add_node(curios_cont::CpsNode::LetValue {
+                    result: bound,
+                    value: curios_cont::CpsValueExpr::Tuple(atoms),
+                    next,
+                });
+                self.wrap_settles(settles, node)
             }
             Rhs::Construct {
                 constructor,
                 fields,
             } => match self.family_encoding(self.constructor_family(*constructor)) {
-                // A collapsed construction with at most one payload builds nothing: the result is the payload atom itself (or the interned zero), recorded as an alias in the value map, so downstream code reads the value where the tuple would have been.
+                // A collapsed construction with at most one payload builds nothing: the result is the payload atom itself (or the interned zero), recorded as an alias in the value map, so downstream code reads the value where the tuple would have been. A marked single field still settles — the value *is* the store — through an ordinary binding instead of the alias.
                 FamilyEncoding::Collapsed if fields.len() <= 1 => {
-                    let value = match fields.first() {
-                        Some(&payload) => self.lower_atom(payload),
-                        None => curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(0)),
-                    };
-                    self.values.insert(result, value);
-                    self.lower_statements(rest, terminator, target)
+                    if let Some(&payload) = fields.first()
+                        && self.facts.indexed_only_constructor(*constructor, 0)
+                    {
+                        let atom = self.lower_atom(payload);
+                        self.straight(result, rest, terminator, target, |bound, next| {
+                            curios_cont::CpsNode::LetIntrinsic {
+                                result: bound,
+                                op: curios_cont::CpsIntrinsicOp::ListSettle,
+                                args: vec![atom],
+                                next,
+                            }
+                        })
+                    } else {
+                        let value = match fields.first() {
+                            Some(&payload) => self.lower_atom(payload),
+                            None => curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(0)),
+                        };
+                        self.values.insert(result, value);
+                        self.lower_statements(rest, terminator, target)
+                    }
                 }
                 FamilyEncoding::Collapsed => {
-                    let atoms = fields.iter().map(|&atom| self.lower_atom(atom)).collect();
-                    self.straight(result, rest, terminator, target, move |bound, next| {
-                        curios_cont::CpsNode::LetValue {
-                            result: bound,
-                            value: curios_cont::CpsValueExpr::Tuple(atoms),
-                            next,
-                        }
-                    })
+                    let mut atoms: Vec<_> =
+                        fields.iter().map(|&atom| self.lower_atom(atom)).collect();
+                    let marked: Vec<bool> = (0..fields.len())
+                        .map(|field| self.facts.indexed_only_constructor(*constructor, field))
+                        .collect();
+                    let settles = self.settle_stores(&marked, &mut atoms);
+                    let bound = self.bind_value(result);
+                    let next = self.lower_statements(rest, terminator, target);
+                    let node = self.module.add_node(curios_cont::CpsNode::LetValue {
+                        result: bound,
+                        value: curios_cont::CpsValueExpr::Tuple(atoms),
+                        next,
+                    });
+                    self.wrap_settles(settles, node)
                 }
-                // The immediate-unary constructor rides bare: the payload is always an immediate, so the value *is* the payload and the tag is never minted.
+                // The immediate-unary constructor rides bare: the payload is always an immediate, so the value *is* the payload and the tag is never minted. An immediate is never a list, so no settle applies.
                 FamilyEncoding::Immediate { constructor: bare } if bare == *constructor => {
                     let payload = self.lower_atom(fields[0]);
                     self.values.insert(result, payload);
@@ -722,13 +753,22 @@ impl Lowerer<'_> {
                         tag,
                     )));
                     atoms.extend(fields.iter().map(|&atom| self.lower_atom(atom)));
-                    self.straight(result, rest, terminator, target, move |bound, next| {
-                        curios_cont::CpsNode::LetValue {
-                            result: bound,
-                            value: curios_cont::CpsValueExpr::Tuple(atoms),
-                            next,
-                        }
-                    })
+                    // The tag occupies slot zero, so field `i` sits at atom `i + 1`.
+                    let marked: Vec<bool> =
+                        std::iter::once(false)
+                            .chain((0..fields.len()).map(|field| {
+                                self.facts.indexed_only_constructor(*constructor, field)
+                            }))
+                            .collect();
+                    let settles = self.settle_stores(&marked, &mut atoms);
+                    let bound = self.bind_value(result);
+                    let next = self.lower_statements(rest, terminator, target);
+                    let node = self.module.add_node(curios_cont::CpsNode::LetValue {
+                        result: bound,
+                        value: curios_cont::CpsValueExpr::Tuple(atoms),
+                        next,
+                    });
+                    self.wrap_settles(settles, node)
                 }
             },
             Rhs::Project {
@@ -1799,6 +1839,40 @@ impl Lowerer<'_> {
         let bound = self.bind_value(result);
         let next = self.lower_statements(rest, terminator, target);
         self.module.add_node(make(bound, next))
+    }
+
+    /// Redirect each marked construction slot through a fresh value the caller settles: the atom is replaced in place, and the returned bindings are what [`Self::wrap_settles`] chains in front of the construction node. A store into a field the census marked indexed-only is where the value's whole future is known — it will only ever be indexed — so it is made (or proven) flat exactly there.
+    fn settle_stores(
+        &mut self,
+        marked: &[bool],
+        atoms: &mut [curios_cont::CpsAtom],
+    ) -> Vec<(curios_cont::CpsValueId, curios_cont::CpsAtom)> {
+        let mut settles = Vec::new();
+        for (atom, _) in atoms.iter_mut().zip(marked).filter(|(_, marked)| **marked) {
+            let settled = self.module.add_value(None);
+            settles.push((settled, atom.clone()));
+            *atom = curios_cont::CpsAtom::Value(settled);
+        }
+        settles
+    }
+
+    /// Chain the settle bindings in front of `node`, preserving their field order.
+    fn wrap_settles(
+        &mut self,
+        settles: Vec<(curios_cont::CpsValueId, curios_cont::CpsAtom)>,
+        node: curios_cont::CpsNodeId,
+    ) -> curios_cont::CpsNodeId {
+        settles
+            .into_iter()
+            .rev()
+            .fold(node, |next, (result, atom)| {
+                self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
+                    result,
+                    op: curios_cont::CpsIntrinsicOp::ListSettle,
+                    args: vec![atom],
+                    next,
+                })
+            })
     }
 
     /// Allocate the Cont value representing an arena value, carrying its source hint, and record the mapping — the single choke point for every binder that names a source value.
