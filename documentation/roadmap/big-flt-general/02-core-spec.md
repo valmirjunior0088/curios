@@ -18,14 +18,14 @@ numerator · 2^exponent / odd_denominator
 pub struct BigFlt : Type {
     numerator : BigInt,
     exponent : BigInt,
-    odd_denominator : NonZero,
+    odd_denominator : BigPos,
     canonical : Canonical(numerator, exponent, odd_denominator)
 }
 ```
 
 Use one uniform runtime structure. Dyadic values carry denominator one; the implementation may recognize that value as a fast path, but a second public nominal representation is not introduced.
 
-`odd_denominator` is positive through `NonZero`. The `Canonical` certificate additionally establishes oddness and coprimality where required.
+`odd_denominator` is positive through `BigPos`. The `Canonical` certificate additionally establishes oddness and coprimality where required.
 
 ## Canonical invariant
 
@@ -46,8 +46,8 @@ Use repository-native `of_*` names:
 ```text
 of_big_int : BigInt -> BigFlt
 of_dyadic : BigInt -> BigInt -> BigFlt
-of_ratio : BigInt -> NonZero -> BigFlt
-of_scaled_ratio : BigInt -> BigInt -> NonZero -> BigFlt
+of_ratio : BigInt -> BigPos -> BigFlt
+of_scaled_ratio : BigInt -> BigInt -> BigPos -> BigFlt
 ```
 
 `of_big_int` and `of_dyadic` preserve their existing meaning. `of_ratio(numerator, denominator)` uses exponent zero. `of_scaled_ratio` is the full normalizing constructor.

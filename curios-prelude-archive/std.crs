@@ -94,8 +94,8 @@ pub use Order/{let Order};
 pub mod BigNat;
 pub use BigNat/{let BigNat};
 
-pub mod NonZero;
-pub use NonZero/{let NonZero};
+pub mod BigPos;
+pub use BigPos/{let BigPos};
 
 pub mod BigInt;
 pub use BigInt/{let BigInt};

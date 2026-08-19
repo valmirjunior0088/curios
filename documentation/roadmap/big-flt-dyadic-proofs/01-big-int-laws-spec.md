@@ -68,7 +68,7 @@ Every proof uses checked structural elimination, checked inductive case analysis
 - Rational normalization or reduced-fraction uniqueness.
 - Floating-point representations, encodings, rounding, guard bits, or sticky bits.
 - Field laws, multiplicative inverses, or exact quotients.
-- Redesigning `BigNat`, `NonZero`, or `BigInt` runtime representations.
+- Redesigning `BigNat`, `BigPos`, or `BigInt` runtime representations.
 
 Those Euclidean capabilities are specified separately as a prerequisite of the later general rational `BigFlt` extension.
 

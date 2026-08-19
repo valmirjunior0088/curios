@@ -213,8 +213,8 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Host-service modules (`std/time` `Instant`/`Duration`, `std/proc` `args`/`env`/`exit`, `std/rand`)
 - [x] Arbitrary-precision naturals (`std/BigNat`, canonical and packed over `Bits`)
   - [x] Machine-checked additive and multiplicative laws, additive cancellation, order reflection/transitivity, and power-of-two interaction lemmas
-- [x] Certified strictly-positive arbitrary-precision naturals (`std/NonZero`)
-- [x] Arbitrary-precision integers (`std/BigInt` over the strictly-positive `std/NonZero`)
+- [x] Certified strictly-positive arbitrary-precision naturals (`std/BigPos`)
+- [x] Arbitrary-precision integers (`std/BigInt` over the strictly-positive `std/BigPos`)
 - [ ] Dyadic `BigFlt` exact core
   - [ ] [Canonical representation, exact operations, comparison, and witnesses](roadmap/big-flt-dyadic/01-core-spec.md)
   - [ ] [Exact binary32 conversion and correctly rounded output](roadmap/big-flt-dyadic/02-binary32-spec.md)

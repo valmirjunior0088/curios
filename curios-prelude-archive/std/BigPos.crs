@@ -8,18 +8,18 @@ use /std/BigNat/{of_bits, of_trimmed_bits, is_trimmed, is_trimmed_of_canonical, 
 pub let is_cons(bits: Bits) -> Prop =
     match bits | b[] => False | b[_, .._] => True end;
 
-pub struct NonZero: pub Type {
+pub struct BigPos: pub Type {
     value: BigNat,
     non_zero: is_cons(value.bits),
 }
 
-pub let eq(a: NonZero, b: NonZero, p: Eq(a.value, b.value)) -> Eq(a, b) =
+pub let eq(a: BigPos, b: BigPos, p: Eq(a.value, b.value)) -> Eq(a, b) =
     Eq/subst(
-        (m: BigNat) => (nz: is_cons(m.bits)) -> Eq(a, NonZero { value = m, non_zero = nz }),
+        (m: BigNat) => (nz: is_cons(m.bits)) -> Eq(a, BigPos { value = m, non_zero = nz }),
         p,
         (nz: is_cons(a.value.bits)) => Eq/refl())(b.non_zero);
 
-pub let nz_trimmed(t: NonZero) -> Eq(is_trimmed(t.value.bits), true) =
+pub let nz_trimmed(t: BigPos) -> Eq(is_trimmed(t.value.bits), true) =
     is_trimmed_of_canonical(t.value.bits, t.value.canonical);
 
 let cons_low_trimmed(
@@ -58,11 +58,11 @@ let trim_head_true(r: Bits) -> is_cons(trim(b[1, ..r])) =
     combine_true_non_zero(trim(r));
 
 -- ===================== smart constructors =====================
-pub let one: NonZero =
-    NonZero { value = of_trimmed_bits(b[1], Eq/refl()), non_zero = True/qed() };
+pub let one: BigPos =
+    BigPos { value = of_trimmed_bits(b[1], Eq/refl()), non_zero = True/qed() };
 
-pub let dbl(t: NonZero) -> NonZero =
-    NonZero {
+pub let dbl(t: BigPos) -> BigPos =
+    BigPos {
         value =
             of_trimmed_bits(
                 b[0, ..t.value.bits],
@@ -70,8 +70,8 @@ pub let dbl(t: NonZero) -> NonZero =
         non_zero = True/qed(),
     };
 
-pub let dbl_succ(t: NonZero) -> NonZero =
-    NonZero {
+pub let dbl_succ(t: BigPos) -> BigPos =
+    BigPos {
         value =
             of_trimmed_bits(
                 b[1, ..t.value.bits],
@@ -80,10 +80,10 @@ pub let dbl_succ(t: NonZero) -> NonZero =
     };
 
 -- ===================== BigNat bridge =====================
--- reflect a BigNat as zero-or-nonzero, rebuilding the NonZero certificate bit by bit through the smart constructors (recursion over BigNat's view, as in bit_len).
+-- reflect a BigNat as zero-or-nonzero, rebuilding the BigPos certificate bit by bit through the smart constructors (recursion over BigNat's view, as in bit_len).
 pub induct Split: pub Type
 | zero()
-| pos(NonZero)
+| pos(BigPos)
 end
 
 pub rec of_big_nat(a: BigNat) -> Split =
@@ -97,7 +97,7 @@ pub rec of_big_nat(a: BigNat) -> Split =
     end;
 
 -- ===================== operations =====================
--- Each operation is a facade: the module's namesake binding is the operation and the laws about it nest underneath — `NonZero/add` adds, `NonZero/add/assoc` is its associativity, `NonZero/add/trim_non_zero` the certificate transport it is built from. The helpers above are shared by more than one operation, so they stay here, private to this subtree.
+-- Each operation is a facade: the module's namesake binding is the operation and the laws about it nest underneath — `BigPos/add` adds, `BigPos/add/assoc` is its associativity, `BigPos/add/trim_non_zero` the certificate transport it is built from. The helpers above are shared by more than one operation, so they stay here, private to this subtree.
 pub mod add;
 pub use add/{let add};
 
@@ -110,6 +110,6 @@ pub use mul/{let mul};
 pub mod cmp;
 pub use cmp/{let cmp};
 
-satisfy Show(NonZero) {
+satisfy Show(BigPos) {
     show(n) = /std/BigNat/to_str(n.value),
 }

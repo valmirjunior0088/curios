@@ -8,7 +8,7 @@ Add certified division with remainder, exact division, divisibility, greatest co
 
 ## Ownership and naming
 
-Operations and laws over unsigned magnitudes belong beside `BigNat`. Positive-divisor conveniences may consume `NonZero`, but they do not move ownership into `/std/NonZero`.
+Operations and laws over unsigned magnitudes belong beside `BigNat`. Positive-divisor conveniences may consume `BigPos`, but they do not move ownership into `/std/BigPos`.
 
 Use repository conventions:
 
@@ -28,14 +28,14 @@ is_coprime
 Define a dependent result carrying executable outputs and erased evidence:
 
 ```crs
-pub struct DivMod(dividend : BigNat, divisor : NonZero) : pub Type {
+pub struct DivMod(dividend : BigNat, divisor : BigPos) : pub Type {
     quotient : BigNat,
     remainder : BigNat,
     reconstruct : Eq(dividend, add(mul(quotient, divisor.value), remainder)),
     bounded : Lt(remainder, divisor.value),
 }
 
-pub let divmod(dividend : BigNat, divisor : NonZero) -> DivMod(dividend, divisor)
+pub let divmod(dividend : BigNat, divisor : BigPos) -> DivMod(dividend, divisor)
 ```
 
 The final spelling of the bound may use the existing reflected order proposition rather than introducing a duplicate `Lt`. The semantic obligations are reconstruction and a strict remainder bound.

@@ -1,8 +1,8 @@
 -- Multiplication of strictly-positive naturals. The certificate recurses on the left operand's bits: a set bit reduces the goal to `add`'s transport lemma, a clear bit to a shift of the recursive result.
-use /std/{Bool, Bits, Eq, False, True, BigNat, NonZero};
+use /std/{Bool, Bits, Eq, False, True, BigNat, BigPos};
 use /std/Bool/{false_neq_true};
 use /std/BigNat/{is_trimmed, trim};
-use /std/NonZero/{is_cons, nz_trimmed, trim_head_non_zero, add};
+use /std/BigPos/{is_cons, nz_trimmed, trim_head_non_zero, add};
 
 rec raw_trim_cons(
     p: Bits,
@@ -29,8 +29,8 @@ rec raw_trim_cons(
         end
     end;
 
-pub let mul(p: NonZero, q: NonZero) -> NonZero =
-    NonZero {
+pub let mul(p: BigPos, q: BigPos) -> BigPos =
+    BigPos {
         value = p.value * q.value,
         non_zero =
             raw_trim_cons(
@@ -42,18 +42,18 @@ pub let mul(p: NonZero, q: NonZero) -> NonZero =
                 q.non_zero),
     };
 
-pub let comm(p: NonZero, q: NonZero) -> Eq(mul(p, q), mul(q, p)) =
-    NonZero/eq(mul(p, q), mul(q, p), BigNat/mul/comm(p.value, q.value));
+pub let comm(p: BigPos, q: BigPos) -> Eq(mul(p, q), mul(q, p)) =
+    BigPos/eq(mul(p, q), mul(q, p), BigNat/mul/comm(p.value, q.value));
 
-pub let assoc(p: NonZero, q: NonZero, r: NonZero) -> Eq(mul(mul(p, q), r), mul(p, mul(q, r))) =
-    NonZero/eq(mul(mul(p, q), r), mul(p, mul(q, r)), BigNat/mul/assoc(p.value, q.value, r.value));
+pub let assoc(p: BigPos, q: BigPos, r: BigPos) -> Eq(mul(mul(p, q), r), mul(p, mul(q, r))) =
+    BigPos/eq(mul(mul(p, q), r), mul(p, mul(q, r)), BigNat/mul/assoc(p.value, q.value, r.value));
 
 pub let distrib_l(
-    p: NonZero,
-    q: NonZero,
-    r: NonZero,
+    p: BigPos,
+    q: BigPos,
+    r: BigPos,
 ) -> Eq(mul(p, add(q, r)), add(mul(p, q), mul(p, r))) =
-    NonZero/eq(
+    BigPos/eq(
         mul(p, add(q, r)),
         add(mul(p, q), mul(p, r)),
         BigNat/mul/distrib_l(p.value, q.value, r.value));

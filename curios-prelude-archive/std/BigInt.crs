@@ -1,10 +1,10 @@
--- Arbitrary-precision integers: a sign tag over a strictly-positive `NonZero` magnitude (or the distinguished `zero`). Every operation dispatches on the sign constructors and delegates the magnitude arithmetic to `NonZero`/`BigNat`. Signed subtraction (`pos_sub`) reads the sign straight off `non_zero_cmp` and takes the truncating `BigNat/sub` of the larger minus the smaller magnitude, so no borrow/compare bridge is needed. The algebraic lemma corpus is deferred until a consumer needs it (see documentation/roadmap/big-flt-dyadic-proofs/01-big-int-laws-spec.md).
-use /std/{Nat, Int, Bool, Str, Order, BigNat, NonZero, Eql, Cmp, Add, Sub, Mul, Show, Ord};
+-- Arbitrary-precision integers: a sign tag over a strictly-positive `BigPos` magnitude (or the distinguished `zero`). Every operation dispatches on the sign constructors and delegates the magnitude arithmetic to `BigPos`/`BigNat`. Signed subtraction (`pos_sub`) reads the sign straight off `non_zero_cmp` and takes the truncating `BigNat/sub` of the larger minus the smaller magnitude, so no borrow/compare bridge is needed. The algebraic lemma corpus is deferred until a consumer needs it (see documentation/roadmap/big-flt-dyadic-proofs/01-big-int-laws-spec.md).
+use /std/{Nat, Int, Bool, Str, Order, BigNat, BigPos, Eql, Cmp, Add, Sub, Mul, Show, Ord};
 
 pub induct BigInt: pub Type
-| neg(NonZero)
+| neg(BigPos)
 | zero()
-| pos(NonZero)
+| pos(BigPos)
 end
 
 pub let zero: BigInt =
@@ -15,7 +15,7 @@ pub let is_zero(a: BigInt) -> Bool =
 
 -- attach a sign to a BigNat magnitude, collapsing a zero magnitude to BigInt/zero
 let signed(negative: Bool, a: BigNat) -> BigInt =
-    match NonZero/of_big_nat(a)
+    match BigPos/of_big_nat(a)
     | zero() => BigInt/zero()
     | pos(t) => match negative | true => BigInt/neg(t) | false => BigInt/pos(t) end
     end;
@@ -24,8 +24,8 @@ pub let of_big_nat(a: BigNat) -> BigInt =
     signed(false, a);
 
 -- x - y for positive x, y: the sign is non_zero_cmp, the magnitude is the truncating BigNat difference of the larger minus the smaller.
-pub let pos_sub(x: NonZero, y: NonZero) -> BigInt =
-    match NonZero/cmp(x, y)
+pub let pos_sub(x: BigPos, y: BigPos) -> BigInt =
+    match BigPos/cmp(x, y)
     | lt() => signed(true, y.value - x.value)
     | eq() => BigInt/zero()
     | gt() => signed(false, x.value - y.value)
@@ -33,13 +33,13 @@ pub let pos_sub(x: NonZero, y: NonZero) -> BigInt =
 
 pub let add(a: BigInt, b: BigInt) -> BigInt =
     match (a, b)
-    | (neg(p), neg(q)) => BigInt/neg(NonZero/add(p, q))
+    | (neg(p), neg(q)) => BigInt/neg(BigPos/add(p, q))
     | (neg(p), zero()) => BigInt/neg(p)
     | (neg(p), pos(q)) => pos_sub(q, p)
     | (zero(), y) => y
     | (pos(p), neg(q)) => pos_sub(p, q)
     | (pos(p), zero()) => BigInt/pos(p)
-    | (pos(p), pos(q)) => BigInt/pos(NonZero/add(p, q))
+    | (pos(p), pos(q)) => BigInt/pos(BigPos/add(p, q))
     end;
 
 pub let neg(a: BigInt) -> BigInt =
@@ -56,18 +56,18 @@ pub let magnitude(a: BigInt) -> BigNat =
 
 pub let mul(a: BigInt, b: BigInt) -> BigInt =
     match (a, b)
-    | (neg(p), neg(q)) => BigInt/pos(NonZero/mul(p, q))
+    | (neg(p), neg(q)) => BigInt/pos(BigPos/mul(p, q))
     | (neg(_), zero()) => BigInt/zero()
-    | (neg(p), pos(q)) => BigInt/neg(NonZero/mul(p, q))
+    | (neg(p), pos(q)) => BigInt/neg(BigPos/mul(p, q))
     | (zero(), _) => BigInt/zero()
-    | (pos(p), neg(q)) => BigInt/neg(NonZero/mul(p, q))
+    | (pos(p), neg(q)) => BigInt/neg(BigPos/mul(p, q))
     | (pos(_), zero()) => BigInt/zero()
-    | (pos(p), pos(q)) => BigInt/pos(NonZero/mul(p, q))
+    | (pos(p), pos(q)) => BigInt/pos(BigPos/mul(p, q))
     end;
 
 pub let cmp(a: BigInt, b: BigInt) -> Order =
     match (a, b)
-    | (neg(p), neg(q)) => NonZero/cmp(q, p)
+    | (neg(p), neg(q)) => BigPos/cmp(q, p)
     | (neg(_), zero()) => Order/lt()
     | (neg(_), pos(_)) => Order/lt()
     | (zero(), neg(_)) => Order/gt()
@@ -75,7 +75,7 @@ pub let cmp(a: BigInt, b: BigInt) -> Order =
     | (zero(), pos(_)) => Order/lt()
     | (pos(_), neg(_)) => Order/gt()
     | (pos(_), zero()) => Order/gt()
-    | (pos(p), pos(q)) => NonZero/cmp(p, q)
+    | (pos(p), pos(q)) => BigPos/cmp(p, q)
     end;
 
 pub let eql(a: BigInt, b: BigInt) -> Bool =
