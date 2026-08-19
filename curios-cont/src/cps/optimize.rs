@@ -17,7 +17,7 @@ use super::{
     simplify::{
         dissolve_rec_init, eliminate_dead_bindings, eliminate_dead_parameters,
         fold_intrinsic_identities, forward_aggregate_projections, forward_continuations,
-        rewrite_atoms, simplify_nodes,
+        fuse_append_chains, rewrite_atoms, simplify_nodes,
     },
     specialize::{specialize_call_patterns, specialize_jump_patterns, specialize_scc_calls},
     uncurry::uncurry_returns,
@@ -63,6 +63,7 @@ pub fn optimize(module: &mut CpsModule) {
             | dedupe_intrinsics(module)
             | simplify_nodes(module)
             | fold_intrinsic_identities(module)
+            | fuse_append_chains(module)
             | eliminate_dead_bindings(module)
             | eliminate_dead_parameters(module)
             | inline_single_use_continuations(module)

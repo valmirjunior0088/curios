@@ -74,6 +74,10 @@ fn timed(cwasm: &[u8], n: u64) -> f64 {
 ///
 /// Landed: the in-helper cache probe in `$bytes/read`/`$list/read` and the call-site leaf split (`emit_seq_get`). Figures, same box: the landed variant read 8849/8458/8275 ns/insert over one quiet sequence; an experimental wider split that also answered cached nodes inline at the call site read 7986/7897/8111 in another. Within a sequence the spread is ±1.3%; across sequences it is ±6%, and runs taken right after a compile read up to 5% hot — so none of these deltas, the baseline included, is resolvable.
 ///
+/// # Step 2, packed half, 2026-08-19
+///
+/// `fuse_append_chains` + `BinChunk` landed; the slope read 8166 ns/insert — inside the band, as the spec predicts, since the key builder is a recursive append the fusion correctly declines (charged to step 4). The shape evidence is `tainted_packed_literals_fuse_to_flat_chunks` in `structural.rs`; the beneficiary class (encoders) is not timed by this probe.
+///
 /// What the figure decided: the read protocol's *call* component is not the spines wall. The decomposition's ~60% read share must be carried by what the calls sat beside — the serial dependent fork loads and the walk structure — which halving the call count does not touch. Step 1 stays landed for the invariant's location and for the leaf-rooted walks it does serve (literals, `List/map` results, step 2's flat builds); the cached-node call-site arm was dropped as unresolvable benefit against ~15 instructions per site, to be revisited only if a cached-node-dominated read path is ever hot — none is expected, since step 2 makes fork children leaves. The campaign's weight shifts where the spec already put its centerpiece: the register key (step 4) deletes the loads themselves, and the width reshape (step 5) deletes levels of them.
 #[test]
 #[ignore = "measurement: reports timings rather than asserting"]

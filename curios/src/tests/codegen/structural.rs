@@ -3,7 +3,7 @@
 //! Emitted function names are `$func/<N>` ids — a module-wide monotonic index over every reachable function, prelude included — optionally suffixed with the source hint as `$func/<N>$hint`. The index carries identity; the hint is only origin annotation. Hot kernels are still located by a distinctive literal constant baked into their arithmetic (`65537` for LCG, `1000003` for trees) or by name-independent structure (self-recursion, the shared `$func/<N>`/`$clsr/<N>` index of a function used both directly and as a closure), never by a source name. A genuine irreducible-cycle dispatcher is the `loop $$dispatch/<anchor>` the emitter names in `into_wasm::expr_emitter`; an ordinary constructor-tag `switch` lowers to a `br_table` over `$case$N`/`$tail` labels and is not a dispatcher.
 
 use {
-    crate::tests::cont_optm,
+    crate::tests::{cont_optm, run},
     curios_pipeline::compile_with_prelude,
     curios_runtime::{ForeignBindings, MockHost, precompile, run_bytes},
     curios_text::{Entrypoint, RootSource},
@@ -1265,4 +1265,34 @@ fn raw_wasm_validates_and_executes_without_binaryen() {
             "{label} raw output must match the Binaryen-optimized output",
         );
     }
+}
+
+/// A packed literal's non-constant atoms fuse into one flat chunk build (`fuse_append_chains` in `curios-cont`): the byte literal's two runtime atoms become a `BinChunk(X, 2)` and the bit literal's one a `BinChunk(B, 1)`, in place of the append-per-atom chains the lowering honestly writes, and the program still prints what the chains would. The taint keeps every atom out of constant folding, so the chunks survive to emission and the equality runs over runtime-built values.
+#[test]
+fn tainted_packed_literals_fuse_to_flat_chunks() {
+    let source = r#"
+        use /std/{Nat, List, Byte, Bytes, Bits, Bool, Str, Handle, proc};
+        let taint = List/len(proc/args!);
+        let a: Byte = match taint | 0 => 7 | _ => 9 end;
+        let y: Byte = match taint | 0 => 8 | _ => 10 end;
+        let bytes = x[a, y, 0x21];
+        let t: Bool = taint == 0;
+        let bits = b[t, 1];
+        match bytes == x[7, 8, 0x21] && bits == b[1, 1]
+        | true => /std/print("ok\n")
+        | false => /std/print("bad\n")
+        end
+        "#;
+
+    let dump = cont_optm(source);
+    assert!(
+        dump.contains("BinChunk(X, 2)"),
+        "the byte atoms fuse into one chunk: {dump}"
+    );
+    assert!(
+        dump.contains("BinChunk(B, 1)"),
+        "the bit atom fuses into one chunk: {dump}"
+    );
+
+    assert_eq!(run(source), b"ok\n");
 }

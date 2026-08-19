@@ -134,6 +134,8 @@ pub enum CpsIntrinsicOp {
     BinRest(Grain),
     BinAppend(Grain),
     BinConcat(Grain, usize),
+    /// `(element…) -> bin`: one flat leaf holding exactly these elements at the given grain — the fused form of an append chain, minted only by the optimizer's `fuse_append_chains` and never by the door. The arity is the element count in grain units; the byte grain stores one element per payload byte, the bit grain packs eight.
+    BinChunk(Grain, usize),
     ListLen,
     ListGet,
     ListSlice,
@@ -182,6 +184,8 @@ impl CpsIntrinsicOp {
             (BinGet(_) | BinSlice(_) | BinRest(_) | BinAppend(_), _) => Repr::Nat,
             (ListGet | ListSlice | ListRest | ListAppend, 0) => Repr::List,
             (ListGet | ListSlice | ListRest, _) => Repr::Nat,
+            // A chunk element is one packed byte, carried at the `Nat` grain like an append's.
+            (BinChunk(_, _), _) => Repr::Nat,
             // A list element is carried, never interpreted — unlike a `Bytes` element, which is a `Nat` grain.
             (ListAppend, _) => Repr::Ref,
             (BinConcat(_, _), _) | (BinEql(_) | BinLen(_), _) | (FltOfLeBytes, _) => Repr::Bytes,
@@ -239,7 +243,12 @@ impl CpsIntrinsicOp {
 
             // `IsImmediate` joins the predicates: it answers a `Bool`, whose carrier is a `Nat`.
             BinGet(_) | WindowExtent | IsImmediate => Repr::Nat,
-            BinSlice(_) | BinRest(_) | BinAppend(_) | BinConcat(_, _) | FltToLeBytes => Repr::Bytes,
+            BinSlice(_)
+            | BinRest(_)
+            | BinAppend(_)
+            | BinConcat(_, _)
+            | BinChunk(_, _)
+            | FltToLeBytes => Repr::Bytes,
             ListSlice | ListRest | ListAppend | ListConcat(_) => Repr::List,
             // A list read and a tuple projection both yield whatever was stored, uninterpreted.
             ListGet | TplGet(_) => Repr::Ref,
@@ -285,7 +294,7 @@ impl CpsIntrinsicOp {
             | Self::TplGet(_)
             | Self::IsImmediate => 1,
             Self::BinSlice(_) | Self::ListSlice | Self::WindowExtent => 3,
-            Self::BinConcat(_, arity) | Self::ListConcat(arity) => arity,
+            Self::BinConcat(_, arity) | Self::ListConcat(arity) | Self::BinChunk(_, arity) => arity,
             _ => 2,
         }
     }
@@ -331,6 +340,7 @@ impl CpsIntrinsicOp {
             // Allocates a *sequence*. An `Flt` result is boxed too, but every `Flt` producer below is treated as total, so the category means a rope or a list rather than any heap traffic at all.
             Self::BinAppend(_)
             | Self::BinConcat(_, _)
+            | Self::BinChunk(_, _)
             | Self::ListAppend
             | Self::ListConcat(_)
             | Self::FltToLeBytes => CpsIntrinsicEffect::Allocates,

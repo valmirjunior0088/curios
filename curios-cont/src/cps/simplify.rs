@@ -347,6 +347,126 @@ pub(super) fn fold_intrinsic_identities(module: &mut CpsModule) -> bool {
     }
     changed
 }
+
+/// Fuse a chain of packed appends into one flat chunk build. A literal with non-constant atoms lowers to appends onto whatever precedes it — the free monoid's honest spelling — and each append allocates a one-element leaf and a node the first read then gathers. Where the chain is local and unshared, the elements build one exact flat leaf instead: `BinChunk` alone when the chain is rooted at the empty packed value, or the root concatenated with the chunk otherwise. Only an intermediate append nothing else reads may fuse — a shared intermediate is a value the program observes — and a lone append onto a non-empty root stays as written, since a one-element chunk beside a concat node buys back exactly what it costs.
+pub(super) fn fuse_append_chains(module: &mut CpsModule) -> bool {
+    let counts = module.value_use_counts();
+
+    // Every packed append by its result — node, grain, base, element, successor — and every packed literal binding, so a chain rooted at an interned empty is recognized.
+    let mut appends = BTreeMap::new();
+    let mut literals = BTreeMap::new();
+    for (id, node) in module.nodes.iter_live() {
+        match node {
+            CpsNode::LetIntrinsic {
+                result,
+                op: CpsIntrinsicOp::BinAppend(grain),
+                args,
+                next,
+            } => {
+                appends.insert(
+                    *result,
+                    (id, *grain, args[0].clone(), args[1].clone(), *next),
+                );
+            }
+            CpsNode::LetValue {
+                result,
+                value: CpsValueExpr::Literal(CpsLiteral::Bin(grain, value)),
+                ..
+            } => {
+                literals.insert(*result, (*grain, value.clone()));
+            }
+            _ => {}
+        }
+    }
+
+    // An interior link is an append result whose one use is the base of a same-grain append; a chain is walked from each tip — an append that is no interior link — down through interior links to its root atom.
+    let interior = |value: &CpsValueId, grain: Grain| {
+        counts.get(value).copied().unwrap_or(0) == 1
+            && appends.get(value).is_some_and(|(_, g, ..)| *g == grain)
+    };
+    let is_empty_literal = |atom: &CpsAtom, grain: Grain| match atom {
+        CpsAtom::Literal(CpsLiteral::Bin(g, value)) => *g == grain && value.len(grain) == 0,
+        CpsAtom::Value(value) => literals
+            .get(value)
+            .is_some_and(|(g, value)| *g == grain && value.len(grain) == 0),
+        _ => false,
+    };
+
+    let mut changed = false;
+    for (&tip, &(tip_node, grain, ref tip_base, ref tip_elem, tip_next)) in &appends {
+        let consumed_as_base = appends
+            .values()
+            .any(|(_, g, base, ..)| *g == grain && *base == CpsAtom::Value(tip));
+        if interior(&tip, grain) && consumed_as_base {
+            continue;
+        }
+
+        let mut chain = Vec::new();
+        let mut elems = vec![tip_elem.clone()];
+        let mut root = tip_base.clone();
+        while let CpsAtom::Value(value) = &root
+            && interior(value, grain)
+        {
+            let (node, _, base, elem, _) = &appends[value];
+            chain.push((*node, *value));
+            elems.push(elem.clone());
+            root = base.clone();
+        }
+        elems.reverse();
+
+        let rooted_empty = is_empty_literal(&root, grain);
+        if !rooted_empty && elems.len() < 2 {
+            continue;
+        }
+
+        let chunk = CpsIntrinsicOp::BinChunk(grain, elems.len());
+        if rooted_empty {
+            module.nodes.set(
+                tip_node,
+                CpsNode::LetIntrinsic {
+                    result: tip,
+                    op: chunk,
+                    args: elems,
+                    next: tip_next,
+                },
+            );
+        } else {
+            let chunk_result = module.add_value(None);
+            let concat = module.add_node(CpsNode::LetIntrinsic {
+                result: tip,
+                op: CpsIntrinsicOp::BinConcat(grain, 2),
+                args: vec![root, CpsAtom::Value(chunk_result)],
+                next: tip_next,
+            });
+            module.nodes.set(
+                tip_node,
+                CpsNode::LetIntrinsic {
+                    result: chunk_result,
+                    op: chunk,
+                    args: elems,
+                    next: concat,
+                },
+            );
+        }
+
+        // The interior appends are dead once the tip stops reading them, and dead-binding elimination declines `Allocates` ops, so the chain splices its own nodes out.
+        let redirect = chain
+            .iter()
+            .map(|&(node, value)| {
+                let (_, _, _, _, next) = appends[&value];
+                (node, next)
+            })
+            .collect();
+        splice_dead_nodes(module, &redirect);
+        for (node, value) in chain {
+            module.nodes.remove(node);
+            module.values.remove(value);
+        }
+        changed = true;
+    }
+    changed
+}
+
 pub(super) fn forward_aggregate_projections(module: &mut CpsModule) -> bool {
     let mut changed = false;
     loop {

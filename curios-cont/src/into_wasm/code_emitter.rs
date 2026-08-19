@@ -1063,6 +1063,49 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 let rope = self.context.table().bin_rope();
                 self.emit_rope_concat(&result_local, args, LoadAs::Bytes, &rope);
             }
+            CpsIntrinsicOp::BinChunk(grain, arity) => {
+                let rope = self.context.table().bin_rope();
+                self.emit_instr(curios_wasm::Instr::I32Const { value: 0 });
+                self.emit_instr(curios_wasm::Instr::I32Const {
+                    value: arity as i32,
+                });
+                match grain {
+                    Grain::X => {
+                        for arg in args {
+                            self.emit_instrs(self.context.load_value_instrs(arg, LoadAs::Nat));
+                        }
+                        self.emit_instr(curios_wasm::Instr::ArrayNewFixed {
+                            type_name: rope.payload.clone(),
+                            length: arity as u32,
+                        });
+                    }
+                    // Each payload byte ORs its up-to-eight elements at constant positions, LSB-first — the packing `$bits/force` writes and `$bits/read` reads.
+                    Grain::B => {
+                        for byte in args.chunks(8) {
+                            for (bit, arg) in byte.iter().enumerate() {
+                                self.emit_instrs(self.context.load_value_instrs(arg, LoadAs::Nat));
+                                if bit != 0 {
+                                    self.emit_instr(curios_wasm::Instr::I32Const {
+                                        value: bit as i32,
+                                    });
+                                    self.emit_instr(curios_wasm::Instr::I32Shl);
+                                    self.emit_instr(curios_wasm::Instr::I32Or);
+                                }
+                            }
+                        }
+                        self.emit_instr(curios_wasm::Instr::ArrayNewFixed {
+                            type_name: rope.payload.clone(),
+                            length: args.len().div_ceil(8) as u32,
+                        });
+                    }
+                }
+                self.emit_instr(curios_wasm::Instr::StructNew {
+                    type_name: rope.leaf.clone(),
+                });
+                self.emit_instr(curios_wasm::Instr::LocalSet {
+                    local_name: result_local.clone(),
+                });
+            }
             CpsIntrinsicOp::ListLen => {
                 let rope = self.context.table().list_rope();
                 self.emit_unary_op(dest, &op, &args[0], Self::rope_get(&rope, &rope.len_field));
