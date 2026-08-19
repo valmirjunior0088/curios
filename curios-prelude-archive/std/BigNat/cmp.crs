@@ -31,13 +31,13 @@ pub let eql(a: BigNat, b: BigNat) -> Bool =
 pub let lt(a: BigNat, b: BigNat) -> Bool =
     match cmp(a, b) | lt() => true | _ => false end;
 
-pub let lte(a: BigNat, b: BigNat) -> Bool =
+pub let le(a: BigNat, b: BigNat) -> Bool =
     match cmp(a, b) | gt() => false | _ => true end;
 
 pub let gt(a: BigNat, b: BigNat) -> Bool =
     match cmp(a, b) | gt() => true | _ => false end;
 
-pub let gte(a: BigNat, b: BigNat) -> Bool =
+pub let ge(a: BigNat, b: BigNat) -> Bool =
     match cmp(a, b) | lt() => false | _ => true end;
 
 let absorb_eq(

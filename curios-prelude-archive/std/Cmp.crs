@@ -1,2 +1,2 @@
 pub use /syn/{Cmp};
-pub use /syn/Cmp/{lt, lte, gt, gte};
+pub use /syn/Cmp/{lt, le, gt, ge};

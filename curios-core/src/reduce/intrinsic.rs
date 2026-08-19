@@ -469,7 +469,7 @@ fn reduce_flt_unary(
     Ok(Subterm::Intrinsic(rebuild(inner)))
 }
 
-/// The structural outcome of comparing two `Nat`s. The whole comparison family (`eql`/`neq`/`lt`/`lte`/`gt`/`gte`) reads this one result; each op differs only in how it maps the outcome to a `bool`. `Le`/`Ge` record a *non-strict* bound the operands force without pinning equality (e.g. `succ x ≥ 1`), letting `lt`/`gte` decide where `eql` still cannot; `Stuck` is undecidable, and the op's neutral term is rebuilt.
+/// The structural outcome of comparing two `Nat`s. The whole comparison family (`eql`/`neq`/`lt`/`le`/`gt`/`ge`) reads this one result; each op differs only in how it maps the outcome to a `bool`. `Le`/`Ge` record a *non-strict* bound the operands force without pinning equality (e.g. `succ x ≥ 1`), letting `lt`/`ge` decide where `eql` still cannot; `Stuck` is undecidable, and the op's neutral term is rebuilt.
 #[derive(Debug, PartialEq)]
 enum Comparison {
     Eq,
@@ -504,7 +504,7 @@ fn compare_nat(
     let (sl, il) = Nat::decompose(&left);
     let (sr, ir) = Nat::decompose(&right);
 
-    // Same inner ⇒ the floors alone decide: `cmp(x + sl, x + sr) = cmp(sl, sr)` (so `lt(pred, succ pred) = true`). Two literals — inner `0` on both sides — also land here: this is the O(1) literal fold. Otherwise, whichever side keeps successors past the shared floor is larger *iff* the other bottomed out at literal zero (`inner ≥ 0`); equal floors with one zero inner give a non-strict bound (`a ≤ b`/`a ≥ b`) the strict/`gte`/`lte` reads still use; anything else is undecidable.
+    // Same inner ⇒ the floors alone decide: `cmp(x + sl, x + sr) = cmp(sl, sr)` (so `lt(pred, succ pred) = true`). Two literals — inner `0` on both sides — also land here: this is the O(1) literal fold. Otherwise, whichever side keeps successors past the shared floor is larger *iff* the other bottomed out at literal zero (`inner ≥ 0`); equal floors with one zero inner give a non-strict bound (`a ≤ b`/`a ≥ b`) the strict/`ge`/`le` reads still use; anything else is undecidable.
     // Compared up to universe instances for the same reason [`Nat::cancel_common`] matches summands that way: two occurrences of a polymorphic name carry independently fresh instances, and a level is not part of the answer to "are these the same number".
     let outcome = if project_erased_universes(&il) == project_erased_universes(&ir) {
         from_ordering(sl.cmp(&sr))
@@ -718,14 +718,14 @@ pub fn reduce_intrinsic(
         Intrinsic::ByteLt(l, r) => {
             reduce_byte_binary(reducer, l, r, |l, r| l < r, Intrinsic::ByteLt)
         }
-        Intrinsic::ByteLte(l, r) => {
-            reduce_byte_binary(reducer, l, r, |l, r| l <= r, Intrinsic::ByteLte)
+        Intrinsic::ByteLe(l, r) => {
+            reduce_byte_binary(reducer, l, r, |l, r| l <= r, Intrinsic::ByteLe)
         }
         Intrinsic::ByteGt(l, r) => {
             reduce_byte_binary(reducer, l, r, |l, r| l > r, Intrinsic::ByteGt)
         }
-        Intrinsic::ByteGte(l, r) => {
-            reduce_byte_binary(reducer, l, r, |l, r| l >= r, Intrinsic::ByteGte)
+        Intrinsic::ByteGe(l, r) => {
+            reduce_byte_binary(reducer, l, r, |l, r| l >= r, Intrinsic::ByteGe)
         }
         Intrinsic::NatEql(left, right) => reduce_nat_compare(
             reducer,
@@ -840,7 +840,7 @@ pub fn reduce_intrinsic(
             },
             Intrinsic::nat_gt,
         ),
-        Intrinsic::NatLte(left, right) => reduce_nat_compare(
+        Intrinsic::NatLe(left, right) => reduce_nat_compare(
             reducer,
             left,
             right,
@@ -851,7 +851,7 @@ pub fn reduce_intrinsic(
             },
             Intrinsic::nat_lte,
         ),
-        Intrinsic::NatGte(left, right) => reduce_nat_compare(
+        Intrinsic::NatGe(left, right) => reduce_nat_compare(
             reducer,
             left,
             right,
@@ -1028,19 +1028,19 @@ pub fn reduce_intrinsic(
             |left, right| Some(Intrinsic::Bool(left > right)),
             Intrinsic::IntGt,
         ),
-        Intrinsic::IntLte(left, right) => reduce_int_binary(
+        Intrinsic::IntLe(left, right) => reduce_int_binary(
             reducer,
             left,
             right,
             |left, right| Some(Intrinsic::Bool(left <= right)),
-            Intrinsic::IntLte,
+            Intrinsic::IntLe,
         ),
-        Intrinsic::IntGte(left, right) => reduce_int_binary(
+        Intrinsic::IntGe(left, right) => reduce_int_binary(
             reducer,
             left,
             right,
             |left, right| Some(Intrinsic::Bool(left >= right)),
-            Intrinsic::IntGte,
+            Intrinsic::IntGe,
         ),
         // Bitwise ops fold on the unbounded ℤ the type level pretends: `and`, `or`, `xor` on the infinite two's-complement expansion, `shl` as `· 2^n` and `shr` as the arithmetic `⌊·/2^n⌋`. The runtime's signed 31-bit carrier (truncating `shl`, `shr_s`) is imposed only in the backend, never here.
         Intrinsic::IntAnd(left, right) => reduce_int_binary(
@@ -1162,12 +1162,8 @@ pub fn reduce_intrinsic(
         }
         Intrinsic::FltLt(left, right) => reduce_flt_binary(reducer, left, right, Intrinsic::FltLt),
         Intrinsic::FltGt(left, right) => reduce_flt_binary(reducer, left, right, Intrinsic::FltGt),
-        Intrinsic::FltLte(left, right) => {
-            reduce_flt_binary(reducer, left, right, Intrinsic::FltLte)
-        }
-        Intrinsic::FltGte(left, right) => {
-            reduce_flt_binary(reducer, left, right, Intrinsic::FltGte)
-        }
+        Intrinsic::FltLe(left, right) => reduce_flt_binary(reducer, left, right, Intrinsic::FltLe),
+        Intrinsic::FltGe(left, right) => reduce_flt_binary(reducer, left, right, Intrinsic::FltGe),
         Intrinsic::FltNeg(inner) => reduce_flt_unary(reducer, inner, Intrinsic::FltNeg),
         Intrinsic::FltAbs(inner) => reduce_flt_unary(reducer, inner, Intrinsic::FltAbs),
         Intrinsic::FltSqrt(inner) => reduce_flt_unary(reducer, inner, Intrinsic::FltSqrt),

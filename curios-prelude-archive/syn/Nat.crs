@@ -5,4 +5,4 @@ pub let Lt(a: Nat, b: Nat) -> Prop =
     match Nat/lt(a, b) | true => True | false => False end;
 
 pub let Le(a: Nat, b: Nat) -> Prop =
-    match Nat/lte(a, b) | true => True | false => False end;
+    match Nat/le(a, b) | true => True | false => False end;

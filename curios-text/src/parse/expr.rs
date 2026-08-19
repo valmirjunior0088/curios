@@ -228,8 +228,8 @@ pub(super) fn parse_infix_symbol<'a>() -> Parser<'a, InfixOp> {
 
     symbol("==", InfixOp::Eql)
         .or(symbol("!=", InfixOp::Neq))
-        .or(symbol("<=", InfixOp::Lte))
-        .or(symbol(">=", InfixOp::Gte))
+        .or(symbol("<=", InfixOp::Le))
+        .or(symbol(">=", InfixOp::Ge))
         .or(symbol("&&", InfixOp::And))
         .or(symbol("||", InfixOp::Or))
         .or(symbol("+", InfixOp::Add))
@@ -246,7 +246,7 @@ pub(crate) fn op_precedence(op: InfixOp) -> u8 {
     match op {
         InfixOp::Or => 1,
         InfixOp::And => 2,
-        InfixOp::Eql | InfixOp::Neq | InfixOp::Lt | InfixOp::Gt | InfixOp::Lte | InfixOp::Gte => 3,
+        InfixOp::Eql | InfixOp::Neq | InfixOp::Lt | InfixOp::Gt | InfixOp::Le | InfixOp::Ge => 3,
         InfixOp::Add | InfixOp::Sub => 4,
         InfixOp::Mul | InfixOp::Div | InfixOp::Rem => 5,
     }

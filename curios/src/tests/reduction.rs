@@ -791,7 +791,7 @@ fn an_oversized_construction_is_refused_before_it_is_allocated() {
             r#"
             use /std/{{Handle, Nat, Bool}};
             let big : Nat = Nat/shl(1, {amount});
-            let check = match Nat/lte(1, big) | true => () | false => () end;
+            let check = match Nat/le(1, big) | true => () | false => () end;
             /std/print("ok")
             "#
         )

@@ -371,7 +371,7 @@ fn infix_literal_against_a_user_type_is_rejected() {
     error(source);
 }
 
-// Type-level operators: `a + 1` in `Lte`'s constructor indices elaborates to a witness projection that must reduce during conversion checking, and the two spellings (the index's and this call site's) stay convertible across items.
+// Type-level operators: `a + 1` in `Le`'s constructor indices elaborates to a witness projection that must reduce during conversion checking, and the two spellings (the index's and this call site's) stay convertible across items.
 #[test]
 fn type_level_operator_indices_stay_convertible() {
     assert_eq!(

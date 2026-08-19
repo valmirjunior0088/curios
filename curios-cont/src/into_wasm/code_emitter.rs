@@ -495,10 +495,10 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             CpsIntrinsicOp::NatGt => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32GtU)
             }
-            CpsIntrinsicOp::NatLte => {
+            CpsIntrinsicOp::NatLe => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32LeU)
             }
-            CpsIntrinsicOp::NatGte => {
+            CpsIntrinsicOp::NatGe => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32GeU)
             }
             CpsIntrinsicOp::IntEql => {
@@ -572,10 +572,10 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             CpsIntrinsicOp::IntGt => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32GtS)
             }
-            CpsIntrinsicOp::IntLte => {
+            CpsIntrinsicOp::IntLe => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32LeS)
             }
-            CpsIntrinsicOp::IntGte => {
+            CpsIntrinsicOp::IntGe => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32GeS)
             }
             CpsIntrinsicOp::NatAnd => {
@@ -711,10 +711,10 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             CpsIntrinsicOp::FltGt => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F32Gt)
             }
-            CpsIntrinsicOp::FltLte => {
+            CpsIntrinsicOp::FltLe => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F32Le)
             }
-            CpsIntrinsicOp::FltGte => {
+            CpsIntrinsicOp::FltGe => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F32Ge)
             }
             CpsIntrinsicOp::FltMin => {

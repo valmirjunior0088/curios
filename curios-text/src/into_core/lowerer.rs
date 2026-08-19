@@ -1032,14 +1032,14 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Intrinsic::ByteLt(left, right) => {
                 curios_core::Intrinsic::ByteLt(self.term(left)?, self.term(right)?)
             }
-            Intrinsic::ByteLte(left, right) => {
-                curios_core::Intrinsic::ByteLte(self.term(left)?, self.term(right)?)
+            Intrinsic::ByteLe(left, right) => {
+                curios_core::Intrinsic::ByteLe(self.term(left)?, self.term(right)?)
             }
             Intrinsic::ByteGt(left, right) => {
                 curios_core::Intrinsic::ByteGt(self.term(left)?, self.term(right)?)
             }
-            Intrinsic::ByteGte(left, right) => {
-                curios_core::Intrinsic::ByteGte(self.term(left)?, self.term(right)?)
+            Intrinsic::ByteGe(left, right) => {
+                curios_core::Intrinsic::ByteGe(self.term(left)?, self.term(right)?)
             }
             Intrinsic::NatEql(left, right) => {
                 curios_core::Intrinsic::nat_eql(self.term(left)?, self.term(right)?)
@@ -1080,10 +1080,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Intrinsic::NatGt(left, right) => {
                 curios_core::Intrinsic::nat_gt(self.term(left)?, self.term(right)?)
             }
-            Intrinsic::NatLte(left, right) => {
+            Intrinsic::NatLe(left, right) => {
                 curios_core::Intrinsic::nat_lte(self.term(left)?, self.term(right)?)
             }
-            Intrinsic::NatGte(left, right) => {
+            Intrinsic::NatGe(left, right) => {
                 curios_core::Intrinsic::nat_gte(self.term(left)?, self.term(right)?)
             }
             Intrinsic::NatAnd(left, right) => {
@@ -1151,10 +1151,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Intrinsic::IntGt(left, right) => {
                 curios_core::Intrinsic::int_gt(self.term(left)?, self.term(right)?)
             }
-            Intrinsic::IntLte(left, right) => {
+            Intrinsic::IntLe(left, right) => {
                 curios_core::Intrinsic::int_lte(self.term(left)?, self.term(right)?)
             }
-            Intrinsic::IntGte(left, right) => {
+            Intrinsic::IntGe(left, right) => {
                 curios_core::Intrinsic::int_gte(self.term(left)?, self.term(right)?)
             }
             Intrinsic::IntAnd(left, right) => {
@@ -1210,10 +1210,10 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Intrinsic::FltGt(left, right) => {
                 curios_core::Intrinsic::flt_gt(self.term(left)?, self.term(right)?)
             }
-            Intrinsic::FltLte(left, right) => {
+            Intrinsic::FltLe(left, right) => {
                 curios_core::Intrinsic::flt_lte(self.term(left)?, self.term(right)?)
             }
-            Intrinsic::FltGte(left, right) => {
+            Intrinsic::FltGe(left, right) => {
                 curios_core::Intrinsic::flt_gte(self.term(left)?, self.term(right)?)
             }
             Intrinsic::FltMin(left, right) => {

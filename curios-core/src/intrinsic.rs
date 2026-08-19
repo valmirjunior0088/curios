@@ -58,8 +58,8 @@ pub enum Intrinsic {
         non_zero: Term,
     },
     NatGt(Term, Term),
-    NatLte(Term, Term),
-    NatGte(Term, Term),
+    NatLe(Term, Term),
+    NatGe(Term, Term),
     NatAnd(Term, Term),
     NatOr(Term, Term),
     NatXor(Term, Term),
@@ -76,9 +76,9 @@ pub enum Intrinsic {
     NatToByte(Term),
     ByteEql(Term, Term),
     ByteLt(Term, Term),
-    ByteLte(Term, Term),
+    ByteLe(Term, Term),
     ByteGt(Term, Term),
-    ByteGte(Term, Term),
+    ByteGe(Term, Term),
     IntType,
     Int(Integer),
     IntEql(Term, Term),
@@ -99,8 +99,8 @@ pub enum Intrinsic {
     },
     IntLt(Term, Term),
     IntGt(Term, Term),
-    IntLte(Term, Term),
-    IntGte(Term, Term),
+    IntLe(Term, Term),
+    IntGe(Term, Term),
     IntAnd(Term, Term),
     IntOr(Term, Term),
     IntXor(Term, Term),
@@ -122,8 +122,8 @@ pub enum Intrinsic {
     FltNeq(Term, Term),
     FltLt(Term, Term),
     FltGt(Term, Term),
-    FltLte(Term, Term),
-    FltGte(Term, Term),
+    FltLe(Term, Term),
+    FltGe(Term, Term),
     FltMin(Term, Term),
     FltMax(Term, Term),
     FltNeg(Term),
@@ -268,22 +268,22 @@ impl Intrinsic {
         Self::NatGt(left.into(), right.into())
     }
 
-    /// A `NatGte` node from anything term-shaped.
+    /// A `NatGe` node from anything term-shaped.
     pub fn nat_gte<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::NatGte(left.into(), right.into())
+        Self::NatGe(left.into(), right.into())
     }
 
-    /// A `NatLte` node from anything term-shaped.
+    /// A `NatLe` node from anything term-shaped.
     pub fn nat_lte<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::NatLte(left.into(), right.into())
+        Self::NatLe(left.into(), right.into())
     }
 
     /// A `NatNeq` node from anything term-shaped.
@@ -601,9 +601,9 @@ impl Intrinsic {
             Intrinsic::HandleEql(a, b)
             | Intrinsic::ByteEql(a, b)
             | Intrinsic::ByteLt(a, b)
-            | Intrinsic::ByteLte(a, b)
+            | Intrinsic::ByteLe(a, b)
             | Intrinsic::ByteGt(a, b)
-            | Intrinsic::ByteGte(a, b)
+            | Intrinsic::ByteGe(a, b)
             | Intrinsic::NatEql(a, b)
             | Intrinsic::NatNeq(a, b)
             | Intrinsic::NatAdd(a, b)
@@ -611,8 +611,8 @@ impl Intrinsic {
             | Intrinsic::NatMul(a, b)
             | Intrinsic::NatLt(a, b)
             | Intrinsic::NatGt(a, b)
-            | Intrinsic::NatLte(a, b)
-            | Intrinsic::NatGte(a, b)
+            | Intrinsic::NatLe(a, b)
+            | Intrinsic::NatGe(a, b)
             | Intrinsic::NatAnd(a, b)
             | Intrinsic::NatOr(a, b)
             | Intrinsic::NatXor(a, b)
@@ -632,8 +632,8 @@ impl Intrinsic {
             | Intrinsic::IntMul(a, b)
             | Intrinsic::IntLt(a, b)
             | Intrinsic::IntGt(a, b)
-            | Intrinsic::IntLte(a, b)
-            | Intrinsic::IntGte(a, b)
+            | Intrinsic::IntLe(a, b)
+            | Intrinsic::IntGe(a, b)
             | Intrinsic::IntAnd(a, b)
             | Intrinsic::IntOr(a, b)
             | Intrinsic::IntXor(a, b)
@@ -650,8 +650,8 @@ impl Intrinsic {
             | Intrinsic::FltNeq(a, b)
             | Intrinsic::FltLt(a, b)
             | Intrinsic::FltGt(a, b)
-            | Intrinsic::FltLte(a, b)
-            | Intrinsic::FltGte(a, b)
+            | Intrinsic::FltLe(a, b)
+            | Intrinsic::FltGe(a, b)
             | Intrinsic::FltMin(a, b)
             | Intrinsic::FltMax(a, b)
             | Intrinsic::FltCopysign(a, b)
@@ -937,8 +937,8 @@ impl Intrinsic {
                 non_zero: visit.visit_subterm(p),
             },
             Intrinsic::NatGt(l, r) => traverse_binary(l, r, visit, Intrinsic::NatGt),
-            Intrinsic::NatLte(l, r) => traverse_binary(l, r, visit, Intrinsic::NatLte),
-            Intrinsic::NatGte(l, r) => traverse_binary(l, r, visit, Intrinsic::NatGte),
+            Intrinsic::NatLe(l, r) => traverse_binary(l, r, visit, Intrinsic::NatLe),
+            Intrinsic::NatGe(l, r) => traverse_binary(l, r, visit, Intrinsic::NatGe),
             Intrinsic::NatAnd(l, r) => traverse_binary(l, r, visit, Intrinsic::NatAnd),
             Intrinsic::NatOr(l, r) => traverse_binary(l, r, visit, Intrinsic::NatOr),
             Intrinsic::NatXor(l, r) => traverse_binary(l, r, visit, Intrinsic::NatXor),
@@ -955,9 +955,9 @@ impl Intrinsic {
             Intrinsic::NatToByte(inner) => Intrinsic::NatToByte(visit.visit_subterm(inner)),
             Intrinsic::ByteEql(l, r) => traverse_binary(l, r, visit, Intrinsic::ByteEql),
             Intrinsic::ByteLt(l, r) => traverse_binary(l, r, visit, Intrinsic::ByteLt),
-            Intrinsic::ByteLte(l, r) => traverse_binary(l, r, visit, Intrinsic::ByteLte),
+            Intrinsic::ByteLe(l, r) => traverse_binary(l, r, visit, Intrinsic::ByteLe),
             Intrinsic::ByteGt(l, r) => traverse_binary(l, r, visit, Intrinsic::ByteGt),
-            Intrinsic::ByteGte(l, r) => traverse_binary(l, r, visit, Intrinsic::ByteGte),
+            Intrinsic::ByteGe(l, r) => traverse_binary(l, r, visit, Intrinsic::ByteGe),
             Intrinsic::BoolAnd(l, r) => traverse_binary(l, r, visit, Intrinsic::BoolAnd),
             Intrinsic::BoolOr(l, r) => traverse_binary(l, r, visit, Intrinsic::BoolOr),
             Intrinsic::BoolXor(l, r) => traverse_binary(l, r, visit, Intrinsic::BoolXor),
@@ -990,8 +990,8 @@ impl Intrinsic {
             },
             Intrinsic::IntLt(l, r) => traverse_binary(l, r, visit, Intrinsic::IntLt),
             Intrinsic::IntGt(l, r) => traverse_binary(l, r, visit, Intrinsic::IntGt),
-            Intrinsic::IntLte(l, r) => traverse_binary(l, r, visit, Intrinsic::IntLte),
-            Intrinsic::IntGte(l, r) => traverse_binary(l, r, visit, Intrinsic::IntGte),
+            Intrinsic::IntLe(l, r) => traverse_binary(l, r, visit, Intrinsic::IntLe),
+            Intrinsic::IntGe(l, r) => traverse_binary(l, r, visit, Intrinsic::IntGe),
             Intrinsic::IntAnd(l, r) => traverse_binary(l, r, visit, Intrinsic::IntAnd),
             Intrinsic::IntOr(l, r) => traverse_binary(l, r, visit, Intrinsic::IntOr),
             Intrinsic::IntXor(l, r) => traverse_binary(l, r, visit, Intrinsic::IntXor),
@@ -1013,8 +1013,8 @@ impl Intrinsic {
             Intrinsic::FltNeq(l, r) => traverse_binary(l, r, visit, Intrinsic::FltNeq),
             Intrinsic::FltLt(l, r) => traverse_binary(l, r, visit, Intrinsic::FltLt),
             Intrinsic::FltGt(l, r) => traverse_binary(l, r, visit, Intrinsic::FltGt),
-            Intrinsic::FltLte(l, r) => traverse_binary(l, r, visit, Intrinsic::FltLte),
-            Intrinsic::FltGte(l, r) => traverse_binary(l, r, visit, Intrinsic::FltGte),
+            Intrinsic::FltLe(l, r) => traverse_binary(l, r, visit, Intrinsic::FltLe),
+            Intrinsic::FltGe(l, r) => traverse_binary(l, r, visit, Intrinsic::FltGe),
             Intrinsic::FltMin(l, r) => traverse_binary(l, r, visit, Intrinsic::FltMin),
             Intrinsic::FltMax(l, r) => traverse_binary(l, r, visit, Intrinsic::FltMax),
             Intrinsic::FltCopysign(l, r) => traverse_binary(l, r, visit, Intrinsic::FltCopysign),

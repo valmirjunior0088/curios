@@ -7,8 +7,8 @@ fn utf8_slice_proof_aligns_with_byte_walk() {
         use /std/{Handle, Byte, Bytes, Nat, Bool};
 
         let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =
-            match Nat/gte(c, lo)
-            | true => Nat/lte(c, hi)
+            match Nat/ge(c, lo)
+            | true => Nat/le(c, hi)
             | false => false
             end;
 
@@ -462,8 +462,8 @@ fn utf8_concat_closed_holds_for_the_real_automaton() {
         use /std/{Handle, Str, Nat, Byte, Bytes, Bool};
 
         let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =
-            match Nat/gte(c, lo)
-            | true => Nat/lte(c, hi)
+            match Nat/ge(c, lo)
+            | true => Nat/le(c, hi)
             | false => false
             end;
 
@@ -543,8 +543,8 @@ fn utf8_of_bin_checker_decides_and_builds_derivations() {
         use /std/{Handle, Str, Nat, Bytes, Bool, Option};
 
         let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =
-            match Nat/gte(c, lo)
-            | true => Nat/lte(c, hi)
+            match Nat/ge(c, lo)
+            | true => Nat/le(c, hi)
             | false => false
             end;
 
@@ -637,8 +637,8 @@ fn utf8_decimal_is_ascii_carries_its_proof() {
         use /std/{Handle, Str, Nat, Bytes, Bool, Eq};
 
         let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =
-            match Nat/gte(c, lo)
-            | true => Nat/lte(c, hi)
+            match Nat/ge(c, lo)
+            | true => Nat/le(c, hi)
             | false => false
             end;
 
@@ -754,8 +754,8 @@ fn utf8_slice_closed_peels_codepoints() {
         use /std/{Handle, Str, Nat, Byte, Bytes, Bool};
 
         let in_range(c : Nat, lo : Nat, hi : Nat) -> Bool =
-            match Nat/gte(c, lo)
-            | true => Nat/lte(c, hi)
+            match Nat/ge(c, lo)
+            | true => Nat/le(c, hi)
             | false => false
             end;
 

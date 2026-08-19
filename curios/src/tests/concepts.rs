@@ -475,7 +475,7 @@ fn eql_and_cmp_resolve_across_intrinsics() {
         let a : Bool = Eql/eql(2, 2);
         let b : Bool = Eql/eql("abc", "abc");
         let c : Bool = Cmp/lt(1.0, 2.0);
-        let d : Bool = Cmp/gte(3, 3);
+        let d : Bool = Cmp/ge(3, 3);
         /std/print(Bool/to_str(Bool/and(Bool/and(a, b), Bool/and(c, d))))
         "#;
 

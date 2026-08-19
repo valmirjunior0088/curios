@@ -67,7 +67,7 @@ No public function is named `mk` or `mk_ratio`.
 
 Negation and absolute value act on the numerator. Addition and subtraction align binary exponents, cross-multiply odd denominators, add signed numerators, and normalize once. Multiplication multiplies numerators and denominators, preferably cross-cancelling before large products when the optimization is proven equivalent.
 
-Comparison aligns exponents and cross-multiplies positive denominators without constructing a normalized result. Existing `zero`, `one`, `add`, `sub`, `mul`, `neg`, `abs`, `eql`, `cmp`, `lt`, `lte`, `gt`, and `gte` signatures remain source-compatible.
+Comparison aligns exponents and cross-multiplies positive denominators without constructing a normalized result. Existing `zero`, `one`, `add`, `sub`, `mul`, `neg`, `abs`, `eql`, `cmp`, `lt`, `le`, `gt`, and `ge` signatures remain source-compatible.
 
 Add division-shaped operations:
 

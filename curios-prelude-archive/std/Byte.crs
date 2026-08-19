@@ -1,5 +1,5 @@
 pub use /sys/{Byte};
-pub use /sys/Byte/{to_nat, eql, lt, lte, gt, gte};
+pub use /sys/Byte/{to_nat, eql, lt, le, gt, ge};
 use /sys/Bytes/{let Bytes, get};
 use /std/{Order, Eql, Cmp, Nat, Bool, Show, Ord};
 
@@ -36,9 +36,9 @@ satisfy Eql(Byte) {
 
 satisfy Cmp(Byte) {
     lt = lt,
-    lte = lte,
+    le = le,
     gt = gt,
-    gte = gte,
+    ge = ge,
 }
 
 satisfy Show(Byte) {

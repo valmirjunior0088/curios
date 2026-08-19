@@ -72,11 +72,11 @@ impl Flt {
         self.to_f32() > other.to_f32()
     }
 
-    pub fn lte(self, other: Self) -> bool {
+    pub fn le(self, other: Self) -> bool {
         self.to_f32() <= other.to_f32()
     }
 
-    pub fn gte(self, other: Self) -> bool {
+    pub fn ge(self, other: Self) -> bool {
         self.to_f32() >= other.to_f32()
     }
 }

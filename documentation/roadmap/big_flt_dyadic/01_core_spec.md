@@ -76,7 +76,7 @@ add, sub, mul : BigFlt -> BigFlt -> BigFlt
 neg, abs : BigFlt -> BigFlt
 eql : BigFlt -> BigFlt -> Bool
 cmp : BigFlt -> BigFlt -> Order
-lt, lte, gt, gte : BigFlt -> BigFlt -> Bool
+lt, le, gt, ge : BigFlt -> BigFlt -> Bool
 ```
 
 Equality is structural because certification gives a unique representation. Comparison aligns exact values and delegates signed magnitude comparison to `BigInt`.
@@ -86,7 +86,7 @@ Equality is structural because certification gives a unique representation. Comp
 Reflect executable booleans rather than introducing unrelated inductives:
 
 ```text
-Lte(x, y) := Eq(BigFlt/lte(x, y), true)
+Le(x, y) := Eq(BigFlt/le(x, y), true)
 Lt(x, y) := Eq(BigFlt/lt(x, y), true)
 NonZero(x) := Eq(BigFlt/eql(x, zero), false)
 ```

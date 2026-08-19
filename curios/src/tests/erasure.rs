@@ -7,7 +7,7 @@ use {
 
 #[test]
 fn prop_irrelevance_equates_distinct_proofs() {
-    // Definitional proof irrelevance: `Lte` is a strict proposition, so any two proofs of `Lte(a, b)` are convertible — `refl` checks at `Eq(p, q)` even though `p` and `q` are distinct binders. Without the `Prop` short-circuit in `convert`, `refl : Eq(p, p)` would not check against `Eq(p, q)`.
+    // Definitional proof irrelevance: `Le` is a strict proposition, so any two proofs of `Le(a, b)` are convertible — `refl` checks at `Eq(p, q)` even though `p` and `q` are distinct binders. Without the `Prop` short-circuit in `convert`, `refl : Eq(p, p)` would not check against `Eq(p, q)`.
     let source = r#"
         use /std/{Handle, Str, Eq, Nat};
         let irrelevant(a : Nat, b : Nat, p : Nat/Le/Ind(a, b), q : Nat/Le/Ind(a, b))
@@ -44,7 +44,7 @@ fn let_bound_unit_effect_survives_erasure() {
 
 #[test]
 fn large_elimination_of_a_prop_is_rejected() {
-    // The large-elimination guard: `Lte` is a multi-constructor proposition, so matching it into `Nat` (data) would observe which constructor it was, breaking irrelevance — rejected. The permitted cases (empty `False` via `absurd`, singleton `Eq` via `subst`, and prop→prop) are exercised by std.
+    // The large-elimination guard: `Le` is a multi-constructor proposition, so matching it into `Nat` (data) would observe which constructor it was, breaking irrelevance — rejected. The permitted cases (empty `False` via `absurd`, singleton `Eq` via `subst`, and prop→prop) are exercised by std.
     let source = r#"
         use /std/{Handle, Str, Nat};
         let bad(a : Nat, b : Nat, p : Nat/Le/Ind(a, b)) -> Nat =

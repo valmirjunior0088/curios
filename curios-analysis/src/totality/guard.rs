@@ -13,9 +13,9 @@ use {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum Relation {
     Lt,
-    Lte,
+    Le,
     Gt,
-    Gte,
+    Ge,
     Eql,
     Neq,
 }
@@ -25,9 +25,9 @@ impl Relation {
     pub(super) fn flipped(self) -> Relation {
         match self {
             Relation::Lt => Relation::Gt,
-            Relation::Lte => Relation::Gte,
+            Relation::Le => Relation::Ge,
             Relation::Gt => Relation::Lt,
-            Relation::Gte => Relation::Lte,
+            Relation::Ge => Relation::Le,
             Relation::Eql => Relation::Eql,
             Relation::Neq => Relation::Neq,
         }
@@ -45,9 +45,9 @@ impl Guard {
     pub(super) fn read(term: &Term) -> Option<Guard> {
         let (left, right, relation) = match &**term {
             Subterm::Intrinsic(Intrinsic::NatLt(left, right)) => (left, right, Relation::Lt),
-            Subterm::Intrinsic(Intrinsic::NatLte(left, right)) => (left, right, Relation::Lte),
+            Subterm::Intrinsic(Intrinsic::NatLe(left, right)) => (left, right, Relation::Le),
             Subterm::Intrinsic(Intrinsic::NatGt(left, right)) => (left, right, Relation::Gt),
-            Subterm::Intrinsic(Intrinsic::NatGte(left, right)) => (left, right, Relation::Gte),
+            Subterm::Intrinsic(Intrinsic::NatGe(left, right)) => (left, right, Relation::Ge),
             Subterm::Intrinsic(Intrinsic::NatEql(left, right)) => (left, right, Relation::Eql),
             Subterm::Intrinsic(Intrinsic::NatNeq(left, right)) => (left, right, Relation::Neq),
             _ => return None,
@@ -85,16 +85,16 @@ impl Guard {
 
         match (self.relation, taken) {
             // atom > k, hence atom >= k + 1 >= 1.
-            (Relation::Gt, true) | (Relation::Lte, false) => true,
+            (Relation::Gt, true) | (Relation::Le, false) => true,
             // atom >= k.
-            (Relation::Gte, true) | (Relation::Lt, false) => self.literal >= one,
+            (Relation::Ge, true) | (Relation::Lt, false) => self.literal >= one,
             // atom == k.
             (Relation::Eql, true) | (Relation::Neq, false) => self.literal >= one,
             // atom != k.
             (Relation::Neq, true) | (Relation::Eql, false) => self.literal == zero,
             // atom < k and atom <= k both admit zero.
-            (Relation::Lt, true) | (Relation::Lte, true) => false,
-            (Relation::Gt, false) | (Relation::Gte, false) => false,
+            (Relation::Lt, true) | (Relation::Le, true) => false,
+            (Relation::Gt, false) | (Relation::Ge, false) => false,
         }
     }
 }

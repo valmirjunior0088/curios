@@ -33,9 +33,9 @@ satisfy Eql(BigNat) {
 
 satisfy Cmp(BigNat) {
     lt = cmp/lt,
-    lte = cmp/lte,
+    le = cmp/le,
     gt = cmp/gt,
-    gte = cmp/gte,
+    ge = cmp/ge,
 }
 
 satisfy Add(BigNat) {

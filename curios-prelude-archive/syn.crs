@@ -33,9 +33,9 @@ pub concept Or(A: Type): pub Type {
 
 pub concept Cmp(A: Type): pub Type {
     lt(A, A) -> Bool,
-    lte(A, A) -> Bool,
+    le(A, A) -> Bool,
     gt(A, A) -> Bool,
-    gte(A, A) -> Bool,
+    ge(A, A) -> Bool,
 }
 
 pub concept Eql(A: Type): pub Type {

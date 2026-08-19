@@ -91,13 +91,13 @@ pub trait IntrinsicBuilders {
         F: Into<Term>,
         S: Into<Term>;
 
-    /// An `IntLte` node from anything term-shaped.
+    /// An `IntLe` node from anything term-shaped.
     fn int_lte<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>;
 
-    /// An `IntGte` node from anything term-shaped.
+    /// An `IntGe` node from anything term-shaped.
     fn int_gte<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -198,13 +198,13 @@ pub trait IntrinsicBuilders {
         F: Into<Term>,
         S: Into<Term>;
 
-    /// A `FltLte` node from anything term-shaped.
+    /// A `FltLe` node from anything term-shaped.
     fn flt_lte<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>;
 
-    /// A `FltGte` node from anything term-shaped.
+    /// A `FltGe` node from anything term-shaped.
     fn flt_gte<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
@@ -393,7 +393,7 @@ impl IntrinsicBuilders for Intrinsic {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::IntLte(left.into(), right.into())
+        Self::IntLe(left.into(), right.into())
     }
 
     fn int_gte<F, S>(left: F, right: S) -> Self
@@ -401,7 +401,7 @@ impl IntrinsicBuilders for Intrinsic {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::IntGte(left.into(), right.into())
+        Self::IntGe(left.into(), right.into())
     }
 
     fn flt_add<F, S>(left: F, right: S) -> Self
@@ -538,7 +538,7 @@ impl IntrinsicBuilders for Intrinsic {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::FltLte(left.into(), right.into())
+        Self::FltLe(left.into(), right.into())
     }
 
     fn flt_gte<F, S>(left: F, right: S) -> Self
@@ -546,7 +546,7 @@ impl IntrinsicBuilders for Intrinsic {
         F: Into<Term>,
         S: Into<Term>,
     {
-        Self::FltGte(left.into(), right.into())
+        Self::FltGe(left.into(), right.into())
     }
 
     fn nat_to_int<T>(inner: T) -> Self

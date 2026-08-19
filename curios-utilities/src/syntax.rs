@@ -111,8 +111,8 @@ pub struct OperatorSyntax {
     pub neq: ConceptField,
     pub lt: ConceptField,
     pub gt: ConceptField,
-    pub lte: ConceptField,
-    pub gte: ConceptField,
+    pub le: ConceptField,
+    pub ge: ConceptField,
     pub and: ConceptField,
     pub or: ConceptField,
 }
@@ -130,8 +130,8 @@ impl OperatorSyntax {
             InfixOp::Neq => self.neq,
             InfixOp::Lt => self.lt,
             InfixOp::Gt => self.gt,
-            InfixOp::Lte => self.lte,
-            InfixOp::Gte => self.gte,
+            InfixOp::Le => self.le,
+            InfixOp::Ge => self.ge,
             InfixOp::And => self.and,
             InfixOp::Or => self.or,
         }
@@ -148,7 +148,7 @@ impl OperatorSyntax {
     fn concept_fields(self) -> impl Iterator<Item = ConceptField> {
         [
             self.add, self.sub, self.mul, self.div, self.rem, self.eql, self.neq, self.lt, self.gt,
-            self.lte, self.gte, self.and, self.or,
+            self.le, self.ge, self.and, self.or,
         ]
         .into_iter()
     }

@@ -8,7 +8,7 @@ use /std/{Nat, Option, True, False};
 pub mod Ind;
 pub use Ind/{let Ind};
 
--- Immediate: `lte(n, n)` is decided by the shared inner alone, whatever `n` is.
+-- Immediate: `le(n, n)` is decided by the shared inner alone, whatever `n` is.
 pub let refl(n: Nat) -> Le(n, n) =
     True/qed();
 

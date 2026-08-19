@@ -932,7 +932,7 @@ mod intrinsic {
         let symbolic = context.fresh(Some("x"));
         let x = || Term::free_var(&symbolic);
 
-        // `succ x ≥ 1`: lt is false, gte is true; and `0 < succ x` is true.
+        // `succ x ≥ 1`: lt is false, ge is true; and `0 < succ x` is true.
         assert_eq!(
             reduced(
                 &mut context,
@@ -955,7 +955,7 @@ mod intrinsic {
             Subterm::Intrinsic(Intrinsic::Bool(true)),
         );
 
-        // Shared inner: `lt(x, succ x) = true`, `gte(x, succ x) = false`.
+        // Shared inner: `lt(x, succ x) = true`, `ge(x, succ x) = false`.
         assert_eq!(
             reduced(
                 &mut context,
@@ -980,7 +980,7 @@ mod intrinsic {
             Subterm::Intrinsic(Intrinsic::Bool(false)),
         );
 
-        // A non-strict bound decides `lte` but leaves `lt` genuinely undecidable (neutral), since `2 ≤ succ(succ x)` says nothing about strictness.
+        // A non-strict bound decides `le` but leaves `lt` genuinely undecidable (neutral), since `2 ≤ succ(succ x)` says nothing about strictness.
         assert_eq!(
             reduced(
                 &mut context,

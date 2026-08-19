@@ -35,13 +35,13 @@ pub let cmp(a: Char, b: Char) -> Order =
 pub let lt(a: Char, b: Char) -> Bool =
     match cmp(a, b) | lt() => true | _ => false end;
 
-pub let lte(a: Char, b: Char) -> Bool =
+pub let le(a: Char, b: Char) -> Bool =
     match cmp(a, b) | gt() => false | _ => true end;
 
 pub let gt(a: Char, b: Char) -> Bool =
     match cmp(a, b) | gt() => true | _ => false end;
 
-pub let gte(a: Char, b: Char) -> Bool =
+pub let ge(a: Char, b: Char) -> Bool =
     match cmp(a, b) | lt() => false | _ => true end;
 
 pub let is_whitespace(c: Char) -> Bool =
@@ -119,9 +119,9 @@ satisfy Eql(Char) {
 
 satisfy Cmp(Char) {
     lt = lt,
-    lte = lte,
+    le = le,
     gt = gt,
-    gte = gte,
+    ge = ge,
 }
 
 satisfy Show(Char) {

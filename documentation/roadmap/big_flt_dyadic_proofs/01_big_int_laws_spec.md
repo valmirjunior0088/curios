@@ -33,7 +33,7 @@ Prove and export:
 - comparison reflection: `cmp(a, b) = eq` implies `Eq(a, b)`;
 - comparison reflexivity and flip symmetry;
 - strict-order transitivity and totality;
-- equivalence between `cmp`, `eql`, `lt`, `lte`, `gt`, and `gte`;
+- equivalence between `cmp`, `eql`, `lt`, `le`, `gt`, and `ge`;
 - antisymmetry of non-strict order;
 - addition monotonicity;
 - multiplication monotonicity under nonnegative or nonpositive sign premises;

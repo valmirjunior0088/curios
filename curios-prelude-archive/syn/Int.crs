@@ -5,4 +5,4 @@ pub let NonZero(a: Int) -> Prop =
     match Int/neq(a, 0) | true => True | false => False end;
 
 pub let NonNeg(a: Int) -> Prop =
-    match Int/gte(a, 0) | true => True | false => False end;
+    match Int/ge(a, 0) | true => True | false => False end;

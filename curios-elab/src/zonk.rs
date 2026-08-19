@@ -1265,12 +1265,8 @@ fn zonk_intrinsic(context: &Context, intrinsic: &Intrinsic) -> Result<Intrinsic,
             non_zero: zonk_term(context, non_zero)?,
         },
         Intrinsic::NatGt(a, b) => Intrinsic::NatGt(zonk_term(context, a)?, zonk_term(context, b)?),
-        Intrinsic::NatLte(a, b) => {
-            Intrinsic::NatLte(zonk_term(context, a)?, zonk_term(context, b)?)
-        }
-        Intrinsic::NatGte(a, b) => {
-            Intrinsic::NatGte(zonk_term(context, a)?, zonk_term(context, b)?)
-        }
+        Intrinsic::NatLe(a, b) => Intrinsic::NatLe(zonk_term(context, a)?, zonk_term(context, b)?),
+        Intrinsic::NatGe(a, b) => Intrinsic::NatGe(zonk_term(context, a)?, zonk_term(context, b)?),
         Intrinsic::NatAnd(a, b) => {
             Intrinsic::NatAnd(zonk_term(context, a)?, zonk_term(context, b)?)
         }
@@ -1301,14 +1297,14 @@ fn zonk_intrinsic(context: &Context, intrinsic: &Intrinsic) -> Result<Intrinsic,
         Intrinsic::ByteLt(a, b) => {
             Intrinsic::ByteLt(zonk_term(context, a)?, zonk_term(context, b)?)
         }
-        Intrinsic::ByteLte(a, b) => {
-            Intrinsic::ByteLte(zonk_term(context, a)?, zonk_term(context, b)?)
+        Intrinsic::ByteLe(a, b) => {
+            Intrinsic::ByteLe(zonk_term(context, a)?, zonk_term(context, b)?)
         }
         Intrinsic::ByteGt(a, b) => {
             Intrinsic::ByteGt(zonk_term(context, a)?, zonk_term(context, b)?)
         }
-        Intrinsic::ByteGte(a, b) => {
-            Intrinsic::ByteGte(zonk_term(context, a)?, zonk_term(context, b)?)
+        Intrinsic::ByteGe(a, b) => {
+            Intrinsic::ByteGe(zonk_term(context, a)?, zonk_term(context, b)?)
         }
 
         Intrinsic::BoolAnd(a, b) => {
@@ -1362,12 +1358,8 @@ fn zonk_intrinsic(context: &Context, intrinsic: &Intrinsic) -> Result<Intrinsic,
         },
         Intrinsic::IntLt(a, b) => Intrinsic::IntLt(zonk_term(context, a)?, zonk_term(context, b)?),
         Intrinsic::IntGt(a, b) => Intrinsic::IntGt(zonk_term(context, a)?, zonk_term(context, b)?),
-        Intrinsic::IntLte(a, b) => {
-            Intrinsic::IntLte(zonk_term(context, a)?, zonk_term(context, b)?)
-        }
-        Intrinsic::IntGte(a, b) => {
-            Intrinsic::IntGte(zonk_term(context, a)?, zonk_term(context, b)?)
-        }
+        Intrinsic::IntLe(a, b) => Intrinsic::IntLe(zonk_term(context, a)?, zonk_term(context, b)?),
+        Intrinsic::IntGe(a, b) => Intrinsic::IntGe(zonk_term(context, a)?, zonk_term(context, b)?),
         Intrinsic::IntAnd(a, b) => {
             Intrinsic::IntAnd(zonk_term(context, a)?, zonk_term(context, b)?)
         }
@@ -1414,12 +1406,8 @@ fn zonk_intrinsic(context: &Context, intrinsic: &Intrinsic) -> Result<Intrinsic,
         }
         Intrinsic::FltLt(a, b) => Intrinsic::FltLt(zonk_term(context, a)?, zonk_term(context, b)?),
         Intrinsic::FltGt(a, b) => Intrinsic::FltGt(zonk_term(context, a)?, zonk_term(context, b)?),
-        Intrinsic::FltLte(a, b) => {
-            Intrinsic::FltLte(zonk_term(context, a)?, zonk_term(context, b)?)
-        }
-        Intrinsic::FltGte(a, b) => {
-            Intrinsic::FltGte(zonk_term(context, a)?, zonk_term(context, b)?)
-        }
+        Intrinsic::FltLe(a, b) => Intrinsic::FltLe(zonk_term(context, a)?, zonk_term(context, b)?),
+        Intrinsic::FltGe(a, b) => Intrinsic::FltGe(zonk_term(context, a)?, zonk_term(context, b)?),
         Intrinsic::FltMin(a, b) => {
             Intrinsic::FltMin(zonk_term(context, a)?, zonk_term(context, b)?)
         }

@@ -237,15 +237,15 @@ impl Semantics {
         match operation {
             IntDiv | FltToNat | FltToInt | FltOfLeBytes => LocalBehavior::trap(),
             NatDiv | NatRem | IntRem | BoolAnd | BoolOr | BoolXor | BoolEql | BoolNeq | NatEql
-            | NatNeq | NatAdd | NatSub | NatMul | NatLt | NatGt | NatLte | NatGte | NatAnd
+            | NatNeq | NatAdd | NatSub | NatMul | NatLt | NatGt | NatLe | NatGe | NatAnd
             | NatOr | NatXor | NatShl | NatShr | NatRotl | NatRotr | NatClz | NatCtz
-            | NatPopcnt | ByteToNat | NatToByte | ByteEql | ByteLt | ByteLte | ByteGt | ByteGte
-            | IntEql | IntNeq | IntAdd | IntSub | IntMul | IntLt | IntGt | IntLte | IntGte
+            | NatPopcnt | ByteToNat | NatToByte | ByteEql | ByteLt | ByteLe | ByteGt | ByteGe
+            | IntEql | IntNeq | IntAdd | IntSub | IntMul | IntLt | IntGt | IntLe | IntGe
             | IntAnd | IntOr | IntXor | IntShl | IntShr | IntRotl | IntRotr | IntClz | IntCtz
             | IntPopcnt | FltAdd | FltSub | FltMul | FltDiv | FltRem | FltEql | FltNeq | FltLt
-            | FltGt | FltLte | FltGte | FltMin | FltMax | FltCopysign | FltNeg | FltAbs
-            | FltSqrt | FltFloor | FltCeil | FltTrunc | FltNearest | NatToInt | NatToFlt
-            | IntToNat | IntToFlt | FltToLeBytes | HandleEql => LocalBehavior::pure(),
+            | FltGt | FltLe | FltGe | FltMin | FltMax | FltCopysign | FltNeg | FltAbs | FltSqrt
+            | FltFloor | FltCeil | FltTrunc | FltNearest | NatToInt | NatToFlt | IntToNat
+            | IntToFlt | FltToLeBytes | HandleEql => LocalBehavior::pure(),
         }
     }
 
@@ -389,14 +389,14 @@ impl Semantics {
                 NatNeq => Constant::Bool(nat(0)? != nat(1)?),
                 NatLt => Constant::Bool(nat(0)? < nat(1)?),
                 NatGt => Constant::Bool(nat(0)? > nat(1)?),
-                NatLte => Constant::Bool(nat(0)? <= nat(1)?),
-                NatGte => Constant::Bool(nat(0)? >= nat(1)?),
+                NatLe => Constant::Bool(nat(0)? <= nat(1)?),
+                NatGe => Constant::Bool(nat(0)? >= nat(1)?),
 
                 ByteEql => Constant::Bool(byte(0)? == byte(1)?),
                 ByteLt => Constant::Bool(byte(0)? < byte(1)?),
                 ByteGt => Constant::Bool(byte(0)? > byte(1)?),
-                ByteLte => Constant::Bool(byte(0)? <= byte(1)?),
-                ByteGte => Constant::Bool(byte(0)? >= byte(1)?),
+                ByteLe => Constant::Bool(byte(0)? <= byte(1)?),
+                ByteGe => Constant::Bool(byte(0)? >= byte(1)?),
 
                 IntAdd => Constant::Int(int_add(int(0)?, int(1)?)),
                 IntSub => Constant::Int(int_sub(int(0)?, int(1)?)),
@@ -421,8 +421,8 @@ impl Semantics {
                 IntNeq => Constant::Bool(int(0)? != int(1)?),
                 IntLt => Constant::Bool(int(0)? < int(1)?),
                 IntGt => Constant::Bool(int(0)? > int(1)?),
-                IntLte => Constant::Bool(int(0)? <= int(1)?),
-                IntGte => Constant::Bool(int(0)? >= int(1)?),
+                IntLe => Constant::Bool(int(0)? <= int(1)?),
+                IntGe => Constant::Bool(int(0)? >= int(1)?),
 
                 FltAdd => Constant::Flt(flt(0)? + flt(1)?),
                 FltSub => Constant::Flt(flt(0)? - flt(1)?),
@@ -443,8 +443,8 @@ impl Semantics {
                 FltNeq => Constant::Bool(flt(0)?.neq(flt(1)?)),
                 FltLt => Constant::Bool(flt(0)?.lt(flt(1)?)),
                 FltGt => Constant::Bool(flt(0)?.gt(flt(1)?)),
-                FltLte => Constant::Bool(flt(0)?.lte(flt(1)?)),
-                FltGte => Constant::Bool(flt(0)?.gte(flt(1)?)),
+                FltLe => Constant::Bool(flt(0)?.le(flt(1)?)),
+                FltGe => Constant::Bool(flt(0)?.ge(flt(1)?)),
 
                 HandleEql => Constant::Bool(io(0)? == io(1)?),
 

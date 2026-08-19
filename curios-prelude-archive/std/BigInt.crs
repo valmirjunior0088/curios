@@ -84,13 +84,13 @@ pub let eql(a: BigInt, b: BigInt) -> Bool =
 pub let lt(a: BigInt, b: BigInt) -> Bool =
     match cmp(a, b) | lt() => true | _ => false end;
 
-pub let lte(a: BigInt, b: BigInt) -> Bool =
+pub let le(a: BigInt, b: BigInt) -> Bool =
     match cmp(a, b) | gt() => false | _ => true end;
 
 pub let gt(a: BigInt, b: BigInt) -> Bool =
     match cmp(a, b) | gt() => true | _ => false end;
 
-pub let gte(a: BigInt, b: BigInt) -> Bool =
+pub let ge(a: BigInt, b: BigInt) -> Bool =
     match cmp(a, b) | lt() => false | _ => true end;
 
 pub let of_nat(n: Nat) -> BigInt =
@@ -124,9 +124,9 @@ satisfy Eql(BigInt) {
 
 satisfy Cmp(BigInt) {
     lt = lt,
-    lte = lte,
+    le = le,
     gt = gt,
-    gte = gte,
+    ge = ge,
 }
 
 satisfy Add(BigInt) {

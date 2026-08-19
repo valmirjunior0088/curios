@@ -581,7 +581,7 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
             // Registered on the *cheap* key: the scrutinee as written, with metas and universes normalized. Canonicalizing here is what used to make a guard cost its operand's evaluation before any use of the fact — see `shallow_scrutinee`. The reducer's probe escalates on a miss, so a spelling this does not collapse is still found, and found by reducing at the site that needs it rather than at every site that records one.
             let canonical = super::shallow_scrutinee(context, head);
 
-            // A concept-dispatched scrutinee (`a <= hi`) elaborates to the method projected out of the witness — `(?w).1(a, hi)` — which is not the shape the reducer probes: by then it has become the intrinsic normal form `NatLte(a, hi)`. Registering only the verbatim key leaves the arm unrefined, silently, while the equivalent `Nat/lte(a, hi)` spelling refines. Register the probed form alongside it so both spellings agree.
+            // A concept-dispatched scrutinee (`a <= hi`) elaborates to the method projected out of the witness — `(?w).1(a, hi)` — which is not the shape the reducer probes: by then it has become the intrinsic normal form `NatLe(a, hi)`. Registering only the verbatim key leaves the arm unrefined, silently, while the equivalent `Nat/le(a, hi)` spelling refines. Register the probed form alongside it so both spellings agree.
             if canonical.head_key().is_none()
                 && let Some(spined) = spine_whnf(context, head)?
             {
@@ -601,7 +601,7 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
 
 /// Weak-head normal form of the *spine only*: reduce the function position and beta-open it over the arguments, repeating, but never reduce an argument and never evaluate the intrinsic node this lands on.
 ///
-/// This is what turns a concept-dispatched comparison `(?w).1(a, hi)` into the `NatLte(a, hi)` the reducer actually probes, while leaving `a` and `hi` exactly as written. Reducing the whole application would do the same, but it forces the arguments — and an argument may legitimately contain an effect at the value level, which must keep being an error at the type level rather than being evaluated here.
+/// This is what turns a concept-dispatched comparison `(?w).1(a, hi)` into the `NatLe(a, hi)` the reducer actually probes, while leaving `a` and `hi` exactly as written. Reducing the whole application would do the same, but it forces the arguments — and an argument may legitimately contain an effect at the value level, which must keep being an error at the type level rather than being evaluated here.
 ///
 /// `None` when the head does not resolve to a function, which is every non-dispatch scrutinee: those keep their verbatim key.
 fn spine_whnf(context: &mut Context, term: &Term) -> Result<Option<Term>, Error> {

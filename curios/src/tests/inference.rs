@@ -253,7 +253,7 @@ fn postponed_lambda_projecting_by_label_elaborates() {
     assert_eq!(run(source), b"7");
 }
 
-// Scrutinee refinement keys on the applied head's *label* (the reducer's Rung-B probe in `reduce`). A concept-dispatched comparison reduces past the `Cmp` wrapper to an intrinsic normal form, which is not an application — so before `head_label` covered intrinsics, `match a <= hi` registered a refinement key the probe could never look up and the arm silently failed to refine, while the equivalent `Nat/lte(a, hi)` spelling worked. Operators must be usable in a proof-carrying position, not just the intrinsic spelling.
+// Scrutinee refinement keys on the applied head's *label* (the reducer's Rung-B probe in `reduce`). A concept-dispatched comparison reduces past the `Cmp` wrapper to an intrinsic normal form, which is not an application — so before `head_label` covered intrinsics, `match a <= hi` registered a refinement key the probe could never look up and the arm silently failed to refine, while the equivalent `Nat/le(a, hi)` spelling worked. Operators must be usable in a proof-carrying position, not just the intrinsic spelling.
 #[test]
 fn operator_scrutinee_refines_a_proof_carrying_arm() {
     let source = r#"

@@ -192,19 +192,19 @@ fn a_guard_excludes_zero_only_when_its_arm_does() {
     assert!(!guard(Relation::Eql, 0).establishes_nonzero(true));
 
     // `n >= 0` is no information at all, and `n < 0` is unsatisfiable rather than informative — neither may be read as excluding zero.
-    assert!(!guard(Relation::Gte, 0).establishes_nonzero(true));
+    assert!(!guard(Relation::Ge, 0).establishes_nonzero(true));
     assert!(!guard(Relation::Lt, 0).establishes_nonzero(false));
 
     // A strict lower bound excludes zero whatever the literal is.
     assert!(guard(Relation::Gt, 0).establishes_nonzero(true));
-    assert!(guard(Relation::Lte, 0).establishes_nonzero(false));
+    assert!(guard(Relation::Le, 0).establishes_nonzero(false));
 }
 
 #[test]
 fn a_guard_written_with_its_literal_first_reads_the_same() {
     // `10 > n` is `n < 10`, so the arm that excludes zero is the same one.
     assert_eq!(Relation::Gt.flipped(), Relation::Lt);
-    assert_eq!(Relation::Lte.flipped(), Relation::Gte);
+    assert_eq!(Relation::Le.flipped(), Relation::Ge);
     assert_eq!(Relation::Eql.flipped(), Relation::Eql);
     assert_eq!(Relation::Neq.flipped(), Relation::Neq);
 }
