@@ -16,8 +16,8 @@ pub use natural::*;
 mod integer;
 pub use integer::*;
 
-mod flt;
-pub use flt::*;
+mod floating;
+pub use floating::*;
 
 mod scalar;
 pub use scalar::*;

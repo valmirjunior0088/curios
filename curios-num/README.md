@@ -1,6 +1,6 @@
 # curios-num
 
-The Curios numeric tower: the unbounded type-level `Natural` and `Integer`, the bitwise-identity `Flt`, and the `scalar` semantics of the erased `u32`/`i32`/binary32 carriers every stage's constant folder shares. It is also the workspace's only `num-bigint` and `num-traits` dependency. What a numeric carrier means to the *language* belongs to [syntax.md](../documentation/syntax.md); how narrowing refuses rather than wraps is [Numeric carriers narrow by refusing, never by changing a value](../documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md); local architecture belongs to the crate rustdoc.
+The Curios numeric tower: the unbounded type-level `Natural` and `Integer`, the bitwise-identity `Floating`, and the `scalar` semantics of the erased `u32`/`i32`/binary32 carriers every stage's constant folder shares. It is also the workspace's only `num-bigint` and `num-traits` dependency. What a numeric carrier means to the *language* belongs to [syntax.md](../documentation/syntax.md); how narrowing refuses rather than wraps is [Numeric carriers narrow by refusing, never by changing a value](../documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md); local architecture belongs to the crate rustdoc.
 
 ## Design
 

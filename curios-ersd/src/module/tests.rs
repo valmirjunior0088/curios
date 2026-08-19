@@ -1,6 +1,6 @@
 use {
     crate::*,
-    curios_num::Flt,
+    curios_num::Floating,
     curios_utilities::{Grain, PackedBin},
 };
 
@@ -22,13 +22,13 @@ fn constants_intern_by_exact_bitwise_identity() {
 #[test]
 fn float_constants_intern_by_bit_pattern() {
     let mut module = Module::new();
-    let positive = module.intern_constant(Constant::Flt(Flt::from_f32(0.0)));
-    let negative = module.intern_constant(Constant::Flt(Flt::from_f32(-0.0)));
+    let positive = module.intern_constant(Constant::Flt(Floating::from_f32(0.0)));
+    let negative = module.intern_constant(Constant::Flt(Floating::from_f32(-0.0)));
     assert_ne!(positive, negative, "signed zeros are distinct constants");
-    let nan = module.intern_constant(Constant::Flt(Flt::from_f32(f32::NAN)));
+    let nan = module.intern_constant(Constant::Flt(Floating::from_f32(f32::NAN)));
     assert_eq!(
         nan,
-        module.intern_constant(Constant::Flt(Flt::from_f32(f32::NAN))),
+        module.intern_constant(Constant::Flt(Floating::from_f32(f32::NAN))),
         "an identical NaN bit pattern shares one identity"
     );
 }

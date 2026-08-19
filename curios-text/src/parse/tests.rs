@@ -1,7 +1,7 @@
 use {
     crate::*,
     curios_abi::{WireLeaf, WireSignature, WireType},
-    curios_num::Flt,
+    curios_num::Floating,
     curios_utilities::{Grain, InfixOp, Plicity, Qualifier},
 };
 
@@ -68,15 +68,17 @@ fn parse_integer_literals_are_polymorphic_num_lits() {
     assert_eq!("-42".parse::<Term>().unwrap(), num_lit(42, true, true));
     assert_eq!(
         "42.0".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Flt::from_f32(42.0))))
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f32(42.0))))
     );
     assert_eq!(
         "+42.0".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Flt::from_f32(42.0))))
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f32(42.0))))
     );
     assert_eq!(
         "-42.0".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Flt::from_f32(-42.0))))
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f32(
+            -42.0
+        ))))
     );
 }
 
@@ -88,7 +90,9 @@ fn parse_rejects_a_float_literal_that_overflows_to_infinity() {
     // The largest finite magnitudes still parse.
     assert_eq!(
         "3.4e38".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Flt::from_f32(3.4e38))))
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f32(
+            3.4e38
+        ))))
     );
 }
 
@@ -97,7 +101,7 @@ fn parse_intrinsic() {
     assert_eq!("42".parse::<Term>().unwrap(), num_lit(42, false, false));
     assert_eq!(
         "1.5".parse::<Term>().unwrap(),
-        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Flt::from_f32(1.5))))
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f32(1.5))))
     );
     assert_eq!(
         "false".parse::<Term>().unwrap(),

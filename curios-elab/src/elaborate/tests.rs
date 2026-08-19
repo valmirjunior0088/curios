@@ -1,7 +1,7 @@
 use curios_core::*;
 use {
     crate::*,
-    curios_num::Flt,
+    curios_num::Floating,
     curios_num::Natural,
     curios_utilities::{Plicity, Qualifier},
 };
@@ -466,7 +466,10 @@ fn a_num_lit_that_overflows_flt_is_refused() {
     // A magnitude inside the finite range still resolves at `Flt`.
     let small = Term::num_lit(Natural::from(42u32), false, false);
     let (term, _) = elaborate(&mut context, &small, Mode::Check(flt())).unwrap();
-    assert_eq!(term, Term::intrinsic(Intrinsic::Flt(Flt::from_f32(42.0))));
+    assert_eq!(
+        term,
+        Term::intrinsic(Intrinsic::Flt(Floating::from_f32(42.0)))
+    );
 }
 
 #[test]

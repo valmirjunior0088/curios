@@ -1,7 +1,7 @@
 use curios_core::*;
 use {
     crate::*,
-    curios_num::{Flt, Integer},
+    curios_num::{Floating, Integer},
     curios_utilities::{Grain, PackedBin, Qualifier},
 };
 
@@ -422,8 +422,8 @@ fn reduce_flt_mul_stays_stuck() {
 
     // `Flt` is opaque at the type level: the operation is its own normal form even over literals, so no IEEE semantics enters definitional equality. Runtime-faithful folding belongs to `curios-ersd`'s partial evaluator.
     let product: Term = Subterm::Intrinsic(Intrinsic::flt_mul(
-        Subterm::Intrinsic(Intrinsic::Flt(Flt::from_f32(1.5))),
-        Subterm::Intrinsic(Intrinsic::Flt(Flt::from_f32(2.0))),
+        Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f32(1.5))),
+        Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f32(2.0))),
     ))
     .into();
     assert_eq!(reduce(&mut context, product.clone()), Ok(product));
@@ -899,12 +899,12 @@ fn reduce_flt_to_int_stays_stuck() {
 
     // Opaque at the type level even on an exactly representable value: reading a float *is* float semantics, and none of it decides conversion.
     let exact = Term::intrinsic(Intrinsic::FltToInt(Term::intrinsic(Intrinsic::Flt(
-        Flt::from_f32(2147483648.0),
+        Floating::from_f32(2147483648.0),
     ))));
     assert_eq!(reduce(&mut context, exact.clone()), Ok(exact));
 
     let nan = Term::intrinsic(Intrinsic::FltToInt(Term::intrinsic(Intrinsic::Flt(
-        Flt::from_f32(f32::NAN),
+        Floating::from_f32(f32::NAN),
     ))));
     assert_eq!(reduce(&mut context, nan.clone()), Ok(nan));
 }

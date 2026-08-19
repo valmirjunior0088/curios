@@ -132,7 +132,7 @@ pub(super) fn parse_flt_value<'a>() -> Parser<'a, Term> {
             fail("Float literal overflows Flt")
         }
     })
-    .map(|value| Subterm::Intrinsic(Intrinsic::Flt(Flt::from_f32(value))))
+    .map(|value| Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f32(value))))
     .map(Into::into)
 }
 

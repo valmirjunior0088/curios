@@ -4,7 +4,7 @@
 
 use {
     crate::{Constant, ConstructorId, FunctionId, ProductId, ValueId},
-    curios_num::Flt,
+    curios_num::Floating,
     curios_utilities::{Grain, PackedBin},
     std::{cell::RefCell, rc::Rc},
 };
@@ -18,7 +18,7 @@ pub(super) enum Value {
     Nat(u32),
     Byte(u8),
     Int(i32),
-    Flt(Flt),
+    Flt(Floating),
     Handle(u32),
     Bin(Grain, Rc<PackedBin>),
     List(Rc<Vec<Value>>),

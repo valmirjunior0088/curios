@@ -5,7 +5,7 @@ use {
         StructType, Subterm, Telescope, Term, Three, Transient, Tuple, TupleType, Two, Var,
         Variant,
     },
-    curios_num::Flt,
+    curios_num::Floating,
     curios_print::{Printer, flat, group, indent, line, pure, sep_flat, soft_line},
     curios_utilities::{Grain, Plicity, Qualifier, recurse},
     std::{
@@ -397,7 +397,7 @@ fn print_atom(atom: Atom) -> Printer {
     flat([pure("'"), pure(atom.as_string())])
 }
 
-fn print_flt(flt: Flt) -> Printer {
+fn print_flt(flt: Floating) -> Printer {
     let mut string = format!("{:+}", flt.to_f32());
 
     // string always starts with '+' or '-'; work on the digits after the sign

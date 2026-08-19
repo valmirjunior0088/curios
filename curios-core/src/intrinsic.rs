@@ -4,7 +4,7 @@ pub use signature::*;
 use {
     super::{Bound, MetaId, Nat, Subterm, Term, Var, Visit},
     curios_abi::WireType,
-    curios_num::{Flt, Integer},
+    curios_num::{Floating, Integer},
     curios_utilities::{Grain, PackedBin},
     std::collections::BTreeSet,
 };
@@ -112,7 +112,7 @@ pub enum Intrinsic {
     IntCtz(Term),
     IntPopcnt(Term),
     FltType,
-    Flt(Flt),
+    Flt(Floating),
     FltAdd(Term, Term),
     FltSub(Term, Term),
     FltMul(Term, Term),

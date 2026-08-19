@@ -4,7 +4,7 @@
 
 use {
     super::{ConstantId, FunctionId, ValueId},
-    curios_num::Flt,
+    curios_num::Floating,
     curios_utilities::{Grain, PackedBin},
 };
 
@@ -28,7 +28,7 @@ pub enum Constant {
     Bool(bool),
     Nat(u32),
     Int(i32),
-    Flt(Flt),
+    Flt(Floating),
     Byte(u8),
     /// A packed binary of the given grain.
     Bin(Grain, PackedBin),

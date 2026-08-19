@@ -273,7 +273,7 @@ pub(super) fn elaborate_num_lit(
             } else {
                 magnitude
             };
-            (Intrinsic::Flt(Flt::from_f32(value)), flt_type)
+            (Intrinsic::Flt(Floating::from_f32(value)), flt_type)
         }
         // A concrete expected type that is non-numeric — or `Nat` for a negative literal — has no realization: report against the literal's own shape.
         _ => {

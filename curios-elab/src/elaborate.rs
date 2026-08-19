@@ -36,7 +36,7 @@ use {
         StructDecl, StructEntry, StructType, Subterm, Telescope, Term, Transient, Tuple, TupleType,
         Variant, WitnessOrigin, instantiate_universe_levels_scoped, wire_term,
     },
-    curios_num::{Flt, Integer},
+    curios_num::{Floating, Integer},
     curios_utilities::{InfixOp, Plicity, recurse},
     std::{
         collections::{BTreeSet, VecDeque},

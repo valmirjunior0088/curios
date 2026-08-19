@@ -3,7 +3,7 @@ name = "curios-num"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "The Curios numeric tower: the unbounded type-level Natural and Integer, the opaque Flt, and the erased carriers' scalar semantics"
+description = "The Curios numeric tower: the unbounded type-level Natural and Integer, the opaque Floating, and the erased carriers' scalar semantics"
 
 [lints]
 workspace = true

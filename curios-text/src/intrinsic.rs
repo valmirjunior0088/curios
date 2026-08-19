@@ -1,6 +1,6 @@
 use {
     super::{Nat, Term},
-    curios_num::{Flt, Integer},
+    curios_num::{Floating, Integer},
     curios_utilities::Grain,
 };
 
@@ -102,7 +102,7 @@ pub enum Intrinsic {
     IntCtz(Term),
     IntPopcnt(Term),
     FltType,
-    Flt(Flt),
+    Flt(Floating),
     FltAdd(Term, Term),
     FltSub(Term, Term),
     FltMul(Term, Term),
