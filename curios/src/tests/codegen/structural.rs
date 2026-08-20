@@ -1095,6 +1095,27 @@ fn a_returned_closure_every_caller_applies_is_absorbed() {
 ///
 /// The split is the prediction: the two programs whose hot loop dispatches an unknown callee moved, and the five whose loops carry no indirect call — plus `state_monad`, whose binds the specializer absorbs — sat inside ±1.7%. What remains per dispatch is the one `ref.cast (ref $envr/N)` to the non-final environment supertype, the residue the typed-heap-fields specification prices separately.
 ///
+/// # Family keying, 2026-08-20
+///
+/// A variant family is one final struct at its own width — `CpsValueExpr::Variant`/`CpsIntrinsic::VariantGet`, minted by the Ersd door and padded to the family's width — so a family read is one exact cast where it was a `ref.test` cascade over the arity roster. Same method as above, but **interleaved run-by-run** (before, after, before, after) rather than arm-by-arm, min of 7 each, taken at a one-minute load average under 1.0. Two independent passes, reported together because they agree:
+///
+/// | Program | before | after | pass 1 | pass 2 |
+/// | --- | ---: | ---: | ---: | ---: |
+/// | `parse_digits` | 369 ms | 329 ms | **-10.8%** | **-9.8%** |
+/// | `chain` | 118 ms | 107 ms | **-9.3%** | **-10.8%** |
+/// | `trees` | 329 ms | 305 ms | **-7.3%** | **-7.6%** |
+/// | `spines` | 70 ms | 65 ms | **-7.1%** | **-7.5%** |
+/// | `churn` | 343 ms | 338 ms | -1.5% | -0.6% |
+/// | `monad_io` | 232 ms | 232 ms | +0.0% | +0.0% |
+/// | `state_monad` | 181 ms | 182 ms | +0.6% | +0.5% |
+/// | `lcg` | 320 ms | 322 ms | +0.6% | +0.3% |
+///
+/// Statically, over optimized `spines`: the cascade's `ref.test (ref $tuple/N)` falls **58 to 6**, `ref.cast (ref $tuple/N)` **86 to 17**, and the arity roster **5 types to 3**.
+///
+/// The four movers are exactly the programs whose hot loop walks a heap variant family, and `lcg` — which declares no variant — is flat, so the split is a class rather than a coincidence. **The controls earned their place twice here.** A first pass showed `state_monad` 5.8x *slower* (185 to 1070 ms): the specializer's profitability gates asked whether a body contained a `TupleGet` on its parameter, and once family reads became `VariantGet` they answered no for every variant, so constructor specialization declined silently and `State/bind`'s chain survived as a per-step closure allocation. Teaching both gates the second vocabulary restored it exactly. That is the cost of a second vocabulary, and the reason it is worth paying is the same measurement: a *rebuild* in the wrong vocabulary would have trapped at the next exact cast instead of merely running slower, and the verifier now refuses one.
+///
+/// One finding for the successor: the per-family type identity does **not** survive Binaryen while every slot is `anyref`. `GlobalTypeOptimization` drops a slot nothing reads, leaving a struct structurally identical to a same-width `$tuple/N`, which closed-world type merging then folds together — the map's fork reads ship as `struct.get $tuple/3`. Exactness is unaffected (the merged type is still final, so the cast is still one compare), but `TypeRefining` still has nothing to refine. Typed slots are what make family structs structurally distinct, which is the next step's subject.
+///
 /// **Where the profile's attribution had expired:** the 2026-08-10 profile named `rng_state` at ~75% interning, but the inline-budget raise recorded in `cps/optimize.rs` has since absorbed that program's `State/bind` chain entirely — its loop is scalar now, closures survive only at its few effect boundaries, and both arms time identically. `state_monad`'s trivial-bind loop specializes the same way. The population the swap re-prices is what the specializers *cannot* reach: the per-step `Io` description and the genuinely unknown per-character step closure — which is exactly the spec's "only re-prices the calls that stay unknown".
 ///
 /// # The two scale questions, answered by the corpus
