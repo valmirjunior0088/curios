@@ -1078,6 +1078,23 @@ fn a_returned_closure_every_caller_applies_is_absorbed() {
 ///
 /// **The monadic loop the mechanism was priced for moved 5.9×** — `monad_io` binds a description per step, so each iteration built one closure and forced it, and 1.26 s of that was the funcref machinery. The string walks moved too (parse_digits −27%, parse_multibyte −11%): two `call_indirect` per character replaced two funcref constructions' interns. The controls behaved — `lcg` and `rng_manual` build no closures and are flat.
 ///
+/// # The typed tables, 2026-08-20
+///
+/// Per-arity tables typed `(ref null $clsr/N)` with bodies declared at the arity type, deleting both per-dispatch engine checks: the `call_indirect` signature check compiles away entirely (the table's element type equals the expected type — Wasmtime's `StaticMatch`), and the former named-final-subtype mismatch that took the `is_subtype` libcall on every call has no types left to mismatch. Release-profile compiler this time, native binaries, x86-64 Linux, whole-process wall, min of 5, before = the commit under `5b837023`, outputs identical across arms and every harness anchor reproduced:
+///
+/// | Program | Input | before | after |
+/// | --- | --- | --- | --- |
+/// | `monad_io` | 20 000 000 | 317 ms | 238 ms (**−24.9%**) |
+/// | `parse_digits` | 1 000 000 | 442 ms | 374 ms (**−15.4%**) |
+/// | `state_monad` | 100 000 000 | 185 ms | 180 ms |
+/// | `chain` | 1600 | 118 ms | 118 ms |
+/// | `spines` | 75 000 | 82 ms | 82 ms |
+/// | `lcg` | 100 000 000 | 321 ms | 326 ms |
+/// | `trees` | 21 | 352 ms | 346 ms |
+/// | `churn` | 75 000 000 | 344 ms | 345 ms |
+///
+/// The split is the prediction: the two programs whose hot loop dispatches an unknown callee moved, and the five whose loops carry no indirect call — plus `state_monad`, whose binds the specializer absorbs — sat inside ±1.7%. What remains per dispatch is the one `ref.cast (ref $envr/N)` to the non-final environment supertype, the residue the typed-heap-fields specification prices separately.
+///
 /// **Where the profile's attribution had expired:** the 2026-08-10 profile named `rng_state` at ~75% interning, but the inline-budget raise recorded in `cps/optimize.rs` has since absorbed that program's `State/bind` chain entirely — its loop is scalar now, closures survive only at its few effect boundaries, and both arms time identically. `state_monad`'s trivial-bind loop specializes the same way. The population the swap re-prices is what the specializers *cannot* reach: the per-step `Io` description and the genuinely unknown per-character step closure — which is exactly the spec's "only re-prices the calls that stay unknown".
 ///
 /// # The two scale questions, answered by the corpus
