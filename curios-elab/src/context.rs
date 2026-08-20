@@ -350,7 +350,7 @@ impl Context {
         &mut self,
         allowance: u64,
         attempt: impl FnOnce(&mut Self) -> Result<T, ReduceError>,
-    ) -> Option<T> {
+    ) -> Result<Option<T>, ReduceError> {
         let before = self.remaining.get();
         let granted = before.min(allowance);
         self.remaining.set(granted);
@@ -359,7 +359,12 @@ impl Context {
         let spent = granted.saturating_sub(self.remaining.get());
         self.remaining.set(before.saturating_sub(spent));
 
-        outcome.ok()
+        match outcome {
+            Ok(value) => Ok(Some(value)),
+            // Exhaustion is the allowance's to absorb only when the allowance was the binding constraint. When the declaration's own remainder was smaller, the attempt spent the *declaration* out — swallowing that as an ordinary bail let elaboration continue at zero budget, where every later capped attempt failed for free and an unbounded retry spun without a single unit left to charge (the map-wall coda's literal-depth reproducer). The budget is the only bound that decides, so its exhaustion must outrank the cap that happened to be live.
+            Err(error) if error.is_exhausted() && before <= allowance => Err(error),
+            Err(_) => Ok(None),
+        }
     }
 
     /// How much of this compilation's retention allowance the caches have consumed.

@@ -301,3 +301,22 @@ fn a_guard_discharges_a_bound_spelled_one_reduction_away() {
         "#;
     assert_eq!(run(source), b"2\n");
 }
+
+/// The map-wall coda's elaboration-runaway record, kept runnable. The full pathology: a `rec` over a packed accumulator called at a *literal* depth (`widen(30, grown)` over runtime-tainted bits), scrutinised by any comparison under a `match`, spins elaboration past twenty minutes with the default budget never refusing — while the same program with the depth spelled `30 + taint` compiles instantly. What five instrumentation rounds excluded: the loop enters `reduce` ~2000 times, core's `reduce_intrinsic` under a million, the free-monoid walks and `Term::eq` pairs and conversion goals under their thresholds, `Term::traverse` under ten million — with flat RSS throughout. So it is a tight, allocation-free, effectively uncharged cycle below every counted seam, exponential at ×4 per +2 of literal depth (1.5s at 20, 24s at 24, past sixty at 26), and naming it needs the sampling profiler this box lacks. What the hunt did fix: `Context::within_allowance` swallowed a *declaration's* exhaustion as an ordinary allowance bail whenever the remainder was below the cap, letting elaboration continue at zero budget — re-raised now, which this test pins: a budget too small to finish the depth-30 chain refuses loudly instead of spinning.
+#[test]
+fn a_literal_depth_packed_recursion_refuses_within_a_small_budget() {
+    let source = r#"
+        use /std/{Nat, List, Bits, Bool, Str, Handle, proc};
+        let taint = List/len(proc/args!);
+        let t: Bool = taint == 0;
+        let grown = b[t, 1];
+        rec widen(n: Nat, acc: Bits) -> Bits =
+            match n | 0 => acc | _ => widen(n - 1, b[..acc, t]) end;
+        let wide = widen(30, grown);
+        match Bits/len(wide) == 32
+        | true => /std/print("ok\n")
+        | false => /std/print("bad\n")
+        end
+        "#;
+    assert!(super::typecheck_within(1_000, source).is_err());
+}

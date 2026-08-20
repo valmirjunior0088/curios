@@ -624,7 +624,7 @@ fn canonical_key(context: &mut Context, key: &Term, original: &Term) -> Result<T
     let canonical = context
         .within_allowance(CANONICAL_KEY_ALLOWANCE, |context| {
             canonical_scrutinee(context, original)
-        })
+        })?
         .unwrap_or_else(|| key.clone());
 
     context.record_canonical_key(key.clone(), &canonical);
