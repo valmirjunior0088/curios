@@ -5,6 +5,7 @@ use {
         bytes_sub_type, cell_sub_type, elems_sub_type, flt_sub_type, rope_base_sub_type,
         rope_leaf_sub_type, rope_node_sub_type, rope_view_sub_type,
     },
+    crate::CpsSlot,
     curios_abi::WireType,
     curios_utilities::{Grain, PackedBin},
     std::iter,
@@ -247,29 +248,62 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    /// One final struct per variant family, at the family's width: slot 0 the tag, the rest the payload row of its widest constructor. Final and unrelated to every other type, so a read of one is an exact cast — the reason families are keyed here rather than by arity. Fields stay `anyref` for now; typing them per recorded shape is this campaign's next step.
+    /// One final struct per variant family: slot zero the tag, the rest the payload slots its constructors share. Final and unrelated to every other type, so a read of one is an exact cast — the reason families are keyed here rather than by arity — and each field is declared at the carrier [`CpsSlot`] names rather than uniformly `anyref`, which is what lets a scalar payload live in a register and a list payload arrive already at its rope base.
+    ///
+    /// The tag is `i8`. A family's constructor count is bounded by its declaration and no corpus family approaches the byte, so the discriminant packs into one and reads back through `struct.get_u` with no unboxing at all — the store side is the raw index, where a uniform slot wrote an `i31` reference.
     fn emit_family_types(&mut self) {
-        for (_, type_name, width) in self.table.family_types() {
+        let fields: Vec<_> = self
+            .table
+            .family_types()
+            .map(|(_, type_name, slots)| {
+                let fields: Vec<_> = slots
+                    .iter()
+                    .enumerate()
+                    .map(|(index, slot)| {
+                        (
+                            Table::tuple_field(index),
+                            curios_wasm::FieldType {
+                                storage_type: self.slot_storage_type(*slot),
+                                mutability: Table::tuple_field_mutability(),
+                            },
+                        )
+                    })
+                    .collect();
+                (type_name, fields)
+            })
+            .collect();
+
+        for (type_name, fields) in fields {
             self.module.add_type(
                 type_name,
                 curios_wasm::SubType {
                     is_final: true,
                     super_types: vec![],
-                    comp_type: curios_wasm::CompType::Struct(curios_wasm::StructType::from(
-                        (0..width).map(|index| {
-                            (
-                                Table::tuple_field(index),
-                                curios_wasm::FieldType {
-                                    storage_type: curios_wasm::StorageType::Val(Table::top_type(
-                                        true,
-                                    )),
-                                    mutability: Table::tuple_field_mutability(),
-                                },
-                            )
-                        }),
-                    )),
+                    comp_type: curios_wasm::CompType::Struct(curios_wasm::StructType::from(fields)),
                 },
             );
+        }
+    }
+
+    /// The wasm storage type one family slot is declared at.
+    fn slot_storage_type(&self, slot: CpsSlot) -> curios_wasm::StorageType {
+        let reference = |type_name| {
+            curios_wasm::StorageType::Val(curios_wasm::ValType::Ref(curios_wasm::RefType {
+                is_nullable: true,
+                heap_type: curios_wasm::HeapType::Concrete(type_name),
+            }))
+        };
+        match slot {
+            CpsSlot::Tag => curios_wasm::StorageType::Packed(curios_wasm::PackedType::I8),
+            CpsSlot::Nat | CpsSlot::Int => {
+                curios_wasm::StorageType::Val(curios_wasm::ValType::Num(curios_wasm::NumType::I32))
+            }
+            CpsSlot::Flt => {
+                curios_wasm::StorageType::Val(curios_wasm::ValType::Num(curios_wasm::NumType::F32))
+            }
+            CpsSlot::List => reference(self.table.list_rope().base.clone()),
+            CpsSlot::Product(width) => reference(self.table.find_tuple_type(width)),
+            CpsSlot::Opaque => curios_wasm::StorageType::Val(Table::top_type(true)),
         }
     }
 

@@ -1,11 +1,11 @@
 use {
     super::{
-        BlockData, ClsrData, EmissionBlockName, EmissionCallTarget, EmissionCellTarget,
-        EmissionFunctionName, EmissionHostTarget, EmissionJumpArg, EmissionJumpTarget,
+        BlockData, ClsrData, EmissionArg, EmissionBlockName, EmissionCallTarget,
+        EmissionCellTarget, EmissionFunctionName, EmissionHostTarget, EmissionJumpTarget,
         EmissionMatchTarget, EmissionTail, EmissionValueName, FieldData, Frame, FuncData,
         LocalData, Table,
     },
-    crate::Repr,
+    crate::{CpsSlot, Repr},
     curios_abi::{WireLeaf, WireType},
     curios_utilities::{Entropy, Grain},
     std::{
@@ -213,7 +213,7 @@ impl<'a, 'b> Context<'a, 'b> {
 
         assert!(
             !(raw && self.is_aggregate(value_name)),
-            "`{value_name}` is a `Tuple`/`List` construction loaded at the raw carrier {load_as:?}"
+            "`{value_name}` is a `Tuple`/`List`/`Variant` construction loaded at the raw carrier {load_as:?}"
         );
     }
 
@@ -250,6 +250,14 @@ impl<'a, 'b> Context<'a, 'b> {
                 vec![curios_wasm::Instr::RefCast {
                     ref_type: curios_wasm::RefType {
                         is_nullable: false,
+                        heap_type: curios_wasm::HeapType::Concrete(type_name),
+                    },
+                }]
+            }
+            LoadAs::ConcreteOrNull(type_name) => {
+                vec![curios_wasm::Instr::RefCast {
+                    ref_type: curios_wasm::RefType {
+                        is_nullable: true,
                         heap_type: curios_wasm::HeapType::Concrete(type_name),
                     },
                 }]
@@ -403,11 +411,11 @@ impl<'a, 'b> Context<'a, 'b> {
         if self.is_resume(&target.target) {
             for arg in &target.params {
                 output.extend(match arg {
-                    EmissionJumpArg::Value(value_name) => {
+                    EmissionArg::Value(value_name) => {
                         self.load_value_instrs(value_name, LoadAs::NonNull)
                     }
                     // A resume block's parameters are held boxed by construction, so a return filler's carrier was never in question.
-                    EmissionJumpArg::Filler => zero_instrs(None),
+                    EmissionArg::Filler => zero_instrs(None),
                 });
             }
             output.push(curios_wasm::Instr::Return);
@@ -421,7 +429,7 @@ impl<'a, 'b> Context<'a, 'b> {
             let param = block_data.params().get(index).map(|(param, _)| param);
 
             output.extend(match arg {
-                EmissionJumpArg::Value(value_name) => {
+                EmissionArg::Value(value_name) => {
                     let load = match param {
                         Some(param) => self.param_load(param),
                         None => LoadAs::NonNull,
@@ -429,7 +437,7 @@ impl<'a, 'b> Context<'a, 'b> {
                     self.load_value_instrs(value_name, load)
                 }
                 // The one position whose carrier could not be known upstream. A filler inhabits the slot rather than merely going unread there, so it is built at the carrier the parameter's local is declared as — raw where the analysis raised it, boxed otherwise.
-                EmissionJumpArg::Filler => {
+                EmissionArg::Filler => {
                     zero_instrs(param.and_then(|param| self.table().raw_carrier(param)))
                 }
             });
@@ -858,6 +866,8 @@ pub(crate) enum LoadAs {
     Null,
     NonNull,
     Concrete(curios_wasm::TypeName),
+    /// The same cast, admitting null. A family slot its constructor does not write holds null, and a region split into its slots and rebuilt travels that null back through this store — so the position that fills a typed slot is the one position whose cast must not trap on it.
+    ConcreteOrNull(curios_wasm::TypeName),
     Nat,
     Int,
     Flt,
@@ -871,6 +881,22 @@ pub(crate) enum LoadAs {
 /// The zero of `carrier`, or the boxed zero when the destination holds a reference.
 ///
 /// This is what a filler is materialised as, and the reason it is a function of the *destination* rather than of the filler: a slot's carrier is settled by the representation analysis from the uses of the parameter it feeds, long after the pass that placed the filler. The arms mirror [`Table::local_type`] exactly, including the reference carriers that analysis never answers — a local declared at the top reference type takes the boxed zero, whichever way it got there.
+/// The zero of one family slot: the register zero for a scalar carrier, a null for a declared heap type, and the boxed zero for the uniform reference.
+///
+/// A typed reference slot takes `ref.null none` rather than the boxed zero because the boxed zero is not of its type — and because null is what a filler *means*, where an `i31` zero is a perfectly good `Nat` standing in a position that holds no value at all.
+pub(crate) fn slot_zero_instrs(slot: CpsSlot) -> Vec<curios_wasm::Instr> {
+    match slot {
+        CpsSlot::Tag | CpsSlot::Nat | CpsSlot::Int => {
+            vec![curios_wasm::Instr::I32Const { value: 0 }]
+        }
+        CpsSlot::Flt => vec![curios_wasm::Instr::F32Const { value: 0.0 }],
+        CpsSlot::List | CpsSlot::Product(_) => vec![curios_wasm::Instr::RefNull {
+            heap_type: curios_wasm::HeapType::Abstract(curios_wasm::AbsHeapType::None),
+        }],
+        CpsSlot::Opaque => zero_instrs(None),
+    }
+}
+
 pub(crate) fn zero_instrs(carrier: Option<Repr>) -> Vec<curios_wasm::Instr> {
     match carrier {
         Some(Repr::Nat | Repr::Int) => vec![curios_wasm::Instr::I32Const { value: 0 }],

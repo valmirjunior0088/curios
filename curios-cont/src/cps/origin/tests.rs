@@ -2,7 +2,7 @@ use {
     super::{Origin, origins},
     crate::{
         CpsAtom, CpsCallee, CpsContinuation, CpsEdge, CpsFunction, CpsLiteral, CpsModule, CpsNode,
-        CpsValueExpr, CpsValueId,
+        CpsSlot, CpsValueExpr, CpsValueId,
     },
     std::collections::BTreeSet,
 };
@@ -347,7 +347,7 @@ fn a_variant_construction_carries_its_family() {
     let module = module_with(|module| {
         family = module.add_family(crate::CpsFamily {
             debug_name: Some("Shape".into()),
-            width: 3,
+            slots: vec![CpsSlot::Tag, CpsSlot::Opaque, CpsSlot::Opaque],
         });
         let built = module.add_value(Some("built".into()));
         param = module.add_value(Some("param".into()));
@@ -401,7 +401,7 @@ fn two_constructors_of_a_family_merge_to_the_family() {
     let module = module_with(|module| {
         family = module.add_family(crate::CpsFamily {
             debug_name: Some("Shape".into()),
-            width: 2,
+            slots: vec![CpsSlot::Tag, CpsSlot::Opaque],
         });
         let wide = module.add_value(Some("wide".into()));
         let narrow = module.add_value(Some("narrow".into()));

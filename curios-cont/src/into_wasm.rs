@@ -1,6 +1,6 @@
 use {
     crate::{
-        CpsFamilyId, CpsIntrinsic, CpsModule, Repr, cps::represent, machine::lower,
+        CpsFamily, CpsFamilyId, CpsIntrinsic, CpsModule, Repr, cps::represent, machine::lower,
         machine::structurize, machine::value_id, machine::value_name,
     },
     curios_abi::ForeignFunction,
@@ -84,7 +84,7 @@ pub(crate) enum EmissionData {
     List(Vec<EmissionValueName>),
     Tuple(Vec<EmissionValueName>),
     /// A variant construction at its family's width. Emitted as the family's own final struct type rather than an arity-keyed `$tuple/N`, which is what makes every read of it an exact cast.
-    Variant(CpsFamilyId, Vec<EmissionValueName>),
+    Variant(CpsFamilyId, Vec<EmissionArg>),
     Closure(EmissionClosureName, Vec<EmissionValueName>),
 }
 
@@ -116,14 +116,14 @@ pub(crate) struct EmissionBlock {
 #[derive(Debug, Clone)]
 pub(crate) struct EmissionJumpTarget {
     pub(crate) target: EmissionBlockName,
-    pub(crate) params: Vec<EmissionJumpArg>,
+    pub(crate) params: Vec<EmissionArg>,
 }
 
 /// What one edge passes for one block parameter.
 ///
-/// A named value in every ordinary case. [`EmissionJumpArg::Filler`] is the exception, and it exists because this is the first point at which the destination parameter's carrier is knowable: an edge coerces each argument to that carrier (see `Context::jump_instrs`), so a filler chosen upstream as a literal would be coerced as one, which is what trapped an `i31` zero standing in a raw `Flt` slot.
+/// A named value in every ordinary case. [`EmissionArg::Filler`] is the exception, and it exists because this is the first point at which the destination's carrier is knowable: an edge coerces each argument to the parameter's carrier (see `Context::jump_instrs`) and a variant construction to the slot's, so a filler chosen upstream as a literal would be coerced as one — which is what trapped an `i31` zero standing in a raw `Flt` slot.
 #[derive(Debug, Clone)]
-pub(crate) enum EmissionJumpArg {
+pub(crate) enum EmissionArg {
     Value(EmissionValueName),
     /// No value: the slot belongs to a wider constructor than this edge's. Materialised as the zero of whatever carrier the destination parameter is held at.
     Filler,
@@ -266,8 +266,8 @@ pub(crate) struct EmissionModule {
     clsrs: Vec<(EmissionClosureName, EmissionClosure)>,
     funcs: Vec<(EmissionFunctionName, EmissionFunction)>,
     entry: Option<EmissionFunctionName>,
-    /// The variant families this module constructs and reads, each with its debug name and width. See [`EmissionData::Variant`].
-    families: Vec<(CpsFamilyId, Option<String>, usize)>,
+    /// The variant families this module constructs and reads, each with its debug name and slot carriers. See [`EmissionData::Variant`].
+    families: Vec<(CpsFamilyId, CpsFamily)>,
 }
 
 impl EmissionModule {
@@ -276,11 +276,11 @@ impl EmissionModule {
         Self::default()
     }
 
-    pub(crate) fn families(&self) -> &[(CpsFamilyId, Option<String>, usize)] {
+    pub(crate) fn families(&self) -> &[(CpsFamilyId, CpsFamily)] {
         &self.families
     }
 
-    pub(crate) fn set_families(&mut self, families: Vec<(CpsFamilyId, Option<String>, usize)>) {
+    pub(crate) fn set_families(&mut self, families: Vec<(CpsFamilyId, CpsFamily)>) {
         self.families = families;
     }
 

@@ -3,7 +3,7 @@
 use {
     super::map_wall::{cwasm_of, run, timed},
     crate::{tests::ersd_optm, to_cwasm_dumped},
-    curios_ersd::{FieldShape, Module},
+    curios_ersd::{FieldShape, Module, Sign},
     curios_pipeline::{DEFAULT_STEP_BUDGET, Stage, compile_with_prelude},
     curios_text::{Entrypoint, RootSource},
     curios_utilities::Grain,
@@ -69,7 +69,7 @@ fn a_recorded_shape_survives_to_the_program_schema() {
     assert_eq!(
         shapes["fork"],
         vec![
-            FieldShape::Immediate,
+            FieldShape::Immediate(Sign::Unsigned),
             FieldShape::Family,
             FieldShape::Family
         ],
@@ -80,7 +80,8 @@ fn a_recorded_shape_survives_to_the_program_schema() {
 /// The label a shape counts under in the census table.
 fn shape_class(shape: FieldShape) -> &'static str {
     match shape {
-        FieldShape::Immediate => "immediate",
+        FieldShape::Immediate(Sign::Unsigned) => "immediate",
+        FieldShape::Immediate(Sign::Signed) => "immediate/signed",
         FieldShape::Flt => "flt",
         FieldShape::Packed(Grain::X) => "bytes",
         FieldShape::Packed(Grain::B) => "bits",
@@ -321,4 +322,157 @@ fn boxed_field_read_measurements() {
         payload_ns - bare_ns,
         (payload_ns - bare_ns) / payload_ns * 100.0,
     );
+}
+
+/// The slot-layout probe: how wide a family's heap type becomes under each way of assigning its constructors' fields to slots, and how many of those slots end up carrying a type rather than `anyref`.
+///
+/// Three policies, over every family that takes the tagged encoding:
+///
+/// - **positional** — field `i` of every constructor on slot `i + 1`, which is what the family keying landed with: the family is exactly as wide as its widest constructor and a slot is typed only where every constructor writing it agrees.
+/// - **classed** — one slot range per carrier, sized to the widest constructor's count of that carrier. Every slot is typed by construction, and width grows only where constructors disagree.
+/// - **disjoint** — every constructor its own slot range, which types no more than classed does and pays for every field twice over.
+///
+/// The carriers are the ones the door actually assigns (`into_cont.rs`'s `slot_of`), so packed, closure and family shapes count as untyped here.
+///
+/// # How to run it
+///
+/// ```sh
+/// cargo test --release --package curios --lib -- --ignored --nocapture slot_layout_probe
+/// ```
+///
+/// # What it last printed
+///
+/// Taken 2026-08-20, release, x86-64 Linux, over 26 tagged families:
+///
+/// ```text
+/// 26 tagged families
+/// positional: 60 slots, 11 typed
+/// classed:    70 slots, 22 typed
+/// disjoint:   88 slots, 26 typed
+/// families the classed layout widens:
+///   /std/Async/Future/State      positional 0/2 typed, classed 1/3 typed, disjoint 1/3 typed
+///   /std/Toml/Toml               positional 0/2 typed, classed 7/9 typed, disjoint 9/11 typed
+///   /std/Async/Pause             positional 0/3 typed, classed 2/5 typed, disjoint 2/10 typed
+/// ```
+///
+/// What the figures decided the layout. Classed doubles what positional can type for ten slots more across the whole roster, and — the reading that settled it — **only three families widen at all**, none of them on a hot allocation path: every family the corpus allocates in a loop keeps the width it had, and `/std/Map/Node` in particular stays four slots while its `crit` becomes a register. Disjoint, the specification's stated starting point, types four more slots than classed for eighteen more slots of width, so it was declined here rather than measured.
+#[test]
+#[ignore = "measurement: reports the layout table rather than asserting"]
+fn slot_layout_probe() {
+    let module = ersd_optm(SPINES);
+
+    // The carrier a shape occupies, mirroring the door's own rule, or `None` where the slot stays the uniform reference.
+    let class = |shape: FieldShape| -> Option<String> {
+        match shape {
+            FieldShape::Immediate(Sign::Unsigned) => Some("nat".into()),
+            FieldShape::Immediate(Sign::Signed) => Some("int".into()),
+            FieldShape::Flt => Some("flt".into()),
+            FieldShape::List => Some("list".into()),
+            FieldShape::Product(width) => Some(format!("tuple/{width}")),
+            FieldShape::Packed(_)
+            | FieldShape::Closure(_)
+            | FieldShape::Family
+            | FieldShape::Opaque => None,
+        }
+    };
+
+    let (mut positional_width, mut classed_width, mut disjoint_width) = (0, 0, 0);
+    let (mut positional_typed, mut classed_typed, mut disjoint_typed) = (0, 0, 0);
+    let mut families = 0;
+    let mut report = Vec::new();
+
+    for family in module.families() {
+        let rows: Vec<Vec<FieldShape>> = family
+            .constructors
+            .iter()
+            .map(|&id| {
+                module
+                    .constructor(id)
+                    .expect("live constructor")
+                    .fields
+                    .iter()
+                    .map(|field| field.shape)
+                    .collect()
+            })
+            .collect();
+
+        // Collapsed and immediate encodings never allocate a family struct, so they have no slots to lay out.
+        if rows.len() < 2 {
+            continue;
+        }
+        let bare = rows
+            .iter()
+            .filter(|row| matches!(row.as_slice(), [shape] if matches!(shape, FieldShape::Immediate(_))))
+            .count();
+        if bare == 1 {
+            continue;
+        }
+        families += 1;
+
+        let widest = rows.iter().map(Vec::len).max().unwrap_or(0);
+        let positional: usize = (0..widest)
+            .filter(|&index| {
+                let written: Vec<_> = rows.iter().filter_map(|row| row.get(index)).collect();
+                let first = written.first().map(|&&shape| class(shape));
+                matches!(&first, Some(Some(_)))
+                    && written
+                        .iter()
+                        .all(|&&shape| Some(class(shape)) == first.clone())
+            })
+            .count();
+
+        let mut classed = BTreeMap::<String, usize>::new();
+        let mut opaque_slots = 0;
+        for row in &rows {
+            let mut counts = BTreeMap::<String, usize>::new();
+            let mut opaque = 0;
+            for &shape in row {
+                match class(shape) {
+                    Some(name) => *counts.entry(name).or_default() += 1,
+                    None => opaque += 1,
+                }
+            }
+            for (name, count) in counts {
+                let slot = classed.entry(name).or_default();
+                *slot = (*slot).max(count);
+            }
+            opaque_slots = opaque_slots.max(opaque);
+        }
+        let classed_slots: usize = classed.values().sum();
+        let disjoint: usize = rows.iter().map(Vec::len).sum();
+        let disjoint_typed_here = rows
+            .iter()
+            .flatten()
+            .filter(|&&shape| class(shape).is_some())
+            .count();
+
+        positional_width += 1 + widest;
+        classed_width += 1 + classed_slots + opaque_slots;
+        disjoint_width += 1 + disjoint;
+        positional_typed += positional;
+        classed_typed += classed_slots;
+        disjoint_typed += disjoint_typed_here;
+
+        if 1 + classed_slots + opaque_slots > 1 + widest {
+            report.push(format!(
+                "  {:<28} positional {}/{} typed, classed {}/{} typed, disjoint {}/{} typed",
+                family.debug_name.as_deref().unwrap_or("?"),
+                positional,
+                1 + widest,
+                classed_slots,
+                1 + classed_slots + opaque_slots,
+                disjoint_typed_here,
+                1 + disjoint,
+            ));
+        }
+    }
+
+    println!("{families} tagged families");
+    println!(
+        "positional: {positional_width} slots, {positional_typed} typed\nclassed:    {classed_width} slots, {classed_typed} typed\ndisjoint:   {disjoint_width} slots, {disjoint_typed} typed"
+    );
+    println!("families the classed layout widens:");
+    for line in report {
+        println!("{line}");
+    }
 }

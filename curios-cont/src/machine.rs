@@ -4,9 +4,9 @@
 
 use {
     crate::{
-        CpsAtom, CpsCallee, CpsCellOp, CpsContId, CpsEdge, CpsFamilyId, CpsFunId, CpsFunction,
-        CpsIntrinsic, CpsIntrinsicCall, CpsLiteral, CpsModule, CpsNode, CpsNodeId, CpsValueExpr,
-        CpsValueId, atoms,
+        CpsAtom, CpsCallee, CpsCellOp, CpsContId, CpsEdge, CpsFamily, CpsFamilyId, CpsFunId,
+        CpsFunction, CpsIntrinsic, CpsIntrinsicCall, CpsLiteral, CpsModule, CpsNode, CpsNodeId,
+        CpsValueExpr, CpsValueId, atoms,
     },
     curios_abi::ForeignFunction,
     curios_utilities::{Entropy, id},
@@ -166,8 +166,8 @@ pub(crate) struct MachineModule {
     entry: CpsFunId,
     /// Each function's source hint, carried from the Cont module so emission names can spell a function's origin (`func/{index}$hint`). A hint never affects identity — the `CpsFunId` index does — so a missing entry only omits the hint.
     function_hints: BTreeMap<CpsFunId, String>,
-    /// Every variant family the Cont module declared, with its debug name and width — carried whole rather than collected from constructions, so a family whose constructions were all optimized away still declares a type for the projections that may outlive them.
-    families: Vec<(CpsFamilyId, Option<String>, usize)>,
+    /// Every variant family the Cont module declared, with its debug name and slot carriers — carried whole rather than collected from constructions, so a family whose constructions were all optimized away still declares a type for the projections that may outlive them.
+    families: Vec<(CpsFamilyId, CpsFamily)>,
 }
 
 impl MachineModule {
@@ -176,7 +176,7 @@ impl MachineModule {
         self.function_hints.get(&id).map(String::as_str)
     }
 
-    pub(crate) fn families(&self) -> &[(CpsFamilyId, Option<String>, usize)] {
+    pub(crate) fn families(&self) -> &[(CpsFamilyId, CpsFamily)] {
         &self.families
     }
 }
@@ -265,7 +265,7 @@ pub(crate) fn lower(source: &CpsModule) -> MachineModule {
         .collect();
     let families = source
         .families()
-        .map(|(id, family)| (id, family.debug_name.clone(), family.width))
+        .map(|(id, family)| (id, family.clone()))
         .collect();
     let module = MachineModule {
         functions,

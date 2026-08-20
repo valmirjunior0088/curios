@@ -9,9 +9,9 @@ use {
     crate::{
         CpsCellOp, CpsFunId, CpsIntrinsicCall, CpsLiteral,
         into_wasm::{
-            EmissionArgument, EmissionBlock, EmissionBlockName, EmissionBody, EmissionCallTarget,
-            EmissionCellTarget, EmissionClosure, EmissionClosureName, EmissionCode, EmissionData,
-            EmissionFunction, EmissionFunctionName, EmissionHostTarget, EmissionJumpArg,
+            EmissionArg, EmissionArgument, EmissionBlock, EmissionBlockName, EmissionBody,
+            EmissionCallTarget, EmissionCellTarget, EmissionClosure, EmissionClosureName,
+            EmissionCode, EmissionData, EmissionFunction, EmissionFunctionName, EmissionHostTarget,
             EmissionJumpTarget, EmissionMatchTarget, EmissionModule, EmissionTail, EmissionValue,
             EmissionValueName,
         },
@@ -140,8 +140,9 @@ impl<'a> MachineFunctionBridge<'a> {
                         MachineConstruct::Tuple(elements) => EmissionValue::Pure(
                             EmissionData::Tuple(self.operands(elements, &mut values)),
                         ),
+                        // A variant's slots are the second position that may defer a filler: the slot's carrier is the family's to declare, so materialising a zero here would pick the wrong one exactly where a slot is typed.
                         MachineConstruct::Variant(family, elements) => EmissionValue::Pure(
-                            EmissionData::Variant(*family, self.operands(elements, &mut values)),
+                            EmissionData::Variant(*family, self.jump_args(elements, &mut values)),
                         ),
                     };
                     values.push((value_name(*result), value));
@@ -358,14 +359,14 @@ impl<'a> MachineFunctionBridge<'a> {
         let mut params = results
             .iter()
             .cloned()
-            .map(EmissionJumpArg::Value)
+            .map(EmissionArg::Value)
             .collect::<Vec<_>>();
         params.extend(
             captures
                 .iter()
                 .copied()
                 .map(value_name)
-                .map(EmissionJumpArg::Value),
+                .map(EmissionArg::Value),
         );
         blocks.push((
             resume.clone(),
@@ -429,7 +430,7 @@ impl<'a> MachineFunctionBridge<'a> {
         ));
         EmissionTail::Jump(EmissionJumpTarget {
             target: resume,
-            params: vec![EmissionJumpArg::Value(result)],
+            params: vec![EmissionArg::Value(result)],
         })
     }
 
@@ -444,7 +445,7 @@ impl<'a> MachineFunctionBridge<'a> {
                 .iter()
                 .copied()
                 .map(value_name)
-                .map(EmissionJumpArg::Value),
+                .map(EmissionArg::Value),
         );
         EmissionJumpTarget {
             target: self.block_name(edge.target),
@@ -452,17 +453,17 @@ impl<'a> MachineFunctionBridge<'a> {
         }
     }
 
-    /// The arguments one edge passes, with a filler left unmaterialised: an edge is the only position whose destination carrier is decided later, so it is the only one that may defer.
+    /// The arguments an edge passes or a variant construction stores, with a filler left unmaterialised: these are the positions whose destination carrier is decided later, so they are the ones that may defer.
     fn jump_args(
         &mut self,
         operands: &[MachineOperand],
         values: &mut Vec<(EmissionValueName, EmissionValue)>,
-    ) -> Vec<EmissionJumpArg> {
+    ) -> Vec<EmissionArg> {
         operands
             .iter()
             .map(|operand| match operand {
-                MachineOperand::Filler => EmissionJumpArg::Filler,
-                operand => EmissionJumpArg::Value(self.operand(operand, values)),
+                MachineOperand::Filler => EmissionArg::Filler,
+                operand => EmissionArg::Value(self.operand(operand, values)),
             })
             .collect()
     }

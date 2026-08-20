@@ -3,7 +3,7 @@
 use {
     crate::{
         CpsAtom, CpsCallee, CpsCellOp, CpsContinuation, CpsEdge, CpsFunction, CpsIntrinsic,
-        CpsIntrinsicCall, CpsLiteral, CpsModule, CpsNode, CpsValueExpr, into_wasm,
+        CpsIntrinsicCall, CpsLiteral, CpsModule, CpsNode, CpsSlot, CpsValueExpr, into_wasm,
     },
     curios_abi::host_ops,
     curios_utilities::{Grain, PackedBin},
@@ -1205,7 +1205,7 @@ fn a_variant_is_built_and_read_at_its_family_type() {
     let mut module = CpsModule::new();
     let family = module.add_family(crate::CpsFamily {
         debug_name: Some("Shape".into()),
-        width: 3,
+        slots: vec![CpsSlot::Tag, CpsSlot::Opaque, CpsSlot::Opaque],
     });
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();
@@ -1255,7 +1255,7 @@ fn a_short_variant_construction_is_refused() {
     let mut module = CpsModule::new();
     let family = module.add_family(crate::CpsFamily {
         debug_name: Some("Shape".into()),
-        width: 3,
+        slots: vec![CpsSlot::Tag, CpsSlot::Opaque, CpsSlot::Opaque],
     });
     let main = module.reserve_function();
     let return_cont = module.reserve_continuation();

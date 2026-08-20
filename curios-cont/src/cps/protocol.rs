@@ -231,7 +231,7 @@ pub(super) fn split_returns(module: &mut CpsModule) -> bool {
             value: match family {
                 Some(family) => {
                     // The protocol carries only the slots the demand asked for, so the rebuild fills the family's remaining width rather than widening the interface — a narrower interface is the whole point of splitting, and the slots past the demand are by construction unread.
-                    atoms.resize(module.family(family).width, CpsAtom::Filler);
+                    atoms.resize(module.family(family).width(), CpsAtom::Filler);
                     CpsValueExpr::Variant(family, atoms)
                 }
                 None => CpsValueExpr::Tuple(atoms),

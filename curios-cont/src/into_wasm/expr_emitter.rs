@@ -1,8 +1,8 @@
 use {
     super::{
-        BlockData, CodeEmitter, Context, EmissionBlockName, EmissionBody, EmissionClosureName,
-        EmissionData, EmissionValue, EmissionValueName, Frame, LayoutItem, LoadAs, LocalData,
-        region_layout,
+        BlockData, CodeEmitter, Context, EmissionArg, EmissionBlockName, EmissionBody,
+        EmissionClosureName, EmissionData, EmissionValue, EmissionValueName, Frame, LayoutItem,
+        LoadAs, LocalData, region_layout, slot_zero_instrs,
     },
     curios_utilities::Grain,
     std::collections::{BTreeMap, HashMap, HashSet},
@@ -123,11 +123,18 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     type_name: tuple_n_type,
                 });
             }
-            EmissionData::Variant(family, elems) => {
+            // Each slot is filled at the carrier its family declares: a scalar goes in raw, a shaped reference through a null-admitting cast, and a slot this constructor does not write takes that slot's own zero rather than one chosen upstream.
+            EmissionData::Variant(family, slots) => {
                 let family_type = self.context.table().find_family_type(*family);
+                let carriers = self.context.table().family_slots(*family).to_vec();
 
-                for elem in elems {
-                    self.emit_instrs(self.context.load_value_instrs(elem, LoadAs::Null));
+                for (slot, carrier) in slots.iter().zip(carriers) {
+                    self.emit_instrs(match slot {
+                        EmissionArg::Value(name) => self
+                            .context
+                            .load_value_instrs(name, self.context.table().slot_load_as(carrier)),
+                        EmissionArg::Filler => slot_zero_instrs(carrier),
+                    });
                 }
 
                 self.emit_instr(curios_wasm::Instr::StructNew {

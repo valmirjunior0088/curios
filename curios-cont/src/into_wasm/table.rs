@@ -2,9 +2,9 @@ use {
     super::{
         EmissionBlockName, EmissionBody, EmissionClosure, EmissionClosureName, EmissionCode,
         EmissionData, EmissionFunction, EmissionFunctionName, EmissionModule, EmissionValue,
-        EmissionValueName,
+        EmissionValueName, LoadAs,
     },
-    crate::{CpsFamilyId, CpsIntrinsic, Repr},
+    crate::{CpsFamilyId, CpsIntrinsic, CpsSlot, Repr},
     curios_abi::ForeignFunction,
     std::{
         cell::{OnceCell, RefCell},
@@ -290,7 +290,7 @@ pub(crate) struct Table<'a> {
     host_funcs: RefCell<BTreeMap<String, Arc<ForeignFunction>>>,
     tuple_types: BTreeMap<usize, curios_wasm::TypeName>,
     /// One final struct type per variant family, keyed by the family's identity rather than by an arity — which is what makes a family read an exact cast and gives Binaryen's closed-world passes distinct types to refine. Widths come from the Cont module's own family table, so a family whose constructions were all optimized away still declares its type (harmless, and a projection can outlive its constructions).
-    family_types: BTreeMap<CpsFamilyId, (curios_wasm::TypeName, usize)>,
+    family_types: BTreeMap<CpsFamilyId, (curios_wasm::TypeName, Vec<CpsSlot>)>,
     envr_types: BTreeMap<usize, curios_wasm::TypeName>,
     clsr_types: BTreeMap<usize, curios_wasm::TypeName>,
     /// Keyed by the pair a wasm function type actually is — parameter count *and* result count — rather than by parameter count alone, so two functions of the same arity delivering different result shapes cannot collide on one type. The closure supertypes below stay keyed by arity, because a function reached through one is invoked at the uniform shape whatever its own type says.
@@ -385,12 +385,18 @@ impl<'a> Table<'a> {
             family_types: module
                 .families()
                 .iter()
-                .map(|(family, hint, width)| {
-                    let spelled = match hint {
+                .map(|(family, definition)| {
+                    let spelled = match &definition.debug_name {
                         Some(hint) => format!("fam/{}${hint}", family.index()),
                         None => format!("fam/{}", family.index()),
                     };
-                    (*family, (curios_wasm::TypeName::from(spelled), *width))
+                    (
+                        *family,
+                        (
+                            curios_wasm::TypeName::from(spelled),
+                            definition.slots.clone(),
+                        ),
+                    )
                 })
                 .collect(),
             tuple_types: {
@@ -410,6 +416,13 @@ impl<'a> Table<'a> {
                             .iter()
                             .map(|(_, func)| max_region_tuple_arity(&func.region)),
                     )
+                    // A family slot declared at a product width names that width's tuple type, so the roster has to reach it whether or not the module ever builds one — the family type is emitted even where every construction of the family was optimized away.
+                    .chain(module.families().iter().flat_map(|(_, definition)| {
+                        definition.slots.iter().map(|slot| match slot {
+                            CpsSlot::Product(width) => *width,
+                            _ => 0,
+                        })
+                    }))
                     .max()
                     .unwrap_or(0);
 
@@ -834,13 +847,36 @@ impl<'a> Table<'a> {
             .map(|(arity, type_name)| (*arity, type_name.clone()))
     }
 
-    /// Every declared family type, with the width its struct carries.
+    /// Every declared family type, with the carrier of each slot its struct holds.
     pub(crate) fn family_types(
         &self,
-    ) -> impl Iterator<Item = (CpsFamilyId, curios_wasm::TypeName, usize)> {
+    ) -> impl Iterator<Item = (CpsFamilyId, curios_wasm::TypeName, &[CpsSlot])> {
         self.family_types
             .iter()
-            .map(|(family, (type_name, width))| (*family, type_name.clone(), *width))
+            .map(|(family, (type_name, slots))| (*family, type_name.clone(), slots.as_slice()))
+    }
+
+    /// How a value is loaded to fill `slot`, and how a read of it is coerced back.
+    ///
+    /// A typed reference slot admits null, because the slots a narrow constructor leaves unwritten hold one; every other carrier is loaded exactly as any position naming it.
+    pub(crate) fn slot_load_as(&self, slot: CpsSlot) -> LoadAs {
+        match slot {
+            CpsSlot::Tag | CpsSlot::Nat => LoadAs::Nat,
+            CpsSlot::Int => LoadAs::Int,
+            CpsSlot::Flt => LoadAs::Flt,
+            CpsSlot::List => LoadAs::ConcreteOrNull(self.list_rope().base.clone()),
+            CpsSlot::Product(width) => LoadAs::ConcreteOrNull(self.find_tuple_type(width)),
+            CpsSlot::Opaque => LoadAs::Null,
+        }
+    }
+
+    /// The carriers of `family`'s slots.
+    pub(crate) fn family_slots(&self, family: CpsFamilyId) -> &[CpsSlot] {
+        &self
+            .family_types
+            .get(&family)
+            .unwrap_or_else(|| panic!("`Table` lacks a type for family `{}`", family))
+            .1
     }
 
     pub(crate) fn find_family_type(&self, family: CpsFamilyId) -> curios_wasm::TypeName {

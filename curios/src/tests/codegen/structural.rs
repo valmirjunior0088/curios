@@ -1636,3 +1636,66 @@ fn a_tuple_is_read_at_its_own_final_type() {
         );
     }
 }
+
+/// A family slot is declared at the carrier its recorded shape names, not at `anyref`.
+///
+/// `Chain` is `stop() | link(Nat, Chain)`, so its slots are the tag, one unsigned immediate, and one uniform reference — and the emitted struct says exactly that: `i8`, `i32`, `anyref`. Two costs die with the declaration. The tag reads back through `struct.get_u` out of a packed byte, where a uniform slot cast an `i31` and unboxed it; and the `Nat` payload arrives in a register, where the same slot boxed at every store and unboxed at every read. That pair is the largest static population in every corpus program and prices at 17% of a dispatch-heavy fold's per-element budget (`shapes.rs`'s `boxed_field_read_measurements`).
+///
+/// The slots are grouped by carrier rather than by field position, which is what keeps this from widening the family: a carrier's range is as wide as the constructor holding the most fields of it, so constructors agreeing on a carrier share slots. `shapes.rs`'s `slot_layout_probe` is that decision's figure — over the standard library the rule types 22 slots against positional assignment's 11, and only three families widen at all, none of them on a hot allocation path.
+#[test]
+fn a_monomorphic_slot_carries_its_own_type() {
+    let source = r#"
+        use /std/{Nat, List, Str, Handle, proc};
+
+        induct Chain : Type
+        | stop()
+        | link(Nat, Chain)
+        end
+
+        let taint = List/len(proc/args!);
+        rec build(n : Nat, acc : Chain) -> Chain =
+            match n : (_) => Chain
+            | 0 => acc
+            | m + 1; ih => build(m, Chain/link(m, acc))
+            end;
+        rec total(c : Chain, acc : Nat) -> Nat =
+            match c
+            | stop() => acc
+            | link(v, rest) => total(rest, (acc + v) % 999983)
+            end;
+        /std/print(Nat/to_str(total(build(taint + 3, Chain/stop()), 0) + total(build(taint + 4, Chain/stop()), 1)))
+        "#;
+
+    let wat = wat(source);
+
+    let declaration = wat
+        .lines()
+        .find(|line| line.contains("(type $fam/") && line.contains("Chain"))
+        .expect("the Chain family declares a type");
+    assert!(
+        declaration.contains("i8") && declaration.contains("i32"),
+        "the tag packs into a byte and the `Nat` payload is a raw scalar: {declaration}"
+    );
+
+    let functions = functions(&wat);
+    let kernel = function_with(&functions, "999983");
+    assert!(
+        kernel.body.contains("struct.get_u $fam/"),
+        "the tag is read out of its packed byte, with nothing to unbox: {}",
+        kernel.body
+    );
+    // Every read of a slot lands in a local of the slot's own carrier, so none of them is followed
+    // by an unbox. The casts that remain in this walk are the function's own `anyref` parameter and
+    // a hoisted literal — neither is a field, and both are somebody else's campaign.
+    let lines: Vec<&str> = kernel.body.lines().collect();
+    for (index, line) in lines.iter().enumerate() {
+        if !line.contains("struct.get") || !line.contains("$fam/") {
+            continue;
+        }
+        assert!(
+            !lines[index + 1].contains("ref.cast"),
+            "a slot read is followed by an unbox: {line} then {}",
+            lines[index + 1]
+        );
+    }
+}

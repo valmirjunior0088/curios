@@ -1,6 +1,6 @@
 use {
     super::{Context, EmissionCode, EmissionValueName, LoadAs, RopeData, Table, box_instr},
-    crate::{CpsIntrinsic, Repr},
+    crate::{CpsIntrinsic, CpsSlot, Repr},
     curios_utilities::Grain,
 };
 
@@ -951,14 +951,20 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         let (value_name, result_local) = (dest.value_name, dest.local.clone());
 
         // Every store below may assume this: a local held in a register is held at exactly the carrier this op produces, so no path has to coerce on the way in. What makes it true is that the representation analysis only offers a register to a value whose own definition produces that carrier — see `Offer` in `cps::represent`.
+        let result_repr = match op {
+            // A family read produces its slot's carrier, which is a fact of the family rather than of the operation.
+            CpsIntrinsic::VariantGet(family, index) => {
+                self.context.table().family_slots(family)[index].repr()
+            }
+            _ => op.result_repr(),
+        };
         debug_assert!(
             self.context
                 .table()
                 .raw_carrier(value_name)
-                .is_none_or(|carrier| carrier == op.result_repr()),
-            "`{value_name}` is held as {:?} where {op:?} produces {:?}",
+                .is_none_or(|carrier| carrier == result_repr),
+            "`{value_name}` is held as {:?} where {op:?} produces {result_repr:?}",
             self.context.table().raw_carrier(value_name),
-            op.result_repr(),
         );
 
         match op {
@@ -1784,18 +1790,26 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instrs(instrs);
                 self.emit_store(dest, &op.result_repr());
             }
-            // One exact cast, no cascade: a family value's heap type is a fact of the family, because the door pads every construction to the family's width and the family's type is final. This is what the whole keying buys — the roster search `TupleGet` performs above has nothing to search here.
+            // One exact cast, no cascade: a family value's heap type is a fact of the family, because the door pads every construction to the family's width and the family's type is final. This is what the whole keying buys — the roster search `TupleGet` performs above has nothing to search here. The slot then hands back its own carrier: a scalar arrives in a register with nothing to unbox, and the tag comes out of its packed byte through `struct.get_u`.
             CpsIntrinsic::VariantGet(family, index) => {
                 let family_type = self.context.table().find_family_type(family);
+                let slot = self.context.table().family_slots(family)[index];
                 self.emit_instrs(
                     self.context
                         .load_value_instrs(&args[0], LoadAs::Concrete(family_type.clone())),
                 );
-                self.emit_instr(curios_wasm::Instr::StructGet {
-                    type_name: family_type,
-                    field_name: Table::tuple_field(index),
+                let field_name = Table::tuple_field(index);
+                self.emit_instr(match slot {
+                    CpsSlot::Tag => curios_wasm::Instr::StructGetU {
+                        type_name: family_type,
+                        field_name,
+                    },
+                    _ => curios_wasm::Instr::StructGet {
+                        type_name: family_type,
+                        field_name,
+                    },
                 });
-                self.emit_store(dest, &op.result_repr());
+                self.emit_store(dest, &slot.repr());
             }
             CpsIntrinsic::IsImmediate => {
                 self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::NonNull));

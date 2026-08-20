@@ -126,8 +126,9 @@ fn offers(module: &CpsModule) -> BTreeMap<CpsValueId, Offer> {
 
     for (_, node) in module.nodes.iter_live() {
         match node {
+            // A family read is the one operation whose result carrier is a fact of the module rather than of the operation: the slot it names says whether a register can hold it.
             CpsNode::LetIntrinsic { result, op, .. } => {
-                offers.insert(*result, offer_of(op.result_repr()));
+                offers.insert(*result, offer_of(module.result_repr(op)));
             }
 
             CpsNode::LetValue { result, value, .. } => {
@@ -236,7 +237,22 @@ pub(crate) fn storage(module: &CpsModule) -> BTreeMap<CpsValueId, Storage> {
                     }
                 }
 
-                // Everything else stores or passes a reference: call arguments cross a `func/N` signature that is uniformly `anyref`, aggregate elements and closure captures are held uninterpreted, and every cell operation works on shapes. None of these demands a raw carrier, so none contributes.
+                // A variant construction stores each atom into a slot whose carrier the family declares, so a scalar slot demands its atom raw — the store side of the same fact the read side offers above.
+                CpsNode::LetValue {
+                    value: CpsValueExpr::Variant(family, atoms),
+                    ..
+                } => {
+                    for (index, atom) in atoms.iter().enumerate() {
+                        demand(
+                            atom,
+                            raw_carrier(&module.slot_repr(*family, index)),
+                            &offers,
+                            solver,
+                        );
+                    }
+                }
+
+                // Everything else stores or passes a reference: call arguments cross a `func/N` signature that is uniformly `anyref`, a list's elements and a tuple's fields are held uninterpreted, and every cell operation works on shapes. None of these demands a raw carrier, so none contributes.
                 CpsNode::LetValue { value, .. } => match value {
                     CpsValueExpr::Literal(_)
                     | CpsValueExpr::List(_)

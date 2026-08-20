@@ -57,11 +57,11 @@ pub struct Field {
 }
 
 impl Field {
-    /// A field whose values are immediates at runtime.
+    /// A field whose values are unsigned immediates at runtime.
     pub fn immediate(debug_name: Option<String>) -> Self {
         Self {
             debug_name,
-            shape: FieldShape::Immediate,
+            shape: FieldShape::Immediate(Sign::Unsigned),
         }
     }
 
@@ -76,11 +76,11 @@ impl Field {
 
 /// The erased carrier shape of one relevant field, recorded by erasure — the one walk that still holds the Core field types — for every constructor payload and product entry. One variant is *spent* today: `Immediate` is read by the lowering into Cont when it decides a family's encoding, and it means every runtime value of the field's declared type lives in the uniform carrier's immediate population — an intrinsic head riding the i31 carrier, or a chain of single-relevant-field collapses landing on one. Every other shaped variant is pure record: the census over these rows is what prices the typed-slot campaign, and a recorded shape must therefore be *true* rather than useful — `Opaque` covers polymorphic fields and everything unstated, and never misleads, where a wrong shape would.
 ///
-/// `Immediate` means *always*, never *sometimes*: since the map-wall campaign a small `Bytes` value rides the i31, so a packed carrier is sometimes-immediate — and sometimes is `Packed`, never `Immediate`, because the `Immediate` family encoding's discrimination is disjoint only while the bare payload can never box. `packed_unary_payload_declines_the_immediate_encoding`, in `curios`'s codegen tests, pins the consequence end to end. The same always-versus-sometimes line runs through the rest of the roster: `Flt` is the boxed `f32` struct, `Packed` a `Bytes`/`Bits` value at its grain (immediate inside the envelope, a rope past it — `Handle` tokens classify as byte-grain packed, the ABI's own encoding), `List` a list rope, `Closure` a function value at its erased arity, `Product` a boxed product row at its relevant width (always two or more — zero and one relevant collapse through the newtype chain before this is recorded), and `Family` a value of a multi-constructor variant family.
+/// `Immediate` carries the raw carrier its population occupies ([`Sign`]), which the family encoding ignores and a typed slot spends. `Immediate` means *always*, never *sometimes*: since the map-wall campaign a small `Bytes` value rides the i31, so a packed carrier is sometimes-immediate — and sometimes is `Packed`, never `Immediate`, because the `Immediate` family encoding's discrimination is disjoint only while the bare payload can never box. `packed_unary_payload_declines_the_immediate_encoding`, in `curios`'s codegen tests, pins the consequence end to end. The same always-versus-sometimes line runs through the rest of the roster: `Flt` is the boxed `f32` struct, `Packed` a `Bytes`/`Bits` value at its grain (immediate inside the envelope, a rope past it — `Handle` tokens classify as byte-grain packed, the ABI's own encoding), `List` a list rope, `Closure` a function value at its erased arity, `Product` a boxed product row at its relevant width (always two or more — zero and one relevant collapse through the newtype chain before this is recorded), and `Family` a value of a multi-constructor variant family.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[curios_archive::archived]
 pub enum FieldShape {
-    Immediate,
+    Immediate(Sign),
     Flt,
     Packed(Grain),
     List,
@@ -88,4 +88,14 @@ pub enum FieldShape {
     Product(usize),
     Family,
     Opaque,
+}
+
+/// Which raw carrier an immediate field's values occupy once a slot holds them unboxed: the unsigned population — `Nat`, `Bool`, `Byte`, and the nullary constructor riding the interned zero — or the signed `Int` one.
+///
+/// Both ride the i31, so the family encoding's admission reads [`FieldShape::Immediate`] without looking here. The distinction is spent one step later, by the slot a typed heap field is declared at: a slot naming the wrong carrier is not a wrong answer — the bit pattern round-trips either way — but every read of it coerces, which is exactly the cost typing the slot exists to delete.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[curios_archive::archived]
+pub enum Sign {
+    Unsigned,
+    Signed,
 }

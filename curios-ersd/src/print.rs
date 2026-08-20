@@ -7,7 +7,7 @@ mod tests;
 
 use {
     super::{
-        Atom, BlockId, Constant, Field, FieldShape, FunctionId, Module, Rhs, Statement,
+        Atom, BlockId, Constant, Field, FieldShape, FunctionId, Module, Rhs, Sign, Statement,
         StatementId, Terminator, ValueId,
     },
     curios_utilities::Grain,
@@ -445,7 +445,8 @@ fn fields(row: &[Field]) -> String {
                 None => format!("{index}"),
             };
             match field.shape {
-                FieldShape::Immediate => format!("{name}:immediate"),
+                FieldShape::Immediate(Sign::Unsigned) => format!("{name}:immediate"),
+                FieldShape::Immediate(Sign::Signed) => format!("{name}:immediate/signed"),
                 FieldShape::Flt => format!("{name}:flt"),
                 FieldShape::Packed(Grain::X) => format!("{name}:bytes"),
                 FieldShape::Packed(Grain::B) => format!("{name}:bits"),

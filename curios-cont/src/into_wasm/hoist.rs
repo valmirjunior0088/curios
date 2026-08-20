@@ -4,8 +4,8 @@
 
 use {
     super::{
-        EmissionBody, EmissionCallTarget, EmissionCellTarget, EmissionCode, EmissionData,
-        EmissionHostTarget, EmissionJumpArg, EmissionModule, EmissionTail, EmissionValue,
+        EmissionArg, EmissionBody, EmissionCallTarget, EmissionCellTarget, EmissionCode,
+        EmissionData, EmissionHostTarget, EmissionModule, EmissionTail, EmissionValue,
         EmissionValueName,
     },
     curios_utilities::{Grain, PackedBin},
@@ -21,8 +21,8 @@ enum ConstKey {
     Bin(u8, usize, Vec<u8>),
     List(Vec<String>),
     Tuple(Vec<String>),
-    /// A variant is its family plus its canonicalized slots — keyed apart from `Tuple` because the two materialise at different heap types, so a structurally identical row is not the same constant.
-    Variant(usize, Vec<String>),
+    /// A variant is its family plus its canonicalized slots, a filler keying as `None` — kept apart from `Tuple` because the two materialise at different heap types, so a structurally identical row is not the same constant.
+    Variant(usize, Vec<Option<String>>),
     /// A closure is its target plus its canonicalized captures: with the code field an ordinary table index, a const-captured closure is a constant aggregate like any `Tuple`, materialized once per instantiation instead of per construction.
     Clsr(String, Vec<String>),
 }
@@ -131,11 +131,17 @@ fn collect_consts(body: &EmissionBody, interner: &mut ConstInterner, consts: &mu
                     consts.renames.insert(name.clone(), interned);
                 }
             }
-            EmissionData::Variant(family, elems) => {
-                if let Some(canonical) = intern_elements(elems, interner, consts) {
+            EmissionData::Variant(family, slots) => {
+                if let Some(canonical) = intern_slots(slots, interner, consts) {
                     let key = ConstKey::Variant(
                         family.index(),
-                        canonical.iter().map(|name| name.as_string()).collect(),
+                        canonical
+                            .iter()
+                            .map(|slot| match slot {
+                                EmissionArg::Value(name) => Some(name.as_string()),
+                                EmissionArg::Filler => None,
+                            })
+                            .collect(),
                     );
                     let interned = interner.intern(key, EmissionData::Variant(*family, canonical));
                     consts.renames.insert(name.clone(), interned);
@@ -158,6 +164,33 @@ fn collect_consts(body: &EmissionBody, interner: &mut ConstInterner, consts: &mu
     for (_, block) in &body.blocks {
         collect_consts(&block.region, interner, consts);
     }
+}
+
+/// The [`intern_elements`] rule over a variant's slots: a filler names nothing, so it is constant by construction and carries through unresolved.
+fn intern_slots(
+    slots: &[EmissionArg],
+    interner: &mut ConstInterner,
+    consts: &mut FunctionConsts,
+) -> Option<Vec<EmissionArg>> {
+    let named: Vec<EmissionValueName> = slots
+        .iter()
+        .filter_map(|slot| match slot {
+            EmissionArg::Value(name) => Some(name.clone()),
+            EmissionArg::Filler => None,
+        })
+        .collect();
+    let mut canonical = intern_elements(&named, interner, consts)?.into_iter();
+    Some(
+        slots
+            .iter()
+            .map(|slot| match slot {
+                EmissionArg::Value(_) => {
+                    EmissionArg::Value(canonical.next().expect("one canonical name per named slot"))
+                }
+                EmissionArg::Filler => EmissionArg::Filler,
+            })
+            .collect(),
+    )
 }
 
 /// Resolve every element of an aggregate to its interned const name, demand-hoisting kept scalars, or report the aggregate non-constant. Checks all elements before interning any, so a failing aggregate hoists no scalar.
@@ -217,12 +250,12 @@ fn rename_names(
 }
 
 fn rename_jump_args(
-    args: &mut [EmissionJumpArg],
+    args: &mut [EmissionArg],
     renames: &HashMap<EmissionValueName, EmissionValueName>,
 ) {
     for arg in args {
         // A filler names nothing, so there is nothing to intern it against.
-        if let EmissionJumpArg::Value(name) = arg {
+        if let EmissionArg::Value(name) = arg {
             rename_name(name, renames);
         }
     }
@@ -238,9 +271,8 @@ fn rename_value(
             | EmissionData::Int(_)
             | EmissionData::Flt(_)
             | EmissionData::Bin(_, _) => {}
-            EmissionData::List(elems)
-            | EmissionData::Tuple(elems)
-            | EmissionData::Variant(_, elems) => rename_names(elems, renames),
+            EmissionData::List(elems) | EmissionData::Tuple(elems) => rename_names(elems, renames),
+            EmissionData::Variant(_, slots) => rename_jump_args(slots, renames),
             EmissionData::Closure(_, fields) => rename_names(fields, renames),
         },
         EmissionValue::Eval(code) => match code {

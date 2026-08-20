@@ -92,9 +92,12 @@ pub(crate) fn field_shape(
     type_: &Term,
 ) -> Result<curios_ersd::FieldShape, Error> {
     match Term::unwrap_or_clone(reduce_with(context, type_)?) {
-        Subterm::Intrinsic(
-            Intrinsic::NatType | Intrinsic::BoolType | Intrinsic::ByteType | Intrinsic::IntType,
-        ) => Ok(curios_ersd::FieldShape::Immediate),
+        Subterm::Intrinsic(Intrinsic::NatType | Intrinsic::BoolType | Intrinsic::ByteType) => Ok(
+            curios_ersd::FieldShape::Immediate(curios_ersd::Sign::Unsigned),
+        ),
+        Subterm::Intrinsic(Intrinsic::IntType) => Ok(curios_ersd::FieldShape::Immediate(
+            curios_ersd::Sign::Signed,
+        )),
         Subterm::Intrinsic(Intrinsic::FltType) => Ok(curios_ersd::FieldShape::Flt),
         Subterm::Intrinsic(Intrinsic::BinType(grain)) => Ok(curios_ersd::FieldShape::Packed(grain)),
         Subterm::Intrinsic(Intrinsic::HandleType) => Ok(curios_ersd::FieldShape::Packed(Grain::X)),
@@ -133,7 +136,9 @@ pub(crate) fn field_shape(
             };
             match leading_relevant_domains(context, telescope)? {
                 // No payload rides the interned `Nat` zero; one payload is the value itself.
-                (None, false) => Ok(curios_ersd::FieldShape::Immediate),
+                (None, false) => Ok(curios_ersd::FieldShape::Immediate(
+                    curios_ersd::Sign::Unsigned,
+                )),
                 (Some(domain), false) => field_shape(context, visited, &domain),
                 _ => Ok(curios_ersd::FieldShape::Opaque),
             }

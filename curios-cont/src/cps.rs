@@ -643,11 +643,56 @@ pub struct CpsModule {
     entry: Option<CpsFunId>,
 }
 
-/// One variant family: its debug name, and its width — one tag slot plus the widest constructor's payload row, which is the arity every [`CpsValueExpr::Variant`] of the family is padded to.
+/// One variant family: its debug name, and the carrier of every slot of its heap type — slot zero the tag, the rest the payload row every [`CpsValueExpr::Variant`] of the family is padded to.
 #[derive(Debug, Clone)]
 pub struct CpsFamily {
     pub debug_name: Option<String>,
-    pub width: usize,
+    pub slots: Vec<CpsSlot>,
+}
+
+impl CpsFamily {
+    /// The arity every construction of this family carries.
+    pub fn width(&self) -> usize {
+        self.slots.len()
+    }
+}
+
+/// What one slot of a family's heap type holds.
+///
+/// The door decides this from the erased shape recorded on each constructor's fields, and it is the whole point of keying a heap type by family: an arity-keyed type is shared by every constructor of that arity module-wide, so the join over any slot's stores is the top type and nothing can be said about it. A family's slots are written by that family alone, so a slot whose every writer agrees names a carrier — a register for the scalars, a declared heap type for the shapes — and the emitter declares the wasm field at it.
+///
+/// Slots are assigned by carrier rather than by field position, which is what keeps the family from widening: a constructor's fields are distributed into the slot range their carrier owns, so two constructors sharing a carrier share its slots and only a disagreement costs width. Positional assignment would have been free but types almost nothing — over the standard library it settles 11 slots against this rule's 22 — while giving each constructor a disjoint range types only five more and costs 18 slots more than this.
+///
+/// Three shapes stay [`CpsSlot::Opaque`] deliberately. A packed carrier is *sometimes* an immediate, so no single heap type names its population. A closure's runtime arity is not something the recorded shape is yet entitled to promise, since the erased arity is read off the declared type and the passes above may raise it. A family-typed field would need the field's family identity, which erasure does not record.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum CpsSlot {
+    /// The discriminant. Stored packed and read unsigned, since a family's constructor count is bounded far below the byte the tag occupies.
+    Tag,
+    /// A raw unsigned 32-bit payload.
+    Nat,
+    /// A raw signed 32-bit payload.
+    Int,
+    /// A raw binary32 payload — the one slot that deletes an allocation rather than a coercion, since the boxed `Flt` it replaces is a heap object of its own.
+    Flt,
+    /// A list rope. The base type is not final, so this is the slot that deletes an `is_subtype` libcall rather than an inline check.
+    List,
+    /// A boxed product row at the given relevant width.
+    Product(usize),
+    /// The uniform reference: a polymorphic payload, or one whose shape names no single heap type.
+    Opaque,
+}
+
+impl CpsSlot {
+    /// The representation a read of this slot produces.
+    pub fn repr(self) -> Repr {
+        match self {
+            CpsSlot::Tag | CpsSlot::Nat => Repr::Nat,
+            CpsSlot::Int => Repr::Int,
+            CpsSlot::Flt => Repr::Flt,
+            CpsSlot::List => Repr::List,
+            CpsSlot::Product(_) | CpsSlot::Opaque => Repr::Ref,
+        }
+    }
 }
 
 impl CpsModule {
@@ -673,6 +718,19 @@ impl CpsModule {
 
     pub fn family(&self, id: CpsFamilyId) -> &CpsFamily {
         &self.families[id.index()]
+    }
+
+    /// The representation a read of `family`'s slot at `index` produces. The one result representation that is a fact of the module rather than of the operation, which is why [`CpsIntrinsic::result_repr`] cannot answer it alone.
+    pub fn slot_repr(&self, family: CpsFamilyId, index: usize) -> Repr {
+        self.families[family.index()].slots[index].repr()
+    }
+
+    /// The representation `op` produces, resolving a family read against this module's slot carriers.
+    pub fn result_repr(&self, op: &CpsIntrinsic) -> Repr {
+        match op {
+            CpsIntrinsic::VariantGet(family, index) => self.slot_repr(*family, *index),
+            _ => op.result_repr(),
+        }
     }
 
     pub fn families(&self) -> impl Iterator<Item = (CpsFamilyId, &CpsFamily)> {
@@ -1058,11 +1116,11 @@ impl CpsModule {
                             "variant construction names {family}, which was not minted by this module"
                         )));
                     };
-                    if atoms.len() != definition.width {
+                    if atoms.len() != definition.width() {
                         return Err(CpsVerifyError(format!(
                             "variant construction of {family} carries {} slots, but the family is {} wide",
                             atoms.len(),
-                            definition.width,
+                            definition.width(),
                         )));
                     }
                 }
@@ -1075,10 +1133,10 @@ impl CpsModule {
                             "variant read names {family}, which was not minted by this module"
                         )));
                     };
-                    if *index >= definition.width {
+                    if *index >= definition.width() {
                         return Err(CpsVerifyError(format!(
                             "variant read of {family} at slot {index}, but the family is {} wide",
-                            definition.width,
+                            definition.width(),
                         )));
                     }
                 }
