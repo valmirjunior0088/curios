@@ -2,16 +2,13 @@ use /std/{Nat, Bool, Bits, Str, Order, Eq, False, True, Eql, Cmp, Add, Sub, Mul,
 use /std/Bool/{false_neq_true};
 use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
 use /std/BigNat/{BigNat, cong_cons2, cons_inj_head, cons_inj_tail, is_trimmed, is_trimmed_cons,
-    nonempty, of_bits, refl_at, tail_is_trimmed};
+    is_trimmed_of_canonical, nonempty, of_trimmed_bits, refl_at, tail_is_trimmed};
 
 pub rec raw(x: Bits) -> Bits =
     match x
     | b[] => b[1]
     | b[h, ..t] => match h | true => b[0, ..raw(t)] | false => b[1, ..t] end
     end;
-
-pub let succ(a: BigNat) -> BigNat =
-    of_bits(raw(a.bits));
 
 pub let cong_raw(@s: Bits, @t: Bits, p: Eq(s, t)) -> Eq(raw(s), raw(t)) =
     Eq/cong(raw, p);
@@ -44,6 +41,10 @@ pub rec raw_trimmed(x: Bits, p: Eq(is_trimmed(x), true)) -> Eq(is_trimmed(raw(x)
             end
         end
     end;
+
+-- `raw` preserves canonicity, so unlike a two-operand op the successor owes no boundary trim: the `of_trimmed_bits` door with `raw_trimmed` as the certificate makes an increment cost the carry ripple alone.
+pub let succ(a: BigNat) -> BigNat =
+    of_trimmed_bits(raw(a.bits), raw_trimmed(a.bits, is_trimmed_of_canonical(a.bits, a.canonical)));
 
 let raw_inj_absurd(
     zh: Bool,

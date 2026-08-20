@@ -1,6 +1,6 @@
 -- Successor of a strictly-positive natural. `BigNat/succ/raw` is cons-headed on every input, so the certificate needs no hypothesis about the operand.
 use /std/{Bits, True, BigNat, BigPos};
-use /std/BigPos/{is_cons, nz_trimmed, raw_non_zero};
+use /std/BigPos/{is_cons};
 
 -- the raw successor is always cons-headed (`BigNat/succ/raw(b[]) = b[1]`)
 let raw_cons(x: Bits) -> is_cons(BigNat/succ/raw(x)) =
@@ -9,12 +9,9 @@ let raw_cons(x: Bits) -> is_cons(BigNat/succ/raw(x)) =
     | b[xh, ..xt] => match xh | true => True/qed() | false => True/qed() end
     end;
 
+-- `BigNat/succ` answers with its raw ripple untrimmed, so the certificate is `raw_cons` directly — no transport across a trim.
 pub let succ(p: BigPos) -> BigPos =
     BigPos {
         value = BigNat/succ/succ(p.value),
-        non_zero =
-            raw_non_zero(
-                BigNat/succ/raw(p.value.bits),
-                BigNat/succ/raw_trimmed(p.value.bits, nz_trimmed(p)),
-                raw_cons(p.value.bits)),
+        non_zero = raw_cons(p.value.bits),
     };
