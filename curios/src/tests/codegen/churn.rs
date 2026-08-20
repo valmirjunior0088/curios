@@ -304,6 +304,20 @@ end
 /// ```
 ///
 /// The sized stock reproduces the pre-grown arms — collections effectively gone, and the per-insert cost flat across N where it was superlinear — with the small residual over the 46-era ballast figure being the 47 pin's own cost plus first-touch. The figures above stay as the admission record.
+///
+/// # Retaken 2026-08-20, as the map-distance decomposition's first cut
+///
+/// Same box, release, after the single-walk map, the two-way branch, exact tuple reads, and the per-arity typed closure tables:
+///
+/// ```text
+/// == spines collection decomposition
+///   stock, N=12500: churn 0.62 us/insert, 0.0 collections per 1000 inserts, no heap growth recorded
+///   stock, N=25000: churn 0.90 us/insert, 0.0 collections per 1000 inserts, no heap growth recorded
+///   ballast 250k, N=25000: churn 0.75 us/insert, 0.1 collections per 1000 inserts, no heap growth recorded
+///   ballast 4M, N=25000: churn 1.08 us/insert, 0.0 collections per 1000 inserts, -> grew GC heap by 0x8000000 bytes: new size is 0x10000000 bytes
+/// ```
+///
+/// What the figure decided: **the collector's share of the remaining insert is nil** — zero collections per thousand inserts at stock, at both Ns, on the post-campaign code. The remaining ~744 ns/insert (`map_wall_spines_slope`) is mutator work, so the decomposition's rebuild-and-collection candidate is measured out for this workload, the generational nursery is demoted with it, and what is left to rank is the representation tax against per-insert key construction — both owned by the typed-fields campaign's instruments.
 #[test]
 #[ignore = "measurement: times the spines workload rather than asserting"]
 fn spines_collection_decomposition() {

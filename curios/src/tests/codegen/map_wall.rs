@@ -14,7 +14,7 @@ const SPINES: &str = include_str!(concat!(
     "/../programs/spines/spines.crs"
 ));
 
-fn cwasm_of(source: &str) -> Vec<u8> {
+pub(super) fn cwasm_of(source: &str) -> Vec<u8> {
     let entrypoint = source
         .parse::<Entrypoint>()
         .map_err(|error| error.format())
@@ -31,7 +31,7 @@ fn cwasm_of(source: &str) -> Vec<u8> {
 }
 
 /// One run: milliseconds around `run_bytes` — deserialize, instantiate, and the whole call — and what the program printed.
-fn run(cwasm: &[u8], n: u64) -> (f64, Vec<u8>) {
+pub(super) fn run(cwasm: &[u8], n: u64) -> (f64, Vec<u8>) {
     let (host, io) = MockHost::builder().stdin_lines([n.to_string()]).build();
     let start = Instant::now();
     let code = run_bytes(cwasm, host, ForeignBindings::empty()).expect("the workload runs");
@@ -42,7 +42,7 @@ fn run(cwasm: &[u8], n: u64) -> (f64, Vec<u8>) {
 }
 
 /// Best of five, per the decomposition's method: a timing floor is what the slope subtracts.
-fn timed(cwasm: &[u8], n: u64) -> f64 {
+pub(super) fn timed(cwasm: &[u8], n: u64) -> f64 {
     (0..5)
         .map(|_| run(cwasm, n).0)
         .fold(f64::INFINITY, f64::min)

@@ -8,4 +8,5 @@ mod churn;
 mod ladder;
 mod map_wall;
 mod parity;
+mod shapes;
 mod structural;
