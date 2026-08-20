@@ -222,11 +222,11 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
-    fn emit_tpl_types(&mut self) {
-        for (arity, type_name) in self.table.tpl_types() {
+    fn emit_tuple_types(&mut self) {
+        for (arity, type_name) in self.table.tuple_types() {
             let super_types = match arity {
                 0 => vec![],
-                n => vec![self.table.find_tpl_type(n - 1)],
+                n => vec![self.table.find_tuple_type(n - 1)],
             };
 
             self.module.add_type(
@@ -237,12 +237,12 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                     comp_type: curios_wasm::CompType::Struct(curios_wasm::StructType::from(
                         (0..arity).map(|index| {
                             (
-                                Table::tpl_field(index),
+                                Table::tuple_field(index),
                                 curios_wasm::FieldType {
                                     storage_type: curios_wasm::StorageType::Val(Table::top_type(
                                         true,
                                     )),
-                                    mutability: Table::tpl_field_mutability(),
+                                    mutability: Table::tuple_field_mutability(),
                                 },
                             )
                         }),
@@ -473,7 +473,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             .push(curios_wasm::Instr::GlobalSet { global_name });
     }
 
-    /// Emit a module-level const. Every global is declared mutable so that aggregate (`Tpl`/`List`/`EmissionClosure`) consts can `global.get` their dependencies inside the start function — wasm constant expressions can only read immutable globals. Scalars (`Nat`/`Int`/`Flt`) keep a self-contained const initializer (mutability is harmless when the init is constant); `Bin` and aggregates declare a placeholder init and build the real value in the start function. `Bin` is special-cased via [`Self::emit_let_bin_data`] because its payload comes from a data segment.
+    /// Emit a module-level const. Every global is declared mutable so that aggregate (`Tuple`/`List`/`EmissionClosure`) consts can `global.get` their dependencies inside the start function — wasm constant expressions can only read immutable globals. Scalars (`Nat`/`Int`/`Flt`) keep a self-contained const initializer (mutability is harmless when the init is constant); `Bin` and aggregates declare a placeholder init and build the real value in the start function. `Bin` is special-cased via [`Self::emit_let_bin_data`] because its payload comes from a data segment.
     fn emit_let_data(&mut self, name: &'a EmissionValueName, value: &'a EmissionData) {
         match value {
             EmissionData::Bin(grain, value) => {
@@ -494,7 +494,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                     },
                 );
             }
-            EmissionData::Tpl(_) | EmissionData::List(_) | EmissionData::Closure(_, _) => {
+            EmissionData::Tuple(_) | EmissionData::List(_) | EmissionData::Closure(_, _) => {
                 let global_name = self.table.find_const(name);
 
                 let mut init_expr: curios_wasm::Expr = Default::default();
@@ -756,7 +756,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         self.emit_bin_rope_types();
         self.emit_list_rope_types();
         self.emit_cell_type();
-        self.emit_tpl_types();
+        self.emit_tuple_types();
         self.emit_clsr_arity_types();
         self.emit_clsr_named_types(module);
         self.emit_envr_arity_types();

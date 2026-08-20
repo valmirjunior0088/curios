@@ -6,8 +6,8 @@
 
 use {
     super::{
-        CpsAtom, CpsCallee, CpsEdge, CpsIntrinsicOp, CpsModule, CpsNode, CpsValueId, Lattice,
-        Solver, atoms,
+        CpsAtom, CpsCallee, CpsEdge, CpsIntrinsic, CpsModule, CpsNode, CpsValueId, Lattice, Solver,
+        atoms,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -87,7 +87,7 @@ pub(crate) fn demands(module: &CpsModule) -> BTreeMap<CpsValueId, Demand> {
             match node {
                 // A projection reads one field and nothing else — the only use that does not consume the whole value. It is taken before the general fallback below, which would otherwise report `Opaque` for the same operand and erase the refinement.
                 CpsNode::LetIntrinsic {
-                    op: CpsIntrinsicOp::TplGet(index),
+                    op: CpsIntrinsic::TupleGet(index),
                     args,
                     ..
                 } if matches!(args.as_slice(), [CpsAtom::Value(_)]) => {
@@ -99,16 +99,16 @@ pub(crate) fn demands(module: &CpsModule) -> BTreeMap<CpsValueId, Demand> {
                 // A sequence read consumes only elements, lengths, or windows of its carrier operand: the carrier's demand stays `Indexed`, while every other operand — an index, a count, an appended element — is consumed whole. `ListSettle` joins the reads because settling is exactly what an `Indexed` construction would have done to itself. The growth forms — concat, append, chunk, flat — are deliberately absent: their carrier operands are consumed into a new value, which is the escape the lattice point exists to exclude.
                 CpsNode::LetIntrinsic {
                     op:
-                        CpsIntrinsicOp::BinLen(_)
-                        | CpsIntrinsicOp::BinEql(_)
-                        | CpsIntrinsicOp::BinGet(_)
-                        | CpsIntrinsicOp::BinSlice(_)
-                        | CpsIntrinsicOp::BinRest(_)
-                        | CpsIntrinsicOp::ListLen
-                        | CpsIntrinsicOp::ListGet
-                        | CpsIntrinsicOp::ListSlice
-                        | CpsIntrinsicOp::ListRest
-                        | CpsIntrinsicOp::ListSettle,
+                        CpsIntrinsic::BinLen(_)
+                        | CpsIntrinsic::BinEql(_)
+                        | CpsIntrinsic::BinGet(_)
+                        | CpsIntrinsic::BinSlice(_)
+                        | CpsIntrinsic::BinRest(_)
+                        | CpsIntrinsic::ListLen
+                        | CpsIntrinsic::ListGet
+                        | CpsIntrinsic::ListSlice
+                        | CpsIntrinsic::ListRest
+                        | CpsIntrinsic::ListSettle,
                     args,
                     ..
                 } => {
@@ -117,7 +117,7 @@ pub(crate) fn demands(module: &CpsModule) -> BTreeMap<CpsValueId, Demand> {
                         2 if matches!(
                             node,
                             CpsNode::LetIntrinsic {
-                                op: CpsIntrinsicOp::BinEql(_),
+                                op: CpsIntrinsic::BinEql(_),
                                 ..
                             }
                         ) =>

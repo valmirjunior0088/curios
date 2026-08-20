@@ -7,7 +7,7 @@
 
 use {
     curios_cont::{
-        CpsAtom, CpsCallee, CpsContId, CpsEdge, CpsFunId, CpsIntrinsicOp, CpsLiteral, CpsModule,
+        CpsAtom, CpsCallee, CpsContId, CpsEdge, CpsFunId, CpsIntrinsic, CpsLiteral, CpsModule,
         CpsNode, CpsNodeId, CpsValueExpr, CpsValueId,
     },
     curios_pipeline::{DEFAULT_STEP_BUDGET, Stage, compile_with_prelude},
@@ -460,7 +460,7 @@ impl<'m> Census<'m> {
                 CpsNode::LetIntrinsic {
                     result, op, args, ..
                 } => {
-                    if matches!(op, CpsIntrinsicOp::BinSlice(_) | CpsIntrinsicOp::ListSlice) {
+                    if matches!(op, CpsIntrinsic::BinSlice(_) | CpsIntrinsic::ListSlice) {
                         self.slice_sites.insert(*result, node_id);
                         self.home_of_value.insert(*result, Home::Node(node_id));
                     }
@@ -468,19 +468,18 @@ impl<'m> Census<'m> {
                         match atom {
                             CpsAtom::Value(operand) => {
                                 let consumption = match (op, position) {
-                                    (CpsIntrinsicOp::TplGet(field), 0) => {
+                                    (CpsIntrinsic::TupleGet(field), 0) => {
                                         Consumption::Projection(*field)
                                     }
-                                    (CpsIntrinsicOp::BinLen(_) | CpsIntrinsicOp::ListLen, 0) => {
+                                    (CpsIntrinsic::BinLen(_) | CpsIntrinsic::ListLen, 0) => {
                                         Consumption::RopeLen
                                     }
-                                    (CpsIntrinsicOp::BinGet(_) | CpsIntrinsicOp::ListGet, 0) => {
+                                    (CpsIntrinsic::BinGet(_) | CpsIntrinsic::ListGet, 0) => {
                                         Consumption::RopeGet
                                     }
-                                    (
-                                        CpsIntrinsicOp::BinSlice(_) | CpsIntrinsicOp::ListSlice,
-                                        0,
-                                    ) => Consumption::RopeSlice,
+                                    (CpsIntrinsic::BinSlice(_) | CpsIntrinsic::ListSlice, 0) => {
+                                        Consumption::RopeSlice
+                                    }
                                     _ => Consumption::OpaqueIntrinsic,
                                 };
                                 self.record(*operand, node_id, consumption);
@@ -1261,8 +1260,8 @@ fn rebirth(census: &Census) -> Rebirth {
             continue;
         };
         let bases: &[CpsAtom] = match op {
-            CpsIntrinsicOp::BinAppend(_) | CpsIntrinsicOp::ListAppend => &args[..1],
-            CpsIntrinsicOp::BinConcat(_, _) | CpsIntrinsicOp::ListConcat(_) => args.as_slice(),
+            CpsIntrinsic::BinAppend(_) | CpsIntrinsic::ListAppend => &args[..1],
+            CpsIntrinsic::BinConcat(_, _) | CpsIntrinsic::ListConcat(_) => args.as_slice(),
             _ => continue,
         };
         for base in bases {

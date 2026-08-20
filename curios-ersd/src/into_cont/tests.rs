@@ -150,9 +150,9 @@ fn a_variant_match_lowers_to_tag_dispatch() {
     let module = builder.finalize().expect("verifies");
 
     let printed = lowered(&module);
-    // The constructor is the flat tuple (tag, payload…); dispatch reads the tag with TplGet(0) and the payload with TplGet(1).
-    assert!(printed.contains("TplGet(0)"), "{printed}");
-    assert!(printed.contains("TplGet(1)"), "{printed}");
+    // The constructor is the flat tuple (tag, payload…); dispatch reads the tag with TupleGet(0) and the payload with TupleGet(1).
+    assert!(printed.contains("TupleGet(0)"), "{printed}");
+    assert!(printed.contains("TupleGet(1)"), "{printed}");
     assert!(printed.contains("switch"), "{printed}");
 }
 
@@ -197,8 +197,8 @@ fn a_single_constructor_family_collapses_to_its_bare_payload() {
 
     let printed = lowered(&module);
     // The collapsed value is the payload itself: no tuple is built, no tag is read, and the match never dispatches.
-    assert!(!printed.contains("Tuple"), "{printed}");
-    assert!(!printed.contains("TplGet"), "{printed}");
+    assert!(!printed.contains("Tuple("), "{printed}");
+    assert!(!printed.contains("TupleGet"), "{printed}");
     assert!(!printed.contains("switch"), "{printed}");
 }
 
@@ -264,10 +264,10 @@ fn an_immediate_constructor_rides_its_payload() {
 
     let printed = lowered(&module);
     // The leaf construct builds nothing, the dispatch is an `IsImmediate` test, and with exactly one boxed constructor the tag is never read — the node arm's payloads still project at their tagged offsets.
-    assert!(!printed.contains("Tuple"), "{printed}");
+    assert!(!printed.contains("Tuple("), "{printed}");
     assert!(printed.contains("IsImmediate"), "{printed}");
-    assert!(!printed.contains("TplGet(0)"), "{printed}");
-    assert!(printed.contains("TplGet(1)"), "{printed}");
+    assert!(!printed.contains("TupleGet(0)"), "{printed}");
+    assert!(printed.contains("TupleGet(1)"), "{printed}");
     // The immediate arm's payload is *read*, not aliased to the scrutinee. Without this node the binder and the scrutinee are one value, and a raw demand from the arm reaches the scrutinee's own definition — which on the boxed path built a tuple. See `an_immediate_arm_payload_survives_arithmetic_in_a_loop` in `curios`'s matching tests for what that emitted.
     assert!(printed.contains("ImmediateGet"), "{printed}");
 }
@@ -342,7 +342,7 @@ fn an_immediate_family_with_two_boxed_constructors_keeps_the_inner_tag_dispatch(
     let printed = lowered(&module);
     // Two boxed constructors remain behind the test, so the tag dispatch survives on that side.
     assert!(printed.contains("IsImmediate"), "{printed}");
-    assert!(printed.contains("TplGet(0)"), "{printed}");
+    assert!(printed.contains("TupleGet(0)"), "{printed}");
 }
 
 #[test]
@@ -375,7 +375,7 @@ fn two_immediate_constructors_decline_the_encoding() {
 
     let printed = lowered(&module);
     // Two immediate constructors would collide on the same i31 values, so the family stays tagged.
-    assert!(printed.contains("Tuple"), "{printed}");
+    assert!(printed.contains("Tuple("), "{printed}");
     assert!(!printed.contains("IsImmediate"), "{printed}");
 }
 
@@ -425,8 +425,8 @@ fn a_collapsed_pair_is_an_untagged_tuple() {
 
     let printed = lowered(&module);
     // Untagged: the second payload reads at index 1, where the tagged encoding would put it at 2 — and nothing dispatches.
-    assert!(printed.contains("TplGet(1)"), "{printed}");
-    assert!(!printed.contains("TplGet(2)"), "{printed}");
+    assert!(printed.contains("TupleGet(1)"), "{printed}");
+    assert!(!printed.contains("TupleGet(2)"), "{printed}");
     assert!(!printed.contains("switch"), "{printed}");
 }
 
@@ -466,7 +466,7 @@ fn a_collapsed_nullary_constructor_is_the_interned_zero() {
 
     let printed = lowered(&module);
     // The value carries zero information and rides the cheapest carrier — the Unit encoding — so nothing is allocated and nothing dispatches.
-    assert!(!printed.contains("Tuple"), "{printed}");
+    assert!(!printed.contains("Tuple("), "{printed}");
     assert!(!printed.contains("switch"), "{printed}");
 }
 

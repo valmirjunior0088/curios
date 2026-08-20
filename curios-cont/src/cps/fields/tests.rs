@@ -2,7 +2,7 @@ use {
     super::{split_parameters, split_workers},
     crate::{
         CpsAtom, CpsCallee, CpsContId, CpsContinuation, CpsEdge, CpsFunId, CpsFunction,
-        CpsIntrinsicOp, CpsLiteral, CpsModule, CpsNode, CpsValueExpr, CpsValueId, FieldGroup,
+        CpsIntrinsic, CpsLiteral, CpsModule, CpsNode, CpsValueExpr, CpsValueId, FieldGroup,
         optimize,
     },
 };
@@ -31,7 +31,7 @@ fn loop_module() -> (CpsModule, CpsFunId, CpsContId, CpsValueId) {
     }));
     let take = module.add_node(CpsNode::LetIntrinsic {
         result,
-        op: CpsIntrinsicOp::TplGet(0),
+        op: CpsIntrinsic::TupleGet(0),
         args: vec![CpsAtom::Value(out)],
         next: deliver,
     });
@@ -70,13 +70,13 @@ fn loop_module() -> (CpsModule, CpsFunId, CpsContId, CpsValueId) {
     });
     let bump = module.add_node(CpsNode::LetIntrinsic {
         result: bumped,
-        op: CpsIntrinsicOp::NatAdd,
+        op: CpsIntrinsic::NatAdd,
         args: vec![CpsAtom::Value(read), CpsAtom::Literal(CpsLiteral::Nat(1))],
         next: build,
     });
     let project = module.add_node(CpsNode::LetIntrinsic {
         result: read,
-        op: CpsIntrinsicOp::TplGet(0),
+        op: CpsIntrinsic::TupleGet(0),
         args: vec![CpsAtom::Value(carried)],
         next: bump,
     });
@@ -205,7 +205,7 @@ fn a_mixed_origin_is_declined() {
     let join_exit = module.add_node(CpsNode::Exit { value: None });
     let project = module.add_node(CpsNode::LetIntrinsic {
         result: read,
-        op: CpsIntrinsicOp::TplGet(0),
+        op: CpsIntrinsic::TupleGet(0),
         args: vec![CpsAtom::Value(landed)],
         next: join_exit,
     });
@@ -298,7 +298,7 @@ fn variant_loop_module() -> (CpsModule, CpsContId, CpsValueId) {
     }));
     let take = module.add_node(CpsNode::LetIntrinsic {
         result,
-        op: CpsIntrinsicOp::TplGet(0),
+        op: CpsIntrinsic::TupleGet(0),
         args: vec![CpsAtom::Value(out)],
         next: deliver,
     });
@@ -339,7 +339,7 @@ fn variant_loop_module() -> (CpsModule, CpsContId, CpsValueId) {
     });
     let dispatch = module.add_node(CpsNode::LetIntrinsic {
         result: tag,
-        op: CpsIntrinsicOp::TplGet(0),
+        op: CpsIntrinsic::TupleGet(0),
         args: vec![CpsAtom::Value(carried)],
         next: build,
     });
@@ -434,7 +434,7 @@ fn a_variant_splits_at_its_widest_constructor_with_per_edge_filler() {
         .filter(|node| {
             matches!(
                 node,
-                CpsNode::LetIntrinsic { op: CpsIntrinsicOp::TplGet(index), args, .. }
+                CpsNode::LetIntrinsic { op: CpsIntrinsic::TupleGet(index), args, .. }
                     if *index >= 1 && matches!(args.as_slice(), [CpsAtom::Value(value)] if *value == narrow)
             )
         })
@@ -486,7 +486,7 @@ fn merged_argument_module() -> (CpsModule, CpsFunId, CpsValueId) {
     }));
     let callee_body = module.add_node(CpsNode::LetIntrinsic {
         result: callee_read,
-        op: CpsIntrinsicOp::TplGet(0),
+        op: CpsIntrinsic::TupleGet(0),
         args: vec![CpsAtom::Value(callee_param)],
         next: callee_return,
     });
@@ -588,7 +588,7 @@ fn merged_argument_module() -> (CpsModule, CpsFunId, CpsValueId) {
     (module, callee, callee_param)
 }
 
-/// Every projection in `module` that reads a visible construction, paired with that construction's arity. A read past the arity is the miscompile a site-blind width would produce: `$tpl/n` extends `$tpl/(n-1)`, so the emitter casts a projection's operand to the tuple type of `index + 1` and a narrower object fails that cast at runtime rather than at build time.
+/// Every projection in `module` that reads a visible construction, paired with that construction's arity. A read past the arity is the miscompile a site-blind width would produce: `$tuple/n` extends `$tuple/(n-1)`, so the emitter casts a projection's operand to the tuple type of `index + 1` and a narrower object fails that cast at runtime rather than at build time.
 fn projections_within_bounds(module: &CpsModule) -> bool {
     let built = module
         .nodes()
@@ -605,7 +605,7 @@ fn projections_within_bounds(module: &CpsModule) -> bool {
         .collect::<std::collections::BTreeMap<_, _>>();
     module.nodes().iter().flatten().all(|node| match node {
         CpsNode::LetIntrinsic {
-            op: CpsIntrinsicOp::TplGet(index),
+            op: CpsIntrinsic::TupleGet(index),
             args,
             ..
         } => match args.as_slice() {
@@ -717,19 +717,19 @@ fn walk_module() -> (CpsModule, crate::CpsContId) {
     // A *suffix*, which is what `into_cont`'s peel emits: no count operand, so the fixture exercises the shape the compiler actually produces rather than one it no longer can.
     let slice = module.add_node(CpsNode::LetIntrinsic {
         result: tail,
-        op: CpsIntrinsicOp::BinRest(curios_utilities::Grain::X),
+        op: CpsIntrinsic::BinRest(curios_utilities::Grain::X),
         args: vec![CpsAtom::Value(window), CpsAtom::Literal(CpsLiteral::Nat(1))],
         next: spin,
     });
     let read = module.add_node(CpsNode::LetIntrinsic {
         result: head,
-        op: CpsIntrinsicOp::BinGet(curios_utilities::Grain::X),
+        op: CpsIntrinsic::BinGet(curios_utilities::Grain::X),
         args: vec![CpsAtom::Value(window), CpsAtom::Literal(CpsLiteral::Nat(0))],
         next: slice,
     });
     let measure = module.add_node(CpsNode::LetIntrinsic {
         result: length,
-        op: CpsIntrinsicOp::BinLen(curios_utilities::Grain::X),
+        op: CpsIntrinsic::BinLen(curios_utilities::Grain::X),
         args: vec![CpsAtom::Value(window)],
         next: read,
     });
@@ -787,11 +787,11 @@ fn a_suffix_walk_virtualizes_its_windows() {
     for node in module.nodes().iter().flatten() {
         if let CpsNode::LetIntrinsic { op, .. } = node {
             match op {
-                CpsIntrinsicOp::BinSlice(_)
-                | CpsIntrinsicOp::BinRest(_)
-                | CpsIntrinsicOp::ListSlice
-                | CpsIntrinsicOp::ListRest => slices += 1,
-                CpsIntrinsicOp::WindowExtent => extents += 1,
+                CpsIntrinsic::BinSlice(_)
+                | CpsIntrinsic::BinRest(_)
+                | CpsIntrinsic::ListSlice
+                | CpsIntrinsic::ListRest => slices += 1,
+                CpsIntrinsic::WindowExtent => extents += 1,
                 _ => {}
             }
         }

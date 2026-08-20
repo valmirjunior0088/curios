@@ -652,7 +652,7 @@ impl<'a, 'b> Context<'a, 'b> {
     fn host_unit_resume(&self, output: &mut Vec<curios_wasm::Instr>, resume: &EmissionBlockName) {
         if self.is_resume(resume) {
             output.push(curios_wasm::Instr::StructNew {
-                type_name: self.table().find_tpl_type(0),
+                type_name: self.table().find_tuple_type(0),
             });
             output.push(curios_wasm::Instr::Return);
         } else {
@@ -824,7 +824,7 @@ pub(crate) fn zero_instrs(carrier: Option<Repr>) -> Vec<curios_wasm::Instr> {
     match carrier {
         Some(Repr::Nat | Repr::Int) => vec![curios_wasm::Instr::I32Const { value: 0 }],
         Some(Repr::Flt) => vec![curios_wasm::Instr::F32Const { value: 0.0 }],
-        Some(Repr::Bin(_) | Repr::List | Repr::Tpl(_) | Repr::Ref) | None => vec![
+        Some(Repr::Bin(_) | Repr::List | Repr::Tuple(_) | Repr::Ref) | None => vec![
             curios_wasm::Instr::I32Const { value: 0 },
             curios_wasm::Instr::RefI31,
         ],
@@ -837,7 +837,7 @@ pub(crate) fn box_instr(repr: &Repr, table: &Table) -> Option<curios_wasm::Instr
         Repr::Flt => Some(curios_wasm::Instr::StructNew {
             type_name: table.flt_type(),
         }),
-        Repr::Bin(_) | Repr::List | Repr::Tpl(_) | Repr::Ref => None,
+        Repr::Bin(_) | Repr::List | Repr::Tuple(_) | Repr::Ref => None,
     }
 }
 
@@ -854,7 +854,7 @@ impl LoadAs {
             Repr::Flt => Self::Flt,
             Repr::Bin(grain) => Self::Bin(*grain),
             Repr::List => Self::List,
-            Repr::Tpl(arity) => Self::Concrete(table.find_tpl_type(*arity)),
+            Repr::Tuple(arity) => Self::Concrete(table.find_tuple_type(*arity)),
             Repr::Ref => Self::Null,
         }
     }

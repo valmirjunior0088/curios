@@ -1,6 +1,6 @@
 //! Scoped common-subexpression elimination over deterministic intrinsics.
 //!
-//! In this CPS a binding's lexical scope is its dominance region: every use of a `LetIntrinsic` result sits inside the binder's subtree, and any jump into a `LetCont` member comes from within that subtree, after the bindings above it executed. Walking each function's node tree with a scoped table of `(op, operands)` therefore finds exactly the duplicates whose dominating occurrence already ran, which is what makes reusing its result sound even for `MayTrap` ops (see [`CpsIntrinsicOp::cse_eligible`]). The table never crosses a nested function definition: sharing across one would grow its closure environment, a size tradeoff this pass refuses.
+//! In this CPS a binding's lexical scope is its dominance region: every use of a `LetIntrinsic` result sits inside the binder's subtree, and any jump into a `LetCont` member comes from within that subtree, after the bindings above it executed. Walking each function's node tree with a scoped table of `(op, operands)` therefore finds exactly the duplicates whose dominating occurrence already ran, which is what makes reusing its result sound even for `MayTrap` ops (see [`CpsIntrinsic::cse_eligible`]). The table never crosses a nested function definition: sharing across one would grow its closure environment, a size tradeoff this pass refuses.
 
 use {
     super::simplify::{rewire_node, rewrite_atoms},
@@ -45,7 +45,7 @@ fn atom_key(atom: &CpsAtom) -> AtomKey {
     }
 }
 
-fn intrinsic_key(op: CpsIntrinsicOp, args: &[CpsAtom]) -> (CpsIntrinsicOp, Vec<AtomKey>) {
+fn intrinsic_key(op: CpsIntrinsic, args: &[CpsAtom]) -> (CpsIntrinsic, Vec<AtomKey>) {
     let mut keys = args.iter().map(atom_key).collect::<Vec<_>>();
     if op.is_commutative() {
         keys.sort();
@@ -69,7 +69,7 @@ pub(super) fn dedupe_intrinsics(module: &mut CpsModule) -> bool {
     let mut duplicates = Vec::new();
     let functions = module.functions.live_ids().collect::<Vec<_>>();
     for function in functions {
-        let mut table = BTreeMap::<(CpsIntrinsicOp, Vec<AtomKey>), CpsValueId>::new();
+        let mut table = BTreeMap::<(CpsIntrinsic, Vec<AtomKey>), CpsValueId>::new();
         let mut work = vec![Task::Visit(module.function(function).unwrap().body)];
         let mut visited = BTreeSet::new();
         while let Some(task) = work.pop() {

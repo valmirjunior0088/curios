@@ -600,7 +600,7 @@ fn trees_hot_arithmetic_has_no_indirect_calls() {
     );
 }
 
-/// T4: ordinary recursive functions create no shells or mutable closure fields. The trees module allocates only data tuples (`$tpl/…` for the `Tree` nodes) — no closure (`$clsr/`) or environment (`$envr/`) structs, and no `struct.new_default` shell.
+/// T4: ordinary recursive functions create no shells or mutable closure fields. The trees module allocates only data tuples (`$tuple/…` for the `Tree` nodes) — no closure (`$clsr/`) or environment (`$envr/`) structs, and no `struct.new_default` shell.
 #[test]
 fn trees_ordinary_recursion_has_no_shells() {
     let wat = wat(TREES);
@@ -631,14 +631,14 @@ fn a_string_walk_allocates_no_closure_per_character() {
     assert!(shells.is_empty(), "no closure shell: {shells:?}");
 }
 
-/// T5: constructor payloads are untouched, which is what makes the locals-only scope *observable* rather than merely intended. A `Tree/node` carries its `Nat` in a `$tpl/…` field, and every such field stays `(ref null any)` — the representation analysis reaches locals and block parameters, never a heap layout, because a field is a contract between an allocation site and every reader of it rather than one function's private decision. Widening this is the successor's subject; until then a scalar field appearing here means the scope leaked.
+/// T5: constructor payloads are untouched, which is what makes the locals-only scope *observable* rather than merely intended. A `Tree/node` carries its `Nat` in a `$tuple/…` field, and every such field stays `(ref null any)` — the representation analysis reaches locals and block parameters, never a heap layout, because a field is a contract between an allocation site and every reader of it rather than one function's private decision. Widening this is the successor's subject; until then a scalar field appearing here means the scope leaked.
 #[test]
 fn trees_constructor_payloads_stay_boxed() {
     let wat = wat(TREES);
 
     let scalar_fields = wat
         .lines()
-        .filter(|line| line.contains("(type $tpl/") || line.trim().starts_with("(field "))
+        .filter(|line| line.contains("(type $tuple/") || line.trim().starts_with("(field "))
         .filter(|line| line.contains("(field $") && !line.contains("(ref null any)"))
         .collect::<Vec<_>>();
 
@@ -648,7 +648,7 @@ fn trees_constructor_payloads_stay_boxed() {
     );
 }
 
-/// T6: the leaf constructor rides its payload — the immediate encoding. `build`'s leaf arm returns the payload with no allocation, so its body holds exactly one construction (the node's), and `sum` discriminates leaf from node with `ref.test (ref i31)` in place of a tag read — with only one boxed constructor the tag is never read, so no `$tpl/1` cast survives in `sum`.
+/// T6: the leaf constructor rides its payload — the immediate encoding. `build`'s leaf arm returns the payload with no allocation, so its body holds exactly one construction (the node's), and `sum` discriminates leaf from node with `ref.test (ref i31)` in place of a tag read — with only one boxed constructor the tag is never read, so no `$tuple/1` cast survives in `sum`.
 ///
 /// # What the encoding was worth, and how to retake it
 ///
@@ -672,7 +672,7 @@ fn trees_leaf_rides_its_payload() {
         sum.body
     );
     assert!(
-        !sum.body.contains("$tpl/1"),
+        !sum.body.contains("$tuple/1"),
         "no tag read survives in sum: {}",
         sum.body
     );

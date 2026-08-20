@@ -710,7 +710,7 @@ impl Lowerer<'_> {
                         self.straight(result, rest, terminator, target, |bound, next| {
                             curios_cont::CpsNode::LetIntrinsic {
                                 result: bound,
-                                op: curios_cont::CpsIntrinsicOp::ListSettle,
+                                op: curios_cont::CpsIntrinsic::ListSettle,
                                 args: vec![atom],
                                 next,
                             }
@@ -781,7 +781,7 @@ impl Lowerer<'_> {
                 self.straight(result, rest, terminator, target, move |bound, next| {
                     curios_cont::CpsNode::LetIntrinsic {
                         result: bound,
-                        op: curios_cont::CpsIntrinsicOp::TplGet(index),
+                        op: curios_cont::CpsIntrinsic::TupleGet(index),
                         args: vec![product],
                         next,
                     }
@@ -921,7 +921,7 @@ impl Lowerer<'_> {
                 self.straight(result, rest, terminator, target, move |bound, next| {
                     curios_cont::CpsNode::LetIntrinsic {
                         result: bound,
-                        op: curios_cont::CpsIntrinsicOp::NatAnd,
+                        op: curios_cont::CpsIntrinsic::NatAnd,
                         args: vec![
                             value,
                             curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(0xFF)),
@@ -1050,7 +1050,7 @@ impl Lowerer<'_> {
         })
     }
 
-    /// Lower a variant match: the tag (`TplGet(0)`) selects an arm through a `Switch`; each arm binds its payload positionally (`TplGet(1 + i)`) and delivers to the join. A [`FamilyEncoding::Collapsed`] family has nothing to decide — its single arm (or the default, when the arm is absent) runs unconditionally, inline rather than behind a dispatch.
+    /// Lower a variant match: the tag (`TupleGet(0)`) selects an arm through a `Switch`; each arm binds its payload positionally (`TupleGet(1 + i)`) and delivers to the join. A [`FamilyEncoding::Collapsed`] family has nothing to decide — its single arm (or the default, when the arm is absent) runs unconditionally, inline rather than behind a dispatch.
     #[allow(clippy::too_many_arguments)]
     fn lower_match_variant(
         &mut self,
@@ -1131,7 +1131,7 @@ impl Lowerer<'_> {
         });
         let dispatch = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
             result: tag,
-            op: curios_cont::CpsIntrinsicOp::TplGet(0),
+            op: curios_cont::CpsIntrinsic::TupleGet(0),
             args: vec![scrutinee],
             next: switch,
         });
@@ -1225,7 +1225,7 @@ impl Lowerer<'_> {
                 });
                 let body = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
                     result: tag,
-                    op: curios_cont::CpsIntrinsicOp::TplGet(0),
+                    op: curios_cont::CpsIntrinsic::TupleGet(0),
                     args: vec![scrutinee.clone()],
                     next: switch,
                 });
@@ -1260,7 +1260,7 @@ impl Lowerer<'_> {
         });
         let dispatch = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
             result: kind,
-            op: curios_cont::CpsIntrinsicOp::IsImmediate,
+            op: curios_cont::CpsIntrinsic::IsImmediate,
             args: vec![scrutinee],
             next: switch,
         });
@@ -1272,7 +1272,7 @@ impl Lowerer<'_> {
 
     /// One collapsed arm body: a lone payload aliases the scrutinee, which *is* the payload under the collapsed encoding; a wider row projects untagged fields. Returns a body rather than a continuation because the caller inlines it with no dispatch to target it.
     ///
-    /// The aliasing is sound *here* and only here. A collapsed family has one constructor, so the scrutinee is the payload on every path there is. The immediate encoding looks like the same shape and is not — its scrutinee is a scalar on one path and a tuple on the other — so it binds through [`lower_immediate_arm`] instead. Sharing this function with it miscompiled a loop that did arithmetic on the payload; see [`curios_cont::CpsIntrinsicOp::ImmediateGet`].
+    /// The aliasing is sound *here* and only here. A collapsed family has one constructor, so the scrutinee is the payload on every path there is. The immediate encoding looks like the same shape and is not — its scrutinee is a scalar on one path and a tuple on the other — so it binds through [`lower_immediate_arm`] instead. Sharing this function with it miscompiled a loop that did arithmetic on the payload; see [`curios_cont::CpsIntrinsic::ImmediateGet`].
     fn lower_collapsed_arm(
         &mut self,
         arm: &VariantArm,
@@ -1292,7 +1292,7 @@ impl Lowerer<'_> {
         for index in (0..bindings.len()).rev() {
             body = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
                 result: bindings[index],
-                op: curios_cont::CpsIntrinsicOp::TplGet(index),
+                op: curios_cont::CpsIntrinsic::TupleGet(index),
                 args: vec![scrutinee.clone()],
                 next: body,
             });
@@ -1300,7 +1300,7 @@ impl Lowerer<'_> {
         body
     }
 
-    /// One immediate-encoded arm body: the payload is the scrutinee's value, bound through [`curios_cont::CpsIntrinsicOp::ImmediateGet`] rather than aliased to it, so it has a definition of its own for the representation analysis to read a carrier off.
+    /// One immediate-encoded arm body: the payload is the scrutinee's value, bound through [`curios_cont::CpsIntrinsic::ImmediateGet`] rather than aliased to it, so it has a definition of its own for the representation analysis to read a carrier off.
     ///
     /// Exactly one binding, always: the encoding admits only a unary constructor, so there is no wider row to project and a different shape is this lowering's own contract broken rather than a program's fault.
     fn lower_immediate_arm(
@@ -1316,7 +1316,7 @@ impl Lowerer<'_> {
         let body = self.lower_block(arm.block, join);
         self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
             result: bound,
-            op: curios_cont::CpsIntrinsicOp::ImmediateGet,
+            op: curios_cont::CpsIntrinsic::ImmediateGet,
             args: vec![scrutinee],
             next: body,
         })
@@ -1337,7 +1337,7 @@ impl Lowerer<'_> {
         for index in (0..bindings.len()).rev() {
             body = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
                 result: bindings[index],
-                op: curios_cont::CpsIntrinsicOp::TplGet(index + 1),
+                op: curios_cont::CpsIntrinsic::TupleGet(index + 1),
                 args: vec![scrutinee.clone()],
                 next: body,
             });
@@ -1395,7 +1395,7 @@ impl Lowerer<'_> {
         );
         let increment = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
             result: next_index,
-            op: curios_cont::CpsIntrinsicOp::NatAdd,
+            op: curios_cont::CpsIntrinsic::NatAdd,
             args: vec![
                 curios_cont::CpsAtom::Value(step_index),
                 curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(1)),
@@ -1446,7 +1446,7 @@ impl Lowerer<'_> {
         });
         let loop_body = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
             result: comparison,
-            op: curios_cont::CpsIntrinsicOp::NatEql,
+            op: curios_cont::CpsIntrinsic::NatEql,
             args: vec![curios_cont::CpsAtom::Value(loop_index), head],
             next: switch,
         });
@@ -1663,7 +1663,7 @@ impl Lowerer<'_> {
         );
         let step_body = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
             result: element_index,
-            op: curios_cont::CpsIntrinsicOp::NatSub,
+            op: curios_cont::CpsIntrinsic::NatSub,
             args: vec![
                 curios_cont::CpsAtom::Value(step_index),
                 curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(1)),
@@ -1699,7 +1699,7 @@ impl Lowerer<'_> {
         });
         let loop_body = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
             result: comparison,
-            op: curios_cont::CpsIntrinsicOp::NatEql,
+            op: curios_cont::CpsIntrinsic::NatEql,
             args: vec![
                 curios_cont::CpsAtom::Value(loop_index),
                 curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(0)),
@@ -1892,7 +1892,7 @@ impl Lowerer<'_> {
             .fold(node, |next, (result, atom)| {
                 self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
                     result,
-                    op: curios_cont::CpsIntrinsicOp::ListSettle,
+                    op: curios_cont::CpsIntrinsic::ListSettle,
                     args: vec![atom],
                     next,
                 })
@@ -2010,91 +2010,91 @@ impl Lowerer<'_> {
 }
 
 /// The Cont intrinsic of a scalar [`Operation`]. `Bool` operations run on the `0`/`1` `Nat` carrier (`BoolNeq` is xor on a single bit) and `Byte` comparisons on the `Nat` carrier; `HandleEql` is packed-binary equality at byte grain. The `Byte` conversions are handled before this table.
-fn operation_intrinsic(operation: Operation) -> curios_cont::CpsIntrinsicOp {
+fn operation_intrinsic(operation: Operation) -> curios_cont::CpsIntrinsic {
     use Operation as O;
     match operation {
-        O::BoolAnd => curios_cont::CpsIntrinsicOp::NatAnd,
-        O::BoolOr => curios_cont::CpsIntrinsicOp::NatOr,
-        O::BoolXor => curios_cont::CpsIntrinsicOp::NatXor,
-        O::BoolEql => curios_cont::CpsIntrinsicOp::NatEql,
-        O::BoolNeq => curios_cont::CpsIntrinsicOp::NatXor,
-        O::NatEql => curios_cont::CpsIntrinsicOp::NatEql,
-        O::NatNeq => curios_cont::CpsIntrinsicOp::NatNeq,
-        O::NatAdd => curios_cont::CpsIntrinsicOp::NatAdd,
-        O::NatSub => curios_cont::CpsIntrinsicOp::NatSub,
-        O::NatMul => curios_cont::CpsIntrinsicOp::NatMul,
-        O::NatLt => curios_cont::CpsIntrinsicOp::NatLt,
-        O::NatDiv => curios_cont::CpsIntrinsicOp::NatDiv,
-        O::NatRem => curios_cont::CpsIntrinsicOp::NatRem,
-        O::NatGt => curios_cont::CpsIntrinsicOp::NatGt,
-        O::NatLe => curios_cont::CpsIntrinsicOp::NatLe,
-        O::NatGe => curios_cont::CpsIntrinsicOp::NatGe,
-        O::NatAnd => curios_cont::CpsIntrinsicOp::NatAnd,
-        O::NatOr => curios_cont::CpsIntrinsicOp::NatOr,
-        O::NatXor => curios_cont::CpsIntrinsicOp::NatXor,
-        O::NatShl => curios_cont::CpsIntrinsicOp::NatShl,
-        O::NatShr => curios_cont::CpsIntrinsicOp::NatShr,
-        O::NatRotl => curios_cont::CpsIntrinsicOp::NatRotl,
-        O::NatRotr => curios_cont::CpsIntrinsicOp::NatRotr,
-        O::NatClz => curios_cont::CpsIntrinsicOp::NatClz,
-        O::NatCtz => curios_cont::CpsIntrinsicOp::NatCtz,
-        O::NatPopcnt => curios_cont::CpsIntrinsicOp::NatPopcnt,
-        O::ByteEql => curios_cont::CpsIntrinsicOp::NatEql,
-        O::ByteLt => curios_cont::CpsIntrinsicOp::NatLt,
-        O::ByteLe => curios_cont::CpsIntrinsicOp::NatLe,
-        O::ByteGt => curios_cont::CpsIntrinsicOp::NatGt,
-        O::ByteGe => curios_cont::CpsIntrinsicOp::NatGe,
-        O::IntEql => curios_cont::CpsIntrinsicOp::IntEql,
-        O::IntNeq => curios_cont::CpsIntrinsicOp::IntNeq,
-        O::IntAdd => curios_cont::CpsIntrinsicOp::IntAdd,
-        O::IntSub => curios_cont::CpsIntrinsicOp::IntSub,
-        O::IntMul => curios_cont::CpsIntrinsicOp::IntMul,
-        O::IntDiv => curios_cont::CpsIntrinsicOp::IntDiv,
-        O::IntRem => curios_cont::CpsIntrinsicOp::IntRem,
-        O::IntLt => curios_cont::CpsIntrinsicOp::IntLt,
-        O::IntGt => curios_cont::CpsIntrinsicOp::IntGt,
-        O::IntLe => curios_cont::CpsIntrinsicOp::IntLe,
-        O::IntGe => curios_cont::CpsIntrinsicOp::IntGe,
-        O::IntAnd => curios_cont::CpsIntrinsicOp::IntAnd,
-        O::IntOr => curios_cont::CpsIntrinsicOp::IntOr,
-        O::IntXor => curios_cont::CpsIntrinsicOp::IntXor,
-        O::IntShl => curios_cont::CpsIntrinsicOp::IntShl,
-        O::IntShr => curios_cont::CpsIntrinsicOp::IntShr,
-        O::IntRotl => curios_cont::CpsIntrinsicOp::IntRotl,
-        O::IntRotr => curios_cont::CpsIntrinsicOp::IntRotr,
-        O::IntClz => curios_cont::CpsIntrinsicOp::IntClz,
-        O::IntCtz => curios_cont::CpsIntrinsicOp::IntCtz,
-        O::IntPopcnt => curios_cont::CpsIntrinsicOp::IntPopcnt,
-        O::FltAdd => curios_cont::CpsIntrinsicOp::FltAdd,
-        O::FltSub => curios_cont::CpsIntrinsicOp::FltSub,
-        O::FltMul => curios_cont::CpsIntrinsicOp::FltMul,
-        O::FltDiv => curios_cont::CpsIntrinsicOp::FltDiv,
-        O::FltRem => curios_cont::CpsIntrinsicOp::FltRem,
-        O::FltEql => curios_cont::CpsIntrinsicOp::FltEql,
-        O::FltNeq => curios_cont::CpsIntrinsicOp::FltNeq,
-        O::FltLt => curios_cont::CpsIntrinsicOp::FltLt,
-        O::FltGt => curios_cont::CpsIntrinsicOp::FltGt,
-        O::FltLe => curios_cont::CpsIntrinsicOp::FltLe,
-        O::FltGe => curios_cont::CpsIntrinsicOp::FltGe,
-        O::FltMin => curios_cont::CpsIntrinsicOp::FltMin,
-        O::FltMax => curios_cont::CpsIntrinsicOp::FltMax,
-        O::FltCopysign => curios_cont::CpsIntrinsicOp::FltCopysign,
-        O::FltNeg => curios_cont::CpsIntrinsicOp::FltNeg,
-        O::FltAbs => curios_cont::CpsIntrinsicOp::FltAbs,
-        O::FltSqrt => curios_cont::CpsIntrinsicOp::FltSqrt,
-        O::FltFloor => curios_cont::CpsIntrinsicOp::FltFloor,
-        O::FltCeil => curios_cont::CpsIntrinsicOp::FltCeil,
-        O::FltTrunc => curios_cont::CpsIntrinsicOp::FltTrunc,
-        O::FltNearest => curios_cont::CpsIntrinsicOp::FltNearest,
-        O::NatToInt => curios_cont::CpsIntrinsicOp::NatToInt,
-        O::NatToFlt => curios_cont::CpsIntrinsicOp::NatToFlt,
-        O::IntToNat => curios_cont::CpsIntrinsicOp::IntToNat,
-        O::IntToFlt => curios_cont::CpsIntrinsicOp::IntToFlt,
-        O::FltToNat => curios_cont::CpsIntrinsicOp::FltToNat,
-        O::FltToInt => curios_cont::CpsIntrinsicOp::FltToInt,
-        O::FltToLeBytes => curios_cont::CpsIntrinsicOp::FltToLeBytes,
-        O::FltOfLeBytes => curios_cont::CpsIntrinsicOp::FltOfLeBytes,
-        O::HandleEql => curios_cont::CpsIntrinsicOp::BinEql(Grain::X),
+        O::BoolAnd => curios_cont::CpsIntrinsic::NatAnd,
+        O::BoolOr => curios_cont::CpsIntrinsic::NatOr,
+        O::BoolXor => curios_cont::CpsIntrinsic::NatXor,
+        O::BoolEql => curios_cont::CpsIntrinsic::NatEql,
+        O::BoolNeq => curios_cont::CpsIntrinsic::NatXor,
+        O::NatEql => curios_cont::CpsIntrinsic::NatEql,
+        O::NatNeq => curios_cont::CpsIntrinsic::NatNeq,
+        O::NatAdd => curios_cont::CpsIntrinsic::NatAdd,
+        O::NatSub => curios_cont::CpsIntrinsic::NatSub,
+        O::NatMul => curios_cont::CpsIntrinsic::NatMul,
+        O::NatLt => curios_cont::CpsIntrinsic::NatLt,
+        O::NatDiv => curios_cont::CpsIntrinsic::NatDiv,
+        O::NatRem => curios_cont::CpsIntrinsic::NatRem,
+        O::NatGt => curios_cont::CpsIntrinsic::NatGt,
+        O::NatLe => curios_cont::CpsIntrinsic::NatLe,
+        O::NatGe => curios_cont::CpsIntrinsic::NatGe,
+        O::NatAnd => curios_cont::CpsIntrinsic::NatAnd,
+        O::NatOr => curios_cont::CpsIntrinsic::NatOr,
+        O::NatXor => curios_cont::CpsIntrinsic::NatXor,
+        O::NatShl => curios_cont::CpsIntrinsic::NatShl,
+        O::NatShr => curios_cont::CpsIntrinsic::NatShr,
+        O::NatRotl => curios_cont::CpsIntrinsic::NatRotl,
+        O::NatRotr => curios_cont::CpsIntrinsic::NatRotr,
+        O::NatClz => curios_cont::CpsIntrinsic::NatClz,
+        O::NatCtz => curios_cont::CpsIntrinsic::NatCtz,
+        O::NatPopcnt => curios_cont::CpsIntrinsic::NatPopcnt,
+        O::ByteEql => curios_cont::CpsIntrinsic::NatEql,
+        O::ByteLt => curios_cont::CpsIntrinsic::NatLt,
+        O::ByteLe => curios_cont::CpsIntrinsic::NatLe,
+        O::ByteGt => curios_cont::CpsIntrinsic::NatGt,
+        O::ByteGe => curios_cont::CpsIntrinsic::NatGe,
+        O::IntEql => curios_cont::CpsIntrinsic::IntEql,
+        O::IntNeq => curios_cont::CpsIntrinsic::IntNeq,
+        O::IntAdd => curios_cont::CpsIntrinsic::IntAdd,
+        O::IntSub => curios_cont::CpsIntrinsic::IntSub,
+        O::IntMul => curios_cont::CpsIntrinsic::IntMul,
+        O::IntDiv => curios_cont::CpsIntrinsic::IntDiv,
+        O::IntRem => curios_cont::CpsIntrinsic::IntRem,
+        O::IntLt => curios_cont::CpsIntrinsic::IntLt,
+        O::IntGt => curios_cont::CpsIntrinsic::IntGt,
+        O::IntLe => curios_cont::CpsIntrinsic::IntLe,
+        O::IntGe => curios_cont::CpsIntrinsic::IntGe,
+        O::IntAnd => curios_cont::CpsIntrinsic::IntAnd,
+        O::IntOr => curios_cont::CpsIntrinsic::IntOr,
+        O::IntXor => curios_cont::CpsIntrinsic::IntXor,
+        O::IntShl => curios_cont::CpsIntrinsic::IntShl,
+        O::IntShr => curios_cont::CpsIntrinsic::IntShr,
+        O::IntRotl => curios_cont::CpsIntrinsic::IntRotl,
+        O::IntRotr => curios_cont::CpsIntrinsic::IntRotr,
+        O::IntClz => curios_cont::CpsIntrinsic::IntClz,
+        O::IntCtz => curios_cont::CpsIntrinsic::IntCtz,
+        O::IntPopcnt => curios_cont::CpsIntrinsic::IntPopcnt,
+        O::FltAdd => curios_cont::CpsIntrinsic::FltAdd,
+        O::FltSub => curios_cont::CpsIntrinsic::FltSub,
+        O::FltMul => curios_cont::CpsIntrinsic::FltMul,
+        O::FltDiv => curios_cont::CpsIntrinsic::FltDiv,
+        O::FltRem => curios_cont::CpsIntrinsic::FltRem,
+        O::FltEql => curios_cont::CpsIntrinsic::FltEql,
+        O::FltNeq => curios_cont::CpsIntrinsic::FltNeq,
+        O::FltLt => curios_cont::CpsIntrinsic::FltLt,
+        O::FltGt => curios_cont::CpsIntrinsic::FltGt,
+        O::FltLe => curios_cont::CpsIntrinsic::FltLe,
+        O::FltGe => curios_cont::CpsIntrinsic::FltGe,
+        O::FltMin => curios_cont::CpsIntrinsic::FltMin,
+        O::FltMax => curios_cont::CpsIntrinsic::FltMax,
+        O::FltCopysign => curios_cont::CpsIntrinsic::FltCopysign,
+        O::FltNeg => curios_cont::CpsIntrinsic::FltNeg,
+        O::FltAbs => curios_cont::CpsIntrinsic::FltAbs,
+        O::FltSqrt => curios_cont::CpsIntrinsic::FltSqrt,
+        O::FltFloor => curios_cont::CpsIntrinsic::FltFloor,
+        O::FltCeil => curios_cont::CpsIntrinsic::FltCeil,
+        O::FltTrunc => curios_cont::CpsIntrinsic::FltTrunc,
+        O::FltNearest => curios_cont::CpsIntrinsic::FltNearest,
+        O::NatToInt => curios_cont::CpsIntrinsic::NatToInt,
+        O::NatToFlt => curios_cont::CpsIntrinsic::NatToFlt,
+        O::IntToNat => curios_cont::CpsIntrinsic::IntToNat,
+        O::IntToFlt => curios_cont::CpsIntrinsic::IntToFlt,
+        O::FltToNat => curios_cont::CpsIntrinsic::FltToNat,
+        O::FltToInt => curios_cont::CpsIntrinsic::FltToInt,
+        O::FltToLeBytes => curios_cont::CpsIntrinsic::FltToLeBytes,
+        O::FltOfLeBytes => curios_cont::CpsIntrinsic::FltOfLeBytes,
+        O::HandleEql => curios_cont::CpsIntrinsic::BinEql(Grain::X),
         O::ByteToNat | O::NatToByte => {
             unreachable!("Byte conversions are lowered before the intrinsic table")
         }
@@ -2102,20 +2102,20 @@ fn operation_intrinsic(operation: Operation) -> curios_cont::CpsIntrinsicOp {
 }
 
 /// The Cont intrinsic of a [`SequenceOp`], threading the operand count into the variadic concatenations. `ListBuild` is a list value, never an intrinsic.
-fn sequence_intrinsic(operation: SequenceOp, arity: usize) -> curios_cont::CpsIntrinsicOp {
+fn sequence_intrinsic(operation: SequenceOp, arity: usize) -> curios_cont::CpsIntrinsic {
     use SequenceOp as S;
     match operation {
-        S::BinLen(grain) => curios_cont::CpsIntrinsicOp::BinLen(grain),
-        S::BinEql(grain) => curios_cont::CpsIntrinsicOp::BinEql(grain),
-        S::BinGet(grain) => curios_cont::CpsIntrinsicOp::BinGet(grain),
-        S::BinSlice(grain) => curios_cont::CpsIntrinsicOp::BinSlice(grain),
-        S::BinAppend(grain) => curios_cont::CpsIntrinsicOp::BinAppend(grain),
-        S::BinConcat(grain) => curios_cont::CpsIntrinsicOp::BinConcat(grain, arity),
-        S::ListLen => curios_cont::CpsIntrinsicOp::ListLen,
-        S::ListGet => curios_cont::CpsIntrinsicOp::ListGet,
-        S::ListSlice => curios_cont::CpsIntrinsicOp::ListSlice,
-        S::ListAppend => curios_cont::CpsIntrinsicOp::ListAppend,
-        S::ListConcat => curios_cont::CpsIntrinsicOp::ListConcat(arity),
+        S::BinLen(grain) => curios_cont::CpsIntrinsic::BinLen(grain),
+        S::BinEql(grain) => curios_cont::CpsIntrinsic::BinEql(grain),
+        S::BinGet(grain) => curios_cont::CpsIntrinsic::BinGet(grain),
+        S::BinSlice(grain) => curios_cont::CpsIntrinsic::BinSlice(grain),
+        S::BinAppend(grain) => curios_cont::CpsIntrinsic::BinAppend(grain),
+        S::BinConcat(grain) => curios_cont::CpsIntrinsic::BinConcat(grain, arity),
+        S::ListLen => curios_cont::CpsIntrinsic::ListLen,
+        S::ListGet => curios_cont::CpsIntrinsic::ListGet,
+        S::ListSlice => curios_cont::CpsIntrinsic::ListSlice,
+        S::ListAppend => curios_cont::CpsIntrinsic::ListAppend,
+        S::ListConcat => curios_cont::CpsIntrinsic::ListConcat(arity),
         S::ListBuild => unreachable!("ListBuild is lowered as a list value"),
     }
 }
@@ -2128,23 +2128,23 @@ fn cell_op(operation: CellOperation) -> curios_cont::CpsCellOp {
     }
 }
 
-fn sequence_len_op(grain: SequenceGrain) -> curios_cont::CpsIntrinsicOp {
+fn sequence_len_op(grain: SequenceGrain) -> curios_cont::CpsIntrinsic {
     match grain {
-        SequenceGrain::List => curios_cont::CpsIntrinsicOp::ListLen,
-        SequenceGrain::Bin(grain) => curios_cont::CpsIntrinsicOp::BinLen(grain),
+        SequenceGrain::List => curios_cont::CpsIntrinsic::ListLen,
+        SequenceGrain::Bin(grain) => curios_cont::CpsIntrinsic::BinLen(grain),
     }
 }
 
-fn sequence_get_op(grain: SequenceGrain) -> curios_cont::CpsIntrinsicOp {
+fn sequence_get_op(grain: SequenceGrain) -> curios_cont::CpsIntrinsic {
     match grain {
-        SequenceGrain::List => curios_cont::CpsIntrinsicOp::ListGet,
-        SequenceGrain::Bin(grain) => curios_cont::CpsIntrinsicOp::BinGet(grain),
+        SequenceGrain::List => curios_cont::CpsIntrinsic::ListGet,
+        SequenceGrain::Bin(grain) => curios_cont::CpsIntrinsic::BinGet(grain),
     }
 }
 
-fn sequence_rest_op(grain: SequenceGrain) -> curios_cont::CpsIntrinsicOp {
+fn sequence_rest_op(grain: SequenceGrain) -> curios_cont::CpsIntrinsic {
     match grain {
-        SequenceGrain::List => curios_cont::CpsIntrinsicOp::ListRest,
-        SequenceGrain::Bin(grain) => curios_cont::CpsIntrinsicOp::BinRest(grain),
+        SequenceGrain::List => curios_cont::CpsIntrinsic::ListRest,
+        SequenceGrain::Bin(grain) => curios_cont::CpsIntrinsic::BinRest(grain),
     }
 }

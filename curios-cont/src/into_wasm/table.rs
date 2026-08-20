@@ -4,7 +4,7 @@ use {
         EmissionData, EmissionFunction, EmissionFunctionName, EmissionModule, EmissionValue,
         EmissionValueName,
     },
-    crate::{CpsIntrinsicOp, Repr},
+    crate::{CpsIntrinsic, Repr},
     curios_abi::ForeignFunction,
     std::{
         cell::{OnceCell, RefCell},
@@ -210,18 +210,18 @@ impl<'a> FuncData<'a> {
     }
 }
 
-fn max_tpl_arity(data: &EmissionData) -> usize {
+fn max_tuple_arity(data: &EmissionData) -> usize {
     match data {
-        EmissionData::Tpl(fields) => fields.len(),
+        EmissionData::Tuple(fields) => fields.len(),
         _ => 0,
     }
 }
 
-fn max_value_tpl_arity(value: &EmissionValue) -> usize {
+fn max_value_tuple_arity(value: &EmissionValue) -> usize {
     match value {
-        EmissionValue::Pure(data) => max_tpl_arity(data),
+        EmissionValue::Pure(data) => max_tuple_arity(data),
         // Projecting field `index` reads through a tuple type of arity at least `index + 1`, even when no tuple of that arity is ever *built* in the module (e.g. the projected tuple only ever arrives from outside, or the producing array is empty). Sizing the tuple types from constructions alone misses it.
-        EmissionValue::Eval(EmissionCode::Intrinsic(CpsIntrinsicOp::TplGet(index), _)) => index + 1,
+        EmissionValue::Eval(EmissionCode::Intrinsic(CpsIntrinsic::TupleGet(index), _)) => index + 1,
         _ => 0,
     }
 }
@@ -237,17 +237,17 @@ fn collect_cyclic_clsrs(region: &EmissionBody, out: &mut HashSet<EmissionClosure
     }
 }
 
-fn max_region_tpl_arity(region: &EmissionBody) -> usize {
+fn max_region_tuple_arity(region: &EmissionBody) -> usize {
     // Recursive fallback entries are closure shells only, so they contribute no tuple arity; the arities all come from tuple constructions and projections in `values` (and nested blocks).
     let values = region
         .values
         .iter()
-        .map(|(_, value)| max_value_tpl_arity(value));
+        .map(|(_, value)| max_value_tuple_arity(value));
 
     let blocks = region
         .blocks
         .iter()
-        .map(|(_, block)| max_region_tpl_arity(&block.region));
+        .map(|(_, block)| max_region_tuple_arity(&block.region));
 
     values.chain(blocks).max().unwrap_or(0)
 }
@@ -294,7 +294,7 @@ pub(crate) struct Table<'a> {
     list_map: OnceCell<curios_wasm::FuncName>,
     // The foreign functions the emitted code calls, keyed by the minted internal name (see `host_func`). Same lazy used-tracking as the `exit` cell: the first call-site reference during emission records the function's row, and `emit_sys_imports` then declares exactly the recorded set (in minted-name order — wasmtime links by name, so import order is cosmetic).
     host_funcs: RefCell<BTreeMap<String, Arc<ForeignFunction>>>,
-    tpl_types: BTreeMap<usize, curios_wasm::TypeName>,
+    tuple_types: BTreeMap<usize, curios_wasm::TypeName>,
     envr_types: BTreeMap<usize, curios_wasm::TypeName>,
     clsr_types: BTreeMap<usize, curios_wasm::TypeName>,
     /// Keyed by the pair a wasm function type actually is — parameter count *and* result count — rather than by parameter count alone, so two functions of the same arity delivering different result shapes cannot collide on one type. The closure supertypes below stay keyed by arity, because a function reached through one is invoked at the uniform shape whatever its own type says.
@@ -375,28 +375,33 @@ impl<'a> Table<'a> {
             bits_eql: OnceCell::new(),
             list_map: OnceCell::new(),
             host_funcs: RefCell::new(BTreeMap::new()),
-            tpl_types: {
+            tuple_types: {
                 let max = module
                     .consts()
                     .iter()
-                    .map(|(_, data)| max_tpl_arity(data))
+                    .map(|(_, data)| max_tuple_arity(data))
                     .chain(
                         module
                             .clsrs()
                             .iter()
-                            .map(|(_, clsr)| max_region_tpl_arity(&clsr.region)),
+                            .map(|(_, clsr)| max_region_tuple_arity(&clsr.region)),
                     )
                     .chain(
                         module
                             .funcs()
                             .iter()
-                            .map(|(_, func)| max_region_tpl_arity(&func.region)),
+                            .map(|(_, func)| max_region_tuple_arity(&func.region)),
                     )
                     .max()
                     .unwrap_or(0);
 
                 (0..=max)
-                    .map(|arity| (arity, curios_wasm::TypeName::from(format!("tpl/{}", arity))))
+                    .map(|arity| {
+                        (
+                            arity,
+                            curios_wasm::TypeName::from(format!("tuple/{}", arity)),
+                        )
+                    })
                     .collect()
             },
             envr_types: module
@@ -787,20 +792,20 @@ impl<'a> Table<'a> {
         self.list_map.get().is_some()
     }
 
-    pub(crate) fn tpl_types(&self) -> impl Iterator<Item = (usize, curios_wasm::TypeName)> {
-        self.tpl_types
+    pub(crate) fn tuple_types(&self) -> impl Iterator<Item = (usize, curios_wasm::TypeName)> {
+        self.tuple_types
             .iter()
             .map(|(arity, type_name)| (*arity, type_name.clone()))
     }
 
-    pub(crate) fn find_tpl_type(&self, arity: usize) -> curios_wasm::TypeName {
-        self.tpl_types
+    pub(crate) fn find_tuple_type(&self, arity: usize) -> curios_wasm::TypeName {
+        self.tuple_types
             .get(&arity)
             .unwrap_or_else(|| panic!("`Table` lacks tuple type for arity `{}`", arity))
             .clone()
     }
 
-    pub(crate) fn tpl_field(index: usize) -> curios_wasm::FieldName {
+    pub(crate) fn tuple_field(index: usize) -> curios_wasm::FieldName {
         curios_wasm::FieldName::from(index.to_string())
     }
 
@@ -822,7 +827,7 @@ impl<'a> Table<'a> {
         }
     }
 
-    pub(crate) fn tpl_field_mutability() -> curios_wasm::Mutability {
+    pub(crate) fn tuple_field_mutability() -> curios_wasm::Mutability {
         // Tuples are never cyclic (rejected in `into_cont`), so they are never back-patched.
         Self::field_mutability(false)
     }
@@ -916,7 +921,7 @@ impl<'a> Table<'a> {
         match self.raw_carrier(value_name) {
             Some(Repr::Nat | Repr::Int) => curios_wasm::ValType::Num(curios_wasm::NumType::I32),
             Some(Repr::Flt) => curios_wasm::ValType::Num(curios_wasm::NumType::F32),
-            Some(Repr::Bin(_) | Repr::List | Repr::Tpl(_) | Repr::Ref) | None => {
+            Some(Repr::Bin(_) | Repr::List | Repr::Tuple(_) | Repr::Ref) | None => {
                 Table::top_type(true)
             }
         }

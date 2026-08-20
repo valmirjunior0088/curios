@@ -138,10 +138,10 @@ const WALK_MIRROR_INDEXED: &str = include_str!(concat!(
 /// | --- | --- |
 /// | read the byte | `call $bytes/read` |
 /// | **allocate a rope view** for the tail | `call $bytes/slice` |
-/// | **allocate the scan state** to hand to `step` | `struct.new $tpl/4` |
+/// | **allocate the scan state** to hand to `step` | `struct.new $tuple/4` |
 /// | the UTF-8 scan | `call $syn/Str/step`, then `classify` |
 /// | **indirect call** through `f` | `call_ref $clsr/2` |
-/// | **allocate the accumulator tuple** | `struct.new $tpl/2` |
+/// | **allocate the accumulator tuple** | `struct.new $tuple/2` |
 ///
 /// Three of those six are allocations, and **none is confined to the iteration that builds it**: each crosses the loop's own edge, so the region is the loop and its backedges rather than one lexical iteration. The accumulator tuple is the least obvious and the best example: nobody wrote it, it exists because the fold threads `{A, Nat}`. The indirect call is its own roadmap item. The scan is the work the abstraction performs and the control declines, which is what makes `parse_manual` a ceiling rather than an equivalent.
 ///
@@ -153,15 +153,15 @@ const WALK_MIRROR_INDEXED: &str = include_str!(concat!(
 /// cargo run --package curios -- --print=wasm compile programs/parse_digits.crs -o /tmp/parse_digits
 /// ```
 ///
-/// The raw pre-Binaryen module goes to stderr. `$func/…$/std/Str/fold` then holds five `struct.new $tpl/2` — four in the arms, plus the seed built before the loop — one `struct.new $tpl/4`, three `call $bytes/slice`, three `call $bytes/read` and two `call_ref $clsr/2`. Exactly one arm runs per character, which is what turns those site counts into the per-character row above.
+/// The raw pre-Binaryen module goes to stderr. `$func/…$/std/Str/fold` then holds five `struct.new $tuple/2` — four in the arms, plus the seed built before the loop — one `struct.new $tuple/4`, three `call $bytes/slice`, three `call $bytes/read` and two `call_ref $clsr/2`. Exactly one arm runs per character, which is what turns those site counts into the per-character row above.
 ///
 /// **The split between those six is unmeasured**, and dividing it needs one instrument each rather than another rung: removing the three allocations measures them, specializing `f` measures the call, and what remains is the scan.
 ///
 /// ## After the scan argument stopped being rebuilt (2026-08-16)
 ///
-/// The `struct.new $tpl/4` row above was a spelling, not a compiler obligation. The cont arm passed `step(h, Scan/cont(rem, lo, hi))` with `sc` — the parameter holding exactly that value — in scope, and match refinement makes the two spellings definitionally equal, so `/std` now passes the held parameter at every such site: `fold`, `at`, `utf8/drop_width`, `utf8/count_scalars`, and their proof twins, which keeps function and proof unfolding in the same spelling. The kernel recertified the prelude over the change, and the walk, `len` and `slice` each lost a per-continuation-byte allocation at once.
+/// The `struct.new $tuple/4` row above was a spelling, not a compiler obligation. The cont arm passed `step(h, Scan/cont(rem, lo, hi))` with `sc` — the parameter holding exactly that value — in scope, and match refinement makes the two spellings definitionally equal, so `/std` now passes the held parameter at every such site: `fold`, `at`, `utf8/drop_width`, `utf8/count_scalars`, and their proof twins, which keeps function and proof unfolding in the same spelling. The kernel recertified the prelude over the change, and the walk, `len` and `slice` each lost a per-continuation-byte allocation at once.
 ///
-/// The emitted fold body for `programs/parse_multibyte.crs` now holds five `struct.new $tpl/2`, no `struct.new $tpl/4`, three `call $bytes/slice`, three `call $bytes/read` and two `call_ref $clsr/2`, and the only arity-4 constructions left in that module are the two genuine transitions inside `/syn/Str/step` — the probe now spelled [`the_per_character_walk_carries_its_scan_without_allocating`] held both facts. Timed **2026-08-17** with the native-binary protocol above, five runs each, `user` seconds:
+/// The emitted fold body for `programs/parse_multibyte.crs` now holds five `struct.new $tuple/2`, no `struct.new $tuple/4`, three `call $bytes/slice`, three `call $bytes/read` and two `call_ref $clsr/2`, and the only arity-4 constructions left in that module are the two genuine transitions inside `/syn/Str/step` — the probe now spelled [`the_per_character_walk_carries_its_scan_without_allocating`] held both facts. Timed **2026-08-17** with the native-binary protocol above, five runs each, `user` seconds:
 ///
 /// | Program | before | after |
 /// | --- | --- | --- |
@@ -185,7 +185,7 @@ const WALK_MIRROR_INDEXED: &str = include_str!(concat!(
 ///
 /// ## After the accumulator crossed as fields (M2, 2026-08-17)
 ///
-/// Continuation scalar replacement threads the `{A, Nat}` accumulator through the contified loop as two field parameters, seed included — the emitted fold body holds no `struct.new $tpl/2` at all — and with it the M1a reboxing recedes on every path that stopped carrying the tuple:
+/// Continuation scalar replacement threads the `{A, Nat}` accumulator through the contified loop as two field parameters, seed included — the emitted fold body holds no `struct.new $tuple/2` at all — and with it the M1a reboxing recedes on every path that stopped carrying the tuple:
 ///
 /// | Program | after M1a | after M2 |
 /// | --- | --- | --- |
@@ -293,8 +293,8 @@ fn mirror_counts(wat: &str) -> (usize, usize, usize, usize) {
             .count()
     };
     (
-        lines("struct.new $tpl/4"),
-        lines("struct.new $tpl/2"),
+        lines("struct.new $tuple/4"),
+        lines("struct.new $tuple/2"),
         lines("call $bytes/slice"),
         wat.lines()
             .map(str::trim)
@@ -443,7 +443,7 @@ fn walk_mirror_attribution_measurements() {
         ("indexed", WALK_MIRROR_INDEXED),
     ] {
         let module = compile_raw(source);
-        println!("{label:12} {:?} (tpl4, tpl2, slice, mstep calls)", {
+        println!("{label:12} {:?} (tuple4, tuple2, slice, mstep calls)", {
             let printed = module.to_string();
             mirror_counts(&printed)
         });

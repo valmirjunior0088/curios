@@ -2,7 +2,7 @@ use {
     super::{ReturnProtocol, return_protocols},
     crate::{
         CpsAtom, CpsCallee, CpsContId, CpsContinuation, CpsEdge, CpsFunId, CpsFunction,
-        CpsIntrinsicOp, CpsModule, CpsNode, CpsValueExpr,
+        CpsIntrinsic, CpsModule, CpsNode, CpsValueExpr,
     },
 };
 
@@ -34,7 +34,7 @@ fn returning_callee(module: &mut CpsModule, name: &str) -> CpsFunId {
     function
 }
 
-/// A resume continuation that reads its one parameter only through `TplGet(0)` and `TplGet(1)`, then exits.
+/// A resume continuation that reads its one parameter only through `TupleGet(0)` and `TupleGet(1)`, then exits.
 fn projecting_resume(module: &mut CpsModule, name: &str) -> CpsContId {
     let result = module.add_value(Some(format!("{name}/result")));
     let tag = module.add_value(Some(format!("{name}/tag")));
@@ -44,13 +44,13 @@ fn projecting_resume(module: &mut CpsModule, name: &str) -> CpsContId {
     let exit = module.add_node(CpsNode::Exit { value: None });
     let second = module.add_node(CpsNode::LetIntrinsic {
         result: payload,
-        op: CpsIntrinsicOp::TplGet(1),
+        op: CpsIntrinsic::TupleGet(1),
         args: vec![CpsAtom::Value(result)],
         next: exit,
     });
     let first = module.add_node(CpsNode::LetIntrinsic {
         result: tag,
-        op: CpsIntrinsicOp::TplGet(0),
+        op: CpsIntrinsic::TupleGet(0),
         args: vec![CpsAtom::Value(result)],
         next: second,
     });

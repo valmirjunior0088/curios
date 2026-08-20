@@ -1,7 +1,7 @@
 use {
     super::{Demand, demand_of, demands},
     crate::{
-        CpsAtom, CpsCallee, CpsContinuation, CpsEdge, CpsFunction, CpsIntrinsicOp, CpsModule,
+        CpsAtom, CpsCallee, CpsContinuation, CpsEdge, CpsFunction, CpsIntrinsic, CpsModule,
         CpsNode, CpsValueExpr, CpsValueId,
     },
     std::collections::BTreeSet,
@@ -24,7 +24,7 @@ fn module() -> (CpsModule, CpsValueId, CpsValueId, CpsValueId) {
     });
     let project = module.add_node(CpsNode::LetIntrinsic {
         result: field,
-        op: CpsIntrinsicOp::TplGet(0),
+        op: CpsIntrinsic::TupleGet(0),
         args: vec![CpsAtom::Value(projected)],
         next: construct,
     });
@@ -84,7 +84,7 @@ fn an_argument_asks_what_the_receiving_parameter_asks() {
     let callee_exit = module.add_node(CpsNode::Exit { value: None });
     let callee_body = module.add_node(CpsNode::LetIntrinsic {
         result: field,
-        op: CpsIntrinsicOp::TplGet(1),
+        op: CpsIntrinsic::TupleGet(1),
         args: vec![CpsAtom::Value(param)],
         next: callee_exit,
     });

@@ -15,7 +15,7 @@ mod tests;
 
 use {
     super::{
-        CpsAtom, CpsCallee, CpsContId, CpsEdge, CpsFunId, CpsIntrinsicOp, CpsLiteral, CpsModule,
+        CpsAtom, CpsCallee, CpsContId, CpsEdge, CpsFunId, CpsIntrinsic, CpsLiteral, CpsModule,
         CpsNode, CpsNodeId, CpsUseTarget, CpsValueExpr, CpsValueId, Demand, Origin,
         analysis::analyze_calls, demand_of, demands, optimize::PARAM_SPLIT_GROWTH_LIMIT, origins,
         simplify::rewire_node,
@@ -200,7 +200,7 @@ pub(super) fn split_parameters(module: &mut CpsModule) -> bool {
                 ids[offset],
                 CpsNode::LetIntrinsic {
                     result: projection,
-                    op: CpsIntrinsicOp::TplGet(index),
+                    op: CpsIntrinsic::TupleGet(index),
                     args: vec![CpsAtom::Value(source)],
                     next,
                 },
@@ -341,7 +341,7 @@ pub(super) fn split_workers(module: &mut CpsModule) -> bool {
             let projection = module.add_value(Some(format!("worker/{}/{index}", caller.index())));
             inserted.push(CpsNode::LetIntrinsic {
                 result: projection,
-                op: CpsIntrinsicOp::TplGet(index),
+                op: CpsIntrinsic::TupleGet(index),
                 args: vec![CpsAtom::Value(source)],
                 next: caller,
             });
@@ -371,31 +371,31 @@ enum WindowFamily {
 }
 
 impl WindowFamily {
-    fn of(op: CpsIntrinsicOp) -> Option<(Self, WindowRead)> {
+    fn of(op: CpsIntrinsic) -> Option<(Self, WindowRead)> {
         match op {
-            CpsIntrinsicOp::BinLen(grain) => Some((Self::Bin(grain), WindowRead::Len)),
-            CpsIntrinsicOp::BinGet(grain) => Some((Self::Bin(grain), WindowRead::Get)),
-            CpsIntrinsicOp::BinSlice(grain) => Some((Self::Bin(grain), WindowRead::Slice)),
-            CpsIntrinsicOp::BinRest(grain) => Some((Self::Bin(grain), WindowRead::Rest)),
-            CpsIntrinsicOp::ListLen => Some((Self::List, WindowRead::Len)),
-            CpsIntrinsicOp::ListGet => Some((Self::List, WindowRead::Get)),
-            CpsIntrinsicOp::ListSlice => Some((Self::List, WindowRead::Slice)),
-            CpsIntrinsicOp::ListRest => Some((Self::List, WindowRead::Rest)),
+            CpsIntrinsic::BinLen(grain) => Some((Self::Bin(grain), WindowRead::Len)),
+            CpsIntrinsic::BinGet(grain) => Some((Self::Bin(grain), WindowRead::Get)),
+            CpsIntrinsic::BinSlice(grain) => Some((Self::Bin(grain), WindowRead::Slice)),
+            CpsIntrinsic::BinRest(grain) => Some((Self::Bin(grain), WindowRead::Rest)),
+            CpsIntrinsic::ListLen => Some((Self::List, WindowRead::Len)),
+            CpsIntrinsic::ListGet => Some((Self::List, WindowRead::Get)),
+            CpsIntrinsic::ListSlice => Some((Self::List, WindowRead::Slice)),
+            CpsIntrinsic::ListRest => Some((Self::List, WindowRead::Rest)),
             _ => None,
         }
     }
 
-    fn len_op(self) -> CpsIntrinsicOp {
+    fn len_op(self) -> CpsIntrinsic {
         match self {
-            Self::Bin(grain) => CpsIntrinsicOp::BinLen(grain),
-            Self::List => CpsIntrinsicOp::ListLen,
+            Self::Bin(grain) => CpsIntrinsic::BinLen(grain),
+            Self::List => CpsIntrinsic::ListLen,
         }
     }
 
-    fn get_op(self) -> CpsIntrinsicOp {
+    fn get_op(self) -> CpsIntrinsic {
         match self {
-            Self::Bin(grain) => CpsIntrinsicOp::BinGet(grain),
-            Self::List => CpsIntrinsicOp::ListGet,
+            Self::Bin(grain) => CpsIntrinsic::BinGet(grain),
+            Self::List => CpsIntrinsic::ListGet,
         }
     }
 }
@@ -501,7 +501,7 @@ fn grow_window_region(
     let mut members = BTreeSet::from([seed.2]);
     let mut work = vec![seed.2];
 
-    let unify = |family: &mut Option<WindowFamily>, op: CpsIntrinsicOp| {
+    let unify = |family: &mut Option<WindowFamily>, op: CpsIntrinsic| {
         let (this, _) = WindowFamily::of(op)?;
         match family {
             None => {
@@ -675,7 +675,7 @@ pub(super) fn split_windows(module: &mut CpsModule) -> bool {
                     slice,
                     CpsNode::LetIntrinsic {
                         result: extent,
-                        op: CpsIntrinsicOp::WindowExtent,
+                        op: CpsIntrinsic::WindowExtent,
                         args: vec![args[1].clone(), args[2].clone(), length],
                         next: add,
                     },
@@ -689,7 +689,7 @@ pub(super) fn split_windows(module: &mut CpsModule) -> bool {
                         slice,
                         CpsNode::LetIntrinsic {
                             result: remaining,
-                            op: CpsIntrinsicOp::NatSub,
+                            op: CpsIntrinsic::NatSub,
                             args: vec![length.clone(), args[1].clone()],
                             next: guard,
                         },
@@ -698,7 +698,7 @@ pub(super) fn split_windows(module: &mut CpsModule) -> bool {
                         guard,
                         CpsNode::LetIntrinsic {
                             result: extent,
-                            op: CpsIntrinsicOp::WindowExtent,
+                            op: CpsIntrinsic::WindowExtent,
                             args: vec![args[1].clone(), CpsAtom::Value(remaining), length.clone()],
                             next: add,
                         },
@@ -709,7 +709,7 @@ pub(super) fn split_windows(module: &mut CpsModule) -> bool {
                 add,
                 CpsNode::LetIntrinsic {
                     result: sum,
-                    op: CpsIntrinsicOp::NatAdd,
+                    op: CpsIntrinsic::NatAdd,
                     args: vec![offset, args[1].clone()],
                     next,
                 },
@@ -751,7 +751,7 @@ pub(super) fn split_windows(module: &mut CpsModule) -> bool {
                         *node,
                         vec![CpsNode::LetIntrinsic {
                             result: sum,
-                            op: CpsIntrinsicOp::NatAdd,
+                            op: CpsIntrinsic::NatAdd,
                             args: vec![fields[&member][1].clone(), args[1].clone()],
                             next: *node,
                         }],

@@ -753,7 +753,7 @@ fn a_matched_payload_still_refuses_a_false_equation() {
 
 /// An immediate-encoded arm binds its payload through a read of its own rather than aliasing the scrutinee.
 ///
-/// `stop(Nat)` beside `cons(Nat, L)` takes the `Immediate` family encoding, so `stop`'s payload rides bare and its arm's binder used to *be* the scrutinee. `total`'s `acc + z` then demanded a raw carrier of the scrutinee itself; the representation analysis admitted it because a continuation parameter has no producer to contradict it, carried the demand back along the loop edge to `build`'s accumulator, and the emitter coerced a freshly built `struct.new $tpl/3` with `ref.cast (ref i31)` — a trap for every input above zero, where zero alone answered correctly because the list is then just the bare `stop`.
+/// `stop(Nat)` beside `cons(Nat, L)` takes the `Immediate` family encoding, so `stop`'s payload rides bare and its arm's binder used to *be* the scrutinee. `total`'s `acc + z` then demanded a raw carrier of the scrutinee itself; the representation analysis admitted it because a continuation parameter has no producer to contradict it, carried the demand back along the loop edge to `build`'s accumulator, and the emitter coerced a freshly built `struct.new $tuple/3` with `ref.cast (ref i31)` — a trap for every input above zero, where zero alone answered correctly because the list is then just the bare `stop`.
 ///
 /// The depth is host-tainted deliberately: a closed program folds at compile time and never reaches the emitter, so the fixture would pass while the bug stood.
 #[test]

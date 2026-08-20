@@ -20,8 +20,8 @@ enum ConstKey {
     Flt(u32),
     Bin(u8, usize, Vec<u8>),
     List(Vec<String>),
-    Tpl(Vec<String>),
-    /// A closure is its target plus its canonicalized captures: with the code field an ordinary table index, a const-captured closure is a constant aggregate like any `Tpl`, materialized once per instantiation instead of per construction.
+    Tuple(Vec<String>),
+    /// A closure is its target plus its canonicalized captures: with the code field an ordinary table index, a const-captured closure is a constant aggregate like any `Tuple`, materialized once per instantiation instead of per construction.
     Clsr(String, Vec<String>),
 }
 
@@ -113,11 +113,11 @@ fn collect_consts(body: &EmissionBody, interner: &mut ConstInterner, consts: &mu
                 let interned = interner.intern(bin_key(*grain, value), data.clone());
                 consts.renames.insert(name.clone(), interned);
             }
-            EmissionData::Tpl(elems) => {
+            EmissionData::Tuple(elems) => {
                 if let Some(canonical) = intern_elements(elems, interner, consts) {
                     let key =
-                        ConstKey::Tpl(canonical.iter().map(|name| name.as_string()).collect());
-                    let interned = interner.intern(key, EmissionData::Tpl(canonical));
+                        ConstKey::Tuple(canonical.iter().map(|name| name.as_string()).collect());
+                    let interned = interner.intern(key, EmissionData::Tuple(canonical));
                     consts.renames.insert(name.clone(), interned);
                 }
             }
@@ -226,7 +226,7 @@ fn rename_value(
             | EmissionData::Int(_)
             | EmissionData::Flt(_)
             | EmissionData::Bin(_, _) => {}
-            EmissionData::List(elems) | EmissionData::Tpl(elems) => rename_names(elems, renames),
+            EmissionData::List(elems) | EmissionData::Tuple(elems) => rename_names(elems, renames),
             EmissionData::Closure(_, fields) => rename_names(fields, renames),
         },
         EmissionValue::Eval(code) => match code {

@@ -6,7 +6,7 @@ Unrefined, not started, deliberately. This file records what the map-wall campai
 
 ## Why it exists
 
-Every constructor and product field in emitted code is `(ref null any)`, so every projection pays a `ref.cast` to the field's actual shape. The variant-collapse decision names field representation as its successor's subject, and the map-wall campaign priced one instance concretely: the declined qp reshape's child-array access kept "a tag test and a `ref.cast` that a raw wasm array would not pay" — a residual this campaign would delete for every consumer at once, instead of minting a per-consumer carrier (the shape the reshape's rejection recorded). The other measured beneficiary class is monad-heavy code, where every `TplGet` behind the dictionary machinery casts what erasure already knew the shape of.
+Every constructor and product field in emitted code is `(ref null any)`, so every projection pays a `ref.cast` to the field's actual shape. The variant-collapse decision names field representation as its successor's subject, and the map-wall campaign priced one instance concretely: the declined qp reshape's child-array access kept "a tag test and a `ref.cast` that a raw wasm array would not pay" — a residual this campaign would delete for every consumer at once, instead of minting a per-consumer carrier (the shape the reshape's rejection recorded). The other measured beneficiary class is monad-heavy code, where every `TupleGet` behind the dictionary machinery casts what erasure already knew the shape of.
 
 ## The shape of the work
 
@@ -22,7 +22,7 @@ Boundaries already drawn, from the map-wall campaign's evidence:
 
 Three structural costs, named so the census prices them rather than discovers them:
 
-- `find_tpl_type` keys tuple types by arity alone; shaped fields re-key by shape vector, with the type-count management and canonical ordering that implies.
+- `find_tuple_type` keys tuple types by arity alone; shaped fields re-key by shape vector, with the type-count management and canonical ordering that implies.
 - `cps/fields.rs`'s split/rebuild machinery and the return protocol must thread shapes through parameter splitting — the seam the value-lifetime campaign took a full campaign to land.
 - Every projection site in the emitter, and the host boundary's uniform lifts, must agree about which side owns the coercion.
 

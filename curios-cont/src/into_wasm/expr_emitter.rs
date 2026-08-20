@@ -112,15 +112,15 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     type_name: rope.leaf,
                 });
             }
-            EmissionData::Tpl(elems) => {
-                let tpl_n_type = self.context.table().find_tpl_type(elems.len());
+            EmissionData::Tuple(elems) => {
+                let tuple_n_type = self.context.table().find_tuple_type(elems.len());
 
                 for elem in elems {
                     self.emit_instrs(self.context.load_value_instrs(elem, LoadAs::Null));
                 }
 
                 self.emit_instr(curios_wasm::Instr::StructNew {
-                    type_name: tpl_n_type,
+                    type_name: tuple_n_type,
                 });
             }
             EmissionData::Bin(grain, value) => {
@@ -316,7 +316,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         for (value_name, value) in values {
             // An acyclic aggregate has no back-edge, so every field is already bound: build it directly with a single `struct.new` / `array.new_fixed` (via `emit_data`). Only a shell'd closure shell — a recursive capture reusing its own local — takes the `new_default` + per-field `struct.set` backpatch path. Tuples and arrays are never shell'd (cyclic ones are rejected in `into_cont`), so they always build directly.
             match value {
-                EmissionValue::Pure(value @ (EmissionData::List(_) | EmissionData::Tpl(_))) => {
+                EmissionValue::Pure(value @ (EmissionData::List(_) | EmissionData::Tuple(_))) => {
                     self.declare_local(value_name);
                     self.emit_let_pure(value_name, value);
                 }

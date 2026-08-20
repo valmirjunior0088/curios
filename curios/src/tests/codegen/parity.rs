@@ -1,4 +1,4 @@
-//! Codegen parity for concept-dispatched operators (the witness-projection folding gate). No dedicated folding rule exists in core — none is needed: after erasure a witness is a bakeable value (a one-method dictionary collapses to its bare method field, a many-method one is a tuple of methods), so its resolved instance argument is a specialization candidate. Closure specialization bakes it into the caller, the `Tpl.get`s (for a tuple witness) fold to the known methods, and the cont inliner beta-reduces the chain down to the bare intrinsic instruction. These tests pin that pipeline behavior: a concept method call at a concrete intrinsic type must emit the *same operations* as calling the intrinsic wrapper directly. The generated names differ — the concept path threads the witness through an extra specialization, decorating clone names with its key — but that provenance names no instruction, so the emitted operations match exactly. These gate (and then guard) the infix rewrite that routes every operator through the concepts.
+//! Codegen parity for concept-dispatched operators (the witness-projection folding gate). No dedicated folding rule exists in core — none is needed: after erasure a witness is a bakeable value (a one-method dictionary collapses to its bare method field, a many-method one is a tuple of methods), so its resolved instance argument is a specialization candidate. Closure specialization bakes it into the caller, the `Tuple.get`s (for a tuple witness) fold to the known methods, and the cont inliner beta-reduces the chain down to the bare intrinsic instruction. These tests pin that pipeline behavior: a concept method call at a concrete intrinsic type must emit the *same operations* as calling the intrinsic wrapper directly. The generated names differ — the concept path threads the witness through an extra specialization, decorating clone names with its key — but that provenance names no instruction, so the emitted operations match exactly. These gate (and then guard) the infix rewrite that routes every operator through the concepts.
 
 use crate::tests::cont_optm;
 
@@ -92,13 +92,13 @@ fn choose_bind_arm_matches_headed_catch_all_codegen() {
     assert_eq!(operations(&cont_optm(bind)), operations(&cont_optm(headed)),);
 }
 
-/// The instructions a cont dump emits, sorted — `NatAdd`, `TplGet(0)`, `BinLen(X)`, and the qualified `cell.Set` / `intrinsic.ListMap` forms — with the generated names that wire them together and the operands they read left out. Sorted because the two programs may emit their top-level closures in a different order while their bodies agree, which is the whole point of comparing operations rather than dumps.
+/// The instructions a cont dump emits, sorted — `NatAdd`, `TupleGet(0)`, `BinLen(X)`, and the qualified `cell.Set` / `intrinsic.ListMap` forms — with the generated names that wire them together and the operands they read left out. Sorted because the two programs may emit their top-level closures in a different order while their bodies agree, which is the whole point of comparing operations rather than dumps.
 ///
-/// The dump arrives verbatim, never digit-normalized. Entropy-derived name counters (`~v37`, `~f26`) do differ between the compared programs, but the names are discarded entirely, and the digits that survive into an operation token — a projection's index, a concatenation's arity — are its semantics, so collapsing them would make `TplGet(0)` and `TplGet(1)` compare equal.
+/// The dump arrives verbatim, never digit-normalized. Entropy-derived name counters (`~v37`, `~f26`) do differ between the compared programs, but the names are discarded entirely, and the digits that survive into an operation token — a projection's index, a concatenation's arity — are its semantics, so collapsing them would make `TupleGet(0)` and `TupleGet(1)` compare equal.
 ///
 /// `curios_cont`'s `Display` prints an instruction as its `Debug` spelling immediately followed by its bracketed operand list, so each `[` is a candidate — but the shape alone is not enough to identify one, which is why [`operation_ending_at`] decides on position instead.
 ///
-/// The previous spelling looked for `Kind.op` tokens (`Nat.add`, `Tpl.get`) that the printer has not emitted for some time, so it matched nothing at all and every comparison below was `vec![] == vec![]`.
+/// The previous spelling looked for `Kind.op` tokens (`Nat.add`, `Tuple.get`) that the printer has not emitted for some time, so it matched nothing at all and every comparison below was `vec![] == vec![]`.
 fn operations(dump: &str) -> Vec<String> {
     let mut ops: Vec<String> = dump
         .match_indices('[')
@@ -119,10 +119,10 @@ fn operations(dump: &str) -> Vec<String> {
 ///
 /// Position is what decides it, not the bracket: `apply Known(CpsFunId(13))[…]` and `apply Closure(CpsValueId(95))[…]` end in a bracketed operand list too, and their heads are entropy-derived ids that differ between any two compilations. Accepting those would compare the numbering rather than the code. So the head must sit where `curios_cont::CpsNode`'s `Display` puts an operation: after a `let` binding's `= `, or behind a `cell.`/`intrinsic.` qualifier.
 ///
-/// The qualifier is kept because it selects a different operation enum — `CpsIntrinsicOp::ListMap` and an intrinsic of the same name would otherwise read alike.
+/// The qualifier is kept because it selects a different operation enum — `CpsIntrinsic::ListMap` and an intrinsic of the same name would otherwise read alike.
 fn operation_ending_at(dump: &str, at: usize) -> Option<String> {
     let head = &dump[..at];
-    // `TplGet(0)`, `BinLen(X)`, `BinConcat(X, 2)`: step over the parenthesized argument to reach the name.
+    // `TupleGet(0)`, `BinLen(X)`, `BinConcat(X, 2)`: step over the parenthesized argument to reach the name.
     let name_end = match head.ends_with(')') {
         true => head.rfind('(')?,
         false => at,
@@ -146,7 +146,7 @@ fn operation_ending_at(dump: &str, at: usize) -> Option<String> {
         })
 }
 
-/// The comparison concept folds the same way: `Cmp/lt` at `Nat` is the bare `Nat.lt` instruction. Unlike the single-method operators, `Cmp` is a many-method concept whose witness is a *tuple* of methods, so its resolved instance does not newtype-collapse to a bare field — it is baked in by closure specialization (`specialize_calls`), whose `Tpl.get`s then fold to the same intrinsic. The specialized-clone names therefore differ from the direct wrapper's, so the dumps are no longer byte-identical; what must still match is the emitted instructions — the concept path lowers `Cmp/lt` to the bare `Nat.lt` with no witness dispatch left behind, so it emits exactly the direct intrinsic's operations.
+/// The comparison concept folds the same way: `Cmp/lt` at `Nat` is the bare `Nat.lt` instruction. Unlike the single-method operators, `Cmp` is a many-method concept whose witness is a *tuple* of methods, so its resolved instance does not newtype-collapse to a bare field — it is baked in by closure specialization (`specialize_calls`), whose `Tuple.get`s then fold to the same intrinsic. The specialized-clone names therefore differ from the direct wrapper's, so the dumps are no longer byte-identical; what must still match is the emitted instructions — the concept path lowers `Cmp/lt` to the bare `Nat.lt` with no witness dispatch left behind, so it emits exactly the direct intrinsic's operations.
 #[test]
 fn concept_comparison_matches_direct_intrinsic_codegen() {
     let through_concept = r#"

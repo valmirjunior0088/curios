@@ -4,8 +4,9 @@
 
 use {
     crate::{
-        CpsAtom, CpsCallee, CpsCellOp, CpsContId, CpsEdge, CpsFunId, CpsFunction, CpsIntrinsicCall,
-        CpsIntrinsicOp, CpsLiteral, CpsModule, CpsNode, CpsNodeId, CpsValueExpr, CpsValueId, atoms,
+        CpsAtom, CpsCallee, CpsCellOp, CpsContId, CpsEdge, CpsFunId, CpsFunction, CpsIntrinsic,
+        CpsIntrinsicCall, CpsLiteral, CpsModule, CpsNode, CpsNodeId, CpsValueExpr, CpsValueId,
+        atoms,
     },
     curios_abi::ForeignFunction,
     curios_utilities::{Entropy, id},
@@ -46,7 +47,7 @@ pub(crate) enum MachineInstruction {
     },
     Intrinsic {
         result: MachineValueId,
-        op: CpsIntrinsicOp,
+        op: CpsIntrinsic,
         args: Vec<MachineOperand>,
     },
     /// Retained-ABI closure wrapper around direct code. The wrapper unpacks these captures and tail-calls `function`.

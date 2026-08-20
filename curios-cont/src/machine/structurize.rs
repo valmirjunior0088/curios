@@ -137,7 +137,7 @@ impl<'a> MachineFunctionBridge<'a> {
                             EmissionData::List(self.operands(elements, &mut values)),
                         ),
                         MachineConstruct::Tuple(elements) => EmissionValue::Pure(
-                            EmissionData::Tpl(self.operands(elements, &mut values)),
+                            EmissionData::Tuple(self.operands(elements, &mut values)),
                         ),
                     };
                     values.push((value_name(*result), value));

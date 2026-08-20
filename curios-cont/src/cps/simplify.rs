@@ -225,7 +225,7 @@ enum IdentityFold {
 /// Match one `Nat`/`Int` identity or absorption law on a binary intrinsic with a literal neutral or absorbing operand: `x + 0`, `x - 0`, `x * 1`, `x * 0`, `x / 1`, `x % 1`, `x & 0`, `x | 0`, `x ^ 0`, and shifts or rotates by zero.
 ///
 /// Trap discipline: `nat_add`/`nat_mul` wrap and `nat_sub` is monus, so the only runtime trap of the `MayTrap` members is the backend's i31 range check on the result. Every fold here returns either an operand that is already a live in-range value or a literal inside the envelope, and a `/ 1` or `% 1` divisor can never be the trapping zero, so no trap is added or dropped. `Flt` deliberately has no laws here: `x + 0.0` is not the identity on `-0.0`.
-fn identity_fold(op: CpsIntrinsicOp, args: &[CpsAtom]) -> Option<IdentityFold> {
+fn identity_fold(op: CpsIntrinsic, args: &[CpsAtom]) -> Option<IdentityFold> {
     let [left, right] = args else { return None };
     let nat = |atom: &CpsAtom| match atom {
         CpsAtom::Literal(CpsLiteral::Nat(value)) => Some(*value),
@@ -238,7 +238,7 @@ fn identity_fold(op: CpsIntrinsicOp, args: &[CpsAtom]) -> Option<IdentityFold> {
     let operand = |atom: &CpsAtom| Some(IdentityFold::Operand(atom.clone()));
 
     match op {
-        CpsIntrinsicOp::NatAdd | CpsIntrinsicOp::NatOr | CpsIntrinsicOp::NatXor => {
+        CpsIntrinsic::NatAdd | CpsIntrinsic::NatOr | CpsIntrinsic::NatXor => {
             if nat(right) == Some(0) {
                 operand(left)
             } else if nat(left) == Some(0) {
@@ -247,7 +247,7 @@ fn identity_fold(op: CpsIntrinsicOp, args: &[CpsAtom]) -> Option<IdentityFold> {
                 None
             }
         }
-        CpsIntrinsicOp::IntAdd | CpsIntrinsicOp::IntOr | CpsIntrinsicOp::IntXor => {
+        CpsIntrinsic::IntAdd | CpsIntrinsic::IntOr | CpsIntrinsic::IntXor => {
             if int(right) == Some(0) {
                 operand(left)
             } else if int(left) == Some(0) {
@@ -256,17 +256,17 @@ fn identity_fold(op: CpsIntrinsicOp, args: &[CpsAtom]) -> Option<IdentityFold> {
                 None
             }
         }
-        CpsIntrinsicOp::NatSub
-        | CpsIntrinsicOp::NatShl
-        | CpsIntrinsicOp::NatShr
-        | CpsIntrinsicOp::NatRotl
-        | CpsIntrinsicOp::NatRotr => (nat(right) == Some(0)).then(|| operand(left)).flatten(),
-        CpsIntrinsicOp::IntSub
-        | CpsIntrinsicOp::IntShl
-        | CpsIntrinsicOp::IntShr
-        | CpsIntrinsicOp::IntRotl
-        | CpsIntrinsicOp::IntRotr => (int(right) == Some(0)).then(|| operand(left)).flatten(),
-        CpsIntrinsicOp::NatMul => {
+        CpsIntrinsic::NatSub
+        | CpsIntrinsic::NatShl
+        | CpsIntrinsic::NatShr
+        | CpsIntrinsic::NatRotl
+        | CpsIntrinsic::NatRotr => (nat(right) == Some(0)).then(|| operand(left)).flatten(),
+        CpsIntrinsic::IntSub
+        | CpsIntrinsic::IntShl
+        | CpsIntrinsic::IntShr
+        | CpsIntrinsic::IntRotl
+        | CpsIntrinsic::IntRotr => (int(right) == Some(0)).then(|| operand(left)).flatten(),
+        CpsIntrinsic::NatMul => {
             if nat(right) == Some(1) {
                 operand(left)
             } else if nat(left) == Some(1) {
@@ -277,7 +277,7 @@ fn identity_fold(op: CpsIntrinsicOp, args: &[CpsAtom]) -> Option<IdentityFold> {
                 None
             }
         }
-        CpsIntrinsicOp::IntMul => {
+        CpsIntrinsic::IntMul => {
             if int(right) == Some(1) {
                 operand(left)
             } else if int(left) == Some(1) {
@@ -288,17 +288,17 @@ fn identity_fold(op: CpsIntrinsicOp, args: &[CpsAtom]) -> Option<IdentityFold> {
                 None
             }
         }
-        CpsIntrinsicOp::NatDiv => (nat(right) == Some(1)).then(|| operand(left)).flatten(),
-        CpsIntrinsicOp::IntDiv => (int(right) == Some(1)).then(|| operand(left)).flatten(),
-        CpsIntrinsicOp::NatRem => {
+        CpsIntrinsic::NatDiv => (nat(right) == Some(1)).then(|| operand(left)).flatten(),
+        CpsIntrinsic::IntDiv => (int(right) == Some(1)).then(|| operand(left)).flatten(),
+        CpsIntrinsic::NatRem => {
             (nat(right) == Some(1)).then_some(IdentityFold::Literal(CpsLiteral::Nat(0)))
         }
-        CpsIntrinsicOp::IntRem => {
+        CpsIntrinsic::IntRem => {
             (int(right) == Some(1)).then_some(IdentityFold::Literal(CpsLiteral::Int(0)))
         }
-        CpsIntrinsicOp::NatAnd => (nat(right) == Some(0) || nat(left) == Some(0))
+        CpsIntrinsic::NatAnd => (nat(right) == Some(0) || nat(left) == Some(0))
             .then_some(IdentityFold::Literal(CpsLiteral::Nat(0))),
-        CpsIntrinsicOp::IntAnd => (int(right) == Some(0) || int(left) == Some(0))
+        CpsIntrinsic::IntAnd => (int(right) == Some(0) || int(left) == Some(0))
             .then_some(IdentityFold::Literal(CpsLiteral::Int(0))),
         _ => None,
     }
@@ -359,7 +359,7 @@ pub(super) fn fuse_append_chains(module: &mut CpsModule) -> bool {
         match node {
             CpsNode::LetIntrinsic {
                 result,
-                op: CpsIntrinsicOp::BinAppend(grain),
+                op: CpsIntrinsic::BinAppend(grain),
                 args,
                 next,
             } => {
@@ -419,7 +419,7 @@ pub(super) fn fuse_append_chains(module: &mut CpsModule) -> bool {
             continue;
         }
 
-        let chunk = CpsIntrinsicOp::BinChunk(grain, elems.len());
+        let chunk = CpsIntrinsic::BinChunk(grain, elems.len());
         if rooted_empty {
             module.nodes.set(
                 tip_node,
@@ -434,7 +434,7 @@ pub(super) fn fuse_append_chains(module: &mut CpsModule) -> bool {
             let chunk_result = module.add_value(None);
             let concat = module.add_node(CpsNode::LetIntrinsic {
                 result: tip,
-                op: CpsIntrinsicOp::BinConcat(grain, 2),
+                op: CpsIntrinsic::BinConcat(grain, 2),
                 args: vec![root, CpsAtom::Value(chunk_result)],
                 next: tip_next,
             });
@@ -545,7 +545,7 @@ fn install_flat(
     let (operands, literals) = flat_operands(module, pieces);
     let mut tail = module.add_node(CpsNode::LetIntrinsic {
         result,
-        op: CpsIntrinsicOp::ListFlat(operands.len()),
+        op: CpsIntrinsic::ListFlat(operands.len()),
         args: operands,
         next,
     });
@@ -601,7 +601,7 @@ pub(super) fn flatten_indexed_lists(module: &mut CpsModule) -> bool {
             match node {
                 CpsNode::LetIntrinsic {
                     result,
-                    op: CpsIntrinsicOp::ListConcat(_),
+                    op: CpsIntrinsic::ListConcat(_),
                     args,
                     next,
                 } => {
@@ -609,7 +609,7 @@ pub(super) fn flatten_indexed_lists(module: &mut CpsModule) -> bool {
                 }
                 CpsNode::LetIntrinsic {
                     result,
-                    op: CpsIntrinsicOp::ListAppend,
+                    op: CpsIntrinsic::ListAppend,
                     args,
                     next,
                 } => {
@@ -617,7 +617,7 @@ pub(super) fn flatten_indexed_lists(module: &mut CpsModule) -> bool {
                 }
                 CpsNode::LetIntrinsic {
                     result,
-                    op: CpsIntrinsicOp::ListFlat(_) | CpsIntrinsicOp::ListSettle,
+                    op: CpsIntrinsic::ListFlat(_) | CpsIntrinsic::ListSettle,
                     ..
                 }
                 | CpsNode::LetValue {
@@ -641,7 +641,7 @@ pub(super) fn flatten_indexed_lists(module: &mut CpsModule) -> bool {
             matches!(
                 node,
                 CpsNode::LetIntrinsic {
-                    op: CpsIntrinsicOp::ListSettle,
+                    op: CpsIntrinsic::ListSettle,
                     ..
                 }
             )
@@ -651,7 +651,7 @@ pub(super) fn flatten_indexed_lists(module: &mut CpsModule) -> bool {
     for site in settle_sites {
         let Some(CpsNode::LetIntrinsic {
             result,
-            op: CpsIntrinsicOp::ListSettle,
+            op: CpsIntrinsic::ListSettle,
             args,
             next,
         }) = module.node(site).cloned()
@@ -698,7 +698,7 @@ pub(super) fn flatten_indexed_lists(module: &mut CpsModule) -> bool {
         .filter_map(|(id, node)| match node {
             CpsNode::LetIntrinsic {
                 result,
-                op: CpsIntrinsicOp::ListConcat(_) | CpsIntrinsicOp::ListAppend,
+                op: CpsIntrinsic::ListConcat(_) | CpsIntrinsic::ListAppend,
                 ..
             } if demand_of(&demands, *result) == Demand::Indexed => Some(id),
             _ => None,
@@ -719,12 +719,12 @@ pub(super) fn flatten_indexed_lists(module: &mut CpsModule) -> bool {
         let mut consumed = Vec::new();
         let mut pieces = Vec::new();
         match op {
-            CpsIntrinsicOp::ListConcat(_) => {
+            CpsIntrinsic::ListConcat(_) => {
                 for arg in &args {
                     collect_flat_tree(arg, &counts, &concats, &appends, &mut consumed, &mut pieces);
                 }
             }
-            CpsIntrinsicOp::ListAppend => {
+            CpsIntrinsic::ListAppend => {
                 collect_flat_tree(
                     &args[0],
                     &counts,
@@ -764,7 +764,7 @@ pub(super) fn forward_aggregate_projections(module: &mut CpsModule) -> bool {
         let selected = module.nodes.iter_live().find_map(|(id, node)| {
             let CpsNode::LetIntrinsic {
                 result,
-                op: CpsIntrinsicOp::TplGet(field),
+                op: CpsIntrinsic::TupleGet(field),
                 args,
                 next,
             } = node

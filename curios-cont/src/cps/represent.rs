@@ -178,7 +178,7 @@ fn offers(module: &CpsModule) -> BTreeMap<CpsValueId, Offer> {
 fn raw_carrier(repr: &Repr) -> Option<Repr> {
     match repr {
         Repr::Nat | Repr::Int | Repr::Flt => Some(*repr),
-        Repr::Bin(_) | Repr::List | Repr::Tpl(_) | Repr::Ref => None,
+        Repr::Bin(_) | Repr::List | Repr::Tuple(_) | Repr::Ref => None,
     }
 }
 

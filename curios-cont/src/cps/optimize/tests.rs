@@ -18,7 +18,7 @@ use {
     },
     crate::{
         CpsAtom, CpsCallee, CpsContId, CpsContinuation, CpsEdge, CpsFunId, CpsFunction,
-        CpsIntrinsicOp, CpsLiteral, CpsModule, CpsNode, CpsNodeId, CpsValueExpr, CpsValueId, atoms,
+        CpsIntrinsic, CpsLiteral, CpsModule, CpsNode, CpsNodeId, CpsValueExpr, CpsValueId, atoms,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -62,7 +62,7 @@ fn sccs_group_cycles_and_stay_deterministic() {
 fn preserves_traps_and_folds_exact_u32_nat_add() {
     assert_eq!(
         evaluate(
-            CpsIntrinsicOp::NatAdd,
+            CpsIntrinsic::NatAdd,
             &[
                 CpsAtom::Literal(CpsLiteral::Nat(20)),
                 CpsAtom::Literal(CpsLiteral::Nat(22)),
@@ -73,7 +73,7 @@ fn preserves_traps_and_folds_exact_u32_nat_add() {
     // The numeric law: the folder computes in exact u32; the i31 envelope is the backend's problem (an out-of-range literal traps at materialization).
     assert_eq!(
         evaluate(
-            CpsIntrinsicOp::NatAdd,
+            CpsIntrinsic::NatAdd,
             &[
                 CpsAtom::Literal(CpsLiteral::Nat(0x7fff_ffff)),
                 CpsAtom::Literal(CpsLiteral::Nat(1)),
@@ -83,7 +83,7 @@ fn preserves_traps_and_folds_exact_u32_nat_add() {
     );
     assert_eq!(
         evaluate(
-            CpsIntrinsicOp::NatDiv,
+            CpsIntrinsic::NatDiv,
             &[
                 CpsAtom::Literal(CpsLiteral::Nat(1)),
                 CpsAtom::Literal(CpsLiteral::Nat(0)),
@@ -105,7 +105,7 @@ fn dead_binding_elimination_preserves_traps_and_drops_total_literals() {
     let dead_total = module.add_value(Some("dead total".into()));
     let total_node = module.add_node(CpsNode::LetIntrinsic {
         result: dead_total,
-        op: CpsIntrinsicOp::NatEql,
+        op: CpsIntrinsic::NatEql,
         args: vec![
             CpsAtom::Literal(CpsLiteral::Nat(1)),
             CpsAtom::Literal(CpsLiteral::Nat(2)),
@@ -115,7 +115,7 @@ fn dead_binding_elimination_preserves_traps_and_drops_total_literals() {
     let dead_trap = module.add_value(Some("dead trap".into()));
     let trap_node = module.add_node(CpsNode::LetIntrinsic {
         result: dead_trap,
-        op: CpsIntrinsicOp::NatDiv,
+        op: CpsIntrinsic::NatDiv,
         args: vec![
             CpsAtom::Literal(CpsLiteral::Nat(1)),
             CpsAtom::Literal(CpsLiteral::Nat(0)),
@@ -138,7 +138,7 @@ fn dead_binding_elimination_preserves_traps_and_drops_total_literals() {
     assert!(matches!(
         module.node(trap_node),
         Some(CpsNode::LetIntrinsic {
-            op: CpsIntrinsicOp::NatDiv,
+            op: CpsIntrinsic::NatDiv,
             next,
             ..
         }) if *next == return_node
@@ -812,7 +812,7 @@ fn polymorphic_loop(second_is_mul: bool, padding: usize) -> PolymorphicLoop {
         let dead = module.add_value(None);
         loop_body = module.add_node(CpsNode::LetIntrinsic {
             result: dead,
-            op: CpsIntrinsicOp::NatAdd,
+            op: CpsIntrinsic::NatAdd,
             args: vec![
                 CpsAtom::Literal(CpsLiteral::Nat(0)),
                 CpsAtom::Literal(CpsLiteral::Nat(0)),
@@ -1246,13 +1246,13 @@ fn tagged_consumer(padding: usize, sites: &[u32]) -> (CpsModule, Vec<CpsNodeId>,
     });
     let project_val = module.add_node(CpsNode::LetIntrinsic {
         result: val,
-        op: CpsIntrinsicOp::TplGet(1),
+        op: CpsIntrinsic::TupleGet(1),
         args: vec![CpsAtom::Value(t)],
         next: switch,
     });
     let mut consume_body = module.add_node(CpsNode::LetIntrinsic {
         result: tag,
-        op: CpsIntrinsicOp::TplGet(0),
+        op: CpsIntrinsic::TupleGet(0),
         args: vec![CpsAtom::Value(t)],
         next: project_val,
     });
@@ -1260,7 +1260,7 @@ fn tagged_consumer(padding: usize, sites: &[u32]) -> (CpsModule, Vec<CpsNodeId>,
         let dead = module.add_value(None);
         consume_body = module.add_node(CpsNode::LetIntrinsic {
             result: dead,
-            op: CpsIntrinsicOp::NatAdd,
+            op: CpsIntrinsic::NatAdd,
             args: vec![
                 CpsAtom::Literal(CpsLiteral::Nat(0)),
                 CpsAtom::Literal(CpsLiteral::Nat(0)),
@@ -1565,13 +1565,13 @@ fn specialization_peels_a_recursive_callee_into_the_general_function() {
     });
     let project_child = module.add_node(CpsNode::LetIntrinsic {
         result: child,
-        op: CpsIntrinsicOp::TplGet(1),
+        op: CpsIntrinsic::TupleGet(1),
         args: vec![CpsAtom::Value(t)],
         next: scope,
     });
     let project_tag = module.add_node(CpsNode::LetIntrinsic {
         result: tag,
-        op: CpsIntrinsicOp::TplGet(0),
+        op: CpsIntrinsic::TupleGet(0),
         args: vec![CpsAtom::Value(t)],
         next: project_child,
     });
@@ -1639,7 +1639,7 @@ fn specialization_peels_a_recursive_callee_into_the_general_function() {
 }
 
 /// One entry function `main(x)` binding `result = op(args)` and returning it — the smallest module exercising a single intrinsic fold.
-fn unary_intrinsic_module(op: CpsIntrinsicOp, args: Vec<CpsAtom>) -> (CpsModule, CpsNodeId) {
+fn unary_intrinsic_module(op: CpsIntrinsic, args: Vec<CpsAtom>) -> (CpsModule, CpsNodeId) {
     let mut module = CpsModule::new();
     let entry = module.reserve_function();
     let return_cont = module.reserve_continuation();
@@ -1671,19 +1671,19 @@ fn unary_intrinsic_module(op: CpsIntrinsicOp, args: Vec<CpsAtom>) -> (CpsModule,
 #[test]
 fn identity_folds_forward_the_surviving_operand() {
     let cases = [
-        (CpsIntrinsicOp::NatAdd, CpsLiteral::Nat(0), true),
-        (CpsIntrinsicOp::NatAdd, CpsLiteral::Nat(0), false),
-        (CpsIntrinsicOp::NatSub, CpsLiteral::Nat(0), true),
-        (CpsIntrinsicOp::NatMul, CpsLiteral::Nat(1), true),
-        (CpsIntrinsicOp::NatMul, CpsLiteral::Nat(1), false),
-        (CpsIntrinsicOp::NatDiv, CpsLiteral::Nat(1), true),
-        (CpsIntrinsicOp::NatOr, CpsLiteral::Nat(0), true),
-        (CpsIntrinsicOp::NatXor, CpsLiteral::Nat(0), false),
-        (CpsIntrinsicOp::NatShl, CpsLiteral::Nat(0), true),
-        (CpsIntrinsicOp::IntAdd, CpsLiteral::Int(0), false),
-        (CpsIntrinsicOp::IntSub, CpsLiteral::Int(0), true),
-        (CpsIntrinsicOp::IntMul, CpsLiteral::Int(1), true),
-        (CpsIntrinsicOp::IntShr, CpsLiteral::Int(0), true),
+        (CpsIntrinsic::NatAdd, CpsLiteral::Nat(0), true),
+        (CpsIntrinsic::NatAdd, CpsLiteral::Nat(0), false),
+        (CpsIntrinsic::NatSub, CpsLiteral::Nat(0), true),
+        (CpsIntrinsic::NatMul, CpsLiteral::Nat(1), true),
+        (CpsIntrinsic::NatMul, CpsLiteral::Nat(1), false),
+        (CpsIntrinsic::NatDiv, CpsLiteral::Nat(1), true),
+        (CpsIntrinsic::NatOr, CpsLiteral::Nat(0), true),
+        (CpsIntrinsic::NatXor, CpsLiteral::Nat(0), false),
+        (CpsIntrinsic::NatShl, CpsLiteral::Nat(0), true),
+        (CpsIntrinsic::IntAdd, CpsLiteral::Int(0), false),
+        (CpsIntrinsic::IntSub, CpsLiteral::Int(0), true),
+        (CpsIntrinsic::IntMul, CpsLiteral::Int(1), true),
+        (CpsIntrinsic::IntShr, CpsLiteral::Int(0), true),
     ];
     for (op, literal, literal_on_right) in cases {
         let x = CpsValueId(0);
@@ -1710,31 +1710,11 @@ fn identity_folds_forward_the_surviving_operand() {
 #[test]
 fn identity_folds_pin_absorbing_results() {
     let cases = [
-        (
-            CpsIntrinsicOp::NatMul,
-            CpsLiteral::Nat(0),
-            CpsLiteral::Nat(0),
-        ),
-        (
-            CpsIntrinsicOp::NatAnd,
-            CpsLiteral::Nat(0),
-            CpsLiteral::Nat(0),
-        ),
-        (
-            CpsIntrinsicOp::NatRem,
-            CpsLiteral::Nat(1),
-            CpsLiteral::Nat(0),
-        ),
-        (
-            CpsIntrinsicOp::IntMul,
-            CpsLiteral::Int(0),
-            CpsLiteral::Int(0),
-        ),
-        (
-            CpsIntrinsicOp::IntRem,
-            CpsLiteral::Int(1),
-            CpsLiteral::Int(0),
-        ),
+        (CpsIntrinsic::NatMul, CpsLiteral::Nat(0), CpsLiteral::Nat(0)),
+        (CpsIntrinsic::NatAnd, CpsLiteral::Nat(0), CpsLiteral::Nat(0)),
+        (CpsIntrinsic::NatRem, CpsLiteral::Nat(1), CpsLiteral::Nat(0)),
+        (CpsIntrinsic::IntMul, CpsLiteral::Int(0), CpsLiteral::Int(0)),
+        (CpsIntrinsic::IntRem, CpsLiteral::Int(1), CpsLiteral::Int(0)),
     ];
     for (op, literal, expected) in cases {
         let x = CpsValueId(0);
@@ -1764,19 +1744,19 @@ fn identity_folds_leave_traps_and_flt_untouched() {
     let x = CpsValueId(0);
     let cases = [
         (
-            CpsIntrinsicOp::NatDiv,
+            CpsIntrinsic::NatDiv,
             vec![CpsAtom::Value(x), CpsAtom::Literal(CpsLiteral::Nat(0))],
         ),
         (
-            CpsIntrinsicOp::NatAdd,
+            CpsIntrinsic::NatAdd,
             vec![CpsAtom::Value(x), CpsAtom::Literal(CpsLiteral::Nat(2))],
         ),
         (
-            CpsIntrinsicOp::FltAdd,
+            CpsIntrinsic::FltAdd,
             vec![CpsAtom::Value(x), CpsAtom::Literal(CpsLiteral::Flt(0.0))],
         ),
         (
-            CpsIntrinsicOp::FltMul,
+            CpsIntrinsic::FltMul,
             vec![CpsAtom::Value(x), CpsAtom::Literal(CpsLiteral::Flt(1.0))],
         ),
     ];
@@ -1793,8 +1773,8 @@ fn identity_folds_leave_traps_and_flt_untouched() {
 
 /// `main(x, y)` binding `first = op1`, `second = op2`, then `sum = first + second`, returned — the two-occurrence chain every CSE test starts from.
 fn duplicate_pair_module(
-    op1: CpsIntrinsicOp,
-    op2: CpsIntrinsicOp,
+    op1: CpsIntrinsic,
+    op2: CpsIntrinsic,
     swap_second: bool,
 ) -> (CpsModule, CpsNodeId, CpsNodeId, CpsNodeId) {
     let mut module = CpsModule::new();
@@ -1811,7 +1791,7 @@ fn duplicate_pair_module(
     }));
     let add = module.add_node(CpsNode::LetIntrinsic {
         result: sum,
-        op: CpsIntrinsicOp::NatAdd,
+        op: CpsIntrinsic::NatAdd,
         args: vec![CpsAtom::Value(first), CpsAtom::Value(second)],
         next: return_node,
     });
@@ -1848,7 +1828,7 @@ fn duplicate_pair_module(
 #[test]
 fn cse_merges_dominated_duplicates_onto_the_first_binder() {
     let (mut module, first_node, second_node, add) =
-        duplicate_pair_module(CpsIntrinsicOp::NatMul, CpsIntrinsicOp::NatMul, false);
+        duplicate_pair_module(CpsIntrinsic::NatMul, CpsIntrinsic::NatMul, false);
 
     assert!(dedupe_intrinsics(&mut module));
     assert!(matches!(
@@ -1872,7 +1852,7 @@ fn cse_merges_dominated_duplicates_onto_the_first_binder() {
 #[test]
 fn cse_normalizes_commutative_operand_order() {
     let (mut module, _, second_node, _) =
-        duplicate_pair_module(CpsIntrinsicOp::NatAdd, CpsIntrinsicOp::NatAdd, true);
+        duplicate_pair_module(CpsIntrinsic::NatAdd, CpsIntrinsic::NatAdd, true);
 
     assert!(dedupe_intrinsics(&mut module));
     assert!(module.node(second_node).is_none());
@@ -1882,7 +1862,7 @@ fn cse_normalizes_commutative_operand_order() {
 #[test]
 fn cse_keeps_noncommutative_swapped_operands_distinct() {
     let (mut module, first_node, second_node, _) =
-        duplicate_pair_module(CpsIntrinsicOp::NatSub, CpsIntrinsicOp::NatSub, true);
+        duplicate_pair_module(CpsIntrinsic::NatSub, CpsIntrinsic::NatSub, true);
 
     assert!(!dedupe_intrinsics(&mut module));
     assert!(module.node(first_node).is_some());
@@ -1892,7 +1872,7 @@ fn cse_keeps_noncommutative_swapped_operands_distinct() {
 #[test]
 fn cse_reuses_a_dominating_may_trap_result() {
     let (mut module, first_node, second_node, _) =
-        duplicate_pair_module(CpsIntrinsicOp::NatDiv, CpsIntrinsicOp::NatDiv, false);
+        duplicate_pair_module(CpsIntrinsic::NatDiv, CpsIntrinsic::NatDiv, false);
 
     assert!(dedupe_intrinsics(&mut module));
     assert!(module.node(first_node).is_some());
@@ -1902,11 +1882,8 @@ fn cse_reuses_a_dominating_may_trap_result() {
 
 #[test]
 fn cse_keeps_allocating_ops_distinct() {
-    let (mut module, first_node, second_node, _) = duplicate_pair_module(
-        CpsIntrinsicOp::ListAppend,
-        CpsIntrinsicOp::ListAppend,
-        false,
-    );
+    let (mut module, first_node, second_node, _) =
+        duplicate_pair_module(CpsIntrinsic::ListAppend, CpsIntrinsic::ListAppend, false);
 
     assert!(!dedupe_intrinsics(&mut module));
     assert!(module.node(first_node).is_some());
@@ -1932,13 +1909,13 @@ fn cse_reaches_a_dominated_continuation_but_not_a_sibling() {
     }));
     let reached_shl = module.add_node(CpsNode::LetIntrinsic {
         result: shl_first,
-        op: CpsIntrinsicOp::NatShl,
+        op: CpsIntrinsic::NatShl,
         args: vec![CpsAtom::Value(x), CpsAtom::Value(x)],
         next: reached_return,
     });
     let reached_body = module.add_node(CpsNode::LetIntrinsic {
         result: dominated,
-        op: CpsIntrinsicOp::NatMul,
+        op: CpsIntrinsic::NatMul,
         args: vec![CpsAtom::Value(x), CpsAtom::Value(x)],
         next: reached_shl,
     });
@@ -1959,7 +1936,7 @@ fn cse_reaches_a_dominated_continuation_but_not_a_sibling() {
     }));
     let other_body = module.add_node(CpsNode::LetIntrinsic {
         result: sibling,
-        op: CpsIntrinsicOp::NatShl,
+        op: CpsIntrinsic::NatShl,
         args: vec![CpsAtom::Value(x), CpsAtom::Value(x)],
         next: other_return,
     });
@@ -1993,7 +1970,7 @@ fn cse_reaches_a_dominated_continuation_but_not_a_sibling() {
     });
     let bind = module.add_node(CpsNode::LetIntrinsic {
         result: dominating,
-        op: CpsIntrinsicOp::NatMul,
+        op: CpsIntrinsic::NatMul,
         args: vec![CpsAtom::Value(x), CpsAtom::Value(x)],
         next: letcont,
     });
@@ -2032,7 +2009,7 @@ fn tagged_join() -> (CpsModule, CpsContId, CpsNodeId, CpsNodeId, CpsValueId) {
     let return_cont = module.reserve_continuation();
     let x = module.add_value(Some("x".into()));
 
-    // join(p): switch TplGet(0)[p] { 0 => return TplGet(1)[p], 1 => return 7 }.
+    // join(p): switch TupleGet(0)[p] { 0 => return TupleGet(1)[p], 1 => return 7 }.
     let p = module.add_value(Some("p".into()));
     let tag = module.add_value(Some("tag".into()));
     let payload = module.add_value(Some("payload".into()));
@@ -2045,7 +2022,7 @@ fn tagged_join() -> (CpsModule, CpsContId, CpsNodeId, CpsNodeId, CpsValueId) {
     }));
     let some_body = module.add_node(CpsNode::LetIntrinsic {
         result: payload,
-        op: CpsIntrinsicOp::TplGet(1),
+        op: CpsIntrinsic::TupleGet(1),
         args: vec![CpsAtom::Value(p)],
         next: some_return,
     });
@@ -2091,7 +2068,7 @@ fn tagged_join() -> (CpsModule, CpsContId, CpsNodeId, CpsNodeId, CpsValueId) {
     });
     let read_tag = module.add_node(CpsNode::LetIntrinsic {
         result: tag,
-        op: CpsIntrinsicOp::TplGet(0),
+        op: CpsIntrinsic::TupleGet(0),
         args: vec![CpsAtom::Value(p)],
         next: dispatch,
     });
@@ -2227,7 +2204,7 @@ fn optimization_collapses_the_tagged_join_outright() {
                     value: CpsValueExpr::Tuple(_),
                     ..
                 } | CpsNode::LetIntrinsic {
-                    op: CpsIntrinsicOp::TplGet(_),
+                    op: CpsIntrinsic::TupleGet(_),
                     ..
                 }
             ),

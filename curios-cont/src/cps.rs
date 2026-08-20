@@ -52,7 +52,7 @@ pub enum CpsValueExpr {
 
 /// Intrinsic identity without operands. Operand order and arity live on the surrounding `LetIntrinsic`, so every analysis sees one uniform operand vector.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum CpsIntrinsicOp {
+pub enum CpsIntrinsic {
     NatEql,
     NatNeq,
     NatAdd,
@@ -139,20 +139,20 @@ pub enum CpsIntrinsicOp {
     ListLen,
     ListGet,
     ListSlice,
-    /// The `List` mirror of [`CpsIntrinsicOp::BinRest`].
+    /// The `List` mirror of [`CpsIntrinsic::BinRest`].
     ListRest,
     ListAppend,
     ListConcat(usize),
     /// `(list) -> list`: the same value, flat — a leaf answers itself, and anything else answers a fresh leaf over its forced payload (an O(1) wrap, since payload arrays are filled once and never rewritten). Semantically the identity; representationally the settle the door inserts on stores into fields the Ersd census marked indexed-only, so the values a program only ever indexes are flat by the time they are stored.
     ListSettle,
-    /// `(list…) -> list`: one exact-length flat leaf holding every element of every operand in order — the eager concatenation `fuse_settle_trees` builds where the reads that would have paid the gather are already in evidence. Minted only by the optimizer, like [`CpsIntrinsicOp::BinChunk`].
+    /// `(list…) -> list`: one exact-length flat leaf holding every element of every operand in order — the eager concatenation `fuse_settle_trees` builds where the reads that would have paid the gather are already in evidence. Minted only by the optimizer, like [`CpsIntrinsic::BinChunk`].
     ListFlat(usize),
-    TplGet(usize),
+    TupleGet(usize),
     /// The virtual-window bounds guard: `(start, count, len) -> count`, trapping unless the window ends inside `len` — the eager trap a physical slice would have performed, kept at the original evaluation point when the slice itself is virtualized away. It answers the count unchanged rather than a difference, because a window is a start and a count everywhere above this too; what it contributes is the trap, not the arithmetic.
     WindowExtent,
     /// Whether the operand is an unboxed scalar (1) or an aggregate reference (0) — the dispatch of a variant encoding whose one scalar-payload constructor rides bare. A representation question, which is why it exists in this crate's vocabulary and not in Ersd: the lowering that chose the encoding is the only producer, and it guarantees the two answers are disjoint over every value the test can reach.
     IsImmediate,
-    /// `(value) -> value`: the bare payload of the constructor [`CpsIntrinsicOp::IsImmediate`] just answered for, passed through unchanged.
+    /// `(value) -> value`: the bare payload of the constructor [`CpsIntrinsic::IsImmediate`] just answered for, passed through unchanged.
     ///
     /// Representationally the identity, and that is the whole point: it exists so the payload has a *definition* instead of being aliased to the scrutinee. The representation analysis fixes a value's carrier from whatever produced it, so a payload with no producer of its own carries its uses' raw demand back onto the scrutinee — which on the boxed path is a tuple, not a scalar. That is not a missed optimization but a miscompile: an arm's `NatAdd` demanded the raw carrier, the demand reached the scrutinee's own definition, and the emitter coerced a `struct.new` with a `ref.cast` to `i31`. Answering `Repr::Ref` makes this definition's offer `Never`, so the demand coerces at the use where it belongs and the scrutinee is never demanded raw.
     ImmediateGet,
@@ -174,17 +174,17 @@ pub enum Repr {
     /// A list rope reference.
     List,
     /// The tuple heap type of the given arity.
-    Tpl(usize),
+    Tuple(usize),
     /// An opaque reference: nothing is read of it, so nothing constrains it.
     Ref,
 }
 
-impl CpsIntrinsicOp {
+impl CpsIntrinsic {
     /// The representation this operation reads its `index`-th operand at.
     ///
     /// Indexed rather than returning a sequence because the concatenations are variadic and every operand of one shares a representation, so a list would allocate to say what a match arm already says.
     pub fn operand_repr(&self, index: usize) -> Repr {
-        use CpsIntrinsicOp::*;
+        use CpsIntrinsic::*;
 
         match (self, index) {
             // The sequence operations are the only ones whose operands differ from one another: a rope first, then positions.
@@ -204,7 +204,7 @@ impl CpsIntrinsicOp {
             // The whole point of the test is to look at the reference uncoerced, and the read that follows it hands that same reference on.
             (IsImmediate | ImmediateGet, _) => Repr::Ref,
             (ListConcat(_) | ListLen | ListSettle | ListFlat(_), _) => Repr::List,
-            (TplGet(index), _) => Repr::Tpl(index + 1),
+            (TupleGet(index), _) => Repr::Tuple(index + 1),
 
             (
                 NatEql | NatNeq | NatAdd | NatSub | NatMul | NatLt | NatDiv | NatRem | NatGt
@@ -231,7 +231,7 @@ impl CpsIntrinsicOp {
 
     /// The representation this operation produces.
     pub fn result_repr(&self) -> Repr {
-        use CpsIntrinsicOp::*;
+        use CpsIntrinsic::*;
 
         match self {
             // Every comparison and predicate answers a `Bool`, whose carrier is a `Nat`.
@@ -264,7 +264,7 @@ impl CpsIntrinsicOp {
                 Repr::List
             }
             // A list read, a tuple projection and an immediate arm's payload all yield whatever was stored, uninterpreted.
-            ListGet | TplGet(_) | ImmediateGet => Repr::Ref,
+            ListGet | TupleGet(_) | ImmediateGet => Repr::Ref,
         }
     }
 }
@@ -276,7 +276,7 @@ pub enum CpsIntrinsicEffect {
     Allocates,
 }
 
-impl CpsIntrinsicOp {
+impl CpsIntrinsic {
     pub fn arity(self) -> usize {
         match self {
             Self::NatClz
@@ -304,7 +304,7 @@ impl CpsIntrinsicOp {
             | Self::FltToInt
             | Self::BinLen(_)
             | Self::ListLen
-            | Self::TplGet(_)
+            | Self::TupleGet(_)
             | Self::IsImmediate
             | Self::ImmediateGet => 1,
             Self::BinSlice(_) | Self::ListSlice | Self::WindowExtent => 3,
@@ -338,7 +338,7 @@ impl CpsIntrinsicOp {
             | Self::ListGet
             | Self::ListSlice
             | Self::ListRest
-            | Self::TplGet(_)
+            | Self::TupleGet(_)
             | Self::WindowExtent
             // Total in the language, guarded by the emitter because the result can leave the i31 envelope. `NatSub` is monus and `NatShr`/`IntShr` only clear bits, so neither needs a guard.
             | Self::NatAdd
@@ -513,7 +513,7 @@ pub enum CpsNode {
     },
     LetIntrinsic {
         result: CpsValueId,
-        op: CpsIntrinsicOp,
+        op: CpsIntrinsic,
         args: Vec<CpsAtom>,
         next: CpsNodeId,
     },
@@ -1772,7 +1772,7 @@ impl fmt::Display for CpsDisplayNode<'_> {
 #[cfg(test)]
 mod tests {
     use super::{
-        CpsAtom, CpsContId, CpsContinuation, CpsEdge, CpsFunId, CpsFunction, CpsIntrinsicOp,
+        CpsAtom, CpsContId, CpsContinuation, CpsEdge, CpsFunId, CpsFunction, CpsIntrinsic,
         CpsLiteral, CpsModule, CpsNode, CpsNodeId, CpsUseTarget, CpsValueExpr, CpsValueId,
         FieldGroup,
     };
@@ -1883,7 +1883,7 @@ mod tests {
         let next = module.add_node(CpsNode::Unreachable);
         module.add_node(CpsNode::LetIntrinsic {
             result,
-            op: CpsIntrinsicOp::NatAdd,
+            op: CpsIntrinsic::NatAdd,
             args: vec![CpsAtom::Literal(CpsLiteral::Nat(1))],
             next,
         });
@@ -1900,30 +1900,30 @@ mod tests {
 
     #[test]
     fn list_map_is_not_an_intrinsic_opcode() {
-        assert!(CpsIntrinsicOp::ListAppend.allocates());
-        assert!(!CpsIntrinsicOp::NatAdd.is_total());
+        assert!(CpsIntrinsic::ListAppend.allocates());
+        assert!(!CpsIntrinsic::NatAdd.is_total());
     }
 
     #[test]
     fn every_guarded_operation_is_classified_as_trapping() {
         // Found by reading `into_wasm`'s emission against this table rather than by a failure: each of these emits a guard — the first four through the same checked helpers as siblings already listed, the last three through an inline `Unreachable` — while the wildcard this match replaced answered `Total` for all seven, which is `eliminate_dead_bindings` deleting a refusal.
         for op in [
-            CpsIntrinsicOp::NatRotr,
-            CpsIntrinsicOp::IntShl,
-            CpsIntrinsicOp::IntRotl,
-            CpsIntrinsicOp::IntRotr,
-            CpsIntrinsicOp::NatToInt,
-            CpsIntrinsicOp::IntToNat,
-            CpsIntrinsicOp::FltOfLeBytes,
+            CpsIntrinsic::NatRotr,
+            CpsIntrinsic::IntShl,
+            CpsIntrinsic::IntRotl,
+            CpsIntrinsic::IntRotr,
+            CpsIntrinsic::NatToInt,
+            CpsIntrinsic::IntToNat,
+            CpsIntrinsic::FltOfLeBytes,
         ] {
             assert!(op.may_trap(), "{op:?} emits a guard but is not `MayTrap`");
             assert!(!op.is_total(), "{op:?} must not be deletable when dead");
         }
 
         // The controls that keep the rule from being "guard everything": monus saturates and a right shift only clears bits, so neither can leave the envelope.
-        assert!(CpsIntrinsicOp::NatSub.is_total());
-        assert!(CpsIntrinsicOp::NatShr.is_total());
-        assert!(CpsIntrinsicOp::IntShr.is_total());
+        assert!(CpsIntrinsic::NatSub.is_total());
+        assert!(CpsIntrinsic::NatShr.is_total());
+        assert!(CpsIntrinsic::IntShr.is_total());
     }
 
     #[test]

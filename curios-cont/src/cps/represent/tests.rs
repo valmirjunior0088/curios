@@ -2,7 +2,7 @@ use {
     super::{Storage, storage},
     crate::Repr,
     crate::{
-        CpsAtom, CpsCallee, CpsContinuation, CpsEdge, CpsFunction, CpsIntrinsicOp, CpsLiteral,
+        CpsAtom, CpsCallee, CpsContinuation, CpsEdge, CpsFunction, CpsIntrinsic, CpsLiteral,
         CpsModule, CpsNode, CpsNodeId, CpsValueId,
     },
 };
@@ -66,7 +66,7 @@ fn an_intrinsic_operand_position_demands_the_raw_carrier() {
     let done = finish(&mut module, vec![CpsAtom::Value(result)]);
     let body = module.add_node(CpsNode::LetIntrinsic {
         result,
-        op: CpsIntrinsicOp::NatAdd,
+        op: CpsIntrinsic::NatAdd,
         args: vec![CpsAtom::Value(param), CpsAtom::Literal(CpsLiteral::Nat(1))],
         next: done,
     });
@@ -132,7 +132,7 @@ fn an_edge_argument_inherits_the_storage_of_the_parameter_it_feeds() {
     let done = finish(&mut module, vec![CpsAtom::Value(result)]);
     let head_body = module.add_node(CpsNode::LetIntrinsic {
         result,
-        op: CpsIntrinsicOp::NatAdd,
+        op: CpsIntrinsic::NatAdd,
         args: vec![CpsAtom::Value(param), CpsAtom::Literal(CpsLiteral::Nat(1))],
         next: done,
     });
@@ -152,7 +152,7 @@ fn an_edge_argument_inherits_the_storage_of_the_parameter_it_feeds() {
     }));
     let body = module.add_node(CpsNode::LetIntrinsic {
         result: carried,
-        op: CpsIntrinsicOp::NatAdd,
+        op: CpsIntrinsic::NatAdd,
         args: vec![
             CpsAtom::Literal(CpsLiteral::Nat(1)),
             CpsAtom::Literal(CpsLiteral::Nat(2)),
@@ -176,14 +176,14 @@ fn disagreeing_raw_carriers_settle_at_conflict_rather_than_oscillating() {
     // Read as a signed carrier here...
     let signed = module.add_node(CpsNode::LetIntrinsic {
         result: second,
-        op: CpsIntrinsicOp::IntAdd,
+        op: CpsIntrinsic::IntAdd,
         args: vec![CpsAtom::Value(shared), CpsAtom::Literal(CpsLiteral::Int(1))],
         next: done,
     });
     // ...and as an unsigned one here.
     let body = module.add_node(CpsNode::LetIntrinsic {
         result: first,
-        op: CpsIntrinsicOp::NatAdd,
+        op: CpsIntrinsic::NatAdd,
         args: vec![CpsAtom::Value(shared), CpsAtom::Literal(CpsLiteral::Nat(1))],
         next: signed,
     });
@@ -205,7 +205,7 @@ fn a_function_parameter_stays_boxed_however_its_body_reads_it() {
     let done = finish(&mut module, vec![CpsAtom::Value(result)]);
     let body = module.add_node(CpsNode::LetIntrinsic {
         result,
-        op: CpsIntrinsicOp::NatAdd,
+        op: CpsIntrinsic::NatAdd,
         args: vec![CpsAtom::Value(param), CpsAtom::Literal(CpsLiteral::Nat(1))],
         next: done,
     });
@@ -228,7 +228,7 @@ fn a_value_free_in_another_function_stays_boxed() {
     let callee_done = finish(&mut module, vec![CpsAtom::Value(result)]);
     let callee_body = module.add_node(CpsNode::LetIntrinsic {
         result,
-        op: CpsIntrinsicOp::NatAdd,
+        op: CpsIntrinsic::NatAdd,
         args: vec![
             CpsAtom::Value(escaping),
             CpsAtom::Literal(CpsLiteral::Nat(1)),
@@ -253,7 +253,7 @@ fn a_value_free_in_another_function_stays_boxed() {
     });
     let body = module.add_node(CpsNode::LetIntrinsic {
         result: escaping,
-        op: CpsIntrinsicOp::NatAdd,
+        op: CpsIntrinsic::NatAdd,
         args: vec![
             CpsAtom::Literal(CpsLiteral::Nat(1)),
             CpsAtom::Literal(CpsLiteral::Nat(2)),
@@ -277,7 +277,7 @@ fn a_call_result_stays_boxed_however_its_continuation_reads_it() {
     let done = finish(&mut module, vec![CpsAtom::Value(result)]);
     let resume_body = module.add_node(CpsNode::LetIntrinsic {
         result,
-        op: CpsIntrinsicOp::NatAdd,
+        op: CpsIntrinsic::NatAdd,
         args: vec![
             CpsAtom::Value(returned),
             CpsAtom::Literal(CpsLiteral::Nat(1)),
