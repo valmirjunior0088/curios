@@ -241,7 +241,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             // No other shape is ever offered a register, so this arm builds the reference and reads it straight back down. It exists to keep the match total rather than to be taken.
             (Some(carrier), value) => {
                 self.emit_data(value_name, value);
-                let load = LoadAs::of(&carrier, self.context.table());
+                let load = LoadAs::of(&carrier);
                 self.emit_instrs(self.context.load_as_instrs(load, false));
             }
             (None, value) => self.emit_data(value_name, value),

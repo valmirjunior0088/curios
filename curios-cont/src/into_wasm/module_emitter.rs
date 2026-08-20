@@ -224,16 +224,11 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
     fn emit_tuple_types(&mut self) {
         for (arity, type_name) in self.table.tuple_types() {
-            let super_types = match arity {
-                0 => vec![],
-                n => vec![self.table.find_tuple_type(n - 1)],
-            };
-
             self.module.add_type(
                 type_name,
                 curios_wasm::SubType {
-                    is_final: false,
-                    super_types,
+                    is_final: true,
+                    super_types: vec![],
                     comp_type: curios_wasm::CompType::Struct(curios_wasm::StructType::from(
                         (0..arity).map(|index| {
                             (

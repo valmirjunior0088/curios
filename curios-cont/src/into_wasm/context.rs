@@ -321,7 +321,7 @@ impl<'a, 'b> Context<'a, 'b> {
     /// How a value must sit on the stack to be stored into `param`'s local: in its register carrier when that local is one, and as a reference otherwise.
     fn param_load(&self, param: &EmissionValueName) -> LoadAs {
         match self.table().raw_carrier(param) {
-            Some(carrier) => LoadAs::of(&carrier, self.table()),
+            Some(carrier) => LoadAs::of(&carrier),
             None => LoadAs::NonNull,
         }
     }
@@ -875,7 +875,7 @@ pub(crate) fn zero_instrs(carrier: Option<Repr>) -> Vec<curios_wasm::Instr> {
     match carrier {
         Some(Repr::Nat | Repr::Int) => vec![curios_wasm::Instr::I32Const { value: 0 }],
         Some(Repr::Flt) => vec![curios_wasm::Instr::F32Const { value: 0.0 }],
-        Some(Repr::Bin(_) | Repr::List | Repr::Tuple(_) | Repr::Ref) | None => vec![
+        Some(Repr::Bin(_) | Repr::List | Repr::Ref) | None => vec![
             curios_wasm::Instr::I32Const { value: 0 },
             curios_wasm::Instr::RefI31,
         ],
@@ -888,7 +888,7 @@ pub(crate) fn box_instr(repr: &Repr, table: &Table) -> Option<curios_wasm::Instr
         Repr::Flt => Some(curios_wasm::Instr::StructNew {
             type_name: table.flt_type(),
         }),
-        Repr::Bin(_) | Repr::List | Repr::Tuple(_) | Repr::Ref => None,
+        Repr::Bin(_) | Repr::List | Repr::Ref => None,
     }
 }
 
@@ -898,14 +898,13 @@ impl LoadAs {
     /// This is the whole of the translation between [`Repr`] — what an operation declares it reads — and the instructions that deliver it. Every operand load in the emitter resolves through here rather than naming a `LoadAs` directly, so the demand has one statement (the intrinsic roster) and one realisation (this function), and the two cannot drift apart.
     ///
     /// `Repr::Ref` maps to `Null` rather than `NonNull`: an uninterpreted operand is passed along exactly as stored, and asserting non-nullness of a value nothing reads would emit an instruction for no reader.
-    pub(crate) fn of(repr: &Repr, table: &Table) -> Self {
+    pub(crate) fn of(repr: &Repr) -> Self {
         match repr {
             Repr::Nat => Self::Nat,
             Repr::Int => Self::Int,
             Repr::Flt => Self::Flt,
             Repr::Bin(grain) => Self::Bin(*grain),
             Repr::List => Self::List,
-            Repr::Tuple(arity) => Self::Concrete(table.find_tuple_type(*arity)),
             Repr::Ref => Self::Null,
         }
     }

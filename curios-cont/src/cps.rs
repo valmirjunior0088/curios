@@ -173,8 +173,6 @@ pub enum Repr {
     Bin(Grain),
     /// A list rope reference.
     List,
-    /// The tuple heap type of the given arity.
-    Tuple(usize),
     /// An opaque reference: nothing is read of it, so nothing constrains it.
     Ref,
 }
@@ -204,7 +202,7 @@ impl CpsIntrinsic {
             // The whole point of the test is to look at the reference uncoerced, and the read that follows it hands that same reference on.
             (IsImmediate | ImmediateGet, _) => Repr::Ref,
             (ListConcat(_) | ListLen | ListSettle | ListFlat(_), _) => Repr::List,
-            (TupleGet(index), _) => Repr::Tuple(index + 1),
+            (TupleGet(_), _) => Repr::Ref,
 
             (
                 NatEql | NatNeq | NatAdd | NatSub | NatMul | NatLt | NatDiv | NatRem | NatGt

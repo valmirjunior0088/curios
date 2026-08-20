@@ -49,7 +49,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
 
     /// Load one operand at the representation `intrinsic` declares for that position.
     fn emit_operand(&mut self, intrinsic: &CpsIntrinsic, index: usize, name: &EmissionValueName) {
-        let load = LoadAs::of(&intrinsic.operand_repr(index), self.context.table());
+        let load = LoadAs::of(&intrinsic.operand_repr(index));
         self.emit_instrs(self.context.load_value_instrs(name, load));
     }
 
@@ -890,6 +890,62 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         }
     }
 
+    /// Read field `index` through the object's *exact* tuple type, trying `arities` in order and casting on the last.
+    ///
+    /// The tuple types are final and unrelated, so there is no prefix supertype to read a field through any more — the object's own type has to be found. Exhausting every roster arity that could hold the field is what makes this correct without an assumption: it never supposes an object's arity is its constructor's, which `cps/fields.rs` makes false whenever a narrow constructor materialises at its region's width. The order is a preference only.
+    fn tuple_get_cascade(
+        &self,
+        operand: &'a EmissionValueName,
+        index: usize,
+        arities: &[usize],
+    ) -> Vec<curios_wasm::Instr> {
+        match arities {
+            [] => vec![curios_wasm::Instr::Unreachable],
+            [last] => {
+                let type_name = self.context.table().find_tuple_type(*last);
+                self.context
+                    .load_value_instrs(operand, LoadAs::Concrete(type_name.clone()))
+                    .into_iter()
+                    .chain([curios_wasm::Instr::StructGet {
+                        type_name,
+                        field_name: Table::tuple_field(index),
+                    }])
+                    .collect()
+            }
+            [first, rest @ ..] => {
+                let type_name = self.context.table().find_tuple_type(*first);
+                let hit: Vec<curios_wasm::Instr> = self
+                    .context
+                    .load_value_instrs(operand, LoadAs::Concrete(type_name.clone()))
+                    .into_iter()
+                    .chain([curios_wasm::Instr::StructGet {
+                        type_name: type_name.clone(),
+                        field_name: Table::tuple_field(index),
+                    }])
+                    .collect();
+
+                self.context
+                    .load_value_instrs(operand, LoadAs::NonNull)
+                    .into_iter()
+                    .chain([
+                        curios_wasm::Instr::RefTest {
+                            ref_type: curios_wasm::RefType {
+                                is_nullable: false,
+                                heap_type: curios_wasm::HeapType::Concrete(type_name),
+                            },
+                        },
+                        curios_wasm::Instr::If {
+                            label_name: curios_wasm::LabelName::from("tuple_get"),
+                            block_type: curios_wasm::BlockType::Inline(Table::top_type(true)),
+                            then_instructions: hit,
+                            else_instructions: self.tuple_get_cascade(operand, index, rest),
+                        },
+                    ])
+                    .collect()
+            }
+        }
+    }
+
     /// Lower one intrinsic op into the current frame; `args` carries the operands in the order and arity the op fixes, verified at the CPS boundary.
     fn emit_intrinsic(&mut self, dest: &Dest<'a>, op: CpsIntrinsic, args: &'a [EmissionValueName]) {
         let (value_name, result_local) = (dest.value_name, dest.local.clone());
@@ -1711,18 +1767,21 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 });
             }
             CpsIntrinsic::TupleGet(index) => {
-                let tuple_n_type = self.context.table().find_tuple_type(index + 1);
-                let field_name = Table::tuple_field(index);
+                // Widest first: widening only ever widens, and in every family measured the wide
+                // constructor is the hot one — `fork` over `leaf`, `cons` over `nil`, `some` over
+                // `none` — so the first test usually hits. The roster is module-global and small
+                // (2 to 5 across the whole corpus), so the chain is short whatever the order.
+                let mut arities: Vec<usize> = self
+                    .context
+                    .table()
+                    .tuple_types()
+                    .map(|(arity, _)| arity)
+                    .filter(|arity| *arity > index)
+                    .collect();
+                arities.sort_unstable_by(|left, right| right.cmp(left));
 
-                self.emit_instrs(
-                    self.context
-                        .load_value_instrs(&args[0], LoadAs::Concrete(tuple_n_type.clone())),
-                );
-
-                self.emit_instr(curios_wasm::Instr::StructGet {
-                    type_name: tuple_n_type,
-                    field_name,
-                });
+                let instrs = self.tuple_get_cascade(&args[0], index, &arities);
+                self.emit_instrs(instrs);
                 self.emit_store(dest, &op.result_repr());
             }
             CpsIntrinsic::IsImmediate => {

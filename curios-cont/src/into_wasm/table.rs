@@ -934,9 +934,7 @@ impl<'a> Table<'a> {
         match self.raw_carrier(value_name) {
             Some(Repr::Nat | Repr::Int) => curios_wasm::ValType::Num(curios_wasm::NumType::I32),
             Some(Repr::Flt) => curios_wasm::ValType::Num(curios_wasm::NumType::F32),
-            Some(Repr::Bin(_) | Repr::List | Repr::Tuple(_) | Repr::Ref) | None => {
-                Table::top_type(true)
-            }
+            Some(Repr::Bin(_) | Repr::List | Repr::Ref) | None => Table::top_type(true),
         }
     }
 
