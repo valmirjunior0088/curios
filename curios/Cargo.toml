@@ -39,3 +39,4 @@ curios-cert = { workspace = true }
 curios-core = { workspace = true }
 curios-cont = { workspace = true }
 curios-elab = { workspace = true }
+curios-ersd = { workspace = true }

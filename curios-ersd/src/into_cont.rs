@@ -7,6 +7,7 @@
 //! Arena identities are globally unique and never shadowed, so flat maps to their Cont counterparts suffice; source hints are carried onto the Cont values and functions they lower to.
 
 mod census;
+pub(crate) use census::{SequenceFacts, sequence_census};
 
 #[cfg(test)]
 mod tests;
@@ -18,7 +19,6 @@ use {
         Module, Operation, RecGroup, RecGroupId, Rhs, SequenceGrain, SequenceOp, Statement,
         StatementId, Terminator, UnconsSequenceStep, ValueId, VariantArm,
     },
-    census::{SequenceFacts, sequence_census},
     curios_abi::ForeignFunction,
     curios_num::Natural,
     curios_utilities::{Grain, PackedBin},

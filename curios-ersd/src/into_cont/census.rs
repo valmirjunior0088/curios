@@ -34,13 +34,13 @@ enum FieldKey {
 
 /// The census's verdicts: the constructor and product fields whose every read is indexing-shaped, with list evidence.
 #[derive(Debug, Default)]
-pub(super) struct SequenceFacts {
+pub(crate) struct SequenceFacts {
     constructors: BTreeSet<(ConstructorId, usize)>,
     products: BTreeSet<(ProductId, usize)>,
 }
 
 impl SequenceFacts {
-    pub(super) fn indexed_only_constructor(
+    pub(crate) fn indexed_only_constructor(
         &self,
         constructor: ConstructorId,
         field: usize,
@@ -48,13 +48,13 @@ impl SequenceFacts {
         self.constructors.contains(&(constructor, field))
     }
 
-    pub(super) fn indexed_only_product(&self, product: ProductId, field: usize) -> bool {
+    pub(crate) fn indexed_only_product(&self, product: ProductId, field: usize) -> bool {
         self.products.contains(&(product, field))
     }
 }
 
 /// Walk the whole arena once: collect every value's uses and every field read, then mark the fields whose reads all hold.
-pub(super) fn sequence_census(module: &Module) -> SequenceFacts {
+pub(crate) fn sequence_census(module: &Module) -> SequenceFacts {
     let mut uses: BTreeMap<ValueId, Vec<UseKind>> = BTreeMap::new();
     let mut constructor_reads: BTreeMap<(ConstructorId, usize), Vec<ValueId>> = BTreeMap::new();
     let mut product_reads: BTreeMap<(ProductId, usize), Vec<ValueId>> = BTreeMap::new();

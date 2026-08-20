@@ -3,7 +3,7 @@
 //! Emitted function names are `$func/<N>` ids — a module-wide monotonic index over every reachable function, prelude included — optionally suffixed with the source hint as `$func/<N>$hint`. The index carries identity; the hint is only origin annotation. Hot kernels are still located by a distinctive literal constant baked into their arithmetic (`65537` for LCG, `1000003` for trees) or by name-independent structure (self-recursion, the shared `$func/<N>`/`$clsr/<N>` index of a function used both directly and as a closure), never by a source name. A genuine irreducible-cycle dispatcher is the `loop $$dispatch/<anchor>` the emitter names in `into_wasm::expr_emitter`; an ordinary constructor-tag `switch` lowers to a `br_table` over `$case$N`/`$tail` labels and is not a dispatcher.
 
 use {
-    crate::tests::{cont_optm, run},
+    crate::tests::{census_settles, cont_optm, run},
     curios_pipeline::compile_with_prelude,
     curios_runtime::{ForeignBindings, MockHost, precompile, run_bytes},
     curios_text::{Entrypoint, RootSource},
@@ -1320,6 +1320,11 @@ fn indexed_field_store_fuses_to_flat_build() {
         end
         "#;
 
+    // The named verdict first — the assertion surface — then the fused op it becomes, then the behavior.
+    assert!(
+        census_settles(source, "/Box", "pack", "items"),
+        "the census marks the stored field indexed-only"
+    );
     let dump = cont_optm(source);
     assert!(
         dump.contains("ListFlat(3)"),
@@ -1354,6 +1359,10 @@ fn regrown_field_store_stays_lazy() {
         end
         "#;
 
+    assert!(
+        !census_settles(source, "/Acc", "keep", "items"),
+        "a re-grown field is never marked"
+    );
     let dump = cont_optm(source);
     assert!(
         !dump.contains("ListSettle") && !dump.contains("ListFlat"),

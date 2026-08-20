@@ -98,6 +98,36 @@ fn error(source: &str) -> String {
     }
 }
 
+/// Compile through production and hand back the optimized Ersd arena — the module the door's sequence-usage census judges.
+fn ersd_optm(source: &str) -> curios_ersd::Module {
+    let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
+
+    let mut captured = None;
+    compile_with_prelude(
+        DEFAULT_STEP_BUDGET,
+        &entrypoint,
+        &RootSource::none(),
+        |stage| {
+            if let Stage::ErsdOptm(module) = stage {
+                captured = Some(module.clone());
+            }
+        },
+    )
+    .expect("fixture compiles");
+
+    captured.expect("the pipeline emits the optimized Ersd stage")
+}
+
+/// Whether the census settles `family`'s `constructor` field named `field` in `source` — the named assertion surface over the door's verdict, so a fixture pins the settling by name instead of grepping a dump for the op the settling later becomes.
+fn census_settles(source: &str, family: &str, constructor: &str, field: &str) -> bool {
+    curios_ersd::test_support::census_settles_constructor_field(
+        &ersd_optm(source),
+        family,
+        constructor,
+        field,
+    )
+}
+
 /// Compile through production and capture the optimized Cont printout.
 fn cont_optm(source: &str) -> String {
     let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");

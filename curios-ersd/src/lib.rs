@@ -41,6 +41,8 @@ pub use analysis::*;
 mod into_cont;
 pub use into_cont::lower_to_cont;
 
+pub mod test_support;
+
 mod semantics;
 pub use semantics::*;
 
