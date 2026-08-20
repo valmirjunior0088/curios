@@ -20,6 +20,7 @@ Each results file is a single-sitting snapshot with its own commentary:
 | [05 — The plateau broke, and only where it was aimed](05_RESULTS.md) | 2026-08-17 |
 | [06 — The other column halved, and one commit did it](06_RESULTS.md) | 2026-08-17 |
 | [07 — Three columns arrived, and one of them is a wall](07_RESULTS.md) | 2026-08-18 |
+| [08 — The wall fell by three quarters, and only the wall](08_RESULTS.md) | 2026-08-20 |
 
 ### Curios across runs
 
@@ -118,6 +119,15 @@ The workload and the execution setup are fixed across runs, but the *toolchains*
       <td align="right">0.66×</td>
       <td align="right">1.01×</td>
     </tr>
+    <tr>
+      <td>08</td>
+      <td align="right">292.9 ± 0.3</td>
+      <td align="right">0.66×</td>
+      <td align="right">0.98×</td>
+      <td align="right">295.7 ± 4.4</td>
+      <td align="right">0.67×</td>
+      <td align="right">1.00×</td>
+    </tr>
   </tbody>
 </table>
 
@@ -212,6 +222,15 @@ The workload and the execution setup are fixed across runs, but the *toolchains*
       <td align="right">0.36×</td>
       <td align="right">0.95×</td>
     </tr>
+    <tr>
+      <td>08</td>
+      <td align="right">115.5 ± 0.8</td>
+      <td align="right">0.37×</td>
+      <td align="right">0.98×</td>
+      <td align="right">115.1 ± 0.7</td>
+      <td align="right">0.36×</td>
+      <td align="right">1.00×</td>
+    </tr>
   </tbody>
 </table>
 
@@ -242,6 +261,15 @@ The workload and the execution setup are fixed across runs, but the *toolchains*
       <td align="right">134.8 ± 1.3</td>
       <td align="right">1.00×</td>
       <td align="right">—</td>
+    </tr>
+    <tr>
+      <td>08</td>
+      <td align="right">133.4 ± 2.1</td>
+      <td align="right">0.99×</td>
+      <td align="right">0.99×</td>
+      <td align="right">132.9 ± 1.0</td>
+      <td align="right">0.99×</td>
+      <td align="right">0.99×</td>
     </tr>
   </tbody>
 </table>
@@ -274,6 +302,15 @@ The workload and the execution setup are fixed across runs, but the *toolchains*
       <td align="right">1.00×</td>
       <td align="right">—</td>
     </tr>
+    <tr>
+      <td>08</td>
+      <td align="right">273.4 ± 1.5</td>
+      <td align="right">0.99×</td>
+      <td align="right">0.99×</td>
+      <td align="right">272.7 ± 0.6</td>
+      <td align="right">1.00×</td>
+      <td align="right">1.00×</td>
+    </tr>
   </tbody>
 </table>
 
@@ -304,6 +341,15 @@ The workload and the execution setup are fixed across runs, but the *toolchains*
       <td align="right">207.0 ± 1.0</td>
       <td align="right">1.00×</td>
       <td align="right">—</td>
+    </tr>
+    <tr>
+      <td>08</td>
+      <td align="right">54.4 ± 0.3</td>
+      <td align="right">0.26×</td>
+      <td align="right">0.26×</td>
+      <td align="right">53.9 ± 0.6</td>
+      <td align="right">0.26×</td>
+      <td align="right">0.26×</td>
     </tr>
   </tbody>
 </table>
