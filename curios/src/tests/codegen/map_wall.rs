@@ -1,4 +1,4 @@
-//! The map-wall campaign's end-to-end instrument: the `spines` insert slope, retaken as each step of `documentation/roadmap/map-wall-classes-spec.md` lands. The spec's decomposition figures (per-op insert/get costs, protocol shares) were taken by throwaway probes and live in the spec as history; this module is the figure that persists, in the `stored_prelude_measurements` pattern — the command, the date, and what it last printed, kept beside the code so a number cannot drift from the thing that would check it.
+//! The map-wall campaign's end-to-end instrument: the `spines` insert slope, retaken as each step of the campaign landed — `documentation/design/toolchain/the-map-wall-falls-by-classes-not-by-symptom.md` is the decision record, and the retired specification in git history holds the schedule and the decomposition's throwaway-probe figures. This module is the figure that persists, in the `stored_prelude_measurements` pattern — the command, the date, and what it last printed, kept beside the code so a number cannot drift from the thing that would check it.
 
 use {
     crate::to_cwasm,
