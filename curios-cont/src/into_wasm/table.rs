@@ -60,10 +60,9 @@ pub(crate) struct RopeData {
 #[derive(Debug, Clone)]
 pub(crate) struct ClsrData<'a> {
     name: &'a EmissionClosureName,
-    /// This closure's slot in the shared funcref table — the value its environment's special field holds. 1-based: slot 0 stays null so a `struct.new_default` shell's zeroed field dispatches into the null entry and traps, as the unfilled funcref did.
+    /// This closure's slot in its arity's dispatch table — the value its environment's special field holds. 1-based: slot 0 stays null so a `struct.new_default` shell's zeroed field dispatches into the null entry and traps, as the unfilled funcref did.
     index: i32,
     func_name: curios_wasm::FuncName,
-    clsr_type: curios_wasm::TypeName,
     envr_type: curios_wasm::TypeName,
     fields: Vec<(&'a EmissionValueName, curios_wasm::FieldName)>,
     params: HashMap<&'a EmissionValueName, curios_wasm::LocalName>,
@@ -80,7 +79,6 @@ impl<'a> ClsrData<'a> {
             name: clsr_name,
             index,
             func_name: curios_wasm::FuncName::from(format!("clsr/{}", clsr_name)),
-            clsr_type: curios_wasm::TypeName::from(format!("clsr/{}", clsr_name)),
             envr_type: curios_wasm::TypeName::from(format!("envr/{}", clsr_name)),
             fields: clsr
                 .fields
@@ -116,10 +114,6 @@ impl<'a> ClsrData<'a> {
 
     pub(crate) fn func_name(&self) -> curios_wasm::FuncName {
         self.func_name.clone()
-    }
-
-    pub(crate) fn clsr_type(&self) -> curios_wasm::TypeName {
-        self.clsr_type.clone()
     }
 
     pub(crate) fn envr_type(&self) -> curios_wasm::TypeName {
@@ -257,7 +251,7 @@ pub(crate) struct Table<'a> {
     special_field: curios_wasm::FieldName,
     special_local: curios_wasm::LocalName,
     special_label: curios_wasm::LabelName,
-    clsr_table: curios_wasm::TableName,
+    clsr_tables: BTreeMap<usize, curios_wasm::TableName>,
     flt_type: curios_wasm::TypeName,
     bin_rope_type: curios_wasm::TypeName,
     list_rope_type: curios_wasm::TypeName,
@@ -342,7 +336,16 @@ impl<'a> Table<'a> {
             special_field: curios_wasm::FieldName::from("!"),
             special_local: curios_wasm::LocalName::from("!"),
             special_label: curios_wasm::LabelName::from("!"),
-            clsr_table: curios_wasm::TableName::from("clsr"),
+            clsr_tables: module
+                .clsr_arities()
+                .into_iter()
+                .map(|arity| {
+                    (
+                        arity,
+                        curios_wasm::TableName::from(format!("clsr/{}", arity)),
+                    )
+                })
+                .collect(),
             flt_type: curios_wasm::TypeName::from("flt"),
             bin_rope_type: curios_wasm::TypeName::from("rope/bin"),
             list_rope_type: curios_wasm::TypeName::from("rope/list"),
@@ -448,15 +451,19 @@ impl<'a> Table<'a> {
                 .filter(|(_, data)| matches!(data, EmissionData::List(_) | EmissionData::Tuple(_)))
                 .map(|(const_name, _)| const_name)
                 .collect(),
-            // Table indices come from the module's ordered closure walk — the same order the element segment lists the bodies in — never from this map's iteration.
-            clsrs: module
-                .clsrs()
-                .iter()
-                .enumerate()
-                .map(|(index, (clsr_name, clsr))| {
-                    (clsr_name, ClsrData::new(clsr_name, clsr, index as i32 + 1))
-                })
-                .collect(),
+            // Table indices come from the module's ordered closure walk — the same order each arity's element segment lists its bodies in — never from this map's iteration. The counter is per arity because each arity dispatches through its own typed table.
+            clsrs: {
+                let mut next_index = BTreeMap::<usize, i32>::new();
+                module
+                    .clsrs()
+                    .iter()
+                    .map(|(clsr_name, clsr)| {
+                        let index = next_index.entry(clsr.params.len()).or_insert(0);
+                        *index += 1;
+                        (clsr_name, ClsrData::new(clsr_name, clsr, *index))
+                    })
+                    .collect()
+            },
             funcs: module
                 .funcs()
                 .iter()
@@ -477,9 +484,12 @@ impl<'a> Table<'a> {
         self.special_label.clone()
     }
 
-    /// The module-level funcref table holding every closure body, indexed by [`ClsrData::index`].
-    pub(crate) fn clsr_table(&self) -> curios_wasm::TableName {
-        self.clsr_table.clone()
+    /// The dispatch table holding every closure body of `arity`, indexed by [`ClsrData::index`]. Typed `(ref null $clsr/{arity})` rather than `funcref`, so a `call_indirect` expecting that type is statically known to match and the engine emits no runtime signature check at all.
+    pub(crate) fn clsr_table(&self, arity: usize) -> curios_wasm::TableName {
+        self.clsr_tables
+            .get(&arity)
+            .unwrap_or_else(|| panic!("`Table` lacks closure table for arity `{}`", arity))
+            .clone()
     }
 
     pub(crate) fn top_type(is_nullable: bool) -> curios_wasm::ValType {

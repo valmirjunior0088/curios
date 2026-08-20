@@ -395,7 +395,7 @@ fn the_per_character_walk_carries_its_scan_without_allocating() {
         "the byte is read once and shared by the arms, not re-read per arm",
     );
     assert_eq!(
-        in_fold("call_indirect $clsr $clsr/2"),
+        in_fold("call_indirect $clsr/2 $clsr/2"),
         2,
         "the user's step closure"
     );

@@ -1537,7 +1537,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             get(&f),
             field_get(&envr_type, &special_field),
             curios_wasm::Instr::CallIndirect {
-                table_name: self.table.clsr_table(),
+                table_name: self.table.clsr_table(1),
                 type_name: clsr_type,
             },
             curios_wasm::Instr::ArraySet {

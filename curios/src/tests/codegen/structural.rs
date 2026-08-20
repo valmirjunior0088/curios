@@ -242,7 +242,7 @@ pub(super) fn wat(source: &str) -> String {
 ///
 /// Every program's tail is a description, and a description erases to a zero-argument closure — so an effect boundary allocates a closure and forces it through an indirect call no matter how the *user's* code is written. Those carry the `$io/…` hint their thunk was minted with (`io/pure`, `io/bind`, `io/write`, …), which is what lets a claim about user code stay a claim about user code. A test that dropped the distinction would either fail on every program or assert nothing.
 ///
-/// **The separation is by what the line names, and that is why this is for allocations and nothing else.** An allocation names its own definition, so `struct.new $clsr/451$io/bind` carries the hint even though the description is built *inside* user code — which is exactly where it is built, so filtering by enclosing function would discard the distinction this exists to make. An indirect call names the table and the arity-keyed supertype instead: `call_indirect $clsr $clsr/0` identifies no callee, and a needle like that would silently keep every `Io` force while looking like it had excluded them. Those claims belong to [`user_functions_with`], where the enclosing function is the only thing left to separate on. The assertion below is what keeps the choice from being made by accident.
+/// **The separation is by what the line names, and that is why this is for allocations and nothing else.** An allocation names its own definition, so `struct.new $clsr/451$io/bind` carries the hint even though the description is built *inside* user code — which is exactly where it is built, so filtering by enclosing function would discard the distinction this exists to make. An indirect call names the arity's table and type instead: `call_indirect $clsr/0 $clsr/0` identifies no callee, and a needle like that would silently keep every `Io` force while looking like it had excluded them. Those claims belong to [`user_functions_with`], where the enclosing function is the only thing left to separate on. The assertion below is what keeps the choice from being made by accident.
 pub(super) fn user_allocations<'a>(wat: &'a str, needle: &str) -> Vec<&'a str> {
     assert!(
         needle.starts_with("struct.new") || needle.starts_with("array.new"),
@@ -692,18 +692,18 @@ fn trees_leaf_rides_its_payload() {
 
 // -- general corpus ---------------------------------------------------------
 
-/// G1: a genuinely unknown higher-order call retains the closure ABI and dispatches through the shared funcref table. `f` is selected at runtime, so it cannot be devirtualized: the module declares `$clsr/…` closure types, materializes the branches as environments carrying their body's `i32` table index, and dispatches through `call_indirect`.
+/// G1: a genuinely unknown higher-order call retains the closure ABI and dispatches through its arity's typed table. `f` is selected at runtime, so it cannot be devirtualized: the module declares `$clsr/…` closure types, materializes the branches as environments carrying their body's `i32` table index, and dispatches through `call_indirect`.
 #[test]
 fn unknown_higher_order_call_uses_closure_abi_and_call_indirect() {
     let wat = wat(HIGHER_ORDER);
     assert!(
-        wat.contains("call_indirect $clsr "),
-        "the unknown call dispatches through the closure table"
+        wat.contains("call_indirect $clsr/"),
+        "the unknown call dispatches through its arity's closure table"
     );
     assert!(wat.contains("$clsr/"), "the closure ABI is retained");
 }
 
-/// The closure ABI's code field is an `i32` table index, and nothing in emitted code touches a funcref. Construction writes `i32.const`, dispatch reads the field into `call_indirect`, and the table plus one active element segment (offset 1 — slot 0 stays null for the shell trap) carry every closure body. `ref.func` and `call_ref` are absent from every corpus module, which is the whole point: the per-store funcref-to-GC-heap intern the funcref field paid on every construction has no site left to fire on.
+/// The closure ABI's code field is an `i32` table index, and nothing in *function code* touches a funcref. Construction writes `i32.const`, dispatch reads the field into `call_indirect`, and one typed table per arity — `(ref null $clsr/N)`, filled by an active element segment at offset 1, slot 0 null for the shell trap — carries that arity's bodies. The element type is what satisfies the `call_indirect` signature check statically, so the per-dispatch runtime subtype check has no site left to fire on; the only `ref.func`s in a module are the segments' items, and `call_ref` is absent everywhere.
 #[test]
 fn closures_carry_their_code_as_a_table_index() {
     for (label, source) in [
@@ -719,9 +719,10 @@ fn closures_carry_their_code_as_a_table_index() {
         ("looped-pick", LOOPED_PICK),
     ] {
         let wat = wat(source);
-        assert!(
-            !wat.contains("ref.func"),
-            "{label}: no funcref is materialized anywhere",
+        assert_eq!(
+            wat.matches("ref.func").count(),
+            wat.matches("(item ref.func").count(),
+            "{label}: every funcref materialization is an element-segment item",
         );
         assert!(
             !wat.contains("call_ref"),
@@ -735,12 +736,12 @@ fn closures_carry_their_code_as_a_table_index() {
         "the environment's code field is an ordinary i32",
     );
     assert!(
-        wat.contains("(table $clsr i32 ") && wat.contains("(ref null func)"),
-        "one shared funcref table holds the closure bodies",
+        wat.contains("(table $clsr/") && wat.contains("(ref null $clsr/"),
+        "each arity's typed table holds its closure bodies",
     );
     assert!(
-        wat.contains("(elem $clsr (table $clsr) (offset i32.const 1) func"),
-        "one active segment fills it from slot 1, leaving slot 0 null",
+        wat.contains("(offset i32.const 1) (ref $clsr/"),
+        "an active typed segment fills each table from slot 1, leaving slot 0 null",
     );
 }
 
@@ -1115,10 +1116,11 @@ fn closure_index_dispatch_measurements() {
         let wat = wat(source);
         let slots = wat
             .lines()
-            .find_map(|line| line.trim().strip_prefix("(table $clsr i32 "))
-            .and_then(|rest| rest.split_whitespace().next().map(str::to_string))
-            .unwrap_or_else(|| "none".to_string());
-        let dispatches = wat.matches("call_indirect $clsr ").count();
+            .filter_map(|line| line.trim().strip_prefix("(table $clsr/"))
+            .filter_map(|rest| rest.split_whitespace().nth(2))
+            .filter_map(|min| min.parse::<usize>().ok())
+            .sum::<usize>();
+        let dispatches = wat.matches("call_indirect $clsr/").count();
         let environments = wat.matches("struct.new $envr/").count();
         // The constant-closure annex's admission census: environments materialized once at instantiation, each a construction the swap moved out of function code.
         let interned = functions(&wat)

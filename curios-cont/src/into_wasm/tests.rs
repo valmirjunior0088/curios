@@ -566,14 +566,17 @@ fn indirect_apply() -> CpsModule {
 fn unknown_callee_dispatches_through_the_closure_table() {
     let wat = wat(&indirect_apply());
 
-    // The environment's code field is an `i32` table index, so construction writes a constant and dispatch reads it back into `call_indirect` — no funcref is ever materialized in function code.
-    assert_contains(&wat, "call_indirect $clsr ");
+    // The environment's code field is an `i32` table index, so construction writes a constant and dispatch reads it back into `call_indirect` — no funcref is ever materialized in function code. The one `ref.func` in the module is the element segment's item.
+    assert_contains(&wat, "call_indirect $clsr/0 ");
     assert_absent(&wat, "call_ref");
-    assert_absent(&wat, "ref.func");
+    assert_eq!(count(&wat, "ref.func"), 1, "ref.func outside the segment");
 
-    // One shared funcref table sized for every closure body plus the null slot 0, filled by one active segment at offset 1 in definition order.
-    assert_contains(&wat, "(table $clsr i32 2 2 (ref null func))");
-    assert_contains(&wat, "(elem $clsr (table $clsr) (offset i32.const 1) func");
+    // One table per dispatch arity, typed at the arity's own final func type so the `call_indirect` signature check is satisfied statically, sized for that arity's bodies plus the null slot 0, and filled by one active typed-expression segment at offset 1 in definition order.
+    assert_contains(&wat, "(table $clsr/0 i32 2 2 (ref null $clsr/0))");
+    assert_contains(
+        &wat,
+        "(elem $clsr/0 (table $clsr/0) (offset i32.const 1) (ref $clsr/0)",
+    );
 }
 
 #[test]

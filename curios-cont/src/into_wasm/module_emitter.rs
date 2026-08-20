@@ -309,40 +309,18 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
+    /// One final func type per closure arity: every body of that arity is declared at it, and its arity's table is typed by it, so the `call_indirect` signature check is satisfied statically rather than at runtime.
     fn emit_clsr_arity_types(&mut self) {
         for (arity, type_name) in self.table.clsr_types() {
             self.module.add_type(
                 type_name,
                 curios_wasm::SubType {
-                    is_final: false,
+                    is_final: true,
                     super_types: vec![],
                     comp_type: curios_wasm::CompType::Func(curios_wasm::FuncType {
                         inputs: curios_wasm::ResultType::from(
                             iter::once(Table::top_type(false))
                                 .chain((0..arity).map(|_| Table::top_type(false))),
-                        ),
-                        outputs: curios_wasm::ResultType::from([Table::top_type(false)]),
-                    }),
-                },
-            );
-        }
-    }
-
-    fn emit_clsr_named_types(&mut self, module: &'a EmissionModule) {
-        for data in module
-            .clsrs()
-            .iter()
-            .map(|(name, _)| self.table.find_clsr(name))
-        {
-            self.module.add_type(
-                data.clsr_type(),
-                curios_wasm::SubType {
-                    is_final: true,
-                    super_types: vec![self.table.find_clsr_type(data.arity())],
-                    comp_type: curios_wasm::CompType::Func(curios_wasm::FuncType {
-                        inputs: curios_wasm::ResultType::from(
-                            iter::once(Table::top_type(false))
-                                .chain((0..data.arity()).map(|_| Table::top_type(false))),
                         ),
                         outputs: curios_wasm::ResultType::from([Table::top_type(false)]),
                     }),
@@ -533,7 +511,10 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         self.module.add_func(
             self.table.find_clsr(name).func_name(),
             curios_wasm::Func {
-                type_name: self.table.find_clsr(name).clsr_type(),
+                // Declared at the arity type itself, not a named subtype: the body's `ref.func` then types as `(ref $clsr/N)`, which is exactly what its arity's table holds.
+                type_name: self
+                    .table
+                    .find_clsr_type(self.table.find_clsr(name).arity()),
                 params: iter::once(self.table.special_local())
                     .chain(clsr.params.iter().map(|param| {
                         self.table
@@ -548,54 +529,65 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         );
     }
 
-    /// The shared funcref table every closure dispatches through: one table, filled by one active element segment in the module's ordered closure walk, so [`ClsrData::index`](super::ClsrData::index) is reproducible. Slot 0 stays null — a shell's zeroed index field must trap, and a funcref table's uninitialized entry does exactly that under `call_indirect`. The table exists whenever the module speaks the closure vocabulary at all, because an indirect call site can survive the inlining-away of every closure definition of its arity.
-    fn emit_clsr_table(&mut self, module: &'a EmissionModule) {
-        if self.table.clsr_types().next().is_none() {
-            return;
-        }
+    /// One dispatch table per closure arity, typed `(ref null $clsr/N)` and filled by one active element segment in the module's ordered closure walk, so [`ClsrData::index`](super::ClsrData::index) is reproducible. The element type is what deletes the `call_indirect` signature check: the call site expects exactly the table's element type, so the engine proves the match statically instead of comparing type indices per dispatch. Slot 0 stays null — a shell's zeroed index field must trap, and a null entry does exactly that under `call_indirect`. A table exists for every arity the module dispatches at, because an indirect call site can survive the inlining-away of every closure definition of its arity.
+    fn emit_clsr_tables(&mut self, module: &'a EmissionModule) {
+        for (arity, type_name) in self.table.clsr_types() {
+            let exprs: Vec<curios_wasm::Expr> = module
+                .clsrs()
+                .iter()
+                .filter(|(_, clsr)| clsr.params.len() == arity)
+                .map(|(name, _)| {
+                    let mut expr: curios_wasm::Expr = Default::default();
+                    expr.push(curios_wasm::Instr::RefFunc {
+                        func_name: self.table.find_clsr(name).func_name(),
+                    });
+                    expr
+                })
+                .collect();
 
-        let func_names: Vec<_> = module
-            .clsrs()
-            .iter()
-            .map(|(name, _)| self.table.find_clsr(name).func_name())
-            .collect();
-
-        let slots = func_names.len() as u64 + 1;
-        self.module.add_table(
-            self.table.clsr_table(),
-            curios_wasm::Table {
-                table_type: curios_wasm::TableType {
-                    address_type: curios_wasm::AddressType::I32,
-                    ref_type: curios_wasm::RefType {
-                        is_nullable: true,
-                        heap_type: curios_wasm::HeapType::Abstract(curios_wasm::AbsHeapType::Func),
+            let slots = exprs.len() as u64 + 1;
+            self.module.add_table(
+                self.table.clsr_table(arity),
+                curios_wasm::Table {
+                    table_type: curios_wasm::TableType {
+                        address_type: curios_wasm::AddressType::I32,
+                        ref_type: curios_wasm::RefType {
+                            is_nullable: true,
+                            heap_type: curios_wasm::HeapType::Concrete(type_name.clone()),
+                        },
+                        limits: curios_wasm::Limits {
+                            min: slots,
+                            max: Some(slots),
+                        },
                     },
-                    limits: curios_wasm::Limits {
-                        min: slots,
-                        max: Some(slots),
+                    expr: None,
+                },
+            );
+
+            if exprs.is_empty() {
+                continue;
+            }
+
+            let mut offset: curios_wasm::Expr = Default::default();
+            offset.push(curios_wasm::Instr::I32Const { value: 1 });
+
+            self.module.add_elem(
+                curios_wasm::ElemName::from(format!("clsr/{}", arity)),
+                curios_wasm::ElemSegment {
+                    mode: curios_wasm::ElemMode::Active {
+                        table_name: self.table.clsr_table(arity),
+                        offset,
                     },
+                    list: curios_wasm::ElemList::Exprs(
+                        curios_wasm::RefType {
+                            is_nullable: false,
+                            heap_type: curios_wasm::HeapType::Concrete(type_name),
+                        },
+                        exprs,
+                    ),
                 },
-                expr: None,
-            },
-        );
-
-        if func_names.is_empty() {
-            return;
+            );
         }
-
-        let mut offset: curios_wasm::Expr = Default::default();
-        offset.push(curios_wasm::Instr::I32Const { value: 1 });
-
-        self.module.add_elem(
-            curios_wasm::ElemName::from("clsr"),
-            curios_wasm::ElemSegment {
-                mode: curios_wasm::ElemMode::Active {
-                    table_name: self.table.clsr_table(),
-                    offset,
-                },
-                list: curios_wasm::ElemList::Funcs(func_names),
-            },
-        );
     }
 
     fn emit_let_func(&mut self, name: &'a EmissionFunctionName, func: &'a EmissionFunction) {
@@ -753,7 +745,6 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         self.emit_cell_type();
         self.emit_tuple_types();
         self.emit_clsr_arity_types();
-        self.emit_clsr_named_types(module);
         self.emit_envr_arity_types();
         self.emit_clsr_types(module);
         self.emit_func_types();
@@ -766,7 +757,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             self.emit_let_clsr(name, clsr);
         }
 
-        self.emit_clsr_table(module);
+        self.emit_clsr_tables(module);
 
         for (name, func) in module.funcs() {
             self.emit_let_func(name, func);

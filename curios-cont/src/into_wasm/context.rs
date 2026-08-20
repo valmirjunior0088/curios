@@ -641,12 +641,12 @@ impl<'a, 'b> Context<'a, 'b> {
 
         if self.is_resume(resume) {
             output.push(curios_wasm::Instr::ReturnCallIndirect {
-                table_name: self.table().clsr_table(),
+                table_name: self.table().clsr_table(arity),
                 type_name: clsr_type,
             });
         } else {
             output.push(curios_wasm::Instr::CallIndirect {
-                table_name: self.table().clsr_table(),
+                table_name: self.table().clsr_table(arity),
                 type_name: clsr_type,
             });
 
