@@ -1,8 +1,8 @@
 use /std/{Nat, Bool, Bits, Str, Order, Eq, False, True, Eql, Cmp, Add, Sub, Mul, Show, Ord};
 use /std/Bool/{false_neq_true};
 use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
-use /std/BigNat/{BigNat, combine, cong_combine, dbl, dbl_raw, eq, maj3, of_bits, of_nat, refl_at,
-    trim, trim_is_trimmed, trim_of_trimmed, xor3, mod add};
+use /std/BigNat/{BigNat, combine, cong_combine, dbl, dbl_raw, eq, is_trimmed_of_canonical, maj3,
+    of_bits, of_nat, refl_at, trim, trim_of_trimmed, xor3, mod add};
 
 pub rec raw(x: Bits, y: Bits) -> Bits =
     match x
@@ -22,9 +22,6 @@ pub let small(a: BigNat, c: Nat) -> BigNat =
 
 let cong_trim(@s: Bits, @t: Bits, p: Eq(s, t)) -> Eq(trim(s), trim(t)) =
     Eq/cong(trim, p);
-
-let trim_idem(w: Bits) -> Eq(trim(trim(w)), trim(w)) =
-    trim_of_trimmed(trim(w), trim_is_trimmed(w));
 
 let of_bits_eq(u: Bits, v: Bits, p: Eq(trim(u), trim(v))) -> Eq(of_bits(u), of_bits(v)) =
     eq(of_bits(u), of_bits(v), p);
@@ -352,23 +349,29 @@ pub let distrib_r(
 let cong_dbl(@s: BigNat, @t: BigNat, p: Eq(s, t)) -> Eq(dbl(s), dbl(t)) =
     Eq/cong(dbl, p);
 
+-- `dbl` answers its bits as `combine(false, ..)` rather than through `of_bits`, so the ladder laws bridge each `trim(dbl_raw ..)` the raw calculus produces back to that spelling: the trim of a canonical word is itself.
+let trim_dbl_raw(x: BigNat) -> Eq(trim(dbl_raw(x.bits)), combine(false, x.bits)) =
+    cong_combine(false, trim_of_trimmed(x.bits, is_trimmed_of_canonical(x.bits, x.canonical)));
+
 let dbl_add(a: BigNat, b: BigNat) -> Eq(dbl(add/add(a, b)), add/add(dbl(a), dbl(b))) =
-    of_bits_eq(
-        dbl_raw(trim(add/raw(a.bits, b.bits, false))),
-        add/raw(trim(dbl_raw(a.bits)), trim(dbl_raw(b.bits)), false),
+    eq(
+        dbl(add/add(a, b)),
+        add/add(dbl(a), dbl(b)),
         Eq/trans(
-            cong_combine(false, trim_idem(add/raw(a.bits, b.bits, false))),
+            Eq/sym(trim_add_raw_trim_l(dbl_raw(a.bits), dbl_raw(b.bits), false)),
             Eq/trans(
-                Eq/sym(trim_add_raw_trim_l(dbl_raw(a.bits), dbl_raw(b.bits), false)),
-                Eq/sym(trim_add_raw_trim_r(trim(dbl_raw(a.bits)), dbl_raw(b.bits), false)))));
+                Eq/sym(trim_add_raw_trim_r(trim(dbl_raw(a.bits)), dbl_raw(b.bits), false)),
+                Eq/trans(
+                    Eq/cong((w) => trim(add/raw(w, trim(dbl_raw(b.bits)), false)), trim_dbl_raw(a)),
+                    Eq/cong((w) => trim(add/raw(combine(false, a.bits), w, false)), trim_dbl_raw(b))))));
 
 let dbl_mul_l(a: BigNat, b: BigNat) -> Eq(dbl(mul(a, b)), mul(dbl(a), b)) =
-    of_bits_eq(
-        dbl_raw(trim(raw(a.bits, b.bits))),
-        raw(trim(dbl_raw(a.bits)), b.bits),
+    eq(
+        dbl(mul(a, b)),
+        mul(dbl(a), b),
         Eq/trans(
-            cong_combine(false, trim_idem(raw(a.bits, b.bits))),
-            Eq/sym(trim_raw_trim_l(dbl_raw(a.bits), b.bits))));
+            Eq/sym(trim_raw_trim_l(dbl_raw(a.bits), b.bits)),
+            Eq/cong((w) => trim(raw(w, b.bits)), trim_dbl_raw(a))));
 
 pub let pow2_add(
     a: BigNat,

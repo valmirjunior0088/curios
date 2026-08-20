@@ -99,20 +99,30 @@ pub let zero: BigNat =
 pub let is_zero(a: BigNat) -> Bool =
     match view(a) | zero() => true | succ(_, _) => false end;
 
+-- The raw double survives `dbl`'s restatement as `mul`'s proof vocabulary: the ladder laws relate `dbl` to the raw ripple through this spelling.
 let dbl_raw(x: Bits) -> Bits =
     b[0, ..x];
 
-let dbl_succ_raw(x: Bits) -> Bits =
-    b[1, ..x];
-
+-- `combine` already answers the one case a doubling can untrim — a false head over an empty word — so the smart constructors and `of_nat` take the `of_trimmed_bits` door with `combine_is_trimmed` as certificate, costing one head test where `of_bits` walks the whole word.
 let dbl(a: BigNat) -> BigNat =
-    of_bits(dbl_raw(a.bits));
+    of_trimmed_bits(
+        combine(false, a.bits),
+        combine_is_trimmed(false, a.bits, is_trimmed_of_canonical(a.bits, a.canonical)));
 
 let dbl_succ(a: BigNat) -> BigNat =
-    of_bits(dbl_succ_raw(a.bits));
+    of_trimmed_bits(
+        combine(true, a.bits),
+        combine_is_trimmed(true, a.bits, is_trimmed_of_canonical(a.bits, a.canonical)));
 
 pub rec of_nat(n: Nat) -> BigNat =
-    match n == 0 | true => zero | false => of_bits(combine(n % 2 == 1, of_nat(n / 2).bits)) end;
+    match n == 0
+    | true => zero
+    | false =>
+        let tail = of_nat(n / 2);
+        of_trimmed_bits(
+            combine(n % 2 == 1, tail.bits),
+            combine_is_trimmed(n % 2 == 1, tail.bits, is_trimmed_of_canonical(tail.bits, tail.canonical)))
+    end;
 
 pub let xor3(a: Bool, b: Bool, c: Bool) -> Bool =
     match a
