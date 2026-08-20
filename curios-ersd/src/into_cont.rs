@@ -1166,7 +1166,7 @@ impl Lowerer<'_> {
 
         let immediate_target = match arms.iter().find(|arm| arm.constructor == immediate) {
             Some(arm) => {
-                let body = self.lower_collapsed_arm(arm, scrutinee.clone(), join);
+                let body = self.lower_immediate_arm(arm, scrutinee.clone(), join);
                 let continuation = self.module.reserve_continuation();
                 self.module.define_continuation(
                     continuation,
@@ -1270,7 +1270,9 @@ impl Lowerer<'_> {
         })
     }
 
-    /// One bare-payload arm body: a lone payload aliases the scrutinee, which *is* the payload under both the collapsed and the immediate encodings; a wider row projects untagged fields, which only the collapsed encoding produces — an immediate-family arm always has exactly one binding, so its calls never reach the projection branch. Returns a body rather than a continuation because the collapsed caller inlines it with no dispatch to target it; the immediate-family caller wraps it itself.
+    /// One collapsed arm body: a lone payload aliases the scrutinee, which *is* the payload under the collapsed encoding; a wider row projects untagged fields. Returns a body rather than a continuation because the caller inlines it with no dispatch to target it.
+    ///
+    /// The aliasing is sound *here* and only here. A collapsed family has one constructor, so the scrutinee is the payload on every path there is. The immediate encoding looks like the same shape and is not — its scrutinee is a scalar on one path and a tuple on the other — so it binds through [`lower_immediate_arm`] instead. Sharing this function with it miscompiled a loop that did arithmetic on the payload; see [`curios_cont::CpsIntrinsicOp::ImmediateGet`].
     fn lower_collapsed_arm(
         &mut self,
         arm: &VariantArm,
@@ -1296,6 +1298,28 @@ impl Lowerer<'_> {
             });
         }
         body
+    }
+
+    /// One immediate-encoded arm body: the payload is the scrutinee's value, bound through [`curios_cont::CpsIntrinsicOp::ImmediateGet`] rather than aliased to it, so it has a definition of its own for the representation analysis to read a carrier off.
+    ///
+    /// Exactly one binding, always: the encoding admits only a unary constructor, so there is no wider row to project and a different shape is this lowering's own contract broken rather than a program's fault.
+    fn lower_immediate_arm(
+        &mut self,
+        arm: &VariantArm,
+        scrutinee: curios_cont::CpsAtom,
+        join: curios_cont::CpsContId,
+    ) -> curios_cont::CpsNodeId {
+        let [binder] = arm.bindings.as_slice() else {
+            panic!("an immediate constructor binds exactly its one payload")
+        };
+        let bound = self.bind_value(*binder);
+        let body = self.lower_block(arm.block, join);
+        self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
+            result: bound,
+            op: curios_cont::CpsIntrinsicOp::ImmediateGet,
+            args: vec![scrutinee],
+            next: body,
+        })
     }
 
     fn lower_variant_arm(

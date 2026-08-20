@@ -152,6 +152,10 @@ pub enum CpsIntrinsicOp {
     WindowExtent,
     /// Whether the operand is an unboxed scalar (1) or an aggregate reference (0) — the dispatch of a variant encoding whose one scalar-payload constructor rides bare. A representation question, which is why it exists in this crate's vocabulary and not in Ersd: the lowering that chose the encoding is the only producer, and it guarantees the two answers are disjoint over every value the test can reach.
     IsImmediate,
+    /// `(value) -> value`: the bare payload of the constructor [`CpsIntrinsicOp::IsImmediate`] just answered for, passed through unchanged.
+    ///
+    /// Representationally the identity, and that is the whole point: it exists so the payload has a *definition* instead of being aliased to the scrutinee. The representation analysis fixes a value's carrier from whatever produced it, so a payload with no producer of its own carries its uses' raw demand back onto the scrutinee — which on the boxed path is a tuple, not a scalar. That is not a missed optimization but a miscompile: an arm's `NatAdd` demanded the raw carrier, the demand reached the scrutinee's own definition, and the emitter coerced a `struct.new` with a `ref.cast` to `i31`. Answering `Repr::Ref` makes this definition's offer `Never`, so the demand coerces at the use where it belongs and the scrutinee is never demanded raw.
+    ImmediateGet,
 }
 
 /// The representation a value is read or produced at — the carrier, not the type.
@@ -197,8 +201,8 @@ impl CpsIntrinsicOp {
             (BinConcat(grain, _), _) | (BinEql(grain) | BinLen(grain), _) => Repr::Bin(*grain),
             (FltOfLeBytes, _) => Repr::Bin(Grain::X),
             (WindowExtent, _) => Repr::Nat,
-            // The whole point of the test is to look at the reference uncoerced.
-            (IsImmediate, _) => Repr::Ref,
+            // The whole point of the test is to look at the reference uncoerced, and the read that follows it hands that same reference on.
+            (IsImmediate | ImmediateGet, _) => Repr::Ref,
             (ListConcat(_) | ListLen | ListSettle | ListFlat(_), _) => Repr::List,
             (TplGet(index), _) => Repr::Tpl(index + 1),
 
@@ -259,8 +263,8 @@ impl CpsIntrinsicOp {
             ListSlice | ListRest | ListAppend | ListConcat(_) | ListSettle | ListFlat(_) => {
                 Repr::List
             }
-            // A list read and a tuple projection both yield whatever was stored, uninterpreted.
-            ListGet | TplGet(_) => Repr::Ref,
+            // A list read, a tuple projection and an immediate arm's payload all yield whatever was stored, uninterpreted.
+            ListGet | TplGet(_) | ImmediateGet => Repr::Ref,
         }
     }
 }
@@ -301,7 +305,8 @@ impl CpsIntrinsicOp {
             | Self::BinLen(_)
             | Self::ListLen
             | Self::TplGet(_)
-            | Self::IsImmediate => 1,
+            | Self::IsImmediate
+            | Self::ImmediateGet => 1,
             Self::BinSlice(_) | Self::ListSlice | Self::WindowExtent => 3,
             Self::BinConcat(_, arity)
             | Self::ListConcat(arity)
@@ -415,7 +420,8 @@ impl CpsIntrinsicOp {
             | Self::BinLen(_)
             | Self::BinEql(_)
             | Self::ListLen
-            | Self::IsImmediate => CpsIntrinsicEffect::Total,
+            | Self::IsImmediate
+            | Self::ImmediateGet => CpsIntrinsicEffect::Total,
         }
     }
 

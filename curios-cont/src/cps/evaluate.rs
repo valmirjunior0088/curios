@@ -114,6 +114,8 @@ pub(super) fn evaluate(op: CpsIntrinsicOp, args: &[CpsAtom]) -> Option<CpsLitera
             CpsLiteral::Nat(_) | CpsLiteral::Int(_) => 1,
             CpsLiteral::Flt(_) | CpsLiteral::Bin(_, _) => 0,
         })),
+        // The identity on the value, so a literal operand is the answer. Reached only when the dispatch above already folded to the immediate side.
+        CpsIntrinsicOp::ImmediateGet => Some(literals[0].clone()),
         _ => None,
     }
 }

@@ -750,3 +750,48 @@ fn a_matched_payload_still_refuses_a_false_equation() {
     let error = error(source);
     assert!(error.contains("type mismatch"), "unexpected error: {error}");
 }
+
+/// An immediate-encoded arm binds its payload through a read of its own rather than aliasing the scrutinee.
+///
+/// `stop(Nat)` beside `cons(Nat, L)` takes the `Immediate` family encoding, so `stop`'s payload rides bare and its arm's binder used to *be* the scrutinee. `total`'s `acc + z` then demanded a raw carrier of the scrutinee itself; the representation analysis admitted it because a continuation parameter has no producer to contradict it, carried the demand back along the loop edge to `build`'s accumulator, and the emitter coerced a freshly built `struct.new $tpl/3` with `ref.cast (ref i31)` — a trap for every input above zero, where zero alone answered correctly because the list is then just the bare `stop`.
+///
+/// The depth is host-tainted deliberately: a closed program folds at compile time and never reaches the emitter, so the fixture would pass while the bug stood.
+#[test]
+fn an_immediate_arm_payload_survives_arithmetic_in_a_loop() {
+    let (system, io) = MockHost::builder().stdin_lines(["A"]).build();
+    run_text(
+        r#"
+        use /std/{Handle, Byte, Bytes, Nat, Option, Str};
+
+        induct L : Type
+        | stop(Nat)
+        | cons(Nat, L)
+        end
+
+        rec build(n : Nat, acc : L) -> L =
+            match n : (_) => L
+            | 0 => acc
+            | m + 1; ih => build(m, L/cons(m, acc))
+            end;
+
+        rec total(c : L, acc : Nat) -> Nat =
+            match c : (_) => Nat
+            | stop(z) => acc + z
+            | cons(v, tail) => total(tail, acc + v)
+            end;
+
+        let bytes = match Handle/read(Handle/stdin, 16)! : (_) => Bytes
+            | chunk(b) => b
+            | eof() => x[]
+            | error(_) => x[]
+            end;
+        let n = Nat/sub(Byte/to_nat(Option/unwrap_or(Bytes/try_get(bytes, 0), 0)), 60);
+        /std/print(Nat/to_str(total(build(n, L/stop(n)), 0)))
+        "#,
+        system,
+    )
+    .expect("expected result");
+
+    // `A` is 65, so the depth is 5: the cons cells carry 0..4 and `stop` carries 5.
+    assert_eq!(io.output(), b"15");
+}

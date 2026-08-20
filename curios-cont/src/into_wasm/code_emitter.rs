@@ -1737,6 +1737,11 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 });
                 self.emit_store(dest, &op.result_repr());
             }
+            // The identity on the reference — it computes nothing, and exists so the payload has a definition of its own rather than aliasing the scrutinee. `LoadAs::Null` is what `Repr::Ref` resolves to: the value is handed on exactly as stored, and each use coerces at its own site.
+            CpsIntrinsicOp::ImmediateGet => {
+                self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::Null));
+                self.emit_store(dest, &op.result_repr());
+            }
         }
     }
 }

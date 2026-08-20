@@ -268,6 +268,8 @@ fn an_immediate_constructor_rides_its_payload() {
     assert!(printed.contains("IsImmediate"), "{printed}");
     assert!(!printed.contains("TplGet(0)"), "{printed}");
     assert!(printed.contains("TplGet(1)"), "{printed}");
+    // The immediate arm's payload is *read*, not aliased to the scrutinee. Without this node the binder and the scrutinee are one value, and a raw demand from the arm reaches the scrutinee's own definition — which on the boxed path built a tuple. See `an_immediate_arm_payload_survives_arithmetic_in_a_loop` in `curios`'s matching tests for what that emitted.
+    assert!(printed.contains("ImmediateGet"), "{printed}");
 }
 
 #[test]
