@@ -87,6 +87,22 @@ fn timed(cwasm: &[u8], n: u64) -> f64 {
 /// The qp reshape was built in full and its list-half integration proven live (four `ListFlat`, five `ListSettle` in a map program's lowering), then measured: loop-built windows 5918 ns/insert, view windows with settled flat children **1802** — against **1353** for the crit-bit trie it would replace. Step 4 had rewritten the calculus the reshape was priced under: an immediate key's bit test costs a few register ops, so seventeen cheap levels beat four or five levels each paying an O(width) child-copy per rebuild on an all-insert workload. The crit-bit shape stands, the `Key` field is `to_bytes` now, and the census's store-safety fixpoint — found by the experiment, kept on its fixtures — stays. The campaign's closing figure is step 4's: **~1353 ns/insert, 6.1× off the 8320 baseline**.
 ///
 /// What the figure decided: the read protocol's *call* component is not the spines wall. The decomposition's ~60% read share must be carried by what the calls sat beside — the serial dependent fork loads and the walk structure — which halving the call count does not touch. Step 1 stays landed for the invariant's location and for the leaf-rooted walks it does serve (literals, `List/map` results, step 2's flat builds); the cached-node call-site arm was dropped as unresolvable benefit against ~15 instructions per site, to be revisited only if a cached-node-dominated read path is ever hot — none is expected, since step 2 makes fork children leaves. The campaign's weight shifts where the spec already put its centerpiece: the register key (step 4) deletes the loads themselves, and the width reshape (step 5) deletes levels of them.
+/// # The single walk, 2026-08-20
+///
+/// A later campaign's first step, and the first change to `/std/Map` itself since the shape was settled: `insert1`/`remove1` descend once and decide on the way back up, replacing the `lookup` descent plus the `insert_node`/`remove_node` descent. See `documentation/roadmap/map-distance-spec.md`.
+///
+/// **Measured like-for-like on one box in one sitting, rather than against the 1353 above.** That figure was taken at a different sitting, and this machine was reading bimodally on the day — two clusters about 10% apart, in *both* arms — so comparing across sittings would have priced the machine as much as the change. Seven readings each, same binary shape, alternating nothing else:
+///
+/// | Variant | Readings (ns/insert) | Median | Min |
+/// | --- | --- | --- | --- |
+/// | two walks (`HEAD` before this step) | 1267, 1281, 1287, 1309, 1318, 1360, 1421 | 1309 | 1267 |
+/// | one walk | 924, 941, 942, 951, 1047, 1058, 1133 | 951 | 924 |
+///
+/// **−27% on the medians and −27% on the minima** — the same answer from both ends of a noisy distribution, which is what makes it reportable. The specification predicted −30%; a standalone reimplementation of the same shape, measured separately on the same box, read −31%. Take −27% as the conservative figure and the agreement across three methods as the evidence.
+///
+/// The baseline median of 1309 sits within 3.3% of the 1353 recorded above, so this box is comparable to the one that took the campaign's closing figure; the bimodality is the day's, not a drift in the workload.
+///
+/// What the figure decided: the walk was the win the specification claimed, and the remaining ~950 ns/insert is what the next decomposition has to explain. Neither of that specification's compiler-side steps — a two-way branch, exact tuple reads — is priced against a decomposition yet, and together they were predicted to reach only about 16% of the insert.
 #[test]
 #[ignore = "measurement: reports timings rather than asserting"]
 fn map_wall_spines_slope() {

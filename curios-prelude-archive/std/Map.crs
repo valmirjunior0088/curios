@@ -73,47 +73,69 @@ rec lookup(@V: Type, t: Node(V), k: Bytes) -> {Bytes, V} =
     | fork(c, z, o) => match bit(k, c) | 0 => lookup(z, k) | _ => lookup(o, k) end
     end;
 
-rec replace(@V: Type, t: Node(V), k: Bytes, v: V) -> Node(V) =
-    match t
-    | leaf(k0, v0) => Node/leaf(k, v)
-    | fork(c, z, o) =>
-        match bit(k, c)
-        | 0 => Node/fork(c, replace(z, k, v), o)
-        | _ => Node/fork(c, z, replace(o, k, v))
-        end
-    end;
-
 let wedge(@V: Type, c: Nat, b: Nat, k: Bytes, v: V, t: Node(V)) -> Node(V) =
     match b | 0 => Node/fork(c, Node/leaf(k, v), t) | _ => Node/fork(c, t, Node/leaf(k, v)) end;
 
-rec insert_node(@V: Type, t: Node(V), c: Nat, b: Nat, k: Bytes, v: V) -> Node(V) =
+-- One descent per insert, deciding on the way back up. `insert1` answers the rebuilt subtree, a crit position, and one of three states: 0 placed, 1 pending, 2 replaced. The state is what keeps `size` right, and `pending` is what lets a single walk find an attachment point the descent could not have known.
+--
+-- Why the return side can decide it: the leaf reached by following `k`'s bits sits in the branch matching `k` at every fork on the path, so it agrees with `k` at every crit there, and `c = crit(k, k0)` is therefore never equal to a path crit. Crits increase strictly downward, so the wedge point — the shallowest fork whose crit exceeds `c` — is the child of the *deepest* fork whose crit is below `c`, and climbing from the leaf reaches that fork before any other with a crit below `c`. A fork still pending returns its own node untouched, so nothing above the wedge point is rebuilt and nothing below it was.
+--
+-- This was the retired map-wall campaign's step 3, held back there because the qp reshape would have replaced the crit descent outright. That reshape was built, measured and declined, so nothing supersedes it any more.
+rec insert1(@V: Type, t: Node(V), k: Bytes, v: V) -> {Node(V), Nat, Nat} =
     match t
-    | leaf(k0, v0) => wedge(c, b, k, v, Node/leaf(k0, v0))
+    | leaf(k0, v0) =>
+        match Bytes/eql(k0, k)
+        | true => (Node/leaf(k, v), 0, 2)
+        | false => (Node/leaf(k0, v0), crit(k, k0), 1)
+        end
     | fork(tc, z, o) =>
-        match tc < c
-        | true =>
-            match bit(k, tc)
-            | 0 => Node/fork(tc, insert_node(z, c, b, k, v), o)
-            | _ => Node/fork(tc, z, insert_node(o, c, b, k, v))
+        match bit(k, tc)
+        | 0 =>
+            let (z2, c, st) = insert1(z, k, v);
+            match st
+            | 1 =>
+                match tc < c
+                | true => (Node/fork(tc, wedge(c, bit(k, c), k, v, z2), o), 0, 0)
+                | false => (t, c, 1)
+                end
+            | _ => (Node/fork(tc, z2, o), 0, st)
             end
-        | false => wedge(c, b, k, v, Node/fork(tc, z, o))
+        | _ =>
+            let (o2, c, st) = insert1(o, k, v);
+            match st
+            | 1 =>
+                match tc < c
+                | true => (Node/fork(tc, z, wedge(c, bit(k, c), k, v, o2)), 0, 0)
+                | false => (t, c, 1)
+                end
+            | _ => (Node/fork(tc, z, o2), 0, st)
+            end
         end
     end;
 
-rec remove_node(@V: Type, t: Node(V), k: Bytes) -> Option(Node(V)) =
+-- The same single descent for removal, over three states: 0 unchanged, 1 removed, 2 emptied. A fork whose child emptied answers its other child, which is the collapse that keeps the shape canonical; `emptied` reaching the root means the map held exactly this one entry. The node answered alongside `emptied` is the untouched original and is never read.
+rec remove1(@V: Type, t: Node(V), k: Bytes) -> {Node(V), Nat} =
     match t
-    | leaf(k0, v0) => Option/none()
+    | leaf(k0, v0) =>
+        match Bytes/eql(k0, k)
+        | true => (t, 2)
+        | false => (t, 0)
+        end
     | fork(c, z, o) =>
         match bit(k, c)
         | 0 =>
-            match remove_node(z, k)
-            | none() => Option/some(o)
-            | some(z2) => Option/some(Node/fork(c, z2, o))
+            let (z2, st) = remove1(z, k);
+            match st
+            | 2 => (o, 1)
+            | 1 => (Node/fork(c, z2, o), 1)
+            | _ => (t, 0)
             end
         | _ =>
-            match remove_node(o, k)
-            | none() => Option/some(z)
-            | some(o2) => Option/some(Node/fork(c, z, o2))
+            let (o2, st) = remove1(o, k);
+            match st
+            | 2 => (z, 1)
+            | 1 => (Node/fork(c, z, o2), 1)
+            | _ => (t, 0)
             end
         end
     end;
@@ -141,12 +163,11 @@ pub let insert(@K: Type, @V: Type, use Key(K), m: Map(V), key: K, v: V) -> Map(V
     match m.root
     | none() => Map { size = 1, root = Option/some(Node/leaf(k, v)) }
     | some(n) =>
-        let (k0, _) = lookup(n, k);
-        match Bytes/eql(k0, k)
-        | true => Map { size = m.size, root = Option/some(replace(n, k, v)) }
-        | false =>
-            let c = crit(k, k0);
-            Map { size = m.size + 1, root = Option/some(insert_node(n, c, bit(k, c), k, v)) }
+        let (n2, c, st) = insert1(n, k, v);
+        match st
+        | 2 => Map { size = m.size, root = Option/some(n2) }
+        | 1 => Map { size = m.size + 1, root = Option/some(wedge(c, bit(k, c), k, v, n2)) }
+        | _ => Map { size = m.size + 1, root = Option/some(n2) }
         end
     end;
 
@@ -155,10 +176,11 @@ pub let remove(@K: Type, @V: Type, use Key(K), m: Map(V), key: K) -> Map(V) =
     match m.root
     | none() => m
     | some(n) =>
-        let (k0, _) = lookup(n, k);
-        match Bytes/eql(k0, k)
-        | true => Map { size = m.size - 1, root = remove_node(n, k) }
-        | false => m
+        let (n2, st) = remove1(n, k);
+        match st
+        | 2 => Map { size = m.size - 1, root = Option/none() }
+        | 1 => Map { size = m.size - 1, root = Option/some(n2) }
+        | _ => m
         end
     end;
 
