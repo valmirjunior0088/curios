@@ -467,6 +467,23 @@ impl<'a, 'b> Context<'a, 'b> {
                         },
                     ])
                     .collect()
+            } else if let ([(_, zero_target), (_, one_target)], None) =
+                (sorted.as_slice(), &target.default)
+            {
+                // Cases `{0, 1}` with nothing else reachable: the operand is 0 or 1 by construction, so a conditional branch decides it. This is every `Bool` match — `Rhs::SwitchBool` lowers as exactly these cases with no default — and every exhaustive two-constructor tag. A `br_table` here is a bounds check, a `csel`, a dependent load and an indirect branch where `if` is one compare, and nothing below the emitter narrows it: Cranelift's aarch64 rule builds a `JTSequence` whatever the table's size, and Binaryen leaves a two-entry table alone.
+                //
+                // Two cases *with* a default is three outcomes, not two, so it falls through to the compare chain below rather than here.
+                self.load_value_instrs(&target.operand, LoadAs::Nat)
+                    .into_iter()
+                    .chain([curios_wasm::Instr::If {
+                        label_name: self.table().special_label(),
+                        block_type: curios_wasm::BlockType::Empty,
+                        then_instructions: self.jump_instrs(one_target),
+                        else_instructions: self.jump_instrs(zero_target),
+                    }])
+                    .collect()
+            } else if sorted.len() == 2 {
+                self.binary_search_instrs(&target.operand, &sorted, default_instructions)
             } else {
                 let label_names = sorted
                     .iter()

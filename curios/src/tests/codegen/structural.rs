@@ -1,6 +1,6 @@
 //! Structural acceptance fixtures. Each test compiles a small `.crs` fixture to the raw, pre-Binaryen wasm module and asserts a structural property of the emitted code — a clean natural loop for a hot kernel, direct recursion, the closure ABI only where a call is genuinely unknown — and that the raw module validates and executes without Binaryen repairing control flow.
 //!
-//! Emitted function names are `$func/<N>` ids — a module-wide monotonic index over every reachable function, prelude included — optionally suffixed with the source hint as `$func/<N>$hint`. The index carries identity; the hint is only origin annotation. Hot kernels are still located by a distinctive literal constant baked into their arithmetic (`65537` for LCG, `1000003` for trees) or by name-independent structure (self-recursion, the shared `$func/<N>`/`$clsr/<N>` index of a function used both directly and as a closure), never by a source name. A genuine irreducible-cycle dispatcher is the `loop $$dispatch/<anchor>` the emitter names in `into_wasm::expr_emitter`; an ordinary constructor-tag `switch` lowers to a `br_table` over `$case$N`/`$tail` labels and is not a dispatcher.
+//! Emitted function names are `$func/<N>` ids — a module-wide monotonic index over every reachable function, prelude included — optionally suffixed with the source hint as `$func/<N>$hint`. The index carries identity; the hint is only origin annotation. Hot kernels are still located by a distinctive literal constant baked into their arithmetic (`65537` for LCG, `1000003` for trees) or by name-independent structure (self-recursion, the shared `$func/<N>`/`$clsr/<N>` index of a function used both directly and as a closure), never by a source name. A genuine irreducible-cycle dispatcher is the `loop $$dispatch/<anchor>` the emitter names in `into_wasm::expr_emitter`; an ordinary constructor-tag `switch` is not a dispatcher whatever shape it takes — a `br_table` over `$case$N`/`$tail` labels for three or more cases, a plain `if` for the two-way and one-way shapes.
 
 use {
     crate::tests::{census_settles, cont_optm, run},
@@ -922,7 +922,7 @@ fn function_only_recursion_has_no_fallback_shells() {
     );
 }
 
-/// G4: ordinary corpus cases use no irreducible fallback. None of the ordinary fixtures — including mutual recursion — emit a `loop $$dispatch/` localized dispatcher; their constructor-tag matches lower to ordinary `br_table` data switches over `$case$N` labels, which are not dispatchers.
+/// G4: ordinary corpus cases use no irreducible fallback. None of the ordinary fixtures — including mutual recursion — emit a `loop $$dispatch/` localized dispatcher; their constructor-tag matches lower to ordinary data switches — a `br_table` over `$case$N` labels where the family is wide enough to want one, an `if` where it is not — and neither is a dispatcher.
 #[test]
 fn ordinary_corpus_uses_no_irreducible_fallback() {
     for (label, source) in [
@@ -1486,4 +1486,43 @@ fn small_bits_ride_the_immediate_and_overflow_boxes() {
         "#;
 
     assert_eq!(run(source), b"ok\n");
+}
+
+/// A two-way dispatch is a conditional branch, not a jump table.
+///
+/// Cases `{0, 1}` with nothing else reachable — every `Bool` match, and every exhaustive two-constructor tag — decide in one compare. A `br_table` is a bounds check, a `csel`, a dependent load and an indirect branch on the ISA lowerings in this pipeline's chain, and nothing below the emitter narrows it: Cranelift's aarch64 rule builds a `JTSequence` whatever the table's size, and Binaryen leaves a two-entry table alone (measured 2026-08-20 on `spines`: 60 tables emitted before this shape landed, 57 of them surviving `-O2`; 9 emitted after).
+///
+/// Asserted on the fixture's own kernel rather than the module, since the prelude rides along and its wider families table legitimately. Both dispatches stay runtime-tainted so neither folds — a closed condition is decided at compile time and emits no dispatch at all.
+#[test]
+fn a_two_way_dispatch_is_a_branch_not_a_table() {
+    let source = r#"
+        use /std/{Nat, Bool, List, Str, Handle, proc};
+
+        induct Pair : Type
+        | left(Nat)
+        | right(Nat)
+        end
+
+        let taint = List/len(proc/args!);
+        let flag : Bool = taint == 0;
+        rec decide(n : Nat, acc : Nat) -> Nat =
+            match n : (_) => Nat
+            | 0 => acc
+            | m + 1; ih =>
+                let chosen : Pair = match flag | true => Pair/left(m) | false => Pair/right(m) end;
+                let folded = match chosen | left(x) => x + 65521 | right(x) => x + 65519 end;
+                decide(m, acc + folded)
+            end;
+        /std/print(Nat/to_str(decide(taint + 3, 0) + decide(taint + 4, 1)))
+        "#;
+
+    let wat = wat(source);
+    let functions = functions(&wat);
+    let kernel = function_with(&functions, "65521");
+
+    assert!(
+        !kernel.body.contains("br_table"),
+        "a two-way dispatch must branch rather than table: {}",
+        kernel.body
+    );
 }
