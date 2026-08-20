@@ -615,14 +615,15 @@ const CANONICAL_KEY_ALLOWANCE: u64 = 100_000;
 /// Both halves are load-bearing and neither works alone. The escalation runs per probe while this answer is per key, so without the memo one guard's subject is re-derived at every node of that operation in the declaration. And the first attempt can be the expensive one, so without the cap there is no first success to memoize — a guard over a subject a hundred thousand iterations built consumes the declaration's whole budget on that attempt, which is measured rather than supposed (`tests::numeric::byte_of_nat_inverts_to_nat_and_refuses_the_bound` is where it showed).
 ///
 /// A key the allowance stopped short is memoized as *itself*, so the bail is paid once and the key keeps its written spelling — the behaviour that held before any of this existed.
-fn canonical_key(context: &mut Context, key: &Term) -> Result<Term, ReduceError> {
+fn canonical_key(context: &mut Context, key: &Term, original: &Term) -> Result<Term, ReduceError> {
     if let Some(cached) = context.cached_canonical_key(key) {
         return Ok(cached);
     }
 
+    // Canonicalized from the *original* spelling, never the key: the key is universes-erased, and erasure strips the `UniverseInst` a polymorphic global unfolds through, so reducing the key stalls exactly where the probe side reduced — reduce-then-erase and erase-then-reduce disagree, and the probe side is reduce-then-erase.
     let canonical = context
         .within_allowance(CANONICAL_KEY_ALLOWANCE, |context| {
-            canonical_scrutinee(context, key)
+            canonical_scrutinee(context, original)
         })
         .unwrap_or_else(|| key.clone());
 
@@ -657,9 +658,9 @@ fn refined_after_fold(context: &mut Context, folded: &Term) -> Result<Option<Ter
     }
 
     // The escalation, and the cheap half of it: `reduce_intrinsic` left the operands in weak-head normal form, so the candidate side is canonical already and only the key has to be brought to it — capped and memoized, so once per key rather than once per node.
-    for (key, value) in context.scrutinee_entries(head) {
-        if canonical_key(context, &key)? == shallow {
-            return Ok(Some(value));
+    for (key, entry) in context.scrutinee_entries(head) {
+        if canonical_key(context, &key, &entry.original)? == shallow {
+            return Ok(Some(entry.value));
         }
     }
 
@@ -723,9 +724,9 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
                     if !candidates.is_empty() {
                         let canonical = canonical_scrutinee(context, &term)?;
 
-                        for (key, value) in candidates {
-                            if canonical_key(context, &key)? == canonical {
-                                break 'step Reduce::Continue(value);
+                        for (key, entry) in candidates {
+                            if canonical_key(context, &key, &entry.original)? == canonical {
+                                break 'step Reduce::Continue(entry.value);
                             }
                         }
                     }

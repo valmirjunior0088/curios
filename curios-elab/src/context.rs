@@ -798,9 +798,9 @@ impl Context {
     }
 
     /// [`Frames::refine_scrutinee`], with the refinement cache protocol.
-    pub(crate) fn refine_scrutinee(&mut self, canonical: Term, value: Term) {
+    pub(crate) fn refine_scrutinee(&mut self, canonical: Term, original: Term, value: Term) {
         self.caches.invalidate_for_refinement();
-        self.frames.refine_scrutinee(canonical, value);
+        self.frames.refine_scrutinee(canonical, original, value);
     }
 
     pub(crate) fn has_scrutinee_refinements(&self) -> bool {
@@ -815,7 +815,7 @@ impl Context {
         self.frames.scrutinee_reduct(canonical)
     }
 
-    pub(crate) fn scrutinee_entries(&self, head: HeadTag<'_>) -> Vec<(Term, Term)> {
+    pub(crate) fn scrutinee_entries(&self, head: HeadTag<'_>) -> Vec<(Term, ScrutineeEntry)> {
         self.frames.scrutinee_entries(head)
     }
 
@@ -1275,8 +1275,12 @@ impl Context {
             self.refine_projection(base.clone(), *index, value.clone());
         }
 
-        for (canonical, value) in &frame.refinement_scrutinees {
-            self.refine_scrutinee(canonical.clone(), value.clone());
+        for (canonical, entry) in &frame.refinement_scrutinees {
+            self.refine_scrutinee(
+                canonical.clone(),
+                entry.original.clone(),
+                entry.value.clone(),
+            );
         }
 
         // The witness binders were already re-assumed by the loop above (they are a subset of `assumptions`); only the scope membership is restored here. The enclosing frame's mark truncates it on exit.

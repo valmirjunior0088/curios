@@ -25,13 +25,20 @@ impl DefEntry {
 }
 
 /// The local frame a parked problem froze at park time: assumptions (in binding order), and the non-base-frame definitions, counterfactual refinements, projection refinements, and scrutinee refinements (each outermost frame first, so reapplying in order reproduces the shadowing). A retry must run under the same equalities its origin saw — including the arm-local refinements — while solution re-validation independently suppresses them, keeping committed solutions refinement-free.
+/// One stuck-application refinement: the scrutinee as *written* (unerased, so the probe-time canonicalization can still unfold its polymorphic heads — erasure strips the `UniverseInst` a global unfolds through, so reduce-then-erase and erase-then-reduce disagree exactly there), and the arm's value.
+#[derive(Debug, Clone)]
+pub(crate) struct ScrutineeEntry {
+    pub(crate) original: Term,
+    pub(crate) value: Term,
+}
+
 #[derive(Debug, Clone)]
 pub(crate) struct FrozenFrame {
     pub(crate) assumptions: Vec<(Free, Term)>,
     pub(crate) definitions: Vec<(Free, DefEntry)>,
     pub(crate) refinements: Vec<(Free, Term)>,
     pub(crate) refinement_projections: Vec<((Term, usize), Term)>,
-    pub(crate) refinement_scrutinees: Vec<(Term, Term)>,
+    pub(crate) refinement_scrutinees: Vec<(Term, ScrutineeEntry)>,
     /// The `use`-plicity binders in scope at park time (a subset of `assumptions`, in the same binding order). Witness resolution scans these; a retry must see the same instance scope its origin saw.
     pub(crate) witness_binders: Vec<(Free, Term)>,
 }
@@ -55,7 +62,7 @@ pub(crate) struct Frames {
     refinements: Vec<HashMap<Free, Term>>,
     refinement_projections: Vec<HashMap<(Term, usize), Term>>,
     /// Counterfactual refinements keyed by a *stuck application* scrutinee — a non-key match head (`classify(c)`, `Nat/in_range(...)`) that `refine_head` could not record. Keyed by a *canonical* form (head verbatim, arguments reduced to WHNF), so an occurrence that surfaces spelled differently still matches the stored key once both are canonicalized. The term-keyed analogue of the two stores above, suppressed by the same flag.
-    refinement_scrutinees: Vec<HashMap<Term, Term>>,
+    refinement_scrutinees: Vec<HashMap<Term, ScrutineeEntry>>,
     suppress_refinements: bool,
     /// The local assumption context in binding order (a companion to `assumptions`, which is keyed by name and loses order). `assume` appends; frames are delimited by `local_marks`.
     local: Vec<(Free, Term)>,
@@ -344,12 +351,12 @@ impl Frames {
             .insert((project_erased_universes(&base), index), value);
     }
 
-    /// Register a counterfactual refinement of a stuck-application scrutinee (`refine_head` on a non-key head). `canonical` is the canonical form (head verbatim, arguments in WHNF); `value` is the arm's constructor. Sound for the same reason `refine` is — the arm is reached only when the scrutinee equals `value` — and non-cyclic because `value` is a constructor of the scrutinee's inductive, a normal form. The façade clears the caches first.
-    pub(crate) fn refine_scrutinee(&mut self, canonical: Term, value: Term) {
+    /// Register a counterfactual refinement of a stuck-application scrutinee (`refine_head` on a non-key head). `canonical` is the cheap key (as written, metas and universes normalized); `original` is the unerased spelling the probe-time canonicalization reduces; `value` is the arm's constructor. Sound for the same reason `refine` is — the arm is reached only when the scrutinee equals `value` — and non-cyclic because `value` is a constructor of the scrutinee's inductive, a normal form. The façade clears the caches first.
+    pub(crate) fn refine_scrutinee(&mut self, canonical: Term, original: Term, value: Term) {
         self.refinement_scrutinees
             .last_mut()
             .unwrap()
-            .insert(canonical, value);
+            .insert(canonical, ScrutineeEntry { original, value });
     }
 
     /// Whether any scrutinee refinement is registered (regardless of suppression). The cheap outer gate for the reducer probe — skipped on the common refinement-free reduction without hashing anything.
@@ -367,7 +374,7 @@ impl Frames {
     /// Every registered scrutinee key sharing `head`, with its value, innermost frame first — the escalation path's input, where a canonical comparison replaces the shallow lookup that missed.
     ///
     /// Filtered here rather than by the caller so a key under another head is never cloned: the store is keyed by written spelling, and reducing arguments cannot change an application's head, so such a key could not have become the candidate however it canonicalizes. Owned rather than borrowed because canonicalizing a key reduces, which needs the context mutably while this borrow would still be live.
-    pub(crate) fn scrutinee_entries(&self, head: HeadTag<'_>) -> Vec<(Term, Term)> {
+    pub(crate) fn scrutinee_entries(&self, head: HeadTag<'_>) -> Vec<(Term, ScrutineeEntry)> {
         if self.suppress_refinements {
             return Vec::new();
         }
@@ -377,7 +384,7 @@ impl Frames {
             .rev()
             .flat_map(|frame| frame.iter())
             .filter(|(key, _)| key.head_key() == Some(head))
-            .map(|(key, value)| (key.clone(), value.clone()))
+            .map(|(key, entry)| (key.clone(), entry.clone()))
             .collect()
     }
 
@@ -391,6 +398,7 @@ impl Frames {
             .iter()
             .rev()
             .find_map(|f| f.get(canonical))
+            .map(|entry| &entry.value)
     }
 
     /// Whether `canonical` is itself a registered scrutinee key — checked *past* suppression. A `Var`/`Proj` key stays neutral under suppression for free (its reduct is withheld, so it does not unfold); an application key would otherwise unfold to its definition body and stop being a key. The reducer consults this to keep such a key neutral while suppressed, so `solve_refinement_free`'s committed (refinement-free) spelling stays a term the live refinement can still fire on.

@@ -289,3 +289,15 @@ fn unresolvable_parked_check_reports_its_expected_type() {
     let error = error(source);
     assert!(error.contains("never gained structure"), "{error}");
 }
+
+/// A guard's refinement discharges a window bound whose spelling sits one definitional step away: the slice obligation states its end as `0 + n`, the guard can only spell `n <= List/len(l)`, and the probe-time canonicalization brings the two together. The regression this pins: the refinement store records a universes-erased key, and erasure strips the `UniverseInst` a polymorphic global (`List/len`) unfolds through — so canonicalizing the *erased* key stalled where the goal side reduced, and the bound reported as an uninferred implicit against a caller who had established it. The canonicalization now reduces the unerased original stored beside the key.
+#[test]
+fn a_guard_discharges_a_bound_spelled_one_reduction_away() {
+    let source = r#"
+        use /std/{Nat, List, Str, Handle};
+        let take(l: List(Nat), n: Nat) -> List(Nat) =
+            match n <= List/len(l) | true => List/slice(l, 0, n) | false => [] end;
+        /std/print(Str/concat(Nat/to_str(List/len(take([1, 2, 3], 2))), "\n"))
+        "#;
+    assert_eq!(run(source), b"2\n");
+}

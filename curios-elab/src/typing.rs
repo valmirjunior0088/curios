@@ -584,17 +584,22 @@ pub(crate) fn refine_head(context: &mut Context, head: &Term, value: &Term) -> R
             // A concept-dispatched scrutinee (`a <= hi`) elaborates to the method projected out of the witness — `(?w).1(a, hi)` — which is not the shape the reducer probes: by then it has become the intrinsic normal form `NatLe(a, hi)`. Registering only the verbatim key leaves the arm unrefined, silently, while the equivalent `Nat/le(a, hi)` spelling refines. Register the probed form alongside it so both spellings agree.
             let resolved = match canonical.head_key().is_none() {
                 true => spine_whnf(context, head)?
-                    .map(|spined| super::shallow_scrutinee(context, &spined))
-                    .filter(|resolved| resolved.head_key().is_some() && *resolved != canonical),
+                    .map(|spined| {
+                        let key = super::shallow_scrutinee(context, &spined);
+                        (key, spined)
+                    })
+                    .filter(|(resolved, _)| {
+                        resolved.head_key().is_some() && *resolved != canonical
+                    }),
                 false => None,
             };
 
-            // The operands disagree the same way and are deliberately *not* re-registered here. Their spellings differ by a fold and by an unfolded local as well as by a wrapper, so bringing them together is reduction — and reduction at registration is what would make a guard cost its subject's evaluation before any use of the fact, which is the whole reason `shallow_scrutinee` records the written form. `reduce::canonical_key` does it at the probe instead, under a ceiling and once per key.
-            if let Some(resolved) = resolved {
-                context.refine_scrutinee(resolved, value.clone());
+            // The operands disagree the same way and are deliberately *not* re-registered here. Their spellings differ by a fold and by an unfolded local as well as by a wrapper, so bringing them together is reduction — and reduction at registration is what would make a guard cost its subject's evaluation before any use of the fact, which is the whole reason `shallow_scrutinee` records the written form. `reduce::canonical_key` does it at the probe instead, under a ceiling and once per key — from the *unerased* spelling stored beside the key, since the erased one cannot unfold the polymorphic heads reduction must see through.
+            if let Some((resolved, spined)) = resolved {
+                context.refine_scrutinee(resolved, spined, value.clone());
             }
 
-            context.refine_scrutinee(canonical, value.clone());
+            context.refine_scrutinee(canonical, head.clone(), value.clone());
         }
     }
 

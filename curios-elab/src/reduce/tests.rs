@@ -649,7 +649,7 @@ fn scrutinee_refinement_ignores_fresh_universe_instances() {
         [nat(0)],
     );
     let canonical = canonical_scrutinee(&mut context, &registered).unwrap();
-    context.refine_scrutinee(canonical, nat(1));
+    context.refine_scrutinee(canonical, registered, nat(1));
 
     assert_eq!(reduce(&mut context, probe), Ok(nat(1)));
 }
