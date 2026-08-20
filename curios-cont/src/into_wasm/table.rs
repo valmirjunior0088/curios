@@ -300,6 +300,8 @@ pub(crate) struct Table<'a> {
     /// Keyed by the pair a wasm function type actually is — parameter count *and* result count — rather than by parameter count alone, so two functions of the same arity delivering different result shapes cannot collide on one type. The closure supertypes below stay keyed by arity, because a function reached through one is invoked at the uniform shape whatever its own type says.
     func_types: BTreeMap<(usize, usize), curios_wasm::TypeName>,
     consts: HashMap<&'a EmissionValueName, curios_wasm::GlobalName>,
+    /// The module consts that are `Tuple`/`List` constructions — the hoisted half of the population `Context::refuse_raw_aggregate` refuses to hand to a register. A closed aggregate is lifted out of its region by `hoist`, so a guard reading region values alone would miss exactly the constant ones.
+    const_aggregates: HashSet<&'a EmissionValueName>,
     clsrs: HashMap<&'a EmissionClosureName, ClsrData<'a>>,
     funcs: HashMap<&'a EmissionFunctionName, FuncData<'a>>,
     // Closures that are ever shell'd as a recursive shell — their `envr` fields are back-patched (`struct.set`), so those fields must stay mutable. Every other aggregate field is immutable. `cyclic_clsr_arities` carries the same fact at arity granularity, for the shared `envr/N` special field (which must agree across all its subtypes).
@@ -439,6 +441,12 @@ impl<'a> Table<'a> {
                         curios_wasm::GlobalName::from(const_name.as_string()),
                     )
                 })
+                .collect(),
+            const_aggregates: module
+                .consts()
+                .iter()
+                .filter(|(_, data)| matches!(data, EmissionData::List(_) | EmissionData::Tuple(_)))
+                .map(|(const_name, _)| const_name)
                 .collect(),
             // Table indices come from the module's ordered closure walk — the same order the element segment lists the bodies in — never from this map's iteration.
             clsrs: module
@@ -899,6 +907,11 @@ impl<'a> Table<'a> {
                 )
             })
             .clone()
+    }
+
+    /// Whether this name is a module const holding a `Tuple`/`List`. See `Context::refuse_raw_aggregate`.
+    pub(crate) fn is_aggregate_const(&self, const_name: &EmissionValueName) -> bool {
+        self.const_aggregates.contains(const_name)
     }
 
     pub(crate) fn find_const(&self, const_name: &EmissionValueName) -> curios_wasm::GlobalName {

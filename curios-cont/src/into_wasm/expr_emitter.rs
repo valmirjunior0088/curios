@@ -347,10 +347,22 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         region: &'a EmissionBody,
     ) {
         let shells = region.shells.iter().map(|(name, _)| name).collect();
+        let aggregates: HashSet<_> = region
+            .values
+            .iter()
+            .filter(|(_, value)| {
+                matches!(
+                    value,
+                    EmissionValue::Pure(EmissionData::Tuple(_) | EmissionData::List(_))
+                )
+            })
+            .map(|(name, _)| name)
+            .collect();
 
         // A region with no join blocks is straight-line code ending in its tail; there is nothing to structure.
         if region.blocks.is_empty() {
-            self.context.enter_frame(Frame::new(params, shells, vec![]));
+            self.context
+                .enter_frame(Frame::new(params, shells, aggregates, vec![]));
             self.emit_shells(&region.shells);
             self.emit_let_values(&region.values);
             let tail = self.context.tail_instrs(&region.tail);
@@ -366,7 +378,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         // The region frame registers the forward-entry block of every top-level item, so the tail and earlier items resolve their forward branches.
         let registrations = scope_registrations(&layout, region, &block_params, &dispatch);
         self.context
-            .enter_frame(Frame::new(params, shells, registrations));
+            .enter_frame(Frame::new(params, shells, aggregates, registrations));
         self.emit_shells(&region.shells);
         self.emit_let_values(&region.values);
 
@@ -492,8 +504,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     BlockData::new_loop(loop_label.clone(), block_params[*header].clone()),
                 )];
                 registrations.extend(scope_registrations(rest, region, block_params, dispatch));
-                self.context
-                    .enter_frame(Frame::new(HashMap::new(), HashSet::new(), registrations));
+                self.context.enter_frame(Frame::structural(registrations));
 
                 let header_params = block_params[*header].iter().cloned().collect();
                 self.emit_region(header_params, &region.blocks[*header].1.region);
@@ -543,8 +554,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 )
             })
             .collect();
-        self.context
-            .enter_frame(Frame::new(HashMap::new(), HashSet::new(), registrations));
+        self.context.enter_frame(Frame::structural(registrations));
 
         let member_bodies = members
             .iter()

@@ -185,6 +185,38 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
+    /// Whether the definition of `value_name` is a `Tuple` or `List` construction — bound in a region in scope, or hoisted to a module const.
+    ///
+    /// Both halves are needed: `hoist` lifts a closed aggregate out of its region into a global, so a check reading frames alone answers `false` for exactly the constant ones.
+    fn is_aggregate(&self, value_name: &EmissionValueName) -> bool {
+        if self.table().is_aggregate_const(value_name) {
+            return true;
+        }
+
+        match self {
+            Self::Const { .. } => false,
+            Self::Closure { frames, .. } | Self::Function { frames, .. } => frames
+                .iter()
+                .any(|frame| frame.aggregates.contains(value_name)),
+        }
+    }
+
+    /// Refuse to hand an aggregate construction to a register.
+    ///
+    /// A `Tuple` or `List` construction is a heap reference, so loading one at a scalar carrier emits `ref.cast (ref i31)` over a `struct.new`. That traps at run time, in a function far from whatever decided the carrier, which is exactly how it went unnoticed.
+    ///
+    /// **The representation analysis does not rule this out, which is why the check is here.** An aggregate's own definition offers `Offer::Never`, so no demand settles raw on *it* — but a continuation parameter it flows into is `Offer::Open` and settles raw from its own uses, whatever reaches it, and the edge then coerces every argument to that carrier before anything looks at what it is. So the invariant is the *door's*: `curios-ersd`'s lowering must never route an aggregate into a parameter something reads as a scalar. It broke once, when an immediate arm's binder was aliased to its scrutinee and the payload had no definition of its own to refuse the demand; the only symptom was a program that trapped for every input but zero. Both halves of the population are checked — a region binding and a `hoist`ed const — and both are pinned by `should_panic` fixtures in this module's tests.
+    ///
+    /// A panic rather than a diagnostic, per this workspace's rule for invariants: a program's fault is reported to its author, but this crate's own broken contract is not something to emit code for.
+    fn refuse_raw_aggregate(&self, value_name: &EmissionValueName, load_as: &LoadAs) {
+        let raw = matches!(load_as, LoadAs::Nat | LoadAs::Int | LoadAs::Flt);
+
+        assert!(
+            !(raw && self.is_aggregate(value_name)),
+            "`{value_name}` is a `Tuple`/`List` construction loaded at the raw carrier {load_as:?}"
+        );
+    }
+
     pub(crate) fn find_block(&self, block_name: &EmissionBlockName) -> &BlockData<'a> {
         match self {
             Self::Const { .. } => panic!("`Context` lacks frame stack"),
@@ -321,6 +353,8 @@ impl<'a, 'b> Context<'a, 'b> {
         value_name: &'a EmissionValueName,
         load_as: LoadAs,
     ) -> Vec<curios_wasm::Instr> {
+        self.refuse_raw_aggregate(value_name, &load_as);
+
         let mut output = Vec::new();
 
         if let Some(field_data) = self.find_field(value_name) {
