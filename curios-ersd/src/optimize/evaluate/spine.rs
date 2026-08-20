@@ -23,6 +23,11 @@ const MAX_SPECIALIZATIONS: usize = 64;
 /// A literal larger than this many nodes is not a specialization key.
 const MAX_SPINE_NODES: usize = 256;
 
+/// Module-wide cap on what minting may *materialize*, in arena entries.
+///
+/// [`MAX_SPECIALIZATIONS`] bounds how many specializations are minted and says nothing about how large each one is, so the pair bounded a count while the cost is a product: sixty-four copies of a large self-recursive target multiply the module exactly as unbounded closure reification did. Counting mints is the cheap half of the answer; this is the other half.
+const MAX_SPECIALIZATION_NODES: usize = 100_000;
+
 /// Specialize every eligible literal-spine call site, module-wide.
 pub(crate) fn specialize_literal_spines(module: &mut Module) {
     curios_profile::profile!("specialize_literal_spines");
@@ -270,6 +275,7 @@ struct Minter {
     memo: BTreeMap<String, FunctionId>,
     minted: BTreeMap<FunctionId, Vec<FunctionId>>,
     budget: usize,
+    nodes: usize,
 }
 
 impl Minter {
@@ -278,6 +284,7 @@ impl Minter {
             memo: BTreeMap::new(),
             minted: BTreeMap::new(),
             budget: MAX_SPECIALIZATIONS,
+            nodes: MAX_SPECIALIZATION_NODES,
         }
     }
 
@@ -301,14 +308,22 @@ impl Minter {
         self.budget -= 1;
 
         // Materialize the spine locally, deep-copy the target, drop the baked parameter and bind it to the spine ahead of the copied body. Dry-run first so a declined mint strands nothing.
+        // One scope for this mint's probe and its real run: the module does not change between them, and sharing it across *mints* would be unsound because a deep copy rewrites bodies the scope has already answered for.
+        let mut scope = super::reify::ReifyScope::new();
         {
             let mut probe = ReifyBudget::new();
-            super::reify::reify_check(module, spine, &mut probe).ok()?;
+            super::reify::reify_check(module, spine, &mut probe, &mut scope).ok()?;
         }
         let mut prelude = Vec::new();
         let mut reify_budget = ReifyBudget::new();
-        let spine_atom = reify(module, spine, &mut reify_budget, &mut prelude).ok()?;
+        let spine_atom = reify(module, spine, &mut reify_budget, &mut prelude, &mut scope).ok()?;
 
+        // Charge what the copy will materialize before making it: a mint is bounded by size as well as by count.
+        let weight = super::copy::copy_weight(module, target)?;
+        if weight > self.nodes {
+            return None;
+        }
+        self.nodes -= weight;
         let spec = deep_copy_function(module, target, &BTreeMap::new(), Some(target))?;
         let definition = module.function(spec)?.clone();
         let baked = *definition.params.get(position)?;

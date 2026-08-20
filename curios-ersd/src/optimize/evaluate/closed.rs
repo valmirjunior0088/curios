@@ -4,9 +4,9 @@
 
 use {
     super::{
-        budget::ReifyBudget,
+        budget::{PASS_REIFY_BUDGET, ReifyBudget},
         interpret::{Evaluator, Outcome, Residual},
-        reify::{reify, reify_all, reify_check, reify_check_all},
+        reify::{ReifyScope, reify, reify_all, reify_check, reify_check_all},
         value::Value,
     },
     crate::{
@@ -100,15 +100,22 @@ fn apply(module: &mut Module, planned: Vec<Planned>) -> bool {
     let mut rewrites = Vec::<(StatementId, ValueId, Rhs)>::new();
     let mut spliced_before = BTreeMap::<StatementId, Vec<StatementId>>::new();
     let mut touched = BTreeSet::<Owner>::new();
+    // Every replacement draws on one pool, so a pass cannot multiply the module however many candidates it found — see `PASS_REIFY_BUDGET`.
+    let mut reify_pool = PASS_REIFY_BUDGET;
+    // Stable for the whole pass: reification only appends, and the item list is rebuilt after this loop.
+    let mut scope = ReifyScope::new();
 
     for plan in planned {
+        if reify_pool == 0 {
+            break;
+        }
         // Dry-run first: a plan that cannot fully materialize is skipped before anything is emitted, so nothing is ever stranded.
         {
-            let mut probe = ReifyBudget::new();
+            let mut probe = ReifyBudget::within(reify_pool);
             let ok = match &plan.kind {
-                Kind::Value(value) => reify_check(module, value, &mut probe).is_ok(),
+                Kind::Value(value) => reify_check(module, value, &mut probe, &mut scope).is_ok(),
                 Kind::Foreign(_, values) | Kind::Call(_, values) => {
-                    reify_check_all(module, values, &mut probe).is_ok()
+                    reify_check_all(module, values, &mut probe, &mut scope).is_ok()
                 }
             };
             if !ok {
@@ -116,20 +123,22 @@ fn apply(module: &mut Module, planned: Vec<Planned>) -> bool {
             }
         }
         let mut spliced = Vec::new();
-        let mut budget = ReifyBudget::new();
+        let mut budget = ReifyBudget::within(reify_pool);
         let rhs = match plan.kind {
-            Kind::Value(value) => match reify(module, &value, &mut budget, &mut spliced) {
-                Ok(atom) => Rhs::Alias(atom),
-                Err(_) => continue,
-            },
+            Kind::Value(value) => {
+                match reify(module, &value, &mut budget, &mut spliced, &mut scope) {
+                    Ok(atom) => Rhs::Alias(atom),
+                    Err(_) => continue,
+                }
+            }
             Kind::Foreign(foreign, values) => {
-                match reify_all(module, &values, &mut budget, &mut spliced) {
+                match reify_all(module, &values, &mut budget, &mut spliced, &mut scope) {
                     Ok(operands) => Rhs::Foreign { foreign, operands },
                     Err(_) => continue,
                 }
             }
             Kind::Call(function, values) => {
-                match reify_all(module, &values, &mut budget, &mut spliced) {
+                match reify_all(module, &values, &mut budget, &mut spliced, &mut scope) {
                     Ok(arguments) => {
                         let callee = Atom::Function(function);
                         // A residual identical to the original call would churn forever; leave it untouched.
@@ -142,6 +151,7 @@ fn apply(module: &mut Module, planned: Vec<Planned>) -> bool {
                 }
             }
         };
+        reify_pool = reify_pool.saturating_sub(budget.spent());
         rewrites.push((plan.statement, plan.result, rhs));
         if !spliced.is_empty() {
             spliced_before.insert(plan.statement, spliced);

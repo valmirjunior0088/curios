@@ -20,7 +20,7 @@ pub fn optimize(module: &mut Module) {
     let proven_pure = evaluate::prove_eager_groups_pure(module, &analysis);
     prune::prune_unreachable(module, &proven_pure, &analysis);
     compact(module);
-    // A curried chain folds one application per round; eight rounds cover any corpus chain with room to spare, and the shared pass budget caps the total work regardless.
+    // A curried chain folds one application per round; eight rounds cover any corpus chain with room to spare, and each round's reification draws on one shared node pool, so a round cannot multiply the module however many candidates it found.
     for _ in 0..8 {
         if !evaluate::evaluate_closed_terms(module) {
             break;

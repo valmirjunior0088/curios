@@ -118,6 +118,20 @@ struct Region {
     rec_groups: Vec<RecGroupId>,
 }
 
+/// What [`deep_copy_function`] would materialize for `source`, in arena entries.
+///
+/// A closure reifies by copying its whole function region, so charging one node for it — as the reify budget did until this existed — let a single replacement add a parser body's worth of statements for the price of one. The caps only bound what they can see, and this is what makes a closure cost what it actually builds.
+pub(super) fn copy_weight(module: &Module, source: FunctionId) -> Option<usize> {
+    let region = gather_region(module, source)?;
+    Some(
+        region.functions.len()
+            + region.blocks.len()
+            + region.statements.len()
+            + region.values.len()
+            + region.rec_groups.len(),
+    )
+}
+
 fn gather_region(module: &Module, source: FunctionId) -> Option<Region> {
     let mut functions = Vec::new();
     let mut seen_functions = BTreeSet::new();
