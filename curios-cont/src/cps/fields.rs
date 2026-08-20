@@ -2,7 +2,7 @@
 //!
 //! Admission composes the two halves `documentation/design/toolchain/a-value-costs-when-it-is-kept-not-when-it-is-named.md` keeps separate: the backward half says every use of the parameter is a projection or an eligible transfer (`demands`, `Projected`), and the forward half says every flow reaching it is a construction or an alias of one (`origins`, `Constructed`). Loop backedges are the central case rather than an exclusion — an edge carrying the join's own parameter reads as the constructions that entered it, which is precisely what the forward fixpoint establishes.
 //!
-//! **A variant is the same rewrite at the widest of several widths.** Where the constructions reaching a parameter disagree about arity — a tagged family's nullary constructor arriving as a one-tuple beside its three-payload sibling's four — the region travels as the widest, and each narrower edge carries its own fields followed by filler. The per-edge width is the same forward fact read at that edge's argument, so a projection is never emitted past what a construction carries.
+//! **A variant is the same rewrite at the widest of several widths.** Where the constructions reaching a parameter disagree about arity — a tagged row's nullary constructor arriving as a one-tuple beside its three-payload sibling's four — the region travels as the widest, and each narrower edge carries its own fields followed by filler. The per-edge width is the same forward fact read at that edge's argument, so a projection is never emitted past what a construction carries.
 //!
 //! What makes the filler safe is that it *inhabits* the slot, not that nothing reads it. Unreadness was the stated justification and it is false: the value is passed, and an edge into a raw-carried parameter coerces every argument to that carrier before the discriminant is consulted, so an `i31` zero standing in a `Flt` slot trapped on the `ref.cast`. [`CpsAtom::Filler`] carries no value for exactly that reason — the carrier is settled after this pass, and the emitter materialises the filler as the zero of whichever one the destination turns out to hold.
 //!
@@ -30,8 +30,8 @@ struct Split {
     position: usize,
     param: CpsValueId,
     width: usize,
-    /// The family, where every flow into the parameter is a variant construction of one. Carried from the same origin fact that gave the width, so the head rebuild and the per-edge projections stay in the vocabulary the reads below them use — a variant rebuilt as a structural tuple would trap at the next exact cast.
-    family: Option<super::CpsFamilyId>,
+    /// The row, where every flow into the parameter is a variant construction of one. Carried from the same origin fact that gave the width, so the head rebuild and the per-edge projections stay in the vocabulary the reads below them use — a variant rebuilt as a structural tuple would trap at the next exact cast.
+    row: Option<super::CpsRowId>,
 }
 
 /// Whether a site may take `source` apart into fields.
@@ -46,19 +46,19 @@ fn takeable(origins: &BTreeMap<CpsValueId, Origin>, param: CpsValueId, source: &
     }
 }
 
-/// The construction a rebuild emits: the family's own, where one was carried, and a structural tuple otherwise.
-fn rebuild_of(family: Option<super::CpsFamilyId>, fields: &[CpsValueId]) -> CpsValueExpr {
+/// The construction a rebuild emits: the row's own, where one was carried, and a structural tuple otherwise.
+fn rebuild_of(row: Option<super::CpsRowId>, fields: &[CpsValueId]) -> CpsValueExpr {
     let atoms = fields.iter().copied().map(CpsAtom::Value).collect();
-    match family {
-        Some(family) => CpsValueExpr::Variant(family, atoms),
+    match row {
+        Some(row) => CpsValueExpr::Row(row, atoms),
         None => CpsValueExpr::Tuple(atoms),
     }
 }
 
 /// The projection a split emits, in the vocabulary its source was built in.
-fn projection_of(family: Option<super::CpsFamilyId>, index: usize) -> CpsIntrinsic {
-    match family {
-        Some(family) => CpsIntrinsic::VariantGet(family, index),
+fn projection_of(row: Option<super::CpsRowId>, index: usize) -> CpsIntrinsic {
+    match row {
+        Some(row) => CpsIntrinsic::RowGet(row, index),
         None => CpsIntrinsic::TupleGet(index),
     }
 }
@@ -120,7 +120,7 @@ fn admit(module: &CpsModule, origins: &BTreeMap<CpsValueId, Origin>) -> Option<S
                 position,
                 param,
                 width,
-                family: origins.get(&param).and_then(Origin::family),
+                row: origins.get(&param).and_then(Origin::row),
             });
         }
     }
@@ -157,7 +157,7 @@ pub(super) fn split_parameters(module: &mut CpsModule) -> bool {
     let rebuilt = module.add_value(Some(format!("rebuilt/{}", split.continuation.index())));
     let head = module.add_node(CpsNode::LetValue {
         result: rebuilt,
-        value: rebuild_of(split.family, &fields),
+        value: rebuild_of(split.row, &fields),
         next: body,
     });
     module
@@ -220,7 +220,7 @@ pub(super) fn split_parameters(module: &mut CpsModule) -> bool {
                 ids[offset],
                 CpsNode::LetIntrinsic {
                     result: projection,
-                    op: projection_of(split.family, index),
+                    op: projection_of(split.row, index),
                     args: vec![CpsAtom::Value(source)],
                     next,
                 },
@@ -246,8 +246,8 @@ struct Worker {
     position: usize,
     param: CpsValueId,
     width: usize,
-    /// See [`Split::family`].
-    family: Option<super::CpsFamilyId>,
+    /// See [`Split::row`].
+    row: Option<super::CpsRowId>,
 }
 
 /// The first admissible worker split in deterministic order, if any.
@@ -292,7 +292,7 @@ fn admit_worker(module: &CpsModule, origins: &BTreeMap<CpsValueId, Origin>) -> O
                 position,
                 param,
                 width,
-                family: origins.get(&param).and_then(Origin::family),
+                row: origins.get(&param).and_then(Origin::row),
             });
         }
     }
@@ -322,7 +322,7 @@ pub(super) fn split_workers(module: &mut CpsModule) -> bool {
     let rebuilt = module.add_value(Some(format!("rebuilt/{}", worker.function.index())));
     let head = module.add_node(CpsNode::LetValue {
         result: rebuilt,
-        value: rebuild_of(worker.family, &fields),
+        value: rebuild_of(worker.row, &fields),
         next: body,
     });
     module
@@ -364,7 +364,7 @@ pub(super) fn split_workers(module: &mut CpsModule) -> bool {
             let projection = module.add_value(Some(format!("worker/{}/{index}", caller.index())));
             inserted.push(CpsNode::LetIntrinsic {
                 result: projection,
-                op: projection_of(worker.family, index),
+                op: projection_of(worker.row, index),
                 args: vec![CpsAtom::Value(source)],
                 next: caller,
             });
@@ -386,7 +386,7 @@ pub(super) fn split_workers(module: &mut CpsModule) -> bool {
 //
 // The rope analogue of the product split, sharing the record rather than growing a second coordination discipline. A window is `(base, offset, length)`: any rope is its own whole window as `(r, 0, len r)`, a virtual slice is offset arithmetic behind a `WindowExtent` guard that keeps the eager bounds trap at the original evaluation point, and a read reaches the base directly — the read helper already forces and memoizes an uncached node on first contact, so deferring the physical slice's force changes no observable value. Unlike products there is no cheap head rebuild, so the rewrite is region-atomic: a region is admitted only when every use of every member — the parameters and the slice results flowing between them — is a length, a read, a further slice, or a transfer into the region, and a region with any other use is declined whole, the conservative limit the value-lifetime decision allows the first implementation.
 
-/// Which sequence family a window region reads through, unified across every operation the region contains.
+/// Which sequence row a window region reads through, unified across every operation the region contains.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum WindowFamily {
     Bin(Grain),
@@ -503,9 +503,9 @@ fn window_uses(module: &CpsModule) -> BTreeMap<CpsValueId, Vec<WindowUse>> {
     uses
 }
 
-/// One admitted window region: the continuation parameters it spans, the slice nodes it consumes, and the family every read agrees on.
+/// One admitted window region: the continuation parameters it spans, the slice nodes it consumes, and the row every read agrees on.
 struct WindowRegion {
-    family: WindowFamily,
+    row: WindowFamily,
     params: Vec<(CpsContId, usize, CpsValueId)>,
     slices: Vec<CpsNodeId>,
     members: BTreeSet<CpsValueId>,
@@ -518,17 +518,17 @@ fn grow_window_region(
     resumes: &BTreeSet<CpsContId>,
     seed: (CpsContId, usize, CpsValueId),
 ) -> Option<WindowRegion> {
-    let mut family = None;
+    let mut row = None;
     let mut params = vec![seed];
     let mut slices = Vec::new();
     let mut members = BTreeSet::from([seed.2]);
     let mut work = vec![seed.2];
 
-    let unify = |family: &mut Option<WindowFamily>, op: CpsIntrinsic| {
+    let unify = |row: &mut Option<WindowFamily>, op: CpsIntrinsic| {
         let (this, _) = WindowFamily::of(op)?;
-        match family {
+        match row {
             None => {
-                *family = Some(this);
+                *row = Some(this);
                 Some(())
             }
             Some(existing) => (*existing == this).then_some(()),
@@ -542,13 +542,13 @@ fn grow_window_region(
                     let CpsNode::LetIntrinsic { op, .. } = module.node(*node)? else {
                         return None;
                     };
-                    unify(&mut family, *op)?;
+                    unify(&mut row, *op)?;
                 }
                 WindowUse::Slice(node) => {
                     let CpsNode::LetIntrinsic { op, result, .. } = module.node(*node)? else {
                         return None;
                     };
-                    unify(&mut family, *op)?;
+                    unify(&mut row, *op)?;
                     slices.push(*node);
                     if members.insert(*result) {
                         work.push(*result);
@@ -579,7 +579,7 @@ fn grow_window_region(
         return None;
     }
     Some(WindowRegion {
-        family: family?,
+        row: row?,
         params,
         slices,
         members,
@@ -783,7 +783,7 @@ pub(super) fn split_windows(module: &mut CpsModule) -> bool {
                         *node,
                         CpsNode::LetIntrinsic {
                             result,
-                            op: region.family.get_op(),
+                            op: region.row.get_op(),
                             args: vec![fields[&member][0].clone(), CpsAtom::Value(sum)],
                             next,
                         },
@@ -824,7 +824,7 @@ pub(super) fn split_windows(module: &mut CpsModule) -> bool {
                             module.add_value(Some(format!("window/{}/open", carrier.index())));
                         openings.push(CpsNode::LetIntrinsic {
                             result: length,
-                            op: region.family.len_op(),
+                            op: region.row.len_op(),
                             args: vec![atom.clone()],
                             next: carrier,
                         });

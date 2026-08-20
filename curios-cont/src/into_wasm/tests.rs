@@ -1199,11 +1199,11 @@ fn a_region_aggregate_reaching_a_raw_parameter_is_refused() {
     wat(&module);
 }
 
-/// A variant is constructed at its family's own final type and read back with one exact cast — no roster cascade, because a family value's type is a fact of the family rather than of the constructor that built it.
+/// A variant is constructed at its row's own final type and read back with one exact cast — no roster cascade, because a row value's type is a fact of the row rather than of the constructor that built it.
 #[test]
 fn a_variant_is_built_and_read_at_its_family_type() {
     let mut module = CpsModule::new();
-    let family = module.add_family(crate::CpsFamily {
+    let row = module.add_row(crate::CpsRow {
         debug_name: Some("Shape".into()),
         slots: vec![CpsSlot::Tag, CpsSlot::Opaque, CpsSlot::Opaque],
     });
@@ -1216,13 +1216,13 @@ fn a_variant_is_built_and_read_at_its_family_type() {
     });
     let read = module.add_node(CpsNode::LetIntrinsic {
         result: field,
-        op: CpsIntrinsic::VariantGet(family, 1),
+        op: CpsIntrinsic::RowGet(row, 1),
         args: vec![CpsAtom::Value(built)],
         next: exit,
     });
     let build = module.add_node(CpsNode::LetValue {
         result: built,
-        value: CpsValueExpr::Variant(family, vec![nat(0), nat(7), CpsAtom::Filler]),
+        value: CpsValueExpr::Row(row, vec![nat(0), nat(7), CpsAtom::Filler]),
         next: read,
     });
     module.define_function(
@@ -1237,23 +1237,23 @@ fn a_variant_is_built_and_read_at_its_family_type() {
     module.set_entry(main);
 
     let wat = wat(&module);
-    assert_contains(&wat, "(type $fam/0$Shape");
-    assert_contains(&wat, "struct.new $fam/0$Shape");
-    assert_contains(&wat, "ref.cast (ref $fam/0$Shape)");
-    assert_contains(&wat, "struct.get $fam/0$Shape $1");
+    assert_contains(&wat, "(type $row/0$Shape");
+    assert_contains(&wat, "struct.new $row/0$Shape");
+    assert_contains(&wat, "ref.cast (ref $row/0$Shape)");
+    assert_contains(&wat, "struct.get $row/0$Shape $1");
     assert_absent(&wat, "ref.test");
-    // The family type is final and unrelated: the printer renders no `sub` wrapper for one.
-    for line in wat.lines().filter(|line| line.contains("(type $fam/")) {
-        assert!(!line.contains("sub"), "family types must be final: {line}");
+    // The row type is final and unrelated: the printer renders no `sub` wrapper for one.
+    for line in wat.lines().filter(|line| line.contains("(type $row/")) {
+        assert!(!line.contains("sub"), "row types must be final: {line}");
     }
 }
 
-/// A construction that does not carry its family's width is a compiler bug, and the verifier is where it stops — the check the distinct variant vocabulary exists to make possible.
+/// A construction that does not carry its row's width is a compiler bug, and the verifier is where it stops — the check the distinct variant vocabulary exists to make possible.
 #[test]
-#[should_panic = "the family is 3 wide"]
+#[should_panic = "the row is 3 wide"]
 fn a_short_variant_construction_is_refused() {
     let mut module = CpsModule::new();
-    let family = module.add_family(crate::CpsFamily {
+    let row = module.add_row(crate::CpsRow {
         debug_name: Some("Shape".into()),
         slots: vec![CpsSlot::Tag, CpsSlot::Opaque, CpsSlot::Opaque],
     });
@@ -1263,7 +1263,7 @@ fn a_short_variant_construction_is_refused() {
     let exit = module.add_node(CpsNode::Exit { value: None });
     let build = module.add_node(CpsNode::LetValue {
         result: built,
-        value: CpsValueExpr::Variant(family, vec![nat(0)]),
+        value: CpsValueExpr::Row(row, vec![nat(0)]),
         next: exit,
     });
     module.define_function(

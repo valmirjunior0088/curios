@@ -151,14 +151,8 @@ fn a_variant_match_lowers_to_tag_dispatch() {
 
     let printed = lowered(&module);
     // The constructor is its family's own value — the tag at slot 0, payloads above it, padded to the family's width — so dispatch reads the tag and the payload through the family rather than through the arity roster.
-    assert!(
-        printed.contains("VariantGet(CpsFamilyId(0), 0)"),
-        "{printed}"
-    );
-    assert!(
-        printed.contains("VariantGet(CpsFamilyId(0), 1)"),
-        "{printed}"
-    );
+    assert!(printed.contains("RowGet(CpsRowId(0), 0)"), "{printed}");
+    assert!(printed.contains("RowGet(CpsRowId(0), 1)"), "{printed}");
     assert!(!printed.contains("TupleGet"), "{printed}");
     assert!(printed.contains("switch"), "{printed}");
 }
@@ -273,14 +267,8 @@ fn an_immediate_constructor_rides_its_payload() {
     // The leaf construct builds nothing, the dispatch is an `IsImmediate` test, and with exactly one boxed constructor the tag is never read — the node arm's payloads still project at their tagged offsets.
     assert!(!printed.contains("Tuple("), "{printed}");
     assert!(printed.contains("IsImmediate"), "{printed}");
-    assert!(
-        !printed.contains("VariantGet(CpsFamilyId(0), 0)"),
-        "{printed}"
-    );
-    assert!(
-        printed.contains("VariantGet(CpsFamilyId(0), 1)"),
-        "{printed}"
-    );
+    assert!(!printed.contains("RowGet(CpsRowId(0), 0)"), "{printed}");
+    assert!(printed.contains("RowGet(CpsRowId(0), 1)"), "{printed}");
     // The immediate arm's payload is *read*, not aliased to the scrutinee. Without this node the binder and the scrutinee are one value, and a raw demand from the arm reaches the scrutinee's own definition — which on the boxed path built a tuple. See `an_immediate_arm_payload_survives_arithmetic_in_a_loop` in `curios`'s matching tests for what that emitted.
     assert!(printed.contains("ImmediateGet"), "{printed}");
 }
@@ -355,10 +343,7 @@ fn an_immediate_family_with_two_boxed_constructors_keeps_the_inner_tag_dispatch(
     let printed = lowered(&module);
     // Two boxed constructors remain behind the test, so the tag dispatch survives on that side.
     assert!(printed.contains("IsImmediate"), "{printed}");
-    assert!(
-        printed.contains("VariantGet(CpsFamilyId(0), 0)"),
-        "{printed}"
-    );
+    assert!(printed.contains("RowGet(CpsRowId(0), 0)"), "{printed}");
 }
 
 #[test]
@@ -391,7 +376,7 @@ fn two_immediate_constructors_decline_the_encoding() {
 
     let printed = lowered(&module);
     // Two immediate constructors would collide on the same i31 values, so the family stays tagged — which since family keying means a `Variant` of its own family rather than a structural tuple.
-    assert!(printed.contains("Variant(CpsFamilyId(0)"), "{printed}");
+    assert!(printed.contains("Row(CpsRowId(0)"), "{printed}");
     assert!(!printed.contains("IsImmediate"), "{printed}");
 }
 

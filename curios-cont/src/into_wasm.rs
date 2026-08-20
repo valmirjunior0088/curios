@@ -1,6 +1,6 @@
 use {
     crate::{
-        CpsFamily, CpsFamilyId, CpsIntrinsic, CpsModule, Repr, cps::represent, machine::lower,
+        CpsIntrinsic, CpsModule, CpsRow, CpsRowId, Repr, cps::represent, machine::lower,
         machine::structurize, machine::value_id, machine::value_name,
     },
     curios_abi::ForeignFunction,
@@ -83,15 +83,15 @@ pub(crate) enum EmissionData {
     Bin(Grain, PackedBin),
     List(Vec<EmissionValueName>),
     Tuple(Vec<EmissionValueName>),
-    /// A variant construction at its family's width. Emitted as the family's own final struct type rather than an arity-keyed `$tuple/N`, which is what makes every read of it an exact cast.
-    Variant(CpsFamilyId, Vec<EmissionArg>),
+    /// A nominal row's construction, at that row's full width. Emitted as the row's own final struct type rather than an arity-keyed `$tuple/N`, which is what makes every read of it an exact cast.
+    Row(CpsRowId, Vec<EmissionArg>),
     Closure(EmissionClosureName, Vec<EmissionValueName>),
 }
 
 /// One pure intrinsic computation over already-bound values — the expression vocabulary of the IR. Every variant produces exactly one value and has no effects (anything stateful is a [`EmissionTail`], per the IR's atomicity law), which is what licenses the optimizer to fold, dedupe, hoist, and drop `Eval` bindings freely.
 #[derive(Debug, Clone)]
 pub(crate) enum EmissionCode {
-    /// One [`CpsIntrinsic`] over its operands, in the order and arity the op fixes — verified at the CPS boundary, so codegen indexes the vector directly. The scalar families (`Nat*`/`Int*`/`Flt*`) lower to the wasm ops they mirror one-for-one; the `Bin*`/`List*` families are rope operations codegen services through shared helper functions.
+    /// One [`CpsIntrinsic`] over its operands, in the order and arity the op fixes — verified at the CPS boundary, so codegen indexes the vector directly. The scalar rows (`Nat*`/`Int*`/`Flt*`) lower to the wasm ops they mirror one-for-one; the `Bin*`/`List*` rows are rope operations codegen services through shared helper functions.
     Intrinsic(CpsIntrinsic, Vec<EmissionValueName>),
     // `ListMap(src, f)`: map closure `f` over list `src` into a fresh list of the same length. Codegen lowers it to the shared `$list/map` rope helper: one allocation, one fill loop applying `f` per slot via `call_indirect`.
     /// The list-map runtime helper call: list first, mapper second. Not an [`Intrinsic`](Self::Intrinsic) member because it is no [`CpsIntrinsic`] upstream — it runs a closure, so CPS carries it as the call-shaped `CpsIntrinsicCall` with a return continuation, and only structurization collapses it to a pure helper call.
@@ -266,8 +266,8 @@ pub(crate) struct EmissionModule {
     clsrs: Vec<(EmissionClosureName, EmissionClosure)>,
     funcs: Vec<(EmissionFunctionName, EmissionFunction)>,
     entry: Option<EmissionFunctionName>,
-    /// The variant families this module constructs and reads, each with its debug name and slot carriers. See [`EmissionData::Variant`].
-    families: Vec<(CpsFamilyId, CpsFamily)>,
+    /// The nominal rows this module constructs and reads, each with its debug name and slot carriers. See [`EmissionData::Row`].
+    rows: Vec<(CpsRowId, CpsRow)>,
 }
 
 impl EmissionModule {
@@ -276,12 +276,12 @@ impl EmissionModule {
         Self::default()
     }
 
-    pub(crate) fn families(&self) -> &[(CpsFamilyId, CpsFamily)] {
-        &self.families
+    pub(crate) fn rows(&self) -> &[(CpsRowId, CpsRow)] {
+        &self.rows
     }
 
-    pub(crate) fn set_families(&mut self, families: Vec<(CpsFamilyId, CpsFamily)>) {
-        self.families = families;
+    pub(crate) fn set_rows(&mut self, rows: Vec<(CpsRowId, CpsRow)>) {
+        self.rows = rows;
     }
 
     pub(crate) fn consts(&self) -> &[(EmissionValueName, EmissionData)] {

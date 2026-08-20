@@ -27,7 +27,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    /// The binary rope family: the flat `$bytes` payload (the host-boundary shape), the `$rope/bin` base, and its `leaf`/`node`/`view` subtypes. Each is its own singleton recursion group — `$bytes` must canonicalize equal to the type curios-js's bridge declares standalone, and a subtype may reference any *earlier* group.
+    /// The binary rope row: the flat `$bytes` payload (the host-boundary shape), the `$rope/bin` base, and its `leaf`/`node`/`view` subtypes. Each is its own singleton recursion group — `$bytes` must canonicalize equal to the type curios-js's bridge declares standalone, and a subtype may reference any *earlier* group.
     fn emit_bin_rope_types(&mut self) {
         let rope = self.table.bin_rope();
 
@@ -248,13 +248,13 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    /// One final struct per variant family: slot zero the tag, the rest the payload slots its constructors share. Final and unrelated to every other type, so a read of one is an exact cast — the reason families are keyed here rather than by arity — and each field is declared at the carrier [`CpsSlot`] names rather than uniformly `anyref`, which is what lets a scalar payload live in a register and a list payload arrive already at its rope base.
+    /// One final struct per nominal row: for a family, slot zero the tag and the rest the payload slots its constructors share; for a product, the schema's row outright. Final and unrelated to every other type, so a read of one is an exact cast — the reason rows are keyed here rather than by arity — and each field is declared at the carrier [`CpsSlot`] names rather than uniformly `anyref`, which is what lets a scalar payload live in a register and a list payload arrive already at its rope base.
     ///
-    /// The tag is `i8`. A family's constructor count is bounded by its declaration and no corpus family approaches the byte, so the discriminant packs into one and reads back through `struct.get_u` with no unboxing at all — the store side is the raw index, where a uniform slot wrote an `i31` reference.
-    fn emit_family_types(&mut self) {
+    /// A family's tag is `i8`. Its constructor count is bounded by its declaration and no corpus family approaches the byte, so the discriminant packs into one and reads back through `struct.get_u` with no unboxing at all — the store side is the raw index, where a uniform slot wrote an `i31` reference.
+    fn emit_row_types(&mut self) {
         let fields: Vec<_> = self
             .table
-            .family_types()
+            .row_types()
             .map(|(_, type_name, slots)| {
                 let fields: Vec<_> = slots
                     .iter()
@@ -285,7 +285,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
-    /// The wasm storage type one family slot is declared at.
+    /// The wasm storage type one row slot is declared at.
     fn slot_storage_type(&self, slot: CpsSlot) -> curios_wasm::StorageType {
         let reference = |type_name| {
             curios_wasm::StorageType::Val(curios_wasm::ValType::Ref(curios_wasm::RefType {
@@ -528,7 +528,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 );
             }
             EmissionData::Tuple(_)
-            | EmissionData::Variant(..)
+            | EmissionData::Row(..)
             | EmissionData::List(_)
             | EmissionData::Closure(_, _) => {
                 let global_name = self.table.find_const(name);
@@ -807,7 +807,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         self.emit_list_rope_types();
         self.emit_cell_type();
         self.emit_tuple_types();
-        self.emit_family_types();
+        self.emit_row_types();
         self.emit_clsr_arity_types();
         self.emit_envr_arity_types();
         self.emit_clsr_types(module);

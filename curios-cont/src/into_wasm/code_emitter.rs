@@ -952,10 +952,8 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
 
         // Every store below may assume this: a local held in a register is held at exactly the carrier this op produces, so no path has to coerce on the way in. What makes it true is that the representation analysis only offers a register to a value whose own definition produces that carrier — see `Offer` in `cps::represent`.
         let result_repr = match op {
-            // A family read produces its slot's carrier, which is a fact of the family rather than of the operation.
-            CpsIntrinsic::VariantGet(family, index) => {
-                self.context.table().family_slots(family)[index].repr()
-            }
+            // A row read produces its slot's carrier, which is a fact of the row rather than of the operation.
+            CpsIntrinsic::RowGet(row, index) => self.context.table().row_slots(row)[index].repr(),
             _ => op.result_repr(),
         };
         debug_assert!(
@@ -1773,7 +1771,7 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 });
             }
             CpsIntrinsic::TupleGet(index) => {
-                // Widest first: widening only ever widens, and in every family measured the wide
+                // Widest first: widening only ever widens, and in every row measured the wide
                 // constructor is the hot one — `fork` over `leaf`, `cons` over `nil`, `some` over
                 // `none` — so the first test usually hits. The roster is module-global and small
                 // (2 to 5 across the whole corpus), so the chain is short whatever the order.
@@ -1790,10 +1788,10 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instrs(instrs);
                 self.emit_store(dest, &op.result_repr());
             }
-            // One exact cast, no cascade: a family value's heap type is a fact of the family, because the door pads every construction to the family's width and the family's type is final. This is what the whole keying buys — the roster search `TupleGet` performs above has nothing to search here. The slot then hands back its own carrier: a scalar arrives in a register with nothing to unbox, and the tag comes out of its packed byte through `struct.get_u`.
-            CpsIntrinsic::VariantGet(family, index) => {
-                let family_type = self.context.table().find_family_type(family);
-                let slot = self.context.table().family_slots(family)[index];
+            // One exact cast, no cascade: a row value's heap type is a fact of the row, because the door pads every construction to the row's width and the row's type is final. This is what the whole keying buys — the roster search `TupleGet` performs above has nothing to search here. The slot then hands back its own carrier: a scalar arrives in a register with nothing to unbox, and the tag comes out of its packed byte through `struct.get_u`.
+            CpsIntrinsic::RowGet(row, index) => {
+                let family_type = self.context.table().find_row_type(row);
+                let slot = self.context.table().row_slots(row)[index];
                 self.emit_instrs(
                     self.context
                         .load_value_instrs(&args[0], LoadAs::Concrete(family_type.clone())),

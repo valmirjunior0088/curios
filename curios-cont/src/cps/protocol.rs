@@ -163,23 +163,23 @@ pub(super) fn split_returns(module: &mut CpsModule) -> bool {
     let constructions = constructions(module);
 
     let mut returning = Vec::new();
-    // The family each split class belongs to, read off the constructions its return edges name. A component whose edges disagree — or that returns structural tuples — rebuilds as a tuple, which is the vocabulary its reads are then in.
-    let mut classes = BTreeMap::<CpsFunId, Option<CpsFamilyId>>::new();
+    // The row each split class belongs to, read off the constructions its return edges name. A component whose edges disagree — or that returns structural tuples — rebuilds as a tuple, which is the vocabulary its reads are then in.
+    let mut classes = BTreeMap::<CpsFunId, Option<CpsRowId>>::new();
     for &function in widths.keys() {
         let sentinel = module.function(function).unwrap().return_cont;
         for node_id in function_nodes(module, function) {
             for edge in return_edges(module.node(node_id).unwrap(), sentinel) {
                 if let [CpsAtom::Value(value)] = edge.args.as_slice()
-                    && let Some((_, family)) = constructions.get(value)
+                    && let Some((_, row)) = constructions.get(value)
                 {
                     classes
                         .entry(function)
                         .and_modify(|seen| {
-                            if *seen != *family {
+                            if *seen != *row {
                                 *seen = None;
                             }
                         })
-                        .or_insert(*family);
+                        .or_insert(*row);
                 }
             }
         }
@@ -213,7 +213,7 @@ pub(super) fn split_returns(module: &mut CpsModule) -> bool {
             resuming.insert(*return_to, (width, classes.get(callee).copied().flatten()));
         }
     }
-    for (resume, (width, family)) in resuming {
+    for (resume, (width, row)) in resuming {
         // A tail call names its function's sentinel, which is bodyless and has no parameters to widen — the caller's own return edges carry the class's width already.
         let Some(definition) = module.continuation(resume) else {
             continue;
@@ -228,11 +228,11 @@ pub(super) fn split_returns(module: &mut CpsModule) -> bool {
         let mut atoms: Vec<CpsAtom> = params.iter().copied().map(CpsAtom::Value).collect();
         let rebuilt = module.add_node(CpsNode::LetValue {
             result: held,
-            value: match family {
-                Some(family) => {
-                    // The protocol carries only the slots the demand asked for, so the rebuild fills the family's remaining width rather than widening the interface — a narrower interface is the whole point of splitting, and the slots past the demand are by construction unread.
-                    atoms.resize(module.family(family).width(), CpsAtom::Filler);
-                    CpsValueExpr::Variant(family, atoms)
+            value: match row {
+                Some(row) => {
+                    // The protocol carries only the slots the demand asked for, so the rebuild fills the row's remaining width rather than widening the interface — a narrower interface is the whole point of splitting, and the slots past the demand are by construction unread.
+                    atoms.resize(module.row(row).width(), CpsAtom::Filler);
+                    CpsValueExpr::Row(row, atoms)
                 }
                 None => CpsValueExpr::Tuple(atoms),
             },
@@ -247,7 +247,7 @@ pub(super) fn split_returns(module: &mut CpsModule) -> bool {
 
 /// The first `width` fields of the construction `args` names, filled out where the constructor is shorter than the class's width.
 fn split_fields(
-    constructions: &BTreeMap<CpsValueId, (Vec<CpsAtom>, Option<CpsFamilyId>)>,
+    constructions: &BTreeMap<CpsValueId, (Vec<CpsAtom>, Option<CpsRowId>)>,
     args: &[CpsAtom],
     width: usize,
 ) -> Vec<CpsAtom> {
@@ -321,8 +321,8 @@ fn return_edges(node: &CpsNode, sentinel: CpsContId) -> Vec<&CpsEdge> {
         .collect()
 }
 
-/// The fields of every aggregate built in the module, by the value the construction binds, with the family a variant construction belongs to. A variant is visible here for the same reason a tuple is — a return edge naming one is a class this rewrite can split — and the family rides along so the resume rebuilds in the vocabulary the reads below it use.
-fn constructions(module: &CpsModule) -> BTreeMap<CpsValueId, (Vec<CpsAtom>, Option<CpsFamilyId>)> {
+/// The fields of every aggregate built in the module, by the value the construction binds, with the row a variant construction belongs to. A variant is visible here for the same reason a tuple is — a return edge naming one is a class this rewrite can split — and the row rides along so the resume rebuilds in the vocabulary the reads below it use.
+fn constructions(module: &CpsModule) -> BTreeMap<CpsValueId, (Vec<CpsAtom>, Option<CpsRowId>)> {
     let mut output = BTreeMap::new();
     for (_, node) in module.nodes.iter_live() {
         match node {
@@ -335,10 +335,10 @@ fn constructions(module: &CpsModule) -> BTreeMap<CpsValueId, (Vec<CpsAtom>, Opti
             }
             CpsNode::LetValue {
                 result,
-                value: CpsValueExpr::Variant(family, fields),
+                value: CpsValueExpr::Row(row, fields),
                 ..
             } => {
-                output.insert(*result, (fields.clone(), Some(*family)));
+                output.insert(*result, (fields.clone(), Some(*row)));
             }
             _ => {}
         }

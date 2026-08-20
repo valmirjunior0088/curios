@@ -747,7 +747,7 @@ pub(super) fn flatten_indexed_lists(module: &mut CpsModule) -> bool {
 pub(super) fn forward_aggregate_projections(module: &mut CpsModule) -> bool {
     let mut changed = false;
     loop {
-        // Keyed by the vocabulary the construction was built in, so a read only ever forwards through a matching construction — a `VariantGet` never folds through a structural tuple, nor a `TupleGet` through a family's.
+        // Keyed by the vocabulary the construction was built in, so a read only ever forwards through a matching construction — a `RowGet` never folds through a structural tuple, nor a `TupleGet` through a row's.
         let aggregates = module
             .nodes
             .slots()
@@ -761,9 +761,9 @@ pub(super) fn forward_aggregate_projections(module: &mut CpsModule) -> bool {
                 } => Some(((*result, None), fields.clone())),
                 CpsNode::LetValue {
                     result,
-                    value: CpsValueExpr::Variant(family, fields),
+                    value: CpsValueExpr::Row(row, fields),
                     ..
-                } => Some(((*result, Some(*family)), fields.clone())),
+                } => Some(((*result, Some(*row)), fields.clone())),
                 _ => None,
             })
             .collect::<BTreeMap<_, _>>();
@@ -777,15 +777,15 @@ pub(super) fn forward_aggregate_projections(module: &mut CpsModule) -> bool {
             else {
                 return None;
             };
-            let (family, field) = match op {
+            let (row, field) = match op {
                 CpsIntrinsic::TupleGet(field) => (None, *field),
-                CpsIntrinsic::VariantGet(family, field) => (Some(*family), *field),
+                CpsIntrinsic::RowGet(row, field) => (Some(*row), *field),
                 _ => return None,
             };
             let [CpsAtom::Value(tuple)] = args.as_slice() else {
                 return None;
             };
-            let replacement = aggregates.get(&(*tuple, family))?.get(field)?.clone();
+            let replacement = aggregates.get(&(*tuple, row))?.get(field)?.clone();
             Some((id, *result, *next, replacement))
         });
         let Some((node, result, next, replacement)) = selected else {

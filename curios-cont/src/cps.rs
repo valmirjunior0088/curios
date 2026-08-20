@@ -17,7 +17,7 @@ id!(CpsNodeId, "~n");
 id!(CpsValueId, "~v");
 id!(CpsFunId, "~f");
 id!(CpsContId, "~k");
-id!(CpsFamilyId, "~d");
+id!(CpsRowId, "~r");
 
 impl CpsFunId {
     pub(crate) fn from_index(index: usize) -> Self {
@@ -49,8 +49,8 @@ pub enum CpsValueExpr {
     Literal(CpsLiteral),
     List(Vec<CpsAtom>),
     Tuple(Vec<CpsAtom>),
-    /// A tagged variant construction at its family's width: `fields[0]` is the tag, then the payloads, padded with [`CpsAtom::Filler`] past the constructor's own row. The Ersd door is the only mint and pads every construction, so a family value's arity is a fact of the family rather than of the constructor that built it — which is what lets the emitter key one final heap type per family and read it with an exact cast instead of the structural roster cascade.
-    Variant(CpsFamilyId, Vec<CpsAtom>),
+    /// A construction of a *nominal* row — a variant family or a product schema — at that row's full width, padded with [`CpsAtom::Filler`] wherever the constructor building it is narrower than the row. A family's slot zero is its tag; a product has none. The Ersd door is the only mint and pads every construction, so a row value's arity is a fact of the row rather than of the site that built it — which is what lets the emitter key one final heap type per row and read it with an exact cast instead of the structural roster cascade.
+    Row(CpsRowId, Vec<CpsAtom>),
 }
 
 /// Intrinsic identity without operands. Operand order and arity live on the surrounding `LetIntrinsic`, so every analysis sees one uniform operand vector.
@@ -151,8 +151,8 @@ pub enum CpsIntrinsic {
     /// `(list…) -> list`: one exact-length flat leaf holding every element of every operand in order — the eager concatenation `fuse_settle_trees` builds where the reads that would have paid the gather are already in evidence. Minted only by the optimizer, like [`CpsIntrinsic::BinChunk`].
     ListFlat(usize),
     TupleGet(usize),
-    /// `(variant) -> value`: slot `index` of a [`CpsValueExpr::Variant`] of `family` — 0 the tag, `1 + i` payload `i`. Distinct from [`CpsIntrinsic::TupleGet`] so a family read names the family whose final type the emitter casts to exactly, and so a structural projection can never silently read a family value through the roster cascade: the two vocabularies meet only in the verifier, which refuses a mismatch.
-    VariantGet(CpsFamilyId, usize),
+    /// `(row) -> value`: slot `index` of a [`CpsValueExpr::Row`] of `row`. Which slot holds what is the row's to say — a family's slot zero is its tag — and the door is what knows it. Distinct from [`CpsIntrinsic::TupleGet`] so a row read names the row whose final type the emitter casts to exactly, and so a structural projection can never silently read a row value through the roster cascade: the two vocabularies meet only in the verifier, which refuses a mismatch.
+    RowGet(CpsRowId, usize),
     /// The virtual-window bounds guard: `(start, count, len) -> count`, trapping unless the window ends inside `len` — the eager trap a physical slice would have performed, kept at the original evaluation point when the slice itself is virtualized away. It answers the count unchanged rather than a difference, because a window is a start and a count everywhere above this too; what it contributes is the trap, not the arithmetic.
     WindowExtent,
     /// Whether the operand is an unboxed scalar (1) or an aggregate reference (0) — the dispatch of a variant encoding whose one scalar-payload constructor rides bare. A representation question, which is why it exists in this crate's vocabulary and not in Ersd: the lowering that chose the encoding is the only producer, and it guarantees the two answers are disjoint over every value the test can reach.
@@ -207,7 +207,7 @@ impl CpsIntrinsic {
             // The whole point of the test is to look at the reference uncoerced, and the read that follows it hands that same reference on.
             (IsImmediate | ImmediateGet, _) => Repr::Ref,
             (ListConcat(_) | ListLen | ListSettle | ListFlat(_), _) => Repr::List,
-            (TupleGet(_) | VariantGet(..), _) => Repr::Ref,
+            (TupleGet(_) | RowGet(..), _) => Repr::Ref,
 
             (
                 NatEql | NatNeq | NatAdd | NatSub | NatMul | NatLt | NatDiv | NatRem | NatGt
@@ -267,7 +267,7 @@ impl CpsIntrinsic {
                 Repr::List
             }
             // A list read, a tuple or variant projection and an immediate arm's payload all yield whatever was stored, uninterpreted.
-            ListGet | TupleGet(_) | VariantGet(..) | ImmediateGet => Repr::Ref,
+            ListGet | TupleGet(_) | RowGet(..) | ImmediateGet => Repr::Ref,
         }
     }
 }
@@ -308,7 +308,7 @@ impl CpsIntrinsic {
             | Self::BinLen(_)
             | Self::ListLen
             | Self::TupleGet(_)
-            | Self::VariantGet(..)
+            | Self::RowGet(..)
             | Self::IsImmediate
             | Self::ImmediateGet => 1,
             Self::BinSlice(_) | Self::ListSlice | Self::WindowExtent => 3,
@@ -343,7 +343,7 @@ impl CpsIntrinsic {
             | Self::ListSlice
             | Self::ListRest
             | Self::TupleGet(_)
-            | Self::VariantGet(..)
+            | Self::RowGet(..)
             | Self::WindowExtent
             // Total in the language, guarded by the emitter because the result can leave the i31 envelope. `NatSub` is monus and `NatShr`/`IntShr` only clear bits, so neither needs a guard.
             | Self::NatAdd
@@ -503,7 +503,7 @@ impl CpsCellOp {
     }
 }
 
-/// A call-like intrinsic. `ListMap` takes the list then the mapper — the carrier-first order of the whole sequence family, matched by the erased representation so the lowering transcribes without reordering — and runs the mapper once per element, in order.
+/// A call-like intrinsic. `ListMap` takes the list then the mapper — the carrier-first order of the whole sequence row, matched by the erased representation so the lowering transcribes without reordering — and runs the mapper once per element, in order.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CpsIntrinsicCall {
     ListMap,
@@ -638,35 +638,35 @@ pub struct CpsModule {
     functions: Arena<CpsFunId, CpsFunction>,
     continuations: Arena<CpsContId, CpsContinuation>,
     field_groups: BTreeMap<CpsContId, Vec<FieldGroup>>,
-    /// The variant families this module's [`CpsValueExpr::Variant`]s belong to, appended by the Ersd door and never removed — a family that loses its last construction is simply an unreferenced row, so the ids stay stable without tombstones.
-    families: Vec<CpsFamily>,
+    /// The nominal rows this module's [`CpsValueExpr::Row`]s belong to, appended by the Ersd door and never removed — a row that loses its last construction is simply an unreferenced entry, so the ids stay stable without tombstones.
+    rows: Vec<CpsRow>,
     entry: Option<CpsFunId>,
 }
 
-/// One variant family: its debug name, and the carrier of every slot of its heap type — slot zero the tag, the rest the payload row every [`CpsValueExpr::Variant`] of the family is padded to.
+/// One nominal row — a variant family or a product schema: its debug name, and the carrier of every slot of its heap type. A family carries its tag at slot zero and a product does not; either way this is the width every [`CpsValueExpr::Row`] naming it is padded to.
 #[derive(Debug, Clone)]
-pub struct CpsFamily {
+pub struct CpsRow {
     pub debug_name: Option<String>,
     pub slots: Vec<CpsSlot>,
 }
 
-impl CpsFamily {
-    /// The arity every construction of this family carries.
+impl CpsRow {
+    /// The arity every construction of this row carries.
     pub fn width(&self) -> usize {
         self.slots.len()
     }
 }
 
-/// What one slot of a family's heap type holds.
+/// What one slot of a row's heap type holds.
 ///
-/// The door decides this from the erased shape recorded on each constructor's fields, and it is the whole point of keying a heap type by family: an arity-keyed type is shared by every constructor of that arity module-wide, so the join over any slot's stores is the top type and nothing can be said about it. A family's slots are written by that family alone, so a slot whose every writer agrees names a carrier — a register for the scalars, a declared heap type for the shapes — and the emitter declares the wasm field at it.
+/// The door decides this from the erased shape recorded on each constructor's fields, and it is the whole point of keying a heap type by row: an arity-keyed type is shared by every constructor of that arity module-wide, so the join over any slot's stores is the top type and nothing can be said about it. A row's slots are written by that row alone, so a slot whose every writer agrees names a carrier — a register for the scalars, a declared heap type for the shapes — and the emitter declares the wasm field at it.
 ///
-/// Slots are assigned by carrier rather than by field position, which is what keeps the family from widening: a constructor's fields are distributed into the slot range their carrier owns, so two constructors sharing a carrier share its slots and only a disagreement costs width. Positional assignment would have been free but types almost nothing — over the standard library it settles 11 slots against this rule's 22 — while giving each constructor a disjoint range types only five more and costs 18 slots more than this.
+/// Slots are assigned by carrier rather than by field position, which is what keeps a family from widening: a constructor's fields are distributed into the slot range their carrier owns, so two constructors sharing a carrier share its slots and only a disagreement costs width. Positional assignment would have been free but types almost nothing — over the standard library it settles 11 slots against this rule's 22 — while giving each constructor a disjoint range types only five more and costs 18 slots more than this.
 ///
-/// Three shapes stay [`CpsSlot::Opaque`] deliberately. A packed carrier is *sometimes* an immediate, so no single heap type names its population. A closure's runtime arity is not something the recorded shape is yet entitled to promise, since the erased arity is read off the declared type and the passes above may raise it. A family-typed field would need the field's family identity, which erasure does not record.
+/// Three shapes stay [`CpsSlot::Opaque`] deliberately. A packed carrier is *sometimes* an immediate, so no single heap type names its population. A closure's runtime arity is not something the recorded shape is yet entitled to promise, since the erased arity is read off the declared type and the passes above may raise it. A row-typed field would need the field's row identity, which erasure does not record.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum CpsSlot {
-    /// The discriminant. Stored packed and read unsigned, since a family's constructor count is bounded far below the byte the tag occupies.
+    /// A variant family's discriminant, at slot zero. Stored packed and read unsigned, since a family's constructor count is bounded far below the byte the tag occupies; a product row carries none.
     Tag,
     /// A raw unsigned 32-bit payload.
     Nat,
@@ -709,35 +709,35 @@ impl CpsModule {
         &self.field_groups
     }
 
-    /// Register a variant family and hand back its identity. The Ersd door is the only caller; see [`CpsValueExpr::Variant`].
-    pub fn add_family(&mut self, family: CpsFamily) -> CpsFamilyId {
-        let id = CpsFamilyId::from_index(self.families.len());
-        self.families.push(family);
+    /// Register a nominal row and hand back its identity. The Ersd door is the only caller; see [`CpsValueExpr::Row`].
+    pub fn add_row(&mut self, row: CpsRow) -> CpsRowId {
+        let id = CpsRowId::from_index(self.rows.len());
+        self.rows.push(row);
         id
     }
 
-    pub fn family(&self, id: CpsFamilyId) -> &CpsFamily {
-        &self.families[id.index()]
+    pub fn row(&self, id: CpsRowId) -> &CpsRow {
+        &self.rows[id.index()]
     }
 
-    /// The representation a read of `family`'s slot at `index` produces. The one result representation that is a fact of the module rather than of the operation, which is why [`CpsIntrinsic::result_repr`] cannot answer it alone.
-    pub fn slot_repr(&self, family: CpsFamilyId, index: usize) -> Repr {
-        self.families[family.index()].slots[index].repr()
+    /// The representation a read of `row`'s slot at `index` produces. The one result representation that is a fact of the module rather than of the operation, which is why [`CpsIntrinsic::result_repr`] cannot answer it alone.
+    pub fn slot_repr(&self, row: CpsRowId, index: usize) -> Repr {
+        self.rows[row.index()].slots[index].repr()
     }
 
-    /// The representation `op` produces, resolving a family read against this module's slot carriers.
+    /// The representation `op` produces, resolving a row read against this module's slot carriers.
     pub fn result_repr(&self, op: &CpsIntrinsic) -> Repr {
         match op {
-            CpsIntrinsic::VariantGet(family, index) => self.slot_repr(*family, *index),
+            CpsIntrinsic::RowGet(row, index) => self.slot_repr(*row, *index),
             _ => op.result_repr(),
         }
     }
 
-    pub fn families(&self) -> impl Iterator<Item = (CpsFamilyId, &CpsFamily)> {
-        self.families
+    pub fn rows(&self) -> impl Iterator<Item = (CpsRowId, &CpsRow)> {
+        self.rows
             .iter()
             .enumerate()
-            .map(|(index, family)| (CpsFamilyId::from_index(index), family))
+            .map(|(index, row)| (CpsRowId::from_index(index), row))
     }
 
     /// Record that `continuation`'s parameter at `start` was spliced into `width` fields: the new group, *and* every group past it shifted by the parameters the splice added.
@@ -1050,7 +1050,7 @@ impl CpsModule {
             )?;
         }
         self.verify_lexical_scopes(entry)?;
-        self.verify_families()?;
+        self.verify_rows()?;
 
         let live_nodes = self.nodes.live_ids().collect::<BTreeSet<_>>();
         let owned_nodes = node_owners.keys().copied().collect::<BTreeSet<_>>();
@@ -1101,41 +1101,41 @@ impl CpsModule {
         Ok(())
     }
 
-    /// The family vocabulary's coherence: every family named by a construction or a read exists, every construction carries exactly its family's width, and every read is in range of it.
+    /// The row vocabulary's coherence: every row named by a construction or a read exists, every construction carries exactly its row's width, and every read is in range of it.
     ///
-    /// This is what the distinct [`CpsValueExpr::Variant`] buys over an annotation on `Tuple`. A family value read at a structural projection, or a construction one slot short of its family, would be a `ref.cast` trap in emitted code far from the pass that caused it; here it is a verifier failure at the boundary that produced it. Padding is the door's job, so a mismatch is always a compiler bug rather than a program's.
-    fn verify_families(&self) -> Result<(), CpsVerifyError> {
+    /// This is what the distinct [`CpsValueExpr::Row`] buys over an annotation on `Tuple`. A row value read at a structural projection, or a construction one slot short of its row, would be a `ref.cast` trap in emitted code far from the pass that caused it; here it is a verifier failure at the boundary that produced it. Padding is the door's job, so a mismatch is always a compiler bug rather than a program's.
+    fn verify_rows(&self) -> Result<(), CpsVerifyError> {
         for (_, node) in self.nodes.iter_live() {
             match node {
                 CpsNode::LetValue {
-                    value: CpsValueExpr::Variant(family, atoms),
+                    value: CpsValueExpr::Row(row, atoms),
                     ..
                 } => {
-                    let Some(definition) = self.families.get(family.index()) else {
+                    let Some(definition) = self.rows.get(row.index()) else {
                         return Err(CpsVerifyError(format!(
-                            "variant construction names {family}, which was not minted by this module"
+                            "row construction names {row}, which was not minted by this module"
                         )));
                     };
                     if atoms.len() != definition.width() {
                         return Err(CpsVerifyError(format!(
-                            "variant construction of {family} carries {} slots, but the family is {} wide",
+                            "row construction of {row} carries {} slots, but the row is {} wide",
                             atoms.len(),
                             definition.width(),
                         )));
                     }
                 }
                 CpsNode::LetIntrinsic {
-                    op: CpsIntrinsic::VariantGet(family, index),
+                    op: CpsIntrinsic::RowGet(row, index),
                     ..
                 } => {
-                    let Some(definition) = self.families.get(family.index()) else {
+                    let Some(definition) = self.rows.get(row.index()) else {
                         return Err(CpsVerifyError(format!(
-                            "variant read names {family}, which was not minted by this module"
+                            "row read names {row}, which was not minted by this module"
                         )));
                     };
                     if *index >= definition.width() {
                         return Err(CpsVerifyError(format!(
-                            "variant read of {family} at slot {index}, but the family is {} wide",
+                            "row read of {row} at slot {index}, but the row is {} wide",
                             definition.width(),
                         )));
                     }
@@ -1697,7 +1697,7 @@ pub(crate) fn atoms(node: &CpsNode) -> Vec<&CpsAtom> {
             CpsValueExpr::Literal(_) => {}
             CpsValueExpr::List(values)
             | CpsValueExpr::Tuple(values)
-            | CpsValueExpr::Variant(_, values) => output.extend(values),
+            | CpsValueExpr::Row(_, values) => output.extend(values),
         },
         CpsNode::LetIntrinsic { args, .. }
         | CpsNode::ApplyFun { args, .. }
@@ -1733,7 +1733,7 @@ pub(crate) fn visit_atoms_mut(node: &mut CpsNode, visitor: &mut impl FnMut(&mut 
             CpsValueExpr::Literal(_) => {}
             CpsValueExpr::List(values)
             | CpsValueExpr::Tuple(values)
-            | CpsValueExpr::Variant(_, values) => values.iter_mut().for_each(visitor),
+            | CpsValueExpr::Row(_, values) => values.iter_mut().for_each(visitor),
         },
         CpsNode::LetIntrinsic { args, .. }
         | CpsNode::ApplyFun { args, .. }

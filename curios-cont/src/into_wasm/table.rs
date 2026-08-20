@@ -4,7 +4,7 @@ use {
         EmissionData, EmissionFunction, EmissionFunctionName, EmissionModule, EmissionValue,
         EmissionValueName, LoadAs,
     },
-    crate::{CpsFamilyId, CpsIntrinsic, CpsSlot, Repr},
+    crate::{CpsIntrinsic, CpsRowId, CpsSlot, Repr},
     curios_abi::ForeignFunction,
     std::{
         cell::{OnceCell, RefCell},
@@ -289,8 +289,8 @@ pub(crate) struct Table<'a> {
     // The foreign functions the emitted code calls, keyed by the minted internal name (see `host_func`). Same lazy used-tracking as the `exit` cell: the first call-site reference during emission records the function's row, and `emit_sys_imports` then declares exactly the recorded set (in minted-name order — wasmtime links by name, so import order is cosmetic).
     host_funcs: RefCell<BTreeMap<String, Arc<ForeignFunction>>>,
     tuple_types: BTreeMap<usize, curios_wasm::TypeName>,
-    /// One final struct type per variant family, keyed by the family's identity rather than by an arity — which is what makes a family read an exact cast and gives Binaryen's closed-world passes distinct types to refine. Widths come from the Cont module's own family table, so a family whose constructions were all optimized away still declares its type (harmless, and a projection can outlive its constructions).
-    family_types: BTreeMap<CpsFamilyId, (curios_wasm::TypeName, Vec<CpsSlot>)>,
+    /// One final struct type per nominal row, keyed by the row's identity rather than by an arity — which is what makes a row read an exact cast and gives Binaryen's closed-world passes distinct types to refine. Widths come from the Cont module's own row table, so a row whose constructions were all optimized away still declares its type (harmless, and a projection can outlive its constructions).
+    row_types: BTreeMap<CpsRowId, (curios_wasm::TypeName, Vec<CpsSlot>)>,
     envr_types: BTreeMap<usize, curios_wasm::TypeName>,
     clsr_types: BTreeMap<usize, curios_wasm::TypeName>,
     /// Keyed by the pair a wasm function type actually is — parameter count *and* result count — rather than by parameter count alone, so two functions of the same arity delivering different result shapes cannot collide on one type. The closure supertypes below stay keyed by arity, because a function reached through one is invoked at the uniform shape whatever its own type says.
@@ -382,16 +382,16 @@ impl<'a> Table<'a> {
             bits_eql: OnceCell::new(),
             list_map: OnceCell::new(),
             host_funcs: RefCell::new(BTreeMap::new()),
-            family_types: module
-                .families()
+            row_types: module
+                .rows()
                 .iter()
-                .map(|(family, definition)| {
+                .map(|(row, definition)| {
                     let spelled = match &definition.debug_name {
-                        Some(hint) => format!("fam/{}${hint}", family.index()),
-                        None => format!("fam/{}", family.index()),
+                        Some(hint) => format!("row/{}${hint}", row.index()),
+                        None => format!("row/{}", row.index()),
                     };
                     (
-                        *family,
+                        *row,
                         (
                             curios_wasm::TypeName::from(spelled),
                             definition.slots.clone(),
@@ -416,8 +416,8 @@ impl<'a> Table<'a> {
                             .iter()
                             .map(|(_, func)| max_region_tuple_arity(&func.region)),
                     )
-                    // A family slot declared at a product width names that width's tuple type, so the roster has to reach it whether or not the module ever builds one — the family type is emitted even where every construction of the family was optimized away.
-                    .chain(module.families().iter().flat_map(|(_, definition)| {
+                    // A row slot declared at a product width names that width's tuple type, so the roster has to reach it whether or not the module ever builds one — the row type is emitted even where every construction of the row was optimized away.
+                    .chain(module.rows().iter().flat_map(|(_, definition)| {
                         definition.slots.iter().map(|slot| match slot {
                             CpsSlot::Product(width) => *width,
                             _ => 0,
@@ -477,7 +477,7 @@ impl<'a> Table<'a> {
                 .filter(|(_, data)| {
                     matches!(
                         data,
-                        EmissionData::List(_) | EmissionData::Tuple(_) | EmissionData::Variant(..)
+                        EmissionData::List(_) | EmissionData::Tuple(_) | EmissionData::Row(..)
                     )
                 })
                 .map(|(const_name, _)| const_name)
@@ -597,7 +597,7 @@ impl<'a> Table<'a> {
 
     /// The internal binding name of a store-described host function. First use during emission records the function as live; [`host_funcs`](Self::host_funcs) hands the recorded set to `emit_sys_imports`.
     ///
-    /// A row's identity is its `(namespace, name)` pair (see [`ForeignFunction`]), and its name is chosen outside the emitter, so the minted name embeds both components under the reserved `host/` family prefix — a foreign name can never collide with a runtime helper, another minted family, or a same-named row from another namespace. The embedding is injective because namespaces are compiler-chosen and never contain `/`.
+    /// A row's identity is its `(namespace, name)` pair (see [`ForeignFunction`]), and its name is chosen outside the emitter, so the minted name embeds both components under the reserved `host/` row prefix — a foreign name can never collide with a runtime helper, another minted row, or a same-named row from another namespace. The embedding is injective because namespaces are compiler-chosen and never contain `/`.
     pub(crate) fn host_func(&self, function: &Arc<ForeignFunction>) -> curios_wasm::FuncName {
         let func_name =
             curios_wasm::FuncName::from(format!("host/{}/{}", function.namespace, function.name));
@@ -847,13 +847,13 @@ impl<'a> Table<'a> {
             .map(|(arity, type_name)| (*arity, type_name.clone()))
     }
 
-    /// Every declared family type, with the carrier of each slot its struct holds.
-    pub(crate) fn family_types(
+    /// Every declared row type, with the carrier of each slot its struct holds.
+    pub(crate) fn row_types(
         &self,
-    ) -> impl Iterator<Item = (CpsFamilyId, curios_wasm::TypeName, &[CpsSlot])> {
-        self.family_types
+    ) -> impl Iterator<Item = (CpsRowId, curios_wasm::TypeName, &[CpsSlot])> {
+        self.row_types
             .iter()
-            .map(|(family, (type_name, slots))| (*family, type_name.clone(), slots.as_slice()))
+            .map(|(row, (type_name, slots))| (*row, type_name.clone(), slots.as_slice()))
     }
 
     /// How a value is loaded to fill `slot`, and how a read of it is coerced back.
@@ -870,19 +870,19 @@ impl<'a> Table<'a> {
         }
     }
 
-    /// The carriers of `family`'s slots.
-    pub(crate) fn family_slots(&self, family: CpsFamilyId) -> &[CpsSlot] {
+    /// The carriers of `row`'s slots.
+    pub(crate) fn row_slots(&self, row: CpsRowId) -> &[CpsSlot] {
         &self
-            .family_types
-            .get(&family)
-            .unwrap_or_else(|| panic!("`Table` lacks a type for family `{}`", family))
+            .row_types
+            .get(&row)
+            .unwrap_or_else(|| panic!("`Table` lacks a type for row `{}`", row))
             .1
     }
 
-    pub(crate) fn find_family_type(&self, family: CpsFamilyId) -> curios_wasm::TypeName {
-        self.family_types
-            .get(&family)
-            .unwrap_or_else(|| panic!("`Table` lacks a type for family `{}`", family))
+    pub(crate) fn find_row_type(&self, row: CpsRowId) -> curios_wasm::TypeName {
+        self.row_types
+            .get(&row)
+            .unwrap_or_else(|| panic!("`Table` lacks a type for row `{}`", row))
             .0
             .clone()
     }

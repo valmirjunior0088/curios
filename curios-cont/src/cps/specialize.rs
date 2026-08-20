@@ -235,7 +235,7 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
     }
 
     // The first specializable pattern in deterministic (node, then argument) order: a known-callee call whose argument is a known tagged tuple that the callee deconstructs, whose callee has a lexical `LetFun` owner and a clonable body within the growth budget.
-    let mut chosen: Option<(CpsFunId, usize, u32, usize, Option<CpsFamilyId>)> = None;
+    let mut chosen: Option<(CpsFunId, usize, u32, usize, Option<CpsRowId>)> = None;
     'search: for (_, node) in module.nodes.iter_live() {
         let CpsNode::ApplyFun {
             callee: CpsCallee::Known(callee),
@@ -251,7 +251,7 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
         let params = &module.function(*callee).unwrap().params;
         for (index, arg) in args.iter().enumerate() {
             let CpsAtom::Value(value) = arg else { continue };
-            let Some((tag, fields, family)) = constructors.get(value) else {
+            let Some((tag, fields, row)) = constructors.get(value) else {
                 continue;
             };
             let Some(&param) = params.get(index) else {
@@ -269,11 +269,11 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
             if extent.len() + 1 > BRANCH_SPECIALIZATION_GROWTH_LIMIT {
                 continue;
             }
-            chosen = Some((*callee, index, *tag, fields.len(), *family));
+            chosen = Some((*callee, index, *tag, fields.len(), *row));
             break 'search;
         }
     }
-    let Some((callee, index, tag, arity, family)) = chosen else {
+    let Some((callee, index, tag, arity, row)) = chosen else {
         return false;
     };
 
@@ -321,8 +321,8 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
     rebuilt.extend(field_params.iter().map(|&p| CpsAtom::Value(p)));
     let entry = module.add_node(CpsNode::LetValue {
         result: old_param,
-        value: match family {
-            Some(family) => CpsValueExpr::Variant(family, rebuilt),
+        value: match row {
+            Some(row) => CpsValueExpr::Row(row, rebuilt),
             None => CpsValueExpr::Tuple(rebuilt),
         },
         next: clone_body,
@@ -378,10 +378,10 @@ pub(super) fn specialize_call_patterns(module: &mut CpsModule, budget: &mut usiz
 /// The `LetValue`-bound tagged tuples: values whose defining expression is a tuple whose first field is a `Nat` literal tag. These are the constructor call patterns branch specialization can bake into a callee.
 pub(super) fn tagged_tuple_values(
     module: &CpsModule,
-) -> BTreeMap<CpsValueId, (u32, Vec<CpsAtom>, Option<CpsFamilyId>)> {
+) -> BTreeMap<CpsValueId, (u32, Vec<CpsAtom>, Option<CpsRowId>)> {
     let mut result = BTreeMap::new();
     for (_, node) in module.nodes.iter_live() {
-        let (value, fields, family) = match node {
+        let (value, fields, row) = match node {
             CpsNode::LetValue {
                 result: value,
                 value: CpsValueExpr::Tuple(fields),
@@ -389,18 +389,18 @@ pub(super) fn tagged_tuple_values(
             } => (value, fields, None),
             CpsNode::LetValue {
                 result: value,
-                value: CpsValueExpr::Variant(family, fields),
+                value: CpsValueExpr::Row(row, fields),
                 ..
-            } => (value, fields, Some(*family)),
+            } => (value, fields, Some(*row)),
             _ => continue,
         };
         if let Some(CpsAtom::Literal(CpsLiteral::Nat(tag))) = fields.first() {
-            result.insert(*value, (*tag, fields.clone(), family));
+            result.insert(*value, (*tag, fields.clone(), row));
         }
     }
     result
 }
-/// Whether `function` projects a field out of `param`, i.e. contains a projection on it — a `TupleGet` for a structural product, a `VariantGet` for a family. This is the profitability gate: baking a known constructor into a parameter only pays off when the body actually deconstructs it, and a gate that knew only one of the two vocabularies would silently decline every variant.
+/// Whether `function` projects a field out of `param`, i.e. contains a projection on it — a `TupleGet` for a structural product, a `RowGet` for a row. This is the profitability gate: baking a known constructor into a parameter only pays off when the body actually deconstructs it, and a gate that knew only one of the two vocabularies would silently decline every variant.
 pub(super) fn deconstructs_param(
     module: &CpsModule,
     function: CpsFunId,
@@ -410,7 +410,7 @@ pub(super) fn deconstructs_param(
         matches!(
             module.node(id),
             Some(CpsNode::LetIntrinsic {
-                op: CpsIntrinsic::TupleGet(_) | CpsIntrinsic::VariantGet(..),
+                op: CpsIntrinsic::TupleGet(_) | CpsIntrinsic::RowGet(..),
                 args,
                 ..
             }) if args.first() == Some(&CpsAtom::Value(param))
@@ -466,7 +466,7 @@ pub(super) fn specialize_jump_patterns(module: &mut CpsModule, budget: &mut usiz
     let transfers = continuation_transfers(module);
 
     // The first specializable pattern in deterministic (node, then edge, then argument) order.
-    let mut chosen: Option<(CpsContId, usize, u32, usize, Option<CpsFamilyId>)> = None;
+    let mut chosen: Option<(CpsContId, usize, u32, usize, Option<CpsRowId>)> = None;
     'search: for (_, node) in module.nodes.iter_live() {
         let edges: Vec<&CpsEdge> = match node {
             CpsNode::ApplyCont(edge) => vec![edge],
@@ -487,7 +487,7 @@ pub(super) fn specialize_jump_patterns(module: &mut CpsModule, budget: &mut usiz
             }
             for (index, arg) in edge.args.iter().enumerate() {
                 let CpsAtom::Value(value) = arg else { continue };
-                let Some((tag, fields, family)) = constructors.get(value) else {
+                let Some((tag, fields, row)) = constructors.get(value) else {
                     continue;
                 };
                 let Some(&param) = continuation.params.get(index) else {
@@ -504,12 +504,12 @@ pub(super) fn specialize_jump_patterns(module: &mut CpsModule, budget: &mut usiz
                 if extent.len() + 1 > BRANCH_SPECIALIZATION_GROWTH_LIMIT {
                     continue;
                 }
-                chosen = Some((edge.target, index, *tag, fields.len(), *family));
+                chosen = Some((edge.target, index, *tag, fields.len(), *row));
                 break 'search;
             }
         }
     }
-    let Some((target, index, tag, arity, family)) = chosen else {
+    let Some((target, index, tag, arity, row)) = chosen else {
         return false;
     };
 
@@ -529,8 +529,8 @@ pub(super) fn specialize_jump_patterns(module: &mut CpsModule, budget: &mut usiz
     rebuilt.extend(field_params.iter().map(|&p| CpsAtom::Value(p)));
     let entry = module.add_node(CpsNode::LetValue {
         result: old_param,
-        value: match family {
-            Some(family) => CpsValueExpr::Variant(family, rebuilt),
+        value: match row {
+            Some(row) => CpsValueExpr::Row(row, rebuilt),
             None => CpsValueExpr::Tuple(rebuilt),
         },
         next: clone_body,
@@ -546,27 +546,26 @@ pub(super) fn specialize_jump_patterns(module: &mut CpsModule, budget: &mut usiz
     }
 
     // Repoint every edge sharing the pattern, splicing each edge's own constructor fields in place of the tuple argument.
-    let repoint =
-        |edge: &mut CpsEdge,
-         constructors: &BTreeMap<CpsValueId, (u32, Vec<CpsAtom>, Option<CpsFamilyId>)>|
-         -> bool {
-            if edge.target != target {
-                return false;
-            }
-            let Some(CpsAtom::Value(value)) = edge.args.get(index) else {
-                return false;
-            };
-            let Some((site_tag, site_fields, _)) = constructors.get(value) else {
-                return false;
-            };
-            if *site_tag != tag || site_fields.len() != arity {
-                return false;
-            }
-            let spliced = site_fields[1..].to_vec();
-            edge.target = clone;
-            edge.args.splice(index..=index, spliced);
-            true
+    let repoint = |edge: &mut CpsEdge,
+                   constructors: &BTreeMap<CpsValueId, (u32, Vec<CpsAtom>, Option<CpsRowId>)>|
+     -> bool {
+        if edge.target != target {
+            return false;
+        }
+        let Some(CpsAtom::Value(value)) = edge.args.get(index) else {
+            return false;
         };
+        let Some((site_tag, site_fields, _)) = constructors.get(value) else {
+            return false;
+        };
+        if *site_tag != tag || site_fields.len() != arity {
+            return false;
+        }
+        let spliced = site_fields[1..].to_vec();
+        edge.target = clone;
+        edge.args.splice(index..=index, spliced);
+        true
+    };
     for node_index in 0..module.nodes.len() {
         let node_id = CpsNodeId(node_index as u32);
         let Some(node) = module.nodes.get_mut(node_id) else {
@@ -600,7 +599,7 @@ pub(super) fn continuation_projects(
             matches!(
                 module.node(id),
                 Some(CpsNode::LetIntrinsic {
-                    op: CpsIntrinsic::TupleGet(_) | CpsIntrinsic::VariantGet(..),
+                    op: CpsIntrinsic::TupleGet(_) | CpsIntrinsic::RowGet(..),
                     args,
                     ..
                 }) if args.first() == Some(&CpsAtom::Value(param))

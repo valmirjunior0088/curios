@@ -4,8 +4,8 @@
 
 use {
     crate::{
-        CpsAtom, CpsCallee, CpsCellOp, CpsContId, CpsEdge, CpsFamily, CpsFamilyId, CpsFunId,
-        CpsFunction, CpsIntrinsic, CpsIntrinsicCall, CpsLiteral, CpsModule, CpsNode, CpsNodeId,
+        CpsAtom, CpsCallee, CpsCellOp, CpsContId, CpsEdge, CpsFunId, CpsFunction, CpsIntrinsic,
+        CpsIntrinsicCall, CpsLiteral, CpsModule, CpsNode, CpsNodeId, CpsRow, CpsRowId,
         CpsValueExpr, CpsValueId, atoms,
     },
     curios_abi::ForeignFunction,
@@ -37,7 +37,7 @@ pub(crate) enum MachineConstruct {
     Literal(CpsLiteral),
     List(Vec<MachineOperand>),
     Tuple(Vec<MachineOperand>),
-    Variant(CpsFamilyId, Vec<MachineOperand>),
+    Row(CpsRowId, Vec<MachineOperand>),
 }
 
 #[derive(Debug, Clone)]
@@ -166,8 +166,8 @@ pub(crate) struct MachineModule {
     entry: CpsFunId,
     /// Each function's source hint, carried from the Cont module so emission names can spell a function's origin (`func/{index}$hint`). A hint never affects identity — the `CpsFunId` index does — so a missing entry only omits the hint.
     function_hints: BTreeMap<CpsFunId, String>,
-    /// Every variant family the Cont module declared, with its debug name and slot carriers — carried whole rather than collected from constructions, so a family whose constructions were all optimized away still declares a type for the projections that may outlive them.
-    families: Vec<(CpsFamilyId, CpsFamily)>,
+    /// Every nominal row the Cont module declared, with its debug name and slot carriers — carried whole rather than collected from constructions, so a row whose constructions were all optimized away still declares a type for the projections that may outlive them.
+    rows: Vec<(CpsRowId, CpsRow)>,
 }
 
 impl MachineModule {
@@ -176,8 +176,8 @@ impl MachineModule {
         self.function_hints.get(&id).map(String::as_str)
     }
 
-    pub(crate) fn families(&self) -> &[(CpsFamilyId, CpsFamily)] {
-        &self.families
+    pub(crate) fn rows(&self) -> &[(CpsRowId, CpsRow)] {
+        &self.rows
     }
 }
 
@@ -263,16 +263,13 @@ pub(crate) fn lower(source: &CpsModule) -> MachineModule {
             Some((CpsFunId::from_index(index), name))
         })
         .collect();
-    let families = source
-        .families()
-        .map(|(id, family)| (id, family.clone()))
-        .collect();
+    let rows = source.rows().map(|(id, row)| (id, row.clone())).collect();
     let module = MachineModule {
         functions,
         wrappers,
         entry: source.entry().unwrap(),
         function_hints,
-        families,
+        rows,
     };
     module.verify().expect("invalid closed machine CFG");
     module
@@ -535,8 +532,8 @@ impl<'a> MachineFunctionLowerer<'a> {
                                 .map(|atom| self.lower_atom(atom, &mut instructions))
                                 .collect(),
                         ),
-                        CpsValueExpr::Variant(family, values) => MachineConstruct::Variant(
-                            *family,
+                        CpsValueExpr::Row(row, values) => MachineConstruct::Row(
+                            *row,
                             values
                                 .iter()
                                 .map(|atom| self.lower_atom(atom, &mut instructions))

@@ -866,7 +866,7 @@ pub(crate) enum LoadAs {
     Null,
     NonNull,
     Concrete(curios_wasm::TypeName),
-    /// The same cast, admitting null. A family slot its constructor does not write holds null, and a region split into its slots and rebuilt travels that null back through this store — so the position that fills a typed slot is the one position whose cast must not trap on it.
+    /// The same cast, admitting null. A row slot its constructor does not write holds null, and a region split into its slots and rebuilt travels that null back through this store — so the position that fills a typed slot is the one position whose cast must not trap on it.
     ConcreteOrNull(curios_wasm::TypeName),
     Nat,
     Int,
@@ -881,7 +881,7 @@ pub(crate) enum LoadAs {
 /// The zero of `carrier`, or the boxed zero when the destination holds a reference.
 ///
 /// This is what a filler is materialised as, and the reason it is a function of the *destination* rather than of the filler: a slot's carrier is settled by the representation analysis from the uses of the parameter it feeds, long after the pass that placed the filler. The arms mirror [`Table::local_type`] exactly, including the reference carriers that analysis never answers — a local declared at the top reference type takes the boxed zero, whichever way it got there.
-/// The zero of one family slot: the register zero for a scalar carrier, a null for a declared heap type, and the boxed zero for the uniform reference.
+/// The zero of one row slot: the register zero for a scalar carrier, a null for a declared heap type, and the boxed zero for the uniform reference.
 ///
 /// A typed reference slot takes `ref.null none` rather than the boxed zero because the boxed zero is not of its type — and because null is what a filler *means*, where an `i31` zero is a perfectly good `Nat` standing in a position that holds no value at all.
 pub(crate) fn slot_zero_instrs(slot: CpsSlot) -> Vec<curios_wasm::Instr> {

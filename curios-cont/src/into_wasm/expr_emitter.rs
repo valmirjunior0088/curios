@@ -123,10 +123,10 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     type_name: tuple_n_type,
                 });
             }
-            // Each slot is filled at the carrier its family declares: a scalar goes in raw, a shaped reference through a null-admitting cast, and a slot this constructor does not write takes that slot's own zero rather than one chosen upstream.
-            EmissionData::Variant(family, slots) => {
-                let family_type = self.context.table().find_family_type(*family);
-                let carriers = self.context.table().family_slots(*family).to_vec();
+            // Each slot is filled at the carrier its row declares: a scalar goes in raw, a shaped reference through a null-admitting cast, and a slot this constructor does not write takes that slot's own zero rather than one chosen upstream.
+            EmissionData::Row(row, slots) => {
+                let family_type = self.context.table().find_row_type(*row);
+                let carriers = self.context.table().row_slots(*row).to_vec();
 
                 for (slot, carrier) in slots.iter().zip(carriers) {
                     self.emit_instrs(match slot {
@@ -372,7 +372,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 matches!(
                     value,
                     EmissionValue::Pure(
-                        EmissionData::Tuple(_) | EmissionData::List(_) | EmissionData::Variant(..)
+                        EmissionData::Tuple(_) | EmissionData::List(_) | EmissionData::Row(..)
                     )
                 )
             })

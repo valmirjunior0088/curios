@@ -90,13 +90,13 @@ struct Lowerer<'a> {
     /// Members of value-only recursive knots, mapped to the mutable cell that ties each knot. A reference to such a member lowers to a read of the filled cell (see [`Lowerer::with_cell_reads`]), so the tie is forced once and is invisible to everything but this lowering.
     knot_cells: BTreeMap<ValueId, curios_cont::CpsValueId>,
     /// The Cont layout of each tagged family, computed on first use. Only the tagged encodings register one: a collapsed family builds a bare value or a structural tuple, and an immediate family's bare constructor is a scalar, so neither has a family heap type to key.
-    families: BTreeMap<FamilyId, FamilyLayout>,
+    families: BTreeMap<FamilyId, RowLayout>,
 }
 
 /// Where one erased family's constructors live in its Cont heap type: the family's identity, the arity every construction of it carries, and the slot each constructor's relevant fields occupy.
 #[derive(Debug, Clone)]
-struct FamilyLayout {
-    id: curios_cont::CpsFamilyId,
+struct RowLayout {
+    id: curios_cont::CpsRowId,
     width: usize,
     fields: BTreeMap<ConstructorId, Vec<usize>>,
 }
@@ -777,9 +777,9 @@ impl Lowerer<'_> {
                 FamilyEncoding::Tagged | FamilyEncoding::Immediate { .. } => {
                     let tag = self.constructor_tag(*constructor);
                     let owner = self.constructor_family(*constructor);
-                    let family = self.family_identity(owner);
+                    let family = self.row_identity(owner);
                     // Every construction of a family carries every slot, so a narrow constructor is the same heap type as its widest sibling and every read of the family is one exact cast. A slot this constructor does not write takes the filler, which carries no value — the destination's carrier is not known until the backend decides it.
-                    let width = self.family_width(owner);
+                    let width = self.row_width(owner);
                     let places = self.constructor_slots(*constructor);
                     let mut atoms = vec![curios_cont::CpsAtom::Filler; width];
                     let mut marked = vec![false; width];
@@ -794,7 +794,7 @@ impl Lowerer<'_> {
                     let next = self.lower_statements(rest, terminator, target);
                     let node = self.module.add_node(curios_cont::CpsNode::LetValue {
                         result: bound,
-                        value: curios_cont::CpsValueExpr::Variant(family, atoms),
+                        value: curios_cont::CpsValueExpr::Row(family, atoms),
                         next,
                     });
                     self.wrap_settles(settles, node)
@@ -1128,7 +1128,7 @@ impl Lowerer<'_> {
             FamilyEncoding::Tagged => {}
         }
 
-        let identity = self.family_identity(family);
+        let identity = self.row_identity(family);
         let (join, fresh) = self.open_join(result, rest, terminator, target);
 
         let mut continuations = if fresh { vec![join] } else { Vec::new() };
@@ -1161,7 +1161,7 @@ impl Lowerer<'_> {
         });
         let dispatch = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
             result: tag,
-            op: curios_cont::CpsIntrinsic::VariantGet(identity, 0),
+            op: curios_cont::CpsIntrinsic::RowGet(identity, 0),
             args: vec![scrutinee],
             next: switch,
         });
@@ -1212,7 +1212,7 @@ impl Lowerer<'_> {
             None => default_cont.expect("a variant match covers its family"),
         };
 
-        let identity = self.family_identity(family);
+        let identity = self.row_identity(family);
         let boxed: Vec<ConstructorId> = self
             .source
             .family(family)
@@ -1258,7 +1258,7 @@ impl Lowerer<'_> {
                 });
                 let body = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
                     result: tag,
-                    op: curios_cont::CpsIntrinsic::VariantGet(identity, 0),
+                    op: curios_cont::CpsIntrinsic::RowGet(identity, 0),
                     args: vec![scrutinee.clone()],
                     next: switch,
                 });
@@ -1357,7 +1357,7 @@ impl Lowerer<'_> {
 
     fn lower_variant_arm(
         &mut self,
-        family: curios_cont::CpsFamilyId,
+        family: curios_cont::CpsRowId,
         arm: &VariantArm,
         scrutinee: curios_cont::CpsAtom,
         join: curios_cont::CpsContId,
@@ -1372,7 +1372,7 @@ impl Lowerer<'_> {
         for index in (0..bindings.len()).rev() {
             body = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
                 result: bindings[index],
-                op: curios_cont::CpsIntrinsic::VariantGet(family, places[index]),
+                op: curios_cont::CpsIntrinsic::RowGet(family, places[index]),
                 args: vec![scrutinee.clone()],
                 next: body,
             });
@@ -1978,15 +1978,15 @@ impl Lowerer<'_> {
     /// Slot zero is the tag; the payload slots are grouped by carrier, each group as wide as the constructor holding the most fields of that carrier. So two constructors agreeing on a carrier share its slots and only a disagreement costs width, which is what lets every slot name a carrier without the family widening: over the standard library this settles 22 slots against positional assignment's 11, for ten slots more across the whole roster and no growth at all in the families that allocate hot.
     ///
     /// A [`FamilyEncoding::Immediate`] family's bare constructor writes no slot — its value *is* its payload — so it contributes nothing to the widths.
-    fn family_layout(&mut self, family: FamilyId) -> &FamilyLayout {
+    fn row_layout(&mut self, family: FamilyId) -> &RowLayout {
         if !self.families.contains_key(&family) {
-            let layout = self.compute_family_layout(family);
+            let layout = self.compute_row_layout(family);
             self.families.insert(family, layout);
         }
         &self.families[&family]
     }
 
-    fn compute_family_layout(&mut self, family: FamilyId) -> FamilyLayout {
+    fn compute_row_layout(&mut self, family: FamilyId) -> RowLayout {
         let definition = self.source.family(family).expect("live family");
         let debug_name = definition.debug_name.clone();
         let bare = match self.family_encoding(family) {
@@ -2054,24 +2054,24 @@ impl Lowerer<'_> {
         let width = slots.len();
         let id = self
             .module
-            .add_family(curios_cont::CpsFamily { debug_name, slots });
-        FamilyLayout { id, width, fields }
+            .add_row(curios_cont::CpsRow { debug_name, slots });
+        RowLayout { id, width, fields }
     }
 
     /// The Cont identity of `family`.
-    fn family_identity(&mut self, family: FamilyId) -> curios_cont::CpsFamilyId {
-        self.family_layout(family).id
+    fn row_identity(&mut self, family: FamilyId) -> curios_cont::CpsRowId {
+        self.row_layout(family).id
     }
 
     /// The arity every construction of `family` is padded to.
-    fn family_width(&mut self, family: FamilyId) -> usize {
-        self.family_layout(family).width
+    fn row_width(&mut self, family: FamilyId) -> usize {
+        self.row_layout(family).width
     }
 
     /// The slot each of `constructor`'s relevant fields occupies in its family's heap type.
     fn constructor_slots(&mut self, constructor: ConstructorId) -> Vec<usize> {
         let family = self.constructor_family(constructor);
-        self.family_layout(family).fields[&constructor].clone()
+        self.row_layout(family).fields[&constructor].clone()
     }
 
     fn constructor_family(&self, constructor: ConstructorId) -> FamilyId {

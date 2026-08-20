@@ -120,7 +120,7 @@ fn a_loop_alias_edge_keeps_the_region_exact() {
     assert_eq!(origins[&param], Origin::of_width(2));
 }
 
-/// Two constructions of different arities merging at one parameter: the flow is a variant, and the fact carries both widths so the rewrite can travel it at the wider one and fill the narrower edge. This read *replaced* one that answered `Opaque` — merging widths is what the variant-width capability is, and the pair below is the shape of every tagged family whose constructors carry different payload counts.
+/// Two constructions of different arities merging at one parameter: the flow is a variant, and the fact carries both widths so the rewrite can travel it at the wider one and fill the narrower edge. This read *replaced* one that answered `Opaque` — merging widths is what the variant-width capability is, and the pair below is the shape of every tagged row whose constructors carry different payload counts.
 #[test]
 fn merged_arities_travel_as_a_variant() {
     let mut param = CpsValueId(0);
@@ -339,13 +339,13 @@ fn a_known_call_argument_reaches_the_callee_parameter_unless_it_escapes() {
     }
 }
 
-/// A variant construction reaches its parameter as its own family, settled by construction — the door pads every construction to the family's width, so a variant flow never has the several-width shape a structural variant region does.
+/// A variant construction reaches its parameter as its own row, settled by construction — the door pads every construction to the row's width, so a variant flow never has the several-width shape a structural variant region does.
 #[test]
 fn a_variant_construction_carries_its_family() {
     let mut param = CpsValueId(0);
-    let mut family = crate::CpsFamilyId(0);
+    let mut row = crate::CpsRowId(0);
     let module = module_with(|module| {
-        family = module.add_family(crate::CpsFamily {
+        row = module.add_row(crate::CpsRow {
             debug_name: Some("Shape".into()),
             slots: vec![CpsSlot::Tag, CpsSlot::Opaque, CpsSlot::Opaque],
         });
@@ -367,8 +367,8 @@ fn a_variant_construction_carries_its_family() {
         }));
         let build = module.add_node(CpsNode::LetValue {
             result: built,
-            value: CpsValueExpr::Variant(
-                family,
+            value: CpsValueExpr::Row(
+                row,
                 vec![
                     CpsAtom::Literal(CpsLiteral::Nat(0)),
                     CpsAtom::Literal(CpsLiteral::Nat(1)),
@@ -384,22 +384,22 @@ fn a_variant_construction_carries_its_family() {
     });
 
     let origin = &origins(&module)[&param];
-    assert_eq!(*origin, Origin::Variant(family, 3));
-    assert_eq!(origin.family(), Some(family));
+    assert_eq!(*origin, Origin::Row(row, 3));
+    assert_eq!(origin.row(), Some(row));
     assert_eq!(
         origin.settled_width(),
         Some(3),
-        "a padded family flow is takeable at its width"
+        "a padded row flow is takeable at its width"
     );
 }
 
-/// Two constructors of one family merge to that family at its width — the padding is what makes this a single point rather than the width *set* a structural variant region merges to.
+/// Two constructors of one row merge to that row at its width — the padding is what makes this a single point rather than the width *set* a structural variant region merges to.
 #[test]
 fn two_constructors_of_a_family_merge_to_the_family() {
     let mut param = CpsValueId(0);
-    let mut family = crate::CpsFamilyId(0);
+    let mut row = crate::CpsRowId(0);
     let module = module_with(|module| {
-        family = module.add_family(crate::CpsFamily {
+        row = module.add_row(crate::CpsRow {
             debug_name: Some("Shape".into()),
             slots: vec![CpsSlot::Tag, CpsSlot::Opaque],
         });
@@ -441,16 +441,16 @@ fn two_constructors_of_a_family_merge_to_the_family() {
         });
         let build_narrow = module.add_node(CpsNode::LetValue {
             result: narrow,
-            value: CpsValueExpr::Variant(
-                family,
+            value: CpsValueExpr::Row(
+                row,
                 vec![CpsAtom::Literal(CpsLiteral::Nat(1)), CpsAtom::Filler],
             ),
             next: switch,
         });
         let build_wide = module.add_node(CpsNode::LetValue {
             result: wide,
-            value: CpsValueExpr::Variant(
-                family,
+            value: CpsValueExpr::Row(
+                row,
                 vec![
                     CpsAtom::Literal(CpsLiteral::Nat(0)),
                     CpsAtom::Literal(CpsLiteral::Nat(7)),
@@ -464,5 +464,5 @@ fn two_constructors_of_a_family_merge_to_the_family() {
         })
     });
 
-    assert_eq!(origins(&module)[&param], Origin::Variant(family, 2));
+    assert_eq!(origins(&module)[&param], Origin::Row(row, 2));
 }

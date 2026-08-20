@@ -126,7 +126,7 @@ fn offers(module: &CpsModule) -> BTreeMap<CpsValueId, Offer> {
 
     for (_, node) in module.nodes.iter_live() {
         match node {
-            // A family read is the one operation whose result carrier is a fact of the module rather than of the operation: the slot it names says whether a register can hold it.
+            // A row read is the one operation whose result carrier is a fact of the module rather than of the operation: the slot it names says whether a register can hold it.
             CpsNode::LetIntrinsic { result, op, .. } => {
                 offers.insert(*result, offer_of(module.result_repr(op)));
             }
@@ -134,7 +134,7 @@ fn offers(module: &CpsModule) -> BTreeMap<CpsValueId, Offer> {
             CpsNode::LetValue { result, value, .. } => {
                 let offer = match value {
                     CpsValueExpr::Literal(literal) => offer_of(literal_repr(literal)),
-                    CpsValueExpr::List(_) | CpsValueExpr::Tuple(_) | CpsValueExpr::Variant(..) => {
+                    CpsValueExpr::List(_) | CpsValueExpr::Tuple(_) | CpsValueExpr::Row(..) => {
                         Offer::Never
                     }
                 };
@@ -237,15 +237,15 @@ pub(crate) fn storage(module: &CpsModule) -> BTreeMap<CpsValueId, Storage> {
                     }
                 }
 
-                // A variant construction stores each atom into a slot whose carrier the family declares, so a scalar slot demands its atom raw — the store side of the same fact the read side offers above.
+                // A variant construction stores each atom into a slot whose carrier the row declares, so a scalar slot demands its atom raw — the store side of the same fact the read side offers above.
                 CpsNode::LetValue {
-                    value: CpsValueExpr::Variant(family, atoms),
+                    value: CpsValueExpr::Row(row, atoms),
                     ..
                 } => {
                     for (index, atom) in atoms.iter().enumerate() {
                         demand(
                             atom,
-                            raw_carrier(&module.slot_repr(*family, index)),
+                            raw_carrier(&module.slot_repr(*row, index)),
                             &offers,
                             solver,
                         );
@@ -257,7 +257,7 @@ pub(crate) fn storage(module: &CpsModule) -> BTreeMap<CpsValueId, Storage> {
                     CpsValueExpr::Literal(_)
                     | CpsValueExpr::List(_)
                     | CpsValueExpr::Tuple(_)
-                    | CpsValueExpr::Variant(..) => {}
+                    | CpsValueExpr::Row(..) => {}
                 },
                 CpsNode::ApplyFun { .. }
                 | CpsNode::Cell { .. }

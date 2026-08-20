@@ -1116,6 +1116,29 @@ fn a_returned_closure_every_caller_applies_is_absorbed() {
 ///
 /// One finding for the successor: the per-family type identity does **not** survive Binaryen while every slot is `anyref`. `GlobalTypeOptimization` drops a slot nothing reads, leaving a struct structurally identical to a same-width `$tuple/N`, which closed-world type merging then folds together — the map's fork reads ship as `struct.get $tuple/3`. Exactness is unaffected (the merged type is still final, so the cast is still one compare), but `TypeRefining` still has nothing to refine. Typed slots are what make family structs structurally distinct, which is the next step's subject.
 ///
+/// # Typed slots, 2026-08-20
+///
+/// Each family slot is now declared at the carrier its recorded shape names rather than uniformly `anyref` — the tag as a packed `i8` read through `struct.get_u`, unsigned and signed immediates as raw `i32`, an `Flt` inline as `f32`, a list at its rope base, a product at its arity's type. Slots are grouped by carrier rather than by field position, so constructors agreeing on a carrier share its slots and only a disagreement costs width; `shapes.rs`'s `slot_layout_probe` is that choice's figure. Same method as family keying above — interleaved run-by-run, min of 7, two passes, load 0.82 at the start and 1.15 at the end — outputs identical across arms and every harness anchor reproduced:
+///
+/// | Program | before | after | pass 1 | pass 2 |
+/// | --- | ---: | ---: | ---: | ---: |
+/// | `spines` | 65 ms | 60 ms | **−7.7%** | **−7.7%** |
+/// | `trees` | 306 ms | 284 ms | **−7.2%** | **−4.9%** |
+/// | `chain` | 110 ms | 107 ms | **−2.7%** | **−2.8%** |
+/// | `monad_io` | 232 ms | 234 ms | +0.9% | +0.4% |
+/// | `churn` | 340 ms | 343 ms | +0.9% | +0.6% |
+/// | `lcg` | 320 ms | 320 ms | +0.0% | −0.3% |
+/// | `state_monad` | 182 ms | 182 ms | +0.0% | +0.0% |
+/// | `parse_digits` | 332 ms | 339 ms | +1.8% | +2.4% |
+///
+/// **The split is payload typing, and `parse_digits` is the experiment that shows it.** Its only families are `Option` and `Result`, whose payloads are polymorphic and stay `anyref`, so it is the one program where the tag is typed and nothing else is — and it is the one program that loses. The three that win are exactly the three whose hot loop reads a *typed payload*: `Map/Node`'s `crit`, `Chain/link`'s `Nat`, `trees`' node. So the tag's packing is a small charge and the payload's carrier is what pays for it, which is worth stating because the two arrived in one commit and a single aggregate would have hidden it. The regression was left standing deliberately: it is a fifth the size of what the same mechanism returns elsewhere, and isolating it further would have cost more machine time than the finding is worth.
+///
+/// Statically the emitted code is uniformly *better* in the losing program too — all 26 of `parse_digits`'s functions shrank or held, `ref.i31` fell 307 to 297 and `ref.cast (ref $tuple/N)` 16 to 10 — so its 2% lives in the engine's object handling rather than in the instruction stream. Over optimized `spines`: `ref.i31` **410 to 363**, `ref.cast (ref $tuple/N)` **17 to 10**, total instructions **8962 to 8758**.
+///
+/// **The finding family keying left open is closed.** With every slot `anyref` a family struct was structurally identical to a same-width `$tuple/N`, and Binaryen's closed-world type merging folded them together — under family keying alone `spines` shipped exactly one surviving `$row/` type (`/syn/Str/Scan`) and `parse_digits` shipped none, with `/std/Map/Node`'s reads going out as tuple gets. Typed slots make the structs distinct, so the types survive (`spines` 1 to 3, every other program 0–1 to 2–3) and `TypeRefining` has something to work with at last: the emitted module now names `(ref (exact $row/5$/std/Map/Node))` in a signature. The descent loop reads its `crit` straight into `i32.div_u`, with no cast and no unbox between.
+///
+/// **One negative result, worth as much as the positive ones.** Typing `List` slots at the rope base was meant to bite into the `is_subtype` libcall class, and it did nothing: `ref.cast (ref $rope/N)` is 51 in five programs and 72 in `spines` in *both* arms. That class is not fed by family fields at all — it lives in the `$bytes/box`/`$list/box` helpers' own entries — so a mechanism aimed at fields could never have reached it, and the census's 51–72 figure was never a field population. Typing the helpers' entries is the work that would move it.
+///
 /// **Where the profile's attribution had expired:** the 2026-08-10 profile named `rng_state` at ~75% interning, but the inline-budget raise recorded in `cps/optimize.rs` has since absorbed that program's `State/bind` chain entirely — its loop is scalar now, closures survive only at its few effect boundaries, and both arms time identically. `state_monad`'s trivial-bind loop specializes the same way. The population the swap re-prices is what the specializers *cannot* reach: the per-step `Io` description and the genuinely unknown per-character step closure — which is exactly the spec's "only re-prices the calls that stay unknown".
 ///
 /// # The two scale questions, answered by the corpus
@@ -1611,13 +1634,13 @@ fn a_tuple_is_read_at_its_own_final_type() {
         );
     }
 
-    // Since family keying, `Chain` is one final `$fam/N$/Chain` at the family's width rather than a
+    // Since family keying, `Chain` is one final `$row/N$/Chain` at the family's width rather than a
     // `$tuple/3` beside a `$tuple/1`, so the walk needs no cascade at all: the object's type is a
     // fact of the family, and the read is one exact cast followed by the field.
     let functions = functions(&wat);
     let kernel = function_with(&functions, "999983");
     assert!(
-        kernel.body.contains("ref.cast (ref $fam/") && kernel.body.contains("struct.get $fam/"),
+        kernel.body.contains("ref.cast (ref $row/") && kernel.body.contains("struct.get $row/"),
         "the walk reads the family at its own exact type: {}",
         kernel.body
     );
@@ -1629,7 +1652,7 @@ fn a_tuple_is_read_at_its_own_final_type() {
 
     // The family types are final and unrelated too — the same property, for the types that
     // replaced the tuples on this path.
-    for line in wat.lines().filter(|line| line.contains("(type $fam/")) {
+    for line in wat.lines().filter(|line| line.contains("(type $row/")) {
         assert!(
             !line.contains("sub"),
             "family types must be final and unrelated: {line}"
@@ -1670,7 +1693,7 @@ fn a_monomorphic_slot_carries_its_own_type() {
 
     let declaration = wat
         .lines()
-        .find(|line| line.contains("(type $fam/") && line.contains("Chain"))
+        .find(|line| line.contains("(type $row/") && line.contains("Chain"))
         .expect("the Chain family declares a type");
     assert!(
         declaration.contains("i8") && declaration.contains("i32"),
@@ -1680,7 +1703,7 @@ fn a_monomorphic_slot_carries_its_own_type() {
     let functions = functions(&wat);
     let kernel = function_with(&functions, "999983");
     assert!(
-        kernel.body.contains("struct.get_u $fam/"),
+        kernel.body.contains("struct.get_u $row/"),
         "the tag is read out of its packed byte, with nothing to unbox: {}",
         kernel.body
     );
@@ -1689,7 +1712,7 @@ fn a_monomorphic_slot_carries_its_own_type() {
     // a hoisted literal — neither is a field, and both are somebody else's campaign.
     let lines: Vec<&str> = kernel.body.lines().collect();
     for (index, line) in lines.iter().enumerate() {
-        if !line.contains("struct.get") || !line.contains("$fam/") {
+        if !line.contains("struct.get") || !line.contains("$row/") {
             continue;
         }
         assert!(

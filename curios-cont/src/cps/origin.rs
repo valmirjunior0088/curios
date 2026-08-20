@@ -4,7 +4,7 @@
 //!
 //! A region is entered by constructions but circulates through aliases: a loop arm that passes the loop's own parameter back unchanged contributes that parameter's own fact, which the fixpoint resolves to the constructions that entered it — so an every-edge-constructs reading is not expressible here by design, because it would decline exactly the loops the specification exists for.
 //!
-//! **Widths merge rather than conflict, which is what makes a variant expressible.** A flow reached by constructions of several widths was `Opaque` while the fact was one arity, and a tagged family is exactly that shape: `curios-ersd`'s door lowers a nullary constructor to a one-tuple and a three-payload one to a four-tuple, so no single arity ever described the UTF-8 scan state. The fact is the *set* of widths instead, and the rewrite travels the region at the widest of them with each narrower edge filled — which is safe for the same reason the return protocol's filler is: an edge's own width is this same fact read at that edge's argument, so nothing ever projects past what a construction carries.
+//! **Widths merge rather than conflict, which is what makes a variant expressible.** A flow reached by constructions of several widths was `Opaque` while the fact was one arity, and a tagged row is exactly that shape: `curios-ersd`'s door lowers a nullary constructor to a one-tuple and a three-payload one to a four-tuple, so no single arity ever described the UTF-8 scan state. The fact is the *set* of widths instead, and the rewrite travels the region at the widest of them with each narrower edge filled — which is safe for the same reason the return protocol's filler is: an edge's own width is this same fact read at that edge's argument, so nothing ever projects past what a construction carries.
 //!
 //! **What the fact deliberately does not record is the discriminant.** A variant region's cheapness comes from its tag being a constant on each entry edge, but that is a *consequence* rather than an admission condition, and requiring it would decline the motivating flow: once `split_returns` delivers a constructor as fields, the resume rebuilds it with the tag in a parameter, so seven of the scan region's seventeen constructions carry no literal at slot zero at all. Constant discriminants are then found by the passes that already fold them — projection forwarding through a visible construction, and jump threading over a literal switch.
 //!
@@ -25,8 +25,8 @@ pub(crate) enum Origin {
     Unreached,
     /// Every flow reaching it is a tuple construction, or an alias of one, and these are the widths they carry. One width is an exact product; several are a variant, which travels as its widest constructor with each narrower edge filled.
     Constructed(BTreeSet<usize>),
-    /// Every flow reaching it is a [`CpsValueExpr::Variant`](super::CpsValueExpr::Variant) of this family, or an alias of one — all at the family's width, carried here so the rewrite needs no module access. Always settled, because the door pads every construction; a merge with a different family or with a structural tuple is `Opaque`, which upstream typing makes unreachable and this lattice makes safe anyway.
-    Variant(super::CpsFamilyId, usize),
+    /// Every flow reaching it is a [`CpsValueExpr::Row`](super::CpsValueExpr::Row) of this row, or an alias of one — all at the row's width, carried here so the rewrite needs no module access. Always settled, because the door pads every construction; a merge with a different row or with a structural tuple is `Opaque`, which upstream typing makes unreachable and this lattice makes safe anyway.
+    Row(super::CpsRowId, usize),
     /// Some flow is not a visible construction — a call result, a literal, a closure, a projection.
     Opaque,
 }
@@ -41,21 +41,21 @@ impl Origin {
     pub(crate) fn width(&self) -> Option<usize> {
         match self {
             Origin::Constructed(widths) => widths.last().copied(),
-            Origin::Variant(_, width) => Some(*width),
+            Origin::Row(_, width) => Some(*width),
             Origin::Unreached | Origin::Opaque => None,
         }
     }
 
     /// The one width every flow agrees on, and `None` where they do not.
     ///
-    /// This is the fact a *site* may take a value apart by, and it is deliberately not [`Origin::width`]: a value the fixpoint reports at several widths is a variant whose constructor is undecided there, so projecting it at the widest reads past whatever the narrower constructor carries and traps. The widest is what a region travels at; the settled one is what an edge into that region may project. A [`Origin::Variant`] flow is settled by construction — every edge carries the family width, a padded slot reads null rather than out of bounds — which is what door-padding buys this analysis.
+    /// This is the fact a *site* may take a value apart by, and it is deliberately not [`Origin::width`]: a value the fixpoint reports at several widths is a variant whose constructor is undecided there, so projecting it at the widest reads past whatever the narrower constructor carries and traps. The widest is what a region travels at; the settled one is what an edge into that region may project. A [`Origin::Row`] flow is settled by construction — every edge carries the row width, a padded slot reads null rather than out of bounds — which is what door-padding buys this analysis.
     pub(crate) fn settled_width(&self) -> Option<usize> {
         match self {
             Origin::Constructed(widths) => match widths.len() {
                 1 => widths.last().copied(),
                 _ => None,
             },
-            Origin::Variant(_, width) => Some(*width),
+            Origin::Row(_, width) => Some(*width),
             Origin::Unreached | Origin::Opaque => None,
         }
     }
@@ -65,10 +65,10 @@ impl Origin {
         !matches!(self, Origin::Constructed(widths) if widths.len() > 1)
     }
 
-    /// The family this origin's flows construct, where they are variant constructions at all.
-    pub(crate) fn family(&self) -> Option<super::CpsFamilyId> {
+    /// The row this origin's flows construct, where they are variant constructions at all.
+    pub(crate) fn row(&self) -> Option<super::CpsRowId> {
         match self {
-            Origin::Variant(family, _) => Some(*family),
+            Origin::Row(row, _) => Some(*row),
             Origin::Unreached | Origin::Constructed(_) | Origin::Opaque => None,
         }
     }
@@ -87,11 +87,11 @@ impl Lattice for Origin {
                 left.extend(right);
                 Origin::Constructed(left)
             }
-            (Origin::Variant(left, width), Origin::Variant(right, _)) if left == right => {
-                Origin::Variant(left, width)
+            (Origin::Row(left, width), Origin::Row(right, _)) if left == right => {
+                Origin::Row(left, width)
             }
-            // A family meeting a different family or a structural tuple is ill-typed upstream; the lattice answers the safe point rather than assuming it cannot happen.
-            (Origin::Variant(..), _) | (_, Origin::Variant(..)) => Origin::Opaque,
+            // A row meeting a different row or a structural tuple is ill-typed upstream; the lattice answers the safe point rather than assuming it cannot happen.
+            (Origin::Row(..), _) | (_, Origin::Row(..)) => Origin::Opaque,
         }
     }
 }
@@ -135,9 +135,7 @@ pub(crate) fn origins(module: &CpsModule) -> BTreeMap<CpsValueId, Origin> {
                 CpsNode::LetValue { result, value, .. } => {
                     let origin = match value {
                         CpsValueExpr::Tuple(atoms) => Origin::of_width(atoms.len()),
-                        CpsValueExpr::Variant(family, atoms) => {
-                            Origin::Variant(*family, atoms.len())
-                        }
+                        CpsValueExpr::Row(row, atoms) => Origin::Row(*row, atoms.len()),
                         CpsValueExpr::List(_) | CpsValueExpr::Literal(_) => Origin::Opaque,
                     };
                     solver.join(*result, origin);

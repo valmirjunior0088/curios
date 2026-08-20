@@ -22,7 +22,7 @@ use {
 
 pub(crate) fn structurize(machine: &MachineModule) -> EmissionModule {
     let mut output = EmissionModule::new();
-    output.set_families(machine.families().to_vec());
+    output.set_rows(machine.rows().to_vec());
     for (function, wrapper) in &machine.wrappers {
         output.add_clsr(
             wrapper_name(machine, *function),
@@ -140,9 +140,9 @@ impl<'a> MachineFunctionBridge<'a> {
                         MachineConstruct::Tuple(elements) => EmissionValue::Pure(
                             EmissionData::Tuple(self.operands(elements, &mut values)),
                         ),
-                        // A variant's slots are the second position that may defer a filler: the slot's carrier is the family's to declare, so materialising a zero here would pick the wrong one exactly where a slot is typed.
-                        MachineConstruct::Variant(family, elements) => EmissionValue::Pure(
-                            EmissionData::Variant(*family, self.jump_args(elements, &mut values)),
+                        // A variant's slots are the second position that may defer a filler: the slot's carrier is the row's to declare, so materialising a zero here would pick the wrong one exactly where a slot is typed.
+                        MachineConstruct::Row(row, elements) => EmissionValue::Pure(
+                            EmissionData::Row(*row, self.jump_args(elements, &mut values)),
                         ),
                     };
                     values.push((value_name(*result), value));
@@ -574,7 +574,7 @@ fn block_operand_values(block: &MachineBlock) -> BTreeSet<MachineValueId> {
                 MachineConstruct::Literal(_) => {}
                 MachineConstruct::List(operands)
                 | MachineConstruct::Tuple(operands)
-                | MachineConstruct::Variant(_, operands) => {
+                | MachineConstruct::Row(_, operands) => {
                     operands.iter().for_each(&mut insert);
                 }
             },

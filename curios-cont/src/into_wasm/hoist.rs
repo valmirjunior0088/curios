@@ -21,8 +21,8 @@ enum ConstKey {
     Bin(u8, usize, Vec<u8>),
     List(Vec<String>),
     Tuple(Vec<String>),
-    /// A variant is its family plus its canonicalized slots, a filler keying as `None` — kept apart from `Tuple` because the two materialise at different heap types, so a structurally identical row is not the same constant.
-    Variant(usize, Vec<Option<String>>),
+    /// A nominal row is its identity plus its canonicalized slots, a filler keying as `None` — kept apart from `Tuple` because the two materialise at different heap types, so a structurally identical row is not the same constant.
+    Row(usize, Vec<Option<String>>),
     /// A closure is its target plus its canonicalized captures: with the code field an ordinary table index, a const-captured closure is a constant aggregate like any `Tuple`, materialized once per instantiation instead of per construction.
     Clsr(String, Vec<String>),
 }
@@ -131,10 +131,10 @@ fn collect_consts(body: &EmissionBody, interner: &mut ConstInterner, consts: &mu
                     consts.renames.insert(name.clone(), interned);
                 }
             }
-            EmissionData::Variant(family, slots) => {
+            EmissionData::Row(row, slots) => {
                 if let Some(canonical) = intern_slots(slots, interner, consts) {
-                    let key = ConstKey::Variant(
-                        family.index(),
+                    let key = ConstKey::Row(
+                        row.index(),
                         canonical
                             .iter()
                             .map(|slot| match slot {
@@ -143,7 +143,7 @@ fn collect_consts(body: &EmissionBody, interner: &mut ConstInterner, consts: &mu
                             })
                             .collect(),
                     );
-                    let interned = interner.intern(key, EmissionData::Variant(*family, canonical));
+                    let interned = interner.intern(key, EmissionData::Row(*row, canonical));
                     consts.renames.insert(name.clone(), interned);
                 }
             }
@@ -272,7 +272,7 @@ fn rename_value(
             | EmissionData::Flt(_)
             | EmissionData::Bin(_, _) => {}
             EmissionData::List(elems) | EmissionData::Tuple(elems) => rename_names(elems, renames),
-            EmissionData::Variant(_, slots) => rename_jump_args(slots, renames),
+            EmissionData::Row(_, slots) => rename_jump_args(slots, renames),
             EmissionData::Closure(_, fields) => rename_names(fields, renames),
         },
         EmissionValue::Eval(code) => match code {
