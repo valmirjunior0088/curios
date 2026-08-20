@@ -279,6 +279,8 @@ pub(crate) struct Table<'a> {
     bytes_embed: OnceCell<curios_wasm::FuncName>,
     bytes_box: OnceCell<curios_wasm::FuncName>,
     bytes_norm: OnceCell<curios_wasm::FuncName>,
+    bits_box: OnceCell<curios_wasm::FuncName>,
+    bits_norm: OnceCell<curios_wasm::FuncName>,
     list_embed: OnceCell<curios_wasm::FuncName>,
     list_bytes_embed: OnceCell<curios_wasm::FuncName>,
     bytes_slice: OnceCell<curios_wasm::FuncName>,
@@ -359,6 +361,8 @@ impl<'a> Table<'a> {
             bytes_embed: OnceCell::new(),
             bytes_box: OnceCell::new(),
             bytes_norm: OnceCell::new(),
+            bits_box: OnceCell::new(),
+            bits_norm: OnceCell::new(),
             list_embed: OnceCell::new(),
             list_bytes_embed: OnceCell::new(),
             bytes_slice: OnceCell::new(),
@@ -643,6 +647,28 @@ impl<'a> Table<'a> {
         self.bytes_norm.get().is_some()
     }
 
+    /// `$bits/box (ref null any) -> (ref $rope/bin)`: the bit-grain mirror of [`bytes_box_func`](Self::bytes_box_func) — length in the top 5 payload bits (0–26), packed bits LSB-first below.
+    pub(crate) fn bits_box_func(&self) -> curios_wasm::FuncName {
+        self.bits_box
+            .get_or_init(|| curios_wasm::FuncName::from("bits/box"))
+            .clone()
+    }
+
+    pub(crate) fn bits_box_used(&self) -> bool {
+        self.bits_box.get().is_some()
+    }
+
+    /// `$bits/norm (ref $rope/bin) -> (ref any)`: the bit-grain mirror of [`bytes_norm_func`](Self::bytes_norm_func) — at most 26 bits packs into the i31, anything longer passes through.
+    pub(crate) fn bits_norm_func(&self) -> curios_wasm::FuncName {
+        self.bits_norm
+            .get_or_init(|| curios_wasm::FuncName::from("bits/norm"))
+            .clone()
+    }
+
+    pub(crate) fn bits_norm_used(&self) -> bool {
+        self.bits_norm.get().is_some()
+    }
+
     /// `$list/embed (ref $elems) -> (ref $rope/list)`: the `List` mirror of [`bytes_embed_func`](Self::bytes_embed_func), for scalar-element results.
     pub(crate) fn list_embed_func(&self) -> curios_wasm::FuncName {
         self.list_embed
@@ -890,7 +916,7 @@ impl<'a> Table<'a> {
         match self.raw_carrier(value_name) {
             Some(Repr::Nat | Repr::Int) => curios_wasm::ValType::Num(curios_wasm::NumType::I32),
             Some(Repr::Flt) => curios_wasm::ValType::Num(curios_wasm::NumType::F32),
-            Some(Repr::Bytes | Repr::List | Repr::Tpl(_) | Repr::Ref) | None => {
+            Some(Repr::Bin(_) | Repr::List | Repr::Tpl(_) | Repr::Ref) | None => {
                 Table::top_type(true)
             }
         }

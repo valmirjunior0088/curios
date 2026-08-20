@@ -7,7 +7,7 @@ use {
     },
     crate::Repr,
     curios_abi::{WireLeaf, WireType},
-    curios_utilities::Entropy,
+    curios_utilities::{Entropy, Grain},
     std::{
         collections::{BTreeMap, HashMap},
         iter,
@@ -252,11 +252,13 @@ impl<'a, 'b> Context<'a, 'b> {
                     },
                 ]
             }
-            // A byte-shaped value is small-canonical — an i31 at up to three bytes, a rope past that — so a position demanding the rope goes through `$bytes/box`, which materialises an immediate and casts (trapping on null) exactly as the bare cast here used to. Bit-grain values ride the same carrier and are never immediate; for them the box is the old cast plus one settled test.
-            LoadAs::Bytes => {
-                vec![curios_wasm::Instr::Call {
-                    func_name: self.table().bytes_box_func(),
-                }]
+            // A packed value is small-canonical — an immediate inside its grain's envelope, a rope past it — so a position demanding the rope goes through its grain's box helper, which materialises an immediate and casts (trapping on null) exactly as the bare cast here used to. The grain rides the load because the two immediate layouts share no runtime discrimination.
+            LoadAs::Bin(grain) => {
+                let func_name = match grain {
+                    Grain::X => self.table().bytes_box_func(),
+                    Grain::B => self.table().bits_box_func(),
+                };
+                vec![curios_wasm::Instr::Call { func_name }]
             }
             LoadAs::List => {
                 vec![curios_wasm::Instr::RefCast {
@@ -808,7 +810,7 @@ pub(crate) enum LoadAs {
     Nat,
     Int,
     Flt,
-    Bytes,
+    Bin(Grain),
     List,
 }
 
@@ -822,7 +824,7 @@ pub(crate) fn zero_instrs(carrier: Option<Repr>) -> Vec<curios_wasm::Instr> {
     match carrier {
         Some(Repr::Nat | Repr::Int) => vec![curios_wasm::Instr::I32Const { value: 0 }],
         Some(Repr::Flt) => vec![curios_wasm::Instr::F32Const { value: 0.0 }],
-        Some(Repr::Bytes | Repr::List | Repr::Tpl(_) | Repr::Ref) | None => vec![
+        Some(Repr::Bin(_) | Repr::List | Repr::Tpl(_) | Repr::Ref) | None => vec![
             curios_wasm::Instr::I32Const { value: 0 },
             curios_wasm::Instr::RefI31,
         ],
@@ -835,7 +837,7 @@ pub(crate) fn box_instr(repr: &Repr, table: &Table) -> Option<curios_wasm::Instr
         Repr::Flt => Some(curios_wasm::Instr::StructNew {
             type_name: table.flt_type(),
         }),
-        Repr::Bytes | Repr::List | Repr::Tpl(_) | Repr::Ref => None,
+        Repr::Bin(_) | Repr::List | Repr::Tpl(_) | Repr::Ref => None,
     }
 }
 
@@ -850,7 +852,7 @@ impl LoadAs {
             Repr::Nat => Self::Nat,
             Repr::Int => Self::Int,
             Repr::Flt => Self::Flt,
-            Repr::Bytes => Self::Bytes,
+            Repr::Bin(grain) => Self::Bin(*grain),
             Repr::List => Self::List,
             Repr::Tpl(arity) => Self::Concrete(table.find_tpl_type(*arity)),
             Repr::Ref => Self::Null,
@@ -864,7 +866,7 @@ impl From<&WireType> for LoadAs {
         match wire_type {
             WireType::Nat | WireType::Bool => LoadAs::Nat,
             WireType::Int => LoadAs::Int,
-            WireType::Bytes | WireType::Handle => LoadAs::Bytes,
+            WireType::Bytes | WireType::Handle => LoadAs::Bin(Grain::X),
             WireType::List(_) => LoadAs::List,
         }
     }

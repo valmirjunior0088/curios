@@ -165,8 +165,8 @@ pub enum Repr {
     Int,
     /// A raw binary32 carrier.
     Flt,
-    /// A binary rope reference.
-    Bytes,
+    /// A packed-binary reference at the given grain: a small-canonical immediate or a rope. The grain rides the carrier because the two immediate layouts share no runtime discrimination — only the static type keeps them apart, so the coercion tables must be unable to confuse them.
+    Bin(Grain),
     /// A list rope reference.
     List,
     /// The tuple heap type of the given arity.
@@ -184,7 +184,9 @@ impl CpsIntrinsicOp {
 
         match (self, index) {
             // The sequence operations are the only ones whose operands differ from one another: a rope first, then positions.
-            (BinGet(_) | BinSlice(_) | BinRest(_) | BinAppend(_), 0) => Repr::Bytes,
+            (BinGet(grain) | BinSlice(grain) | BinRest(grain) | BinAppend(grain), 0) => {
+                Repr::Bin(*grain)
+            }
             (BinGet(_) | BinSlice(_) | BinRest(_) | BinAppend(_), _) => Repr::Nat,
             (ListGet | ListSlice | ListRest | ListAppend, 0) => Repr::List,
             (ListGet | ListSlice | ListRest, _) => Repr::Nat,
@@ -192,7 +194,8 @@ impl CpsIntrinsicOp {
             (BinChunk(_, _), _) => Repr::Nat,
             // A list element is carried, never interpreted — unlike a `Bytes` element, which is a `Nat` grain.
             (ListAppend, _) => Repr::Ref,
-            (BinConcat(_, _), _) | (BinEql(_) | BinLen(_), _) | (FltOfLeBytes, _) => Repr::Bytes,
+            (BinConcat(grain, _), _) | (BinEql(grain) | BinLen(grain), _) => Repr::Bin(*grain),
+            (FltOfLeBytes, _) => Repr::Bin(Grain::X),
             (WindowExtent, _) => Repr::Nat,
             // The whole point of the test is to look at the reference uncoerced.
             (IsImmediate, _) => Repr::Ref,
@@ -247,12 +250,12 @@ impl CpsIntrinsicOp {
 
             // `IsImmediate` joins the predicates: it answers a `Bool`, whose carrier is a `Nat`.
             BinGet(_) | WindowExtent | IsImmediate => Repr::Nat,
-            BinSlice(_)
-            | BinRest(_)
-            | BinAppend(_)
-            | BinConcat(_, _)
-            | BinChunk(_, _)
-            | FltToLeBytes => Repr::Bytes,
+            BinSlice(grain)
+            | BinRest(grain)
+            | BinAppend(grain)
+            | BinConcat(grain, _)
+            | BinChunk(grain, _) => Repr::Bin(*grain),
+            FltToLeBytes => Repr::Bin(Grain::X),
             ListSlice | ListRest | ListAppend | ListConcat(_) | ListSettle | ListFlat(_) => {
                 Repr::List
             }

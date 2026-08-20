@@ -124,17 +124,21 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                 });
             }
             EmissionData::Bin(grain, value) => {
-                // A small byte literal is its canonical immediate, computed here at compile time: length in the top 2 payload bits, bytes LSB-first below. The bit grain never rides the immediate.
-                if matches!(grain, Grain::X) && value.len(Grain::X) <= 3 {
-                    let bytes = value
-                        .to_bytes()
-                        .expect("X literals are always byte-aligned");
-                    let packed = bytes
-                        .iter()
-                        .enumerate()
-                        .fold((bytes.len() as i32) << 29, |packed, (index, &byte)| {
-                            packed | (byte as i32) << (8 * index)
-                        });
+                // A small packed literal is its canonical immediate, computed here at compile time: the byte grain's length in the top 2 payload bits over up to 3 bytes, the bit grain's in the top 5 over up to 26 bits, both LSB-first.
+                let envelope = match grain {
+                    Grain::X => 3,
+                    Grain::B => 26,
+                };
+                if value.len(*grain) <= envelope {
+                    let len_shift = match grain {
+                        Grain::X => 29,
+                        Grain::B => 26,
+                    };
+                    let bytes = value.to_packed_bytes();
+                    let packed = bytes.iter().enumerate().fold(
+                        (value.len(*grain) as i32) << len_shift,
+                        |packed, (index, &byte)| packed | (byte as i32) << (8 * index),
+                    );
                     self.emit_instrs([
                         curios_wasm::Instr::I32Const { value: packed },
                         curios_wasm::Instr::RefI31,

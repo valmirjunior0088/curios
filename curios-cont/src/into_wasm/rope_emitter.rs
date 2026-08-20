@@ -10,7 +10,10 @@
 //!
 //! The `list/bytes` variants are the host boundary's deep forms: a `List(Bytes)` / `List(Handle)` wire value carries `Bytes`-shaped *elements*, which the host lifts and lowers as raw `$bytes` — so params force each element too, and results embed each element back.
 
-use super::{RopeData, Table};
+use {
+    super::{RopeData, Table},
+    curios_utilities::Grain,
+};
 
 fn concrete_ref(type_name: curios_wasm::TypeName, is_nullable: bool) -> curios_wasm::RefType {
     curios_wasm::RefType {
@@ -58,6 +61,14 @@ fn field_set(
     curios_wasm::Instr::StructSet {
         type_name: type_name.clone(),
         field_name: field_name.clone(),
+    }
+}
+
+/// One packed grain's immediate layout: where the length lives, what masks the payload, how many payload bytes can be occupied, and how many length units one byte holds.
+fn immediate_layout(grain: Grain) -> (i32, i32, i32, i32) {
+    match grain {
+        Grain::X => (29, 0x00FF_FFFF, 3, 1),
+        Grain::B => (26, 0x03FF_FFFF, 4, 8),
     }
 }
 
@@ -1592,8 +1603,9 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$bytes/box (ref null any) -> (ref $rope/bin)`: a small-canonical `Bytes` as a rope. An immediate — length in the top 2 payload bits, bytes LSB-first below — is materialised into a fresh exact leaf; anything else casts to the rope it must be, trapping on null exactly as the cast this call replaced did.
-    pub(crate) fn emit_box_func(&mut self, func_name: curios_wasm::FuncName) {
+    /// `$bytes/box` / `$bits/box (ref null any) -> (ref $rope/bin)`: a small-canonical packed value as a rope. An immediate — the byte grain's length in the top 2 payload bits over up to 3 bytes, the bit grain's in the top 5 over up to 26 bits, both LSB-first — is materialised into a fresh exact leaf; anything else casts to the rope it must be, trapping on null exactly as the cast this call replaced did. The payload is masked before byte extraction so the length field can never bleed into a stored byte.
+    pub(crate) fn emit_box_func(&mut self, grain: Grain, func_name: curios_wasm::FuncName) {
+        let (len_shift, payload_mask, slots, unit) = immediate_layout(grain);
         let rope = self.table.bin_rope();
         let r = curios_wasm::LocalName::from("r");
         let v = curios_wasm::LocalName::from("v");
@@ -1607,17 +1619,23 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             (arr.clone(), concrete_val(rope.payload.clone(), true)),
         ];
 
-        // arr[i] = (v >> 8i) & 0xFF, emitted for each of the up-to-three occupied slots.
+        // arr[i] = ((v & payload_mask) >> 8i) & 0xFF, for each payload byte the length says is occupied — the grain's unit converts a byte slot back into the length's own units.
         let set_byte = |index: i32| {
             let mut instrs = vec![
                 get(&len),
-                curios_wasm::Instr::I32Const { value: index },
+                curios_wasm::Instr::I32Const {
+                    value: index * unit,
+                },
                 curios_wasm::Instr::I32GtU,
             ];
             let mut body = vec![
                 get(&arr),
                 curios_wasm::Instr::I32Const { value: index },
                 get(&v),
+                curios_wasm::Instr::I32Const {
+                    value: payload_mask,
+                },
+                curios_wasm::Instr::I32And,
             ];
             if index != 0 {
                 body.push(curios_wasm::Instr::I32Const { value: index * 8 });
@@ -1645,16 +1663,27 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             curios_wasm::Instr::I31GetU,
             set(&v),
             get(&v),
-            curios_wasm::Instr::I32Const { value: 29 },
+            curios_wasm::Instr::I32Const { value: len_shift },
             curios_wasm::Instr::I32ShrU,
             set(&len),
-            get(&len),
+        ];
+        // The payload array holds the length's ceiling in bytes: the length itself at the byte grain, `(len + 7) / 8` at the bit grain.
+        immediate.push(get(&len));
+        if unit != 1 {
+            immediate.extend([
+                curios_wasm::Instr::I32Const { value: 7 },
+                curios_wasm::Instr::I32Add,
+                curios_wasm::Instr::I32Const { value: 3 },
+                curios_wasm::Instr::I32ShrU,
+            ]);
+        }
+        immediate.extend([
             curios_wasm::Instr::ArrayNewDefault {
                 type_name: rope.payload.clone(),
             },
             set(&arr),
-        ];
-        for index in 0..3 {
+        ]);
+        for index in 0..slots {
             immediate.extend(set_byte(index));
         }
         immediate.extend([
@@ -1692,12 +1721,18 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
-    /// `$bytes/norm (ref $rope/bin) -> (ref any)`: the canonical form of a byte rope. At most three bytes packs into the i31 — length in the top 2 payload bits, bytes LSB-first below — and anything longer answers itself. Called at every byte-grain producer's exit, which is what makes a mixed-representation pair unrepresentable and the immediate equality one instruction.
+    /// `$bytes/norm` / `$bits/norm (ref $rope/bin) -> (ref any)`: the canonical form of a packed rope — inside its grain's envelope it packs into the i31, and anything longer answers itself. Called at every producer's exit for its grain, which is what makes a mixed-representation pair unrepresentable and the immediate equality one instruction. The bit grain's force already zeroes final-byte padding, so the bytes OR in clean.
     pub(crate) fn emit_norm_func(
         &mut self,
+        grain: Grain,
         func_name: curios_wasm::FuncName,
         force_func: curios_wasm::FuncName,
     ) {
+        let (len_shift, _, slots, unit) = immediate_layout(grain);
+        let envelope = match grain {
+            Grain::X => 3,
+            Grain::B => 26,
+        };
         let rope = self.table.bin_rope();
         let r = curios_wasm::LocalName::from("r");
         let p = curios_wasm::LocalName::from("p");
@@ -1711,7 +1746,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             (v.clone(), i32_val),
         ];
 
-        // v |= p[i] << 8i, for each occupied slot.
+        // v |= p[i] << 8i, for each payload byte the length says is occupied.
         let or_byte = |index: i32| {
             let mut body = vec![
                 get(&v),
@@ -1729,7 +1764,9 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             body.push(set(&v));
             vec![
                 get(&len),
-                curios_wasm::Instr::I32Const { value: index },
+                curios_wasm::Instr::I32Const {
+                    value: index * unit,
+                },
                 curios_wasm::Instr::I32GtU,
                 curios_wasm::Instr::If {
                     label_name: curios_wasm::LabelName::from("occupied"),
@@ -1745,7 +1782,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             field_get(&rope.base, &rope.len_field),
             set(&len),
             get(&len),
-            curios_wasm::Instr::I32Const { value: 3 },
+            curios_wasm::Instr::I32Const { value: envelope },
             curios_wasm::Instr::I32GtU,
             curios_wasm::Instr::If {
                 label_name: curios_wasm::LabelName::from("wide"),
@@ -1759,11 +1796,11 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
             },
             set(&p),
             get(&len),
-            curios_wasm::Instr::I32Const { value: 29 },
+            curios_wasm::Instr::I32Const { value: len_shift },
             curios_wasm::Instr::I32Shl,
             set(&v),
         ];
-        for index in 0..3 {
+        for index in 0..slots {
             instrs.extend(or_byte(index));
         }
         instrs.extend([get(&v), curios_wasm::Instr::RefI31]);

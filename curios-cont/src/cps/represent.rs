@@ -97,7 +97,7 @@ fn literal_repr(literal: &CpsLiteral) -> Repr {
         CpsLiteral::Nat(_) => Repr::Nat,
         CpsLiteral::Int(_) => Repr::Int,
         CpsLiteral::Flt(_) => Repr::Flt,
-        CpsLiteral::Bin(_, _) => Repr::Bytes,
+        CpsLiteral::Bin(grain, _) => Repr::Bin(*grain),
     }
 }
 
@@ -178,7 +178,7 @@ fn offers(module: &CpsModule) -> BTreeMap<CpsValueId, Offer> {
 fn raw_carrier(repr: &Repr) -> Option<Repr> {
     match repr {
         Repr::Nat | Repr::Int | Repr::Flt => Some(*repr),
-        Repr::Bytes | Repr::List | Repr::Tpl(_) | Repr::Ref => None,
+        Repr::Bin(_) | Repr::List | Repr::Tpl(_) | Repr::Ref => None,
     }
 }
 

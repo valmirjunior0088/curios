@@ -1431,6 +1431,50 @@ fn packed_unary_payload_declines_the_immediate_encoding() {
         "a sometimes-immediate packed payload declines it: {dump}"
     );
 
+    // The bit grain declines identically: a `Bits` payload is sometimes-immediate too.
+    let bits_family = r#"
+        use /std/{Nat, List, Bits, Str, Handle, proc};
+
+        induct Gauge: Type
+        | tiny(Bits)
+        | pair(Nat, Nat)
+        end
+
+        let taint = List/len(proc/args!);
+        let g = match taint | 0 => Gauge/tiny(b[1]) | _ => Gauge/pair(taint, taint) end;
+        match g
+        | tiny(inner) => /std/print(Str/concat(Nat/to_str(Bits/len(inner)), "\n"))
+        | pair(a, b) => /std/print(Str/concat(Nat/to_str(a + b), "\n"))
+        end
+        "#;
+    assert!(
+        !cont_optm(bits_family).contains("IsImmediate"),
+        "a sometimes-immediate bit payload declines it too"
+    );
+
     assert_eq!(run(nat_family), b"7\n");
     assert_eq!(run(bytes_family), b"1\n");
+    assert_eq!(run(bits_family), b"1\n");
+}
+
+/// The bit grain rides the i31 exactly as the byte grain does: small literals and appends stay immediate — the equality against a compile-time literal is the canonicity check — an append past the 26-bit envelope boxes into the rope world, and two separately grown ropes still compare by content. The taint keeps every value out of constant folding, and it also rides the recursion depth: a *literal* depth sends elaboration into a runaway reduction of the open append spine — a pre-existing pathology recorded in the map-wall follow-ups, independent of the immediate representation.
+#[test]
+fn small_bits_ride_the_immediate_and_overflow_boxes() {
+    let source = r#"
+        use /std/{Nat, List, Bits, Bool, Str, Handle, proc};
+        let taint = List/len(proc/args!);
+        let t: Bool = taint == 0;
+        let small = b[t, 1, 0, t];
+        let grown = b[..small, 1];
+        rec widen(n: Nat, acc: Bits) -> Bits =
+            match n | 0 => acc | _ => widen(n - 1, b[..acc, t]) end;
+        let wide = widen(30 + taint, grown);
+        let wide2 = widen(30 + taint, grown);
+        match (grown == b[1, 1, 0, 1, 1]) && (wide == wide2) && (Bits/len(wide) == 35 + taint)
+        | true => /std/print("ok\n")
+        | false => /std/print("bad\n")
+        end
+        "#;
+
+    assert_eq!(run(source), b"ok\n");
 }

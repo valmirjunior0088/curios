@@ -377,17 +377,21 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     }
 
     fn emit_let_bin_data(&mut self, name: &'a EmissionValueName, grain: Grain, value: &PackedBin) {
-        // A small byte constant is its canonical immediate — a self-contained constant initializer, no data segment, no start-function code — exactly as the inline literal path emits it. Leaving this path on the leaf would mint the one non-canonical small value in the program, and the immediate equality would answer false against it.
-        if matches!(grain, Grain::X) && value.len(Grain::X) <= 3 {
-            let bytes = value
-                .to_bytes()
-                .expect("X constants are always byte-aligned");
-            let packed = bytes
-                .iter()
-                .enumerate()
-                .fold((bytes.len() as i32) << 29, |packed, (index, &byte)| {
-                    packed | (byte as i32) << (8 * index)
-                });
+        // A small packed constant is its canonical immediate — a self-contained constant initializer, no data segment, no start-function code — exactly as the inline literal path emits it. Leaving this path on the leaf would mint the one non-canonical small value in the program, and the immediate equality would answer false against it.
+        let envelope = match grain {
+            Grain::X => 3,
+            Grain::B => 26,
+        };
+        if value.len(grain) <= envelope {
+            let len_shift = match grain {
+                Grain::X => 29,
+                Grain::B => 26,
+            };
+            let bytes = value.to_packed_bytes();
+            let packed = bytes.iter().enumerate().fold(
+                (value.len(grain) as i32) << len_shift,
+                |packed, (index, &byte)| packed | (byte as i32) << (8 * index),
+            );
             let mut init_expr: curios_wasm::Expr = Default::default();
             init_expr.push(curios_wasm::Instr::I32Const { value: packed });
             init_expr.push(curios_wasm::Instr::RefI31);
@@ -643,11 +647,27 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
 
         if self.table.bytes_norm_used() {
-            ropes.emit_norm_func(self.table.bytes_norm_func(), self.table.bytes_force_func());
+            ropes.emit_norm_func(
+                Grain::X,
+                self.table.bytes_norm_func(),
+                self.table.bytes_force_func(),
+            );
+        }
+
+        if self.table.bits_norm_used() {
+            ropes.emit_norm_func(
+                Grain::B,
+                self.table.bits_norm_func(),
+                self.table.bits_force_func(),
+            );
         }
 
         if self.table.bytes_box_used() {
-            ropes.emit_box_func(self.table.bytes_box_func());
+            ropes.emit_box_func(Grain::X, self.table.bytes_box_func());
+        }
+
+        if self.table.bits_box_used() {
+            ropes.emit_box_func(Grain::B, self.table.bits_box_func());
         }
 
         if self.table.bytes_eql_used() {

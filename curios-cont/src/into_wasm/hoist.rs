@@ -32,11 +32,13 @@ fn bin_key(grain: Grain, value: &PackedBin) -> ConstKey {
             .to_bytes()
             .expect("X literals are always byte-aligned"),
     };
+    // The *logical* length, in grain units: the packed bytes alone underdetermine a bit-grain value — `b[1]` and `b[1, 0]` pack identically — and a key that dropped the length interned them into one constant, whose emitted length was whichever literal arrived first.
+    let length = value.len(grain);
     let grain = match grain {
         Grain::B => 0u8,
         Grain::X => 1u8,
     };
-    ConstKey::Bin(grain, bytes.len(), bytes)
+    ConstKey::Bin(grain, length, bytes)
 }
 
 #[derive(Default)]
