@@ -11,20 +11,20 @@ pub struct Map(V: Type): Type {
     root: Option(Node(V)),
 }
 
--- The trie's identity is the byte string, so a `to_bin` that collides silently merges two keys into one entry. `injective` is that obligation stated where it can be checked: a witness cannot register without proving its own encoding distinguishes what the key type distinguishes.
+-- The trie's identity is the byte string, so a `to_bytes` that collides silently merges two keys into one entry. `injective` is that obligation stated where it can be checked: a witness cannot register without proving its own encoding distinguishes what the key type distinguishes.
 pub concept Key(K: Type): pub Type {
-    to_bin(K) -> Bytes,
-    injective(a: K, b: K, same: Eq(to_bin(a), to_bin(b))) -> Eq(a, b),
+    to_bytes(K) -> Bytes,
+    injective(a: K, b: K, same: Eq(to_bytes(a), to_bytes(b))) -> Eq(a, b),
 }
 
 satisfy Key(Bytes) {
-    to_bin(b) = b,
+    to_bytes(b) = b,
     -- The identity encoding: the goal reduces to the hypothesis.
     injective(a, b, same) = same,
 }
 
 satisfy Key(Str) {
-    to_bin = Str/to_bytes,
+    to_bytes = Str/to_bytes,
     injective(a, b, same) = Str/eq_of_bytes(a, b, same),
 }
 
@@ -125,7 +125,7 @@ pub let len(@V: Type, m: Map(V)) -> Nat =
     m.size;
 
 pub let get(@K: Type, @V: Type, use Key(K), m: Map(V), key: K) -> Option(V) =
-    let k = Key/to_bin(key);
+    let k = Key/to_bytes(key);
     match m.root
     | none() => Option/none()
     | some(n) =>
@@ -137,7 +137,7 @@ pub let has(@K: Type, @V: Type, use Key(K), m: Map(V), key: K) -> Bool =
     Option/is_some(get(m, key));
 
 pub let insert(@K: Type, @V: Type, use Key(K), m: Map(V), key: K, v: V) -> Map(V) =
-    let k = Key/to_bin(key);
+    let k = Key/to_bytes(key);
     match m.root
     | none() => Map { size = 1, root = Option/some(Node/leaf(k, v)) }
     | some(n) =>
@@ -151,7 +151,7 @@ pub let insert(@K: Type, @V: Type, use Key(K), m: Map(V), key: K, v: V) -> Map(V
     end;
 
 pub let remove(@K: Type, @V: Type, use Key(K), m: Map(V), key: K) -> Map(V) =
-    let k = Key/to_bin(key);
+    let k = Key/to_bytes(key);
     match m.root
     | none() => m
     | some(n) =>

@@ -123,7 +123,7 @@ fn a_colliding_key_witness_is_rejected() {
         | right()
         end
         satisfy Map/Key(Side) {
-            to_bin(s) = x[],
+            to_bytes(s) = x[],
             injective(a, b, same) = Eq/refl(),
         }
         /std/print("unreachable")

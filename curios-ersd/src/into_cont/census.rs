@@ -1,6 +1,6 @@
 //! The sequence-usage census behind the door's settle insertion: which constructor and product fields hold values that are only ever *indexed* — read by position, length, window, fold, or map — and never re-grown or moved somewhere the census cannot see. The fact is recorded here, over the arena, because this is the last stage at which family and product identity exist: at Cont a variant is an anonymous tuple, so a per-field fact keyed there would be cross-poisoned by every unrelated tuple of the same width. The door spends the fact by settling the stores into a marked field, which is what lets the reshaped map's child arrays be flat without any library spelling; see the list-half refinement in `documentation/roadmap/map-wall-classes-spec.md`.
 //!
-//! The census follows exactly two shapes of indirection and no others: a computation-free alias, and an argument of a saturated known call, which fares as the receiving parameter fares — without which every read would be poisoned, since the surface reaches `ListGet` through the `/sys/List/get` wrapper and an `Apply` is what a read looks like at this level. Everything else — a closure call, a return, a store, a scrutinee — poisons, because following it would be the interprocedural demand analysis this fact deliberately is not. Recursion is read coinductively: a value revisited during classification is assumed to hold, which is the greatest fixpoint of a safety property and sound for it. A field is marked only when at least one read carries *list* evidence — a `List`-shaped use — so a field the program never reads, or one holding a packed binary, is never wrapped in a list operation it cannot carry.
+//! The census follows exactly three shapes of indirection and no others: a computation-free alias; an argument of a saturated known call, which fares as the receiving parameter fares — without which every read would be poisoned, since the surface reaches `ListGet` through the `/sys/List/get` wrapper and an `Apply` is what a read looks like at this level — and a store back into a constructor or product field, which is safe exactly when that field is safe, because a persistent rebuild reads a field and stores it unchanged into the fresh construction, and poisoning that move would unmark every functional update in the program. The field dependencies resolve by a greatest fixpoint: every field starts safe, a hard poison demotes its field, and demotion propagates to the fields whose reads flow there, so a value escaping the safe system demotes everything on its path. Everything else — a closure call, a return, a scrutinee — poisons outright, because following it would be the interprocedural demand analysis this fact deliberately is not. Recursion is read coinductively: a value revisited during classification is assumed to hold, the same greatest-fixpoint reading. A field is settled only when it is safe *and* at least one of its own reads carries *list* evidence — a `List`-shaped use — so a field the program never reads, or one holding a packed binary, is never wrapped in a list operation it cannot carry.
 
 use {
     super::super::{
@@ -19,8 +19,17 @@ enum UseKind {
     Neutral,
     /// The value's fate is another value's: an alias result, or the parameter receiving it at a saturated known call.
     Alias(ValueId),
+    /// Stored into a field: safe exactly when that field is safe, per the fixpoint.
+    Stored(FieldKey),
     /// Anything else — growth, escape, or a shape the census does not follow.
     Poison,
+}
+
+/// One constructor or product field, the census's unit of verdict.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+enum FieldKey {
+    Constructor(ConstructorId, usize),
+    Product(ProductId, usize),
 }
 
 /// The census's verdicts: the constructor and product fields whose every read is indexing-shaped, with list evidence.
@@ -134,7 +143,24 @@ pub(super) fn sequence_census(module: &Module) -> SequenceFacts {
                     .or_default()
                     .push(*result);
             }
-            // Every other occurrence — a construction, a scalar operation, a cell, a foreign call, a dispatch scrutinee — moves the value somewhere this census does not follow.
+            // A construction stores each atom into a field of the built value; the store is judged by the receiving field's own verdict.
+            Rhs::Construct {
+                constructor,
+                fields,
+            } => {
+                for (field, atom) in fields.iter().enumerate() {
+                    record(
+                        atom,
+                        UseKind::Stored(FieldKey::Constructor(*constructor, field)),
+                    );
+                }
+            }
+            Rhs::Product { schema, fields } => {
+                for (field, atom) in fields.iter().enumerate() {
+                    record(atom, UseKind::Stored(FieldKey::Product(*schema, field)));
+                }
+            }
+            // Every other occurrence — a scalar operation, a cell, a foreign call, a dispatch scrutinee — moves the value somewhere this census does not follow.
             rhs => {
                 for atom in rhs_atoms(rhs) {
                     record(atom, UseKind::Poison);
@@ -152,16 +178,55 @@ pub(super) fn sequence_census(module: &Module) -> SequenceFacts {
         }
     }
 
-    let mut facts = SequenceFacts::default();
+    // Per-field verdicts before the fixpoint: poisoned outright, or holding with the evidence seen and the fields its reads flow into.
     let classifier = Classifier { uses: &uses };
-    for (key, reads) in constructor_reads {
-        if classifier.indexed_only(&reads) {
-            facts.constructors.insert(key);
-        }
+    let mut verdicts: BTreeMap<FieldKey, Option<(bool, BTreeSet<FieldKey>)>> = BTreeMap::new();
+    for (&(constructor, field), reads) in &constructor_reads {
+        let key = FieldKey::Constructor(constructor, field);
+        verdicts.insert(key, classifier.classify(reads));
     }
-    for (key, reads) in product_reads {
-        if classifier.indexed_only(&reads) {
-            facts.products.insert(key);
+    for (&(product, field), reads) in &product_reads {
+        let key = FieldKey::Product(product, field);
+        verdicts.insert(key, classifier.classify(reads));
+    }
+
+    // The greatest fixpoint over field safety: a field is unsafe when its own reads poison or when they flow into an unsafe field; a field with no recorded reads is vacuously safe, since nothing observes what lands there.
+    let mut unsafe_fields: BTreeSet<FieldKey> = verdicts
+        .iter()
+        .filter_map(|(key, verdict)| verdict.is_none().then_some(*key))
+        .collect();
+    loop {
+        let demoted: Vec<FieldKey> = verdicts
+            .iter()
+            .filter_map(|(key, verdict)| match verdict {
+                Some((_, deps))
+                    if !unsafe_fields.contains(key)
+                        && deps.iter().any(|dep| unsafe_fields.contains(dep)) =>
+                {
+                    Some(*key)
+                }
+                _ => None,
+            })
+            .collect();
+        if demoted.is_empty() {
+            break;
+        }
+        unsafe_fields.extend(demoted);
+    }
+
+    let mut facts = SequenceFacts::default();
+    for (key, verdict) in verdicts {
+        if let Some((true, _)) = verdict
+            && !unsafe_fields.contains(&key)
+        {
+            match key {
+                FieldKey::Constructor(constructor, field) => {
+                    facts.constructors.insert((constructor, field));
+                }
+                FieldKey::Product(product, field) => {
+                    facts.products.insert((product, field));
+                }
+            }
         }
     }
     facts
@@ -207,21 +272,25 @@ struct Classifier<'a> {
 }
 
 impl Classifier<'_> {
-    /// Every read holds — no poison anywhere, aliases included — and at least one use across the reads carries list evidence.
-    fn indexed_only(&self, reads: &[ValueId]) -> bool {
+    /// `None` when any read poisons outright; otherwise whether the reads carry list evidence, and the fields they flow into, for the fixpoint to judge.
+    fn classify(&self, reads: &[ValueId]) -> Option<(bool, BTreeSet<FieldKey>)> {
         let mut evidence = false;
+        let mut deps = BTreeSet::new();
         let mut visited = BTreeSet::new();
         for &read in reads {
-            match self.value_holds(read, &mut visited) {
-                None => return false,
-                Some(found) => evidence |= found,
-            }
+            let found = self.value_holds(read, &mut visited, &mut deps)?;
+            evidence |= found;
         }
-        evidence
+        Some((evidence, deps))
     }
 
-    /// `None` when any use poisons; otherwise whether list evidence was seen. `visited` guards the alias walk — cycles cannot occur in ANF, but a shared alias target is classified once.
-    fn value_holds(&self, value: ValueId, visited: &mut BTreeSet<ValueId>) -> Option<bool> {
+    /// `None` when any use poisons; otherwise whether list evidence was seen, with the stored-into fields accumulated onto `deps`. `visited` guards the alias walk — cycles cannot occur in ANF, but a shared alias target is classified once.
+    fn value_holds(
+        &self,
+        value: ValueId,
+        visited: &mut BTreeSet<ValueId>,
+        deps: &mut BTreeSet<FieldKey>,
+    ) -> Option<bool> {
         if !visited.insert(value) {
             return Some(false);
         }
@@ -230,7 +299,10 @@ impl Classifier<'_> {
             match kind {
                 UseKind::ListEvidence => evidence = true,
                 UseKind::Neutral => {}
-                UseKind::Alias(result) => evidence |= self.value_holds(*result, visited)?,
+                UseKind::Alias(result) => evidence |= self.value_holds(*result, visited, deps)?,
+                UseKind::Stored(field) => {
+                    deps.insert(*field);
+                }
                 UseKind::Poison => return None,
             }
         }
