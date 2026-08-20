@@ -122,12 +122,12 @@ fn constructors_register_in_discriminant_order() {
     let circle = module.add_constructor(
         family,
         Some("circle".into()),
-        vec![ConstructorField::opaque(Some("radius".into()))],
+        vec![Field::opaque(Some("radius".into()))],
     );
     let square = module.add_constructor(
         family,
         Some("square".into()),
-        vec![ConstructorField::opaque(Some("side".into()))],
+        vec![Field::opaque(Some("side".into()))],
     );
     assert_eq!(
         module.family(family).unwrap().constructors,

@@ -9,9 +9,9 @@ mod tests;
 
 use {
     super::{
-        Block, BlockId, Constant, ConstantId, ConstructorField, ConstructorId, FamilyId, ForeignId,
-        Function, FunctionId, Module, ProductId, ProductSchema, RecGroup, RecGroupId, RecValue,
-        Rhs, Statement, StatementId, Terminator, ValueId, VerifyError,
+        Block, BlockId, Constant, ConstantId, ConstructorId, FamilyId, Field, ForeignId, Function,
+        FunctionId, Module, ProductId, ProductSchema, RecGroup, RecGroupId, RecValue, Rhs,
+        Statement, StatementId, Terminator, ValueId, VerifyError,
     },
     curios_abi::ForeignFunction,
     std::{collections::BTreeSet, sync::Arc},
@@ -88,7 +88,7 @@ impl ErsdBuilder {
         &mut self,
         family: FamilyId,
         debug_name: Option<String>,
-        fields: Vec<ConstructorField>,
+        fields: Vec<Field>,
     ) -> ConstructorId {
         self.module.add_constructor(family, debug_name, fields)
     }

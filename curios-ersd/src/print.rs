@@ -7,7 +7,7 @@ mod tests;
 
 use {
     super::{
-        Atom, BlockId, Constant, ConstructorField, FieldShape, FunctionId, Module, Rhs, Statement,
+        Atom, BlockId, Constant, Field, FieldShape, FunctionId, Module, Rhs, Statement,
         StatementId, Terminator, ValueId,
     },
     curios_utilities::Grain,
@@ -64,7 +64,7 @@ impl Printer<'_, '_, '_> {
                     format!(
                         "{constructor}{}({})",
                         hint(&definition.debug_name),
-                        constructor_fields(&definition.fields)
+                        fields(&definition.fields)
                     )
                 })
                 .collect::<Vec<_>>()
@@ -435,19 +435,8 @@ fn hint(debug_name: &Option<String>) -> String {
     }
 }
 
-fn fields(row: &[Option<String>]) -> String {
-    row.iter()
-        .enumerate()
-        .map(|(index, field)| match field {
-            Some(name) => name.clone(),
-            None => format!("{index}"),
-        })
-        .collect::<Vec<_>>()
-        .join(", ")
-}
-
-/// A constructor's payload row: the field name (or its index), with recorded immediate carriers marked so the erasure-side classification is legible in a dump.
-fn constructor_fields(row: &[ConstructorField]) -> String {
+/// A schema's field row — a constructor's payload or a product's entries: the field name (or its index), with every recorded carrier shape marked so the erasure-side classification is legible in a dump. `Opaque` prints bare, since it is the absence of a claim.
+fn fields(row: &[Field]) -> String {
     row.iter()
         .enumerate()
         .map(|(index, field)| {
@@ -457,6 +446,13 @@ fn constructor_fields(row: &[ConstructorField]) -> String {
             };
             match field.shape {
                 FieldShape::Immediate => format!("{name}:immediate"),
+                FieldShape::Flt => format!("{name}:flt"),
+                FieldShape::Packed(Grain::X) => format!("{name}:bytes"),
+                FieldShape::Packed(Grain::B) => format!("{name}:bits"),
+                FieldShape::List => format!("{name}:list"),
+                FieldShape::Closure(arity) => format!("{name}:closure/{arity}"),
+                FieldShape::Product(width) => format!("{name}:product/{width}"),
+                FieldShape::Family => format!("{name}:family"),
                 FieldShape::Opaque => name,
             }
         })

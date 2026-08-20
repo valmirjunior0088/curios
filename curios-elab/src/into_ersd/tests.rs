@@ -1097,7 +1097,8 @@ fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
         "{printed}"
     );
     assert!(printed.contains("$/Knotted { ~t1$mk(x) }"), "{printed}");
-    assert!(printed.contains("$/Boxed { ~t2$mk(x) }"), "{printed}");
+    // `Boxed` was this fixture's "not immediate" example; the full recorder now names its carrier instead of merely withholding `immediate`.
+    assert!(printed.contains("$/Boxed { ~t2$mk(x:flt) }"), "{printed}");
     assert!(
         printed.contains("$/Chained { ~t3$mk(x:immediate) }"),
         "{printed}"

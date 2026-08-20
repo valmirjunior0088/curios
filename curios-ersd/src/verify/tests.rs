@@ -50,7 +50,7 @@ fn a_self_referential_lazy_value_verifies() {
     let mut builder = ErsdBuilder::new();
     let schema = builder.product(ProductSchema {
         debug_name: Some("Lazy".into()),
-        fields: vec![Some("force".into())],
+        fields: vec![Field::opaque(Some("force".into()))],
     });
 
     // rec { lazy = Lazy { force: fn() = lazy } }
@@ -247,16 +247,8 @@ fn a_two_parameter_mapper_is_rejected() {
 fn a_match_missing_a_constructor_is_rejected() {
     let mut builder = ErsdBuilder::new();
     let family = builder.family(Some("Shape".into()));
-    let circle = builder.constructor(
-        family,
-        Some("circle".into()),
-        vec![ConstructorField::opaque(None)],
-    );
-    let _square = builder.constructor(
-        family,
-        Some("square".into()),
-        vec![ConstructorField::opaque(None)],
-    );
+    let circle = builder.constructor(family, Some("circle".into()), vec![Field::opaque(None)]);
+    let _square = builder.constructor(family, Some("square".into()), vec![Field::opaque(None)]);
 
     builder.open_block();
     let one = nat_atom(&mut builder, 1);
@@ -373,7 +365,7 @@ fn a_projection_out_of_range_is_rejected() {
     let mut builder = ErsdBuilder::new();
     let schema = builder.product(ProductSchema {
         debug_name: None,
-        fields: vec![None, None],
+        fields: vec![Field::opaque(None), Field::opaque(None)],
     });
     builder.open_block();
     let zero = nat_atom(&mut builder, 0);

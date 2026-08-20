@@ -107,7 +107,7 @@ fn a_variant_match_lowers_to_tag_dispatch() {
     let some = builder.constructor(
         family,
         Some("some".into()),
-        vec![ConstructorField::opaque(Some("x".into()))],
+        vec![Field::opaque(Some("x".into()))],
     );
 
     builder.open_block();
@@ -163,7 +163,7 @@ fn a_single_constructor_family_collapses_to_its_bare_payload() {
     let wrap = builder.constructor(
         family,
         Some("wrap".into()),
-        vec![ConstructorField::immediate(Some("x".into()))],
+        vec![Field::immediate(Some("x".into()))],
     );
 
     builder.open_block();
@@ -209,15 +209,15 @@ fn an_immediate_constructor_rides_its_payload() {
     let leaf = builder.constructor(
         family,
         Some("leaf".into()),
-        vec![ConstructorField::immediate(Some("n".into()))],
+        vec![Field::immediate(Some("n".into()))],
     );
     let node = builder.constructor(
         family,
         Some("node".into()),
         vec![
-            ConstructorField::immediate(Some("v".into())),
-            ConstructorField::opaque(Some("l".into())),
-            ConstructorField::opaque(Some("r".into())),
+            Field::immediate(Some("v".into())),
+            Field::opaque(Some("l".into())),
+            Field::opaque(Some("r".into())),
         ],
     );
 
@@ -279,15 +279,15 @@ fn an_immediate_family_with_two_boxed_constructors_keeps_the_inner_tag_dispatch(
     let one = builder.constructor(
         family,
         Some("one".into()),
-        vec![ConstructorField::immediate(Some("n".into()))],
+        vec![Field::immediate(Some("n".into()))],
     );
     let empty = builder.constructor(family, Some("empty".into()), vec![]);
     let pair = builder.constructor(
         family,
         Some("pair".into()),
         vec![
-            ConstructorField::opaque(Some("a".into())),
-            ConstructorField::opaque(Some("b".into())),
+            Field::opaque(Some("a".into())),
+            Field::opaque(Some("b".into())),
         ],
     );
 
@@ -352,12 +352,12 @@ fn two_immediate_constructors_decline_the_encoding() {
     let left = builder.constructor(
         family,
         Some("left".into()),
-        vec![ConstructorField::immediate(Some("a".into()))],
+        vec![Field::immediate(Some("a".into()))],
     );
     let _right = builder.constructor(
         family,
         Some("right".into()),
-        vec![ConstructorField::immediate(Some("b".into()))],
+        vec![Field::immediate(Some("b".into()))],
     );
 
     builder.open_block();
@@ -387,8 +387,8 @@ fn a_collapsed_pair_is_an_untagged_tuple() {
         family,
         Some("both".into()),
         vec![
-            ConstructorField::immediate(Some("a".into())),
-            ConstructorField::immediate(Some("b".into())),
+            Field::immediate(Some("a".into())),
+            Field::immediate(Some("b".into())),
         ],
     );
 
@@ -644,7 +644,10 @@ fn a_value_only_knot_lowers_through_cells() {
     let mut builder = ErsdBuilder::new();
     let schema = builder.product(ProductSchema {
         debug_name: Some("Lazy".into()),
-        fields: vec![Some("force".into()), Some("mark".into())],
+        fields: vec![
+            Field::opaque(Some("force".into())),
+            Field::opaque(Some("mark".into())),
+        ],
     });
     let lazy = builder.value(Some("lazy".into()));
     builder.open_block();

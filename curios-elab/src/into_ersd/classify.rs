@@ -3,6 +3,7 @@
 use {
     crate::{Context, Error, is_prop, reduce_with},
     curios_core::{Bound, FuncType, Global, Intrinsic, Subterm, Telescope, Term, TupleType},
+    curios_utilities::Grain,
     std::collections::BTreeSet,
 };
 
@@ -82,7 +83,7 @@ pub(crate) fn constructor_entries<B: Bound>(
     }
 }
 
-/// The erased carrier shape of a kept field's declared type: `Immediate` iff every runtime value of the type lives in the uniform carrier's immediate population — an intrinsic head riding the i31 carrier, or a chain of single-relevant-field collapses (newtype structs, subset tuples) landing on one. Everything else answers `Opaque`, and the asymmetry is the point: a conservative answer only misses an encoding, an aggressive one would corrupt it.
+/// The erased carrier shape of a kept field's declared type — the full recorder behind [`curios_ersd::FieldShape`]. `Immediate` iff every runtime value of the type lives in the uniform carrier's immediate population — an intrinsic head riding the i31 carrier, or a chain of single-relevant-field collapses (newtype structs, subset tuples) landing on one. The other shaped answers name the erased carrier the type always takes: the boxed `Flt` struct, a packed grain (a `Handle` token is its bytes at the byte grain, the ABI's encoding), a list rope, a closure at its kept arity, a boxed product row at its relevant width, or a multi-constructor family. Everything unstated answers `Opaque`, and the asymmetry is the point: a conservative answer only misses an encoding or a census entry, an aggressive one would corrupt what is spent on it.
 ///
 /// `visited` makes the chain-chasing terminate: a self-referential struct elaborates (it is merely uninhabited), so the recursion through nominal declarations can cycle, and a cycle classifies `Opaque`. The chain recurses into at most one field per level, so the set is the ancestor chain and never needs unwinding.
 pub(crate) fn field_shape(
@@ -94,6 +95,17 @@ pub(crate) fn field_shape(
         Subterm::Intrinsic(
             Intrinsic::NatType | Intrinsic::BoolType | Intrinsic::ByteType | Intrinsic::IntType,
         ) => Ok(curios_ersd::FieldShape::Immediate),
+        Subterm::Intrinsic(Intrinsic::FltType) => Ok(curios_ersd::FieldShape::Flt),
+        Subterm::Intrinsic(Intrinsic::BinType(grain)) => Ok(curios_ersd::FieldShape::Packed(grain)),
+        Subterm::Intrinsic(Intrinsic::HandleType) => Ok(curios_ersd::FieldShape::Packed(Grain::X)),
+        Subterm::Intrinsic(Intrinsic::ListType(_)) => Ok(curios_ersd::FieldShape::List),
+        // The field is kept, so the codomain does not erase; the value is a closure over the kept binders of the outermost telescope, which is the arity the lowering gives it.
+        Subterm::FuncType(FuncType { telescope, .. }) => {
+            let entries = signature_entries(context, telescope)?;
+            Ok(curios_ersd::FieldShape::Closure(
+                entries.iter().filter(|(_, erased)| !erased).count(),
+            ))
+        }
         Subterm::StructType(struct_type) => {
             if !visited.insert(struct_type.name.clone()) {
                 return Ok(curios_ersd::FieldShape::Opaque);
@@ -101,12 +113,10 @@ pub(crate) fn field_shape(
             let Some(struct_decl) = context.struct_decl(&struct_type.name).cloned() else {
                 return Ok(curios_ersd::FieldShape::Opaque);
             };
-            single_relevant_shape(context, visited, struct_decl.fields_at(&struct_type.params))
+            row_shape(context, visited, struct_decl.fields_at(&struct_type.params))
         }
-        Subterm::TupleType(TupleType { telescope }) => {
-            single_relevant_shape(context, visited, telescope)
-        }
-        // A single-constructor family is *always* its payload row under the collapsed encoding — one constructor, no discrimination — so the chain continues through it exactly as through a newtype struct. A multi-constructor family mixes shapes and is never chased, whatever its own encoding. Inductives are legitimately recursive, so the same visited guard cuts their cycles.
+        Subterm::TupleType(TupleType { telescope }) => row_shape(context, visited, telescope),
+        // A single-constructor family is *always* its payload row under the collapsed encoding — one constructor, no discrimination — so the chain continues through it exactly as through a newtype struct. A multi-constructor family is its own shape: never chased, whatever its encoding. Inductives are legitimately recursive, so the same visited guard cuts their cycles.
         Subterm::InductType(induct_type) => {
             if !visited.insert(induct_type.name.clone()) {
                 return Ok(curios_ersd::FieldShape::Opaque);
@@ -116,7 +126,7 @@ pub(crate) fn field_shape(
             };
             let tags: Vec<_> = induct_decl.constructor_order().collect();
             let [tag] = tags.as_slice() else {
-                return Ok(curios_ersd::FieldShape::Opaque);
+                return Ok(curios_ersd::FieldShape::Family);
             };
             let Some(telescope) = induct_decl.instantiate(tag, &induct_type.params) else {
                 return Ok(curios_ersd::FieldShape::Opaque);
@@ -132,15 +142,28 @@ pub(crate) fn field_shape(
     }
 }
 
-/// The shape a product-shaped telescope collapses to: exactly one relevant entry recurses into that entry's declared type — the newtype chain — and any other relevant count is `Opaque` (zero relevant is an allocated empty product, two or more a boxed one).
-fn single_relevant_shape<B: Bound>(
+/// The shape a product-shaped telescope takes: exactly one relevant entry recurses into that entry's declared type — the newtype chain — two or more are the boxed product row at that width, and zero relevant stays `Opaque` (an allocated empty product today; classifying it further is an admission this recorder does not make).
+fn row_shape<B: Bound>(
     context: &mut Context,
     visited: &mut BTreeSet<Global>,
-    telescope: Telescope<B>,
+    mut telescope: Telescope<B>,
 ) -> Result<curios_ersd::FieldShape, Error> {
-    match leading_relevant_domains(context, telescope)? {
-        (Some(domain), false) => field_shape(context, visited, &domain),
-        _ => Ok(curios_ersd::FieldShape::Opaque),
+    let mut first = None;
+    let mut relevant = 0;
+    while let Telescope::Cons(type_, rest) = telescope {
+        if !is_erasable(context, &type_)? {
+            relevant += 1;
+            if first.is_none() {
+                first = Some(type_);
+            }
+        }
+        let variable = Term::free_var(&context.fresh(None));
+        telescope = rest.open(&[&variable]);
+    }
+    match (relevant, first) {
+        (1, Some(domain)) => field_shape(context, visited, &domain),
+        (0, _) => Ok(curios_ersd::FieldShape::Opaque),
+        (width, _) => Ok(curios_ersd::FieldShape::Product(width)),
     }
 }
 

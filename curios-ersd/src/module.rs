@@ -9,9 +9,9 @@ mod tests;
 
 use {
     super::{
-        Block, BlockId, Constant, ConstantId, Constructor, ConstructorField, ConstructorId,
-        FamilyId, ForeignId, Function, FunctionId, ProductId, ProductSchema, RecGroup, RecGroupId,
-        Statement, StatementId, Terminator, ValueId, VariantFamily,
+        Block, BlockId, Constant, ConstantId, Constructor, ConstructorId, FamilyId, Field,
+        ForeignId, Function, FunctionId, ProductId, ProductSchema, RecGroup, RecGroupId, Statement,
+        StatementId, Terminator, ValueId, VariantFamily,
     },
     curios_abi::ForeignFunction,
     curios_utilities::Arena,
@@ -362,7 +362,7 @@ impl Module {
         &mut self,
         family: FamilyId,
         debug_name: Option<String>,
-        fields: Vec<ConstructorField>,
+        fields: Vec<Field>,
     ) -> ConstructorId {
         let id = ConstructorId(
             u32::try_from(self.constructors.len()).expect("constructor arena exhausted"),

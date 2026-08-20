@@ -6,9 +6,9 @@
 
 use {
     super::{
-        ConstructorRow, Context, Error, FamilyRow, Field, Lowering, Outcome, ProductRow, Proj,
-        Struct, StructType, Subterm, Telescope, Term, Tuple, TupleType, Variant,
-        constructor_entries, emitted, erasure_mask, infer, reduce_with, signature_entries,
+        ConstructorRow, Context, Error, FamilyRow, Lowering, Outcome, ProductRow, Proj, Struct,
+        StructType, Subterm, Telescope, Term, Tuple, TupleType, Variant, constructor_entries,
+        emitted, erasure_mask, infer, reduce_with,
     },
     curios_core::Bound,
 };
@@ -46,13 +46,16 @@ impl Lowering {
             .expect("erase: a registered struct");
         let entries = context.with_frame(|context| {
             let params = open_opaque(context, struct_decl.arity.clone());
-            signature_entries(context, struct_decl.fields_at(&params))
+            constructor_entries(context, struct_decl.fields_at(&params))
         })?;
-        let mask: Vec<bool> = entries.iter().map(|(_, erased)| *erased).collect();
-        let relevant: Vec<Option<String>> = entries
+        let mask: Vec<bool> = entries.iter().map(|(_, erased, _)| *erased).collect();
+        let relevant: Vec<curios_ersd::Field> = entries
             .into_iter()
-            .filter(|(_, erased)| !erased)
-            .map(|(label, _)| label)
+            .filter(|(_, erased, _)| !erased)
+            .map(|(label, _, shape)| curios_ersd::Field {
+                debug_name: label,
+                shape,
+            })
             .collect();
         // A single relevant field is a newtype: the bare field, no schema.
         let schema = (!ProductRow::collapses(relevant.len())).then(|| {
@@ -99,10 +102,10 @@ impl Lowering {
                 .map(|(label, erased, shape)| (label, erased || proof_family, shape))
                 .collect();
             let mask: Vec<bool> = entries.iter().map(|(_, erased, _)| *erased).collect();
-            let relevant: Vec<curios_ersd::ConstructorField> = entries
+            let relevant: Vec<curios_ersd::Field> = entries
                 .into_iter()
                 .filter(|(_, erased, _)| !erased)
-                .map(|(label, _, shape)| curios_ersd::ConstructorField {
+                .map(|(label, _, shape)| curios_ersd::Field {
                     debug_name: label,
                     shape,
                 })
@@ -125,9 +128,10 @@ impl Lowering {
         if let Some(schema) = self.environment.tuple_schema(width) {
             return schema;
         }
+        // An anonymous tuple's row is written with no type information at hand, so every entry is the conservative shape.
         let schema = self.builder.product(curios_ersd::ProductSchema {
             debug_name: None,
-            fields: vec![None; width],
+            fields: vec![curios_ersd::Field::opaque(None); width],
         });
         self.environment.register_tuple_schema(width, schema);
         schema
@@ -250,7 +254,8 @@ impl Lowering {
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
         let Proj { head, field } = proj;
-        let Field::Index(index) = field else {
+        // `Field` arrives from two crates in this file — core's projection selector here, `curios_ersd::Field` in the schema rows — so both stay qualified.
+        let curios_core::Field::Index(index) = field else {
             unreachable!("unresolved label projection reached erasure");
         };
 

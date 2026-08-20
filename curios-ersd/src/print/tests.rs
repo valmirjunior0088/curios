@@ -114,13 +114,13 @@ fn schemas_and_constants_print_deterministically() {
     let mut builder = ErsdBuilder::new();
     let schema = builder.product(ProductSchema {
         debug_name: Some("Pair".into()),
-        fields: vec![Some("lhs".into()), None],
+        fields: vec![Field::opaque(Some("lhs".into())), Field::opaque(None)],
     });
     let family = builder.family(Some("Shape".into()));
     let circle = builder.constructor(
         family,
         Some("circle".into()),
-        vec![ConstructorField::opaque(Some("radius".into()))],
+        vec![Field::opaque(Some("radius".into()))],
     );
     builder.open_block();
     let negative_zero = builder.constant(Constant::Flt(Floating::from_f32(-0.0)));
