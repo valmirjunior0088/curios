@@ -347,9 +347,10 @@ fn bin_len() -> CpsModule {
     });
     let build = module.add_node(CpsNode::LetValue {
         result: bin,
+        // Four bytes: one past the small-canonical envelope, so the literal exercises the rope path these fixtures pin rather than the immediate a smaller value now rides.
         value: CpsValueExpr::Literal(CpsLiteral::Bin(
             Grain::X,
-            PackedBin::from_bytes(vec![1, 2, 3]),
+            PackedBin::from_bytes(vec![1, 2, 3, 4]),
         )),
         next: measure,
     });
@@ -364,6 +365,41 @@ fn bin_len() -> CpsModule {
     );
     module.set_entry(main);
     module
+}
+
+#[test]
+fn small_packed_literal_rides_the_immediate() {
+    let mut module = CpsModule::new();
+    let main = module.reserve_function();
+    let return_cont = module.reserve_continuation();
+    let bin = module.add_value(Some("bin".into()));
+    let exit = module.add_node(CpsNode::Exit {
+        value: Some(CpsAtom::Value(bin)),
+    });
+    let build = module.add_node(CpsNode::LetValue {
+        result: bin,
+        value: CpsValueExpr::Literal(CpsLiteral::Bin(
+            Grain::X,
+            PackedBin::from_bytes(vec![1, 2, 3]),
+        )),
+        next: exit,
+    });
+    module.define_function(
+        main,
+        CpsFunction {
+            debug_name: Some("main".into()),
+            params: Vec::new(),
+            return_cont,
+            body: build,
+        },
+    );
+    module.set_entry(main);
+
+    // Inside the envelope nothing is allocated and no data segment exists: the value is one i31 constant.
+    let wat = wat(&module);
+    assert_contains(&wat, "ref.i31");
+    assert_eq!(count(&wat, "array.new_data"), 0);
+    assert_eq!(count(&wat, "(data "), 0);
 }
 
 #[test]
