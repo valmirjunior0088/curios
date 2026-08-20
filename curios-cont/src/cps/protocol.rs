@@ -185,18 +185,6 @@ pub(super) fn split_returns(module: &mut CpsModule) -> bool {
         }
     }
 
-    // A variant class travels at its family's full width, whatever the demand asked for: the family's heap type has that arity, so a shorter rebuild would not be a value of it. Demand still decides *whether* to split — this only widens what a split carries.
-    let widths = widths
-        .into_iter()
-        .map(|(function, width)| {
-            let width = match classes.get(&function).copied().flatten() {
-                Some(family) => module.family(family).width.max(width),
-                None => width,
-            };
-            (function, width)
-        })
-        .collect::<BTreeMap<_, _>>();
-
     for (&function, &width) in &widths {
         let sentinel = module.function(function).unwrap().return_cont;
         for node_id in function_nodes(module, function) {
@@ -237,11 +225,15 @@ pub(super) fn split_returns(module: &mut CpsModule) -> bool {
         let params = (0..width)
             .map(|index| module.add_value(Some(format!("resume/{}/{index}", resume.index()))))
             .collect::<Vec<_>>();
-        let atoms = params.iter().copied().map(CpsAtom::Value).collect();
+        let mut atoms: Vec<CpsAtom> = params.iter().copied().map(CpsAtom::Value).collect();
         let rebuilt = module.add_node(CpsNode::LetValue {
             result: held,
             value: match family {
-                Some(family) => CpsValueExpr::Variant(family, atoms),
+                Some(family) => {
+                    // The protocol carries only the slots the demand asked for, so the rebuild fills the family's remaining width rather than widening the interface — a narrower interface is the whole point of splitting, and the slots past the demand are by construction unread.
+                    atoms.resize(module.family(family).width, CpsAtom::Filler);
+                    CpsValueExpr::Variant(family, atoms)
+                }
                 None => CpsValueExpr::Tuple(atoms),
             },
             next: body,

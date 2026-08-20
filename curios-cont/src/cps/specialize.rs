@@ -400,7 +400,7 @@ pub(super) fn tagged_tuple_values(
     }
     result
 }
-/// Whether `function` projects a field out of `param`, i.e. contains a `TupleGet` on it. This is the profitability gate: baking a known tuple into a parameter only pays off when the body actually deconstructs it.
+/// Whether `function` projects a field out of `param`, i.e. contains a projection on it — a `TupleGet` for a structural product, a `VariantGet` for a family. This is the profitability gate: baking a known constructor into a parameter only pays off when the body actually deconstructs it, and a gate that knew only one of the two vocabularies would silently decline every variant.
 pub(super) fn deconstructs_param(
     module: &CpsModule,
     function: CpsFunId,
@@ -410,7 +410,7 @@ pub(super) fn deconstructs_param(
         matches!(
             module.node(id),
             Some(CpsNode::LetIntrinsic {
-                op: CpsIntrinsic::TupleGet(_),
+                op: CpsIntrinsic::TupleGet(_) | CpsIntrinsic::VariantGet(..),
                 args,
                 ..
             }) if args.first() == Some(&CpsAtom::Value(param))
@@ -600,7 +600,7 @@ pub(super) fn continuation_projects(
             matches!(
                 module.node(id),
                 Some(CpsNode::LetIntrinsic {
-                    op: CpsIntrinsic::TupleGet(_),
+                    op: CpsIntrinsic::TupleGet(_) | CpsIntrinsic::VariantGet(..),
                     args,
                     ..
                 }) if args.first() == Some(&CpsAtom::Value(param))
