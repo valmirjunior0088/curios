@@ -51,6 +51,9 @@ pub(super) fn clone_node(node: &CpsNode, map: &Mapping<'_>) -> CpsNode {
                 CpsValueExpr::Tuple(atoms) => {
                     CpsValueExpr::Tuple(atoms.iter().map(map.atom).collect())
                 }
+                CpsValueExpr::Variant(family, atoms) => {
+                    CpsValueExpr::Variant(*family, atoms.iter().map(map.atom).collect())
+                }
             },
             next: (map.node)(*next),
         },

@@ -22,6 +22,7 @@ use {
 
 pub(crate) fn structurize(machine: &MachineModule) -> EmissionModule {
     let mut output = EmissionModule::new();
+    output.set_families(machine.families().to_vec());
     for (function, wrapper) in &machine.wrappers {
         output.add_clsr(
             wrapper_name(machine, *function),
@@ -138,6 +139,9 @@ impl<'a> MachineFunctionBridge<'a> {
                         ),
                         MachineConstruct::Tuple(elements) => EmissionValue::Pure(
                             EmissionData::Tuple(self.operands(elements, &mut values)),
+                        ),
+                        MachineConstruct::Variant(family, elements) => EmissionValue::Pure(
+                            EmissionData::Variant(*family, self.operands(elements, &mut values)),
                         ),
                     };
                     values.push((value_name(*result), value));
@@ -567,7 +571,9 @@ fn block_operand_values(block: &MachineBlock) -> BTreeSet<MachineValueId> {
         match instruction {
             MachineInstruction::Construct { value, .. } => match value {
                 MachineConstruct::Literal(_) => {}
-                MachineConstruct::List(operands) | MachineConstruct::Tuple(operands) => {
+                MachineConstruct::List(operands)
+                | MachineConstruct::Tuple(operands)
+                | MachineConstruct::Variant(_, operands) => {
                     operands.iter().for_each(&mut insert);
                 }
             },

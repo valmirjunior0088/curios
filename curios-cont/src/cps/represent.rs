@@ -133,7 +133,9 @@ fn offers(module: &CpsModule) -> BTreeMap<CpsValueId, Offer> {
             CpsNode::LetValue { result, value, .. } => {
                 let offer = match value {
                     CpsValueExpr::Literal(literal) => offer_of(literal_repr(literal)),
-                    CpsValueExpr::List(_) | CpsValueExpr::Tuple(_) => Offer::Never,
+                    CpsValueExpr::List(_) | CpsValueExpr::Tuple(_) | CpsValueExpr::Variant(..) => {
+                        Offer::Never
+                    }
                 };
                 offers.insert(*result, offer);
             }
@@ -236,7 +238,10 @@ pub(crate) fn storage(module: &CpsModule) -> BTreeMap<CpsValueId, Storage> {
 
                 // Everything else stores or passes a reference: call arguments cross a `func/N` signature that is uniformly `anyref`, aggregate elements and closure captures are held uninterpreted, and every cell operation works on shapes. None of these demands a raw carrier, so none contributes.
                 CpsNode::LetValue { value, .. } => match value {
-                    CpsValueExpr::Literal(_) | CpsValueExpr::List(_) | CpsValueExpr::Tuple(_) => {}
+                    CpsValueExpr::Literal(_)
+                    | CpsValueExpr::List(_)
+                    | CpsValueExpr::Tuple(_)
+                    | CpsValueExpr::Variant(..) => {}
                 },
                 CpsNode::ApplyFun { .. }
                 | CpsNode::Cell { .. }

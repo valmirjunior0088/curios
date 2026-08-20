@@ -4,9 +4,9 @@
 
 use {
     crate::{
-        CpsAtom, CpsCallee, CpsCellOp, CpsContId, CpsEdge, CpsFunId, CpsFunction, CpsIntrinsic,
-        CpsIntrinsicCall, CpsLiteral, CpsModule, CpsNode, CpsNodeId, CpsValueExpr, CpsValueId,
-        atoms,
+        CpsAtom, CpsCallee, CpsCellOp, CpsContId, CpsEdge, CpsFamilyId, CpsFunId, CpsFunction,
+        CpsIntrinsic, CpsIntrinsicCall, CpsLiteral, CpsModule, CpsNode, CpsNodeId, CpsValueExpr,
+        CpsValueId, atoms,
     },
     curios_abi::ForeignFunction,
     curios_utilities::{Entropy, id},
@@ -37,6 +37,7 @@ pub(crate) enum MachineConstruct {
     Literal(CpsLiteral),
     List(Vec<MachineOperand>),
     Tuple(Vec<MachineOperand>),
+    Variant(CpsFamilyId, Vec<MachineOperand>),
 }
 
 #[derive(Debug, Clone)]
@@ -165,12 +166,18 @@ pub(crate) struct MachineModule {
     entry: CpsFunId,
     /// Each function's source hint, carried from the Cont module so emission names can spell a function's origin (`func/{index}$hint`). A hint never affects identity — the `CpsFunId` index does — so a missing entry only omits the hint.
     function_hints: BTreeMap<CpsFunId, String>,
+    /// Every variant family the Cont module declared, with its debug name and width — carried whole rather than collected from constructions, so a family whose constructions were all optimized away still declares a type for the projections that may outlive them.
+    families: Vec<(CpsFamilyId, Option<String>, usize)>,
 }
 
 impl MachineModule {
     /// The source hint of a function, if it carries one.
     pub(crate) fn function_hint(&self, id: CpsFunId) -> Option<&str> {
         self.function_hints.get(&id).map(String::as_str)
+    }
+
+    pub(crate) fn families(&self) -> &[(CpsFamilyId, Option<String>, usize)] {
+        &self.families
     }
 }
 
@@ -256,11 +263,16 @@ pub(crate) fn lower(source: &CpsModule) -> MachineModule {
             Some((CpsFunId::from_index(index), name))
         })
         .collect();
+    let families = source
+        .families()
+        .map(|(id, family)| (id, family.debug_name.clone(), family.width))
+        .collect();
     let module = MachineModule {
         functions,
         wrappers,
         entry: source.entry().unwrap(),
         function_hints,
+        families,
     };
     module.verify().expect("invalid closed machine CFG");
     module
@@ -518,6 +530,13 @@ impl<'a> MachineFunctionLowerer<'a> {
                                 .collect(),
                         ),
                         CpsValueExpr::Tuple(values) => MachineConstruct::Tuple(
+                            values
+                                .iter()
+                                .map(|atom| self.lower_atom(atom, &mut instructions))
+                                .collect(),
+                        ),
+                        CpsValueExpr::Variant(family, values) => MachineConstruct::Variant(
+                            *family,
                             values
                                 .iter()
                                 .map(|atom| self.lower_atom(atom, &mut instructions))

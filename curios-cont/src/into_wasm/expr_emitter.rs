@@ -123,6 +123,17 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
                     type_name: tuple_n_type,
                 });
             }
+            EmissionData::Variant(family, elems) => {
+                let family_type = self.context.table().find_family_type(*family);
+
+                for elem in elems {
+                    self.emit_instrs(self.context.load_value_instrs(elem, LoadAs::Null));
+                }
+
+                self.emit_instr(curios_wasm::Instr::StructNew {
+                    type_name: family_type,
+                });
+            }
             EmissionData::Bin(grain, value) => {
                 // A small packed literal is its canonical immediate, computed here at compile time: the byte grain's length in the top 2 payload bits over up to 3 bytes, the bit grain's in the top 5 over up to 26 bits, both LSB-first.
                 let envelope = match grain {
@@ -353,7 +364,9 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             .filter(|(_, value)| {
                 matches!(
                     value,
-                    EmissionValue::Pure(EmissionData::Tuple(_) | EmissionData::List(_))
+                    EmissionValue::Pure(
+                        EmissionData::Tuple(_) | EmissionData::List(_) | EmissionData::Variant(..)
+                    )
                 )
             })
             .map(|(name, _)| name)

@@ -21,6 +21,8 @@ enum ConstKey {
     Bin(u8, usize, Vec<u8>),
     List(Vec<String>),
     Tuple(Vec<String>),
+    /// A variant is its family plus its canonicalized slots — keyed apart from `Tuple` because the two materialise at different heap types, so a structurally identical row is not the same constant.
+    Variant(usize, Vec<String>),
     /// A closure is its target plus its canonicalized captures: with the code field an ordinary table index, a const-captured closure is a constant aggregate like any `Tuple`, materialized once per instantiation instead of per construction.
     Clsr(String, Vec<String>),
 }
@@ -129,6 +131,16 @@ fn collect_consts(body: &EmissionBody, interner: &mut ConstInterner, consts: &mu
                     consts.renames.insert(name.clone(), interned);
                 }
             }
+            EmissionData::Variant(family, elems) => {
+                if let Some(canonical) = intern_elements(elems, interner, consts) {
+                    let key = ConstKey::Variant(
+                        family.index(),
+                        canonical.iter().map(|name| name.as_string()).collect(),
+                    );
+                    let interned = interner.intern(key, EmissionData::Variant(*family, canonical));
+                    consts.renames.insert(name.clone(), interned);
+                }
+            }
             // A recursive shell's fill is naturally outside the condition: a cyclic closure's captures include a cycle member — its own shell'd name or a partner's — which is neither an interned const nor a kept scalar, so `intern_elements` refuses it and the shell + backpatch path is untouched.
             EmissionData::Closure(target, fields) => {
                 if let Some(canonical) = intern_elements(fields, interner, consts) {
@@ -226,7 +238,9 @@ fn rename_value(
             | EmissionData::Int(_)
             | EmissionData::Flt(_)
             | EmissionData::Bin(_, _) => {}
-            EmissionData::List(elems) | EmissionData::Tuple(elems) => rename_names(elems, renames),
+            EmissionData::List(elems)
+            | EmissionData::Tuple(elems)
+            | EmissionData::Variant(_, elems) => rename_names(elems, renames),
             EmissionData::Closure(_, fields) => rename_names(fields, renames),
         },
         EmissionValue::Eval(code) => match code {

@@ -1546,11 +1546,13 @@ fn a_two_way_dispatch_is_a_branch_not_a_table() {
     );
 }
 
-/// A tuple is read at its own type, and the tuple types are final.
+/// An aggregate is read at its own final type — a variant family through its own type, a structural tuple through the roster.
 ///
 /// The `$tuple/N` family used to be a prefix subtype chain — `$tuple/4 <: $tuple/3 <: … <: $tuple/1` — so one `ref.cast (ref $tuple/1)` could read field 0 of any tuple whatever its arity. That is what made the cast a *host call*: wasmtime's `is_subtype` short-circuits only when the target is final, so every cast to a prefix of a wider object took the `is_subtype` libcall, and every real node is wider than the prefix it was read through.
 ///
 /// Final types delete the short-circuit's precondition, and the reader finds the object's exact type by exhausting the roster instead. Correctness does not rest on an object's arity being its constructor's, which `cps/fields.rs` makes false whenever a narrow constructor materialises at its region's width.
+///
+/// Family keying then removed the cascade from the case it was built for. A variant family is one final struct at its own width, so a family read is a single exact cast and the roster search survives only for structural tuples — this fixture pins the family half, and the `$tuple/` finality check below still pins the other.
 ///
 /// **Measured 2026-08-20, x86-64 Linux, release, whole-process, min of 5, anchors checked on every run.** `chain` 339.6 → 131.1 ms (**−61.4%**), `spines` 100.5 → 78.8 ms (**−21.6%**), against `lcg` +0.8%, `trees` +0.8% and `churn` +0.1% — all three inside noise, and each for a stated reason: `lcg` declares no variant at all, `trees`' leaf rides the i31 so its family never reads a tag and its one boxed constructor casts exactly, and `churn`'s hot loop is not a variant walk. The two that moved are exactly the two whose hot loop reads a multi-constructor heap family, which is what makes the figure a class rather than a coincidence.
 #[test]
@@ -1588,17 +1590,28 @@ fn a_tuple_is_read_at_its_own_final_type() {
         );
     }
 
-    // `link` is a `$tuple/3` and `stop` a `$tuple/1`, so the walk must test the wide constructor
-    // rather than read either through a prefix.
+    // Since family keying, `Chain` is one final `$fam/N$/Chain` at the family's width rather than a
+    // `$tuple/3` beside a `$tuple/1`, so the walk needs no cascade at all: the object's type is a
+    // fact of the family, and the read is one exact cast followed by the field.
     let functions = functions(&wat);
     let kernel = function_with(&functions, "999983");
     assert!(
-        kernel.body.contains("ref.test (ref $tuple/3)"),
-        "the walk tests the wide constructor's exact type: {}",
+        kernel.body.contains("ref.cast (ref $fam/") && kernel.body.contains("struct.get $fam/"),
+        "the walk reads the family at its own exact type: {}",
         kernel.body
     );
-    // Deliberately *not* asserted: that no `ref.cast (ref $tuple/1)` survives. It does, as the
-    // cascade's cold terminal for `stop`, and that is the design — what changed is that the type
-    // it names is final, so the cast is one compare instead of the `is_subtype` libcall a
-    // non-final target forces. The `sub` check above is what pins that, and it is the whole fix.
+    assert!(
+        !kernel.body.contains("ref.test"),
+        "and needs no roster cascade to find it: {}",
+        kernel.body
+    );
+
+    // The family types are final and unrelated too — the same property, for the types that
+    // replaced the tuples on this path.
+    for line in wat.lines().filter(|line| line.contains("(type $fam/")) {
+        assert!(
+            !line.contains("sub"),
+            "family types must be final and unrelated: {line}"
+        );
+    }
 }

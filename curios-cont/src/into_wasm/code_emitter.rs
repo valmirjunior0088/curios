@@ -1784,6 +1784,19 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                 self.emit_instrs(instrs);
                 self.emit_store(dest, &op.result_repr());
             }
+            // One exact cast, no cascade: a family value's heap type is a fact of the family, because the door pads every construction to the family's width and the family's type is final. This is what the whole keying buys — the roster search `TupleGet` performs above has nothing to search here.
+            CpsIntrinsic::VariantGet(family, index) => {
+                let family_type = self.context.table().find_family_type(family);
+                self.emit_instrs(
+                    self.context
+                        .load_value_instrs(&args[0], LoadAs::Concrete(family_type.clone())),
+                );
+                self.emit_instr(curios_wasm::Instr::StructGet {
+                    type_name: family_type,
+                    field_name: Table::tuple_field(index),
+                });
+                self.emit_store(dest, &op.result_repr());
+            }
             CpsIntrinsic::IsImmediate => {
                 self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::NonNull));
                 self.emit_instr(curios_wasm::Instr::RefTest {

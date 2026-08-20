@@ -247,6 +247,32 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         }
     }
 
+    /// One final struct per variant family, at the family's width: slot 0 the tag, the rest the payload row of its widest constructor. Final and unrelated to every other type, so a read of one is an exact cast — the reason families are keyed here rather than by arity. Fields stay `anyref` for now; typing them per recorded shape is this campaign's next step.
+    fn emit_family_types(&mut self) {
+        for (_, type_name, width) in self.table.family_types() {
+            self.module.add_type(
+                type_name,
+                curios_wasm::SubType {
+                    is_final: true,
+                    super_types: vec![],
+                    comp_type: curios_wasm::CompType::Struct(curios_wasm::StructType::from(
+                        (0..width).map(|index| {
+                            (
+                                Table::tuple_field(index),
+                                curios_wasm::FieldType {
+                                    storage_type: curios_wasm::StorageType::Val(Table::top_type(
+                                        true,
+                                    )),
+                                    mutability: Table::tuple_field_mutability(),
+                                },
+                            )
+                        }),
+                    )),
+                },
+            );
+        }
+    }
+
     fn emit_envr_arity_types(&mut self) {
         for (arity, type_name) in self.table.envr_types() {
             self.module.add_type(
@@ -467,7 +493,10 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                     },
                 );
             }
-            EmissionData::Tuple(_) | EmissionData::List(_) | EmissionData::Closure(_, _) => {
+            EmissionData::Tuple(_)
+            | EmissionData::Variant(..)
+            | EmissionData::List(_)
+            | EmissionData::Closure(_, _) => {
                 let global_name = self.table.find_const(name);
 
                 let mut init_expr: curios_wasm::Expr = Default::default();
@@ -744,6 +773,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         self.emit_list_rope_types();
         self.emit_cell_type();
         self.emit_tuple_types();
+        self.emit_family_types();
         self.emit_clsr_arity_types();
         self.emit_envr_arity_types();
         self.emit_clsr_types(module);

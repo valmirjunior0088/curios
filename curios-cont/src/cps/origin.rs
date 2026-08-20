@@ -18,13 +18,15 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// What flows into a value, ordered `Unreached < Constructed(_) < Opaque`.
+/// What flows into a value, ordered `Unreached < Constructed(_)/Variant(..) < Opaque`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Origin {
     /// No flow reached it in the round — an unentered parameter or an unreachable binding.
     Unreached,
     /// Every flow reaching it is a tuple construction, or an alias of one, and these are the widths they carry. One width is an exact product; several are a variant, which travels as its widest constructor with each narrower edge filled.
     Constructed(BTreeSet<usize>),
+    /// Every flow reaching it is a [`CpsValueExpr::Variant`](super::CpsValueExpr::Variant) of this family, or an alias of one — all at the family's width, carried here so the rewrite needs no module access. Always settled, because the door pads every construction; a merge with a different family or with a structural tuple is `Opaque`, which upstream typing makes unreachable and this lattice makes safe anyway.
+    Variant(super::CpsFamilyId, usize),
     /// Some flow is not a visible construction — a call result, a literal, a closure, a projection.
     Opaque,
 }
@@ -39,19 +41,21 @@ impl Origin {
     pub(crate) fn width(&self) -> Option<usize> {
         match self {
             Origin::Constructed(widths) => widths.last().copied(),
+            Origin::Variant(_, width) => Some(*width),
             Origin::Unreached | Origin::Opaque => None,
         }
     }
 
     /// The one width every flow agrees on, and `None` where they do not.
     ///
-    /// This is the fact a *site* may take a value apart by, and it is deliberately not [`Origin::width`]: a value the fixpoint reports at several widths is a variant whose constructor is undecided there, so projecting it at the widest reads past whatever the narrower constructor carries and traps. The widest is what a region travels at; the settled one is what an edge into that region may project.
+    /// This is the fact a *site* may take a value apart by, and it is deliberately not [`Origin::width`]: a value the fixpoint reports at several widths is a variant whose constructor is undecided there, so projecting it at the widest reads past whatever the narrower constructor carries and traps. The widest is what a region travels at; the settled one is what an edge into that region may project. A [`Origin::Variant`] flow is settled by construction — every edge carries the family width, a padded slot reads null rather than out of bounds — which is what door-padding buys this analysis.
     pub(crate) fn settled_width(&self) -> Option<usize> {
         match self {
             Origin::Constructed(widths) => match widths.len() {
                 1 => widths.last().copied(),
                 _ => None,
             },
+            Origin::Variant(_, width) => Some(*width),
             Origin::Unreached | Origin::Opaque => None,
         }
     }
@@ -59,6 +63,14 @@ impl Origin {
     /// Whether a site may take a value of this origin apart — see [`Origin::settled_width`] for why a merged variant may not.
     pub(crate) fn is_settled(&self) -> bool {
         !matches!(self, Origin::Constructed(widths) if widths.len() > 1)
+    }
+
+    /// The family this origin's flows construct, where they are variant constructions at all.
+    pub(crate) fn family(&self) -> Option<super::CpsFamilyId> {
+        match self {
+            Origin::Variant(family, _) => Some(*family),
+            Origin::Unreached | Origin::Constructed(_) | Origin::Opaque => None,
+        }
     }
 }
 
@@ -75,6 +87,11 @@ impl Lattice for Origin {
                 left.extend(right);
                 Origin::Constructed(left)
             }
+            (Origin::Variant(left, width), Origin::Variant(right, _)) if left == right => {
+                Origin::Variant(left, width)
+            }
+            // A family meeting a different family or a structural tuple is ill-typed upstream; the lattice answers the safe point rather than assuming it cannot happen.
+            (Origin::Variant(..), _) | (_, Origin::Variant(..)) => Origin::Opaque,
         }
     }
 }
@@ -118,6 +135,9 @@ pub(crate) fn origins(module: &CpsModule) -> BTreeMap<CpsValueId, Origin> {
                 CpsNode::LetValue { result, value, .. } => {
                     let origin = match value {
                         CpsValueExpr::Tuple(atoms) => Origin::of_width(atoms.len()),
+                        CpsValueExpr::Variant(family, atoms) => {
+                            Origin::Variant(*family, atoms.len())
+                        }
                         CpsValueExpr::List(_) | CpsValueExpr::Literal(_) => Origin::Opaque,
                     };
                     solver.join(*result, origin);

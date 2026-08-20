@@ -39,6 +39,7 @@ pub fn lower_to_cont(source: &Module) -> curios_cont::CpsModule {
         values: BTreeMap::new(),
         functions: BTreeMap::new(),
         knot_cells: BTreeMap::new(),
+        families: BTreeMap::new(),
     };
 
     let main = lowerer.module.reserve_function();
@@ -88,6 +89,8 @@ struct Lowerer<'a> {
     functions: BTreeMap<FunctionId, curios_cont::CpsFunId>,
     /// Members of value-only recursive knots, mapped to the mutable cell that ties each knot. A reference to such a member lowers to a read of the filled cell (see [`Lowerer::with_cell_reads`]), so the tie is forced once and is invisible to everything but this lowering.
     knot_cells: BTreeMap<ValueId, curios_cont::CpsValueId>,
+    /// The Cont identity of each tagged family, minted on first use. Only the tagged encodings register one: a collapsed family builds a bare value or a structural tuple, and an immediate family's bare constructor is a scalar, so neither has a family heap type to key.
+    families: BTreeMap<FamilyId, curios_cont::CpsFamilyId>,
 }
 
 impl Lowerer<'_> {
@@ -748,6 +751,7 @@ impl Lowerer<'_> {
                 }
                 FamilyEncoding::Tagged | FamilyEncoding::Immediate { .. } => {
                     let tag = self.constructor_tag(*constructor);
+                    let family = self.family_identity(self.constructor_family(*constructor));
                     let mut atoms = Vec::with_capacity(fields.len() + 1);
                     atoms.push(curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(
                         tag,
@@ -761,11 +765,14 @@ impl Lowerer<'_> {
                             }))
                             .collect();
                     let settles = self.settle_stores(&marked, &mut atoms);
+                    // Pad to the family's width, so a narrow constructor is the same heap type as its widest sibling and every read of the family is one exact cast. The filler carries no value — the destination's carrier is not known until the backend decides it.
+                    let width = self.module.family(family).width;
+                    atoms.resize(width, curios_cont::CpsAtom::Filler);
                     let bound = self.bind_value(result);
                     let next = self.lower_statements(rest, terminator, target);
                     let node = self.module.add_node(curios_cont::CpsNode::LetValue {
                         result: bound,
-                        value: curios_cont::CpsValueExpr::Tuple(atoms),
+                        value: curios_cont::CpsValueExpr::Variant(family, atoms),
                         next,
                     });
                     self.wrap_settles(settles, node)
@@ -1099,12 +1106,13 @@ impl Lowerer<'_> {
             FamilyEncoding::Tagged => {}
         }
 
+        let identity = self.family_identity(family);
         let (join, fresh) = self.open_join(result, rest, terminator, target);
 
         let mut continuations = if fresh { vec![join] } else { Vec::new() };
         let mut cases = BTreeMap::new();
         for arm in arms {
-            let continuation = self.lower_variant_arm(arm, scrutinee.clone(), join);
+            let continuation = self.lower_variant_arm(identity, arm, scrutinee.clone(), join);
             continuations.push(continuation);
             cases.insert(
                 self.constructor_tag(arm.constructor),
@@ -1131,7 +1139,7 @@ impl Lowerer<'_> {
         });
         let dispatch = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
             result: tag,
-            op: curios_cont::CpsIntrinsic::TupleGet(0),
+            op: curios_cont::CpsIntrinsic::VariantGet(identity, 0),
             args: vec![scrutinee],
             next: switch,
         });
@@ -1182,6 +1190,7 @@ impl Lowerer<'_> {
             None => default_cont.expect("a variant match covers its family"),
         };
 
+        let identity = self.family_identity(family);
         let boxed: Vec<ConstructorId> = self
             .source
             .family(family)
@@ -1194,7 +1203,8 @@ impl Lowerer<'_> {
         let boxed_target = match boxed.as_slice() {
             [only] => match arms.iter().find(|arm| arm.constructor == *only) {
                 Some(arm) => {
-                    let continuation = self.lower_variant_arm(arm, scrutinee.clone(), join);
+                    let continuation =
+                        self.lower_variant_arm(identity, arm, scrutinee.clone(), join);
                     continuations.push(continuation);
                     continuation
                 }
@@ -1203,7 +1213,8 @@ impl Lowerer<'_> {
             _ => {
                 let mut cases = BTreeMap::new();
                 for arm in arms.iter().filter(|arm| arm.constructor != immediate) {
-                    let continuation = self.lower_variant_arm(arm, scrutinee.clone(), join);
+                    let continuation =
+                        self.lower_variant_arm(identity, arm, scrutinee.clone(), join);
                     continuations.push(continuation);
                     cases.insert(
                         self.constructor_tag(arm.constructor),
@@ -1225,7 +1236,7 @@ impl Lowerer<'_> {
                 });
                 let body = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
                     result: tag,
-                    op: curios_cont::CpsIntrinsic::TupleGet(0),
+                    op: curios_cont::CpsIntrinsic::VariantGet(identity, 0),
                     args: vec![scrutinee.clone()],
                     next: switch,
                 });
@@ -1324,6 +1335,7 @@ impl Lowerer<'_> {
 
     fn lower_variant_arm(
         &mut self,
+        family: curios_cont::CpsFamilyId,
         arm: &VariantArm,
         scrutinee: curios_cont::CpsAtom,
         join: curios_cont::CpsContId,
@@ -1337,7 +1349,7 @@ impl Lowerer<'_> {
         for index in (0..bindings.len()).rev() {
             body = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
                 result: bindings[index],
-                op: curios_cont::CpsIntrinsic::TupleGet(index + 1),
+                op: curios_cont::CpsIntrinsic::VariantGet(family, index + 1),
                 args: vec![scrutinee.clone()],
                 next: body,
             });
@@ -1938,6 +1950,31 @@ impl Lowerer<'_> {
     }
 
     /// The family a constructor belongs to.
+    /// The Cont identity of `family`, minted on first use at the family's width — one tag slot plus its widest constructor's payload row, which is the arity every construction of the family is padded to.
+    fn family_identity(&mut self, family: FamilyId) -> curios_cont::CpsFamilyId {
+        if let Some(&id) = self.families.get(&family) {
+            return id;
+        }
+        let definition = self.source.family(family).expect("live family");
+        let width = 1 + definition
+            .constructors
+            .iter()
+            .map(|&constructor| {
+                self.source
+                    .constructor(constructor)
+                    .expect("live constructor")
+                    .width()
+            })
+            .max()
+            .unwrap_or(0);
+        let id = self.module.add_family(curios_cont::CpsFamily {
+            debug_name: definition.debug_name.clone(),
+            width,
+        });
+        self.families.insert(family, id);
+        id
+    }
+
     fn constructor_family(&self, constructor: ConstructorId) -> FamilyId {
         self.source
             .constructor(constructor)

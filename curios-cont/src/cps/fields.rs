@@ -30,6 +30,8 @@ struct Split {
     position: usize,
     param: CpsValueId,
     width: usize,
+    /// The family, where every flow into the parameter is a variant construction of one. Carried from the same origin fact that gave the width, so the head rebuild and the per-edge projections stay in the vocabulary the reads below them use — a variant rebuilt as a structural tuple would trap at the next exact cast.
+    family: Option<super::CpsFamilyId>,
 }
 
 /// Whether a site may take `source` apart into fields.
@@ -41,6 +43,23 @@ fn takeable(origins: &BTreeMap<CpsValueId, Origin>, param: CpsValueId, source: &
             *value == param || origins.get(value).is_none_or(Origin::is_settled)
         }
         CpsAtom::Fun(_) | CpsAtom::Literal(_) | CpsAtom::Filler => false,
+    }
+}
+
+/// The construction a rebuild emits: the family's own, where one was carried, and a structural tuple otherwise.
+fn rebuild_of(family: Option<super::CpsFamilyId>, fields: &[CpsValueId]) -> CpsValueExpr {
+    let atoms = fields.iter().copied().map(CpsAtom::Value).collect();
+    match family {
+        Some(family) => CpsValueExpr::Variant(family, atoms),
+        None => CpsValueExpr::Tuple(atoms),
+    }
+}
+
+/// The projection a split emits, in the vocabulary its source was built in.
+fn projection_of(family: Option<super::CpsFamilyId>, index: usize) -> CpsIntrinsic {
+    match family {
+        Some(family) => CpsIntrinsic::VariantGet(family, index),
+        None => CpsIntrinsic::TupleGet(index),
     }
 }
 
@@ -101,6 +120,7 @@ fn admit(module: &CpsModule, origins: &BTreeMap<CpsValueId, Origin>) -> Option<S
                 position,
                 param,
                 width,
+                family: origins.get(&param).and_then(Origin::family),
             });
         }
     }
@@ -137,7 +157,7 @@ pub(super) fn split_parameters(module: &mut CpsModule) -> bool {
     let rebuilt = module.add_value(Some(format!("rebuilt/{}", split.continuation.index())));
     let head = module.add_node(CpsNode::LetValue {
         result: rebuilt,
-        value: CpsValueExpr::Tuple(fields.iter().copied().map(CpsAtom::Value).collect()),
+        value: rebuild_of(split.family, &fields),
         next: body,
     });
     module
@@ -200,7 +220,7 @@ pub(super) fn split_parameters(module: &mut CpsModule) -> bool {
                 ids[offset],
                 CpsNode::LetIntrinsic {
                     result: projection,
-                    op: CpsIntrinsic::TupleGet(index),
+                    op: projection_of(split.family, index),
                     args: vec![CpsAtom::Value(source)],
                     next,
                 },
@@ -226,6 +246,8 @@ struct Worker {
     position: usize,
     param: CpsValueId,
     width: usize,
+    /// See [`Split::family`].
+    family: Option<super::CpsFamilyId>,
 }
 
 /// The first admissible worker split in deterministic order, if any.
@@ -270,6 +292,7 @@ fn admit_worker(module: &CpsModule, origins: &BTreeMap<CpsValueId, Origin>) -> O
                 position,
                 param,
                 width,
+                family: origins.get(&param).and_then(Origin::family),
             });
         }
     }
@@ -299,7 +322,7 @@ pub(super) fn split_workers(module: &mut CpsModule) -> bool {
     let rebuilt = module.add_value(Some(format!("rebuilt/{}", worker.function.index())));
     let head = module.add_node(CpsNode::LetValue {
         result: rebuilt,
-        value: CpsValueExpr::Tuple(fields.iter().copied().map(CpsAtom::Value).collect()),
+        value: rebuild_of(worker.family, &fields),
         next: body,
     });
     module
@@ -341,7 +364,7 @@ pub(super) fn split_workers(module: &mut CpsModule) -> bool {
             let projection = module.add_value(Some(format!("worker/{}/{index}", caller.index())));
             inserted.push(CpsNode::LetIntrinsic {
                 result: projection,
-                op: CpsIntrinsic::TupleGet(index),
+                op: projection_of(worker.family, index),
                 args: vec![CpsAtom::Value(source)],
                 next: caller,
             });

@@ -338,3 +338,131 @@ fn a_known_call_argument_reaches_the_callee_parameter_unless_it_escapes() {
         );
     }
 }
+
+/// A variant construction reaches its parameter as its own family, settled by construction — the door pads every construction to the family's width, so a variant flow never has the several-width shape a structural variant region does.
+#[test]
+fn a_variant_construction_carries_its_family() {
+    let mut param = CpsValueId(0);
+    let mut family = crate::CpsFamilyId(0);
+    let module = module_with(|module| {
+        family = module.add_family(crate::CpsFamily {
+            debug_name: Some("Shape".into()),
+            width: 3,
+        });
+        let built = module.add_value(Some("built".into()));
+        param = module.add_value(Some("param".into()));
+        let target = module.reserve_continuation();
+        let exit = module.add_node(CpsNode::Exit { value: None });
+        module.define_continuation(
+            target,
+            CpsContinuation {
+                debug_name: None,
+                params: vec![param],
+                body: exit,
+            },
+        );
+        let jump = module.add_node(CpsNode::ApplyCont(CpsEdge {
+            target,
+            args: vec![CpsAtom::Value(built)],
+        }));
+        let build = module.add_node(CpsNode::LetValue {
+            result: built,
+            value: CpsValueExpr::Variant(
+                family,
+                vec![
+                    CpsAtom::Literal(CpsLiteral::Nat(0)),
+                    CpsAtom::Literal(CpsLiteral::Nat(1)),
+                    CpsAtom::Filler,
+                ],
+            ),
+            next: jump,
+        });
+        module.add_node(CpsNode::LetCont {
+            continuations: vec![target],
+            body: build,
+        })
+    });
+
+    let origin = &origins(&module)[&param];
+    assert_eq!(*origin, Origin::Variant(family, 3));
+    assert_eq!(origin.family(), Some(family));
+    assert_eq!(
+        origin.settled_width(),
+        Some(3),
+        "a padded family flow is takeable at its width"
+    );
+}
+
+/// Two constructors of one family merge to that family at its width — the padding is what makes this a single point rather than the width *set* a structural variant region merges to.
+#[test]
+fn two_constructors_of_a_family_merge_to_the_family() {
+    let mut param = CpsValueId(0);
+    let mut family = crate::CpsFamilyId(0);
+    let module = module_with(|module| {
+        family = module.add_family(crate::CpsFamily {
+            debug_name: Some("Shape".into()),
+            width: 2,
+        });
+        let wide = module.add_value(Some("wide".into()));
+        let narrow = module.add_value(Some("narrow".into()));
+        param = module.add_value(Some("param".into()));
+        let target = module.reserve_continuation();
+        let exit = module.add_node(CpsNode::Exit { value: None });
+        module.define_continuation(
+            target,
+            CpsContinuation {
+                debug_name: None,
+                params: vec![param],
+                body: exit,
+            },
+        );
+        // One switch, one edge per constructor, so both constructions flow into the single join.
+        let switch = module.add_node(CpsNode::Switch {
+            scrutinee: CpsAtom::Literal(CpsLiteral::Nat(0)),
+            cases: [
+                (
+                    0,
+                    CpsEdge {
+                        target,
+                        args: vec![CpsAtom::Value(wide)],
+                    },
+                ),
+                (
+                    1,
+                    CpsEdge {
+                        target,
+                        args: vec![CpsAtom::Value(narrow)],
+                    },
+                ),
+            ]
+            .into_iter()
+            .collect(),
+            default: None,
+        });
+        let build_narrow = module.add_node(CpsNode::LetValue {
+            result: narrow,
+            value: CpsValueExpr::Variant(
+                family,
+                vec![CpsAtom::Literal(CpsLiteral::Nat(1)), CpsAtom::Filler],
+            ),
+            next: switch,
+        });
+        let build_wide = module.add_node(CpsNode::LetValue {
+            result: wide,
+            value: CpsValueExpr::Variant(
+                family,
+                vec![
+                    CpsAtom::Literal(CpsLiteral::Nat(0)),
+                    CpsAtom::Literal(CpsLiteral::Nat(7)),
+                ],
+            ),
+            next: build_narrow,
+        });
+        module.add_node(CpsNode::LetCont {
+            continuations: vec![target],
+            body: build_wide,
+        })
+    });
+
+    assert_eq!(origins(&module)[&param], Origin::Variant(family, 2));
+}

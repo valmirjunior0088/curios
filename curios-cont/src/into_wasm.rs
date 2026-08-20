@@ -1,7 +1,7 @@
 use {
     crate::{
-        CpsIntrinsic, CpsModule, Repr, cps::represent, machine::lower, machine::structurize,
-        machine::value_id, machine::value_name,
+        CpsFamilyId, CpsIntrinsic, CpsModule, Repr, cps::represent, machine::lower,
+        machine::structurize, machine::value_id, machine::value_name,
     },
     curios_abi::ForeignFunction,
     curios_utilities::{Grain, PackedBin},
@@ -83,6 +83,8 @@ pub(crate) enum EmissionData {
     Bin(Grain, PackedBin),
     List(Vec<EmissionValueName>),
     Tuple(Vec<EmissionValueName>),
+    /// A variant construction at its family's width. Emitted as the family's own final struct type rather than an arity-keyed `$tuple/N`, which is what makes every read of it an exact cast.
+    Variant(CpsFamilyId, Vec<EmissionValueName>),
     Closure(EmissionClosureName, Vec<EmissionValueName>),
 }
 
@@ -264,12 +266,22 @@ pub(crate) struct EmissionModule {
     clsrs: Vec<(EmissionClosureName, EmissionClosure)>,
     funcs: Vec<(EmissionFunctionName, EmissionFunction)>,
     entry: Option<EmissionFunctionName>,
+    /// The variant families this module constructs and reads, each with its debug name and width. See [`EmissionData::Variant`].
+    families: Vec<(CpsFamilyId, Option<String>, usize)>,
 }
 
 impl EmissionModule {
     /// An empty module: no definitions, no entrypoint.
     pub(crate) fn new() -> Self {
         Self::default()
+    }
+
+    pub(crate) fn families(&self) -> &[(CpsFamilyId, Option<String>, usize)] {
+        &self.families
+    }
+
+    pub(crate) fn set_families(&mut self, families: Vec<(CpsFamilyId, Option<String>, usize)>) {
+        self.families = families;
     }
 
     pub(crate) fn consts(&self) -> &[(EmissionValueName, EmissionData)] {

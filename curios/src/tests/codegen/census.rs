@@ -426,7 +426,8 @@ impl<'m> Census<'m> {
             let node_id = CpsNodeId::from_index(index);
             match node {
                 CpsNode::LetValue { result, value, .. } => {
-                    if let CpsValueExpr::Tuple(atoms) = value {
+                    // A tagged constructor is a `Variant` since family keying, and it is exactly the shape this census counts as a tuple site — the tag still sits at slot 0.
+                    if let CpsValueExpr::Tuple(atoms) | CpsValueExpr::Variant(_, atoms) = value {
                         let tag = match atoms.first() {
                             Some(CpsAtom::Literal(CpsLiteral::Nat(tag))) => Some(*tag),
                             _ => None,
@@ -442,7 +443,9 @@ impl<'m> Census<'m> {
                         self.home_of_value.insert(*result, Home::Node(node_id));
                     }
                     let atoms = match value {
-                        CpsValueExpr::Tuple(atoms) | CpsValueExpr::List(atoms) => atoms.as_slice(),
+                        CpsValueExpr::Tuple(atoms)
+                        | CpsValueExpr::List(atoms)
+                        | CpsValueExpr::Variant(_, atoms) => atoms.as_slice(),
                         CpsValueExpr::Literal(_) => &[],
                     };
                     for atom in atoms {

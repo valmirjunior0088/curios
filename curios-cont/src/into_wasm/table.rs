@@ -4,7 +4,7 @@ use {
         EmissionData, EmissionFunction, EmissionFunctionName, EmissionModule, EmissionValue,
         EmissionValueName,
     },
-    crate::{CpsIntrinsic, Repr},
+    crate::{CpsFamilyId, CpsIntrinsic, Repr},
     curios_abi::ForeignFunction,
     std::{
         cell::{OnceCell, RefCell},
@@ -289,6 +289,8 @@ pub(crate) struct Table<'a> {
     // The foreign functions the emitted code calls, keyed by the minted internal name (see `host_func`). Same lazy used-tracking as the `exit` cell: the first call-site reference during emission records the function's row, and `emit_sys_imports` then declares exactly the recorded set (in minted-name order — wasmtime links by name, so import order is cosmetic).
     host_funcs: RefCell<BTreeMap<String, Arc<ForeignFunction>>>,
     tuple_types: BTreeMap<usize, curios_wasm::TypeName>,
+    /// One final struct type per variant family, keyed by the family's identity rather than by an arity — which is what makes a family read an exact cast and gives Binaryen's closed-world passes distinct types to refine. Widths come from the Cont module's own family table, so a family whose constructions were all optimized away still declares its type (harmless, and a projection can outlive its constructions).
+    family_types: BTreeMap<CpsFamilyId, (curios_wasm::TypeName, usize)>,
     envr_types: BTreeMap<usize, curios_wasm::TypeName>,
     clsr_types: BTreeMap<usize, curios_wasm::TypeName>,
     /// Keyed by the pair a wasm function type actually is — parameter count *and* result count — rather than by parameter count alone, so two functions of the same arity delivering different result shapes cannot collide on one type. The closure supertypes below stay keyed by arity, because a function reached through one is invoked at the uniform shape whatever its own type says.
@@ -380,6 +382,17 @@ impl<'a> Table<'a> {
             bits_eql: OnceCell::new(),
             list_map: OnceCell::new(),
             host_funcs: RefCell::new(BTreeMap::new()),
+            family_types: module
+                .families()
+                .iter()
+                .map(|(family, hint, width)| {
+                    let spelled = match hint {
+                        Some(hint) => format!("fam/{}${hint}", family.index()),
+                        None => format!("fam/{}", family.index()),
+                    };
+                    (*family, (curios_wasm::TypeName::from(spelled), *width))
+                })
+                .collect(),
             tuple_types: {
                 let max = module
                     .consts()
@@ -448,7 +461,12 @@ impl<'a> Table<'a> {
             const_aggregates: module
                 .consts()
                 .iter()
-                .filter(|(_, data)| matches!(data, EmissionData::List(_) | EmissionData::Tuple(_)))
+                .filter(|(_, data)| {
+                    matches!(
+                        data,
+                        EmissionData::List(_) | EmissionData::Tuple(_) | EmissionData::Variant(..)
+                    )
+                })
                 .map(|(const_name, _)| const_name)
                 .collect(),
             // Table indices come from the module's ordered closure walk — the same order each arity's element segment lists its bodies in — never from this map's iteration. The counter is per arity because each arity dispatches through its own typed table.
@@ -814,6 +832,23 @@ impl<'a> Table<'a> {
         self.tuple_types
             .iter()
             .map(|(arity, type_name)| (*arity, type_name.clone()))
+    }
+
+    /// Every declared family type, with the width its struct carries.
+    pub(crate) fn family_types(
+        &self,
+    ) -> impl Iterator<Item = (CpsFamilyId, curios_wasm::TypeName, usize)> {
+        self.family_types
+            .iter()
+            .map(|(family, (type_name, width))| (*family, type_name.clone(), *width))
+    }
+
+    pub(crate) fn find_family_type(&self, family: CpsFamilyId) -> curios_wasm::TypeName {
+        self.family_types
+            .get(&family)
+            .unwrap_or_else(|| panic!("`Table` lacks a type for family `{}`", family))
+            .0
+            .clone()
     }
 
     pub(crate) fn find_tuple_type(&self, arity: usize) -> curios_wasm::TypeName {

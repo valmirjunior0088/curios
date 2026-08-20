@@ -87,7 +87,7 @@ pub(crate) fn demands(module: &CpsModule) -> BTreeMap<CpsValueId, Demand> {
             match node {
                 // A projection reads one field and nothing else — the only use that does not consume the whole value. It is taken before the general fallback below, which would otherwise report `Opaque` for the same operand and erase the refinement.
                 CpsNode::LetIntrinsic {
-                    op: CpsIntrinsic::TupleGet(index),
+                    op: CpsIntrinsic::TupleGet(index) | CpsIntrinsic::VariantGet(_, index),
                     args,
                     ..
                 } if matches!(args.as_slice(), [CpsAtom::Value(_)]) => {

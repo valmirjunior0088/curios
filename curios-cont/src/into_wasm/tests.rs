@@ -1198,3 +1198,84 @@ fn a_region_aggregate_reaching_a_raw_parameter_is_refused() {
 
     wat(&module);
 }
+
+/// A variant is constructed at its family's own final type and read back with one exact cast — no roster cascade, because a family value's type is a fact of the family rather than of the constructor that built it.
+#[test]
+fn a_variant_is_built_and_read_at_its_family_type() {
+    let mut module = CpsModule::new();
+    let family = module.add_family(crate::CpsFamily {
+        debug_name: Some("Shape".into()),
+        width: 3,
+    });
+    let main = module.reserve_function();
+    let return_cont = module.reserve_continuation();
+    let built = module.add_value(Some("built".into()));
+    let field = module.add_value(Some("field".into()));
+    let exit = module.add_node(CpsNode::Exit {
+        value: Some(CpsAtom::Value(field)),
+    });
+    let read = module.add_node(CpsNode::LetIntrinsic {
+        result: field,
+        op: CpsIntrinsic::VariantGet(family, 1),
+        args: vec![CpsAtom::Value(built)],
+        next: exit,
+    });
+    let build = module.add_node(CpsNode::LetValue {
+        result: built,
+        value: CpsValueExpr::Variant(family, vec![nat(0), nat(7), CpsAtom::Filler]),
+        next: read,
+    });
+    module.define_function(
+        main,
+        CpsFunction {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont,
+            body: build,
+        },
+    );
+    module.set_entry(main);
+
+    let wat = wat(&module);
+    assert_contains(&wat, "(type $fam/0$Shape");
+    assert_contains(&wat, "struct.new $fam/0$Shape");
+    assert_contains(&wat, "ref.cast (ref $fam/0$Shape)");
+    assert_contains(&wat, "struct.get $fam/0$Shape $1");
+    assert_absent(&wat, "ref.test");
+    // The family type is final and unrelated: the printer renders no `sub` wrapper for one.
+    for line in wat.lines().filter(|line| line.contains("(type $fam/")) {
+        assert!(!line.contains("sub"), "family types must be final: {line}");
+    }
+}
+
+/// A construction that does not carry its family's width is a compiler bug, and the verifier is where it stops — the check the distinct variant vocabulary exists to make possible.
+#[test]
+#[should_panic = "the family is 3 wide"]
+fn a_short_variant_construction_is_refused() {
+    let mut module = CpsModule::new();
+    let family = module.add_family(crate::CpsFamily {
+        debug_name: Some("Shape".into()),
+        width: 3,
+    });
+    let main = module.reserve_function();
+    let return_cont = module.reserve_continuation();
+    let built = module.add_value(Some("built".into()));
+    let exit = module.add_node(CpsNode::Exit { value: None });
+    let build = module.add_node(CpsNode::LetValue {
+        result: built,
+        value: CpsValueExpr::Variant(family, vec![nat(0)]),
+        next: exit,
+    });
+    module.define_function(
+        main,
+        CpsFunction {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont,
+            body: build,
+        },
+    );
+    module.set_entry(main);
+
+    let _ = wat(&module);
+}

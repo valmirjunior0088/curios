@@ -4,7 +4,7 @@
 
 use {
     curios_abi::ForeignFunction,
-    curios_utilities::{Arena, Grain, PackedBin, id},
+    curios_utilities::{Arena, ArenaId, Grain, PackedBin, id},
     std::{
         collections::{BTreeMap, BTreeSet},
         fmt,
@@ -17,6 +17,7 @@ id!(CpsNodeId, "~n");
 id!(CpsValueId, "~v");
 id!(CpsFunId, "~f");
 id!(CpsContId, "~k");
+id!(CpsFamilyId, "~d");
 
 impl CpsFunId {
     pub(crate) fn from_index(index: usize) -> Self {
@@ -48,6 +49,8 @@ pub enum CpsValueExpr {
     Literal(CpsLiteral),
     List(Vec<CpsAtom>),
     Tuple(Vec<CpsAtom>),
+    /// A tagged variant construction at its family's width: `fields[0]` is the tag, then the payloads, padded with [`CpsAtom::Filler`] past the constructor's own row. The Ersd door is the only mint and pads every construction, so a family value's arity is a fact of the family rather than of the constructor that built it — which is what lets the emitter key one final heap type per family and read it with an exact cast instead of the structural roster cascade.
+    Variant(CpsFamilyId, Vec<CpsAtom>),
 }
 
 /// Intrinsic identity without operands. Operand order and arity live on the surrounding `LetIntrinsic`, so every analysis sees one uniform operand vector.
@@ -148,6 +151,8 @@ pub enum CpsIntrinsic {
     /// `(list…) -> list`: one exact-length flat leaf holding every element of every operand in order — the eager concatenation `fuse_settle_trees` builds where the reads that would have paid the gather are already in evidence. Minted only by the optimizer, like [`CpsIntrinsic::BinChunk`].
     ListFlat(usize),
     TupleGet(usize),
+    /// `(variant) -> value`: slot `index` of a [`CpsValueExpr::Variant`] of `family` — 0 the tag, `1 + i` payload `i`. Distinct from [`CpsIntrinsic::TupleGet`] so a family read names the family whose final type the emitter casts to exactly, and so a structural projection can never silently read a family value through the roster cascade: the two vocabularies meet only in the verifier, which refuses a mismatch.
+    VariantGet(CpsFamilyId, usize),
     /// The virtual-window bounds guard: `(start, count, len) -> count`, trapping unless the window ends inside `len` — the eager trap a physical slice would have performed, kept at the original evaluation point when the slice itself is virtualized away. It answers the count unchanged rather than a difference, because a window is a start and a count everywhere above this too; what it contributes is the trap, not the arithmetic.
     WindowExtent,
     /// Whether the operand is an unboxed scalar (1) or an aggregate reference (0) — the dispatch of a variant encoding whose one scalar-payload constructor rides bare. A representation question, which is why it exists in this crate's vocabulary and not in Ersd: the lowering that chose the encoding is the only producer, and it guarantees the two answers are disjoint over every value the test can reach.
@@ -202,7 +207,7 @@ impl CpsIntrinsic {
             // The whole point of the test is to look at the reference uncoerced, and the read that follows it hands that same reference on.
             (IsImmediate | ImmediateGet, _) => Repr::Ref,
             (ListConcat(_) | ListLen | ListSettle | ListFlat(_), _) => Repr::List,
-            (TupleGet(_), _) => Repr::Ref,
+            (TupleGet(_) | VariantGet(..), _) => Repr::Ref,
 
             (
                 NatEql | NatNeq | NatAdd | NatSub | NatMul | NatLt | NatDiv | NatRem | NatGt
@@ -261,8 +266,8 @@ impl CpsIntrinsic {
             ListSlice | ListRest | ListAppend | ListConcat(_) | ListSettle | ListFlat(_) => {
                 Repr::List
             }
-            // A list read, a tuple projection and an immediate arm's payload all yield whatever was stored, uninterpreted.
-            ListGet | TupleGet(_) | ImmediateGet => Repr::Ref,
+            // A list read, a tuple or variant projection and an immediate arm's payload all yield whatever was stored, uninterpreted.
+            ListGet | TupleGet(_) | VariantGet(..) | ImmediateGet => Repr::Ref,
         }
     }
 }
@@ -303,6 +308,7 @@ impl CpsIntrinsic {
             | Self::BinLen(_)
             | Self::ListLen
             | Self::TupleGet(_)
+            | Self::VariantGet(..)
             | Self::IsImmediate
             | Self::ImmediateGet => 1,
             Self::BinSlice(_) | Self::ListSlice | Self::WindowExtent => 3,
@@ -337,6 +343,7 @@ impl CpsIntrinsic {
             | Self::ListSlice
             | Self::ListRest
             | Self::TupleGet(_)
+            | Self::VariantGet(..)
             | Self::WindowExtent
             // Total in the language, guarded by the emitter because the result can leave the i31 envelope. `NatSub` is monus and `NatShr`/`IntShr` only clear bits, so neither needs a guard.
             | Self::NatAdd
@@ -631,7 +638,16 @@ pub struct CpsModule {
     functions: Arena<CpsFunId, CpsFunction>,
     continuations: Arena<CpsContId, CpsContinuation>,
     field_groups: BTreeMap<CpsContId, Vec<FieldGroup>>,
+    /// The variant families this module's [`CpsValueExpr::Variant`]s belong to, appended by the Ersd door and never removed — a family that loses its last construction is simply an unreferenced row, so the ids stay stable without tombstones.
+    families: Vec<CpsFamily>,
     entry: Option<CpsFunId>,
+}
+
+/// One variant family: its debug name, and its width — one tag slot plus the widest constructor's payload row, which is the arity every [`CpsValueExpr::Variant`] of the family is padded to.
+#[derive(Debug, Clone)]
+pub struct CpsFamily {
+    pub debug_name: Option<String>,
+    pub width: usize,
 }
 
 impl CpsModule {
@@ -646,6 +662,24 @@ impl CpsModule {
     /// The recorded fields representations, by continuation.
     pub fn field_groups(&self) -> &BTreeMap<CpsContId, Vec<FieldGroup>> {
         &self.field_groups
+    }
+
+    /// Register a variant family and hand back its identity. The Ersd door is the only caller; see [`CpsValueExpr::Variant`].
+    pub fn add_family(&mut self, family: CpsFamily) -> CpsFamilyId {
+        let id = CpsFamilyId::from_index(self.families.len());
+        self.families.push(family);
+        id
+    }
+
+    pub fn family(&self, id: CpsFamilyId) -> &CpsFamily {
+        &self.families[id.index()]
+    }
+
+    pub fn families(&self) -> impl Iterator<Item = (CpsFamilyId, &CpsFamily)> {
+        self.families
+            .iter()
+            .enumerate()
+            .map(|(index, family)| (CpsFamilyId::from_index(index), family))
     }
 
     /// Record that `continuation`'s parameter at `start` was spliced into `width` fields: the new group, *and* every group past it shifted by the parameters the splice added.
@@ -958,6 +992,7 @@ impl CpsModule {
             )?;
         }
         self.verify_lexical_scopes(entry)?;
+        self.verify_families()?;
 
         let live_nodes = self.nodes.live_ids().collect::<BTreeSet<_>>();
         let owned_nodes = node_owners.keys().copied().collect::<BTreeSet<_>>();
@@ -1005,6 +1040,51 @@ impl CpsModule {
             }
         }
 
+        Ok(())
+    }
+
+    /// The family vocabulary's coherence: every family named by a construction or a read exists, every construction carries exactly its family's width, and every read is in range of it.
+    ///
+    /// This is what the distinct [`CpsValueExpr::Variant`] buys over an annotation on `Tuple`. A family value read at a structural projection, or a construction one slot short of its family, would be a `ref.cast` trap in emitted code far from the pass that caused it; here it is a verifier failure at the boundary that produced it. Padding is the door's job, so a mismatch is always a compiler bug rather than a program's.
+    fn verify_families(&self) -> Result<(), CpsVerifyError> {
+        for (_, node) in self.nodes.iter_live() {
+            match node {
+                CpsNode::LetValue {
+                    value: CpsValueExpr::Variant(family, atoms),
+                    ..
+                } => {
+                    let Some(definition) = self.families.get(family.index()) else {
+                        return Err(CpsVerifyError(format!(
+                            "variant construction names {family}, which was not minted by this module"
+                        )));
+                    };
+                    if atoms.len() != definition.width {
+                        return Err(CpsVerifyError(format!(
+                            "variant construction of {family} carries {} slots, but the family is {} wide",
+                            atoms.len(),
+                            definition.width,
+                        )));
+                    }
+                }
+                CpsNode::LetIntrinsic {
+                    op: CpsIntrinsic::VariantGet(family, index),
+                    ..
+                } => {
+                    let Some(definition) = self.families.get(family.index()) else {
+                        return Err(CpsVerifyError(format!(
+                            "variant read names {family}, which was not minted by this module"
+                        )));
+                    };
+                    if *index >= definition.width {
+                        return Err(CpsVerifyError(format!(
+                            "variant read of {family} at slot {index}, but the family is {} wide",
+                            definition.width,
+                        )));
+                    }
+                }
+                _ => {}
+            }
+        }
         Ok(())
     }
 
@@ -1557,7 +1637,9 @@ pub(crate) fn atoms(node: &CpsNode) -> Vec<&CpsAtom> {
     match node {
         CpsNode::LetValue { value, .. } => match value {
             CpsValueExpr::Literal(_) => {}
-            CpsValueExpr::List(values) | CpsValueExpr::Tuple(values) => output.extend(values),
+            CpsValueExpr::List(values)
+            | CpsValueExpr::Tuple(values)
+            | CpsValueExpr::Variant(_, values) => output.extend(values),
         },
         CpsNode::LetIntrinsic { args, .. }
         | CpsNode::ApplyFun { args, .. }
@@ -1591,9 +1673,9 @@ pub(crate) fn visit_atoms_mut(node: &mut CpsNode, visitor: &mut impl FnMut(&mut 
     match node {
         CpsNode::LetValue { value, .. } => match value {
             CpsValueExpr::Literal(_) => {}
-            CpsValueExpr::List(values) | CpsValueExpr::Tuple(values) => {
-                values.iter_mut().for_each(visitor)
-            }
+            CpsValueExpr::List(values)
+            | CpsValueExpr::Tuple(values)
+            | CpsValueExpr::Variant(_, values) => values.iter_mut().for_each(visitor),
         },
         CpsNode::LetIntrinsic { args, .. }
         | CpsNode::ApplyFun { args, .. }

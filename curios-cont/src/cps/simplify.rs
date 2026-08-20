@@ -747,6 +747,7 @@ pub(super) fn flatten_indexed_lists(module: &mut CpsModule) -> bool {
 pub(super) fn forward_aggregate_projections(module: &mut CpsModule) -> bool {
     let mut changed = false;
     loop {
+        // Keyed by the vocabulary the construction was built in, so a read only ever forwards through a matching construction — a `VariantGet` never folds through a structural tuple, nor a `TupleGet` through a family's.
         let aggregates = module
             .nodes
             .slots()
@@ -757,24 +758,34 @@ pub(super) fn forward_aggregate_projections(module: &mut CpsModule) -> bool {
                     result,
                     value: CpsValueExpr::Tuple(fields),
                     ..
-                } => Some((*result, fields.clone())),
+                } => Some(((*result, None), fields.clone())),
+                CpsNode::LetValue {
+                    result,
+                    value: CpsValueExpr::Variant(family, fields),
+                    ..
+                } => Some(((*result, Some(*family)), fields.clone())),
                 _ => None,
             })
             .collect::<BTreeMap<_, _>>();
         let selected = module.nodes.iter_live().find_map(|(id, node)| {
             let CpsNode::LetIntrinsic {
                 result,
-                op: CpsIntrinsic::TupleGet(field),
+                op,
                 args,
                 next,
             } = node
             else {
                 return None;
             };
+            let (family, field) = match op {
+                CpsIntrinsic::TupleGet(field) => (None, *field),
+                CpsIntrinsic::VariantGet(family, field) => (Some(*family), *field),
+                _ => return None,
+            };
             let [CpsAtom::Value(tuple)] = args.as_slice() else {
                 return None;
             };
-            let replacement = aggregates.get(tuple)?.get(*field)?.clone();
+            let replacement = aggregates.get(&(*tuple, family))?.get(field)?.clone();
             Some((id, *result, *next, replacement))
         });
         let Some((node, result, next, replacement)) = selected else {
