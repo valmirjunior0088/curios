@@ -89,7 +89,7 @@ pub(super) fn timed(cwasm: &[u8], n: u64) -> f64 {
 /// What the figure decided: the read protocol's *call* component is not the spines wall. The decomposition's ~60% read share must be carried by what the calls sat beside — the serial dependent fork loads and the walk structure — which halving the call count does not touch. Step 1 stays landed for the invariant's location and for the leaf-rooted walks it does serve (literals, `List/map` results, step 2's flat builds); the cached-node call-site arm was dropped as unresolvable benefit against ~15 instructions per site, to be revisited only if a cached-node-dominated read path is ever hot — none is expected, since step 2 makes fork children leaves. The campaign's weight shifts where the spec already put its centerpiece: the register key (step 4) deletes the loads themselves, and the width reshape (step 5) deletes levels of them.
 /// # The single walk, 2026-08-20
 ///
-/// A later campaign's first step, and the first change to `/std/Map` itself since the shape was settled: `insert1`/`remove1` descend once and decide on the way back up, replacing the `lookup` descent plus the `insert_node`/`remove_node` descent. See `documentation/roadmap/map-distance-spec.md`.
+/// A later campaign's first step, and the first change to `/std/Map` itself since the shape was settled: `insert1`/`remove1` descend once and decide on the way back up, replacing the `lookup` descent plus the `insert_node`/`remove_node` descent. The map-distance specification that scheduled it is retired; its decomposition closed in `map_wall_key_share` below, and git history holds the schedule.
 ///
 /// **Measured like-for-like on one box in one sitting, rather than against the 1353 above.** That figure was taken at a different sitting, and this machine was reading bimodally on the day — two clusters about 10% apart, in *both* arms — so comparing across sittings would have priced the machine as much as the change. Seven readings each, same binary shape, alternating nothing else:
 ///
@@ -119,5 +119,104 @@ fn map_wall_spines_slope() {
     println!(
         "  N={n1}: {t1:.1} ms, N={n2}: {t2:.1} ms, slope {:.0} ns/insert",
         (t2 - t1) * 1_000_000.0 / (n2 - n1) as f64,
+    );
+}
+
+/// The per-iteration loop of `spines` with the map removed: the same LCG, the same key derivation, folding a checksum instead of inserting. The pair differs only in whether `Bytes/of_nat` runs, so the slope delta is the key construction's own price per insert.
+const KEY_OFNAT: &str = r#"
+use /std/{Str, Nat, Bytes, Option, Io};
+
+rec walk(n: Nat, x: Nat, s: Nat) -> Nat =
+    match n: (_) => Nat
+    | 0 => s
+    | k + 1; ih =>
+        let y = 75 * x % 65537;
+        walk(k, y, (s + y + Bytes/len(Bytes/of_nat(y))) % 1000003)
+    end;
+
+let input = /std/read()!;
+match input: (_) => Io({})
+| some(bytes) =>
+    match Str/of_bytes(bytes): (_) => Io({})
+    | some(str) =>
+        match Nat/of_str(Str/trim(str)): (_) => Io({})
+        | some(n) => /std/print(Str/concat(Nat/to_str(walk(n, (n + 1) % 65537, 0)), "\n"))
+        | none() => /std/print("bad input\n")
+        end
+    | none() => /std/print("invalid utf-8\n")
+    end
+| none() => /std/print("no input\n")
+end
+"#;
+
+const KEY_CONTROL: &str = r#"
+use /std/{Str, Nat, Bytes, Option, Io};
+
+rec walk(n: Nat, x: Nat, s: Nat) -> Nat =
+    match n: (_) => Nat
+    | 0 => s
+    | k + 1; ih =>
+        let y = 75 * x % 65537;
+        walk(k, y, (s + y + 2) % 1000003)
+    end;
+
+let input = /std/read()!;
+match input: (_) => Io({})
+| some(bytes) =>
+    match Str/of_bytes(bytes): (_) => Io({})
+    | some(str) =>
+        match Nat/of_str(Str/trim(str)): (_) => Io({})
+        | some(n) => /std/print(Str/concat(Nat/to_str(walk(n, (n + 1) % 65537, 0)), "\n"))
+        | none() => /std/print("bad input\n")
+        end
+    | none() => /std/print("invalid utf-8\n")
+    end
+| none() => /std/print("no input\n")
+end
+"#;
+
+/// The key's share of the insert: what `Bytes/of_nat` costs per call at `spines`' key magnitudes, isolated from the map. Sound as a pair of scalar loops because the collector's share of this workload measured nil (`spines_collection_decomposition`) — the live-set confound that invalidated a whole-process ablation has no collections left to misattribute.
+///
+/// # How to run it
+///
+/// ```sh
+/// cargo test --release --package curios --lib -- --ignored --nocapture map_wall_key_share
+/// ```
+///
+/// The control folds a constant where the probe folds `Bytes/len(Bytes/of_nat(y))`, so the delta is `of_nat` plus one immediate `len` — read it as a slight upper bound on the key class. One call per insert makes the share arithmetic direct against `map_wall_spines_slope`'s figure.
+///
+/// # What it last printed
+///
+/// Taken 2026-08-20, release, x86-64 Linux, twice for stability:
+///
+/// ```text
+/// outputs at N=1000: ofnat "923684", control "923689"
+///   ofnat 18 ns/iter, control 4 ns/iter, key construction 14 ns/insert   (retake: 18 / 3 / 14)
+/// ```
+///
+/// What the figure decided, and with it the whole map-distance decomposition. **The key class is negligible — 14 ns against the 744 ns insert, under 2%** — so the workload confound `programs/README.md` flags is real but immaterial at these key magnitudes. Beside it: the collector's share measured nil (`spines_collection_decomposition`), and the compare-chain residue closed by inspection the same day — the optimized `spines` module's nine surviving `br_table`s all sit in string/UTF-8 decoding and `main`, none in `insert1`, `bit`, `crit`, `lookup`, `wedge`, or the fold, so the descent has no table left to replace and the three-plus-case question has no hot instance. What remains of the insert is therefore the uniform-representation tax, whole: the campaign that owns it is `documentation/roadmap/typed-heap-fields-spec.md`, and the retired map-distance specification lives in git history.
+#[test]
+#[ignore = "measurement: reports timings rather than asserting"]
+fn map_wall_key_share() {
+    let ofnat = cwasm_of(KEY_OFNAT);
+    let control = cwasm_of(KEY_CONTROL);
+
+    // Self-pinned outputs: the two arms legitimately differ (len versus the constant), so each pins its own.
+    let (_, ofnat_out) = run(&ofnat, 1000);
+    let (_, control_out) = run(&control, 1000);
+    println!(
+        "outputs at N=1000: ofnat {:?}, control {:?}",
+        String::from_utf8_lossy(&ofnat_out).trim(),
+        String::from_utf8_lossy(&control_out).trim(),
+    );
+
+    let (n1, n2) = (25_000u64, 75_000u64);
+    let slope =
+        |cwasm: &[u8]| (timed(cwasm, n2) - timed(cwasm, n1)) * 1_000_000.0 / (n2 - n1) as f64;
+    let ofnat_ns = slope(&ofnat);
+    let control_ns = slope(&control);
+    println!(
+        "  ofnat {ofnat_ns:.0} ns/iter, control {control_ns:.0} ns/iter, key construction {:.0} ns/insert",
+        ofnat_ns - control_ns,
     );
 }
