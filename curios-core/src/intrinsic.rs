@@ -2,7 +2,7 @@ mod signature;
 pub use signature::*;
 
 use {
-    super::{Bound, MetaId, Nat, Subterm, Term, Var, Visit},
+    super::{Bound, Nat, Subterm, Term, Var, Visit},
     curios_abi::WireType,
     curios_num::{Floating, Integer},
     curios_utilities::{Grain, PackedBin},
@@ -851,13 +851,6 @@ impl Intrinsic {
         reach
     }
 
-    pub(crate) fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
-        let mut found = false;
-        self.for_each_operand(&mut |term| found = found || term.any_metavar(pred));
-        found
-    }
-
-    /// Whether any operand `Term` satisfies `pred` — the `Intrinsic` leg of `Subterm::any_child_term`, layered on the private operand walker like `any_metavar` above.
     /// The logical units this node's *own* payload occupies, excluding every child term.
     ///
     /// Only three variants carry payload a child term does not: a packed binary run, a natural's successor floor, and an integer. Everything else is either a scalar the node constant already covers or a child whose own footprint counts it — a `List`'s element vector included, since each element is a term with a footprint of its own and a slot costs less than the node it points at.
@@ -875,6 +868,7 @@ impl Intrinsic {
         }
     }
 
+    /// Whether any operand `Term` satisfies `pred` — the `Intrinsic` leg of `Subterm::any_child_term`, layered on the private operand walker.
     pub fn any_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
         let mut found = false;
         self.for_each_operand(&mut |term| found = found || pred(term));

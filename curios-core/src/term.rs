@@ -1574,15 +1574,41 @@ impl Term {
     /// The ids of every metavariable in this term. Inherent, and gated on the memoized `has_metavar`: a ground term (every data spine) short-circuits without walking, so the enumeration only ever recurses through metavariable-bearing structure, whose depth is bounded by the written program.
     pub fn metavars(&self) -> BTreeSet<MetaId> {
         let mut ids = BTreeSet::new();
-        if self.has_metavar() {
-            self.inner.subterm.collect_metavars(&mut ids);
-        }
+        self.any_metavar(&mut |id| {
+            ids.insert(id);
+            false
+        });
         ids
     }
 
-    /// Whether any metavariable in this term satisfies `pred`. Inherent and gated on `has_metavar` like [`metavars`](Self::metavars), and — since `Subterm::any_metavar`'s recursion re-enters through each child `Term` — every ground subtree it reaches short-circuits too.
+    /// Whether any metavariable in this term satisfies `pred`, visiting each shared node once. The walk prunes on the cached `has_metavar` bit and dedupes revisits by node identity, because the two prunes fail in each other's gap: a reduction result is a DAG whose tree expansion can be exponential in its depth — one substitution landing a term in two positions doubles it — and a single metavariable at its base, solved or not, sets `has_metavar` on every ancestor, so without the visited set each occurrence of a shared subtree re-pays its whole expansion (measured as a ×2-per-depth elaboration runaway). Skipping a revisit is sound: `pred` is deterministic within one walk, a `true` ends the walk outright, so a recorded node is always one that answered `false`.
     pub fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
-        self.has_metavar() && self.inner.subterm.any_metavar(pred)
+        self.any_metavar_walk(pred, &mut HashSet::new())
+    }
+
+    fn any_metavar_walk<F: FnMut(MetaId) -> bool>(
+        &self,
+        pred: &mut F,
+        visited: &mut HashSet<*const Node>,
+    ) -> bool {
+        if !self.has_metavar() {
+            return false;
+        }
+
+        // A node reached twice in one walk has two owning handles, so a strong count of one proves this visit is the only one and skips the set — which therefore stays empty (and unallocated) on unshared terms.
+        if Rc::strong_count(&self.inner) > 1 && !visited.insert(Rc::as_ptr(&self.inner)) {
+            return false;
+        }
+
+        if let Subterm::Metavar(Metavar { id, .. }) = &self.inner.subterm
+            && pred(*id)
+        {
+            return true;
+        }
+
+        self.inner
+            .subterm
+            .any_child_term(&mut |child| child.any_metavar_walk(pred, visited))
     }
 }
 
@@ -2432,102 +2458,7 @@ impl Subterm {
         }
     }
 
-    /// Whether any metavariable occurring in this subterm satisfies `pred`, stopping at the first hit. The early-exit dual of `collect_metavars` (which is this with a collector that never stops): the reducer's memo gate uses it to reject caching a WHNF that still names an unsolved metavariable, without allocating the full id set.
-    pub(crate) fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
-        match self {
-            Subterm::Metavar(Metavar { id, spine, .. }) => {
-                pred(*id) || spine.iter().any(|t| t.any_metavar(pred))
-            }
-            Subterm::Type(_) | Subterm::Prop | Subterm::Var(_) => false,
-            Subterm::UniverseInst(UniverseInst { head, .. }) => head.any_metavar(pred),
-            Subterm::Transient(transient) => {
-                let mut children = transient.subterms();
-                children.any(|child| child.any_metavar(pred))
-            }
-            Subterm::Intrinsic(intrinsic) => intrinsic.any_metavar(pred),
-            Subterm::Foreign(_, args) => args.iter().any(|arg| arg.any_metavar(pred)),
-            Subterm::Func(Func { telescope, .. }) => telescope.any_metavar(pred),
-            Subterm::FuncType(FuncType { telescope, .. }) => telescope.any_metavar(pred),
-            Subterm::Apply(Apply { head, params, .. }) => {
-                head.any_metavar(pred) || params.iter().any(|p| p.any_metavar(pred))
-            }
-            Subterm::TupleType(TupleType { telescope, .. }) => telescope.any_metavar(pred),
-            Subterm::Tuple(Tuple { fields, .. }) => fields.iter().any(|f| f.any_metavar(pred)),
-            Subterm::Proj(Proj { head, .. }) => head.any_metavar(pred),
-            Subterm::InductType(InductType {
-                params, indices, ..
-            }) => {
-                params.iter().any(|p| p.any_metavar(pred))
-                    || indices.iter().any(|i| i.any_metavar(pred))
-            }
-            Subterm::Variant(Variant {
-                params, payload, ..
-            }) => {
-                params.iter().any(|p| p.any_metavar(pred))
-                    || payload.iter().any(|p| p.any_metavar(pred))
-            }
-            Subterm::StructType(StructType { params, .. }) => {
-                params.iter().any(|p| p.any_metavar(pred))
-            }
-            Subterm::Struct(Struct { params, fields, .. }) => {
-                params.iter().any(|p| p.any_metavar(pred))
-                    || fields.iter().any(|f| f.any_metavar(pred))
-            }
-            Subterm::Match(Match {
-                head,
-                motive,
-                cases,
-            }) => {
-                head.any_metavar(pred)
-                    || motive.body().any_metavar(pred)
-                    || match cases {
-                        Cases::Bool {
-                            false_case,
-                            true_case,
-                        } => false_case.any_metavar(pred) || true_case.any_metavar(pred),
-                        Cases::Switch { cases, default } => {
-                            cases.values().any(|b| b.any_metavar(pred)) || default.any_metavar(pred)
-                        }
-                        Cases::Induct { cases, default } => {
-                            cases.iter().any(|(_, s)| s.body.body().any_metavar(pred))
-                                || default.as_ref().is_some_and(|d| d.any_metavar(pred))
-                        }
-                        Cases::FreeMonoid { carrier } => match carrier {
-                            Carrier::Nat {
-                                empty_case,
-                                cons_case,
-                            } => empty_case.any_metavar(pred) || cons_case.body().any_metavar(pred),
-                            Carrier::Bin {
-                                empty_case,
-                                cons_case,
-                                ..
-                            } => empty_case.any_metavar(pred) || cons_case.body().any_metavar(pred),
-                            Carrier::List {
-                                elem,
-                                empty_case,
-                                cons_case,
-                            } => {
-                                elem.any_metavar(pred)
-                                    || empty_case.any_metavar(pred)
-                                    || cons_case.body().any_metavar(pred)
-                            }
-                        },
-                    }
-            }
-            Subterm::Let(Let { bindings, tail, .. }) => {
-                bindings.iter().any(|binding| {
-                    binding.type_().any_metavar(pred) || binding.value().any_metavar(pred)
-                }) || tail.body().any_metavar(pred)
-            }
-            Subterm::Rec(Rec { group, tail }) => {
-                group.iter().any(|member| {
-                    member.type_.body().any_metavar(pred) || member.body.body().any_metavar(pred)
-                }) || tail.body().any_metavar(pred)
-            }
-        }
-    }
-
-    /// Whether any direct child `Term` of this subterm satisfies `pred`, short-circuiting on the first hit — the shared structural walk under the cached `has_local_free`/`has_metavar` bits, which pass a child's own memoized accessor as `pred` so shared subterms are never re-walked. Scope bodies are visited closed: binder occurrences are bound indices there, so binder labels stay invisible to any free-variable predicate.
+    /// Whether any direct child `Term` of this subterm satisfies `pred`, short-circuiting on the first hit — the shared structural walk under the cached `has_local_free`/`has_metavar` bits, which pass a child's own memoized accessor as `pred` so shared subterms are never re-walked. `Term::any_metavar` recurses over it too, so the metavariables a walk can reach are exactly the ones the cached bit knows about. Scope bodies are visited closed: binder occurrences are bound indices there, so binder labels stay invisible to any free-variable predicate.
     ///
     /// Also the descent `positivity` uses for the forms it cannot see through, with a `pred` that always returns `false` so the walk is exhaustive rather than short-circuiting. That reuse is deliberate: it is what keeps the positivity check from silently missing a recursive occurrence when a new term former is added.
     pub fn any_child_term<F: FnMut(&Term) -> bool>(&self, pred: &mut F) -> bool {
@@ -2697,14 +2628,6 @@ impl Subterm {
             (Some(shared), None) => FreeVars::Shared(shared),
             (None, None) => FreeVars::Owned(BTreeSet::new()),
         }
-    }
-
-    /// Collect the ids of every metavariable occurring in this subterm. `Visit` only sees `Var`s and a `Metavar` holds none, so occurs/zonk analyses cannot piggyback on `free_vars` — this walk (an `any_metavar` whose collector never short-circuits) enumerates them directly.
-    fn collect_metavars(&self, ids: &mut BTreeSet<MetaId>) {
-        self.any_metavar(&mut |id| {
-            ids.insert(id);
-            false
-        });
     }
 }
 

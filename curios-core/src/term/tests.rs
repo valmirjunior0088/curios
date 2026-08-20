@@ -172,6 +172,24 @@ fn any_metavar_short_circuits_and_agrees_with_collection() {
     assert!(!fired);
 }
 
+// The elaboration-runaway pin: a metavariable below a shared node defeats the `has_metavar` prune on every ancestor, so without the walk's visited set this term — 64 levels of self-application over a metavar, a 2^64-node tree expansion of a 65-node DAG — cannot be walked at all. Terminating is the assertion; the exact id set and the single predicate firing pin that dedup skips revisits, not nodes.
+#[test]
+fn any_metavar_visits_a_shared_subterm_once() {
+    let mut term = Term::metavar(1);
+    for _ in 0..64 {
+        term = Term::apply(term.clone(), [term]);
+    }
+
+    assert_eq!(term.metavars(), BTreeSet::from([MetaId(1)]));
+
+    let mut visits = 0;
+    assert!(!term.any_metavar(&mut |_| {
+        visits += 1;
+        false
+    }));
+    assert_eq!(visits, 1);
+}
+
 #[test]
 fn has_local_free_flags_locals_not_globals() {
     let binder_0 = Free::local(0, Some("/syn/Str/step"));
