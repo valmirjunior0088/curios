@@ -160,26 +160,67 @@ fn lay_out(
 
 /// The slot carrier a recorded field shape names, resolving a nominal shape to the Cont row that holds it.
 ///
-/// Two shapes answer [`curios_cont::CpsSlot::Opaque`] on purpose. A packed carrier is *sometimes* an immediate, so no single heap type covers its population. A closure's runtime arity is read off its declared type, and the passes between here and emission may raise it, so the recorded arity is not yet something a declared field type may promise.
+/// Two shapes answer [`curios_cont::CpsSlot::Opaque`] whatever else is true, and for one reason: a carrier that is *sometimes* an immediate has no single heap type to name. A packed value is one; so is a value of an [`FamilyEncoding::Immediate`] family, whose bare constructor rides the i31 while its siblings allocate. Everything unshaped is opaque by definition.
 ///
-/// A *tagged* family also stays opaque, and for a reason the other two do not share: it would type. Its slots are grouped by carrier, so a family-typed slot cannot share the uniform range, and `/std/Map/Node` — the corpus's hottest allocated row — grows from four slots to six to make its two children concrete. That is a trade of live bytes for casts which are already exact compares, and it is owed a measurement rather than an assumption. A *collapsed* family has one writer and therefore no such trade, so it is typed here with the products.
+/// A *family*-typed field is named here but not necessarily kept: slots are grouped by carrier, so giving a family its own carrier can cost the row width it would otherwise share with the uniform range. [`Lowerer::compute_row_layout`] lays the row out both ways and keeps this one only where it is free.
 impl Lowerer<'_> {
-    fn slot_of(&mut self, shape: FieldShape) -> curios_cont::CpsSlot {
+    fn slot_of(&mut self, shape: FieldShape, family_typed: bool) -> curios_cont::CpsSlot {
         match shape {
             FieldShape::Immediate(Sign::Unsigned) => curios_cont::CpsSlot::Nat,
             FieldShape::Immediate(Sign::Signed) => curios_cont::CpsSlot::Int,
             FieldShape::Flt => curios_cont::CpsSlot::Flt,
             FieldShape::List => curios_cont::CpsSlot::List,
-            FieldShape::Product(schema) => curios_cont::CpsSlot::Row(self.product_identity(schema)),
-            FieldShape::Family(family) => match self.family_encoding(family) {
-                FamilyEncoding::Collapsed => curios_cont::CpsSlot::Row(self.row_identity(family)),
-                FamilyEncoding::Tagged | FamilyEncoding::Immediate { .. } => {
-                    curios_cont::CpsSlot::Opaque
-                }
-            },
             FieldShape::Closure(arity) => curios_cont::CpsSlot::Closure(arity),
-            FieldShape::Packed(_) | FieldShape::Opaque => curios_cont::CpsSlot::Opaque,
+            FieldShape::Product(schema) => curios_cont::CpsSlot::Row(self.product_identity(schema)),
+            // An immediate family's values are *sometimes* the row struct and sometimes the bare payload riding the i31, so no single heap type names its population — the same always-never-sometimes line that keeps a packed carrier out. Every other encoding allocates the row for every constructor.
+            FieldShape::Family(family)
+                if family_typed
+                    && !matches!(
+                        self.family_encoding(family),
+                        FamilyEncoding::Immediate { .. }
+                    ) =>
+            {
+                curios_cont::CpsSlot::Row(self.row_identity(family))
+            }
+            FieldShape::Family(_) | FieldShape::Packed(_) | FieldShape::Opaque => {
+                curios_cont::CpsSlot::Opaque
+            }
         }
+    }
+
+    /// The carriers each of `family`'s constructors writes, with its family-typed fields named or left uniform.
+    fn row_writers(
+        &mut self,
+        family: FamilyId,
+        bare: Option<ConstructorId>,
+        family_typed: bool,
+    ) -> Vec<Vec<curios_cont::CpsSlot>> {
+        let constructors = self
+            .source
+            .family(family)
+            .expect("live family")
+            .constructors
+            .clone();
+        constructors
+            .iter()
+            .map(|&constructor| match Some(constructor) == bare {
+                true => Vec::new(),
+                false => {
+                    let shapes: Vec<FieldShape> = self
+                        .source
+                        .constructor(constructor)
+                        .expect("live constructor")
+                        .fields
+                        .iter()
+                        .map(|field| field.shape)
+                        .collect();
+                    shapes
+                        .into_iter()
+                        .map(|shape| self.slot_of(shape, family_typed))
+                        .collect()
+                }
+            })
+            .collect()
     }
 }
 
@@ -2089,26 +2130,18 @@ impl Lowerer<'_> {
             FamilyEncoding::Immediate { constructor } => Some(constructor),
             FamilyEncoding::Collapsed | FamilyEncoding::Tagged => None,
         };
-        let writers: Vec<Vec<curios_cont::CpsSlot>> = self
-            .source
-            .family(family)
-            .expect("live family")
-            .constructors
-            .iter()
-            .map(|&constructor| match Some(constructor) == bare {
-                true => Vec::new(),
-                false => self
-                    .source
-                    .constructor(constructor)
-                    .expect("live constructor")
-                    .fields
-                    .iter()
-                    .map(|field| self.slot_of(field.shape))
-                    .collect(),
-            })
-            .collect();
-
-        let (slots, places) = lay_out(tagged, &writers);
+        // Both layouts, and the typed one only where it is free.
+        //
+        // A family-typed slot cannot share the uniform range, so a family whose constructors disagree pays width for it — `/std/Map/Node` goes four slots to six to make its two children concrete, on the corpus's hottest allocated row, and what that buys is the *cheap* kind of cast: an exact compare against a final type, not the `is_subtype` libcall a list or closure slot deletes. Weighed against the `trees` finding that live bytes convert to time under an all-live collector, that trade is declined. The criterion is exact rather than a heuristic — the row widens or it does not — so every free win is still taken; `family_slot_probe` in `curios`'s codegen tests is its figure.
+        let typed = self.row_writers(family, bare, true);
+        let uniform = self.row_writers(family, bare, false);
+        let (typed_slots, typed_places) = lay_out(tagged, &typed);
+        let (slots, places) = match lay_out(tagged, &uniform) {
+            (uniform_slots, _) if uniform_slots.len() == typed_slots.len() => {
+                (typed_slots, typed_places)
+            }
+            uniform => uniform,
+        };
         let width = slots.len();
         self.module
             .define_row(id, curios_cont::CpsRow { debug_name, slots });
@@ -2136,10 +2169,12 @@ impl Lowerer<'_> {
         {
             let definition = self.source.product(schema).expect("live product");
             let debug_name = definition.debug_name.clone();
-            let writer: Vec<curios_cont::CpsSlot> = definition
-                .fields
-                .iter()
-                .map(|field| self.slot_of(field.shape))
+            // One writer, so every field takes a slot of its own and no carrier can widen the row: the typed layout is free by construction.
+            let shapes: Vec<FieldShape> =
+                definition.fields.iter().map(|field| field.shape).collect();
+            let writer: Vec<curios_cont::CpsSlot> = shapes
+                .into_iter()
+                .map(|shape| self.slot_of(shape, true))
                 .collect();
             let (slots, places) = lay_out(false, std::slice::from_ref(&writer));
             let width = slots.len();
