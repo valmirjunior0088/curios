@@ -1308,7 +1308,7 @@ const WORKLOADS: [(&str, &str); 3] = [
 ];
 
 /// The in-corpus spine-churn consumer the specification's evidence names: a driver that pulls the whole TOML decoder — and with it `/std/Map`'s table construction — into the surveyed module. The classifier only compiles it; nothing runs.
-const TOML_DRIVER: &str = r#"
+pub(in crate::tests) const TOML_DRIVER: &str = r#"
 use /std/{Str, Nat, Map, Toml, Option, Result, Io};
 
 let input = /std/read()!;

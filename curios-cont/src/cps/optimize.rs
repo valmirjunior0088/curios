@@ -1,6 +1,6 @@
 //! Deterministic high-CPS canonicalization and propagation.
 //!
-//! The pipeline never keys on input names: every rewrite depends only on graph structure and the enforced budget constants below, so the same module always optimizes identically. Performance is investigated with revision worktrees and temporary instrumentation, never a permanent metrics API.
+//! The pipeline never keys on input names: every rewrite depends only on graph structure and the enforced budget constants below, so the same module always optimizes identically. Every pass carries a permanent span and a sample of whether it fired, as `curios-profile` prescribes for optimizer passes: the span's `calls` is the round count and its total the pass's share, and the sample's total is the number of rounds that pass kept the fixpoint alive. Anything finer is investigated with revision worktrees and temporary instrumentation, never a permanent metrics API.
 
 #[cfg(test)]
 mod tests;
@@ -54,42 +54,78 @@ pub fn optimize(module: &mut CpsModule) {
     let mut scc_clone_budget = SCC_CLONE_LIMIT;
     let mut branch_clone_budget = BRANCH_CLONE_LIMIT;
     let mut jump_clone_budget = JUMP_CLONE_LIMIT;
-    let mut converged = false;
-    for _ in 0..ROUND_LIMIT {
-        let substitutions = known_values(module);
-        let changed = rewrite_atoms(module, &substitutions)
-            | forward_continuations(module)
-            | forward_aggregate_projections(module)
-            | dedupe_intrinsics(module)
-            | simplify_nodes(module)
-            | fold_intrinsic_identities(module)
-            | fuse_append_chains(module)
-            | flatten_indexed_lists(module)
-            | eliminate_dead_bindings(module)
-            | eliminate_dead_parameters(module)
-            | inline_single_use_continuations(module)
-            | inline_known_calls(module)
-            | contify_calls(module)
-            | specialize_scc_calls(module, &mut scc_clone_budget)
-            | specialize_call_patterns(module, &mut branch_clone_budget)
-            | specialize_jump_patterns(module, &mut jump_clone_budget)
-            | split_returns(module)
-            | split_parameters(module)
-            | split_workers(module)
-            | uncurry_returns(module)
-            | dissolve_rec_init(module)
-            | prune_unreachable(module);
+    // Name and time one pass, and record whether it fired. The two together are what separate the fixpoint's hypotheses: a pass that admits one candidate per call fires on as many rounds as it has candidates, while a pair undoing each other's work fires in lockstep for rounds neither needed.
+    macro_rules! pass {
+        ($name:literal, $pass:expr) => {{
+            let changed = curios_profile::profile_span!($name, $pass);
+            curios_profile::sample!($name, changed as u64);
+            changed
+        }};
+    }
+
+    // The round on which the sequence settled, or `None` if it never did.
+    let mut converged = None;
+    for round in 1..=ROUND_LIMIT {
+        let substitutions =
+            curios_profile::profile_span!("cont::known_values", known_values(module));
+        let changed = pass!("cont::rewrite_atoms", rewrite_atoms(module, &substitutions))
+            | pass!("cont::forward_continuations", forward_continuations(module))
+            | pass!(
+                "cont::forward_aggregate_projections",
+                forward_aggregate_projections(module)
+            )
+            | pass!("cont::dedupe_intrinsics", dedupe_intrinsics(module))
+            | pass!("cont::simplify_nodes", simplify_nodes(module))
+            | pass!(
+                "cont::fold_intrinsic_identities",
+                fold_intrinsic_identities(module)
+            )
+            | pass!("cont::fuse_append_chains", fuse_append_chains(module))
+            | pass!("cont::flatten_indexed_lists", flatten_indexed_lists(module))
+            | pass!(
+                "cont::eliminate_dead_bindings",
+                eliminate_dead_bindings(module)
+            )
+            | pass!(
+                "cont::eliminate_dead_parameters",
+                eliminate_dead_parameters(module)
+            )
+            | pass!(
+                "cont::inline_single_use_continuations",
+                inline_single_use_continuations(module)
+            )
+            | pass!("cont::inline_known_calls", inline_known_calls(module))
+            | pass!("cont::contify_calls", contify_calls(module))
+            | pass!(
+                "cont::specialize_scc_calls",
+                specialize_scc_calls(module, &mut scc_clone_budget)
+            )
+            | pass!(
+                "cont::specialize_call_patterns",
+                specialize_call_patterns(module, &mut branch_clone_budget)
+            )
+            | pass!(
+                "cont::specialize_jump_patterns",
+                specialize_jump_patterns(module, &mut jump_clone_budget)
+            )
+            | pass!("cont::split_returns", split_returns(module))
+            | pass!("cont::split_parameters", split_parameters(module))
+            | pass!("cont::split_workers", split_workers(module))
+            | pass!("cont::uncurry_returns", uncurry_returns(module))
+            | pass!("cont::dissolve_rec_init", dissolve_rec_init(module))
+            | pass!("cont::prune_unreachable", prune_unreachable(module));
         // Windows are virtualized only once everything else has settled, because a window split is irrevocable in a way no other rewrite here is: it records a group over every position the region spans, and a later region that transfers into one of those positions is declined whole. A region's extent is a fact of the *converged* graph — the continuations inlining, contification and specialization mint do not exist in the round that split a region they will turn out to flow into — so deciding it earlier measures something transient and then freezes it. `programs/walk_mirror_held_scan.crs` was the case: its walk's continuation was minted a round after the sub-region below it had been split, and the walk sliced a fresh rope per character from then on.
-        let changed = changed || split_windows(module);
+        let changed = changed || pass!("cont::split_windows", split_windows(module));
         if !changed {
-            converged = true;
+            converged = Some(round);
             break;
         }
     }
+    curios_profile::sample!("cont_optimize::rounds", converged.unwrap_or(ROUND_LIMIT));
 
     // Loud rather than silent: a module that exhausts the limit is emitted less optimized than an equivalent one that did not, and no later stage can detect the difference. Debug-only because the consequence is worse code rather than wrong code — a release compile should still produce a working program.
     debug_assert!(
-        converged,
+        converged.is_some(),
         "cont optimization did not converge within {ROUND_LIMIT} rounds"
     );
 
