@@ -303,14 +303,41 @@ fn mirror_counts(wat: &str) -> (usize, usize, usize, usize) {
     )
 }
 
-/// What the family guards changed when the compiler caught up with it (M2, 2026-08-17). The two allocation rungs were built to isolate obligations by *removing* them at the source — and continuation scalar replacement now erases those obligations from the baseline itself, so `held_scan` compiles to counts identical to the baseline's and `flat_acc` no longer saves a single accumulator construction. That equality is the campaign's headliner delivered for these spellings — naming the value stopped costing — and this guard now holds it. The two call rungs keep their spelling-structural facts: inlining the step removes its calls, and indexing removes the walk's slices.
+/// The calls to `needle` lexically inside a `loop`, anywhere in the module: the per-character cost, which a module-wide count cannot tell from the one-time plumbing around the walk. Nesting is read off the printer's indentation, which the emitter keeps exact.
+fn calls_inside_loops(wat: &str, needle: &str) -> usize {
+    let mut open = Vec::<usize>::new();
+    let mut count = 0;
+    for line in wat.lines() {
+        let indent = line.len() - line.trim_start().len();
+        let line = line.trim();
+        while open
+            .last()
+            .is_some_and(|&loop_indent| loop_indent >= indent)
+        {
+            open.pop();
+        }
+        if line.starts_with("loop ") {
+            open.push(indent);
+        } else if line.starts_with(needle) && !open.is_empty() {
+            count += 1;
+        }
+    }
+    count
+}
+
+/// What the family guards changed when the compiler caught up with it — twice. The two allocation rungs were built to isolate obligations by *removing* them at the source, and continuation scalar replacement (M2, 2026-08-17) erased those obligations from the baseline itself, so `held_scan` compiles to counts identical to the baseline's and `flat_acc` no longer saves a single accumulator construction. That equality is the campaign's headliner delivered for these spellings — naming the value stopped costing — and this guard holds it. Then window virtualization reached the walk in the faithful spelling too (2026-08-21), so `indexed` stopped shedding a slice the baseline pays; the fact that survives is stronger than the comparison it replaces, and is stated below. The step rung keeps its spelling-structural fact: inlining the step removes its calls.
+///
+/// **The slice claim is per loop, because the module-wide count could not see the event it guards.** The walk is inlined into the entry, so a slice leaving the walk's loop read as 11 → 10 in `mirror_counts` and nothing more — and the same count is what let the family pass for three days while every spelling's walk sliced a fresh rope per character. The reason was order, not capability: `split_windows` took the first admissible region rather than the widest, and ran before the continuation the walk would turn out to flow into existed, so a one-continuation sub-region below the walk claimed the positions and the walk's own region was declined for the rest of the compilation.
 #[test]
 fn walk_mirror_family_isolates_each_obligation() {
-    let baseline = mirror_counts(&wat(WALK_MIRROR_BASELINE));
+    let baseline_wat = wat(WALK_MIRROR_BASELINE);
+    let held_scan_wat = wat(WALK_MIRROR_HELD_SCAN);
+    let indexed_wat = wat(WALK_MIRROR_INDEXED);
+    let baseline = mirror_counts(&baseline_wat);
     let flat_acc = mirror_counts(&wat(WALK_MIRROR_FLAT_ACC));
-    let held_scan = mirror_counts(&wat(WALK_MIRROR_HELD_SCAN));
+    let held_scan = mirror_counts(&held_scan_wat);
     let inline_step = mirror_counts(&wat(WALK_MIRROR_INLINE_STEP));
-    let indexed = mirror_counts(&wat(WALK_MIRROR_INDEXED));
+    let indexed = mirror_counts(&indexed_wat);
 
     assert_eq!(
         held_scan, baseline,
@@ -328,10 +355,21 @@ fn walk_mirror_family_isolates_each_obligation() {
         baseline.3 >= 3,
         "the baseline pays a step call per arm: {baseline:?}",
     );
-    assert!(
-        indexed.2 < baseline.2,
-        "indexed sheds the walk's slice calls: baseline {baseline:?}, indexed {indexed:?}",
+    assert_eq!(
+        indexed.2, baseline.2,
+        "indexing no longer sheds a slice the baseline pays: baseline {baseline:?}, indexed {indexed:?}",
     );
+    for (label, wat) in [
+        ("baseline", &baseline_wat),
+        ("held_scan", &held_scan_wat),
+        ("indexed", &indexed_wat),
+    ] {
+        assert_eq!(
+            calls_inside_loops(wat, "call $bytes/slice"),
+            0,
+            "{label}'s per-character path slices nothing: the walk is a virtualized window",
+        );
+    }
 }
 
 /// Probe one of the four attributions: the returned scan state, tracked by where its construction lives — and the rung at which it stops having one.

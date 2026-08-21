@@ -619,8 +619,9 @@ pub(super) fn split_windows(module: &mut CpsModule) -> bool {
     let uses = window_uses(module);
     let resumes = resume_targets(module);
 
-    let mut admitted = None;
-    'search: for (continuation, definition) in module.continuations.iter_live() {
+    // The widest admissible region, not the first. A region grows forward along transfers from its seed, so a seed downstream of another's grows a *strict sub-region* of it — and splitting that one records a group over positions the larger region also spans, which `grow_window_region` then declines outright, stranding the larger region's slices for the rest of the compilation. That is the difference between `programs/walk_mirror_held_scan.crs` slicing a fresh rope per character and `walk_mirror_baseline.crs` virtualizing the same walk: the walk's region and the one-continuation sub-region below it were both candidates, and the sub-region was enumerated first. Slices consumed is the key because consuming them is what the rewrite is for; seed order breaks ties, so the choice stays deterministic.
+    let mut admitted: Option<WindowRegion> = None;
+    for (continuation, definition) in module.continuations.iter_live() {
         if resumes.contains(&continuation) {
             continue;
         }
@@ -630,11 +631,17 @@ pub(super) fn split_windows(module: &mut CpsModule) -> bool {
             {
                 continue;
             }
-            if let Some(region) =
+            let Some(region) =
                 grow_window_region(module, &uses, &resumes, (continuation, position, param))
-            {
+            else {
+                continue;
+            };
+            let wider = admitted.as_ref().is_none_or(|best| {
+                (region.slices.len(), region.members.len())
+                    > (best.slices.len(), best.members.len())
+            });
+            if wider {
                 admitted = Some(region);
-                break 'search;
             }
         }
     }

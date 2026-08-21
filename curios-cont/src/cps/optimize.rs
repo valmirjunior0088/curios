@@ -76,10 +76,11 @@ pub fn optimize(module: &mut CpsModule) {
             | split_returns(module)
             | split_parameters(module)
             | split_workers(module)
-            | split_windows(module)
             | uncurry_returns(module)
             | dissolve_rec_init(module)
             | prune_unreachable(module);
+        // Windows are virtualized only once everything else has settled, because a window split is irrevocable in a way no other rewrite here is: it records a group over every position the region spans, and a later region that transfers into one of those positions is declined whole. A region's extent is a fact of the *converged* graph — the continuations inlining, contification and specialization mint do not exist in the round that split a region they will turn out to flow into — so deciding it earlier measures something transient and then freezes it. `programs/walk_mirror_held_scan.crs` was the case: its walk's continuation was minted a round after the sub-region below it had been split, and the walk sliced a fresh rope per character from then on.
+        let changed = changed || split_windows(module);
         if !changed {
             converged = true;
             break;
