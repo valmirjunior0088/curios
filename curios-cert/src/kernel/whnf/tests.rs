@@ -702,6 +702,160 @@ fn the_two_consultation_points_answer_one_equation_alike() {
     );
 }
 
+/// The escalation: an equation recorded as written still answers the spelling only reduction reaches.
+///
+/// This is the half of the two-tier key that keeping the *written* spelling alone would lose, and losing it is not hypothetical — keying the kernel on the written form and stopping there refused prelude items whose decided propositions no longer collapsed to `True`. Here the subject probes with the equation's reduct, which the written spelling cannot match; the answer comes from a reduced spelling `refined_reduct` settled on demand, at the stuck-reduct probe point, because that is where a spelling reduction produced arrives.
+///
+/// The control fixes the premise the fixture rests on: the written form has to reduce to something else, or the probe below would hit the written spelling and this would be testing the first tier over again.
+///
+/// Mutation-checked three ways, all of which return the unrefined `n + 64`. Removing the escalation from `refined_reduct` leaves only the written spelling, which does not match. Narrowing `Scope::hide_refinements_from` to withhold nothing — or to withhold the equations inside the settling one but not it — makes the settlement meet its own equation at the reducer's first probe and settle the reduced spelling to the case value it was assuming, which no reduct will ever equal. None of the three moved [`a_local_free_term_is_never_refined`], [`a_case_equation_reaches_the_reduct_and_not_the_memos`] or either pre-existing consultation-point fixture.
+#[test]
+fn a_case_equation_answers_a_spelling_only_reduction_reaches() {
+    let n = binder(1, "n");
+    let written = Term::intrinsic(Intrinsic::nat_add(
+        Term::free_var(&n),
+        Term::intrinsic(Intrinsic::nat_add(nat(30), nat(34))),
+    ));
+
+    let mut control = kernel();
+    control.assume(&n, &nat_type());
+    let reduct = whnf(&mut control, written.clone()).expect("reduces");
+    assert_ne!(
+        reduct, written,
+        "the inner operand has to fold, or the probe below is the written spelling's"
+    );
+
+    let mut subject = kernel();
+    subject.assume(&n, &nat_type());
+    let answered = subject.scoped(|kernel| {
+        kernel.refine(written.clone(), nat(0));
+
+        whnf(kernel, reduct.clone())
+    });
+
+    assert_eq!(answered, Ok(nat(0)));
+}
+
+/// Settling an equation's reduced spelling withholds every equation assumed *inside* it, and not only the equation itself.
+///
+/// **This is what makes a deferred reduction mean what an eager one meant.** The reduction this replaced ran at registration, when the equations inside the arm did not exist yet and the stack below it was already frozen; running it later has to reconstruct that view, or the reduct rests on an equation that retracts before the entry holding it does — a remembered spelling outliving its own justification.
+///
+/// The subject nests an inner equation over `n + 1` inside an outer one, then probes with the outer equation's true reduct — what a kernel that never assumed the inner one computes, which is what `control` is for. Reaching it means the settlement did not consult the inner equation.
+///
+/// Mutation-checked with the mutation that moves this fixture and nothing else: leaving `Scope::unasked_refinement`'s reading of the limit alone — so the loop still terminates — while the two probes skip only the equation being settled. The inner equation then fires inside the outer's reduction, which answers `5 + 64` and settles the outer spelling to `69`, so the probe misses and the unrefined reduct comes back. The three coarser mutations recorded on [`a_case_equation_answers_a_spelling_only_reduction_reaches`] move this fixture too, and none of them separates the two halves of what withholding does; this one does. Relaxing *both* readings instead sends the settlement back into the entry it is already settling, which is `Scope::unasked_refinement`'s second job and not this fixture's.
+#[test]
+fn settling_a_reduced_spelling_withholds_the_equations_inside_it() {
+    let n = binder(1, "n");
+    let inner = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&n), nat(1)));
+    let outer = Term::intrinsic(Intrinsic::nat_add(
+        inner.clone(),
+        Term::intrinsic(Intrinsic::nat_add(nat(30), nat(34))),
+    ));
+
+    let mut control = kernel();
+    control.assume(&n, &nat_type());
+    let reduct = whnf(&mut control, outer.clone()).expect("reduces");
+    assert_ne!(
+        reduct, outer,
+        "the written spelling has to fold, or the probe below is the written spelling's"
+    );
+
+    let mut subject = kernel();
+    subject.assume(&n, &nat_type());
+    let answered = subject.scoped(|kernel| {
+        kernel.refine(outer.clone(), nat(0));
+
+        kernel.scoped(|kernel| {
+            kernel.refine(inner.clone(), nat(5));
+
+            whnf(kernel, reduct.clone())
+        })
+    });
+
+    assert_eq!(answered, Ok(nat(0)));
+}
+
+/// A local-free term is never refined, however an equation's reduced spelling settles.
+///
+/// **The interlock's other half, and the one the written key does not cover.** `Scope::refine` admits only a local-bearing scrutinee, so nothing an equation is *recorded* under can collide with what the evaluation memos store; a reduced spelling is whatever reduction returned, and can perfectly well be local-free. What holds the line there is `refined_reduct`'s gate: a term with no local free is not probed at all, so it cannot be answered by an equation and its remembered reduct cannot outlive the arm.
+///
+/// Both sides are asserted for the reason `a_case_equation_reaches_the_reduct_and_not_the_memos` asserts both: the inside reduct is what a leak would corrupt, and the outside one is what a leaked memo entry would then hand back.
+///
+/// Mutation-checked: dropping the gate settles `konst(n)`'s reduced spelling to `7` and refines the local-free `konst(1)` to `0`, inside the arm and — through the memo entry that reduction stores — outside it as well. It is the only mutation in this module's set that moves this fixture, it moves no other new one, and it also moves [`a_case_equation_answers_a_term_the_budget_cannot_reduce`], whose deliberately tiny budget then goes on a settlement no probe asked for.
+#[test]
+fn a_local_free_term_is_never_refined() {
+    let n = binder(1, "n");
+    let konst = binder(2, "konst");
+    let x = binder(3, "x");
+
+    let mut kernel = kernel();
+    kernel.define(
+        &konst,
+        &Term::func_type([(x.clone(), nat_type())], nat_type()),
+        &Term::func([(x.clone(), nat_type())], nat(7)),
+        &monomorphic(),
+    );
+    kernel.assume(&n, &nat_type());
+
+    let open = Term::apply(Term::free_var(&konst), [Term::free_var(&n)]);
+    let closed = Term::apply(Term::free_var(&konst), [nat(1)]);
+
+    let inside = kernel.scoped(|kernel| {
+        kernel.refine(open.clone(), nat(0));
+
+        whnf(kernel, closed.clone())
+    });
+    let outside = whnf(&mut kernel, closed);
+
+    assert_eq!(inside, Ok(nat(7)), "the equation is not this term's");
+    assert_eq!(outside, Ok(nat(7)), "and nothing remembered says otherwise");
+}
+
+/// A reduct that *drops* a local is still reached, which is the direction `Scope::could_reduce_to` must not be strict in.
+///
+/// The filter deciding whether a settlement is worth performing tests that the candidate's locals are a *subset* of the key's, and subset rather than equality is the whole of what it can afford to claim: reduction may drop a local — the second projection of two, an argument a body ignores — while it can never introduce one, since it substitutes only closed definition bodies and subterms of the term it is reducing. Reading the test as equality, or as "the candidate mentions every local the key does", loses exactly this equation, and loses it silently: the arm simply stops refining.
+///
+/// `second(n, m)` mentions both binders and reduces to `m` alone, so the candidate's locals are a strict subset of the key's. That is a shape a filter tightened by one word would refuse.
+///
+/// Mutation-checked with the tightening itself — the subset read as set equality — which moves this fixture and no other. Relaxing the filter the other way, to admit everything, moves nothing at all: it is a cost filter, and what says it is doing its job is `curios`' `scrutinee_refinement_measurements` rather than any assertion here.
+#[test]
+fn a_reduct_that_drops_a_local_is_still_reached() {
+    let n = binder(1, "n");
+    let m = binder(2, "m");
+    let second = binder(3, "second");
+    let x = binder(4, "x");
+    let y = binder(5, "y");
+
+    let mut kernel = kernel();
+    kernel.define(
+        &second,
+        &Term::func_type(
+            [(x.clone(), nat_type()), (y.clone(), nat_type())],
+            nat_type(),
+        ),
+        &Term::func(
+            [(x.clone(), nat_type()), (y.clone(), nat_type())],
+            Term::free_var(&y),
+        ),
+        &monomorphic(),
+    );
+    kernel.assume(&n, &nat_type());
+    kernel.assume(&m, &nat_type());
+
+    let written = Term::apply(
+        Term::free_var(&second),
+        [Term::free_var(&n), Term::free_var(&m)],
+    );
+
+    let answered = kernel.scoped(|kernel| {
+        kernel.refine(written.clone(), nat(0));
+
+        whnf(kernel, Term::free_var(&m))
+    });
+
+    assert_eq!(answered, Ok(nat(0)));
+}
+
 /// Depth is refused by the counter, and the refusal says so. Before the frame row, a reduction driven deep took real stack and the budget observed none of it — `recurse` grows rather than aborting, so what bounded depth was the host's memory rather than anything the program could be told about.
 ///
 /// The subject is a chain of nested intrinsic operands over an *open* tip — a term the closed machine's gate declines, so the recursive strategy re-enters reduction once per link and the budget affords a handful of levels and no more. The closed twin of this chain no longer trips the row at all, which is the machine's whole yield and is asserted by its own tests.

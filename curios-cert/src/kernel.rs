@@ -603,14 +603,50 @@ impl Kernel {
         outcome
     }
 
-    /// Assume an arm's case equation: within the arm, `scrutinee` — already in weak-head normal form — is `value`, definitionally. Assumed inside the arm's [`Kernel::scoped`] bracket, which is what scopes it.
+    /// Assume an arm's case equation: within the arm, `scrutinee` — as written — is `value`, definitionally. Assumed inside the arm's [`Kernel::scoped`] bracket, which is what scopes it.
     pub(crate) fn refine(&mut self, scrutinee: Term, value: Term) {
         self.scope.refine(scrutinee, value);
     }
 
-    /// The case value the stuck form `term` is refined to, innermost arm first.
+    /// The case value `term` is refined to under the written spelling, innermost arm first.
     pub(crate) fn refinement_of(&self, term: &Term) -> Option<Term> {
         self.scope.refinement_of(term)
+    }
+
+    /// The case value `term` is refined to under a reduced spelling already settled, innermost arm first.
+    pub(crate) fn refinement_of_reduct(&self, term: &Term) -> Option<Term> {
+        self.scope.refinement_of_reduct(term)
+    }
+
+    /// The innermost equation in force whose reduced spelling has not been asked for and could be `candidate`, as its position and the term to reduce.
+    pub(crate) fn unasked_refinement(&self, candidate: &Term) -> Option<(usize, Term)> {
+        self.scope.unasked_refinement(candidate)
+    }
+
+    /// Settle the reduced spelling of the equation at `index`, reducing `key` with that equation — and every equation inside it — withheld.
+    ///
+    /// **The whole of what the two-tier key defers.** Recording an equation costs nothing now; this is where the reduction the old key performed eagerly, once per arm, actually happens — at most once per equation, and only because a probe presented a term the written spelling did not answer.
+    ///
+    /// Withholding is [`Scope::hide_refinements_from`]'s to justify. An error settles the equation as having no reduced spelling, so the attempt is paid once rather than repeated at every later probe; exhaustion is the one error that also propagates, because the budget it spent is real and the judgment has no business continuing at zero.
+    pub(crate) fn settle_refinement(&mut self, index: usize, key: Term) -> Result<(), ReduceError> {
+        let outer = self.scope.hide_refinements_from(index);
+        let reduct = whnf(self, key);
+        self.scope.show_refinements(outer);
+
+        match reduct {
+            Ok(value) => {
+                self.scope.settle_refinement(index, Some(value));
+                Ok(())
+            }
+            Err(error) => {
+                self.scope.settle_refinement(index, None);
+
+                match error.is_exhausted() {
+                    true => Err(error),
+                    false => Ok(()),
+                }
+            }
+        }
     }
 
     /// Whether any arm's case equation is currently assumed — the judgment-side half of the closed machine's gate.

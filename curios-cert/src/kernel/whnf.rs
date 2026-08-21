@@ -114,6 +114,8 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
         // An arm's case equation is consulted *before* the term is taken apart, not only on the value it reduced to. Both points are sound for the same reason and by the same test: [`Scope::refinement_of`] matches by `Term`'s structural equality, universe instances included, so a hit means this term *is* the registered scrutinee and the arm's hypothesis applies to it directly — and the value it substitutes is a constructor, a normal form, so nothing cycles.
         //
         // Asking only afterwards made the answer depend on affording the reduction. `Lt(i, len(b))` under a guard that refined exactly that comparison would fold the intrinsic first — evaluating `b` — and consult the equation about a value it had already spent the budget to compute. The elaborator's reducer asks first and this did not, which is the divergence [`Scope::refine`] records as a defect in its own right: a program the elaborator accepts and the kernel then refuses reads as a disagreement about the rule, and is not one.
+        //
+        // The written spelling alone here. An equation is *recorded* under it, so this point answers the scrutinee's own occurrences — the common case, and the one whose whole cost is this comparison. The reduced spelling is what [`refined_reduct`] escalates to, at the other point, where the terms that need it arrive.
         if let Some(refined) = kernel.refinement_of(&term) {
             term = refined;
             continue;
@@ -147,7 +149,7 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
             Step::Continue(next) => term = next,
             Step::Stop(value) => {
                 // A stuck form standing under an arm's case equation *is* that case's value, definitionally; continue from it. This is the *second* of the two probe points, and it does not merge with the one above: that one asks about a term before it is taken apart, this one about a form reduction produced, and routing this one back to the top would re-decompose a normal form forever.
-                match kernel.refinement_of(&value) {
+                match refined_reduct(kernel, &value)? {
                     Some(refined) => term = refined,
                     None => {
                         // Remembered under the term this level was *entered* with, not the one the loop finished on — the same key the probe above will present.
@@ -159,6 +161,33 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
                 }
             }
         }
+    }
+}
+
+/// The refinement probe at a stuck reduct: the written spelling first, then the reduced one, settling reduced spellings until one answers or none is left to settle.
+///
+/// **Why the escalation is here and not at the other probe point.** An equation is recorded under the scrutinee as written, and reduction reaches the scrutinee's *reduct* — `Le(s + l, len b)` instantiated at a call arrives as `Le(0 + n, len b)` and folds to a spelling the written key does not carry. The point before decomposition sees terms on the way in, where the written spelling is what matches; this point sees the forms reduction produced, which is exactly where a spelling that exists only as a reduct can appear.
+///
+/// **The local-bearing gate is the guard, not an optimization.** `Scope::refine` records only local-bearing written spellings, but a *reduced* spelling is whatever reduction returned and may well be local-free. Refusing to probe on a local-free term is what keeps every refined term local-bearing, which is the half of the evaluation memos' first invariant this component owns: the memos store local-free terms only, so a local-free term whose reduct came from a case equation is precisely the entry that could outlive the arm that justified it. It is also what makes the deferral pay — an arm body of literals reduces to local-free forms and settles nothing at all.
+fn refined_reduct(kernel: &mut Kernel, value: &Term) -> Result<Option<Term>, ReduceError> {
+    if let Some(refined) = kernel.refinement_of(value) {
+        return Ok(Some(refined));
+    }
+
+    if !value.has_local_free() {
+        return Ok(None);
+    }
+
+    loop {
+        if let Some(refined) = kernel.refinement_of_reduct(value) {
+            return Ok(Some(refined));
+        }
+
+        let Some((index, key)) = kernel.unasked_refinement(value) else {
+            return Ok(None);
+        };
+
+        kernel.settle_refinement(index, key)?;
     }
 }
 

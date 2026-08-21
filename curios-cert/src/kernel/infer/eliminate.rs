@@ -26,8 +26,8 @@ use {
     crate::{InductAt, Kernel, KernelError, Sort, carries_information},
     curios_analysis::{Invert, invert_indices, invert_indices_outer, pinned_by_targets},
     curios_core::{
-        Atom, Bound, Free, InductArm, InductType, Many, Reducer, Scope, Subterm, Telescope, Term,
-        Variant, Visit,
+        Atom, Bound, Free, InductArm, InductType, Many, Scope, Subterm, Telescope, Term, Variant,
+        Visit,
     },
 };
 
@@ -138,7 +138,11 @@ fn check_arm(
 
 /// Teach an arm that its scrutinee **is** this case's value, which is what specializes the context the body is checked in.
 ///
-/// A variable scrutinee becomes a solution the arm is substituted through — for a nominal arm the zero-index instance of the same index equations, and for an intrinsic carrier the whole of the refinement it gets. Any other scrutinee has no binder to solve, so the equation is recorded against its stuck spelling for the reducer to consult instead.
+/// A variable scrutinee becomes a solution the arm is substituted through — for a nominal arm the zero-index instance of the same index equations, and for an intrinsic carrier the whole of the refinement it gets. Any other scrutinee has no binder to solve, so the equation is recorded against its written spelling for the reducer to consult instead.
+///
+/// **Recording costs nothing, which it did not use to.** This reduced the scrutinee to weak-head normal form here, once per arm, purely to obtain a key — and the scrutinee mentions a local, which is exactly the term the evaluation memos may not store, so a web of combinator definitions each naming the one before it twice unfolded exponentially before a single arm was checked. Fourteen such definitions refused on the reduction budget while the elaborator, which registers on the written spelling, checked the same program flat. `Scope::refine` and `whnf`'s `refined_reduct` carry the two-tier key that replaced it; the reduction happens there, at most once per equation, and only when a probe presents a term the written spelling does not answer.
+///
+/// The reduction's own failure used to be swallowed by an `unwrap_or_else`, so exhausting the budget here surfaced as a refusal on whatever judgment ran next. There is nothing left to swallow: no reduction happens at registration at all.
 ///
 /// Every scrutinee gets its equation, because a term of non-`Io` type denotes one value. This used to ask a shared walk whether the spelling fixed one — an operation the host performs did not, nor did a call whose callee the walk could not read, since `f(true)` for a parameter `f` computes whatever the caller bound. Retyping the host surface to return `Io` answered both by construction: an `Io` is opaque and cannot be eliminated, so it never reaches a scrutinee position, and no inhabitant of an ordinary arrow performs an effect. The equation the walk had to withhold from a pure opaque head is admitted again.
 ///
@@ -161,10 +165,7 @@ pub(super) fn assume_case_value(
         return;
     }
 
-    let stuck = kernel
-        .reduce(scrutinee.clone())
-        .unwrap_or_else(|_| scrutinee.clone());
-    kernel.refine(stuck, value);
+    kernel.refine(scrutinee.clone(), value);
 }
 
 /// The most-general solution of `actual indices ~ case targets`, both directions, as one idempotent substitution. Empty when the equations force nothing — including when they *clash*, which makes the arm unreachable and therefore checked as written.
