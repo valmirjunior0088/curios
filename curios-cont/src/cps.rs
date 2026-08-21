@@ -1204,10 +1204,54 @@ impl CpsModule {
         Ok(())
     }
 
-    /// The row vocabulary's coherence: every row named by a construction or a read exists, every construction carries exactly its row's width, and every read is in range of it.
+    /// The row vocabulary's coherence: every row named by a construction or a read exists, every construction carries exactly its row's width, every read is in range of it — and a read of a value this module visibly constructs is in the vocabulary that construction was minted in.
     ///
     /// This is what the distinct [`CpsValueExpr::Row`] buys over an annotation on `Tuple`. A row value read at a structural projection, or a construction one slot short of its row, would be a `ref.cast` trap in emitted code far from the pass that caused it; here it is a verifier failure at the boundary that produced it. Padding is the door's job, so a mismatch is always a compiler bug rather than a program's.
+    ///
+    /// The last clause was documented here before it was checked, and the gap was found the way the paragraph above predicts: `split_returns` rebuilt a resume's `Tuple` for a class returning an `Option` row, the `RowGet` below it cast `$tuple/2` to the row's final type, and the only symptom was an HTTP client trapping on its first response header. The check covers direct operands — a value constructed by a `LetValue` in this module and read by a `TupleGet` or `RowGet` in it — which is every case a pass's own rebuild can produce; a value that arrives through a parameter is the emitter's cast to decide, as before.
     fn verify_rows(&self) -> Result<(), CpsVerifyError> {
+        // What every visible construction built, so a read can be checked against the vocabulary its operand was actually minted in rather than only against the row's own width.
+        let mut built = BTreeMap::<CpsValueId, Option<CpsRowId>>::new();
+        for (_, node) in self.nodes.iter_live() {
+            if let CpsNode::LetValue { result, value, .. } = node {
+                match value {
+                    CpsValueExpr::Row(row, _) => {
+                        built.insert(*result, Some(*row));
+                    }
+                    CpsValueExpr::Tuple(_) => {
+                        built.insert(*result, None);
+                    }
+                    CpsValueExpr::Literal(_) | CpsValueExpr::List(_) => {}
+                }
+            }
+        }
+        for (_, node) in self.nodes.iter_live() {
+            if let CpsNode::LetIntrinsic { op, args, .. } = node
+                && let [CpsAtom::Value(operand)] = args.as_slice()
+                && let Some(&minted) = built.get(operand)
+            {
+                let read = match op {
+                    CpsIntrinsic::RowGet(row, _) => Some(Some(*row)),
+                    CpsIntrinsic::TupleGet(_) => Some(None),
+                    _ => None,
+                };
+                if let Some(read) = read
+                    && read != minted
+                {
+                    return Err(CpsVerifyError(format!(
+                        "{operand} was built as {} but is read as {}",
+                        match minted {
+                            Some(row) => format!("{row}"),
+                            None => "a structural tuple".into(),
+                        },
+                        match read {
+                            Some(row) => format!("{row}"),
+                            None => "a structural tuple".into(),
+                        },
+                    )));
+                }
+            }
+        }
         for (_, node) in self.nodes.iter_live() {
             match node {
                 CpsNode::LetValue {
@@ -2110,8 +2154,8 @@ impl fmt::Display for CpsDisplayNode<'_> {
 mod tests {
     use super::{
         CpsAtom, CpsContId, CpsContinuation, CpsEdge, CpsFunId, CpsFunction, CpsIntrinsic,
-        CpsLiteral, CpsModule, CpsNode, CpsNodeId, CpsUseTarget, CpsValueExpr, CpsValueId,
-        FieldGroup,
+        CpsLiteral, CpsModule, CpsNode, CpsNodeId, CpsRow, CpsSlot, CpsUseTarget, CpsValueExpr,
+        CpsValueId, FieldGroup,
     };
 
     /// Splitting a lower parameter after a higher one moves the higher group along: recording a start without shifting what follows it leaves a record the verifier reads as overlapping, which is how this was found.
@@ -2233,6 +2277,50 @@ mod tests {
                 .0
                 .contains("expects 2 operands")
         );
+    }
+
+    /// The vocabulary clause of `verify_rows`: a value minted as a structural tuple and read as a row — the rebuild `split_returns` used to emit for a class whose only own return edges were tail calls — is refused here, not at the `ref.cast` the emitter would otherwise produce for it. The mirror mismatch, a row read structurally, is refused by the same clause.
+    #[test]
+    fn verifier_rejects_a_read_in_the_other_vocabulary() {
+        for (minted_as_row, read_as_row) in [(false, true), (true, false)] {
+            let mut module = minimal_module();
+            let row = module.add_row(CpsRow {
+                debug_name: Some("Option".into()),
+                slots: vec![CpsSlot::Tag, CpsSlot::Opaque],
+            });
+            let built = module.add_value(Some("built".into()));
+            let field = module.add_value(Some("field".into()));
+            // Ahead of the minimal body rather than in place of it, so every other clause of the verifier is satisfied and the vocabulary one is the only thing left to refuse.
+            let next = module.function(CpsFunId(0)).unwrap().body;
+            let atoms = vec![
+                CpsAtom::Literal(CpsLiteral::Nat(0)),
+                CpsAtom::Literal(CpsLiteral::Nat(0)),
+            ];
+            let read = module.add_node(CpsNode::LetIntrinsic {
+                result: field,
+                op: match read_as_row {
+                    true => CpsIntrinsic::RowGet(row, 1),
+                    false => CpsIntrinsic::TupleGet(1),
+                },
+                args: vec![CpsAtom::Value(built)],
+                next,
+            });
+            let construction = module.add_node(CpsNode::LetValue {
+                result: built,
+                value: match minted_as_row {
+                    true => CpsValueExpr::Row(row, atoms),
+                    false => CpsValueExpr::Tuple(atoms),
+                },
+                next: read,
+            });
+            module.functions.get_mut(CpsFunId(0)).unwrap().body = construction;
+
+            let error = module.verify().unwrap_err().0;
+            assert!(
+                error.contains("was built as") && error.contains("but is read as"),
+                "{error}"
+            );
+        }
     }
 
     #[test]
