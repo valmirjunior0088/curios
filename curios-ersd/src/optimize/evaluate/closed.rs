@@ -9,7 +9,7 @@ use {
     super::{
         budget::{PASS_REIFY_BUDGET, ReifyBudget},
         interpret::{Evaluator, Outcome, Residual},
-        reify::{ReifyScope, reify, reify_all, reify_check, reify_check_all},
+        reify::{ReifyScope, free_references, reify, reify_all, reify_check, reify_check_all},
         value::Value,
     },
     crate::{
@@ -107,8 +107,9 @@ fn apply(module: &mut Module, planned: Vec<Planned>) -> bool {
     let mut reify_pool = PASS_REIFY_BUDGET;
     // Stable for the whole pass: reification only appends, and the item list is rebuilt after this loop.
     let mut scope = ReifyScope::new();
-    // Which item hosts each block, so a candidate inside one binds its group ahead of that item. Stable for the same reason.
+    // Which item hosts each block, so a candidate inside one binds its group ahead of that item, and what an item binds — the two together decide whether a group *can* be lifted. Stable for the same reason.
     let block_items = index_block_items(module);
+    let (item_functions, item_values) = item_binding_positions(module);
     // Where each item stands, so a shared copy is reused only by a candidate its splice point precedes. Stable for the same reason.
     let item_positions: BTreeMap<StatementId, usize> = module
         .items()
@@ -154,6 +155,7 @@ fn apply(module: &mut Module, planned: Vec<Planned>) -> bool {
                 None => (plan.statement, plan.owner, None),
             },
         };
+        let hoisting = plan.owner != splice_owner;
         scope.begin_replacement(position);
         let rhs = match plan.kind {
             Kind::Value(value) => {
@@ -185,6 +187,17 @@ fn apply(module: &mut Module, planned: Vec<Planned>) -> bool {
         reify_pool = reify_pool.saturating_sub(budget.spent());
         rewrites.push((plan.statement, plan.result, rhs));
         if !spliced.is_empty() {
+            // Hoisting is a bet placed before reification, because the position has to be in hand before the first copy is recorded under it. Here is where it settles: a group that came out closed is bound ahead of the item, and one that did not goes back into the candidate's own block — with the claim it made on the module-wide memo withdrawn, since nothing later can name a copy bound in a block that need not dominate it.
+            let safe = position.is_some_and(|before| {
+                group_is_item_level_safe(module, &spliced, &item_functions, &item_values, before)
+            });
+            let (splice_before, splice_owner) = match hoisting && !safe {
+                true => {
+                    scope.withdraw_replacement();
+                    (plan.statement, plan.owner)
+                }
+                false => (splice_before, splice_owner),
+            };
             // Appended rather than inserted: every candidate inside one item binds its group ahead of that same item, in the order the plans were applied — which is the order a later group's reuse of an earlier group's copy depends on.
             spliced_before
                 .entry(splice_before)
@@ -237,6 +250,96 @@ fn is_same_call(module: &Module, statement: StatementId, callee: Atom, arguments
             ..
         }) if *original_callee == callee && original_arguments.as_slice() == arguments
     )
+}
+
+/// Where each top-level item binds what it binds — a position rather than a set, because a hoisted group has to name only what stands *before* the item it is bound ahead of.
+fn item_binding_positions(
+    module: &Module,
+) -> (BTreeMap<FunctionId, usize>, BTreeMap<ValueId, usize>) {
+    let mut functions = BTreeMap::new();
+    let mut values = BTreeMap::new();
+
+    for (position, &item) in module.items().iter().enumerate() {
+        match module.statement(item) {
+            Some(Statement::Let { result, rhs }) => {
+                values.insert(*result, position);
+                values.extend(rhs.binders().into_iter().map(|value| (value, position)));
+            }
+            Some(Statement::Functions { functions: bound }) => {
+                functions.extend(bound.iter().map(|&function| (function, position)));
+            }
+            Some(Statement::Rec { group }) => {
+                if let Some(group) = module.rec_group(*group) {
+                    functions.extend(group.functions.iter().map(|&f| (f, position)));
+                    values.extend(group.values.iter().map(|m| (m.value, position)));
+                }
+            }
+            None => {}
+        }
+    }
+
+    (functions, values)
+}
+
+/// Whether `group` — the statements one replacement emitted, in order — can be bound at item level.
+///
+/// **The claim the cure rests on, checked rather than assumed.** A group is *ordinarily* closed: `reify` emits interned constants, constructions over atoms it produced earlier in the same group, and copies whose outward *functions* [`ReifyScope::outward_ok`] proved item-bound. What that gate does not cover is a free **value** the closure's captures did not reach — `reify_closure` keeps such a value verbatim on the stated ground that it is a top-level identity, and on a real module it is sometimes a binding of the very block the candidate sits in. Spliced back into that block it is in scope; lifted out of it, it is not, and the module stops verifying.
+///
+/// So the group decides. Everything it names must be a constant, a function bound by an item or by this group, or a value bound by an item or by this group — checked through the copies as well as over the emitted statements, because a copy carries its whole region with it.
+fn group_is_item_level_safe(
+    module: &Module,
+    group: &[StatementId],
+    item_functions: &BTreeMap<FunctionId, usize>,
+    item_values: &BTreeMap<ValueId, usize>,
+    before: usize,
+) -> bool {
+    // What the group itself binds, which is in scope for its later statements wherever it lands.
+    let mut functions = BTreeSet::<FunctionId>::new();
+    let mut values = BTreeSet::<ValueId>::new();
+    let earlier_function = |f: &FunctionId| item_functions.get(f).is_some_and(|&at| at < before);
+    let earlier_value = |v: &ValueId| item_values.get(v).is_some_and(|&at| at < before);
+
+    for &statement in group {
+        match module.statement(statement) {
+            Some(Statement::Let { result, rhs }) => {
+                for atom in rhs.operands() {
+                    let known = match atom {
+                        Atom::Constant(_) => true,
+                        Atom::Function(f) => functions.contains(&f) || earlier_function(&f),
+                        Atom::Value(v) => values.contains(&v) || earlier_value(&v),
+                    };
+                    if !known {
+                        return false;
+                    }
+                }
+                values.insert(*result);
+                values.extend(rhs.binders());
+            }
+            Some(Statement::Functions { functions: bound }) => {
+                for &function in bound {
+                    let Some((outward_functions, outward_values)) =
+                        free_references(module, function)
+                    else {
+                        return false;
+                    };
+                    if !outward_functions
+                        .iter()
+                        .all(|f| functions.contains(f) || earlier_function(f))
+                        || !outward_values
+                            .iter()
+                            .all(|v| values.contains(v) || earlier_value(v))
+                    {
+                        return false;
+                    }
+                }
+                functions.extend(bound);
+            }
+            // `reify` emits neither, so reaching one means the group is not what this function was written against.
+            Some(Statement::Rec { .. }) | None => return false,
+        }
+    }
+
+    true
 }
 
 /// Map every block to the top-level item whose region owns it.

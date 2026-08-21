@@ -260,6 +260,15 @@ impl ReifyScope {
         (self.position? >= defined).then_some(atom)
     }
 
+    /// Withdraw everything this replacement contributed to the module-wide memo.
+    ///
+    /// **For a group that turned out not to be bindable at item level.** The position is chosen before reification, because [`ReifyScope::record`] needs it; whether the group it produces is *closed* at item level can only be read off the group afterwards. A replacement that loses that bet keeps its copies — they are spliced into its own block, exactly as before — but must take back the claim that a later candidate can name them, which is what `local` holds the keys for.
+    pub(super) fn withdraw_replacement(&mut self) {
+        for specialization in self.local.keys() {
+            self.shared.remove(specialization);
+        }
+    }
+
     /// Record a copy for reuse: within this replacement always, and module-wide when the candidate is item-level.
     fn record(&mut self, specialization: Specialization, atom: Atom) {
         if let Some(position) = self.position {
@@ -320,6 +329,77 @@ pub(super) fn item_bound_functions(module: &Module) -> BTreeSet<FunctionId> {
         }
     }
     item_bound
+}
+
+/// The functions and values a region references from outside itself.
+///
+/// [`outward_functions_item_bound`] answers the same question about functions alone and is what gates a reification at all; this answers it about both, and is what decides whether an emitted group can be *bound at item level*. The two are separate because a free value is ordinarily covered by the closure's captures and substituted away, so the reification gate has no business refusing one — while a copy that came out still naming a value bound in some block cannot be lifted out of it.
+///
+/// `None` when the region reaches a tombstoned entity, which the caller treats as unsafe.
+pub(super) fn free_references(
+    module: &Module,
+    root: FunctionId,
+) -> Option<(BTreeSet<FunctionId>, BTreeSet<ValueId>)> {
+    let mut region = BTreeSet::new();
+    let mut bound = BTreeSet::new();
+    let mut functions = BTreeSet::new();
+    let mut values = BTreeSet::new();
+    let mut work = vec![root];
+
+    while let Some(function) = work.pop() {
+        if !region.insert(function) {
+            continue;
+        }
+        let definition = module.function(function)?;
+        bound.extend(&definition.params);
+        for block in control_blocks(module, definition.body) {
+            let Some(block) = module.block(block) else {
+                continue;
+            };
+            for &statement in &block.statements {
+                match module.statement(statement) {
+                    Some(Statement::Let { result, rhs }) => {
+                        bound.insert(*result);
+                        bound.extend(rhs.binders());
+                        for atom in rhs.operands() {
+                            match atom {
+                                Atom::Function(referenced) => {
+                                    functions.insert(referenced);
+                                }
+                                Atom::Value(referenced) => {
+                                    values.insert(referenced);
+                                }
+                                Atom::Constant(_) => {}
+                            }
+                        }
+                    }
+                    Some(Statement::Functions {
+                        functions: bound_here,
+                    }) => work.extend(bound_here),
+                    Some(Statement::Rec { group }) => {
+                        if let Some(group) = module.rec_group(*group) {
+                            work.extend(&group.functions);
+                            bound.extend(group.values.iter().map(|member| member.value));
+                        }
+                    }
+                    None => {}
+                }
+            }
+            match block.terminator.atom() {
+                Some(Atom::Function(referenced)) => {
+                    functions.insert(referenced);
+                }
+                Some(Atom::Value(referenced)) => {
+                    values.insert(referenced);
+                }
+                _ => {}
+            }
+        }
+    }
+
+    functions.retain(|function| !region.contains(function));
+    values.retain(|value| !bound.contains(value));
+    Some((functions, values))
 }
 
 fn outward_functions_item_bound(
