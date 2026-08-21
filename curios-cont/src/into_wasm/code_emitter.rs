@@ -1156,31 +1156,6 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             CpsIntrinsic::NatShr => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32ShrU)
             }
-            CpsIntrinsic::NatRotl => self.emit_checked_nat_op(
-                dest,
-                &op,
-                &args[0],
-                &args[1],
-                "nat_rotl",
-                curios_wasm::Instr::I32Rotl,
-            ),
-            CpsIntrinsic::NatRotr => self.emit_checked_nat_op(
-                dest,
-                &op,
-                &args[0],
-                &args[1],
-                "nat_rotr",
-                curios_wasm::Instr::I32Rotr,
-            ),
-            CpsIntrinsic::NatClz => {
-                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::I32Clz)
-            }
-            CpsIntrinsic::NatCtz => {
-                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::I32Ctz)
-            }
-            CpsIntrinsic::NatPopcnt => {
-                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::I32Popcnt)
-            }
             CpsIntrinsic::NatEqz => {
                 self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::I32Eqz)
             }
@@ -1203,31 +1178,6 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             ),
             CpsIntrinsic::IntShr => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32ShrS)
-            }
-            CpsIntrinsic::IntRotl => self.emit_checked_int_op(
-                dest,
-                &op,
-                &args[0],
-                &args[1],
-                "int_rotl",
-                curios_wasm::Instr::I32Rotl,
-            ),
-            CpsIntrinsic::IntRotr => self.emit_checked_int_op(
-                dest,
-                &op,
-                &args[0],
-                &args[1],
-                "int_rotr",
-                curios_wasm::Instr::I32Rotr,
-            ),
-            CpsIntrinsic::IntClz => {
-                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::I32Clz)
-            }
-            CpsIntrinsic::IntCtz => {
-                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::I32Ctz)
-            }
-            CpsIntrinsic::IntPopcnt => {
-                self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::I32Popcnt)
             }
             CpsIntrinsic::IntEqz => {
                 self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::I32Eqz)

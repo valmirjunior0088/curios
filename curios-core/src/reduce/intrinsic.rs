@@ -5,7 +5,7 @@ use {
         bin_measure, bin_window, list_locate, list_measure, list_window, normalize_concat,
         peel_bin, peel_first_atom, peel_first_elem, project_erased_universes,
     },
-    curios_num::{Integer, Natural, int_rotl, int_rotr, nat_rotl, nat_rotr},
+    curios_num::{Integer, Natural},
     curios_utilities::{Grain, PackedBin},
     std::cmp::Ordering,
 };
@@ -946,59 +946,6 @@ pub fn reduce_intrinsic(
             |l, r| l.checked_shr(r).map(Intrinsic::Nat),
             Intrinsic::NatShr,
         ),
-        // The rotation and bit-count operations are 32-bit-carrier notions: they fold only a literal that fits the u32 view (the erased carrier) and stay neutral otherwise, like every other declined fold.
-        Intrinsic::NatRotl(left, right) => reduce_nat_binary(
-            reducer,
-            left,
-            right,
-            |l, r| {
-                let l = l.to_natural()?.to_u32()?;
-                let r = r.to_natural()?.to_u32()?;
-                Some(Intrinsic::Nat(Nat::new(nat_rotl(l, r) as usize)))
-            },
-            Intrinsic::NatRotl,
-        ),
-        Intrinsic::NatRotr(left, right) => reduce_nat_binary(
-            reducer,
-            left,
-            right,
-            |l, r| {
-                let l = l.to_natural()?.to_u32()?;
-                let r = r.to_natural()?.to_u32()?;
-                Some(Intrinsic::Nat(Nat::new(nat_rotr(l, r) as usize)))
-            },
-            Intrinsic::NatRotr,
-        ),
-        Intrinsic::NatClz(inner) => reduce_nat_unary(
-            reducer,
-            inner,
-            |n| {
-                Some(Intrinsic::Nat(Nat::new(
-                    n.to_natural()?.to_u32()?.leading_zeros() as usize,
-                )))
-            },
-            Intrinsic::NatClz,
-        ),
-        Intrinsic::NatCtz(inner) => reduce_nat_unary(
-            reducer,
-            inner,
-            |n| {
-                Some(Intrinsic::Nat(Nat::new(
-                    n.to_natural()?.to_u32()?.trailing_zeros() as usize,
-                )))
-            },
-            Intrinsic::NatCtz,
-        ),
-        Intrinsic::NatPopcnt(inner) => reduce_nat_unary(
-            reducer,
-            inner,
-            |n| {
-                Some(Intrinsic::Nat(Nat::new(
-                    n.to_natural()?.to_u32()?.count_ones() as usize,
-                )))
-            },
-            Intrinsic::NatPopcnt,
-        ),
         Intrinsic::IntType => Ok(Subterm::Intrinsic(Intrinsic::IntType)),
         Intrinsic::Int(value) => Ok(Subterm::Intrinsic(Intrinsic::Int(value.clone()))),
         Intrinsic::IntEql(left, right) => reduce_int_binary(
@@ -1127,60 +1074,6 @@ pub fn reduce_intrinsic(
             Intrinsic::IntShr,
         ),
         // 32-bit-carrier rotations and bit counts over the i32 view; a literal outside it stays neutral.
-        Intrinsic::IntRotl(left, right) => reduce_int_binary(
-            reducer,
-            left,
-            right,
-            |l, r| {
-                Some(Intrinsic::Int(Integer::from(int_rotl(
-                    l.to_i32()?,
-                    r.to_i32()?,
-                ))))
-            },
-            Intrinsic::IntRotl,
-        ),
-        Intrinsic::IntRotr(left, right) => reduce_int_binary(
-            reducer,
-            left,
-            right,
-            |l, r| {
-                Some(Intrinsic::Int(Integer::from(int_rotr(
-                    l.to_i32()?,
-                    r.to_i32()?,
-                ))))
-            },
-            Intrinsic::IntRotr,
-        ),
-        Intrinsic::IntClz(inner) => reduce_int_unary(
-            reducer,
-            inner,
-            |n| {
-                Some(Intrinsic::Int(Integer::from(
-                    (n.to_i32()? as u32).leading_zeros() as i32,
-                )))
-            },
-            Intrinsic::IntClz,
-        ),
-        Intrinsic::IntCtz(inner) => reduce_int_unary(
-            reducer,
-            inner,
-            |n| {
-                Some(Intrinsic::Int(Integer::from(
-                    (n.to_i32()? as u32).trailing_zeros() as i32,
-                )))
-            },
-            Intrinsic::IntCtz,
-        ),
-        Intrinsic::IntPopcnt(inner) => reduce_int_unary(
-            reducer,
-            inner,
-            |n| {
-                Some(Intrinsic::Int(Integer::from(
-                    (n.to_i32()? as u32).count_ones() as i32,
-                )))
-            },
-            Intrinsic::IntPopcnt,
-        ),
         Intrinsic::FltType => Ok(Subterm::Intrinsic(Intrinsic::FltType)),
         Intrinsic::Flt(flt) => Ok(Subterm::Intrinsic(Intrinsic::Flt(*flt))),
         Intrinsic::FltAdd(left, right) => {

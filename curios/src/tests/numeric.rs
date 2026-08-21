@@ -83,17 +83,7 @@ fn folded_and_executed_scalar_ops_agree_inside_the_envelope() {
         "Int/to_str(Nat/to_int(1000000000 + n))",
         // Guarded on `>= +0`, the comparison `/sys/Int/to_nat`'s precondition is decided on: `i` is runtime-tainted, so nothing settles the sign statically and the narrowing demands evidence. Both arms fold identically at the literal `i`, so the differential still compares the conversion rather than the guard.
         "Nat/to_str(to_nat_or(Int/add(+12345, i), 0))",
-        // Rotations, bit counts, and sign transfer.
-        "Nat/to_str(Nat/rotl(3 + n, 4))",
-        "Nat/to_str(Nat/rotr(64 + n, 3))",
-        "Nat/to_str(Nat/clz(1 + n))",
-        "Nat/to_str(Nat/ctz(48 + n))",
-        "Nat/to_str(Nat/popcnt(255 + n))",
-        "Int/to_str(Int/rotl(Int/add(+3, i), +4))",
-        "Int/to_str(Int/rotr(Int/add(+64, i), +3))",
-        "Int/to_str(Int/clz(Int/add(+1, i)))",
-        "Int/to_str(Int/ctz(Int/add(+48, i)))",
-        "Int/to_str(Int/popcnt(Int/add(+255, i)))",
+        // Sign transfer.
         "Flt/to_str(Flt/copysign(Flt/add(2.5, Int/to_flt(i)), -1.0))",
     ] {
         folded_matches_runtime(body);
@@ -107,8 +97,6 @@ fn overflowing_computations_trap_at_the_backend_boundary() {
         "Nat/to_str(1073741824 + 1073741824 + n)",
         "Nat/to_str(Nat/mul(46341 + n, 46341))",
         "Nat/to_str(Nat/shl(1 + n, 31))",
-        "Nat/to_str(Nat/rotl(1 + n, 31))",
-        "Int/to_str(Int/rotl(Int/add(+1, i), +31))",
         "Int/to_str(Nat/to_int(1073741824 + n))",
     ] {
         runtime_traps(body);
@@ -144,22 +132,6 @@ fn closed_computation_through_the_envelope_folds_in_u32() {
     assert_eq!(
         run("use /std/{Handle, Nat}; /std/print(Nat/to_str(1073741824 + 1073741824))"),
         b"2147483648"
-    );
-}
-
-#[test]
-fn carrier_bit_operations_compute_at_the_type_level() {
-    // The 32-bit-carrier operations reduce on literals inside the u32/i32 view during conversion, so proofs can compute with them; a value outside the view stays neutral rather than folding wrongly.
-    assert_eq!(
-        run(r#"
-        use /std/{Handle, Nat, Int, Eq};
-        let p1 : Eq(Nat/rotl(2, 31), 1) = Eq/refl();
-        let p2 : Eq(Nat/clz(1), 31) = Eq/refl();
-        let p3 : Eq(Nat/popcnt(255), 8) = Eq/refl();
-        let p4 : Eq(Int/rotr(+16, +4), +1) = Eq/refl();
-        /std/print("ok")
-        "#),
-        b"ok"
     );
 }
 

@@ -478,8 +478,6 @@ impl Sort {
                 | Intrinsic::Int(..)
                 | Intrinsic::IntAdd(..)
                 | Intrinsic::IntAnd(..)
-                | Intrinsic::IntClz(..)
-                | Intrinsic::IntCtz(..)
                 | Intrinsic::IntDiv { .. }
                 | Intrinsic::IntEql(..)
                 | Intrinsic::IntGt(..)
@@ -489,10 +487,7 @@ impl Sort {
                 | Intrinsic::IntMul(..)
                 | Intrinsic::IntNeq(..)
                 | Intrinsic::IntOr(..)
-                | Intrinsic::IntPopcnt(..)
                 | Intrinsic::IntRem { .. }
-                | Intrinsic::IntRotl(..)
-                | Intrinsic::IntRotr(..)
                 | Intrinsic::IntShl(..)
                 | Intrinsic::IntShr(..)
                 | Intrinsic::IntSub(..)
@@ -511,8 +506,6 @@ impl Sort {
                 | Intrinsic::Nat(..)
                 | Intrinsic::NatAdd(..)
                 | Intrinsic::NatAnd(..)
-                | Intrinsic::NatClz(..)
-                | Intrinsic::NatCtz(..)
                 | Intrinsic::NatDiv { .. }
                 | Intrinsic::NatEql(..)
                 | Intrinsic::NatGt(..)
@@ -522,10 +515,7 @@ impl Sort {
                 | Intrinsic::NatMul(..)
                 | Intrinsic::NatNeq(..)
                 | Intrinsic::NatOr(..)
-                | Intrinsic::NatPopcnt(..)
                 | Intrinsic::NatRem { .. }
-                | Intrinsic::NatRotl(..)
-                | Intrinsic::NatRotr(..)
                 | Intrinsic::NatShl(..)
                 | Intrinsic::NatShr(..)
                 | Intrinsic::NatSub(..)

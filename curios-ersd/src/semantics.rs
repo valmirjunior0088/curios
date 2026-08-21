@@ -11,8 +11,8 @@ use {
     super::{CellOperation, Constant, Intrinsic, Operation, Rhs, SequenceOp, Terminator},
     curios_num::{
         DivTrap, Floating, flt_max, flt_min, flt_to_int, flt_to_nat, int_add, int_div, int_mul,
-        int_rem, int_rotl, int_rotr, int_shl, int_shr, int_sub, int_to_nat, nat_add, nat_div,
-        nat_mul, nat_rem, nat_rotl, nat_rotr, nat_shl, nat_shr, nat_sub, nat_to_int,
+        int_rem, int_shl, int_shr, int_sub, int_to_nat, nat_add, nat_div, nat_mul, nat_rem,
+        nat_shl, nat_shr, nat_sub, nat_to_int,
     },
     curios_utilities::{Grain, PackedBin},
 };
@@ -239,14 +239,13 @@ impl Semantics {
             IntDiv | FltToNat | FltToInt | FltOfLeBytes => LocalBehavior::trap(),
             NatDiv | NatRem | IntRem | BoolAnd | BoolOr | BoolXor | BoolEql | BoolNeq | NatEql
             | NatNeq | NatAdd | NatSub | NatMul | NatLt | NatGt | NatLe | NatGe | NatAnd
-            | NatOr | NatXor | NatShl | NatShr | NatRotl | NatRotr | NatClz | NatCtz
-            | NatPopcnt | ByteToNat | NatToByte | ByteEql | ByteLt | ByteLe | ByteGt | ByteGe
-            | IntEql | IntNeq | IntAdd | IntSub | IntMul | IntLt | IntGt | IntLe | IntGe
-            | IntAnd | IntOr | IntXor | IntShl | IntShr | IntRotl | IntRotr | IntClz | IntCtz
-            | IntPopcnt | FltAdd | FltSub | FltMul | FltDiv | FltRem | FltEql | FltNeq | FltLt
-            | FltGt | FltLe | FltGe | FltMin | FltMax | FltCopysign | FltNeg | FltAbs | FltSqrt
-            | FltFloor | FltCeil | FltTrunc | FltNearest | NatToInt | NatToFlt | IntToNat
-            | IntToFlt | FltToLeBytes | HandleEql => LocalBehavior::pure(),
+            | NatOr | NatXor | NatShl | NatShr | ByteToNat | NatToByte | ByteEql | ByteLt
+            | ByteLe | ByteGt | ByteGe | IntEql | IntNeq | IntAdd | IntSub | IntMul | IntLt
+            | IntGt | IntLe | IntGe | IntAnd | IntOr | IntXor | IntShl | IntShr | FltAdd
+            | FltSub | FltMul | FltDiv | FltRem | FltEql | FltNeq | FltLt | FltGt | FltLe
+            | FltGe | FltMin | FltMax | FltCopysign | FltNeg | FltAbs | FltSqrt | FltFloor
+            | FltCeil | FltTrunc | FltNearest | NatToInt | NatToFlt | IntToNat | IntToFlt
+            | FltToLeBytes | HandleEql => LocalBehavior::pure(),
         }
     }
 
@@ -381,11 +380,6 @@ impl Semantics {
                 NatXor => Constant::Nat(nat(0)? ^ nat(1)?),
                 NatShl => Constant::Nat(nat_shl(nat(0)?, nat(1)?)),
                 NatShr => Constant::Nat(nat_shr(nat(0)?, nat(1)?)),
-                NatRotl => Constant::Nat(nat_rotl(nat(0)?, nat(1)?)),
-                NatRotr => Constant::Nat(nat_rotr(nat(0)?, nat(1)?)),
-                NatClz => Constant::Nat(nat(0)?.leading_zeros()),
-                NatCtz => Constant::Nat(nat(0)?.trailing_zeros()),
-                NatPopcnt => Constant::Nat(nat(0)?.count_ones()),
                 NatEql => Constant::Bool(nat(0)? == nat(1)?),
                 NatNeq => Constant::Bool(nat(0)? != nat(1)?),
                 NatLt => Constant::Bool(nat(0)? < nat(1)?),
@@ -413,11 +407,6 @@ impl Semantics {
                 IntXor => Constant::Int(int(0)? ^ int(1)?),
                 IntShl => Constant::Int(int_shl(int(0)?, int(1)?)),
                 IntShr => Constant::Int(int_shr(int(0)?, int(1)?)),
-                IntRotl => Constant::Int(int_rotl(int(0)?, int(1)?)),
-                IntRotr => Constant::Int(int_rotr(int(0)?, int(1)?)),
-                IntClz => Constant::Int((int(0)? as u32).leading_zeros() as i32),
-                IntCtz => Constant::Int((int(0)? as u32).trailing_zeros() as i32),
-                IntPopcnt => Constant::Int((int(0)? as u32).count_ones() as i32),
                 IntEql => Constant::Bool(int(0)? == int(1)?),
                 IntNeq => Constant::Bool(int(0)? != int(1)?),
                 IntLt => Constant::Bool(int(0)? < int(1)?),

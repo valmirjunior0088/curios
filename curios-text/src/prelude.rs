@@ -412,11 +412,6 @@ fn nat_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
         binary("xor", nat(), nat(), Intrinsic::NatXor),
         binary("shl", nat(), nat(), Intrinsic::NatShl),
         binary("shr", nat(), nat(), Intrinsic::NatShr),
-        binary("rotl", nat(), nat(), Intrinsic::NatRotl),
-        binary("rotr", nat(), nat(), Intrinsic::NatRotr),
-        unary("clz", nat(), nat(), Intrinsic::NatClz),
-        unary("ctz", nat(), nat(), Intrinsic::NatCtz),
-        unary("popcnt", nat(), nat(), Intrinsic::NatPopcnt),
         unary("to_int", nat(), int(), Intrinsic::NatToInt),
         unary("to_flt", nat(), flt(), Intrinsic::NatToFlt),
         unary("to_byte", nat(), byte(), Intrinsic::NatToByte),
@@ -483,11 +478,6 @@ fn int_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
         binary("xor", int(), int(), Intrinsic::IntXor),
         binary("shl", int(), int(), Intrinsic::IntShl),
         binary("shr", int(), int(), Intrinsic::IntShr),
-        binary("rotl", int(), int(), Intrinsic::IntRotl),
-        binary("rotr", int(), int(), Intrinsic::IntRotr),
-        unary("clz", int(), int(), Intrinsic::IntClz),
-        unary("ctz", int(), int(), Intrinsic::IntCtz),
-        unary("popcnt", int(), int(), Intrinsic::IntPopcnt),
         pub_fn_marked(
             "to_nat",
             vec![

@@ -1280,15 +1280,6 @@ fn zonk_intrinsic(context: &Context, intrinsic: &Intrinsic) -> Result<Intrinsic,
         Intrinsic::NatShr(a, b) => {
             Intrinsic::NatShr(zonk_term(context, a)?, zonk_term(context, b)?)
         }
-        Intrinsic::NatRotl(a, b) => {
-            Intrinsic::NatRotl(zonk_term(context, a)?, zonk_term(context, b)?)
-        }
-        Intrinsic::NatRotr(a, b) => {
-            Intrinsic::NatRotr(zonk_term(context, a)?, zonk_term(context, b)?)
-        }
-        Intrinsic::NatClz(a) => Intrinsic::NatClz(zonk_term(context, a)?),
-        Intrinsic::NatCtz(a) => Intrinsic::NatCtz(zonk_term(context, a)?),
-        Intrinsic::NatPopcnt(a) => Intrinsic::NatPopcnt(zonk_term(context, a)?),
         Intrinsic::ByteToNat(t) => Intrinsic::ByteToNat(zonk_term(context, t)?),
         Intrinsic::NatToByte(t) => Intrinsic::NatToByte(zonk_term(context, t)?),
         Intrinsic::ByteEql(a, b) => {
@@ -1373,15 +1364,6 @@ fn zonk_intrinsic(context: &Context, intrinsic: &Intrinsic) -> Result<Intrinsic,
         Intrinsic::IntShr(a, b) => {
             Intrinsic::IntShr(zonk_term(context, a)?, zonk_term(context, b)?)
         }
-        Intrinsic::IntRotl(a, b) => {
-            Intrinsic::IntRotl(zonk_term(context, a)?, zonk_term(context, b)?)
-        }
-        Intrinsic::IntRotr(a, b) => {
-            Intrinsic::IntRotr(zonk_term(context, a)?, zonk_term(context, b)?)
-        }
-        Intrinsic::IntClz(a) => Intrinsic::IntClz(zonk_term(context, a)?),
-        Intrinsic::IntCtz(a) => Intrinsic::IntCtz(zonk_term(context, a)?),
-        Intrinsic::IntPopcnt(a) => Intrinsic::IntPopcnt(zonk_term(context, a)?),
 
         Intrinsic::FltAdd(a, b) => {
             Intrinsic::FltAdd(zonk_term(context, a)?, zonk_term(context, b)?)

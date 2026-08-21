@@ -65,11 +65,6 @@ pub enum Intrinsic {
     NatXor(Term, Term),
     NatShl(Term, Term),
     NatShr(Term, Term),
-    NatRotl(Term, Term),
-    NatRotr(Term, Term),
-    NatClz(Term),
-    NatCtz(Term),
-    NatPopcnt(Term),
     ByteType,
     Byte(u8),
     ByteToNat(Term),
@@ -106,11 +101,6 @@ pub enum Intrinsic {
     IntXor(Term, Term),
     IntShl(Term, Term),
     IntShr(Term, Term),
-    IntRotl(Term, Term),
-    IntRotr(Term, Term),
-    IntClz(Term),
-    IntCtz(Term),
-    IntPopcnt(Term),
     FltType,
     Flt(Floating),
     FltAdd(Term, Term),
@@ -600,12 +590,6 @@ impl Intrinsic {
             | Intrinsic::FltCeil(t)
             | Intrinsic::FltTrunc(t)
             | Intrinsic::FltNearest(t)
-            | Intrinsic::NatClz(t)
-            | Intrinsic::NatCtz(t)
-            | Intrinsic::NatPopcnt(t)
-            | Intrinsic::IntClz(t)
-            | Intrinsic::IntCtz(t)
-            | Intrinsic::IntPopcnt(t)
             | Intrinsic::BinLen(Grain::X, t)
             | Intrinsic::BinLen(Grain::B, t)
             | Intrinsic::ListType(t)
@@ -632,8 +616,6 @@ impl Intrinsic {
             | Intrinsic::NatXor(a, b)
             | Intrinsic::NatShl(a, b)
             | Intrinsic::NatShr(a, b)
-            | Intrinsic::NatRotl(a, b)
-            | Intrinsic::NatRotr(a, b)
             | Intrinsic::BoolAnd(a, b)
             | Intrinsic::BoolOr(a, b)
             | Intrinsic::BoolXor(a, b)
@@ -653,8 +635,6 @@ impl Intrinsic {
             | Intrinsic::IntXor(a, b)
             | Intrinsic::IntShl(a, b)
             | Intrinsic::IntShr(a, b)
-            | Intrinsic::IntRotl(a, b)
-            | Intrinsic::IntRotr(a, b)
             | Intrinsic::FltAdd(a, b)
             | Intrinsic::FltSub(a, b)
             | Intrinsic::FltMul(a, b)
@@ -925,11 +905,6 @@ impl Intrinsic {
             Intrinsic::NatXor(l, r) => traverse_binary(l, r, visit, Intrinsic::NatXor),
             Intrinsic::NatShl(l, r) => traverse_binary(l, r, visit, Intrinsic::NatShl),
             Intrinsic::NatShr(l, r) => traverse_binary(l, r, visit, Intrinsic::NatShr),
-            Intrinsic::NatRotl(l, r) => traverse_binary(l, r, visit, Intrinsic::NatRotl),
-            Intrinsic::NatRotr(l, r) => traverse_binary(l, r, visit, Intrinsic::NatRotr),
-            Intrinsic::NatClz(i) => Intrinsic::NatClz(visit.visit_subterm(i)),
-            Intrinsic::NatCtz(i) => Intrinsic::NatCtz(visit.visit_subterm(i)),
-            Intrinsic::NatPopcnt(i) => Intrinsic::NatPopcnt(visit.visit_subterm(i)),
             Intrinsic::ByteType => Intrinsic::ByteType,
             Intrinsic::Byte(value) => Intrinsic::Byte(*value),
             Intrinsic::ByteToNat(inner) => Intrinsic::ByteToNat(visit.visit_subterm(inner)),
@@ -978,11 +953,6 @@ impl Intrinsic {
             Intrinsic::IntXor(l, r) => traverse_binary(l, r, visit, Intrinsic::IntXor),
             Intrinsic::IntShl(l, r) => traverse_binary(l, r, visit, Intrinsic::IntShl),
             Intrinsic::IntShr(l, r) => traverse_binary(l, r, visit, Intrinsic::IntShr),
-            Intrinsic::IntRotl(l, r) => traverse_binary(l, r, visit, Intrinsic::IntRotl),
-            Intrinsic::IntRotr(l, r) => traverse_binary(l, r, visit, Intrinsic::IntRotr),
-            Intrinsic::IntClz(i) => Intrinsic::IntClz(visit.visit_subterm(i)),
-            Intrinsic::IntCtz(i) => Intrinsic::IntCtz(visit.visit_subterm(i)),
-            Intrinsic::IntPopcnt(i) => Intrinsic::IntPopcnt(visit.visit_subterm(i)),
             Intrinsic::FltType => Intrinsic::FltType,
             Intrinsic::Flt(flt) => Intrinsic::Flt(*flt),
             Intrinsic::FltAdd(l, r) => traverse_binary(l, r, visit, Intrinsic::FltAdd),

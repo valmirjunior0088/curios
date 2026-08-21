@@ -236,11 +236,6 @@ pub(super) fn erase_intrinsic(
         Intrinsic::NatXor(l, r) => op!(curios_ersd::Operation::NatXor, nat_type, l, r),
         Intrinsic::NatShl(l, r) => op!(curios_ersd::Operation::NatShl, nat_type, l, r),
         Intrinsic::NatShr(l, r) => op!(curios_ersd::Operation::NatShr, nat_type, l, r),
-        Intrinsic::NatRotl(l, r) => op!(curios_ersd::Operation::NatRotl, nat_type, l, r),
-        Intrinsic::NatRotr(l, r) => op!(curios_ersd::Operation::NatRotr, nat_type, l, r),
-        Intrinsic::NatClz(i) => op!(curios_ersd::Operation::NatClz, nat_type, i),
-        Intrinsic::NatCtz(i) => op!(curios_ersd::Operation::NatCtz, nat_type, i),
-        Intrinsic::NatPopcnt(i) => op!(curios_ersd::Operation::NatPopcnt, nat_type, i),
 
         Intrinsic::Int(value) => {
             Ok(lowering.constant(curios_ersd::Constant::Int(narrow_int(value)?)))
@@ -271,11 +266,6 @@ pub(super) fn erase_intrinsic(
         Intrinsic::IntXor(l, r) => op!(curios_ersd::Operation::IntXor, int_type, l, r),
         Intrinsic::IntShl(l, r) => op!(curios_ersd::Operation::IntShl, int_type, l, r),
         Intrinsic::IntShr(l, r) => op!(curios_ersd::Operation::IntShr, int_type, l, r),
-        Intrinsic::IntRotl(l, r) => op!(curios_ersd::Operation::IntRotl, int_type, l, r),
-        Intrinsic::IntRotr(l, r) => op!(curios_ersd::Operation::IntRotr, int_type, l, r),
-        Intrinsic::IntClz(i) => op!(curios_ersd::Operation::IntClz, int_type, i),
-        Intrinsic::IntCtz(i) => op!(curios_ersd::Operation::IntCtz, int_type, i),
-        Intrinsic::IntPopcnt(i) => op!(curios_ersd::Operation::IntPopcnt, int_type, i),
 
         &Intrinsic::Flt(value) => Ok(lowering.constant(curios_ersd::Constant::Flt(value))),
         Intrinsic::FltAdd(l, r) => op!(curios_ersd::Operation::FltAdd, flt_type, l, r),

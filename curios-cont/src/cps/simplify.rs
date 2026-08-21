@@ -259,16 +259,12 @@ fn identity_fold(op: CpsIntrinsic, args: &[CpsAtom]) -> Option<IdentityFold> {
                 None
             }
         }
-        CpsIntrinsic::NatSub
-        | CpsIntrinsic::NatShl
-        | CpsIntrinsic::NatShr
-        | CpsIntrinsic::NatRotl
-        | CpsIntrinsic::NatRotr => (nat(right) == Some(0)).then(|| operand(left)).flatten(),
-        CpsIntrinsic::IntSub
-        | CpsIntrinsic::IntShl
-        | CpsIntrinsic::IntShr
-        | CpsIntrinsic::IntRotl
-        | CpsIntrinsic::IntRotr => (int(right) == Some(0)).then(|| operand(left)).flatten(),
+        CpsIntrinsic::NatSub | CpsIntrinsic::NatShl | CpsIntrinsic::NatShr => {
+            (nat(right) == Some(0)).then(|| operand(left)).flatten()
+        }
+        CpsIntrinsic::IntSub | CpsIntrinsic::IntShl | CpsIntrinsic::IntShr => {
+            (int(right) == Some(0)).then(|| operand(left)).flatten()
+        }
         CpsIntrinsic::NatMul => {
             if nat(right) == Some(1) {
                 operand(left)

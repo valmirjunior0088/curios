@@ -27,11 +27,6 @@ pub enum Operation {
     NatXor,
     NatShl,
     NatShr,
-    NatRotl,
-    NatRotr,
-    NatClz,
-    NatCtz,
-    NatPopcnt,
     ByteToNat,
     NatToByte,
     ByteEql,
@@ -55,11 +50,6 @@ pub enum Operation {
     IntXor,
     IntShl,
     IntShr,
-    IntRotl,
-    IntRotr,
-    IntClz,
-    IntCtz,
-    IntPopcnt,
     FltAdd,
     FltSub,
     FltMul,
@@ -112,13 +102,7 @@ impl Operation {
             | Self::FltToNat
             | Self::FltToInt
             | Self::FltToLeBytes
-            | Self::FltOfLeBytes
-            | Self::NatClz
-            | Self::NatCtz
-            | Self::NatPopcnt
-            | Self::IntClz
-            | Self::IntCtz
-            | Self::IntPopcnt => 1,
+            | Self::FltOfLeBytes => 1,
             Self::BoolAnd
             | Self::BoolOr
             | Self::BoolXor
@@ -140,8 +124,6 @@ impl Operation {
             | Self::NatXor
             | Self::NatShl
             | Self::NatShr
-            | Self::NatRotl
-            | Self::NatRotr
             | Self::ByteEql
             | Self::ByteLt
             | Self::ByteLe
@@ -163,8 +145,6 @@ impl Operation {
             | Self::IntXor
             | Self::IntShl
             | Self::IntShr
-            | Self::IntRotl
-            | Self::IntRotr
             | Self::FltAdd
             | Self::FltSub
             | Self::FltMul

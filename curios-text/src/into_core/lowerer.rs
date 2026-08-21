@@ -1101,15 +1101,6 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Intrinsic::NatShr(left, right) => {
                 curios_core::Intrinsic::NatShr(self.term(left)?, self.term(right)?)
             }
-            Intrinsic::NatRotl(left, right) => {
-                curios_core::Intrinsic::NatRotl(self.term(left)?, self.term(right)?)
-            }
-            Intrinsic::NatRotr(left, right) => {
-                curios_core::Intrinsic::NatRotr(self.term(left)?, self.term(right)?)
-            }
-            Intrinsic::NatClz(inner) => curios_core::Intrinsic::NatClz(self.term(inner)?),
-            Intrinsic::NatCtz(inner) => curios_core::Intrinsic::NatCtz(self.term(inner)?),
-            Intrinsic::NatPopcnt(inner) => curios_core::Intrinsic::NatPopcnt(self.term(inner)?),
             Intrinsic::IntType => curios_core::Intrinsic::IntType,
             Intrinsic::Int(value) => curios_core::Intrinsic::Int(value.clone()),
             Intrinsic::IntEql(left, right) => {
@@ -1172,15 +1163,6 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Intrinsic::IntShr(left, right) => {
                 curios_core::Intrinsic::IntShr(self.term(left)?, self.term(right)?)
             }
-            Intrinsic::IntRotl(left, right) => {
-                curios_core::Intrinsic::IntRotl(self.term(left)?, self.term(right)?)
-            }
-            Intrinsic::IntRotr(left, right) => {
-                curios_core::Intrinsic::IntRotr(self.term(left)?, self.term(right)?)
-            }
-            Intrinsic::IntClz(inner) => curios_core::Intrinsic::IntClz(self.term(inner)?),
-            Intrinsic::IntCtz(inner) => curios_core::Intrinsic::IntCtz(self.term(inner)?),
-            Intrinsic::IntPopcnt(inner) => curios_core::Intrinsic::IntPopcnt(self.term(inner)?),
             Intrinsic::FltType => curios_core::Intrinsic::FltType,
             Intrinsic::Flt(flt) => curios_core::Intrinsic::Flt(*flt),
             Intrinsic::FltAdd(left, right) => {

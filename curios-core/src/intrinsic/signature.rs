@@ -138,13 +138,11 @@ impl Intrinsic {
             // Arithmetic and bitwise: closed on their carrier.
             BoolAnd(..) | BoolOr(..) | BoolXor(..) => bin_op(bool_type(), bool_type()),
             NatAdd(..) | NatSub(..) | NatMul(..) | NatAnd(..) | NatOr(..) | NatXor(..)
-            | NatShl(..) | NatShr(..) | NatRotl(..) | NatRotr(..) => bin_op(nat_type(), nat_type()),
+            | NatShl(..) | NatShr(..) => bin_op(nat_type(), nat_type()),
             IntAdd(..) | IntSub(..) | IntMul(..) | IntAnd(..) | IntOr(..) | IntXor(..)
-            | IntShl(..) | IntShr(..) | IntRotl(..) | IntRotr(..) => bin_op(int_type(), int_type()),
+            | IntShl(..) | IntShr(..) => bin_op(int_type(), int_type()),
             FltAdd(..) | FltSub(..) | FltMul(..) | FltDiv(..) | FltRem(..) | FltMin(..)
             | FltMax(..) | FltCopysign(..) => bin_op(flt_type(), flt_type()),
-            NatClz(..) | NatCtz(..) | NatPopcnt(..) => un(nat_type(), nat_type()),
-            IntClz(..) | IntCtz(..) | IntPopcnt(..) => un(int_type(), int_type()),
             FltNeg(..) | FltAbs(..) | FltSqrt(..) | FltFloor(..) | FltCeil(..) | FltTrunc(..)
             | FltNearest(..) => un(flt_type(), flt_type()),
 

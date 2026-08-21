@@ -72,11 +72,6 @@ pub enum CpsIntrinsic {
     NatXor,
     NatShl,
     NatShr,
-    NatRotl,
-    NatRotr,
-    NatClz,
-    NatCtz,
-    NatPopcnt,
     NatEqz,
     NatToInt,
     NatToFlt,
@@ -96,11 +91,6 @@ pub enum CpsIntrinsic {
     IntXor,
     IntShl,
     IntShr,
-    IntRotl,
-    IntRotr,
-    IntClz,
-    IntCtz,
-    IntPopcnt,
     IntEqz,
     IntToNat,
     IntToFlt,
@@ -211,15 +201,15 @@ impl CpsIntrinsic {
 
             (
                 NatEql | NatNeq | NatAdd | NatSub | NatMul | NatLt | NatDiv | NatRem | NatGt
-                | NatLe | NatGe | NatAnd | NatOr | NatXor | NatShl | NatShr | NatRotl | NatRotr
-                | NatClz | NatCtz | NatPopcnt | NatEqz | NatToInt | NatToFlt,
+                | NatLe | NatGe | NatAnd | NatOr | NatXor | NatShl | NatShr | NatEqz | NatToInt
+                | NatToFlt,
                 _,
             ) => Repr::Nat,
 
             (
                 IntEql | IntNeq | IntAdd | IntSub | IntMul | IntDiv | IntRem | IntLt | IntGt
-                | IntLe | IntGe | IntAnd | IntOr | IntXor | IntShl | IntShr | IntRotl | IntRotr
-                | IntClz | IntCtz | IntPopcnt | IntEqz | IntToNat | IntToFlt,
+                | IntLe | IntGe | IntAnd | IntOr | IntXor | IntShl | IntShr | IntEqz | IntToNat
+                | IntToFlt,
                 _,
             ) => Repr::Int,
 
@@ -243,13 +233,10 @@ impl CpsIntrinsic {
             | BinEql(_) => Repr::Nat,
 
             NatAdd | NatSub | NatMul | NatDiv | NatRem | NatAnd | NatOr | NatXor | NatShl
-            | NatShr | NatRotl | NatRotr | NatClz | NatCtz | NatPopcnt | IntToNat | FltToNat
-            | BinLen(_) | ListLen => Repr::Nat,
+            | NatShr | IntToNat | FltToNat | BinLen(_) | ListLen => Repr::Nat,
 
             IntAdd | IntSub | IntMul | IntDiv | IntRem | IntAnd | IntOr | IntXor | IntShl
-            | IntShr | IntRotl | IntRotr | IntClz | IntCtz | IntPopcnt | NatToInt | FltToInt => {
-                Repr::Int
-            }
+            | IntShr | NatToInt | FltToInt => Repr::Int,
 
             FltAdd | FltSub | FltMul | FltDiv | FltRem | FltMin | FltMax | FltNeg | FltAbs
             | FltSqrt | FltFloor | FltCeil | FltTrunc | FltNearest | FltCopysign | NatToFlt
@@ -282,15 +269,9 @@ pub enum CpsIntrinsicEffect {
 impl CpsIntrinsic {
     pub fn arity(self) -> usize {
         match self {
-            Self::NatClz
-            | Self::NatCtz
-            | Self::NatPopcnt
-            | Self::NatEqz
+            Self::NatEqz
             | Self::NatToInt
             | Self::NatToFlt
-            | Self::IntClz
-            | Self::IntCtz
-            | Self::IntPopcnt
             | Self::IntEqz
             | Self::IntToNat
             | Self::IntToFlt
@@ -349,15 +330,11 @@ impl CpsIntrinsic {
             | Self::NatAdd
             | Self::NatMul
             | Self::NatShl
-            | Self::NatRotl
-            | Self::NatRotr
             | Self::NatToInt
             | Self::IntAdd
             | Self::IntSub
             | Self::IntMul
             | Self::IntShl
-            | Self::IntRotl
-            | Self::IntRotr
             | Self::IntToNat => CpsIntrinsicEffect::MayTrap,
 
             // Allocates a *sequence*. An `Flt` result is boxed too, but every `Flt` producer below is treated as total, so the category means a rope or a list rather than any heap traffic at all.
@@ -381,9 +358,6 @@ impl CpsIntrinsic {
             | Self::NatOr
             | Self::NatXor
             | Self::NatShr
-            | Self::NatClz
-            | Self::NatCtz
-            | Self::NatPopcnt
             | Self::NatEqz
             | Self::NatToFlt
             | Self::IntEql
@@ -396,9 +370,6 @@ impl CpsIntrinsic {
             | Self::IntOr
             | Self::IntXor
             | Self::IntShr
-            | Self::IntClz
-            | Self::IntCtz
-            | Self::IntPopcnt
             | Self::IntEqz
             | Self::IntToFlt
             | Self::FltAdd
@@ -2272,12 +2243,9 @@ mod tests {
 
     #[test]
     fn every_guarded_operation_is_classified_as_trapping() {
-        // Found by reading `into_wasm`'s emission against this table rather than by a failure: each of these emits a guard — the first four through the same checked helpers as siblings already listed, the last three through an inline `Unreachable` — while the wildcard this match replaced answered `Total` for all seven, which is `eliminate_dead_bindings` deleting a refusal.
+        // Found by reading `into_wasm`'s emission against this table rather than by a failure: each of these emits a guard — the first through the same checked helper as siblings already listed, the last three through an inline `Unreachable` — while the wildcard this match replaced answered `Total` for all of them, which is `eliminate_dead_bindings` deleting a refusal.
         for op in [
-            CpsIntrinsic::NatRotr,
             CpsIntrinsic::IntShl,
-            CpsIntrinsic::IntRotl,
-            CpsIntrinsic::IntRotr,
             CpsIntrinsic::NatToInt,
             CpsIntrinsic::IntToNat,
             CpsIntrinsic::FltOfLeBytes,

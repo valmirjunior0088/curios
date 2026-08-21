@@ -1,9 +1,9 @@
 use {
     super::*,
     curios_num::{
-        flt_max, flt_min, flt_to_int, flt_to_nat, int_add, int_div, int_mul, int_rem, int_rotl,
-        int_rotr, int_shl, int_shr, int_sub, int_to_nat, nat_add, nat_div, nat_mul, nat_rem,
-        nat_rotl, nat_rotr, nat_shl, nat_shr, nat_sub, nat_to_int,
+        flt_max, flt_min, flt_to_int, flt_to_nat, int_add, int_div, int_mul, int_rem, int_shl,
+        int_shr, int_sub, int_to_nat, nat_add, nat_div, nat_mul, nat_rem, nat_shl, nat_shr,
+        nat_sub, nat_to_int,
     },
 };
 
@@ -54,11 +54,6 @@ pub(super) fn evaluate(op: CpsIntrinsic, args: &[CpsAtom]) -> Option<CpsLiteral>
         CpsIntrinsic::NatXor => Some(CpsLiteral::Nat(nat(0)? ^ nat(1)?)),
         CpsIntrinsic::NatShl => Some(CpsLiteral::Nat(nat_shl(nat(0)?, nat(1)?))),
         CpsIntrinsic::NatShr => Some(CpsLiteral::Nat(nat_shr(nat(0)?, nat(1)?))),
-        CpsIntrinsic::NatRotl => Some(CpsLiteral::Nat(nat_rotl(nat(0)?, nat(1)?))),
-        CpsIntrinsic::NatRotr => Some(CpsLiteral::Nat(nat_rotr(nat(0)?, nat(1)?))),
-        CpsIntrinsic::NatClz => Some(CpsLiteral::Nat(nat(0)?.leading_zeros())),
-        CpsIntrinsic::NatCtz => Some(CpsLiteral::Nat(nat(0)?.trailing_zeros())),
-        CpsIntrinsic::NatPopcnt => Some(CpsLiteral::Nat(nat(0)?.count_ones())),
         CpsIntrinsic::NatEqz => bool_(nat(0)? == 0),
         CpsIntrinsic::NatToInt => Some(CpsLiteral::Int(nat_to_int(nat(0)?)?)),
         CpsIntrinsic::NatToFlt => Some(CpsLiteral::Flt(nat(0)? as f32)),
@@ -78,11 +73,6 @@ pub(super) fn evaluate(op: CpsIntrinsic, args: &[CpsAtom]) -> Option<CpsLiteral>
         CpsIntrinsic::IntXor => Some(CpsLiteral::Int(int(0)? ^ int(1)?)),
         CpsIntrinsic::IntShl => Some(CpsLiteral::Int(int_shl(int(0)?, int(1)?))),
         CpsIntrinsic::IntShr => Some(CpsLiteral::Int(int_shr(int(0)?, int(1)?))),
-        CpsIntrinsic::IntRotl => Some(CpsLiteral::Int(int_rotl(int(0)?, int(1)?))),
-        CpsIntrinsic::IntRotr => Some(CpsLiteral::Int(int_rotr(int(0)?, int(1)?))),
-        CpsIntrinsic::IntClz => Some(CpsLiteral::Int((int(0)? as u32).leading_zeros() as i32)),
-        CpsIntrinsic::IntCtz => Some(CpsLiteral::Int((int(0)? as u32).trailing_zeros() as i32)),
-        CpsIntrinsic::IntPopcnt => Some(CpsLiteral::Int((int(0)? as u32).count_ones() as i32)),
         CpsIntrinsic::IntEqz => bool_(int(0)? == 0),
         CpsIntrinsic::IntToNat => Some(CpsLiteral::Nat(int_to_nat(int(0)?)?)),
         CpsIntrinsic::IntToFlt => Some(CpsLiteral::Flt(int(0)? as f32)),
