@@ -46,6 +46,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Packed-literal views in unification decomposition (a nonempty `Bits`/`Bytes` literal decomposes against `append`/`concat` spines length-directedly, solving-side only — the shared reduction and peel laws are untouched)
   - [x] Right-biased partial imitation for flex-apply (`?M(?A) ≟ T(b̄, x)` under-applied commits `λx. T(b̄, x)` with the suffix equated pairwise and the split re-validated against the birth type — what pins a two-parameter monad's `?M` from its region)
   - [x] Witness keying through a partially applied type constructor (`satisfy (@S) => Monad((A) => State(S, A))` keys on the stuck application's head; registration and goal lookup share the one `of_whnf` arm)
+- [ ] [Equality is defined at the type, not assumed over all of them](roadmap/observational-equality-spec.md) (deliberately unrefined: `/std/Eq` is one inductive family uniform across every type, so function extensionality is not derivable, quotients cannot be defined, and transport does not compute on a neutral proof whose endpoints convert. Only the settled target theory — CC^obs, because `Prop` is impredicative — and the audit that settled it are recorded, with eighteen open questions for whoever picks it up; nothing is started)
 
 ## Pattern Matching
 
