@@ -7,6 +7,9 @@ use {
     },
 };
 
+/// Fold one intrinsic over literal operands, or decline.
+///
+/// **A proven trap declines here, where `curios-ersd`'s fold records it.** This answer is two-way — a literal or nothing — so an operation whose value leaves its carrier is left standing, and the guard `into_wasm` emits for it traps at the execution point instead. Recording the trap would be more precise and is what the erased fold does with its three-way outcome; declining is correct either way, and it is the convention `NatDiv` already established for a zero divisor.
 pub(super) fn evaluate(op: CpsIntrinsic, args: &[CpsAtom]) -> Option<CpsLiteral> {
     let literals = args
         .iter()
@@ -40,9 +43,9 @@ pub(super) fn evaluate(op: CpsIntrinsic, args: &[CpsAtom]) -> Option<CpsLiteral>
                 .map(|_| CpsLiteral::Nat(count))
         }
         CpsIntrinsic::NatNeq => bool_(nat(0)? != nat(1)?),
-        CpsIntrinsic::NatAdd => Some(CpsLiteral::Nat(nat_add(nat(0)?, nat(1)?))),
+        CpsIntrinsic::NatAdd => Some(CpsLiteral::Nat(nat_add(nat(0)?, nat(1)?).ok()?)),
         CpsIntrinsic::NatSub => Some(CpsLiteral::Nat(nat_sub(nat(0)?, nat(1)?))),
-        CpsIntrinsic::NatMul => Some(CpsLiteral::Nat(nat_mul(nat(0)?, nat(1)?))),
+        CpsIntrinsic::NatMul => Some(CpsLiteral::Nat(nat_mul(nat(0)?, nat(1)?).ok()?)),
         CpsIntrinsic::NatLt => bool_(nat(0)? < nat(1)?),
         CpsIntrinsic::NatDiv => Some(CpsLiteral::Nat(nat_div(nat(0)?, nat(1)?).ok()?)),
         CpsIntrinsic::NatRem => Some(CpsLiteral::Nat(nat_rem(nat(0)?, nat(1)?).ok()?)),
@@ -52,16 +55,16 @@ pub(super) fn evaluate(op: CpsIntrinsic, args: &[CpsAtom]) -> Option<CpsLiteral>
         CpsIntrinsic::NatAnd => Some(CpsLiteral::Nat(nat(0)? & nat(1)?)),
         CpsIntrinsic::NatOr => Some(CpsLiteral::Nat(nat(0)? | nat(1)?)),
         CpsIntrinsic::NatXor => Some(CpsLiteral::Nat(nat(0)? ^ nat(1)?)),
-        CpsIntrinsic::NatShl => Some(CpsLiteral::Nat(nat_shl(nat(0)?, nat(1)?))),
+        CpsIntrinsic::NatShl => Some(CpsLiteral::Nat(nat_shl(nat(0)?, nat(1)?).ok()?)),
         CpsIntrinsic::NatShr => Some(CpsLiteral::Nat(nat_shr(nat(0)?, nat(1)?))),
         CpsIntrinsic::NatEqz => bool_(nat(0)? == 0),
         CpsIntrinsic::NatToInt => Some(CpsLiteral::Int(nat_to_int(nat(0)?)?)),
         CpsIntrinsic::NatToFlt => Some(CpsLiteral::Flt(nat(0)? as f32)),
         CpsIntrinsic::IntEql => bool_(int(0)? == int(1)?),
         CpsIntrinsic::IntNeq => bool_(int(0)? != int(1)?),
-        CpsIntrinsic::IntAdd => Some(CpsLiteral::Int(int_add(int(0)?, int(1)?))),
-        CpsIntrinsic::IntSub => Some(CpsLiteral::Int(int_sub(int(0)?, int(1)?))),
-        CpsIntrinsic::IntMul => Some(CpsLiteral::Int(int_mul(int(0)?, int(1)?))),
+        CpsIntrinsic::IntAdd => Some(CpsLiteral::Int(int_add(int(0)?, int(1)?).ok()?)),
+        CpsIntrinsic::IntSub => Some(CpsLiteral::Int(int_sub(int(0)?, int(1)?).ok()?)),
+        CpsIntrinsic::IntMul => Some(CpsLiteral::Int(int_mul(int(0)?, int(1)?).ok()?)),
         CpsIntrinsic::IntDiv => Some(CpsLiteral::Int(int_div(int(0)?, int(1)?).ok()?)),
         CpsIntrinsic::IntRem => Some(CpsLiteral::Int(int_rem(int(0)?, int(1)?).ok()?)),
         CpsIntrinsic::IntLt => bool_(int(0)? < int(1)?),
@@ -71,8 +74,8 @@ pub(super) fn evaluate(op: CpsIntrinsic, args: &[CpsAtom]) -> Option<CpsLiteral>
         CpsIntrinsic::IntAnd => Some(CpsLiteral::Int(int(0)? & int(1)?)),
         CpsIntrinsic::IntOr => Some(CpsLiteral::Int(int(0)? | int(1)?)),
         CpsIntrinsic::IntXor => Some(CpsLiteral::Int(int(0)? ^ int(1)?)),
-        CpsIntrinsic::IntShl => Some(CpsLiteral::Int(int_shl(int(0)?, int(1)?))),
-        CpsIntrinsic::IntShr => Some(CpsLiteral::Int(int_shr(int(0)?, int(1)?))),
+        CpsIntrinsic::IntShl => Some(CpsLiteral::Int(int_shl(int(0)?, int(1)?)?.ok()?)),
+        CpsIntrinsic::IntShr => Some(CpsLiteral::Int(int_shr(int(0)?, int(1)?)?)),
         CpsIntrinsic::IntEqz => bool_(int(0)? == 0),
         CpsIntrinsic::IntToNat => Some(CpsLiteral::Nat(int_to_nat(int(0)?)?)),
         CpsIntrinsic::IntToFlt => Some(CpsLiteral::Flt(int(0)? as f32)),

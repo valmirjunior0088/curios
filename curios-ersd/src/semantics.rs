@@ -10,7 +10,7 @@ mod tests;
 use {
     super::{CellOperation, Constant, Intrinsic, Operation, Rhs, SequenceOp, Terminator},
     curios_num::{
-        DivTrap, Floating, flt_max, flt_min, flt_to_int, flt_to_nat, int_add, int_div, int_mul,
+        Floating, ScalarTrap, flt_max, flt_min, flt_to_int, flt_to_nat, int_add, int_div, int_mul,
         int_rem, int_shl, int_shr, int_sub, int_to_nat, nat_add, nat_div, nat_mul, nat_rem,
         nat_shl, nat_shr, nat_sub, nat_to_int,
     },
@@ -366,19 +366,25 @@ impl Semantics {
                 BoolEql => Constant::Bool(bool_(0)? == bool_(1)?),
                 BoolNeq => Constant::Bool(bool_(0)? != bool_(1)?),
 
-                NatAdd => Constant::Nat(nat_add(nat(0)?, nat(1)?)),
+                NatAdd => {
+                    return Some(scalar_result(nat_add(nat(0)?, nat(1)?), Constant::Nat));
+                }
                 NatSub => Constant::Nat(nat_sub(nat(0)?, nat(1)?)),
-                NatMul => Constant::Nat(nat_mul(nat(0)?, nat(1)?)),
+                NatMul => {
+                    return Some(scalar_result(nat_mul(nat(0)?, nat(1)?), Constant::Nat));
+                }
                 NatDiv => {
-                    return Some(div_result(nat_div(nat(0)?, nat(1)?), Constant::Nat));
+                    return Some(scalar_result(nat_div(nat(0)?, nat(1)?), Constant::Nat));
                 }
                 NatRem => {
-                    return Some(div_result(nat_rem(nat(0)?, nat(1)?), Constant::Nat));
+                    return Some(scalar_result(nat_rem(nat(0)?, nat(1)?), Constant::Nat));
                 }
                 NatAnd => Constant::Nat(nat(0)? & nat(1)?),
                 NatOr => Constant::Nat(nat(0)? | nat(1)?),
                 NatXor => Constant::Nat(nat(0)? ^ nat(1)?),
-                NatShl => Constant::Nat(nat_shl(nat(0)?, nat(1)?)),
+                NatShl => {
+                    return Some(scalar_result(nat_shl(nat(0)?, nat(1)?), Constant::Nat));
+                }
                 NatShr => Constant::Nat(nat_shr(nat(0)?, nat(1)?)),
                 NatEql => Constant::Bool(nat(0)? == nat(1)?),
                 NatNeq => Constant::Bool(nat(0)? != nat(1)?),
@@ -393,20 +399,28 @@ impl Semantics {
                 ByteLe => Constant::Bool(byte(0)? <= byte(1)?),
                 ByteGe => Constant::Bool(byte(0)? >= byte(1)?),
 
-                IntAdd => Constant::Int(int_add(int(0)?, int(1)?)),
-                IntSub => Constant::Int(int_sub(int(0)?, int(1)?)),
-                IntMul => Constant::Int(int_mul(int(0)?, int(1)?)),
+                IntAdd => {
+                    return Some(scalar_result(int_add(int(0)?, int(1)?), Constant::Int));
+                }
+                IntSub => {
+                    return Some(scalar_result(int_sub(int(0)?, int(1)?), Constant::Int));
+                }
+                IntMul => {
+                    return Some(scalar_result(int_mul(int(0)?, int(1)?), Constant::Int));
+                }
                 IntDiv => {
-                    return Some(div_result(int_div(int(0)?, int(1)?), Constant::Int));
+                    return Some(scalar_result(int_div(int(0)?, int(1)?), Constant::Int));
                 }
                 IntRem => {
-                    return Some(div_result(int_rem(int(0)?, int(1)?), Constant::Int));
+                    return Some(scalar_result(int_rem(int(0)?, int(1)?), Constant::Int));
                 }
                 IntAnd => Constant::Int(int(0)? & int(1)?),
                 IntOr => Constant::Int(int(0)? | int(1)?),
                 IntXor => Constant::Int(int(0)? ^ int(1)?),
-                IntShl => Constant::Int(int_shl(int(0)?, int(1)?)),
-                IntShr => Constant::Int(int_shr(int(0)?, int(1)?)),
+                IntShl => {
+                    return Some(scalar_result(int_shl(int(0)?, int(1)?)?, Constant::Int));
+                }
+                IntShr => Constant::Int(int_shr(int(0)?, int(1)?)?),
                 IntEql => Constant::Bool(int(0)? == int(1)?),
                 IntNeq => Constant::Bool(int(0)? != int(1)?),
                 IntLt => Constant::Bool(int(0)? < int(1)?),
@@ -536,15 +550,17 @@ fn fold_outcome(result: Option<Result<Constant, TrapKind>>) -> FoldOutcome {
     }
 }
 
-/// Map a shared-semantics division outcome ([`DivTrap`]) into the fold's constant/trap split.
-fn div_result<T>(
-    result: Result<T, DivTrap>,
+/// Map a shared-semantics outcome ([`ScalarTrap`]) into the fold's constant/trap split.
+///
+/// `Err` is a *proven* trap and not a decline: the operation has an answer the carrier cannot hold, so the program traps wherever it runs, and recording that lets the trap stand at its execution point instead of surviving as an operation nobody can fold. Declining — leaving the term alone — is the outer `None`, and the two must not be confused.
+fn scalar_result<T>(
+    result: Result<T, ScalarTrap>,
     wrap: fn(T) -> Constant,
 ) -> Result<Constant, TrapKind> {
     match result {
         Ok(value) => Ok(wrap(value)),
-        Err(DivTrap::DivisionByZero) => Err(TrapKind::DivisionByZero),
-        Err(DivTrap::Overflow) => Err(TrapKind::IntegerOverflow),
+        Err(ScalarTrap::DivisionByZero) => Err(TrapKind::DivisionByZero),
+        Err(ScalarTrap::Overflow) => Err(TrapKind::IntegerOverflow),
     }
 }
 
