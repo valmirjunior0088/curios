@@ -1093,7 +1093,7 @@ fn a_returned_closure_every_caller_applies_is_absorbed() {
 /// | `trees` | 21 | 352 ms | 346 ms |
 /// | `churn` | 75 000 000 | 344 ms | 345 ms |
 ///
-/// The split is the prediction: the two programs whose hot loop dispatches an unknown callee moved, and the five whose loops carry no indirect call — plus `state_monad`, whose binds the specializer absorbs — sat inside ±1.7%. What remains per dispatch is the one `ref.cast (ref $envr/N)` to the non-final environment supertype, the residue the typed-heap-fields specification prices separately.
+/// The split is the prediction: the two programs whose hot loop dispatches an unknown callee moved, and the five whose loops carry no indirect call — plus `state_monad`, whose binds the specializer absorbs — sat inside ±1.7%. What remains per dispatch is the one `ref.cast (ref $envr/N)` to the non-final environment supertype — deleted since, where the closure arrives from a heap field declared at that type, and standing where it arrives from a parameter.
 ///
 /// # Family keying, 2026-08-20
 ///
