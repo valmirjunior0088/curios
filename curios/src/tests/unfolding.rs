@@ -112,6 +112,11 @@ match input: (_) => Io({})
 end
 "#;
 
+/// The tail every measured program here shares: one that *infers*.
+///
+/// No `!`, unlike [`ENTRY`]: these programs are put to the two checkers through `typecheck_with_prelude_measured`, which elaborates an unannotated entrypoint in `Mode::Infer` where the compile path checks it against `Io({})` — so a top-level `!` has no region type to read its monad from. Nothing measured here needs the runtime taint either, since both checkers walk every declaration whether the entry reaches it or not.
+const TAIL: &str = "/std/print(\"ok\")\n";
+
 /// How many emitted functions carry `needle` in their debug name — one copy of a source function per hit.
 fn copies(module: &curios_ersd::Module, needle: &str) -> usize {
     module
@@ -132,10 +137,21 @@ fn emitted(module: &curios_ersd::Module) -> usize {
     module.functions().iter().flatten().count()
 }
 
-/// A web of `rules` predicate definitions consumed by a match or by a bare application, with each definition naming the one before it once or twice.
-fn predicates(rules: usize, scrutinize: bool, twice: bool) -> String {
+/// How a web's value is consumed — the axis that decides whether the kernel ever demands it.
+#[derive(Clone, Copy)]
+pub(super) enum Consumed {
+    /// Applied to the declaration's own binder and returned. Nothing demands the value, so nothing reduces the web.
+    Applied,
+    /// Scrutinized by a `match` at that binder, so the case equation's subject mentions a local.
+    Scrutinized,
+    /// Scrutinized by a `match` at a literal. The equation's subject is local-free, which is the control separating *a scrutinee* from *a scrutinee mentioning a binder* — the local-free path has the evaluation memos and the closed machine, and the local-bearing one has neither.
+    ScrutinizedClosed,
+}
+
+/// A web of `rules` predicate definitions consumed as `consumed` says, with each definition naming the one before it once or twice.
+pub(super) fn predicates(rules: usize, consumed: Consumed, twice: bool) -> String {
     let mut source = String::from(
-        "use /std/{Str, Nat, Bool, Option, Io};\n\n\
+        "use /std/{Str, Nat, Bool};\n\n\
          let Pred: Type = (x: Nat) -> Bool;\n\
          let both(p: Pred, q: Pred) -> Pred = (x) => p(x) && q(x);\n\
          let anyof(p: Pred, q: Pred) -> Pred = (x) => p(x) || q(x);\n\
@@ -166,21 +182,18 @@ fn predicates(rules: usize, scrutinize: bool, twice: bool) -> String {
 
     let _ = writeln!(source, "\nlet top: Pred = r{};\n", rules - 1);
 
-    // The only difference between the two probes: whether the web's value reaches a match scrutinee.
-    source.push_str(match scrutinize {
-        true => {
+    // The only difference between the three probes: what, if anything, demands the web's value.
+    source.push_str(match consumed {
+        Consumed::Applied => "let probe(n: Nat) -> Bool = top(n);\n\n",
+        Consumed::Scrutinized => {
             "let probe(n: Nat) -> Str =\n    match top(n): (_) => Str | true => \"y\" | false => \"n\" end;\n\n"
         }
-        false => "let probe(n: Nat) -> Bool = top(n);\n\n",
+        Consumed::ScrutinizedClosed => {
+            "let probe(n: Nat) -> Str =\n    match top(7): (_) => Str | true => \"y\" | false => \"n\" end;\n\n"
+        }
     });
 
-    source.push_str(
-        "let input = /std/read()!;\n\
-         match input: (_) => Io({})\n\
-         | some(_) => /std/print(\"ok\\n\")\n\
-         | none() => /std/print(\"none\\n\")\n\
-         end\n",
-    );
+    source.push_str(TAIL);
     source
 }
 
@@ -297,7 +310,7 @@ fn combinator_sharing_measurements() {
     }
 }
 
-/// What the kernel spends re-deriving a case refinement's key, against what the same web costs when its value never reaches a scrutinee.
+/// What a web of combinator definitions costs to compile, and what consuming its value adds to that.
 ///
 /// # How to take it
 ///
@@ -307,27 +320,56 @@ fn combinator_sharing_measurements() {
 ///
 /// # What it last printed
 ///
-/// Taken **2026-08-21**, **release**, `aarch64-apple-darwin`, at the same commit.
+/// Taken **2026-08-21**, **release**, `aarch64-apple-darwin`, with a case refinement keyed at the written spelling.
 ///
-/// | definitions | named twice, not scrutinized | named once, scrutinized | named twice, scrutinized |
-/// | --- | --- | --- | --- |
-/// | 8 | 0.28 s | 0.26 s | 0.29 s |
-/// | 10 | 0.26 s | 0.28 s | 0.42 s |
-/// | 12 | 0.26 s | 0.28 s | 1.21 s |
-/// | 13 | 0.26 s | 0.30 s | 2.60 s |
-/// | 14 | 0.27 s | 0.31 s | **refused** — the kernel's reduction budget |
-/// | 20 | 0.27 s | 0.99 s | **refused** |
+/// | definitions | applied | named once, scrutinized | named twice, scrutinized | scrutinized at a literal |
+/// | --- | --- | --- | --- | --- |
+/// | 8 | 0.13 s | 0.08 s | 0.08 s | 0.08 s |
+/// | 12 | 0.10 s | 0.08 s | 0.08 s | 0.08 s |
+/// | 13 | 0.09 s | 0.08 s | 0.08 s | 0.08 s |
+/// | 14 | 0.08 s | 0.08 s | 0.08 s | 0.08 s |
+/// | 20 | 0.08 s | 0.09 s | 0.08 s | 0.08 s |
 ///
-/// Both conditions are necessary and neither is sufficient. A web nothing scrutinizes is flat however it fans out; a web that *is* scrutinized costs what its fan-out is — the middle column still names each definition twice across the chain, once as the previous rule and once as the older one, and grows accordingly, just far more slowly than naming it twice within one rule.
+/// Flat in every column, and the columns are each other's controls: what the web is consumed by no longer decides anything. The first row is the first compile of the run and carries its warm-up.
 ///
-/// Under `--features profile` at 13 definitions, `recheck` is 2 881 ms of a 3 061 ms compile — 94.1%, allocating 6 955 MB across 74.8 M allocations — against `elaborate_and_zonk`'s 13 ms and 134 k allocations. The two checkers are deciding the same terms; only one of them reduces.
+/// Under `--features profile` at 13 definitions — `make curios/profile CURIOS_PROFILE_SOURCE=<the same program>` — `recheck` is **7.9 ms of a 64 ms compile**, 112 k allocations, tenth in the table and below `elaborate_and_zonk`'s 10.4 ms. Peak memory is 24.9 MiB. The figures it replaced are two paragraphs down.
+///
+/// # What it printed with the key at the reduced spelling
+///
+/// Taken the same day on the same host, before `Scope::refine` stopped reducing. The `applied` column was the same then and is omitted; the last column did not exist.
+///
+/// | definitions | named once, scrutinized | named twice, scrutinized |
+/// | --- | --- | --- |
+/// | 8 | 0.26 s | 0.29 s |
+/// | 10 | 0.28 s | 0.42 s |
+/// | 12 | 0.28 s | 1.21 s |
+/// | 13 | 0.30 s | 2.60 s |
+/// | 14 | 0.31 s | **refused** — the kernel's reduction budget |
+/// | 20 | 0.99 s | **refused** |
+///
+/// Both conditions were necessary and neither was sufficient. A web nothing scrutinized was flat however it fanned out; a web that *was* scrutinized cost what its fan-out was — the middle column still names each definition twice across the chain, once as the previous rule and once as the older one, and grew accordingly, just far more slowly than naming it twice within one rule.
+///
+/// Under `--features profile` at 13 definitions, `recheck` was 2 881 ms of a 3 061 ms compile — 94.1%, allocating 6 955 MB across 74.8 M allocations — against `elaborate_and_zonk`'s 13 ms and 134 k allocations. The two checkers were deciding the same terms; only one of them reduced. It is now 7.9 ms and 112 k allocations: a 364× fall in time and 668× in allocation, on the judgment rather than on the program.
+///
+/// **The `scrutinized at a literal` column is the control that identified the trigger, and it was not in the earlier table.** The same web under the same `match`, with the scrutinee applied to `7` rather than to the declaration's binder, was already flat at every size — same call site, same full reduction, nothing folded away by elaboration. What made the reduction unaffordable was never the `match`; it was that its subject mentioned a binder, which is exactly the term `Memos::storable` may not remember and the closed machine may not take.
+///
+/// The programs end in a plain `/std/print("ok")` rather than a runtime-tainted parse, so these wall clocks are the two checkers and nothing downstream of them. That is also why they are lower across the board than the earlier table's.
 #[test]
 #[ignore = "measurement: reports what a scrutinee costs rather than asserting"]
 fn scrutinee_refinement_measurements() {
-    println!("definitions  named   scrutinized  outcome");
-    for (twice, scrutinize) in [(true, false), (false, true), (true, true)] {
+    println!(
+        "{:<12} {:<7} {:<18} {:<9} outcome",
+        "definitions", "named", "consumed", "compile"
+    );
+
+    for (twice, consumed, label) in [
+        (true, Consumed::Applied, "applied"),
+        (false, Consumed::Scrutinized, "scrutinized"),
+        (true, Consumed::Scrutinized, "scrutinized"),
+        (true, Consumed::ScrutinizedClosed, "scrutinized, closed"),
+    ] {
         for rules in [8usize, 10, 12, 13, 14, 20] {
-            let (outcome, elapsed) = compile_only(&predicates(rules, scrutinize, twice));
+            let (outcome, elapsed) = compile_only(&predicates(rules, consumed, twice));
             let verdict = match &outcome {
                 Ok(()) => "compiled".to_string(),
                 Err(error) => error.lines().next().unwrap_or("refused").to_string(),
@@ -336,7 +378,8 @@ fn scrutinee_refinement_measurements() {
                 true => "twice",
                 false => "once",
             };
-            println!("{rules:<12} {named:<7} {scrutinize:<12} {elapsed:.2} s  {verdict}");
+
+            println!("{rules:<12} {named:<7} {label:<18} {elapsed:>7.2} s  {verdict}");
         }
     }
 }
@@ -392,9 +435,7 @@ fn dispatched(rules: usize, scrutinize: bool, suffix: &str, moduli: (u64, u64)) 
     source
 }
 
-/// One or more [`dispatched`] webs under the shared header, with a tail that infers.
-///
-/// No `!` in the entry, unlike [`ENTRY`]: this probe puts the program to the two checkers through `typecheck_with_prelude_measured`, which elaborates an unannotated entrypoint in `Mode::Infer` where the compile path checks it against `Io({})` — so a top-level `!` has no region type to read its monad from. Nothing here needs the runtime taint either, since both checkers walk every declaration whether the entry reaches it or not.
+/// One or more [`dispatched`] webs under the shared header and [`TAIL`].
 fn dispatched_program(webs: &[(usize, bool, &str, (u64, u64))]) -> String {
     let mut source = String::from("use /std/{Str, Nat, Bool};\n\n");
 
@@ -402,7 +443,7 @@ fn dispatched_program(webs: &[(usize, bool, &str, (u64, u64))]) -> String {
         source.push_str(&dispatched(*rules, *scrutinize, suffix, *moduli));
     }
 
-    source.push_str("/std/print(\"ok\")\n");
+    source.push_str(TAIL);
     source
 }
 

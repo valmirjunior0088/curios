@@ -9,7 +9,10 @@
 //! A second probe reads the same programs the other way round. [`type_level_sequence_cost_measurements`] divides one checker's cost into machinery and construction; [`kernel_memo_charge_measurements`] holds the program fixed and divides the *checkers*, because the compile path puts one budget to both and a user meets whichever demands more.
 
 use {
-    super::typecheck_within,
+    super::{
+        typecheck_within,
+        unfolding::{Consumed, predicates},
+    },
     curios_core::{Consumption, Cost},
     curios_pipeline::{
         DEFAULT_STEP_BUDGET, recheck_with_prelude, recheck_with_prelude_measured,
@@ -677,6 +680,71 @@ fn str_literal_cost_measurements() {
         "Str n=500, sliced",
         &str_literal(500, 0).replace(r#"/std/print("ok")"#, r#"/std/print(Str/slice(s, 0, 10))"#),
     );
+}
+
+/// What a web of combinator definitions costs each checker, and what consuming its value does to that.
+///
+/// ```sh
+/// cargo test --release --package curios -- --ignored --nocapture combinator_web_cost_measurements
+/// ```
+///
+/// The third of the parity probes, and the one aimed at a gap that was an *exponent* rather than a multiple. [`str_literal_cost_measurements`] holds a derivation fixed and divides one checker's cost; [`kernel_memo_charge_measurements`] divides the two checkers by budget floor; this one divides them on a program shape where they used to disagree without disagreeing about any rule — a scrutinee whose subject mentions a binder, which the kernel reduced once per arm to key its case refinement and the elaborator did not reduce at all.
+///
+/// Three rows per size, differing only in what demands the web's value: nothing, a `match` at a binder, a `match` at a literal. The middle row is the one that used to grow; the last is the control that says the trigger was the binder rather than the `match`.
+///
+/// It asserts nothing beyond each arm checking at all. `curios`' `scrutinee_refinement_measurements` carries the wall clocks and the refusals beside it.
+///
+/// # What it last printed
+///
+/// Taken **2026-08-21**, **release**, `aarch64-apple-darwin`.
+///
+/// ```text
+///   program                      units   depth      other      retained       units   depth      other      retained  kernel/elab
+///   web n=8, applied              9302       2       7254         48649       22400       6      16256        186809     2.4x
+///   web n=8, scrutinized          9302       2       7254         65685       22400       6      16256        208459     2.4x
+///   web n=8, closed               9302       2       7254         65685       22400       6      16256        196313     2.4x
+///   web n=13, applied             9302       2       7254         52729       22400       6      16256        189089     2.4x
+///   web n=13, scrutinized         9302       2       7254         69765       22400       6      16256        210739     2.4x
+///   web n=13, closed              9302       2       7254         69765       22400       6      16256        198593     2.4x
+///   web n=20, applied             9302       2       7254         58441       22400       6      16256        192281     2.4x
+///   web n=20, scrutinized         9302       2       7254         75477       22400       6      16256        213931     2.4x
+///   web n=20, closed              9302       2       7254         75477       22400       6      16256        201785     2.4x
+/// ```
+///
+/// **Every unit column is constant**, across five sizes and all three consumptions, and the ratio is 2.4× everywhere. Twenty definitions at fourteen — the size that refused — cost what eight do.
+///
+/// The heaviest declaration is the same one in every row, and that is what the flatness is *about*: it is `probe`, the declaration holding the `match`, and what it costs no longer has anything to do with the web it scrutinizes. Before the key moved to the written spelling this row grew by a factor of two per definition and refused at fourteen; the wall clocks and the refusals are in `curios`' `scrutinee_refinement_measurements`.
+///
+/// Retention is the one column that still separates the rows, linearly in the web: an equation is now *recorded* rather than reduced, so what a scrutinee adds is one more term held for the length of an arm.
+#[test]
+#[ignore = "measurement: reports what a combinator web costs each checker rather than asserting"]
+fn combinator_web_cost_measurements() {
+    println!(
+        "\n  {:<22}  {:>10}  {:>6}  {:>9}  {:>12}  {:>10}  {:>6}  {:>9}  {:>12}  {:>7}",
+        "program",
+        "units",
+        "depth",
+        "other",
+        "retained",
+        "units",
+        "depth",
+        "other",
+        "retained",
+        "kernel/elab",
+    );
+
+    for rules in [8usize, 12, 13, 14, 20] {
+        for (consumed, label) in [
+            (Consumed::Applied, "applied"),
+            (Consumed::Scrutinized, "scrutinized"),
+            (Consumed::ScrutinizedClosed, "closed"),
+        ] {
+            cost_row(
+                &format!("web n={rules}, {label}"),
+                &predicates(rules, consumed, true),
+            );
+        }
+    }
 }
 
 /// **The guard [`str_literal_cost_measurements`] cannot be**, because a probe is ignored and nothing runs it.
