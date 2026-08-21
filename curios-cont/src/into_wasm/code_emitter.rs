@@ -183,6 +183,114 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
         }
     }
 
+    /// Push the shift count for a shift lowering, clamped to 31.
+    ///
+    /// **The clamp is what makes one test decide every count.** Wasm's shifts reduce their count modulo the operand width — `i32.shl` by 32, `i64.shl` by 64 — so a count of 40 becomes a count of 8 and the result is a value the program never asked for. Clamping instead of masking is sound because 31 is already past the envelope: any nonzero value shifted 31 places leaves it, so the check below reaches the same verdict for 31 as for any larger count, and zero shifted anywhere is still zero.
+    fn emit_clamped_shift(
+        &mut self,
+        intrinsic: &CpsIntrinsic,
+        count: &EmissionValueName,
+        name: &str,
+    ) {
+        let count_local = self
+            .context
+            .push_local(name, curios_wasm::ValType::Num(curios_wasm::NumType::I32));
+
+        self.emit_operand(intrinsic, 1, count);
+        self.emit_instr(curios_wasm::Instr::LocalTee {
+            local_name: count_local.clone(),
+        });
+        self.emit_instr(curios_wasm::Instr::I32Const { value: 31 });
+        self.emit_instr(curios_wasm::Instr::LocalGet {
+            local_name: count_local,
+        });
+        self.emit_instr(curios_wasm::Instr::I32Const { value: 31 });
+        self.emit_instr(curios_wasm::Instr::I32LtU);
+        self.emit_instr(curios_wasm::Instr::Select {
+            val_types: vec![curios_wasm::ValType::Num(curios_wasm::NumType::I32)],
+        });
+    }
+
+    /// Lower a left shift, trapping when the shifted value leaves the i31 envelope.
+    ///
+    /// **Widened for the reason `NatMul` is widened, and it is the same defect underneath.** Shifting in `i32` and testing the result's bit 31 afterwards cannot see bits the shift already discarded: `2³⁰ << 15` is `2⁴⁵`, truncates to zero, and reads as a perfectly good result. Sixty-four bits hold every product a clamped count can produce from a value inside the envelope, so the one test after the shift decides it.
+    ///
+    /// `signed` selects the sign extension and the range test: unsigned answers whether any bit at or above 31 survived, signed whether the value still sits in `[-2³⁰, 2³⁰)`, which is the same question `emit_checked_int_op` asks of an `i32`.
+    fn emit_shift_left(
+        &mut self,
+        dest: &Dest<'_>,
+        intrinsic: &CpsIntrinsic,
+        value: &EmissionValueName,
+        count: &EmissionValueName,
+        name: &str,
+        signed: bool,
+    ) {
+        let wide_local = self
+            .context
+            .push_local(name, curios_wasm::ValType::Num(curios_wasm::NumType::I64));
+        let extend = match signed {
+            true => curios_wasm::Instr::I64ExtendI32S,
+            false => curios_wasm::Instr::I64ExtendI32U,
+        };
+
+        self.emit_operand(intrinsic, 0, value);
+        self.emit_instr(extend.clone());
+        self.emit_clamped_shift(intrinsic, count, &format!("{name}_count"));
+        self.emit_instr(curios_wasm::Instr::I64ExtendI32U);
+        self.emit_instr(curios_wasm::Instr::I64Shl);
+        self.emit_instr(curios_wasm::Instr::LocalTee {
+            local_name: wide_local.clone(),
+        });
+
+        match signed {
+            // Sign-extending from bit 30 and comparing is the `i64` spelling of `emit_checked_int_op`'s bit-30-agrees-with-bit-31 test.
+            true => {
+                self.emit_instr(curios_wasm::Instr::I64Const { value: 33 });
+                self.emit_instr(curios_wasm::Instr::I64Shl);
+                self.emit_instr(curios_wasm::Instr::I64Const { value: 33 });
+                self.emit_instr(curios_wasm::Instr::I64ShrS);
+                self.emit_instr(curios_wasm::Instr::LocalGet {
+                    local_name: wide_local.clone(),
+                });
+                self.emit_instr(curios_wasm::Instr::I64Ne);
+            }
+            false => {
+                self.emit_instr(curios_wasm::Instr::I64Const { value: 31 });
+                self.emit_instr(curios_wasm::Instr::I64ShrU);
+                self.emit_instr(curios_wasm::Instr::I32WrapI64);
+            }
+        }
+
+        self.emit_instr(curios_wasm::Instr::If {
+            label_name: self.context.table().special_label(),
+            block_type: curios_wasm::BlockType::Empty,
+            then_instructions: vec![curios_wasm::Instr::Unreachable],
+            else_instructions: vec![],
+        });
+
+        self.emit_instr(curios_wasm::Instr::LocalGet {
+            local_name: wide_local,
+        });
+        self.emit_instr(curios_wasm::Instr::I32WrapI64);
+        self.emit_store(dest, &intrinsic.result_repr());
+    }
+
+    /// Lower a right shift over a clamped count. A quotient of a value inside the envelope is inside it, so there is nothing to check.
+    fn emit_shift_right(
+        &mut self,
+        dest: &Dest<'_>,
+        intrinsic: &CpsIntrinsic,
+        value: &EmissionValueName,
+        count: &EmissionValueName,
+        name: &str,
+        op: curios_wasm::Instr,
+    ) {
+        self.emit_operand(intrinsic, 0, value);
+        self.emit_clamped_shift(intrinsic, count, name);
+        self.emit_instr(op);
+        self.emit_store(dest, &intrinsic.result_repr());
+    }
+
     /// `struct.get` on a rope base — the `len`/`tag` reads that never force.
     fn rope_get(rope: &RopeData, field: &curios_wasm::FieldName) -> curios_wasm::Instr {
         curios_wasm::Instr::StructGet {
@@ -1145,17 +1253,17 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             CpsIntrinsic::NatXor => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32Xor)
             }
-            CpsIntrinsic::NatShl => self.emit_checked_nat_op(
+            CpsIntrinsic::NatShl => {
+                self.emit_shift_left(dest, &op, &args[0], &args[1], "nat_shl", false)
+            }
+            CpsIntrinsic::NatShr => self.emit_shift_right(
                 dest,
                 &op,
                 &args[0],
                 &args[1],
-                "nat_shl",
-                curios_wasm::Instr::I32Shl,
+                "nat_shr",
+                curios_wasm::Instr::I32ShrU,
             ),
-            CpsIntrinsic::NatShr => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32ShrU)
-            }
             CpsIntrinsic::NatEqz => {
                 self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::I32Eqz)
             }
@@ -1168,17 +1276,17 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             CpsIntrinsic::IntXor => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32Xor)
             }
-            CpsIntrinsic::IntShl => self.emit_checked_int_op(
+            CpsIntrinsic::IntShl => {
+                self.emit_shift_left(dest, &op, &args[0], &args[1], "int_shl", true)
+            }
+            CpsIntrinsic::IntShr => self.emit_shift_right(
                 dest,
                 &op,
                 &args[0],
                 &args[1],
-                "int_shl",
-                curios_wasm::Instr::I32Shl,
+                "int_shr",
+                curios_wasm::Instr::I32ShrS,
             ),
-            CpsIntrinsic::IntShr => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32ShrS)
-            }
             CpsIntrinsic::IntEqz => {
                 self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::I32Eqz)
             }
