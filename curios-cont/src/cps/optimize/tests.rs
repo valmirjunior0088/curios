@@ -1197,6 +1197,107 @@ fn dissolves_a_broken_recursive_initializer() {
     module.verify().unwrap();
 }
 
+// Build `main` whose body is a `RecInit` over member `f` and computed value `v`, where `f` is independent but a function `g` *nested in the body* captures `v`. The knot is still live: dissolving drops `v` from the body's scope and leaves `g` naming it.
+fn rec_init_nested_capture() -> (CpsModule, CpsNodeId) {
+    let mut module = CpsModule::new();
+    let entry = module.reserve_function();
+    let entry_return = module.reserve_continuation();
+    let v = module.add_value(Some("v".into()));
+
+    let f = module.reserve_function();
+    let f_return = module.reserve_continuation();
+    let a = module.add_value(Some("a".into()));
+    let f_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        target: f_return,
+        args: vec![CpsAtom::Value(a)],
+    }));
+    module.define_function(
+        f,
+        CpsFunction {
+            debug_name: Some("f".into()),
+            params: vec![a],
+            return_cont: f_return,
+            body: f_body,
+        },
+    );
+
+    let g = module.reserve_function();
+    let g_return = module.reserve_continuation();
+    let b = module.add_value(Some("b".into()));
+    let g_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        target: g_return,
+        args: vec![CpsAtom::Value(v)],
+    }));
+    module.define_function(
+        g,
+        CpsFunction {
+            debug_name: Some("g".into()),
+            params: vec![b],
+            return_cont: g_return,
+            body: g_body,
+        },
+    );
+
+    let ready = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        target: entry_return,
+        args: vec![CpsAtom::Value(v)],
+    }));
+    let rec_v = module.reserve_continuation();
+    module.define_continuation(
+        rec_v,
+        CpsContinuation {
+            debug_name: Some("rec/v".into()),
+            params: vec![v],
+            body: ready,
+        },
+    );
+    let enter = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        target: rec_v,
+        args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
+    }));
+    let let_cont = module.add_node(CpsNode::LetCont {
+        continuations: vec![rec_v],
+        body: enter,
+    });
+    let init_body = module.add_node(CpsNode::LetFun {
+        functions: vec![g],
+        body: let_cont,
+    });
+    let rec_init = module.add_node(CpsNode::RecInit {
+        functions: vec![f],
+        values: vec![v],
+        ready,
+        body: init_body,
+    });
+    module.define_function(
+        entry,
+        CpsFunction {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: entry_return,
+            body: rec_init,
+        },
+    );
+    module.set_entry(entry);
+    module.verify().unwrap();
+    (module, rec_init)
+}
+
+/// A test that reads only the group's own members sees an independent `f` and dissolves the knot, dropping the binding a function nested in the body still needs. The result fails verification, which is how this was found -- from a program, at the exit of `optimize`, several passes after the damage.
+#[test]
+fn retains_an_initializer_a_nested_function_still_captures() {
+    let (mut module, rec_init) = rec_init_nested_capture();
+    assert!(
+        !dissolve_rec_init(&mut module),
+        "a function nested in the body still capturing a computed value keeps the knot"
+    );
+    assert!(matches!(
+        module.node(rec_init),
+        Some(CpsNode::RecInit { .. })
+    ));
+    module.verify().unwrap();
+}
+
 #[test]
 fn retains_a_live_recursive_initializer() {
     let (mut module, rec_init) = rec_init_module(true);

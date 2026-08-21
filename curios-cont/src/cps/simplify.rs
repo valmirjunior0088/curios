@@ -1,10 +1,12 @@
 use {
+    super::evaluate::evaluate,
     super::*,
-    super::{analysis::free_values, evaluate::evaluate},
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// Dissolve a `RecInit` knot into an ordinary `LetFun` once optimization has severed the function-to-value dependency. `RecInit` additionally binds its computed values so escaping closures may forward-reference them and emits a fallback shell for each escaping member that captures one; when no member still captures a computed value, that binding and those shells are unnecessary and the node is an ordinary recursive function group. The stronger "captures nothing computed" test (rather than merely "escapes nothing") also keeps every computed value in lexical scope after the rewrite.
+/// Dissolve a `RecInit` knot into an ordinary `LetFun` once optimization has severed the function-to-value dependency. `RecInit` additionally binds its computed values so escaping closures may forward-reference them and emits a fallback shell for each escaping member that captures one; when nothing below the node still needs that forward binding, both are unnecessary and the node is an ordinary recursive function group.
+///
+/// The test asks [`CpsModule::let_fun_requirements`] what the `LetFun` this becomes would still require from its enclosing scope, rather than restating when a computed value is reachable. Restating it is what went wrong before: the test covered the group's members, through a `free_values` that stops at a nested function, and never covered the body at all -- so a knot whose body held a function capturing a computed value dissolved into a module the verifier rejects.
 pub(super) fn dissolve_rec_init(module: &mut CpsModule) -> bool {
     let mut selected = None;
     for (id, node) in module.nodes.iter_live() {
@@ -18,13 +20,14 @@ pub(super) fn dissolve_rec_init(module: &mut CpsModule) -> bool {
             continue;
         };
         let computed: BTreeSet<CpsValueId> = values.iter().copied().collect();
-        let captures = functions
-            .iter()
-            .any(|function| !free_values(module, *function).is_disjoint(&computed));
-        if !captures {
-            selected = Some((id, functions.clone(), *body));
-            break;
+        if !module
+            .let_fun_requirements(functions, *body)
+            .is_disjoint(&computed)
+        {
+            continue;
         }
+        selected = Some((id, functions.clone(), *body));
+        break;
     }
     let Some((node, functions, body)) = selected else {
         return false;

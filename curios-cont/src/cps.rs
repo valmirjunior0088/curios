@@ -630,6 +630,122 @@ pub struct FieldGroup {
     pub width: usize,
 }
 
+/// A value a node binds, and which uniqueness rule the verifier applies to it.
+enum ScopeBinding {
+    /// Bound here and nowhere else; `noun` names it in the duplicate-binding message.
+    Once {
+        value: CpsValueId,
+        noun: &'static str,
+    },
+    /// Forward-declared by a `RecInit`, to be discharged by the continuation parameter that computes it.
+    Recursive(CpsValueId),
+    /// A continuation parameter, which is fresh unless it discharges a forward declaration.
+    Parameter(CpsValueId),
+}
+
+/// A pending region in a walk over lexical structure, carrying the scope that region sees.
+enum ScopeTask {
+    Function {
+        function: CpsFunId,
+        values: BTreeSet<CpsValueId>,
+        functions: BTreeSet<CpsFunId>,
+    },
+    Node {
+        /// The function the node belongs to. It names the region in a verification message and is needed for nothing else, so a walk that reports nothing has none.
+        owner: Option<CpsFunId>,
+        node: CpsNodeId,
+        values: BTreeSet<CpsValueId>,
+        functions: BTreeSet<CpsFunId>,
+        continuations: BTreeSet<CpsContId>,
+    },
+}
+
+/// What one region contributes to a lexical walk: the names it binds, and the regions below it.
+#[derive(Default)]
+struct ScopeStep {
+    values: Vec<ScopeBinding>,
+    functions: Vec<CpsFunId>,
+    tasks: Vec<ScopeTask>,
+}
+
+type NodeTask = (
+    Option<CpsFunId>,
+    CpsNodeId,
+    BTreeSet<CpsValueId>,
+    BTreeSet<CpsFunId>,
+    BTreeSet<CpsContId>,
+);
+
+/// The bookkeeping a lexical *verification* walk carries on top of the scope rules: which names have been bound, and which regions are still to visit.
+#[derive(Default)]
+struct ScopeVerifier {
+    bound_functions: BTreeSet<CpsFunId>,
+    bound_values: BTreeSet<CpsValueId>,
+    pending_recursive_values: BTreeSet<CpsValueId>,
+    function_work: Vec<(CpsFunId, BTreeSet<CpsValueId>, BTreeSet<CpsFunId>)>,
+    node_work: Vec<NodeTask>,
+}
+
+impl ScopeVerifier {
+    /// Record what `step` binds, rejecting a name bound twice, then queue the regions below it.
+    fn admit(&mut self, step: ScopeStep) -> Result<(), CpsVerifyError> {
+        for function in step.functions {
+            if !self.bound_functions.insert(function) {
+                return Err(CpsVerifyError(format!(
+                    "function {function} is bound more than once"
+                )));
+            }
+        }
+        for binding in step.values {
+            match binding {
+                ScopeBinding::Once { value, noun } => {
+                    if !self.bound_values.insert(value) {
+                        return Err(CpsVerifyError(format!(
+                            "{noun} {value} is bound more than once"
+                        )));
+                    }
+                }
+                ScopeBinding::Recursive(value) => {
+                    if !self.bound_values.insert(value) {
+                        return Err(CpsVerifyError(format!(
+                            "recursive value {value} is bound more than once"
+                        )));
+                    }
+                    self.pending_recursive_values.insert(value);
+                }
+                ScopeBinding::Parameter(value) => {
+                    if !self.bound_values.insert(value)
+                        && !self.pending_recursive_values.remove(&value)
+                    {
+                        return Err(CpsVerifyError(format!(
+                            "continuation parameter {value} is bound more than once"
+                        )));
+                    }
+                }
+            }
+        }
+        for task in step.tasks {
+            match task {
+                ScopeTask::Function {
+                    function,
+                    values,
+                    functions,
+                } => self.function_work.push((function, values, functions)),
+                ScopeTask::Node {
+                    owner,
+                    node,
+                    values,
+                    functions,
+                    continuations,
+                } => self
+                    .node_work
+                    .push((owner, node, values, functions, continuations)),
+            }
+        }
+        Ok(())
+    }
+}
+
 /// The production Cont representation. Arena slots never move or get reused; deletion writes `None` and deterministic compaction is explicit.
 #[derive(Debug, Clone, Default)]
 pub struct CpsModule {
@@ -1163,47 +1279,26 @@ impl CpsModule {
     }
 
     fn verify_lexical_scopes(&self, entry: CpsFunId) -> Result<(), CpsVerifyError> {
-        type NodeTask = (
-            CpsFunId,
-            CpsNodeId,
-            BTreeSet<CpsValueId>,
-            BTreeSet<CpsFunId>,
-            BTreeSet<CpsContId>,
-        );
-
-        let mut bound_functions = BTreeSet::from([entry]);
-        let mut bound_values = BTreeSet::new();
-        let mut pending_recursive_values = BTreeSet::new();
-        let mut function_work = vec![(entry, BTreeSet::new(), BTreeSet::from([entry]))];
-        let mut node_work = Vec::<NodeTask>::new();
+        let mut walk = ScopeVerifier {
+            bound_functions: BTreeSet::from([entry]),
+            function_work: vec![(entry, BTreeSet::new(), BTreeSet::from([entry]))],
+            ..ScopeVerifier::default()
+        };
         let mut visited_nodes = BTreeSet::new();
 
-        while !function_work.is_empty() || !node_work.is_empty() {
-            while let Some((function, mut values, functions)) = function_work.pop() {
-                let definition = self.function(function).unwrap();
-                for value in &definition.params {
-                    if !bound_values.insert(*value) {
-                        return Err(CpsVerifyError(format!(
-                            "function parameter {value} is bound more than once"
-                        )));
-                    }
-                    values.insert(*value);
-                }
-                node_work.push((
-                    function,
-                    definition.body,
-                    values,
-                    functions,
-                    BTreeSet::new(),
-                ));
+        while !walk.function_work.is_empty() || !walk.node_work.is_empty() {
+            while let Some((function, values, functions)) = walk.function_work.pop() {
+                walk.admit(self.function_scope(function, values, functions))?;
             }
 
-            let Some((owner, node_id, values, functions, continuations)) = node_work.pop() else {
+            let Some((owner, node_id, values, functions, continuations)) = walk.node_work.pop()
+            else {
                 continue;
             };
             if !visited_nodes.insert(node_id) {
                 continue;
             }
+            let owner = owner.expect("a verification task names the function it walks");
             let node = self.node(node_id).unwrap();
             for atom in atoms(node) {
                 match atom {
@@ -1237,128 +1332,245 @@ impl CpsModule {
                 }
             }
 
-            match node {
-                CpsNode::LetValue { result, next, .. }
-                | CpsNode::LetIntrinsic { result, next, .. } => {
-                    if !bound_values.insert(*result) {
-                        return Err(CpsVerifyError(format!(
-                            "node result {result} is bound more than once"
-                        )));
-                    }
-                    let mut inner = values;
-                    inner.insert(*result);
-                    node_work.push((owner, *next, inner, functions, continuations));
-                }
-                CpsNode::LetFun {
-                    functions: members,
-                    body,
-                } => {
-                    let mut inner = functions;
-                    for function in members {
-                        if !bound_functions.insert(*function) {
-                            return Err(CpsVerifyError(format!(
-                                "function {function} is bound more than once"
-                            )));
-                        }
-                        inner.insert(*function);
-                    }
-                    for function in members.iter().rev() {
-                        function_work.push((*function, values.clone(), inner.clone()));
-                    }
-                    node_work.push((owner, *body, values, inner, continuations));
-                }
-                CpsNode::RecInit {
-                    functions: members,
-                    values: recursive_values,
-                    body,
-                    ..
-                } => {
-                    let mut inner_functions = functions;
-                    for function in members {
-                        if !bound_functions.insert(*function) {
-                            return Err(CpsVerifyError(format!(
-                                "function {function} is bound more than once"
-                            )));
-                        }
-                        inner_functions.insert(*function);
-                    }
-                    let mut inner_values = values;
-                    for value in recursive_values {
-                        if !bound_values.insert(*value) {
-                            return Err(CpsVerifyError(format!(
-                                "recursive value {value} is bound more than once"
-                            )));
-                        }
-                        pending_recursive_values.insert(*value);
-                        inner_values.insert(*value);
-                    }
-                    for function in members.iter().rev() {
-                        function_work.push((
-                            *function,
-                            inner_values.clone(),
-                            inner_functions.clone(),
-                        ));
-                    }
-                    node_work.push((owner, *body, inner_values, inner_functions, continuations));
-                }
-                CpsNode::LetCont {
-                    continuations: members,
-                    body,
-                } => {
-                    let mut inner = continuations;
-                    inner.extend(members.iter().copied());
-                    for continuation in members.iter().rev() {
-                        let definition = self.continuation(*continuation).unwrap();
-                        let mut continuation_values = values.clone();
-                        for value in &definition.params {
-                            if !bound_values.insert(*value)
-                                && !pending_recursive_values.remove(value)
-                            {
-                                return Err(CpsVerifyError(format!(
-                                    "continuation parameter {value} is bound more than once"
-                                )));
-                            }
-                            continuation_values.insert(*value);
-                        }
-                        node_work.push((
-                            owner,
-                            definition.body,
-                            continuation_values,
-                            functions.clone(),
-                            inner.clone(),
-                        ));
-                    }
-                    node_work.push((owner, *body, values, functions, inner));
-                }
-                CpsNode::ApplyFun { .. }
-                | CpsNode::ApplyCont(_)
-                | CpsNode::Switch { .. }
-                | CpsNode::Foreign { .. }
-                | CpsNode::Cell { .. }
-                | CpsNode::Intrinsic { .. }
-                | CpsNode::Exit { .. }
-                | CpsNode::Unreachable => {}
-            }
+            walk.admit(self.scope_step(Some(owner), node, values, functions, continuations))?;
         }
 
         let live_functions = self.functions.live_ids().collect::<BTreeSet<_>>();
-        if live_functions != bound_functions {
+        if live_functions != walk.bound_functions {
             return Err(CpsVerifyError(
                 "function arena and lexical function bindings disagree".into(),
             ));
         }
         let live_values = self.values.live_ids().collect::<BTreeSet<_>>();
-        if live_values != bound_values {
+        if live_values != walk.bound_values {
             return Err(CpsVerifyError(
                 "value arena and lexical value bindings disagree".into(),
             ));
         }
-        if !pending_recursive_values.is_empty() {
+        if !walk.pending_recursive_values.is_empty() {
             return Err(CpsVerifyError(
                 "recursive initializer value lacks its computed binding".into(),
             ));
         }
         Ok(())
+    }
+
+    /// The scope a function's own body sees: its parameters join the values it inherits, and no continuation crosses the boundary.
+    fn function_scope(
+        &self,
+        function: CpsFunId,
+        mut values: BTreeSet<CpsValueId>,
+        functions: BTreeSet<CpsFunId>,
+    ) -> ScopeStep {
+        let definition = self.function(function).unwrap();
+        let mut step = ScopeStep::default();
+        for value in &definition.params {
+            step.values.push(ScopeBinding::Once {
+                value: *value,
+                noun: "function parameter",
+            });
+            values.insert(*value);
+        }
+        step.tasks.push(ScopeTask::Node {
+            owner: Some(function),
+            node: definition.body,
+            values,
+            functions,
+            continuations: BTreeSet::new(),
+        });
+        step
+    }
+
+    /// What `node` binds, and the regions below it with the scope each one sees.
+    ///
+    /// This is the single statement of the lexical scoping rules: [`Self::verify_lexical_scopes`] enforces them and [`Self::let_fun_requirements`] queries them. A pass deciding whether a binding may be removed therefore cannot disagree with the verifier that will judge the result -- which is how `dissolve_rec_init` came to drop a `RecInit`'s computed values while a function nested in its body still referenced them, having asked a narrower question of its own.
+    fn scope_step(
+        &self,
+        owner: Option<CpsFunId>,
+        node: &CpsNode,
+        values: BTreeSet<CpsValueId>,
+        functions: BTreeSet<CpsFunId>,
+        continuations: BTreeSet<CpsContId>,
+    ) -> ScopeStep {
+        let mut step = ScopeStep::default();
+        match node {
+            CpsNode::LetValue { result, next, .. } | CpsNode::LetIntrinsic { result, next, .. } => {
+                step.values.push(ScopeBinding::Once {
+                    value: *result,
+                    noun: "node result",
+                });
+                let mut inner = values;
+                inner.insert(*result);
+                step.tasks.push(ScopeTask::Node {
+                    owner,
+                    node: *next,
+                    values: inner,
+                    functions,
+                    continuations,
+                });
+            }
+            CpsNode::LetFun {
+                functions: members,
+                body,
+            } => {
+                let mut inner = functions;
+                for function in members {
+                    step.functions.push(*function);
+                    inner.insert(*function);
+                }
+                for function in members.iter().rev() {
+                    step.tasks.push(ScopeTask::Function {
+                        function: *function,
+                        values: values.clone(),
+                        functions: inner.clone(),
+                    });
+                }
+                step.tasks.push(ScopeTask::Node {
+                    owner,
+                    node: *body,
+                    values,
+                    functions: inner,
+                    continuations,
+                });
+            }
+            CpsNode::RecInit {
+                functions: members,
+                values: recursive_values,
+                body,
+                ..
+            } => {
+                let mut inner_functions = functions;
+                for function in members {
+                    step.functions.push(*function);
+                    inner_functions.insert(*function);
+                }
+                let mut inner_values = values;
+                for value in recursive_values {
+                    step.values.push(ScopeBinding::Recursive(*value));
+                    inner_values.insert(*value);
+                }
+                for function in members.iter().rev() {
+                    step.tasks.push(ScopeTask::Function {
+                        function: *function,
+                        values: inner_values.clone(),
+                        functions: inner_functions.clone(),
+                    });
+                }
+                step.tasks.push(ScopeTask::Node {
+                    owner,
+                    node: *body,
+                    values: inner_values,
+                    functions: inner_functions,
+                    continuations,
+                });
+            }
+            CpsNode::LetCont {
+                continuations: members,
+                body,
+            } => {
+                let mut inner = continuations;
+                inner.extend(members.iter().copied());
+                for continuation in members.iter().rev() {
+                    // Tolerate a tombstoned continuation, as `nodes_from` does and for the same reason: an inline sweep can leave a `LetCont` transiently naming an inlined-away continuation until its sweep-ending prune, and these rules are now read between passes as well as at verification. The verifier loses nothing by the tolerance, because `verify_node` rejects a missing `LetCont` member structurally before `verify_lexical_scopes` runs.
+                    let Some(definition) = self.continuation(*continuation) else {
+                        continue;
+                    };
+                    let mut continuation_values = values.clone();
+                    for value in &definition.params {
+                        step.values.push(ScopeBinding::Parameter(*value));
+                        continuation_values.insert(*value);
+                    }
+                    step.tasks.push(ScopeTask::Node {
+                        owner,
+                        node: definition.body,
+                        values: continuation_values,
+                        functions: functions.clone(),
+                        continuations: inner.clone(),
+                    });
+                }
+                step.tasks.push(ScopeTask::Node {
+                    owner,
+                    node: *body,
+                    values,
+                    functions,
+                    continuations: inner,
+                });
+            }
+            CpsNode::ApplyFun { .. }
+            | CpsNode::ApplyCont(_)
+            | CpsNode::Switch { .. }
+            | CpsNode::Foreign { .. }
+            | CpsNode::Cell { .. }
+            | CpsNode::Intrinsic { .. }
+            | CpsNode::Exit { .. }
+            | CpsNode::Unreachable => {}
+        }
+        step
+    }
+
+    /// The values a `LetFun { functions, body }` would reference without binding below -- what it requires from the scope enclosing it.
+    ///
+    /// Answered by walking [`Self::scope_step`], so a pass about to remove a binding asks whether the result will still verify rather than restating when a binding is still reachable. Two consequences follow from the rules rather than from a choice made here: the walk descends through nested functions and continuations, and a continuation parameter that rebinds a value covers the uses below it -- which is what lets a broken `RecInit` dissolve even though its computed value is still named at the ready point.
+    pub(crate) fn let_fun_requirements(
+        &self,
+        functions: &[CpsFunId],
+        body: CpsNodeId,
+    ) -> BTreeSet<CpsValueId> {
+        let mut required = BTreeSet::new();
+        let mut visited_nodes = BTreeSet::new();
+        let mut work = vec![ScopeTask::Node {
+            owner: None,
+            node: body,
+            values: BTreeSet::new(),
+            functions: BTreeSet::new(),
+            continuations: BTreeSet::new(),
+        }];
+        work.extend(functions.iter().map(|function| ScopeTask::Function {
+            function: *function,
+            values: BTreeSet::new(),
+            functions: BTreeSet::new(),
+        }));
+
+        while let Some(task) = work.pop() {
+            let step = match task {
+                ScopeTask::Function {
+                    function,
+                    values,
+                    functions,
+                } => self.function_scope(function, values, functions),
+                ScopeTask::Node {
+                    owner,
+                    node,
+                    values,
+                    functions,
+                    continuations,
+                } => {
+                    if !visited_nodes.insert(node) {
+                        continue;
+                    }
+                    let definition = self.node(node).unwrap();
+                    // A closure callee is a value the node reads, and it is the one such read that is not an operand atom.
+                    if let CpsNode::ApplyFun {
+                        callee: CpsCallee::Closure(value),
+                        ..
+                    } = definition
+                        && !values.contains(value)
+                    {
+                        required.insert(*value);
+                    }
+                    for atom in atoms(definition) {
+                        if let CpsAtom::Value(value) = atom
+                            && !values.contains(value)
+                        {
+                            required.insert(*value);
+                        }
+                    }
+                    self.scope_step(owner, definition, values, functions, continuations)
+                }
+            };
+            work.extend(step.tasks);
+        }
+        required
     }
 
     fn verify_function_body(
