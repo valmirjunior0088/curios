@@ -9,11 +9,11 @@ use {
         value::{Bail, Closure, Value},
     },
     crate::{
-        Atom, Constant, FunctionId, Module, Rhs, SequenceOp, Statement, StatementId,
+        Atom, Constant, FunctionId, Module, Rhs, SequenceOp, Statement, StatementId, ValueId,
         walk::control_blocks,
     },
     std::{
-        collections::{BTreeMap, BTreeSet},
+        collections::{BTreeMap, BTreeSet, HashMap},
         rc::Rc,
     },
 };
@@ -54,14 +54,15 @@ pub(super) fn reify_check(
             if closure.env.borrow().is_empty() && scope.is_item_bound(module, closure.function) {
                 return Ok(());
             }
+            // Captures first, then the copy, in `reify_closure`'s order. The real run pays a subset of these charges, so charging the same amounts *in the same sequence* is what makes "the probe fits" imply "the real run fits". The order is the real run's, not this one's: a memo key cannot be formed until the captures have atoms.
+            for (_, held) in closure.env.borrow().iter() {
+                reify_check(module, held, budget, scope)?;
+            }
             budget.bulk(
                 scope
                     .weigh(module, closure.function)
                     .ok_or(Bail::Unsupported)?,
             )?;
-            for (_, held) in closure.env.borrow().iter() {
-                reify_check(module, held, budget, scope)?;
-            }
             Ok(())
         }
         _ => Ok(()),
@@ -146,6 +147,8 @@ pub(super) fn reify(
 }
 
 /// Materialize a closure: reify each captured value to an atom (nesting captured closures), then deep-copy the closure's function with those atoms substituted for its free values, introduced by a `Functions` statement. A free value the captures do not cover is a top-level identity kept verbatim.
+///
+/// The copy is memoized on the substitution it would apply, because the substitution *is* the copy: two closures over one function with equal captures deep-copy to functions differing only in their fresh identities. A combinator grammar reaches the same specialization over and over — one folded TOML document materialized `Parse/fail(\"bare carriage return\")` 462 times, and 51.5% of that module's 8,818 emitted functions were exact twins — so the memo is the difference between copying a parser tree and naming it.
 fn reify_closure(
     module: &mut Module,
     closure: &Rc<Closure>,
@@ -162,21 +165,33 @@ fn reify_closure(
     if captures.is_empty() && scope.is_item_bound(module, closure.function) {
         return Ok(Atom::Function(closure.function));
     }
+    let mut substitution = BTreeMap::new();
+    for (value, held) in &captures {
+        substitution.insert(*value, reify(module, held, budget, out, scope)?);
+    }
+    let specialization = (
+        closure.function,
+        substitution
+            .iter()
+            .map(|(&value, &atom)| (value, atom))
+            .collect::<Vec<_>>(),
+    );
+    if let Some(materialized) = scope.reusable(&specialization) {
+        return Ok(materialized);
+    }
     budget.bulk(
         scope
             .weigh(module, closure.function)
             .ok_or(Bail::Unsupported)?,
     )?;
-    let mut substitution = BTreeMap::new();
-    for (value, held) in &captures {
-        substitution.insert(*value, reify(module, held, budget, out, scope)?);
-    }
     let function = deep_copy_function(module, closure.function, &substitution, None)
         .ok_or(Bail::Unsupported)?;
     out.push(module.add_statement(Statement::Functions {
         functions: vec![function],
     }));
-    Ok(Atom::Function(function))
+    let materialized = Atom::Function(function);
+    scope.record(specialization, materialized);
+    Ok(materialized)
 }
 
 /// Reify each value in order, collecting the atoms that name them.
@@ -195,13 +210,21 @@ pub(super) fn reify_all(
 }
 
 /// Whether every function the region rooted at `root` references outside itself is bound by a top-level item.
-/// What a reification pass may compute once and reuse for every replacement in it.
+/// One closure copy's identity: the source function and the captures already reduced to atoms. Equal keys deep-copy to functions that differ only in their fresh identities.
+type Specialization = (FunctionId, Vec<(ValueId, Atom)>);
+
+/// What a reification pass may compute once, and what only one replacement in it may reuse.
 ///
-/// Both facts are stable while a pass reifies -- it only appends, and the item list is rebuilt afterwards -- and both were previously recomputed per closure: the item-bound set walked every item, and the copy weight walked the whole region, each on the probe *and* again on the real run. On a combinator-heavy module that is thousands of full walks per round.
+/// The first three facts are stable while a pass reifies -- it only appends, and the item list is rebuilt afterwards -- and all three were previously recomputed per closure: the item-bound set walked every item, and the copy weight walked the whole region, each on the probe *and* again on the real run. On a combinator-heavy module that is thousands of full walks per round.
+///
+/// The two memos are the exception. Reifying a closure deep-copies its whole region, and the same specialization is reached along two independent axes: within one replacement, because a combinator names a sub-parser twice (`alt(a, a)`), and across replacements, because many definitions name one shared sub-parser. Measured on a generated grammar, the first axis costs `2^depth` copies without [`ReifyScope::local`] and one per level with it; the second costs five functions per referencing definition without [`ReifyScope::shared`]. Only the first is unconditionally safe to reuse, which is what [`ReifyScope::reusable`] arbitrates.
 pub(super) struct ReifyScope {
     item_bound: Option<BTreeSet<FunctionId>>,
     weights: BTreeMap<FunctionId, Option<usize>>,
     outward: BTreeMap<FunctionId, bool>,
+    local: HashMap<Specialization, Atom>,
+    shared: HashMap<Specialization, (Atom, usize)>,
+    position: Option<usize>,
 }
 
 impl ReifyScope {
@@ -211,7 +234,38 @@ impl ReifyScope {
             item_bound: None,
             weights: BTreeMap::new(),
             outward: BTreeMap::new(),
+            local: HashMap::new(),
+            shared: HashMap::new(),
+            position: None,
         }
+    }
+
+    /// Drop the previous replacement's copies before reifying the next one's value.
+    ///
+    /// The memo is scoped to one replacement because a copy is bound where it is spliced: the `Functions` statement goes immediately before *its* candidate, so the function it binds is in scope for that candidate and for nothing that does not follow it. Carrying an atom into the next replacement would name a function bound in a block that need not dominate it. The pass-stable facts above are untouched.
+    pub(super) fn begin_replacement(&mut self, position: Option<usize>) {
+        self.local.clear();
+        self.position = position;
+    }
+
+    /// The copy already materialized for this specialization, if one is in scope here.
+    ///
+    /// A copy made for *this* replacement is always in scope: it is spliced immediately before the candidate that is about to use it. A copy made for an earlier replacement is in scope only when both are item-level and this candidate is not earlier in the item list, because [`Module::verify`] binds an item's functions where the item stands rather than making them ambient — so a reuse from above would name a function bound below it.
+    fn reusable(&self, specialization: &Specialization) -> Option<Atom> {
+        if let Some(&atom) = self.local.get(specialization) {
+            return Some(atom);
+        }
+        // Not reusable from here when this candidate has no item position, or stands before the splice point.
+        let &(atom, defined) = self.shared.get(specialization)?;
+        (self.position? >= defined).then_some(atom)
+    }
+
+    /// Record a copy for reuse: within this replacement always, and module-wide when the candidate is item-level.
+    fn record(&mut self, specialization: Specialization, atom: Atom) {
+        if let Some(position) = self.position {
+            self.shared.insert(specialization.clone(), (atom, position));
+        }
+        self.local.insert(specialization, atom);
     }
 
     fn item_bound(&mut self, module: &Module) -> &BTreeSet<FunctionId> {

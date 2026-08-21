@@ -104,6 +104,13 @@ fn apply(module: &mut Module, planned: Vec<Planned>) -> bool {
     let mut reify_pool = PASS_REIFY_BUDGET;
     // Stable for the whole pass: reification only appends, and the item list is rebuilt after this loop.
     let mut scope = ReifyScope::new();
+    // Where each item stands, so a shared copy is reused only by a candidate its splice point precedes. Stable for the same reason.
+    let item_positions: BTreeMap<StatementId, usize> = module
+        .items()
+        .iter()
+        .enumerate()
+        .map(|(position, &statement)| (statement, position))
+        .collect();
 
     for plan in planned {
         if reify_pool == 0 {
@@ -124,6 +131,12 @@ fn apply(module: &mut Module, planned: Vec<Planned>) -> bool {
         }
         let mut spliced = Vec::new();
         let mut budget = ReifyBudget::within(reify_pool);
+        // The probe above shares nothing, so it charges at least what this run will; the memos only ever remove copies from under a gate that already fit without them.
+        // An item-level candidate may additionally reuse a copy spliced before an earlier item; one inside a block carries no position and shares only within itself.
+        scope.begin_replacement(match plan.owner {
+            Owner::Items => item_positions.get(&plan.statement).copied(),
+            Owner::Block(_) => None,
+        });
         let rhs = match plan.kind {
             Kind::Value(value) => {
                 match reify(module, &value, &mut budget, &mut spliced, &mut scope) {

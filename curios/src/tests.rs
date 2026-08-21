@@ -32,6 +32,7 @@ mod strings;
 mod structs;
 mod throw;
 mod toml;
+mod unfolding;
 mod universes;
 mod wasm_conformance;
 

@@ -157,6 +157,10 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] `struct.new` construction with immutable fields
   - [x] Direct `br` for single-target regions
 - [x] Binaryen closed-world post-optimization pass
+- [ ] Three measured cliffs where an ordinary spelling costs superlinearly, or refuses — one per compiler stage, each with the probe that reproduces it beside it in `curios`' `tests::unfolding`, and each independent of the other two. Read in stage order:
+  - [ ] [A case refinement is keyed at the cheap spelling first](roadmap/technical_debts/01-kernel-scrutinee-key-spec.md) — the kernel fully reduces a match scrutinee to key its case refinement, once per arm, where the elaborator keys on the cheap spelling and escalates only on a miss. Fourteen ordinary combinator definitions refuse on the reduction budget, and `recheck` is 94.1% of that compile against elaboration's 0.4%. The cure is the elaborator's own two-tier key, a strict superset by its own argument; it is a trusted-base edit and wants review before speed
+  - [ ] [A reified closure is bound once, not copied per use](roadmap/technical_debts/02-point-free-unfolding-spec.md) — a combinator application written inside a closure body is reified without sharing, so a grammar's copies grow as `n² + 2` where the same applications at item level cost `n + 2`. The cure is narrowed to let-insertion and is not built. Replaces a predecessor whose three load-bearing claims did not survive being re-measured, and records what they were
+  - [ ] [The fixpoint costs more than everything it optimizes](roadmap/technical_debts/03-cont-fixpoint-cost-spec.md) — `curios_cont::optimize` is 97.6% of an ordinary `Toml/decode` compile and super-quadratic in module size, on code that reaches for none of the above. Deliberately thinner than its siblings: the cause is unlocated because `curios-cont` carries two spans for twenty-two passes, so the first work item is instrumentation rather than a fix
 
 ## IO
 
