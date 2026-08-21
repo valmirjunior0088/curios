@@ -8,7 +8,7 @@ Deliberately unrefined, and thinner than its siblings on purpose: the cost is me
 
 `curios_cont::optimize` is **97.6% of an ordinary `Toml/decode` compile** — 4 719 ms of 4 836 ms — on a program with no unusual spelling anywhere in it. Every other stage is noise beside it: elaboration 6 ms, the kernel 8 ms, erasure 9 ms, the lowering into Cont 8 ms, wasm emission 39 ms, and the whole erased-arena optimizer 44 ms.
 
-That share is not a symptom of anything else. [A reified closure is bound once, not copied per use](02-point-free-unfolding-spec.md) describes a spelling that hands this pass a larger module, and this pass is what converts that into fifteen minutes — but the 97.6% above is measured with none of that in play. Whatever a user writes, almost all of the compiler's time is here.
+That share is not a symptom of anything else. A point-free spelling used to hand this pass four times the module — a grammar's reified copies grew quadratically until a replacement's residual group was bound at item level — and this pass is what converted that into fifteen minutes. That spelling is fixed and the 97.6% above was always measured with none of it in play. Whatever a user writes, almost all of the compiler's time is here.
 
 ## Known for certain
 
@@ -36,7 +36,7 @@ Unknown, and deliberately so. Three hypotheses the measurements are consistent w
 
 ## Deliberately not specified
 
-Whether the answer is incrementality, a worklist over changed nodes instead of whole-module rounds, a pass ordering that converges faster, or a lower round limit with a measured loss. Whether `into_wasm`'s own cost — 39 ms against the fixpoint's 4 719 ms on the same program — stays negligible at every size. And whether any of this is worth doing before [the point-free spelling stops handing it four times the module](02-point-free-unfolding-spec.md), which is a cheaper lever on the same product.
+Whether the answer is incrementality, a worklist over changed nodes instead of whole-module rounds, a pass ordering that converges faster, or a lower round limit with a measured loss. Whether `into_wasm`'s own cost — 39 ms against the fixpoint's 4 719 ms on the same program — stays negligible at every size. The cheaper lever on the same product has since been pulled — the point-free spelling no longer hands this pass four times the module, which took one grammar's compile from 22.2 s to 1.0 s without touching this pass at all — so what remains here is this pass's own cost and nothing else's.
 
 ## How to take the figures
 

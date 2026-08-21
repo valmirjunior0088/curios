@@ -1,6 +1,6 @@
 //! What a combinator web costs to compile, and where.
 //!
-//! Three measurements, for the specifications that lean on them: `documentation/roadmap/technical_debts/02-point-free-unfolding-spec.md` for how a reified closure is shared, `documentation/roadmap/technical_debts/04-index-inversion-conversion-cost-spec.md` for what an index inversion reduces, and `documentation/roadmap/technical_debts/05-kernel-retention-accounting-spec.md` for what filling the retention allowance costs. A fourth specification, on how a case refinement is keyed, is closed — what is left of it here is the before-and-after in the two scrutinee probes. All three are here rather than in prose because those specifications were preceded by a document whose figures were taken by a throwaway script, and none of that document's three load-bearing claims survived being re-measured.
+//! Three measurements, for the specifications that lean on them: `documentation/roadmap/technical_debts/04-index-inversion-conversion-cost-spec.md` for what an index inversion reduces, and `documentation/roadmap/technical_debts/05-kernel-retention-accounting-spec.md` for what filling the retention allowance costs. Two more specifications are closed — how a case refinement is keyed, and how a reified closure is shared — and what is left of them here is the before-and-after each probe carries. All three measurements are here rather than in prose because those specifications were preceded by a document whose figures were taken by a throwaway script, and none of that document's three load-bearing claims survived being re-measured.
 //!
 //! None asserts. A measurement that fails is a measurement with an opinion, and what these report is a cost, not a contract — see `curios-prelude-archive`'s `stored_prelude_measurements`, whose shape this follows.
 
@@ -302,7 +302,18 @@ fn compile_only(source: &str) -> (Result<(), String>, f64) {
 /// make curios/profile CURIOS_PROFILE_SOURCE=<file>
 /// ```
 ///
-/// Same date and host. `curios_cont::optimize` is **21 998 ms of a 22 193 ms** compile as written — 99.1%, allocating 15.2 GB across 223.8 M allocations — against **602 ms of 737 ms** hoisted, at 458 MB and 6.5 M. `evaluate_closed_terms`, which is the pass this specification is about, is **19 ms** and runs four rounds rather than the eight the driver allows. For calibration, a plain `Toml/decode` program with no point-free code in it spends **4 719 ms of 4 836 ms** in the same pass.
+/// Same date and host, with the group bound at item level:
+///
+/// | | as written | hoisted |
+/// | --- | --- | --- |
+/// | `compile_entrypoint` | 1 043 ms | 1 027 ms |
+/// | `cont_optimize` | 891 ms | 874 ms |
+/// | `cont_optimize` allocations | 7 889 915 | 7 889 915 |
+/// | `evaluate_closed_terms` | 12 ms | 12 ms |
+///
+/// **The allocation counts are identical**, which says more than the wall clocks: the two spellings now hand the fixpoint the same module, so what it does with them cannot differ. As written, `curios_cont::optimize` was **21 998 ms of a 22 193 ms** compile — 99.1%, at 15.2 GB and 223.8 M allocations — against **602 ms of 737 ms** hoisted. It is 891 ms and 7.9 M allocations now: 25× less time and 28× fewer allocations, all of it from handing that pass a module a quarter the size.
+///
+/// `evaluate_closed_terms`, the pass this measurement is about, was 19 ms and is 12 ms; it never was the cost. What it *produces* was, because the fixpoint below it (`documentation/roadmap/technical_debts/03-cont-fixpoint-cost-spec.md`) is super-quadratic in module size — still 97.6% of an ordinary `Toml/decode` compile, with no point-free code in it anywhere.
 ///
 #[test]
 #[ignore = "measurement: reports what a spelling costs rather than asserting"]
