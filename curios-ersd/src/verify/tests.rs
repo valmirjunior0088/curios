@@ -51,6 +51,7 @@ fn a_self_referential_lazy_value_verifies() {
     let schema = builder.product(ProductSchema {
         debug_name: Some("Lazy".into()),
         fields: vec![Field::opaque(Some("force".into()))],
+        shared: false,
     });
 
     // rec { lazy = Lazy { force: fn() = lazy } }
@@ -366,6 +367,7 @@ fn a_projection_out_of_range_is_rejected() {
     let schema = builder.product(ProductSchema {
         debug_name: None,
         fields: vec![Field::opaque(None), Field::opaque(None)],
+        shared: false,
     });
     builder.open_block();
     let zero = nat_atom(&mut builder, 0);

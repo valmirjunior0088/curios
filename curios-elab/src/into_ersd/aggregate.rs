@@ -44,10 +44,13 @@ impl Lowering {
             .struct_decl(name)
             .cloned()
             .expect("erase: a registered struct");
+        self.in_flight.insert(name.clone());
         let entries = context.with_frame(|context| {
             let params = open_opaque(context, struct_decl.arity.clone());
-            constructor_entries(context, struct_decl.fields_at(&params))
-        })?;
+            constructor_entries(self, context, struct_decl.fields_at(&params))
+        });
+        self.in_flight.remove(name);
+        let entries = entries?;
         let mask: Vec<bool> = entries.iter().map(|(_, erased, _)| *erased).collect();
         let relevant: Vec<curios_ersd::Field> = entries
             .into_iter()
@@ -62,6 +65,7 @@ impl Lowering {
             self.builder.product(curios_ersd::ProductSchema {
                 debug_name: Some(name.to_string()),
                 fields: relevant,
+                shared: false,
             })
         });
         let row = ProductRow { schema, mask };
@@ -83,6 +87,8 @@ impl Lowering {
             .cloned()
             .expect("erase: a registered inductive");
         let family = self.builder.family(Some(name.to_string()));
+        // Registered before the constructor walk, not after: classifying a field of this very inductive is the ordinary case, not an edge one.
+        self.pending_families.insert(name.clone(), family);
         // A `Prop`-sorted family is proof-irrelevant, so erasure drops its inhabitants wholesale — payloads included. Classifying each payload on its own type would keep a `Type`-sorted one (`Eq`'s `refl(@z : A)` has an abstract `A`, which is neither prop nor universe), leaving a live field inside an erased proof: rebuilding the constructor would then compute that field from binders the same erasure had dropped. `Prop` structures already guarantee this by declaration — their fields must be non-informative — so this aligns inductives with them.
         let proof_family = matches!(
             &*reduce_with(context, &induct_decl.result_sort)?,
@@ -95,7 +101,7 @@ impl Lowering {
                 let telescope = induct_decl
                     .instantiate(tag, &params)
                     .expect("erase: constructor instantiates at its inductive's parameters");
-                constructor_entries(context, telescope)
+                constructor_entries(self, context, telescope)
             })?;
             let entries: Vec<(Option<String>, bool, curios_ersd::FieldShape)> = entries
                 .into_iter()
@@ -123,6 +129,26 @@ impl Lowering {
         Ok(row)
     }
 
+    /// Whether `name`'s structure row is being registered right now — see [`Lowering::in_flight`].
+    pub(super) fn in_flight(&self, name: &curios_core::Global) -> bool {
+        self.in_flight.contains(name)
+    }
+
+    /// The family identity of a registered inductive, minting its row if this is the first reference.
+    pub(super) fn family_identity(
+        &mut self,
+        context: &mut Context,
+        name: &curios_core::Global,
+    ) -> Result<curios_ersd::FamilyId, Error> {
+        if let Some(row) = self.environment.induct_row(name) {
+            return Ok(row.family);
+        }
+        if let Some(&family) = self.pending_families.get(name) {
+            return Ok(family);
+        }
+        Ok(self.induct_row(context, name)?.family)
+    }
+
     /// The interned anonymous product schema of the given relevant width.
     fn tuple_schema(&mut self, width: usize) -> curios_ersd::ProductId {
         if let Some(schema) = self.environment.tuple_schema(width) {
@@ -132,6 +158,7 @@ impl Lowering {
         let schema = self.builder.product(curios_ersd::ProductSchema {
             debug_name: None,
             fields: vec![curios_ersd::Field::opaque(None); width],
+            shared: true,
         });
         self.environment.register_tuple_schema(width, schema);
         schema

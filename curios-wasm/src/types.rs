@@ -165,7 +165,7 @@ impl SubType {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct RecType {
+pub struct RecType {
     pub sub_types: Vec<(TypeName, SubType)>,
 }
 

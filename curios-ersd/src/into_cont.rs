@@ -16,8 +16,8 @@ use {
     super::{
         Analysis, Atom, Block, BlockId, CellOperation, Constant, ConstantId, ConstructorId,
         FamilyId, FieldShape, FoldNatStep, FoldSequenceStep, Function, FunctionId, Intrinsic,
-        Module, Operation, RecGroup, RecGroupId, Rhs, SequenceGrain, SequenceOp, Sign, Statement,
-        StatementId, Terminator, UnconsSequenceStep, ValueId, VariantArm,
+        Module, Operation, ProductId, RecGroup, RecGroupId, Rhs, SequenceGrain, SequenceOp, Sign,
+        Statement, StatementId, Terminator, UnconsSequenceStep, ValueId, VariantArm,
     },
     curios_abi::ForeignFunction,
     curios_num::Natural,
@@ -40,6 +40,9 @@ pub fn lower_to_cont(source: &Module) -> curios_cont::CpsModule {
         functions: BTreeMap::new(),
         knot_cells: BTreeMap::new(),
         families: BTreeMap::new(),
+        products: BTreeMap::new(),
+        family_ids: BTreeMap::new(),
+        product_ids: BTreeMap::new(),
     };
 
     let main = lowerer.module.reserve_function();
@@ -91,30 +94,93 @@ struct Lowerer<'a> {
     knot_cells: BTreeMap<ValueId, curios_cont::CpsValueId>,
     /// The Cont layout of each tagged family, computed on first use. Only the tagged encodings register one: a collapsed family builds a bare value or a structural tuple, and an immediate family's bare constructor is a scalar, so neither has a family heap type to key.
     families: BTreeMap<FamilyId, RowLayout>,
+    /// The Cont layout of each product schema, computed on first use.
+    products: BTreeMap<ProductId, RowLayout>,
+    /// The Cont identity of each row, claimed *before* its layout is computed. A row's slots may name other rows and a self-referential declaration names its own, so identity has to be answerable while the layout that would answer it is still being built.
+    family_ids: BTreeMap<FamilyId, curios_cont::CpsRowId>,
+    product_ids: BTreeMap<ProductId, curios_cont::CpsRowId>,
 }
 
-/// Where one erased family's constructors live in its Cont heap type: the family's identity, the arity every construction of it carries, and the slot each constructor's relevant fields occupy.
+/// Where one erased row's writers live in its Cont heap type: the arity every construction of it carries, and the slot each writer's relevant fields occupy. The identity is not here — it is claimed before the layout exists, so it lives in the map that hands it out.
+///
+/// A variant family has one writer per constructor, indexed by the constructor's position — which is its tag. A product schema has exactly one, at index zero.
 #[derive(Debug, Clone)]
 struct RowLayout {
-    id: curios_cont::CpsRowId,
     width: usize,
-    fields: BTreeMap<ConstructorId, Vec<usize>>,
+    places: Vec<Vec<usize>>,
 }
 
-/// The slot carrier a recorded field shape names.
+/// Lay out one nominal row: a tag slot where the row carries one, then a slot range per carrier sized to the widest writer's count of it, and the slot each writer's fields land in.
 ///
-/// Three shapes answer [`curios_cont::CpsSlot::Opaque`] on purpose. A packed carrier is *sometimes* an immediate, so no single heap type covers its population. A family-typed field would need the field's family identity, which erasure does not record. A closure's runtime arity is read off its declared type, and the passes between here and emission may raise it, so the recorded arity is not yet something a declared field type may promise.
-fn slot_of(shape: FieldShape) -> curios_cont::CpsSlot {
-    match shape {
-        FieldShape::Immediate(Sign::Unsigned) => curios_cont::CpsSlot::Nat,
-        FieldShape::Immediate(Sign::Signed) => curios_cont::CpsSlot::Int,
-        FieldShape::Flt => curios_cont::CpsSlot::Flt,
-        FieldShape::List => curios_cont::CpsSlot::List,
-        FieldShape::Product(width) => curios_cont::CpsSlot::Product(width),
-        FieldShape::Packed(_)
-        | FieldShape::Closure(_)
-        | FieldShape::Family
-        | FieldShape::Opaque => curios_cont::CpsSlot::Opaque,
+/// Grouping by carrier rather than by field position is what lets every slot name a carrier without the row widening: two writers agreeing on a carrier share its slots, so only a disagreement costs width. A row with a single writer — a product schema, a collapsed family — has no disagreement to pay for, and the grouping degenerates to a permutation of its fields.
+fn lay_out(
+    tagged: bool,
+    writers: &[Vec<curios_cont::CpsSlot>],
+) -> (Vec<curios_cont::CpsSlot>, Vec<Vec<usize>>) {
+    let mut widths = BTreeMap::<curios_cont::CpsSlot, usize>::new();
+    for carriers in writers {
+        let mut here = BTreeMap::<curios_cont::CpsSlot, usize>::new();
+        for &carrier in carriers {
+            *here.entry(carrier).or_default() += 1;
+        }
+        for (carrier, count) in here {
+            let width = widths.entry(carrier).or_default();
+            *width = (*width).max(count);
+        }
+    }
+
+    let mut slots = match tagged {
+        true => vec![curios_cont::CpsSlot::Tag],
+        false => Vec::new(),
+    };
+    let mut starts = BTreeMap::<curios_cont::CpsSlot, usize>::new();
+    for (&carrier, &count) in &widths {
+        starts.insert(carrier, slots.len());
+        slots.extend(std::iter::repeat_n(carrier, count));
+    }
+
+    let places = writers
+        .iter()
+        .map(|carriers| {
+            let mut taken = BTreeMap::<curios_cont::CpsSlot, usize>::new();
+            carriers
+                .iter()
+                .map(|carrier| {
+                    let offset = taken.entry(*carrier).or_default();
+                    let place = starts[carrier] + *offset;
+                    *offset += 1;
+                    place
+                })
+                .collect()
+        })
+        .collect();
+
+    (slots, places)
+}
+
+/// The slot carrier a recorded field shape names, resolving a nominal shape to the Cont row that holds it.
+///
+/// Two shapes answer [`curios_cont::CpsSlot::Opaque`] on purpose. A packed carrier is *sometimes* an immediate, so no single heap type covers its population. A closure's runtime arity is read off its declared type, and the passes between here and emission may raise it, so the recorded arity is not yet something a declared field type may promise.
+///
+/// A *tagged* family also stays opaque, and for a reason the other two do not share: it would type. Its slots are grouped by carrier, so a family-typed slot cannot share the uniform range, and `/std/Map/Node` — the corpus's hottest allocated row — grows from four slots to six to make its two children concrete. That is a trade of live bytes for casts which are already exact compares, and it is owed a measurement rather than an assumption. A *collapsed* family has one writer and therefore no such trade, so it is typed here with the products.
+impl Lowerer<'_> {
+    fn slot_of(&mut self, shape: FieldShape) -> curios_cont::CpsSlot {
+        match shape {
+            FieldShape::Immediate(Sign::Unsigned) => curios_cont::CpsSlot::Nat,
+            FieldShape::Immediate(Sign::Signed) => curios_cont::CpsSlot::Int,
+            FieldShape::Flt => curios_cont::CpsSlot::Flt,
+            FieldShape::List => curios_cont::CpsSlot::List,
+            FieldShape::Product(schema) => curios_cont::CpsSlot::Row(self.product_identity(schema)),
+            FieldShape::Family(family) => match self.family_encoding(family) {
+                FamilyEncoding::Collapsed => curios_cont::CpsSlot::Row(self.row_identity(family)),
+                FamilyEncoding::Tagged | FamilyEncoding::Immediate { .. } => {
+                    curios_cont::CpsSlot::Opaque
+                }
+            },
+            FieldShape::Packed(_) | FieldShape::Closure(_) | FieldShape::Opaque => {
+                curios_cont::CpsSlot::Opaque
+            }
+        }
     }
 }
 
@@ -711,16 +777,32 @@ impl Lowerer<'_> {
                 })
             }
             Rhs::Product { schema, fields } => {
-                let mut atoms: Vec<_> = fields.iter().map(|&atom| self.lower_atom(atom)).collect();
-                let marked: Vec<bool> = (0..fields.len())
-                    .map(|field| self.facts.indexed_only_product(*schema, field))
-                    .collect();
+                // A shared row stays a structural tuple: it is the row a multi-result split also builds, and that site names no schema to agree with.
+                let places = match self.is_shared(*schema) {
+                    true => (0..fields.len()).collect(),
+                    false => self.product_slots(*schema),
+                };
+                let width = match self.is_shared(*schema) {
+                    true => fields.len(),
+                    false => self.product_layout(*schema).width,
+                };
+                // One writer, so every slot is filled and no filler is ever placed.
+                let mut atoms = vec![curios_cont::CpsAtom::Filler; width];
+                let mut marked = vec![false; width];
+                for (field, &atom) in fields.iter().enumerate() {
+                    atoms[places[field]] = self.lower_atom(atom);
+                    marked[places[field]] = self.facts.indexed_only_product(*schema, field);
+                }
                 let settles = self.settle_stores(&marked, &mut atoms);
+                let value = match self.is_shared(*schema) {
+                    true => curios_cont::CpsValueExpr::Tuple(atoms),
+                    false => curios_cont::CpsValueExpr::Row(self.product_identity(*schema), atoms),
+                };
                 let bound = self.bind_value(result);
                 let next = self.lower_statements(rest, terminator, target);
                 let node = self.module.add_node(curios_cont::CpsNode::LetValue {
                     result: bound,
-                    value: curios_cont::CpsValueExpr::Tuple(atoms),
+                    value,
                     next,
                 });
                 self.wrap_settles(settles, node)
@@ -752,18 +834,25 @@ impl Lowerer<'_> {
                         self.lower_statements(rest, terminator, target)
                     }
                 }
+                // Its own nominal row, with no tag: nothing needs discriminating, so it encodes exactly as the struct with the same relevant row does — which is what keeps that equivalence true now that a struct's row is keyed by its schema rather than by its arity.
                 FamilyEncoding::Collapsed => {
-                    let mut atoms: Vec<_> =
-                        fields.iter().map(|&atom| self.lower_atom(atom)).collect();
-                    let marked: Vec<bool> = (0..fields.len())
-                        .map(|field| self.facts.indexed_only_constructor(*constructor, field))
-                        .collect();
+                    let owner = self.constructor_family(*constructor);
+                    let row = self.row_identity(owner);
+                    let places = self.constructor_slots(*constructor);
+                    let width = self.row_width(owner);
+                    let mut atoms = vec![curios_cont::CpsAtom::Filler; width];
+                    let mut marked = vec![false; width];
+                    for (field, &atom) in fields.iter().enumerate() {
+                        atoms[places[field]] = self.lower_atom(atom);
+                        marked[places[field]] =
+                            self.facts.indexed_only_constructor(*constructor, field);
+                    }
                     let settles = self.settle_stores(&marked, &mut atoms);
                     let bound = self.bind_value(result);
                     let next = self.lower_statements(rest, terminator, target);
                     let node = self.module.add_node(curios_cont::CpsNode::LetValue {
                         result: bound,
-                        value: curios_cont::CpsValueExpr::Tuple(atoms),
+                        value: curios_cont::CpsValueExpr::Row(row, atoms),
                         next,
                     });
                     self.wrap_settles(settles, node)
@@ -801,16 +890,22 @@ impl Lowerer<'_> {
                 }
             },
             Rhs::Project {
-                schema: _,
+                schema,
                 product,
                 field,
             } => {
+                let op = match self.is_shared(*schema) {
+                    true => curios_cont::CpsIntrinsic::TupleGet(*field as usize),
+                    false => curios_cont::CpsIntrinsic::RowGet(
+                        self.product_identity(*schema),
+                        self.product_slots(*schema)[*field as usize],
+                    ),
+                };
                 let product = self.lower_atom(*product);
-                let index = *field as usize;
                 self.straight(result, rest, terminator, target, move |bound, next| {
                     curios_cont::CpsNode::LetIntrinsic {
                         result: bound,
-                        op: curios_cont::CpsIntrinsic::TupleGet(index),
+                        op,
                         args: vec![product],
                         next,
                     }
@@ -1321,11 +1416,13 @@ impl Lowerer<'_> {
             .iter()
             .map(|&binder| self.bind_value(binder))
             .collect();
+        let row = self.row_identity(self.constructor_family(arm.constructor));
+        let places = self.constructor_slots(arm.constructor);
         let mut body = self.lower_block(arm.block, join);
         for index in (0..bindings.len()).rev() {
             body = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
                 result: bindings[index],
-                op: curios_cont::CpsIntrinsic::TupleGet(index),
+                op: curios_cont::CpsIntrinsic::RowGet(row, places[index]),
                 args: vec![scrutinee.clone()],
                 next: body,
             });
@@ -1979,88 +2076,98 @@ impl Lowerer<'_> {
     ///
     /// A [`FamilyEncoding::Immediate`] family's bare constructor writes no slot — its value *is* its payload — so it contributes nothing to the widths.
     fn row_layout(&mut self, family: FamilyId) -> &RowLayout {
-        if !self.families.contains_key(&family) {
-            let layout = self.compute_row_layout(family);
-            self.families.insert(family, layout);
-        }
+        self.row_identity(family);
         &self.families[&family]
     }
 
-    fn compute_row_layout(&mut self, family: FamilyId) -> RowLayout {
+    fn compute_row_layout(&mut self, family: FamilyId, id: curios_cont::CpsRowId) -> RowLayout {
         let definition = self.source.family(family).expect("live family");
         let debug_name = definition.debug_name.clone();
-        let bare = match self.family_encoding(family) {
+        let encoding = self.family_encoding(family);
+        // A collapsed family discriminates nothing, so it mints no tag and encodes exactly as the struct with the same relevant row does. An immediate family's bare constructor writes no slot at all — its value *is* its payload — so it contributes nothing to the widths.
+        let tagged = !matches!(encoding, FamilyEncoding::Collapsed);
+        let bare = match encoding {
             FamilyEncoding::Immediate { constructor } => Some(constructor),
             FamilyEncoding::Collapsed | FamilyEncoding::Tagged => None,
         };
-        let rows: Vec<(ConstructorId, Vec<curios_cont::CpsSlot>)> = self
+        let writers: Vec<Vec<curios_cont::CpsSlot>> = self
             .source
             .family(family)
             .expect("live family")
             .constructors
             .iter()
-            .map(|&constructor| {
-                let carriers = match Some(constructor) == bare {
-                    true => Vec::new(),
-                    false => self
-                        .source
-                        .constructor(constructor)
-                        .expect("live constructor")
-                        .fields
-                        .iter()
-                        .map(|field| slot_of(field.shape))
-                        .collect(),
-                };
-                (constructor, carriers)
-            })
-            .collect();
-
-        let mut widths = BTreeMap::<curios_cont::CpsSlot, usize>::new();
-        for (_, carriers) in &rows {
-            let mut here = BTreeMap::<curios_cont::CpsSlot, usize>::new();
-            for &carrier in carriers {
-                *here.entry(carrier).or_default() += 1;
-            }
-            for (carrier, count) in here {
-                let width = widths.entry(carrier).or_default();
-                *width = (*width).max(count);
-            }
-        }
-
-        let mut slots = vec![curios_cont::CpsSlot::Tag];
-        let mut starts = BTreeMap::<curios_cont::CpsSlot, usize>::new();
-        for (&carrier, &count) in &widths {
-            starts.insert(carrier, slots.len());
-            slots.extend(std::iter::repeat_n(carrier, count));
-        }
-
-        let fields = rows
-            .iter()
-            .map(|(constructor, carriers)| {
-                let mut taken = BTreeMap::<curios_cont::CpsSlot, usize>::new();
-                let places = carriers
+            .map(|&constructor| match Some(constructor) == bare {
+                true => Vec::new(),
+                false => self
+                    .source
+                    .constructor(constructor)
+                    .expect("live constructor")
+                    .fields
                     .iter()
-                    .map(|carrier| {
-                        let offset = taken.entry(*carrier).or_default();
-                        let place = starts[carrier] + *offset;
-                        *offset += 1;
-                        place
-                    })
-                    .collect();
-                (*constructor, places)
+                    .map(|field| self.slot_of(field.shape))
+                    .collect(),
             })
             .collect();
 
+        let (slots, places) = lay_out(tagged, &writers);
         let width = slots.len();
-        let id = self
-            .module
-            .add_row(curios_cont::CpsRow { debug_name, slots });
-        RowLayout { id, width, fields }
+        self.module
+            .define_row(id, curios_cont::CpsRow { debug_name, slots });
+        RowLayout { width, places }
     }
 
-    /// The Cont identity of `family`.
+    /// The Cont layout of a product schema, computed on first use. One writer, so every slot is written and none is ever a filler.
+    fn product_layout(&mut self, schema: ProductId) -> &RowLayout {
+        self.product_identity(schema);
+        &self.products[&schema]
+    }
+
+    /// Whether every row of this width shares `schema` — see [`ProductSchema::shared`](curios_ersd::ProductSchema::shared).
+    fn is_shared(&self, schema: ProductId) -> bool {
+        self.source.product(schema).expect("live product").shared
+    }
+
+    /// The Cont identity of a product schema, laying its row out on first use. See [`Lowerer::row_identity`] for why the reservation comes first.
+    fn product_identity(&mut self, schema: ProductId) -> curios_cont::CpsRowId {
+        if let Some(&id) = self.product_ids.get(&schema) {
+            return id;
+        }
+        let id = self.module.reserve_row();
+        self.product_ids.insert(schema, id);
+        {
+            let definition = self.source.product(schema).expect("live product");
+            let debug_name = definition.debug_name.clone();
+            let writer: Vec<curios_cont::CpsSlot> = definition
+                .fields
+                .iter()
+                .map(|field| self.slot_of(field.shape))
+                .collect();
+            let (slots, places) = lay_out(false, std::slice::from_ref(&writer));
+            let width = slots.len();
+            self.module
+                .define_row(id, curios_cont::CpsRow { debug_name, slots });
+            self.products.insert(schema, RowLayout { width, places });
+        }
+        id
+    }
+
+    /// The slot each of a product schema's relevant fields occupies.
+    fn product_slots(&mut self, schema: ProductId) -> Vec<usize> {
+        self.product_layout(schema).places[0].clone()
+    }
+
+    /// The Cont identity of `family`, laying its row out on first use.
+    ///
+    /// The identity is registered *before* the layout is computed, which is what lets a row whose slots name itself terminate: the recursive call finds the reservation and returns. Reserving and defining are one operation so that no identity can be handed out for a row nothing ever declares.
     fn row_identity(&mut self, family: FamilyId) -> curios_cont::CpsRowId {
-        self.row_layout(family).id
+        if let Some(&id) = self.family_ids.get(&family) {
+            return id;
+        }
+        let id = self.module.reserve_row();
+        self.family_ids.insert(family, id);
+        let layout = self.compute_row_layout(family, id);
+        self.families.insert(family, layout);
+        id
     }
 
     /// The arity every construction of `family` is padded to.
@@ -2071,7 +2178,8 @@ impl Lowerer<'_> {
     /// The slot each of `constructor`'s relevant fields occupies in its family's heap type.
     fn constructor_slots(&mut self, constructor: ConstructorId) -> Vec<usize> {
         let family = self.constructor_family(constructor);
-        self.row_layout(family).fields[&constructor].clone()
+        let tag = self.constructor_tag(constructor) as usize;
+        self.row_layout(family).places[tag].clone()
     }
 
     fn constructor_family(&self, constructor: ConstructorId) -> FamilyId {

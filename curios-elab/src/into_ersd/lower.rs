@@ -10,10 +10,13 @@ use {
     },
     crate::{validate_bound_universes, validate_universes},
     curios_core::{
-        ConceptDecl, Definition, Free, InductParam, Item, Module, StructDecl,
+        ConceptDecl, Definition, Free, Global, InductParam, Item, Module, StructDecl,
         project_erased_universes, wire_term,
     },
-    std::{collections::BTreeSet, sync::Arc},
+    std::{
+        collections::{BTreeMap, BTreeSet},
+        sync::Arc,
+    },
 };
 
 /// What one expression erased to. See the module documentation.
@@ -32,6 +35,10 @@ pub(super) struct Lowering {
     pub(super) dangled: BTreeSet<Free>,
     /// The definition each emitted function descends from, innermost last, paired with how many anonymous ones have been minted under it. See [`Lowering::derived_hint`].
     owners: Vec<(String, usize)>,
+    /// The family identity of each inductive whose row is being registered right now. An inductive is legitimately recursive, so classifying its fields reaches itself; the identity is minted before that walk begins, so the recursive lookup answers from here rather than re-entering the registration.
+    pub(super) pending_families: BTreeMap<Global, curios_ersd::FamilyId>,
+    /// The structures whose row is being registered right now. A self-referential structure is uninhabited but elaborates, and unlike an inductive its schema is only decided *after* its fields are classified — so the cycle is cut by declining to name a schema rather than by naming one early.
+    pub(super) in_flight: BTreeSet<Global>,
 }
 
 pub(super) struct UniverseErased<T>(T);
@@ -548,6 +555,8 @@ pub fn erase_unit(
             environment: prefix.environment,
             dangled: Default::default(),
             owners: Default::default(),
+            pending_families: Default::default(),
+            in_flight: Default::default(),
         };
         lowering.erase_items(context, &module)?;
 

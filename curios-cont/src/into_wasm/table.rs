@@ -416,13 +416,6 @@ impl<'a> Table<'a> {
                             .iter()
                             .map(|(_, func)| max_region_tuple_arity(&func.region)),
                     )
-                    // A row slot declared at a product width names that width's tuple type, so the roster has to reach it whether or not the module ever builds one — the row type is emitted even where every construction of the row was optimized away.
-                    .chain(module.rows().iter().flat_map(|(_, definition)| {
-                        definition.slots.iter().map(|slot| match slot {
-                            CpsSlot::Product(width) => *width,
-                            _ => 0,
-                        })
-                    }))
                     .max()
                     .unwrap_or(0);
 
@@ -865,7 +858,7 @@ impl<'a> Table<'a> {
             CpsSlot::Int => LoadAs::Int,
             CpsSlot::Flt => LoadAs::Flt,
             CpsSlot::List => LoadAs::ConcreteOrNull(self.list_rope().base.clone()),
-            CpsSlot::Product(width) => LoadAs::ConcreteOrNull(self.find_tuple_type(width)),
+            CpsSlot::Row(row) => LoadAs::ConcreteOrNull(self.find_row_type(row)),
             CpsSlot::Opaque => LoadAs::Null,
         }
     }

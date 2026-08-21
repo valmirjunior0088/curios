@@ -639,7 +639,7 @@ pub struct CpsModule {
     continuations: Arena<CpsContId, CpsContinuation>,
     field_groups: BTreeMap<CpsContId, Vec<FieldGroup>>,
     /// The nominal rows this module's [`CpsValueExpr::Row`]s belong to, appended by the Ersd door and never removed — a row that loses its last construction is simply an unreferenced entry, so the ids stay stable without tombstones.
-    rows: Vec<CpsRow>,
+    rows: Vec<Option<CpsRow>>,
     entry: Option<CpsFunId>,
 }
 
@@ -676,8 +676,8 @@ pub enum CpsSlot {
     Flt,
     /// A list rope. The base type is not final, so this is the slot that deletes an `is_subtype` libcall rather than an inline check.
     List,
-    /// A boxed product row at the given relevant width.
-    Product(usize),
+    /// A value of the named nominal row. A row's heap type is final, so this is the slot whose read needs no cast at all once Binaryen has the static type.
+    Row(CpsRowId),
     /// The uniform reference: a polymorphic payload, or one whose shape names no single heap type.
     Opaque,
 }
@@ -690,7 +690,7 @@ impl CpsSlot {
             CpsSlot::Int => Repr::Int,
             CpsSlot::Flt => Repr::Flt,
             CpsSlot::List => Repr::List,
-            CpsSlot::Product(_) | CpsSlot::Opaque => Repr::Ref,
+            CpsSlot::Row(_) | CpsSlot::Opaque => Repr::Ref,
         }
     }
 }
@@ -711,18 +711,33 @@ impl CpsModule {
 
     /// Register a nominal row and hand back its identity. The Ersd door is the only caller; see [`CpsValueExpr::Row`].
     pub fn add_row(&mut self, row: CpsRow) -> CpsRowId {
-        let id = CpsRowId::from_index(self.rows.len());
-        self.rows.push(row);
+        let id = self.reserve_row();
+        self.define_row(id, row);
         id
     }
 
+    /// Claim an identity before the row it names is known.
+    ///
+    /// A row's slots may name other rows, and a self-referential declaration names its own — so the identity has to exist before the slots are computed, or computing them would not terminate. An undefined row is a compiler bug, and [`CpsModule::row`] says so rather than carrying an `Option` every caller would unwrap.
+    pub fn reserve_row(&mut self) -> CpsRowId {
+        let id = CpsRowId::from_index(self.rows.len());
+        self.rows.push(None);
+        id
+    }
+
+    pub fn define_row(&mut self, id: CpsRowId, row: CpsRow) {
+        self.rows[id.index()] = Some(row);
+    }
+
     pub fn row(&self, id: CpsRowId) -> &CpsRow {
-        &self.rows[id.index()]
+        self.rows[id.index()]
+            .as_ref()
+            .unwrap_or_else(|| panic!("{id} was reserved and never defined"))
     }
 
     /// The representation a read of `row`'s slot at `index` produces. The one result representation that is a fact of the module rather than of the operation, which is why [`CpsIntrinsic::result_repr`] cannot answer it alone.
     pub fn slot_repr(&self, row: CpsRowId, index: usize) -> Repr {
-        self.rows[row.index()].slots[index].repr()
+        self.row(row).slots[index].repr()
     }
 
     /// The representation `op` produces, resolving a row read against this module's slot carriers.
@@ -734,10 +749,9 @@ impl CpsModule {
     }
 
     pub fn rows(&self) -> impl Iterator<Item = (CpsRowId, &CpsRow)> {
-        self.rows
-            .iter()
-            .enumerate()
-            .map(|(index, row)| (CpsRowId::from_index(index), row))
+        (0..self.rows.len())
+            .map(CpsRowId::from_index)
+            .map(|id| (id, self.row(id)))
     }
 
     /// Record that `continuation`'s parameter at `start` was spliced into `width` fields: the new group, *and* every group past it shifted by the parameters the splice added.
@@ -1111,7 +1125,7 @@ impl CpsModule {
                     value: CpsValueExpr::Row(row, atoms),
                     ..
                 } => {
-                    let Some(definition) = self.rows.get(row.index()) else {
+                    let Some(Some(definition)) = self.rows.get(row.index()) else {
                         return Err(CpsVerifyError(format!(
                             "row construction names {row}, which was not minted by this module"
                         )));
@@ -1128,7 +1142,7 @@ impl CpsModule {
                     op: CpsIntrinsic::RowGet(row, index),
                     ..
                 } => {
-                    let Some(definition) = self.rows.get(row.index()) else {
+                    let Some(Some(definition)) = self.rows.get(row.index()) else {
                         return Err(CpsVerifyError(format!(
                             "row read names {row}, which was not minted by this module"
                         )));

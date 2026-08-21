@@ -66,14 +66,30 @@ fn a_recorded_shape_survives_to_the_program_schema() {
         vec![FieldShape::Packed(Grain::X), FieldShape::Opaque],
         "leaf: a Bytes key and a polymorphic value",
     );
+    let [crit, zero, one] = shapes["fork"].as_slice() else {
+        panic!(
+            "fork carries three relevant fields, got {:?}",
+            shapes["fork"]
+        )
+    };
     assert_eq!(
-        shapes["fork"],
-        vec![
-            FieldShape::Immediate(Sign::Unsigned),
-            FieldShape::Family,
-            FieldShape::Family
-        ],
-        "fork: a Nat crit and two Node children",
+        *crit,
+        FieldShape::Immediate(Sign::Unsigned),
+        "fork: an unsigned Nat crit",
+    );
+    // The children are the family's *own* identity, which is the case the recorder exists to reach: a shape that named only "some family" could not be spent on a declared field type, and a self-reference is where that matters most.
+    let (FieldShape::Family(zero), FieldShape::Family(one)) = (zero, one) else {
+        panic!("fork's children record their family, got {zero:?} and {one:?}")
+    };
+    assert_eq!(zero, one, "both children are the same family");
+    assert_eq!(
+        module
+            .family(*zero)
+            .expect("live family")
+            .debug_name
+            .as_deref(),
+        Some("/std/Map/Node"),
+        "and it is Node's own, recorded through the self-reference",
     );
 }
 
@@ -88,7 +104,7 @@ fn shape_class(shape: FieldShape) -> &'static str {
         FieldShape::List => "list",
         FieldShape::Closure(_) => "closure",
         FieldShape::Product(_) => "product",
-        FieldShape::Family => "family",
+        FieldShape::Family(_) => "family",
         FieldShape::Opaque => "opaque",
     }
 }
@@ -368,10 +384,10 @@ fn slot_layout_probe() {
             FieldShape::Immediate(Sign::Signed) => Some("int".into()),
             FieldShape::Flt => Some("flt".into()),
             FieldShape::List => Some("list".into()),
-            FieldShape::Product(width) => Some(format!("tuple/{width}")),
+            FieldShape::Product(schema) => Some(format!("product/{schema}")),
             FieldShape::Packed(_)
             | FieldShape::Closure(_)
-            | FieldShape::Family
+            | FieldShape::Family(_)
             | FieldShape::Opaque => None,
         }
     };

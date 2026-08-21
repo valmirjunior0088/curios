@@ -115,6 +115,7 @@ fn schemas_and_constants_print_deterministically() {
     let schema = builder.product(ProductSchema {
         debug_name: Some("Pair".into()),
         fields: vec![Field::opaque(Some("lhs".into())), Field::opaque(None)],
+        shared: false,
     });
     let family = builder.family(Some("Shape".into()));
     let circle = builder.constructor(

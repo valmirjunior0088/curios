@@ -273,16 +273,22 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             })
             .collect();
 
-        for (type_name, fields) in fields {
-            self.module.add_type(
-                type_name,
-                curios_wasm::SubType {
-                    is_final: true,
-                    super_types: vec![],
-                    comp_type: curios_wasm::CompType::Struct(curios_wasm::StructType::from(fields)),
+        // One recursion group for the whole roster: a row's slot may name another row, and a self-referential declaration names its own, so a forward reference is only well-formed inside a shared group.
+        self.module
+            .add_types(curios_wasm::RecType::from(fields.into_iter().map(
+                |(type_name, fields)| {
+                    (
+                        type_name,
+                        curios_wasm::SubType {
+                            is_final: true,
+                            super_types: vec![],
+                            comp_type: curios_wasm::CompType::Struct(
+                                curios_wasm::StructType::from(fields),
+                            ),
+                        },
+                    )
                 },
-            );
-        }
+            )));
     }
 
     /// The wasm storage type one row slot is declared at.
@@ -302,7 +308,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 curios_wasm::StorageType::Val(curios_wasm::ValType::Num(curios_wasm::NumType::F32))
             }
             CpsSlot::List => reference(self.table.list_rope().base.clone()),
-            CpsSlot::Product(width) => reference(self.table.find_tuple_type(width)),
+            CpsSlot::Row(row) => reference(self.table.find_row_type(row)),
             CpsSlot::Opaque => curios_wasm::StorageType::Val(Table::top_type(true)),
         }
     }

@@ -190,11 +190,12 @@ impl Module {
             .find_map(|(type_name, sub_type)| (target_name == type_name).then_some(sub_type))
     }
 
-    pub(crate) fn add_types(&mut self, rec_type: RecType) {
+    /// Adds a whole recursion group. Required when the types in it reference each other — a group's members are declared simultaneously, so a forward reference is only well-formed inside one.
+    pub fn add_types(&mut self, rec_type: RecType) {
         self.types.push(rec_type);
     }
 
-    /// Adds a single type as its own one-member recursion group. Sufficient whenever the type only references itself or earlier declarations; mutually recursive types must instead share a group (via the crate-internal `add_types`).
+    /// Adds a single type as its own one-member recursion group. Sufficient whenever the type only references itself or earlier declarations; mutually recursive types must instead share a group, via [`Module::add_types`].
     pub fn add_type(&mut self, type_name: TypeName, sub_type: SubType) {
         self.types.push(RecType::from([(type_name, sub_type)]));
     }

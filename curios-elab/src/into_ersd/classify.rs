@@ -1,6 +1,7 @@
 //! Sort-driven erasability classification, shared by every erasure walk: whether a type's values are dropped at runtime, and the signature view of a telescope — one walk ([`signature_entries`]) with a labelled and a mask-only ([`erasure_mask`]) reading. Beside it, the carrier-shape classification of constructor payloads ([`field_shape`], [`constructor_entries`]): erasure is the last walk that still holds the Core field types, so the shape is recorded here and read by `curios-ersd`'s lowering when it decides a family's encoding.
 
 use {
+    super::Lowering,
     crate::{Context, Error, is_prop, reduce_with},
     curios_core::{Bound, FuncType, Global, Intrinsic, Subterm, Telescope, Term, TupleType},
     curios_utilities::Grain,
@@ -61,6 +62,7 @@ pub(crate) fn erasure_mask<B: Bound>(
 
 /// The constructor-payload view of a telescope: [`signature_entries`] plus the recorded carrier shape of each kept domain. An erased entry's shape is `Opaque`; nothing reads it.
 pub(crate) fn constructor_entries<B: Bound>(
+    lowering: &mut Lowering,
     context: &mut Context,
     mut telescope: Telescope<B>,
 ) -> Result<Vec<(Option<String>, bool, curios_ersd::FieldShape)>, Error> {
@@ -72,7 +74,7 @@ pub(crate) fn constructor_entries<B: Bound>(
                 let erasable = is_erasable(context, &type_)?;
                 let shape = match erasable {
                     true => curios_ersd::FieldShape::Opaque,
-                    false => field_shape(context, &mut BTreeSet::new(), &type_)?,
+                    false => field_shape(lowering, context, &mut BTreeSet::new(), &type_)?,
                 };
                 let variable = Term::free_var(&context.fresh(label.as_deref()));
                 entries.push((label, erasable, shape));
@@ -87,6 +89,7 @@ pub(crate) fn constructor_entries<B: Bound>(
 ///
 /// `visited` makes the chain-chasing terminate: a self-referential struct elaborates (it is merely uninhabited), so the recursion through nominal declarations can cycle, and a cycle classifies `Opaque`. The chain recurses into at most one field per level, so the set is the ancestor chain and never needs unwinding.
 pub(crate) fn field_shape(
+    lowering: &mut Lowering,
     context: &mut Context,
     visited: &mut BTreeSet<Global>,
     type_: &Term,
@@ -110,49 +113,72 @@ pub(crate) fn field_shape(
             ))
         }
         Subterm::StructType(struct_type) => {
-            if !visited.insert(struct_type.name.clone()) {
-                return Ok(curios_ersd::FieldShape::Opaque);
-            }
             let Some(struct_decl) = context.struct_decl(&struct_type.name).cloned() else {
                 return Ok(curios_ersd::FieldShape::Opaque);
             };
-            row_shape(context, visited, struct_decl.fields_at(&struct_type.params))
-        }
-        Subterm::TupleType(TupleType { telescope }) => row_shape(context, visited, telescope),
-        // A single-constructor family is *always* its payload row under the collapsed encoding — one constructor, no discrimination — so the chain continues through it exactly as through a newtype struct. A multi-constructor family is its own shape: never chased, whatever its encoding. Inductives are legitimately recursive, so the same visited guard cuts their cycles.
-        Subterm::InductType(induct_type) => {
-            if !visited.insert(induct_type.name.clone()) {
-                return Ok(curios_ersd::FieldShape::Opaque);
+            match relevant_chain(context, struct_decl.fields_at(&struct_type.params))? {
+                Chain::None => Ok(curios_ersd::FieldShape::Opaque),
+                Chain::One(domain) => field_shape(lowering, context, visited, &domain),
+                // A struct that reaches itself is uninhabited but elaborates, so its own registration is still in flight here and there is no schema to name yet. Answering `Opaque` costs a shape no value will ever occupy.
+                Chain::Many => match lowering.in_flight(&struct_type.name) {
+                    true => Ok(curios_ersd::FieldShape::Opaque),
+                    false => Ok(lowering
+                        .struct_row(context, &struct_type.name)?
+                        .schema
+                        .map_or(curios_ersd::FieldShape::Opaque, |schema| {
+                            curios_ersd::FieldShape::Product(schema)
+                        })),
+                },
             }
+        }
+        // An anonymous tuple's row is shared by every tuple of its width and records no shape, so there is no type to declare a slot at — the chain still runs through a one-field tuple, which is a newtype like any other.
+        Subterm::TupleType(TupleType { telescope }) => match relevant_chain(context, telescope)? {
+            Chain::One(domain) => field_shape(lowering, context, visited, &domain),
+            Chain::None | Chain::Many => Ok(curios_ersd::FieldShape::Opaque),
+        },
+        // A multi-constructor family is its own shape, and its *identity* is what a typed slot needs — never chased, whatever its encoding. A single-constructor family is always its payload row under the collapsed encoding, so the chain continues through it exactly as through a newtype struct; the `visited` guard cuts the cycle a legitimately recursive one would otherwise spin in.
+        Subterm::InductType(induct_type) => {
             let Some(induct_decl) = context.induct_decl(&induct_type.name).cloned() else {
                 return Ok(curios_ersd::FieldShape::Opaque);
             };
             let tags: Vec<_> = induct_decl.constructor_order().collect();
             let [tag] = tags.as_slice() else {
-                return Ok(curios_ersd::FieldShape::Family);
+                return Ok(curios_ersd::FieldShape::Family(
+                    lowering.family_identity(context, &induct_type.name)?,
+                ));
             };
+            if !visited.insert(induct_type.name.clone()) {
+                return Ok(curios_ersd::FieldShape::Opaque);
+            }
             let Some(telescope) = induct_decl.instantiate(tag, &induct_type.params) else {
                 return Ok(curios_ersd::FieldShape::Opaque);
             };
-            match leading_relevant_domains(context, telescope)? {
-                // No payload rides the interned `Nat` zero; one payload is the value itself.
-                (None, false) => Ok(curios_ersd::FieldShape::Immediate(
+            match relevant_chain(context, telescope)? {
+                // No payload rides the interned `Nat` zero; one payload is the value itself; two or more are the family's own row, which the collapsed encoding lays out exactly as the equivalent struct.
+                Chain::None => Ok(curios_ersd::FieldShape::Immediate(
                     curios_ersd::Sign::Unsigned,
                 )),
-                (Some(domain), false) => field_shape(context, visited, &domain),
-                _ => Ok(curios_ersd::FieldShape::Opaque),
+                Chain::One(domain) => field_shape(lowering, context, visited, &domain),
+                Chain::Many => Ok(curios_ersd::FieldShape::Family(
+                    lowering.family_identity(context, &induct_type.name)?,
+                )),
             }
         }
         _ => Ok(curios_ersd::FieldShape::Opaque),
     }
 }
 
-/// The shape a product-shaped telescope takes: exactly one relevant entry recurses into that entry's declared type — the newtype chain — two or more are the boxed product row at that width, and zero relevant stays `Opaque` (an allocated empty product today; classifying it further is an admission this recorder does not make).
-fn row_shape<B: Bound>(
+/// What a product-shaped telescope's relevant entries amount to: none, exactly one (the newtype chain, which the caller continues through), or a row of two or more.
+enum Chain {
+    None,
+    One(Term),
+    Many,
+}
+
+fn relevant_chain<B: Bound>(
     context: &mut Context,
-    visited: &mut BTreeSet<Global>,
     mut telescope: Telescope<B>,
-) -> Result<curios_ersd::FieldShape, Error> {
+) -> Result<Chain, Error> {
     let mut first = None;
     let mut relevant = 0;
     while let Telescope::Cons(type_, rest) = telescope {
@@ -166,27 +192,8 @@ fn row_shape<B: Bound>(
         telescope = rest.open(&[&variable]);
     }
     match (relevant, first) {
-        (1, Some(domain)) => field_shape(context, visited, &domain),
-        (0, _) => Ok(curios_ersd::FieldShape::Opaque),
-        (width, _) => Ok(curios_ersd::FieldShape::Product(width)),
+        (1, Some(domain)) => Ok(Chain::One(domain)),
+        (0, _) => Ok(Chain::None),
+        _ => Ok(Chain::Many),
     }
-}
-
-/// The leading relevant domains of a telescope, up to the two any collapse rule asks about: the first relevant domain, and whether a second exists. Domains are classified with the preceding binders opened opaque, the same discipline as [`signature_entries`].
-fn leading_relevant_domains<B: Bound>(
-    context: &mut Context,
-    mut telescope: Telescope<B>,
-) -> Result<(Option<Term>, bool), Error> {
-    let mut first = None;
-    while let Telescope::Cons(type_, rest) = telescope {
-        if !is_erasable(context, &type_)? {
-            if first.is_some() {
-                return Ok((first, true));
-            }
-            first = Some(type_);
-        }
-        let variable = Term::free_var(&context.fresh(None));
-        telescope = rest.open(&[&variable]);
-    }
-    Ok((first, false))
 }

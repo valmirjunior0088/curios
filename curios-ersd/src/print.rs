@@ -452,8 +452,8 @@ fn fields(row: &[Field]) -> String {
                 FieldShape::Packed(Grain::B) => format!("{name}:bits"),
                 FieldShape::List => format!("{name}:list"),
                 FieldShape::Closure(arity) => format!("{name}:closure/{arity}"),
-                FieldShape::Product(width) => format!("{name}:product/{width}"),
-                FieldShape::Family => format!("{name}:family"),
+                FieldShape::Product(schema) => format!("{name}:product/{schema}"),
+                FieldShape::Family(family) => format!("{name}:family/{family}"),
                 FieldShape::Opaque => name,
             }
         })

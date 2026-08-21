@@ -425,9 +425,10 @@ fn a_collapsed_pair_is_an_untagged_tuple() {
     let module = builder.finalize().expect("verifies");
 
     let printed = lowered(&module);
-    // Untagged: the second payload reads at index 1, where the tagged encoding would put it at 2 — and nothing dispatches.
-    assert!(printed.contains("TupleGet(1)"), "{printed}");
-    assert!(!printed.contains("TupleGet(2)"), "{printed}");
+    // Untagged: the collapsed family is its own nominal row with no tag slot, so the second payload reads at slot 1 where the tagged encoding would put it at 2 — and nothing dispatches.
+    assert!(printed.contains("RowGet(CpsRowId(0), 1)"), "{printed}");
+    assert!(!printed.contains("RowGet(CpsRowId(0), 2)"), "{printed}");
+    assert!(!printed.contains("TupleGet"), "{printed}");
     assert!(!printed.contains("switch"), "{printed}");
 }
 
@@ -649,6 +650,7 @@ fn a_value_only_knot_lowers_through_cells() {
             Field::opaque(Some("force".into())),
             Field::opaque(Some("mark".into())),
         ],
+        shared: false,
     });
     let lazy = builder.value(Some("lazy".into()));
     builder.open_block();
