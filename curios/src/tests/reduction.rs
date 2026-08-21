@@ -852,14 +852,17 @@ fn a_user_refinement_over_a_packed_carrier_takes_the_same_machine() {
 /// A shift is the shape no representation change can flatten. It has no loop, so nothing amortizes it; its result is `bits(value) + amount` wide and the amount is a numeral the program writes, so no operand size bounds it. Before construction was priced this compiled in well under a second while building fifty megabytes of magnitude, with the counter charging a handful of transitions.
 ///
 /// The paired control is [`a_bound_behind_a_parameter_evaluates_nothing`](super::numeric) in spirit and the second arm here in fact: the same term at an amount the budget affords still folds, so what the first arm demonstrates is a refusal about *size* rather than about the operation.
+///
+/// **The subject stands under an obligation rather than in a match scrutinee, and it had to move there.** `Bytes/drop` states `Le(k, len(b))`, a decided proposition whose subject stands in a type, so discharging it *is* reducing the shift — which is what makes this fixture about construction at all. The program it replaced put the same shift under `match Nat/le(1, big)`, and nothing in either checker demands a top-level match's scrutinee: what evaluated it was the kernel reducing every non-variable scrutinee to key a case equation, which for a *local-free* scrutinee like this one it then discarded, since `Scope::refine` records only local-bearing keys. The two-tier key stopped that reduction, and this fixture stopped testing anything — both arms of it, since the affordable arm was not folding either. The pricing itself never moved: what changed is that the program has a demander again, chosen to be one a user would actually write.
 #[test]
 fn an_oversized_construction_is_refused_before_it_is_allocated() {
     let shift = |amount: u64| {
         format!(
             r#"
-            use /std/{{Handle, Nat, Bool}};
+            use /std/{{Handle, Nat, Bytes, Str}};
             let big : Nat = Nat/shl(1, {amount});
-            let check = match Nat/le(1, big) | true => () | false => () end;
+            let b : Bytes = Str/to_bytes("0123456789");
+            let rest : Bytes = Bytes/drop(b, big);
             /std/print("ok")
             "#
         )
@@ -872,7 +875,7 @@ fn an_oversized_construction_is_refused_before_it_is_allocated() {
         "expected a spent-budget refusal, got: {refusal}"
     );
 
-    typecheck_within(DEFAULT_STEP_BUDGET, &shift(64))
+    typecheck_within(DEFAULT_STEP_BUDGET, &shift(3))
         .expect("the same operation at an affordable size still folds");
 }
 
