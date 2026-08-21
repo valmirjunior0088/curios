@@ -6,6 +6,8 @@
 //!
 //! **A function must not escape, for two independent reasons.** Its call sites have to be visible, and they are exactly the `Known` ones only when the function never becomes a value. And an escaping function additionally acquires a retained-ABI closure wrapper, which reaches it by a tail call at the shared `clsr/{arity}` type — a type this work deliberately does not re-key, so the wrapper would disagree with anything wider.
 //!
+//! **The shape a resume rebuilds in is part of the decision, not something the rewrite reads off the callee.** A class's return edges agree on one construction vocabulary — a row, or a structural tuple — and the reads below every resume are in that vocabulary, so the rebuild must be too. The rewrite used to recover it per *function*, from that function's own return edges; a member that returns only by tail-calling a class-mate has none, so its callers rebuilt a `Tuple` for a class that hands back a row, and the first `RowGet` below cast the wrong final type. Exactly the failure co-location was supposed to prevent, and what prevents it is the decision's return type being complete: `ReturnProtocol::Fields` carries the [`ReturnShape`] alongside the width, both joined over the class, and a class whose edges disagree is declined — the direction that only ever costs an allocation. [`CpsModule::verify`] holds the same line from below, refusing a read whose operand was minted in the other vocabulary.
+//!
 //! **Tail calls make the decision an equivalence class rather than a per-function one.** A call whose return continuation is its function's return sentinel lowers to `return_call`, which requires the callee's results to match the caller's exactly. Agreement is symmetric, so the classes are the *undirected* connected components of the tail-call graph: a function is decided together with everything it tail-calls and with everything that tail-calls it, however the edges point.
 //!
 //! **Four tail positions fix a function's results to something already settled**, and pin their whole component to the tuple: a tail call through a closure, which returns at the closure type's single result; a tail foreign call, a tail cell operation, and a tail `ListMap`, each of which falls through to the return with the results that operation produces. The module entry is pinned for the same kind of reason — the host calls it and is not rewritten with the module — and pinning it explicitly is load-bearing rather than belt-and-braces, because having no call sites of its own would otherwise leave it to inherit a component's decision through a tail call.
@@ -29,8 +31,15 @@ use {
 pub(super) enum ReturnProtocol {
     /// One value: the tuple as the callee built it. What every function speaks until this says otherwise.
     Tuple,
-    /// The tuple's leading fields, delivered as that many results.
-    Fields(usize),
+    /// The tuple's leading fields, delivered as that many results, rebuilt at the vocabulary the class's return edges agree on.
+    Fields(usize, ReturnShape),
+}
+
+/// The construction vocabulary a class's return edges agree on — what a resume must rebuild in, so the reads below it stay exact.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum ReturnShape {
+    Tuple,
+    Row(CpsRowId),
 }
 
 /// What every live function's return protocol may be, total over the module's functions.
@@ -109,6 +118,25 @@ pub(super) fn return_protocols(module: &CpsModule) -> BTreeMap<CpsFunId, ReturnP
 
     let mut protocols = BTreeMap::new();
     for members in components(&tail_calls) {
+        // The vocabulary is a fact of the *class*, exactly as the width is: a member that returns only by tail call carries no edge of its own, and its callers must still rebuild what the class actually hands back.
+        let mut shape = None;
+        let mut agreed = true;
+        for &function in &members {
+            let sentinel = module.function(function).unwrap().return_cont;
+            for node_id in function_nodes(module, function) {
+                for edge in return_edges(module.node(node_id).unwrap(), sentinel) {
+                    let [CpsAtom::Value(value)] = edge.args.as_slice() else {
+                        continue;
+                    };
+                    let Some((_, row)) = constructions.get(value) else {
+                        continue;
+                    };
+                    let seen = row.map_or(ReturnShape::Tuple, ReturnShape::Row);
+                    agreed &= shape.is_none_or(|prior| prior == seen);
+                    shape = Some(seen);
+                }
+            }
+        }
         let class = members.iter().copied().collect::<BTreeSet<_>>();
         let admissible = members
             .iter()
@@ -133,10 +161,10 @@ pub(super) fn return_protocols(module: &CpsModule) -> BTreeMap<CpsFunId, ReturnP
                     .unwrap_or_else(Demand::bottom),
             );
         }
-        let protocol = match admissible.then_some(demand) {
+        let protocol = match (admissible && agreed).then_some(demand).zip(shape) {
             // The slots are delivered in order from zero, so covering the demanded indices means covering everything up to the last of them, read or not.
-            Some(Demand::Projected(indices)) => match indices.last() {
-                Some(&last) if last >= 1 => ReturnProtocol::Fields(last + 1),
+            Some((Demand::Projected(indices), shape)) => match indices.last() {
+                Some(&last) if last >= 1 => ReturnProtocol::Fields(last + 1, shape),
                 _ => ReturnProtocol::Tuple,
             },
             _ => ReturnProtocol::Tuple,
@@ -153,7 +181,7 @@ pub(super) fn split_returns(module: &mut CpsModule) -> bool {
     let widths = return_protocols(module)
         .into_iter()
         .filter_map(|(function, protocol)| match protocol {
-            ReturnProtocol::Fields(width) => Some((function, width)),
+            ReturnProtocol::Fields(width, shape) => Some((function, (width, shape))),
             ReturnProtocol::Tuple => None,
         })
         .collect::<BTreeMap<_, _>>();
@@ -163,29 +191,7 @@ pub(super) fn split_returns(module: &mut CpsModule) -> bool {
     let constructions = constructions(module);
 
     let mut returning = Vec::new();
-    // The row each split class belongs to, read off the constructions its return edges name. A component whose edges disagree — or that returns structural tuples — rebuilds as a tuple, which is the vocabulary its reads are then in.
-    let mut classes = BTreeMap::<CpsFunId, Option<CpsRowId>>::new();
-    for &function in widths.keys() {
-        let sentinel = module.function(function).unwrap().return_cont;
-        for node_id in function_nodes(module, function) {
-            for edge in return_edges(module.node(node_id).unwrap(), sentinel) {
-                if let [CpsAtom::Value(value)] = edge.args.as_slice()
-                    && let Some((_, row)) = constructions.get(value)
-                {
-                    classes
-                        .entry(function)
-                        .and_modify(|seen| {
-                            if *seen != *row {
-                                *seen = None;
-                            }
-                        })
-                        .or_insert(*row);
-                }
-            }
-        }
-    }
-
-    for (&function, &width) in &widths {
+    for (&function, &(width, _)) in &widths {
         let sentinel = module.function(function).unwrap().return_cont;
         for node_id in function_nodes(module, function) {
             if !return_edges(module.node(node_id).unwrap(), sentinel).is_empty() {
@@ -208,12 +214,12 @@ pub(super) fn split_returns(module: &mut CpsModule) -> bool {
             return_to,
             ..
         } = node
-            && let Some(&width) = widths.get(callee)
+            && let Some(&(width, shape)) = widths.get(callee)
         {
-            resuming.insert(*return_to, (width, classes.get(callee).copied().flatten()));
+            resuming.insert(*return_to, (width, shape));
         }
     }
-    for (resume, (width, row)) in resuming {
+    for (resume, (width, shape)) in resuming {
         // A tail call names its function's sentinel, which is bodyless and has no parameters to widen — the caller's own return edges carry the class's width already.
         let Some(definition) = module.continuation(resume) else {
             continue;
@@ -228,13 +234,13 @@ pub(super) fn split_returns(module: &mut CpsModule) -> bool {
         let mut atoms: Vec<CpsAtom> = params.iter().copied().map(CpsAtom::Value).collect();
         let rebuilt = module.add_node(CpsNode::LetValue {
             result: held,
-            value: match row {
-                Some(row) => {
+            value: match shape {
+                ReturnShape::Row(row) => {
                     // The protocol carries only the slots the demand asked for, so the rebuild fills the row's remaining width rather than widening the interface — a narrower interface is the whole point of splitting, and the slots past the demand are by construction unread.
                     atoms.resize(module.row(row).width(), CpsAtom::Filler);
                     CpsValueExpr::Row(row, atoms)
                 }
-                None => CpsValueExpr::Tuple(atoms),
+                ReturnShape::Tuple => CpsValueExpr::Tuple(atoms),
             },
             next: body,
         });

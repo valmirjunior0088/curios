@@ -1,8 +1,8 @@
 use {
-    super::{ReturnProtocol, return_protocols},
+    super::{ReturnProtocol, ReturnShape, return_protocols, split_returns},
     crate::{
         CpsAtom, CpsCallee, CpsContId, CpsContinuation, CpsEdge, CpsFunId, CpsFunction,
-        CpsIntrinsic, CpsModule, CpsNode, CpsValueExpr,
+        CpsIntrinsic, CpsLiteral, CpsModule, CpsNode, CpsRow, CpsRowId, CpsSlot, CpsValueExpr,
     },
 };
 
@@ -132,7 +132,7 @@ fn a_result_read_only_through_projections_is_returned_as_its_fields() {
     module.set_entry(caller);
 
     let protocols = return_protocols(&module);
-    assert_eq!(protocols[&callee], ReturnProtocol::Fields(2));
+    assert!(matches!(protocols[&callee], ReturnProtocol::Fields(2, _)));
     // The entry is pinned whatever its body does, because the host calls it and is not rewritten with the module.
     assert_eq!(protocols[&caller], ReturnProtocol::Tuple);
 }
@@ -182,10 +182,10 @@ fn a_result_projected_only_behind_a_forwarding_jump_is_returned_as_its_fields() 
     );
     module.set_entry(caller);
 
-    assert_eq!(
+    assert!(matches!(
         return_protocols(&module)[&callee],
-        ReturnProtocol::Fields(2)
-    );
+        ReturnProtocol::Fields(2, _)
+    ));
 }
 
 #[test]
@@ -216,7 +216,7 @@ fn a_tail_call_chain_is_decided_together() {
     let (separate, callee, forwarder) = chain(false);
     let protocols = return_protocols(&separate);
     // Apart, the two disagree: one result is taken apart at its call site and the other is not.
-    assert_eq!(protocols[&callee], ReturnProtocol::Fields(2));
+    assert!(matches!(protocols[&callee], ReturnProtocol::Fields(2, _)));
     assert_eq!(protocols[&forwarder], ReturnProtocol::Tuple);
 
     let (joined, callee, forwarder) = chain(true);
@@ -318,4 +318,123 @@ fn an_escaping_callee_stays_a_tuple() {
 
     // That one capture is enough: it puts the function behind a closure wrapper reaching it at the shared one-result closure type, whatever the direct call site asks for.
     assert_eq!(return_protocols(&module)[&callee], ReturnProtocol::Tuple);
+}
+
+/// A two-slot row — a tag and one payload, the shape of `/std/Option` — minted for the fixtures below.
+fn option_row(module: &mut CpsModule) -> CpsRowId {
+    module.add_row(CpsRow {
+        debug_name: Some("Option".into()),
+        slots: vec![CpsSlot::Tag, CpsSlot::Opaque],
+    })
+}
+
+/// [`returning_callee`] over a row: the construction it returns is `Row(row, [1, field])`.
+fn row_returning_callee(module: &mut CpsModule, name: &str, row: CpsRowId) -> CpsFunId {
+    let field = module.add_value(Some(format!("{name}/field")));
+    let built = module.add_value(Some(format!("{name}/built")));
+    let function = module.reserve_function();
+    let sentinel = module.reserve_continuation();
+
+    let ret = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        target: sentinel,
+        args: vec![CpsAtom::Value(built)],
+    }));
+    let body = module.add_node(CpsNode::LetValue {
+        result: built,
+        value: CpsValueExpr::Row(
+            row,
+            vec![CpsAtom::Literal(CpsLiteral::Nat(1)), CpsAtom::Value(field)],
+        ),
+        next: ret,
+    });
+    module.define_function(
+        function,
+        CpsFunction {
+            debug_name: Some(name.into()),
+            params: vec![field],
+            return_cont: sentinel,
+            body,
+        },
+    );
+    function
+}
+
+/// [`projecting_resume`] in the row vocabulary: both reads are `RowGet`.
+fn row_projecting_resume(module: &mut CpsModule, name: &str, row: CpsRowId) -> CpsContId {
+    let result = module.add_value(Some(format!("{name}/result")));
+    let tag = module.add_value(Some(format!("{name}/tag")));
+    let payload = module.add_value(Some(format!("{name}/payload")));
+    let resume = module.reserve_continuation();
+
+    let exit = module.add_node(CpsNode::Exit { value: None });
+    let second = module.add_node(CpsNode::LetIntrinsic {
+        result: payload,
+        op: CpsIntrinsic::RowGet(row, 1),
+        args: vec![CpsAtom::Value(result)],
+        next: exit,
+    });
+    let first = module.add_node(CpsNode::LetIntrinsic {
+        result: tag,
+        op: CpsIntrinsic::RowGet(row, 0),
+        args: vec![CpsAtom::Value(result)],
+        next: second,
+    });
+    module.define_continuation(
+        resume,
+        CpsContinuation {
+            debug_name: Some(name.into()),
+            params: vec![result],
+            body: first,
+        },
+    );
+    resume
+}
+
+/// The shape a resume rebuilds in is the class's, not the callee's own. `forwarder` returns only by tail-calling `callee`, so it has no return edge of its own to read a vocabulary off — and its caller's resume reads the result as the row `callee` builds. Deriving the shape per function rebuilt a structural tuple here, which the `RowGet` below then cast to the row's final type; that was `/std/http/header_lookup`, and the only symptom was an HTTP client trapping on its first response header.
+///
+/// Mutation-checked by reverting the shape to the per-function derivation: the protocol alone still reads `Fields(2, …)`, and what fails is the verifier on the rebuilt `Tuple` — which is the other half of the fix, and why the fixture asserts both.
+#[test]
+fn a_forwarder_rebuilds_in_its_class_vocabulary() {
+    let mut module = CpsModule::default();
+    let row = option_row(&mut module);
+    let callee = row_returning_callee(&mut module, "callee", row);
+    let forwarder = calling_function(&mut module, "forwarder", callee, None);
+    let outer = row_projecting_resume(&mut module, "outer", row);
+    let entry = calling_function(&mut module, "entry", forwarder, Some(outer));
+    // Bound lexically, unlike the other fixtures here, because this one runs the verifier and the verifier reads scope.
+    let inner = module.function(entry).unwrap().body;
+    let bound = module.add_node(CpsNode::LetFun {
+        functions: vec![callee, forwarder],
+        body: inner,
+    });
+    module.functions.get_mut(entry).unwrap().body = bound;
+    module.set_entry(entry);
+    module.verify().unwrap();
+
+    let protocols = return_protocols(&module);
+    assert_eq!(
+        protocols[&forwarder],
+        ReturnProtocol::Fields(2, ReturnShape::Row(row)),
+        "the forwarder has no return edge of its own and takes the class's shape",
+    );
+    assert_eq!(protocols[&callee], protocols[&forwarder]);
+
+    assert!(split_returns(&mut module));
+    module.verify().unwrap_or_else(|error| {
+        panic!("the resume must rebuild in the row vocabulary its reads are in: {error}")
+    });
+    let rebuilt = module
+        .continuation(outer)
+        .map(|definition| module.node(definition.body).unwrap().clone())
+        .unwrap();
+    assert!(
+        matches!(
+            rebuilt,
+            CpsNode::LetValue {
+                value: CpsValueExpr::Row(rebuilt_row, _),
+                ..
+            } if rebuilt_row == row
+        ),
+        "{rebuilt:?}"
+    );
 }
