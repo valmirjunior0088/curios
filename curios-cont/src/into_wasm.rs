@@ -1,6 +1,6 @@
 use {
     crate::{
-        CpsIntrinsic, CpsModule, CpsRow, CpsRowId, Repr, cps::represent, machine::lower,
+        CpsIntrinsic, CpsModule, CpsRow, CpsRowId, CpsSlot, Repr, cps::represent, machine::lower,
         machine::structurize, machine::value_id, machine::value_name,
     },
     curios_abi::ForeignFunction,
@@ -311,6 +311,15 @@ impl EmissionModule {
     /// Every closure arity the module needs closure types for: the arities of the surviving closure definitions, unioned with the arities of indirect call sites (whose target definition may have been inlined away). Sizing closure types from definitions alone misses the latter, leaving a surviving `call_indirect` with no declared type for its arity.
     pub(crate) fn clsr_arities(&self) -> BTreeSet<usize> {
         let mut arities = BTreeSet::new();
+
+        // A row slot declared at a closure arity names that arity's environment type, so the roster has to reach it whether or not the module ever builds a closure of that arity.
+        for (_, row) in &self.rows {
+            for slot in &row.slots {
+                if let CpsSlot::Closure(arity) = slot {
+                    arities.insert(*arity);
+                }
+            }
+        }
 
         for (_, clsr) in &self.clsrs {
             arities.insert(clsr.params.len());

@@ -308,6 +308,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                 curios_wasm::StorageType::Val(curios_wasm::ValType::Num(curios_wasm::NumType::F32))
             }
             CpsSlot::List => reference(self.table.list_rope().base.clone()),
+            CpsSlot::Closure(arity) => reference(self.table.find_envr_type(arity)),
             CpsSlot::Row(row) => reference(self.table.find_row_type(row)),
             CpsSlot::Opaque => curios_wasm::StorageType::Val(Table::top_type(true)),
         }
@@ -813,9 +814,9 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
         self.emit_list_rope_types();
         self.emit_cell_type();
         self.emit_tuple_types();
-        self.emit_row_types();
         self.emit_clsr_arity_types();
         self.emit_envr_arity_types();
+        self.emit_row_types();
         self.emit_clsr_types(module);
         self.emit_func_types();
 

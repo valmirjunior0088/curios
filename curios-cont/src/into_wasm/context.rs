@@ -890,9 +890,11 @@ pub(crate) fn slot_zero_instrs(slot: CpsSlot) -> Vec<curios_wasm::Instr> {
             vec![curios_wasm::Instr::I32Const { value: 0 }]
         }
         CpsSlot::Flt => vec![curios_wasm::Instr::F32Const { value: 0.0 }],
-        CpsSlot::List | CpsSlot::Row(_) => vec![curios_wasm::Instr::RefNull {
-            heap_type: curios_wasm::HeapType::Abstract(curios_wasm::AbsHeapType::None),
-        }],
+        CpsSlot::List | CpsSlot::Closure(_) | CpsSlot::Row(_) => {
+            vec![curios_wasm::Instr::RefNull {
+                heap_type: curios_wasm::HeapType::Abstract(curios_wasm::AbsHeapType::None),
+            }]
+        }
         CpsSlot::Opaque => zero_instrs(None),
     }
 }

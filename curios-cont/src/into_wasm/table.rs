@@ -858,6 +858,7 @@ impl<'a> Table<'a> {
             CpsSlot::Int => LoadAs::Int,
             CpsSlot::Flt => LoadAs::Flt,
             CpsSlot::List => LoadAs::ConcreteOrNull(self.list_rope().base.clone()),
+            CpsSlot::Closure(arity) => LoadAs::ConcreteOrNull(self.find_envr_type(arity)),
             CpsSlot::Row(row) => LoadAs::ConcreteOrNull(self.find_row_type(row)),
             CpsSlot::Opaque => LoadAs::Null,
         }

@@ -177,9 +177,8 @@ impl Lowerer<'_> {
                     curios_cont::CpsSlot::Opaque
                 }
             },
-            FieldShape::Packed(_) | FieldShape::Closure(_) | FieldShape::Opaque => {
-                curios_cont::CpsSlot::Opaque
-            }
+            FieldShape::Closure(arity) => curios_cont::CpsSlot::Closure(arity),
+            FieldShape::Packed(_) | FieldShape::Opaque => curios_cont::CpsSlot::Opaque,
         }
     }
 }

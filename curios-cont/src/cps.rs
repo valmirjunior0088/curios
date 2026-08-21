@@ -676,6 +676,8 @@ pub enum CpsSlot {
     Flt,
     /// A list rope. The base type is not final, so this is the slot that deletes an `is_subtype` libcall rather than an inline check.
     List,
+    /// A closure of the given arity. Its environment base is *not* final — it is the supertype of every per-closure environment of that arity — so, like [`CpsSlot::List`], this is a slot that deletes an `is_subtype` libcall rather than an inline check.
+    Closure(usize),
     /// A value of the named nominal row. A row's heap type is final, so this is the slot whose read needs no cast at all once Binaryen has the static type.
     Row(CpsRowId),
     /// The uniform reference: a polymorphic payload, or one whose shape names no single heap type.
@@ -690,7 +692,7 @@ impl CpsSlot {
             CpsSlot::Int => Repr::Int,
             CpsSlot::Flt => Repr::Flt,
             CpsSlot::List => Repr::List,
-            CpsSlot::Row(_) | CpsSlot::Opaque => Repr::Ref,
+            CpsSlot::Closure(_) | CpsSlot::Row(_) | CpsSlot::Opaque => Repr::Ref,
         }
     }
 }
