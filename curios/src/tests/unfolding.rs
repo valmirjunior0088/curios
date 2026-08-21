@@ -236,18 +236,31 @@ fn compile_only(source: &str) -> (Result<(), String>, f64) {
 ///
 /// # What it last printed
 ///
-/// Taken **2026-08-21**, **release**, `aarch64-apple-darwin`, at the commit that landed the reification memo.
+/// Taken **2026-08-21**, **release**, `aarch64-apple-darwin`, with a replacement's residual group bound at item level.
 ///
 /// | spelling | `Parse/bind` copies at 16 rules | emitted functions | compile | growth of copies |
 /// | --- | --- | --- | --- | --- |
-/// | no application inside a continuation | 18 | 166 | 0.52 s | `n + 2` |
-/// | applications hoisted to items | 18 | 262 | 1.19 s | `n + 2` |
-/// | every rule eta-expanded, applications left in place | 18 | 312 | 4.39 s | `n + 2` |
-/// | **as written** — applications inside the continuation | **258** | 566 | **23.21 s** | **`n² + 2`** |
+/// | no application inside a continuation | 18 | 166 | 0.69 s | `n + 2` |
+/// | **as written** — applications inside the continuation | **18** | **262** | **1.52 s** | **`n + 2`** |
+/// | applications hoisted to items | 18 | 262 | 1.54 s | `n + 2` |
+/// | every rule eta-expanded, applications left in place | 18 | 278 | 1.64 s | `n + 2` |
 ///
-/// The quadratic is exact over `n` ∈ {2, 4, 8, 12, 16}: 6, 18, 66, 146, 258. The other three are exactly `n + 2` — hoisting the applications costs precisely what never writing them inside a continuation costs.
+/// **Where the application is written no longer decides anything.** The as-written row and the hoisted row agree to the copy, to the function, and to within a hundredth of a second, at every size — 4/108, 6/130, 10/174, 14/218, 18/262. The hoisted spelling was the cure emulated in source and therefore a ceiling; this is that ceiling reached.
 ///
-/// **Hoisting beats eta-expanding**, which is what says the cure is sharing rather than refusal: 1.19 s against 4.39 s and 262 functions against 312, for the same grammar. Eta-expansion declines the folds; hoisting performs them *and* shares the result.
+/// # What it printed before let-insertion
+///
+/// Same day, same host, with a block-owned candidate's group spliced into its own block.
+///
+/// | spelling | copies at 16 rules | emitted functions | compile | growth |
+/// | --- | --- | --- | --- | --- |
+/// | no application inside a continuation | 18 | 166 | 0.63 s | `n + 2` |
+/// | applications hoisted to items | 18 | 262 | 1.29 s | `n + 2` |
+/// | every rule eta-expanded | 18 | 312 | 4.58 s | `n + 2` |
+/// | **as written** | **258** | **566** | **24.23 s** | **`n² + 2`** |
+///
+/// The quadratic was exact over `n` ∈ {2, 4, 8, 12, 16}: 6, 18, 66, 146, 258. Sixteen rules cost 14× the copies and 16× the wall clock of the identical grammar with the same applications named as items first.
+///
+/// **Eta-expansion improved too, and by less**, which is the same reading the earlier table gave: 312 functions to 278, 4.58 s to 1.64 s. Eta declines the folds rather than sharing them, so it gains only what its remaining block candidates share — hoisting performs the folds *and* shares the result, and is still the cheaper of the two.
 ///
 /// # What the landed memo bought
 ///
@@ -642,4 +655,21 @@ fn scrutinee_retention_measurements() {
             kernel.units(),
         );
     }
+}
+
+/// **The guard [`combinator_sharing_measurements`] cannot be**, because a probe is ignored and nothing runs it.
+///
+/// What it holds is the growth *law* rather than a number: a combinator application written inside a `!` continuation must cost what the identical application written as a top-level item costs. The two spellings denote the same grammar, and before a replacement's residual group was bound at item level they differed by an order of magnitude at this size and by fourteen times at sixteen rules — `n² + 2` copies against `n + 2`.
+///
+/// Eight rules rather than sixteen because this one is not ignored: the quadratic is already 66 against 10 here, and the assertion is the shape rather than the size.
+#[test]
+fn an_application_inside_a_continuation_is_shared_like_one_at_item_level() {
+    let inside = copies(&ersd_optm(&grammar(8, Inner::InBlock)), "/std/Parse/bind");
+    let hoisted = copies(&ersd_optm(&grammar(8, Inner::Hoisted)), "/std/Parse/bind");
+
+    assert_eq!(
+        inside, hoisted,
+        "where a combinator application is written must not decide what it costs"
+    );
+    assert_eq!(inside, 10, "eight rules cost `n + 2` copies, not `n² + 2`");
 }

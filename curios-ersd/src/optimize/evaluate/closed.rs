@@ -2,6 +2,9 @@
 //!
 //! A two-phase plan/apply split: interpretation borrows the module immutably (a closure names a module function) while installing a replacement mutates it. The plan phase finds every closed candidate call and records its freestanding result; the apply phase materializes each result, splices the construction statements ahead of the candidate, rewrites the candidate to an alias or a residual, and re-verifies.
 
+#[cfg(test)]
+mod tests;
+
 use {
     super::{
         budget::{PASS_REIFY_BUDGET, ReifyBudget},
@@ -11,7 +14,7 @@ use {
     },
     crate::{
         Analysis, Atom, BlockId, ForeignId, FunctionId, Module, Rhs, Statement, StatementId,
-        ValueId,
+        ValueId, walk::control_blocks,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -104,6 +107,8 @@ fn apply(module: &mut Module, planned: Vec<Planned>) -> bool {
     let mut reify_pool = PASS_REIFY_BUDGET;
     // Stable for the whole pass: reification only appends, and the item list is rebuilt after this loop.
     let mut scope = ReifyScope::new();
+    // Which item hosts each block, so a candidate inside one binds its group ahead of that item. Stable for the same reason.
+    let block_items = index_block_items(module);
     // Where each item stands, so a shared copy is reused only by a candidate its splice point precedes. Stable for the same reason.
     let item_positions: BTreeMap<StatementId, usize> = module
         .items()
@@ -132,11 +137,24 @@ fn apply(module: &mut Module, planned: Vec<Planned>) -> bool {
         let mut spliced = Vec::new();
         let mut budget = ReifyBudget::within(reify_pool);
         // The probe above shares nothing, so it charges at least what this run will; the memos only ever remove copies from under a gate that already fit without them.
-        // An item-level candidate may additionally reuse a copy spliced before an earlier item; one inside a block carries no position and shares only within itself.
-        scope.begin_replacement(match plan.owner {
-            Owner::Items => item_positions.get(&plan.statement).copied(),
-            Owner::Block(_) => None,
-        });
+        //
+        // **Where the group is bound, which is not where the candidate stands.** Every statement a replacement emits is closed by construction — interned constants, functions [`ReifyScope::outward_ok`] proved item-bound, and earlier statements of the same group — so the group can be bound ahead of the *item* enclosing the candidate instead of inside the candidate's own block. Item bindings are ambient for everything after them, so that puts it in scope at the candidate and at every candidate after it, and gives a block-owned candidate an item position to share from.
+        //
+        // Binding it in the block instead is what made the same grammar cost `n² + 2` copies where the identical applications written at item level cost `n + 2`: a group bound inside a block that need not dominate anything contributed to no other replacement, so every definition re-materialized the whole chain below it.
+        //
+        // A block the entry expression owns has no item ahead of it. Such a candidate keeps the block-local splice and shares only within itself, which is what every block-owned candidate used to do.
+        let (splice_before, splice_owner, position) = match plan.owner {
+            Owner::Items => (
+                plan.statement,
+                Owner::Items,
+                item_positions.get(&plan.statement).copied(),
+            ),
+            Owner::Block(block) => match block_items.get(&block) {
+                Some(&item) => (item, Owner::Items, item_positions.get(&item).copied()),
+                None => (plan.statement, plan.owner, None),
+            },
+        };
+        scope.begin_replacement(position);
         let rhs = match plan.kind {
             Kind::Value(value) => {
                 match reify(module, &value, &mut budget, &mut spliced, &mut scope) {
@@ -167,8 +185,12 @@ fn apply(module: &mut Module, planned: Vec<Planned>) -> bool {
         reify_pool = reify_pool.saturating_sub(budget.spent());
         rewrites.push((plan.statement, plan.result, rhs));
         if !spliced.is_empty() {
-            spliced_before.insert(plan.statement, spliced);
-            touched.insert(plan.owner);
+            // Appended rather than inserted: every candidate inside one item binds its group ahead of that same item, in the order the plans were applied — which is the order a later group's reuse of an earlier group's copy depends on.
+            spliced_before
+                .entry(splice_before)
+                .or_default()
+                .extend(spliced);
+            touched.insert(splice_owner);
         }
     }
 
@@ -215,6 +237,73 @@ fn is_same_call(module: &Module, statement: StatementId, callee: Atom, arguments
             ..
         }) if *original_callee == callee && original_arguments.as_slice() == arguments
     )
+}
+
+/// Map every block to the top-level item whose region owns it.
+///
+/// **What lets a candidate inside a block bind its group where later candidates can see it.** [`Module::verify`] treats the top level as a virtual block — the items in order, then the entry block, with each item's bindings ambient for everything after it — so a group bound ahead of the item *enclosing* a candidate is in scope at that candidate and at every candidate after it. Bound inside the candidate's own block, the same group is in scope for nothing else at all, and that difference is the whole of the quadratic this pass used to produce.
+///
+/// A `Rec` group's computed members initialize in blocks the group owns, so they map to the item beside the function bodies. A block the *entry expression* owns maps to nothing: there is no item ahead of it, and a candidate there keeps the block-local splice.
+///
+/// Iterative rather than recursive over the two worklists, because module nesting is what erasure generated rather than what anyone wrote, and the verifier next door already reaches for `recurse` at this shape.
+fn index_block_items(module: &Module) -> BTreeMap<BlockId, StatementId> {
+    let mut hosts = BTreeMap::new();
+
+    for &item in module.items() {
+        let mut functions = Vec::new();
+        let mut blocks = Vec::new();
+        match module.statement(item) {
+            Some(Statement::Functions { functions: bound }) => functions.extend(bound),
+            Some(Statement::Rec { group }) => {
+                let Some(group) = module.rec_group(*group) else {
+                    continue;
+                };
+                functions.extend(&group.functions);
+                blocks.extend(group.values.iter().map(|member| member.init));
+            }
+            _ => continue,
+        }
+
+        let mut seen_functions = BTreeSet::new();
+        let mut seen_blocks = BTreeSet::new();
+        while !functions.is_empty() || !blocks.is_empty() {
+            while let Some(function) = functions.pop() {
+                if !seen_functions.insert(function) {
+                    continue;
+                }
+                if let Some(definition) = module.function(function) {
+                    blocks.push(definition.body);
+                }
+            }
+            while let Some(root) = blocks.pop() {
+                for block in control_blocks(module, root) {
+                    if !seen_blocks.insert(block) {
+                        continue;
+                    }
+                    hosts.insert(block, item);
+                    let Some(definition) = module.block(block) else {
+                        continue;
+                    };
+                    for &statement in &definition.statements {
+                        match module.statement(statement) {
+                            Some(Statement::Functions { functions: bound }) => {
+                                functions.extend(bound)
+                            }
+                            Some(Statement::Rec { group }) => {
+                                if let Some(group) = module.rec_group(*group) {
+                                    functions.extend(&group.functions);
+                                    blocks.extend(group.values.iter().map(|member| member.init));
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    hosts
 }
 
 /// Map each statement to its owner — its block, or the top-level item list.
