@@ -118,7 +118,11 @@ pub(crate) fn field_shape(
             };
             match relevant_chain(context, struct_decl.fields_at(&struct_type.params))? {
                 Chain::None => Ok(curios_ersd::FieldShape::Opaque),
-                Chain::One(domain) => field_shape(lowering, context, visited, &domain),
+                // The cycle the family arm below cuts, cut here too: a struct naming itself elaborates, so chasing its one relevant field returns to this declaration and the chain never lands. Guarding only where the chain continues keeps `visited` the ancestor chain rather than a seen-set.
+                Chain::One(domain) => match visited.insert(struct_type.name.clone()) {
+                    true => field_shape(lowering, context, visited, &domain),
+                    false => Ok(curios_ersd::FieldShape::Opaque),
+                },
                 // A struct that reaches itself is uninhabited but elaborates, so its own registration is still in flight here and there is no schema to name yet. Answering `Opaque` costs a shape no value will ever occupy.
                 Chain::Many => match lowering.in_flight(&struct_type.name) {
                     true => Ok(curios_ersd::FieldShape::Opaque),
