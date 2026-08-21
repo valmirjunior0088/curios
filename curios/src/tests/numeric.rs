@@ -92,14 +92,50 @@ fn folded_and_executed_scalar_ops_agree_inside_the_envelope() {
 
 #[test]
 fn overflowing_computations_trap_at_the_backend_boundary() {
-    // Each expression is a valid u32/i32 computation whose value leaves the i31 envelope; the backend refuses to box it and traps instead of silently truncating (shl formerly truncated, the conversions formerly wrapped).
+    // Each expression is a valid computation whose value leaves the carrier; the backend refuses it and traps instead of silently answering something else. Three ways a shift used to answer something else are covered below, and each was a different defect: a truncated product, a masked count, and the signed envelope being one place narrower than the unsigned one.
     for body in [
         "Nat/to_str(1073741824 + 1073741824 + n)",
         "Nat/to_str(Nat/mul(46341 + n, 46341))",
         "Nat/to_str(Nat/shl(1 + n, 31))",
         "Int/to_str(Nat/to_int(1073741824 + n))",
+        // A count under 32 whose *product* leaves the 32-bit carrier: `2^30 << 15` is `2^45`, which
+        // an `i32` shift truncates to zero — a result the old bit-31 test read as perfectly good,
+        // because the bits it would have seen were already gone.
+        "Nat/to_str(Nat/shl(1073741824 + n, 15))",
+        // A count Wasm would reduce modulo the operand width, turning `<< 40` into `<< 8`.
+        "Nat/to_str(Nat/shl(1 + n, 40))",
+        "Int/to_str(Int/shl(Int/add(+1, i), +40))",
+        // The signed envelope is `[-2^30, 2^30)`, so one place short of the unsigned one.
+        "Int/to_str(Int/shl(Int/add(+1, i), +30))",
     ] {
         runtime_traps(body);
+    }
+}
+
+/// A shift count past the carrier's width answers the arithmetic, not Wasm's modulo.
+///
+/// **These agree by computing rather than by refusing, which is why they sit apart from the trap list.** `⌊v / 2^k⌋` is zero for every `k` at or above the width and every `v` the carrier holds, and zero is representable — so refusing here would refuse a value the theory has and the carrier can hold. `Natural`'s bignum shift in `curios-core` is the oracle: it answers zero, and both erased stages must too. Before the count was clamped rather than masked, `1024 >> 40` answered `4`.
+///
+/// The left shifts are here for the case the trap list cannot cover: shifting *zero* by a count past the width is still zero, so the count alone must not decide a refusal.
+///
+/// Mutation-checked against both halves of the emitter's shift lowering, and they separate. Masking the count instead of clamping it — Wasm's own reduction — moves this fixture and the trap list together. Restoring the old `i32` shift with its bit-31 test moves the trap list alone, since a truncated product is invisible to that test while a clamped count is unaffected by it. Neither moves [`folded_and_executed_scalar_ops_agree_inside_the_envelope`], whose rows all sit inside the carrier.
+#[test]
+fn a_shift_past_the_carrier_width_answers_the_arithmetic() {
+    for (body, expected) in [
+        ("Nat/to_str(Nat/shr(1024 + n, 40))", "0"),
+        ("Nat/to_str(Nat/shr(1024 + n, 11))", "0"),
+        ("Nat/to_str(Nat/shr(1024 + n, 3))", "128"),
+        ("Nat/to_str(Nat/shl(0 + n, 40))", "0"),
+        ("Int/to_str(Int/shr(Int/add(-65, i), +40))", "-1"),
+        ("Int/to_str(Int/shr(Int/add(+1024, i), +40))", "+0"),
+        ("Int/to_str(Int/shl(Int/add(+0, i), +40))", "+0"),
+    ] {
+        folded_matches_runtime(body);
+        assert_eq!(
+            run_tainted(body).expect("in-envelope expression executes"),
+            expected.as_bytes(),
+            "wrong value for: {body}"
+        );
     }
 }
 
