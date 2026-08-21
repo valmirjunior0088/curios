@@ -111,5 +111,5 @@ pub mod cmp;
 pub use cmp/{let cmp};
 
 satisfy Show(BigPos) {
-    show(n) = /std/BigNat/to_str(n.value),
+    show(n) = BigNat/to_str(n.value),
 }
