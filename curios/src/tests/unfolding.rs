@@ -1,12 +1,16 @@
 //! What a combinator web costs to compile, and where.
 //!
-//! Two measurements, for the two specifications that lean on them: `documentation/roadmap/technical_debts/02-point-free-unfolding-spec.md` for how a reified closure is shared, and `documentation/roadmap/technical_debts/01-kernel-scrutinee-key-spec.md` for how a case refinement is keyed. Both are here rather than in prose because both specifications were preceded by a document whose figures were taken by a throwaway script, and none of that document's three load-bearing claims survived being re-measured.
+//! Three measurements, for the specifications that lean on them: `documentation/roadmap/technical_debts/02-point-free-unfolding-spec.md` for how a reified closure is shared, and `documentation/roadmap/technical_debts/01-kernel-scrutinee-key-spec.md` for how a case refinement is keyed and what filling the retention allowance costs. All three are here rather than in prose because both specifications were preceded by a document whose figures were taken by a throwaway script, and none of that document's three load-bearing claims survived being re-measured.
 //!
-//! Neither asserts. A measurement that fails is a measurement with an opinion, and what these report is a cost, not a contract — see `curios-prelude-archive`'s `stored_prelude_measurements`, whose shape this follows.
+//! None asserts. A measurement that fails is a measurement with an opinion, and what these report is a cost, not a contract — see `curios-prelude-archive`'s `stored_prelude_measurements`, whose shape this follows.
 
 use {
     super::ersd_optm,
-    curios_pipeline::{DEFAULT_STEP_BUDGET, compile_with_prelude},
+    curios_core::Consumption,
+    curios_pipeline::{
+        DEFAULT_STEP_BUDGET, compile_with_prelude, recheck_with_prelude_measured,
+        typecheck_with_prelude_measured,
+    },
     curios_text::{Entrypoint, RootSource},
     std::{fmt::Write, time::Instant},
 };
@@ -334,5 +338,199 @@ fn scrutinee_refinement_measurements() {
             };
             println!("{rules:<12} {named:<7} {scrutinize:<12} {elapsed:.2} s  {verdict}");
         }
+    }
+}
+
+/// A web of `rules` predicate definitions whose combinators dispatch through a stuck `match` rather than through `&&`, so the web's weak-head normal form is a tower of stuck matches rather than a tree of folded intrinsics.
+///
+/// Same fan-out as [`predicates`] — each rule names the one before it twice — and the same scrutinized consumer. What differs is the shape reduction has to build, and that is what the step in [`scrutinee_retention_measurements`] is a function of.
+fn dispatched(rules: usize, scrutinize: bool, suffix: &str, moduli: (u64, u64)) -> String {
+    let (even, odd) = moduli;
+    let mut source = format!(
+        "let Pred{suffix}: Type = (x: Nat) -> Bool;\n\
+         let both{suffix}(p: Pred{suffix}, q: Pred{suffix}) -> Pred{suffix} =\n\
+         \x20   (x) => match p(x): (_) => Bool | true => q(x) | false => false end;\n\
+         let anyof{suffix}(p: Pred{suffix}, q: Pred{suffix}) -> Pred{suffix} =\n\
+         \x20   (x) => match p(x): (_) => Bool | true => true | false => q(x) end;\n\
+         let base{suffix}: Pred{suffix} = (x) => x % {even} == 0;\n\
+         let other{suffix}: Pred{suffix} = (x) => x % {odd} == 0;\n\n"
+    );
+
+    for rule in 0..rules {
+        let previous = match rule >= 1 {
+            true => format!("r{}{suffix}", rule - 1),
+            false => format!("base{suffix}"),
+        };
+        let older = match rule >= 2 {
+            true => format!("r{}{suffix}", rule - 2),
+            false => format!("other{suffix}"),
+        };
+        let _ = writeln!(
+            source,
+            "let r{rule}{suffix}: Pred{suffix} = both{suffix}({previous}, anyof{suffix}({older}, {previous}));"
+        );
+    }
+
+    let _ = writeln!(
+        source,
+        "\nlet top{suffix}: Pred{suffix} = r{}{suffix};\n",
+        rules - 1
+    );
+
+    let _ = match scrutinize {
+        true => writeln!(
+            source,
+            "let probe{suffix}(n: Nat) -> Str =\n\
+             \x20   match top{suffix}(n): (_) => Str | true => \"y\" | false => \"n\" end;\n"
+        ),
+        false => writeln!(
+            source,
+            "let probe{suffix}(n: Nat) -> Bool = top{suffix}(n);\n"
+        ),
+    };
+
+    source
+}
+
+/// One or more [`dispatched`] webs under the shared header, with a tail that infers.
+///
+/// No `!` in the entry, unlike [`ENTRY`]: this probe puts the program to the two checkers through `typecheck_with_prelude_measured`, which elaborates an unannotated entrypoint in `Mode::Infer` where the compile path checks it against `Io({})` — so a top-level `!` has no region type to read its monad from. Nothing here needs the runtime taint either, since both checkers walk every declaration whether the entry reaches it or not.
+fn dispatched_program(webs: &[(usize, bool, &str, (u64, u64))]) -> String {
+    let mut source = String::from("use /std/{Str, Nat, Bool};\n\n");
+
+    for (rules, scrutinize, suffix, moduli) in webs {
+        source.push_str(&dispatched(*rules, *scrutinize, suffix, *moduli));
+    }
+
+    source.push_str("/std/print(\"ok\")\n");
+    source
+}
+
+/// What each checker's heaviest declaration spent on `source` at `budget`, what the kernel's walk retained, and how long the two took together.
+fn checker_cost(budget: u64, source: &str) -> (Consumption, Consumption, u64, f64) {
+    let entrypoint = source.parse::<Entrypoint>().expect("the probe parses");
+    let start = Instant::now();
+
+    let (module, _obligations, elaborator, _retained) =
+        typecheck_with_prelude_measured(budget, &entrypoint, &RootSource::none())
+            .expect("the probe elaborates");
+    let (verdicts, kernel) = recheck_with_prelude_measured(&module, budget);
+    let elapsed = start.elapsed().as_secs_f64();
+
+    assert!(verdicts.is_empty(), "the kernel accepts it: {verdicts:?}");
+
+    (
+        elaborator,
+        kernel.heaviest_declaration(),
+        kernel.retained(),
+        elapsed,
+    )
+}
+
+/// Where the step at eighteen definitions comes from, read off the compilation-scoped retention allowance rather than guessed at from a wall clock.
+///
+/// # How to take it
+///
+/// ```sh
+/// cargo test --release --package curios --lib -- --ignored --nocapture scrutinee_retention_measurements
+/// ```
+///
+/// # What it is for
+///
+/// [`scrutinee_refinement_measurements`] reports a cost that grows with the web. This one reports a cost that does *not*: with the combinators dispatching through a stuck `match` instead of `&&`, the compile is flat through seventeen definitions, steps by a factor of fifty at eighteen, and stays there to forty. A wall clock cannot tell a fan-out from a ceiling, so the column that decides it is here instead — and the three controls are what say which ceiling.
+///
+/// The kernel's only compilation-scoped, never-refunded, budget-independent bound is [`curios_core::DEFAULT_RETENTION_QUOTA`]. Every other counter it holds is per declaration and restored at each item boundary.
+///
+/// # What it last printed
+///
+/// Taken **2026-08-21**, **release**, `aarch64-apple-darwin`.
+///
+/// ```text
+///   rules   kernel units   depth  kernel retained  elab units   compile
+///   15             23415      18        892370244        9302     0.08 s
+///   16             24649      19        964531570        9302     0.05 s
+///   17             25976      20        999919608        9302     0.05 s
+///   18             53433       6        999999999        9302     2.66 s
+///   19             53433       6       1000000000        9302     2.68 s
+///   20             53433       6        999999991        9302     2.68 s
+///   40             61821      43        999999986        9302     2.70 s
+/// ```
+///
+/// **The step is the retention quota filling, and the ladder walks right up to it.** One fifteen-definition web has already consumed 89% of the compilation's whole allowance; seventeen reaches 99.99%; eighteen saturates. Past that every insertion is refused, the reduction runs cold, and the compile costs fifty times what it did one definition earlier.
+///
+/// **It is not the step budget.** The same web at twenty definitions spends the identical 53 433 units and takes the identical time across a sixty-four-fold budget range — a fixed `n` across budgets cannot see a threshold, which is what an earlier reading of this got wrong; sweeping the threshold is what settles it.
+///
+/// **It is not the program's size either.** One, two and three *different* eighteen-definition webs in one file all cost 2.7 s and all saturate: the first web spends the allowance and the rest run cold for free. A per-declaration cost would have tripled.
+///
+/// **What consumes it is the scrutinee.** The same webs with `top(n)` never reaching a match retain 191 177 units at eighteen definitions and 201 209 at forty — four orders of magnitude less, flat, and fast. Only `assume_case_value`'s reduction fills the quota.
+///
+/// The charged units barely move across the step (25 976 → 53 433) while the wall clock moves fifty-fold, because a term-keyed hit is free by design: what the memo buys is not charged, so what losing it costs is not charged either.
+#[test]
+#[ignore = "measurement: reports where a ceiling is rather than asserting one"]
+fn scrutinee_retention_measurements() {
+    println!("  the ladder — one scrutinized web, at the default budget");
+    println!(
+        "  {:<6}  {:>12}  {:>6}  {:>14}  {:>10}  {:>8}",
+        "rules", "kernel units", "depth", "kernel retained", "elab units", "compile"
+    );
+    for rules in [15usize, 16, 17, 18, 19, 20, 40] {
+        let source = dispatched_program(&[(rules, true, "", (2, 3))]);
+        let (elaborator, kernel, retained, elapsed) = checker_cost(DEFAULT_STEP_BUDGET, &source);
+
+        println!(
+            "  {rules:<6}  {:>12}  {:>6}  {:>14}  {:>10}  {elapsed:>7.2} s",
+            kernel.units(),
+            kernel.peak_depth(),
+            retained,
+            elaborator.units(),
+        );
+    }
+
+    println!(
+        "\n  control: the same web at twenty definitions, across a sixty-four-fold budget range"
+    );
+    let source = dispatched_program(&[(20, true, "", (2, 3))]);
+    for budget in [
+        DEFAULT_STEP_BUDGET / 8,
+        DEFAULT_STEP_BUDGET,
+        DEFAULT_STEP_BUDGET * 8,
+    ] {
+        let (_, kernel, retained, elapsed) = checker_cost(budget, &source);
+
+        println!(
+            "  budget {budget:<12}  kernel units {:>12}  retained {retained:>14}  {elapsed:>7.2} s",
+            kernel.units(),
+        );
+    }
+
+    println!("\n  control: how many eighteen-definition webs one program contains");
+    for webs in [
+        &[(18usize, true, "", (2u64, 3u64))][..],
+        &[(18, true, "", (2, 3)), (18, true, "B", (5, 7))][..],
+        &[
+            (18, true, "", (2, 3)),
+            (18, true, "B", (5, 7)),
+            (18, true, "C", (11, 13)),
+        ][..],
+    ] {
+        let source = dispatched_program(webs);
+        let (_, kernel, retained, elapsed) = checker_cost(DEFAULT_STEP_BUDGET, &source);
+
+        println!(
+            "  {} web(s)  kernel units {:>12}  retained {retained:>14}  {elapsed:>7.2} s",
+            webs.len(),
+            kernel.units(),
+        );
+    }
+
+    println!("\n  control: the same web at eighteen and forty definitions, never scrutinized");
+    for rules in [18usize, 40] {
+        let source = dispatched_program(&[(rules, false, "", (2, 3))]);
+        let (_, kernel, retained, elapsed) = checker_cost(DEFAULT_STEP_BUDGET, &source);
+
+        println!(
+            "  {rules:<6}  kernel units {:>12}  retained {retained:>14}  {elapsed:>7.2} s",
+            kernel.units(),
+        );
     }
 }
