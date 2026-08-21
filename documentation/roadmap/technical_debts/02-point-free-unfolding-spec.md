@@ -104,4 +104,4 @@ Whether the residual cost is acceptable for `/std` or whether the scanner spelli
 
 ## Out of scope
 
-[The fixpoint costs more than everything it optimizes](03-cont-fixpoint-cost-spec.md) owns `curios_cont::optimize`'s super-quadratic cost, which is the amplifier here and is already the dominant cost of compiles that have nothing to do with this. [A case refinement is keyed at the cheap spelling first](01-kernel-scrutinee-key-spec.md) owns a second, unrelated cliff on combinator-shaped code, in the kernel.
+[The fixpoint costs more than everything it optimizes](03-cont-fixpoint-cost-spec.md) owns `curios_cont::optimize`'s super-quadratic cost, which is the amplifier here and is already the dominant cost of compiles that have nothing to do with this. [An index inversion reduces its actuals, and both checkers pay for it](04-index-inversion-conversion-cost-spec.md) owns a second, unrelated cliff on combinator-shaped code, in the checkers.
