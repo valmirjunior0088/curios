@@ -921,6 +921,84 @@ fn a_declined_insertion_costs_the_next_reduction_a_re_derivation() {
     );
 }
 
+/// A boolean operation reduces its right operand only once its left is a literal. The left here is a local, so the right — a fold that would answer `true` — is handed back as written; with the left `true`, the same right folds and so does the whole. This is the rule that keeps weak-head reduction of a `&&`/`||` tree from being its full normalization, which on a web of predicate definitions naming each other twice was `2^n` under every demand — see `reduce_bool_binary`.
+#[test]
+fn a_stuck_left_operand_leaves_the_right_as_written() {
+    let mut kernel = kernel();
+    let x = binder(0, "x");
+    kernel.assume(&x, &Term::intrinsic(Intrinsic::BoolType));
+    let literal = |value: bool| Term::intrinsic(Intrinsic::Bool(value));
+    let folds = Term::intrinsic(Intrinsic::BoolAnd(literal(true), literal(true)));
+
+    let stuck = Term::intrinsic(Intrinsic::BoolAnd(Term::free_var(&x), folds.clone()));
+    assert_eq!(
+        whnf(&mut kernel, stuck.clone()),
+        Ok(stuck),
+        "a stuck left settles the fold, and the right is not reduced for an answer it cannot change"
+    );
+
+    let open = Term::intrinsic(Intrinsic::BoolAnd(literal(true), folds));
+    assert_eq!(
+        whnf(&mut kernel, open),
+        Ok(literal(true)),
+        "a literal left reads the right and folds"
+    );
+}
+
+/// A global name handed to a closed function stays a name in what the machine hands back, exactly as it does under the strategy: `twice(g)` at a plain demand is `(x) => g(g(x))` with `g` *named*, not `g`'s body substituted twice. The machine evaluated every beta argument and substituted its value, which on a function-valued global inlined the definition once per occurrence — and a web of definitions each naming the one before it twice came back as a graph whose tree was `2^n`, retained by the unfold memo and opened as a tree by the strategy's own beta. The strategy substitutes the argument as written, so the two reducts were never identical here, and this fixture is the one that sees it.
+#[test]
+fn the_closed_machine_keeps_a_global_argument_as_a_name() {
+    let g = Free::global(Qualifier::from(["g"]));
+    let twice = Free::global(Qualifier::from(["twice"]));
+    let (x, f) = (binder(0, "x"), binder(1, "f"));
+    let unary = Term::func_type([(x.clone(), nat_type())], nat_type());
+
+    let define = |kernel: &mut Kernel| {
+        kernel.define(
+            &g,
+            &unary,
+            &Term::func(
+                [(x.clone(), nat_type())],
+                Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), nat(1))),
+            ),
+            &monomorphic(),
+        );
+        kernel.define(
+            &twice,
+            &Term::func_type([(f.clone(), unary.clone())], unary.clone()),
+            &Term::func(
+                [(f.clone(), unary.clone())],
+                Term::func(
+                    [(x.clone(), nat_type())],
+                    Term::apply(
+                        Term::free_var(&f),
+                        [Term::apply(Term::free_var(&f), [Term::free_var(&x)])],
+                    ),
+                ),
+            ),
+            &monomorphic(),
+        );
+    };
+
+    let term = Term::apply(Term::free_var(&twice), [Term::free_var(&g)]);
+
+    let mut machined = kernel();
+    define(&mut machined);
+    let mut strategy = strategy_kernel();
+    define(&mut strategy);
+
+    let reduct = machined.reduce(term.clone()).expect("the machine reduces");
+    assert_eq!(
+        Some(reduct.clone()),
+        strategy.reduce(term).ok(),
+        "the machine and the strategy agree on the function handed back"
+    );
+    assert!(
+        reduct.mentions_free(&g),
+        "the argument survives as the name it was passed as:\n{reduct}"
+    );
+}
+
 /// The strategy arm of the differential fixture below: the ordinary test kernel with its closed machine off, so every closed term is walked by the recursive strategy. Beside its one consumer on purpose — nothing else may evaluate with the machine disabled.
 fn strategy_kernel() -> Kernel {
     let mut kernel = kernel();

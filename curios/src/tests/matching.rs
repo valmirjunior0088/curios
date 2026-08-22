@@ -706,6 +706,30 @@ fn an_inferred_implicit_does_not_break_a_refinement_key() {
     assert_eq!(run(source), b"refined");
 }
 
+// A refinement on a boolean operation still reaches the scrutinee's own occurrences now that `&&` reduces its right operand only behind a literal left: the key is recorded as written and probed before the term is taken apart, so the occurrence is answered whatever the operands would reduce to. What this does *not* pin is an occurrence spelled differently on its right — `Bool/and(x, h(7))` or the folded `Bool/and(x, true)` against a `Bool/and(x, g(7))` scrutinee — because those were not refined before the operand rule changed either: the escalation canonicalizes the key's arguments, but the probe it compares against arrives at the intrinsic after the fold, and the two never met. The operator spelling `x && g(7)` is not refined at all in this position, its check being parked on the `&&` witness and resumed after the arm's frame is gone. Both are findings, not this fixture's subject.
+//
+// Both checkers run this, so the one rule they share — `reduce_bool_binary` — cannot make them disagree about it.
+#[test]
+fn a_boolean_refinement_still_reaches_its_own_spelling() {
+    let source = r#"
+        use /std/{Eq, Bool, Nat, Str};
+
+        let g(n : Nat) -> Bool = n == 7;
+
+        let refined(x : Bool) -> Str =
+            match Bool/and(x, g(7))
+            | true =>
+                let p : Eq(Bool/and(x, g(7)), true) = Eq/refl();
+                "refined"
+            | false => "unrefined"
+            end;
+
+        /std/print(refined(true))
+        "#;
+
+    assert_eq!(run(source), b"refined");
+}
+
 // An arm is opened at the forced constructor's own payload, so a matched payload reduces to the value that constructor carried. Opening it at projections of the scrutinee instead reduces to the same value but leaves a residual Core cannot type — `Proj` has no rule for an inductive — and the difference is invisible until such a residual reaches conversion as a metavariable solution candidate, where re-validation refuses it as `NotATuple`: a hard verdict that fails the goal outright rather than parking it. A parameterized family is what keeps the projection from reducing away first, and a phantom parameter suffices, so this reached `/std/Option/map` and every container whose operation returns what a match arm bound.
 #[test]
 fn a_matched_payload_converts_against_the_value_it_carried() {

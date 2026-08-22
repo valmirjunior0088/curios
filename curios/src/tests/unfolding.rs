@@ -1,6 +1,6 @@
 //! What a combinator web costs to compile, and where.
 //!
-//! Three measurements, for the specifications that lean on them: `documentation/roadmap/technical_debts/04-index-inversion-conversion-cost-spec.md` for what an index inversion reduces, and `documentation/roadmap/technical_debts/05-kernel-retention-accounting-spec.md` for what filling the retention allowance costs. Three more specifications are closed — how a case refinement is keyed, how a reified closure is shared, and what the Cont fixpoint costs, the last measured in `tests::fixpoint` — and what is left of them here is the before-and-after each probe carries. All three measurements are here rather than in prose because those specifications were preceded by a document whose figures were taken by a throwaway script, and none of that document's three load-bearing claims survived being re-measured.
+//! Three measurements, for the specification that leans on them — `documentation/roadmap/technical_debts/05-kernel-retention-accounting-spec.md`, for what filling the retention allowance costs — and for the four that are closed: how a case refinement is keyed, how a reified closure is shared, what the Cont fixpoint costs (measured in `tests::fixpoint`), and what an index inversion reduces, whose residue over `Nat` [`numerics`] still measures. What is left of the closed ones here is the before-and-after each probe carries. All three measurements are here rather than in prose because those specifications were preceded by a document whose figures were taken by a throwaway script, and none of that document's three load-bearing claims survived being re-measured.
 //!
 //! None asserts. A measurement that fails is a measurement with an opinion, and what these report is a cost, not a contract — see `curios-prelude-archive`'s `stored_prelude_measurements`, whose shape this follows.
 
@@ -148,7 +148,7 @@ pub(super) enum Consumed {
     ScrutinizedClosed,
     /// Named in the index of an `Eq` the declaration takes a proof of, and eliminated. No case equation is registered for the web at all — the scrutinee is the proof, a bare variable — and the web is reduced anyway, by `invert_indices` unifying `(top(n), true)` against `refl`'s `(z, z)` through `Judge::convert_at`.
     ///
-    /// The second door onto the same reduction, and the one no refinement key reaches. Both checkers pay it, which is what makes it a different defect rather than the same one: see `documentation/roadmap/technical_debts/04-index-inversion-conversion-cost-spec.md`.
+    /// The second door onto the same reduction, and the one no refinement key reaches. Both checkers paid it, which is what made it a different defect rather than the same one — the third of the compiler cliffs `documentation/roadmap.md` records, closed: the cost was never the inverter's but weak-head reduction's, which normalized a `&&`/`||` tree whole to decide a fold a stuck left had already settled, and the closed machine's, which substituted a global's value for its name. [`numerics`] is the same door over `Nat`, where the first of those is the fold laws' to keep.
     Proved,
 }
 
@@ -355,6 +355,23 @@ fn combinator_sharing_measurements() {
 ///
 /// # What it last printed
 ///
+/// Taken **2026-08-21**, **release**, `x86_64-unknown-linux-gnu`, with `&&`/`||` reducing their right operand only behind a literal left and the closed machine keeping a global argument as a name.
+///
+/// | definitions | proved | numeric, proved |
+/// | --- | --- | --- |
+/// | 8 | 0.15 s | 0.19 s |
+/// | 10 | 0.15 s | 0.42 s |
+/// | 12 | 0.15 s | 1.78 s |
+/// | 13 | 0.16 s | 4.01 s |
+///
+/// The first four columns of the earlier table did not move and are omitted. **The proved door is flat**, and on the same host it read 0.23, 0.57, 2.55 and 5.53 s the same morning. Under `--features profile` at 13 definitions `recheck` is **13.6 ms of a 108 ms compile**, 120 k allocations, where it was 5 842 ms of 6 138 ms, 72 M allocations, 6.3 GB; `elaborate_and_zonk` is 13.8 ms where it was 220 ms.
+///
+/// The cost was never the inverter's. Conversion is weak-head-and-compare, and `true` against a stuck term stops at the heads; what the inverter's `force` paid for was weak-head reduction itself, twice over. `reduce_bool_binary` reduced both operands of a `&&`/`||` before it could know the fold was settled by a stuck left, so the weak-head form of the web's top was its full normalization, `2^n` with nothing remembering a local-bearing term — the whole of the elaborator's share and most of the kernel's. And the closed machine, handed the *closed* `both(r11, anyof(r11, r11))`, substituted `r11`'s value where the strategy keeps the name, so every definition's value held the previous one's twice, a graph whose tree was `2^n`, stored by the unfold memo at the tree's footprint and opened as a tree by the strategy's own beta — the 1.3 s that survived the first cure alone, and the whole of [`scrutinee_retention_measurements`]' retention ladder. Each is closed where it stood: `reduce_bool_binary` and the machine's `args`, in `curios-core`, which both checkers share.
+///
+/// **The numeric column is the same door over `Nat`, and it is the cliff that is left.** `reduce_nat_binary` reads its right operand for its identity laws — `x + 0` is `x` whatever the left — so a stuck left does not settle its fold the way a `Bool`'s does, and the web's weak-head form is still its normalization: ×2.2 per definition, the shape the boolean column had. What would reach it is sharing — a reduct remembered for a local-bearing term within one reduction, which both checkers refuse today for the reason `documentation/soundness/what-the-kernel-consults/the-evaluation-memo.md` gives — and that is a decision about the trusted base's evaluation strategy rather than a line here.
+///
+/// # What it printed with the key at the written spelling and both operands eager
+///
 /// Taken **2026-08-21**, **release**, `aarch64-apple-darwin`, with a case refinement keyed at the written spelling.
 ///
 /// | definitions | applied | named once, scrutinized | named twice, scrutinized | scrutinized at a literal | proved |
@@ -368,7 +385,7 @@ fn combinator_sharing_measurements() {
 ///
 /// Flat in the first four columns, and they are each other's controls: what a `match` is written over no longer decides anything, at any size, and fourteen definitions compile where they refused. The first row is the first compile of the run and carries its warm-up.
 ///
-/// **The last column is the door this key does not reach**, and it is here so that a reader can see the two apart. `Eq(top(n), true)` eliminated at `refl` registers no case equation for the web — the scrutinee is a proof variable — and reduces it anyway, through the index inversion the elimination rule runs. It is unchanged by this commit, to the wall clock, and it is exponential in *both* checkers rather than one. `documentation/roadmap/technical_debts/04-index-inversion-conversion-cost-spec.md` owns it, and [`scrutinee_retention_measurements`] measures it.
+/// **The last column was the door this key does not reach**, and it is here so that a reader can see the two apart. `Eq(top(n), true)` eliminated at `refl` registers no case equation for the web — the scrutinee is a proof variable — and reduces it anyway, through the index inversion the elimination rule runs. It was unchanged by that commit, to the wall clock, and it was exponential in *both* checkers rather than one; the section above is where it went.
 ///
 /// Under `--features profile` at 13 definitions — `make curios/profile CURIOS_PROFILE_SOURCE=<the same program>` — `recheck` is **7.9 ms of a 64 ms compile**, 112 k allocations, tenth in the table and below `elaborate_and_zonk`'s 10.4 ms. Peak memory is 24.9 MiB. The figures it replaced are two paragraphs down.
 ///
@@ -427,6 +444,55 @@ fn scrutinee_refinement_measurements() {
             println!("{rules:<12} {named:<7} {label:<18} {elapsed:>7.2} s  {verdict}");
         }
     }
+
+    // The same web over `Nat`, proved — the shape the boolean cure does not reach, because a `Nat` fold must read its right operand for its identity laws where a `Bool` fold behind a stuck left need not.
+    for &rules in &[8usize, 10, 12, 13] {
+        let (outcome, elapsed) = compile_only(&numerics(rules));
+        let verdict = match &outcome {
+            Ok(()) => "compiled".to_string(),
+            Err(error) => error.lines().next().unwrap_or("refused").to_string(),
+        };
+        println!(
+            "{rules:<12} {:<7} {:<18} {elapsed:>7.2} s  {verdict}",
+            "twice", "numeric, proved"
+        );
+    }
+}
+
+/// The [`predicates`] web carried over `Nat` — `+` for `both`, `*` for `anyof`, remainders for the leaves — and proved at `Eq(top(n), 0)`. Each rule names the one before it twice, as the `twice` arm of [`predicates`] does.
+fn numerics(rules: usize) -> String {
+    let mut source = String::from(
+        "use /std/{Str, Nat, Eq};\n\n\
+         let Fn: Type = (x: Nat) -> Nat;\n\
+         let both(p: Fn, q: Fn) -> Fn = (x) => p(x) + q(x);\n\
+         let anyof(p: Fn, q: Fn) -> Fn = (x) => p(x) * q(x);\n\
+         let base: Fn = (x) => x % 2;\n\
+         let other: Fn = (x) => x % 3;\n\n",
+    );
+
+    for rule in 0..rules {
+        let previous = if rule >= 1 {
+            format!("r{}", rule - 1)
+        } else {
+            "base".to_string()
+        };
+        let older = if rule >= 2 {
+            format!("r{}", rule - 2)
+        } else {
+            "other".to_string()
+        };
+        let _ = writeln!(
+            source,
+            "let r{rule}: Fn = both({previous}, anyof({older}, {previous}));"
+        );
+    }
+
+    let _ = writeln!(source, "\nlet top: Fn = r{};\n", rules - 1);
+    source.push_str(
+        "let probe(n: Nat, e: Eq(top(n), 0)) -> Str =\n    match e: (_, _, _) => Str | refl(@z) => \"y\" end;\n\n",
+    );
+    source.push_str(TAIL);
+    source
 }
 
 /// A web of `rules` predicate definitions whose combinators dispatch through a stuck `match` rather than through `&&`, so the web's weak-head normal form is a tower of stuck matches rather than a tree of folded intrinsics.
@@ -516,6 +582,23 @@ fn checker_cost(budget: u64, source: &str) -> (Consumption, Consumption, u64, f6
 ///
 /// # What it last printed
 ///
+/// Taken **2026-08-21**, **release**, `x86_64-unknown-linux-gnu`, with the closed machine keeping a global argument as a name — the proved ladder alone, the rest of the run being unchanged.
+///
+/// ```text
+///   the ladder — one proved web, at the default budget
+///   rules   kernel units   depth  kernel retained  elab units   compile
+///   6              22363       6           215949       14073     0.04 s
+///   8              22363       6           226581       16593     0.04 s
+///   10             22363       6           239261       19113     0.04 s
+///   11             22363       6           246369       20373     0.04 s
+///   12             22363       6           253989       21633     0.04 s
+///   13             22482      16           262121       22893     0.04 s
+/// ```
+///
+/// **The proved door's retention was the machine's.** Thirteen definitions retain 262 121 units where they retained 309 948 607 — a thousandth — and the column grows by about twelve thousand a definition, linearly. What the unfold memo was retaining was the closed machine's reduct of each definition: it substituted the previous definition's *value* for its name at every beta, so each value held the one before it twice, and `footprint` priced the graph as the tree it unfolds to — exactly the overcount `documentation/roadmap/technical_debts/05-kernel-retention-accounting-spec.md` hypothesized, with the thing that built the graph now named. A bare name stays a name, as it does under the strategy, and the ladder below is what this one printed before.
+///
+/// # What it printed with the machine substituting values
+///
 /// Taken **2026-08-21**, **release**, `aarch64-apple-darwin`, with a case refinement keyed at the written spelling.
 ///
 /// ```text
@@ -552,7 +635,7 @@ fn checker_cost(budget: u64, source: &str) -> (Consumption, Consumption, u64, f6
 ///
 /// **The scrutinized door is closed.** Forty definitions retain 222 555 units — a fifth of a percent of the allowance — where fifteen used to retain 892 370 244 and eighteen saturated. That door was `assume_case_value` reducing to key a case refinement, and it no longer reduces.
 ///
-/// **The proved door is open, and it is the same reduction reached another way.** `Eq(top(n), true)` eliminated at `refl` registers no case equation for the web at all — the scrutinee is a proof variable — and reduces it anyway, through `invert_indices` unifying the actual indices against `(z, z)`. Retention grows by a factor of about 2.4 per definition: thirteen definitions consume 31% of the whole compilation's allowance, and fifteen would exhaust it. The wall clock grows with it, and *both checkers* pay — `elab units` climbs on this ladder where it is flat on the other, which is what makes it a different defect. See `documentation/roadmap/technical_debts/04-index-inversion-conversion-cost-spec.md`.
+/// **The proved door was open, and it was the same reduction reached another way.** `Eq(top(n), true)` eliminated at `refl` registers no case equation for the web at all — the scrutinee is a proof variable — and reduces it anyway, through `invert_indices` unifying the actual indices against `(z, z)`. Retention grew by a factor of about 2.4 per definition: thirteen definitions consumed 31% of the whole compilation's allowance, and fifteen would have exhausted it. The wall clock grew with it, and *both checkers* paid — `elab units` climbs on this ladder where it is flat on the other, which is what made it a different defect. [`scrutinee_refinement_measurements`] carries where both went.
 ///
 /// **It is not the step budget.** The same proved web across a sixty-four-fold budget range retains the identical figure and takes the identical time. Every other counter the kernel holds is per declaration and restored at each item boundary; this one is not, which is why a wall clock alone cannot tell a fan-out from a ceiling.
 ///

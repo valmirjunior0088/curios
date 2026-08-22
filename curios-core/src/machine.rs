@@ -704,11 +704,17 @@ impl Machine {
     }
 
     /// Advance an [`Args`] run: evaluate the next pending term, or finish over the collected values.
+    ///
+    /// **A global name in a catching position stays a name.** The hosts substitute a beta argument or an arm payload as written and unfold a name only where it is demanded; evaluating the name here and substituting its *value* is call-by-value on definitions, and on a function-valued global it inlines the definition's whole web once per occurrence — `both(r11, anyof(r11, r11))` came back holding `r11`'s value twice, that value holding `r10`'s twice, a graph whose tree is `2^n` — which the host's unfold memo then retained and the host's own beta later opened as a tree. Everything else in a catching position is still evaluated, which is what keeps a data-shaped walk at constant native depth; a name costs the host one unfold where it is demanded, served by the run-scoped memo thereafter.
     fn args<H: ClosedHost>(&mut self, host: &mut H, mut args: Args) -> Result<Step, ReduceError> {
-        if args.next < args.originals.len() {
+        while args.next < args.originals.len() {
             let next = args.originals[args.next].clone();
             let demand = args.item_demand;
             args.next += 1;
+            if args.catch && matches!(&*next, Subterm::Var(_)) {
+                args.done.push(next);
+                continue;
+            }
             self.push(host, Frame::Args(args))?;
             return Ok(Step::Eval(next, demand));
         }

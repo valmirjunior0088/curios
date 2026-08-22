@@ -2,7 +2,7 @@
 
 ## Status
 
-Located and measured, unstarted. `curios`' `scrutinee_retention_measurements` is the probe, and `curios-core/src/retention.rs` already carries the ceiling's own measurement and the sentence this specification is the follow-through on: *"The open question is the source, not the ceiling."*
+Located and measured; the source found and its largest spring closed, the accounting question open. `curios`' `scrutinee_retention_measurements` is the probe, and `curios-core/src/retention.rs` already carries the ceiling's own measurement and the sentence this specification is the follow-through on: *"The open question is the source, not the ceiling."* The source, for the ladder below, was the closed machine substituting a global's *value* for its name at every beta — a function-valued global's definition inlined once per occurrence, so a web naming each definition twice produced a graph whose tree was `2^n`, which the unfold memo retained at the footprint of the tree. A bare name now stays a name, and the thirteen-definition proof retains **262 121** units where it retained 309 948 607. What remains is everything this document said about the allowance itself, and the elaborator's unattributed `Str` share.
 
 ## Why it exists
 
@@ -40,6 +40,8 @@ That was observed directly, before the refinement key moved to the written spell
 A step of fifty-fold on one more definition, then flat forever. It reproduced as budget-invariant across a sixty-four-fold range, invariant in the web's size past the threshold, and invariant in how many copies of the web the program contained — three fingerprints of a saturating compilation-scoped store, and none of a fan-out. `scrutinee_retention_measurements` records that table as what it printed before, and the door that reached it is closed; the proved door above still climbs toward the same ceiling.
 
 ## Where the units go
+
+For the proved ladder, found: the machine's value-substituted reducts, whose `footprint` is the tree of a graph. The hypothesis below was right about the accounting and silent about what built the graph; the rest of this section is kept as it was written, because the `Str` share it ends on is still unattributed.
 
 Unexplained, and that is the first work item rather than a caveat. Nothing in the observed programs is large: peak process memory over the whole eighteen-definition compile was 25 MiB, against an allowance that at eight logical bytes a unit nominally bounds retained storage at eight gigabytes.
 

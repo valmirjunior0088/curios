@@ -15,7 +15,9 @@ fn as_index(term: &Term) -> Option<usize> {
     term.as_nat().and_then(|n| n.to_natural()?.to_usize())
 }
 
-/// Reduce both operands of a `Bool` binary intrinsic, then either `fold` the two literals or `rebuild` the neutral term. `Bool` has no numeric carrier at the type level, so the fold reads the `true`/`false` constructors directly.
+/// Reduce the operands of a `Bool` binary intrinsic as far as a fold could use them, then either `fold` the two literals or `rebuild` the neutral term. `Bool` has no numeric carrier at the type level, so the fold reads the `true`/`false` constructors directly.
+///
+/// **The right operand is reduced only once the left is a literal.** A fold needs both, so a stuck left settles the verdict whatever the right holds, and reducing the right then is work the answer cannot use. It was reduced regardless, and that made weak-head reduction of a `&&`/`||` tree its *full* normalization: a web of predicate definitions each naming the one before it twice unfolded `2^n` times under any demand on its top, since a local-bearing term is remembered by nothing — the cliff `curios`' `scrutinee_refinement_measurements` records under `proved`. Stopping at the left leaves the right as written, which conversion compares lazily through its own reduction, so no equality decision moves. The `Nat` folds below keep both operands eager because their identity laws (`x + 0`) read the right.
 fn reduce_bool_binary(
     reducer: &mut impl Reducer,
     left: &Term,
@@ -24,14 +26,15 @@ fn reduce_bool_binary(
     rebuild: impl FnOnce(Term, Term) -> Intrinsic,
 ) -> Result<Subterm, ReduceError> {
     let left = reducer.reduce_forced(left.clone())?;
-    let right = reducer.reduce_forced(right.clone())?;
+    let Some(l) = left.as_bool() else {
+        return Ok(Subterm::Intrinsic(rebuild(left, right.clone())));
+    };
 
-    Ok(Subterm::Intrinsic(
-        match (left.as_bool(), right.as_bool()) {
-            (Some(l), Some(r)) => Intrinsic::Bool(fold(l, r)),
-            _ => rebuild(left, right),
-        },
-    ))
+    let right = reducer.reduce_forced(right.clone())?;
+    Ok(Subterm::Intrinsic(match right.as_bool() {
+        Some(r) => Intrinsic::Bool(fold(l, r)),
+        None => rebuild(left, right),
+    }))
 }
 
 fn reduce_byte_binary(
