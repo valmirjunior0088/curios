@@ -746,8 +746,14 @@ fn elaborate_induct_match(
                 Telescope::Cons(..) => unreachable!("arity checked above"),
             };
 
-            // Refinement propagates `head := ctor_val` to other occurrences of the scrutinee in the arm body; the binder types themselves came from the telescope above.
-            let ctor_val = Term::variant(name.clone(), params.clone(), tag.clone(), vars.clone());
+            // Refinement propagates `head := ctor_val` to other occurrences of the scrutinee in the arm body; the binder types themselves came from the telescope above. Built at the scrutinee's own universe levels, because this value outlives the refinement: the motive is opened on it, so it is what a metavariable in an arm's expected type is solved to — the `@z` of an `Eq/refl()` against `Eq(len(xs), len(xs))` — and a level-less occurrence of a polymorphic family zonks into the definition, where the arity check (or, for a prelude family it cannot see, the kernel) refuses it.
+            let ctor_val = Term::variant_at(
+                name.clone(),
+                universes.clone(),
+                params.clone(),
+                tag.clone(),
+                vars.clone(),
+            );
             refine_head(context, &head_elaborated, &ctor_val)?;
 
             // Rung B — definitional learning: a scrutinee index that is a `Var` reduces, inside this arm, to the case's target index — the same counterfactual, frame-scoped move as `head := ctor_val`. A constructor index records an inert entry (`refine_head`); the inverter below pins the arm binders the other way. Refinements never justify the typing (the motive application does); they are convertibility aids, so context hypotheses mentioning the key reduce at the arm's index.
