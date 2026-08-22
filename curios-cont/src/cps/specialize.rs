@@ -16,11 +16,12 @@ pub(super) enum Knowledge {
     Conflict,
 }
 impl Knowledge {
+    /// Fold one transfer in: `None` is a transfer whose arguments cannot be seen — an escaping reference, an operation delivering its result — and it is a conflict from whatever state, not only from `Known`. It once left `Unknown` standing, so a join that was first an operation's `return_to` and then a jump's target learned the jump's literal as if it were the only way in, and the order the arena happened to list the two decided what the program computed.
     fn merge(&mut self, incoming: Option<&CpsAtom>) {
         match (&*self, incoming) {
-            (Self::Conflict, _) | (Self::Unknown, None) => {}
+            (Self::Conflict, _) => {}
+            (_, None) => *self = Self::Conflict,
             (Self::Unknown, Some(atom)) => *self = Self::Known(atom.clone()),
-            (Self::Known(_), None) => *self = Self::Conflict,
             (Self::Known(current), Some(incoming)) if current == incoming => {}
             (Self::Known(_), Some(_)) => *self = Self::Conflict,
         }

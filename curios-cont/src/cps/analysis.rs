@@ -305,6 +305,46 @@ pub(super) fn known_values(module: &CpsModule) -> BTreeMap<CpsValueId, CpsAtom> 
         record_known_literals(params, &inputs, &mut known);
     }
 
+    // A continuation parameter is known the same way a function's is: every transfer hands it the same literal. Edges carry their arguments; an operation delivering into its `return_to` hands a runtime value, which is the `None` that forces `Conflict`. A join point whose every jump passes one tag — the clone `specialize_jump_patterns` or `split_parameters` leaves once the other tag's jumps are gone — keeps a switch on that parameter and the arm it can never take, and a read in that dead arm of a value minted in the live arm's vocabulary is exactly what `verify_rows` refuses once a later pass substitutes the construction into it.
+    let mut continuation_inputs = BTreeMap::<CpsContId, Vec<Knowledge>>::new();
+    for (continuation, definition) in module.continuations.iter_live() {
+        continuation_inputs.insert(
+            continuation,
+            vec![Knowledge::Unknown; definition.params.len()],
+        );
+    }
+    for (_, node) in module.nodes.iter_live() {
+        let mut edge = |edge: &CpsEdge| {
+            if let Some(inputs) = continuation_inputs.get_mut(&edge.target) {
+                merge_inputs(inputs, Some(&edge.args));
+            }
+        };
+        match node {
+            CpsNode::ApplyCont(target) => edge(target),
+            CpsNode::Switch { cases, default, .. } => {
+                cases.values().chain(default.iter()).for_each(edge);
+            }
+            CpsNode::ApplyFun { return_to, .. }
+            | CpsNode::Foreign { return_to, .. }
+            | CpsNode::Cell { return_to, .. }
+            | CpsNode::Intrinsic { return_to, .. } => {
+                if let Some(inputs) = continuation_inputs.get_mut(return_to) {
+                    merge_inputs(inputs, None);
+                }
+            }
+            CpsNode::LetValue { .. }
+            | CpsNode::LetIntrinsic { .. }
+            | CpsNode::LetFun { .. }
+            | CpsNode::LetCont { .. }
+            | CpsNode::Exit { .. }
+            | CpsNode::Unreachable => {}
+        }
+    }
+    for (continuation, inputs) in continuation_inputs {
+        let params = &module.continuation(continuation).unwrap().params;
+        record_known_literals(params, &inputs, &mut known);
+    }
+
     // Recursive members are skipped above because a self-forwarded argument pollutes the flat per-call join. Recover their provably-invariant known parameters with a dedicated SCC fixpoint and fold them in.
     let invariant = scc_invariant_knowns(module, &analysis, &known);
     known.extend(invariant);
