@@ -1,15 +1,17 @@
 use {
-    super::analysis::{analyze_calls, available_values, free_values, function_nodes},
+    super::analysis::{CallAnalysis, analyze_calls, available_values, free_values, function_nodes},
     super::*,
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// Contify a non-escaping function whose calls resolve to a single return context into a local continuation, covering both the single-entry recursive loop and the non-recursive join-point cases.
+/// Contify every non-escaping function whose calls resolve to a single return context into a local continuation, covering both the single-entry recursive loop and the non-recursive join-point cases.
 ///
 /// A function qualifies when it has exactly one external call site: any call from a third function would make `external` longer than one, so the only admissible calls are that single entry plus the function's own tail-recursive self-calls. This excludes mutual recursion and multi-return-context callers without a separate check. Common-dominator placement for genuinely multi-site contification is deferred to the machine-CFG analysis.
+///
+/// One call analysis serves every candidate, because a contification leaves the others admissible. It replaces one call and moves one body: no other function's sites change, nothing new escapes, and the one fact that does move — the owner of a site that sat inside the contified body is now that body's new owner — preserves both conditions that read it. Reachability: the new owner called the contified function directly, so reaching it would have meant reaching the function, which was refused. Capture: the new owner's available values have grown by everything the contified body owned, and the candidate's free values were already within those. What does go stale is mechanical, and [`resolve_owner`] repairs it. It was one contification per call, which `fixpoint_pass_measurements` found setting a `Toml/decode` compile's round count once the two passes ahead of it stopped.
 pub(super) fn contify_calls(module: &mut CpsModule) -> bool {
     let analysis = analyze_calls(module);
-    let mut selected = None;
+    let mut admitted = Vec::new();
 
     for (callee, function) in module.functions.iter_live() {
         if Some(callee) == module.entry || analysis.escaping.contains(&callee) {
@@ -43,16 +45,36 @@ pub(super) fn contify_calls(module: &mut CpsModule) -> bool {
             }
         }
         if compatible {
-            selected = Some((callee, external[0]));
-            break;
+            admitted.push((callee, external[0], external_owner));
         }
     }
 
-    let Some((callee, call)) = selected else {
-        return false;
-    };
-    contify_call(module, callee, call);
-    true
+    let mut changed = false;
+    for (callee, call, owner) in admitted {
+        let owner = resolve_owner(module, &analysis, owner);
+        // Implied by the snapshot's verdict, as the doc above argues; re-read live because it is cheap and the argument is the only thing standing behind it.
+        if !free_values(module, callee).is_subset(&available_values(module, owner)) {
+            continue;
+        }
+        contify_call(module, callee, call);
+        changed = true;
+    }
+    changed
+}
+
+/// The function that owns a site the snapshot attributed to `owner`, after the contifications this sweep has already applied.
+///
+/// A function the sweep removed was contified, and what contified it was its single external site — so its body, and every site in it, now belongs to whoever the snapshot says owned *that* site. The chain is finite because a contified function does not reach its owner.
+fn resolve_owner(module: &CpsModule, analysis: &CallAnalysis, mut owner: CpsFunId) -> CpsFunId {
+    while module.function(owner).is_none() {
+        let site = analysis.call_sites[&owner]
+            .iter()
+            .copied()
+            .find(|site| analysis.node_owners[site] != owner)
+            .expect("a function removed in this sweep was contified at its one external site");
+        owner = analysis.node_owners[&site];
+    }
+    owner
 }
 pub(super) fn function_reaches(
     graph: &BTreeMap<CpsFunId, BTreeSet<CpsFunId>>,

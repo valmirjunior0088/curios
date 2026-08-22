@@ -147,6 +147,182 @@ fn a_split_records_the_group_and_verifies() {
     );
 }
 
+/// Two join points, each handed its own pair by the entry and each projecting field 0 — candidates with nothing between them. `chained` instead routes one pair through both: the first join hands its parameter whole to the second, so the second's only incoming edge carries the first's parameter.
+fn two_joins_module(chained: bool) -> (CpsModule, CpsContId, CpsContId) {
+    let mut module = CpsModule::default();
+    let scrutinee = module.add_value(Some("scrutinee".into()));
+    let first_pair = module.add_value(Some("first_pair".into()));
+    let second_pair = module.add_value(Some("second_pair".into()));
+    let first_param = module.add_value(Some("first_param".into()));
+    let second_param = module.add_value(Some("second_param".into()));
+    let first_read = module.add_value(Some("first_read".into()));
+    let second_read = module.add_value(Some("second_read".into()));
+
+    let function = module.reserve_function();
+    let return_cont = module.reserve_continuation();
+    let first = module.reserve_continuation();
+    let second = module.reserve_continuation();
+
+    // second(second_param): second_read = second_param.0; return second_read
+    let deliver = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        target: return_cont,
+        args: vec![CpsAtom::Value(second_read)],
+    }));
+    let take = module.add_node(CpsNode::LetIntrinsic {
+        result: second_read,
+        op: CpsIntrinsic::TupleGet(0),
+        args: vec![CpsAtom::Value(second_param)],
+        next: deliver,
+    });
+    module.define_continuation(
+        second,
+        CpsContinuation {
+            debug_name: Some("second".into()),
+            params: vec![second_param],
+            body: take,
+        },
+    );
+
+    // first(first_param): first_read = first_param.0; then either return first_read, or second(first_param) when chained
+    let leave = match chained {
+        true => module.add_node(CpsNode::ApplyCont(CpsEdge {
+            target: second,
+            args: vec![CpsAtom::Value(first_param)],
+        })),
+        false => module.add_node(CpsNode::ApplyCont(CpsEdge {
+            target: return_cont,
+            args: vec![CpsAtom::Value(first_read)],
+        })),
+    };
+    let read = module.add_node(CpsNode::LetIntrinsic {
+        result: first_read,
+        op: CpsIntrinsic::TupleGet(0),
+        args: vec![CpsAtom::Value(first_param)],
+        next: leave,
+    });
+    module.define_continuation(
+        first,
+        CpsContinuation {
+            debug_name: Some("first".into()),
+            params: vec![first_param],
+            body: read,
+        },
+    );
+
+    // main(scrutinee): first_pair = (0, 7); second_pair = (1, 8); switch scrutinee { 0 => first(first_pair), _ => second(second_pair) } — or first(first_pair) alone when chained
+    let enter = match chained {
+        true => module.add_node(CpsNode::ApplyCont(CpsEdge {
+            target: first,
+            args: vec![CpsAtom::Value(first_pair)],
+        })),
+        false => module.add_node(CpsNode::Switch {
+            scrutinee: CpsAtom::Value(scrutinee),
+            cases: [(
+                0,
+                CpsEdge {
+                    target: first,
+                    args: vec![CpsAtom::Value(first_pair)],
+                },
+            )]
+            .into(),
+            default: Some(CpsEdge {
+                target: second,
+                args: vec![CpsAtom::Value(second_pair)],
+            }),
+        }),
+    };
+    let plant_second = module.add_node(CpsNode::LetValue {
+        result: second_pair,
+        value: CpsValueExpr::Tuple(vec![
+            CpsAtom::Literal(CpsLiteral::Nat(1)),
+            CpsAtom::Literal(CpsLiteral::Nat(8)),
+        ]),
+        next: enter,
+    });
+    let plant_first = module.add_node(CpsNode::LetValue {
+        result: first_pair,
+        value: CpsValueExpr::Tuple(vec![
+            CpsAtom::Literal(CpsLiteral::Nat(0)),
+            CpsAtom::Literal(CpsLiteral::Nat(7)),
+        ]),
+        next: plant_second,
+    });
+    let body = module.add_node(CpsNode::LetCont {
+        continuations: vec![first, second],
+        body: plant_first,
+    });
+    module.define_function(
+        function,
+        CpsFunction {
+            debug_name: Some("main".into()),
+            params: vec![scrutinee],
+            return_cont,
+            body,
+        },
+    );
+    module.set_entry(function);
+    (module, first, second)
+}
+
+/// One invocation splits every candidate that one snapshot admits: two independent joins are both recorded after a single call, where one split per call would have spent a whole round of every pass on the second.
+#[test]
+fn independent_candidates_split_in_one_sweep() {
+    let (mut module, first, second) = two_joins_module(false);
+    module.verify().expect("the fixture is well-formed");
+
+    assert!(split_parameters(&mut module));
+    module
+        .verify()
+        .expect("the sweep preserves well-formedness");
+
+    assert_eq!(
+        module.field_groups().get(&first),
+        Some(&vec![FieldGroup { start: 0, width: 2 }]),
+        "the first join is split",
+    );
+    assert_eq!(
+        module.field_groups().get(&second),
+        Some(&vec![FieldGroup { start: 0, width: 2 }]),
+        "and so is the second, in the same call",
+    );
+    assert!(
+        !split_parameters(&mut module),
+        "nothing is left for a second call",
+    );
+}
+
+/// A candidate whose incoming edge an earlier split in the sweep has touched waits for the next round: the first join's split redirects its parameter to a head rebuild the snapshot never saw, and that rebuild now stands on the only edge into the second join, so the second is declined this call and admitted on the next, against facts that know the rebuild's width.
+#[test]
+fn a_candidate_behind_a_sweep_mate_waits_for_the_next_round() {
+    let (mut module, first, second) = two_joins_module(true);
+    module.verify().expect("the fixture is well-formed");
+
+    assert!(split_parameters(&mut module));
+    module
+        .verify()
+        .expect("the sweep preserves well-formedness");
+    assert_eq!(
+        module.field_groups().get(&first),
+        Some(&vec![FieldGroup { start: 0, width: 2 }]),
+        "the first join is split",
+    );
+    assert_eq!(
+        module.field_groups().get(&second),
+        None,
+        "the second is deferred, its edge now carrying the first's rebuild",
+    );
+
+    assert!(split_parameters(&mut module));
+    module
+        .verify()
+        .expect("the deferred split preserves well-formedness");
+    assert_eq!(
+        module.field_groups().get(&second),
+        Some(&vec![FieldGroup { start: 0, width: 2 }]),
+        "and is admitted once the facts include the rebuild",
+    );
+}
+
 /// The full chain erases the product: after optimization no two-field tuple construction survives anywhere — not the seed, not the arm's rebuild, not the split's own head materialization. This is the campaign's focused acceptance fixture for continuation scalar replacement.
 #[test]
 fn a_loop_carried_product_erases_through_the_chain() {

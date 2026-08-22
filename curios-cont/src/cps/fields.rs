@@ -63,8 +63,8 @@ fn projection_of(row: Option<super::CpsRowId>, index: usize) -> CpsIntrinsic {
     }
 }
 
-/// The first admissible split in deterministic order, if any.
-fn admit(module: &CpsModule, origins: &BTreeMap<CpsValueId, Origin>) -> Option<Split> {
+/// Every admissible split, in deterministic order: continuations by identity, positions ascending within each.
+fn admit(module: &CpsModule, origins: &BTreeMap<CpsValueId, Origin>) -> Vec<Split> {
     let demands = demands(module);
 
     // A resume's parameters are the call interface the return protocol owns, whatever their demand says.
@@ -78,17 +78,13 @@ fn admit(module: &CpsModule, origins: &BTreeMap<CpsValueId, Origin>) -> Option<S
         }
     }
 
+    let mut admitted = Vec::new();
     for (continuation, definition) in module.continuations.iter_live() {
         if resumes.contains(&continuation) {
             continue;
         }
-        let recorded = module.field_groups().get(&continuation);
         for (position, &param) in definition.params.iter().enumerate() {
-            if recorded.is_some_and(|groups| {
-                groups
-                    .iter()
-                    .any(|group| position >= group.start && position < group.start + group.width)
-            }) {
+            if grouped(module, continuation, position) {
                 continue;
             }
             let Some(width) = origins.get(&param).and_then(Origin::width) else {
@@ -115,7 +111,7 @@ fn admit(module: &CpsModule, origins: &BTreeMap<CpsValueId, Origin>) -> Option<S
             {
                 continue;
             }
-            return Some(Split {
+            admitted.push(Split {
                 continuation,
                 position,
                 param,
@@ -124,16 +120,83 @@ fn admit(module: &CpsModule, origins: &BTreeMap<CpsValueId, Origin>) -> Option<S
             });
         }
     }
-    None
+    admitted
 }
 
-/// Split one admissible continuation parameter into its fields, record the group, and leave the cleanup to the chain. One split per invocation keeps the pass deterministic and lets the optimizer's own fixpoint drive region-wide convergence; termination is independent of the round limit because every split consumes an unrecorded aggregate parameter and the growth ceiling bounds how many parameters any continuation can accrue.
-pub(super) fn split_parameters(module: &mut CpsModule) -> bool {
-    let origins = origins(module);
-    let Some(split) = admit(module, &origins) else {
+/// Whether `split`, admitted against the snapshot `origins`, still holds on the live module after the splits applied before it in the same sweep.
+///
+/// The sweep reuses one snapshot for every split, which is `inline_known_calls`' shape, and what keeps that honest is that a fresh value *declines* here where the rewrite below could *assume*. An earlier split's head rebuild is absent from the snapshot. With one split per call that absence could only mean a value the fixpoint never reached, and the rewrite read the region's full width for it; in a sweep the rebuild may be standing on an edge into this very candidate — the earlier split's parameter was redirected to it everywhere — at its own region's width rather than this one's, and projecting it at this width would read past a narrower constructor. So every incoming argument must be this parameter or a value the snapshot holds a fact for, and whatever an earlier split put there waits for the next round's facts. That wait is the one genuine dependency between two splits, and the only one that still costs a round.
+///
+/// The live parameter list is re-read for the same reason: an earlier split of the same continuation at a higher position has already grown it, and the ceiling is a fact of the list as it stands.
+fn still_admissible(
+    module: &CpsModule,
+    origins: &BTreeMap<CpsValueId, Origin>,
+    carriers: &[CpsNodeId],
+    split: &Split,
+) -> bool {
+    let Some(definition) = module.continuation(split.continuation) else {
         return false;
     };
+    if definition.params.get(split.position) != Some(&split.param)
+        || grouped(module, split.continuation, split.position)
+        || definition.params.len() - 1 + split.width > PARAM_SPLIT_GROWTH_LIMIT
+    {
+        return false;
+    }
+    carriers
+        .iter()
+        .filter_map(|&carrier| module.node(carrier))
+        .flat_map(edges_of)
+        .filter(|edge| edge.target == split.continuation)
+        .all(|edge| match edge.args.get(split.position) {
+            Some(CpsAtom::Value(value)) => {
+                *value == split.param || origins.get(value).is_some_and(Origin::is_settled)
+            }
+            _ => false,
+        })
+}
 
+/// Split every admissible continuation parameter into its fields against one forward snapshot, record each group, and leave the cleanup to the chain.
+///
+/// It was one split per call, on the reasoning that the optimizer's own fixpoint would drive region-wide convergence — and it did, at one round of every pass per split: `fixpoint_pass_measurements` found this pass firing on 54 of a `Toml/decode` compile's 57 rounds, with most of the fixpoint's time going to passes that rewrote nothing on any of them. A sweep applies what one snapshot admits and [`still_admissible`] declines what an earlier split in the sweep has since touched, so the rounds that remain are the ones a split genuinely depends on. Determinism is the order below; termination is unchanged, since every split still consumes an unrecorded aggregate parameter under the growth ceiling.
+pub(super) fn split_parameters(module: &mut CpsModule) -> bool {
+    let origins = origins(module);
+    let mut admitted = admit(module, &origins);
+    // Highest position first within a continuation, so an earlier position's index survives a later one's splice — the order `split_windows` applies its positions in, for the same reason.
+    admitted.sort_by_key(|split| (split.continuation, std::cmp::Reverse(split.position)));
+
+    // The nodes carrying an edge into each continuation, indexed once for the sweep. A split repoints a carrier's predecessors at its projection chain and sets the carrier in place, so the index holds across the sweep — and it is what keeps a sweep of a hundred splits from walking the module a hundred times to find the few nodes each one rewrites.
+    let mut carriers = BTreeMap::<CpsContId, Vec<CpsNodeId>>::new();
+    for (id, node) in module.nodes.iter_live() {
+        for edge in edges_of(node) {
+            let entry = carriers.entry(edge.target).or_default();
+            if entry.last() != Some(&id) {
+                entry.push(id);
+            }
+        }
+    }
+
+    let mut changed = false;
+    for split in admitted {
+        let carriers = carriers
+            .get(&split.continuation)
+            .map_or(&[][..], Vec::as_slice);
+        if !still_admissible(module, &origins, carriers, &split) {
+            continue;
+        }
+        apply_split(module, &origins, carriers, &split);
+        changed = true;
+    }
+    changed
+}
+
+/// The three local edits of one split: splice the parameter list and record the group, rebuild the aggregate at the head and redirect the old parameter to it, and project every incoming edge's argument into fields above the jump — `carriers` being the nodes that hold those edges.
+fn apply_split(
+    module: &mut CpsModule,
+    origins: &BTreeMap<CpsValueId, Origin>,
+    carriers: &[CpsNodeId],
+    split: &Split,
+) {
     // The field parameters, and the group that records them.
     let fields = (0..split.width)
         .map(|index| {
@@ -169,17 +232,7 @@ pub(super) fn split_parameters(module: &mut CpsModule) -> bool {
     module.values.remove(split.param);
 
     // Every incoming edge projects its argument into fields above the jump; forwarding collapses the reads through visible constructions on the next rounds.
-    let carriers = module
-        .nodes
-        .iter_live()
-        .filter(|(_, node)| {
-            edges_of(node)
-                .iter()
-                .any(|edge| edge.target == split.continuation)
-        })
-        .map(|(id, _)| id)
-        .collect::<Vec<_>>();
-    for carrier in carriers {
+    for &carrier in carriers {
         let mut node = module.node(carrier).expect("carrier is live").clone();
         let mut chain = Vec::new();
         for edge in edges_of_mut(&mut node) {
@@ -190,7 +243,7 @@ pub(super) fn split_parameters(module: &mut CpsModule) -> bool {
                 unreachable!("a construction origin admits only value arguments");
             };
             let source = *source;
-            // How wide *this* edge's argument is: the one width its own flows settle on, admission having refused any edge whose source has no such width. The head rebuild minted above is absent from the pre-rewrite facts and is the region's full width by construction; so is a value the fixpoint never reached, which only unreachable code can hold.
+            // How wide *this* edge's argument is: the one width its own flows settle on, admission having refused any edge whose source has no such width. The head rebuild minted above is absent from the pre-rewrite facts and is the region's full width by construction; so is a value the fixpoint never reached, which only unreachable code can hold — and nothing else is, since [`still_admissible`] declines a sweep-mate's rebuild rather than letting it fall through to here.
             let carried = origins
                 .get(&source)
                 .and_then(Origin::settled_width)
@@ -228,8 +281,6 @@ pub(super) fn split_parameters(module: &mut CpsModule) -> bool {
         }
         module.nodes.set(carrier, node);
     }
-
-    true
 }
 
 // -- known-function workers --------------------------------------------------

@@ -927,12 +927,23 @@ pub(super) fn rewire_node(module: &mut CpsModule, from: CpsNodeId, to: CpsNodeId
         }
     }
 }
-/// Drop one entity's unread parameters, and the arguments every caller passes into them.
+/// Drop every entity's unread parameters, and the arguments every caller passes into them.
 ///
 /// Deadness is read from [`super::demand`]'s lattice rather than from a use count, which is the same question asked at the bottom point of a richer order — the one whose `Projected` point a return protocol needs. The lattice defers an argument's demand to the receiving parameter, so `Unused` here reaches further than a zero use count: a value threaded only into parameters nobody reads is dead however many edges carry it, and this pass deleting such a chain is the code motion the strengthening was scheduled to cause. The deletion stays well-formed because a parameter is always removed together with the argument every incoming edge passes into it, so no occurrence survives its binding.
+///
+/// One snapshot of the lattice serves every entity, because removing a parameter only ever removes uses: a verdict of `Unused` cannot be falsified by an earlier removal in the same sweep, and each entity's edit touches its own parameter list and the edges or calls into it alone. It was one entity per call, which `fixpoint_pass_measurements` found firing on 44 of a `Toml/decode` compile's 45 rounds once `split_parameters` stopped setting the count — each round of every pass bought one continuation's cleanup.
 pub(super) fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
     let demands = demands(module);
     let dead_value = |value: &CpsValueId| demand_of(&demands, *value) == Demand::Unused;
+    let dead_indices = |params: &[CpsValueId]| {
+        params
+            .iter()
+            .enumerate()
+            .filter_map(|(index, value)| dead_value(value).then_some(index))
+            .collect::<BTreeSet<_>>()
+    };
+    let mut changed = false;
+
     // Precompute the continuations used as a return target in one pass, rather than rescanning every node for each continuation.
     let return_targets = module
         .nodes
@@ -947,23 +958,16 @@ pub(super) fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
             _ => None,
         })
         .collect::<BTreeSet<_>>();
-    let mut continuation = None;
-    for (id, definition) in module.continuations.iter_live() {
-        if return_targets.contains(&id) {
-            continue;
-        }
-        let dead = definition
-            .params
-            .iter()
-            .enumerate()
-            .filter_map(|(index, value)| dead_value(value).then_some(index))
-            .collect::<BTreeSet<_>>();
-        if !dead.is_empty() {
-            continuation = Some((id, dead));
-            break;
-        }
-    }
-    if let Some((continuation, dead)) = continuation {
+    let continuations = module
+        .continuations
+        .iter_live()
+        .filter(|(id, _)| !return_targets.contains(id))
+        .filter_map(|(id, definition)| {
+            let dead = dead_indices(&definition.params);
+            (!dead.is_empty()).then_some((id, dead))
+        })
+        .collect::<Vec<_>>();
+    for (continuation, dead) in continuations {
         let removed = remove_parameter_indices(
             &mut module.continuations.get_mut(continuation).unwrap().params,
             &dead,
@@ -987,7 +991,7 @@ pub(super) fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
         for value in removed {
             module.values.remove(value);
         }
-        return true;
+        changed = true;
     }
 
     let escaping = module
@@ -1001,44 +1005,37 @@ pub(super) fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
             _ => None,
         })
         .collect::<BTreeSet<_>>();
-    let mut function = None;
-    for (id, definition) in module.functions.iter_live() {
-        if escaping.contains(&id) {
-            continue;
+    let functions = module
+        .functions
+        .iter_live()
+        .filter(|(id, _)| !escaping.contains(id))
+        .filter_map(|(id, definition)| {
+            let dead = dead_indices(&definition.params);
+            (!dead.is_empty()).then_some((id, dead))
+        })
+        .collect::<Vec<_>>();
+    for (function, dead) in functions {
+        let removed = remove_parameter_indices(
+            &mut module.functions.get_mut(function).unwrap().params,
+            &dead,
+        );
+        for (_, node) in module.nodes.iter_live_mut() {
+            if let CpsNode::ApplyFun {
+                callee: CpsCallee::Known(callee),
+                args,
+                ..
+            } = node
+                && *callee == function
+            {
+                remove_parameter_indices(args, &dead);
+            }
         }
-        let dead = definition
-            .params
-            .iter()
-            .enumerate()
-            .filter_map(|(index, value)| dead_value(value).then_some(index))
-            .collect::<BTreeSet<_>>();
-        if !dead.is_empty() {
-            function = Some((id, dead));
-            break;
+        for value in removed {
+            module.values.remove(value);
         }
+        changed = true;
     }
-    let Some((function, dead)) = function else {
-        return false;
-    };
-    let removed = remove_parameter_indices(
-        &mut module.functions.get_mut(function).unwrap().params,
-        &dead,
-    );
-    for (_, node) in module.nodes.iter_live_mut() {
-        if let CpsNode::ApplyFun {
-            callee: CpsCallee::Known(callee),
-            args,
-            ..
-        } = node
-            && *callee == function
-        {
-            remove_parameter_indices(args, &dead);
-        }
-    }
-    for value in removed {
-        module.values.remove(value);
-    }
-    true
+    changed
 }
 pub(super) fn remove_parameter_indices<T>(
     values: &mut Vec<T>,
