@@ -123,31 +123,17 @@ pub struct Response: pub Type {
     body: Bytes,
 }
 
-let rest: Parse(Bytes) =
-    Parse {
-        run(input, pos) =
-            match Nat/Le/try(pos, Bytes/len(input))
-            | none() => Result/failure("position past the end of input")
-            | some(within) =>
-                Result/success(
-                    (
-                        Bytes/len(input),
-                        Bytes/drop(input, pos, @within)))
-            end,
-    };
-
+-- The header block ends at a bare CR, which is not consumed: `header_line` is repeated by `many0`, so the parser that stops it has to leave the terminator for the caller to read.
 let guard_header: Parse({}) =
-    Parse {
-        run(input, pos) =
-            match Nat/Lt/try(pos, Bytes/len(input))
-            | none() => Result/failure("unexpected end of headers")
-            | some(ok) =>
-                match Bytes/get(input, pos, @ok) == 0xD
-                | true => Result/failure("end of header block")
-                | false => Result/success((pos, ()))
-                end
-            end,
-    };
+    let next = Parse/peek!;
+    match next
+    | none() => Parse/fail("unexpected end of headers")
+    | some(byte) =>
+        match byte == 0xD
+        | true => Parse/fail("end of header block")
+        | false => Parse/pure(())
+        end
+    end;
 
 let header_line: Parse({Str, Str}) =
     let _ = guard_header!;
@@ -161,29 +147,15 @@ let header_line: Parse({Str, Str}) =
             Option/unwrap_or(Str/of_bytes(name), ""),
             Str/trim(Option/unwrap_or(Str/of_bytes(value), ""))));
 
--- The clamp `min(pos + n, len input)` is a branch rather than an arithmetic minimum here, because the two cases want different windows: `n` bytes when they are all there, and everything that remains when they are not. Testing the window's own bound is what decides which, so the clamp and the proof are one test instead of two.
-let take_n(n: Nat) -> Parse(Bytes) =
-    Parse {
-        run(input, pos) =
-            match Nat/Le/try(pos + n, Bytes/len(input))
-            | some(within) => Result/success((pos + n, Bytes/slice(input, pos, n, @within)))
-            | none() =>
-                match Nat/Le/try(pos, Bytes/len(input))
-                | none() => Result/failure("position past the end of input")
-                | some(within) =>
-                    Result/success((Bytes/len(input), Bytes/drop(input, pos, @within)))
-                end
-            end,
-    };
-
 let content_length_of(headers: List({Str, Str})) -> Option(Nat) =
     match header_lookup(headers, "Content-Length")
     | some(value) => Nat/of_str(value)
     | none() => Option/none()
     end;
 
+-- A response with a `Content-Length` is that many bytes, clamped by `Parse/take` to what actually arrived; one without is everything the peer sent.
 let body_parser(headers: List({Str, Str})) -> Parse(Bytes) =
-    match content_length_of(headers) | some(n) => take_n(n) | none() => rest end;
+    match content_length_of(headers) | some(n) => Parse/take(n) | none() => Parse/rest end;
 
 pub let decode: Parse(Response) =
     let status = status_line!;

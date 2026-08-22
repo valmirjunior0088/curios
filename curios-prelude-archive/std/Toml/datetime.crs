@@ -1,194 +1,121 @@
 use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, List, Map, Option, Result, Parse};
 use /std/Toml/{Toml, Date, Time, OffsetDateTime, LocalDateTime};
 use /std/Toml/calendar/{date_ok, time_ok};
-use /std/Toml/scan/{byte_at_is};
 
-rec fixed_scan(input: Bytes, cur: Nat, count: Nat, acc: Nat) -> Result({Nat, Nat}, Str) =
+-- One decimal digit. Both ways of not finding one -- the end of input and a non-digit -- are the same refusal to the caller, which is what `label` states here.
+let digit: Parse(Nat) =
+    Parse/label(
+        Parse/map(
+            Parse/take_if((b) => Nat/in_range(Byte/to_nat(b), 0x30, 0x39)),
+            (b) => Byte/to_nat(b) - 0x30),
+        "expected digit");
+
+-- Exactly `count` digits, as one number. A date-time field is fixed-width, so a short run is an error rather than a stopping point.
+rec fixed(count: Nat, acc: Nat) -> Parse(Nat) =
     match count
-    | 0 => Result/success((cur, acc))
+    | 0 => Parse/pure(acc)
     | pred + 1 =>
-        match Bytes/try_get(input, cur)
-        | none() => Result/failure("expected digit")
-        | some(b) =>
-            let n = Byte/to_nat(b);
-            match Nat/in_range(n, 0x30, 0x39)
-            | true => fixed_scan(input, cur + 1, pred, acc * 10 + (n - 0x30))
-            | false => Result/failure("expected digit")
-            end
-        end
+        let d = digit!;
+        fixed(pred, acc * 10 + d)
     end;
 
-let expect_byte(input: Bytes, cur: Nat, want: Nat) -> Result(Nat, Str) =
-    match byte_at_is(input, cur, (n) => n == want)
-    | true => Result/success(cur + 1)
-    | false => Result/failure("malformed date-time")
-    end;
-
-let date_scan(input: Bytes, pos: Nat) -> Result({Nat, Date}, Str) =
-    match fixed_scan(input, pos, 4, 0)
-    | failure(msg) => Result/failure(msg)
-    | success((c1, y)) =>
-        match expect_byte(input, c1, 0x2D)
-        | failure(msg) => Result/failure(msg)
-        | success(c2) =>
-            match fixed_scan(input, c2, 2, 0)
-            | failure(msg) => Result/failure(msg)
-            | success((c3, mo)) =>
-                match expect_byte(input, c3, 0x2D)
-                | failure(msg) => Result/failure(msg)
-                | success(c4) =>
-                    match fixed_scan(input, c4, 2, 0)
-                    | failure(msg) => Result/failure(msg)
-                    | success((c5, d)) =>
-                        let date = Date { year = y, month = mo, day = d };
-                        match date_ok(date)
-                        | true => Result/success((c5, date))
-                        | false => Result/failure("invalid date")
-                        end
-                    end
-                end
-            end
-        end
-    end;
+let expect(want: Byte) -> Parse({}) =
+    Parse/label(Parse/map(Parse/take_byte(want), (_) => ()), "malformed date-time");
 
 let nat_pow10(n: Nat) -> Nat =
     match n | 0 => 1 | pred + 1; ih => ih * 10 end;
 
+let frac_stop(taken: Nat, acc: Nat, seen: Bool) -> Parse(Nat) =
+    match seen
+    | true => Parse/pure(acc * nat_pow10(9 - taken))
+    | false => Parse/fail("expected digit")
+    end;
+
 -- fractional seconds: at most nine digits honored, further digits truncated
-rec frac_ns(input: Bytes, cur: Nat, taken: Nat, acc: Nat, seen: Bool) -> Result({Nat, Nat}, Str) =
-    let stop: Result({Nat, Nat}, Str) =
-        match seen
-        | true => Result/success((cur, acc * nat_pow10(9 - taken)))
-        | false => Result/failure("expected digit")
-        end;
-    match Bytes/try_get(input, cur)
-    | none() => stop
+rec frac_digits(taken: Nat, acc: Nat, seen: Bool) -> Parse(Nat) =
+    let next = Parse/peek!;
+    match next
+    | none() => frac_stop(taken, acc, seen)
     | some(b) =>
-        let n = Byte/to_nat(b);
-        match Nat/in_range(n, 0x30, 0x39)
+        match Nat/in_range(Byte/to_nat(b), 0x30, 0x39)
+        | false => frac_stop(taken, acc, seen)
         | true =>
+            let _ = Parse/any_byte!;
             match taken < 9
-            | true => frac_ns(input, cur + 1, taken + 1, acc * 10 + (n - 0x30), true)
-            | false => frac_ns(input, cur + 1, taken, acc, true)
-            end
-        | false => stop
-        end
-    end;
-
-let time_scan(input: Bytes, pos: Nat) -> Result({Nat, Time}, Str) =
-    match fixed_scan(input, pos, 2, 0)
-    | failure(msg) => Result/failure(msg)
-    | success((c1, h)) =>
-        match expect_byte(input, c1, 0x3A)
-        | failure(msg) => Result/failure(msg)
-        | success(c2) =>
-            match fixed_scan(input, c2, 2, 0)
-            | failure(msg) => Result/failure(msg)
-            | success((c3, mi)) =>
-                match expect_byte(input, c3, 0x3A)
-                | failure(msg) => Result/failure(msg)
-                | success(c4) =>
-                    match fixed_scan(input, c4, 2, 0)
-                    | failure(msg) => Result/failure(msg)
-                    | success((c5, s)) =>
-                        let ns_res: Result({Nat, Nat}, Str) =
-                            match byte_at_is(input, c5, (n) => n == 0x2E)
-                            | true => frac_ns(input, c5 + 1, 0, 0, false)
-                            | false => Result/success((c5, 0))
-                            end;
-                        match ns_res
-                        | failure(msg) => Result/failure(msg)
-                        | success((c6, ns)) =>
-                            let time = Time { hour = h, minute = mi, second = s, nanosecond = ns };
-                            match time_ok(time)
-                            | true => Result/success((c6, time))
-                            | false => Result/failure("invalid time")
-                            end
-                        end
-                    end
-                end
+            | true => frac_digits(taken + 1, acc * 10 + (Byte/to_nat(b) - 0x30), true)
+            | false => frac_digits(taken, acc, true)
             end
         end
     end;
 
-let offset_scan(input: Bytes, pos: Nat) -> Result({Nat, Int}, Str) =
-    match byte_at_is(input, pos, (n) => n == 0x5A || n == 0x7A)
-    | true => Result/success((pos + 1, +0))
-    | false =>
-        match Bytes/try_get(input, pos)
-        | none() => Result/failure("expected offset")
-        | some(b) =>
-            let n = Byte/to_nat(b);
-            match n == 0x2B || n == 0x2D
-            | true =>
-                match fixed_scan(input, pos + 1, 2, 0)
-                | failure(msg) => Result/failure(msg)
-                | success((c1, oh)) =>
-                    match expect_byte(input, c1, 0x3A)
-                    | failure(msg) => Result/failure(msg)
-                    | success(c2) =>
-                        match fixed_scan(input, c2, 2, 0)
-                        | failure(msg) => Result/failure(msg)
-                        | success((c3, om)) =>
-                            match oh <= 23 && om <= 59
-                            | true =>
-                                let mins = oh * 60 + om;
-                                let value: Int =
-                                    match n == 0x2D
-                                    | true => +0 - Nat/to_int(mins)
-                                    | false => Nat/to_int(mins)
-                                    end;
-                                Result/success((c3, value))
-                            | false => Result/failure("invalid offset")
-                            end
-                        end
-                    end
-                end
-            | false => Result/failure("expected offset")
+-- A dot commits to a fractional part: once it is consumed, a run of digits must follow, so this deliberately does not fall back to zero on failure the way an `or` would.
+let frac_part: Parse(Nat) =
+    let dot = Parse/optional(Parse/take_byte(0x2E))!;
+    match dot
+    | some(_) => frac_digits(0, 0, false)
+    | none() => Parse/pure(0)
+    end;
+
+let date_parse: Parse(Date) =
+    let y = fixed(4, 0)!;
+    let _ = expect(0x2D)!;
+    let mo = fixed(2, 0)!;
+    let _ = expect(0x2D)!;
+    let d = fixed(2, 0)!;
+    let date = Date { year = y, month = mo, day = d };
+    match date_ok(date)
+    | true => Parse/pure(date)
+    | false => Parse/fail("invalid date")
+    end;
+
+let time_parse: Parse(Time) =
+    let h = fixed(2, 0)!;
+    let _ = expect(0x3A)!;
+    let mi = fixed(2, 0)!;
+    let _ = expect(0x3A)!;
+    let s = fixed(2, 0)!;
+    let ns = frac_part!;
+    let time = Time { hour = h, minute = mi, second = s, nanosecond = ns };
+    match time_ok(time)
+    | true => Parse/pure(time)
+    | false => Parse/fail("invalid time")
+    end;
+
+let offset_parse: Parse(Int) =
+    let zulu = Parse/optional(Parse/take_if((b) => b == 0x5A || b == 0x7A))!;
+    match zulu
+    | some(_) => Parse/pure(+0)
+    | none() =>
+        let sign = Parse/label(Parse/take_if((b) => b == 0x2B || b == 0x2D), "expected offset")!;
+        let oh = fixed(2, 0)!;
+        let _ = expect(0x3A)!;
+        let om = fixed(2, 0)!;
+        match oh <= 23 && om <= 59
+        | true =>
+            let mins = oh * 60 + om;
+            match sign == 0x2D
+            | true => Parse/pure(+0 - Nat/to_int(mins))
+            | false => Parse/pure(Nat/to_int(mins))
             end
+        | false => Parse/fail("invalid offset")
         end
     end;
+
+-- Everything after a date that is still part of one value. The `or`s here start *after* the date has been consumed, which is what makes a separator with no time behind it give the separator back and leave a plain local date standing -- rather than failing the whole value, and rather than backtracking over the date as well.
+let date_time_tail(date: Date) -> Parse(Toml) =
+    let _ = Parse/take_if((b) => b == 0x54 || b == 0x74 || b == 0x20)!;
+    let time = time_parse!;
+    Parse/or(
+        Parse/map(
+            offset_parse,
+            (off) =>
+                Toml/offset_date_time(
+                    OffsetDateTime { date = date, time = time, offset_minutes = off })),
+        Parse/pure(Toml/local_date_time(LocalDateTime { date = date, time = time })));
+
+let date_led: Parse(Toml) =
+    let date = date_parse!;
+    Parse/or(date_time_tail(date), Parse/pure(Toml/local_date(date)));
 
 pub let datetime_value: Parse(Toml) =
-    Parse {
-        run(input, pos) =
-            match date_scan(input, pos)
-            | success((c1, date)) =>
-                let sep: Option(Nat) =
-                    match byte_at_is(input, c1, (n) => n == 0x54 || n == 0x74 || n == 0x20)
-                    | true => Option/some(c1 + 1)
-                    | false => Option/none()
-                    end;
-                match sep
-                | none() => Result/success((c1, Toml/local_date(date)))
-                | some(c2) =>
-                    match time_scan(input, c2)
-                    | failure(_) => Result/success((c1, Toml/local_date(date)))
-                    | success((c3, time)) =>
-                        match offset_scan(input, c3)
-                        | success((c4, off)) =>
-                            Result/success(
-                                (
-                                    c4,
-                                    Toml/offset_date_time(
-                                        OffsetDateTime {
-                                            date = date,
-                                            time = time,
-                                            offset_minutes = off,
-                                        })))
-                        | failure(_) =>
-                            Result/success(
-                                (
-                                    c3,
-                                    Toml/local_date_time(
-                                        LocalDateTime { date = date, time = time })))
-                        end
-                    end
-                end
-            | failure(_) =>
-                match time_scan(input, pos)
-                | success((c, time)) => Result/success((c, Toml/local_time(time)))
-                | failure(msg) => Result/failure(msg)
-                end
-            end,
-    };
+    Parse/or(date_led, Parse/map(time_parse, (time) => Toml/local_time(time)));

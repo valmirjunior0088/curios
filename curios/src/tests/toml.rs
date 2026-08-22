@@ -180,13 +180,16 @@ fn toml_floats_pin_binary32_bit_patterns() {
     );
 }
 
+/// Each malformed input is pinned to the *message* it is rejected with, not merely to the fact that it is rejected.
+///
+/// The decoder hands these strings to its caller through `Result(_, Str)`, so they are contract rather than debug output — and a reformulation of the scanners into `/std/Parse` combinators can flatten a specific reason into whichever generic message the combinator that happened to fail carries. Accept-versus-reject cannot see that happen; this table can.
 #[test]
 fn toml_malformed_numbers_and_escapes_reject() {
     let source = r#"
         use /std/{Handle, Str, Toml, Result, List};
         let ok(input : Str) -> Str =
             match Toml/decode(input)
-            | failure(_) => "reject"
+            | failure(msg) => msg
             | success(_) => "accept"
             end;
         /std/print(Str/join("|", [
@@ -198,9 +201,10 @@ fn toml_malformed_numbers_and_escapes_reject() {
         ]))
         "#;
 
+    // The three date-time rejections and the `00:00:61` one reach the caller through a later parser: `val_number_digit` is `or(datetime_value, …)`, so the date-time parser's own `invalid date`/`invalid time` is discarded when `or` restores the position, the integer parser then accepts the leading digits, and what finally fails is the line end — or, for `00:00:61`, the integer parser's leading-zero rule. That was the decoder's behaviour before the combinator reformulation as well; this table is where it became visible.
     assert_eq!(
         run(source),
-        b"reject|reject|reject|reject|reject|reject|reject|reject|reject|reject|reject|reject|reject|reject|reject"
+        b"malformed underscore|malformed underscore|malformed underscore|leading zero|leading zero|expected end of input|expected digit|expected end of input|invalid Unicode scalar in escape|unknown escape|expected end of input|expected end of input|leading zero|expected end of input|expected end of input"
     );
 }
 

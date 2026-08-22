@@ -1,226 +1,247 @@
 use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, List, Map, Option, Result, Parse};
-use /std/Toml/scan/{byte_at_is, hex_val, newline};
+use /std/Toml/scan/{hex_val};
 
-rec hex_scan(input: Bytes, cur: Nat, count: Nat, acc: Nat) -> Result({Nat, Nat}, Str) =
-    match count
-    | 0 => Result/success((cur, acc))
-    | pred + 1 =>
-        match Bytes/try_get(input, cur)
-        | none() => Result/failure("unterminated escape")
-        | some(b) =>
-            match hex_val(Byte/to_nat(b))
-            | some(v) => hex_scan(input, cur + 1, pred, acc * 0x10 + v)
-            | none() => Result/failure("invalid hex digit in escape")
-            end
-        end
-    end;
-
-let scalar_utf8(code: Nat) -> Result(Bytes, Str) =
-    match Char/of_nat(code)
-    | some(c) => Result/success(Char/to_utf8(c))
-    | none() => Result/failure("invalid Unicode scalar in escape")
-    end;
-
--- one basic-string escape, `cur` positioned after the backslash
-let escape_scan(input: Bytes, cur: Nat) -> Result({Nat, Bytes}, Str) =
-    match Bytes/try_get(input, cur)
-    | none() => Result/failure("unterminated escape")
+-- One hex digit of an escape. The two ways of not finding one are different errors here -- running out of input truncates the escape, a wrong byte spells it wrongly -- so this peeks rather than labelling a single refusal.
+let hex_digit: Parse(Nat) =
+    let next = Parse/peek!;
+    match next
+    | none() => Parse/fail("unterminated escape")
     | some(b) =>
-        match Byte/to_nat(b)
-        | 98 => Result/success((cur + 1, x[0x08]))
-        | 116 => Result/success((cur + 1, x[0x09]))
-        | 110 => Result/success((cur + 1, x[0x0a]))
-        | 102 => Result/success((cur + 1, x[0x0c]))
-        | 114 => Result/success((cur + 1, x[0x0d]))
-        | 34 => Result/success((cur + 1, x[0x22]))
-        | 92 => Result/success((cur + 1, x[0x5c]))
-        | 117 =>
-            match hex_scan(input, cur + 1, 4, 0)
-            | success((next, code)) => Result/map_success(scalar_utf8(code), (u) => (next, u))
-            | failure(msg) => Result/failure(msg)
-            end
-        | 85 =>
-            match hex_scan(input, cur + 1, 8, 0)
-            | success((next, code)) => Result/map_success(scalar_utf8(code), (u) => (next, u))
-            | failure(msg) => Result/failure(msg)
-            end
-        | _ => Result/failure("unknown escape")
+        match hex_val(Byte/to_nat(b))
+        | some(v) =>
+            let _ = Parse/any_byte!;
+            Parse/pure(v)
+        | none() => Parse/fail("invalid hex digit in escape")
         end
     end;
 
-let basic_str_scan: Parse(Bytes) =
-    Parse {
-        run(input, pos) =
-            rec go(cur: Nat, acc: Bytes) -> Result({Nat, Bytes}, Str) =
-                match Bytes/try_get(input, cur)
-                | none() => Result/failure("unterminated string")
-                | some(b) =>
-                    let n = Byte/to_nat(b);
-                    choose
-                    | n == 0x22 => Result/success((cur + 1, acc))
-                    | n == 0x5C =>
-                        match escape_scan(input, cur + 1)
-                        | success((next, chunk)) => go(next, x[..acc, ..chunk])
-                        | failure(msg) => Result/failure(msg)
-                        end
-                    | n == 0x9 => go(cur + 1, x[..acc, b])
-                    | n < 0x20 => Result/failure("control character in string")
-                    | n == 0x7F => Result/failure("control character in string")
-                    | _ => go(cur + 1, x[..acc, b])
-                    end
-                end;
-            match byte_at_is(input, pos, (n) => n == 0x22)
-            | true => go(pos + 1, x[])
-            | false => Result/failure("expected string")
-            end,
-    };
-
-let literal_str_scan: Parse(Bytes) =
-    Parse {
-        run(input, pos) =
-            rec go(cur: Nat, acc: Bytes) -> Result({Nat, Bytes}, Str) =
-                match Bytes/try_get(input, cur)
-                | none() => Result/failure("unterminated string")
-                | some(b) =>
-                    let n = Byte/to_nat(b);
-                    choose
-                    | n == 0x27 => Result/success((cur + 1, acc))
-                    | n == 0x9 => go(cur + 1, x[..acc, b])
-                    | n < 0x20 => Result/failure("control character in string")
-                    | n == 0x7F => Result/failure("control character in string")
-                    | _ => go(cur + 1, x[..acc, b])
-                    end
-                end;
-            match byte_at_is(input, pos, (n) => n == 0x27)
-            | true => go(pos + 1, x[])
-            | false => Result/failure("expected string")
-            end,
-    };
-
-rec quote_run(input: Bytes, cur: Nat, quote: Nat, acc: Nat) -> Nat =
-    match byte_at_is(input, cur, (n) => n == quote)
-    | true => quote_run(input, cur + 1, quote, acc + 1)
-    | false => acc
+rec hex_digits(count: Nat, acc: Nat) -> Parse(Nat) =
+    match count
+    | 0 => Parse/pure(acc)
+    | pred + 1 =>
+        let v = hex_digit!;
+        hex_digits(pred, acc * 0x10 + v)
     end;
+
+let scalar_utf8(code: Nat) -> Parse(Bytes) =
+    match Char/of_nat(code)
+    | some(c) => Parse/pure(Char/to_utf8(c))
+    | none() => Parse/fail("invalid Unicode scalar in escape")
+    end;
+
+-- one basic-string escape, the backslash already consumed
+let escape: Parse(Bytes) =
+    let next = Parse/peek!;
+    match next
+    | none() => Parse/fail("unterminated escape")
+    | some(b) =>
+        let _ = Parse/any_byte!;
+        match Byte/to_nat(b)
+        | 98 => Parse/pure(x[0x08])
+        | 116 => Parse/pure(x[0x09])
+        | 110 => Parse/pure(x[0x0a])
+        | 102 => Parse/pure(x[0x0c])
+        | 114 => Parse/pure(x[0x0d])
+        | 34 => Parse/pure(x[0x22])
+        | 92 => Parse/pure(x[0x5c])
+        | 117 =>
+            let code = hex_digits(4, 0)!;
+            scalar_utf8(code)
+        | 85 =>
+            let code = hex_digits(8, 0)!;
+            scalar_utf8(code)
+        | _ => Parse/fail("unknown escape")
+        end
+    end;
+
+-- A carriage return is only ever legal as the first half of a CRLF, so consuming one is all-or-nothing: `optional` gives a lone one back, and every caller turns that into the same refusal.
+let crlf: Parse(Option({Byte, Byte})) =
+    Parse/optional(Parse/and(Parse/take_byte(0x0D), Parse/take_byte(0x0A)));
 
 let quotes(quote: Byte, count: Nat) -> Bytes =
     match count | 0 => x[] | pred + 1; ih => x[..ih, quote] end;
 
-let is_crlf_at(input: Bytes, cur: Nat) -> Bool =
-    byte_at_is(input, cur, (n) => n == 0xD) && byte_at_is(input, cur + 1, (n) => n == 0xA);
+rec basic_body(acc: Bytes) -> Parse(Bytes) =
+    let next = Parse/peek!;
+    match next
+    | none() => Parse/fail("unterminated string")
+    | some(b) =>
+        let n = Byte/to_nat(b);
+        choose
+        | n == 0x22 =>
+            let _ = Parse/any_byte!;
+            Parse/pure(acc)
+        | n == 0x5C =>
+            let _ = Parse/any_byte!;
+            let chunk = escape!;
+            basic_body(x[..acc, ..chunk])
+        | n == 0x9 =>
+            let _ = Parse/any_byte!;
+            basic_body(x[..acc, b])
+        | n < 0x20 => Parse/fail("control character in string")
+        | n == 0x7F => Parse/fail("control character in string")
+        | _ =>
+            let _ = Parse/any_byte!;
+            basic_body(x[..acc, b])
+        end
+    end;
+
+let basic_str_scan: Parse(Bytes) =
+    let _ = Parse/label(Parse/take_byte(0x22), "expected string")!;
+    basic_body(x[]);
+
+rec literal_body(acc: Bytes) -> Parse(Bytes) =
+    let next = Parse/peek!;
+    match next
+    | none() => Parse/fail("unterminated string")
+    | some(b) =>
+        let n = Byte/to_nat(b);
+        choose
+        | n == 0x27 =>
+            let _ = Parse/any_byte!;
+            Parse/pure(acc)
+        | n == 0x9 =>
+            let _ = Parse/any_byte!;
+            literal_body(x[..acc, b])
+        | n < 0x20 => Parse/fail("control character in string")
+        | n == 0x7F => Parse/fail("control character in string")
+        | _ =>
+            let _ = Parse/any_byte!;
+            literal_body(x[..acc, b])
+        end
+    end;
+
+let literal_str_scan: Parse(Bytes) =
+    let _ = Parse/label(Parse/take_byte(0x27), "expected string")!;
+    literal_body(x[]);
 
 -- after a line-ending backslash: whitespace, then at least one newline, then any further whitespace and newlines
-rec trim_scan(input: Bytes, cur: Nat, seen_nl: Bool) -> Result(Nat, Str) =
-    let stop: Result(Nat, Str) =
-        match seen_nl | true => Result/success(cur) | false => Result/failure("invalid escape") end;
-    match Bytes/try_get(input, cur)
+rec trim_run(seen_nl: Bool) -> Parse({}) =
+    let stop: Parse({}) =
+        match seen_nl | true => Parse/pure(()) | false => Parse/fail("invalid escape") end;
+    let next = Parse/peek!;
+    match next
     | none() => stop
     | some(b) =>
         let n = Byte/to_nat(b);
         choose
-        | n == 0x20 => trim_scan(input, cur + 1, seen_nl)
-        | n == 0x9 => trim_scan(input, cur + 1, seen_nl)
-        | n == 0xA => trim_scan(input, cur + 1, true)
+        | n == 0x20 =>
+            let _ = Parse/any_byte!;
+            trim_run(seen_nl)
+        | n == 0x9 =>
+            let _ = Parse/any_byte!;
+            trim_run(seen_nl)
+        | n == 0xA =>
+            let _ = Parse/any_byte!;
+            trim_run(true)
         | n == 0xD =>
-            match is_crlf_at(input, cur)
-            | true => trim_scan(input, cur + 2, true)
-            | false => Result/failure("bare carriage return")
+            let pair = crlf!;
+            match pair
+            | some(_) => trim_run(true)
+            | none() => Parse/fail("bare carriage return")
             end
         | _ => stop
         end
     end;
 
--- content of a multiline basic string, after the opening delimiter
-let ml_basic_scan: Parse(Bytes) =
-    Parse {
-        run(input, pos) =
-            rec go(cur: Nat, acc: Bytes) -> Result({Nat, Bytes}, Str) =
-                match Bytes/try_get(input, cur)
-                | none() => Result/failure("unterminated string")
-                | some(b) =>
-                    let n = Byte/to_nat(b);
-                    choose
-                    | n == 0x22 =>
-                        let q = quote_run(input, cur, 0x22, 0);
-                        choose
-                        | q >= 6 => Result/failure("too many quotes")
-                        | q >= 3 => Result/success((cur + q, x[..acc, ..quotes(b, q - 3)]))
-                        | _ => go(cur + q, x[..acc, ..quotes(b, q)])
-                        end
-                    | n == 0x5C =>
-                        match byte_at_is(
-                            input,
-                            cur + 1,
-                            (n2) => n2 == 0x20 || n2 == 0x9 || n2 == 0xA || n2 == 0xD)
-                        | true =>
-                            match trim_scan(input, cur + 1, false)
-                            | success(next) => go(next, acc)
-                            | failure(msg) => Result/failure(msg)
-                            end
-                        | false =>
-                            match escape_scan(input, cur + 1)
-                            | success((next, chunk)) => go(next, x[..acc, ..chunk])
-                            | failure(msg) => Result/failure(msg)
-                            end
-                        end
-                    | n == 0xA => go(cur + 1, x[..acc, b])
-                    | n == 0xD =>
-                        match is_crlf_at(input, cur)
-                        | true => go(cur + 2, x[..acc, 0x0d, 0x0a])
-                        | false => Result/failure("bare carriage return")
-                        end
-                    | n == 0x9 => go(cur + 1, x[..acc, b])
-                    | n < 0x20 => Result/failure("control character in string")
-                    | n == 0x7F => Result/failure("control character in string")
-                    | _ => go(cur + 1, x[..acc, b])
-                    end
-                end;
-            let start =
-                choose
-                | byte_at_is(input, pos, (n) => n == 0xA) => pos + 1
-                | is_crlf_at(input, pos) => pos + 2
-                | _ => pos
-                end;
-            go(start, x[]),
-    };
+-- A multiline string's opening delimiter may be followed by one newline, which is not part of the content.
+let skip_opening_newline: Parse({}) =
+    let lf = Parse/optional(Parse/take_byte(0x0A))!;
+    match lf
+    | some(_) => Parse/pure(())
+    | none() =>
+        let _ = crlf!;
+        Parse/pure(())
+    end;
 
--- content of a multiline literal string, after the opening delimiter
-let ml_literal_scan: Parse(Bytes) =
-    Parse {
-        run(input, pos) =
-            rec go(cur: Nat, acc: Bytes) -> Result({Nat, Bytes}, Str) =
-                match Bytes/try_get(input, cur)
-                | none() => Result/failure("unterminated string")
-                | some(b) =>
-                    let n = Byte/to_nat(b);
-                    choose
-                    | n == 0x27 =>
-                        let q = quote_run(input, cur, 0x27, 0);
-                        choose
-                        | q >= 6 => Result/failure("too many quotes")
-                        | q >= 3 => Result/success((cur + q, x[..acc, ..quotes(b, q - 3)]))
-                        | _ => go(cur + q, x[..acc, ..quotes(b, q)])
-                        end
-                    | n == 0xA => go(cur + 1, x[..acc, b])
-                    | n == 0xD =>
-                        match is_crlf_at(input, cur)
-                        | true => go(cur + 2, x[..acc, 0x0d, 0x0a])
-                        | false => Result/failure("bare carriage return")
-                        end
-                    | n == 0x9 => go(cur + 1, x[..acc, b])
-                    | n < 0x20 => Result/failure("control character in string")
-                    | n == 0x7F => Result/failure("control character in string")
-                    | _ => go(cur + 1, x[..acc, b])
-                    end
-                end;
-            let start =
-                choose
-                | byte_at_is(input, pos, (n) => n == 0xA) => pos + 1
-                | is_crlf_at(input, pos) => pos + 2
-                | _ => pos
-                end;
-            go(start, x[]),
-    };
+-- The closing delimiter is three quotes, but a run of up to five ends the string with the surplus kept as content -- so the whole run is read at once and its length decides, rather than a quote at a time.
+rec ml_basic_body(acc: Bytes) -> Parse(Bytes) =
+    let next = Parse/peek!;
+    match next
+    | none() => Parse/fail("unterminated string")
+    | some(b) =>
+        let n = Byte/to_nat(b);
+        choose
+        | n == 0x22 =>
+            let run = Parse/take_while((c) => Byte/to_nat(c) == 0x22)!;
+            let q = Bytes/len(run);
+            choose
+            | q >= 6 => Parse/fail("too many quotes")
+            | q >= 3 => Parse/pure(x[..acc, ..quotes(b, q - 3)])
+            | _ => ml_basic_body(x[..acc, ..quotes(b, q)])
+            end
+        | n == 0x5C =>
+            let _ = Parse/any_byte!;
+            let folded = Parse/peek!;
+            match folded
+            | some(w) =>
+                let m = Byte/to_nat(w);
+                match m == 0x20 || m == 0x9 || m == 0xA || m == 0xD
+                | true =>
+                    let _ = trim_run(false)!;
+                    ml_basic_body(acc)
+                | false =>
+                    let chunk = escape!;
+                    ml_basic_body(x[..acc, ..chunk])
+                end
+            | none() =>
+                let chunk = escape!;
+                ml_basic_body(x[..acc, ..chunk])
+            end
+        | n == 0xA =>
+            let _ = Parse/any_byte!;
+            ml_basic_body(x[..acc, b])
+        | n == 0xD =>
+            let pair = crlf!;
+            match pair
+            | some(_) => ml_basic_body(x[..acc, 0x0d, 0x0a])
+            | none() => Parse/fail("bare carriage return")
+            end
+        | n == 0x9 =>
+            let _ = Parse/any_byte!;
+            ml_basic_body(x[..acc, b])
+        | n < 0x20 => Parse/fail("control character in string")
+        | n == 0x7F => Parse/fail("control character in string")
+        | _ =>
+            let _ = Parse/any_byte!;
+            ml_basic_body(x[..acc, b])
+        end
+    end;
+
+rec ml_literal_body(acc: Bytes) -> Parse(Bytes) =
+    let next = Parse/peek!;
+    match next
+    | none() => Parse/fail("unterminated string")
+    | some(b) =>
+        let n = Byte/to_nat(b);
+        choose
+        | n == 0x27 =>
+            let run = Parse/take_while((c) => Byte/to_nat(c) == 0x27)!;
+            let q = Bytes/len(run);
+            choose
+            | q >= 6 => Parse/fail("too many quotes")
+            | q >= 3 => Parse/pure(x[..acc, ..quotes(b, q - 3)])
+            | _ => ml_literal_body(x[..acc, ..quotes(b, q)])
+            end
+        | n == 0xA =>
+            let _ = Parse/any_byte!;
+            ml_literal_body(x[..acc, b])
+        | n == 0xD =>
+            let pair = crlf!;
+            match pair
+            | some(_) => ml_literal_body(x[..acc, 0x0d, 0x0a])
+            | none() => Parse/fail("bare carriage return")
+            end
+        | n == 0x9 =>
+            let _ = Parse/any_byte!;
+            ml_literal_body(x[..acc, b])
+        | n < 0x20 => Parse/fail("control character in string")
+        | n == 0x7F => Parse/fail("control character in string")
+        | _ =>
+            let _ = Parse/any_byte!;
+            ml_literal_body(x[..acc, b])
+        end
+    end;
 
 let str_of(b: Bytes) -> Parse(Str) =
     match Str/of_bytes(b)
@@ -238,10 +259,12 @@ pub let str_literal: Parse(Str) =
 
 pub let str_ml_basic: Parse(Str) =
     let _ = Parse/take_literal("\"\"\"")!;
-    let b = ml_basic_scan!;
+    let _ = skip_opening_newline!;
+    let b = ml_basic_body(x[])!;
     str_of(b);
 
 pub let str_ml_literal: Parse(Str) =
     let _ = Parse/take_literal("'''")!;
-    let b = ml_literal_scan!;
+    let _ = skip_opening_newline!;
+    let b = ml_literal_body(x[])!;
     str_of(b);

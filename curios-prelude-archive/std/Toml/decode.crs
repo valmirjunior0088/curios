@@ -1,9 +1,9 @@
 use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, List, Map, Option, Result, Parse};
 use /std/Toml/{Toml, let Build};
 use /std/Toml/build/{apply_assign, apply_header, apply_aot, build_empty};
-use /std/Toml/scan/{byte_at_is, line_end, trivia, ws};
+use /std/Toml/scan/{line_end, trivia, ws};
 use /std/Toml/keys/{key_part};
-use /std/Toml/values/{value_scan};
+use /std/Toml/values/{value_parse};
 
 induct Stmt: Type
 | assign(path: List(Str), value: Toml)
@@ -11,104 +11,69 @@ induct Stmt: Type
 | array_header(List(Str))
 end
 
--- The statement layer is written as recursive scanners over positions: a recursive function applied to a symbolic input stays a residual application under type-level reduction, where an equivalent combinator constant would unfold its whole parser tree symbolically.
-rec key_path_scan(input: Bytes, cur: Nat, acc: List(Str)) -> Result({Nat, List(Str)}, Str) =
-    match key_part.run(input, cur)
-    | failure(msg) => Result/failure(msg)
-    | success((c1, k)) =>
-        let acc2 = [..acc, k];
-        match ws.run(input, c1)
-        | failure(msg) => Result/failure(msg)
-        | success((c2, _)) =>
-            match byte_at_is(input, c2, (n) => n == 0x2E)
-            | true =>
-                match ws.run(input, c2 + 1)
-                | failure(msg) => Result/failure(msg)
-                | success((c3, _)) => key_path_scan(input, c3, acc2)
-                end
-            | false => Result/success((c2, acc2))
-            end
-        end
-    end
-and header_scan(input: Bytes, cur: Nat, double: Bool) -> Result({Nat, List(Str)}, Str) =
-    match ws.run(input, cur)
-    | failure(msg) => Result/failure(msg)
-    | success((c1, _)) =>
-        match key_path_scan(input, c1, [])
-        | failure(msg) => Result/failure(msg)
-        | success((c2, path)) =>
-            match byte_at_is(input, c2, (n) => n == 0x5D)
-            | true =>
-                match double
-                | true =>
-                    match byte_at_is(input, c2 + 1, (n) => n == 0x5D)
-                    | true => Result/success((c2 + 2, path))
-                    | false => Result/failure("expected ']]' in table header")
-                    end
-                | false => Result/success((c2 + 1, path))
-                end
-            | false => Result/failure("expected ']' in table header")
-            end
-        end
-    end
-and stmt_scan(input: Bytes, cur: Nat) -> Result({Nat, Stmt}, Str) =
-    match byte_at_is(input, cur, (n) => n == 0x5B)
+rec key_path(acc: List(Str)) -> Parse(List(Str)) =
+    let k = key_part!;
+    let _ = ws!;
+    let acc2 = [..acc, k];
+    let dot = Parse/optional(Parse/take_byte(0x2E))!;
+    match dot
+    | some(_) =>
+        let _ = ws!;
+        key_path(acc2)
+    | none() => Parse/pure(acc2)
+    end;
+
+-- A `[[` header is read as two separate brackets, so the second one's absence is the doubled form's own error rather than the single form's.
+let header(double: Bool) -> Parse(List(Str)) =
+    let _ = ws!;
+    let path = key_path([])!;
+    let _ = Parse/label(Parse/take_byte(0x5D), "expected ']' in table header")!;
+    match double
     | true =>
-        match byte_at_is(input, cur + 1, (n) => n == 0x5B)
-        | true =>
-            match header_scan(input, cur + 2, true)
-            | success((c1, path)) => Result/success((c1, Stmt/array_header(path)))
-            | failure(msg) => Result/failure(msg)
-            end
-        | false =>
-            match header_scan(input, cur + 1, false)
-            | success((c1, path)) => Result/success((c1, Stmt/table_header(path)))
-            | failure(msg) => Result/failure(msg)
-            end
-        end
-    | false =>
-        match key_path_scan(input, cur, [])
-        | failure(msg) => Result/failure(msg)
-        | success((c1, path)) =>
-            match byte_at_is(input, c1, (n) => n == 0x3D)
-            | true =>
-                match ws.run(input, c1 + 1)
-                | failure(msg) => Result/failure(msg)
-                | success((c2, _)) =>
-                    match value_scan(input, c2)
-                    | failure(msg) => Result/failure(msg)
-                    | success((c3, v)) => Result/success((c3, Stmt/assign(path, v)))
-                    end
-                end
-            | false => Result/failure("expected '=' after key")
-            end
-        end
-    end
-and stmts_scan(input: Bytes, cur: Nat, acc: List(Stmt)) -> Result(List(Stmt), Str) =
-    match trivia.run(input, cur)
-    | failure(msg) => Result/failure(msg)
-    | success((c1, _)) =>
-        match Parse/eof.run(input, c1)
-        | success(_) => Result/success(acc)
-        | failure(_) =>
-            match stmt_scan(input, c1)
-            | failure(msg) => Result/failure(msg)
-            | success((c2, s)) =>
-                match line_end.run(input, c2)
-                | failure(msg) => Result/failure(msg)
-                | success((c3, _)) => stmts_scan(input, c3, [..acc, s])
-                end
-            end
+        let _ = Parse/label(Parse/take_byte(0x5D), "expected ']]' in table header")!;
+        Parse/pure(path)
+    | false => Parse/pure(path)
+    end;
+
+let stmt: Parse(Stmt) =
+    let bracket = Parse/optional(Parse/take_byte(0x5B))!;
+    match bracket
+    | none() =>
+        let path = key_path([])!;
+        let _ = Parse/label(Parse/take_byte(0x3D), "expected '=' after key")!;
+        let _ = ws!;
+        let value = value_parse!;
+        Parse/pure(Stmt/assign(path, value))
+    | some(_) =>
+        let doubled = Parse/optional(Parse/take_byte(0x5B))!;
+        match doubled
+        | some(_) =>
+            let path = header(true)!;
+            Parse/pure(Stmt/array_header(path))
+        | none() =>
+            let path = header(false)!;
+            Parse/pure(Stmt/table_header(path))
         end
     end;
 
+rec stmts(acc: List(Stmt)) -> Parse(List(Stmt)) =
+    let _ = trivia!;
+    let done = Parse/optional(Parse/eof)!;
+    match done
+    | some(_) => Parse/pure(acc)
+    | none() =>
+        let s = stmt!;
+        let _ = line_end!;
+        stmts([..acc, s])
+    end;
+
 pub let decode(source: Str) -> Result(Map(Toml), Str) =
-    match stmts_scan(Str/to_bytes(source), 0, [])
+    match Parse/run(stmts([]), Str/to_bytes(source))
     | failure(msg) => Result/failure(msg)
-    | success(stmts) =>
+    | success(parsed) =>
         let start: Result(Build, Str) = Result/success(build_empty);
         match List/fold(
-            stmts,
+            parsed,
             start,
             (s, acc) =>
                 Result/bind(

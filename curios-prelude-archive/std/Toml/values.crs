@@ -1,7 +1,7 @@
 use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, List, Map, Option, Result, Parse};
 use /std/Toml/{Toml};
 use /std/Toml/build/{inline_fold};
-use /std/Toml/scan/{byte_at_is, trivia, ws};
+use /std/Toml/scan/{trivia, ws};
 use /std/Toml/strings/{str_basic, str_literal, str_ml_basic, str_ml_literal};
 use /std/Toml/keys/{key_dotted};
 use /std/Toml/numbers/{flt_number, flt_special, int_value};
@@ -25,106 +25,79 @@ let val_number_signed: Parse(Toml) =
 let val_number_digit: Parse(Toml) =
     Parse/or(datetime_value, Parse/or(flt_number, int_value));
 
-rec array_scan(input: Bytes, pos: Nat) -> Result({Nat, Toml}, Str) =
-    rec go(cur: Nat, acc: List(Toml)) -> Result({Nat, Toml}, Str) =
-        match trivia.run(input, cur)
-        | failure(msg) => Result/failure(msg)
-        | success((c1, _)) =>
-            match byte_at_is(input, c1, (n) => n == 0x5D)
-            | true => Result/success((c1 + 1, Toml/arr(acc)))
-            | false =>
-                match value_scan(input, c1)
-                | failure(msg) => Result/failure(msg)
-                | success((c2, v)) =>
-                    match trivia.run(input, c2)
-                    | failure(msg) => Result/failure(msg)
-                    | success((c3, _)) =>
-                        match byte_at_is(input, c3, (n) => n == 0x2C)
-                        | true => go(c3 + 1, [..acc, v])
-                        | false =>
-                            match byte_at_is(input, c3, (n) => n == 0x5D)
-                            | true => Result/success((c3 + 1, Toml/arr([..acc, v])))
-                            | false => Result/failure("expected ',' or ']' in array")
-                            end
-                        end
-                    end
-                end
-            end
-        end;
-    match byte_at_is(input, pos, (n) => n == 0x5B)
-    | true => go(pos + 1, [])
-    | false => Result/failure("expected array")
-    end
-and inline_scan(input: Bytes, pos: Nat) -> Result({Nat, Toml}, Str) =
-    rec go(cur: Nat, acc: List({List(Str), Toml})) -> Result({Nat, Toml}, Str) =
-        match key_dotted.run(input, cur)
-        | failure(msg) => Result/failure(msg)
-        | success((c1, path)) =>
-            match ws.run(input, c1)
-            | failure(msg) => Result/failure(msg)
-            | success((c2, _)) =>
-                match byte_at_is(input, c2, (n) => n == 0x3D)
-                | true =>
-                    match ws.run(input, c2 + 1)
-                    | failure(msg) => Result/failure(msg)
-                    | success((c3, _)) =>
-                        match value_scan(input, c3)
-                        | failure(msg) => Result/failure(msg)
-                        | success((c4, v)) =>
-                            match ws.run(input, c4)
-                            | failure(msg) => Result/failure(msg)
-                            | success((c5, _)) =>
-                                let acc2 = [..acc, (path, v)];
-                                match byte_at_is(input, c5, (n) => n == 0x2C)
-                                | true =>
-                                    match ws.run(input, c5 + 1)
-                                    | failure(msg) => Result/failure(msg)
-                                    | success((c6, _)) => go(c6, acc2)
-                                    end
-                                | false =>
-                                    match byte_at_is(input, c5, (n) => n == 0x7D)
-                                    | true =>
-                                        match inline_fold(acc2)
-                                        | success(m) => Result/success((c5 + 1, Toml/table(m)))
-                                        | failure(msg) => Result/failure(msg)
-                                        end
-                                    | false => Result/failure("expected ',' or '}' in inline table")
-                                    end
-                                end
-                            end
-                        end
-                    end
-                | false => Result/failure("expected '=' in inline table")
-                end
-            end
-        end;
-    match byte_at_is(input, pos, (n) => n == 0x7B)
-    | true =>
-        match ws.run(input, pos + 1)
-        | failure(msg) => Result/failure(msg)
-        | success((c1, _)) =>
-            match byte_at_is(input, c1, (n) => n == 0x7D)
-            | true => Result/success((c1 + 1, Toml/table(Map/empty())))
-            | false => go(c1, [])
+
+-- The nested collections and the value dispatcher are one mutually recursive group: an array holds values, a value may be an array.
+rec array_parse: Parse(Toml) =
+    let _ = Parse/label(Parse/take_byte(0x5B), "expected array")!;
+    array_items([])
+and array_items(acc: List(Toml)) -> Parse(Toml) =
+    let _ = trivia!;
+    let closed = Parse/optional(Parse/take_byte(0x5D))!;
+    match closed
+    | some(_) => Parse/pure(Toml/arr(acc))
+    | none() =>
+        let v = value_parse!;
+        let _ = trivia!;
+        let acc2 = [..acc, v];
+        let comma = Parse/optional(Parse/take_byte(0x2C))!;
+        match comma
+        | some(_) => array_items(acc2)
+        | none() =>
+            let stop = Parse/optional(Parse/take_byte(0x5D))!;
+            match stop
+            | some(_) => Parse/pure(Toml/arr(acc2))
+            | none() => Parse/fail("expected ',' or ']' in array")
             end
         end
-    | false => Result/failure("expected inline table")
     end
-pub and value_scan(input: Bytes, pos: Nat) -> Result({Nat, Toml}, Str) =
-    match Bytes/try_get(input, pos)
-    | none() => Result/failure("expected value")
+and inline_parse: Parse(Toml) =
+    let _ = Parse/label(Parse/take_byte(0x7B), "expected inline table")!;
+    let _ = ws!;
+    let empty = Parse/optional(Parse/take_byte(0x7D))!;
+    match empty
+    | some(_) => Parse/pure(Toml/table(Map/empty()))
+    | none() => inline_items([])
+    end
+and inline_items(acc: List({List(Str), Toml})) -> Parse(Toml) =
+    let path = key_dotted!;
+    let _ = ws!;
+    let _ = Parse/label(Parse/take_byte(0x3D), "expected '=' in inline table")!;
+    let _ = ws!;
+    let v = value_parse!;
+    let _ = ws!;
+    let acc2 = [..acc, (path, v)];
+    let comma = Parse/optional(Parse/take_byte(0x2C))!;
+    match comma
+    | some(_) =>
+        let _ = ws!;
+        inline_items(acc2)
+    | none() =>
+        let stop = Parse/optional(Parse/take_byte(0x7D))!;
+        match stop
+        | some(_) =>
+            match inline_fold(acc2)
+            | success(m) => Parse/pure(Toml/table(m))
+            | failure(msg) => Parse/fail(msg)
+            end
+        | none() => Parse/fail("expected ',' or '}' in inline table")
+        end
+    end
+pub and value_parse: Parse(Toml) =
+    let next = Parse/peek!;
+    match next
+    | none() => Parse/fail("expected value")
     | some(b) =>
         match Byte/to_nat(b)
-        | 34 => val_str_basic.run(input, pos)
-        | 39 => val_str_literal.run(input, pos)
-        | 116 => val_true.run(input, pos)
-        | 102 => val_false.run(input, pos)
-        | 91 => array_scan(input, pos)
-        | 123 => inline_scan(input, pos)
-        | 43 => val_number_signed.run(input, pos)
-        | 45 => val_number_signed.run(input, pos)
-        | 105 => flt_special.run(input, pos)
-        | 110 => flt_special.run(input, pos)
-        | _ => val_number_digit.run(input, pos)
+        | 34 => val_str_basic
+        | 39 => val_str_literal
+        | 116 => val_true
+        | 102 => val_false
+        | 91 => array_parse
+        | 123 => inline_parse
+        | 43 => val_number_signed
+        | 45 => val_number_signed
+        | 105 => flt_special
+        | 110 => flt_special
+        | _ => val_number_digit
         end
     end;

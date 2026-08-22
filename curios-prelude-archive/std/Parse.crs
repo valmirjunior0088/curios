@@ -1,6 +1,9 @@
 use /std/{Result, Nat, Byte, Bytes, Str, Bool, List, Option, Monad};
 
-pub struct Parse(A: Type): pub Type {
+-- A parser is a step from a position in the input to a position and a value, or a message. The representation is *sealed*: a `Parse` is built and consumed only through the combinators below, so no consumer can depend on the step function being what a parser is.
+--
+-- Sealing it is what makes the carrier free to change. Nothing outside this module names a position, so a later representation carrying more -- a committed flag, the position a failure occurred at, a defunctionalized step -- is this module's decision alone rather than an edit to every parser in `/std`.
+pub struct Parse(A: Type): Type {
     run(input: Bytes, pos: Nat) -> Result({Nat, A}, Str),
 }
 
@@ -43,6 +46,14 @@ pub let or(@A: Type, p: Parse(A), q: Parse(A)) -> Parse(A) =
             end,
     };
 
+-- Report `msg` in place of whatever `p` failed with. `or` restores the position before its second branch, so the fallback sees exactly the input `p` was given and simply fails there with a better reason.
+pub let label(@A: Type, p: Parse(A), msg: Str) -> Parse(A) =
+    or(p, fail(msg));
+
+-- Run `p`, but treat its failure as an absent value rather than a failed parse. Nothing is consumed when it fails, so this is the parser spelling of "optionally".
+pub let optional(@A: Type, p: Parse(A)) -> Parse(Option(A)) =
+    or(map(p, (a) => Option/some(a)), pure(Option/none()));
+
 pub let and(@A: Type, @B: Type, p: Parse(A), q: Parse(B)) -> Parse({A, B}) =
     Parse {
         run(input, pos) =
@@ -65,6 +76,12 @@ pub let any_byte: Parse(Byte) =
             end,
     };
 
+-- Consume one byte, but only when it passes `pred`. The position is untouched on refusal, since a failing parser never advances one.
+pub let take_if(pred: (Byte) -> Bool) -> Parse(Byte) =
+    bind(
+        any_byte,
+        (byte) => match pred(byte) | true => pure(byte) | false => fail("unexpected byte") end);
+
 pub let peek_byte: Parse(Byte) =
     Parse {
         run(input, pos) =
@@ -73,6 +90,10 @@ pub let peek_byte: Parse(Byte) =
             | some(ok) => Result/success((pos, Bytes/get(input, pos, @ok)))
             end,
     };
+
+-- Look at the next byte without consuming it, and without failing at the end of input. This is the shape a scanning loop wants: `none()` is the loop's stop condition rather than an error, which `peek_byte` cannot express because running out of input is the only thing it can do about it.
+pub let peek: Parse(Option(Byte)) =
+    or(map(peek_byte, (b) => Option/some(b)), pure(Option/none()));
 
 pub let take_byte(expected: Byte) -> Parse(Byte) =
     Parse {
@@ -165,6 +186,41 @@ pub let take_while(pred: (Byte) -> Bool) -> Parse(Bytes) =
                         end
                     end;
                 Result/success((pos + taken, Bytes/slice(input, pos, taken, @at_stop)))
+            end,
+    };
+
+-- Everything from the current position to the end of input. Always succeeds where the position is legal, yielding the empty slice at the end.
+-- Run `p` for its result but not for its effect on the position: the input is left exactly where `p` started.
+--
+-- This is the one shape the rest of this module cannot express. `or` restores a position only when its first branch *fails*, so it can look ahead by failing but never by succeeding -- and deciding between two parsers on more than the single byte `peek` shows needs exactly that.
+pub let lookahead(@A: Type, p: Parse(A)) -> Parse(A) =
+    Parse {
+        run(input, pos) =
+            match p.run(input, pos)
+            | success((_, a)) => Result/success((pos, a))
+            | failure(msg) => Result/failure(msg)
+            end,
+    };
+
+pub let rest: Parse(Bytes) =
+    Parse {
+        run(input, pos) =
+            match Nat/Le/try(pos, Bytes/len(input))
+            | none() => Result/failure("position past the end of input")
+            | some(within) =>
+                Result/success((Bytes/len(input), Bytes/drop(input, pos, @within)))
+            end,
+    };
+
+-- The next `n` bytes, or everything that remains when fewer than `n` are left.
+--
+-- The clamp `min(pos + n, len input)` is a branch rather than an arithmetic minimum, because the two cases want different windows: `n` bytes when they are all there, and everything that remains when they are not. Testing the window's own bound is what decides which, so the clamp and the proof are one test instead of two.
+pub let take(n: Nat) -> Parse(Bytes) =
+    Parse {
+        run(input, pos) =
+            match Nat/Le/try(pos + n, Bytes/len(input))
+            | some(within) => Result/success((pos + n, Bytes/slice(input, pos, n, @within)))
+            | none() => rest.run(input, pos)
             end,
     };
 

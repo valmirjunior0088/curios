@@ -3,21 +3,15 @@ use /std/Toml/scan/{is_bare_byte, ws};
 use /std/Toml/strings/{str_basic, str_literal};
 
 let key_bare: Parse(Str) =
-    Parse {
-        run(input, pos) =
-            match Parse/take_while(is_bare_byte).run(input, pos)
-            | success((next, chunk)) =>
-                match Bytes/len(chunk) == 0
-                | true => Result/failure("expected key")
-                | false =>
-                    match Str/of_bytes(chunk)
-                    | some(s) => Result/success((next, s))
-                    | none() => Result/failure("expected key")
-                    end
-                end
-            | failure(msg) => Result/failure(msg)
-            end,
-    };
+    let chunk = Parse/take_while(is_bare_byte)!;
+    match Bytes/len(chunk) == 0
+    | true => Parse/fail("expected key")
+    | false =>
+        match Str/of_bytes(chunk)
+        | some(s) => Parse/pure(s)
+        | none() => Parse/fail("expected key")
+        end
+    end;
 
 pub let key_part: Parse(Str) =
     Parse/or(key_bare, Parse/or(str_basic, str_literal));

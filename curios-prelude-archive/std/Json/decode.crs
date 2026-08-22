@@ -21,17 +21,11 @@ let parse_false_val: Parse(Json) =
     Parse/map(Parse/take_literal("false"), (_) => Json/bool(false));
 
 let parse_num: Parse(Json) =
-    Parse {
-        run(input, pos) =
-            match Parse/take_while(is_num_byte).run(input, pos)
-            | success((next, chunk)) =>
-                match Flt/of_str(Option/unwrap_or(Str/of_bytes(chunk), ""))
-                | some(value) => Result/success((next, Json/num(value)))
-                | none() => Result/failure("expected number")
-                end
-            | failure(msg) => Result/failure(msg)
-            end,
-    };
+    let chunk = Parse/take_while(is_num_byte)!;
+    match Flt/of_str(Option/unwrap_or(Str/of_bytes(chunk), ""))
+    | some(value) => Parse/pure(Json/num(value))
+    | none() => Parse/fail("expected number")
+    end;
 
 let is_not_string_special(byte: Byte) -> Bool =
     match Byte/to_nat(byte) | 34 => false | 92 => false | _ => true end;
@@ -126,27 +120,19 @@ let symbol(b: Byte) -> Parse(Byte) =
     let _ = ws!;
     Parse/take_byte(b);
 
+-- The dispatch reads the first byte without consuming it, so each arm parses the value whole -- including the byte that selected it.
 pub rec decode: Parse(Json) =
-    Parse {
-        run(input, pos) =
-            match ws.run(input, pos)
-            | failure(msg) => Result/failure(msg)
-            | success((start, _)) =>
-                match Nat/Lt/try(start, Bytes/len(input))
-                | none() => Result/failure("unexpected end of input")
-                | some(ok) =>
-                    match Byte/to_nat(Bytes/get(input, start, @ok))
-                    | 110 => parse_null.run(input, start)
-                    | 116 => parse_true_val.run(input, start)
-                    | 102 => parse_false_val.run(input, start)
-                    | 34 => parse_str_value.run(input, start)
-                    | 91 => parse_arr.run(input, start)
-                    | 123 => parse_obj.run(input, start)
-                    | _ => parse_num.run(input, start)
-                    end
-                end
-            end,
-    }
+    let _ = ws!;
+    let byte = Parse/peek_byte!;
+    match Byte/to_nat(byte)
+    | 110 => parse_null
+    | 116 => parse_true_val
+    | 102 => parse_false_val
+    | 34 => parse_str_value
+    | 91 => parse_arr
+    | 123 => parse_obj
+    | _ => parse_num
+    end
 and parse_arr: Parse(Json) =
     let _ = symbol(0x5B)!;
     let elems = Parse/sep_by0(decode, symbol(0x2C))!;
