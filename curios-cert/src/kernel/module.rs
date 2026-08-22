@@ -13,7 +13,7 @@ mod tests;
 
 use {
     super::{
-        Kernel, KernelError, Sort, carries_information,
+        Counted, Kernel, KernelError, Sort, carries_information,
         convert::convert,
         infer::{check, infer, infer_type},
     },
@@ -122,6 +122,7 @@ pub(crate) fn check_rec_group(
 
     if names.len() != group.length() {
         return Err(KernelError::Arity {
+            counted: Counted::GroupMembers,
             expected: group.length(),
             actual: names.len(),
         });
@@ -294,6 +295,7 @@ fn check_constructed(
     // Refused before the walk, because `take` would end it early without complaint: a telescope too short to hold the prefix would hand `indices_at` a short parameter list and panic in `Telescope::open`, and a malformed entry deserves a refusal rather than a crash.
     if entries.len() < declaration.param_count() {
         return Err(KernelError::Arity {
+            counted: Counted::Parameters,
             expected: declaration.param_count(),
             actual: entries.len(),
         });
@@ -321,6 +323,7 @@ fn check_constructed(
     let expected = declaration.index_count();
     if targets.len() != expected {
         return Err(KernelError::Arity {
+            counted: Counted::Indices,
             expected,
             actual: targets.len(),
         });

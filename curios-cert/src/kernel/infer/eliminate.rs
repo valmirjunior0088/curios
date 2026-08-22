@@ -23,7 +23,7 @@ mod tests;
 
 use {
     super::{check, infer},
-    crate::{InductAt, Kernel, KernelError, Sort, carries_information},
+    crate::{Counted, InductAt, Kernel, KernelError, Sort, carries_information},
     curios_analysis::{Invert, invert_indices, invert_indices_outer, pinned_by_targets},
     curios_core::{
         Atom, Bound, Free, InductArm, InductType, Many, Scope, Subterm, Telescope, Term, Variant,
@@ -99,6 +99,7 @@ fn check_arm(
 
     if signature.len() != arm.arity() {
         return Err(KernelError::Arity {
+            counted: Counted::ArmBinders,
             expected: signature.len(),
             actual: arm.arity(),
         });

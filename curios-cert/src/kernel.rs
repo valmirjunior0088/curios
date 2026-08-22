@@ -58,6 +58,48 @@ use {
 
 /// Why the kernel refused a term.
 ///
+/// What a [`KernelError::Arity`] counted. One refusal, many tallies — a message reading `expected 1, found 0` with nothing to say what the 1 was sent a reader to the kernel's source to learn it was a universe level.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Counted {
+    /// The levels an occurrence supplies, against the parameters its declaration's scheme binds.
+    UniverseLevels,
+    /// The parameters an occurrence supplies, or a constructor's telescope opens with, against the declaration's.
+    Parameters,
+    /// The indices an occurrence supplies, or the targets a constructor states, against the declaration's index telescope.
+    Indices,
+    /// The names a recursive group is exported under, against the members it holds.
+    GroupMembers,
+    /// The arguments of a call, against the parameters of the function's type or the foreign row.
+    Arguments,
+    /// The components a projection reaches past — the index it names plus one — against the tuple or structure it projects from.
+    Components,
+    /// A constructor value's payload, against its signature.
+    Payload,
+    /// A tuple or structure value's fields, against its telescope.
+    Fields,
+    /// A motive's binders, against the family's indices plus the scrutinee.
+    MotiveBinders,
+    /// An arm's binders, against the constructor's signature.
+    ArmBinders,
+}
+
+impl fmt::Display for Counted {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(match self {
+            Counted::UniverseLevels => "universe levels",
+            Counted::Parameters => "parameters",
+            Counted::Indices => "indices",
+            Counted::GroupMembers => "recursive group members",
+            Counted::Arguments => "arguments",
+            Counted::Components => "components",
+            Counted::Payload => "constructor payload",
+            Counted::Fields => "fields",
+            Counted::MotiveBinders => "motive binders",
+            Counted::ArmBinders => "arm binders",
+        })
+    }
+}
+
 /// Every variant is a refusal, never a warning: reaching one means the kernel declined to certify the term, and a caller must treat that as rejection.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum KernelError {
@@ -82,8 +124,12 @@ pub enum KernelError {
     NotAFunction(Term),
     /// A term projected from that has no components.
     NotATuple(Term),
-    /// A count that did not match: arguments against a telescope, a payload against a constructor's signature, a motive against a family's indices.
-    Arity { expected: usize, actual: usize },
+    /// A count that did not match — what was counted is [`Counted`], so the refusal names it.
+    Arity {
+        counted: Counted,
+        expected: usize,
+        actual: usize,
+    },
     /// A proposition eliminated into a relevant result while carrying something a program could read back. Permitted only for an empty proposition or a singleton whose payload is entirely determined.
     LargeElimination(Global),
     /// Elaboration-only syntax — a metavariable, an unresolved infix operator, or a polymorphic numeric literal — reached the kernel. The term was handed over before elaboration finished with it.
@@ -211,8 +257,12 @@ impl fmt::Display for Displayed<'_> {
                 let type_ = type_.spelled(spelling);
                 write!(formatter, "`{type_}` has no components")
             }
-            KernelError::Arity { expected, actual } => {
-                write!(formatter, "expected {expected} of them, found {actual}")
+            KernelError::Arity {
+                counted,
+                expected,
+                actual,
+            } => {
+                write!(formatter, "{counted}: expected {expected}, found {actual}")
             }
             KernelError::LargeElimination(name) => write!(
                 formatter,
@@ -505,6 +555,7 @@ impl Kernel {
     ) -> Result<(), KernelError> {
         if levels.len() != context.parameter_count {
             return Err(KernelError::Arity {
+                counted: Counted::UniverseLevels,
                 expected: context.parameter_count,
                 actual: levels.len(),
             });

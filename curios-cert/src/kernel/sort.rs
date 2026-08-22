@@ -18,7 +18,7 @@
 mod tests;
 
 use {
-    super::{Kernel, KernelError, infer::infer_type, whnf::whnf},
+    super::{Counted, Kernel, KernelError, infer::infer_type, whnf::whnf},
     curios_core::{
         Apply, Bound, Field, FuncType, Intrinsic, Level, Proj, Reducer, StructType, Subterm,
         Telescope, Term, TupleType, UniverseInst, instantiate_universe_levels_scoped,
@@ -50,10 +50,18 @@ impl Sort {
 /// An occurrence supplies exactly as many parameters, or indices, as its declaration declares.
 ///
 /// The counterpart of [`Kernel::check_instance`](crate::Kernel) for the arities a nominal term carries beside its universe instance — an occurrence's parameters and indices, and a value's parameters. Both are read from the declaration the moment anything asks what an occurrence *is*, and both were taken on the occurrence's own word: an `InductType` at no parameters for a one-parameter family was classified as a well-formed type, and every consumer of the arity after that was wrong about it — `instantiate` peeling a prefix that is not there, and `indices_at` reaching `Telescope::open`'s assertion and aborting the process. Checked here, beside the universe width, because this is where a declaration is consulted for an occurrence at all.
-pub(super) fn arity_matches(expected: usize, actual: usize) -> Result<(), KernelError> {
+pub(super) fn arity_matches(
+    counted: Counted,
+    expected: usize,
+    actual: usize,
+) -> Result<(), KernelError> {
     match expected == actual {
         true => Ok(()),
-        false => Err(KernelError::Arity { expected, actual }),
+        false => Err(KernelError::Arity {
+            counted,
+            expected,
+            actual,
+        }),
     }
 }
 

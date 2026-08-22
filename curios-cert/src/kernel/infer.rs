@@ -23,8 +23,8 @@ mod tests;
 
 use {
     super::{
-        Kernel, KernelError, Sort, check_group, convert::convert, sort::as_sort, sort::infer_sort,
-        synth_neutral,
+        Counted, Kernel, KernelError, Sort, check_group, convert::convert, sort::as_sort,
+        sort::infer_sort, synth_neutral,
     },
     curios_core::{
         Apply, Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Intrinsic,
@@ -65,6 +65,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
 
             if args.len() != signature.params.len() {
                 return Err(KernelError::Arity {
+                    counted: Counted::Arguments,
                     expected: signature.params.len(),
                     actual: args.len(),
                 });
@@ -128,6 +129,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
 
             if telescope.len() != params.len() {
                 return Err(KernelError::Arity {
+                    counted: Counted::Arguments,
                     expected: telescope.len(),
                     actual: params.len(),
                 });
@@ -173,6 +175,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
                     telescope
                         .field_type_from(head, *index)
                         .ok_or(KernelError::Arity {
+                            counted: Counted::Components,
                             expected: *index + 1,
                             actual: len,
                         })
@@ -187,6 +190,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
                     fields
                         .field_type_from(head, *index)
                         .ok_or(KernelError::Arity {
+                            counted: Counted::Components,
                             expected: *index + 1,
                             actual: len,
                         })
@@ -263,6 +267,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
 
             if signature.len() != payload.len() {
                 return Err(KernelError::Arity {
+                    counted: Counted::Payload,
                     expected: signature.len(),
                     actual: payload.len(),
                 });
@@ -303,6 +308,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
 
             if telescope.len() != fields.len() {
                 return Err(KernelError::Arity {
+                    counted: Counted::Fields,
                     expected: telescope.len(),
                     actual: fields.len(),
                 });
@@ -343,6 +349,7 @@ fn infer_within(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
 
             if m.motive.arity() != indices.len() + 1 {
                 return Err(KernelError::Arity {
+                    counted: Counted::MotiveBinders,
                     expected: indices.len() + 1,
                     actual: m.motive.arity(),
                 });
@@ -873,6 +880,7 @@ fn check_fields(
 ) -> Result<(), KernelError> {
     if telescope.len() != fields.len() {
         return Err(KernelError::Arity {
+            counted: Counted::Fields,
             expected: telescope.len(),
             actual: fields.len(),
         });

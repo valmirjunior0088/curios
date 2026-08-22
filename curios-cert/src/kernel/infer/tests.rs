@@ -1,6 +1,6 @@
 use {
     super::subsumes,
-    crate::{Kernel, KernelError, check, check_definition, infer},
+    crate::{Counted, Kernel, KernelError, check, check_definition, infer},
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Level, MetaId, Nat, Polarity,
         StructDecl, StructType, Subterm, Telescope, Term, UniverseConstraint,
@@ -149,6 +149,7 @@ fn an_application_of_the_wrong_arity_is_refused() {
     assert_eq!(
         infer(&mut kernel, &applied),
         Err(KernelError::Arity {
+            counted: Counted::Arguments,
             expected: 1,
             actual: 2
         }),
