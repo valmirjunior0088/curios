@@ -279,6 +279,7 @@ impl Context {
         self.remaining.set(self.budget);
         self.depth.set(0);
         self.peak_depth.set(0);
+        self.caches.begin_declaration();
     }
 
     /// What the declaration being elaborated has consumed so far.
@@ -308,12 +309,21 @@ impl Context {
             && !result.has_universe_meta()
             && !result.any_metavar(&mut |id| self.metavar_solution(id).is_none());
 
-        // The key and the reduct both have their lifetimes extended by the insertion, so both are charged; the allowance is the compilation's rather than this declaration's, and exhausting it stops the cache accepting entries instead of refusing anything.
+        if !cacheable {
+            return;
+        }
+
+        // A local-bearing term's entry dies with the declaration — its binders never recur — so the work budget that built it is its bound, and it is stored for nothing. A closed term's entry outlives the declaration, which is what the retention allowance exists to price: the key and the reduct both have their lifetimes extended by the insertion, so both are charged, and exhausting the allowance stops the cache accepting entries instead of refusing anything. See [`Retention`].
+        if term.has_local_free() {
+            self.caches.reduction_insert(term, result.clone());
+            return;
+        }
+
         let cost = Cost::collection(1)
             .saturating_add(Cost::units(term.footprint()))
             .saturating_add(Cost::units(result.footprint()));
 
-        if cacheable && self.retention.admits(cost) {
+        if self.retention.admits(cost) {
             self.caches.reduction_insert(term, result.clone());
         }
     }
@@ -326,17 +336,13 @@ impl Context {
         self.caches.canonical_key_get(key)
     }
 
-    /// The write half, charged as [`Context::reduce`] is.
+    /// The write half. Not charged: a canonical key is a fact about one declaration's arms, cleared with the declaration, and computed within that declaration's budget under [`Context::within_allowance`]'s ceiling — the same reason [`Context::reduce`] stores a local-bearing reduct for nothing.
     ///
     /// The unsolved-metavariable condition that gate takes is deliberately absent. It keeps a *reduct* from being substituted into a term after a solve invalidated it; an entry here is only ever a comparison representative, so a stale one compares unequal to the candidate a solve produced — a miss, which is the refusing direction where the reduction cache's would be the admitting one. Keeping the condition would also exclude the entries the memo exists for: a guard over a metavariable-bearing subject is exactly the case whose recomputation is unaffordable.
     pub(crate) fn record_canonical_key(&mut self, key: Term, canonical: &Term) {
         let cacheable = key.closed() && !key.has_universe_meta();
 
-        let cost = Cost::collection(1)
-            .saturating_add(Cost::units(key.footprint()))
-            .saturating_add(Cost::units(canonical.footprint()));
-
-        if cacheable && self.retention.admits(cost) {
+        if cacheable {
             self.caches.canonical_key_insert(key, canonical.clone());
         }
     }

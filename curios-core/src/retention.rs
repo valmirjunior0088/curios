@@ -6,6 +6,10 @@
 //!
 //! The work budget is restored at every declaration boundary, and the elaborator's reduction cache deliberately is not — it survives item boundaries so that closed reducts stay warm across the definitions reduction and erasure mint. Those two lifetimes compose into a bound of *declarations times budget*, which is no bound at all for a module of many heavy ones. Per-declaration charging bounds one declaration; this bounds the module.
 //!
+//! # What it prices, and what it deliberately does not
+//!
+//! **Storage that outlives the budget that built it, and nothing else.** A table cleared at the declaration boundary holds only what that declaration's budget paid to build — a construction costs what it builds — so charging it here as well is a second bound with the wrong scope: cumulative where the first is restored, and at the tree footprint of a reduct where the first priced the nodes. That second bound is how one declaration came to spend every later one's allowance on entries that died with it — a thirteen-definition proof retaining a third of the compilation's quota — and it was removed rather than raised. The kernel's term-keyed memos and the elaborator's local-bearing reducts and canonical refinement keys are declaration-scoped by construction, the last two because a binder is minted once and never recurs, and none of them charges an insertion. The kernel's name-keyed unfold table and the elaborator's closed reducts outlive a declaration, and they pay.
+//!
 //! # What it costs to exhaust
 //!
 //! Nothing semantic, and one thing that is worth stating rather than claiming away. The reduction loop probes its cache *before* it charges, so a hit already costs nothing and a cold cache already costs re-derivation against the work budget. A declaration that would have hit a warm cache can therefore exhaust its own budget once retention has stopped. That is the elaborator's existing warmth-dependence rather than a new one, and the default is measured with enough headroom that ordinary compilation never reaches it.
@@ -18,16 +22,16 @@ use super::Cost;
 
 /// How much optional storage one compilation may retain, in the same logical units work is charged in.
 ///
-/// **Measured for headroom rather than for tightness**, because crossing it costs a later declaration its own budget in re-derivation — see the module documentation. Taken 2026-08-15 by `curios-prelude-archive`'s `stored_prelude_measurements`, which reports both sides over the whole standard library:
+/// **Measured for headroom rather than for tightness**, because crossing it costs a later declaration its own budget in re-derivation — see the module documentation. Taken 2026-08-22 on `x86_64-unknown-linux-gnu` by `curios-prelude-archive`'s `stored_prelude_measurements`, which reports both sides over the whole standard library, with the declaration-scoped tables no longer charged:
 ///
 /// | What | Retained |
 /// | --- | --- |
-/// | certifying one whole unit — the kernel's three memo tables | 108 530 138 units |
-/// | re-erasing one whole unit — the elaborator's reduction cache | 3 524 199 units |
+/// | certifying one whole unit — the kernel's name-keyed unfold table | 6 479 units |
+/// | re-erasing one whole unit — the elaborator's closed reducts | 4 317 513 units |
 ///
-/// This is nine times the larger of them. That is a real ceiling rather than an unreachable one — at the eight logical bytes a unit names, it bounds retained storage at about eight gigabytes — while leaving the fixed prelude, which is the heaviest thing the compiler ever holds, using eleven percent of it.
+/// The constant was set at nine times the larger of two figures taken 2026-08-15, when the kernel's three tables were all charged and read 108 530 138 units and the elaborator's 3 524 199; it is left where it was, which now puts the fixed prelude — the heaviest thing the compiler ever holds — under half a percent of it. That is still a real ceiling at the eight logical bytes a unit names, about eight gigabytes of retained storage, and lowering it is a separate decision from the one that took the declaration-scoped tables out from under it.
 ///
-/// **The kernel's figure was 24 444 443 until its memo was made to reach every reduction level rather than only the two `Reducer` entry points.** Four and a half times the entries for a 5.3× drop in what a `Str` literal's check charges, and no measurable change in process memory — the counter double-counts payload shared between entries, deliberately, which is why it moved so much further than the machine did.
+/// **The kernel's figure was 24 444 443 until its memo was made to reach every reduction level rather than only the two `Reducer` entry points, and 108 530 138 after.** Four and a half times the entries for a 5.3× drop in what a `Str` literal's check charges, and no measurable change in process memory — the counter double-counts payload shared between entries, deliberately, which is why it moved so much further than the machine did. Both figures priced the term-keyed tables, which die with each declaration; what the kernel charges now is the unfold table alone.
 ///
 /// **The accumulator-chain shape this documentation used to record is gone with the closed machine, on the kernel entirely and on the elaborator in part.** Arguments were substituted unreduced, so a tail recursion threading an accumulator built a term one link deeper per element, and every memo entry keyed on a term containing the chain had a footprint of the walk so far — a `Str` literal of 4 000 characters consumed 774 million units of this allowance by itself. The machine substitutes values, so the chain is never built: the kernel's retention over the same literal ladder is now flat at under a quarter-million units at every size, which `str_literal_cost_measurements` records beside the old ladder.
 ///

@@ -595,23 +595,25 @@ fn cost_row(label: &str, source: &str) {
 ///
 /// # What it last printed
 ///
-/// Taken **2026-08-21**, **release**, on `x86_64-unknown-linux-gnu`, with the elaborator's conversion forcing a folded recursive call before comparing it, and a window comparing equal to itself by identity.
+/// Taken **2026-08-22**, **release**, on `x86_64-unknown-linux-gnu`, with the elaborator's conversion forcing a folded recursive call before comparing it, a window comparing equal to itself by identity, and the declaration-scoped memo tables no longer charged against the allowance.
 ///
 /// ```text
 ///   program                      units   depth      other      retained       units   depth      other      retained  kernel/elab
-///   Str literal, n=250           16655       1      15631         36360       22363       6      16219        184567     1.3x
-///   Str literal, n=500           27905       1      26881         37445       28776       2      26728        185156     1.0x
-///   Str literal, n=1000          50405       1      49381         39615       51276       2      49228        186334     1.0x
-///   Str literal, n=2000          95405       1      94381         43990       96276       2      94228        188709     1.0x
-///   Str literal, n=4000         185405       1     184381         52740      186276       2     184228        193459     1.0x
-///   Str literal, n=8000         365405       1     364381         70240      366276       2     364228        202959     1.0x
-///   Str n=500, 1 uses            27905       1      26881         37936       28776       2      26728        185264     1.0x
-///   Str n=500, 3 uses            27905       1      26881         37936       28776       2      26728        185264     1.0x
-///   Bytes literal, n=500          8541       2       6493         21057       20502       6      14358        171068     2.4x
-///   Str n=500, sliced            27905       1      26881         32685       28776       2      26728        179063     1.0x
+///   Str literal, n=250           16655       1      15631         33461       22363       6      16219             0     1.3x
+///   Str literal, n=500           27905       1      26881         34546       28776       2      26728             0     1.0x
+///   Str literal, n=1000          50405       1      49381         36716       51276       2      49228             0     1.0x
+///   Str literal, n=2000          95405       1      94381         41091       96276       2      94228             0     1.0x
+///   Str literal, n=4000         185405       1     184381         49841      186276       2     184228             0     1.0x
+///   Str literal, n=8000         365405       1     364381         67341      366276       2     364228             0     1.0x
+///   Str n=500, 1 uses            27905       1      26881         35037       28776       2      26728             0     1.0x
+///   Str n=500, 3 uses            27905       1      26881         35037       28776       2      26728             0     1.0x
+///   Bytes literal, n=500          8541       2       6493         19540       20502       6      14358             0     2.4x
+///   Str n=500, sliced            27905       1      26881         29786       28776       2      26728             0     1.0x
 /// ```
 ///
-/// **The elaborator's retention is linear now** — 36K to 70K units across the ladder, about four a character, where it grew as 37·n² and saturated the quota near 5 200 characters — and **its units are the kernel's**: the `kernel/elab` column reads 1.0× at every size, where it read 0.3×. Both were one defect. The literal's proof is `of_scan_eq(b, refl_scan(b))`, and checking it asks conversion one question, `scan_from(lead, b) ≡ Scan/lead()`; the elaborator's conversion reduced the left at the *plain* demand — where a folded recursive call is its own normal form, as the machine's contract says — met the fold against a constructor, and unfolded it **one step per round**, each round storing a cache entry keyed on the next folded spelling with the scan's state unreduced in its argument, one `step` deeper per character. The kernel forces both sides of every comparison, which is one machine run. `Convert::force_folded_call` now does the same, falling back to the one-step unfold only when forcing reaches no value.
+/// The kernel's `retained` column reads its unfold table alone now, and a literal unfolds nothing monomorphic; the day before, with its term-keyed tables still charged, it read 184 567 to 202 959 across the ladder.
+///
+/// **The elaborator's retention is linear now** — 33K to 67K units across the ladder, about four a character, where it grew as 37·n² and saturated the quota near 5 200 characters — and **its units are the kernel's**: the `kernel/elab` column reads 1.0× at every size, where it read 0.3×. Both were one defect. The literal's proof is `of_scan_eq(b, refl_scan(b))`, and checking it asks conversion one question, `scan_from(lead, b) ≡ Scan/lead()`; the elaborator's conversion reduced the left at the *plain* demand — where a folded recursive call is its own normal form, as the machine's contract says — met the fold against a constructor, and unfolded it **one step per round**, each round storing a cache entry keyed on the next folded spelling with the scan's state unreduced in its argument, one `step` deeper per character. The kernel forces both sides of every comparison, which is one machine run. `Convert::force_folded_call` now does the same, falling back to the one-step unfold only when forcing reaches no value.
 ///
 /// **Wall clock was superlinear where every counter was linear, and that was the representation.** Release, the bisection's rungs: 16K in 0.95 s, 32K in 2.15 s, 64K in 5.86 s, 128K in 18.3 s — where they were 5.7 s, 21 s, 82 s and about 250 s on this host. The whole of the difference was inside one `reduce_closed` run, and `PackedBin`'s equality was what it did per element: the run-scoped memo probes a key holding the current tail window and finds the key it stored, and confirming those equal walked the window bit by bit. A window of one buffer at one offset is the same bits, and `PartialEq` now says so without a read; aligned windows compare as byte slices beside it. What remains grows as about n^1.5 at the top of that ladder and is not a per-element walk — its shape is the run-scoped memo's size — and is left measured rather than chased.
 ///

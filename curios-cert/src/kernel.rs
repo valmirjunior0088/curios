@@ -433,17 +433,11 @@ impl Kernel {
         Some(self.spend.charge_nothing(replay))
     }
 
-    /// Remember a local-free `term`'s weak-head reduct and its consumption — unless the compilation's retention allowance cannot cover the entry.
+    /// Remember a local-free `term`'s weak-head reduct and its consumption.
     ///
-    /// The key is charged as well as the reduct here, and is not there: an `unfold` entry is keyed by a name, and this one by the whole term, whose lifetime the insertion extends exactly as it extends the reduct's.
+    /// **Not charged to the retention allowance, and deliberately.** That allowance exists for storage that outlives the budget that built it — [`Retention`] names the composition it bounds, a cache surviving item boundaries times a budget restored at each — and this table does not: [`Memos::begin_declaration`] clears it exactly where [`Spend::restore_budget`] fires, and every node it holds was built under that budget, which charges a construction what it builds. It was charged anyway, key and reduct, at the tree footprint of each — and a thirteen-definition proof whose reducts were graphs with `2^n`-node trees spent a third of the whole compilation's allowance on entries that died with the declaration. The name-keyed table beside this one does outlive a declaration, and [`Kernel::unfold_store`] still pays for it.
     pub(crate) fn whnf_store(&mut self, term: Term, forced: bool, replay: Replay) {
-        let cost = replay
-            .retention()
-            .saturating_add(Cost::units(term.footprint()));
-
-        if self.retention.admits(cost) {
-            self.memos.store_whnf(term, forced, replay);
-        }
+        self.memos.store_whnf(term, forced, replay);
     }
 
     /// How much of this walk's retention allowance its memos have consumed.

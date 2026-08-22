@@ -883,7 +883,7 @@ fn a_deep_reduction_is_refused_and_the_refusal_names_depth() {
 
 /// The retention quota degrades the cache rather than refusing the program: an allowance too small for any entry leaves every reduction correct and every one of them cold.
 ///
-/// Correctness is the assertion, and the coldness is what makes it worth making — with retention exhausted the second reduction re-derives instead of hitting, so this is the same term reduced twice by two different routes to the same answer.
+/// Correctness is the assertion, and what the allowance withholds is what makes it worth making: the name-keyed unfold table, which is what an exhausted allowance leaves cold across declarations. The term-keyed tables are not the allowance's to withhold — see the test below — so within one declaration the second reduction here is a hit either way, and what this pins is that a kernel with no allowance at all still answers what a warm one does.
 #[test]
 fn an_exhausted_retention_quota_leaves_the_answer_alone() {
     let mut warm = kernel();
@@ -898,26 +898,31 @@ fn an_exhausted_retention_quota_leaves_the_answer_alone() {
     assert_eq!(cold.retained(), 0, "nothing was admitted, so nothing spent");
 }
 
-/// A cold cache costs *work*, which is the warmth dependence the specification states rather than claims away: the second reduction of a term the memos declined to keep re-derives it, where a warm one hands it back for nothing.
+/// The retention allowance does not reach the term-keyed tables: a kernel with *no* allowance still hands a term's second reduction back for nothing within the declaration, exactly as one with the default does. Those tables live as long as the budget that built their entries and are bounded by it; what the allowance prices is the name-keyed table that outlives a declaration.
 ///
-/// What the cold second reduction does *not* re-pay is the frames, and that is the peak-depth rule showing through rather than an exception to it — the first reduction already reached that depth, so re-reaching it is free. The re-derivation it does pay is the transitions and the construction, which is what makes the two figures below differ by more than rounding.
+/// This used to assert the opposite — that a zero allowance made the second reduction re-derive — and that was the rule under which a thirteen-definition proof spent a third of the whole compilation's allowance on entries that died with its declaration.
 #[test]
-fn a_declined_insertion_costs_the_next_reduction_a_re_derivation() {
+fn the_allowance_does_not_decide_a_second_reduction_within_a_declaration() {
     let term = chain(64);
 
     let mut warm = kernel();
     spent(&mut warm, term.clone());
     let warm_again = spent(&mut warm, term.clone());
 
-    let mut cold = Kernel::with_retention(1_000_000, 0, crate::fixture::SYNTAX);
-    cold.set_local_floor(1_000);
-    spent(&mut cold, term.clone());
-    let cold_again = spent(&mut cold, term);
+    let mut unallowed = Kernel::with_retention(1_000_000, 0, crate::fixture::SYNTAX);
+    unallowed.set_local_floor(1_000);
+    spent(&mut unallowed, term.clone());
+    let unallowed_again = spent(&mut unallowed, term);
 
-    assert_eq!(warm_again, 0, "a retained entry is hit for nothing");
-    assert!(
-        cold_again > 0,
-        "a declined entry is not there to be hit, so the work happens again"
+    assert_eq!(warm_again, 0, "a remembered reduct is hit for nothing");
+    assert_eq!(
+        unallowed_again, 0,
+        "and no allowance was needed to remember it"
+    );
+    assert_eq!(
+        unallowed.retained(),
+        0,
+        "the term-keyed tables charge the allowance nothing"
     );
 }
 

@@ -34,7 +34,10 @@ pub(crate) struct ElaborationStamp {
 /// The reduction, elaboration and canonical-key caches with their two write stamps. See the module documentation for the protocol; `Context` holds exactly one of these.
 #[derive(Debug, Default)]
 pub(crate) struct Caches {
+    /// Reducts of terms mentioning no local binder — the table that survives item boundaries, so closed reducts stay warm across the definitions reduction and erasure mint, and the one the retention allowance prices.
     reduction: HashMap<Term, Term>,
+    /// Reducts of terms mentioning a local binder. Declaration-scoped by nature — a binder is minted once and never recurs, so no later declaration can ask about one — and therefore bounded by the work budget that built every node it holds rather than by the retention allowance: [`Caches::begin_declaration`] clears it where the budget is restored, and nothing charges an insertion. Apart from the closed table so the clear is one operation rather than a walk.
+    reduction_local: HashMap<Term, Term>,
     /// A registered refinement key against the canonical form the escalation compares it at (`reduce::canonical_scrutinee`: head verbatim, arguments and operands in weak-head normal form).
     ///
     /// **Per *key*, where the escalation is per *probe*.** A store entry is recorded as the guard was written and every occurrence the reducer meets has been reduced, so the two meet only through a canonical form — which nothing but reduction produces. Recomputing it at each probe re-derives one guard's subject once per node of that operation in the declaration, and a subject that reduces to a *stuck* form is not held by the reduction table either, since that one caches reducts rather than the walks that failed to settle. Filled on the first escalation that needs it, so a guard whose fact is never probed against still costs nothing to register — the property `reduce::shallow_scrutinee` exists to keep.
@@ -84,11 +87,29 @@ impl Caches {
     }
 
     pub(crate) fn reduction_get(&self, term: &Term) -> Option<Term> {
-        self.reduction.get(term).cloned()
+        match term.has_local_free() {
+            true => self.reduction_local.get(term).cloned(),
+            false => self.reduction.get(term).cloned(),
+        }
     }
 
     pub(crate) fn reduction_insert(&mut self, term: Term, reduct: Term) {
-        self.reduction.insert(term, reduct);
+        match term.has_local_free() {
+            true => self.reduction_local.insert(term, reduct),
+            false => self.reduction.insert(term, reduct),
+        };
+    }
+
+    /// Every reduct, whichever table holds it. The two tables differ in lifetime and in what prices them, never in what invalidates them: a write that could change a reduct changes a local-bearing one exactly as it changes a closed one, so every protocol below that clears reducts clears both through this, and [`Caches::retain_reductions_without`] retains on both.
+    fn clear_reductions(&mut self) {
+        self.reduction.clear();
+        self.reduction_local.clear();
+    }
+
+    /// A new declaration: the tables whose entries cannot outlive one are discarded. The local-bearing reducts, whose keys name binders no later declaration can mention, and the canonical refinement keys, which are facts about one declaration's arms.
+    pub(crate) fn begin_declaration(&mut self) {
+        self.reduction_local.clear();
+        self.canonical_keys.clear();
     }
 
     pub(crate) fn canonical_key_get(&self, key: &Term) -> Option<Term> {
@@ -134,7 +155,7 @@ impl Caches {
     /// A counterfactual refinement was registered: a refinement key can be a `#`-free stuck application of globals, so it can have influenced any entry — both caches clear wholesale, and the write is stamped.
     pub(crate) fn invalidate_for_refinement(&mut self) {
         self.note_write();
-        self.reduction.clear();
+        self.clear_reductions();
         self.canonical_keys.clear();
         self.elaboration.clear();
     }
@@ -142,7 +163,7 @@ impl Caches {
     /// A name was *re*defined (or an assumption's universe scheme rewritten in place): the old value may sit consumed inside a reduct or an elaboration result that no longer mentions the name, leaving nothing for a selective retain to key on — both caches clear wholesale, and the write is stamped.
     pub(crate) fn invalidate_for_redefinition(&mut self) {
         self.note_write();
-        self.reduction.clear();
+        self.clear_reductions();
         self.canonical_keys.clear();
         self.elaboration.clear();
     }
@@ -150,6 +171,8 @@ impl Caches {
     /// A name was *freshly* defined. A fresh definition can only unstick reductions that read this name's absence, and a stuck read always leaves the name free in the WHNF — so the reduction cache retains every entry whose result does not mention it instead of clearing. The elaboration cache survives untouched: its insert gate already refused every entry naming a not-yet-defined global. No stamp — definition is the one ambient fact a pure run may read, and the settled-globals gate covers it.
     pub(crate) fn retain_reductions_without(&mut self, name: &Free) {
         self.reduction
+            .retain(|_, reduct| !reduct.mentions_free(name));
+        self.reduction_local
             .retain(|_, reduct| !reduct.mentions_free(name));
         // A canonical key is a reduct of the same kind, retained by the same test.
         self.canonical_keys
@@ -169,25 +192,25 @@ impl Caches {
         dropped_definitions: bool,
     ) {
         if dropped_refinements {
-            self.reduction.clear();
+            self.clear_reductions();
             self.canonical_keys.clear();
             self.elaboration.clear();
         } else if dropped_definitions {
-            self.reduction.clear();
+            self.clear_reductions();
             self.canonical_keys.clear();
         }
     }
 
     /// A refinement-suppression boundary is being crossed with refinements registered: refinement-applied and refinement-suppressed reducts must never contaminate each other's cache, so both clear — on both sides of the bracket, unstamped (the flag flip itself writes nothing).
     pub(crate) fn invalidate_suppression_boundary(&mut self) {
-        self.reduction.clear();
+        self.clear_reductions();
         self.canonical_keys.clear();
         self.elaboration.clear();
     }
 
     /// Universe levels were rewritten in place (defaulting, finalization, instance closure): cached reducts and elaborations may embed the pre-rewrite levels, so both clear. The solver write itself is stamped by the `UniverseMutation` guard.
     pub(crate) fn invalidate_for_universe_rewrite(&mut self) {
-        self.reduction.clear();
+        self.clear_reductions();
         self.canonical_keys.clear();
         self.elaboration.clear();
     }
@@ -196,7 +219,7 @@ impl Caches {
     pub(crate) fn invalidate_for_rollback(&mut self) {
         self.note_write();
         self.note_universe_write();
-        self.reduction.clear();
+        self.clear_reductions();
         self.canonical_keys.clear();
         // Entries are metavar-free on both key and value, so an un-solve cannot invalidate them in principle; cleared anyway while the rollback bracket is young — conservative and cheap.
         self.elaboration.clear();

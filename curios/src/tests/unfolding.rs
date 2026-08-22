@@ -582,18 +582,20 @@ fn checker_cost(budget: u64, source: &str) -> (Consumption, Consumption, u64, f6
 ///
 /// # What it last printed
 ///
-/// Taken **2026-08-21**, **release**, `x86_64-unknown-linux-gnu`, with the closed machine keeping a global argument as a name — the proved ladder alone, the rest of the run being unchanged.
+/// Taken **2026-08-22**, **release**, `x86_64-unknown-linux-gnu`, with the closed machine keeping a global argument as a name and the declaration-scoped memo tables no longer charged against the allowance — the proved ladder alone, the rest of the run being unchanged.
 ///
 /// ```text
 ///   the ladder — one proved web, at the default budget
 ///   rules   kernel units   depth  kernel retained  elab units   compile
-///   6              22363       6           215949       14073     0.04 s
-///   8              22363       6           226581       16593     0.04 s
-///   10             22363       6           239261       19113     0.04 s
-///   11             22363       6           246369       20373     0.04 s
-///   12             22363       6           253989       21633     0.04 s
-///   13             22482      16           262121       22893     0.04 s
+///   6              22363       6                0       14073     0.04 s
+///   8              22363       6                0       16593     0.04 s
+///   10             22363       6                0       19113     0.04 s
+///   11             22363       6                0       20373     0.05 s
+///   12             22363       6                0       21633     0.04 s
+///   13             22482      16                0       22893     0.05 s
 /// ```
+///
+/// **`kernel retained` reads the unfold table alone now**, and a web of universe-polymorphic definitions stores nothing there — the scrutinized ladder reads 2 501 at every size for the same reason. The day before, with the term-keyed tables still charged but the machine keeping names, the same column read 215 949 to 262 121, linear at about twelve thousand a definition; both tables are kept below.
 ///
 /// **The proved door's retention was the machine's.** Thirteen definitions retain 262 121 units where they retained 309 948 607 — a thousandth — and the column grows by about twelve thousand a definition, linearly. What the unfold memo was retaining was the closed machine's reduct of each definition: it substituted the previous definition's *value* for its name at every beta, so each value held the one before it twice, and `footprint` priced the graph as the tree it unfolds to — exactly the overcount `documentation/roadmap/technical_debts/05-kernel-retention-accounting-spec.md` hypothesized, with the thing that built the graph now named. A bare name stays a name, as it does under the strategy, and the ladder below is what this one printed before.
 ///
