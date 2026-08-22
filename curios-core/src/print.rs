@@ -44,6 +44,8 @@ fn universe_suffix(levels: &[Level], spelling: &Rc<Spelling>) -> String {
 //
 // A `Type`'s own level is suppressed only when it is *metavariable-headed*. The level is that node's whole content, so erasing a concrete one could render two distinct sorts identically — but an unsolved level names nothing a reader can act on, and it is the common case: a diagnostic over a polymorphic head reports `(A: Type.{?u263}) -> Nat` against `((Type.{?u261}) -> Type.{?u262}) -> Nat`, three placeholders competing with the disagreement they surround. Suppressing every level was rejected for the case that cannot be ruled out — two distinct concrete levels rendering as `Type` against `Type` — and a whole-fragment "show it only when it disambiguates" pass was rejected as context-dependent rendering: unlike a binder name, which is inherently relative, a level is an absolute fact about the term.
 //
+// axis (e) — unsolved metavariables: a flag spelling every metavariable as a bare `?`. An id such as `?2677` is elaboration state — a counter a reader cannot decode and the surface cannot write — and a diagnostic carrying one reads as three placeholders competing with the disagreement they surround: the transcript case is `inferred: Prop, expected: Eq(@?2677, ?2679, ?2680)`, where `Eq(@?, ?, ?)` says what the reader needs, that *some* equality was expected. Two distinct metavariables rendering alike is not the hazard it is for levels: a mismatch is reported between rigid structure, and two unsolved metavariables facing each other unify rather than mismatch, so no diagnostic hinges on telling them apart. Diagnostics set it; the `--print` dumps do not, for axis (c)'s reason.
+//
 // `Spelling::label` consults the shorten map first (globals), then the rename map (locals); a name in neither renders verbatim.
 
 /// How a term is spelled for a reader. The default spells nothing differently, which is what a bare `Display` uses.
@@ -57,6 +59,8 @@ pub struct Spelling {
     erase_universes: bool,
     /// axis (d) — a nominal declaration's parameter plicities, so an applied family is marked the way a use site would write it.
     nominal_plicities: Option<Rc<BTreeMap<Global, Vec<Plicity>>>>,
+    /// axis (e) — whether every metavariable spells as a bare `?`.
+    anonymous_metavars: bool,
 }
 
 impl Spelling {
@@ -75,6 +79,12 @@ impl Spelling {
     /// Suppress universe instances and metavariable-headed levels (axis (c)).
     pub fn with_erased_universes(mut self) -> Self {
         self.erase_universes = true;
+        self
+    }
+
+    /// Spell every metavariable as a bare `?` (axis (e)).
+    pub fn with_anonymous_metavars(mut self) -> Self {
+        self.anonymous_metavars = true;
         self
     }
 
@@ -1453,9 +1463,11 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             action,
             continuation,
         })) => flat([sub(action, frame), pure("!; "), sub(continuation, frame)]),
-        // Identity and renaming spines (every entry a variable) are the uninteresting common case and print as the bare id; a spine carrying anything else is exactly the one worth seeing.
+        // Identity and renaming spines (every entry a variable) are the uninteresting common case and print as the bare id; a spine carrying anything else is exactly the one worth seeing. Under axis (e) neither is: the spine is elaboration state like the id, and the reader gets `?`.
         Subterm::Metavar(metavar) => {
-            if metavar
+            if frame.spelling.anonymous_metavars {
+                pure("?")
+            } else if metavar
                 .spine
                 .iter()
                 .all(|entry| matches!(&**entry, Subterm::Var(_)))

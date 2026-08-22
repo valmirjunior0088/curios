@@ -1030,7 +1030,8 @@ impl Error {
                 .with_pretty_names(self.rename_map(&shorten))
                 .with_short_names(shorten)
                 .with_nominal_plicities(Rc::new(plicities))
-                .with_erased_universes(),
+                .with_erased_universes()
+                .with_anonymous_metavars(),
         ))
     }
 
@@ -1206,12 +1207,23 @@ impl fmt::Display for Displayed<'_> {
                 write!(f, "conversion ran out of steps between {this} and {that}")
             }
             Error::TypeMismatch { inferred, expected } => {
-                let expected = expected.spelled(spelling);
-                let inferred = inferred.spelled(spelling);
+                let shown_expected = expected.spelled(spelling);
+                let shown_inferred = inferred.spelled(spelling);
                 write!(
                     f,
-                    "type mismatch\n  inferred: {inferred}\n  expected: {expected}"
-                )
+                    "type mismatch\n  inferred: {shown_inferred}\n  expected: {shown_expected}"
+                )?;
+                // The collision every beginner meets once: a type handed over where a value of it belonged — `Eq/cong(f, Eq(a, b))` with the statement in the proof's seat. The mismatch line already says `Prop` against `Eq(…)`, but only to a reader who knows a proposition is a type and a proof is its inhabitant, which is the very thing they have not learned yet. One sentence names the level confusion; the `Type` twin is the same mistake with a type where a value belonged.
+                let inferred_is_sort = matches!(&***inferred, Subterm::Type(_) | Subterm::Prop);
+                let expected_is_sort = matches!(&***expected, Subterm::Type(_) | Subterm::Prop);
+                if inferred_is_sort && !expected_is_sort {
+                    let (what, held) = match &***inferred {
+                        Subterm::Prop => ("a proposition", "a proof of it"),
+                        _ => ("a type", "a value of it"),
+                    };
+                    write!(f, "\n  {what} was given where {held} was expected")?;
+                }
+                Ok(())
             }
             // "this sequencing", not "this '!'": a hand-written '/syn/Monad/bind' call reaches the same report, and nothing on the term records which spelling produced it.
             Error::StrandedSequencing { sequenced, region } => {

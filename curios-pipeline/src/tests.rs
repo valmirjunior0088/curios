@@ -196,6 +196,28 @@ fn a_dependent_result_action_auto_lifts_through_bang() {
 }
 
 #[test]
+fn a_proposition_where_a_proof_belongs_is_named_and_its_metavariables_are_not_numbered() {
+    // The beginner's collision: the statement `Eq(n + n, n * 2)` handed to `Eq/cong` where the proof `ih` belonged. The mismatch is `Prop` against an `Eq` whose indices never solved; the report says so in a sentence, and spells the unsolved indices `?` rather than as elaboration counters.
+    let source = r#"
+        use /std/{Nat, Eq, Io};
+
+        let step(n: Nat, ih: Eq(n + n, n * 2)) -> Eq((n + 1) + (n + 1), (n + 1) * 2) =
+            Eq/cong((x) => x + 2, Eq(n + n, n * 2));
+
+        Io/pure(())
+    "#;
+    let error = compile(source, None).map(|_| ()).unwrap_err();
+    assert!(
+        error.contains("inferred: Prop") && error.contains("expected: Eq(@?, ?, ?)"),
+        "unexpected report: {error}"
+    );
+    assert!(
+        error.contains("a proposition was given where a proof of it was expected"),
+        "unexpected report: {error}"
+    );
+}
+
+#[test]
 fn a_rigid_mismatch_still_reports_as_a_mismatch() {
     let source = r#"
         use /std/{Nat, Io};
