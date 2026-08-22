@@ -12,7 +12,7 @@ use {
         TupleTypeParam, UseGroup, WitnessEntry,
     },
     crate::{format::claim_comments_before, parse::op_precedence},
-    curios_abi::{WireSignature, WireType},
+    curios_abi::{WireSignature, WireType, stdio},
     curios_num::Natural,
     curios_print::{
         Printer, fill, flat, group, hard_line, if_break, indent, line, line_suffix, pure, sep_flat,
@@ -410,11 +410,22 @@ fn format_radix(n: &Natural, radix: Radix) -> String {
     }
 }
 
-fn print_intrinsic_call(name: impl Into<String> + 'static, args: Vec<Term>) -> Printer {
-    flat([
-        pure(name),
-        listed("(", args.into_iter().map(print_term).collect(), ")"),
-    ])
+/// An intrinsic operation as the surface calls it: its `/sys` path applied, `Nat/shl(a, b)`, with the type arguments it takes implicitly marked `@` as the application of that declaration marks them. A `/sys` body is the only place a text-stage intrinsic node exists, and its reading spells the operation the way the `/std` re-export a reader writes does.
+fn print_intrinsic_call(
+    name: impl Into<String> + 'static,
+    implicits: Vec<Term>,
+    explicits: Vec<Term>,
+) -> Printer {
+    let arguments = implicits
+        .into_iter()
+        .map(|term| flat([print_plicity(Plicity::Implicit), print_term(term)]))
+        .chain(explicits.into_iter().map(print_term))
+        .collect::<Vec<_>>();
+    // A row with no parameters is a constant in `/sys`, not a nullary function, and is named the way a constant is.
+    if arguments.is_empty() {
+        return pure(name);
+    }
+    flat([pure(name), listed("(", arguments, ")")])
 }
 
 fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
@@ -422,11 +433,21 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
         Intrinsic::BoolType => pure("Bool"),
         Intrinsic::Bool(false) => pure("false"),
         Intrinsic::Bool(true) => pure("true"),
-        Intrinsic::BoolAnd(left, right) => print_intrinsic_call("Bool.and", vec![left, right]),
-        Intrinsic::BoolOr(left, right) => print_intrinsic_call("Bool.or", vec![left, right]),
-        Intrinsic::BoolXor(left, right) => print_intrinsic_call("Bool.xor", vec![left, right]),
-        Intrinsic::BoolEql(left, right) => print_intrinsic_call("Bool.eql", vec![left, right]),
-        Intrinsic::BoolNeq(left, right) => print_intrinsic_call("Bool.neq", vec![left, right]),
+        Intrinsic::BoolAnd(left, right) => {
+            print_intrinsic_call("Bool/and", vec![], vec![left, right])
+        }
+        Intrinsic::BoolOr(left, right) => {
+            print_intrinsic_call("Bool/or", vec![], vec![left, right])
+        }
+        Intrinsic::BoolXor(left, right) => {
+            print_intrinsic_call("Bool/xor", vec![], vec![left, right])
+        }
+        Intrinsic::BoolEql(left, right) => {
+            print_intrinsic_call("Bool/eql", vec![], vec![left, right])
+        }
+        Intrinsic::BoolNeq(left, right) => {
+            print_intrinsic_call("Bool/neq", vec![], vec![left, right])
+        }
         Intrinsic::NatType => pure("Nat"),
         Intrinsic::Nat(Nat::Zero) => pure("0"),
         Intrinsic::Nat(Nat::Succ(nat, inner)) => {
@@ -449,100 +470,168 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
                 }
             }
         }
-        Intrinsic::NatEql(left, right) => print_intrinsic_call("Nat.eql", vec![left, right]),
-        Intrinsic::NatNeq(left, right) => print_intrinsic_call("Nat.neq", vec![left, right]),
-        Intrinsic::NatAdd(left, right) => print_intrinsic_call("Nat.add", vec![left, right]),
-        Intrinsic::NatSub(left, right) => print_intrinsic_call("Nat.sub", vec![left, right]),
-        Intrinsic::NatMul(left, right) => print_intrinsic_call("Nat.mul", vec![left, right]),
-        Intrinsic::NatLt(left, right) => print_intrinsic_call("Nat.lt", vec![left, right]),
+        Intrinsic::NatEql(left, right) => {
+            print_intrinsic_call("Nat/eql", vec![], vec![left, right])
+        }
+        Intrinsic::NatNeq(left, right) => {
+            print_intrinsic_call("Nat/neq", vec![], vec![left, right])
+        }
+        Intrinsic::NatAdd(left, right) => {
+            print_intrinsic_call("Nat/add", vec![], vec![left, right])
+        }
+        Intrinsic::NatSub(left, right) => {
+            print_intrinsic_call("Nat/sub", vec![], vec![left, right])
+        }
+        Intrinsic::NatMul(left, right) => {
+            print_intrinsic_call("Nat/mul", vec![], vec![left, right])
+        }
+        Intrinsic::NatLt(left, right) => print_intrinsic_call("Nat/lt", vec![], vec![left, right]),
         Intrinsic::NatDiv {
             dividend: left,
             divisor: right,
             ..
-        } => print_intrinsic_call("Nat.div", vec![left, right]),
+        } => print_intrinsic_call("Nat/div", vec![], vec![left, right]),
         Intrinsic::NatRem {
             dividend: left,
             divisor: right,
             ..
-        } => print_intrinsic_call("Nat.rem", vec![left, right]),
-        Intrinsic::NatGt(left, right) => print_intrinsic_call("Nat.gt", vec![left, right]),
-        Intrinsic::NatLe(left, right) => print_intrinsic_call("Nat.le", vec![left, right]),
-        Intrinsic::NatGe(left, right) => print_intrinsic_call("Nat.ge", vec![left, right]),
-        Intrinsic::NatAnd(left, right) => print_intrinsic_call("Nat.and", vec![left, right]),
-        Intrinsic::NatOr(left, right) => print_intrinsic_call("Nat.or", vec![left, right]),
-        Intrinsic::NatXor(left, right) => print_intrinsic_call("Nat.xor", vec![left, right]),
-        Intrinsic::NatShl(left, right) => print_intrinsic_call("Nat.shl", vec![left, right]),
-        Intrinsic::NatShr(left, right) => print_intrinsic_call("Nat.shr", vec![left, right]),
+        } => print_intrinsic_call("Nat/rem", vec![], vec![left, right]),
+        Intrinsic::NatGt(left, right) => print_intrinsic_call("Nat/gt", vec![], vec![left, right]),
+        Intrinsic::NatLe(left, right) => print_intrinsic_call("Nat/le", vec![], vec![left, right]),
+        Intrinsic::NatGe(left, right) => print_intrinsic_call("Nat/ge", vec![], vec![left, right]),
+        Intrinsic::NatAnd(left, right) => {
+            print_intrinsic_call("Nat/and", vec![], vec![left, right])
+        }
+        Intrinsic::NatOr(left, right) => print_intrinsic_call("Nat/or", vec![], vec![left, right]),
+        Intrinsic::NatXor(left, right) => {
+            print_intrinsic_call("Nat/xor", vec![], vec![left, right])
+        }
+        Intrinsic::NatShl(left, right) => {
+            print_intrinsic_call("Nat/shl", vec![], vec![left, right])
+        }
+        Intrinsic::NatShr(left, right) => {
+            print_intrinsic_call("Nat/shr", vec![], vec![left, right])
+        }
         Intrinsic::IntType => pure("Int"),
         Intrinsic::Int(value) => pure(format!("{value:+}")),
-        Intrinsic::IntEql(left, right) => print_intrinsic_call("Int.eql", vec![left, right]),
-        Intrinsic::IntNeq(left, right) => print_intrinsic_call("Int.neq", vec![left, right]),
-        Intrinsic::IntAdd(left, right) => print_intrinsic_call("Int.add", vec![left, right]),
-        Intrinsic::IntSub(left, right) => print_intrinsic_call("Int.sub", vec![left, right]),
-        Intrinsic::IntMul(left, right) => print_intrinsic_call("Int.mul", vec![left, right]),
+        Intrinsic::IntEql(left, right) => {
+            print_intrinsic_call("Int/eql", vec![], vec![left, right])
+        }
+        Intrinsic::IntNeq(left, right) => {
+            print_intrinsic_call("Int/neq", vec![], vec![left, right])
+        }
+        Intrinsic::IntAdd(left, right) => {
+            print_intrinsic_call("Int/add", vec![], vec![left, right])
+        }
+        Intrinsic::IntSub(left, right) => {
+            print_intrinsic_call("Int/sub", vec![], vec![left, right])
+        }
+        Intrinsic::IntMul(left, right) => {
+            print_intrinsic_call("Int/mul", vec![], vec![left, right])
+        }
         Intrinsic::IntDiv {
             dividend: left,
             divisor: right,
             ..
-        } => print_intrinsic_call("Int.div", vec![left, right]),
+        } => print_intrinsic_call("Int/div", vec![], vec![left, right]),
         Intrinsic::IntRem {
             dividend: left,
             divisor: right,
             ..
-        } => print_intrinsic_call("Int.rem", vec![left, right]),
-        Intrinsic::IntLt(left, right) => print_intrinsic_call("Int.lt", vec![left, right]),
-        Intrinsic::IntGt(left, right) => print_intrinsic_call("Int.gt", vec![left, right]),
-        Intrinsic::IntLe(left, right) => print_intrinsic_call("Int.le", vec![left, right]),
-        Intrinsic::IntGe(left, right) => print_intrinsic_call("Int.ge", vec![left, right]),
-        Intrinsic::IntAnd(left, right) => print_intrinsic_call("Int.and", vec![left, right]),
-        Intrinsic::IntOr(left, right) => print_intrinsic_call("Int.or", vec![left, right]),
-        Intrinsic::IntXor(left, right) => print_intrinsic_call("Int.xor", vec![left, right]),
-        Intrinsic::IntShl(left, right) => print_intrinsic_call("Int.shl", vec![left, right]),
-        Intrinsic::IntShr(left, right) => print_intrinsic_call("Int.shr", vec![left, right]),
+        } => print_intrinsic_call("Int/rem", vec![], vec![left, right]),
+        Intrinsic::IntLt(left, right) => print_intrinsic_call("Int/lt", vec![], vec![left, right]),
+        Intrinsic::IntGt(left, right) => print_intrinsic_call("Int/gt", vec![], vec![left, right]),
+        Intrinsic::IntLe(left, right) => print_intrinsic_call("Int/le", vec![], vec![left, right]),
+        Intrinsic::IntGe(left, right) => print_intrinsic_call("Int/ge", vec![], vec![left, right]),
+        Intrinsic::IntAnd(left, right) => {
+            print_intrinsic_call("Int/and", vec![], vec![left, right])
+        }
+        Intrinsic::IntOr(left, right) => print_intrinsic_call("Int/or", vec![], vec![left, right]),
+        Intrinsic::IntXor(left, right) => {
+            print_intrinsic_call("Int/xor", vec![], vec![left, right])
+        }
+        Intrinsic::IntShl(left, right) => {
+            print_intrinsic_call("Int/shl", vec![], vec![left, right])
+        }
+        Intrinsic::IntShr(left, right) => {
+            print_intrinsic_call("Int/shr", vec![], vec![left, right])
+        }
         Intrinsic::FltType => pure("Flt"),
         Intrinsic::Flt(value) => print_flt(value.to_f32()),
-        Intrinsic::FltAdd(left, right) => print_intrinsic_call("Flt.add", vec![left, right]),
-        Intrinsic::FltSub(left, right) => print_intrinsic_call("Flt.sub", vec![left, right]),
-        Intrinsic::FltMul(left, right) => print_intrinsic_call("Flt.mul", vec![left, right]),
-        Intrinsic::FltDiv(left, right) => print_intrinsic_call("Flt.div", vec![left, right]),
-        Intrinsic::FltRem(left, right) => print_intrinsic_call("Flt.rem", vec![left, right]),
-        Intrinsic::FltEql(left, right) => print_intrinsic_call("Flt.eql", vec![left, right]),
-        Intrinsic::FltNeq(left, right) => print_intrinsic_call("Flt.neq", vec![left, right]),
-        Intrinsic::FltLt(left, right) => print_intrinsic_call("Flt.lt", vec![left, right]),
-        Intrinsic::FltGt(left, right) => print_intrinsic_call("Flt.gt", vec![left, right]),
-        Intrinsic::FltLe(left, right) => print_intrinsic_call("Flt.le", vec![left, right]),
-        Intrinsic::FltGe(left, right) => print_intrinsic_call("Flt.ge", vec![left, right]),
-        Intrinsic::FltMin(left, right) => print_intrinsic_call("Flt.min", vec![left, right]),
-        Intrinsic::FltMax(left, right) => print_intrinsic_call("Flt.max", vec![left, right]),
-        Intrinsic::FltNeg(operand) => print_intrinsic_call("Flt.neg", vec![operand]),
-        Intrinsic::FltAbs(operand) => print_intrinsic_call("Flt.abs", vec![operand]),
-        Intrinsic::FltSqrt(operand) => print_intrinsic_call("Flt.sqrt", vec![operand]),
-        Intrinsic::FltFloor(operand) => print_intrinsic_call("Flt.floor", vec![operand]),
-        Intrinsic::FltCeil(operand) => print_intrinsic_call("Flt.ceil", vec![operand]),
-        Intrinsic::FltTrunc(operand) => print_intrinsic_call("Flt.trunc", vec![operand]),
-        Intrinsic::FltNearest(operand) => print_intrinsic_call("Flt.nearest", vec![operand]),
+        Intrinsic::FltAdd(left, right) => {
+            print_intrinsic_call("Flt/add", vec![], vec![left, right])
+        }
+        Intrinsic::FltSub(left, right) => {
+            print_intrinsic_call("Flt/sub", vec![], vec![left, right])
+        }
+        Intrinsic::FltMul(left, right) => {
+            print_intrinsic_call("Flt/mul", vec![], vec![left, right])
+        }
+        Intrinsic::FltDiv(left, right) => {
+            print_intrinsic_call("Flt/div", vec![], vec![left, right])
+        }
+        Intrinsic::FltRem(left, right) => {
+            print_intrinsic_call("Flt/rem", vec![], vec![left, right])
+        }
+        Intrinsic::FltEql(left, right) => {
+            print_intrinsic_call("Flt/eql", vec![], vec![left, right])
+        }
+        Intrinsic::FltNeq(left, right) => {
+            print_intrinsic_call("Flt/neq", vec![], vec![left, right])
+        }
+        Intrinsic::FltLt(left, right) => print_intrinsic_call("Flt/lt", vec![], vec![left, right]),
+        Intrinsic::FltGt(left, right) => print_intrinsic_call("Flt/gt", vec![], vec![left, right]),
+        Intrinsic::FltLe(left, right) => print_intrinsic_call("Flt/le", vec![], vec![left, right]),
+        Intrinsic::FltGe(left, right) => print_intrinsic_call("Flt/ge", vec![], vec![left, right]),
+        Intrinsic::FltMin(left, right) => {
+            print_intrinsic_call("Flt/min", vec![], vec![left, right])
+        }
+        Intrinsic::FltMax(left, right) => {
+            print_intrinsic_call("Flt/max", vec![], vec![left, right])
+        }
+        Intrinsic::FltNeg(operand) => print_intrinsic_call("Flt/neg", vec![], vec![operand]),
+        Intrinsic::FltAbs(operand) => print_intrinsic_call("Flt/abs", vec![], vec![operand]),
+        Intrinsic::FltSqrt(operand) => print_intrinsic_call("Flt/sqrt", vec![], vec![operand]),
+        Intrinsic::FltFloor(operand) => print_intrinsic_call("Flt/floor", vec![], vec![operand]),
+        Intrinsic::FltCeil(operand) => print_intrinsic_call("Flt/ceil", vec![], vec![operand]),
+        Intrinsic::FltTrunc(operand) => print_intrinsic_call("Flt/trunc", vec![], vec![operand]),
+        Intrinsic::FltNearest(operand) => {
+            print_intrinsic_call("Flt/nearest", vec![], vec![operand])
+        }
         Intrinsic::FltCopysign(left, right) => {
-            print_intrinsic_call("Flt.copysign", vec![left, right])
+            print_intrinsic_call("Flt/copysign", vec![], vec![left, right])
         }
-        Intrinsic::FltToLeBytes(operand) => print_intrinsic_call("Flt.to_le_bytes", vec![operand]),
+        Intrinsic::FltToLeBytes(operand) => {
+            print_intrinsic_call("Flt/to_le_bytes", vec![], vec![operand])
+        }
         Intrinsic::FltOfLeBytes { bin: operand, .. } => {
-            print_intrinsic_call("Flt.of_le_bytes", vec![operand])
+            print_intrinsic_call("Flt/of_le_bytes", vec![], vec![operand])
         }
-        Intrinsic::NatToInt(operand) => print_intrinsic_call("Nat.to_int", vec![operand]),
-        Intrinsic::NatToFlt(operand) => print_intrinsic_call("Nat.to_flt", vec![operand]),
+        Intrinsic::NatToInt(operand) => print_intrinsic_call("Nat/to_int", vec![], vec![operand]),
+        Intrinsic::NatToFlt(operand) => print_intrinsic_call("Nat/to_flt", vec![], vec![operand]),
         Intrinsic::ByteType => pure("Byte"),
         Intrinsic::Byte(value) => pure(format!("0x{value:02X}")),
-        Intrinsic::ByteToNat(operand) => print_intrinsic_call("Byte.to_nat", vec![operand]),
-        Intrinsic::NatToByte(operand) => print_intrinsic_call("Nat.to_byte", vec![operand]),
-        Intrinsic::ByteEql(left, right) => print_intrinsic_call("Byte.eql", vec![left, right]),
-        Intrinsic::ByteLt(left, right) => print_intrinsic_call("Byte.lt", vec![left, right]),
-        Intrinsic::ByteLe(left, right) => print_intrinsic_call("Byte.le", vec![left, right]),
-        Intrinsic::ByteGt(left, right) => print_intrinsic_call("Byte.gt", vec![left, right]),
-        Intrinsic::ByteGe(left, right) => print_intrinsic_call("Byte.ge", vec![left, right]),
-        Intrinsic::IntToNat(operand) => print_intrinsic_call("Int.to_nat", vec![operand]),
-        Intrinsic::IntToFlt(operand) => print_intrinsic_call("Int.to_flt", vec![operand]),
-        Intrinsic::FltToNat(operand) => print_intrinsic_call("Flt.to_nat", vec![operand]),
-        Intrinsic::FltToInt(operand) => print_intrinsic_call("Flt.to_int", vec![operand]),
+        Intrinsic::ByteToNat(operand) => print_intrinsic_call("Byte/to_nat", vec![], vec![operand]),
+        Intrinsic::NatToByte(operand) => print_intrinsic_call("Nat/to_byte", vec![], vec![operand]),
+        Intrinsic::ByteEql(left, right) => {
+            print_intrinsic_call("Byte/eql", vec![], vec![left, right])
+        }
+        Intrinsic::ByteLt(left, right) => {
+            print_intrinsic_call("Byte/lt", vec![], vec![left, right])
+        }
+        Intrinsic::ByteLe(left, right) => {
+            print_intrinsic_call("Byte/le", vec![], vec![left, right])
+        }
+        Intrinsic::ByteGt(left, right) => {
+            print_intrinsic_call("Byte/gt", vec![], vec![left, right])
+        }
+        Intrinsic::ByteGe(left, right) => {
+            print_intrinsic_call("Byte/ge", vec![], vec![left, right])
+        }
+        Intrinsic::IntToNat(operand) => print_intrinsic_call("Int/to_nat", vec![], vec![operand]),
+        Intrinsic::IntToFlt(operand) => print_intrinsic_call("Int/to_flt", vec![], vec![operand]),
+        Intrinsic::FltToNat(operand) => print_intrinsic_call("Flt/to_nat", vec![], vec![operand]),
+        Intrinsic::FltToInt(operand) => print_intrinsic_call("Flt/to_int", vec![], vec![operand]),
         Intrinsic::BinType(grain) => pure(match grain {
             Grain::B => "Bits",
             Grain::X => "Bytes",
@@ -564,22 +653,24 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
         ),
         Intrinsic::BinLen(grain, operand) => print_intrinsic_call(
             format!(
-                "{}.len",
+                "{}/len",
                 match grain {
                     Grain::B => "Bits",
                     Grain::X => "Bytes",
                 }
             ),
+            vec![],
             vec![operand],
         ),
         Intrinsic::BinEql(grain, left, right) => print_intrinsic_call(
             format!(
-                "{}.eql",
+                "{}/eql",
                 match grain {
                     Grain::B => "Bits",
                     Grain::X => "Bytes",
                 }
             ),
+            vec![],
             vec![left, right],
         ),
         Intrinsic::BinGet {
@@ -589,12 +680,13 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             in_range: _,
         } => print_intrinsic_call(
             format!(
-                "{}.get",
+                "{}/get",
                 match grain {
                     Grain::B => "Bits",
                     Grain::X => "Bytes",
                 }
             ),
+            vec![],
             vec![bin, index],
         ),
         Intrinsic::BinSlice {
@@ -605,12 +697,13 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             within: _,
         } => print_intrinsic_call(
             format!(
-                "{}.slice",
+                "{}/slice",
                 match grain {
                     Grain::B => "Bits",
                     Grain::X => "Bytes",
                 }
             ),
+            vec![],
             vec![bin, start, length],
         ),
         Intrinsic::BinAppend {
@@ -619,25 +712,27 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             element: atom,
         } => print_intrinsic_call(
             format!(
-                "{}.append",
+                "{}/append",
                 match grain {
                     Grain::B => "Bits",
                     Grain::X => "Bytes",
                 }
             ),
+            vec![],
             vec![bin, atom],
         ),
         Intrinsic::BinConcat { grain, left, right } => print_intrinsic_call(
             format!(
-                "{}.concat",
+                "{}/concat",
                 match grain {
                     Grain::B => "Bits",
                     Grain::X => "Bytes",
                 }
             ),
+            vec![],
             vec![left, right],
         ),
-        Intrinsic::ListType(elem) => print_intrinsic_call("List", vec![elem]),
+        Intrinsic::ListType(elem) => print_intrinsic_call("List", vec![], vec![elem]),
         Intrinsic::List(entries) => listed(
             "[",
             entries
@@ -652,65 +747,71 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
         Intrinsic::ListLen {
             element: ty,
             list: operand,
-        } => print_intrinsic_call("List.len", vec![ty, operand]),
+        } => print_intrinsic_call("List/len", vec![ty], vec![operand]),
         Intrinsic::ListGet {
             element: ty,
             list,
             index,
             in_range: _,
-        } => print_intrinsic_call("List.get", vec![ty, list, index]),
+        } => print_intrinsic_call("List/get", vec![ty], vec![list, index]),
         Intrinsic::ListSlice {
             element: ty,
             list,
             start,
             length,
             within: _,
-        } => print_intrinsic_call("List.slice", vec![ty, list, start, length]),
+        } => print_intrinsic_call("List/slice", vec![ty], vec![list, start, length]),
         Intrinsic::ListAppend {
             element: ty,
             list,
             item: elem,
-        } => print_intrinsic_call("List.append", vec![ty, list, elem]),
+        } => print_intrinsic_call("List/append", vec![ty], vec![list, elem]),
         Intrinsic::ListConcat {
             element: ty,
             left,
             right,
-        } => print_intrinsic_call("List.concat", vec![ty, left, right]),
+        } => print_intrinsic_call("List/concat", vec![ty], vec![left, right]),
         Intrinsic::ListMap {
             from: a,
             to: b,
             list,
             function: f,
-        } => print_intrinsic_call("List.map", vec![a, b, list, f]),
+        } => print_intrinsic_call("List/map", vec![a, b], vec![list, f]),
         Intrinsic::HandleType => pure("Handle"),
+        // The three `/sys/Handle` constants are the only handles a `/sys` body plants; the last arm spells a token no source can write rather than fail the print.
+        Intrinsic::Handle(stdio::STDIN) => pure("Handle/stdin"),
+        Intrinsic::Handle(stdio::STDOUT) => pure("Handle/stdout"),
+        Intrinsic::Handle(stdio::STDERR) => pure("Handle/stderr"),
         Intrinsic::Handle(token) => pure(format!("Handle({token})")),
-        Intrinsic::HandleEql(left, right) => print_intrinsic_call("Handle.eql", vec![left, right]),
-        Intrinsic::ProcExit(code) => print_intrinsic_call("proc.exit", vec![code]),
-        Intrinsic::CellType(elem) => print_intrinsic_call("Cell", vec![elem]),
+        Intrinsic::HandleEql(left, right) => {
+            print_intrinsic_call("Handle/eql", vec![], vec![left, right])
+        }
+        Intrinsic::ProcExit(code) => print_intrinsic_call("proc/exit", vec![], vec![code]),
+        Intrinsic::CellType(elem) => print_intrinsic_call("Cell", vec![], vec![elem]),
         Intrinsic::Cell {
             element: type_,
             initial: init,
-        } => print_intrinsic_call("Cell.new", vec![type_, init]),
+        } => print_intrinsic_call("Cell/new", vec![type_], vec![init]),
         Intrinsic::CellSet {
             element: type_,
             cell,
             value,
-        } => print_intrinsic_call("Cell.set", vec![type_, cell, value]),
+        } => print_intrinsic_call("Cell/set", vec![type_], vec![cell, value]),
         Intrinsic::CellGet {
             element: type_,
             cell,
-        } => print_intrinsic_call("Cell.get", vec![type_, cell]),
-        Intrinsic::IoType(result) => print_intrinsic_call("Io", vec![result]),
+        } => print_intrinsic_call("Cell/get", vec![type_], vec![cell]),
+        Intrinsic::IoType(result) => print_intrinsic_call("Io", vec![], vec![result]),
         Intrinsic::IoPure {
             result: type_,
             value,
-        } => print_intrinsic_call("Io.pure", vec![type_, value]),
+        } => print_intrinsic_call("Io/pure", vec![type_], vec![value]),
         Intrinsic::IoBind {
             from,
             to,
             action,
             continuation: f,
-        } => print_intrinsic_call("Io.bind", vec![from, to, action, f]),
+        } => print_intrinsic_call("Io/bind", vec![from, to], vec![action, f]),
     }
 }
 
@@ -806,7 +907,14 @@ fn print_term_inner(term: Term) -> Printer {
         Subterm::Type => pure("Type"),
         Subterm::Prop => pure("Prop"),
         Subterm::Intrinsic(intrinsic) => print_intrinsic(intrinsic),
-        Subterm::Foreign(function, args) => print_intrinsic_call(function.label.clone(), args),
+        // A builtin row surfaces under its `/sys` subject (`Handle/write`); a user's `foreign` declaration under the name they gave it.
+        Subterm::Foreign(function, args) => {
+            let name = match &function.subject {
+                Some(subject) => format!("{subject}/{}", function.label),
+                None => function.label.clone(),
+            };
+            print_intrinsic_call(name, vec![], args)
+        }
         Subterm::Name(name) => pure(name.join()),
         // Both spell `?`: the written/desugared distinction matters to zonk's reporting, not to how the term reads.
         Subterm::Hole | Subterm::Goal => pure("?"),

@@ -5,6 +5,7 @@ use {
         StructType, Subterm, Telescope, Term, Three, Transient, Tuple, TupleType, Two, Var,
         Variant,
     },
+    curios_abi::stdio,
     curios_num::Floating,
     curios_print::{Printer, flat, group, indent, line, pure, sep_flat, soft_line},
     curios_utilities::{Grain, PackedBin, Plicity, Qualifier, recurse},
@@ -414,22 +415,28 @@ fn print_flt(flt: Floating) -> Printer {
     pure(string)
 }
 
-/// Render a binary intrinsic as `name left right`, the shape almost every scalar arithmetic/comparison/bitwise intrinsic shares. `name` carries its own trailing space (`"Nat.add "`).
-fn print_binary(name: &'static str, left: Term, right: Term, frame: Frame) -> Printer {
-    flat([pure(name), sub(left, frame), pure(" "), sub(right, frame)])
-}
-
-/// The unary counterpart of [`print_binary`]: `name inner`.
-fn print_unary(name: &'static str, inner: Term, frame: Frame) -> Printer {
-    flat([pure(name), sub(inner, frame)])
+/// An intrinsic operation as the surface calls it — `Nat/shl(a, b)`, never `Nat.shl a b`. Every operation here is declared by `/sys` under its carrier's module and re-exported by `/std` under the same name, so the path is the one a reader wrote; it is also how the same term prints before reduction unfolds that `/sys` global, which is the agreement [`print_former`] states for type formers. A type argument is marked `@`, exactly as the application of the global marks it. The proof an operation carries — a bound on an index, a nonzero divisor — is not an argument here: the reader never wrote one, the operator or the elaborator inserted it, and it is erased.
+fn print_call(
+    name: impl Into<String>,
+    implicits: Vec<Term>,
+    explicits: Vec<Term>,
+    frame: Frame,
+) -> Printer {
+    let arguments = implicits
+        .into_iter()
+        .map(|term| marked_argument(sub(term, frame), Some(&Plicity::Implicit)))
+        .chain(explicits.into_iter().map(|term| sub(term, frame)))
+        .collect::<Vec<_>>();
+    // A row with no parameters is a constant in `/sys`, not a nullary function, and is named the way a constant is.
+    if arguments.is_empty() {
+        return pure(name);
+    }
+    flat([pure(name), listed("(".into(), false, arguments, ")")])
 }
 
 /// A parameterized intrinsic type former as the surface applies it — `List(Nat)`, never `List Nat`. The same type reaches a report two ways, as the intrinsic node and as its `/sys` global applied, and a reader shown `t : List Nat` beside `xs : List(Nat)` is being told two types where there is one.
 fn print_former(name: &'static str, argument: Term, frame: Frame) -> Printer {
-    flat([
-        pure(name),
-        listed("(".into(), false, vec![sub(argument, frame)], ")"),
-    ])
+    print_call(name, vec![], vec![argument], frame)
 }
 
 /// A bracketed literal from its already-rendered entries: `[` and its packed cousins `b[`/`x[` opened by the caller, `]` closed here.
@@ -634,7 +641,7 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
         Intrinsic::Bool(true) => pure("true"),
         Intrinsic::BoolAnd(l, r) => print_infix("&&", l, r, frame),
         Intrinsic::BoolOr(l, r) => print_infix("||", l, r, frame),
-        Intrinsic::BoolXor(l, r) => print_binary("Bool.xor ", l, r, frame),
+        Intrinsic::BoolXor(l, r) => print_call("Bool/xor", vec![], vec![l, r], frame),
         Intrinsic::BoolEql(l, r) => print_infix("==", l, r, frame),
         Intrinsic::BoolNeq(l, r) => print_infix("!=", l, r, frame),
         Intrinsic::NatType => pure("Nat"),
@@ -667,20 +674,20 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
         Intrinsic::NatGt(l, r) => print_infix(">", l, r, frame),
         Intrinsic::NatLe(l, r) => print_infix("<=", l, r, frame),
         Intrinsic::NatGe(l, r) => print_infix(">=", l, r, frame),
-        Intrinsic::NatAnd(l, r) => print_binary("Nat.and ", l, r, frame),
-        Intrinsic::NatOr(l, r) => print_binary("Nat.or ", l, r, frame),
-        Intrinsic::NatXor(l, r) => print_binary("Nat.xor ", l, r, frame),
-        Intrinsic::NatShl(l, r) => print_binary("Nat.shl ", l, r, frame),
-        Intrinsic::NatShr(l, r) => print_binary("Nat.shr ", l, r, frame),
+        Intrinsic::NatAnd(l, r) => print_call("Nat/and", vec![], vec![l, r], frame),
+        Intrinsic::NatOr(l, r) => print_call("Nat/or", vec![], vec![l, r], frame),
+        Intrinsic::NatXor(l, r) => print_call("Nat/xor", vec![], vec![l, r], frame),
+        Intrinsic::NatShl(l, r) => print_call("Nat/shl", vec![], vec![l, r], frame),
+        Intrinsic::NatShr(l, r) => print_call("Nat/shr", vec![], vec![l, r], frame),
         Intrinsic::ByteType => pure("Byte"),
         Intrinsic::Byte(value) => pure(format!("0x{value:02X}")),
-        Intrinsic::ByteToNat(i) => print_unary("Byte.to_nat ", i, frame),
-        Intrinsic::NatToByte(i) => print_unary("Nat.to_byte ", i, frame),
-        Intrinsic::ByteEql(l, r) => print_binary("Byte.eql ", l, r, frame),
-        Intrinsic::ByteLt(l, r) => print_binary("Byte.lt ", l, r, frame),
-        Intrinsic::ByteLe(l, r) => print_binary("Byte.le ", l, r, frame),
-        Intrinsic::ByteGt(l, r) => print_binary("Byte.gt ", l, r, frame),
-        Intrinsic::ByteGe(l, r) => print_binary("Byte.ge ", l, r, frame),
+        Intrinsic::ByteToNat(i) => print_call("Byte/to_nat", vec![], vec![i], frame),
+        Intrinsic::NatToByte(i) => print_call("Nat/to_byte", vec![], vec![i], frame),
+        Intrinsic::ByteEql(l, r) => print_call("Byte/eql", vec![], vec![l, r], frame),
+        Intrinsic::ByteLt(l, r) => print_call("Byte/lt", vec![], vec![l, r], frame),
+        Intrinsic::ByteLe(l, r) => print_call("Byte/le", vec![], vec![l, r], frame),
+        Intrinsic::ByteGt(l, r) => print_call("Byte/gt", vec![], vec![l, r], frame),
+        Intrinsic::ByteGe(l, r) => print_call("Byte/ge", vec![], vec![l, r], frame),
         Intrinsic::IntType => pure("Int"),
         Intrinsic::Int(value) => pure(format!("{value:+}")),
         Intrinsic::IntEql(l, r) => print_infix("==", l, r, frame),
@@ -702,11 +709,11 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
         Intrinsic::IntGt(l, r) => print_infix(">", l, r, frame),
         Intrinsic::IntLe(l, r) => print_infix("<=", l, r, frame),
         Intrinsic::IntGe(l, r) => print_infix(">=", l, r, frame),
-        Intrinsic::IntAnd(l, r) => print_binary("Int.and ", l, r, frame),
-        Intrinsic::IntOr(l, r) => print_binary("Int.or ", l, r, frame),
-        Intrinsic::IntXor(l, r) => print_binary("Int.xor ", l, r, frame),
-        Intrinsic::IntShl(l, r) => print_binary("Int.shl ", l, r, frame),
-        Intrinsic::IntShr(l, r) => print_binary("Int.shr ", l, r, frame),
+        Intrinsic::IntAnd(l, r) => print_call("Int/and", vec![], vec![l, r], frame),
+        Intrinsic::IntOr(l, r) => print_call("Int/or", vec![], vec![l, r], frame),
+        Intrinsic::IntXor(l, r) => print_call("Int/xor", vec![], vec![l, r], frame),
+        Intrinsic::IntShl(l, r) => print_call("Int/shl", vec![], vec![l, r], frame),
+        Intrinsic::IntShr(l, r) => print_call("Int/shr", vec![], vec![l, r], frame),
         Intrinsic::FltType => pure("Flt"),
         Intrinsic::Flt(flt) => print_flt(flt),
         Intrinsic::FltAdd(l, r) => print_infix("+", l, r, frame),
@@ -720,82 +727,70 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
         Intrinsic::FltGt(l, r) => print_infix(">", l, r, frame),
         Intrinsic::FltLe(l, r) => print_infix("<=", l, r, frame),
         Intrinsic::FltGe(l, r) => print_infix(">=", l, r, frame),
-        Intrinsic::FltMin(l, r) => print_binary("Flt.min ", l, r, frame),
-        Intrinsic::FltMax(l, r) => print_binary("Flt.max ", l, r, frame),
-        Intrinsic::FltCopysign(l, r) => print_binary("Flt.copysign ", l, r, frame),
-        Intrinsic::FltNeg(i) => print_unary("Flt.neg ", i, frame),
-        Intrinsic::FltAbs(i) => print_unary("Flt.abs ", i, frame),
-        Intrinsic::FltSqrt(i) => print_unary("Flt.sqrt ", i, frame),
-        Intrinsic::FltFloor(i) => print_unary("Flt.floor ", i, frame),
-        Intrinsic::FltCeil(i) => print_unary("Flt.ceil ", i, frame),
-        Intrinsic::FltTrunc(i) => print_unary("Flt.trunc ", i, frame),
-        Intrinsic::FltNearest(i) => print_unary("Flt.nearest ", i, frame),
-        Intrinsic::FltToLeBytes(i) => print_unary("Flt.to_le_bytes ", i, frame),
-        Intrinsic::FltOfLeBytes { bin: i, .. } => print_unary("Flt.of_le_bytes ", i, frame),
-        Intrinsic::NatToInt(i) => print_unary("Nat.to_int ", i, frame),
-        Intrinsic::NatToFlt(i) => print_unary("Nat.to_flt ", i, frame),
-        Intrinsic::IntToNat(i) => print_unary("Int.to_nat ", i, frame),
-        Intrinsic::IntToFlt(i) => print_unary("Int.to_flt ", i, frame),
-        Intrinsic::FltToNat(i) => print_unary("Flt.to_nat ", i, frame),
-        Intrinsic::FltToInt(i) => print_unary("Flt.to_int ", i, frame),
+        Intrinsic::FltMin(l, r) => print_call("Flt/min", vec![], vec![l, r], frame),
+        Intrinsic::FltMax(l, r) => print_call("Flt/max", vec![], vec![l, r], frame),
+        Intrinsic::FltCopysign(l, r) => print_call("Flt/copysign", vec![], vec![l, r], frame),
+        Intrinsic::FltNeg(i) => print_call("Flt/neg", vec![], vec![i], frame),
+        Intrinsic::FltAbs(i) => print_call("Flt/abs", vec![], vec![i], frame),
+        Intrinsic::FltSqrt(i) => print_call("Flt/sqrt", vec![], vec![i], frame),
+        Intrinsic::FltFloor(i) => print_call("Flt/floor", vec![], vec![i], frame),
+        Intrinsic::FltCeil(i) => print_call("Flt/ceil", vec![], vec![i], frame),
+        Intrinsic::FltTrunc(i) => print_call("Flt/trunc", vec![], vec![i], frame),
+        Intrinsic::FltNearest(i) => print_call("Flt/nearest", vec![], vec![i], frame),
+        Intrinsic::FltToLeBytes(i) => print_call("Flt/to_le_bytes", vec![], vec![i], frame),
+        Intrinsic::FltOfLeBytes { bin: i, .. } => {
+            print_call("Flt/of_le_bytes", vec![], vec![i], frame)
+        }
+        Intrinsic::NatToInt(i) => print_call("Nat/to_int", vec![], vec![i], frame),
+        Intrinsic::NatToFlt(i) => print_call("Nat/to_flt", vec![], vec![i], frame),
+        Intrinsic::IntToNat(i) => print_call("Int/to_nat", vec![], vec![i], frame),
+        Intrinsic::IntToFlt(i) => print_call("Int/to_flt", vec![], vec![i], frame),
+        Intrinsic::FltToNat(i) => print_call("Flt/to_nat", vec![], vec![i], frame),
+        Intrinsic::FltToInt(i) => print_call("Flt/to_int", vec![], vec![i], frame),
         Intrinsic::BinType(Grain::X) => pure("Bytes"),
         Intrinsic::Bin(Grain::X, bytes) => print_packed(Grain::X, bin_atoms(Grain::X, &bytes)),
-        Intrinsic::BinLen(Grain::X, b) => print_unary("Bytes.len ", b, frame),
+        Intrinsic::BinLen(Grain::X, b) => print_call("Bytes/len", vec![], vec![b], frame),
         Intrinsic::BinEql(Grain::X, l, r) => print_infix("==", l, r, frame),
         Intrinsic::BinGet {
             grain: Grain::X,
             bin: b,
             index: i,
             in_range: _,
-        } => print_binary("Bytes.get ", b, i, frame),
+        } => print_call("Bytes/get", vec![], vec![b, i], frame),
         Intrinsic::BinSlice {
             grain: Grain::X,
             bin,
             start,
             length,
             within: _,
-        } => flat([
-            pure("Bytes.slice "),
-            sub(bin, frame),
-            pure(" "),
-            sub(start, frame),
-            pure(" "),
-            sub(length, frame),
-        ]),
+        } => print_call("Bytes/slice", vec![], vec![bin, start, length], frame),
         Intrinsic::BinAppend {
             grain: Grain::X,
             bin: b,
             element: byte,
-        } => print_binary("Bytes.append ", b, byte, frame),
+        } => print_call("Bytes/append", vec![], vec![b, byte], frame),
         Intrinsic::BinType(Grain::B) => pure("Bits"),
         Intrinsic::Bin(Grain::B, bits) => print_packed(Grain::B, bin_atoms(Grain::B, &bits)),
-        Intrinsic::BinLen(Grain::B, b) => print_unary("Bits.len ", b, frame),
+        Intrinsic::BinLen(Grain::B, b) => print_call("Bits/len", vec![], vec![b], frame),
         Intrinsic::BinEql(Grain::B, l, r) => print_infix("==", l, r, frame),
         Intrinsic::BinGet {
             grain: Grain::B,
             bin: b,
             index: i,
             in_range: _,
-        } => print_binary("Bits.get ", b, i, frame),
+        } => print_call("Bits/get", vec![], vec![b, i], frame),
         Intrinsic::BinSlice {
             grain: Grain::B,
             bin,
             start,
             length,
             within: _,
-        } => flat([
-            pure("Bits.slice "),
-            sub(bin, frame),
-            pure(" "),
-            sub(start, frame),
-            pure(" "),
-            sub(length, frame),
-        ]),
+        } => print_call("Bits/slice", vec![], vec![bin, start, length], frame),
         Intrinsic::BinAppend {
             grain: Grain::B,
             bin: b,
             element: bit,
-        } => print_binary("Bits.append ", b, bit, frame),
+        } => print_call("Bits/append", vec![], vec![b, bit], frame),
         Intrinsic::BinConcat { grain, operands } => {
             let mut entries = Vec::new();
             bin_concat_entries(grain, operands, frame, &mut entries);
@@ -810,48 +805,27 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             sep_flat(elems.into_iter().map(move |e| sub(e, frame)), || pure(", ")),
             pure("]"),
         ]),
-        Intrinsic::ListLen { element: ty, list } => print_binary("List.len ", ty, list, frame),
+        Intrinsic::ListLen { element: ty, list } => {
+            print_call("List/len", vec![ty], vec![list], frame)
+        }
         Intrinsic::ListGet {
             element: ty,
             list,
             index,
             in_range: _,
-        } => flat([
-            pure("List.get "),
-            sub(ty, frame),
-            pure(" "),
-            sub(list, frame),
-            pure(" "),
-            sub(index, frame),
-        ]),
+        } => print_call("List/get", vec![ty], vec![list, index], frame),
         Intrinsic::ListSlice {
             element: ty,
             list,
             start,
             length,
             within: _,
-        } => flat([
-            pure("List.slice "),
-            sub(ty, frame),
-            pure(" "),
-            sub(list, frame),
-            pure(" "),
-            sub(start, frame),
-            pure(" "),
-            sub(length, frame),
-        ]),
+        } => print_call("List/slice", vec![ty], vec![list, start, length], frame),
         Intrinsic::ListAppend {
             element: ty,
             list,
             item: elem,
-        } => flat([
-            pure("List.append "),
-            sub(ty, frame),
-            pure(" "),
-            sub(list, frame),
-            pure(" "),
-            sub(elem, frame),
-        ]),
+        } => print_call("List/append", vec![ty], vec![list, elem], frame),
         Intrinsic::ListConcat {
             element: _,
             operands,
@@ -865,60 +839,39 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             to: b,
             list,
             function: f,
-        } => flat([
-            pure("List.map "),
-            sub(a, frame),
-            pure(" "),
-            sub(b, frame),
-            pure(" "),
-            sub(list, frame),
-            pure(" "),
-            sub(f, frame),
-        ]),
+        } => print_call("List/map", vec![a, b], vec![list, f], frame),
         Intrinsic::HandleType => pure("Handle"),
+        // The three `/sys/Handle` constants are the only handles a term ever holds: every other handle is minted by the host at run time, behind an `Io` no reduction enters. The last arm names a token no source can spell, and spells the token rather than abort the diagnostic it is inside.
+        Intrinsic::Handle(stdio::STDIN) => pure("Handle/stdin"),
+        Intrinsic::Handle(stdio::STDOUT) => pure("Handle/stdout"),
+        Intrinsic::Handle(stdio::STDERR) => pure("Handle/stderr"),
         Intrinsic::Handle(token) => pure(format!("Handle({token})")),
-        Intrinsic::ProcExit(code) => print_unary("proc.exit ", code, frame),
+        Intrinsic::ProcExit(code) => print_call("proc/exit", vec![], vec![code], frame),
         Intrinsic::CellType(elem) => print_former("Cell", elem, frame),
         Intrinsic::Cell {
             element: type_,
             initial: init,
-        } => print_binary("Cell.new ", type_, init, frame),
+        } => print_call("Cell/new", vec![type_], vec![init], frame),
         Intrinsic::CellSet {
             element: type_,
             cell,
             value,
-        } => flat([
-            pure("Cell.set "),
-            sub(type_, frame),
-            pure(" "),
-            sub(cell, frame),
-            pure(" "),
-            sub(value, frame),
-        ]),
+        } => print_call("Cell/set", vec![type_], vec![cell, value], frame),
         Intrinsic::CellGet {
             element: type_,
             cell,
-        } => print_binary("Cell.get ", type_, cell, frame),
+        } => print_call("Cell/get", vec![type_], vec![cell], frame),
         Intrinsic::IoType(result) => print_former("Io", result, frame),
         Intrinsic::IoPure {
             result: type_,
             value,
-        } => print_binary("Io.pure ", type_, value, frame),
+        } => print_call("Io/pure", vec![type_], vec![value], frame),
         Intrinsic::IoBind {
             from: a,
             to: b,
             action,
             continuation: f,
-        } => flat([
-            pure("Io.bind "),
-            sub(a, frame),
-            pure(" "),
-            sub(b, frame),
-            pure(" "),
-            sub(action, frame),
-            pure(" "),
-            sub(f, frame),
-        ]),
+        } => print_call("Io/bind", vec![a, b], vec![action, f], frame),
     }
 }
 
@@ -968,15 +921,14 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             pure(universe_suffix(&instance.levels, frame.spelling)),
         ]),
         Subterm::Intrinsic(intrinsic) => sub_intrinsic(intrinsic, frame),
-        Subterm::Foreign(function, args) => flat(
-            [pure(function.label.clone())]
-                .into_iter()
-                .chain(
-                    args.into_iter()
-                        .flat_map(|arg| [pure(" "), sub(arg, frame)]),
-                )
-                .collect::<Vec<_>>(),
-        ),
+        // A builtin row surfaces under its `/sys` subject (`Handle/write`); a user's `foreign` declaration under the name they gave it.
+        Subterm::Foreign(function, args) => {
+            let name = match &function.subject {
+                Some(subject) => format!("{subject}/{}", function.label),
+                None => function.label.clone(),
+            };
+            print_call(name, vec![], args, frame)
+        }
         Subterm::FuncType(FuncType {
             telescope,
             plicities,
