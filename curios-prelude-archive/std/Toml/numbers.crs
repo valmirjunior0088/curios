@@ -221,24 +221,29 @@ pub let flt_special: Parse(Toml) =
         Parse/map(Parse/take_literal("nan"), (_) => Toml/flt(Flt/nan)));
 
 -- The fraction continues the *same* significand the integer part built, which is why it takes it as an argument rather than starting afresh: `1.5` keeps nine significant digits across the point, not nine on each side. Returns the significand, the decimal-point shift, and whether a fraction was there at all.
+let frac_fields(sig0: Nat, count0: Nat) -> Parse({Nat, Nat, Bool}) =
+    let (sig, _, down) = flt_digits(sig0, count0, true)!;
+    Parse/pure((sig, down, true));
+
+-- The dot commits: past it, `1.` is a float missing its digits, not the integer `1` followed by junk. The exponent marker commits the same way.
 let frac_part(sig0: Nat, count0: Nat) -> Parse({Nat, Nat, Bool}) =
     let dot = Parse/optional(Parse/take_byte(0x2E))!;
     match dot
     | none() => Parse/pure((sig0, 0, false))
-    | some(_) =>
-        let (sig, _, down) = flt_digits(sig0, count0, true)!;
-        Parse/pure((sig, down, true))
+    | some(_) => Parse/commit(frac_fields(sig0, count0))
     end;
+
+let exp_fields: Parse({Nat, Bool, Bool}) =
+    let (eneg, _) = sign!;
+    let emag = exp_digits!;
+    Parse/pure((emag, eneg, true));
 
 -- (magnitude, negative, present)
 let exp_part: Parse({Nat, Bool, Bool}) =
     let marker = Parse/optional(Parse/take_if((b) => b == 0x65 || b == 0x45))!;
     match marker
     | none() => Parse/pure((0, false, false))
-    | some(_) =>
-        let (eneg, _) = sign!;
-        let emag = exp_digits!;
-        Parse/pure((emag, eneg, true))
+    | some(_) => Parse/commit(exp_fields)
     end;
 
 pub let flt_number: Parse(Toml) =

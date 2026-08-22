@@ -201,10 +201,10 @@ fn toml_malformed_numbers_and_escapes_reject() {
         ]))
         "#;
 
-    // The three date-time rejections and the `00:00:61` one reach the caller through a later parser: `val_number_digit` is `or(datetime_value, …)`, so the date-time parser's own `invalid date`/`invalid time` is discarded when `or` restores the position, the integer parser then accepts the leading digits, and what finally fails is the line end — or, for `00:00:61`, the integer parser's leading-zero rule. That was the decoder's behaviour before the combinator reformulation as well; this table is where it became visible.
+    // Every rejection is the refusing parser's own reason. The date-time, fraction and exponent parsers commit once their prefix can be nothing else, so `val_number_digit`'s `or` reports `invalid date` rather than restoring the position, reading `2021` as an integer and failing on the line end — which is what this table showed before `Parse/commit` existed: `expected end of input` for every date-time and `leading zero` for `00:00:61`.
     assert_eq!(
         run(source),
-        b"malformed underscore|malformed underscore|malformed underscore|leading zero|leading zero|expected end of input|expected digit|expected end of input|invalid Unicode scalar in escape|unknown escape|expected end of input|expected end of input|leading zero|expected end of input|expected end of input"
+        b"malformed underscore|malformed underscore|malformed underscore|leading zero|leading zero|expected digit|expected digit|expected digit|invalid Unicode scalar in escape|unknown escape|invalid date|invalid time|invalid time|invalid offset|expected end of input"
     );
 }
 

@@ -52,8 +52,8 @@ let parse_unicode: Parse(Bytes) =
     let hi = hex4!;
     match hi >= 0xD800 && hi <= 0xDBFF
     | true =>
-        let _ = Parse/take_byte(0x5C)!;
-        let _ = Parse/take_byte(0x75)!;
+        let _ = Parse/label(Parse/take_byte(0x5C), "expected low surrogate")!;
+        let _ = Parse/label(Parse/take_byte(0x75), "expected low surrogate")!;
         let lo = hex4!;
         match lo >= 0xDC00 && lo <= 0xDFFF
         | true =>
@@ -70,8 +70,8 @@ let parse_unicode: Parse(Bytes) =
         end
     end;
 
-let parse_str_escape: Parse(Bytes) =
-    let _ = Parse/take_byte(0x5C)!;
+-- The backslash commits: past it, an unknown letter is a bad escape, not the end of a string segment to be closed by a quote that is not there.
+let escape_fields: Parse(Bytes) =
     let byte = Parse/any_byte!;
     match Byte/to_nat(byte)
     | 34 => Parse/pure(Str/to_bytes("\""))
@@ -85,6 +85,10 @@ let parse_str_escape: Parse(Bytes) =
     | 117 => parse_unicode
     | _ => Parse/fail("unknown escape")
     end;
+
+let parse_str_escape: Parse(Bytes) =
+    let _ = Parse/take_byte(0x5C)!;
+    Parse/commit(escape_fields);
 
 let parse_str_segment: Parse(Bytes) =
     Parse/take_while(is_not_string_special);

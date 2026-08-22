@@ -272,6 +272,13 @@ fn fmt_print_partial_evaluation_reduces_residual() {
     assert_eq!(io.output(), b"Alice is 30");
 }
 
+/// Whether the printed Ersd still holds any of `/std/Parse`'s *code*. The printer lists every registered schema whether or not anything uses it, so `/std/Parse/Refusal`'s family line is not evidence the parser web survived; a function, value or group named under `/std/Parse/` is.
+fn names_parse_code(ersd: &str) -> bool {
+    ersd.lines()
+        .filter(|line| line.contains("/std/Parse/"))
+        .any(|line| !line.starts_with("family ") && !line.starts_with("product "))
+}
+
 #[test]
 fn fmt_print_runtime_args_specializes_spine() {
     // The mixed case: a literal format string with runtime hole arguments. The ersd `evaluate` pass folds the parse to a constant `Fmt` spine, and `specialize` unrolls `go_with` over it — the ersd-optm module carries the minted spine items and neither the format-string parser nor the generic fold survives to codegen.
@@ -313,7 +320,7 @@ fn fmt_print_runtime_args_specializes_spine() {
         "expected the spine-specialized fold called, got:\n{ersd}",
     );
     assert!(
-        !ersd.contains("parse_fmt") && !ersd.contains("/std/Parse/") && !ersd.contains("rec ~"),
+        !ersd.contains("parse_fmt") && !names_parse_code(&ersd) && !ersd.contains("rec ~"),
         "expected the parser and the generic fold pruned, got:\n{ersd}",
     );
 
@@ -371,7 +378,7 @@ fn fmt_print_constant_args_collapses_at_ersd() {
         "expected the folded write residual, got:\n{ersd}",
     );
     assert!(
-        !ersd.contains("/std/Parse/"),
+        !names_parse_code(&ersd),
         "expected the parser web pruned, got:\n{ersd}",
     );
 

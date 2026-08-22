@@ -56,9 +56,8 @@ let frac_part: Parse(Nat) =
     | none() => Parse/pure(0)
     end;
 
-let date_parse: Parse(Date) =
-    let y = fixed(4, 0)!;
-    let _ = expect(0x2D)!;
+-- Each of the three shapes commits once its prefix can be nothing else -- four digits and a dash are a date, two digits and a colon a time, a sign after a time an offset -- so a malformed one reports its own reason rather than letting the integer parser read its leading digits and fail on what follows. The committed parts are named because `!` sequences in the enclosing region, not in a call's argument.
+let date_fields(y: Nat) -> Parse(Date) =
     let mo = fixed(2, 0)!;
     let _ = expect(0x2D)!;
     let d = fixed(2, 0)!;
@@ -68,9 +67,12 @@ let date_parse: Parse(Date) =
     | false => Parse/fail("invalid date")
     end;
 
-let time_parse: Parse(Time) =
-    let h = fixed(2, 0)!;
-    let _ = expect(0x3A)!;
+let date_parse: Parse(Date) =
+    let y = fixed(4, 0)!;
+    let _ = expect(0x2D)!;
+    Parse/commit(date_fields(y));
+
+let time_fields(h: Nat) -> Parse(Time) =
     let mi = fixed(2, 0)!;
     let _ = expect(0x3A)!;
     let s = fixed(2, 0)!;
@@ -81,24 +83,32 @@ let time_parse: Parse(Time) =
     | false => Parse/fail("invalid time")
     end;
 
+let time_parse: Parse(Time) =
+    let h = fixed(2, 0)!;
+    let _ = expect(0x3A)!;
+    Parse/commit(time_fields(h));
+
+let offset_fields(sign: Byte) -> Parse(Int) =
+    let oh = fixed(2, 0)!;
+    let _ = expect(0x3A)!;
+    let om = fixed(2, 0)!;
+    match oh <= 23 && om <= 59
+    | true =>
+        let mins = oh * 60 + om;
+        match sign == 0x2D
+        | true => Parse/pure(+0 - Nat/to_int(mins))
+        | false => Parse/pure(Nat/to_int(mins))
+        end
+    | false => Parse/fail("invalid offset")
+    end;
+
 let offset_parse: Parse(Int) =
     let zulu = Parse/optional(Parse/take_if((b) => b == 0x5A || b == 0x7A))!;
     match zulu
     | some(_) => Parse/pure(+0)
     | none() =>
         let sign = Parse/label(Parse/take_if((b) => b == 0x2B || b == 0x2D), "expected offset")!;
-        let oh = fixed(2, 0)!;
-        let _ = expect(0x3A)!;
-        let om = fixed(2, 0)!;
-        match oh <= 23 && om <= 59
-        | true =>
-            let mins = oh * 60 + om;
-            match sign == 0x2D
-            | true => Parse/pure(+0 - Nat/to_int(mins))
-            | false => Parse/pure(Nat/to_int(mins))
-            end
-        | false => Parse/fail("invalid offset")
-        end
+        Parse/commit(offset_fields(sign))
     end;
 
 -- Everything after a date that is still part of one value. The `or`s here start *after* the date has been consumed, which is what makes a separator with no time behind it give the separator back and leave a plain local date standing -- rather than failing the whole value, and rather than backtracking over the date as well.

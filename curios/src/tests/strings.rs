@@ -370,17 +370,23 @@ fn json_unicode_escapes_require_well_formed_surrogate_pairs() {
                 | str(s) => s
                 | _ => "wrong"
                 end
-            | failure(_) => "rejected"
+            | failure(msg) => msg
             end;
         /std/print(Str/join("|", [
             decoded("\"\\uD83D\\uDE00\""),
             decoded("\"\\uD83D\""),
             decoded("\"\\uD83D\\u0041\""),
-            decoded("\"\\uDE00\"")
+            decoded("\"\\uDE00\""),
+            decoded("\"a\\qb\"")
         ]))
         "#;
 
-    assert_eq!(run(source), "😀|rejected|rejected|rejected".as_bytes());
+    // Each rejection is pinned to its reason. The backslash commits the escape parser, so a malformed escape reports itself rather than ending the string segment and failing on the closing quote that is not there — `many0(or(escape, segment))` once reported every one of these as `unexpected byte`.
+    assert_eq!(
+        run(source),
+        "😀|expected low surrogate|invalid low surrogate|invalid Unicode scalar|unknown escape"
+            .as_bytes()
+    );
 }
 
 #[test]
