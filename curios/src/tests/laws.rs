@@ -31,14 +31,19 @@ const CARRIERS: &[Carrier] = &[
     Carrier {
         name: "Nat under *",
         binders: "x: Nat, y: Nat, z: Nat",
-        held: &["Eq((x + 1) * 2, x * 2 + 2)", "Eq(3 * (x + 2), 3 * x + 6)"],
-        refused: &[
+        held: &[
+            "Eq((x + 1) * 2, x * 2 + 2)",
+            "Eq(3 * (x + 2), 3 * x + 6)",
             "Eq(x * 1, x)",
             "Eq(1 * x, x)",
             "Eq(x * 0, 0)",
             "Eq(0 * x, 0)",
             "Eq(2 * (3 * x), 6 * x)",
             "Eq((x * 2) * 3, x * 6)",
+            // A literal coefficient has one side, so the two spellings meet.
+            "Eq(x * 2, 2 * x)",
+        ],
+        refused: &[
             "Eq((x + y) * 2, x * 2 + y * 2)",
             "Eq(x * (y + z), x * y + x * z)",
             "Eq(x * 2 + x * 3, x * 5)",
@@ -251,7 +256,8 @@ fn every_held_law_closes_by_refl() {
 
 #[test]
 fn every_row_is_on_the_side_the_compiler_puts_it() {
-    // Every row — held then refused — as a written goal, read back through the compiler's own refl-fit line. A held row without the line is a regression in the normalizer; a refused row with it is a law that has been taken and must move to the held rows, which is how the refused half stays a record.
+    // Every row — held then refused — as a written goal, read back through the compiler's own refl-fit line. A held row without the line is a regression in the normalizer; a refused row with it is a law that has been taken and must move to the held rows, which is how the refused half stays a record. Every misplaced row is reported at once, since a change to one rule can move several.
+    let mut misplaced = Vec::new();
     for carrier in CARRIERS {
         let rows = carrier
             .held
@@ -271,14 +277,15 @@ fn every_row_is_on_the_side_the_compiler_puts_it() {
         for (index, (row, report)) in rows.iter().zip(reports).enumerate() {
             let fits = report.contains("? \u{2248} Eq/refl()");
             let held = index < carrier.held.len();
-            assert_eq!(
-                fits,
-                held,
-                "{}: `{row}` is {} but the compiler {} close it by refl",
-                carrier.name,
-                if held { "held" } else { "refused" },
-                if fits { "does" } else { "does not" }
-            );
+            if fits != held {
+                misplaced.push(format!(
+                    "{}: `{row}` is {} but the compiler {} close it by refl",
+                    carrier.name,
+                    if held { "held" } else { "refused" },
+                    if fits { "does" } else { "does not" }
+                ));
+            }
         }
     }
+    assert!(misplaced.is_empty(), "{}", misplaced.join("\n"));
 }

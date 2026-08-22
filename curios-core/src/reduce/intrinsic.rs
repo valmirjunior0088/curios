@@ -252,6 +252,17 @@ fn nat_literal_factor(summand: &Term) -> Option<(Natural, Term)> {
         .map(|coefficient| (coefficient, left.clone()))
 }
 
+/// `coefficient · inner` for a reduced, floorless `inner`: zero stays zero, a tail already carrying a literal coefficient takes the product — `2 · (3 · x)` is `6 · x` — and anything else is scaled by [`nat_scaled`], which clears the unit and zero coefficients. The one place a literal meets a symbolic factor, so every such product lands in the same normal form.
+fn nat_scale(coefficient: Natural, inner: Term) -> Term {
+    if Nat::is_zero(&inner) {
+        return inner;
+    }
+    match nat_literal_factor(&inner) {
+        Some((nested, factor)) => nat_scaled(coefficient * nested, factor),
+        None => nat_scaled(coefficient, inner),
+    }
+}
+
 /// `coefficient · factor`, dropping a zero product and a unit coefficient rather than emitting `0 · t` or `1 · t` for reduction to clear afterwards.
 fn nat_scaled(coefficient: Natural, factor: Term) -> Term {
     if coefficient.is_zero() {
@@ -843,7 +854,7 @@ pub fn reduce_intrinsic(
             }
             Ok(Subterm::Intrinsic(Intrinsic::nat_sub(left, right)))
         }
-        // Multiplication distributes a literal factor over the other operand's successor floor: `(it + st) · c = (it · c) + (st · c)`. The literal floors multiply out; the symbolic tail rides as a neutral `mul` (or drops when it is zero, which folds two literals). The multiplicative twin of `NatAdd`'s floor law — it lets `n · k` extract `k` past a symbolic `n` (`(x + 1) · 2 = x · 2 + 2`) the same way `n + k` does. Whichever side is the literal drives; two symbolic operands have no literal factor, so the product stays neutral.
+        // Multiplication distributes a literal factor over the other operand's successor floor: `(it + st) · c = (it · c) + (st · c)`. The literal floors multiply out and the symbolic tail is scaled by `nat_scale`, which is where the unit and annihilation laws live — `x · 1 = x`, `x · 0 = 0` — and where a tail already carrying a literal coefficient takes the product of the two, `2 · (3 · x) = 6 · x`. The multiplicative twin of `NatAdd`'s floor law — it lets `n · k` extract `k` past a symbolic `n` (`(x + 1) · 2 = x · 2 + 2`) the same way `n + k` does. Whichever side is the literal drives, and the scaled tail puts the coefficient on the left, so `x · 2` and `2 · x` reach one normal form; two symbolic operands have no literal factor, so their product stays neutral.
         Intrinsic::NatMul(left, right) => {
             let left = reducer.reduce_forced(left.clone())?;
             let right = reducer.reduce_forced(right.clone())?;
@@ -852,16 +863,17 @@ pub fn reduce_intrinsic(
 
             if Nat::is_zero(&ir) {
                 // right is the literal `sr`: distribute over the left floor.
-                let inner = match Nat::is_zero(&il) {
-                    true => il,
-                    false => Term::intrinsic(Intrinsic::nat_mul(il, right.clone())),
-                };
-                return Ok(Term::unwrap_or_clone(Nat::rebuild(sl * sr, inner)));
+                return Ok(Term::unwrap_or_clone(Nat::rebuild(
+                    sl * sr.clone(),
+                    nat_scale(sr, il),
+                )));
             }
             if Nat::is_zero(&il) {
                 // left is the literal `sl`, right symbolic: distribute over the right floor.
-                let inner = Term::intrinsic(Intrinsic::nat_mul(left.clone(), ir));
-                return Ok(Term::unwrap_or_clone(Nat::rebuild(sl * sr, inner)));
+                return Ok(Term::unwrap_or_clone(Nat::rebuild(
+                    sl.clone() * sr,
+                    nat_scale(sl, ir),
+                )));
             }
             Ok(Subterm::Intrinsic(Intrinsic::nat_mul(left, right)))
         }
@@ -3559,6 +3571,43 @@ mod tests {
                 mul(lit(3), plus(x.clone(), lit(2))),
                 plus(mul(lit(3), x.clone()), lit(6)),
                 vec![vec![(&nat_x, lit(0))], vec![(&nat_x, lit(3))]],
+            ),
+            // The unit and annihilation laws, on either side, and the nested literal factor — the three shapes the distribution above left neutral, each of which a first `*` theorem meets.
+            (
+                "x * 1 = x",
+                mul(x.clone(), lit(1)),
+                x.clone(),
+                vec![vec![(&nat_x, lit(0))], vec![(&nat_x, lit(7))]],
+            ),
+            (
+                "1 * (x + 2) = x + 2",
+                mul(lit(1), plus(x.clone(), lit(2))),
+                plus(x.clone(), lit(2)),
+                vec![vec![(&nat_x, lit(0))], vec![(&nat_x, lit(7))]],
+            ),
+            (
+                "(x + 2) * 0 = 0",
+                mul(plus(x.clone(), lit(2)), lit(0)),
+                lit(0),
+                vec![vec![(&nat_x, lit(0))], vec![(&nat_x, lit(7))]],
+            ),
+            (
+                "0 * x = 0",
+                mul(lit(0), x.clone()),
+                lit(0),
+                vec![vec![(&nat_x, lit(0))], vec![(&nat_x, lit(7))]],
+            ),
+            (
+                "2 * (3 * x) = 6 * x",
+                mul(lit(2), mul(lit(3), x.clone())),
+                mul(lit(6), x.clone()),
+                vec![vec![(&nat_x, lit(0))], vec![(&nat_x, lit(5))]],
+            ),
+            (
+                "(x * 2) * 3 = 6 * x",
+                mul(mul(x.clone(), lit(2)), lit(3)),
+                mul(lit(6), x.clone()),
+                vec![vec![(&nat_x, lit(0))], vec![(&nat_x, lit(5))]],
             ),
             (
                 "slice(b, 0, len(b)) = b",
