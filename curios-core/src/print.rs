@@ -7,7 +7,7 @@ use {
     },
     curios_num::Floating,
     curios_print::{Printer, flat, group, indent, line, pure, sep_flat, soft_line},
-    curios_utilities::{Grain, Plicity, Qualifier, recurse},
+    curios_utilities::{Grain, PackedBin, Plicity, Qualifier, recurse},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
         rc::Rc,
@@ -424,6 +424,90 @@ fn print_unary(name: &'static str, inner: Term, frame: Frame) -> Printer {
     flat([pure(name), sub(inner, frame)])
 }
 
+/// A parameterized intrinsic type former as the surface applies it — `List(Nat)`, never `List Nat`. The same type reaches a report two ways, as the intrinsic node and as its `/sys` global applied, and a reader shown `t : List Nat` beside `xs : List(Nat)` is being told two types where there is one.
+fn print_former(name: &'static str, argument: Term, frame: Frame) -> Printer {
+    flat([
+        pure(name),
+        listed("(".into(), false, vec![sub(argument, frame)], ")"),
+    ])
+}
+
+/// A bracketed literal from its already-rendered entries: `[` and its packed cousins `b[`/`x[` opened by the caller, `]` closed here.
+fn print_entries(open: &'static str, entries: Vec<Printer>) -> Printer {
+    flat([pure(open), sep_flat(entries, || pure(", ")), pure("]")])
+}
+
+/// [`print_entries`] under a grain letter.
+fn print_packed(grain: Grain, entries: Vec<Printer>) -> Printer {
+    print_entries(
+        match grain {
+            Grain::B => "b[",
+            Grain::X => "x[",
+        },
+        entries,
+    )
+}
+
+/// The constant atoms of a packed literal, spelled as the surface writes them — `0`/`1` for bits, hexadecimal numerals for bytes.
+fn bin_atoms(grain: Grain, packed: &PackedBin) -> Vec<Printer> {
+    match grain {
+        Grain::B => (0..packed.bit_length())
+            .map(|index| pure(if packed.bit(index).unwrap() { "1" } else { "0" }))
+            .collect(),
+        Grain::X => packed
+            .as_bytes()
+            .unwrap()
+            .iter()
+            .map(|byte| pure(format!("0x{byte:X}")))
+            .collect(),
+    }
+}
+
+/// The entries of a list concatenation as the surface spells them: a literal operand contributes its items in place, a nested concatenation its own entries, and anything else a `..` spread. Lowering turns the `[h, ..t]` a reader wrote into a concatenation of the literal `[h]` with `t`, and substitution nests one concatenation inside another; splicing both back is what lets the report quote the program rather than its lowering. Concatenation is associative, so the splice changes no value.
+fn list_concat_entries(operands: Vec<Term>, frame: Frame, entries: &mut Vec<Printer>) {
+    for operand in operands {
+        match &*operand {
+            Subterm::Intrinsic(Intrinsic::List { .. }) => {
+                let Subterm::Intrinsic(Intrinsic::List { items, .. }) =
+                    Term::unwrap_or_clone(operand)
+                else {
+                    unreachable!()
+                };
+                entries.extend(items.into_iter().map(|item| sub(item, frame)));
+            }
+            Subterm::Intrinsic(Intrinsic::ListConcat { .. }) => {
+                let Subterm::Intrinsic(Intrinsic::ListConcat { operands, .. }) =
+                    Term::unwrap_or_clone(operand)
+                else {
+                    unreachable!()
+                };
+                list_concat_entries(operands, frame, entries);
+            }
+            _ => entries.push(flat([pure(".."), sub(operand, frame)])),
+        }
+    }
+}
+
+/// [`list_concat_entries`] for a packed concatenation: a constant operand of the same grain contributes its atoms in place.
+fn bin_concat_entries(grain: Grain, operands: Vec<Term>, frame: Frame, entries: &mut Vec<Printer>) {
+    for operand in operands {
+        match &*operand {
+            Subterm::Intrinsic(Intrinsic::Bin(g, packed)) if *g == grain => {
+                entries.extend(bin_atoms(grain, packed));
+            }
+            Subterm::Intrinsic(Intrinsic::BinConcat { grain: g, .. }) if *g == grain => {
+                let Subterm::Intrinsic(Intrinsic::BinConcat { operands, .. }) =
+                    Term::unwrap_or_clone(operand)
+                else {
+                    unreachable!()
+                };
+                bin_concat_entries(grain, operands, frame, entries);
+            }
+            _ => entries.push(flat([pure(".."), sub(operand, frame)])),
+        }
+    }
+}
+
 /// The surface infix symbol an operator intrinsic prints as, or `None` for an intrinsic with no infix spelling — the bitwise ops, conversions, `min`/`max`, and the `Bool.xor` that `!=` desugars through. Exactly the operators the surface language spells infix ([`InfixOp::symbol`](super::InfixOp::symbol)); the concept-dispatched arithmetic/comparison operators plus the two hardcoded `Bool` short-circuits.
 fn infix_symbol(intrinsic: &Intrinsic) -> Option<&'static str> {
     Some(match intrinsic {
@@ -655,16 +739,7 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
         Intrinsic::FltToNat(i) => print_unary("Flt.to_nat ", i, frame),
         Intrinsic::FltToInt(i) => print_unary("Flt.to_int ", i, frame),
         Intrinsic::BinType(Grain::X) => pure("Bytes"),
-        Intrinsic::Bin(Grain::X, bytes) => pure(format!(
-            "x[{}]",
-            bytes
-                .as_bytes()
-                .unwrap()
-                .iter()
-                .map(|b| format!("0x{b:X}"))
-                .collect::<Vec<_>>()
-                .join(", ")
-        )),
+        Intrinsic::Bin(Grain::X, bytes) => print_packed(Grain::X, bin_atoms(Grain::X, &bytes)),
         Intrinsic::BinLen(Grain::X, b) => print_unary("Bytes.len ", b, frame),
         Intrinsic::BinEql(Grain::X, l, r) => print_infix("==", l, r, frame),
         Intrinsic::BinGet {
@@ -692,26 +767,8 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             bin: b,
             element: byte,
         } => print_binary("Bytes.append ", b, byte, frame),
-        Intrinsic::BinConcat {
-            grain: Grain::X,
-            operands,
-        } => flat([
-            pure("Bytes.concat "),
-            sep_flat(operands.into_iter().map(move |e| sub(e, frame)), || {
-                pure(", ")
-            }),
-        ]),
         Intrinsic::BinType(Grain::B) => pure("Bits"),
-        Intrinsic::Bin(Grain::B, bits) => pure(format!(
-            "b[{}]",
-            (0..bits.bit_length())
-                .map(|index| match bits.bit(index).unwrap() {
-                    true => "1",
-                    false => "0",
-                })
-                .collect::<Vec<_>>()
-                .join(", ")
-        )),
+        Intrinsic::Bin(Grain::B, bits) => print_packed(Grain::B, bin_atoms(Grain::B, &bits)),
         Intrinsic::BinLen(Grain::B, b) => print_unary("Bits.len ", b, frame),
         Intrinsic::BinEql(Grain::B, l, r) => print_infix("==", l, r, frame),
         Intrinsic::BinGet {
@@ -739,16 +796,12 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             bin: b,
             element: bit,
         } => print_binary("Bits.append ", b, bit, frame),
-        Intrinsic::BinConcat {
-            grain: Grain::B,
-            operands,
-        } => flat([
-            pure("Bits.concat "),
-            sep_flat(operands.into_iter().map(move |e| sub(e, frame)), || {
-                pure(", ")
-            }),
-        ]),
-        Intrinsic::ListType(elem) => print_unary("List ", elem, frame),
+        Intrinsic::BinConcat { grain, operands } => {
+            let mut entries = Vec::new();
+            bin_concat_entries(grain, operands, frame, &mut entries);
+            print_packed(grain, entries)
+        }
+        Intrinsic::ListType(elem) => print_former("List", elem, frame),
         Intrinsic::List {
             element: _,
             items: elems,
@@ -800,16 +853,13 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             sub(elem, frame),
         ]),
         Intrinsic::ListConcat {
-            element: ty,
+            element: _,
             operands,
-        } => flat([
-            pure("List.concat "),
-            sub(ty, frame),
-            pure(" "),
-            sep_flat(operands.into_iter().map(move |e| sub(e, frame)), || {
-                pure(", ")
-            }),
-        ]),
+        } => {
+            let mut entries = Vec::new();
+            list_concat_entries(operands, frame, &mut entries);
+            print_entries("[", entries)
+        }
         Intrinsic::ListMap {
             from: a,
             to: b,
@@ -828,7 +878,7 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
         Intrinsic::HandleType => pure("Handle"),
         Intrinsic::Handle(token) => pure(format!("Handle({token})")),
         Intrinsic::ProcExit(code) => print_unary("proc.exit ", code, frame),
-        Intrinsic::CellType(elem) => print_unary("Cell ", elem, frame),
+        Intrinsic::CellType(elem) => print_former("Cell", elem, frame),
         Intrinsic::Cell {
             element: type_,
             initial: init,
@@ -849,7 +899,7 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
             element: type_,
             cell,
         } => print_binary("Cell.get ", type_, cell, frame),
-        Intrinsic::IoType(result) => print_unary("Io ", result, frame),
+        Intrinsic::IoType(result) => print_former("Io", result, frame),
         Intrinsic::IoPure {
             result: type_,
             value,
