@@ -912,7 +912,7 @@ fn a_computed_only_evaluation_cycle_is_rejected_as_an_error() {
     let mut context = context();
     let a = context.fresh(Some("a"));
     let b = context.fresh(Some("b"));
-    // rec a = b; b = a — a mutual value-level cycle no initialization order satisfies. The verifier rejects it; erasure surfaces the diagnostic as an error, never a panic. (A *self*-knot `rec loop = loop` is admitted: the lowering drops it when unused, mirroring the legacy path.)
+    // rec a = b; b = a — a mutual value-level cycle no forcing order satisfies. The verifier rejects it; erasure surfaces the diagnostic as an error, never a panic. (A *self*-knot `rec loop = loop` is admitted only while nothing outside its initializer reads it, which is when the lowering drops it.)
     let type_ = Term::intrinsic(Intrinsic::NatType);
     let body = Term::rec(
         vec![

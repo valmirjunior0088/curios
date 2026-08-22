@@ -390,6 +390,43 @@ fn json_unicode_escapes_require_well_formed_surrogate_pairs() {
 }
 
 #[test]
+fn json_structural_refusals_name_what_was_expected() {
+    let source = r#"
+        use /std/{Json, Parse, Result, Str, Handle};
+        let decoded(input : Str) -> Str =
+            match Parse/run(Json/decode, Str/to_bytes(input)) : (_) => Str
+            | success(value) => Json/encode(value)
+            | failure(msg) => msg
+            end;
+        /std/print(Str/join("|", [
+            decoded("[]"),
+            decoded("{}"),
+            decoded("[true, [null], {\"a\": []}]"),
+            decoded("[1,]"),
+            decoded("[x]"),
+            decoded("[1 2]"),
+            decoded("{\"a\" 1}"),
+            decoded("{\"a\": 1,}"),
+            decoded("{,}"),
+            decoded("tru"),
+            decoded("["),
+            decoded("")
+        ]))
+        "#;
+
+    // Each refusal is the reason at the point the input stopped being JSON, not the bracket an outer parser failed on afterwards. A comma commits to the element after it and a key to its colon, the byte after an opening bracket decides between the close and the elements, and the primitives name what they expected — `sep_by0`'s backtracking once reported every one of the malformed inputs as `unexpected byte`, and a bad literal as `unexpected literal`.
+    assert_eq!(
+        run(source),
+        concat!(
+            "[]|{}|[true,[null],{\"a\":[]}]|expected value|expected value|expected ',' or ']'|",
+            "expected ':'|expected '\"'|expected '\"'|expected \"true\"|",
+            "unexpected end of input|unexpected end of input"
+        )
+        .as_bytes()
+    );
+}
+
+#[test]
 fn character_literals_do_not_coerce_to_numeric_domains() {
     for source in [
         "use /std/{Nat}; let n : Nat = 'a'; n",

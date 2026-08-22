@@ -24,8 +24,6 @@ enum Inner {
     InBlock,
     /// The same two applications, named as top-level items and referenced from the continuation.
     Hoisted,
-    /// Written inside the continuation as [`Inner::InBlock`], with every rule additionally eta-expanded through a `Parse { run = … }` so no fold reaches it — what a `delay` combinator would give a user.
-    EtaInBlock,
 }
 
 /// A grammar of `rules` rules in the `/std/Json/decode` idiom: each rule is a top-level `Parse` definition built from a `!` chain over the two rules before it.
@@ -49,10 +47,9 @@ fn grammar(rules: usize, inner: Inner) -> String {
             "ws".to_string()
         };
 
-        let eta = matches!(inner, Inner::EtaInBlock);
         let (many, separated) = match inner {
             Inner::None => (None, None),
-            Inner::InBlock | Inner::EtaInBlock => (
+            Inner::InBlock => (
                 Some(format!("Parse/many0({previous})")),
                 Some(format!("Parse/sep_by0({previous}, eq)")),
             ),
@@ -69,11 +66,7 @@ fn grammar(rules: usize, inner: Inner) -> String {
             }
         };
 
-        let head = match eta {
-            true => format!("r{rule}_body"),
-            false => format!("r{rule}"),
-        };
-        let _ = writeln!(source, "let {head}: Parse(Bytes) =");
+        let _ = writeln!(source, "let r{rule}: Parse(Bytes) =");
         let _ = writeln!(source, "    let x0 = {previous}!;");
         let _ = writeln!(source, "    let x1 = {older}!;");
         let _ = writeln!(source, "    let x2 = {previous}!;");
@@ -83,12 +76,6 @@ fn grammar(rules: usize, inner: Inner) -> String {
         }
         let _ = writeln!(source, "    let e = eq!;");
         let _ = writeln!(source, "    Parse/pure(x0);");
-        if eta {
-            let _ = writeln!(
-                source,
-                "let r{rule}: Parse(Bytes) = Parse {{ run(input, pos) = r{rule}_body.run(input, pos) }};"
-            );
-        }
     }
 
     let _ = writeln!(source, "\nlet top: Parse(Bytes) = r{};\n", rules - 1);
@@ -234,6 +221,8 @@ fn compile_only(source: &str) -> (Result<(), String>, f64) {
 ///
 /// Release only. The wall clocks are dominated by `curios_cont::optimize`, which a debug build prices differently; the *counts* are deterministic and hold in either profile.
 ///
+/// The tables below carry a fourth row, every rule eta-expanded through `Parse { run = … }`, that this test no longer takes: `Parse`'s representation has since been sealed, so the spelling is not one a user can write — which is the sealing's point rather than a loss to the measurement, since the row only ever reported what a `delay` combinator would cost, and `Parse` exports none.
+///
 /// # What it last printed
 ///
 /// Taken **2026-08-21**, **release**, `aarch64-apple-darwin`, with a replacement's residual group bound at item level.
@@ -319,17 +308,11 @@ fn compile_only(source: &str) -> (Result<(), String>, f64) {
 #[ignore = "measurement: reports what a spelling costs rather than asserting"]
 fn combinator_sharing_measurements() {
     println!("rules  inner            bind copies  functions  compile");
-    for inner in [
-        Inner::None,
-        Inner::InBlock,
-        Inner::Hoisted,
-        Inner::EtaInBlock,
-    ] {
+    for inner in [Inner::None, Inner::InBlock, Inner::Hoisted] {
         let label = match inner {
             Inner::None => "none",
             Inner::InBlock => "in a continuation",
             Inner::Hoisted => "hoisted to items",
-            Inner::EtaInBlock => "in a continuation, eta",
         };
         for rules in [2usize, 4, 8, 12, 16] {
             let source = grammar(rules, inner);

@@ -54,10 +54,11 @@ pub(super) fn check_group(module: &Module, values: &[RecValue]) -> Result<(), Ve
                 edges.entry(position).or_insert(Some(callee));
             }
         }
-        // A direct self-reference is the language's `rec loop = loop`: admitted, dropped when unused, and a trap on the cycle when forced. Every other direct read is an edge.
+        // A member nothing outside its own initializer references is never forced, so its reads evaluate nothing: the language's `rec loop = loop`, which the lowering drops. Every read of a member that is used is an edge, its own initializer's included — a used self-read is the cycle forcing meets first.
+        let used = module.member_used_outside_init(member.value, member.init);
         for value in evaluation.direct {
             if let Some(position) = computed.iter().position(|&member| member == value)
-                && computed[position] != member.value
+                && (used || computed[position] != member.value)
             {
                 edges.entry(position).or_insert(None);
             }
@@ -80,9 +81,12 @@ pub(super) fn check_group(module: &Module, values: &[RecValue]) -> Result<(), Ve
                 });
             }
             spelled.push_str(&spell_value(module, computed[*cycle.last().unwrap()]));
+            let shape = match cycle.len() {
+                2 => "a computed group member evaluates itself",
+                _ => "computed group members evaluate each other",
+            };
             return Err(VerifyError(format!(
-                "computed group members evaluate each other, which no forcing order can \
-                 satisfy: {spelled}"
+                "{shape}, which no forcing order can satisfy: {spelled}"
             )));
         }
     }

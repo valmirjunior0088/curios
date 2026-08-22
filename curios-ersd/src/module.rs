@@ -9,13 +9,16 @@ mod tests;
 
 use {
     super::{
-        Block, BlockId, Constant, ConstantId, Constructor, ConstructorId, FamilyId, Field,
+        Atom, Block, BlockId, Constant, ConstantId, Constructor, ConstructorId, FamilyId, Field,
         ForeignId, Function, FunctionId, ProductId, ProductSchema, RecGroup, RecGroupId, Statement,
         StatementId, Terminator, ValueId, VariantFamily,
     },
     curios_abi::ForeignFunction,
     curios_utilities::Arena,
-    std::{collections::HashMap, sync::Arc},
+    std::{
+        collections::{BTreeSet, HashMap},
+        sync::Arc,
+    },
 };
 
 /// Where compaction moved the identities a caller outside the module may still hold.
@@ -135,6 +138,69 @@ impl Module {
 
     pub fn rec_group(&self, id: RecGroupId) -> Option<&RecGroup> {
         self.rec_groups.get(id)
+    }
+
+    /// Whether `member` is referenced anywhere in the module outside its own initializer's subtree (control blocks and nested function regions included on both sides). An unreferenced member's init never runs.
+    pub(crate) fn member_used_outside_init(&self, member: ValueId, init: BlockId) -> bool {
+        // The init's own subtree: its blocks, plus the regions of functions bound inside it.
+        let mut inside_blocks = BTreeSet::new();
+        let mut inside_functions = BTreeSet::new();
+        let mut function_work: Vec<FunctionId> = Vec::new();
+        let mut block_work = vec![init];
+        loop {
+            if let Some(block) = block_work.pop() {
+                if !inside_blocks.insert(block) {
+                    continue;
+                }
+                let Some(block) = self.block(block) else {
+                    continue;
+                };
+                for &statement in &block.statements {
+                    match self.statement(statement) {
+                        Some(Statement::Let { rhs, .. }) => block_work.extend(rhs.sub_blocks()),
+                        Some(Statement::Functions { functions }) => {
+                            function_work.extend(functions.iter().copied());
+                        }
+                        Some(Statement::Rec { group }) => {
+                            if let Some(group) = self.rec_group(*group) {
+                                function_work.extend(group.functions.iter().copied());
+                                block_work.extend(group.values.iter().map(|m| m.init));
+                            }
+                        }
+                        None => {}
+                    }
+                }
+                continue;
+            }
+            let Some(function) = function_work.pop() else {
+                break;
+            };
+            if !inside_functions.insert(function) {
+                continue;
+            }
+            if let Some(function) = self.function(function) {
+                block_work.push(function.body);
+            }
+        }
+
+        // Any reference from a block outside the subtree is a use.
+        for (index, slot) in self.blocks().iter().enumerate() {
+            let Some(block) = slot else { continue };
+            if inside_blocks.contains(&BlockId(index as u32)) {
+                continue;
+            }
+            for &statement in &block.statements {
+                if let Some(Statement::Let { rhs, .. }) = self.statement(statement)
+                    && rhs.operands().contains(&Atom::Value(member))
+                {
+                    return true;
+                }
+            }
+            if block.terminator.atom() == Some(Atom::Value(member)) {
+                return true;
+            }
+        }
+        false
     }
 
     pub fn constant(&self, id: ConstantId) -> Option<&Constant> {

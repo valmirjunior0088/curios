@@ -902,8 +902,31 @@ fn a_cycle_hidden_behind_a_closure_traps_at_the_member_being_forced() {
         "#,
     );
     assert!(
-        error.contains("execution failed") && error.contains("/force"),
-        "the cycle must trap in a member's force function: {error}"
+        error.contains("execution failed: wasm trap: wasm `unreachable` instruction executed")
+            && error.contains("/force"),
+        "the cycle must trap in a member's force function, and the report must name the trap before the frames: {error}"
+    );
+}
+
+#[test]
+fn a_member_reading_itself_is_refused_before_it_can_trap() {
+    // The cycle the verifier can see without any summary: `p`'s initializer hands `p` to `Parse/map`, which reads it, so forcing `p` forces `p`. This compiled and trapped as a black hole while a direct self-read was exempt from the cycle graph for the sake of the *unused* `rec loop = loop`; the exemption is now the unused member's alone.
+    let error = error(
+        r#"
+        use /std/{Nat, Str, Bytes, Io, Result, Parse, rand, print};
+        let main: Io({}) =
+            let bs = rand/bytes(1)!;
+            rec p: Parse(Nat) = Parse/or(Parse/map(Parse/any_byte, (_) => 1), Parse/map(p, (n) => n));
+            match Parse/run(p, bs)
+            | success(v) => print(Nat/to_str(v))
+            | failure(_) => print("0")
+            end;
+        main
+        "#,
+    );
+    assert!(
+        error.contains("evaluates itself") && !error.contains("execution failed"),
+        "the self-read must be refused at compile time: {error}"
     );
 }
 

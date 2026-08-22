@@ -305,7 +305,7 @@ fn a_stepper_handed_to_a_combinator_that_applies_it_is_evaluated_by_the_initiali
         .finalize()
         .expect_err("the combinator applies the stepper, which evaluates `table`");
     assert!(
-        error.0.contains("evaluate each other") && error.0.contains("through a call"),
+        error.0.contains("evaluates itself") && error.0.contains("through a call"),
         "{error}"
     );
 }
@@ -410,8 +410,8 @@ fn a_computed_only_cycle_is_rejected() {
 }
 
 #[test]
-fn a_direct_self_knot_is_admitted() {
-    // `rec loop = loop` is language-accepted: unused, the lowering drops it; used, the lowering rejects it. The verifier admits the shape.
+fn an_unused_direct_self_knot_is_admitted() {
+    // `rec loop = loop; 0` is language-accepted: nothing forces `loop`, so its initializer never runs, and the lowering drops it.
     let mut builder = ErsdBuilder::new();
     let value = builder.value(Some("value".into()));
     builder.open_block();
@@ -422,7 +422,27 @@ fn a_direct_self_knot_is_admitted() {
     let zero = builder.constant(Constant::Nat(0));
     let entry = builder.seal_block(Terminator::Return(Atom::Constant(zero)));
     builder.set_entry(entry);
-    builder.finalize().expect("the self-knot is admitted");
+    builder
+        .finalize()
+        .expect("the unused self-knot is admitted");
+}
+
+#[test]
+fn a_used_direct_self_knot_is_rejected() {
+    // `rec loop = loop; loop`: forcing `loop` runs an initializer that forces `loop`, the cycle the by-need lowering meets first. It was admitted with the unused shape and trapped as a black hole at runtime; a self-read is an edge like any other once something forces the member.
+    let mut builder = ErsdBuilder::new();
+    let value = builder.value(Some("value".into()));
+    builder.open_block();
+    let init = builder.seal_block(Terminator::Return(Atom::Value(value)));
+    let group = builder.rec_group(vec![], vec![(value, init)]);
+    builder.item_rec(group);
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(value)));
+    builder.set_entry(entry);
+    let error = builder
+        .finalize()
+        .expect_err("the used self-knot cannot initialize");
+    assert!(error.0.contains("evaluates itself"), "{error}");
 }
 
 #[test]

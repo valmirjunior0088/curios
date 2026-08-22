@@ -118,7 +118,20 @@ pub let peek_byte: Parse(Byte) =
 pub let peek: Parse(Option(Byte)) =
     or(map(peek_byte, (b) => Option/some(b)), pure(Option/none()));
 
+-- How a byte reads in a refusal: as the character it prints as when it has one, and by its number otherwise.
+let byte_spelling(byte: Byte) -> Str =
+    match Str/of_bytes(x[byte])
+    | some(s) =>
+        match Nat/in_range(Byte/to_nat(byte), 0x21, 0x7E)
+        | true => Str/flatten(["'", s, "'"])
+        | false => Str/concat("byte ", Nat/to_str(Byte/to_nat(byte)))
+        end
+    | none() => Str/concat("byte ", Nat/to_str(Byte/to_nat(byte)))
+    end;
+
+-- The refusal is spelled when the parser is built rather than when it declines, since a `many0` or `or` declines the same parser once per byte it stops at.
 pub let take_byte(expected: Byte) -> Parse(Byte) =
+    let refusal = Refusal/declined(Str/concat("expected ", byte_spelling(expected)));
     Parse {
         run(input, pos) =
             match Nat/Lt/try(pos, Bytes/len(input))
@@ -127,12 +140,13 @@ pub let take_byte(expected: Byte) -> Parse(Byte) =
                 let byte = Bytes/get(input, pos, @ok);
                 match byte == expected
                 | true => Result/success((pos + 1, byte))
-                | false => Result/failure(Refusal/declined("unexpected byte"))
+                | false => Result/failure(refusal)
                 end
             end,
     };
 
 pub let take_literal(literal: Str) -> Parse({}) =
+    let refusal = Refusal/declined(Str/flatten(["expected \"", literal, "\""]));
     Parse {
         run(input, pos) =
             let lit = Str/to_bytes(literal);
@@ -157,7 +171,7 @@ pub let take_literal(literal: Str) -> Parse({}) =
                 end;
             match matched
             | true => Result/success((stop, ()))
-            | false => Result/failure(Refusal/declined("unexpected literal"))
+            | false => Result/failure(refusal)
             end,
     };
 

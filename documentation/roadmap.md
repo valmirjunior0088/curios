@@ -13,7 +13,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Π-types, λ-abstractions, and application
 - [x] Σ-types and dependent pairs
 - [x] `let` and `let-rec` bindings
-- [x] Value-level mutual recursion in `rec`
+- [x] Value-level mutual recursion in `rec` — a group's computed members are forced by need, so the order they are written in decides nothing and a recursive grammar is a `rec` group written point-free (`/std/Json/decode` is one; the `Parse/delay` combinator once proposed for that purpose is unnecessary); an initializer that evaluates itself, directly or through the functions it applies, or that performs an effect, is refused by the erased verifier, and a cycle hidden where the verifier cannot see traps in the member being forced rather than computing
 - [x] Bidirectional dependent type checking with full definitional equality (β/ι/δ reduction, intrinsic computation, indexed-inductive inversion)
 - [x] Eta-reduction for Π-types and Σ-types
 - [x] Named tuple fields
@@ -78,7 +78,6 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] `Int`
   - [x] `Flt` (bit-preserving binary32 identity, including `to_le_bytes`/`of_le_bytes` reinterpretation across every compiler stage, plus the full native arithmetic and comparison family — `add`/`sub`/`mul`/`div`/`rem`/`min`/`max`/`neg`/`abs`/`sqrt`/`floor`/`ceil`/`trunc`/`nearest`/`copysign`)
   - [x] Packed `Bits` and `Bytes` (grain-specialized operations over shared immutable windows; O(1) slices and tails)
-  - [ ] `Parse/delay(f: ({}) -> Parse(A)) -> Parse(A)`, so a recursive grammar can be written point-free. `Json/decode.crs` ties its knot with `Parse { run(input, pos) = … }` and `Toml/decode.crs` records the same technique as a deliberate mitigation; both spell the representation, so sealing it removes the only way to write one. Eta-expansion is the classical binding-time control — *Eta-expansion does The Trick* — and should be reached for because a grammar *recurses*, not because it is large
   - [ ] Width-relative bit operations on `Bits`, where a width exists to relate them to — rotation and leading-zero counts are defined by "bit *i* moves to bit *(i+k) mod w*" and by counting from *w*, so they are not functions on an unbounded `Nat` at all. They were `Nat`/`Int` operations that narrowed through `to_u32` to answer, which made them 32-bit notions typed as unbounded *and* left them stuck above `2³²`, and they have been removed from the surface; `Bits` already carries `len`, `get` and `slice`, and is what `/std/BigNat` is proved over. `popcnt` and `ctz` went with them: both have width-free meanings — a bit count, and the 2-adic valuation for a nonzero argument — but nothing called them, honest folds would need `count_ones` and `trailing_zeros` added to `Natural`'s trusted base, and `Int/popcnt` is undefinable on a negative, since two's complement of unbounded width has infinitely many one bits
   - [x] `List`
 - [x] Total `/sys` primitives — every operation whose reduction could fail carries its precondition in its type, in the decided style (see [A partial primitive is totalized by a canonical extension, or it states its domain](design/language/a-partial-primitive-is-totalized-by-a-canonical-extension-or-it-states-its-domain.md) and [A bound is stated in a decided proposition and discharged by reduction](design/language/a-bound-is-stated-in-a-decided-proposition-and-discharged-by-reduction.md))
@@ -184,7 +183,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 ## Diagnostics
 
 - [x] Span-based error quality across all stages
-- [ ] A self-referential eager value reports rather than asserts. `curios-ersd`'s `into_cont` panics with *unsupported eager self-recursive value: its initializer evaluates the member it defines* on a value whose initializer forces itself — an ordinary thing to write (a recursive grammar built point-free reaches it), and the right answer is a diagnostic naming the cause, not an assertion inside a lowering
+- [x] A self-referential value reports rather than asserts — the erased verifier refuses a computed `rec` member whose initializer evaluates itself, naming the path (`p evaluates p`; `a, through a call, evaluates b evaluates a`), and the lowering assertion that once met the shape went with the eager lowering it guarded
 - [x] Diagnostic terms printed with names in scope
 - [x] Bare written goals (`?`) report their local scope, expected type, and optional inferred solution
 - [x] Complete written-goal batches: one elaboration reports every reached goal, located by file, line, and column, tolerantly materialized, with operator witness projections folded back to infix and terms rendered within a fixed width through the printer's width-aware document layer _(labels and a typed incomplete checking outcome remain possible extensions)_

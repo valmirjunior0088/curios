@@ -406,7 +406,8 @@ fn instantiate<H: HostOps + Send + Sync + 'static>(
         Ok(_) => Ok(0),
         Err(error) => match error.downcast_ref::<ExitTrap>() {
             Some(ExitTrap(code)) => Ok(*code),
-            None => Err(format!("execution failed: {error}")),
+            // The trap is the root of the chain and the backtrace a context wrapped around it, so the error's own `Display` shows only the frames; the cause — `unreachable`, a null reference — is what a reader needs first.
+            None => Err(format!("execution failed: {}\n{error}", error.root_cause())),
         },
     }
 }

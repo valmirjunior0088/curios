@@ -390,9 +390,10 @@ impl Lowerer<'_> {
         let mut group: RecGroup = self.source.rec_group(group).expect("live group").clone();
 
         // Drop computed members never referenced outside their own initializer — nothing would ever force them, and a self-knot `rec loop = loop` is legal exactly because its initializer never runs.
-        group
-            .values
-            .retain(|member| self.member_used_outside_init(member.value, member.init));
+        group.values.retain(|member| {
+            self.source
+                .member_used_outside_init(member.value, member.init)
+        });
 
         if group.values.is_empty() {
             let functions = self.lower_function_group(&group.functions);
@@ -791,69 +792,6 @@ impl Lowerer<'_> {
             });
         }
         body
-    }
-
-    /// Whether `member` is referenced anywhere in the module outside its own initializer's subtree (control blocks and nested function regions included on both sides). An unreferenced member's init never runs.
-    fn member_used_outside_init(&self, member: ValueId, init: BlockId) -> bool {
-        // The init's own subtree: its blocks, plus the regions of functions bound inside it.
-        let mut inside_blocks = BTreeSet::new();
-        let mut inside_functions = BTreeSet::new();
-        let mut function_work: Vec<FunctionId> = Vec::new();
-        let mut block_work = vec![init];
-        loop {
-            if let Some(block) = block_work.pop() {
-                if !inside_blocks.insert(block) {
-                    continue;
-                }
-                let Some(block) = self.source.block(block) else {
-                    continue;
-                };
-                for &statement in &block.statements {
-                    match self.source.statement(statement) {
-                        Some(Statement::Let { rhs, .. }) => block_work.extend(rhs.sub_blocks()),
-                        Some(Statement::Functions { functions }) => {
-                            function_work.extend(functions.iter().copied());
-                        }
-                        Some(Statement::Rec { group }) => {
-                            if let Some(group) = self.source.rec_group(*group) {
-                                function_work.extend(group.functions.iter().copied());
-                                block_work.extend(group.values.iter().map(|m| m.init));
-                            }
-                        }
-                        None => {}
-                    }
-                }
-                continue;
-            }
-            let Some(function) = function_work.pop() else {
-                break;
-            };
-            if !inside_functions.insert(function) {
-                continue;
-            }
-            if let Some(function) = self.source.function(function) {
-                block_work.push(function.body);
-            }
-        }
-
-        // Any reference from a block outside the subtree is a use.
-        for (index, slot) in self.source.blocks().iter().enumerate() {
-            let Some(block) = slot else { continue };
-            if inside_blocks.contains(&BlockId(index as u32)) {
-                continue;
-            }
-            for &statement in &block.statements {
-                if let Some(Statement::Let { rhs, .. }) = self.source.statement(statement)
-                    && rhs.operands().contains(&Atom::Value(member))
-                {
-                    return true;
-                }
-            }
-            if block.terminator.atom() == Some(Atom::Value(member)) {
-                return true;
-            }
-        }
-        false
     }
 
     /// The knot members a block's eager region references directly — its statements' operands, its terminator, and the control sub-blocks reachable without entering a function body or a nested group's initializer, each of which forces its own members at its own entry.
