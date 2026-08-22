@@ -21,6 +21,7 @@ Each results file is a single-sitting snapshot with its own commentary:
 | [06 — The other column halved, and one commit did it](06_RESULTS.md) | 2026-08-17 |
 | [07 — Three columns arrived, and one of them is a wall](07_RESULTS.md) | 2026-08-18 |
 | [08 — The wall fell by three quarters, and only the wall](08_RESULTS.md) | 2026-08-20 |
+| [09 — Three columns fell together, and each was named before the run](09_RESULTS.md) | 2026-08-22 |
 
 ### Curios across runs
 
@@ -128,6 +129,15 @@ The workload and the execution setup are fixed across runs, but the *toolchains*
       <td align="right">0.67×</td>
       <td align="right">1.00×</td>
     </tr>
+    <tr>
+      <td>09</td>
+      <td align="right">293.6 ± 0.6</td>
+      <td align="right">0.66×</td>
+      <td align="right">1.00×</td>
+      <td align="right">293.0 ± 0.5</td>
+      <td align="right">0.66×</td>
+      <td align="right">0.99×</td>
+    </tr>
   </tbody>
 </table>
 
@@ -231,6 +241,15 @@ The workload and the execution setup are fixed across runs, but the *toolchains*
       <td align="right">0.36×</td>
       <td align="right">1.00×</td>
     </tr>
+    <tr>
+      <td>09</td>
+      <td align="right">100.6 ± 0.6</td>
+      <td align="right">0.32×</td>
+      <td align="right">0.87×</td>
+      <td align="right">100.9 ± 0.8</td>
+      <td align="right">0.31×</td>
+      <td align="right">0.88×</td>
+    </tr>
   </tbody>
 </table>
 
@@ -270,6 +289,15 @@ The workload and the execution setup are fixed across runs, but the *toolchains*
       <td align="right">132.9 ± 1.0</td>
       <td align="right">0.99×</td>
       <td align="right">0.99×</td>
+    </tr>
+    <tr>
+      <td>09</td>
+      <td align="right">69.5 ± 0.5</td>
+      <td align="right">0.52×</td>
+      <td align="right">0.52×</td>
+      <td align="right">69.2 ± 0.5</td>
+      <td align="right">0.51×</td>
+      <td align="right">0.52×</td>
     </tr>
   </tbody>
 </table>
@@ -311,6 +339,15 @@ The workload and the execution setup are fixed across runs, but the *toolchains*
       <td align="right">1.00×</td>
       <td align="right">1.00×</td>
     </tr>
+    <tr>
+      <td>09</td>
+      <td align="right">268.8 ± 0.8</td>
+      <td align="right">0.98×</td>
+      <td align="right">0.98×</td>
+      <td align="right">268.4 ± 0.2</td>
+      <td align="right">0.98×</td>
+      <td align="right">0.98×</td>
+    </tr>
   </tbody>
 </table>
 
@@ -350,6 +387,15 @@ The workload and the execution setup are fixed across runs, but the *toolchains*
       <td align="right">53.9 ± 0.6</td>
       <td align="right">0.26×</td>
       <td align="right">0.26×</td>
+    </tr>
+    <tr>
+      <td>09</td>
+      <td align="right">24.4 ± 0.4</td>
+      <td align="right">0.12×</td>
+      <td align="right">0.45×</td>
+      <td align="right">24.5 ± 0.5</td>
+      <td align="right">0.12×</td>
+      <td align="right">0.45×</td>
     </tr>
   </tbody>
 </table>
