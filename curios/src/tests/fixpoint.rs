@@ -1,6 +1,6 @@
-//! What the Cont fixpoint costs, pass by pass — the measurement `documentation/roadmap/technical_debts/03-cont-fixpoint-cost-spec.md` leans on.
+//! What the Cont fixpoint costs, pass by pass — the measurement behind the third of the compiler cliffs `documentation/roadmap.md` records, which is closed, and the one that says what is left of it.
 //!
-//! Behind the `profile` feature for the reason `churn` is: the per-pass spans and fired-samples `curios_cont::optimize` carries exist only there. It reports and does not assert, in the shape of `unfolding.rs`'s measurements, and it exists because that specification's headline figure was taken over "an ordinary `Toml/decode` compile" that nothing named — the census's driver is that program, and this is the probe that re-takes it.
+//! Behind the `profile` feature for the reason `churn` is: the per-pass spans and fired-samples `curios_cont::optimize` carries exist only there. It reports and does not assert, in the shape of `unfolding.rs`'s measurements, and it exists because the cliff's headline figure was first taken over "an ordinary `Toml/decode` compile" that nothing named — the census's driver is that program, and this is the probe that re-takes it.
 
 use {
     super::codegen::TOML_DRIVER,
