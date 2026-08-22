@@ -16,6 +16,7 @@ profile = [
     "curios-elab/profile",
     "curios-ersd/profile",
     "curios-cont/profile",
+    "curios-cert/profile",
 ]
 
 # Deliberately absent: `curios-prelude`. The driver folds stages over a scope of

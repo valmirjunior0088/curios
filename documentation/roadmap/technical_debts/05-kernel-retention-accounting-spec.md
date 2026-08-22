@@ -2,7 +2,7 @@
 
 ## Status
 
-Located and measured; the source found and its largest spring closed, the accounting question open. `curios`' `scrutinee_retention_measurements` is the probe, and `curios-core/src/retention.rs` already carries the ceiling's own measurement and the sentence this specification is the follow-through on: *"The open question is the source, not the ceiling."* The source, for the ladder below, was the closed machine substituting a global's *value* for its name at every beta — a function-valued global's definition inlined once per occurrence, so a web naming each definition twice produced a graph whose tree was `2^n`, which the unfold memo retained at the footprint of the tree. A bare name now stays a name, and the thirteen-definition proof retains **262 121** units where it retained 309 948 607. What remains is everything this document said about the allowance itself, and the elaborator's unattributed `Str` share.
+Located and measured; the source found and its largest spring closed, the accounting question open. `curios`' `scrutinee_retention_measurements` is the probe, and `curios-core/src/retention.rs` already carries the ceiling's own measurement and the sentence this specification is the follow-through on: *"The open question is the source, not the ceiling."* The source, for the ladder below, was the closed machine substituting a global's *value* for its name at every beta — a function-valued global's definition inlined once per occurrence, so a web naming each definition twice produced a graph whose tree was `2^n`, which the unfold memo retained at the footprint of the tree. A bare name now stays a name, and the thirteen-definition proof retains **262 121** units where it retained 309 948 607. The elaborator's `Str` share had its own source — its conversion stepping a folded scan one unfolding per round — and is closed with it, linear at about four units a character. What remains is everything this document said about the allowance itself.
 
 ## Why it exists
 
@@ -41,7 +41,7 @@ A step of fifty-fold on one more definition, then flat forever. It reproduced as
 
 ## Where the units go
 
-For the proved ladder, found: the machine's value-substituted reducts, whose `footprint` is the tree of a graph. The hypothesis below was right about the accounting and silent about what built the graph; the rest of this section is kept as it was written, because the `Str` share it ends on is still unattributed.
+For the proved ladder, found: the machine's value-substituted reducts, whose `footprint` is the tree of a graph. For the `Str` share this section ends on, also found, and different: the elaborator's conversion stepped the validity scan one unfolding per round and stored every step. The hypothesis below was right about the accounting and silent about what built the graph; the rest of this section is kept as it was written.
 
 Unexplained, and that is the first work item rather than a caveat. Nothing in the observed programs is large: peak process memory over the whole eighteen-definition compile was 25 MiB, against an allowance that at eight logical bytes a unit nominally bounds retained storage at eight gigabytes.
 

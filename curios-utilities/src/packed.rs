@@ -166,9 +166,22 @@ impl PackedBin {
 }
 
 impl PartialEq for PackedBin {
+    /// Equal bits, decided as cheaply as the representation allows.
+    ///
+    /// **Two windows of one buffer at one offset are the same bits**, so they are equal without a read — and that case is the one the closed machine asks about once per element of a packed walk: every step's tail is a window of the literal's buffer, and the run-scoped memo that keeps the walk linear probes a key holding it, which finds the key it stored and then has to confirm the two are equal. Confirming it bit by bit made a `Str` literal's check quadratic in wall clock where every counter said linear — 2.8 s of a 16 000-character literal's 2.9 s in the machine, 0.4 s with this arm — and `curios`' `str_literal_cost_measurements` carries the ladder.
+    ///
+    /// Two aligned windows compare as byte slices, which is the same answer at a word at a time; only an unaligned window pays the per-bit walk, and only against a buffer it does not share.
     fn eq(&self, other: &Self) -> bool {
-        self.bit_length == other.bit_length
-            && (0..self.bit_length).all(|index| self.bit(index) == other.bit(index))
+        if self.bit_length != other.bit_length {
+            return false;
+        }
+        if Arc::ptr_eq(&self.bytes, &other.bytes) && self.bit_offset == other.bit_offset {
+            return true;
+        }
+        match (self.as_bytes(), other.as_bytes()) {
+            (Some(left), Some(right)) => left == right,
+            _ => (0..self.bit_length).all(|index| self.bit(index) == other.bit(index)),
+        }
     }
 }
 impl Eq for PackedBin {}
@@ -233,6 +246,29 @@ mod tests {
                 assert_eq!(hash(&direct), hash(&window));
             }
         }
+    }
+
+    /// The three arms of equality answer alike: a window against itself, an aligned window against a fresh buffer of the same bytes, and an aligned window against an unaligned window of the same bits — and a window against the same buffer one offset over is unequal when the bits say so.
+    #[test]
+    fn equality_agrees_across_its_arms() {
+        let buffer = PackedBin::from_bytes(vec![0x61, 0x62, 0x63, 0x64, 0x61, 0x62]);
+        let tail = buffer.window(16, 32).unwrap();
+
+        assert_eq!(tail, buffer.window(16, 32).unwrap());
+        assert_eq!(tail, PackedBin::from_bytes(vec![0x63, 0x64, 0x61, 0x62]));
+        let framed = PackedBin::from_bits(
+            [true, false, false]
+                .into_iter()
+                .chain((0..32).map(|i| tail.bit(i).unwrap())),
+        );
+        assert_eq!(tail, framed.window(3, 32).unwrap());
+
+        assert_ne!(tail, buffer.window(8, 32).unwrap());
+        assert_ne!(tail, buffer.window(16, 24).unwrap());
+        assert_eq!(
+            buffer.window(0, 16).unwrap(),
+            buffer.window(32, 16).unwrap()
+        );
     }
 
     #[test]

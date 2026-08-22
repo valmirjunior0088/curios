@@ -820,6 +820,19 @@ impl Convert {
         Ok(true)
     }
 
+    /// The value a folded recursive application forces to, or the one-step unfolding when forcing reaches no value — `None` only when neither moves.
+    ///
+    /// Forcing first is what the kernel does on both sides of every comparison, and on a closed call it is one machine run. The fallback keeps what the one-step rule bought: a call restuck on a variable comes back folded from the force, and unfolding it once still lets the comparison meet a written body.
+    fn force_folded_call(context: &mut Context, apply: Apply) -> Result<Option<Term>, ReduceError> {
+        let folded: Term = Subterm::Apply(apply.clone()).into();
+        let forced = reduce_forced(context, folded.clone())?;
+        if forced != folded {
+            return Ok(Some(forced));
+        }
+
+        unfold_rec_apply(context, apply)
+    }
+
     fn compare_apply(
         &mut self,
         context: &mut Context,
@@ -2139,19 +2152,20 @@ impl Convert {
                         _ => self.compare_apply(context, this_a, that_a)?,
                     }
                 }
+                // A folded recursive call against anything that is not one is *forced* before it is compared, exactly as the kernel's conversion forces both sides: a closed scan then runs as one machine run rather than as one unfolding per round. Unfolding it a step at a time was where a `Str` literal's validity check went quadratic in retention and superlinear in wall clock — every round re-reduced the next folded spelling, whose argument carried the scan's state unreduced, one `step` deeper per character, and stored it. Forcing that makes no progress — a call restuck on a variable — takes the one-step unfold it always did, so a comparison against an unfolded body still meets it.
                 (Subterm::Apply(apply), other) if apply.head.as_rec_proj().is_some() => {
-                    match unfold_rec_apply(context, apply)? {
-                        Some(unfolded) => {
-                            self.enqueue(type_, unfolded, other.into());
+                    match Self::force_folded_call(context, apply)? {
+                        Some(forced) => {
+                            self.enqueue(type_, forced, other.into());
                             true
                         }
                         None => false,
                     }
                 }
                 (other, Subterm::Apply(apply)) if apply.head.as_rec_proj().is_some() => {
-                    match unfold_rec_apply(context, apply)? {
-                        Some(unfolded) => {
-                            self.enqueue(type_, other.into(), unfolded);
+                    match Self::force_folded_call(context, apply)? {
+                        Some(forced) => {
+                            self.enqueue(type_, other.into(), forced);
                             true
                         }
                         None => false,

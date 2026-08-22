@@ -595,6 +595,28 @@ fn cost_row(label: &str, source: &str) {
 ///
 /// # What it last printed
 ///
+/// Taken **2026-08-21**, **release**, on `x86_64-unknown-linux-gnu`, with the elaborator's conversion forcing a folded recursive call before comparing it, and a window comparing equal to itself by identity.
+///
+/// ```text
+///   program                      units   depth      other      retained       units   depth      other      retained  kernel/elab
+///   Str literal, n=250           16655       1      15631         36360       22363       6      16219        184567     1.3x
+///   Str literal, n=500           27905       1      26881         37445       28776       2      26728        185156     1.0x
+///   Str literal, n=1000          50405       1      49381         39615       51276       2      49228        186334     1.0x
+///   Str literal, n=2000          95405       1      94381         43990       96276       2      94228        188709     1.0x
+///   Str literal, n=4000         185405       1     184381         52740      186276       2     184228        193459     1.0x
+///   Str literal, n=8000         365405       1     364381         70240      366276       2     364228        202959     1.0x
+///   Str n=500, 1 uses            27905       1      26881         37936       28776       2      26728        185264     1.0x
+///   Str n=500, 3 uses            27905       1      26881         37936       28776       2      26728        185264     1.0x
+///   Bytes literal, n=500          8541       2       6493         21057       20502       6      14358        171068     2.4x
+///   Str n=500, sliced            27905       1      26881         32685       28776       2      26728        179063     1.0x
+/// ```
+///
+/// **The elaborator's retention is linear now** — 36K to 70K units across the ladder, about four a character, where it grew as 37·n² and saturated the quota near 5 200 characters — and **its units are the kernel's**: the `kernel/elab` column reads 1.0× at every size, where it read 0.3×. Both were one defect. The literal's proof is `of_scan_eq(b, refl_scan(b))`, and checking it asks conversion one question, `scan_from(lead, b) ≡ Scan/lead()`; the elaborator's conversion reduced the left at the *plain* demand — where a folded recursive call is its own normal form, as the machine's contract says — met the fold against a constructor, and unfolded it **one step per round**, each round storing a cache entry keyed on the next folded spelling with the scan's state unreduced in its argument, one `step` deeper per character. The kernel forces both sides of every comparison, which is one machine run. `Convert::force_folded_call` now does the same, falling back to the one-step unfold only when forcing reaches no value.
+///
+/// **Wall clock was superlinear where every counter was linear, and that was the representation.** Release, the bisection's rungs: 16K in 0.95 s, 32K in 2.15 s, 64K in 5.86 s, 128K in 18.3 s — where they were 5.7 s, 21 s, 82 s and about 250 s on this host. The whole of the difference was inside one `reduce_closed` run, and `PackedBin`'s equality was what it did per element: the run-scoped memo probes a key holding the current tail window and finds the key it stored, and confirming those equal walked the window bit by bit. A window of one buffer at one offset is the same bits, and `PartialEq` now says so without a read; aligned windows compare as byte slices beside it. What remains grows as about n^1.5 at the top of that ladder and is not a per-element walk — its shape is the run-scoped memo's size — and is left measured rather than chased.
+///
+/// # What it printed before conversion forced a folded call
+///
 /// Taken **2026-08-16**, **release**, on `x86_64-unknown-linux-gnu`, with the closed machine evaluating the scan. `depth` is the peak guarded reduction level; `other` is what the declaration spent on everything but the frame row. The first four columns are the elaborator's, the next four the kernel's. Units are machine-independent by construction, and a debug run of the same ladder reproduces every unit column exactly.
 ///
 /// ```text
@@ -623,11 +645,11 @@ fn cost_row(label: &str, source: &str) {
 ///
 /// **Wall clock is superlinear where units are exactly linear.** The bisection's rungs, release: 16K in 7.1 s, 32K in 22.6 s, 64K in 82.5 s, 128K in 249.5 s, 185K in 492.5 s — growth near n^1.8 against unit columns that are linear to the third digit. The unit model prices what a reduction builds and transitions, not the O(size) hashing of large keys the elaborator's caches perform; the excess wall shares a source with the retention residue below.
 ///
-/// # The retention residue, half resolved and half unattributed
+/// # The retention residue, as it stood before the forcing
 ///
 /// **The kernel's retention is flat across the ladder** — 184K to 203K units from n=250 to n=8000, where it was 3.2M rising quadratically to 774M and a quota cliff. The quadratic's recorded cause, the scan's unreduced accumulator chain, is gone with the machine's eager substitution, and the kernel's side went with it entirely.
 ///
-/// **The elaborator's did not, and the chain was therefore never most of its story.** Its retention still grows as roughly 37·n² units — about three-quarters of its pre-machine figure — and saturates [`DEFAULT_RETENTION_QUOTA`](curios_core::DEFAULT_RETENTION_QUOTA) near n ≈ 5 200. What the same table shows is that saturating costs this program nothing: the n=8000 row's units are linear on trend, so the refused entries were not ones this walk re-needed. The open question is the residue's source; the closed one is the cliff's consequence, which this ladder now bounds at nil for the literal itself.
+/// **The elaborator's did not, and the chain was therefore never most of its story.** Its retention still grew as roughly 37·n² units — about three-quarters of its pre-machine figure — and saturated [`DEFAULT_RETENTION_QUOTA`](curios_core::DEFAULT_RETENTION_QUOTA) near n ≈ 5 200. What the same table shows is that saturating cost this program nothing: the n=8000 row's units were linear on trend, so the refused entries were not ones this walk re-needed. The source was the conversion stepping above, and the section at the top is where it went.
 ///
 /// # What it printed before the closed machine
 ///
