@@ -57,17 +57,24 @@ impl Retention {
     /// Whether `cost` may be retained — spending it when it may, and leaving the allowance untouched when it may not.
     ///
     /// The verdict and the spend are one operation because they cannot be allowed to disagree: a caller that asked and then inserted anyway would be retaining storage this never counted, and a caller that spent and then declined would have paid for an entry nobody holds. A saturated cost is refused like any other charge that cannot be afforded.
+    ///
+    /// **Each verdict is sampled under `profile`**, admissions under `retention::retained` and refusals under `retention::refused`, each carrying its units — so a report's `count` is the entries a compilation kept or turned away and its `total` the units they came to, summed over every allowance the compilation holds, the elaborator's and the kernel's alike. This is where a crossed allowance becomes visible, and the only place it needs to: crossing changes no verdict and costs only warmth, so it is a fact for the measurement a figure is set against rather than a diagnostic, and a compilation that crossed it used to be distinguishable from one that had not by nothing but a fifty-fold step in a wall clock.
     pub fn admits(&mut self, cost: Cost) -> bool {
         if cost.is_refused() {
+            curios_profile::sample!("retention::refused", cost.get());
             return false;
         }
 
         match self.remaining.checked_sub(cost.get()) {
             Some(remaining) => {
                 self.remaining = remaining;
+                curios_profile::sample!("retention::retained", cost.get());
                 true
             }
-            None => false,
+            None => {
+                curios_profile::sample!("retention::refused", cost.get());
+                false
+            }
         }
     }
 
