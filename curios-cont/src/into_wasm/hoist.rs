@@ -305,6 +305,7 @@ fn rename_tail(tail: &mut EmissionTail, renames: &HashMap<EmissionValueName, Emi
         }
         EmissionTail::Host(EmissionHostTarget::Exit { code }) => rename_name(code, renames),
         EmissionTail::Cell(EmissionCellTarget::New { init, .. }) => rename_name(init, renames),
+        EmissionTail::Cell(EmissionCellTarget::Reserve { .. }) => {}
         EmissionTail::Cell(EmissionCellTarget::Set { cell, value, .. }) => {
             rename_name(cell, renames);
             rename_name(value, renames);

@@ -454,6 +454,8 @@ pub struct CpsEdge {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CpsCellOp {
     New,
+    /// A cell allocated *empty*, to be filled by a later `Set`: what ties a recursive knot, whose members' cells must exist before any initializer runs and hold nothing meaningful until their own has. Reading one before its fill traps, which is the point — a knot read out of order once computed with the placeholder `New` had been handed, and `Get`'s emission already refuses a null for free. Nothing a program writes mints one; only the erased lowering does.
+    Reserve,
     Set,
     Get,
 }
@@ -461,6 +463,7 @@ pub enum CpsCellOp {
 impl CpsCellOp {
     pub fn operand_arity(self) -> usize {
         match self {
+            Self::Reserve => 0,
             Self::New | Self::Get => 1,
             Self::Set => 2,
         }
@@ -468,7 +471,7 @@ impl CpsCellOp {
 
     pub fn result_arity(self) -> usize {
         match self {
-            Self::New | Self::Get => 1,
+            Self::New | Self::Reserve | Self::Get => 1,
             Self::Set => 0,
         }
     }

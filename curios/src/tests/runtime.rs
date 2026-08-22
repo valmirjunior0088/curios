@@ -873,6 +873,31 @@ fn a_stepper_a_fold_applies_inside_an_initializer_is_evaluated_by_it() {
     );
 }
 
+/// The read the verifier admits and cannot see: `p` is a parser over the later member `size`, dormant as built — and `n`'s initializer runs it at once through `Parse/run`, which applies `p`'s step as a *projected closure*, which no summary follows. A knot's cells are reserved empty rather than holding a placeholder, so that read traps — inside the parser's mapper, where `size` is read — where it once computed `1` in silence; the language's own answer is `42`, which by-need knots would give.
+#[test]
+fn a_member_read_through_a_closure_the_verifier_cannot_see_traps_rather_than_computing() {
+    let error = error(
+        r#"
+        use /std/{Nat, Str, Bytes, Byte, Io, Result, Parse, rand, print};
+        let main: Io({}) =
+            let bs = rand/bytes(1)!;
+            rec p: Parse(Nat) = Parse/map(Parse/any_byte, (b) => Byte/to_nat(b) + size)
+            and n: Nat =
+                match Parse/run(p, x[0x01])
+                | success(v) => v
+                | failure(_) => 0
+                end
+            and size: Nat = Bytes/len(bs) + 40;
+            print(Nat/to_str(n));
+        main
+        "#,
+    );
+    assert!(
+        error.contains("execution failed") && error.contains("/std/Parse/map"),
+        "the unfilled read must trap where the member is read: {error}"
+    );
+}
+
 #[test]
 fn a_collapsed_wrapper_survives_storage_and_retrieval() {
     // The collapsed encoding end to end, at rest — the case no call-pattern specializer reaches: single-constructor wrapper values stored in a `List` and read back, a two-payload constructor riding an untagged tuple, and a nullary one riding the `Nat` zero. Every payload is runtime-tainted through stdin so nothing folds at compile time, and the printed sum proves each value round-tripped through its collapsed representation.

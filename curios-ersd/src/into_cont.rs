@@ -473,7 +473,7 @@ impl Lowerer<'_> {
                 .add_node(curios_cont::CpsNode::LetFun { functions, body });
         }
 
-        // Allocate every cell first (a placeholder is never read before its store — the knot is productive), so the initializers' closures can already capture the cells they tie.
+        // Reserve every cell first, so the initializers' closures can already capture the cells they tie. Reserved empty rather than holding a placeholder: the verifier admits a read it cannot see — a closure over a later member handed to something that applies it at once — and an empty cell makes that read trap where a placeholder let it compute on.
         for &cell in cells.iter().rev() {
             let bound = self.module.reserve_continuation();
             self.module.define_continuation(
@@ -485,10 +485,8 @@ impl Lowerer<'_> {
                 },
             );
             let new = self.module.add_node(curios_cont::CpsNode::Cell {
-                op: curios_cont::CpsCellOp::New,
-                args: vec![curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(
-                    0,
-                ))],
+                op: curios_cont::CpsCellOp::Reserve,
+                args: Vec::new(),
                 return_to: bound,
             });
             body = self.module.add_node(curios_cont::CpsNode::LetCont {
@@ -499,7 +497,7 @@ impl Lowerer<'_> {
         body
     }
 
-    /// Run `build` with each member bound to a fresh local holding a read of its knot cell, wrapping the result so the reads happen at entry. A deferred closure re-reads its cell at its own entry rather than capturing a stale placeholder.
+    /// Run `build` with each member bound to a fresh local holding a read of its knot cell, wrapping the result so the reads happen at entry. A closure reads its cell at its own entry — after the knot is tied — rather than at its construction, when the cell is still empty.
     fn with_cell_reads(
         &mut self,
         members: Vec<ValueId>,

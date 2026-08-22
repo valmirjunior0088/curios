@@ -378,6 +378,7 @@ impl<'a> MachineFunctionBridge<'a> {
                 init: args[0].clone(),
                 resume,
             },
+            CpsCellOp::Reserve => EmissionCellTarget::Reserve { resume },
             CpsCellOp::Set => EmissionCellTarget::Set {
                 cell: args[0].clone(),
                 value: args[1].clone(),

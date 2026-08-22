@@ -819,6 +819,12 @@ impl<'a, 'b> Context<'a, 'b> {
                 });
                 self.host_single_resume(&mut output, resume);
             }
+            EmissionCellTarget::Reserve { resume } => {
+                output.push(curios_wasm::Instr::StructNewDefault {
+                    type_name: self.table().cell_type(),
+                });
+                self.host_single_resume(&mut output, resume);
+            }
             EmissionCellTarget::Set {
                 cell,
                 value,
@@ -842,7 +848,7 @@ impl<'a, 'b> Context<'a, 'b> {
                     type_name: self.table().cell_type(),
                     field_name: self.table().special_field(),
                 });
-                // The field is declared nullable, so its `struct.get` is typed `anyref` — and on the sentinel path this value *is* the function's `(ref any)` result. A cell never holds null (`New` takes an init and `Set` takes a value), so this coercion cannot trap; without it the module is ill-typed and only Binaryen's repair hid that.
+                // The field is declared nullable, so its `struct.get` is typed `anyref` — and on the sentinel path this value *is* the function's `(ref any)` result. `New` takes an init and `Set` takes a value, so the one null a cell can hold is a `Reserve`d knot member's before its initializer has stored it, and this coercion is where reading it traps — the loud end of a read the verifier could not see to refuse, where the placeholder it once held computed on in silence. Without the coercion the module is ill-typed besides, which only Binaryen's repair used to hide.
                 output.push(curios_wasm::Instr::RefAsNonNull);
                 self.host_single_resume(&mut output, resume);
             }

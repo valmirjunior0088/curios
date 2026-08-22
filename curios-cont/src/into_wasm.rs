@@ -173,6 +173,8 @@ pub(crate) enum EmissionCellTarget {
         init: EmissionValueName,
         resume: EmissionBlockName,
     },
+    /// An empty cell — its field null, which `Get` refuses — for a knot's member before its initializer has run.
+    Reserve { resume: EmissionBlockName },
     Set {
         cell: EmissionValueName,
         value: EmissionValueName,
@@ -188,6 +190,7 @@ impl EmissionCellTarget {
     pub(crate) fn resume(&self) -> &EmissionBlockName {
         match self {
             EmissionCellTarget::New { resume, .. }
+            | EmissionCellTarget::Reserve { resume }
             | EmissionCellTarget::Set { resume, .. }
             | EmissionCellTarget::Get { resume, .. } => resume,
         }
