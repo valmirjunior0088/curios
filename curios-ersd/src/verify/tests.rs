@@ -102,9 +102,9 @@ fn a_backward_computed_reference_verifies() {
         .expect("backward evaluation is supported");
 }
 
-/// A forward reference reached through a call is an evaluation, not a dormant reference: `rec { table = build(0); fn build(n) = n + size; size = 1 }` runs `build` inside `table`'s initializer, and `build` reads `size` before anything has stored it. The verifier once looked only at what the initializer read itself, and the lowered program computed with an unfilled cell — `1` where the language says `43`, on the `curios` probe that found it.
+/// A forward reference reached through a call is an evaluation, not a dormant reference: `rec { table = build(0); fn build(n) = n + size; size = 1 }` runs `build` inside `table`'s initializer, and `build` reads `size`. Forced by need, that is legal — reading `size` runs its initializer first — where it once read an unfilled cell (`1` where the language says `43`, on the `curios` probe that found it) and was then refused for a while.
 #[test]
-fn a_forward_reference_through_a_called_function_is_rejected() {
+fn a_forward_reference_through_a_called_function_is_forced_first() {
     let mut builder = ErsdBuilder::new();
     let build = builder.reserve_function();
     let table = builder.value(Some("table".into()));
@@ -140,13 +140,58 @@ fn a_forward_reference_through_a_called_function_is_rejected() {
     builder.open_block();
     let entry = builder.seal_block(Terminator::Return(Atom::Value(table)));
     builder.set_entry(entry);
-    let error = builder
+    builder
         .finalize()
-        .expect_err("the call evaluates `size` before its initialization");
-    assert!(error.0.contains("through a call to"), "{error}");
+        .expect("the read through the call forces `size` first");
 }
 
-/// The same knot with `size` ahead of `table` is the supported shape: the call reads a member already stored.
+/// The same knot closed into a cycle — `size = table` — is what no forcing can satisfy: `table`'s initializer evaluates `size` through `build`, and `size`'s evaluates `table`. The refusal names the path and the call.
+#[test]
+fn a_cycle_through_a_called_function_is_rejected() {
+    let mut builder = ErsdBuilder::new();
+    let build = builder.reserve_function();
+    let table = builder.value(Some("table".into()));
+    let size = builder.value(Some("size".into()));
+
+    let n = builder.value(Some("n".into()));
+    builder.open_block();
+    let sum = builder.let_value(
+        None,
+        Rhs::Operation {
+            operation: Operation::NatAdd,
+            operands: vec![Atom::Value(n), Atom::Value(size)],
+        },
+    );
+    let body = builder.seal_block(Terminator::Return(Atom::Value(sum)));
+    builder.define_function(build, Some("build".into()), vec![n], body);
+
+    builder.open_block();
+    let zero = nat_atom(&mut builder, 0);
+    let call = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Function(build),
+            arguments: vec![zero],
+        },
+    );
+    let init_table = builder.seal_block(Terminator::Return(Atom::Value(call)));
+    builder.open_block();
+    let init_size = builder.seal_block(Terminator::Return(Atom::Value(table)));
+    let group = builder.rec_group(vec![build], vec![(table, init_table), (size, init_size)]);
+    builder.item_rec(group);
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(table)));
+    builder.set_entry(entry);
+    let error = builder
+        .finalize()
+        .expect_err("`table` evaluates itself through `build` and `size`");
+    assert!(
+        error.0.contains("evaluate each other") && error.0.contains("through a call"),
+        "{error}"
+    );
+}
+
+/// The same knot with `size` ahead of `table`, which by need makes no difference to.
 #[test]
 fn a_backward_reference_through_a_called_function_verifies() {
     let mut builder = ErsdBuilder::new();
@@ -189,7 +234,7 @@ fn a_backward_reference_through_a_called_function_verifies() {
         .expect("a call reading an earlier member is supported");
 }
 
-/// The fold shape: `rec { table = each(step); fn step(n) = n + size; size = 1 }` where `each(f)` nests a `go` that captures `f` and applies it, and `step` reads `size`. The stepper is handed to a combinator rather than called, and the combinator applies it only through a capture two functions down — which the summary follows, because an applied capture names a value of the scope that binds it, and that scope is `each`'s parameter list.
+/// The fold shape: `rec { table = each(step); fn step(n) = n + table }` where `each(f)` nests a `go` that captures `f` and applies it, and `step` reads `table` — so `table`'s initializer evaluates `table`. The stepper is handed to a combinator rather than called, and the combinator applies it only through a capture two functions down — which the summary follows, because an applied capture names a value of the scope that binds it, and that scope is `each`'s parameter list.
 #[test]
 fn a_stepper_handed_to_a_combinator_that_applies_it_is_evaluated_by_the_initializer() {
     let mut builder = ErsdBuilder::new();
@@ -225,14 +270,14 @@ fn a_stepper_handed_to_a_combinator_that_applies_it_is_evaluated_by_the_initiali
     let each_body = builder.seal_block(Terminator::Return(Atom::Value(gone)));
     builder.define_function(each, Some("each".into()), vec![f], each_body);
 
-    // step(n) = n + size
+    // step(n) = n + table
     let n = builder.value(Some("n".into()));
     builder.open_block();
     let sum = builder.let_value(
         None,
         Rhs::Operation {
             operation: Operation::NatAdd,
-            operands: vec![Atom::Value(n), Atom::Value(size)],
+            operands: vec![Atom::Value(n), Atom::Value(table)],
         },
     );
     let step_body = builder.seal_block(Terminator::Return(Atom::Value(sum)));
@@ -258,11 +303,14 @@ fn a_stepper_handed_to_a_combinator_that_applies_it_is_evaluated_by_the_initiali
     builder.set_entry(entry);
     let error = builder
         .finalize()
-        .expect_err("the combinator applies the stepper, which evaluates `size`");
-    assert!(error.0.contains("through a call to"), "{error}");
+        .expect_err("the combinator applies the stepper, which evaluates `table`");
+    assert!(
+        error.0.contains("evaluate each other") && error.0.contains("through a call"),
+        "{error}"
+    );
 }
 
-/// The bind shape: the same stepper handed to a combinator that only *stores* it — `keep(f) = Box { f }` — stays dormant, which is what keeps a parser knot built over later members legal.
+/// The bind shape: a stepper over a sibling handed to a combinator that only *stores* it — `keep(f) = Box { f }` — stays dormant, which is what keeps a parser knot built over its own members legal.
 #[test]
 fn a_stepper_handed_to_a_combinator_that_stores_it_stays_dormant() {
     let mut builder = ErsdBuilder::new();
@@ -323,6 +371,25 @@ fn a_stepper_handed_to_a_combinator_that_stores_it_stays_dormant() {
         .expect("a stored stepper is dormant until something applies it");
 }
 
+/// An initializer performs no effect: forced by need it runs later than it is written, or never, and an exit — or a host call, or a cell — cannot be moved that way. It is refused where it is declared.
+#[test]
+fn an_initializer_that_performs_an_effect_is_rejected() {
+    let mut builder = ErsdBuilder::new();
+    let member = builder.value(Some("member".into()));
+    builder.open_block();
+    let zero = nat_atom(&mut builder, 0);
+    let init = builder.seal_block(Terminator::Exit(zero));
+    let group = builder.rec_group(vec![], vec![(member, init)]);
+    builder.item_rec(group);
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(member)));
+    builder.set_entry(entry);
+    let error = builder
+        .finalize()
+        .expect_err("an initializer that exits cannot be forced by need");
+    assert!(error.0.contains("performs an effect"), "{error}");
+}
+
 /// A computed-only evaluation cycle has no satisfiable initialization order.
 #[test]
 fn a_computed_only_cycle_is_rejected() {
@@ -339,7 +406,7 @@ fn a_computed_only_cycle_is_rejected() {
     let entry = builder.seal_block(Terminator::Return(Atom::Value(second)));
     builder.set_entry(entry);
     let error = builder.finalize().expect_err("the cycle cannot initialize");
-    assert!(error.0.contains("before its initialization"), "{error}");
+    assert!(error.0.contains("evaluate each other"), "{error}");
 }
 
 #[test]

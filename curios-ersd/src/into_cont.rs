@@ -44,7 +44,8 @@ fn lower_to_cont_within(source: &Module) -> curios_cont::CpsModule {
         module: curios_cont::CpsModule::new(),
         values: BTreeMap::new(),
         functions: BTreeMap::new(),
-        knot_cells: BTreeMap::new(),
+        knot_members: BTreeMap::new(),
+        knot_row: None,
         families: BTreeMap::new(),
         products: BTreeMap::new(),
         family_ids: BTreeMap::new(),
@@ -96,8 +97,10 @@ struct Lowerer<'a> {
     module: curios_cont::CpsModule,
     values: BTreeMap<ValueId, curios_cont::CpsAtom>,
     functions: BTreeMap<FunctionId, curios_cont::CpsFunId>,
-    /// Computed members of recursive knots, mapped to the mutable cell that ties each knot. A reference to such a member lowers to a read of the filled cell (see [`Lowerer::with_cell_reads`]), so the tie is forced once and is invisible to everything but this lowering.
-    knot_cells: BTreeMap<ValueId, curios_cont::CpsValueId>,
+    /// Computed members of recursive knots, mapped to the cell that ties each and the function that forces it. A reference to such a member lowers to a call of that function at the referencing region's entry (see [`Lowerer::with_cell_reads`]), so the member is computed on first use, once, and the tie is invisible to everything but this lowering.
+    knot_members: BTreeMap<ValueId, KnotMember>,
+    /// The row a knot cell holds — its state and, under it, the initializer still to run or the value it produced — minted once per module, the first time a knot is lowered.
+    knot_row: Option<curios_cont::CpsRowId>,
     /// The Cont layout of each tagged family, computed on first use. Only the tagged encodings register one: a collapsed family builds a bare value or a structural tuple, and an immediate family's bare constructor is a scalar, so neither has a family heap type to key.
     families: BTreeMap<FamilyId, RowLayout>,
     /// The Cont layout of each product schema, computed on first use.
@@ -114,6 +117,26 @@ struct Lowerer<'a> {
 struct RowLayout {
     width: usize,
     places: Vec<Vec<usize>>,
+}
+
+/// One computed member of a knot as the lowering ties it: the cell holding its state and the function that forces it.
+#[derive(Clone, Copy)]
+struct KnotMember {
+    cell: curios_cont::CpsValueId,
+    force: curios_cont::CpsFunId,
+}
+
+/// A knot cell's states, at the knot row's tag slot: the initializer still to run, the value it produced, and the initializer running — a read of which is a cycle.
+const UNFORCED: u32 = 0;
+const FORCED: u32 = 1;
+const FORCING: u32 = 2;
+
+/// An argumentless edge into a switch arm.
+fn edge(target: curios_cont::CpsContId) -> curios_cont::CpsEdge {
+    curios_cont::CpsEdge {
+        target,
+        args: Vec::new(),
+    }
 }
 
 /// Lay out one nominal row: a tag slot where the row carries one, then a slot range per carrier sized to the widest writer's count of it, and the slot each writer's fields land in.
@@ -337,7 +360,7 @@ impl Lowerer<'_> {
             .iter()
             .map(|&param| self.bind_value(param))
             .collect();
-        let members = if self.knot_cells.is_empty() {
+        let members = if self.knot_members.is_empty() {
             Vec::new()
         } else {
             self.block_member_refs(function.body)
@@ -366,20 +389,10 @@ impl Lowerer<'_> {
     ) -> curios_cont::CpsNodeId {
         let mut group: RecGroup = self.source.rec_group(group).expect("live group").clone();
 
-        // Drop computed members never referenced outside their own initializer — their init never runs, mirroring the legacy path's member pruning (which is what makes an unused self-knot `rec loop = loop` legal). A member that survives with a direct eager self-reference has no sound initialization order.
+        // Drop computed members never referenced outside their own initializer — nothing would ever force them, and a self-knot `rec loop = loop` is legal exactly because its initializer never runs.
         group
             .values
             .retain(|member| self.member_used_outside_init(member.value, member.init));
-        for member in &group.values {
-            let init = self.source.block(member.init).expect("live init block");
-            assert!(
-                !self
-                    .eager_value_refs(&init.statements, &init.terminator)
-                    .contains(&member.value),
-                "unsupported eager self-recursive value: its initializer \
-                 evaluates the member it defines"
-            );
-        }
 
         if group.values.is_empty() {
             let functions = self.lower_function_group(&group.functions);
@@ -392,9 +405,11 @@ impl Lowerer<'_> {
         self.lower_knot(&group, rest, terminator, target)
     }
 
-    /// Tie a recursive knot with compiler-internal cells: allocate a cell per computed member, bind the function members, run the initializers in source order (their closures capture the cells, not the values), store each result, and read the filled cells wherever a member is referenced. Source order is the eager-dependency order, because the verifier admits an initializer evaluating a computed member — directly, or through the functions it calls — only when that member is an earlier one; so no cell is read before its store, each member's value is built exactly once, and every reference observes that one value. The lowering once re-derived an order of its own from the direct references alone, and that narrower view put a member *after* the initializer that called a function reading it.
+    /// Tie a recursive knot by need. Every computed member gets a cell, reserved empty before anything else so the closures built below can capture it, and a *force* function: read the cell, and by its state hand the value back, run the initializer and store what it produced, or trap — the third state is the initializer already running, and a read inside it is a cycle no order satisfies. The initializers themselves become nullary functions stored unforced in their cells; the function members bind beside the force functions; and every reference to a member, wherever it stands, is a call of its force function at the referencing region's entry (see [`Lowerer::with_cell_reads`]).
     ///
-    /// Function members take the same cell reads at their own entry as any other function (see [`Lowerer::define_function`]), so a member that forward-references a computed value is served by the cell however it is reached — called directly, escaped as a closure, or copied by a later pass into a closure the initializers build. That uniformity is the point: a knot with function members once lowered to a `RecInit` node whose machine lowering patched *escaping member* closures at the ready point, and a closure born inside an initializer that merely *called* a member — `wrap((n) => helper(n))` beside `helper(n) = first(n)` — captured the computed value before it existed, which nothing below the CPS verifier's lexical scope rules could see.
+    /// Forcing on first use is what the language means by a recursive value and what the compile-time evaluator already did for a closed knot — `force_toplevel` treats a member as a CAF with a cycle guard — so the erased program now agrees with both on every forward reference, whatever the verifier can or cannot see through. The lowering once ran the initializers eagerly in an order it computed and later in source order, handing each a cell holding a placeholder and then nothing; a member read out of order computed with the placeholder, then trapped, and now computes what it should. What makes by need *sound* is the rule the verifier holds a knot to: an initializer performs no effect, so running it later, or not at all, is unobservable, and the only behaviours forcing can move are a trap and divergence, which it only delays.
+    ///
+    /// Function members take the same forcing reads at their own entry as any other function (see [`Lowerer::define_function`]), so a member that forward-references a computed value is served by the cell however it is reached — called directly, escaped as a closure, or copied by a later pass into a closure the initializers build. That uniformity is the point: a knot with function members once lowered to a `RecInit` node whose machine lowering patched *escaping member* closures at the ready point, and a closure born inside an initializer that merely *called* a member — `wrap((n) => helper(n))` beside `helper(n) = first(n)` — captured the computed value before it existed, which nothing below the CPS verifier's lexical scope rules could see.
     fn lower_knot(
         &mut self,
         group: &RecGroup,
@@ -402,30 +417,39 @@ impl Lowerer<'_> {
         terminator: &Terminator,
         target: curios_cont::CpsContId,
     ) -> curios_cont::CpsNodeId {
-        let cells: Vec<curios_cont::CpsValueId> = group
+        let row = self.knot_row();
+        let members: Vec<KnotMember> = group
             .values
             .iter()
             .map(|member| {
-                let cell = self.module.add_value(None);
-                self.knot_cells.insert(member.value, cell);
-                cell
+                let knot = KnotMember {
+                    cell: self.module.add_value(None),
+                    force: self.module.reserve_function(),
+                };
+                self.knot_members.insert(member.value, knot);
+                knot
             })
             .collect();
+        for (member, knot) in group.values.iter().zip(&members) {
+            self.define_force(row, *knot, self.arena_value_name(member.value));
+        }
 
-        // The cells are in the map before any member body is lowered, so a function member's reference to a computed sibling is a cell read at its entry.
+        // The members are in the map before any body below is lowered, so a reference to a computed sibling — from a function member, a thunk, or the rest — is a forcing read at its entry.
         let functions = self.lower_function_group(&group.functions);
+        let thunks: Vec<curios_cont::CpsFunId> = group
+            .values
+            .iter()
+            .map(|member| self.define_thunk(member.init, self.arena_value_name(member.value)))
+            .collect();
 
-        // Downstream reads the now-filled cells for the members it references.
+        // Downstream forces the members it references.
         let ready_members = self.eager_member_refs(rest, terminator);
         let mut body = self.with_cell_reads(ready_members, |lowerer| {
             lowerer.lower_statements(rest, terminator, target)
         });
 
-        // Initialize and store each member in source order, inside out.
-        for (position, member) in group.values.iter().enumerate().rev() {
-            let init = member.init;
-            let cell = cells[position];
-
+        // Store every thunk unforced, inside out. The cells exist and the thunks are bound, so no read can come between a reservation and its store.
+        for (knot, thunk) in members.iter().zip(&thunks).rev() {
             let after_store = self.module.reserve_continuation();
             self.module.define_continuation(
                 after_store,
@@ -435,12 +459,12 @@ impl Lowerer<'_> {
                     body,
                 },
             );
-            let value = self.module.add_value(None);
+            let unforced = self.module.add_value(None);
             let store = self.module.add_node(curios_cont::CpsNode::Cell {
                 op: curios_cont::CpsCellOp::Set,
                 args: vec![
-                    curios_cont::CpsAtom::Value(cell),
-                    curios_cont::CpsAtom::Value(value),
+                    curios_cont::CpsAtom::Value(knot.cell),
+                    curios_cont::CpsAtom::Value(unforced),
                 ],
                 return_to: after_store,
             });
@@ -448,56 +472,269 @@ impl Lowerer<'_> {
                 continuations: vec![after_store],
                 body: store,
             });
-            let receive = self.module.reserve_continuation();
-            self.module.define_continuation(
-                receive,
-                curios_cont::CpsContinuation {
-                    debug_name: None,
-                    params: vec![value],
-                    body: store,
-                },
-            );
-            let init_members = self.block_member_refs(init);
-            let entry =
-                self.with_cell_reads(init_members, |lowerer| lowerer.lower_block(init, receive));
-            body = self.module.add_node(curios_cont::CpsNode::LetCont {
-                continuations: vec![receive],
-                body: entry,
+            body = self.module.add_node(curios_cont::CpsNode::LetValue {
+                result: unforced,
+                value: curios_cont::CpsValueExpr::Row(
+                    row,
+                    vec![
+                        curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(UNFORCED)),
+                        curios_cont::CpsAtom::Fun(*thunk),
+                    ],
+                ),
+                next: store,
             });
         }
 
-        // The function members stand inside the cell bindings, so their bodies' cell reads are in scope, and outside the initializers, which may call them.
+        // Binding order, outside in: the cells; the force functions, which capture the cells; the function members, which call the force functions; the thunks, which call both.
+        body = self.module.add_node(curios_cont::CpsNode::LetFun {
+            functions: thunks,
+            body,
+        });
         if !functions.is_empty() {
             body = self
                 .module
                 .add_node(curios_cont::CpsNode::LetFun { functions, body });
         }
-
-        // Reserve every cell first, so the initializers' closures can already capture the cells they tie. Reserved empty rather than holding a placeholder: the verifier admits a read it cannot see — a closure over a later member handed to something that applies it at once — and an empty cell makes that read trap where a placeholder let it compute on.
-        for &cell in cells.iter().rev() {
+        body = self.module.add_node(curios_cont::CpsNode::LetFun {
+            functions: members.iter().map(|knot| knot.force).collect(),
+            body,
+        });
+        for knot in members.iter().rev() {
             let bound = self.module.reserve_continuation();
             self.module.define_continuation(
                 bound,
                 curios_cont::CpsContinuation {
                     debug_name: None,
-                    params: vec![cell],
+                    params: vec![knot.cell],
                     body,
                 },
             );
-            let new = self.module.add_node(curios_cont::CpsNode::Cell {
+            let reserve = self.module.add_node(curios_cont::CpsNode::Cell {
                 op: curios_cont::CpsCellOp::Reserve,
                 args: Vec::new(),
                 return_to: bound,
             });
             body = self.module.add_node(curios_cont::CpsNode::LetCont {
                 continuations: vec![bound],
-                body: new,
+                body: reserve,
             });
         }
         body
     }
 
-    /// Run `build` with each member bound to a fresh local holding a read of its knot cell, wrapping the result so the reads happen at entry. A closure reads its cell at its own entry — after the knot is tied — rather than at its construction, when the cell is still empty.
+    /// The row a knot cell holds: a state at slot zero, and under it the unforced initializer, the value it produced, or nothing while it runs.
+    fn knot_row(&mut self) -> curios_cont::CpsRowId {
+        if let Some(row) = self.knot_row {
+            return row;
+        }
+        let row = self.module.add_row(curios_cont::CpsRow {
+            debug_name: Some("knot".into()),
+            slots: vec![curios_cont::CpsSlot::Tag, curios_cont::CpsSlot::Opaque],
+        });
+        self.knot_row = Some(row);
+        row
+    }
+
+    /// A member's initializer as a nullary function: what its cell holds until something forces it. It takes its own forcing reads at entry, so the members it depends on are computed before it runs — which is the by-need order, found by running rather than computed ahead.
+    fn define_thunk(&mut self, init: BlockId, hint: Option<String>) -> curios_cont::CpsFunId {
+        let thunk = self.module.reserve_function();
+        let return_cont = self.module.reserve_continuation();
+        let init_members = self.block_member_refs(init);
+        let body = self.with_cell_reads(init_members, |lowerer| {
+            lowerer.lower_block(init, return_cont)
+        });
+        self.module.define_function(
+            thunk,
+            curios_cont::CpsFunction {
+                debug_name: hint.map(|hint| format!("{hint}/init")),
+                params: Vec::new(),
+                return_cont,
+                body,
+            },
+        );
+        thunk
+    }
+
+    /// The function that forces one member: read its cell, and by the state found there return the value, run the initializer, or trap on the cycle.
+    fn define_force(&mut self, row: curios_cont::CpsRowId, knot: KnotMember, hint: Option<String>) {
+        let return_cont = self.module.reserve_continuation();
+        let held = self.module.add_value(None);
+        let state = self.module.add_value(None);
+
+        // Forced: the value is under the state.
+        let value = self.module.add_value(None);
+        let forced = self.jump(return_cont, vec![curios_cont::CpsAtom::Value(value)]);
+        let forced = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
+            result: value,
+            op: curios_cont::CpsIntrinsic::RowGet(row, 1),
+            args: vec![curios_cont::CpsAtom::Value(held)],
+            next: forced,
+        });
+        let forced = self.continuation_of(forced);
+
+        // Forcing: a read inside the initializer, which no order could satisfy.
+        let forcing = self.module.add_node(curios_cont::CpsNode::Unreachable);
+        let forcing = self.continuation_of(forcing);
+
+        // Unforced: mark the cell, run the initializer, store what it produced, and return it.
+        let produced = self.module.add_value(None);
+        let after_store = self.module.reserve_continuation();
+        let returning = self.jump(return_cont, vec![curios_cont::CpsAtom::Value(produced)]);
+        self.module.define_continuation(
+            after_store,
+            curios_cont::CpsContinuation {
+                debug_name: None,
+                params: Vec::new(),
+                body: returning,
+            },
+        );
+        let stored = self.module.add_value(None);
+        let store = self.module.add_node(curios_cont::CpsNode::Cell {
+            op: curios_cont::CpsCellOp::Set,
+            args: vec![
+                curios_cont::CpsAtom::Value(knot.cell),
+                curios_cont::CpsAtom::Value(stored),
+            ],
+            return_to: after_store,
+        });
+        let store = self.module.add_node(curios_cont::CpsNode::LetCont {
+            continuations: vec![after_store],
+            body: store,
+        });
+        let store = self.module.add_node(curios_cont::CpsNode::LetValue {
+            result: stored,
+            value: curios_cont::CpsValueExpr::Row(
+                row,
+                vec![
+                    curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(FORCED)),
+                    curios_cont::CpsAtom::Value(produced),
+                ],
+            ),
+            next: store,
+        });
+        let receive = self.module.reserve_continuation();
+        self.module.define_continuation(
+            receive,
+            curios_cont::CpsContinuation {
+                debug_name: None,
+                params: vec![produced],
+                body: store,
+            },
+        );
+        let thunk = self.module.add_value(None);
+        let run = self.module.add_node(curios_cont::CpsNode::ApplyFun {
+            callee: curios_cont::CpsCallee::Closure(thunk),
+            args: Vec::new(),
+            return_to: receive,
+        });
+        let run = self.module.add_node(curios_cont::CpsNode::LetCont {
+            continuations: vec![receive],
+            body: run,
+        });
+        let after_mark = self.module.reserve_continuation();
+        self.module.define_continuation(
+            after_mark,
+            curios_cont::CpsContinuation {
+                debug_name: None,
+                params: Vec::new(),
+                body: run,
+            },
+        );
+        let mark = self.module.add_value(None);
+        let marking = self.module.add_node(curios_cont::CpsNode::Cell {
+            op: curios_cont::CpsCellOp::Set,
+            args: vec![
+                curios_cont::CpsAtom::Value(knot.cell),
+                curios_cont::CpsAtom::Value(mark),
+            ],
+            return_to: after_mark,
+        });
+        let marking = self.module.add_node(curios_cont::CpsNode::LetCont {
+            continuations: vec![after_mark],
+            body: marking,
+        });
+        let marking = self.module.add_node(curios_cont::CpsNode::LetValue {
+            result: mark,
+            value: curios_cont::CpsValueExpr::Row(
+                row,
+                vec![
+                    curios_cont::CpsAtom::Literal(curios_cont::CpsLiteral::Nat(FORCING)),
+                    curios_cont::CpsAtom::Filler,
+                ],
+            ),
+            next: marking,
+        });
+        let unforced = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
+            result: thunk,
+            op: curios_cont::CpsIntrinsic::RowGet(row, 1),
+            args: vec![curios_cont::CpsAtom::Value(held)],
+            next: marking,
+        });
+        let unforced = self.continuation_of(unforced);
+
+        let switch = self.module.add_node(curios_cont::CpsNode::Switch {
+            scrutinee: curios_cont::CpsAtom::Value(state),
+            cases: BTreeMap::from([
+                (UNFORCED, edge(unforced)),
+                (FORCED, edge(forced)),
+                (FORCING, edge(forcing)),
+            ]),
+            default: None,
+        });
+        let switch = self.module.add_node(curios_cont::CpsNode::LetCont {
+            continuations: vec![unforced, forced, forcing],
+            body: switch,
+        });
+        let read = self.module.add_node(curios_cont::CpsNode::LetIntrinsic {
+            result: state,
+            op: curios_cont::CpsIntrinsic::RowGet(row, 0),
+            args: vec![curios_cont::CpsAtom::Value(held)],
+            next: switch,
+        });
+        let got = self.module.reserve_continuation();
+        self.module.define_continuation(
+            got,
+            curios_cont::CpsContinuation {
+                debug_name: None,
+                params: vec![held],
+                body: read,
+            },
+        );
+        let get = self.module.add_node(curios_cont::CpsNode::Cell {
+            op: curios_cont::CpsCellOp::Get,
+            args: vec![curios_cont::CpsAtom::Value(knot.cell)],
+            return_to: got,
+        });
+        let body = self.module.add_node(curios_cont::CpsNode::LetCont {
+            continuations: vec![got],
+            body: get,
+        });
+        self.module.define_function(
+            knot.force,
+            curios_cont::CpsFunction {
+                debug_name: hint.map(|hint| format!("{hint}/force")),
+                params: Vec::new(),
+                return_cont,
+                body,
+            },
+        );
+    }
+
+    /// A parameterless continuation over `body`, for a switch arm.
+    fn continuation_of(&mut self, body: curios_cont::CpsNodeId) -> curios_cont::CpsContId {
+        let continuation = self.module.reserve_continuation();
+        self.module.define_continuation(
+            continuation,
+            curios_cont::CpsContinuation {
+                debug_name: None,
+                params: Vec::new(),
+                body,
+            },
+        );
+        continuation
+    }
+
+    /// Run `build` with each member bound to a fresh local holding its forced value, wrapping the result so the forcing happens at entry. A closure forces at its own entry — when it runs — rather than at its construction, which may be inside the initializer of the very member it names.
     fn with_cell_reads(
         &mut self,
         members: Vec<ValueId>,
@@ -509,17 +746,17 @@ impl Lowerer<'_> {
         let reads: Vec<(
             ValueId,
             curios_cont::CpsValueId,
-            curios_cont::CpsValueId,
+            curios_cont::CpsFunId,
             Option<curios_cont::CpsAtom>,
         )> = members
             .into_iter()
             .map(|member| {
-                let cell = self.knot_cells[&member];
+                let force = self.knot_members[&member].force;
                 let local = self.module.add_value(self.arena_value_name(member));
                 let previous = self
                     .values
                     .insert(member, curios_cont::CpsAtom::Value(local));
-                (member, local, cell, previous)
+                (member, local, force, previous)
             })
             .collect();
         let mut body = build(self);
@@ -533,7 +770,7 @@ impl Lowerer<'_> {
                 }
             }
         }
-        for &(_, local, cell, _) in reads.iter().rev() {
+        for &(_, local, force, _) in reads.iter().rev() {
             let resume = self.module.reserve_continuation();
             self.module.define_continuation(
                 resume,
@@ -543,14 +780,14 @@ impl Lowerer<'_> {
                     body,
                 },
             );
-            let get = self.module.add_node(curios_cont::CpsNode::Cell {
-                op: curios_cont::CpsCellOp::Get,
-                args: vec![curios_cont::CpsAtom::Value(cell)],
+            let forcing = self.module.add_node(curios_cont::CpsNode::ApplyFun {
+                callee: curios_cont::CpsCallee::Known(force),
+                args: Vec::new(),
                 return_to: resume,
             });
             body = self.module.add_node(curios_cont::CpsNode::LetCont {
                 continuations: vec![resume],
-                body: get,
+                body: forcing,
             });
         }
         body
@@ -619,7 +856,7 @@ impl Lowerer<'_> {
         false
     }
 
-    /// The knot members a block's eager region references directly — its statements' operands, its terminator, and the control sub-blocks and nested-group initializers reachable without entering a function body (a nested function takes its own reads).
+    /// The knot members a block's eager region references directly — its statements' operands, its terminator, and the control sub-blocks reachable without entering a function body or a nested group's initializer, each of which forces its own members at its own entry.
     fn block_member_refs(&self, block: BlockId) -> Vec<ValueId> {
         match self.source.block(block) {
             Some(block) => self.eager_member_refs(&block.statements, &block.terminator),
@@ -634,14 +871,14 @@ impl Lowerer<'_> {
     ) -> Vec<ValueId> {
         let mut refs = BTreeSet::new();
         for value in self.eager_value_refs(statements, terminator) {
-            if self.knot_cells.contains_key(&value) {
+            if self.knot_members.contains_key(&value) {
                 refs.insert(value);
             }
         }
         refs.into_iter().collect()
     }
 
-    /// Every value referenced across an eager region rooted at `statements` and closed by `terminator`, descending through control sub-blocks and nested-group initializers but never into a function body.
+    /// Every value referenced across an eager region rooted at `statements` and closed by `terminator`, descending through control sub-blocks but never into a function body or a nested group's initializer — a thunk, like a function, takes its own reads at its entry, and forcing an outer member because a nested initializer names it would force it before the nested member is ever read, which is a cycle by need never meets.
     fn eager_value_refs(
         &self,
         statements: &[StatementId],
@@ -665,13 +902,7 @@ impl Lowerer<'_> {
                         }
                         blocks.extend(rhs.sub_blocks());
                     }
-                    // A nested group's computed initializers are eager; its functions take their own reads when defined.
-                    Some(Statement::Rec { group }) => {
-                        if let Some(group) = self.source.rec_group(*group) {
-                            blocks.extend(group.values.iter().map(|member| member.init));
-                        }
-                    }
-                    Some(Statement::Functions { .. }) | None => {}
+                    Some(Statement::Rec { .. } | Statement::Functions { .. }) | None => {}
                 }
                 continue;
             }

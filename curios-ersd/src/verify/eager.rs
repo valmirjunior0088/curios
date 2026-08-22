@@ -1,48 +1,132 @@
-//! What an initializer evaluates through the functions it applies — the half of recursion admission that looks through a call.
+//! What an initializer evaluates, and what it performs — the two rules a knot forced by need rests on.
 //!
-//! An initializer that applies a function directly evaluates that function's body before its own result exists, so a computed member the body reads is evaluated by the initializer, and so is one read by a function the body applies, and so on. Each function reachable that way is summarized once, to a fixed point, as what its eager region *reads* and which *values* it applies. An applied value that is one of the function's own parameters names the argument a caller hands there; one the function captures names a value of the scope that binds it, and propagates up to that scope. That is what makes a higher-order combinator legible: `List/fold(xs, zero, step)` applies its `step` — through the `go` it nests, which captures `step` and applies it — so a function atom handed there contributes its reads to the initializer, while `Parse/bind(p, f)` only stores `f` inside the parser it builds, so the same atom there contributes nothing. That is the line between the corpus's parser knots and the eager fold that once read an unfilled cell.
+//! A member is computed the first time something reads it, so the order members are written in decides nothing; what no forcing can satisfy is an initializer that evaluates *itself*, directly or through the functions it applies, which is a cycle in the graph of what each initializer reads. And forcing later, or never, is unobservable only if an initializer performs no effect, so one that reaches a host call, a cell, or an exit is refused — a trap or divergence it only delays, which is what by need means, and those are admitted. Both facts are read the same way: an initializer that applies a function directly evaluates that function's body, so what the body reads and performs is the initializer's, and so is what a function the body applies reads and performs, and so on. Each function reachable that way is summarized once, to a fixed point, as what its eager region *reads*, what it *performs*, and which *values* it applies. An applied value that is one of the function's own parameters names the argument a caller hands there; one the function captures names a value of the scope that binds it, and propagates up to that scope. That is what makes a higher-order combinator legible: `List/fold(xs, zero, step)` applies its `step` — through the `go` it nests, which captures `step` and applies it — so a function atom handed there contributes its reads to the initializer, while `Parse/bind(p, f)` only stores `f` inside the parser it builds, so the same atom there contributes nothing. That is the line between the corpus's parser knots and a fold over a member that reads itself.
 //!
-//! What the summary cannot see, it treats as dormant — the same line [`check_atom_at`](super::Verifier::check_atom_at) draws for a function the initializer merely constructs. A callee bound in its own region by anything but an alias is a closure whose function is unknown: a projected field, a returned closure, a cell's contents. Before optimization every `!` is one — `Monad/bind(witness)` projects the method and the initializer applies it — so refusing the opaque case would refuse every monadic initializer in `/std`, and admitting it is what keeps a parser knot legal. The gap that leaves is an initializer applying such a closure *at once* over a later member, `Parse/run(p, input)` with `p` built over one; closing it needs flow through products and returns, which is a closure analysis this is not. Reads carry the callee they were composed through, so a refusal names the call that evaluates the member.
+//! What the summary cannot see, it treats as dormant — the same line [`check_atom_at`](super::Verifier::check_atom_at) draws for a function the initializer merely constructs. A callee bound in its own region by anything but an alias is a closure whose function is unknown: a projected field, a returned closure, a cell's contents. Before optimization every `!` is one — `Monad/bind(witness)` projects the method and the initializer applies it — so refusing the opaque case would refuse every monadic initializer in `/std`, and admitting it is what keeps a parser knot legal. The gap that leaves is a cycle or an effect reached only through such a closure — `Parse/run(p, input)` with `p` built over the member being initialized — which forcing then meets at runtime, as the trap on a member read while its own initializer runs; closing it needs flow through products and returns, which is a closure analysis this is not. Reads and effects carry the callee they were composed through, so a refusal names the call.
 
 use {
     super::{
         Atom, BlockId, FunctionId, Intrinsic, Module, Rhs, Statement, ValueId, VerifyError,
         spell_function, spell_value,
     },
-    crate::RecValue,
+    crate::{LocalBehavior, RecValue, Semantics},
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// What evaluating a region does to a knot under construction: the values it reads — its own operands, and those of everything it applies, each composed read tagged with the callee it came through — and the values it applies that it does not bind itself: its parameters, or values it captures.
+/// What evaluating a region does to a knot under construction: the values it reads — its own operands, and those of everything it applies, each composed read tagged with the callee it came through — the effect it performs, if any, tagged the same way, and the values it applies that it does not bind itself: its parameters, or values it captures.
 #[derive(Clone, PartialEq, Eq, Default)]
 struct Evaluation {
     direct: BTreeSet<ValueId>,
     composed: BTreeMap<ValueId, FunctionId>,
+    effect: Option<Option<FunctionId>>,
     applies: BTreeSet<ValueId>,
 }
 
-/// Check every computed member's initializer of one group against what it evaluates through calls.
+/// Whether a behaviour is one forcing cannot move: a host call, a cell read or write, or an exit. A trap and divergence are only delayed by forcing later, and never happen if nothing forces — which is what the language means by a recursive value.
+fn performs(behavior: &LocalBehavior) -> bool {
+    let observable = behavior.observable;
+    observable.host_effect || observable.state_read || observable.state_write || observable.may_exit
+}
+
+/// Check one group's computed members: no initializer evaluates itself, and none performs an effect.
 pub(super) fn check_group(module: &Module, values: &[RecValue]) -> Result<(), VerifyError> {
     let computed: Vec<ValueId> = values.iter().map(|member| member.value).collect();
     let mut summaries = Summaries::default();
-    for (index, member) in values.iter().enumerate() {
+    // Each member's evaluation edges to the members it reads, with the callee a read came through.
+    let mut evaluates: Vec<BTreeMap<usize, Option<FunctionId>>> = Vec::with_capacity(values.len());
+    for member in values {
         let evaluation = summaries.settled_region(module, member.init);
-        // The initializer's own reads are `check_atom_at`'s to judge, with its self-knot exemption; a read through a call runs the callee to completion inside the initializer, so the member itself is as unsatisfiable as a later one.
+        if let Some(through) = evaluation.effect {
+            return Err(VerifyError(format!(
+                "the initializer of computed group member {} performs an effect{}, which \
+                 forcing it by need could not keep in its place",
+                spell_value(module, member.value),
+                match through {
+                    Some(callee) =>
+                        format!(" through a call to {}", spell_function(module, callee)),
+                    None => String::new(),
+                }
+            )));
+        }
+        let mut edges = BTreeMap::new();
         for (value, callee) in evaluation.composed {
-            if let Some(position) = computed.iter().position(|&member| member == value)
-                && position >= index
-            {
-                return Err(VerifyError(format!(
-                    "the initializer of computed group member {} evaluates {} before its \
-                     initialization, through a call to {}",
-                    spell_value(module, member.value),
-                    spell_value(module, value),
-                    spell_function(module, callee)
-                )));
+            if let Some(position) = computed.iter().position(|&member| member == value) {
+                edges.entry(position).or_insert(Some(callee));
             }
+        }
+        // A direct self-reference is the language's `rec loop = loop`: admitted, dropped when unused, and a trap on the cycle when forced. Every other direct read is an edge.
+        for value in evaluation.direct {
+            if let Some(position) = computed.iter().position(|&member| member == value)
+                && computed[position] != member.value
+            {
+                edges.entry(position).or_insert(None);
+            }
+        }
+        evaluates.push(edges);
+    }
+
+    // A cycle in that graph is an initializer evaluating itself: refuse it, naming the path.
+    let mut state = vec![Visit::Unseen; values.len()];
+    let mut path = Vec::new();
+    for start in 0..values.len() {
+        if let Some(cycle) = cycle_from(start, &evaluates, &mut state, &mut path) {
+            let mut spelled = String::new();
+            for window in cycle.windows(2) {
+                let (from, to) = (window[0], window[1]);
+                spelled.push_str(&spell_value(module, computed[from]));
+                spelled.push_str(match evaluates[from][&to] {
+                    Some(_) => ", through a call, evaluates ",
+                    None => " evaluates ",
+                });
+            }
+            spelled.push_str(&spell_value(module, computed[*cycle.last().unwrap()]));
+            return Err(VerifyError(format!(
+                "computed group members evaluate each other, which no forcing order can \
+                 satisfy: {spelled}"
+            )));
         }
     }
     Ok(())
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Visit {
+    Unseen,
+    Open,
+    Done,
+}
+
+/// Depth-first from `start`; on a back edge, the cycle as the path from its target back round to it.
+fn cycle_from(
+    start: usize,
+    evaluates: &[BTreeMap<usize, Option<FunctionId>>],
+    state: &mut [Visit],
+    path: &mut Vec<usize>,
+) -> Option<Vec<usize>> {
+    if state[start] == Visit::Done {
+        return None;
+    }
+    state[start] = Visit::Open;
+    path.push(start);
+    for &next in evaluates[start].keys() {
+        match state[next] {
+            Visit::Open => {
+                let from = path.iter().position(|&member| member == next).unwrap();
+                let mut cycle = path[from..].to_vec();
+                cycle.push(next);
+                return Some(cycle);
+            }
+            Visit::Unseen => {
+                if let Some(cycle) = cycle_from(next, evaluates, state, path) {
+                    return Some(cycle);
+                }
+            }
+            Visit::Done => {}
+        }
+    }
+    path.pop();
+    state[start] = Visit::Done;
+    None
 }
 
 /// Per-function summaries over the functions some initializer reaches, settled together: a function enters at the bottom the first time a region applies it, and every entered function is re-summarized from the others until none changes. The lattice is finite — reads and applied values over the module's values — and re-summarizing only grows a summary, so the settling terminates. Settling the set as a whole, rather than each function on entry, is what makes mutual recursion sound: a callee summarized against its caller's seed alone would never see the caller's settled reads.
@@ -53,11 +137,13 @@ struct Summaries {
     version: usize,
 }
 
-/// One region being evaluated: what it binds, the atoms its aliases name, and the functions already composed into it — composing one is idempotent, so a function reached twice, or reaching itself through a capture, is composed once.
+/// One region being evaluated: what it binds, the atoms its aliases name, the nested members a read would force, and the functions already composed into it — composing one is idempotent, so a function reached twice, or reaching itself through a capture, is composed once.
 struct Scope<'a> {
     params: &'a [ValueId],
     bound: BTreeSet<ValueId>,
     aliases: BTreeMap<ValueId, Atom>,
+    /// A nested group's computed members not yet read here, each with the initializer a read would force.
+    nested: BTreeMap<ValueId, BlockId>,
     evaluated: BTreeSet<FunctionId>,
 }
 
@@ -132,6 +218,7 @@ impl Summaries {
             params,
             bound: BTreeSet::new(),
             aliases: BTreeMap::new(),
+            nested: BTreeMap::new(),
             evaluated: BTreeSet::new(),
         };
         let mut blocks = vec![block];
@@ -151,17 +238,24 @@ impl Summaries {
                         for atom in rhs.operands() {
                             if let Atom::Value(value) = atom {
                                 evaluation.direct.insert(value);
+                                if let Some(init) = scope.nested.remove(&value) {
+                                    blocks.push(init);
+                                }
                             }
+                        }
+                        if performs(&Semantics::local_behavior(rhs)) {
+                            evaluation.effect.get_or_insert(None);
                         }
                         self.application(module, rhs, &mut scope, &mut evaluation);
                         blocks.extend(rhs.sub_blocks());
                     }
+                    // A nested group's members are forced by need like the outer one's: an initializer is read into this region the first time the region reads its member, not merely because the group is bound here.
                     Some(Statement::Rec { group }) => {
                         if let Some(group) = module.rec_group(*group) {
-                            scope
-                                .bound
-                                .extend(group.values.iter().map(|member| member.value));
-                            blocks.extend(group.values.iter().map(|member| member.init));
+                            for member in &group.values {
+                                scope.bound.insert(member.value);
+                                scope.nested.insert(member.value, member.init);
+                            }
                         }
                     }
                     Some(Statement::Functions { .. }) | None => {}
@@ -169,6 +263,12 @@ impl Summaries {
             }
             if let Some(Atom::Value(value)) = block.terminator.atom() {
                 evaluation.direct.insert(value);
+                if let Some(init) = scope.nested.remove(&value) {
+                    blocks.push(init);
+                }
+            }
+            if Semantics::terminator(&block.terminator).may_exit {
+                evaluation.effect.get_or_insert(None);
             }
         }
         evaluation
@@ -244,6 +344,9 @@ impl Summaries {
         let summary = self.function(function);
         for &value in summary.direct.iter().chain(summary.composed.keys()) {
             evaluation.composed.entry(value).or_insert(function);
+        }
+        if summary.effect.is_some() {
+            evaluation.effect.get_or_insert(Some(function));
         }
         let params = module
             .function(function)

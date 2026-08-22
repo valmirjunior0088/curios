@@ -67,23 +67,16 @@ impl Summary {
             .join(region_behavior(module, rhs.sub_blocks(), &self.functions))
     }
 
-    /// The total behavior of executing a statement: a `Let` evaluates its right-hand side; binding functions performs nothing (dormancy); a recursive group eagerly evaluates its computed initializers.
+    /// The total behavior of executing a statement: a `Let` evaluates its right-hand side; binding functions performs nothing (dormancy), and so does binding a recursive group, whose computed members are forced by need — an initializer runs when something reads its member, and the verifier holds it to performing no effect, so what it can contribute then is a trap or divergence the language does not owe a program that never forces it.
     pub fn statement_behavior(&self, module: &Module, statement: &Statement) -> LocalBehavior {
         match statement {
             Statement::Let { rhs, .. } => self.rhs_behavior(module, rhs),
-            Statement::Functions { .. } => LocalBehavior::pure(),
-            Statement::Rec { group } => {
-                let inits = module
-                    .rec_group(*group)
-                    .map(|group| group.values.iter().map(|member| member.init).collect())
-                    .unwrap_or_default();
-                region_behavior(module, inits, &self.functions)
-            }
+            Statement::Functions { .. } | Statement::Rec { .. } => LocalBehavior::pure(),
         }
     }
 }
 
-/// The joined behavior of every block reachable from `seeds` through control flow and eager initializers — never through a nested function body, whose behavior is composed only at its calls.
+/// The joined behavior of every block reachable from `seeds` through control flow — never through a nested function body, whose behavior is composed only at its calls, nor a nested group's initializers, which are forced by need.
 fn region_behavior(
     module: &Module,
     seeds: Vec<BlockId>,
@@ -107,12 +100,7 @@ fn region_behavior(
                         .join(call_behavior(rhs, summaries));
                     work.extend(rhs.sub_blocks());
                 }
-                Some(Statement::Rec { group }) => {
-                    if let Some(group) = module.rec_group(*group) {
-                        work.extend(group.values.iter().map(|member| member.init));
-                    }
-                }
-                Some(Statement::Functions { .. }) | None => {}
+                Some(Statement::Rec { .. } | Statement::Functions { .. }) | None => {}
             }
         }
         behavior.observable = behavior

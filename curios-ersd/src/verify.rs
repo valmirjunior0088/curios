@@ -2,7 +2,7 @@
 //!
 //! Structural rules: every referenced identity resolves to a live slot of its kind; every value use is dominated by its unique binding in the lexical scope structure; every live block, statement, value, function, and recursive group has exactly one structural owner (an unowned or doubly owned one is an error, which also rejects ownership cycles); operand counts agree with each operation's own arity; products, constructors, and matches agree with their registered schemas; matches are exhaustive or defaulted.
 //!
-//! Recursion admission mirrors the language: recursion through functions is unrestricted, and a group's computed member may *evaluate* only earlier computed members — a reference from inside a function body constructed during initialization is dormant and unrestricted, while a function the initializer *calls* directly is evaluated then and there, so what its body reads is held to the same rule — and so is what a function it hands to that call reads, when the callee applies it, which [`eager`] decides by summarizing what each reachable function applies. What the summary cannot see through stays dormant; its module states the limit. That single rule admits the corpus's value-recursion idioms (a `join_all`-shaped knot whose initializer calls a group function, a value-only self-referential lazy value whose knot closes through a constructed closure) while rejecting exactly the computed-only *evaluation* cycles no initialization order can satisfy. Every rule is corpus-certified: a rule that rejects a supported program is a bug in the rule.
+//! Recursion admission mirrors the language: recursion through functions is unrestricted, and a group's computed members are forced by need, so a member may reference any other, in any order — what no order can satisfy is an *evaluation cycle*, an initializer that evaluates itself directly or through the functions it applies, and [`eager`] refuses that by summarizing what each reachable function reads and applies. A reference from inside a function body constructed during initialization is dormant; what the summary cannot see through stays dormant too, and its module states the limit. The other rule by need rests on is purity: an initializer performs no effect, so forcing it later, or never, is unobservable — [`eager`] holds it to that as well. Together these admit the corpus's value-recursion idioms (a `join_all`-shaped knot whose initializer calls a group function, a value-only self-referential lazy value whose knot closes through a constructed closure, a parser built over a member declared after it) while refusing exactly what forcing could not make right. Every rule is corpus-certified: a rule that rejects a supported program is a bug in the rule.
 //!
 //! The walk recurses over the module's block structure inside [`recurse`], so a deep module diagnoses on the default test-thread stack instead of overflowing it. It used to drive an explicit task stack, which reified three things the call stack already provides — sibling ordering, scope entry and exit, and unwinding — into a `Task` enum, a reversing `push_sequence`, and a driver loop that abandoned its pending work on the error path.
 
@@ -41,15 +41,6 @@ impl Module {
     }
 }
 
-/// The recursion-admission context of a group's eager initializers: its computed members in order, the index currently being initialized, and the function depth at entry (a use at a greater depth is dormant).
-///
-/// One per group rather than one per member, since only `limit` moves between them.
-struct InitContext {
-    computed: Vec<ValueId>,
-    limit: usize,
-    function_depth: usize,
-}
-
 struct Verifier<'m> {
     module: &'m Module,
     values_in_scope: HashSet<ValueId>,
@@ -59,8 +50,6 @@ struct Verifier<'m> {
     visited_blocks: HashSet<BlockId>,
     visited_statements: HashSet<StatementId>,
     visited_groups: HashSet<RecGroupId>,
-    init_contexts: Vec<InitContext>,
-    function_depth: usize,
 }
 
 impl<'m> Verifier<'m> {
@@ -74,8 +63,6 @@ impl<'m> Verifier<'m> {
             visited_blocks: HashSet::new(),
             visited_statements: HashSet::new(),
             visited_groups: HashSet::new(),
-            init_contexts: Vec::new(),
-            function_depth: 0,
         }
     }
 
@@ -186,44 +173,27 @@ impl<'m> Verifier<'m> {
                 for &function in &group.functions {
                     self.bind_function(function)?;
                 }
-                let computed: Vec<_> = group.values.iter().map(|member| member.value).collect();
-                for &value in &computed {
-                    self.bind_value(value)?;
+                for member in &group.values {
+                    self.bind_value(member.value)?;
                 }
                 for &function in &group.functions {
                     self.walk_function(function)?;
                 }
                 eager::check_group(self.module, &group.values)?;
-                // One context for the whole group, its `limit` advanced per member. Only `limit` differs between members, so pushing a fresh context each time cloned the member list once per member — the same list, `n` times over.
-                self.init_contexts.push(InitContext {
-                    computed,
-                    limit: 0,
-                    function_depth: self.function_depth,
-                });
-                for (index, member) in group.values.iter().enumerate() {
-                    self.init_contexts
-                        .last_mut()
-                        .expect("this group's context is live for every one of its members")
-                        .limit = index;
+                for member in &group.values {
                     self.enter_block(member.init)?;
                 }
-                self.init_contexts.pop();
                 Ok(())
             }
         }
     }
 
-    /// Walk one function definition, entered at its binding site: params bound around the body, dormant depth incremented for the extent of it.
+    /// Walk one function definition, entered at its binding site: params bound around the body.
     fn walk_function(&mut self, function: FunctionId) -> Result<(), VerifyError> {
         let definition = self.function(function)?;
         let params = definition.params.clone();
         let body = definition.body;
-
-        self.function_depth += 1;
-        self.scoped_block(&params, body)?;
-        self.function_depth -= 1;
-
-        Ok(())
+        self.scoped_block(&params, body)
     }
 
     fn check_let(&mut self, id: StatementId, result: ValueId, rhs: Rhs) -> Result<(), VerifyError> {
@@ -522,21 +492,6 @@ impl<'m> Verifier<'m> {
                         site(),
                         spell_value(self.module, value)
                     )));
-                }
-                // Recursion admission: inside an eager initializer (and not inside a function constructed since entering it), a computed member of the group may only be an earlier one — or the member being initialized itself. A self-knot is admitted because the language accepts it: unused, the lowering drops it (mirroring the legacy path); used, the lowering rejects it with a diagnostic. Forward references stay unsatisfiable.
-                for context in &self.init_contexts {
-                    if self.function_depth == context.function_depth
-                        && let Some(position) =
-                            context.computed.iter().position(|&member| member == value)
-                        && position > context.limit
-                    {
-                        return Err(VerifyError(format!(
-                            "{} evaluates computed group member {} before \
-                             its initialization",
-                            site(),
-                            spell_value(self.module, value)
-                        )));
-                    }
                 }
                 Ok(())
             }

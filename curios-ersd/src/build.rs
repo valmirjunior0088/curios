@@ -119,7 +119,7 @@ impl ErsdBuilder {
         );
     }
 
-    /// Group a set of computed recursive-group members with their eager initializer blocks into a registered group.
+    /// Group a set of computed recursive-group members with their initializer blocks into a registered group.
     pub fn rec_group(
         &mut self,
         functions: Vec<FunctionId>,

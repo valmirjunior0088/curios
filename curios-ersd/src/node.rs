@@ -222,7 +222,7 @@ pub struct Function {
     pub body: BlockId,
 }
 
-/// A mutually recursive group mixing functions and eagerly computed values. Every member is in scope in every member body and initializer and in the rest of the enclosing scope. Member order is source order; initializers run eagerly in that order, so an initializer may evaluate — directly, or through a function it calls — only an earlier computed member, while a reference from inside a function it constructs but does not call is dormant. The verifier admits exactly the language's recursion classes: cycles must pass through at least one function.
+/// A mutually recursive group mixing functions and computed values. Every member is in scope in every member body and initializer and in the rest of the enclosing scope. A computed member is forced by need: its initializer runs the first time something reads the member, so members may reference one another in any order, and what the verifier refuses is an initializer that evaluates itself — directly, or through the functions it applies — and one that performs an effect, which forcing could not keep in its place. Member order is source order and decides nothing but spelling.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
 pub struct RecGroup {
@@ -230,7 +230,7 @@ pub struct RecGroup {
     pub values: Vec<RecValue>,
 }
 
-/// A computed member of a [`RecGroup`]: the value it binds and the block that eagerly initializes it, which may reference other members of the group.
+/// A computed member of a [`RecGroup`]: the value it binds and the block that initializes it when first forced, which may reference other members of the group.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
 pub struct RecValue {

@@ -15,10 +15,8 @@ pub fn optimize(module: &mut Module) {
     module
         .verify()
         .expect("a module entering optimization verifies");
-    // One snapshot serves both: proving purity does not mutate, and pruning reads its analysis before it tombstones anything, so the module they see is the same module.
     let analysis = Analysis::analyze(module);
-    let proven_pure = evaluate::prove_eager_groups_pure(module, &analysis);
-    prune::prune_unreachable(module, &proven_pure, &analysis);
+    prune::prune_unreachable(module, &analysis);
     compact(module);
     // A curried chain folds one application per round; eight rounds cover any corpus chain with room to spare, and each round's reification draws on one shared node pool, so a round cannot multiply the module however many candidates it found.
     for _ in 0..8 {
@@ -29,8 +27,7 @@ pub fn optimize(module: &mut Module) {
     evaluate::specialize_literal_spines(module);
     rebase::rebase_monoid_recursion(module);
     let analysis = Analysis::analyze(module);
-    let proven_pure = evaluate::prove_eager_groups_pure(module, &analysis);
-    prune::prune_unreachable(module, &proven_pure, &analysis);
+    prune::prune_unreachable(module, &analysis);
     compact(module);
 }
 

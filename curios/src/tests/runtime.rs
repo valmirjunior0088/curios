@@ -805,79 +805,67 @@ fn a_closure_built_by_a_call_inside_a_knot_reaches_a_later_member() {
     );
 }
 
-/// An initializer that *calls* a member function evaluates that function's body then and there, so a later member the body reads is read before anything has stored it. The erased program once computed with the unfilled cell — `1` here, where the language says `43` — because the verifier looked only at what the initializer read itself and the lowering ordered the initializers by the same narrow view. It is refused at the erase boundary now; `size` written ahead of `table` is the supported spelling.
+/// A knot's computed members are forced by need, so the order they are written in decides nothing: `table = build(len)` reads `size` through `build`, and reading it runs `size`'s initializer first — `43` whether `size` is written before or after. This program once printed `1` (the unfilled cell's placeholder), then trapped, then was refused at the erase boundary; it is the language's program and computes the language's answer now.
 #[test]
-fn an_initializer_calling_a_function_that_reads_a_later_member_is_refused() {
-    let source = r#"
-        use /std/{Nat, Str, Bytes, Byte, Io, rand, print};
-        let main: Io({}) =
-            let bs = rand/bytes(1)!;
-            rec base: Nat = Bytes/len(bs) + 40
-            and table: Nat = build(Bytes/len(bs))
-            and build(n: Nat) -> Nat = n + size
-            and size: Nat = base + 1;
-            print(Nat/to_str(table));
-        main
-        "#;
-    let diagnostic = error(source);
-    assert!(
-        diagnostic.contains("before its initialization, through a call to"),
-        "{diagnostic}"
-    );
-
-    assert_eq!(
-        run(r#"
-        use /std/{Nat, Str, Bytes, Byte, Io, rand, print};
-        let main: Io({}) =
-            let bs = rand/bytes(1)!;
-            rec base: Nat = Bytes/len(bs) + 40
-            and size: Nat = base + 1
-            and table: Nat = build(Bytes/len(bs))
-            and build(n: Nat) -> Nat = n + size;
-            print(Nat/to_str(table));
-        main
-        "#),
-        b"43"
-    );
+fn an_initializer_calling_a_function_that_reads_a_later_member_forces_it_first() {
+    for (first, second) in [
+        ("table: Nat = build(Bytes/len(bs))", "size: Nat = base + 1"),
+        ("size: Nat = base + 1", "table: Nat = build(Bytes/len(bs))"),
+    ] {
+        assert_eq!(
+            run(&format!(
+                r#"
+                use /std/{{Nat, Str, Bytes, Byte, Io, rand, print}};
+                let main: Io({{}}) =
+                    let bs = rand/bytes(1)!;
+                    rec base: Nat = Bytes/len(bs) + 40
+                    and {first}
+                    and build(n: Nat) -> Nat = n + size
+                    and {second};
+                    print(Nat/to_str(table));
+                main
+                "#
+            )),
+            b"43"
+        );
+    }
 }
 
-/// The stepper is never called by the initializer: it is handed to `List/fold`, which applies it through the `go` it nests — and `go` reaches it as a capture, not a parameter. The verifier's summary follows an applied capture to the scope that binds it, so the fold is seen to evaluate `size`, and the program that printed `1` where the language says `42` is refused. With `size` ahead it runs.
+/// The stepper is never called by the initializer: it is handed to `List/fold`, which applies it through the `go` it nests, reaching it as a capture. Forced by need, the read of `size` inside the stepper runs `size`'s initializer, in either order.
 #[test]
-fn a_stepper_a_fold_applies_inside_an_initializer_is_evaluated_by_it() {
-    let source = r#"
-        use /std/{Nat, Str, Bytes, Byte, List, Io, rand, print};
-        let main: Io({}) =
-            let bs = rand/bytes(1)!;
-            rec table: Nat = List/fold([Bytes/len(bs)], 0, (x, acc) => x + acc + size)
-            and size: Nat = Bytes/len(bs) + 40;
-            print(Nat/to_str(table));
-        main
-        "#;
-    let diagnostic = error(source);
-    assert!(
-        diagnostic.contains("before its initialization, through a call to"),
-        "{diagnostic}"
-    );
-
-    assert_eq!(
-        run(r#"
-        use /std/{Nat, Str, Bytes, Byte, List, Io, rand, print};
-        let main: Io({}) =
-            let bs = rand/bytes(1)!;
-            rec size: Nat = Bytes/len(bs) + 40
-            and table: Nat = List/fold([Bytes/len(bs)], 0, (x, acc) => x + acc + size);
-            print(Nat/to_str(table));
-        main
-        "#),
-        b"42"
-    );
+fn a_stepper_a_fold_applies_inside_an_initializer_forces_what_it_reads() {
+    for (first, second) in [
+        (
+            "table: Nat = List/fold([Bytes/len(bs)], 0, (x, acc) => x + acc + size)",
+            "size: Nat = Bytes/len(bs) + 40",
+        ),
+        (
+            "size: Nat = Bytes/len(bs) + 40",
+            "table: Nat = List/fold([Bytes/len(bs)], 0, (x, acc) => x + acc + size)",
+        ),
+    ] {
+        assert_eq!(
+            run(&format!(
+                r#"
+                use /std/{{Nat, Str, Bytes, Byte, List, Io, rand, print}};
+                let main: Io({{}}) =
+                    let bs = rand/bytes(1)!;
+                    rec {first}
+                    and {second};
+                    print(Nat/to_str(table));
+                main
+                "#
+            )),
+            b"42"
+        );
+    }
 }
 
-/// The read the verifier admits and cannot see: `p` is a parser over the later member `size`, dormant as built — and `n`'s initializer runs it at once through `Parse/run`, which applies `p`'s step as a *projected closure*, which no summary follows. A knot's cells are reserved empty rather than holding a placeholder, so that read traps — inside the parser's mapper, where `size` is read — where it once computed `1` in silence; the language's own answer is `42`, which by-need knots would give.
+/// The read no analysis sees: `p` is a parser over the later member `size`, and `n`'s initializer runs it at once through `Parse/run`, which applies `p`'s step as a *projected closure*. Forced by need that read simply runs `size`'s initializer — `42`, where the same program once computed `1` and then trapped on an empty cell. What remains for the runtime is the cycle below.
 #[test]
-fn a_member_read_through_a_closure_the_verifier_cannot_see_traps_rather_than_computing() {
-    let error = error(
-        r#"
+fn a_member_read_through_a_closure_the_verifier_cannot_see_is_forced() {
+    assert_eq!(
+        run(r#"
         use /std/{Nat, Str, Bytes, Byte, Io, Result, Parse, rand, print};
         let main: Io({}) =
             let bs = rand/bytes(1)!;
@@ -890,11 +878,32 @@ fn a_member_read_through_a_closure_the_verifier_cannot_see_traps_rather_than_com
             and size: Nat = Bytes/len(bs) + 40;
             print(Nat/to_str(n));
         main
+        "#),
+        b"42"
+    );
+}
+
+/// An evaluation cycle hidden where the verifier cannot see it — `n`'s initializer runs `p`, whose step reads `n` — is met by forcing: `n` is read while its own initializer runs, and the cell's *forcing* state is the trap. The frame is the member's force function, which is what names the member in the report.
+#[test]
+fn a_cycle_hidden_behind_a_closure_traps_at_the_member_being_forced() {
+    let error = error(
+        r#"
+        use /std/{Nat, Str, Bytes, Byte, Io, Result, Parse, rand, print};
+        let main: Io({}) =
+            let bs = rand/bytes(1)!;
+            rec p: Parse(Nat) = Parse/map(Parse/any_byte, (b) => Byte/to_nat(b) + n)
+            and n: Nat =
+                match Parse/run(p, bs)
+                | success(v) => v
+                | failure(_) => 0
+                end;
+            print(Nat/to_str(n));
+        main
         "#,
     );
     assert!(
-        error.contains("execution failed") && error.contains("/std/Parse/map"),
-        "the unfilled read must trap where the member is read: {error}"
+        error.contains("execution failed") && error.contains("/force"),
+        "the cycle must trap in a member's force function: {error}"
     );
 }
 

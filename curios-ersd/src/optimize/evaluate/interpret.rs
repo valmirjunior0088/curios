@@ -11,8 +11,8 @@ use {
     },
     crate::{
         Analysis, Atom, BlockId, Constant, FoldNatStep, FoldOutcome, FoldSequenceStep, ForeignId,
-        FunctionId, Intrinsic, Module, Operation, RecValue, Rhs, Semantics, SequenceGrain,
-        SequenceOp, Statement, Terminator, UnconsSequenceStep, ValueId, VariantArm,
+        FunctionId, Intrinsic, Module, Operation, Rhs, Semantics, SequenceGrain, SequenceOp,
+        Statement, Terminator, UnconsSequenceStep, ValueId, VariantArm,
     },
     curios_utilities::{Grain, PackedBin},
     std::{
@@ -138,22 +138,6 @@ impl<'m> Evaluator<'m> {
         }
     }
 
-    /// Evaluate every computed member of a function-free eager group, forcing each as a CAF (verifier-guaranteed acyclic, so forcing terminates). `None` if any member bails or performs an effect — leaving the whole group untouched.
-    pub(super) fn evaluate_computed_group(
-        &mut self,
-        values: &[RecValue],
-    ) -> Option<Vec<(ValueId, Value)>> {
-        self.budget.restart();
-        let mut results = Vec::with_capacity(values.len());
-        for member in values {
-            match self.force_toplevel(member.value) {
-                Ok(value) => results.push((member.value, value)),
-                Err(_) => return None,
-            }
-        }
-        Some(results)
-    }
-
     /// Evaluate one closed candidate call from a fresh budget frame.
     pub(super) fn evaluate(&mut self, callee: Atom, arguments: &[Atom]) -> Outcome {
         self.budget.restart();
@@ -271,7 +255,7 @@ impl<'m> Evaluator<'m> {
                 }
                 // Function groups resolve their members on demand at each reference; introducing them binds no value here.
                 Some(Statement::Functions { .. }) => {}
-                // A recursive group with computed members needs eager initialization the interpreter does not model; decline. A function-only group binds on demand.
+                // A local recursive group with computed members would need the knot's cells modeled here; decline. A top-level one is forced on demand through `force_toplevel`, which is the same by-need semantics the lowering gives every knot. A function-only group binds on demand.
                 Some(Statement::Rec { group })
                     if module
                         .rec_group(*group)
