@@ -1617,6 +1617,14 @@ pub fn into_core_unit(
     syntax: &SyntaxRegistry,
 ) -> Result<PreparedText, Error> {
     curios_profile::profile!("into_core_unit");
+    curios_utilities::grown(|| into_core_unit_within(source, scope, syntax))
+}
+
+fn into_core_unit_within(
+    source: &UnitSource<'_>,
+    scope: &[&PreparedText],
+    syntax: &SyntaxRegistry,
+) -> Result<PreparedText, Error> {
     let scope_tables = scope.iter().map(|unit| &unit.table).collect::<Vec<_>>();
     let scope_public = scope.iter().map(|unit| &unit.public).collect::<Vec<_>>();
     let scope_cores = scope.iter().map(|unit| &unit.core).collect::<Vec<_>>();

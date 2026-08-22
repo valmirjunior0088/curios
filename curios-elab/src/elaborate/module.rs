@@ -14,7 +14,7 @@ use {
         Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
         UniverseMetaId, Visit, stamp_declaration_instance, universe_metas,
     },
-    curios_utilities::Qualifier,
+    curios_utilities::{Qualifier, grown},
     std::{
         cell::RefCell,
         collections::{BTreeMap, BTreeSet},
@@ -1154,6 +1154,16 @@ pub fn elaborate_and_zonk_module(
     mode: Mode,
 ) -> Result<(Module, Option<Term>), Error> {
     curios_profile::profile!("elaborate_and_zonk_module");
+    grown(|| elaborate_and_zonk_module_within(context, module, metavar_floor, universe_floor, mode))
+}
+
+fn elaborate_and_zonk_module_within(
+    context: &mut Context,
+    module: &Module,
+    metavar_floor: usize,
+    universe_floor: usize,
+    mode: Mode,
+) -> Result<(Module, Option<Term>), Error> {
     let (module, body_type) = elaborate_module_suffix(
         context,
         Established::nothing(),

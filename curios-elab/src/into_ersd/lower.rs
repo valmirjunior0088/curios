@@ -13,6 +13,7 @@ use {
         ConceptDecl, Definition, Free, Global, InductParam, Item, Module, StructDecl,
         project_erased_universes, wire_term,
     },
+    curios_utilities::grown,
     std::{
         collections::{BTreeMap, BTreeSet},
         sync::Arc,
@@ -215,6 +216,14 @@ pub fn erase_module(
     expected: &Term,
 ) -> Result<curios_ersd::Module, Error> {
     curios_profile::profile!("erase_module");
+    grown(|| erase_module_within(context, module, expected))
+}
+
+fn erase_module_within(
+    context: &mut Context,
+    module: &Module,
+    expected: &Term,
+) -> Result<curios_ersd::Module, Error> {
     let module = UniverseErased::<Module>::project(module)?.into_inner();
     let expected = UniverseErased::<Term>::project(expected)?.into_inner();
     // Erasure is re-derivation of elaborated terms, never surface elaboration, so the representation-privacy checks are suppressed for the whole walk.
@@ -498,6 +507,15 @@ pub fn erase_unit(
     expected: Option<&Term>,
 ) -> Result<ErasedArena, Error> {
     curios_profile::profile!("erase_unit");
+    grown(|| erase_unit_within(context, resumed, module, expected))
+}
+
+fn erase_unit_within(
+    context: &mut Context,
+    resumed: Resumed<'_>,
+    module: &Module,
+    expected: Option<&Term>,
+) -> Result<ErasedArena, Error> {
     assert_eq!(
         module.body.is_some(),
         expected.is_some(),

@@ -15,7 +15,7 @@ use {
         Intrinsic, Module, ProductId, ProductSchema, RecGroup, RecGroupId, Rhs, SequenceArity,
         Statement, StatementId, Terminator, ValueId, VariantFamily,
     },
-    curios_utilities::recurse,
+    curios_utilities::{grown, recurse},
     std::collections::HashSet,
 };
 
@@ -35,7 +35,7 @@ impl Module {
     /// Check the module against the representation contract, reporting the first violation. Deterministic: the same module always reports the same diagnostic.
     pub fn verify(&self) -> Result<(), VerifyError> {
         curios_profile::profile!("verify_module");
-        Verifier::new(self).run()
+        grown(|| Verifier::new(self).run())
     }
 }
 
