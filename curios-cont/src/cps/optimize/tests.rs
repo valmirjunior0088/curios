@@ -1572,6 +1572,81 @@ fn rewrite_atoms_remaps_and_devirtualizes_a_closure_callee() {
     );
 }
 
+/// `main(a)`: `t1 = (a, 1); p = t1.0; t2 = (p, 2); q = t2.0; return q`. One sweep forwards both projections and the return carries `a` — not `p`, which the same sweep deletes — because the replacements are collapsed through each other before anything is rewritten.
+#[test]
+fn forwards_a_chain_of_projections_in_one_sweep() {
+    let mut module = CpsModule::new();
+    let entry = module.reserve_function();
+    let entry_return = module.reserve_continuation();
+    let a = module.add_value(Some("a".into()));
+    let t1 = module.add_value(Some("t1".into()));
+    let p = module.add_value(Some("p".into()));
+    let t2 = module.add_value(Some("t2".into()));
+    let q = module.add_value(Some("q".into()));
+
+    let deliver = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        target: entry_return,
+        args: vec![CpsAtom::Value(q)],
+    }));
+    let read_q = module.add_node(CpsNode::LetIntrinsic {
+        result: q,
+        op: CpsIntrinsic::TupleGet(0),
+        args: vec![CpsAtom::Value(t2)],
+        next: deliver,
+    });
+    let build_t2 = module.add_node(CpsNode::LetValue {
+        result: t2,
+        value: CpsValueExpr::Tuple(vec![
+            CpsAtom::Value(p),
+            CpsAtom::Literal(CpsLiteral::Nat(2)),
+        ]),
+        next: read_q,
+    });
+    let read_p = module.add_node(CpsNode::LetIntrinsic {
+        result: p,
+        op: CpsIntrinsic::TupleGet(0),
+        args: vec![CpsAtom::Value(t1)],
+        next: build_t2,
+    });
+    let build_t1 = module.add_node(CpsNode::LetValue {
+        result: t1,
+        value: CpsValueExpr::Tuple(vec![
+            CpsAtom::Value(a),
+            CpsAtom::Literal(CpsLiteral::Nat(1)),
+        ]),
+        next: read_p,
+    });
+    module.define_function(
+        entry,
+        CpsFunction {
+            debug_name: Some("main".into()),
+            params: vec![a],
+            return_cont: entry_return,
+            body: build_t1,
+        },
+    );
+    module.set_entry(entry);
+    module.verify().unwrap();
+
+    assert!(forward_aggregate_projections(&mut module));
+    module.verify().unwrap();
+    assert!(
+        matches!(
+            module.node(deliver),
+            Some(CpsNode::ApplyCont(CpsEdge { args, .. })) if args == &[CpsAtom::Value(a)]
+        ),
+        "the return carries the origin of the chain:\n{module}"
+    );
+    assert!(
+        module.node(read_p).is_none() && module.node(read_q).is_none(),
+        "both projections are spliced out"
+    );
+    assert!(
+        !forward_aggregate_projections(&mut module),
+        "and nothing is left for a second call"
+    );
+}
+
 fn has_switch(module: &CpsModule, function: CpsFunId) -> bool {
     function_nodes(module, function)
         .iter()

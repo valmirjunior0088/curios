@@ -743,61 +743,91 @@ pub(super) fn flatten_indexed_lists(module: &mut CpsModule) -> bool {
     changed
 }
 
+/// Forward every projection of a visible construction to the field it reads, in one sweep.
+///
+/// One snapshot of the module's constructions admits every forwardable projection; the replacements are then collapsed through each other, as `known_values` collapses its substitutions, so a projection of a construction whose field is itself a forwarded projection resolves to what that one forwards rather than to a value this sweep deletes. One `rewrite_atoms` walk then substitutes them all, and the dead projection nodes are spliced out in one pass. It was one projection per call — rescan, rebuild the construction map with every field vector cloned, rewrite the whole module, repeat — which `fixpoint_pass_measurements` found costing 225 ms of the fixpoint's first round on a `Toml/decode` compile, and growing as the split sweeps it cleans up after landed their projections together.
 pub(super) fn forward_aggregate_projections(module: &mut CpsModule) -> bool {
-    let mut changed = false;
-    loop {
-        // Keyed by the vocabulary the construction was built in, so a read only ever forwards through a matching construction — a `RowGet` never folds through a structural tuple, nor a `TupleGet` through a row's.
-        let aggregates = module
-            .nodes
-            .slots()
-            .iter()
-            .flatten()
-            .filter_map(|node| match node {
-                CpsNode::LetValue {
-                    result,
-                    value: CpsValueExpr::Tuple(fields),
-                    ..
-                } => Some(((*result, None), fields.clone())),
-                CpsNode::LetValue {
-                    result,
-                    value: CpsValueExpr::Row(row, fields),
-                    ..
-                } => Some(((*result, Some(*row)), fields.clone())),
-                _ => None,
-            })
-            .collect::<BTreeMap<_, _>>();
-        let selected = module.nodes.iter_live().find_map(|(id, node)| {
-            let CpsNode::LetIntrinsic {
+    // Keyed by the vocabulary the construction was built in, so a read only ever forwards through a matching construction — a `RowGet` never folds through a structural tuple, nor a `TupleGet` through a row's.
+    let mut aggregates = BTreeMap::<(CpsValueId, Option<CpsRowId>), &[CpsAtom]>::new();
+    for (_, node) in module.nodes.iter_live() {
+        match node {
+            CpsNode::LetValue {
                 result,
-                op,
-                args,
-                next,
-            } = node
-            else {
-                return None;
-            };
-            let (row, field) = match op {
-                CpsIntrinsic::TupleGet(field) => (None, *field),
-                CpsIntrinsic::RowGet(row, field) => (Some(*row), *field),
-                _ => return None,
-            };
-            let [CpsAtom::Value(tuple)] = args.as_slice() else {
-                return None;
-            };
-            let replacement = aggregates.get(&(*tuple, row))?.get(field)?.clone();
-            Some((id, *result, *next, replacement))
-        });
-        let Some((node, result, next, replacement)) = selected else {
-            break;
-        };
-
-        rewrite_atoms(module, &BTreeMap::from([(result, replacement)]));
-        rewire_node(module, node, next);
-        module.nodes.remove(node);
-        module.values.remove(result);
-        changed = true;
+                value: CpsValueExpr::Tuple(fields),
+                ..
+            } => {
+                aggregates.insert((*result, None), fields);
+            }
+            CpsNode::LetValue {
+                result,
+                value: CpsValueExpr::Row(row, fields),
+                ..
+            } => {
+                aggregates.insert((*result, Some(*row)), fields);
+            }
+            _ => {}
+        }
     }
-    changed
+
+    let mut forwarded = BTreeMap::<CpsValueId, CpsAtom>::new();
+    let mut redirect = BTreeMap::<CpsNodeId, CpsNodeId>::new();
+    for (id, node) in module.nodes.iter_live() {
+        let CpsNode::LetIntrinsic {
+            result,
+            op,
+            args,
+            next,
+        } = node
+        else {
+            continue;
+        };
+        let (row, field) = match op {
+            CpsIntrinsic::TupleGet(field) => (None, *field),
+            CpsIntrinsic::RowGet(row, field) => (Some(*row), *field),
+            _ => continue,
+        };
+        let [CpsAtom::Value(tuple)] = args.as_slice() else {
+            continue;
+        };
+        let Some(replacement) = aggregates
+            .get(&(*tuple, row))
+            .and_then(|fields| fields.get(field))
+        else {
+            continue;
+        };
+        forwarded.insert(*result, replacement.clone());
+        redirect.insert(id, *next);
+    }
+    if forwarded.is_empty() {
+        return false;
+    }
+
+    // Collapse the chains: a replacement naming a result this sweep forwards resolves to that result's own replacement. A binding cannot precede the construction it projects, so the chains are finite, and the guard mirrors `known_values` rather than trusting that.
+    let results = forwarded.keys().copied().collect::<Vec<_>>();
+    for result in results {
+        let mut value = forwarded[&result].clone();
+        let mut seen = BTreeSet::new();
+        while let CpsAtom::Value(next) = value {
+            if !seen.insert(next) {
+                break;
+            }
+            let Some(replacement) = forwarded.get(&next) else {
+                break;
+            };
+            value = replacement.clone();
+        }
+        forwarded.insert(result, value);
+    }
+
+    rewrite_atoms(module, &forwarded);
+    splice_dead_nodes(module, &redirect);
+    for &node in redirect.keys() {
+        module.nodes.remove(node);
+    }
+    for &result in forwarded.keys() {
+        module.values.remove(result);
+    }
+    true
 }
 pub(super) fn eliminate_dead_bindings(module: &mut CpsModule) -> bool {
     let mut changed = false;
