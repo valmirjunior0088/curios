@@ -233,6 +233,8 @@ pub(super) struct Context<'a> {
     binders: &'a Entropy,
     // One ordinal counter per mount. A `satisfy` declaration is anonymous, so its identity is minted rather than written — and it is scoped to the mount that declares it, because an ordinal alone would mean something only in the compilation that handed it out.
     witnesses: &'a RefCell<BTreeMap<Qualifier, u32>>,
+    // Every bare name that resolved to nothing, keyed by the binder identity it lowered to, with the public bindings in scope of that name. Shared across nested contexts like the counters, because the table is the unit's: `curios-elab` reports the unbound binder, and this is what lets its report say what the reader probably meant.
+    unbound: &'a RefCell<BTreeMap<curios_core::Free, Vec<Qualifier>>>,
     syntax: &'a SyntaxRegistry,
 }
 
@@ -249,6 +251,7 @@ impl<'a> Context<'a> {
         universe_allocations: &'a RefCell<HashMap<Span, curios_core::UniverseMetaId>>,
         binders: &'a Entropy,
         witnesses: &'a RefCell<BTreeMap<Qualifier, u32>>,
+        unbound: &'a RefCell<BTreeMap<curios_core::Free, Vec<Qualifier>>>,
         syntax: &'a SyntaxRegistry,
     ) -> Context<'a> {
         Context {
@@ -265,6 +268,7 @@ impl<'a> Context<'a> {
             universe_allocations,
             binders,
             witnesses,
+            unbound,
             syntax,
         }
     }
@@ -284,6 +288,7 @@ impl<'a> Context<'a> {
             universe_allocations: self.universe_allocations,
             binders: self.binders,
             witnesses: self.witnesses,
+            unbound: self.unbound,
             syntax: self.syntax,
         }
     }
@@ -386,6 +391,23 @@ impl<'a> Context<'a> {
 
     pub(super) fn bindings(&self) -> &HashMap<String, Qualifier> {
         &self.bindings
+    }
+
+    /// Mint the binder an unresolved bare name lowers to, and record beside it every public binding in scope that carries the name — as the absolute path a reader could write. Read off the public interfaces, where a `pub use` is a binding of the re-exporting module, rather than the declaration table, because the facade's spelling is the one a reader is told everything comes from: `/std/Bool` is `pub use Bool/{let Bool}`, and Core knows only the `/sys/Bool/Bool` it stands for. Only the shortest paths are kept — a longer one is the same name through a deeper module — in the path's own order, which is deterministic and nothing more.
+    pub(super) fn unbound_binder(&self, label: &str) -> curios_core::Free {
+        let mut found = self
+            .public
+            .iter()
+            .filter(|(_, interface)| interface.bindings.contains_key(label))
+            .map(|(module, _)| module.with(label))
+            .collect::<Vec<_>>();
+        found.sort_by_key(|path| (path.segments().len(), path.join()));
+        let shortest = found.first().map(|path| path.segments().len());
+        found.retain(|path| Some(path.segments().len()) == shortest);
+
+        let binder = self.fresh_binder(Some(label));
+        self.unbound.borrow_mut().insert(binder.clone(), found);
+        binder
     }
 
     pub(super) fn insert_scope(&mut self, qualifier: String, name: Qualifier) -> Result<(), Error> {

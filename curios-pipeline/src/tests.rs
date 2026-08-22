@@ -218,6 +218,45 @@ fn a_proposition_where_a_proof_belongs_is_named_and_its_metavariables_are_not_nu
 }
 
 #[test]
+fn an_unbound_name_is_offered_its_reachable_spelling_or_its_import() {
+    // The transcript's two stalls, reported by the text stage, which is the one that can say what was meant: `cong` is a member of `Eq`, so the route through an imported `Eq` is offered beside the direct import; `Bool` is a root's child, so the import is the route. The prelude build elaborates every `/std` module through this same path, so a false report here would fail the workspace build before it reached this test.
+    let source = r#"
+        use /std/{Nat, Eq, Io};
+
+        let step(n: Nat, ih: Eq(n + n, n * 2)) -> Eq((n + 1) + (n + 1), (n + 1) * 2) =
+            cong((x) => x + 2, ih);
+
+        Io/pure(())
+    "#;
+    let error = compile(source, None).map(|_| ()).unwrap_err();
+    assert!(
+        error.contains("unbound variable: cong")
+            && error.contains(
+                "`cong` is `/std/Eq/cong`: write `Eq/cong` if `Eq` is imported, or `use /std/Eq/{cong};`"
+            ),
+        "unexpected report: {error}"
+    );
+
+    let source = r#"
+        use /std/{Io};
+
+        let f(b: Bool) -> Bool = b;
+
+        Io/pure(())
+    "#;
+    let error = compile(source, None).map(|_| ()).unwrap_err();
+    assert!(
+        error.contains("unbound variable: Bool")
+            && error.contains("`Bool` is `/std/Bool`: write it absolute, or `use /std/{Bool};`"),
+        "unexpected report: {error}"
+    );
+    assert!(
+        !error.contains("/sys/Bool/Bool"),
+        "a deeper route to the same name is not offered: {error}"
+    );
+}
+
+#[test]
 fn a_rigid_mismatch_still_reports_as_a_mismatch() {
     let source = r#"
         use /std/{Nat, Io};

@@ -110,6 +110,8 @@ pub struct PreparedText {
     metavariable_floor: usize,
     binder_floor: usize,
     universe_floor: usize,
+    /// Every bare name that resolved to nothing, by the binder it lowered to, with what it could have meant — see `Context::unbound_binder`. Empty for any unit that compiles, the prelude included.
+    unbound: BTreeMap<curios_core::Free, Vec<Qualifier>>,
 }
 
 impl PreparedText {
@@ -142,6 +144,11 @@ impl PreparedText {
 
     pub fn universe_floor(&self) -> usize {
         self.universe_floor
+    }
+
+    /// What each unresolved bare name could have meant, by the binder it lowered to — the table `curios-elab`'s `unbound variable` report reads its suggestion from.
+    pub fn unbound(&self) -> &BTreeMap<curios_core::Free, Vec<Qualifier>> {
+        &self.unbound
     }
 }
 
@@ -1682,6 +1689,7 @@ fn into_core_unit_within(
     binders.seed(floor(PreparedText::binder_floor));
     // No floor: an ordinal is scoped to its mount now, and this unit's mounts are disjoint from every predecessor's, so nothing it mints can collide with anything already stored.
     let witness_ids = RefCell::new(BTreeMap::new());
+    let unbound = RefCell::new(BTreeMap::new());
 
     let universe_role = Cell::new(curios_core::UniverseRole::Flexible);
     // The scope's seed table. A module carries the *cumulative* table from index zero rather than its own slice — `universe_floor` is asserted equal to its length — so the scope's table is the last unit's, already containing every earlier one. Concatenating them counts each predecessor once per successor, which is what the floor assertion catches.
@@ -1704,6 +1712,7 @@ fn into_core_unit_within(
         &universe_allocations,
         &binders,
         &witness_ids,
+        &unbound,
         syntax,
     );
     // Every named prefix in the compilation binds its own one-segment name. No two can repeat it: the disjointness check above refuses a unit claiming what the scope already holds, and the scope's own mounts were pairwise disjoint when each was compiled. The entry's prefix is the empty one, which has no name to bind.
@@ -1801,6 +1810,7 @@ fn into_core_unit_within(
         metavariable_floor: metavars.count(),
         binder_floor: binders.count(),
         universe_floor: universes.count(),
+        unbound: unbound.into_inner(),
     })
 }
 
@@ -1825,19 +1835,30 @@ pub fn prepare_prelude(input: &RootSource, syntax: &SyntaxRegistry) -> Result<Pr
     into_core_unit(&UnitSource::mounted(input), &[], syntax)
 }
 
+/// The entry program lowered: its module, the floors elaboration's counters start above, its `foreign` rows, and the unresolved-name table its `unbound variable` reports read from.
+pub struct LoweredEntry {
+    pub core: curios_core::Module,
+    pub metavariable_floor: usize,
+    pub universe_floor: usize,
+    pub foreigns: ForeignStore,
+    /// See [`PreparedText::unbound`].
+    pub unbound: BTreeMap<curios_core::Free, Vec<Qualifier>>,
+}
+
 /// Lower the entry program against the units already lowered.
 pub fn into_core_with_prelude(
     entrypoint: &Entrypoint,
     loader: &RootSource,
     scope: &[&PreparedText],
     syntax: &SyntaxRegistry,
-) -> Result<(curios_core::Module, usize, usize, ForeignStore), Error> {
+) -> Result<LoweredEntry, Error> {
     let unit = into_core_unit(&UnitSource::entry(entrypoint, loader), scope, syntax)?;
 
-    Ok((
-        unit.core,
-        unit.metavariable_floor,
-        unit.universe_floor,
-        unit.foreigns,
-    ))
+    Ok(LoweredEntry {
+        core: unit.core,
+        metavariable_floor: unit.metavariable_floor,
+        universe_floor: unit.universe_floor,
+        foreigns: unit.foreigns,
+        unbound: unit.unbound,
+    })
 }

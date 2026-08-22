@@ -12,7 +12,9 @@ use {
         elaborate_and_zonk_unit_reporting, erase_unit,
     },
     curios_ersd::lower_to_cont,
-    curios_text::{Entrypoint, RootSource, UnitSource, into_core_unit, into_core_with_prelude},
+    curios_text::{
+        Entrypoint, LoweredEntry, RootSource, UnitSource, into_core_unit, into_core_with_prelude,
+    },
     curios_unit::{Prefix, Unit},
     curios_utilities::{Qualifier, SyntaxRegistry},
     std::fmt,
@@ -113,9 +115,14 @@ pub fn typecheck_measured(
 ) -> Result<(curios_core::Module, Vec<String>, Consumption, u64), CompileError> {
     let text = scope.text();
     let cores = scope.cores();
-    let (lowered, metavars, universe_floor, _foreigns) =
-        into_core_with_prelude(entrypoint, loader, &text, syntax)
-            .map_err(|error| CompileError::Failure(error.format()))?;
+    let LoweredEntry {
+        core: lowered,
+        metavariable_floor: metavars,
+        universe_floor,
+        unbound,
+        ..
+    } = into_core_with_prelude(entrypoint, loader, &text, syntax)
+        .map_err(|error| CompileError::Failure(error.format()))?;
 
     let core_mode = match &lowered.type_ {
         Some(type_) => Mode::Check(type_.clone()),
@@ -131,11 +138,13 @@ pub fn typecheck_measured(
         universe_floor,
         core_mode,
     )
-    .map_err(|error| CompileError::of(&error, error.format_with(&lowered, &cores)))?;
+    .map_err(|error| {
+        CompileError::of(&error, error.format_with_hints(&lowered, &cores, &unbound))
+    })?;
 
     let obligations = obligations
         .into_iter()
-        .map(|error| error.format_with(&lowered, &cores))
+        .map(|error| error.format_with_hints(&lowered, &cores, &unbound))
         .collect();
 
     Ok((
@@ -165,9 +174,14 @@ where
 
     let text = scope.text();
     let cores = scope.cores();
-    let (lowered, metavars, universe_floor, user_foreigns) =
-        into_core_with_prelude(entrypoint, loader, &text, syntax)
-            .map_err(|error| CompileError::Failure(error.format()))?;
+    let LoweredEntry {
+        core: lowered,
+        metavariable_floor: metavars,
+        universe_floor,
+        foreigns: user_foreigns,
+        unbound,
+    } = into_core_with_prelude(entrypoint, loader, &text, syntax)
+        .map_err(|error| CompileError::Failure(error.format()))?;
 
     observe(Stage::Core(&lowered));
 
@@ -187,7 +201,9 @@ where
         universe_floor,
         core_mode,
     )
-    .map_err(|error| CompileError::of(&error, error.format_with(&lowered, &cores)))?;
+    .map_err(|error| {
+        CompileError::of(&error, error.format_with_hints(&lowered, &cores, &unbound))
+    })?;
 
     observe(Stage::CoreElab(&module));
 
@@ -250,7 +266,12 @@ pub fn compile_unit(
         lowered.universe_floor(),
         Mode::Infer,
     )
-    .map_err(|error| CompileError::of(&error, error.format_with(lowered.core(), &cores)))?;
+    .map_err(|error| {
+        CompileError::of(
+            &error,
+            error.format_with_hints(lowered.core(), &cores, lowered.unbound()),
+        )
+    })?;
 
     if let Some(verdict) = recheck(&core, budget, scope, syntax).into_iter().next() {
         let refusal = verdict.error.format_with(&core, &cores);

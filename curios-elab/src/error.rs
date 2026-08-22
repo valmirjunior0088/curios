@@ -7,7 +7,7 @@ use {
     curios_num::{Integer, Natural},
     curios_utilities::{Grain, Plicity, Qualifier, Span},
     std::{
-        collections::{BTreeSet, HashMap},
+        collections::{BTreeMap, BTreeSet, HashMap},
         fmt,
         rc::Rc,
     },
@@ -1012,6 +1012,16 @@ impl Error {
 
     /// Render this error with source-style names, shortening global names against `module`'s symbols together with `scope`'s (axis (b)) — the qualified-name universe an error's globals are spelled relative to. Every elaboration error reaching a reader comes through here, so all three axes are set in one place; axis (c) belongs to the whole render rather than any one variant, since every error that prints a term prints it from the raw elaborated spelling.
     pub fn format_with(&self, module: &Module, scope: &[&Module]) -> String {
+        self.format_with_hints(module, scope, &BTreeMap::new())
+    }
+
+    /// [`Error::format_with`], with the text stage's table of what each unresolved bare name could have meant — keyed by the binder the name lowered to, valued by the absolute paths of the public bindings in scope that carry it. An `unbound variable` report whose binder the table knows gets a line per candidate; every other error ignores the table. The table is the text stage's because only it sees re-exports — `/std/Bool` is a `pub use`, and Core holds the `/sys/Bool/Bool` it stands for — and it arrives here rather than on the error because the error records what was written and nothing about where.
+    pub fn format_with_hints(
+        &self,
+        module: &Module,
+        scope: &[&Module],
+        unbound: &BTreeMap<Free, Vec<Qualifier>>,
+    ) -> String {
         // Everything a reader could see: `module`'s own declarations *and* whatever its environment put in scope. A module carries only its own, so both halves of the spelling have to be told the prelude exists — the shortening table to know `Vec` is an unambiguous suffix, and the plicity marks to know `Eq`'s first parameter is implicit.
         //
         // Taking the scope as a `Module` rather than as one of its projections is deliberate: this was first fixed by passing a name slice, which repaired the shortening and left the plicities reading a module that no longer holds the prelude. A second projection would have been a second thing to forget.
@@ -1025,21 +1035,67 @@ impl Error {
         }
 
         let shorten = Rc::new(build_shorten(&symbols));
-        self.render(&Rc::new(
+        let spelling = Rc::new(
             Spelling::default()
                 .with_pretty_names(self.rename_map(&shorten))
                 .with_short_names(shorten)
                 .with_nominal_plicities(Rc::new(plicities))
                 .with_erased_universes()
                 .with_anonymous_metavars(),
-        ))
+        );
+        let suggestion = self.unbound_suggestion(unbound, &spelling);
+        self.render(&spelling, suggestion)
+    }
+
+    /// The lines an `unbound variable` report adds from the text stage's table, or `None` for any other error or an unknown binder. A candidate nested below a root is offered both ways it can be reached — through its parent's name, `Eq/cong` once `Eq` is in scope, and by its own import; a root's direct child has no route shorter than the import or the absolute path.
+    fn unbound_suggestion(
+        &self,
+        unbound: &BTreeMap<Free, Vec<Qualifier>>,
+        spelling: &Rc<Spelling>,
+    ) -> Option<String> {
+        let term = match self {
+            Self::Located { error, .. } | Self::InDeclaration { error, .. } => {
+                return error.unbound_suggestion(unbound, spelling);
+            }
+            Self::UnboundVariable { term } => term,
+            _ => return None,
+        };
+        let Subterm::Var(var) = &***term else {
+            return None;
+        };
+        let candidates = unbound.get(var.unwrap())?;
+        let written = term.spelled(spelling).to_string();
+
+        let lines = candidates
+            .iter()
+            .map(|candidate| {
+                let module = candidate.without_last();
+                let import = format!("`use {}/{{{written}}};`", module.join());
+                match module.segments().len() {
+                    0 | 1 => format!(
+                        "  `{written}` is `{}`: write it absolute, or {import}",
+                        candidate.join()
+                    ),
+                    _ => format!(
+                        "  `{written}` is `{}`: write `{parent}/{written}` if `{parent}` is imported, or {import}",
+                        candidate.join(),
+                        parent = module.last()
+                    ),
+                }
+            })
+            .collect::<Vec<_>>();
+        (!lines.is_empty()).then(|| lines.join("\n"))
     }
 
     /// One snippet per rendered error, for the innermost span attached to it.
     ///
     /// [`Error::at`] is first-wins *per wrapper*, so the innermost span is the first one stamped — but `in_declaration` may wrap a located error, after which a further `at` sees a non-`Located` head and stamps again, leaving the coarser span outermost. Rendering therefore searches for the innermost rather than reading the outermost, and the message body is assembled separately so a nested `Located` cannot swallow it: `Display` for the wrappers deliberately prints no snippet, and a body rendered through `to_string` would drop the inner span silently.
-    fn render(&self, spelling: &Rc<Spelling>) -> String {
-        let body = self.render_body(spelling);
+    fn render(&self, spelling: &Rc<Spelling>, suggestion: Option<String>) -> String {
+        let mut body = self.render_body(spelling);
+        if let Some(suggestion) = suggestion {
+            body.push('\n');
+            body.push_str(&suggestion);
+        }
         match self.innermost_span() {
             Some(span) => format!("{body}\n\n{}", span.render_snippet()),
             None => body,
