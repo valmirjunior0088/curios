@@ -295,19 +295,16 @@ impl Context {
     }
 
     /// The read half of the reduction cache. The reducer probes it wherever a term's reduction begins — at entry, and at the scrutinee stack's frame push, where a warm scrutinee dispatches in place instead of framing.
+    ///
+    /// **A universe metavariable in the term does not exclude it**, and it did. Reduction is parametric in levels — no rule reads one, `Type u` being a payload and not a scrutinee, and an instantiation substitutes a parameter with whatever level stands in the instance, a metavariable included — so a reduct is the same function of its term whether the metas in it are solved or not, and the in-place rewrites that do change what a level *spells* (defaulting, finalization, instance closure) clear the cache where they happen. What the exclusion cost was every web of universe-polymorphic definitions: inside the declaration that instantiates them their occurrences all carry that declaration's level metas, so nothing in the web was remembered, and a reduct shared as a graph was re-derived once per occurrence — the `2^n` `curios`' `scrutinee_refinement_measurements` records under `numeric, proved`.
     pub(crate) fn cached_reduced(&self, term: &Term) -> Option<Term> {
-        if term.has_universe_meta() {
-            return None;
-        }
         self.caches.reduction_get(term)
     }
 
-    /// Record that `term` reduces to `result` — the write half of the reduction cache, hit wherever a reduction's value lands: the reducer's final return, and its scrutinee stack's frame pop. Memoize only closed terms whose WHNF names no *unsolved* metavariable — `any_metavar` bails on the first one, never building the id set. A solve is monotonic, so it can only invalidate a reduct that still names the metavariable it solved, and reduction gets stuck on (hence surfaces) an unsolved metavariable it actually depends on. Refusing to cache those is what lets `solve_metavar` skip a cache clear; an entry naming only *solved* metavariables stays valid under forward solves (re-validation's `rollback_solutions`, which *un*-solves, clears separately).
+    /// Record that `term` reduces to `result` — the write half of the reduction cache, hit wherever a reduction's value lands: the reducer's final return, and its scrutinee stack's frame pop. Memoize only closed terms whose WHNF names no *unsolved* term metavariable — `any_metavar` bails on the first one, never building the id set. A solve is monotonic, so it can only invalidate a reduct that still names the metavariable it solved, and reduction gets stuck on (hence surfaces) an unsolved metavariable it actually depends on. Refusing to cache those is what lets `solve_metavar` skip a cache clear; an entry naming only *solved* metavariables stays valid under forward solves (re-validation's `rollback_solutions`, which *un*-solves, clears separately). A *universe* metavariable excludes nothing, for the reason [`Context::cached_reduced`] gives.
     pub(crate) fn reduce(&mut self, term: Term, result: &Term) {
-        let cacheable = term.closed()
-            && !term.has_universe_meta()
-            && !result.has_universe_meta()
-            && !result.any_metavar(&mut |id| self.metavar_solution(id).is_none());
+        let cacheable =
+            term.closed() && !result.any_metavar(&mut |id| self.metavar_solution(id).is_none());
 
         if !cacheable {
             return;

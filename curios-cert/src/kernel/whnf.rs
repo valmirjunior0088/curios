@@ -40,7 +40,7 @@ fn machine_admissible(kernel: &Kernel, term: &Term) -> bool {
     kernel.machine && accelerable(term) && !kernel.has_refinements()
 }
 
-/// The kernel's reduction strategy: everything unfolds, and what a local-free term unfolds to is remembered — see the `memos` and `spend` modules for what that does and does not concede, and for why a hit on this entry point is free while a definition unfold's is charged.
+/// The kernel's reduction strategy: everything unfolds, and what a term unfolds to is remembered — for the declaration if it is local-free, for as long as the equations in force stand if it is not — see the `memos` and `spend` modules for what that does and does not concede, and for why a hit on this entry point is free while a definition unfold's is charged.
 impl Reducer for Kernel {
     fn reduce(&mut self, term: Term) -> Result<Term, ReduceError> {
         whnf(self, term)
@@ -88,7 +88,7 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
     //
     // It used to sit on the two `Reducer` methods alone, so the fifteen internal calls below — a scrutinee, an application's head, each turn of `force`'s loop, `expose_rec_tail`, `unfold_spelling` — re-derived what the table already held, and `reduce_forced` re-derived its own weak-head half because it probed only the `forced` table before calling this directly. The elaborator's reducer has always probed at its own entry and recursed through that same entry, so the two strategies differed in reach rather than in rule; measured over a `Str` literal's UTF-8 scan the kernel charged 72× what the elaborator did for the *same* reduction, at the same peak depth, and the whole of that gap was this.
     //
-    // The gate is unchanged and is what makes reaching further safe: [`Memos::storable`](super::Memos) admits only a local-free term, on the lookup as well as the store, so every new site here is protected by the same test the two old ones were.
+    // What makes reaching further safe is that the table a term belongs to is decided inside [`Memos`](super::Memos), on the lookup as well as the store, so every new site here is protected by the same dispatch the two old ones were: a local-free term by the tables that live for the declaration, a local-bearing one by the tables that live only as long as the equations in force.
     if let Some(replayed) = kernel.whnf_hit(&term, false) {
         return Ok(replayed);
     }
@@ -168,7 +168,7 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
 ///
 /// **Why the escalation is here and not at the other probe point.** An equation is recorded under the scrutinee as written, and reduction reaches the scrutinee's *reduct* — `Le(s + l, len b)` instantiated at a call arrives as `Le(0 + n, len b)` and folds to a spelling the written key does not carry. The point before decomposition sees terms on the way in, where the written spelling is what matches; this point sees the forms reduction produced, which is exactly where a spelling that exists only as a reduct can appear.
 ///
-/// **The local-bearing gate is the guard, not an optimization.** `Scope::refine` records only local-bearing written spellings, but a *reduced* spelling is whatever reduction returned and may well be local-free. Refusing to probe on a local-free term is what keeps every refined term local-bearing, which is the half of the evaluation memos' first invariant this component owns: the memos store local-free terms only, so a local-free term whose reduct came from a case equation is precisely the entry that could outlive the arm that justified it. It is also what makes the deferral pay — an arm body of literals reduces to local-free forms and settles nothing at all.
+/// **The local-bearing gate is the guard, not an optimization.** `Scope::refine` records only local-bearing written spellings, but a *reduced* spelling is whatever reduction returned and may well be local-free. Refusing to probe on a local-free term is what keeps every refined term local-bearing, which is the half of the evaluation memos' first invariant this component owns: a local-free term's entry outlives the arm, so a local-free term whose reduct came from a case equation is precisely the entry that could outlive the arm that justified it — where a local-bearing term's entry is cleared with the arm's equations and may. It is also what makes the deferral pay — an arm body of literals reduces to local-free forms and settles nothing at all.
 fn refined_reduct(kernel: &mut Kernel, value: &Term) -> Result<Option<Term>, ReduceError> {
     if let Some(refined) = kernel.refinement_of(value) {
         return Ok(Some(refined));

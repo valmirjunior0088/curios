@@ -355,7 +355,20 @@ fn combinator_sharing_measurements() {
 ///
 /// # What it last printed
 ///
-/// Taken **2026-08-21**, **release**, `x86_64-unknown-linux-gnu`, with `&&`/`||` reducing their right operand only behind a literal left and the closed machine keeping a global argument as a name.
+/// Taken **2026-08-22**, **release**, `x86_64-unknown-linux-gnu`, with the kernel remembering a local-bearing reduct for as long as the equations in force stand, the elaborator's cache admitting a universe metavariable, `capture` and `Term::eq` each walking a graph in its own size, and — from the day before — `&&`/`||` reducing their right operand only behind a literal left and the closed machine keeping a global argument as a name.
+///
+/// | definitions | proved | numeric, proved |
+/// | --- | --- | --- |
+/// | 8 | 0.14 s | 0.15 s |
+/// | 10 | 0.15 s | 0.15 s |
+/// | 12 | 0.15 s | 0.15 s |
+/// | 13 | 0.15 s | 0.15 s |
+///
+/// The first four columns of the earlier table did not move and are omitted. **Both doors are flat.** Under the profiler at thirteen definitions the numeric web is a 106 ms compile, `recheck` 12 ms and `elaborate_and_zonk` 16 ms, where the day before it was 4 452 ms with `recheck` 4 370 and elaboration 165.
+///
+/// # What it printed with the boolean cure alone
+///
+/// Taken **2026-08-21**, the day before, on the same host.
 ///
 /// | definitions | proved | numeric, proved |
 /// | --- | --- | --- |
@@ -364,11 +377,11 @@ fn combinator_sharing_measurements() {
 /// | 12 | 0.15 s | 1.78 s |
 /// | 13 | 0.16 s | 4.01 s |
 ///
-/// The first four columns of the earlier table did not move and are omitted. **The proved door is flat**, and on the same host it read 0.23, 0.57, 2.55 and 5.53 s the same morning. Under `--features profile` at 13 definitions `recheck` is **13.6 ms of a 108 ms compile**, 120 k allocations, where it was 5 842 ms of 6 138 ms, 72 M allocations, 6.3 GB; `elaborate_and_zonk` is 13.8 ms where it was 220 ms.
+/// **The proved door was flat**, and on the same host it read 0.23, 0.57, 2.55 and 5.53 s the same morning. Under `--features profile` at 13 definitions `recheck` is **13.6 ms of a 108 ms compile**, 120 k allocations, where it was 5 842 ms of 6 138 ms, 72 M allocations, 6.3 GB; `elaborate_and_zonk` is 13.8 ms where it was 220 ms.
 ///
 /// The cost was never the inverter's. Conversion is weak-head-and-compare, and `true` against a stuck term stops at the heads; what the inverter's `force` paid for was weak-head reduction itself, twice over. `reduce_bool_binary` reduced both operands of a `&&`/`||` before it could know the fold was settled by a stuck left, so the weak-head form of the web's top was its full normalization, `2^n` with nothing remembering a local-bearing term — the whole of the elaborator's share and most of the kernel's. And the closed machine, handed the *closed* `both(r11, anyof(r11, r11))`, substituted `r11`'s value where the strategy keeps the name, so every definition's value held the previous one's twice, a graph whose tree was `2^n`, stored by the unfold memo at the tree's footprint and opened as a tree by the strategy's own beta — the 1.3 s that survived the first cure alone, and the whole of [`scrutinee_retention_measurements`]' retention ladder. Each is closed where it stood: `reduce_bool_binary` and the machine's `args`, in `curios-core`, which both checkers share.
 ///
-/// **The numeric column is the same door over `Nat`, and it is the cliff that is left.** `reduce_nat_binary` reads its right operand for its identity laws — `x + 0` is `x` whatever the left — so a stuck left does not settle its fold the way a `Bool`'s does, and the web's weak-head form is still its normalization: ×2.2 per definition, the shape the boolean column had. What would reach it is sharing — a reduct remembered for a local-bearing term within one reduction, which both checkers refuse today for the reason `documentation/soundness/what-the-kernel-consults/the-evaluation-memo.md` gives — and that is a decision about the trusted base's evaluation strategy rather than a line here.
+/// **The numeric column was the same door over `Nat`, and it was the cliff that was left.** `reduce_nat_binary` reads its right operand for its identity laws — `x + 0` is `x` whatever the left — so a stuck left does not settle its fold the way a `Bool`'s does, and the web's weak-head form is its normalization: a graph whose tree is `2^n`, and ×2.2 per definition for every walk that saw the tree. Four of them did, and each is closed in its own place. The kernel re-derived the graph at every demand, remembering nothing local-bearing; `Memos` now keeps such a reduct for as long as the equations in force stand. The elaborator's cache refused every term naming a universe metavariable, which inside the declaration instantiating a polymorphic web is all of them; reduction is parametric in levels, and the cache admits them. The kernel's conversion history captured every goal's terms as trees; `capture` is memoized on node and depth. And the elaborator's cache lookup compared a forced graph against an equal, distinct key pair by pair along the tree; `Term::eq` remembers the pairs it has entered.
 ///
 /// # What it printed with the key at the written spelling and both operands eager
 ///

@@ -592,7 +592,10 @@ impl Kernel {
     pub(crate) fn scoped<T>(&mut self, walk: impl FnOnce(&mut Self) -> T) -> T {
         let mark = self.scope.mark();
         let outcome = walk(self);
-        self.scope.retract(mark);
+        // Retracting an equation changes what a local-bearing term reduces to, so the reducts remembered under it go with it. A bracket that assumed none leaves the tables alone — most do, and what they remembered is still true.
+        if self.scope.retract(mark) {
+            self.memos.begin_equations();
+        }
 
         outcome
     }
@@ -600,6 +603,7 @@ impl Kernel {
     /// Assume an arm's case equation: within the arm, `scrutinee` — as written — is `value`, definitionally. Assumed inside the arm's [`Kernel::scoped`] bracket, which is what scopes it.
     pub(crate) fn refine(&mut self, scrutinee: Term, value: Term) {
         self.scope.refine(scrutinee, value);
+        self.memos.begin_equations();
     }
 
     /// The case value `term` is refined to under the written spelling, innermost arm first.
@@ -623,9 +627,12 @@ impl Kernel {
     ///
     /// Withholding is [`Scope::hide_refinements_from`]'s to justify. An error settles the equation as having no reduced spelling, so the attempt is paid once rather than repeated at every later probe; exhaustion is the one error that also propagates, because the budget it spent is real and the judgment has no business continuing at zero.
     pub(crate) fn settle_refinement(&mut self, index: usize, key: Term) -> Result<(), ReduceError> {
+        // Withholding equations is a change to the set in force, and so is restoring them: the local-bearing reducts remembered on either side of the settlement must not answer on the other.
         let outer = self.scope.hide_refinements_from(index);
+        self.memos.begin_equations();
         let reduct = whnf(self, key);
         self.scope.show_refinements(outer);
+        self.memos.begin_equations();
 
         match reduct {
             Ok(value) => {

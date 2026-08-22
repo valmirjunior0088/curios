@@ -580,3 +580,17 @@ fn deep_terms_are_released_without_native_recursion() {
 
     assert_eq!(sharing, Term::tuple([shared.clone(), shared]));
 }
+
+/// Two equal graphs built apart compare equal in the size of the graph, not of its tree. Each level here is the sum of the previous level with itself, so the tree doubles per level and twenty-two levels of it is four million pairs a path-by-path walk would have masked and compared one at a time; the walk remembers each pair of shared nodes it has entered, and answers in a few dozen.
+#[test]
+fn equal_graphs_compare_in_their_own_size() {
+    let build = || {
+        let mut level = Term::intrinsic(Intrinsic::Nat(Nat::new(1usize)));
+        for _ in 0..22 {
+            level = Term::intrinsic(Intrinsic::nat_add(level.clone(), level));
+        }
+        level
+    };
+
+    assert_eq!(build(), build());
+}

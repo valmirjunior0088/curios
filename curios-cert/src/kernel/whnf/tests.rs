@@ -374,21 +374,19 @@ fn a_non_productive_recursion_exhausts_the_budget() {
 /// An undefined variable costs exactly one *step* — it is looked at once and is already normal — on top of the one guarded level the reduction enters. So the smallest budget that affords exactly one reduction is a frame plus a step, spelled from the constants rather than as a number, and what the second and third calls do is entirely about the refill.
 ///
 /// The frame is charged per new *peak* depth, so a second reduction at the same depth would be free of it — which is why the refill matters here twice over: `restore_budget` resets the peak as well as the budget, so the second call pays for its level again exactly as the first did.
+///
+/// Three *different* binders, because a term reduced once is remembered for the rest of the declaration — a local-bearing one too — and a second look at the same one would be a free hit rather than the reduction whose refusal this is about.
 #[test]
 fn restoring_the_budget_refills_it() {
     let mut kernel = Kernel::new(Cost::FRAME.get() + Cost::STEP.get(), crate::fixture::SYNTAX);
     kernel.set_local_floor(1_000);
-    let x = binder(0, "x");
-    let occurrence = Term::free_var(&x);
+    let occurrence = |index: u32| Term::free_var(&binder(index, "x"));
 
-    assert_eq!(
-        whnf(&mut kernel, occurrence.clone()),
-        Ok(occurrence.clone())
-    );
-    assert!(whnf(&mut kernel, occurrence.clone()).is_err_and(|spent| spent.is_exhausted()));
+    assert_eq!(whnf(&mut kernel, occurrence(0)), Ok(occurrence(0)));
+    assert!(whnf(&mut kernel, occurrence(1)).is_err_and(|spent| spent.is_exhausted()));
 
     kernel.restore_budget();
-    assert_eq!(whnf(&mut kernel, occurrence.clone()), Ok(occurrence));
+    assert_eq!(whnf(&mut kernel, occurrence(2)), Ok(occurrence(2)));
 }
 
 /// A remembered reduct is the same answer the term would compute — including across a scope boundary, which a local-free key cannot observe.
@@ -513,9 +511,11 @@ fn restoring_the_budget_forgets_the_term_keyed_memos() {
 
 /// The name-keyed table is the one that is *not* cleared at a declaration boundary, and it stays charged for exactly that reason: an entry outliving a declaration may not also be free, or which declarations came first would decide what this one can afford.
 ///
-/// So a hit costs what computing the body cost, and the second occurrence spends what the first did less the peak-depth rule's discount — the first call's [`Cost::FRAME`] for a level that is no longer a new peak — and less the warmth of the reduct's own memo entry, which the first call stored and the second call hits. Before the closed machine the discount was exactly one frame; the machine's run replaces the reduct's re-derivation with a table hit too, so the equation is stated as the two bounds that survive either evaluator: the hit is charged the bulk of what it replaces, and the discount never exceeds a frame plus the follow-on warmth.
+/// So a hit costs what computing the body cost, and the second occurrence spends what the first did to within the peak-depth rule — a [`Cost::FRAME`] either way, since the boundary between them resets the peak — and the warmth of any term the first call remembered and the boundary did not clear. The equation is stated as the two bounds that survive either evaluator: the hit is charged the bulk of what it replaces, and the two never differ by more than a frame plus that warmth.
 ///
 /// That near-equality is also why the table's *survival* cannot be asserted here: a charged hit and a recomputation are nearly the same number by construction, and only the wall clock separates them.
+///
+/// The two occurrences sit on either side of a declaration boundary, because that is where the unfold table is the only one left: within a declaration the occurrence itself is remembered, local-bearing or not, and the second look would be a free hit on *that* rather than a charged one on the name.
 #[test]
 fn an_unfold_hit_is_charged_what_it_replaces() {
     let mut kernel = kernel();
@@ -524,6 +524,7 @@ fn an_unfold_hit_is_charged_what_it_replaces() {
     let occurrence = Term::free_var(&name);
 
     let first = spent(&mut kernel, occurrence.clone());
+    kernel.restore_budget();
     let second = spent(&mut kernel, occurrence);
 
     assert!(first > 1, "computing the body is what the first call pays");
@@ -532,8 +533,8 @@ fn an_unfold_hit_is_charged_what_it_replaces() {
         "the hit is charged what it replaces: {second} against {first}"
     );
     assert!(
-        first - second <= Cost::FRAME.get() + 64,
-        "the discount is the un-repeated peak frame plus follow-on warmth: {second} against {first}"
+        first.abs_diff(second) <= Cost::FRAME.get() + 64,
+        "the two differ by at most a peak frame plus follow-on warmth: {second} against {first}"
     );
 }
 
@@ -581,13 +582,13 @@ fn across_an_arm(kernel: &mut Kernel) -> [Term; 4] {
 
 /// An arm's case equation reaches the reduct and not the table.
 ///
-/// This is the load-bearing half of the memos' first invariant, and it is a claim held in one component about another: [`Memos::storable`](super::super::Memos) admits only a *local-free* term, while [`Scope::refine`](super::super::Scope) records only a *local-bearing* scrutinee, so the two sets are disjoint and no remembered reduct can rest on an equation later retracted. What stood behind that pair was `curios-prelude-archive`'s `kernel_memo_parity`, which averages the whole prelude rather than aiming at the interlock — coverage by corpus, the standard the perimeter declines to accept elsewhere.
+/// This is the load-bearing half of the memos' first invariant, and it is a claim held in one component about another: the tables that outlive an arm hold only *local-free* terms, while [`Scope::refine`](super::super::Scope) records only a *local-bearing* scrutinee, so the two sets are disjoint and no remembered reduct that outlives an arm can rest on an equation it retracted — and the local-bearing tables, which may, are cleared with it. What stood behind that pair was `curios-prelude-archive`'s `kernel_memo_parity`, which averages the whole prelude rather than aiming at the interlock — coverage by corpus, the standard the perimeter declines to accept elsewhere.
 ///
 /// Both terms are needed and they check different halves. The open one is the equation's subject: inside the arm it reduces to `1` where nothing outside makes it anything but stuck, so the retraction has something to fail to survive — without that inequality the assertion below would hold of a kernel that had never refined anything. The closed one crosses the *other* gate: `machine_admissible` declines the closed machine while any equation is live, so its inside reduct comes from the recursive strategy, and the outside call — where the machine would otherwise run — is served by the table entry that strategy stored. Both routes have to reach the same value as a kernel that never entered the arm at all, which is what `control` is.
 ///
 /// The whole sequence then runs again with the memos off, which is the parity half: with nothing remembered, an equation that leaked into a table cannot leak, so the two kernels agreeing on all four reducts is the property `kernel_memo_parity` asserts over the prelude, asked here of terms chosen to reach the gate.
 ///
-/// Mutation-checked: dropping the local-free test from `Memos::storable` remembers the arm's answer for the open term under the `forced` table, and the outside reduction hands back `1` where the stuck successor of `n` is what the term reduces to — failing at the retraction assertion below and leaving the closed half green. Two cost fixtures in this module move under the same mutation, `an_unfold_hit_is_charged_what_it_replaces` and `restoring_the_budget_refills_it`; both are resource assertions, and this is the only one that sees the false equation.
+/// Mutation-checked: dropping the clear of the local-bearing tables at `Kernel::scoped`'s retract remembers the arm's answer for the open term under the `local_forced` table, and the outside reduction hands back `1` where the stuck successor of `n` is what the term reduces to — failing at the retraction assertion below and leaving the closed half green. The other direction, an entry from before the arm answering inside it, is `a_remembered_reduct_does_not_outlive_the_equations_it_was_taken_under`'s.
 #[test]
 fn a_case_equation_reaches_the_reduct_and_not_the_memos() {
     let mut cached = kernel();
@@ -628,6 +629,64 @@ fn a_case_equation_reaches_the_reduct_and_not_the_memos() {
         [inside_open, inside_closed, outside_open, outside_closed],
         "the memos changed no reduct on either side of the arm"
     );
+}
+
+/// The same interlock from the other side, which the local-bearing memo made a question: a stuck reduct remembered *before* an arm must not answer inside it, where an equation has since made the term something else — and the arm's answer, remembered inside, must not answer after it.
+///
+/// This is the fixture for the rule that a local-bearing reduct lives exactly as long as the set of equations in force: `Memos::begin_equations` clears the local tables where an equation is assumed, where it is retracted, and around a settlement. The open term is reduced before the arm, inside it, and after it; the first and third are the stuck successor and the second is `1`, and the uncached kernel agrees on all three. Mutation-checked: dropping the clear at `Kernel::refine` answers the inside reduction from the entry the outside one stored, and the middle assertion is what sees it.
+#[test]
+fn a_remembered_reduct_does_not_outlive_the_equations_it_was_taken_under() {
+    let sequence = |kernel: &mut Kernel| {
+        let n = binder(1, "n");
+        kernel.assume(&n, &nat_type());
+        let open = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&n), nat(1)));
+
+        let before = kernel.reduce_forced(open.clone()).expect("reduces");
+        let inside = kernel.scoped(|kernel| {
+            kernel.refine(Term::free_var(&n), nat(0));
+            kernel.reduce_forced(open.clone()).expect("reduces")
+        });
+        let after = kernel.reduce_forced(open).expect("reduces");
+
+        [before, inside, after]
+    };
+
+    let mut cached = kernel();
+    let [before, inside, after] = sequence(&mut cached);
+
+    assert_ne!(
+        before, inside,
+        "the equation has to change the open term, or the assertions below prove nothing"
+    );
+    assert_eq!(
+        inside,
+        nat(1),
+        "the equation answers inside the arm, whatever was remembered before it"
+    );
+    assert_eq!(after, before, "and its answer does not outlive it");
+
+    let mut uncached = Kernel::uncached(1_000_000, crate::fixture::SYNTAX);
+    uncached.set_local_floor(1_000);
+    assert_eq!(
+        sequence(&mut uncached),
+        [before, inside, after],
+        "the memos changed no reduct on any side of the arm"
+    );
+}
+
+/// A local-bearing term is remembered for as long as the equations in force stand: the second reduction within a declaration spends nothing, exactly as a closed term's does. This is what the web of definitions an index inversion forces — each naming the one before it twice, a local in every one — was re-derived `2^n` times for want of.
+#[test]
+fn a_local_bearing_reduct_is_a_free_hit_within_its_span() {
+    let mut kernel = kernel();
+    let n = binder(1, "n");
+    kernel.assume(&n, &nat_type());
+    let open = Term::intrinsic(Intrinsic::nat_add(chain(64), Term::free_var(&n)));
+
+    let first = spent(&mut kernel, open.clone());
+    let second = spent(&mut kernel, open);
+
+    assert!(first > 1, "the first reduction does the work");
+    assert_eq!(second, 0, "the second is remembered");
 }
 
 /// The probe before decomposition is what makes an equation's answer independent of affording the reduction it spares.

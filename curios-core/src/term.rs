@@ -1230,6 +1230,8 @@ impl Hash for Term {
 /// The recursion this replaces was native, and a term deep enough overflowed the stack rather than answering — which a kernel must not do, and which the step budget cannot prevent, because depth is not steps. Every other derivation over a term already avoids native depth the same way (`Term::fill_post_order`, `traverse_rewrite_spine`); this closes the last one that decides acceptance.
 ///
 /// Two shortcuts carry the common cases before any of that: pointer identity (hash-consing makes shared structure genuinely common) and the cached hashes. Only a pair that is distinct-but-hash-equal reaches the walk.
+///
+/// **A pair of shared nodes is compared once.** A reduct is a graph whose tree can be exponential in its depth — a web of definitions each naming the one before it twice reduces to one — and two such graphs that are equal but distinct reach the walk with every pair of shared nodes on as many paths as the tree has, each pair masked and compared again. The walk keeps the pairs it has already entered, exactly as `any_metavar` keeps its visited nodes, and for the same reason: a pair's answer is the pair's, whichever path reached it, and a `false` ends the walk outright, so a recorded pair is always one that is equal so far. Recorded only where both nodes are shared, so the set stays empty and unallocated over two trees.
 impl PartialEq for Term {
     fn eq(&self, other: &Self) -> bool {
         // One visit for the whole comparison: the placeholder is allocated once, and each node's children are taken off it in turn.
@@ -1241,6 +1243,7 @@ impl PartialEq for Term {
         };
 
         let mut work = vec![(self.clone(), other.clone())];
+        let mut entered: HashSet<(*const Node, *const Node)> = HashSet::new();
 
         while let Some((this, that)) = work.pop() {
             if Rc::ptr_eq(&this.inner, &that.inner) {
@@ -1248,6 +1251,12 @@ impl PartialEq for Term {
             }
             if this.get_or_init_hash() != that.get_or_init_hash() {
                 return false;
+            }
+            if Rc::strong_count(&this.inner) > 1
+                && Rc::strong_count(&that.inner) > 1
+                && !entered.insert((Rc::as_ptr(&this.inner), Rc::as_ptr(&that.inner)))
+            {
+                continue;
             }
 
             let (this_masked, this_children) = mask(&this.inner.subterm);

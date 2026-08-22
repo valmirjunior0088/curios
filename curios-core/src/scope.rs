@@ -178,8 +178,10 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
     }
 
     /// The closing half of the locally-nameless discipline: turn free occurrences of `binders` into bound indices (position in `binders`, offset by the current depth) while shifting already-loose indices past the new binders. `Scope::close` is this plus the name bookkeeping. Rewrites *free* names, so it can never be pruned by `reach`.
+    ///
+    /// Memoized on node identity and depth, so a DAG-shaped input — the weak-head form of a web of definitions each naming the one before it twice, whose tree is `2^n` — is captured in its own size: the kernel's conversion history captures every goal it enters, and captured that web's tree at every one.
     fn capture(&self, binders: &[&Free]) -> Self {
-        self.traverse(&mut Visit::new(|depth, var| {
+        self.traverse(&mut Visit::shared_at_depth(|depth, var| {
             var.as_free()
                 .and_then(|name| {
                     binders
@@ -1012,6 +1014,8 @@ pub struct Visit<F> {
 enum Mode {
     /// Rebuild every node, rewriting variables only.
     Plain,
+    /// [`Mode::Plain`], memoized on input node identity *and* binder depth, so a structurally shared input stays shared in the output under a visit whose effect depends on the depth it runs at. `capture` is the case: a term reached twice at one depth captures to one node, and [`Mode::RewritingShared`]'s depth-blind memo would hand the second occurrence the wrong indices wherever the depths differed. Keys are addresses of input nodes, held alive by the caller's value for the whole traversal, paired with the depth.
+    PlainSharedAtDepth(HashMap<(usize, usize), Term>),
     /// Skip subtrees whose `reach` proves no loose index can be touched.
     Pruning,
     /// A term-level pre-hook substitutes whole nodes before descending. A substituted node is not descended into.
@@ -1045,6 +1049,16 @@ where
             universe_depth: 0,
             visit,
             mode: Mode::Plain,
+        }
+    }
+
+    /// Like `new`, memoized on node identity and binder depth together — for a visit whose effect depends on the depth, which [`Visit::rewriting_shared`]'s depth-blind memo would answer wrongly. A shared input stays shared in the output, so a DAG-shaped term is rebuilt in its own size rather than its tree's. Sound when the variable callback is pure in the node and the depth.
+    fn shared_at_depth(visit: F) -> Self {
+        Self {
+            term_depth: 0,
+            universe_depth: 0,
+            visit,
+            mode: Mode::PlainSharedAtDepth(HashMap::new()),
         }
     }
 
@@ -1194,6 +1208,7 @@ where
                 Some(placeholder.clone())
             }
             Mode::Plain
+            | Mode::PlainSharedAtDepth(_)
             | Mode::Pruning
             | Mode::RewritingLevels(_)
             | Mode::ErasingUniverses
@@ -1221,20 +1236,29 @@ where
     }
 
     pub(crate) fn memoizes(&self) -> bool {
-        matches!(self.mode, Mode::RewritingShared(..) | Mode::Sharing(..))
+        matches!(
+            self.mode,
+            Mode::RewritingShared(..) | Mode::Sharing(..) | Mode::PlainSharedAtDepth(_)
+        )
     }
 
+    /// The memoized rebuild of the input node at `key`, at the depth this visit currently stands at for the modes whose memo is depth-keyed.
     pub(crate) fn memo_get(&self, key: usize) -> Option<Term> {
         match &self.mode {
             Mode::RewritingShared(_, memo) | Mode::Sharing(memo, _) => memo.get(&key).cloned(),
+            Mode::PlainSharedAtDepth(memo) => memo.get(&(key, self.term_depth)).cloned(),
             _ => None,
         }
     }
 
     pub(crate) fn memo_put(&mut self, key: usize, term: Term) {
+        let depth = self.term_depth;
         match &mut self.mode {
             Mode::RewritingShared(_, memo) | Mode::Sharing(memo, _) => {
                 memo.insert(key, term);
+            }
+            Mode::PlainSharedAtDepth(memo) => {
+                memo.insert((key, depth), term);
             }
             _ => {}
         }

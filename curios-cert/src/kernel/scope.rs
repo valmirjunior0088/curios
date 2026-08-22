@@ -58,7 +58,7 @@ impl Scope {
     ///
     /// **Keyed on the scrutinee as written.** This used to be keyed on the scrutinee's weak-head normal form, which the caller obtained by reducing it once per arm — and a scrutinee mentioning a local can be memoized by nothing, so a web of combinator definitions each naming the one before it twice unfolded exponentially to produce a key that a literal arm body then never probed. The written spelling costs nothing to record; the reduced one is computed only when a probe misses, at most once per equation, by [`Scope::unasked_refinement`] and its caller.
     ///
-    /// A local-free scrutinee is skipped rather than recorded, and that gate now sits on the written spelling. Local-free terms reduce to their case values instead of sticking, and the skip is also what keeps the evaluation memos sound — they store local-free terms only, and reduction of a local-free term never encounters a local-bearing stuck form, so no memoized reduct can depend on an equation that was later retracted. The reduced spelling a settlement computes is *not* covered by this gate, and does not need to be: the probe that consults it is asked only about local-bearing terms, so a local-free reduct can be recorded and can never fire.
+    /// A local-free scrutinee is skipped rather than recorded, and that gate now sits on the written spelling. Local-free terms reduce to their case values instead of sticking, and the skip is also what keeps the evaluation memos sound — a local-free term's entry outlives the arm, and reduction of a local-free term never encounters a local-bearing stuck form, so no such reduct can depend on an equation that was later retracted; a local-bearing term's entry may, and is cleared with the equation. The reduced spelling a settlement computes is *not* covered by this gate, and does not need to be: the probe that consults it is asked only about local-bearing terms, so a local-free reduct can be recorded and can never fire.
     ///
     /// An equation is a claim about *one* term, so the only sound key is one that identifies terms already definitionally equal, and structural equality is the under-approximation of that which costs nothing to justify. Both spellings satisfy it — the written one *is* the scrutinee, and the reduced one is what the kernel's own reduction says it computes to.
     ///
@@ -159,17 +159,19 @@ impl Scope {
         }
     }
 
-    /// Close every binder opened — and drop every case equation assumed — since `mark`.
+    /// Close every binder opened — and drop every case equation assumed — since `mark`, answering whether any equation was dropped.
     ///
     /// No settlement can be in progress here, and that is structural rather than checked by discipline: `Kernel::scoped` is this method's only caller, and reduction — the only thing a settlement runs — never opens a binder scope.
-    pub(super) fn retract(&mut self, mark: Mark) {
+    pub(super) fn retract(&mut self, mark: Mark) -> bool {
         debug_assert!(
             self.hidden.is_none(),
             "a scope retracted while an equation's reduced spelling was being settled"
         );
 
         self.locals.truncate(mark.locals);
+        let dropped = self.refinements.len() > mark.refinements;
         self.refinements.truncate(mark.refinements);
+        dropped
     }
 
     /// How many equations are in force: all of them, unless a settlement is withholding the inner ones.
