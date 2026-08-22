@@ -176,15 +176,6 @@ impl<'a, 'b> Context<'a, 'b> {
         }
     }
 
-    pub(crate) fn is_shell(&self, value_name: &EmissionValueName) -> bool {
-        match self {
-            Self::Const { .. } => false,
-            Self::Closure { frames, .. } | Self::Function { frames, .. } => {
-                frames.iter().any(|frame| frame.shells.contains(value_name))
-            }
-        }
-    }
-
     /// Whether the definition of `value_name` is a `Tuple` or `List` construction — bound in a region in scope, or hoisted to a module const.
     ///
     /// Both halves are needed: `hoist` lifts a closed aggregate out of its region into a global, so a check reading frames alone answers `false` for exactly the constant ones.

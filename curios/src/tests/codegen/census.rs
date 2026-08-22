@@ -374,10 +374,6 @@ impl<'m> Census<'m> {
                             }
                         }
                     }
-                    CpsNode::RecInit { ready, body, .. } => {
-                        stack.push(*ready);
-                        stack.push(*body);
-                    }
                     _ => {}
                 }
             }
@@ -571,10 +567,7 @@ impl<'m> Census<'m> {
                         self.closure_funs.insert(*fun);
                     }
                 }
-                CpsNode::LetFun { .. }
-                | CpsNode::LetCont { .. }
-                | CpsNode::RecInit { .. }
-                | CpsNode::Unreachable => {}
+                CpsNode::LetFun { .. } | CpsNode::LetCont { .. } | CpsNode::Unreachable => {}
             }
         }
     }

@@ -110,9 +110,7 @@ pub(super) fn dedupe_intrinsics(module: &mut CpsModule) -> bool {
                     work.push(Task::Visit(*next));
                 }
                 CpsNode::LetValue { next, .. } => work.push(Task::Visit(*next)),
-                CpsNode::LetFun { body, .. } | CpsNode::RecInit { body, .. } => {
-                    work.push(Task::Visit(*body))
-                }
+                CpsNode::LetFun { body, .. } => work.push(Task::Visit(*body)),
                 CpsNode::LetCont {
                     continuations,
                     body,
@@ -148,7 +146,7 @@ pub(super) fn dedupe_intrinsics(module: &mut CpsModule) -> bool {
     true
 }
 
-/// The scope-is-dominance argument requires the node graph to be a tree: every live node owned by exactly one of a function body, a continuation body, or a predecessor's `next`/`body` link (`RecInit`'s `ready` is an annotation into the body's own chain, not an ownership edge). No pass creates sharing today; this assertion is where that assumption fails loudly if one starts to.
+/// The scope-is-dominance argument requires the node graph to be a tree: every live node owned by exactly one of a function body, a continuation body, or a predecessor's `next`/`body` link. No pass creates sharing today; this assertion is where that assumption fails loudly if one starts to.
 fn debug_assert_single_owner(module: &CpsModule) {
     if cfg!(debug_assertions) {
         let mut counts = BTreeMap::<CpsNodeId, usize>::new();
@@ -163,9 +161,7 @@ fn debug_assert_single_owner(module: &CpsModule) {
                 CpsNode::LetValue { next, .. } | CpsNode::LetIntrinsic { next, .. } => {
                     *counts.entry(*next).or_insert(0) += 1;
                 }
-                CpsNode::LetFun { body, .. }
-                | CpsNode::LetCont { body, .. }
-                | CpsNode::RecInit { body, .. } => {
+                CpsNode::LetFun { body, .. } | CpsNode::LetCont { body, .. } => {
                     *counts.entry(*body).or_insert(0) += 1;
                 }
                 _ => {}

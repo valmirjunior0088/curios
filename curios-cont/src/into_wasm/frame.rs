@@ -183,7 +183,6 @@ impl<'a> BlockData<'a> {
 pub(crate) struct Frame<'a> {
     pub params: HashMap<&'a EmissionValueName, LocalData>,
     pub values: HashMap<&'a EmissionValueName, curios_wasm::LocalName>,
-    pub shells: HashSet<&'a EmissionValueName>,
     /// The region's `Tuple`/`List` constructions, so a load of one at a raw carrier is a build failure rather than a `ref.cast` trap. See [`Context::refuse_raw_aggregate`](super::Context::refuse_raw_aggregate).
     pub aggregates: HashSet<&'a EmissionValueName>,
     pub blocks: Vec<(&'a EmissionBlockName, BlockData<'a>)>,
@@ -193,14 +192,12 @@ pub(crate) struct Frame<'a> {
 impl<'a> Frame<'a> {
     pub(crate) fn new(
         params: HashMap<&'a EmissionValueName, LocalData>,
-        shells: HashSet<&'a EmissionValueName>,
         aggregates: HashSet<&'a EmissionValueName>,
         blocks: Vec<(&'a EmissionBlockName, BlockData<'a>)>,
     ) -> Self {
         Self {
             params,
             values: HashMap::new(),
-            shells,
             aggregates,
             blocks,
             instrs: Default::default(),
@@ -209,6 +206,6 @@ impl<'a> Frame<'a> {
 
     /// A frame that binds nothing of its own — the `loop` and localized-dispatcher scopes, which exist to register block labels.
     pub(crate) fn structural(blocks: Vec<(&'a EmissionBlockName, BlockData<'a>)>) -> Self {
-        Self::new(HashMap::new(), HashSet::new(), HashSet::new(), blocks)
+        Self::new(HashMap::new(), HashSet::new(), blocks)
     }
 }

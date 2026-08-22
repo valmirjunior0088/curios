@@ -4,37 +4,6 @@ use {
     std::collections::{BTreeMap, BTreeSet},
 };
 
-/// Dissolve a `RecInit` knot into an ordinary `LetFun` once optimization has severed the function-to-value dependency. `RecInit` additionally binds its computed values so escaping closures may forward-reference them and emits a fallback shell for each escaping member that captures one; when nothing below the node still needs that forward binding, both are unnecessary and the node is an ordinary recursive function group.
-///
-/// The test asks [`CpsModule::let_fun_requirements`] what the `LetFun` this becomes would still require from its enclosing scope, rather than restating when a computed value is reachable. Restating it is what went wrong before: the test covered the group's members, through a `free_values` that stops at a nested function, and never covered the body at all -- so a knot whose body held a function capturing a computed value dissolved into a module the verifier rejects.
-pub(super) fn dissolve_rec_init(module: &mut CpsModule) -> bool {
-    let mut selected = None;
-    for (id, node) in module.nodes.iter_live() {
-        let CpsNode::RecInit {
-            functions,
-            values,
-            body,
-            ..
-        } = node
-        else {
-            continue;
-        };
-        let computed: BTreeSet<CpsValueId> = values.iter().copied().collect();
-        if !module
-            .let_fun_requirements(functions, *body)
-            .is_disjoint(&computed)
-        {
-            continue;
-        }
-        selected = Some((id, functions.clone(), *body));
-        break;
-    }
-    let Some((node, functions, body)) = selected else {
-        return false;
-    };
-    module.nodes.set(node, CpsNode::LetFun { functions, body });
-    true
-}
 pub(super) fn rewrite_atoms(module: &mut CpsModule, known: &BTreeMap<CpsValueId, CpsAtom>) -> bool {
     let mut changed = false;
     for (_, node) in module.nodes.iter_live_mut() {
@@ -893,10 +862,6 @@ fn splice_dead_nodes(module: &mut CpsModule, redirect: &BTreeMap<CpsNodeId, CpsN
             CpsNode::LetFun { body, .. } | CpsNode::LetCont { body, .. } => {
                 *body = resolve_redirect(redirect, *body);
             }
-            CpsNode::RecInit { ready, body, .. } => {
-                *ready = resolve_redirect(redirect, *ready);
-                *body = resolve_redirect(redirect, *body);
-            }
             CpsNode::ApplyFun { .. }
             | CpsNode::ApplyCont(_)
             | CpsNode::Switch { .. }
@@ -934,14 +899,6 @@ pub(super) fn rewire_node(module: &mut CpsModule, from: CpsNodeId, to: CpsNodeId
                 }
             }
             CpsNode::LetFun { body, .. } | CpsNode::LetCont { body, .. } => {
-                if *body == from {
-                    *body = to;
-                }
-            }
-            CpsNode::RecInit { ready, body, .. } => {
-                if *ready == from {
-                    *ready = to;
-                }
                 if *body == from {
                     *body = to;
                 }

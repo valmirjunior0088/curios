@@ -238,7 +238,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                                     storage_type: curios_wasm::StorageType::Val(Table::top_type(
                                         true,
                                     )),
-                                    mutability: Table::tuple_field_mutability(),
+                                    mutability: curios_wasm::Mutability::Const,
                                 },
                             )
                         }),
@@ -264,7 +264,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                             Table::tuple_field(index),
                             curios_wasm::FieldType {
                                 storage_type: self.slot_storage_type(*slot),
-                                mutability: Table::tuple_field_mutability(),
+                                mutability: curios_wasm::Mutability::Const,
                             },
                         )
                     })
@@ -315,7 +315,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
     }
 
     fn emit_envr_arity_types(&mut self) {
-        for (arity, type_name) in self.table.envr_types() {
+        for type_name in self.table.envr_types() {
             self.module.add_type(
                 type_name,
                 curios_wasm::SubType {
@@ -324,11 +324,11 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                     comp_type: curios_wasm::CompType::Struct(curios_wasm::StructType::from([(
                         self.table.special_field(),
                         curios_wasm::FieldType {
-                            // The code field is the body's index in the shared funcref table, not a funcref: writing an `i32` skips the engine's per-store funcref-to-GC-heap intern at every construction. A `struct.new_default` shell zeroes it, and slot 0 is left null, so dispatching an unfilled shell still traps.
+                            // The code field is the body's index in the shared funcref table, not a funcref: writing an `i32` skips the engine's per-store funcref-to-GC-heap intern at every construction.
                             storage_type: curios_wasm::StorageType::Val(curios_wasm::ValType::Num(
                                 curios_wasm::NumType::I32,
                             )),
-                            mutability: self.table.envr_special_mutability(arity),
+                            mutability: curios_wasm::Mutability::Const,
                         },
                     )])),
                 },
@@ -354,8 +354,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                                 storage_type: curios_wasm::StorageType::Val(
                                     curios_wasm::ValType::Num(curios_wasm::NumType::I32),
                                 ),
-                                // Must agree with the shared `envr/N` special field above.
-                                mutability: self.table.envr_special_mutability(data.arity()),
+                                mutability: curios_wasm::Mutability::Const,
                             },
                         ))
                         .chain(data.fields().map(|field_name| {
@@ -365,8 +364,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
                                     storage_type: curios_wasm::StorageType::Val(Table::top_type(
                                         true,
                                     )),
-                                    // Payload captures are back-patched only when this closure is itself a recursive shell; otherwise they're immutable.
-                                    mutability: self.table.envr_payload_mutability(data.name()),
+                                    mutability: curios_wasm::Mutability::Const,
                                 },
                             )
                         })),

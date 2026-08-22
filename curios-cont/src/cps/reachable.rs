@@ -44,12 +44,6 @@ pub(super) fn prune_unreachable(module: &mut CpsModule) -> bool {
             }
             CpsNode::LetFun { body, .. } => node_work.push_back(*body),
             CpsNode::LetCont { body, .. } => node_work.push_back(*body),
-            CpsNode::RecInit {
-                functions, body, ..
-            } => {
-                function_work.extend(functions.iter().copied());
-                node_work.push_back(*body);
-            }
             CpsNode::ApplyFun {
                 callee, return_to, ..
             } => {
@@ -87,9 +81,6 @@ pub(super) fn prune_unreachable(module: &mut CpsModule) -> bool {
         match node {
             CpsNode::LetFun {
                 functions: members, ..
-            }
-            | CpsNode::RecInit {
-                functions: members, ..
             } => members.retain(|function| functions.contains(function)),
             CpsNode::LetCont {
                 continuations: members,
@@ -110,10 +101,6 @@ pub(super) fn prune_unreachable(module: &mut CpsModule) -> bool {
             CpsNode::LetValue { result, .. } | CpsNode::LetIntrinsic { result, .. } => {
                 values.insert(*result);
             }
-            CpsNode::RecInit {
-                values: recursive_values,
-                ..
-            } => values.extend(recursive_values.iter().copied()),
             _ => {}
         }
     }

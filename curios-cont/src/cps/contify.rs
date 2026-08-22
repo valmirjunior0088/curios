@@ -199,11 +199,8 @@ pub(super) fn contify_call(module: &mut CpsModule, callee: CpsFunId, call: CpsNo
     );
     module.functions.remove(callee);
     for (_, node) in module.nodes.iter_live_mut() {
-        match node {
-            CpsNode::LetFun { functions, .. } | CpsNode::RecInit { functions, .. } => {
-                functions.retain(|function| *function != callee);
-            }
-            _ => {}
+        if let CpsNode::LetFun { functions, .. } = node {
+            functions.retain(|function| *function != callee);
         }
     }
 }

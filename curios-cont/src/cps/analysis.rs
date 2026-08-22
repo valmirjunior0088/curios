@@ -158,7 +158,7 @@ pub(super) fn nodes_from(module: &CpsModule, body: CpsNodeId) -> Vec<CpsNodeId> 
         }
         match module.node(node_id).unwrap() {
             CpsNode::LetValue { next, .. } | CpsNode::LetIntrinsic { next, .. } => work.push(*next),
-            CpsNode::LetFun { body, .. } | CpsNode::RecInit { body, .. } => work.push(*body),
+            CpsNode::LetFun { body, .. } => work.push(*body),
             CpsNode::LetCont {
                 continuations,
                 body,
@@ -240,7 +240,7 @@ fn owned_and_used(
 
 /// The values `function` mentions without binding — what lowering must carry into it.
 ///
-/// **The walk stops at a nested function.** [`function_nodes`] enters a `LetFun`'s body and not its members, so a value referenced only inside a function defined *within* this one is not reported here. That is correct for a caller asking what to carry into a call or a closure — a nested function's own captures are answered when the sweep reaches that function, which is the shape `represent`'s `offers` sweep over every live function relies on. It is wrong for a caller about to *remove* a binding, which must cover the whole region that loses it: [`CpsModule::let_fun_requirements`] answers that question instead, and `dissolve_rec_init` asking this one is the bug that produced it.
+/// **The walk stops at a nested function.** [`function_nodes`] enters a `LetFun`'s body and not its members, so a value referenced only inside a function defined *within* this one is not reported here. That is correct for a caller asking what to carry into a call or a closure — a nested function's own captures are answered when the sweep reaches that function, which is the shape `represent`'s `offers` sweep over every live function relies on. It is wrong for a caller about to *remove* a binding, which must cover the whole region that loses it — a pass once asked this question for that purpose and dropped a binding a nested function still referenced.
 pub(super) fn free_values(module: &CpsModule, function: CpsFunId) -> BTreeSet<CpsValueId> {
     let (owned, used) = owned_and_used(module, function);
     used.difference(&owned).copied().collect()

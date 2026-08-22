@@ -149,9 +149,6 @@ fn offers(module: &CpsModule) -> BTreeMap<CpsValueId, Offer> {
                 withdraw_params(module, *return_to, &mut withdrawn)
             }
 
-            // A recursive shell is allocated empty and filled afterwards, so it is a heap value throughout.
-            CpsNode::RecInit { values, .. } => withdrawn.extend(values),
-
             CpsNode::LetFun { .. }
             | CpsNode::LetCont { .. }
             | CpsNode::ApplyCont(_)
@@ -264,8 +261,7 @@ pub(crate) fn storage(module: &CpsModule) -> BTreeMap<CpsValueId, Storage> {
                 | CpsNode::Intrinsic { .. }
                 | CpsNode::LetFun { .. }
                 | CpsNode::LetCont { .. }
-                | CpsNode::Unreachable
-                | CpsNode::RecInit { .. } => {}
+                | CpsNode::Unreachable => {}
             }
         }
     })

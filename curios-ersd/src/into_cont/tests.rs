@@ -620,8 +620,9 @@ fn an_unused_fold_suffix_is_not_sliced() {
     assert!(!printed.contains("BinSlice"), "{printed}");
 }
 
+/// A group with a function member and a computed member ties through the same cells a value-only knot does: the function member's forward reference to the computed member is a cell read at its entry, never a direct capture of a value that does not exist yet.
 #[test]
-fn a_mixed_recursive_group_lowers_to_rec_init() {
+fn a_mixed_recursive_group_lowers_through_cells() {
     let mut builder = ErsdBuilder::new();
     let produce = builder.reserve_function();
     let consume = builder.value(Some("consume".into()));
@@ -637,7 +638,9 @@ fn a_mixed_recursive_group_lowers_to_rec_init() {
     builder.set_entry(entry);
     let module = builder.finalize().expect("verifies");
     let printed = lowered(&module);
-    assert!(printed.contains("rec-init"), "{printed}");
+    assert!(printed.contains("cell.Get"), "{printed}");
+    assert!(printed.contains("cell.Set"), "{printed}");
+    assert!(printed.contains("let-fun"), "{printed}");
 }
 
 #[test]

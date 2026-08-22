@@ -1,8 +1,8 @@
 use {
     super::{
         BlockData, CodeEmitter, Context, EmissionArg, EmissionBlockName, EmissionBody,
-        EmissionClosureName, EmissionData, EmissionValue, EmissionValueName, Frame, LayoutItem,
-        LoadAs, LocalData, region_layout, slot_zero_instrs,
+        EmissionData, EmissionValue, EmissionValueName, Frame, LayoutItem, LoadAs, LocalData,
+        region_layout, slot_zero_instrs,
     },
     curios_utilities::Grain,
     std::collections::{BTreeMap, HashMap, HashSet},
@@ -220,24 +220,6 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         }
     }
 
-    fn emit_closure_shell(
-        &mut self,
-        value_name: &'a EmissionValueName,
-        target: &'a EmissionClosureName,
-    ) {
-        self.emit_instr(curios_wasm::Instr::StructNewDefault {
-            type_name: self.context.table().find_clsr(target).envr_type(),
-        });
-
-        self.emit_instr(curios_wasm::Instr::LocalSet {
-            local_name: self
-                .context
-                .find_local(value_name)
-                .map(|local_data| local_data.local_name)
-                .unwrap_or_else(|| panic!("`ExprEmitter` lacks local `{}`", value_name)),
-        });
-    }
-
     /// Bind a constructed value to its local, materialising it in a register where that local is one.
     ///
     /// The range checks survive being moved onto this path, and that is deliberate: they are what keeps every register-held `Nat` inside the i31 envelope, so *boxing* one later — at a call argument, a constructor field, a jump to a boxed parameter — is a bare `ref.i31` that never has to re-check. Dropping them here would move the trap to the boxing coercion and change which programs trap.
@@ -274,43 +256,6 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         });
     }
 
-    fn emit_backpatch_clsr(
-        &mut self,
-        value_name: &'a EmissionValueName,
-        target: &'a EmissionClosureName,
-        fields: &'a [EmissionValueName],
-    ) {
-        let clsr_data = self.context.table().find_clsr(target);
-        let envr_type = clsr_data.envr_type();
-
-        self.emit_instrs(
-            self.context
-                .load_value_instrs(value_name, LoadAs::Concrete(envr_type.clone())),
-        );
-        self.emit_instr(curios_wasm::Instr::I32Const {
-            value: clsr_data.index(),
-        });
-
-        self.emit_instr(curios_wasm::Instr::StructSet {
-            type_name: envr_type.clone(),
-            field_name: self.context.table().special_field(),
-        });
-
-        for (field, field_name) in fields.iter().zip(clsr_data.fields()) {
-            self.emit_instrs(
-                self.context
-                    .load_value_instrs(value_name, LoadAs::Concrete(envr_type.clone())),
-            );
-
-            self.emit_instrs(self.context.load_value_instrs(field, LoadAs::Null));
-
-            self.emit_instr(curios_wasm::Instr::StructSet {
-                type_name: envr_type.clone(),
-                field_name,
-            });
-        }
-    }
-
     /// Allocate a fresh wasm local for `value_name` and record it in the current frame, so subsequent `find_local` lookups resolve to it. Called at the point a name is introduced — a shell or a fresh value — never for a fill, whose local its shell already owns.
     fn declare_local(&mut self, value_name: &'a EmissionValueName) {
         let val_type = self.context.table().local_type(value_name);
@@ -323,29 +268,10 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
             .insert(value_name, local_name);
     }
 
-    fn emit_shells(&mut self, shells: &'a [(EmissionValueName, EmissionClosureName)]) {
-        for (value_name, target) in shells {
-            self.declare_local(value_name);
-            self.emit_closure_shell(value_name, target);
-        }
-    }
-
     fn emit_let_values(&mut self, values: &'a [(EmissionValueName, EmissionValue)]) {
         for (value_name, value) in values {
-            // An acyclic aggregate has no back-edge, so every field is already bound: build it directly with a single `struct.new` / `array.new_fixed` (via `emit_data`). Only a shell'd closure shell — a recursive capture reusing its own local — takes the `new_default` + per-field `struct.set` backpatch path. Tuples and arrays are never shell'd (cyclic ones are rejected in `into_cont`), so they always build directly.
+            // No aggregate has a back-edge — a recursive knot ties through a cell, and cyclic tuples and lists are rejected in `into_cont` — so every field is already bound and each construction is a single `struct.new` / `array.new_fixed` (via `emit_data`).
             match value {
-                EmissionValue::Pure(value @ (EmissionData::List(_) | EmissionData::Tuple(_))) => {
-                    self.declare_local(value_name);
-                    self.emit_let_pure(value_name, value);
-                }
-                EmissionValue::Pure(value @ EmissionData::Closure(target, fields)) => {
-                    if self.context.is_shell(value_name) {
-                        self.emit_backpatch_clsr(value_name, target, fields);
-                    } else {
-                        self.declare_local(value_name);
-                        self.emit_let_pure(value_name, value);
-                    }
-                }
                 EmissionValue::Pure(value) => {
                     self.declare_local(value_name);
                     self.emit_let_pure(value_name, value);
@@ -364,7 +290,6 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         params: HashMap<&'a EmissionValueName, LocalData>,
         region: &'a EmissionBody,
     ) {
-        let shells = region.shells.iter().map(|(name, _)| name).collect();
         let aggregates: HashSet<_> = region
             .values
             .iter()
@@ -382,8 +307,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         // A region with no join blocks is straight-line code ending in its tail; there is nothing to structure.
         if region.blocks.is_empty() {
             self.context
-                .enter_frame(Frame::new(params, shells, aggregates, vec![]));
-            self.emit_shells(&region.shells);
+                .enter_frame(Frame::new(params, aggregates, vec![]));
             self.emit_let_values(&region.values);
             let tail = self.context.tail_instrs(&region.tail);
             self.emit_instrs(tail);
@@ -398,8 +322,7 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
         // The region frame registers the forward-entry block of every top-level item, so the tail and earlier items resolve their forward branches.
         let registrations = scope_registrations(&layout, region, &block_params, &dispatch);
         self.context
-            .enter_frame(Frame::new(params, shells, aggregates, registrations));
-        self.emit_shells(&region.shells);
+            .enter_frame(Frame::new(params, aggregates, registrations));
         self.emit_let_values(&region.values);
 
         // The tail is the innermost code: every block wraps it, so the tail can branch forward to any of them.

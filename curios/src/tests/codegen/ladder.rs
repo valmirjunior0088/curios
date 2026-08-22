@@ -232,9 +232,9 @@ const WALK_MIRROR_INDEXED: &str = include_str!(concat!(
 /// Retaken **2026-08-17** after variant-width splitting. The figures it replaces predate the window split and the closure table and had not been retaken, so read the block as a fresh reading rather than as a delta:
 ///
 /// ```text
-/// parse_digits:   0 closure sites, 2 env sites, 0 shell sites, 10 slice calls, 443738 bytes of wat
-/// parse_bindless: 0 closure sites, 3 env sites, 0 shell sites, 10 slice calls, 458940 bytes of wat
-/// parse_manual:   0 closure sites, 2 env sites, 0 shell sites, 10 slice calls, 496933 bytes of wat
+/// parse_digits:   0 closure sites, 2 env sites, 10 slice calls, 443738 bytes of wat
+/// parse_bindless: 0 closure sites, 3 env sites, 10 slice calls, 458940 bytes of wat
+/// parse_manual:   0 closure sites, 2 env sites, 10 slice calls, 496933 bytes of wat
 /// ```
 ///
 /// Two, three and two env sites span a sixfold spread in runtime, and the ones that remain belong to `/std/Nat/of_str/1` and `/std/Str/trim_bounds/1` in all three programs — `parse_manual` included, because every rung parses its stdin the same way. **A site count cannot see a loop.** It is kept because it is the half that survives a machine change, and because a site appearing or vanishing is a real event — the `Str/fold` environments vanishing is how the walk's chain was confirmed gone. It is never the half that answers "what does this cost".
@@ -252,7 +252,6 @@ fn string_walk_ladder_measurements() {
         // The three allocation kinds `structural.rs` separates. A closure's *environment* is the one that answers this document's question: `$envr/<N>$<hint>` carries the hint of the function whose closure it is, so the walk's own allocations can be named rather than merely counted.
         let closures = user_allocations(&wat, "struct.new $clsr/").len();
         let envs = user_allocations(&wat, "struct.new $envr/");
-        let shells = user_allocations(&wat, "struct.new_default").len();
         // A rope view is allocated *inside* the shared `slice` helper, so no `struct.new` site in this module moves when a caller stops slicing — the call sites are what move. Counted directly rather than through [`user_allocations`], whose `$io/` separation exists for instructions that name their own definition and would report nothing here.
         let slices = wat
             .lines()
@@ -262,7 +261,7 @@ fn string_walk_ladder_measurements() {
             })
             .count();
         println!(
-            "{label}: {closures} closure sites, {} env sites, {shells} shell sites, {slices} slice calls, {} bytes of wat",
+            "{label}: {closures} closure sites, {} env sites, {slices} slice calls, {} bytes of wat",
             envs.len(),
             wat.len(),
         );

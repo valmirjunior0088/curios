@@ -176,11 +176,6 @@ pub(crate) fn origins(module: &CpsModule) -> BTreeMap<CpsValueId, Origin> {
                         }
                     }
                 }
-                CpsNode::RecInit { values, .. } => {
-                    for value in values {
-                        solver.join(*value, Origin::Opaque);
-                    }
-                }
                 CpsNode::LetFun { .. }
                 | CpsNode::LetCont { .. }
                 | CpsNode::Exit { .. }

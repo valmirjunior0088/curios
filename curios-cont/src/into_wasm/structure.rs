@@ -314,7 +314,6 @@ mod tests {
 
     fn body(tail: EmissionTail) -> EmissionBody {
         EmissionBody {
-            shells: vec![],
             values: vec![],
             blocks: vec![],
             tail,
@@ -349,7 +348,6 @@ mod tests {
 
     fn region(blocks: Vec<(EmissionBlockName, EmissionTail)>, tail: EmissionTail) -> EmissionBody {
         EmissionBody {
-            shells: vec![],
             values: vec![],
             blocks: blocks
                 .into_iter()

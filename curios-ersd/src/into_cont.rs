@@ -1,6 +1,6 @@
 //! The lowering into the landed Cont interface — the one-way door from meaning to mechanism.
 //!
-//! Every encoding decision the erasure deliberately deferred is made here, exactly once, per the specification's normative desugar table: `Unit`, `Bool`, and `Byte` ride the `Nat` carrier (`Bool` operations become `Nat` bit operations, `Byte` comparisons `Nat` comparisons, `NatToByte` a mask, `ByteToNat` the identity); a `Handle` token is its little-endian bytes as a byte-grain binary and `HandleEql` that grain's binary equality; products and variants are generic tuples (a variant is `(tag, payload…)`, the tag the constructor's position in its family); a single-constructor family collapses instead — nothing ever needs discriminating, so the tag is never minted and it encodes as the struct with the same relevant row would (one payload the bare value, several an untagged tuple, none the `Nat` zero, matches dispatch-free); a family whose one immediate-unary constructor stands beside boxed siblings rides that constructor bare too, matches discriminating with an `IsImmediate` test instead of a tag read; matches and switches are otherwise one `Nat`-keyed `Switch` behind the tag projection; the fold forms are synthesized accumulator loops; recursive groups are `LetFun`/`RecInit`, with value-only knots tied through compiler-internal cells. The per-family choice is [`FamilyEncoding`], a pure function of the registered schema; see `documentation/design/toolchain/a-variant-collapses-when-nothing-needs-to-distinguish-it.md` for the decision.
+//! Every encoding decision the erasure deliberately deferred is made here, exactly once, per the specification's normative desugar table: `Unit`, `Bool`, and `Byte` ride the `Nat` carrier (`Bool` operations become `Nat` bit operations, `Byte` comparisons `Nat` comparisons, `NatToByte` a mask, `ByteToNat` the identity); a `Handle` token is its little-endian bytes as a byte-grain binary and `HandleEql` that grain's binary equality; products and variants are generic tuples (a variant is `(tag, payload…)`, the tag the constructor's position in its family); a single-constructor family collapses instead — nothing ever needs discriminating, so the tag is never minted and it encodes as the struct with the same relevant row would (one payload the bare value, several an untagged tuple, none the `Nat` zero, matches dispatch-free); a family whose one immediate-unary constructor stands beside boxed siblings rides that constructor bare too, matches discriminating with an `IsImmediate` test instead of a tag read; matches and switches are otherwise one `Nat`-keyed `Switch` behind the tag projection; the fold forms are synthesized accumulator loops; a function-only recursive group is a `LetFun`, and a group with computed members is a knot tied through compiler-internal cells. The per-family choice is [`FamilyEncoding`], a pure function of the registered schema; see `documentation/design/toolchain/a-variant-collapses-when-nothing-needs-to-distinguish-it.md` for the decision.
 //!
 //! The lowering is target-continuation shaped: each arena block is lowered against the continuation that receives its result — its terminator delivers there, and its statements build the node chain in front. Because the arena is already ANF, every operand is an atom and maps directly to a [`curios_cont::CpsAtom`]; no administrative continuation is introduced merely to evaluate an operand. Only a genuine control split — an application return, a switch or match, a fold loop, a host call — opens a join continuation whose parameter receives the split's result and whose body is the rest of the block.
 //!
@@ -21,7 +21,7 @@ use {
     },
     curios_abi::ForeignFunction,
     curios_num::Natural,
-    curios_utilities::{Grain, PackedBin},
+    curios_utilities::{Grain, PackedBin, grown, recurse},
     std::{
         collections::{BTreeMap, BTreeSet},
         sync::Arc,
@@ -29,8 +29,14 @@ use {
 };
 
 /// Lower a verified arena [`Module`] into the landed Cont [`curios_cont::CpsModule`]. The module's top level — its item chain followed by its entry block — becomes the parameterless Cps entry `main`, delivering its result to a bodyless `return_cont`. The produced module is verified; a failure is a lowering bug, not a user error, so it panics.
+///
+/// The walk recurses once per statement and once per block nesting, inside [`recurse`], and the stage takes its first segment with [`grown`]: a folded parser is a chain of thousands of statements, which overflowed the default test-thread stack at about 1 900 levels.
 pub fn lower_to_cont(source: &Module) -> curios_cont::CpsModule {
     curios_profile::profile!("lower_to_cont");
+    grown(|| lower_to_cont_within(source))
+}
+
+fn lower_to_cont_within(source: &Module) -> curios_cont::CpsModule {
     let mut lowerer = Lowerer {
         source,
         analysis: Analysis::analyze(source),
@@ -90,7 +96,7 @@ struct Lowerer<'a> {
     module: curios_cont::CpsModule,
     values: BTreeMap<ValueId, curios_cont::CpsAtom>,
     functions: BTreeMap<FunctionId, curios_cont::CpsFunId>,
-    /// Members of value-only recursive knots, mapped to the mutable cell that ties each knot. A reference to such a member lowers to a read of the filled cell (see [`Lowerer::with_cell_reads`]), so the tie is forced once and is invisible to everything but this lowering.
+    /// Computed members of recursive knots, mapped to the mutable cell that ties each knot. A reference to such a member lowers to a read of the filled cell (see [`Lowerer::with_cell_reads`]), so the tie is forced once and is invisible to everything but this lowering.
     knot_cells: BTreeMap<ValueId, curios_cont::CpsValueId>,
     /// The Cont layout of each tagged family, computed on first use. Only the tagged encodings register one: a collapsed family builds a bare value or a structural tuple, and an immediate family's bare constructor is a scalar, so neither has a family heap type to key.
     families: BTreeMap<FamilyId, RowLayout>,
@@ -242,6 +248,15 @@ impl Lowerer<'_> {
         terminator: &Terminator,
         target: curios_cont::CpsContId,
     ) -> curios_cont::CpsNodeId {
+        recurse(|| self.lower_statements_within(statements, terminator, target))
+    }
+
+    fn lower_statements_within(
+        &mut self,
+        statements: &[StatementId],
+        terminator: &Terminator,
+        target: curios_cont::CpsContId,
+    ) -> curios_cont::CpsNodeId {
         let Some((&first, rest)) = statements.split_first() else {
             return self.lower_terminator(terminator, target);
         };
@@ -313,7 +328,7 @@ impl Lowerer<'_> {
         ids
     }
 
-    /// Define a reserved Cont function from its arena function. A body that references a value-only knot member reads it from the knot's cell at its own entry — at call time, once the knot is tied — rather than capturing the value directly.
+    /// Define a reserved Cont function from its arena function. A body that references a knot's computed member reads it from the knot's cell at its own entry — at call time, once the knot is tied — rather than capturing the value directly.
     fn define_function(&mut self, arena: FunctionId, id: curios_cont::CpsFunId) {
         let function: Function = self.source.function(arena).expect("live function").clone();
         let return_cont = self.module.reserve_continuation();
@@ -341,7 +356,7 @@ impl Lowerer<'_> {
         );
     }
 
-    /// Lower a recursive group by its shape: a mixed group becomes a `RecInit` knot; a function-only group a plain `LetFun` (erasure emits `Functions` for those, so this is totality); a value-only group is tied through cells (see [`Lowerer::lower_value_knot`]).
+    /// Lower a recursive group by its shape: a function-only group is a plain `LetFun` (erasure emits `Functions` for those, so this is totality); any group with a computed member is a knot tied through cells (see [`Lowerer::lower_knot`]), its function members bound beside the cells.
     fn lower_rec_group(
         &mut self,
         group: RecGroupId,
@@ -366,69 +381,21 @@ impl Lowerer<'_> {
             );
         }
 
-        if group.functions.is_empty() {
-            return self.lower_value_knot(&group, rest, terminator, target);
-        }
-
-        let functions: Vec<curios_cont::CpsFunId> = group
-            .functions
-            .iter()
-            .map(|&arena| {
-                let id = self.module.reserve_function();
-                self.functions.insert(arena, id);
-                id
-            })
-            .collect();
-        let values: Vec<curios_cont::CpsValueId> = group
-            .values
-            .iter()
-            .map(|member| self.bind_value(member.value))
-            .collect();
-
-        for (&arena, &id) in group.functions.iter().zip(&functions) {
-            self.define_function(arena, id);
-        }
-
         if group.values.is_empty() {
+            let functions = self.lower_function_group(&group.functions);
             let body = self.lower_statements(rest, terminator, target);
             return self
                 .module
                 .add_node(curios_cont::CpsNode::LetFun { functions, body });
         }
 
-        // Mixed knot: the reserved value slots are visible to the member functions and every initializer through the `RecInit`; the value initializers chain over the group's ready point in eager order.
-        let ready = self.lower_statements(rest, terminator, target);
-        let order = self.computed_init_order(&group);
-        let mut body = ready;
-        for &position in order.iter().rev() {
-            let init = group.values[position].init;
-            let bound = values[position];
-            let continuation = self.module.reserve_continuation();
-            self.module.define_continuation(
-                continuation,
-                curios_cont::CpsContinuation {
-                    debug_name: None,
-                    params: vec![bound],
-                    body,
-                },
-            );
-            let entry = self.lower_block(init, continuation);
-            body = self.module.add_node(curios_cont::CpsNode::LetCont {
-                continuations: vec![continuation],
-                body: entry,
-            });
-        }
-
-        self.module.add_node(curios_cont::CpsNode::RecInit {
-            functions,
-            values,
-            ready,
-            body,
-        })
+        self.lower_knot(&group, rest, terminator, target)
     }
 
-    /// Tie a value-only recursive knot with compiler-internal cells: allocate every cell, run the initializers in eager-dependency order (their closures capture the cells, not the values), store each result, and read the filled cells wherever a member is referenced. The verifier already rejected eager cycles among the members, so no cell is read before its store; each member's value is built exactly once, and every reference observes that one value.
-    fn lower_value_knot(
+    /// Tie a recursive knot with compiler-internal cells: allocate a cell per computed member, bind the function members, run the initializers in source order (their closures capture the cells, not the values), store each result, and read the filled cells wherever a member is referenced. Source order is the eager-dependency order, because the verifier admits an initializer evaluating a computed member — directly, or through the functions it calls — only when that member is an earlier one; so no cell is read before its store, each member's value is built exactly once, and every reference observes that one value. The lowering once re-derived an order of its own from the direct references alone, and that narrower view put a member *after* the initializer that called a function reading it.
+    ///
+    /// Function members take the same cell reads at their own entry as any other function (see [`Lowerer::define_function`]), so a member that forward-references a computed value is served by the cell however it is reached — called directly, escaped as a closure, or copied by a later pass into a closure the initializers build. That uniformity is the point: a knot with function members once lowered to a `RecInit` node whose machine lowering patched *escaping member* closures at the ready point, and a closure born inside an initializer that merely *called* a member — `wrap((n) => helper(n))` beside `helper(n) = first(n)` — captured the computed value before it existed, which nothing below the CPS verifier's lexical scope rules could see.
+    fn lower_knot(
         &mut self,
         group: &RecGroup,
         rest: &[StatementId],
@@ -445,16 +412,18 @@ impl Lowerer<'_> {
             })
             .collect();
 
+        // The cells are in the map before any member body is lowered, so a function member's reference to a computed sibling is a cell read at its entry.
+        let functions = self.lower_function_group(&group.functions);
+
         // Downstream reads the now-filled cells for the members it references.
         let ready_members = self.eager_member_refs(rest, terminator);
         let mut body = self.with_cell_reads(ready_members, |lowerer| {
             lowerer.lower_statements(rest, terminator, target)
         });
 
-        // Initialize and store each member in eager-dependency order, inside out.
-        let order = self.computed_init_order(group);
-        for &position in order.iter().rev() {
-            let init = group.values[position].init;
+        // Initialize and store each member in source order, inside out.
+        for (position, member) in group.values.iter().enumerate().rev() {
+            let init = member.init;
             let cell = cells[position];
 
             let after_store = self.module.reserve_continuation();
@@ -495,6 +464,13 @@ impl Lowerer<'_> {
                 continuations: vec![receive],
                 body: entry,
             });
+        }
+
+        // The function members stand inside the cell bindings, so their bodies' cell reads are in scope, and outside the initializers, which may call them.
+        if !functions.is_empty() {
+            body = self
+                .module
+                .add_node(curios_cont::CpsNode::LetFun { functions, body });
         }
 
         // Allocate every cell first (a placeholder is never read before its store — the knot is productive), so the initializers' closures can already capture the cells they tie.
@@ -713,47 +689,6 @@ impl Lowerer<'_> {
             }
         }
         refs
-    }
-
-    /// Order a group's computed members by eager initialization dependency. The verifier proves eager acyclicity, so a total order always exists; cross-references flowing only through closures carry no eager edge.
-    fn computed_init_order(&self, group: &RecGroup) -> Vec<usize> {
-        let position: BTreeMap<ValueId, usize> = group
-            .values
-            .iter()
-            .enumerate()
-            .map(|(index, member)| (member.value, index))
-            .collect();
-        let count = group.values.len();
-        let mut in_degree = vec![0usize; count];
-        let mut successors: Vec<Vec<usize>> = vec![Vec::new(); count];
-        for (index, member) in group.values.iter().enumerate() {
-            let init = self.source.block(member.init).expect("live init block");
-            for dependency in self.eager_value_refs(&init.statements, &init.terminator) {
-                if let Some(&origin) = position.get(&dependency)
-                    && origin != index
-                {
-                    successors[origin].push(index);
-                    in_degree[index] += 1;
-                }
-            }
-        }
-        let mut ready: Vec<usize> = (0..count).filter(|&index| in_degree[index] == 0).collect();
-        let mut order = Vec::with_capacity(count);
-        while let Some(index) = ready.pop() {
-            order.push(index);
-            for &dependent in &successors[index] {
-                in_degree[dependent] -= 1;
-                if in_degree[dependent] == 0 {
-                    ready.push(dependent);
-                }
-            }
-        }
-        assert_eq!(
-            order.len(),
-            count,
-            "a verified group has an acyclic eager initialization order"
-        );
-        order
     }
 
     // === Statements ======================================================

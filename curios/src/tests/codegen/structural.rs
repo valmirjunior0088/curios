@@ -7,12 +7,7 @@ use {
     curios_pipeline::compile_with_prelude,
     curios_runtime::{ForeignBindings, MockHost, precompile, run_bytes},
     curios_text::{Entrypoint, RootSource},
-    curios_wasm::{
-        AbsHeapType, AddressType, CompType, Export, Expr, FieldName, FieldType, Func, FuncName,
-        FuncType, HeapType, Instr, Limits, LocalName, Module, Mutability, NumType, RefType,
-        ResultType, StorageType, StructType, SubType, Table, TableName, TableType, TypeName,
-        ValType, to_bytes,
-    },
+    curios_wasm::{Module, to_bytes},
     std::collections::BTreeSet,
 };
 
@@ -512,10 +507,6 @@ fn lcg_loop_is_scalar_no_closure_no_indirect() {
         !kernel.contains("struct.new $envr/"),
         "no environment allocation in the hot loop"
     );
-    assert!(
-        !kernel.contains("struct.new_default"),
-        "no closure shell in the hot loop"
-    );
 }
 
 /// L5: the loop carries its scalars in registers, so a back edge moves a register to a register. `ref.as_non_null` is the tell: every edge argument used to be loaded with it, and a parameter the representation analysis holds raw is loaded at its carrier instead — a bare `local.get`. Zero of them in the kernel is the loop-carried decision the `cps::represent` fixpoint exists to produce, and it is the one count that went to zero.
@@ -600,16 +591,14 @@ fn trees_hot_arithmetic_has_no_indirect_calls() {
     );
 }
 
-/// T4: ordinary recursive functions create no shells or mutable closure fields. The trees module allocates only data tuples (`$tuple/…` for the `Tree` nodes) — no closure (`$clsr/`) or environment (`$envr/`) structs, and no `struct.new_default` shell.
+/// T4: ordinary recursive functions allocate no closures. The trees module allocates only data tuples (`$tuple/…` for the `Tree` nodes) — no closure (`$clsr/`) or environment (`$envr/`) structs.
 #[test]
-fn trees_ordinary_recursion_has_no_shells() {
+fn trees_ordinary_recursion_allocates_no_closures() {
     let wat = wat(TREES);
     let closures = user_allocations(&wat, "struct.new $clsr/");
     assert!(closures.is_empty(), "no closure allocation: {closures:?}");
     let envs = user_allocations(&wat, "struct.new $envr/");
     assert!(envs.is_empty(), "no environment allocation: {envs:?}");
-    let shells = user_allocations(&wat, "struct.new_default");
-    assert!(shells.is_empty(), "no closure shell: {shells:?}");
 }
 
 /// A string walk allocates nothing per character.
@@ -627,8 +616,6 @@ fn a_string_walk_allocates_no_closure_per_character() {
         envs.is_empty(),
         "the walk carries its state in parameters, so nothing is captured per character: {envs:?}"
     );
-    let shells = user_allocations(&wat, "struct.new_default");
-    assert!(shells.is_empty(), "no closure shell: {shells:?}");
 }
 
 /// T5: constructor payloads are untouched, which is what makes the locals-only scope *observable* rather than merely intended. A `Tree/node` carries its `Nat` in a `$tuple/…` field, and every such field stays `(ref null any)` — the representation analysis reaches locals and block parameters, never a heap layout, because a field is a contract between an allocation site and every reader of it rather than one function's private decision. Widening this is the successor's subject; until then a scalar field appearing here means the scope leaked.
@@ -703,7 +690,7 @@ fn unknown_higher_order_call_uses_closure_abi_and_call_indirect() {
     assert!(wat.contains("$clsr/"), "the closure ABI is retained");
 }
 
-/// The closure ABI's code field is an `i32` table index, and nothing in *function code* touches a funcref. Construction writes `i32.const`, dispatch reads the field into `call_indirect`, and one typed table per arity — `(ref null $clsr/N)`, filled by an active element segment at offset 1, slot 0 null for the shell trap — carries that arity's bodies. The element type is what satisfies the `call_indirect` signature check statically, so the per-dispatch runtime subtype check has no site left to fire on; the only `ref.func`s in a module are the segments' items, and `call_ref` is absent everywhere.
+/// The closure ABI's code field is an `i32` table index, and nothing in *function code* touches a funcref. Construction writes `i32.const`, dispatch reads the field into `call_indirect`, and one typed table per arity — `(ref null $clsr/N)`, filled by an active element segment at offset 1, slot 0 null so a zeroed code field traps — carries that arity's bodies. The element type is what satisfies the `call_indirect` signature check statically, so the per-dispatch runtime subtype check has no site left to fire on; the only `ref.func`s in a module are the segments' items, and `call_ref` is absent everywhere.
 #[test]
 fn closures_carry_their_code_as_a_table_index() {
     for (label, source) in [
@@ -773,120 +760,6 @@ fn a_capture_free_closure_in_a_loop_interns_as_a_const() {
     );
 }
 
-/// A shell dispatched before its back-patch still traps. A recursive shell is built with `struct.new_default`, so its code field is index zero; the shared table's slot 0 is deliberately left null, and `call_indirect` on a null entry traps — the same loud failure the unfilled funcref field reached under `call_ref`. No `.crs` program dispatches a shell before its fill, so the boundary is pinned at the wasm level: the module below is the emitter's own shapes — the `i32` code field, the mutable shell field, the null slot — with the fill omitted.
-#[test]
-fn a_shell_dispatched_before_backpatch_traps() {
-    let ref_any = || {
-        ValType::Ref(RefType {
-            is_nullable: false,
-            heap_type: HeapType::Abstract(AbsHeapType::Any),
-        })
-    };
-
-    let mut module = Module::new("shell-trap");
-
-    module.add_type(
-        TypeName::from("clsr/0"),
-        SubType {
-            is_final: false,
-            super_types: vec![],
-            comp_type: CompType::Func(FuncType {
-                inputs: ResultType::from([ref_any()]),
-                outputs: ResultType::from([ref_any()]),
-            }),
-        },
-    );
-    module.add_type(
-        TypeName::from("envr/0"),
-        SubType {
-            is_final: false,
-            super_types: vec![],
-            comp_type: CompType::Struct(StructType::from([(
-                FieldName::from("!"),
-                FieldType {
-                    storage_type: StorageType::Val(ValType::Num(NumType::I32)),
-                    mutability: Mutability::Var,
-                },
-            )])),
-        },
-    );
-    module.add_type(
-        TypeName::from("func/0"),
-        SubType {
-            is_final: true,
-            super_types: vec![],
-            comp_type: CompType::Func(FuncType {
-                inputs: ResultType::from([]),
-                outputs: ResultType::from([ref_any()]),
-            }),
-        },
-    );
-    module.add_table(
-        TableName::from("clsr"),
-        Table {
-            table_type: TableType {
-                address_type: AddressType::I32,
-                ref_type: RefType {
-                    is_nullable: true,
-                    heap_type: HeapType::Abstract(AbsHeapType::Func),
-                },
-                limits: Limits {
-                    min: 1,
-                    max: Some(1),
-                },
-            },
-            expr: None,
-        },
-    );
-
-    let envr = || RefType {
-        is_nullable: true,
-        heap_type: HeapType::Concrete(TypeName::from("envr/0")),
-    };
-    module.add_func(
-        FuncName::from("func/main"),
-        Func {
-            type_name: TypeName::from("func/0"),
-            params: vec![],
-            locals: vec![(LocalName::from("e"), ValType::Ref(envr()))],
-            expr: Expr::from([
-                Instr::StructNewDefault {
-                    type_name: TypeName::from("envr/0"),
-                },
-                Instr::LocalSet {
-                    local_name: LocalName::from("e"),
-                },
-                Instr::LocalGet {
-                    local_name: LocalName::from("e"),
-                },
-                Instr::RefAsNonNull,
-                Instr::LocalGet {
-                    local_name: LocalName::from("e"),
-                },
-                Instr::StructGet {
-                    type_name: TypeName::from("envr/0"),
-                    field_name: FieldName::from("!"),
-                },
-                Instr::CallIndirect {
-                    table_name: TableName::from("clsr"),
-                    type_name: TypeName::from("clsr/0"),
-                },
-            ]),
-        },
-    );
-    module.add_export("func/main", Export::Func(FuncName::from("func/main")));
-
-    let cwasm = precompile(&to_bytes(&module)).expect("the shell module validates");
-    let (system, _io) = MockHost::builder().build();
-    // The runtime surfaces a trap's wasm backtrace but not its reason string, so the assertion is that execution fails inside the guest — the `call_indirect` on the null slot — rather than matching wasmtime's "uninitialized element" wording.
-    let error = run_bytes(&cwasm, system, ForeignBindings::empty())
-        .expect_err("dispatching an unfilled shell must trap");
-    assert!(
-        error.contains("error while executing"),
-        "the failure is a guest trap, not a load or link error: {error}"
-    );
-}
-
 /// G2: direct and escaping uses of the same function coexist. A function used both directly and as a first-class value is emitted once as `$func/<N>` (the direct callee) and once as `$clsr/<N>` (the escaping wrapper) under the same index, so the set of directly-called `$func/<N>` indices and the set of allocated `$envr/<N>` environments overlap — the environment carries its wrapper's index, and its allocation is what materializing the closure is now.
 #[test]
 fn direct_and_escaping_uses_coexist() {
@@ -901,9 +774,9 @@ fn direct_and_escaping_uses_coexist() {
     );
 }
 
-/// G3: function-only recursion produces no fallback shells. `down` is a plain recursive function; the module allocates no closure (`$clsr/`) and no `struct.new_default` shell for it.
+/// G3: function-only recursion allocates no closure. `down` is a plain recursive function; the module allocates no closure (`$clsr/`) or environment (`$envr/`) for it.
 #[test]
-fn function_only_recursion_has_no_fallback_shells() {
+fn function_only_recursion_allocates_no_closures() {
     let wat = wat(FUNCTION_ONLY);
     // Allocation, not mention: a module that forces a description at all declares the closure *type* for the arity it forces at, and names it in the `call_ref`. What `down` must not do is allocate one.
     let closures = user_allocations(&wat, "struct.new $clsr/");
@@ -915,11 +788,6 @@ fn function_only_recursion_has_no_fallback_shells() {
     assert!(
         envs.is_empty(),
         "function-only recursion needs no environments: {envs:?}"
-    );
-    let shells = user_allocations(&wat, "struct.new_default");
-    assert!(
-        shells.is_empty(),
-        "function-only recursion needs no shells: {shells:?}"
     );
 }
 
@@ -1059,7 +927,7 @@ fn a_returned_closure_every_caller_applies_is_absorbed() {
 /// cargo test --package curios --lib -- --ignored --nocapture closure_index_dispatch_measurements
 /// ```
 ///
-/// It asserts nothing. The structural claims are [`closures_carry_their_code_as_a_table_index`]'s and [`a_shell_dispatched_before_backpatch_traps`]'s to make; this prints the static shape of the swap over the corpus — table slots, dispatch sites, environment allocations — so the timings below stay pinned to the modules that produced them.
+/// It asserts nothing. The structural claim is [`closures_carry_their_code_as_a_table_index`]'s to make; this prints the static shape of the swap over the corpus — table slots, dispatch sites, environment allocations — so the timings below stay pinned to the modules that produced them.
 ///
 /// # The native timings, taken 2026-08-17
 ///

@@ -2,7 +2,7 @@
 //!
 //! Structural rules: every referenced identity resolves to a live slot of its kind; every value use is dominated by its unique binding in the lexical scope structure; every live block, statement, value, function, and recursive group has exactly one structural owner (an unowned or doubly owned one is an error, which also rejects ownership cycles); operand counts agree with each operation's own arity; products, constructors, and matches agree with their registered schemas; matches are exhaustive or defaulted.
 //!
-//! Recursion admission mirrors the language: recursion through functions is unrestricted, and a group's computed member may *evaluate* only earlier computed members — a reference from inside a function body constructed during initialization is dormant and unrestricted. That single rule admits the corpus's value-recursion idioms (a `join_all`-shaped knot whose initializer calls a group function, a value-only self-referential lazy value whose knot closes through a constructed closure) while rejecting exactly the computed-only *evaluation* cycles no initialization order can satisfy. Every rule is corpus-certified: a rule that rejects a supported program is a bug in the rule.
+//! Recursion admission mirrors the language: recursion through functions is unrestricted, and a group's computed member may *evaluate* only earlier computed members — a reference from inside a function body constructed during initialization is dormant and unrestricted, while a function the initializer *calls* directly is evaluated then and there, so what its body reads (and what the bodies it calls directly read, transitively) is held to the same rule. What the rule does not see is a function handed to another as a value and applied there: it is dormant by the line this draws, and an initializer that passes a closure over a later member to a function that applies it at once would read that member unfilled. Closing that needs a closure analysis the corpus has not asked for. That single rule admits the corpus's value-recursion idioms (a `join_all`-shaped knot whose initializer calls a group function, a value-only self-referential lazy value whose knot closes through a constructed closure) while rejecting exactly the computed-only *evaluation* cycles no initialization order can satisfy. Every rule is corpus-certified: a rule that rejects a supported program is a bug in the rule.
 //!
 //! The walk recurses over the module's block structure inside [`recurse`], so a deep module diagnoses on the default test-thread stack instead of overflowing it. It used to drive an explicit task stack, which reified three things the call stack already provides — sibling ordering, scope entry and exit, and unwinding — into a `Task` enum, a reversing `push_sequence`, and a driver loop that abandoned its pending work on the error path.
 
@@ -16,7 +16,7 @@ use {
         Statement, StatementId, Terminator, ValueId, VariantFamily,
     },
     curios_utilities::{grown, recurse},
-    std::collections::HashSet,
+    std::collections::{BTreeSet, HashSet},
 };
 
 /// A verification failure: the first rule violation found, as a rendered diagnostic.
@@ -191,6 +191,9 @@ impl<'m> Verifier<'m> {
                 for &function in &group.functions {
                     self.walk_function(function)?;
                 }
+                for (index, member) in group.values.iter().enumerate() {
+                    self.check_eager_calls(&computed, index, member.init)?;
+                }
                 // One context for the whole group, its `limit` advanced per member. Only `limit` differs between members, so pushing a fresh context each time cloned the member list once per member — the same list, `n` times over.
                 self.init_contexts.push(InitContext {
                     computed,
@@ -208,6 +211,89 @@ impl<'m> Verifier<'m> {
                 Ok(())
             }
         }
+    }
+
+    /// The half of recursion admission that looks through a call. An initializer that applies a function directly evaluates that function's body before its own result exists, so a computed member the body reads — or a member read by a function *it* applies directly, and so on — is evaluated by this initializer, and must be an earlier one. The rule for the initializer's own reads admits the member itself (a self-knot, dropped or refused by the lowering); through a call there is no such exemption, since the body runs to completion inside the initializer.
+    ///
+    /// Reads are gathered the way [`Self::check_atom_at`] counts them for the initializer itself: a region's operands and terminators, its control sub-blocks and a nested group's initializers, never the body of a function the region merely constructs. Only a callee spelled as a function atom is followed; a function passed as a value is dormant here too, which is the limit the module documentation states.
+    fn check_eager_calls(
+        &self,
+        computed: &[ValueId],
+        index: usize,
+        init: BlockId,
+    ) -> Result<(), VerifyError> {
+        let mut callees = Vec::new();
+        self.eager_region(init, &mut BTreeSet::new(), &mut callees)?;
+        let mut visited = BTreeSet::new();
+        while let Some(callee) = callees.pop() {
+            if !visited.insert(callee) {
+                continue;
+            }
+            let mut reads = BTreeSet::new();
+            self.eager_region(self.function(callee)?.body, &mut reads, &mut callees)?;
+            for value in reads {
+                if let Some(position) = computed.iter().position(|&member| member == value)
+                    && position >= index
+                {
+                    return Err(VerifyError(format!(
+                        "the initializer of computed group member {} evaluates {value} \
+                         before its initialization, through a call to {callee}",
+                        computed[index]
+                    )));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Gather what a block's eager region reads and which functions it applies directly, descending through control sub-blocks and nested groups' initializers but never into a constructed function's body.
+    fn eager_region(
+        &self,
+        block: BlockId,
+        reads: &mut BTreeSet<ValueId>,
+        callees: &mut Vec<FunctionId>,
+    ) -> Result<(), VerifyError> {
+        let block = self.block(block)?;
+        for &statement in &block.statements {
+            match self.statement(statement)? {
+                Statement::Let { rhs, .. } => {
+                    match rhs {
+                        Rhs::Apply {
+                            callee: Atom::Function(callee),
+                            ..
+                        } => callees.push(*callee),
+                        // The mapper is applied to every element, which is as direct a call as the list is non-empty.
+                        Rhs::Intrinsic {
+                            intrinsic: Intrinsic::ListMap,
+                            operands,
+                        } => {
+                            if let [_, Atom::Function(mapper)] = operands[..] {
+                                callees.push(mapper);
+                            }
+                        }
+                        _ => {}
+                    }
+                    for atom in rhs.operands() {
+                        if let Atom::Value(value) = atom {
+                            reads.insert(value);
+                        }
+                    }
+                    for sub_block in rhs.sub_blocks() {
+                        self.eager_region(sub_block, reads, callees)?;
+                    }
+                }
+                Statement::Rec { group } => {
+                    for member in &self.rec_group(*group)?.values {
+                        self.eager_region(member.init, reads, callees)?;
+                    }
+                }
+                Statement::Functions { .. } => {}
+            }
+        }
+        if let Some(Atom::Value(value)) = block.terminator.atom() {
+            reads.insert(value);
+        }
+        Ok(())
     }
 
     /// Walk one function definition, entered at its binding site: params bound around the body, dormant depth incremented for the extent of it.

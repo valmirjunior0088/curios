@@ -102,6 +102,93 @@ fn a_backward_computed_reference_verifies() {
         .expect("backward evaluation is supported");
 }
 
+/// A forward reference reached through a call is an evaluation, not a dormant reference: `rec { table = build(0); fn build(n) = n + size; size = 1 }` runs `build` inside `table`'s initializer, and `build` reads `size` before anything has stored it. The verifier once looked only at what the initializer read itself, and the lowered program computed with an unfilled cell — `1` where the language says `43`, on the `curios` probe that found it.
+#[test]
+fn a_forward_reference_through_a_called_function_is_rejected() {
+    let mut builder = ErsdBuilder::new();
+    let build = builder.reserve_function();
+    let table = builder.value(Some("table".into()));
+    let size = builder.value(Some("size".into()));
+
+    let n = builder.value(Some("n".into()));
+    builder.open_block();
+    let sum = builder.let_value(
+        None,
+        Rhs::Operation {
+            operation: Operation::NatAdd,
+            operands: vec![Atom::Value(n), Atom::Value(size)],
+        },
+    );
+    let body = builder.seal_block(Terminator::Return(Atom::Value(sum)));
+    builder.define_function(build, Some("build".into()), vec![n], body);
+
+    builder.open_block();
+    let zero = nat_atom(&mut builder, 0);
+    let call = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Function(build),
+            arguments: vec![zero],
+        },
+    );
+    let init_table = builder.seal_block(Terminator::Return(Atom::Value(call)));
+    builder.open_block();
+    let one = nat_atom(&mut builder, 1);
+    let init_size = builder.seal_block(Terminator::Return(one));
+    let group = builder.rec_group(vec![build], vec![(table, init_table), (size, init_size)]);
+    builder.item_rec(group);
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(table)));
+    builder.set_entry(entry);
+    let error = builder
+        .finalize()
+        .expect_err("the call evaluates `size` before its initialization");
+    assert!(error.0.contains("through a call to"), "{error}");
+}
+
+/// The same knot with `size` ahead of `table` is the supported shape: the call reads a member already stored.
+#[test]
+fn a_backward_reference_through_a_called_function_verifies() {
+    let mut builder = ErsdBuilder::new();
+    let build = builder.reserve_function();
+    let size = builder.value(Some("size".into()));
+    let table = builder.value(Some("table".into()));
+
+    let n = builder.value(Some("n".into()));
+    builder.open_block();
+    let sum = builder.let_value(
+        None,
+        Rhs::Operation {
+            operation: Operation::NatAdd,
+            operands: vec![Atom::Value(n), Atom::Value(size)],
+        },
+    );
+    let body = builder.seal_block(Terminator::Return(Atom::Value(sum)));
+    builder.define_function(build, Some("build".into()), vec![n], body);
+
+    builder.open_block();
+    let one = nat_atom(&mut builder, 1);
+    let init_size = builder.seal_block(Terminator::Return(one));
+    builder.open_block();
+    let zero = nat_atom(&mut builder, 0);
+    let call = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Function(build),
+            arguments: vec![zero],
+        },
+    );
+    let init_table = builder.seal_block(Terminator::Return(Atom::Value(call)));
+    let group = builder.rec_group(vec![build], vec![(size, init_size), (table, init_table)]);
+    builder.item_rec(group);
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(table)));
+    builder.set_entry(entry);
+    builder
+        .finalize()
+        .expect("a call reading an earlier member is supported");
+}
+
 /// A computed-only evaluation cycle has no satisfiable initialization order.
 #[test]
 fn a_computed_only_cycle_is_rejected() {

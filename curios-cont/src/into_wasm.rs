@@ -208,8 +208,6 @@ pub(crate) enum EmissionTail {
 /// One straight-line body fragment and the sub-structure hanging off it: bindings evaluated in order, the labeled join blocks its jumps enter, and the single [`EmissionTail`] transfer that ends it. All control flow in a body lives in its region tree — a [`EmissionValue`] binding never branches, which is what the optimizer's freedom to fold, dedupe, and reorder bindings rests on.
 #[derive(Debug, Clone)]
 pub(crate) struct EmissionBody {
-    /// Closure shells reserved before their captures are filled, so a self- or mutually-recursive capture can name the shell. Only closures need this; cyclic tuples/lists are rejected upstream (`into_cont`), which keeps `tuple`/`list` immutable.
-    pub(crate) shells: Vec<(EmissionValueName, EmissionClosureName)>,
     pub(crate) values: Vec<(EmissionValueName, EmissionValue)>,
     pub(crate) blocks: Vec<(EmissionBlockName, EmissionBlock)>,
     pub(crate) tail: EmissionTail,

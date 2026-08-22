@@ -62,20 +62,8 @@ pub(super) fn inline_known_calls(module: &mut CpsModule) -> bool {
 }
 pub(super) fn inline_single_use_continuations(module: &mut CpsModule) -> bool {
     let mut changed = false;
-    // Inline in sweeps: build the recursive-value set and the transfer index once per sweep rather than once per inline. Inlining a single-use continuation moves its one transfer without duplicating it, so it never changes another continuation's transfer count — the snapshot stays valid for the rest of the sweep. Each candidate is re-read against the live module, and the module is pruned once at the end of each sweep rather than after every inline.
+    // Inline in sweeps: build the transfer index once per sweep rather than once per inline. Inlining a single-use continuation moves its one transfer without duplicating it, so it never changes another continuation's transfer count — the snapshot stays valid for the rest of the sweep. Each candidate is re-read against the live module, and the module is pruned once at the end of each sweep rather than after every inline.
     for _ in 0..10_000 {
-        let recursive_values = module
-            .nodes
-            .slots()
-            .iter()
-            .flatten()
-            .filter_map(|node| match node {
-                CpsNode::RecInit { values, .. } => Some(values.as_slice()),
-                _ => None,
-            })
-            .flatten()
-            .copied()
-            .collect::<BTreeSet<_>>();
         let transfers_by_target = continuation_transfers(module);
         let mut inlined_any = false;
         for index in 0..module.continuations.len() {
@@ -84,13 +72,6 @@ pub(super) fn inline_single_use_continuations(module: &mut CpsModule) -> bool {
             let Some(continuation) = module.continuation(target) else {
                 continue;
             };
-            if continuation
-                .params
-                .iter()
-                .any(|value| recursive_values.contains(value))
-            {
-                continue;
-            }
             let Some(transfers) = transfers_by_target.get(&target) else {
                 continue;
             };
@@ -151,8 +132,7 @@ fn collect_control_targets(node: &CpsNode, targets: &mut BTreeSet<CpsContId>) {
         | CpsNode::LetFun { .. }
         | CpsNode::LetCont { .. }
         | CpsNode::Exit { .. }
-        | CpsNode::Unreachable
-        | CpsNode::RecInit { .. } => {}
+        | CpsNode::Unreachable => {}
     }
 }
 pub(super) fn inline_continuation(
@@ -173,9 +153,7 @@ pub(super) fn inline_continuation(
     let mut function_work = body_nodes
         .iter()
         .filter_map(|node| match module.node(*node).unwrap() {
-            CpsNode::LetFun { functions, .. } | CpsNode::RecInit { functions, .. } => {
-                Some(functions.as_slice())
-            }
+            CpsNode::LetFun { functions, .. } => Some(functions.as_slice()),
             _ => None,
         })
         .flatten()
@@ -187,13 +165,10 @@ pub(super) fn inline_continuation(
             continue;
         }
         for node in function_nodes(module, function) {
-            if substitution_nodes.insert(node) {
-                match module.node(node).unwrap() {
-                    CpsNode::LetFun { functions, .. } | CpsNode::RecInit { functions, .. } => {
-                        function_work.extend(functions.iter().copied());
-                    }
-                    _ => {}
-                }
+            if substitution_nodes.insert(node)
+                && let CpsNode::LetFun { functions, .. } = module.node(node).unwrap()
+            {
+                function_work.extend(functions.iter().copied());
             }
         }
     }
@@ -288,7 +263,6 @@ pub(super) fn inline_call(
             CpsNode::LetValue { result, .. } | CpsNode::LetIntrinsic { result, .. } => {
                 owned.push(*result)
             }
-            CpsNode::RecInit { values, .. } => owned.extend(values.iter().copied()),
             _ => {}
         }
     }

@@ -531,12 +531,6 @@ pub enum CpsNode {
         value: Option<CpsAtom>,
     },
     Unreachable,
-    RecInit {
-        functions: Vec<CpsFunId>,
-        values: Vec<CpsValueId>,
-        ready: CpsNodeId,
-        body: CpsNodeId,
-    },
 }
 
 #[derive(Debug, Clone)]
@@ -601,17 +595,10 @@ pub struct FieldGroup {
     pub width: usize,
 }
 
-/// A value a node binds, and which uniqueness rule the verifier applies to it.
-enum ScopeBinding {
-    /// Bound here and nowhere else; `noun` names it in the duplicate-binding message.
-    Once {
-        value: CpsValueId,
-        noun: &'static str,
-    },
-    /// Forward-declared by a `RecInit`, to be discharged by the continuation parameter that computes it.
-    Recursive(CpsValueId),
-    /// A continuation parameter, which is fresh unless it discharges a forward declaration.
-    Parameter(CpsValueId),
+/// A value a node binds, bound here and nowhere else; `noun` names it in the duplicate-binding message.
+struct ScopeBinding {
+    value: CpsValueId,
+    noun: &'static str,
 }
 
 /// A pending region in a walk over lexical structure, carrying the scope that region sees.
@@ -652,7 +639,6 @@ type NodeTask = (
 struct ScopeVerifier {
     bound_functions: BTreeSet<CpsFunId>,
     bound_values: BTreeSet<CpsValueId>,
-    pending_recursive_values: BTreeSet<CpsValueId>,
     function_work: Vec<(CpsFunId, BTreeSet<CpsValueId>, BTreeSet<CpsFunId>)>,
     node_work: Vec<NodeTask>,
 }
@@ -667,32 +653,11 @@ impl ScopeVerifier {
                 )));
             }
         }
-        for binding in step.values {
-            match binding {
-                ScopeBinding::Once { value, noun } => {
-                    if !self.bound_values.insert(value) {
-                        return Err(CpsVerifyError(format!(
-                            "{noun} {value} is bound more than once"
-                        )));
-                    }
-                }
-                ScopeBinding::Recursive(value) => {
-                    if !self.bound_values.insert(value) {
-                        return Err(CpsVerifyError(format!(
-                            "recursive value {value} is bound more than once"
-                        )));
-                    }
-                    self.pending_recursive_values.insert(value);
-                }
-                ScopeBinding::Parameter(value) => {
-                    if !self.bound_values.insert(value)
-                        && !self.pending_recursive_values.remove(&value)
-                    {
-                        return Err(CpsVerifyError(format!(
-                            "continuation parameter {value} is bound more than once"
-                        )));
-                    }
-                }
+        for ScopeBinding { value, noun } in step.values {
+            if !self.bound_values.insert(value) {
+                return Err(CpsVerifyError(format!(
+                    "{noun} {value} is bound more than once"
+                )));
             }
         }
         for task in step.tasks {
@@ -1362,11 +1327,6 @@ impl CpsModule {
                 "value arena and lexical value bindings disagree".into(),
             ));
         }
-        if !walk.pending_recursive_values.is_empty() {
-            return Err(CpsVerifyError(
-                "recursive initializer value lacks its computed binding".into(),
-            ));
-        }
         Ok(())
     }
 
@@ -1380,7 +1340,7 @@ impl CpsModule {
         let definition = self.function(function).unwrap();
         let mut step = ScopeStep::default();
         for value in &definition.params {
-            step.values.push(ScopeBinding::Once {
+            step.values.push(ScopeBinding {
                 value: *value,
                 noun: "function parameter",
             });
@@ -1398,7 +1358,7 @@ impl CpsModule {
 
     /// What `node` binds, and the regions below it with the scope each one sees.
     ///
-    /// This is the single statement of the lexical scoping rules: [`Self::verify_lexical_scopes`] enforces them and [`Self::let_fun_requirements`] queries them. A pass deciding whether a binding may be removed therefore cannot disagree with the verifier that will judge the result -- which is how `dissolve_rec_init` came to drop a `RecInit`'s computed values while a function nested in its body still referenced them, having asked a narrower question of its own.
+    /// This is the single statement of the lexical scoping rules, which [`Self::verify_lexical_scopes`] enforces.
     fn scope_step(
         &self,
         owner: Option<CpsFunId>,
@@ -1410,7 +1370,7 @@ impl CpsModule {
         let mut step = ScopeStep::default();
         match node {
             CpsNode::LetValue { result, next, .. } | CpsNode::LetIntrinsic { result, next, .. } => {
-                step.values.push(ScopeBinding::Once {
+                step.values.push(ScopeBinding {
                     value: *result,
                     noun: "node result",
                 });
@@ -1448,37 +1408,6 @@ impl CpsModule {
                     continuations,
                 });
             }
-            CpsNode::RecInit {
-                functions: members,
-                values: recursive_values,
-                body,
-                ..
-            } => {
-                let mut inner_functions = functions;
-                for function in members {
-                    step.functions.push(*function);
-                    inner_functions.insert(*function);
-                }
-                let mut inner_values = values;
-                for value in recursive_values {
-                    step.values.push(ScopeBinding::Recursive(*value));
-                    inner_values.insert(*value);
-                }
-                for function in members.iter().rev() {
-                    step.tasks.push(ScopeTask::Function {
-                        function: *function,
-                        values: inner_values.clone(),
-                        functions: inner_functions.clone(),
-                    });
-                }
-                step.tasks.push(ScopeTask::Node {
-                    owner,
-                    node: *body,
-                    values: inner_values,
-                    functions: inner_functions,
-                    continuations,
-                });
-            }
             CpsNode::LetCont {
                 continuations: members,
                 body,
@@ -1486,13 +1415,14 @@ impl CpsModule {
                 let mut inner = continuations;
                 inner.extend(members.iter().copied());
                 for continuation in members.iter().rev() {
-                    // Tolerate a tombstoned continuation, as `nodes_from` does and for the same reason: an inline sweep can leave a `LetCont` transiently naming an inlined-away continuation until its sweep-ending prune, and these rules are now read between passes as well as at verification. The verifier loses nothing by the tolerance, because `verify_node` rejects a missing `LetCont` member structurally before `verify_lexical_scopes` runs.
-                    let Some(definition) = self.continuation(*continuation) else {
-                        continue;
-                    };
+                    // `verify_node` has already rejected a `LetCont` naming a missing member, so the walk may read it.
+                    let definition = self.continuation(*continuation).unwrap();
                     let mut continuation_values = values.clone();
                     for value in &definition.params {
-                        step.values.push(ScopeBinding::Parameter(*value));
+                        step.values.push(ScopeBinding {
+                            value: *value,
+                            noun: "continuation parameter",
+                        });
                         continuation_values.insert(*value);
                     }
                     step.tasks.push(ScopeTask::Node {
@@ -1521,71 +1451,6 @@ impl CpsModule {
             | CpsNode::Unreachable => {}
         }
         step
-    }
-
-    /// The values a `LetFun { functions, body }` would reference without binding below -- what it requires from the scope enclosing it.
-    ///
-    /// Answered by walking [`Self::scope_step`], so a pass about to remove a binding asks whether the result will still verify rather than restating when a binding is still reachable. Two consequences follow from the rules rather than from a choice made here: the walk descends through nested functions and continuations, and a continuation parameter that rebinds a value covers the uses below it -- which is what lets a broken `RecInit` dissolve even though its computed value is still named at the ready point.
-    pub(crate) fn let_fun_requirements(
-        &self,
-        functions: &[CpsFunId],
-        body: CpsNodeId,
-    ) -> BTreeSet<CpsValueId> {
-        let mut required = BTreeSet::new();
-        let mut visited_nodes = BTreeSet::new();
-        let mut work = vec![ScopeTask::Node {
-            owner: None,
-            node: body,
-            values: BTreeSet::new(),
-            functions: BTreeSet::new(),
-            continuations: BTreeSet::new(),
-        }];
-        work.extend(functions.iter().map(|function| ScopeTask::Function {
-            function: *function,
-            values: BTreeSet::new(),
-            functions: BTreeSet::new(),
-        }));
-
-        while let Some(task) = work.pop() {
-            let step = match task {
-                ScopeTask::Function {
-                    function,
-                    values,
-                    functions,
-                } => self.function_scope(function, values, functions),
-                ScopeTask::Node {
-                    owner,
-                    node,
-                    values,
-                    functions,
-                    continuations,
-                } => {
-                    if !visited_nodes.insert(node) {
-                        continue;
-                    }
-                    let definition = self.node(node).unwrap();
-                    // A closure callee is a value the node reads, and it is the one such read that is not an operand atom.
-                    if let CpsNode::ApplyFun {
-                        callee: CpsCallee::Closure(value),
-                        ..
-                    } = definition
-                        && !values.contains(value)
-                    {
-                        required.insert(*value);
-                    }
-                    for atom in atoms(definition) {
-                        if let CpsAtom::Value(value) = atom
-                            && !values.contains(value)
-                        {
-                            required.insert(*value);
-                        }
-                    }
-                    self.scope_step(owner, definition, values, functions, continuations)
-                }
-            };
-            work.extend(step.tasks);
-        }
-        required
     }
 
     fn verify_function_body(
@@ -1619,7 +1484,7 @@ impl CpsModule {
                 CpsNode::LetValue { next, .. } | CpsNode::LetIntrinsic { next, .. } => {
                     work.push((*next, scope));
                 }
-                CpsNode::LetFun { body, .. } | CpsNode::RecInit { body, .. } => {
+                CpsNode::LetFun { body, .. } => {
                     work.push((*body, scope));
                 }
                 CpsNode::LetCont {
@@ -1827,26 +1692,6 @@ impl CpsModule {
                 }
             }
             CpsNode::Exit { .. } | CpsNode::Unreachable => {}
-            CpsNode::RecInit {
-                functions,
-                values,
-                ready,
-                body,
-            } => {
-                if functions.is_empty() || values.is_empty() {
-                    return Err(CpsVerifyError(format!(
-                        "{id} recursive initializer must be a mixed function/value group"
-                    )));
-                }
-                for &function in functions {
-                    self.require_fun(function, "recursive initializer function")?;
-                }
-                for &value in values {
-                    self.require_value(value, "recursive initializer value")?;
-                }
-                self.require_node(*ready, "recursive initializer ready point")?;
-                self.require_node(*body, "recursive initializer body")?;
-            }
         }
 
         for atom in atoms(node) {
@@ -1962,10 +1807,7 @@ pub(crate) fn atoms(node: &CpsNode) -> Vec<&CpsAtom> {
             }
         }
         CpsNode::Exit { value, .. } => output.extend(value),
-        CpsNode::LetFun { .. }
-        | CpsNode::LetCont { .. }
-        | CpsNode::Unreachable
-        | CpsNode::RecInit { .. } => {}
+        CpsNode::LetFun { .. } | CpsNode::LetCont { .. } | CpsNode::Unreachable => {}
     }
     output
 }
@@ -2002,10 +1844,7 @@ pub(crate) fn visit_atoms_mut(node: &mut CpsNode, visitor: &mut impl FnMut(&mut 
                 visitor(value);
             }
         }
-        CpsNode::LetFun { .. }
-        | CpsNode::LetCont { .. }
-        | CpsNode::Unreachable
-        | CpsNode::RecInit { .. } => {}
+        CpsNode::LetFun { .. } | CpsNode::LetCont { .. } | CpsNode::Unreachable => {}
     }
 }
 
@@ -2138,14 +1977,6 @@ impl fmt::Display for CpsDisplayNode<'_> {
             }
             CpsNode::Exit { value } => write!(f, "exit {value:?}"),
             CpsNode::Unreachable => f.write_str("unreachable"),
-            CpsNode::RecInit {
-                functions,
-                values,
-                ready,
-                body,
-            } => {
-                write!(f, "rec-init {functions:?} {values:?} ready {ready}; {body}")
-            }
         }
     }
 }

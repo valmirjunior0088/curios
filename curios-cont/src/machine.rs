@@ -57,16 +57,6 @@ pub(crate) enum MachineInstruction {
         function: CpsFunId,
         captures: Vec<MachineOperand>,
     },
-    /// Explicit mixed-initialization fallback; ordinary recursive functions never use either instruction.
-    FallbackShell {
-        result: MachineValueId,
-        function: CpsFunId,
-    },
-    FallbackFill {
-        shell: MachineValueId,
-        function: CpsFunId,
-        captures: Vec<MachineOperand>,
-    },
 }
 
 #[derive(Debug, Clone)]
@@ -319,7 +309,7 @@ fn free_runtime_values(source: &CpsModule, function: CpsFunId) -> Vec<MachineVal
                 bound.insert(value_id(*result));
                 work.push(*next);
             }
-            CpsNode::LetFun { body, .. } | CpsNode::RecInit { body, .. } => work.push(*body),
+            CpsNode::LetFun { body, .. } => work.push(*body),
             CpsNode::LetCont {
                 continuations,
                 body,
@@ -398,7 +388,7 @@ fn function_nodes(source: &CpsModule, function: CpsFunId) -> Vec<CpsNodeId> {
         nodes.push(node_id);
         match source.node(node_id).unwrap() {
             CpsNode::LetValue { next, .. } | CpsNode::LetIntrinsic { next, .. } => work.push(*next),
-            CpsNode::LetFun { body, .. } | CpsNode::RecInit { body, .. } => work.push(*body),
+            CpsNode::LetFun { body, .. } => work.push(*body),
             CpsNode::LetCont {
                 continuations,
                 body,
@@ -423,9 +413,7 @@ pub(crate) struct MachineFunctionLowerer<'a> {
     blocks: BTreeMap<MachineBlockId, MachineBlock>,
     block_scopes: BTreeMap<MachineBlockId, Vec<MachineBlockId>>,
     continuation_blocks: BTreeMap<CpsContId, MachineBlockId>,
-    recursive_closures: BTreeMap<CpsFunId, MachineValueId>,
     materialized_closures: BTreeMap<CpsFunId, MachineValueId>,
-    ready_fills: BTreeMap<CpsNodeId, Vec<(MachineValueId, CpsFunId)>>,
     work: VecDeque<(MachineBlockId, CpsNodeId, Vec<MachineValueId>)>,
     block_entropy: Entropy<MachineBlockId>,
     value_entropy: Entropy<MachineValueId>,
@@ -452,9 +440,7 @@ impl<'a> MachineFunctionLowerer<'a> {
             blocks: BTreeMap::new(),
             block_scopes: BTreeMap::new(),
             continuation_blocks: BTreeMap::new(),
-            recursive_closures: BTreeMap::new(),
             materialized_closures: BTreeMap::new(),
-            ready_fills: BTreeMap::new(),
             work: VecDeque::new(),
             block_entropy,
             value_entropy,
@@ -496,20 +482,6 @@ impl<'a> MachineFunctionLowerer<'a> {
         self.materialized_closures.clear();
         let mut instructions = Vec::new();
         loop {
-            if let Some(fills) = self.ready_fills.remove(&node_id) {
-                for (shell, function) in fills {
-                    let captures = self.free_values[&function]
-                        .iter()
-                        .copied()
-                        .map(MachineOperand::Value)
-                        .collect();
-                    instructions.push(MachineInstruction::FallbackFill {
-                        shell,
-                        function,
-                        captures,
-                    });
-                }
-            }
             match self.source.node(node_id).unwrap() {
                 CpsNode::LetValue {
                     result,
@@ -581,39 +553,6 @@ impl<'a> MachineFunctionLowerer<'a> {
                             args: vec![],
                         }),
                     };
-                }
-                CpsNode::RecInit {
-                    functions,
-                    values,
-                    ready,
-                    body,
-                } => {
-                    let escaping = initialization_function_atoms(self.source, *body, *ready);
-                    let computed = values
-                        .iter()
-                        .map(|value| value_id(*value))
-                        .collect::<BTreeSet<_>>();
-                    for function in functions.iter().filter(|function| {
-                        escaping.contains(function)
-                            && self.free_values[function]
-                                .iter()
-                                .any(|value| computed.contains(value))
-                    }) {
-                        let result = self.value_entropy.fresh();
-                        assert!(
-                            self.recursive_closures.insert(*function, result).is_none(),
-                            "recursive function belongs to more than one initializer"
-                        );
-                        instructions.push(MachineInstruction::FallbackShell {
-                            result,
-                            function: *function,
-                        });
-                        self.ready_fills
-                            .entry(*ready)
-                            .or_default()
-                            .push((result, *function));
-                    }
-                    node_id = *body;
                 }
                 terminal => {
                     let terminator = self.lower_terminator(terminal, &mut instructions);
@@ -810,9 +749,6 @@ impl<'a> MachineFunctionLowerer<'a> {
             CpsAtom::Literal(literal) => MachineOperand::Literal(literal.clone()),
             CpsAtom::Filler => MachineOperand::Filler,
             CpsAtom::Fun(function) => {
-                if let Some(shell) = self.recursive_closures.get(function) {
-                    return MachineOperand::Value(*shell);
-                }
                 if let Some(existing) = self.materialized_closures.get(function) {
                     return MachineOperand::Value(*existing);
                 }
@@ -836,64 +772,6 @@ impl<'a> MachineFunctionLowerer<'a> {
 
 pub(crate) fn value_id(value: CpsValueId) -> MachineValueId {
     MachineValueId(value.index() as u32)
-}
-
-fn initialization_function_atoms(
-    source: &CpsModule,
-    body: CpsNodeId,
-    ready: CpsNodeId,
-) -> BTreeSet<CpsFunId> {
-    let mut functions = BTreeSet::new();
-    let mut work = vec![body];
-    let mut visited = BTreeSet::new();
-    while let Some(node_id) = work.pop() {
-        if node_id == ready || !visited.insert(node_id) {
-            continue;
-        }
-        let node = source.node(node_id).unwrap();
-        for atom in atoms(node) {
-            if let CpsAtom::Fun(function) = atom {
-                functions.insert(*function);
-            }
-        }
-        match node {
-            CpsNode::LetValue { next, .. } | CpsNode::LetIntrinsic { next, .. } => work.push(*next),
-            CpsNode::LetFun { body, .. } | CpsNode::RecInit { body, .. } => work.push(*body),
-            CpsNode::LetCont {
-                continuations,
-                body,
-            } => {
-                work.push(*body);
-                for continuation in continuations {
-                    if let Some(continuation) = source.continuation(*continuation) {
-                        work.push(continuation.body);
-                    }
-                }
-            }
-            CpsNode::ApplyFun { return_to, .. }
-            | CpsNode::Foreign { return_to, .. }
-            | CpsNode::Cell { return_to, .. }
-            | CpsNode::Intrinsic { return_to, .. } => {
-                if let Some(continuation) = source.continuation(*return_to) {
-                    work.push(continuation.body);
-                }
-            }
-            CpsNode::ApplyCont(edge) => {
-                if let Some(continuation) = source.continuation(edge.target) {
-                    work.push(continuation.body);
-                }
-            }
-            CpsNode::Switch { cases, default, .. } => {
-                for edge in cases.values().chain(default.iter()) {
-                    if let Some(continuation) = source.continuation(edge.target) {
-                        work.push(continuation.body);
-                    }
-                }
-            }
-            CpsNode::Exit { .. } | CpsNode::Unreachable => {}
-        }
-    }
-    functions
 }
 
 impl MachineModule {
@@ -994,63 +872,26 @@ impl MachineModule {
         owner: CpsFunId,
         function: &MachineFunction,
     ) -> Result<(), MachineVerifyError> {
-        let mut shells = BTreeMap::new();
-        let mut fills = BTreeSet::new();
         for instruction in function
             .blocks
             .values()
             .flat_map(|block| &block.instructions)
         {
-            match instruction {
-                MachineInstruction::MakeClosure {
-                    function, captures, ..
-                } => {
-                    let definition = self.functions.get(function).ok_or_else(|| {
-                        MachineVerifyError(format!("{owner} constructs undefined {function}"))
-                    })?;
-                    if !self.wrappers.contains_key(function)
-                        || captures.len() != definition.free_values.len()
-                    {
-                        return Err(MachineVerifyError(format!(
-                            "{owner} closure construction for {function} has an invalid environment"
-                        )));
-                    }
+            if let MachineInstruction::MakeClosure {
+                function, captures, ..
+            } = instruction
+            {
+                let definition = self.functions.get(function).ok_or_else(|| {
+                    MachineVerifyError(format!("{owner} constructs undefined {function}"))
+                })?;
+                if !self.wrappers.contains_key(function)
+                    || captures.len() != definition.free_values.len()
+                {
+                    return Err(MachineVerifyError(format!(
+                        "{owner} closure construction for {function} has an invalid environment"
+                    )));
                 }
-                MachineInstruction::FallbackShell { result, function } => {
-                    if !self.wrappers.contains_key(function) {
-                        return Err(MachineVerifyError(format!(
-                            "{owner} fallback shell for non-escaping {function}"
-                        )));
-                    }
-                    if shells.insert(*result, *function).is_some() {
-                        return Err(MachineVerifyError(format!(
-                            "{owner} defines fallback shell {result} more than once"
-                        )));
-                    }
-                }
-                MachineInstruction::FallbackFill {
-                    shell,
-                    function,
-                    captures,
-                } => {
-                    if shells.get(shell) != Some(function) || !fills.insert(*shell) {
-                        return Err(MachineVerifyError(format!(
-                            "{owner} fallback fill does not uniquely match shell {shell}"
-                        )));
-                    }
-                    if captures.len() != self.functions[function].free_values.len() {
-                        return Err(MachineVerifyError(format!(
-                            "{owner} fallback fill for {function} has an invalid environment"
-                        )));
-                    }
-                }
-                MachineInstruction::Construct { .. } | MachineInstruction::Intrinsic { .. } => {}
             }
-        }
-        if shells.keys().copied().collect::<BTreeSet<_>>() != fills {
-            return Err(MachineVerifyError(format!(
-                "{owner} has an unfilled recursive closure shell"
-            )));
         }
         Ok(())
     }
@@ -1069,8 +910,6 @@ impl MachineModule {
                     )));
                 }
                 MachineInstruction::MakeClosure { function, .. }
-                | MachineInstruction::FallbackShell { function, .. }
-                | MachineInstruction::FallbackFill { function, .. }
                     if !self.functions.contains_key(function) =>
                 {
                     return Err(MachineVerifyError(format!(
@@ -1243,13 +1082,10 @@ fn verify_block_resume(
 #[cfg(test)]
 mod tests {
     use {
-        super::{
-            MachineFunction, MachineInstruction, MachineModule, MachineOperand, MachineTerminator,
-            lower, value_id,
-        },
+        super::{MachineFunction, MachineInstruction, MachineOperand, MachineTerminator, lower},
         crate::{
             CpsAtom, CpsCallee, CpsContinuation, CpsEdge, CpsFunId, CpsFunction, CpsLiteral,
-            CpsModule, CpsNode, into_wasm,
+            CpsModule, CpsNode,
             into_wasm::{EmissionHostTarget, EmissionTail},
         },
     };
@@ -1366,123 +1202,6 @@ mod tests {
         ));
     }
 
-    #[test]
-    fn residual_rec_init_fills_its_fresh_shell_only_at_the_ready_point() {
-        let mut source = CpsModule::new();
-        let main = source.reserve_function();
-        let function = source.reserve_function();
-        let passive = source.reserve_function();
-        let computed = source.add_value(Some("computed capture".into()));
-
-        let function_return = source.reserve_continuation();
-        let function_body = source.add_node(CpsNode::ApplyCont(CpsEdge {
-            target: function_return,
-            args: vec![CpsAtom::Value(computed)],
-        }));
-        source.define_function(
-            function,
-            CpsFunction {
-                debug_name: Some("recursive closure".into()),
-                params: vec![],
-                return_cont: function_return,
-                body: function_body,
-            },
-        );
-        let passive_return = source.reserve_continuation();
-        let passive_body = source.add_node(CpsNode::ApplyCont(CpsEdge {
-            target: passive_return,
-            args: vec![CpsAtom::Literal(CpsLiteral::Nat(0))],
-        }));
-        source.define_function(
-            passive,
-            CpsFunction {
-                debug_name: Some("non-participating sibling".into()),
-                params: vec![],
-                return_cont: passive_return,
-                body: passive_body,
-            },
-        );
-
-        let main_return = source.reserve_continuation();
-        let ready = source.add_node(CpsNode::ApplyCont(CpsEdge {
-            target: main_return,
-            args: vec![CpsAtom::Fun(function)],
-        }));
-        let bind_computed = source.add_continuation(CpsContinuation {
-            debug_name: Some("bind computed capture".into()),
-            params: vec![computed],
-            body: ready,
-        });
-        let initialize = source.add_node(CpsNode::ApplyCont(CpsEdge {
-            target: bind_computed,
-            args: vec![CpsAtom::Fun(function)],
-        }));
-        let initialization = source.add_node(CpsNode::LetCont {
-            continuations: vec![bind_computed],
-            body: initialize,
-        });
-        let body = source.add_node(CpsNode::RecInit {
-            functions: vec![function, passive],
-            values: vec![computed],
-            ready,
-            body: initialization,
-        });
-        source.define_function(
-            main,
-            CpsFunction {
-                debug_name: Some("main".into()),
-                params: vec![],
-                return_cont: main_return,
-                body,
-            },
-        );
-        source.set_entry(main);
-
-        let machine = lower(&source);
-        let main = &machine.functions[&main];
-        let shells = main
-            .blocks
-            .values()
-            .flat_map(|block| &block.instructions)
-            .filter_map(|instruction| match instruction {
-                MachineInstruction::FallbackShell { result, function } => {
-                    Some((*result, *function))
-                }
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-        let fills = main
-            .blocks
-            .values()
-            .flat_map(|block| &block.instructions)
-            .filter_map(|instruction| match instruction {
-                MachineInstruction::FallbackFill {
-                    shell,
-                    function,
-                    captures,
-                } => Some((*shell, *function, captures.clone())),
-                _ => None,
-            })
-            .collect::<Vec<_>>();
-
-        assert_eq!(shells.len(), 1);
-        assert_eq!(fills.len(), 1);
-        assert_eq!(shells[0].1, function);
-        assert_eq!(shells[0], (fills[0].0, fills[0].1));
-        assert!(matches!(
-            fills[0].2.as_slice(),
-            [MachineOperand::Value(value)] if *value == value_id(computed)
-        ));
-        assert!(main.blocks.values().any(|block| {
-            matches!(
-                &block.terminator,
-                MachineTerminator::Return(operands)
-                    if matches!(operands.as_slice(), [MachineOperand::Value(value)] if *value == shells[0].0)
-            )
-        }));
-        let _wasm = into_wasm(&source);
-    }
-
     fn machine_make_closures(function: &MachineFunction, target: CpsFunId) -> usize {
         function
             .blocks
@@ -1494,16 +1213,6 @@ mod tests {
                     MachineInstruction::MakeClosure { function, .. } if *function == target
                 )
             })
-            .count()
-    }
-
-    fn machine_shell_count(machine: &MachineModule) -> usize {
-        machine
-            .functions
-            .values()
-            .flat_map(|function| function.blocks.values())
-            .flat_map(|block| &block.instructions)
-            .filter(|instruction| matches!(instruction, MachineInstruction::FallbackShell { .. }))
             .count()
     }
 
@@ -1636,117 +1345,6 @@ mod tests {
         assert_eq!(machine_make_closures(main, target), 1);
     }
 
-    #[test]
-    fn sibling_recursion_creates_no_shell() {
-        let mut source = CpsModule::new();
-        let main = source.reserve_function();
-        let ping = source.reserve_function();
-        let pong = source.reserve_function();
-
-        let ping_return = source.reserve_continuation();
-        let ping_body = source.add_node(CpsNode::ApplyFun {
-            callee: CpsCallee::Known(pong),
-            args: vec![],
-            return_to: ping_return,
-        });
-        source.define_function(
-            ping,
-            CpsFunction {
-                debug_name: Some("ping".into()),
-                params: vec![],
-                return_cont: ping_return,
-                body: ping_body,
-            },
-        );
-
-        let pong_return = source.reserve_continuation();
-        let pong_body = source.add_node(CpsNode::ApplyFun {
-            callee: CpsCallee::Known(ping),
-            args: vec![],
-            return_to: pong_return,
-        });
-        source.define_function(
-            pong,
-            CpsFunction {
-                debug_name: Some("pong".into()),
-                params: vec![],
-                return_cont: pong_return,
-                body: pong_body,
-            },
-        );
-
-        let main_return = source.reserve_continuation();
-        let call = source.add_node(CpsNode::ApplyFun {
-            callee: CpsCallee::Known(ping),
-            args: vec![],
-            return_to: main_return,
-        });
-        let main_body = source.add_node(CpsNode::LetFun {
-            functions: vec![ping, pong],
-            body: call,
-        });
-        source.define_function(
-            main,
-            CpsFunction {
-                debug_name: Some("main".into()),
-                params: vec![],
-                return_cont: main_return,
-                body: main_body,
-            },
-        );
-        source.set_entry(main);
-
-        let machine = lower(&source);
-        assert_eq!(machine_shell_count(&machine), 0);
-    }
-
-    #[test]
-    fn ordinary_recursion_creates_no_shell() {
-        let mut source = CpsModule::new();
-        let main = source.reserve_function();
-        let repeat = source.reserve_function();
-
-        let repeat_return = source.reserve_continuation();
-        let repeat_body = source.add_node(CpsNode::ApplyFun {
-            callee: CpsCallee::Known(repeat),
-            args: vec![],
-            return_to: repeat_return,
-        });
-        source.define_function(
-            repeat,
-            CpsFunction {
-                debug_name: Some("repeat".into()),
-                params: vec![],
-                return_cont: repeat_return,
-                body: repeat_body,
-            },
-        );
-
-        let main_return = source.reserve_continuation();
-        let call = source.add_node(CpsNode::ApplyFun {
-            callee: CpsCallee::Known(repeat),
-            args: vec![],
-            return_to: main_return,
-        });
-        let main_body = source.add_node(CpsNode::LetFun {
-            functions: vec![repeat],
-            body: call,
-        });
-        source.define_function(
-            main,
-            CpsFunction {
-                debug_name: Some("main".into()),
-                params: vec![],
-                return_cont: main_return,
-                body: main_body,
-            },
-        );
-        source.set_entry(main);
-
-        let machine = lower(&source);
-        assert_eq!(machine_shell_count(&machine), 0);
-    }
-
     /// A nullary `main` that immediately exits — the smallest valid machine module, used to seed the verifier-rejection tests.
     fn exiting_main() -> (CpsModule, CpsFunId) {
         let mut source = CpsModule::new();
@@ -1831,35 +1429,6 @@ mod tests {
         let error = machine.verify().unwrap_err();
         assert!(
             error.to_string().contains("has no lexical owner"),
-            "unexpected error: {error}"
-        );
-    }
-
-    #[test]
-    fn verify_rejects_a_fallback_shell_for_a_non_escaping_function() {
-        // The residual mixed-init fallback is reserved for escaping closures; a shell over a function with no wrapper is a function-only knot leaking into fallback lowering, which the verifier must reject.
-        let (mut source, _) = exiting_main();
-        let mut machine = lower(&source);
-
-        let result = value_id(source.add_value(None));
-        let entry = machine.entry;
-        let function = machine.functions.get_mut(&entry).unwrap();
-        let entry_block = function.entry;
-        function
-            .blocks
-            .get_mut(&entry_block)
-            .unwrap()
-            .instructions
-            .push(MachineInstruction::FallbackShell {
-                result,
-                function: entry,
-            });
-
-        let error = machine.verify().unwrap_err();
-        assert!(
-            error
-                .to_string()
-                .contains("fallback shell for non-escaping"),
             "unexpected error: {error}"
         );
     }

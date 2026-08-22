@@ -147,7 +147,6 @@ fn collect_consts(body: &EmissionBody, interner: &mut ConstInterner, consts: &mu
                     consts.renames.insert(name.clone(), interned);
                 }
             }
-            // A recursive shell's fill is naturally outside the condition: a cyclic closure's captures include a cycle member — its own shell'd name or a partner's — which is neither an interned const nor a kept scalar, so `intern_elements` refuses it and the shell + backpatch path is untouched.
             EmissionData::Closure(target, fields) => {
                 if let Some(canonical) = intern_elements(fields, interner, consts) {
                     let key = ConstKey::Clsr(

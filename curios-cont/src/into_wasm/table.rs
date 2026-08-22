@@ -8,7 +8,7 @@ use {
     curios_abi::ForeignFunction,
     std::{
         cell::{OnceCell, RefCell},
-        collections::{BTreeMap, BTreeSet, HashMap, HashSet},
+        collections::{BTreeMap, HashMap, HashSet},
         sync::Arc,
     },
 };
@@ -59,8 +59,7 @@ pub(crate) struct RopeData {
 
 #[derive(Debug, Clone)]
 pub(crate) struct ClsrData<'a> {
-    name: &'a EmissionClosureName,
-    /// This closure's slot in its arity's dispatch table — the value its environment's special field holds. 1-based: slot 0 stays null so a `struct.new_default` shell's zeroed field dispatches into the null entry and traps, as the unfilled funcref did.
+    /// This closure's slot in its arity's dispatch table — the value its environment's special field holds. 1-based: slot 0 stays null, so a zeroed code field dispatches into the null entry and traps rather than into a body.
     index: i32,
     func_name: curios_wasm::FuncName,
     envr_type: curios_wasm::TypeName,
@@ -76,7 +75,6 @@ impl<'a> ClsrData<'a> {
         index: i32,
     ) -> Self {
         Self {
-            name: clsr_name,
             index,
             func_name: curios_wasm::FuncName::from(format!("clsr/{}", clsr_name)),
             envr_type: curios_wasm::TypeName::from(format!("envr/{}", clsr_name)),
@@ -102,10 +100,6 @@ impl<'a> ClsrData<'a> {
                 .collect(),
             resume: &clsr.resume,
         }
-    }
-
-    pub(crate) fn name(&self) -> &'a EmissionClosureName {
-        self.name
     }
 
     pub(crate) fn index(&self) -> i32 {
@@ -220,19 +214,7 @@ fn max_value_tuple_arity(value: &EmissionValue) -> usize {
     }
 }
 
-/// Collect every closure that is reserved as a recursive shell anywhere in `region` (and its nested blocks). These are the only closures whose `envr` fields are back-patched, so they are the only ones whose wasm struct fields must stay mutable.
-fn collect_cyclic_clsrs(region: &EmissionBody, out: &mut HashSet<EmissionClosureName>) {
-    for (_, clsr) in &region.shells {
-        out.insert(clsr.clone());
-    }
-
-    for (_, block) in &region.blocks {
-        collect_cyclic_clsrs(&block.region, out);
-    }
-}
-
 fn max_region_tuple_arity(region: &EmissionBody) -> usize {
-    // Recursive fallback entries are closure shells only, so they contribute no tuple arity; the arities all come from tuple constructions and projections in `values` (and nested blocks).
     let values = region
         .values
         .iter()
@@ -300,9 +282,6 @@ pub(crate) struct Table<'a> {
     const_aggregates: HashSet<&'a EmissionValueName>,
     clsrs: HashMap<&'a EmissionClosureName, ClsrData<'a>>,
     funcs: HashMap<&'a EmissionFunctionName, FuncData<'a>>,
-    // Closures that are ever shell'd as a recursive shell — their `envr` fields are back-patched (`struct.set`), so those fields must stay mutable. Every other aggregate field is immutable. `cyclic_clsr_arities` carries the same fact at arity granularity, for the shared `envr/N` special field (which must agree across all its subtypes).
-    cyclic_clsrs: HashSet<EmissionClosureName>,
-    cyclic_clsr_arities: BTreeSet<usize>,
     /// The values the representation analysis decided to hold in a register, and at which carrier. A name absent here is held behind a reference, which is every synthetic name codegen mints for itself.
     raw: &'a HashMap<EmissionValueName, Repr>,
 }
@@ -312,28 +291,7 @@ impl<'a> Table<'a> {
         module: &'a EmissionModule,
         raw: &'a HashMap<EmissionValueName, Repr>,
     ) -> Self {
-        let mut cyclic_clsrs = HashSet::new();
-        for (_, clsr) in module.clsrs() {
-            collect_cyclic_clsrs(&clsr.region, &mut cyclic_clsrs);
-        }
-        for (_, func) in module.funcs() {
-            collect_cyclic_clsrs(&func.region, &mut cyclic_clsrs);
-        }
-
-        let arities = module
-            .clsrs()
-            .iter()
-            .map(|(name, clsr)| (name.clone(), clsr.params.len()))
-            .collect::<HashMap<EmissionClosureName, usize>>();
-
-        let cyclic_clsr_arities = cyclic_clsrs
-            .iter()
-            .filter_map(|name| arities.get(name).copied())
-            .collect::<BTreeSet<usize>>();
-
         Self {
-            cyclic_clsrs,
-            cyclic_clsr_arities,
             raw,
             special_field: curios_wasm::FieldName::from("!"),
             special_local: curios_wasm::LocalName::from("!"),
@@ -892,44 +850,8 @@ impl<'a> Table<'a> {
         curios_wasm::FieldName::from(index.to_string())
     }
 
-    /// Whether this closure is ever reserved as a recursive shell, i.e. its `envr` payload fields are back-patched and so must be declared mutable.
-    pub(crate) fn is_cyclic_clsr(&self, name: &EmissionClosureName) -> bool {
-        self.cyclic_clsrs.contains(name)
-    }
-
-    /// Whether *any* closure of this arity is cyclic. The shared `envr/N` special field (and thus every `envr/<clsr>` of that arity, by subtyping invariance) must be mutable iff so.
-    pub(crate) fn arity_has_cyclic_clsr(&self, arity: usize) -> bool {
-        self.cyclic_clsr_arities.contains(&arity)
-    }
-
-    fn field_mutability(is_mutable: bool) -> curios_wasm::Mutability {
-        if is_mutable {
-            curios_wasm::Mutability::Var
-        } else {
-            curios_wasm::Mutability::Const
-        }
-    }
-
-    pub(crate) fn tuple_field_mutability() -> curios_wasm::Mutability {
-        // Tuples are never cyclic (rejected in `into_cont`), so they are never back-patched.
-        Self::field_mutability(false)
-    }
-
-    pub(crate) fn envr_special_mutability(&self, arity: usize) -> curios_wasm::Mutability {
-        Self::field_mutability(self.arity_has_cyclic_clsr(arity))
-    }
-
-    pub(crate) fn envr_payload_mutability(
-        &self,
-        name: &EmissionClosureName,
-    ) -> curios_wasm::Mutability {
-        Self::field_mutability(self.is_cyclic_clsr(name))
-    }
-
-    pub(crate) fn envr_types(&self) -> impl Iterator<Item = (usize, curios_wasm::TypeName)> {
-        self.envr_types
-            .iter()
-            .map(|(arity, type_name)| (*arity, type_name.clone()))
+    pub(crate) fn envr_types(&self) -> impl Iterator<Item = curios_wasm::TypeName> {
+        self.envr_types.values().cloned()
     }
 
     pub(crate) fn find_envr_type(&self, arity: usize) -> curios_wasm::TypeName {

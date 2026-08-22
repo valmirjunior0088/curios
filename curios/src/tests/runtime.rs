@@ -772,6 +772,68 @@ fn recursive_group_signature_reduces_concrete_type_family() {
     );
 }
 
+/// A knot mixing a function member with value members whose initializers build closures *through a call* — `wrap(…)` here, the `bind`/`peek` combinators in `/std/Toml/values` — where one value's closure captures, via the function member, a value initialized later. Every knot ties through cells now; this knot once lowered to a `RecInit` node whose machine lowering patched only *member* closures at the ready point, and `second`'s closure — a non-member born inside an initializer, calling `helper`, which reads `first` — captured a value that did not exist yet. The random byte keeps both closures live as values, so neither is folded away before the knot is lowered.
+#[test]
+fn a_closure_built_by_a_call_inside_a_knot_reaches_a_later_member() {
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Str, Bytes, Byte, Io, rand, print};
+        let wrap(f: (Nat) -> Nat) -> (Nat) -> Nat = (n) => f(n);
+        let main: Io({}) =
+            let bs = rand/bytes(1)!;
+            rec first: (Nat) -> Nat =
+                wrap((n) => match n | 0 => 0 | p + 1; _ => second(p) end)
+            and second: (Nat) -> Nat =
+                wrap((n) => helper(n))
+            and helper(n: Nat) -> Nat = first(n);
+            let f =
+                match bs
+                | x[b, ..rest] => match Byte/to_nat(b) % 2 | 0 => first | _ => second end
+                | x[] => first
+                end;
+            print(Nat/to_str(f(3)));
+        main
+        "#),
+        b"0"
+    );
+}
+
+/// An initializer that *calls* a member function evaluates that function's body then and there, so a later member the body reads is read before anything has stored it. The erased program once computed with the unfilled cell — `1` here, where the language says `43` — because the verifier looked only at what the initializer read itself and the lowering ordered the initializers by the same narrow view. It is refused at the erase boundary now; `size` written ahead of `table` is the supported spelling.
+#[test]
+fn an_initializer_calling_a_function_that_reads_a_later_member_is_refused() {
+    let source = r#"
+        use /std/{Nat, Str, Bytes, Byte, Io, rand, print};
+        let main: Io({}) =
+            let bs = rand/bytes(1)!;
+            rec base: Nat = Bytes/len(bs) + 40
+            and table: Nat = build(Bytes/len(bs))
+            and build(n: Nat) -> Nat = n + size
+            and size: Nat = base + 1;
+            print(Nat/to_str(table));
+        main
+        "#;
+    let diagnostic = error(source);
+    assert!(
+        diagnostic.contains("before its initialization, through a call to"),
+        "{diagnostic}"
+    );
+
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Str, Bytes, Byte, Io, rand, print};
+        let main: Io({}) =
+            let bs = rand/bytes(1)!;
+            rec base: Nat = Bytes/len(bs) + 40
+            and size: Nat = base + 1
+            and table: Nat = build(Bytes/len(bs))
+            and build(n: Nat) -> Nat = n + size;
+            print(Nat/to_str(table));
+        main
+        "#),
+        b"43"
+    );
+}
+
 #[test]
 fn a_collapsed_wrapper_survives_storage_and_retrieval() {
     // The collapsed encoding end to end, at rest — the case no call-pattern specializer reaches: single-constructor wrapper values stored in a `List` and read back, a two-payload constructor riding an untagged tuple, and a nullary one riding the `Nat` zero. Every payload is runtime-tainted through stdin so nothing folds at compile time, and the printed sum proves each value round-tripped through its collapsed representation.

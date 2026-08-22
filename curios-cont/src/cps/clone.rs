@@ -132,17 +132,6 @@ pub(super) fn clone_node(node: &CpsNode, map: &Mapping<'_>) -> CpsNode {
             functions: functions.iter().map(|id| (map.function)(*id)).collect(),
             body: (map.node)(*body),
         },
-        CpsNode::RecInit {
-            functions,
-            values,
-            ready,
-            body,
-        } => CpsNode::RecInit {
-            functions: functions.iter().map(|id| (map.function)(*id)).collect(),
-            values: values.iter().map(|id| (map.value)(*id)).collect(),
-            ready: (map.node)(*ready),
-            body: (map.node)(*body),
-        },
     }
 }
 
@@ -159,9 +148,7 @@ pub(super) fn copied_extent(
 
     while let Some(node_id) = pending.pop() {
         let nested = match module.node(node_id) {
-            Some(CpsNode::LetFun { functions, .. } | CpsNode::RecInit { functions, .. }) => {
-                functions.clone()
-            }
+            Some(CpsNode::LetFun { functions, .. }) => functions.clone(),
             _ => continue,
         };
         for function in nested {
@@ -226,7 +213,7 @@ pub(super) fn copy_bodies(
         .map(|&id| (id, module.continuation(id).unwrap().clone()))
         .collect();
 
-    // Mint fresh owned values: member parameters, let-bound results, the values a `RecInit` knot binds, and continuation parameters. Values defined outside the extent are shared.
+    // Mint fresh owned values: member parameters, let-bound results, and continuation parameters. Values defined outside the extent are shared.
     let mut owned: Vec<CpsValueId> = Vec::new();
     for def in member_defs.values() {
         owned.extend(def.params.iter().copied());
@@ -236,7 +223,6 @@ pub(super) fn copy_bodies(
             CpsNode::LetValue { result, .. } | CpsNode::LetIntrinsic { result, .. } => {
                 owned.push(*result)
             }
-            CpsNode::RecInit { values, .. } => owned.extend(values.iter().copied()),
             _ => {}
         }
     }

@@ -432,7 +432,7 @@ pub(super) fn literal_value_map(module: &CpsModule) -> BTreeMap<CpsValueId, CpsA
     }
     literals
 }
-/// The single `LetFun` node introducing every member, or `None` if the members are split across nodes or introduced by a `RecInit` knot. The clones are added to this node so they share the members' lexical scope.
+/// The single `LetFun` node introducing every member, or `None` if the members are split across nodes. The clones are added to this node so they share the members' lexical scope.
 pub(super) fn introducing_letfun(
     module: &CpsModule,
     members: &BTreeSet<CpsFunId>,

@@ -79,7 +79,6 @@ fn convert_wrapper(machine: &MachineModule, wrapper: &MachineWrapper) -> Emissio
         params,
         resume: resume.clone(),
         region: EmissionBody {
-            shells: vec![],
             values: vec![],
             blocks: vec![],
             tail: EmissionTail::Call(EmissionCallTarget::Direct {
@@ -124,7 +123,6 @@ impl<'a> MachineFunctionBridge<'a> {
 
     fn convert_block(&mut self, id: MachineBlockId) -> EmissionBody {
         let block = &self.function.blocks[&id];
-        let mut shells = Vec::new();
         let mut values = Vec::new();
         let mut blocks = Vec::new();
         for instruction in &block.instructions {
@@ -168,23 +166,6 @@ impl<'a> MachineFunctionBridge<'a> {
                         )),
                     ));
                 }
-                MachineInstruction::FallbackShell { result, function } => {
-                    shells.push((value_name(*result), wrapper_name(self.machine, *function)));
-                }
-                MachineInstruction::FallbackFill {
-                    shell,
-                    function,
-                    captures,
-                } => {
-                    let captures = self.operands(captures, &mut values);
-                    values.push((
-                        value_name(*shell),
-                        EmissionValue::Pure(EmissionData::Closure(
-                            wrapper_name(self.machine, *function),
-                            captures,
-                        )),
-                    ));
-                }
             }
         }
         let tail = self.terminator(&block.terminator, &mut values, &mut blocks);
@@ -200,7 +181,6 @@ impl<'a> MachineFunctionBridge<'a> {
                 .map(|block| self.convert_scoped_block(block)),
         );
         EmissionBody {
-            shells,
             values,
             blocks,
             tail,
@@ -373,7 +353,6 @@ impl<'a> MachineFunctionBridge<'a> {
             EmissionBlock {
                 params: results,
                 region: EmissionBody {
-                    shells: vec![],
                     values: vec![],
                     blocks: vec![],
                     tail: EmissionTail::Jump(EmissionJumpTarget {
@@ -535,11 +514,9 @@ fn block_captures(function: &MachineFunction) -> BTreeMap<MachineBlockId, Vec<Ma
                 match instruction {
                     MachineInstruction::Construct { result, .. }
                     | MachineInstruction::Intrinsic { result, .. }
-                    | MachineInstruction::MakeClosure { result, .. }
-                    | MachineInstruction::FallbackShell { result, .. } => {
+                    | MachineInstruction::MakeClosure { result, .. } => {
                         bound.insert(*result);
                     }
-                    MachineInstruction::FallbackFill { .. } => {}
                 }
             }
 
@@ -582,13 +559,6 @@ fn block_operand_values(block: &MachineBlock) -> BTreeSet<MachineValueId> {
             | MachineInstruction::MakeClosure { captures: args, .. } => {
                 args.iter().for_each(&mut insert);
             }
-            MachineInstruction::FallbackFill {
-                shell, captures, ..
-            } => {
-                insert(&MachineOperand::Value(*shell));
-                captures.iter().for_each(&mut insert);
-            }
-            MachineInstruction::FallbackShell { .. } => {}
         }
     }
     match &block.terminator {
