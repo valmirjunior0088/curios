@@ -13,7 +13,7 @@ use {
     super::{
         Atom, Block, BlockId, Constructor, ConstructorId, FamilyId, Function, FunctionId,
         Intrinsic, Module, ProductId, ProductSchema, RecGroup, RecGroupId, Rhs, SequenceArity,
-        Statement, StatementId, Terminator, ValueId, VariantFamily,
+        Statement, StatementId, Terminator, ValueId, VariantFamily, spell_function, spell_value,
     },
     curios_utilities::{grown, recurse},
     std::collections::{BTreeSet, HashSet},
@@ -236,9 +236,11 @@ impl<'m> Verifier<'m> {
                     && position >= index
                 {
                     return Err(VerifyError(format!(
-                        "the initializer of computed group member {} evaluates {value} \
-                         before its initialization, through a call to {callee}",
-                        computed[index]
+                        "the initializer of computed group member {} evaluates {} \
+                         before its initialization, through a call to {}",
+                        spell_value(self.module, computed[index]),
+                        spell_value(self.module, value),
+                        spell_function(self.module, callee)
                     )));
                 }
             }
@@ -323,8 +325,9 @@ impl<'m> Verifier<'m> {
                     let arity = self.function(function)?.params.len();
                     if arguments.len() != arity {
                         return Err(VerifyError(format!(
-                            "statement {id} applies {function} with {} arguments; \
+                            "statement {id} applies {} with {} arguments; \
                              its arity is {arity}",
+                            spell_function(self.module, function),
                             arguments.len()
                         )));
                     }
@@ -564,8 +567,9 @@ impl<'m> Verifier<'m> {
                     let arity = self.function(mapper)?.params.len();
                     if arity != 1 {
                         return Err(VerifyError(format!(
-                            "statement {id} maps with {mapper} of arity {arity}; \
-                             a mapper takes one element"
+                            "statement {id} maps with {} of arity {arity}; \
+                             a mapper takes one element",
+                            spell_function(self.module, mapper)
                         )));
                     }
                 }
@@ -599,8 +603,9 @@ impl<'m> Verifier<'m> {
                 }
                 if !self.values_in_scope.contains(&value) {
                     return Err(VerifyError(format!(
-                        "{} references {value} out of scope",
-                        site()
+                        "{} references {} out of scope",
+                        site(),
+                        spell_value(self.module, value)
                     )));
                 }
                 // Recursion admission: inside an eager initializer (and not inside a function constructed since entering it), a computed member of the group may only be an earlier one — or the member being initialized itself. A self-knot is admitted because the language accepts it: unused, the lowering drops it (mirroring the legacy path); used, the lowering rejects it with a diagnostic. Forward references stay unsatisfiable.
@@ -611,9 +616,10 @@ impl<'m> Verifier<'m> {
                         && position > context.limit
                     {
                         return Err(VerifyError(format!(
-                            "{} evaluates computed group member {value} before \
+                            "{} evaluates computed group member {} before \
                              its initialization",
-                            site()
+                            site(),
+                            spell_value(self.module, value)
                         )));
                     }
                 }
@@ -628,8 +634,9 @@ impl<'m> Verifier<'m> {
                 }
                 if !self.functions_in_scope.contains(&function) {
                     return Err(VerifyError(format!(
-                        "{} references {function} out of scope",
-                        site()
+                        "{} references {} out of scope",
+                        site(),
+                        spell_function(self.module, function)
                     )));
                 }
                 Ok(())

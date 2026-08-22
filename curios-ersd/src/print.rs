@@ -411,15 +411,27 @@ impl Printer<'_, '_, '_> {
     }
 
     fn value(&self, id: ValueId) -> String {
-        let definition = self.module.value(id).expect("live value");
-        format!("{id}{}", hint(&definition.debug_name))
+        self.module.value(id).expect("live value");
+        spell_value(self.module, id)
     }
 
     fn function(&self, id: FunctionId) -> String {
-        match self.module.function(id) {
-            Some(definition) => format!("{id}{}", hint(&definition.debug_name)),
-            None => format!("{id}"),
-        }
+        spell_function(self.module, id)
+    }
+}
+
+/// A value as the printer spells it — its id, then `$hint` when it carries a source name — which is also how a diagnostic should name it: `~v155$table` locates a definition where `~v155` does not. A dead id spells bare, so a message about one can still be formed.
+pub(crate) fn spell_value(module: &Module, id: ValueId) -> String {
+    match module.value(id) {
+        Some(definition) => format!("{id}{}", hint(&definition.debug_name)),
+        None => format!("{id}"),
+    }
+}
+
+pub(crate) fn spell_function(module: &Module, id: FunctionId) -> String {
+    match module.function(id) {
+        Some(definition) => format!("{id}{}", hint(&definition.debug_name)),
+        None => format!("{id}"),
     }
 }
 

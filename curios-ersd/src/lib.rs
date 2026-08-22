@@ -32,6 +32,7 @@ mod build;
 pub use build::*;
 
 mod print;
+pub(crate) use print::{spell_function, spell_value};
 
 mod walk;
 
