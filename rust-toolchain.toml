@@ -1,0 +1,4 @@
+# The Rust toolchain this checkout builds with, so `rustup` fetches it rather than a reader meeting a `rust-version` refusal from the dependency graph. The floor is Wasmtime's, pinned in `curios-runtime/Cargo.toml`; bump this when that pin moves past it. Both components are what the gate in `CLAUDE.md` runs.
+[toolchain]
+channel = "1.95.0"
+components = ["rustfmt", "clippy"]

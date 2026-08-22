@@ -123,7 +123,7 @@ Dependencies, umbrellas, extra executables, and the rest of the command line liv
 
 ## Build from source
 
-Building requires Rust, a C++ toolchain, and CMake. The first build compiles Binaryen from a verified source release and takes several minutes — a good moment to go read the [language reference](documentation/syntax.md).
+Building requires Rust (`rustup` installs the pinned toolchain from `rust-toolchain.toml` on first use), a C++ toolchain, and CMake. The first build compiles Binaryen from a verified source release and takes several minutes — a good moment to go read the [language reference](documentation/syntax.md).
 
 ```sh
 git clone https://github.com/valmirjunior0088/curios
