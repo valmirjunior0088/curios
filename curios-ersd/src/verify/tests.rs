@@ -189,6 +189,140 @@ fn a_backward_reference_through_a_called_function_verifies() {
         .expect("a call reading an earlier member is supported");
 }
 
+/// The fold shape: `rec { table = each(step); fn step(n) = n + size; size = 1 }` where `each(f)` nests a `go` that captures `f` and applies it, and `step` reads `size`. The stepper is handed to a combinator rather than called, and the combinator applies it only through a capture two functions down — which the summary follows, because an applied capture names a value of the scope that binds it, and that scope is `each`'s parameter list.
+#[test]
+fn a_stepper_handed_to_a_combinator_that_applies_it_is_evaluated_by_the_initializer() {
+    let mut builder = ErsdBuilder::new();
+    let each = builder.reserve_function();
+    let step = builder.reserve_function();
+    let table = builder.value(Some("table".into()));
+    let size = builder.value(Some("size".into()));
+
+    // each(f) = { fn go(x) = f(x); go(0) }
+    let f = builder.value(Some("f".into()));
+    let go = builder.reserve_function();
+    let x = builder.value(Some("x".into()));
+    builder.open_block();
+    let applied = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Value(f),
+            arguments: vec![Atom::Value(x)],
+        },
+    );
+    let go_body = builder.seal_block(Terminator::Return(Atom::Value(applied)));
+    builder.define_function(go, Some("go".into()), vec![x], go_body);
+    builder.open_block();
+    builder.let_functions(vec![go]);
+    let zero = nat_atom(&mut builder, 0);
+    let gone = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Function(go),
+            arguments: vec![zero],
+        },
+    );
+    let each_body = builder.seal_block(Terminator::Return(Atom::Value(gone)));
+    builder.define_function(each, Some("each".into()), vec![f], each_body);
+
+    // step(n) = n + size
+    let n = builder.value(Some("n".into()));
+    builder.open_block();
+    let sum = builder.let_value(
+        None,
+        Rhs::Operation {
+            operation: Operation::NatAdd,
+            operands: vec![Atom::Value(n), Atom::Value(size)],
+        },
+    );
+    let step_body = builder.seal_block(Terminator::Return(Atom::Value(sum)));
+    builder.define_function(step, Some("step".into()), vec![n], step_body);
+
+    builder.open_block();
+    let call = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Function(each),
+            arguments: vec![Atom::Function(step)],
+        },
+    );
+    let init_table = builder.seal_block(Terminator::Return(Atom::Value(call)));
+    builder.open_block();
+    let one = nat_atom(&mut builder, 1);
+    let init_size = builder.seal_block(Terminator::Return(one));
+    let group = builder.rec_group(vec![step], vec![(table, init_table), (size, init_size)]);
+    builder.item_functions(vec![each]);
+    builder.item_rec(group);
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(table)));
+    builder.set_entry(entry);
+    let error = builder
+        .finalize()
+        .expect_err("the combinator applies the stepper, which evaluates `size`");
+    assert!(error.0.contains("through a call to"), "{error}");
+}
+
+/// The bind shape: the same stepper handed to a combinator that only *stores* it — `keep(f) = Box { f }` — stays dormant, which is what keeps a parser knot built over later members legal.
+#[test]
+fn a_stepper_handed_to_a_combinator_that_stores_it_stays_dormant() {
+    let mut builder = ErsdBuilder::new();
+    let schema = builder.product(ProductSchema {
+        debug_name: Some("Box".into()),
+        fields: vec![Field::opaque(Some("held".into()))],
+        shared: false,
+    });
+    let keep = builder.reserve_function();
+    let step = builder.reserve_function();
+    let table = builder.value(Some("table".into()));
+    let size = builder.value(Some("size".into()));
+
+    let f = builder.value(Some("f".into()));
+    builder.open_block();
+    let boxed = builder.let_value(
+        None,
+        Rhs::Product {
+            schema,
+            fields: vec![Atom::Value(f)],
+        },
+    );
+    let keep_body = builder.seal_block(Terminator::Return(Atom::Value(boxed)));
+    builder.define_function(keep, Some("keep".into()), vec![f], keep_body);
+
+    let n = builder.value(Some("n".into()));
+    builder.open_block();
+    let sum = builder.let_value(
+        None,
+        Rhs::Operation {
+            operation: Operation::NatAdd,
+            operands: vec![Atom::Value(n), Atom::Value(size)],
+        },
+    );
+    let step_body = builder.seal_block(Terminator::Return(Atom::Value(sum)));
+    builder.define_function(step, Some("step".into()), vec![n], step_body);
+
+    builder.open_block();
+    let call = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Function(keep),
+            arguments: vec![Atom::Function(step)],
+        },
+    );
+    let init_table = builder.seal_block(Terminator::Return(Atom::Value(call)));
+    builder.open_block();
+    let one = nat_atom(&mut builder, 1);
+    let init_size = builder.seal_block(Terminator::Return(one));
+    let group = builder.rec_group(vec![step], vec![(table, init_table), (size, init_size)]);
+    builder.item_functions(vec![keep]);
+    builder.item_rec(group);
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(table)));
+    builder.set_entry(entry);
+    builder
+        .finalize()
+        .expect("a stored stepper is dormant until something applies it");
+}
+
 /// A computed-only evaluation cycle has no satisfiable initialization order.
 #[test]
 fn a_computed_only_cycle_is_rejected() {

@@ -841,6 +841,38 @@ fn an_initializer_calling_a_function_that_reads_a_later_member_is_refused() {
     );
 }
 
+/// The stepper is never called by the initializer: it is handed to `List/fold`, which applies it through the `go` it nests — and `go` reaches it as a capture, not a parameter. The verifier's summary follows an applied capture to the scope that binds it, so the fold is seen to evaluate `size`, and the program that printed `1` where the language says `42` is refused. With `size` ahead it runs.
+#[test]
+fn a_stepper_a_fold_applies_inside_an_initializer_is_evaluated_by_it() {
+    let source = r#"
+        use /std/{Nat, Str, Bytes, Byte, List, Io, rand, print};
+        let main: Io({}) =
+            let bs = rand/bytes(1)!;
+            rec table: Nat = List/fold([Bytes/len(bs)], 0, (x, acc) => x + acc + size)
+            and size: Nat = Bytes/len(bs) + 40;
+            print(Nat/to_str(table));
+        main
+        "#;
+    let diagnostic = error(source);
+    assert!(
+        diagnostic.contains("before its initialization, through a call to"),
+        "{diagnostic}"
+    );
+
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Str, Bytes, Byte, List, Io, rand, print};
+        let main: Io({}) =
+            let bs = rand/bytes(1)!;
+            rec size: Nat = Bytes/len(bs) + 40
+            and table: Nat = List/fold([Bytes/len(bs)], 0, (x, acc) => x + acc + size);
+            print(Nat/to_str(table));
+        main
+        "#),
+        b"42"
+    );
+}
+
 #[test]
 fn a_collapsed_wrapper_survives_storage_and_retrieval() {
     // The collapsed encoding end to end, at rest — the case no call-pattern specializer reaches: single-constructor wrapper values stored in a `List` and read back, a two-payload constructor riding an untagged tuple, and a nullary one riding the `Nat` zero. Every payload is runtime-tainted through stdin so nothing folds at compile time, and the printed sum proves each value round-tripped through its collapsed representation.
