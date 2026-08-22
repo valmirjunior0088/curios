@@ -531,8 +531,11 @@ impl Term {
             Subterm::Apply(Apply { head, .. }) => head.head_key(),
             Subterm::UniverseInst(UniverseInst { head, .. }) => head.head_key(),
             Subterm::Var(var) => var.as_free().map(HeadTag::Name),
-            // A decidable comparison's normal form is an intrinsic node, not an application, so it has no named head. Scrutinee refinement keys on this tag and the reducer's probe gates on it, so an untagged key can be registered but never looked up — which is how an operator-spelled scrutinee loses its arm refinement while the equivalent `Nat/le(a, b)` keeps it.
+            // A decidable comparison's normal form is an intrinsic node, not an application, so it has no named head. Scrutinee refinement keys on this tag and the reducer's probe gates on it, so an untagged key can be registered but never looked up — which is how an operator-spelled scrutinee used to lose its arm refinement while the equivalent `Nat/le(a, b)` kept it. The boolean connectives are tagged for the same reason: `match x && g(7)` resolves to a `BoolAnd` the way `a <= b` resolves to a `NatLe`, and a `Bool`-valued scrutinee is one a program matches on.
             Subterm::Intrinsic(intrinsic) => match intrinsic {
+                Intrinsic::BoolAnd(..) => Some(HeadTag::Intrinsic("intrinsic:BoolAnd")),
+                Intrinsic::BoolOr(..) => Some(HeadTag::Intrinsic("intrinsic:BoolOr")),
+                Intrinsic::BoolXor(..) => Some(HeadTag::Intrinsic("intrinsic:BoolXor")),
                 Intrinsic::BoolEql(..) => Some(HeadTag::Intrinsic("intrinsic:BoolEql")),
                 Intrinsic::BoolNeq(..) => Some(HeadTag::Intrinsic("intrinsic:BoolNeq")),
                 Intrinsic::NatEql(..) => Some(HeadTag::Intrinsic("intrinsic:NatEql")),

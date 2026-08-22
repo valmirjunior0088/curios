@@ -14,7 +14,7 @@ use {
     curios_core::{
         Apply, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free, FreeMonoid, Func,
         Layer, Let, Many, Match, Nat, Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Struct,
-        Subterm, Term, Tuple, UniverseInst, Var, Variant, accelerable,
+        Subterm, Term, Tuple, UniverseInst, Var, Variant, Visit, accelerable,
         instantiate_universe_levels_scoped, reduce_closed, reduce_intrinsic,
     },
     curios_utilities::recurse,
@@ -169,26 +169,61 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
 /// **Why the escalation is here and not at the other probe point.** An equation is recorded under the scrutinee as written, and reduction reaches the scrutinee's *reduct* — `Le(s + l, len b)` instantiated at a call arrives as `Le(0 + n, len b)` and folds to a spelling the written key does not carry. The point before decomposition sees terms on the way in, where the written spelling is what matches; this point sees the forms reduction produced, which is exactly where a spelling that exists only as a reduct can appear.
 ///
 /// **The local-bearing gate is the guard, not an optimization.** `Scope::refine` records only local-bearing written spellings, but a *reduced* spelling is whatever reduction returned and may well be local-free. Refusing to probe on a local-free term is what keeps every refined term local-bearing, which is the half of the evaluation memos' first invariant this component owns: a local-free term's entry outlives the arm, so a local-free term whose reduct came from a case equation is precisely the entry that could outlive the arm that justified it — where a local-bearing term's entry is cleared with the arm's equations and may. It is also what makes the deferral pay — an arm body of literals reduces to local-free forms and settles nothing at all.
+///
+/// **The reduced spellings meet in operand-canonical form.** A settled reduct is the key's weak-head form with each operand weak-head reduced, and the value probed against it is brought to the same form here, so that `x && true` under a `match x && g(7)` meets the key whose `g(7)` the settlement folded, and `x && h(7)` meets it too. A weak-head form alone would not do: a `&&` behind a stuck left leaves its right as written, and the two spellings would then differ by exactly the fold the escalation exists to see through. It is computed only on a miss under a live equation and only for a tagged intrinsic — a `head_key` — which is the same path the elaborator's `refined_after_fold` canonicalizes on, and what keeps the two checkers reaching the same occurrences.
 fn refined_reduct(kernel: &mut Kernel, value: &Term) -> Result<Option<Term>, ReduceError> {
     if let Some(refined) = kernel.refinement_of(value) {
         return Ok(Some(refined));
     }
 
-    if !value.has_local_free() {
+    if !value.has_local_free() || !kernel.has_refinements() {
         return Ok(None);
     }
 
+    let canonical = canonical_operands(kernel, value)?;
+
     loop {
-        if let Some(refined) = kernel.refinement_of_reduct(value) {
+        if let Some(refined) = kernel.refinement_of_reduct(&canonical) {
             return Ok(Some(refined));
         }
 
-        let Some((index, key)) = kernel.unasked_refinement(value) else {
+        let Some((index, key)) = kernel.unasked_refinement(&canonical) else {
             return Ok(None);
         };
 
         kernel.settle_refinement(index, key)?;
     }
+}
+
+/// `term` with each operand in weak-head normal form, where it is a tagged intrinsic — the form a refinement's reduced spelling and the value probed against it are both held in. Anything else is its own canonical form.
+pub(crate) fn canonical_operands(kernel: &mut Kernel, term: &Term) -> Result<Term, ReduceError> {
+    if term.head_key().is_none() {
+        return Ok(term.clone());
+    }
+    let Subterm::Intrinsic(intrinsic) = &**term else {
+        return Ok(term.clone());
+    };
+
+    let mut masking = Visit::masking(|_, _: &Var| None, Term::type_ground());
+    intrinsic.traverse(&mut masking);
+
+    let mut operands = Vec::new();
+    for operand in masking.take_masked_children() {
+        operands.push(whnf(kernel, operand)?);
+    }
+
+    let mut index = 0;
+    let rebuilt = intrinsic.traverse(&mut Visit::rewriting(
+        |_, _: &Var| None,
+        Box::new(move |_, operand: &Term| {
+            let value = operands.get(index).cloned();
+            index += 1;
+
+            Some(value.unwrap_or_else(|| operand.clone()))
+        }),
+    ));
+
+    Ok(Subterm::Intrinsic(rebuilt).into())
 }
 
 /// Delta: unfold a definition, or leave the variable as the normal form it is.

@@ -657,9 +657,14 @@ fn refined_after_fold(context: &mut Context, folded: &Term) -> Result<Option<Ter
         return Ok(Some(value.clone()));
     }
 
-    // The escalation, and the cheap half of it: `reduce_intrinsic` left the operands in weak-head normal form, so the candidate side is canonical already and only the key has to be brought to it — capped and memoized, so once per key rather than once per node.
-    for (key, entry) in context.scrutinee_entries(head) {
-        if canonical_key(context, &key, &entry.original)? == shallow {
+    // The escalation: both sides brought to the canonical form — the key's, capped and memoized, so once per key rather than once per node; the probe's through the same `canonical_scrutinee` the key's is, so the two meet however either was spelled. The probe side used to be taken as canonical already, on the premise that `reduce_intrinsic` left every operand in weak-head normal form, and a `&&` behind a stuck left leaves its right as written now. In practice the probe before decomposition reaches a connective first, since the loop re-runs it on every continued term; this one decides the folds that change a spelling, and canonicalizing an already-reduced operand is a cache hit.
+    let entries = context.scrutinee_entries(head);
+    if entries.is_empty() {
+        return Ok(None);
+    }
+    let canonical = canonical_scrutinee(context, folded)?;
+    for (key, entry) in entries {
+        if canonical_key(context, &key, &entry.original)? == canonical {
             return Ok(Some(entry.value));
         }
     }

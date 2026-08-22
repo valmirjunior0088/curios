@@ -706,20 +706,24 @@ fn an_inferred_implicit_does_not_break_a_refinement_key() {
     assert_eq!(run(source), b"refined");
 }
 
-// A refinement on a boolean operation still reaches the scrutinee's own occurrences now that `&&` reduces its right operand only behind a literal left: the key is recorded as written and probed before the term is taken apart, so the occurrence is answered whatever the operands would reduce to. What this does *not* pin is an occurrence spelled differently on its right — `Bool/and(x, h(7))` or the folded `Bool/and(x, true)` against a `Bool/and(x, g(7))` scrutinee — because those were not refined before the operand rule changed either: the escalation canonicalizes the key's arguments, but the probe it compares against arrives at the intrinsic after the fold, and the two never met. The operator spelling `x && g(7)` is not refined at all in this position, its check being parked on the `&&` witness and resumed after the arm's frame is gone. Both are findings, not this fixture's subject.
+// A refinement on a boolean connective reaches every spelling of the scrutinee that reduces to it. `x && g(7)` is the scrutinee; the occurrence is spelled `x && h(7)`, with `h` a different function folding to the same `true`, so the written key misses and the escalation has to match the two through their canonical forms — every operand reduced, on both sides. That is the form the elaborator's `refined_after_fold` and the kernel's `refined_reduct` both bring a probed value to, which is what keeps them reaching the same occurrences now that `&&` leaves its right operand as written behind a stuck left. Before the connectives were tagged in `Term::head_key`, an operator-spelled scrutinee registered a key nothing could look up, and not even `x && g(7)` itself refined — a gap that comment recorded.
 //
-// Both checkers run this, so the one rule they share — `reduce_bool_binary` — cannot make them disagree about it.
+// Two occurrences, two routes to the same intrinsic. `x && h(7)` arrives at each reducer as the witness projection the scrutinee was written as; `Bool/and(x, h(7))` arrives under the wrapper's own head, which no key is gated on, and becomes the intrinsic only once the wrapper unfolds. In the elaborator both are decided at the probe *before* decomposition, which re-runs on every continued term and canonicalizes on a miss; in the kernel both are decided at the stuck reduct, brought to operand-canonical form by `refined_reduct`.
+//
+// Both checkers run this. Mutation-checked: dropping `BoolAnd` from `head_key` refuses it at `p`, and comparing the kernel's probed value uncanonicalized refuses it at `p` too. The elaborator's `refined_after_fold` canonicalization is not what either occurrence rests on — the probe before decomposition reaches them first — and is kept for the fold that changes a spelling.
 #[test]
-fn a_boolean_refinement_still_reaches_its_own_spelling() {
+fn a_boolean_refinement_reaches_an_occurrence_spelled_differently_on_its_right() {
     let source = r#"
         use /std/{Eq, Bool, Nat, Str};
 
         let g(n : Nat) -> Bool = n == 7;
+        let h(n : Nat) -> Bool = n == 7;
 
         let refined(x : Bool) -> Str =
-            match Bool/and(x, g(7))
+            match x && g(7)
             | true =>
-                let p : Eq(Bool/and(x, g(7)), true) = Eq/refl();
+                let p : Eq(x && h(7), true) = Eq/refl();
+                let q : Eq(Bool/and(x, h(7)), true) = Eq/refl();
                 "refined"
             | false => "unrefined"
             end;

@@ -630,7 +630,8 @@ impl Kernel {
         // Withholding equations is a change to the set in force, and so is restoring them: the local-bearing reducts remembered on either side of the settlement must not answer on the other.
         let outer = self.scope.hide_refinements_from(index);
         self.memos.begin_equations();
-        let reduct = whnf(self, key);
+        // The reduced spelling is held operand-canonical, the form `refined_reduct` brings a probed value to before comparing — see `canonical_operands`.
+        let reduct = whnf(self, key).and_then(|reduct| whnf::canonical_operands(self, &reduct));
         self.scope.show_refinements(outer);
         self.memos.begin_equations();
 
