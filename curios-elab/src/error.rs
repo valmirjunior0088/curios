@@ -24,6 +24,21 @@ pub struct GoalReport {
     pub candidates: Vec<Term>,
 }
 
+impl GoalReport {
+    /// The axis-(a) rename map for this one report: built over the names *it* mentions, so a binder is suffixed only against a collision the reader can see from this goal. A batch-wide map — the one [`Error::rename_map`] builds for every other error — renamed the second of two functions' `n` to `n2`, a collision with a binder that belongs to a different goal's scope and appears nowhere in this one.
+    fn rename_map(&self, shorten: &HashMap<Global, String>) -> Rc<HashMap<Free, String>> {
+        let mut names = BTreeSet::new();
+        for (name, type_) in &self.scope {
+            names.extend(display_names(name));
+            names.extend(display_names(type_));
+        }
+        names.extend(display_names(&self.goal));
+        names.extend(self.solution.iter().flat_map(display_names));
+        names.extend(self.candidates.iter().flat_map(display_names));
+        Rc::new(build_rename(&names, shorten))
+    }
+}
+
 /// The embedding-specific half of a missing-witness report, computed when the unresolved goal is the registry's `Lift`: the two monads, whether the source is a monad at all, and any chain of declared edges connecting the pair — each fact the report needs to steer the fix (declare the edge, fix the action, or spell the composite) without the reader reconstructing the table.
 #[derive(Debug)]
 pub struct EmbeddingDiagnosis {
@@ -1651,18 +1666,25 @@ impl fmt::Display for Displayed<'_> {
             Error::Goals(reports) => {
                 // A report's terms render within a fixed width — the pipeline is pure and stays terminal-blind, so the target is a constant — and a broken term's continuation lines re-indent under the clause body rather than restarting at column zero.
                 const WIDTH: usize = 100;
-                let clause = |term: &Term| {
-                    term.spelled(spelling)
-                        .within(WIDTH)
-                        .to_string()
-                        .replace('\n', "\n    ")
-                };
 
-                // Each entry is the single-goal turnstile idiom followed by its own snippet — message first, then location, matching how `render` orders a `Located` diagnostic. Entries are separated by a blank line.
+                // Each entry is the single-goal turnstile idiom followed by its own snippet — message first, then location, matching how `render` orders a `Located` diagnostic. Entries are separated by a blank line. Each renders under its own rename map (see [`GoalReport::rename_map`]); the batch-wide one the caller installed is replaced, not extended, since every name this report shows is in the narrower map by construction.
                 for (index, report) in reports.iter().enumerate() {
                     if index > 0 {
                         write!(f, "\n\n")?;
                     }
+                    let shorten = spelling.short_names();
+                    let spelling = Rc::new(
+                        spelling
+                            .as_ref()
+                            .clone()
+                            .with_pretty_names(report.rename_map(&shorten)),
+                    );
+                    let clause = |term: &Term| {
+                        term.spelled(&spelling)
+                            .within(WIDTH)
+                            .to_string()
+                            .replace('\n', "\n    ")
+                    };
                     write!(f, "goal `?`")?;
                     for (name, type_) in &report.scope {
                         let shown = match unnameable_binder(name) {

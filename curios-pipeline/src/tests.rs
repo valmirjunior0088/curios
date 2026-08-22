@@ -514,6 +514,26 @@ fn solved_and_unsolved_goals_share_one_batch() {
 }
 
 #[test]
+fn each_goal_in_a_batch_names_its_binders_as_written() {
+    // Two items each bind `n`. The rename map is per report, so both goals say `n`; a batch-wide map suffixed the second `n2` — a collision with a binder from a goal this one cannot see.
+    let source = r#"
+        use /std/{Nat};
+        let first(n : Nat) -> Nat = ?;
+        let second(n : Nat) -> Nat = ?;
+        /std/print("")
+    "#;
+
+    let error = compile(source, None).unwrap_err();
+
+    assert_eq!(
+        error.matches("  n : Nat").count(),
+        2,
+        "unexpected error: {error}"
+    );
+    assert!(!error.contains("n2"), "unexpected error: {error}");
+}
+
+#[test]
 fn goal_types_spell_operators_as_infix_not_witness_projections() {
     // The concept-dispatch rebuild (`a + b` ≙ a witness projection call — `elaborate_infix`) folds back to its source spelling in reports, nested operands parenthesized, and no anonymous witness name leaks.
     let source = r#"

@@ -78,6 +78,11 @@ impl Spelling {
         self
     }
 
+    /// The axis-(b) map this spelling renders globals under, or an empty map when none was set — what a consumer hands [`build_rename`] to derive a narrower axis (a) for one fragment of a render, so the narrower map reserves the same displayed global spellings the wider one did.
+    pub fn short_names(&self) -> Rc<HashMap<Global, String>> {
+        self.shorten.clone().unwrap_or_default()
+    }
+
     /// Mark a nominal family's implicit parameters (axis (d)), from `build_nominal_plicities`.
     pub fn with_nominal_plicities(mut self, plicities: Rc<BTreeMap<Global, Vec<Plicity>>>) -> Self {
         self.nominal_plicities = Some(plicities);
