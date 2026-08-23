@@ -28,7 +28,7 @@ const STACK_GROWTH: usize = 32 * 1024 * 1024;
 ///
 /// Cheap enough to sit at the head of a hot recursive function: the common case is one comparison against the remaining stack. Guard the *entry point* of a recursive walk rather than each internal step — one check per level is the intent, and the segment is sized so that levels are rarely what triggers it.
 ///
-/// That intent holds only where the thread has the reserve to begin with, which is what [`grown`] is for: on a thread smaller than [`RED_ZONE`] — every Rust test thread, at its default two mebibytes — the common case is not one comparison but a fresh segment mapped and unmapped around *every* outermost call, since the reserve can never be met on the thread itself. Re-erasing the whole standard library measured 2.5 s that way against 629 ms on a thread that had the reserve, with not one deep walk between them.
+/// That intent holds only where the thread has the reserve to begin with, which is what [`grown`] is for: on a thread smaller than `RED_ZONE` — every Rust test thread, at its default two mebibytes — the common case is not one comparison but a fresh segment mapped and unmapped around *every* outermost call, since the reserve can never be met on the thread itself. Re-erasing the whole standard library measured 2.5 s that way against 629 ms on a thread that had the reserve, with not one deep walk between them.
 pub fn recurse<T>(walk: impl FnOnce() -> T) -> T {
     stacker::maybe_grow(RED_ZONE, STACK_GROWTH, walk)
 }
