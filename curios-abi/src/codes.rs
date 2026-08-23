@@ -44,9 +44,9 @@ pub mod mode {
     pub const APPEND: u32 = 2;
 }
 
-/// The well-known stdio handle tokens minted by the `/sys/Handle` prelude. A handle's wire encoding is the little-endian bytes of its token (see `Handle::encode`), so STDIN encodes to the empty byte string.
+/// The well-known stdio handle tokens minted by the `/sys/Handle` prelude. A handle's wire encoding is the little-endian `Natural` bytes of its token (see `Handle::encode`), which mints one zero byte for zero — so STDIN encodes as `[0]`, never the empty byte string.
 pub mod stdio {
-    /// Standard input — the token whose wire encoding is the empty byte string.
+    /// Standard input — the token whose wire encoding is the single zero byte `[0]`.
     pub const STDIN: u32 = 0;
     /// Standard output.
     pub const STDOUT: u32 = 1;

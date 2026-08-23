@@ -48,7 +48,7 @@ export async function run(config) {
     return bridge.bytes_store(bytes.length);
   };
 
-  // A handle's wire encoding is the little-endian bytes of its token, so the empty byte string decodes to 0 (stdin).
+  // A handle's wire encoding is the little-endian bytes of its token — `[0]` for stdin, since the encoder mints one zero byte for zero. This decoder also happens to read the empty string as 0, but nothing ever sends it.
   const tokenOf = (handle) => {
     const bytes = decodeBytes(handle);
     let token = 0;
