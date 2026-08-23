@@ -709,6 +709,21 @@ fn a_module_function_fitting_the_goal_is_suggested_with_pinned_arguments() {
 }
 
 #[test]
+fn an_application_fit_mentioning_a_scope_binder_is_suggested() {
+    // The same fit as above, but the goal sits inside a function body and mentions its binder: `mk`'s output `Eq(n, n)` unifies with `Eq(k, k)` by `n := k`. The suggestion pass used to run on the bare context, so `n`'s metavariable was born closed and the solution `k` failed the solver's scope check — every application fit inside a function body silently vanished, and only closed goals like the one above ever saw one. The pass now assumes the goal's telescope into a frame first.
+    let source = r#"
+        use /std/{Nat, Eq};
+        let mk(n : Nat) -> Eq(n, n) = Eq/refl();
+        let claim(k : Nat) -> Eq(k, k) = ?;
+        0
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert!(error.contains("mk(k)"), "unexpected error: {error}");
+}
+
+#[test]
 fn the_goals_own_definition_is_not_suggested() {
     // Suggesting the definition a goal sits inside would be circular for a plain `let`; the pools exclude the owner. The scope binder still fits.
     let source = r#"

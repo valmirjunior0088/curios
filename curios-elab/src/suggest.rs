@@ -4,7 +4,9 @@
 //!
 //! Every attempt runs inside the `solution_mark`/`rollback_solutions` bracket, and a hit is materialized (committed solutions spliced) *before* rollback — the pinned values the display shows would otherwise die with the transaction. Any error skips its candidate: the pass is infallible. Attempts are capped at [`ATTEMPTS`] per goal and the rendered list at [`CANDIDATES`], ranked complete-first, then fewest holes, then pool order.
 //!
-//! A candidate spells only explicit arguments — hidden slots re-infer when the author pastes it, exactly as they would when writing it by hand — with a shared `?`-named hole standing in for each explicit slot the attempt left unsolved. Hole-free candidates must additionally survive [`verifies`], a sandboxed oracle check in the goal's own scope, which turns the paste-and-recheck promise into a machine guarantee. Representation privacy is deliberately not consulted: a candidate for a sealed type outside its module simply fails the author's re-check.
+//! A candidate spells only explicit arguments — hidden slots re-infer when the author pastes it, exactly as they would when writing it by hand — with a shared `?`-named hole standing in for each explicit slot the attempt left unsolved. A hole-free constructor fit must additionally survive [`verifies`], a sandboxed oracle check in the goal's own scope, because index inversion refuses positions it cannot decide and `Solved` alone is not a fit; an application fit needs no second check, since the conversion that established it is definitive. Either way the paste-and-recheck promise is a machine guarantee. Representation privacy is deliberately not consulted: a candidate for a sealed type outside its module simply fails the author's re-check.
+//!
+//! The whole pass runs under the goal's own scope — its birth telescope assumed into a frame — because the report runs on the bare context after elaboration, and a metavariable minted there is born closed: a solution mentioning a scope binder (`mk(k)` against `Eq(k, k)`) then fails the solver's scope check and the fit silently postpones. Under the frame the fit's metavariables carry the telescope as their birth context, so the same solution inverts. Without it, only a closed goal ever saw an application fit — which is every goal outside a function body, and almost no goal in a proof.
 
 use {
     super::{
@@ -40,6 +42,22 @@ pub(crate) fn suggest_candidates(
     module: &Module,
     owner: Option<&Global>,
 ) -> Vec<Term> {
+    context.with_frame(|context| {
+        for (name, type_) in telescope {
+            context.assume(name, type_);
+        }
+        suggest_in_scope(context, telescope, goal_type, module, owner)
+    })
+}
+
+/// [`suggest_candidates`] with the goal's telescope already assumed into the current frame.
+fn suggest_in_scope(
+    context: &mut Context,
+    telescope: &[(Free, Term)],
+    goal_type: &Term,
+    module: &Module,
+    owner: Option<&Global>,
+) -> Vec<Term> {
     let mut candidates: Vec<Candidate> = Vec::new();
     // One shared hole identity per goal, so every unsolved slot spells the same bare `?`.
     let hole_name = context.fresh(Some("?"));
@@ -61,14 +79,7 @@ pub(crate) fn suggest_candidates(
 
     // Pool 1 — constructor and struct-literal fits on the reduced goal type.
     if let Ok(reduced) = reduce_with(context, goal_type) {
-        constructor_fits(
-            context,
-            telescope,
-            goal_type,
-            &reduced,
-            &hole,
-            &mut candidates,
-        );
+        constructor_fits(context, goal_type, &reduced, &hole, &mut candidates);
     }
 
     // Pools 2–4 — application fits: scope binders with function types, then the module's own definitions, then the globals its items reference. Unnameable heads are skipped for the same reason as pool 0.
@@ -247,7 +258,6 @@ fn apply_fit(
 /// Pool 1: constructor fits for an inductive goal, and the literal shape for a struct goal.
 fn constructor_fits(
     context: &mut Context,
-    telescope: &[(Free, Term)],
     goal_type: &Term,
     reduced: &Term,
     hole: &Term,
@@ -309,7 +319,7 @@ fn constructor_fits(
                         ))));
                         let built = Term::apply(constructor, payload);
                         // Inversion *refuses* positions it cannot decide (metavariable-headed or opaque indices), so `Solved` alone is not a fit. A fully-spelled candidate must survive the definitive gate — a sandboxed check against the goal — which is also what makes the paste-and-recheck promise a machine guarantee. A candidate with visible holes is an advisory refinement and rides on `Impossible` filtering alone.
-                        if holes > 0 || verifies(context, telescope, &built, goal_type) {
+                        if holes > 0 || verifies(context, &built, goal_type) {
                             Some((zonk_solved_term_metas(context, &built), holes))
                         } else {
                             None
@@ -345,22 +355,11 @@ fn constructor_fits(
     }
 }
 
-/// Whether the fully-spelled `candidate` checks against `goal_type` in the goal's own scope — the definitive fit gate for a hole-free candidate, and what turns the paste-and-recheck promise into a machine guarantee. Runs as an oracle (parking, refinements, and privacy suppressed — `Blocked` is a mismatch) inside a transaction: every solution the attempt lands is rolled back.
-fn verifies(
-    context: &mut Context,
-    telescope: &[(Free, Term)],
-    candidate: &Term,
-    goal_type: &Term,
-) -> bool {
+/// Whether the fully-spelled `candidate` checks against `goal_type` in the goal's own scope — already the current frame — the definitive fit gate for a hole-free constructor candidate, and what turns the paste-and-recheck promise into a machine guarantee. Runs as an oracle (parking, refinements, and privacy suppressed — `Blocked` is a mismatch) inside a transaction: every solution the attempt lands is rolled back.
+fn verifies(context: &mut Context, candidate: &Term, goal_type: &Term) -> bool {
     let mark = context.solution_mark();
-    let verdict = context.with_oracle(|context| {
-        context.with_frame(|context| {
-            for (name, type_) in telescope {
-                context.assume(name, type_);
-            }
-            check(context, candidate, goal_type.clone()).is_ok()
-        })
-    });
+    let verdict =
+        context.with_oracle(|context| check(context, candidate, goal_type.clone()).is_ok());
     context.rollback_solutions(mark);
     context.end_solutions(mark);
     verdict
