@@ -8,7 +8,7 @@
 //!
 //! [`Natural`] and [`Integer`] are *type-level* values: unbounded, pretending ℕ and ℤ, because a type-level natural bounded by a machine word would make a term's meaning depend on the host. The runtime's 31-bit range is enforced only where a literal must materialize, in erasure's narrowing and in the runtime's own overflow traps.
 //!
-//! The `scalar` functions are the other layer: the exact semantics of the *erased* carriers, where `Nat` is a `u32` that wraps and `Int` an `i32` that traps. Every stage's constant folder shares them so its arithmetic cannot drift from the backend's. Neither layer is expressible in the other, which is why `Natural`'s `-` panics on underflow while [`nat_sub`] saturates: they are different operations about different things.
+//! The `scalar` functions are the other layer: the exact semantics of the *erased* carriers, where `Nat` is a `u32` and `Int` an `i32`, and a computed value past either is a refusal — a recorded trap, never a wrapped number (`documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md`). Every stage's constant folder shares them so its arithmetic cannot drift from the backend's. Neither layer is expressible in the other, which is why `Natural`'s `-` panics on underflow while [`nat_sub`] saturates: they are different operations about different things.
 
 mod natural;
 pub use natural::*;
