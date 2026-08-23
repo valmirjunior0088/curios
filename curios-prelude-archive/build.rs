@@ -84,10 +84,14 @@ fn build() {
     println!("cargo:rerun-if-changed=src/syntax.rs");
 
     let manifest = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap());
-    let sources = source_files(&manifest);
-    for source in &sources {
-        println!("cargo:rerun-if-changed={}", source.display());
+    // The two directories rather than each discovered file: Cargo scans a watched directory recursively, so a *newly added* source triggers the rerun a per-file directive cannot — it matches no directive from the run that predates it. The two indexes sit beside the directories, not inside them, so they are named on their own.
+    for watched in ["syn.crs", "std.crs", "syn", "std"] {
+        println!(
+            "cargo:rerun-if-changed={}",
+            manifest.join(watched).display()
+        );
     }
+    let sources = source_files(&manifest);
 
     let fingerprint = fingerprint(&manifest, &sources);
     println!(
