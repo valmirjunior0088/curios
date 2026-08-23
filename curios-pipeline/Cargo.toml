@@ -17,13 +17,9 @@ profile = [
     "curios-ersd/profile",
     "curios-cont/profile",
     "curios-cert/profile",
+    "curios-prelude/profile",
 ]
 
-# Deliberately absent: `curios-prelude`. The driver folds stages over a scope of
-# units and does not know which of them is the standard library — that is the
-# caller's to supply, exactly as the `/syn` registry already is. It reappears
-# below as a dev-dependency, because the driver's own fixtures are programs and a
-# program needs a prelude to compile against.
 [dependencies]
 curios-abi = { workspace = true }
 curios-utilities = { workspace = true }
