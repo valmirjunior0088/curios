@@ -41,6 +41,14 @@ use {
     std::{cell::RefCell, collections::BTreeMap, iter},
 };
 
+// Grammar keys for the packrat cache (see `curios_parse::memoize`). One block here rather than one per grammar file, because the table those keys index is shared: two nonterminals that pick the same number serve each other's parses at that offset, silently whenever their outputs share a type, and a key minted by reading a sibling file is a key minted from memory. A new memoized nonterminal takes the next number in this block.
+//
+// Only the nonterminals that overlapping alternatives re-probe at the same offset are memoized; that is enough to keep parsing linear. `parse_pattern`/`parse_match_pattern` qualify because each has its own `(...)`-grouping alternative and is re-probed by every caller that speculatively tries a lambda/match-arm shape (`parse_func`'s parameter list, `parse_ctor_match_pattern`'s argument list, …) — without them, a run of nested parens is exponential: each candidate caller re-walks the whole remaining nesting fresh.
+const MEMO_TERM: u32 = 0;
+const MEMO_ATOMIC_TERM: u32 = 1;
+const MEMO_PATTERN: u32 = 2;
+const MEMO_MATCH_PATTERN: u32 = 3;
+
 thread_local! {
     /// Every comment the current parse run has consumed, keyed by start offset — recorded by [`parse_whitespace`], the single place comments die, and drained by the `parse_with_comments` entries. The packrat-memo pattern: per-thread and cleared per run, so runs never see each other's comments. Offset keying makes re-recording under backtracking idempotent, and memoized jumps that skip re-running whitespace are harmless because the cache-miss run already recorded.
     static COMMENTS: RefCell<BTreeMap<usize, Span>> = const { RefCell::new(BTreeMap::new()) };

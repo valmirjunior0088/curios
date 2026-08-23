@@ -1,9 +1,5 @@
 use super::*;
 
-// Grammar keys for the packrat cache (see `parser::memoize`), mirroring `expr.rs`'s `MEMO_TERM`/`MEMO_ATOMIC_TERM`. `parse_pattern`/`parse_match_pattern` each have their own `(...)`-grouping alternative and are re-probed at the same offset by every caller that speculatively tries a lambda/match-arm shape (`parse_func`'s parameter list, `parse_ctor_match_pattern`'s argument list, …) — without memoization here, a run of nested parens is exponential: each candidate caller re-walks the whole remaining nesting fresh.
-const MEMO_PATTERN: u32 = 2;
-const MEMO_MATCH_PATTERN: u32 = 3;
-
 pub(super) fn parse_use_func_type_param<'a>() -> Parser<'a, FuncTypeParam> {
     catch(parse_keyword("use"))
         .and_keep(lazy(parse_term))
