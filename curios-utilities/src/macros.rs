@@ -71,8 +71,10 @@ macro_rules! id {
     (@impls $name:ident, $prefix:literal) => {
         impl $name {
             /// The identity's raw arena index.
+            ///
+            /// Forwards to the `ArenaId` method rather than repeating it. An inherent method shadows a trait one at every concrete call site, so two bodies here would let a call on `Foo` and a call through `I: ArenaId` answer differently with nothing to catch it.
             pub fn index(self) -> usize {
-                self.0 as usize
+                <Self as $crate::ArenaId>::index(self)
             }
         }
 
@@ -114,8 +116,9 @@ macro_rules! id {
         $crate::id!($name, $prefix);
 
         impl $crate::Mint for $name {
+            // Through the minting intrinsic rather than building the newtype again: one narrowing, and the exhaustion panic names the identity type instead of saying only that some space ran out.
             fn mint(entropy: usize) -> Self {
-                Self(u32::try_from(entropy).expect("ID space exhausted"))
+                <Self as $crate::ArenaId>::from_index(entropy)
             }
         }
     };
