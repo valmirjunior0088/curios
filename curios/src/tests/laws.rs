@@ -188,11 +188,13 @@ const CARRIERS: &[Carrier] = &[
             "Eq(List/slice(xs, 0, 0), [])",
             "Eq(List/slice([a, ..xs], 1, List/len(xs)), xs)",
             "Eq(List/get([a, ..xs], 0), a)",
-        ],
-        refused: &[
             "Eq(List/len(List/map(xs, f)), List/len(xs))",
             "Eq(List/slice([..xs, ..ys], 0, List/len(xs)), xs)",
             "Eq(List/slice([..xs, ..ys], List/len(xs), List/len(ys)), ys)",
+            "Eq(List/slice([..xs, ..ys, ..zs], List/len(xs), List/len(ys)), ys)",
+            "Eq(List/slice([..xs, ..ys, ..zs], 0, List/len(xs) + List/len(ys)), [..xs, ..ys])",
+        ],
+        refused: &[
             // Function extensionality in disguise: not one to take.
             "Eq(List/map(xs, (v) => v), xs)",
         ],
@@ -215,11 +217,11 @@ const CARRIERS: &[Carrier] = &[
             "Eq(Bytes/get(x[k, ..bs], 0), k)",
             "Eq(Bytes/eql(bs, bs), true)",
             "Eq(bs == bs, true)",
-        ],
-        refused: &[
             "Eq(Bytes/slice(x[..bs, ..cs], 0, Bytes/len(bs)), bs)",
             "Eq(Bytes/slice(x[..bs, ..cs], Bytes/len(bs), Bytes/len(cs)), cs)",
+            "Eq(Bytes/slice(x[..bs, ..cs, ..ds], Bytes/len(bs), Bytes/len(cs)), cs)",
         ],
+        refused: &[],
     },
     Carrier {
         name: "Bits, the free monoid",
@@ -231,6 +233,7 @@ const CARRIERS: &[Carrier] = &[
             "Eq(Bits/len(b[..ts, ..us]), Bits/len(ts) + Bits/len(us))",
             "Eq(Bits/slice(ts, 0, Bits/len(ts)), ts)",
             "Eq(Bits/get(b[v, ..ts], 0), v)",
+            "Eq(Bits/slice(b[..ts, ..us], Bits/len(ts), Bits/len(us)), us)",
         ],
         refused: &[],
     },

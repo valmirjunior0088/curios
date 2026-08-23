@@ -876,6 +876,38 @@ fn bin_element(grain: Grain, operand: &Term, local: usize) -> Option<Subterm> {
     }
 }
 
+/// A window aligned to the seams of a concatenation is the run of operands between those seams: `slice([..xs, ..ys], 0, len(xs)) = xs` and `slice([..xs, ..ys], len(xs), len(ys)) = ys`, over *symbolic* operands — the case the literal-run locators above decline. The seams are found by measuring each operand the way `len` measures it and comparing the running sum with the window's start and end as reduced terms; a symbolic operand contributes its own `len`, and the comparison is structural, so two sums that are definitionally but not syntactically equal decline, which is the refusing direction. Sound for every value of the symbolic operands: a window whose start is exactly a prefix's length and whose end is exactly a longer prefix's length covers exactly the operands between, whatever those lengths are. `None` where no seam matches; the operands of the matched run otherwise, for the caller to concatenate.
+fn seam_window(
+    reducer: &mut impl Reducer,
+    operands: &[Term],
+    start: &Term,
+    length: &Term,
+    measure: impl Fn(&Term) -> Intrinsic,
+) -> Result<Option<Vec<Term>>, ReduceError> {
+    let end = reducer.reduce_forced(Term::intrinsic(Intrinsic::nat_add(
+        start.clone(),
+        length.clone(),
+    )))?;
+    let mut prefix = Term::intrinsic(Intrinsic::Nat(Nat::Zero));
+    let mut begin = None;
+    for (index, operand) in operands.iter().enumerate() {
+        if begin.is_none() && prefix == *start {
+            begin = Some(index);
+        }
+        if let Some(begin) = begin
+            && prefix == end
+        {
+            return Ok(Some(operands[begin..index].to_vec()));
+        }
+        let measured = reducer.reduce_forced(Term::intrinsic(measure(operand)))?;
+        prefix = reducer.reduce_forced(Term::intrinsic(Intrinsic::nat_add(prefix, measured)))?;
+    }
+    Ok(match begin {
+        Some(begin) if prefix == end => Some(operands[begin..].to_vec()),
+        _ => None,
+    })
+}
+
 /// [`bin_piece`] over the element carrier, restoring the element type every `List` value carries.
 fn list_piece(element: &Term, piece: Piece<'_>) -> Term {
     match piece {
@@ -1602,6 +1634,23 @@ pub fn reduce_intrinsic(
                     None => {}
                 }
             }
+            // A window on the seams of a symbolic concatenation — see `seam_window`.
+            if let Subterm::Intrinsic(Intrinsic::BinConcat {
+                grain: Grain::X,
+                operands,
+            }) = &*bin
+                && let Some(run) = seam_window(
+                    reducer,
+                    operands,
+                    &start_reduced,
+                    &length_reduced,
+                    |operand| Intrinsic::bin_len(Grain::X, operand.clone()),
+                )?
+            {
+                return reducer
+                    .reduce(Term::intrinsic(Intrinsic::bin_concat(Grain::X, run)))
+                    .map(Term::unwrap_or_clone);
+            }
             // A slice over a cons spine peels one byte per `0`/`succ` boundary step — the reduction partner of the `Utf8` cons the validity proofs walk:  `slice(cons(h, t), 0, succ n) = h ++ slice(t, 0, n)`  and  `slice(cons(h, t), succ s, n) = slice(t, s, n)`.
             //
             // Advancing the start no longer touches the length, which is the reparameterisation paying for itself: the count is invariant under peeling the base, so nothing about the window has to be recomputed to move it.
@@ -1908,6 +1957,23 @@ pub fn reduce_intrinsic(
                     None => {}
                 }
             }
+            // A window on the seams of a symbolic concatenation — see `seam_window`.
+            if let Subterm::Intrinsic(Intrinsic::BinConcat {
+                grain: Grain::B,
+                operands,
+            }) = &*bin
+                && let Some(run) = seam_window(
+                    reducer,
+                    operands,
+                    &start_reduced,
+                    &length_reduced,
+                    |operand| Intrinsic::bin_len(Grain::B, operand.clone()),
+                )?
+            {
+                return reducer
+                    .reduce(Term::intrinsic(Intrinsic::bin_concat(Grain::B, run)))
+                    .map(Term::unwrap_or_clone);
+            }
             if let Some((head, tail)) = peel_first_atom(Grain::B, &bin) {
                 let dec = |n: &Term| {
                     Term::intrinsic(Intrinsic::nat_sub(
@@ -2011,6 +2077,16 @@ pub fn reduce_intrinsic(
             let list = reducer.reduce_forced(list.clone())?;
             if let Some(total) = list_measure(&list) {
                 return Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(total))));
+            }
+            // `len(map(xs, f)) = len(xs)`: a map is elementwise, so the measure passes through it whatever `f` does.
+            if let Subterm::Intrinsic(Intrinsic::ListMap {
+                from, list: inner, ..
+            }) = &*list
+            {
+                return reduce_intrinsic(
+                    reducer,
+                    &Intrinsic::list_len(from.clone(), inner.clone()),
+                );
             }
             reduce_homomorphism(
                 reducer,
@@ -2187,6 +2263,20 @@ pub fn reduce_intrinsic(
                     }
                     None => {}
                 }
+            }
+            // A window on the seams of a symbolic concatenation — see `seam_window`.
+            if let Subterm::Intrinsic(Intrinsic::ListConcat { operands, .. }) = &*list
+                && let Some(run) = seam_window(
+                    reducer,
+                    operands,
+                    &start_reduced,
+                    &length_reduced,
+                    |operand| Intrinsic::list_len(type_.clone(), operand.clone()),
+                )?
+            {
+                return reducer
+                    .reduce(Term::intrinsic(Intrinsic::list_concat(type_, run)))
+                    .map(Term::unwrap_or_clone);
             }
             // A slice over a cons spine peels one element per `0`/`succ` boundary step, the `List` twin of `BinSlice`'s element peel: `slice(cons(h, t), 0, succ n) = [h] ++ slice(t, 0, n)`  and  `slice(cons(h, t), succ s, n) = slice(t, s, n)` — the count riding through the second untouched.
             if let Some((head, tail)) = peel_first_elem(&list) {
@@ -4201,6 +4291,44 @@ mod tests {
                 }),
                 lit(0),
                 nats(),
+            ),
+            // The free monoid's seam windows over symbolic operands, and the measure through a map.
+            (
+                "slice(b ++ t, 0, len(b)) = b",
+                bin_slice(cat(vec![b.clone(), t.clone()]), lit(0), bin_len(b.clone())),
+                b.clone(),
+                vec![
+                    vec![(&bin_base, run_bytes(&[])), (&bin_tail, run_bytes(&[7]))],
+                    vec![
+                        (&bin_base, run_bytes(&[1, 2])),
+                        (&bin_tail, run_bytes(&[3, 4, 5])),
+                    ],
+                ],
+            ),
+            (
+                "slice(b ++ t, len(b), len(t)) = t",
+                bin_slice(
+                    cat(vec![b.clone(), t.clone()]),
+                    bin_len(b.clone()),
+                    bin_len(t.clone()),
+                ),
+                t.clone(),
+                vec![
+                    vec![(&bin_base, run_bytes(&[9])), (&bin_tail, run_bytes(&[]))],
+                    vec![
+                        (&bin_base, run_bytes(&[1, 2])),
+                        (&bin_tail, run_bytes(&[3, 4, 5])),
+                    ],
+                ],
+            ),
+            (
+                "len(map(xs, f)) = len(xs)",
+                list_len(list_map(xs.clone())),
+                list_len(xs.clone()),
+                vec![
+                    vec![(&list_base, nat_list(&[]))],
+                    vec![(&list_base, nat_list(&[1, 2, 3]))],
+                ],
             ),
         ];
 
