@@ -1,5 +1,7 @@
 //! The shape of the compiler's `/syn` vocabulary — every name a stage emits, with the values supplied by the crate that owns the source declarations.
 //!
+//! Every enumeration below opens by destructuring the struct it enumerates, which is not a stylistic choice: a pattern naming fewer fields than the struct has does not compile, so a slot added to a group is a compile error until it is enumerated — exactly as it is a compile error at every fill site until it is filled. The lists were written out by hand before, and [`ProofSyntax::bytes_four`] sat in the registry unenumerated, and so unchecked, from the commit that added it.
+//!
 //! The registry is *shape only*: it names slots, never spellings. `curios-prelude-archive` fills them, because that is the crate holding both the authored `.crs` declarations and the archive that proves each one exists; the two stages that emit `/syn` names — `curios-text`'s lowering and `curios-elab`'s type-directed features — read the filled registry rather than spelling anything themselves. That inversion is why this file lives below both consumers instead of beside the sources: a consumer must see the type, and the prelude sits above every consumer in the crate graph.
 
 use crate::{InfixOp, Qualifier};
@@ -56,32 +58,42 @@ pub struct SyntaxRegistry {
 }
 
 impl SyntaxRegistry {
-    /// Every registered name, for the prelude build's presence check. The operator concepts appear once per method that dispatches through them, so `/syn/Cmp` recurs — a duplicate costs a redundant assertion and nothing else, and enumerating per slot is what keeps a newly added slot impossible to omit here.
+    /// Every registered name, for the prelude build's presence check. The operator concepts appear once per method that dispatches through them, so `/syn/Cmp` recurs — a duplicate costs a redundant assertion and nothing else.
+    ///
+    /// Each group answers for its own slots instead of having them reached through from here, so that the exhaustive pattern sits in the same scope as the fields it has to keep up with.
     pub fn targets(self) -> impl Iterator<Item = SyntaxName> {
-        [
-            self.monad.bind,
-            self.character.character,
-            self.character.scalar_below,
-            self.character.scalar_above,
-            self.string.string,
-            self.string.of_scan_eq,
-            self.string.refl_scan,
-            self.proof.true_qed,
-            self.proof.true_type,
-            self.proof.lt,
-            self.proof.le,
-            self.proof.int_non_zero,
-            self.proof.int_non_neg,
-        ]
-        .into_iter()
-        .chain(self.concept_fields().map(|target| target.concept))
+        let Self {
+            monad,
+            lift,
+            operator,
+            character,
+            string,
+            proof,
+        } = self;
+
+        monad
+            .targets()
+            .chain(lift.targets())
+            .chain(operator.targets())
+            .chain(character.targets())
+            .chain(string.targets())
+            .chain(proof.targets())
     }
 
     /// Every registered concept method, for the prelude build's field check. A concept can exist under the registered name and still not declare the field the compiler projects, which is the drift a presence check alone cannot see.
+    ///
+    /// Only two groups hold concept methods; the other four are bound and discarded rather than elided with `..`, so a group added with methods of its own cannot quietly miss this check.
     pub fn concept_fields(self) -> impl Iterator<Item = ConceptField> {
-        self.operator
-            .concept_fields()
-            .chain(std::iter::once(self.lift.lift))
+        let Self {
+            monad: _,
+            lift,
+            operator,
+            character: _,
+            string: _,
+            proof: _,
+        } = self;
+
+        operator.concept_fields().chain(std::iter::once(lift.lift))
     }
 }
 
@@ -91,10 +103,26 @@ pub struct MonadSyntax {
     pub bind: SyntaxName,
 }
 
+impl MonadSyntax {
+    fn targets(self) -> impl Iterator<Item = SyntaxName> {
+        let Self { bind } = self;
+
+        [bind].into_iter()
+    }
+}
+
 /// The embedding concept auto-lift resolves at a postfix `!` whose action's monad differs from its region's: `/syn/Lift`'s `lift` method, projected from the witness keyed by the two monads. Consulted by `elaborate_bang` only — lowering never reads it.
 #[derive(Debug, Clone, Copy)]
 pub struct LiftSyntax {
     pub lift: ConceptField,
+}
+
+impl LiftSyntax {
+    fn targets(self) -> impl Iterator<Item = SyntaxName> {
+        let Self { lift } = self;
+
+        [lift.concept].into_iter()
+    }
 }
 
 /// The operator→concept table backing `elaborate_infix`: one slot per method the fixed infix operators dispatch through.
@@ -145,12 +173,28 @@ impl OperatorSyntax {
         })
     }
 
+    fn targets(self) -> impl Iterator<Item = SyntaxName> {
+        self.concept_fields().map(|target| target.concept)
+    }
+
     fn concept_fields(self) -> impl Iterator<Item = ConceptField> {
-        [
-            self.add, self.sub, self.mul, self.div, self.rem, self.eql, self.neq, self.lt, self.gt,
-            self.le, self.ge, self.and, self.or,
-        ]
-        .into_iter()
+        let Self {
+            add,
+            sub,
+            mul,
+            div,
+            rem,
+            eql,
+            neq,
+            lt,
+            gt,
+            le,
+            ge,
+            and,
+            or,
+        } = self;
+
+        [add, sub, mul, div, rem, eql, neq, lt, gt, le, ge, and, or].into_iter()
     }
 }
 
@@ -161,11 +205,35 @@ pub struct CharacterSyntax {
     pub scalar_above: SyntaxName,
 }
 
+impl CharacterSyntax {
+    fn targets(self) -> impl Iterator<Item = SyntaxName> {
+        let Self {
+            character,
+            scalar_below,
+            scalar_above,
+        } = self;
+
+        [character, scalar_below, scalar_above].into_iter()
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct StringSyntax {
     pub string: SyntaxName,
     pub of_scan_eq: SyntaxName,
     pub refl_scan: SyntaxName,
+}
+
+impl StringSyntax {
+    fn targets(self) -> impl Iterator<Item = SyntaxName> {
+        let Self {
+            string,
+            of_scan_eq,
+            refl_scan,
+        } = self;
+
+        [string, of_scan_eq, refl_scan].into_iter()
+    }
 }
 
 /// The proof vocabulary the compiler writes into terms it builds itself: the inhabitant it supplies for a discharged obligation, and the propositions it states as preconditions on `/sys`'s partial-looking operations.
@@ -184,4 +252,29 @@ pub struct ProofSyntax {
     pub int_non_neg: SyntaxName,
     /// `len(b) = 4` over `Bytes`, the precondition reinterpreting one as a binary32 states. Decided on the length alone, which is the whole of what the reinterpretation needs.
     pub bytes_four: SyntaxName,
+}
+
+impl ProofSyntax {
+    fn targets(self) -> impl Iterator<Item = SyntaxName> {
+        let Self {
+            true_qed,
+            true_type,
+            lt,
+            le,
+            int_non_zero,
+            int_non_neg,
+            bytes_four,
+        } = self;
+
+        [
+            true_qed,
+            true_type,
+            lt,
+            le,
+            int_non_zero,
+            int_non_neg,
+            bytes_four,
+        ]
+        .into_iter()
+    }
 }
