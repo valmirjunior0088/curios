@@ -41,7 +41,6 @@ unreachable_pub = "warn"
 unused_self = "warn"
 
 [workspace.dependencies]
-curios = { path = "curios" }
 curios-abi = { path = "curios-abi" }
 curios-archive = { path = "curios-archive" }
 curios-archive-derive = { path = "curios-archive-derive" }
@@ -63,6 +62,5 @@ curios-prelude = { path = "curios-prelude" }
 curios-prelude-archive = { path = "curios-prelude-archive" }
 curios-pipeline = { path = "curios-pipeline" }
 curios-package = { path = "curios-package" }
-curios-js = { path = "curios-js" }
 curios-binaryen = { path = "curios-binaryen" }
 curios-runtime = { path = "curios-runtime" }
