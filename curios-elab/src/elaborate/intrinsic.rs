@@ -52,7 +52,7 @@ fn synth_intrinsic(
         let operands = current.operands();
 
         // The table and the traversal are two statements of one operand list; zipping them is only sound while they agree, and a disagreement is this crate's bug rather than the term's.
-        debug_assert_eq!(
+        assert_eq!(
             operands.len(),
             signature.operands.len(),
             "`signature` and `operands` disagree about {intrinsic:?}",

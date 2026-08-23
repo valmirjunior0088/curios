@@ -21,7 +21,7 @@ pub(super) fn infer_intrinsic(
     let operands = intrinsic.operands();
 
     // The table and the traversal are two statements of the same operand list, and zipping them is only safe while they agree. A disagreement is this crate's own bug rather than a fault in the term, so it asserts rather than refusing — see `documentation/design/language/an-independent-kernel-re-checks-what-the-elaborator-accepts.md` on what the kernel reports and what it must not.
-    debug_assert_eq!(
+    assert_eq!(
         operands.len(),
         signature.operands.len(),
         "`signature` and `operands` disagree about {intrinsic:?}",
