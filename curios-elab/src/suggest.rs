@@ -140,7 +140,7 @@ fn suggest_in_scope(
         .collect()
 }
 
-/// Pools 3 to 5: the entry module's own definitions, then every other global its items reference, then every binding its `use` declarations imported that neither earlier pool holds, each with its recorded type. The goal's owning definition is excluded.
+/// Pools 3 to 5: the entry module's own definitions, then every other global its items reference, then every binding in scope of the owning definition through a `use` that neither earlier pool holds, each with its recorded type. The goal's owning definition is excluded.
 fn module_pool(
     context: &Context,
     module: &Module,
@@ -197,8 +197,15 @@ fn module_pool(
         }
     }
 
-    for global in context.imports().keys() {
-        if own.contains(global) || referenced.contains(global) || Some(global) == owner {
+    // The imports in scope where the goal's definition was written — not the unit's, since `use` binds from its own position to the end of its body and a candidate offered above its import would not paste there. A global imported twice in one scope is tried once.
+    let mut imported = BTreeSet::new();
+    for import in context.imports().in_scope_at(owner) {
+        let global = &import.global;
+        if own.contains(global)
+            || referenced.contains(global)
+            || Some(global) == owner
+            || !imported.insert(global.clone())
+        {
             continue;
         }
         let free = Free::Global(global.clone());

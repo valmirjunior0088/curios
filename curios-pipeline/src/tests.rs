@@ -892,6 +892,72 @@ fn mentions_metavar_id(report: &str) -> bool {
 }
 
 #[test]
+fn an_import_is_offered_only_below_its_use() {
+    // `use` binds from its own position to the end of its body. The goal above `use /std/{Eq}` cannot paste `Eq/sym(h)` — `Eq` is not a name there — so it is not offered; the same goal below it is.
+    let source = r#"
+        use /std/{Nat};
+        let above(k : Nat, h : /std/Eq/Eq(k, 7)) -> /std/Eq/Eq(7, k) = ?;
+        use /std/{Eq};
+        let below(k : Nat, h : Eq(k, 7)) -> Eq(7, k) = ?;
+        0
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let reports: Vec<&str> = error.split("goal `?`").collect();
+    let above = reports
+        .iter()
+        .find(|report| report.contains("let above("))
+        .expect("the goal above its import reports");
+    let below = reports
+        .iter()
+        .find(|report| report.contains("let below("))
+        .expect("the goal below its import reports");
+
+    assert!(
+        !above.contains("Eq/sym("),
+        "offered above its import: {error}"
+    );
+    assert!(
+        below.contains("? \u{2248} Eq/sym(h)"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn a_nested_modules_import_stays_in_its_body() {
+    // A nested module body starts with no imports and its own `use` binds nothing outside it: the goal inside `M` is offered `Eq/sym(h)`, the goal in the root body — which never imported `Eq` — is not.
+    let source = r#"
+        use /std/{Nat};
+        pub mod M
+            use /std/{Nat, Eq};
+            pub let inner(k : Nat, h : Eq(k, 7)) -> Eq(7, k) = ?;
+        end
+        let outer(k : Nat, h : /std/Eq/Eq(k, 7)) -> /std/Eq/Eq(7, k) = ?;
+        0
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+    let reports: Vec<&str> = error.split("goal `?`").collect();
+    let inner = reports
+        .iter()
+        .find(|report| report.contains("let inner("))
+        .expect("the goal inside the module reports");
+    let outer = reports
+        .iter()
+        .find(|report| report.contains("let outer("))
+        .expect("the goal in the root body reports");
+
+    assert!(
+        inner.contains("? \u{2248} Eq/sym(h)"),
+        "unexpected error: {error}"
+    );
+    assert!(
+        !outer.contains("Eq/sym("),
+        "leaked out of the module: {error}"
+    );
+}
+
+#[test]
 fn the_goals_own_definition_is_not_suggested() {
     // Suggesting the definition a goal sits inside would be circular for a plain `let`; the pools exclude the owner. The scope binder still fits.
     let source = r#"

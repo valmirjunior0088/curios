@@ -235,8 +235,9 @@ pub(super) struct Context<'a> {
     witnesses: &'a RefCell<BTreeMap<Qualifier, u32>>,
     // Every bare name that resolved to nothing, keyed by the binder identity it lowered to, with the public bindings in scope of that name. Shared across nested contexts like the counters, because the table is the unit's: `curios-elab` reports the unbound binder, and this is what lets its report say what the reader probably meant.
     unbound: &'a RefCell<BTreeMap<curios_core::Free, Vec<Qualifier>>>,
-    // Every binding a `use` brought into some lexical scope of this unit, by its canonical target, with the shortest path a reader wrote it under — `/std/Eq/cong` as `Eq/cong` after `use /std/{Eq}`, or as `cong` after a glob. Shared across nested contexts like `unbound`, and for the same reason: Core keeps the canonical name, and only this stage knows the spelling that resolves at the use site, which is what a goal report's candidate must be pasteable under. Scoping is point-of-use in the body and unit-wide here; a candidate offered to a goal written above its import still pastes under the absolute path the display falls back to.
-    imports: &'a RefCell<BTreeMap<Qualifier, String>>,
+    // Every binding a `use` brought into some lexical scope of this unit, with the path the reader wrote it under, and per definition the ones in scope where it was written — see `curios_core::Imports`. The entries are shared across nested contexts like `unbound`, and for the same reason: Core keeps the canonical name, and only this stage knows the spelling that resolves at the use site, which is what a goal report's candidate must be pasteable under. The scope is this body's alone: `use` binds from its position to the end of the body it is written in, and a nested body starts empty, so `in_scope` is per context and a snapshot of it is taken at each item.
+    imports: &'a RefCell<curios_core::Imports>,
+    in_scope: Vec<usize>,
     syntax: &'a SyntaxRegistry,
 }
 
@@ -254,7 +255,7 @@ impl<'a> Context<'a> {
         binders: &'a Entropy,
         witnesses: &'a RefCell<BTreeMap<Qualifier, u32>>,
         unbound: &'a RefCell<BTreeMap<curios_core::Free, Vec<Qualifier>>>,
-        imports: &'a RefCell<BTreeMap<Qualifier, String>>,
+        imports: &'a RefCell<curios_core::Imports>,
         syntax: &'a SyntaxRegistry,
     ) -> Context<'a> {
         Context {
@@ -273,6 +274,7 @@ impl<'a> Context<'a> {
             witnesses,
             unbound,
             imports,
+            in_scope: Vec::new(),
             syntax,
         }
     }
@@ -294,6 +296,7 @@ impl<'a> Context<'a> {
             witnesses: self.witnesses,
             unbound: self.unbound,
             imports: self.imports,
+            in_scope: Vec::new(),
             syntax: self.syntax,
         }
     }
@@ -581,19 +584,25 @@ impl<'a> Context<'a> {
         Ok(result)
     }
 
-    // Record that `target` is in scope under `spelling`. The shortest spelling wins, and a tie keeps the first: both resolve, and the shorter is the one a reader would write.
-    fn record_import(&self, target: &Qualifier, spelling: String) {
+    // Record that `target` is in scope of this body under `spelling`, from here on. A target already in scope under a spelling no longer than this one is not recorded again — both resolve, and the shorter is the one a reader would write; a shorter spelling arriving later is a second entry, so an item between the two sees only the first.
+    fn record_import(&mut self, target: &Qualifier, spelling: String) {
+        let global = curios_core::Global::Authored(target.clone());
         let mut imports = self.imports.borrow_mut();
-        match imports.get(target) {
-            Some(existing) if existing.len() <= spelling.len() => {}
-            _ => {
-                imports.insert(target.clone(), spelling);
-            }
+        let shadowed = self.in_scope.iter().any(|index| {
+            let existing = &imports.entries[*index];
+            existing.global == global && existing.spelling.len() <= spelling.len()
+        });
+        if shadowed {
+            return;
         }
+        imports
+            .entries
+            .push(curios_core::Import { global, spelling });
+        self.in_scope.push(imports.entries.len() - 1);
     }
 
     // Record every public binding of the module imported under `label`, each spelled through it — `Eq/cong` for `use /std/{Eq}`. Direct bindings only: a deeper member is reached by a longer path the reader has not written, and its own module's import is the place it would be recorded.
-    fn record_module_import(&self, module: &Qualifier, label: &str) {
+    fn record_module_import(&mut self, module: &Qualifier, label: &str) {
         let Some(interface) = self.public.get(module) else {
             return;
         };
@@ -609,6 +618,20 @@ impl<'a> Context<'a> {
             ) {
                 self.record_import(&target, format!("{label}/{binding}"));
             }
+        }
+    }
+
+    // Snapshot the imports in scope of this body as the view of the definition `owner` — what a goal inside it may be offered. `None` is the entrypoint tail, which closes the root body.
+    pub(super) fn record_import_scope(&self, owner: Option<&Qualifier>) {
+        let mut imports = self.imports.borrow_mut();
+        match owner {
+            Some(owner) => {
+                imports.by_item.insert(
+                    curios_core::Global::Authored(owner.clone()),
+                    self.in_scope.clone(),
+                );
+            }
+            None => imports.tail = self.in_scope.clone(),
         }
     }
 

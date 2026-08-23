@@ -112,8 +112,8 @@ pub struct PreparedText {
     universe_floor: usize,
     /// Every bare name that resolved to nothing, by the binder it lowered to, with what it could have meant — see `Context::unbound_binder`. Empty for any unit that compiles, the prelude included.
     unbound: BTreeMap<curios_core::Free, Vec<Qualifier>>,
-    /// Every binding a `use` brought into scope somewhere in this unit, by its canonical name, with the shortest spelling a reader wrote it under — see `Context::imports`. What a goal report's candidate pool reaches beyond the names the program already mentions, and the spelling each such candidate is displayed under.
-    imports: BTreeMap<curios_core::Global, String>,
+    /// Every binding a `use` brought into scope in this unit, with the spelling a reader wrote it under and, per definition, the ones in scope where it was written — see `Context::imports`. What a goal report's candidate pool reaches beyond the names the program already mentions, and the spelling each such candidate is displayed under.
+    imports: curios_core::Imports,
 }
 
 impl PreparedText {
@@ -153,8 +153,8 @@ impl PreparedText {
         &self.unbound
     }
 
-    /// What a `use` brought into scope, by canonical name, with the spelling it resolves under — the table `curios-elab`'s goal suggestions draw imported candidates from and spell them by.
-    pub fn imports(&self) -> &BTreeMap<curios_core::Global, String> {
+    /// What each `use` brought into scope, where, and under which spelling — the table `curios-elab`'s goal suggestions draw imported candidates from and spell them by.
+    pub fn imports(&self) -> &curios_core::Imports {
         &self.imports
     }
 }
@@ -426,6 +426,7 @@ fn process_items(
                 }
             }
             TopItem::Let(let_item) => {
+                context.record_import_scope(Some(&context.prefixed(&let_item.label)));
                 let lower = Lowerer::new(context);
                 let type_ = lower.term(&let_item.signature.type_())?;
                 flat_items.push(FlatItem::Let(FlatLet {
@@ -455,6 +456,7 @@ fn process_items(
                 let items = ls
                     .iter()
                     .map(|let_item| {
+                        context.record_import_scope(Some(&context.prefixed(&let_item.label)));
                         let lower = Lowerer::new(context);
                         let type_ = lower.term(&let_item.signature.type_())?;
                         Ok(FlatLet {
@@ -1697,7 +1699,7 @@ fn into_core_unit_within(
     // No floor: an ordinal is scoped to its mount now, and this unit's mounts are disjoint from every predecessor's, so nothing it mints can collide with anything already stored.
     let witness_ids = RefCell::new(BTreeMap::new());
     let unbound = RefCell::new(BTreeMap::new());
-    let imports = RefCell::new(BTreeMap::new());
+    let imports = RefCell::new(curios_core::Imports::default());
 
     let universe_role = Cell::new(curios_core::UniverseRole::Flexible);
     // The scope's seed table. A module carries the *cumulative* table from index zero rather than its own slice — `universe_floor` is asserted equal to its length — so the scope's table is the last unit's, already containing every earlier one. Concatenating them counts each predecessor once per successor, which is what the floor assertion catches.
@@ -1772,7 +1774,8 @@ fn into_core_unit_within(
         )?;
     }
 
-    // The entrypoint, for the one unit that has one.
+    // The entrypoint, for the one unit that has one. Its tail closes the root body, so the imports in scope there are the last the root saw.
+    context.record_import_scope(None);
     let lower = Lowerer::new(&context);
     let (type_, body) = match source.entrypoint() {
         Some(entrypoint) => (
@@ -1820,11 +1823,7 @@ fn into_core_unit_within(
         binder_floor: binders.count(),
         universe_floor: universes.count(),
         unbound: unbound.into_inner(),
-        imports: imports
-            .into_inner()
-            .into_iter()
-            .map(|(target, spelling)| (curios_core::Global::Authored(target), spelling))
-            .collect(),
+        imports: imports.into_inner(),
     })
 }
 
@@ -1858,7 +1857,7 @@ pub struct LoweredEntry {
     /// See [`PreparedText::unbound`].
     pub unbound: BTreeMap<curios_core::Free, Vec<Qualifier>>,
     /// See [`PreparedText::imports`].
-    pub imports: BTreeMap<curios_core::Global, String>,
+    pub imports: curios_core::Imports,
 }
 
 /// Lower the entry program against the units already lowered.

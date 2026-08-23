@@ -9,7 +9,7 @@ mod tests;
 
 use {
     curios_utilities::{Qualifier, name},
-    std::{cmp::Ordering, fmt, hash},
+    std::{cmp::Ordering, collections::BTreeMap, fmt, hash},
 };
 
 name!(Atom; archive);
@@ -273,5 +273,50 @@ impl fmt::Display for Free {
             Free::Global(global) => write!(formatter, "{global}"),
             Free::Local(mint) => write!(formatter, "{mint}"),
         }
+    }
+}
+
+/// One binding a `use` brought into a lexical scope: its canonical name, and the path the reader wrote it under — `/std/Eq/cong` as `Eq/cong` after `use /std/{Eq}`, or as `cong` after a glob. Core holds only the canonical name; the spelling is the text stage's, and it is what a goal report's candidate must be displayed under to be pasteable.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[curios_archive::archived]
+pub struct Import {
+    pub global: Global,
+    pub spelling: String,
+}
+
+/// What a unit's `use` declarations brought into scope, and where. `use` is point-of-use: it binds from its own position to the end of the module body it is written in, and a nested module body starts with nothing. So each definition records the imports in scope where it was written, and the entrypoint tail records its own — what a goal inside either may be offered, spelled as it resolves there.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[curios_archive::archived]
+pub struct Imports {
+    /// Every import, in the order the lowering met them. Appended to only; the scopes below index into it.
+    pub entries: Vec<Import>,
+    /// Per definition, the indices into `entries` in scope where it was written.
+    pub by_item: BTreeMap<Global, Vec<usize>>,
+    /// The indices in scope where the entrypoint tail was written — the end of the root body.
+    pub tail: Vec<usize>,
+}
+
+impl Imports {
+    /// The imports in scope at `owner`'s definition, or at the entrypoint tail for a goal no definition owns. A definition the lowering never snapshotted — one it synthesized, which no written goal can sit in — falls back to the tail's view as well.
+    pub fn in_scope_at(&self, owner: Option<&Global>) -> impl Iterator<Item = &Import> {
+        owner
+            .and_then(|owner| self.by_item.get(owner))
+            .unwrap_or(&self.tail)
+            .iter()
+            .map(|index| &self.entries[*index])
+    }
+
+    /// Each imported global's shortest spelling across the unit — the display spelling a report uses for it, since a report's spelling is shared by every goal in the batch.
+    pub fn spellings(&self) -> BTreeMap<Global, &str> {
+        let mut spellings: BTreeMap<Global, &str> = BTreeMap::new();
+        for import in &self.entries {
+            match spellings.get(&import.global) {
+                Some(existing) if existing.len() <= import.spelling.len() => {}
+                _ => {
+                    spellings.insert(import.global.clone(), &import.spelling);
+                }
+            }
+        }
+        spellings
     }
 }

@@ -20,8 +20,8 @@ use {
     curios_core::ReduceError,
     curios_core::{
         Bound, ConceptDecl, Consumption, Cost, DEFAULT_RETENTION_QUOTA, DefinitionKind, Free,
-        Global, HeadTag, ImplicitOrigin, InductDecl, Level, MetaId, Metavar, MetavarOrigin,
-        RecGroup, Retention, StructDecl, Term, Totality, UniverseConstraintKind,
+        Global, HeadTag, ImplicitOrigin, Imports, InductDecl, Level, MetaId, Metavar,
+        MetavarOrigin, RecGroup, Retention, StructDecl, Term, Totality, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseRole,
         UniverseSeed, WitnessOrigin, instantiate_universe_levels_scoped,
     },
@@ -131,8 +131,8 @@ pub struct Context {
     syntax: SyntaxRegistry,
     // Conversions the item drain gave up on because written goals alone held them up — what each such `?` must make true, carried to the goal batch rather than reported as an error. See `Context::note_goal_obligation`.
     goal_obligations: Vec<GoalObligation>,
-    // What the unit's `use` declarations brought into scope, by canonical name, with the spelling each resolves under — the text stage's table, installed by the driver before elaboration. Read by goal suggestions alone, as the pool a candidate may come from beyond the names the program already mentions. Empty means nothing was imported, which is also what every embedding that never installs one gets: the pools then stop at the referenced globals, as they always did.
-    imports: BTreeMap<Global, String>,
+    // What the unit's `use` declarations brought into scope, where, and under which spelling — the text stage's table, installed by the driver before elaboration. Read by goal suggestions alone, as the pool a candidate may come from beyond the names the program already mentions. Empty means nothing was imported, which is also what every embedding that never installs one gets: the pools then stop at the referenced globals, as they always did.
+    imports: Imports,
 }
 
 /// A conversion the item drain surrendered to the written goals holding it up: the goals, and the two sides as a report displays them.
@@ -172,7 +172,7 @@ impl Context {
             checked: Vec::new(),
             checked_site: Rc::from("the entrypoint"),
             syntax,
-            imports: BTreeMap::new(),
+            imports: Imports::default(),
             goal_obligations: Vec::new(),
         }
     }
@@ -193,13 +193,13 @@ impl Context {
         self.syntax
     }
 
-    /// Install what the unit's `use` declarations brought into scope — each binding's canonical name with the spelling it resolves under — so a goal report may suggest an imported definition the program has not mentioned yet, spelled the way the author would paste it.
-    pub fn set_imports(&mut self, imports: BTreeMap<Global, String>) {
+    /// Install what the unit's `use` declarations brought into scope — each binding's canonical name with the spelling it resolves under, and per definition the ones in scope where it was written — so a goal report may suggest an imported definition the program has not mentioned yet, spelled the way the author would paste it where the goal is.
+    pub fn set_imports(&mut self, imports: Imports) {
         self.imports = imports;
     }
 
     /// The table [`Context::set_imports`] installed.
-    pub(crate) fn imports(&self) -> &BTreeMap<Global, String> {
+    pub(crate) fn imports(&self) -> &Imports {
         &self.imports
     }
 

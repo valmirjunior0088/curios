@@ -2542,18 +2542,24 @@ fn the_sys_io_roster_offers_no_eliminator() {
 
 #[test]
 fn imports_record_each_binding_under_the_spelling_it_resolves_by() {
-    // The table goal suggestions draw imported candidates from, and spell them by. A module import spells the module's bindings through its label; a named binding import and a glob spell theirs bare; and when one binding arrives twice the shorter spelling wins, since it is the one a reader would write.
+    // The table goal suggestions draw imported candidates from, and spell them by. A module import spells the module's bindings through its label; a named binding import and a glob spell theirs bare; and when one binding arrives twice the shorter spelling is a second entry, so the display takes it while an item between the two still sees only the first.
+    //
+    // Scope is point-of-use, per body: `before` was written above every import and sees none; `after` sees the module import but not the binding import below it; the tail sees both; and `Outer/M/inner`, inside its own body, sees what that body imported and nothing the root did.
     let src = r#"
         pub mod Outer
             pub mod M
+                use /Outer/{N};
                 pub let f: Type = Type;
                 pub let g: Type = Type;
+                pub let inner: Type = N/h;
             end
             pub mod N
                 pub let h: Type = Type;
             end
         end
+        let before: Type = Type;
         use Outer/{M, N};
+        let after: Type = Type;
         use Outer/M/{g};
         Type
     "#;
@@ -2563,10 +2569,44 @@ fn imports_record_each_binding_under_the_spelling_it_resolves_by() {
         syntax(),
     )
     .unwrap();
-    let spelling = |path: &str| unit.imports().get(&global_name(path)).map(String::as_str);
+    let imports = unit.imports();
+    let spellings = imports.spellings();
+    let spelling = |path: &str| spellings.get(&global_name(path)).copied();
+    let in_scope = |owner: Option<&str>| {
+        imports
+            .in_scope_at(owner.map(global_name).as_ref())
+            .map(|import| format!("{}={}", import.global, import.spelling))
+            .collect::<Vec<_>>()
+    };
 
     assert_eq!(spelling("/Outer/M/f"), Some("M/f"));
     assert_eq!(spelling("/Outer/M/g"), Some("g"));
     assert_eq!(spelling("/Outer/N/h"), Some("N/h"));
     assert_eq!(spelling("/Outer/M"), None, "a module is not a binding");
+
+    assert!(
+        in_scope(Some("/before")).is_empty(),
+        "{:?}",
+        in_scope(Some("/before"))
+    );
+    assert_eq!(
+        in_scope(Some("/after")),
+        [
+            "/Outer/M/f=M/f",
+            "/Outer/M/g=M/g",
+            "/Outer/M/inner=M/inner",
+            "/Outer/N/h=N/h"
+        ]
+    );
+    assert_eq!(
+        in_scope(None),
+        [
+            "/Outer/M/f=M/f",
+            "/Outer/M/g=M/g",
+            "/Outer/M/inner=M/inner",
+            "/Outer/N/h=N/h",
+            "/Outer/M/g=g"
+        ]
+    );
+    assert_eq!(in_scope(Some("/Outer/M/inner")), ["/Outer/N/h=N/h"]);
 }

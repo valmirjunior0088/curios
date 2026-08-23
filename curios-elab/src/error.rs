@@ -1,7 +1,7 @@
 use {
     super::Erased,
     curios_core::{
-        Atom, Free, Global, Level, Module, Polarity, ReduceError, Spelling, Subterm, Term,
+        Atom, Free, Global, Imports, Level, Module, Polarity, ReduceError, Spelling, Subterm, Term,
         UniverseConstraintOrigin, UniverseError, build_rename, build_shorten, display_names,
     },
     curios_num::{Integer, Natural},
@@ -1018,16 +1018,16 @@ impl Error {
 
     /// Render this error with source-style names, shortening global names against `module`'s symbols together with `scope`'s (axis (b)) — the qualified-name universe an error's globals are spelled relative to. Every elaboration error reaching a reader comes through here, so all three axes are set in one place; axis (c) belongs to the whole render rather than any one variant, since every error that prints a term prints it from the raw elaborated spelling.
     pub fn format_with(&self, module: &Module, scope: &[&Module]) -> String {
-        self.format_with_hints(module, scope, &BTreeMap::new(), &BTreeMap::new())
+        self.format_with_hints(module, scope, &BTreeMap::new(), &Imports::default())
     }
 
-    /// [`Error::format_with`], with two tables of the text stage's. `unbound` is what each unresolved bare name could have meant — keyed by the binder the name lowered to, valued by the absolute paths of the public bindings in scope that carry it; an `unbound variable` report whose binder the table knows gets a line per candidate, and every other error ignores it. `imports` is what the unit's `use` declarations brought into scope, by canonical name, with the spelling each resolves under; a global the table knows displays under that spelling rather than its shortest unambiguous suffix, since the suffix is not always a name in scope (`/sys/Nat/add` shortens to `add`, which nothing imported) while the written path is by construction — which is what makes a suggested imported candidate pasteable. Both tables are the text stage's because only it sees re-exports — `/std/Bool` is a `pub use`, and Core holds the `/sys/Bool/Bool` it stands for — and they arrive here rather than on the error because the error records what was written and nothing about where.
+    /// [`Error::format_with`], with two tables of the text stage's. `unbound` is what each unresolved bare name could have meant — keyed by the binder the name lowered to, valued by the absolute paths of the public bindings in scope that carry it; an `unbound variable` report whose binder the table knows gets a line per candidate, and every other error ignores it. `imports` is what the unit's `use` declarations brought into scope, with the spelling each resolves under; a global the table knows displays under its shortest such spelling rather than its shortest unambiguous suffix, since the suffix is not always a name in scope (`/sys/Nat/add` shortens to `add`, which nothing imported) while the written path is by construction — which is what makes a suggested imported candidate pasteable. Both tables are the text stage's because only it sees re-exports — `/std/Bool` is a `pub use`, and Core holds the `/sys/Bool/Bool` it stands for — and they arrive here rather than on the error because the error records what was written and nothing about where.
     pub fn format_with_hints(
         &self,
         module: &Module,
         scope: &[&Module],
         unbound: &BTreeMap<Free, Vec<Qualifier>>,
-        imports: &BTreeMap<Global, String>,
+        imports: &Imports,
     ) -> String {
         // Everything a reader could see: `module`'s own declarations *and* whatever its environment put in scope. A module carries only its own, so both halves of the spelling have to be told the prelude exists — the shortening table to know `Vec` is an unambiguous suffix, and the plicity marks to know `Eq`'s first parameter is implicit.
         //
@@ -1042,8 +1042,8 @@ impl Error {
         }
 
         let mut shorten = build_shorten(&symbols);
-        for (global, spelling) in imports {
-            shorten.insert(global.clone(), spelling.clone());
+        for (global, spelling) in imports.spellings() {
+            shorten.insert(global, spelling.to_string());
         }
         let shorten = Rc::new(shorten);
         let spelling = Rc::new(
