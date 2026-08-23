@@ -41,9 +41,9 @@ mod universes;
 mod wasm_conformance;
 
 use {
-    crate::run_wasm,
+    crate::{run_wasm, to_cwasm},
     curios_pipeline::{DEFAULT_STEP_BUDGET, Stage, compile_with_prelude},
-    curios_runtime::{ForeignBindings, HostOps, MockHost},
+    curios_runtime::{ForeignBindings, HostOps, MockHost, run_bytes},
     curios_text::{Entrypoint, RootSource},
 };
 
@@ -74,6 +74,35 @@ fn run(source: &str) -> Vec<u8> {
     let (system, io) = MockHost::builder().build();
     run_text(source, system).expect("expected result");
     io.output().to_vec()
+}
+
+/// A program compiled once — pipeline, Binaryen, Cranelift — for a fixture that runs it under more than one host. The compile is what a fixture pays for, seconds over the prelude; a run of the `.cwasm` is milliseconds. So a table whose rows the host input selects costs one compile rather than one per row, which is the difference between `numeric.rs` taking a minute and taking eight.
+struct Compiled {
+    cwasm: Vec<u8>,
+}
+
+/// Parse `source` (no external modules) and compile it to its `.cwasm`, without running it.
+fn compile(source: &str) -> Result<Compiled, String> {
+    let entrypoint = source
+        .parse::<Entrypoint>()
+        .map_err(|error| error.format())?;
+    let (module, _foreigns) = compile_with_prelude(
+        DEFAULT_STEP_BUDGET,
+        &entrypoint,
+        &RootSource::none(),
+        |_| {},
+    )?;
+
+    Ok(Compiled {
+        cwasm: to_cwasm(&module)?,
+    })
+}
+
+impl Compiled {
+    /// Run the compiled program under `host` — the deserialize-and-execute half of [`run_wasm`].
+    fn run<H: HostOps + Send + Sync + 'static>(&self, host: H) -> Result<i32, String> {
+        run_bytes(&self.cwasm, host, ForeignBindings::empty())
+    }
 }
 
 /// Compile-only, for the programs whose point is that they are refused.

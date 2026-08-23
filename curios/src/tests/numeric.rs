@@ -1,13 +1,24 @@
 //! The numeric envelope gates: every constant folder computes in exact `u32`/`i32` (the numeric law), and the i31 backend boundary appears only as a trap in emitted Wasm — an overflowing computation traps, and a folded literal the carrier cannot box traps at its materialization point. The differential half runs each scalar expression twice — fully constant (folded at compile time) and with a runtime-zero perturbation (executed by the emitted Wasm) — and demands identical output, pinning the folders and the backend to one semantics.
 
 use {
-    super::{run, run_text, typecheck, typecheck_within},
+    super::{Compiled, compile, run, run_text, typecheck, typecheck_within},
     curios_pipeline::DEFAULT_STEP_BUDGET,
     curios_runtime::MockHost,
 };
 
-/// Wrap `body` (an expression over the runtime-zero binder `n`, and its `Int`-carrier twin `i`) in a program that reads `n` from the host so the optimizer cannot fold it.
-fn tainted(body: &str) -> String {
+/// One program holding every row of a table, the row chosen by the host: its stdin line is two bytes, the first read as the runtime zero `n` (`'A' − 65`) with its `Int` twin `i`, which is what keeps every row out of the folder's reach, and the second naming the row. One compile therefore serves the whole table, and a run costs milliseconds — the reason this is a selector rather than one program per row. With `taint` false, `n` and `i` are literal zeros instead, so every row folds to a literal while the selection alone stays runtime, which is what "folded" asserts.
+fn table(rows: &[&str], taint: bool) -> String {
+    let zero = if taint {
+        "Nat/sub(Byte/to_nat(Option/unwrap_or(Bytes/try_get(bytes, 0), 0)), 65)"
+    } else {
+        "0"
+    };
+    let arms = rows
+        .iter()
+        .enumerate()
+        .map(|(index, row)| format!("| {index} => /std/print({row})"))
+        .collect::<Vec<_>>()
+        .join("\n        ");
     format!(
         r#"
         use /std/{{Handle, Nat, Int, Flt, Byte, Bytes, Str, Option}};
@@ -16,54 +27,57 @@ fn tainted(body: &str) -> String {
             | eof() => x[]
             | error(_) => x[]
             end;
-        let n = Nat/sub(Byte/to_nat(Option/unwrap_or(Bytes/try_get(bytes, 0), 0)), 65);
+        let n = {zero};
         let i = Nat/to_int(n);
         let to_nat_or(x : Int, d : Nat) -> Nat =
             match x >= +0 | true => Int/to_nat(x) | false => d end;
-        /std/print({body})
+        let row = Nat/sub(Byte/to_nat(Option/unwrap_or(Bytes/try_get(bytes, 1), 0)), 32);
+        match row
+        {arms}
+        | _ => /std/print("no such row")
+        end
         "#
     )
 }
 
-/// The same program with `n`/`i` as literal zeros, so the whole expression folds at compile time.
-fn closed(body: &str) -> String {
-    format!(
-        r#"
-        use /std/{{Handle, Nat, Int, Flt, Str}};
-        let n = 0;
-        let i = +0;
-        let to_nat_or(x : Int, d : Nat) -> Nat =
-            match x >= +0 | true => Int/to_nat(x) | false => d end;
-        /std/print({body})
-        "#
-    )
+/// Run row `index` of a compiled table: the taint byte, then the row byte, printable so the line stays one.
+fn run_row(compiled: &Compiled, index: usize) -> Result<Vec<u8>, String> {
+    let row = u8::try_from(index).expect("a table of under 95 rows") + b' ';
+    let (system, io) = MockHost::builder().stdin_lines([[b'A', row]]).build();
+    compiled.run(system)?;
+    Ok(io.output())
 }
 
-fn run_tainted(body: &str) -> Result<Vec<u8>, String> {
-    let (system, io) = MockHost::builder().stdin_lines(["A"]).build();
-    run_text(&tainted(body), system)?;
-    Ok(io.output().to_vec())
+/// Compile `rows` closed and tainted — two compiles for the table — and assert each row's folded and executed answers agree byte-for-byte. The executed answers are returned, for a fixture that also pins what they are.
+fn folded_matches_runtime(rows: &[&str]) -> Vec<Vec<u8>> {
+    let folded = compile(&table(rows, false)).expect("the closed table compiles");
+    let executed = compile(&table(rows, true)).expect("the tainted table compiles");
+    rows.iter()
+        .enumerate()
+        .map(|(index, row)| {
+            let folded = run_row(&folded, index).expect("a folded row runs");
+            let executed = run_row(&executed, index).expect("in-envelope expression executes");
+            assert_eq!(folded, executed, "fold/runtime disagreement on: {row}");
+            executed
+        })
+        .collect()
 }
 
-/// Assert the folded and executed results of `body` agree byte-for-byte.
-fn folded_matches_runtime(body: &str) {
-    let folded = run(&closed(body));
-    let executed = run_tainted(body).expect("in-envelope expression executes");
-    assert_eq!(folded, executed, "fold/runtime disagreement on: {body}");
-}
-
-/// Assert the runtime computation of `body` traps at the backend boundary.
-fn runtime_traps(body: &str) {
-    let error = run_tainted(body).expect_err("expression should trap");
-    assert!(
-        error.contains("execution failed"),
-        "expected a runtime trap for {body}, got: {error}"
-    );
+/// Compile `rows` tainted and assert each traps at the backend boundary when it is the row selected.
+fn runtime_traps(rows: &[&str]) {
+    let executed = compile(&table(rows, true)).expect("the tainted table compiles");
+    for (index, row) in rows.iter().enumerate() {
+        let error = run_row(&executed, index).expect_err("expression should trap");
+        assert!(
+            error.contains("execution failed"),
+            "expected a runtime trap for {row}, got: {error}"
+        );
+    }
 }
 
 #[test]
 fn folded_and_executed_scalar_ops_agree_inside_the_envelope() {
-    for body in [
+    folded_matches_runtime(&[
         // Nat arithmetic at the top of the envelope.
         "Nat/to_str(1000000000 + 1000000000 + n)",
         "Nat/to_str(Nat/sub(3 + n, 5))",
@@ -93,15 +107,13 @@ fn folded_and_executed_scalar_ops_agree_inside_the_envelope() {
         // An equal pair under `min`/`max` answers by sign, as `f32.min`/`f32.max` do: the folder spells the rule rather than trusting the host's `min`. Both orders are the folder's own unit test; one each here is the runtime half.
         "Flt/to_str(Flt/min(Nat/to_flt(n), Flt/neg(Nat/to_flt(n))))",
         "Flt/to_str(Flt/max(Flt/neg(Nat/to_flt(n)), Nat/to_flt(n)))",
-    ] {
-        folded_matches_runtime(body);
-    }
+    ]);
 }
 
 #[test]
 fn overflowing_computations_trap_at_the_backend_boundary() {
     // Each expression is a valid computation whose value leaves the carrier; the backend refuses it and traps instead of silently answering something else. Three ways a shift used to answer something else are covered below, and each was a different defect: a truncated product, a masked count, and the signed envelope being one place narrower than the unsigned one.
-    for body in [
+    runtime_traps(&[
         "Nat/to_str(1073741824 + 1073741824 + n)",
         "Nat/to_str(Nat/mul(46341 + n, 46341))",
         "Nat/to_str(Nat/shl(1 + n, 31))",
@@ -115,9 +127,7 @@ fn overflowing_computations_trap_at_the_backend_boundary() {
         "Int/to_str(Int/shl(Int/add(+1, i), +40))",
         // The signed envelope is `[-2^30, 2^30)`, so one place short of the unsigned one.
         "Int/to_str(Int/shl(Int/add(+1, i), +30))",
-    ] {
-        runtime_traps(body);
-    }
+    ]);
 }
 
 /// A shift count past the carrier's width answers the arithmetic, not Wasm's modulo.
@@ -129,7 +139,7 @@ fn overflowing_computations_trap_at_the_backend_boundary() {
 /// Mutation-checked against both halves of the emitter's shift lowering, and they separate. Masking the count instead of clamping it — Wasm's own reduction — moves this fixture and the trap list together. Restoring the old `i32` shift with its bit-31 test moves the trap list alone, since a truncated product is invisible to that test while a clamped count is unaffected by it. Neither moves [`folded_and_executed_scalar_ops_agree_inside_the_envelope`], whose rows all sit inside the carrier.
 #[test]
 fn a_shift_past_the_carrier_width_answers_the_arithmetic() {
-    for (body, expected) in [
+    let rows = [
         ("Nat/to_str(Nat/shr(1024 + n, 40))", "0"),
         ("Nat/to_str(Nat/shr(1024 + n, 11))", "0"),
         ("Nat/to_str(Nat/shr(1024 + n, 3))", "128"),
@@ -137,13 +147,10 @@ fn a_shift_past_the_carrier_width_answers_the_arithmetic() {
         ("Int/to_str(Int/shr(Int/add(-65, i), +40))", "-1"),
         ("Int/to_str(Int/shr(Int/add(+1024, i), +40))", "+0"),
         ("Int/to_str(Int/shl(Int/add(+0, i), +40))", "+0"),
-    ] {
-        folded_matches_runtime(body);
-        assert_eq!(
-            run_tainted(body).expect("in-envelope expression executes"),
-            expected.as_bytes(),
-            "wrong value for: {body}"
-        );
+    ];
+    let bodies = rows.iter().map(|(body, _)| *body).collect::<Vec<_>>();
+    for ((body, expected), executed) in rows.iter().zip(folded_matches_runtime(&bodies)) {
+        assert_eq!(executed, expected.as_bytes(), "wrong value for: {body}");
     }
 }
 
@@ -156,7 +163,10 @@ fn out_of_domain_computations_are_refused_where_they_are_written() {
         ("Nat/to_str(Int/to_nat(Int/sub(i, +1)))", "/sys/Int/to_nat"),
         ("Nat/to_str(Nat/div(5 + n, n))", "/"),
     ] {
-        let error = run_tainted(body).expect_err("expression should be refused");
+        let error = match compile(&table(&[body], true)) {
+            Err(error) => error,
+            Ok(_) => panic!("expression should be refused: {body}"),
+        };
         assert!(
             error.contains("was not inferred") && error.contains(operation),
             "expected {operation} to demand its precondition for {body}, got: {error}"
@@ -167,7 +177,7 @@ fn out_of_domain_computations_are_refused_where_they_are_written() {
 #[test]
 fn folded_literal_outside_the_envelope_traps_at_materialization() {
     // `2^30 + 2^30` folds to the u32 constant `2^31` at compile time; adding the runtime zero keeps the literal alive to emission, where the i31 carrier cannot box it. Materialization is the backend boundary, so the program traps at runtime — it must not crash the compiler.
-    runtime_traps("Nat/to_str(1073741824 + 1073741824 + n)");
+    runtime_traps(&["Nat/to_str(1073741824 + 1073741824 + n)"]);
 }
 
 #[test]
