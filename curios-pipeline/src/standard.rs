@@ -68,10 +68,10 @@ where
             entrypoint,
             loader,
             observe,
-        );
+        )?;
         progress(Progress::Compiled);
 
-        compiled
+        Ok(compiled)
     })
 }
 
