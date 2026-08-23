@@ -219,8 +219,9 @@ impl Document {
             executables.push(row.executable(&executables)?);
         }
 
-        // `default` is a reference like any other, so a dangling one is refused here rather than discovered by a `curios run` that finds nothing.
+        // `default` is a reference like any other, so a dangling one is refused here rather than discovered by a `curios run` that finds nothing. The package's own name is exempt: it is the one name [`Package::discovered`] may still add, from an `exe.crs` this pass cannot see — and when that file turns out to be absent too, `curios run` refuses it by name before anything elaborates.
         if let Some(default) = &self.default
+            && default != &name
             && !executables
                 .iter()
                 .any(|executable| &executable.name == default)
