@@ -89,32 +89,24 @@ impl OsHost {
 
     /// Pull an unconnected socket out of the table by handle, leaving any other resource (or none) in place. Lets `connect`/`listen` transition a handle without holding the lock across the blocking syscall.
     fn take_unconnected(&self, handle: &Handle) -> Option<Socket> {
-        let mut table = self.table.lock().unwrap();
-
-        match table.remove(handle) {
-            Some(OsResource::Unconnected(socket)) => Some(socket),
-            Some(other) => {
-                table.insert(handle, other);
-
-                None
-            }
-            None => None,
-        }
+        self.table
+            .lock()
+            .unwrap()
+            .take_if(handle, |resource| match resource {
+                OsResource::Unconnected(socket) => Ok(socket),
+                other => Err(other),
+            })
     }
 
     /// Pull a connected stream socket out of the table by handle, leaving any other resource (or none) in place. Lets `start_tls`/`start_tls_server` upgrade a handle without holding the lock across the blocking handshake.
     fn take_connected(&self, handle: &Handle) -> Option<Socket> {
-        let mut table = self.table.lock().unwrap();
-
-        match table.remove(handle) {
-            Some(OsResource::Connected(socket)) => Some(socket),
-            Some(other) => {
-                table.insert(handle, other);
-
-                None
-            }
-            None => None,
-        }
+        self.table
+            .lock()
+            .unwrap()
+            .take_if(handle, |resource| match resource {
+                OsResource::Connected(socket) => Ok(socket),
+                other => Err(other),
+            })
     }
 
     /// Apply a `socket2` setter to a configurable handle. Every socket kind — unconnected, connected, or listening — exposes its typed setters directly; a `File` has no socket options, so that path records nothing and succeeds.

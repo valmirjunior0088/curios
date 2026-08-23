@@ -40,6 +40,24 @@ impl<T> Table<T> {
         self.map.remove(&handle.bytes())
     }
 
+    /// Take the resource filed under `handle` if `select` claims it — `Ok(value)` hands the value out and leaves the handle free, `Err(resource)` re-files what it declined and answers `None`. A handle that is not filed answers `None` without consulting `select`.
+    ///
+    /// **The restore is why this is one operation rather than a `remove` and an `insert` at the caller.** A caller that removes before it can tell whether it wants what came out has to put a declined resource back, and a caller that forgets makes a handle the guest still holds vanish: a live socket answering `NotFound` on its next use, with the resource dropped. Stating it here keeps that obligation with the map it is about, instead of once per caller that transitions a handle in place.
+    pub(crate) fn take_if<U>(
+        &mut self,
+        handle: &Handle,
+        select: impl FnOnce(T) -> Result<U, T>,
+    ) -> Option<U> {
+        match select(self.remove(handle)?) {
+            Ok(value) => Some(value),
+            Err(declined) => {
+                self.insert(handle, declined);
+
+                None
+            }
+        }
+    }
+
     pub(crate) fn contains(&self, handle: &Handle) -> bool {
         self.map.contains_key(&handle.bytes())
     }
@@ -89,6 +107,34 @@ mod tests {
         assert_ne!(b.bytes(), a.bytes());
         assert_eq!(table.get(&a), None);
         assert_eq!(table.get(&b), Some(&99));
+    }
+
+    #[test]
+    fn a_declined_resource_stays_filed_under_its_handle() {
+        let mut table: Table<u32> = Table::new();
+
+        let a = table.mint(10);
+
+        // Declining hands the resource back to the table rather than to the caller: the handle still resolves, and to the same value.
+        let declined = table.take_if(&a, |value| match value {
+            10 => Err(10),
+            other => Ok(other),
+        });
+        assert_eq!(declined, None);
+        assert_eq!(table.get(&a), Some(&10));
+
+        // Claiming takes it out, so the handle misses afterwards — the transition `connect`/`start_tls` perform.
+        assert_eq!(
+            table.take_if(&a, |value| Ok::<u32, u32>(value + 1)),
+            Some(11)
+        );
+        assert_eq!(table.get(&a), None);
+
+        // A handle that is not filed never reaches `select`.
+        let missing = table.take_if(&a, |_: u32| -> Result<u32, u32> {
+            panic!("select must not run for a handle the table does not hold")
+        });
+        assert_eq!(missing, None);
     }
 
     #[test]
