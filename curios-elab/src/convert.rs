@@ -2374,7 +2374,9 @@ fn flex_scrutinee(term: &Term) -> bool {
     }
 }
 
-/// `true` iff `term` — already in weak-head normal form, so anything foldable has folded — is stuck on an unsolved metavariable: an intrinsic operation still carrying one, a match whose node mentions one (a metavariable in the scrutinee may fold the match once solved; one in an arm may make the arm compare equal), or an elimination — application, projection — headed by such a shape. A structural mismatch against such a term is undecided rather than definite, so the drain parks it watching the metavariables instead of failing; a stuck comparison with *no* unsolved metavariable anywhere in these positions keeps its hard mismatch, since nothing could ever wake it.
+/// `true` iff `term` — already in weak-head normal form, so anything foldable has folded — is stuck on an unsolved metavariable: an intrinsic operation still carrying one, a match whose node mentions one (a metavariable in the scrutinee may fold the match once solved; one in an arm may make the arm compare equal), or an elimination — application, projection — headed by such a shape or by an unsolved metavariable itself. A structural mismatch against such a term is undecided rather than definite, so the drain parks it watching the metavariables instead of failing; a stuck comparison with *no* unsolved metavariable anywhere in these positions keeps its hard mismatch, since nothing could ever wake it.
+///
+/// The metavariable-headed application is the case [`Convert::imitate_flex_apply`] states the rule for and only covers against a nominal type: `?f(a) ≡ t` against a *value* `t` has no imitation to try, but refuting nothing proves nothing either — a constant solution could still exist, and pinning `a` later may expose an abstraction. It used to fall through to a hard mismatch here, which is what made `Eq/cong(?, h)` report "type mismatch" for a hole standing exactly where the function belongs.
 fn blocked_on_unsolved_metavar(context: &Context, term: &Term) -> bool {
     let has_unsolved = |term: &Term| {
         term.metavars()
@@ -2383,6 +2385,7 @@ fn blocked_on_unsolved_metavar(context: &Context, term: &Term) -> bool {
     };
 
     match &**term {
+        Subterm::Metavar(metavar) => context.metavar_solution(metavar.id).is_none(),
         Subterm::Intrinsic(_) | Subterm::Match(_) => has_unsolved(term),
         Subterm::Apply(apply) => blocked_on_unsolved_metavar(context, &apply.head),
         Subterm::Proj(proj) => blocked_on_unsolved_metavar(context, &proj.head),
