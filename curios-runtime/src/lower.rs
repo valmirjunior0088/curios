@@ -41,6 +41,17 @@ impl Lower for Handle {
     }
 }
 
+/// Box `value` as the i31 ref every scalar crosses this boundary in, refusing a value the carrier cannot hold rather than wrapping one.
+///
+/// **The refusal is the point, and it is the guest half's rule stated on the host half.** `I31::wrapping_u32` drops bit 31 and reports nothing, while `into_wasm`'s literal materialization emits `unreachable` for exactly the values it would drop — so a wrapping host result would be the one direction across this boundary in which leaving the envelope changed a number instead of stopping. Every result that crosses today is in range, but each for a separate reason held somewhere else: `clock_wall` is split base-10⁹ so its limbs fit, `clock_mono`'s seconds would need decades of uptime, a status code is small, and `write`'s count is bounded by a buffer the guest allocated. Five facts in four files are what a check here replaces.
+fn i31_ref(caller: &mut Caller<'_, ()>, value: u32) -> Result<Val, wasmtime::Error> {
+    let boxed = I31::new_u32(value).ok_or_else(|| {
+        wasmtime::Error::msg(format!("host result {value} leaves the i31 carrier"))
+    })?;
+
+    Ok(Val::AnyRef(Some(AnyRef::from_i31(caller, boxed))))
+}
+
 /// Scalar results cross the boundary pre-boxed as i31 refs so generated code can land them directly in anyref block params (see `emit_sys_imports`).
 impl Lower for u32 {
     fn lower(
@@ -48,10 +59,7 @@ impl Lower for u32 {
         caller: &mut Caller<'_, ()>,
         results: &mut [Val],
     ) -> Result<(), wasmtime::Error> {
-        results[0] = Val::AnyRef(Some(AnyRef::from_i31(
-            &mut *caller,
-            I31::wrapping_u32(self),
-        )));
+        results[0] = i31_ref(caller, self)?;
 
         Ok(())
     }
@@ -140,13 +148,8 @@ impl Lower for Vec<Poll> {
 
         let elements = self
             .into_iter()
-            .map(|mask| {
-                Val::AnyRef(Some(AnyRef::from_i31(
-                    &mut *caller,
-                    I31::wrapping_u32(mask.bits()),
-                )))
-            })
-            .collect::<Vec<_>>();
+            .map(|mask| i31_ref(&mut *caller, mask.bits()))
+            .collect::<Result<Vec<_>, wasmtime::Error>>()?;
 
         results[0] = Val::AnyRef(Some(
             ArrayRef::new_fixed(&mut *caller, &outer_pre, &elements)?.to_anyref(),
