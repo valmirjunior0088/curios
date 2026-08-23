@@ -1,0 +1,2 @@
+# The one entry: `Term`'s `Node` caches (`ScalarCache`, `FreeCache`) are lazily filled derivations of the term, never identity — hash and equality are stable across a fill — so a map keyed on `Term` is sound and `mutable_key_type` has nothing to warn about. Stated here once instead of as an `#[allow]` at every keyed map; the lint stays armed for any genuinely mutable key.
+ignore-interior-mutability = ["curios_core::term::Term"]

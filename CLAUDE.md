@@ -133,7 +133,7 @@ One namespace is kept for a different reason, and it is the only one: `curios-ru
 - Name per-carrier helpers, fields, and emitted functions type-first, operation-last (`bin_force`, `list_slice`), never operation-first (`force_bin`).
 - When changing one stage, check the next representation or consumer explicitly. Parsing changes usually affect printing and lowering; core changes usually affect erasure; IR changes usually affect the next lowering and its tests.
 - Use `//!` for module purpose and invariants, and `///` for public API contracts. Do not duplicate detailed subsystem documentation in this file. Write every comment — `//`, `///`, `//!` — as one line per paragraph or list item, matching the Markdown rule below; do not hardwrap. Add a comment only where the WHY is non-obvious — an invariant, a rejected alternative, a measured tradeoff — and never write one that only restates what the code already says.
-- Use stock rustfmt and Clippy settings. There is no repository-specific `rustfmt.toml` or `clippy.toml`.
+- Use stock rustfmt and Clippy settings. There is no repository-specific `rustfmt.toml`, and `clippy.toml` holds exactly one entry: `ignore-interior-mutability` names `Term`, whose cache fills never move hash or equality — the fact stated once there instead of as an `#[allow(clippy::mutable_key_type)]` at every `Term`-keyed map. Do not add entries that change a lint's strictness.
 
 ## Writing Curios
 

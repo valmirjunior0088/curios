@@ -177,7 +177,6 @@ fn ends_in_sort(type_: &Term) -> bool {
 }
 
 /// Walk a term and mark every type written inside it: binder annotations, match motives, `let` and `rec` declared types, nominal and intrinsic type formers.
-#[allow(clippy::mutable_key_type)]
 fn annotations(term: &Term, site: &Rc<str>, positions: &mut Vec<Position>) {
     // On the shared `Term::walk` driver, deduplicated on node identity, for one reason each. A string literal's UTF-8 derivation threads its scanner state forwards, so link `i` carries a `step(bᵢ₋₁, … step(b₀, lead))` of depth `i`: the chain is `O(n)` distinct nodes but `O(n²)` *paths* through them, and a walk that revisits shared nodes pays the square while recursing one native frame per link. Both were measured — 2.5s of a 3.5s compile at 12KiB, and a stack overflow above 16KiB.
     //

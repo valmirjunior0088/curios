@@ -291,13 +291,10 @@ fn verdicts_from(mut kernel: Kernel, module: &Module, globals: &Globals) -> Vec<
     verdicts_into(&mut kernel, module, globals)
 }
 
-// Safety: the memos below are keyed on `Term`, whose `OnceCell` scalar caches trip Clippy's interior-mutability warning. The logical value is immutable, and hashing and equality stay stable across those caches filling.
-#[allow(clippy::mutable_key_type)]
 fn verdicts_into(kernel: &mut Kernel, module: &Module, globals: &Globals) -> Vec<Verdict> {
     grown(|| verdicts_within(kernel, module, globals))
 }
 
-#[allow(clippy::mutable_key_type)]
 fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> Vec<Verdict> {
     let mut verdicts = Vec::new();
     // What this walk has to decide for itself: the names `globals` does not already answer for. A name identifies one top-level thing within a module, so an item every one of whose declared names is in scope was judged by the walk that built the environment, and one that declares anything new is judged here. Skipping is the direction that needs the argument, so an item declaring nothing at all is judged rather than passed over.

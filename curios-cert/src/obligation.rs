@@ -22,8 +22,6 @@ use {
 /// Whether a term is partial *in itself*, with no name to blame: an inline `rec` group that does not descend, or an `Intrinsic::ProcExit`.
 ///
 /// Post-order over the term's DAG on the shared [`Term::walk`] driver. The memo is structural and caller-owned, carried across the whole module rather than per walk — definitions share subterms heavily, and a node settled for one is settled for all.
-// Safety: the memo is keyed on `Term`, whose interior scalar caches trip Clippy's interior-mutability warning. The logical value is immutable, and hashing and equality stay stable across those caches filling.
-#[allow(clippy::mutable_key_type)]
 fn locally_partial(kernel: &mut Kernel, term: &Term, memo: &mut HashMap<Term, bool>) -> bool {
     let mut state = (kernel, memo);
     term.walk(
@@ -55,7 +53,6 @@ fn locally_partial(kernel: &mut Kernel, term: &Term, memo: &mut HashMap<Term, bo
 /// The selection is by name for the same reason it is by name in [`recheck_module_verdicts`](crate::recheck_module_verdicts), and skipping is again the direction that needs the argument: an item declaring nothing is recomputed rather than passed over.
 ///
 /// The closure iterates to a fixpoint rather than assuming one pass suffices: items are stored in binding order, and a definition may mention one stored after it.
-#[allow(clippy::mutable_key_type)]
 pub(crate) fn partial_definitions(
     kernel: &mut Kernel,
     module: &Module,
@@ -133,7 +130,6 @@ pub(crate) fn partial_definitions(
 }
 
 /// Obligations (T) and (V) over the positions one item's check recorded: each must reach nothing partial, and must not be partial in itself.
-#[allow(clippy::mutable_key_type)]
 pub(crate) fn check_positions(
     kernel: &mut Kernel,
     positions: &[(Term, Erased)],

@@ -79,8 +79,6 @@ pub fn check_written_type_totality(
     }
 }
 
-// Safety: the memo is keyed on `Term`, whose `OnceCell` scalar caches trip Clippy's interior-mutability warning. The logical value is immutable, and hashing and equality stay stable across those caches filling — the same caveat `checked_proof_positions` carries.
-#[allow(clippy::mutable_key_type)]
 pub fn classify_module(
     context: &mut Context,
     module: &Module,
@@ -210,8 +208,6 @@ fn settled(module: &Module, inherited: &BTreeMap<Global, Totality>) -> BTreeMap<
 /// Every way the given positions fail to be total, with the site of each.
 ///
 /// Two ways, and a position can fail either: it reaches a definition already classified `Partial`, or it *is* partial with no name to blame — an inline `rec` that does not descend, or an `Intrinsic::ProcExit`.
-// Safety: the memo is keyed on `Term`, whose `OnceCell` scalar caches trip Clippy's interior-mutability warning. The logical value is immutable, and hashing and equality stay stable across those caches filling — the same caveat `checked_proof_positions` carries.
-#[allow(clippy::mutable_key_type)]
 fn faults(
     context: &mut Context,
     module: &Module,
@@ -264,8 +260,6 @@ pub type Zonked = HashMap<Term, Term>;
 /// `term` zonked, through `cache`.
 ///
 /// The four call sites that need this are two types and two terms across the two obligations; before this they were four copies of the same match, two of which had no cache at all.
-// Safety: the cache is keyed on `Term`, which carries `OnceCell` scalar caches and so trips Clippy's interior-mutability warning. The logical value is fully immutable, and hashing and equality stay stable across those caches filling — the caveat every `Term`-keyed map in this module carries.
-#[allow(clippy::mutable_key_type)]
 fn zonked(context: &Context, cache: &mut Zonked, term: &Term) -> Result<Term, Error> {
     if let Some(done) = cache.get(term) {
         return Ok(done.clone());
@@ -279,8 +273,6 @@ fn zonked(context: &Context, cache: &mut Zonked, term: &Term) -> Result<Term, Er
 /// Obligation **(T)**: everything a type position reaches must be total.
 ///
 /// A divergent type breaks type formation, and — through `rec Bad : Type = Sink(Bad)` — ties the negative knot strict positivity exists to forbid without ever writing an `induct`. Runs post-zonk, after [`record_totality`], whose flags it reads.
-// Safety: the cache is keyed on `Term`, which carries `OnceCell` scalar caches and so trips Clippy's interior-mutability warning. The logical value is fully immutable, and hashing and equality stay stable across those caches filling — the caveat every `Term`-keyed map in this module carries.
-#[allow(clippy::mutable_key_type)]
 pub fn check_type_totality(
     context: &mut Context,
     module: &Module,
@@ -298,8 +290,6 @@ pub fn check_type_totality(
 /// This is the half [`type_positions`] structurally cannot reach. That walk is a syntactic reading of where types are *written*: an annotation, a motive, a declaration telescope, a definition whose type ends in a sort. A type passed as an *argument* is written nowhere it looks — `annotations` has no case for an application's parameters — so `ignore(@Shape(inf), 5)` handed a partial value to a type-level function with nothing seeded, while the same type in an annotation was rejected.
 ///
 /// The two seedings are **incomparable**, not nested, which a count of each obscured: the walk sees definition bodies whose type ends in a sort, and no typing judgment classifies those as type positions; this sees type arguments, which no syntactic walk can find without re-deriving the head's telescope — the re-derivation that cost (V) six defects. Taking the union costs one pass over already-recorded terms and needs neither.
-// Safety: the zonk memo is keyed on `Term`, which carries `OnceCell` scalar caches and so trips Clippy's interior-mutability warning. The logical value is fully immutable, and hashing and equality stay stable across those caches filling — the same caveat `checked_proof_positions` carries for the same map.
-#[allow(clippy::mutable_key_type)]
 fn checked_type_positions(
     context: &mut Context,
     cache: &mut Zonked,
@@ -342,8 +332,6 @@ fn checked_type_positions(
 /// Obligation **(V)**: everything a `Prop`-checked term reaches must be total.
 ///
 /// A divergent proof proves anything, and erasure deletes it — so an `exit` behind a proposition never fires and the program continues with a forged invariant. Independent of [`check_type_totality`]: neither obligation subsumes the other.
-// Safety: the cache is keyed on `Term`, which carries `OnceCell` scalar caches and so trips Clippy's interior-mutability warning. The logical value is fully immutable, and hashing and equality stay stable across those caches filling — the caveat every `Term`-keyed map in this module carries.
-#[allow(clippy::mutable_key_type)]
 pub fn check_proof_totality(
     context: &mut Context,
     module: &Module,
@@ -362,8 +350,6 @@ pub fn check_proof_totality(
 /// Two properties follow from the seed rather than from care. **Coverage** is a consequence of elaboration being a typechecker: a position it never settles is a position the program was never typed at. And the **prelude boundary** is a consequence of replay — the archived prefix is defined into the context rather than elaborated, so it settles nothing and seeds nothing, and its verdicts arrive through [`recorded_totality`] instead.
 ///
 /// Sort-hood is decided here rather than at the hook because a type may still carry unsolved metavariables while elaborating. Post-zonk every solution is materialized, so [`is_prop`](crate::is_prop) is asked once per *distinct* type, and hash-consing keeps that set far smaller than the term count.
-// Safety: the memo is keyed on `Term`, which carries `OnceCell` scalar caches and so trips Clippy's interior-mutability warning. The logical value is fully immutable, and hashing and equality stay stable across those caches filling.
-#[allow(clippy::mutable_key_type)]
 fn checked_proof_positions(
     context: &mut Context,
     cache: &mut Zonked,
@@ -481,7 +467,6 @@ pub fn check_rec_item_totality(context: &mut Context, rec: &RecItem) -> Result<(
 /// Per-node verdicts for [`locally_partial`], carried across the terms one pass classifies.
 ///
 /// Keyed on the term, whose hash is cached on the node and whose equality is already a worklist walk, so a lookup does not re-traverse what it is looking up. See [`checked_proof_positions`] for the same key and the same caveat.
-#[allow(clippy::mutable_key_type)]
 type LocalMemo = HashMap<Term, bool>;
 
 /// Whether `term` contains an `Intrinsic::ProcExit` or a `rec` group that does not descend — the "is this term partial on its own account" test both obligations apply one level below a definition.
@@ -489,7 +474,6 @@ type LocalMemo = HashMap<Term, bool>;
 /// **Iterative and memoized, and both are load-bearing.** (V) seeds one position per link of a `Str` literal's UTF-8 derivation, and those links share their tails, so the native per-node recursion this replaces cost one stack frame per byte *and* re-walked the shared tail once per position — quadratic in the literal's length. Measured on a 640-byte literal, that was 2.0s of a 2.1s compile, and a 10KiB literal overflowed the stack outright. Depth is not steps, so the reduction budget cannot bound either one.
 ///
 /// The memo is what makes the sharing pay: hash-consing gives the tails one node, so each distinct node is classified once however many positions reach it. Per-position answers are unchanged — the cache records each node's own verdict, not whether some earlier position already reported it.
-#[allow(clippy::mutable_key_type)]
 fn locally_partial(context: &mut Context, term: &Term, memo: &mut LocalMemo) -> bool {
     // Post-order over the term's DAG on the shared `Term::walk` driver: a memo hit settles at enter, and the exit combine sees every child's verdict.
     let mut state = (context, memo);
@@ -512,7 +496,6 @@ fn locally_partial(context: &mut Context, term: &Term, memo: &mut LocalMemo) -> 
 }
 
 /// Whether this definition is partial on its own account: it mentions an exit, or it contains a local `rec` group that does not descend.
-#[allow(clippy::mutable_key_type)]
 fn definition_is_locally_partial(
     context: &mut Context,
     definition: &Definition,

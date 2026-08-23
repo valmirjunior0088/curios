@@ -37,6 +37,8 @@ pub enum HeadTag<'a> {
 }
 
 /// A core-calculus term: an `Rc`-shared `Node` — a [`Subterm`] plus its lazily-cached, span-independent derivations (a structural hash, `reach`, the free-variable set, and the `has_local_free`/`has_metavar` bits) — with an optional per-occurrence source span. Clones are pointer bumps that share the node's cache, so a subterm shared across occurrences memoizes each derivation once, not once per occurrence. Equality short-circuits first on pointer identity, then on the cached hashes, before falling back to structural comparison — which is what keeps conversion and the reduction memo affordable on heavily shared trees. The span is identity-irrelevant: hash and equality look only at the node, so re-spanning a term never splits a cache.
+///
+/// The caches are derivations, never identity: hash and equality answer the same before and after a fill, so a map keyed on `Term` is sound. The workspace `clippy.toml` states exactly that to `mutable_key_type`, which is why no `Term`-keyed map carries an `#[allow]` for it.
 #[derive(Debug, Clone)]
 #[curios_archive::archived(recursive)]
 pub struct Term {

@@ -1120,8 +1120,6 @@ fn finalize_and_check(
 
     // Reported rather than raised. `curios-cert` decides these same two obligations independently, and a fixture this checker refuses must still be able to reach it — a short circuit here would return no module at all, leaving "would the kernel have caught it?" unobservable, which is exactly the quadrant the trusted base most needs to see. The public entry points raise the first verdict, so nothing on the compile path is weakened.
     // One cache across both: they are seeded from the same recorded entries, so a cache each zonks every distinct recorded type twice.
-    // Safety: the cache is keyed on `Term`, which carries `OnceCell` scalar caches and so trips Clippy's interior-mutability warning. The logical value is fully immutable, and hashing and equality stay stable across those caches filling — the caveat every `Term`-keyed map in this module carries.
-    #[allow(clippy::mutable_key_type)]
     let mut zonked = Zonked::default();
     let obligations = [
         check_type_totality(context, &module, inherited, &mut zonked),

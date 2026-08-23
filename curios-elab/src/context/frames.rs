@@ -109,8 +109,6 @@ impl Frames {
     }
 
     /// Pop one frame, reporting `(dropped_refinements, dropped_definitions)` so the façade can run the matching cache protocol.
-    // Safety: the popped refinement frames are keyed on `Term`, which carries interior scalar caches and so trips Clippy's interior-mutability warning. The logical value is fully immutable, and hashing and equality stay stable across those caches filling.
-    #[allow(clippy::mutable_key_type)]
     pub(crate) fn leave(&mut self) -> (bool, bool) {
         self.locals_stamp.fresh();
         self.assumptions.pop().unwrap();

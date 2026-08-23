@@ -90,8 +90,6 @@ fn break_abandons_the_walk() {
 }
 
 /// A caller-owned memo in the shared state visits an `Rc`-shared node once.
-// Safety: the memo is keyed on `Term`, whose interior scalar caches trip Clippy's interior-mutability warning; hashing and equality stay stable across those caches filling.
-#[allow(clippy::mutable_key_type)]
 #[test]
 fn caller_owned_memo_visits_a_shared_node_once() {
     let (_, shared) = leaf(0, "shared");

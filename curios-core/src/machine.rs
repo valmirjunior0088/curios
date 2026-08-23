@@ -729,8 +729,6 @@ impl Machine {
                 Ok(Step::Eval(body.open(&refs), demand))
             }
             Finish::Intrinsic { key, intrinsic } => {
-                // Safety: keyed on `Term`, whose `OnceCell` scalar caches trip Clippy's interior-mutability warning. The logical value is immutable, and hashing and equality stay stable across those caches filling.
-                #[allow(clippy::mutable_key_type)]
                 let values = args
                     .originals
                     .iter()
