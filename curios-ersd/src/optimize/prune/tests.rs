@@ -1,6 +1,6 @@
 use {
     crate::*,
-    curios_abi::{ForeignFunction, WireSignature, WireType},
+    curios_abi::{ForeignFunction, Namespace, WireSignature, WireType},
 };
 
 /// items: pure_unused = NatAdd(1,1); used = 2; effectful = Foreign(...); entry returns used. The pure unused item drops; the others stay.
@@ -18,7 +18,7 @@ fn keeps_reached_and_effectful_items_and_drops_the_pure_rest() {
     let two = builder.constant(Constant::Nat(2));
     let used = builder.item_value(Some("used".into()), Rhs::Alias(Atom::Constant(two)));
     let row = std::sync::Arc::new(ForeignFunction {
-        namespace: "sys",
+        namespace: Namespace::Sys,
         name: "beep".into(),
         subject: Some("Handle".into()),
         label: "beep".into(),

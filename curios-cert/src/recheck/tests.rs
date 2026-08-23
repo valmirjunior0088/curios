@@ -5,7 +5,7 @@
 use {
     super::recheck_module_verdicts,
     crate::{Globals, KernelError},
-    curios_abi::{ForeignFunction, WireSignature, WireType},
+    curios_abi::{ForeignFunction, Namespace, WireSignature, WireType},
     curios_analysis::Erased,
     curios_core::{
         Atom, Definition, DefinitionKind, Free, Func, FuncType, Global, InductDecl, InductParam,
@@ -1482,7 +1482,7 @@ fn a_forged_foreign_row_still_inhabits_its_wire_type() {
 /// `let held : claimed = <a forged host row returning one `Nat`>`, with `False` declared alongside.
 fn forged_foreign(claimed: &Term, false_name: &Global) -> Module {
     let row = Arc::new(ForeignFunction {
-        namespace: "ffi",
+        namespace: Namespace::Ffi,
         name: "/forged".to_string(),
         subject: None,
         label: "forged".to_string(),

@@ -134,7 +134,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             let func_name = self.table.host_func(&function);
 
             self.add_host_import(
-                function.namespace,
+                function.namespace.as_str(),
                 &function.name,
                 curios_wasm::TypeName::from(func_name.as_str()),
                 func_name.clone(),

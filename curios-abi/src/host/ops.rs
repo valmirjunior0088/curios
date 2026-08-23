@@ -7,7 +7,8 @@
 //! Each row also states where the guest surfaces it, as `wire_name as Subject/label`. The wire name is the ABI and never moves; the `Subject/label` pair is the `/sys` placement, and it is a column of this table rather than a lookup beside it so a new row cannot acquire a placement nothing checks. A subject capitalized names a type module the operation joins (`Handle`), a lowercase one a module of operations alone (`socket`, `clock`).
 
 use super::{
-    ForeignFunction, ForeignStore, Handle, Mode, Poll, Status, WireLeaf, WireSignature, WireType,
+    ForeignFunction, ForeignStore, Handle, Mode, Namespace, Poll, Status, WireLeaf, WireSignature,
+    WireType,
 };
 
 /// The one authored list of builtin host operations. Invoked with the name of a callback macro (`host_ops!(my_callback)`), it applies that callback to the whole table so every projection comes off this single source. Each row is `method as Subject/label [param: Slot, …] [result: Slot, …];` — the method name is both the wasm import name and the [`HostOps`] method, `Subject/label` is where the guest surfaces it under `/sys`, and each `Slot` is one of the closed vocabulary the `*_of!` helpers map to concrete types.
@@ -192,7 +193,7 @@ macro_rules! declare_host_store {
 
             $(
                 store.register(ForeignFunction {
-                    namespace: "sys",
+                    namespace: Namespace::Sys,
                     name: stringify!($method).to_string(),
                     subject: Some(stringify!($subject).to_string()),
                     label: stringify!($label).to_string(),

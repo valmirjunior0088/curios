@@ -10,6 +10,7 @@
 //! A [`ForeignStore`] is the set of foreign functions declared under one tier. [`host_ops`](super::host_ops) seeds the fixed builtin (`sys`) tier, consumable only by the standard library, created per compilation by the pipeline driver; a second store, accumulated from a program's own `foreign` declarations (`curios_text`'s generated foreign signature), holds the `ffi` tier. The two are never merged, but the wasm namespace is the row's own `namespace` field, stamped at declaration time — the store split only governs who may consume a tier. `exit` is deliberately absent from either store: it traps rather than returns and its guest type is the polymorphic bottom `(@A : Type) -> Nat -> A`, which a first-order [`WireSignature`] cannot express, so it stays a hardcoded intrinsic.
 
 use std::{
+    fmt::{self, Display, Formatter},
     hash::{Hash, Hasher},
     sync::Arc,
 };
@@ -60,12 +61,37 @@ pub struct WireSignature {
     pub results: Vec<(String, WireType)>,
 }
 
+/// The wasm import namespace a foreign function links under — the closed pair both ends agree on. `Sys` is the fixed builtin substrate, consumable only by the standard library; `Ffi` is a user's own `foreign` declaration.
+///
+/// Two variants rather than a `&'static str`, so the namespaces that exist are exactly the namespaces that can be written. It archives as its own discriminant, which is the byte a hand-rolled code table used to assign — and that table came with a panic asserting a validity the string type could not give it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[curios_archive::archived]
+pub enum Namespace {
+    Sys,
+    Ffi,
+}
+
+impl Namespace {
+    /// The wasm import string: what the emitter stamps on the import and the runtime linker matches.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Namespace::Sys => "sys",
+            Namespace::Ffi => "ffi",
+        }
+    }
+}
+
+impl Display for Namespace {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> fmt::Result {
+        formatter.write_str(self.as_str())
+    }
+}
+
 /// One foreign (host-provided) function. `namespace`/`name` is the wasm import pair — the wire ABI shared by the wasm emitter and the runtime linker; never change one without changing what the other end expects (the unit tests snapshot the builtin set). `namespace` is `sys` for a builtin and `ffi` for a user's `foreign` declaration, whose `name` is its fully qualified name (leading `/`). `label` is the binding name the function surfaces under in the guest, and `subject` the module that binding sits in: `Some` for a builtin, whose placement the [`host_ops!`](super::host_ops) table states, and `None` for a user's `foreign` declaration, which the guest already places by writing it where it wants it. The two are independent of the wire pair — a row moves in the module tree without the import moving.
 #[derive(Debug, Clone)]
 #[curios_archive::archived]
 pub struct ForeignFunction {
-    #[archived_with(crate::Namespace)]
-    pub namespace: &'static str,
+    pub namespace: Namespace,
     pub name: String,
     pub subject: Option<String>,
     pub label: String,

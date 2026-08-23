@@ -1,5 +1,5 @@
 use {
-    super::{ForeignFunction, Status, WireSignature, host_ops},
+    super::{ForeignFunction, Namespace, Status, WireSignature, host_ops},
     crate::status,
     std::collections::BTreeSet,
 };
@@ -130,7 +130,7 @@ fn register_rejects_a_duplicate_name() {
     let mut store = host_ops();
 
     store.register(ForeignFunction {
-        namespace: "sys",
+        namespace: Namespace::Sys,
         name: "read".to_string(),
         subject: Some("Handle".to_string()),
         label: "read_again".to_string(),
@@ -147,7 +147,7 @@ fn host_ops_rows_are_stamped_with_the_sys_namespace() {
     assert!(
         host_ops()
             .iter()
-            .all(|function| function.namespace == "sys")
+            .all(|function| function.namespace == Namespace::Sys)
     );
 }
 
@@ -165,6 +165,12 @@ fn equality_is_the_import_pair() {
         },
     };
 
-    assert_eq!(base("ffi", "frobnicate"), base("ffi", "frobnicate_again"));
-    assert_ne!(base("sys", "frobnicate"), base("ffi", "frobnicate"));
+    assert_eq!(
+        base(Namespace::Ffi, "frobnicate"),
+        base(Namespace::Ffi, "frobnicate_again")
+    );
+    assert_ne!(
+        base(Namespace::Sys, "frobnicate"),
+        base(Namespace::Ffi, "frobnicate")
+    );
 }

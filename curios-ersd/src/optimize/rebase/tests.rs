@@ -1,6 +1,6 @@
 use {
     crate::*,
-    curios_abi::{ForeignFunction, WireSignature, WireType},
+    curios_abi::{ForeignFunction, Namespace, WireSignature, WireType},
 };
 
 /// rec count(n) = switch-nat n { 0 => 0, default => count(n - 1) + 1 }; entry: count(k) with k a runtime-ish parameterless alias (kept opaque by referencing the function itself so evaluation cannot close it).
@@ -55,7 +55,7 @@ fn a_monoid_deferred_recursion_gains_a_worker() {
 
     builder.open_block();
     let row = std::sync::Arc::new(ForeignFunction {
-        namespace: "sys",
+        namespace: Namespace::Sys,
         name: "poll".into(),
         subject: Some("Handle".into()),
         label: "poll".into(),
