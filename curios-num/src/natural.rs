@@ -74,7 +74,6 @@ impl Natural {
         self.value.to_i32()
     }
 
-    /// The canonical little-endian byte encoding, and its inverse. The host/guest handle token rides on exactly this pair (`curios-abi`'s `Handle`), so the two ends cannot drift.
     /// How many bits the magnitude occupies — zero for zero, `floor(log2(n)) + 1` otherwise.
     ///
     /// The size a reduction charges for a result *before* building it. Bits rather than limbs because a limb is a property of this target's `num-bigint` build and a bit is a property of the number, and the budget has to price a program the same on wasm32 as it does natively.
@@ -82,6 +81,7 @@ impl Natural {
         self.value.bits()
     }
 
+    /// The canonical little-endian byte encoding, and [`from_bytes_le`](Natural::from_bytes_le) its inverse. Zero mints one zero byte, `[0]`, never the empty string. The host/guest handle token rides on exactly this pair (`curios-abi`'s `Handle`), so the two ends cannot drift.
     pub fn to_bytes_le(&self) -> Vec<u8> {
         self.value.to_bytes_le()
     }
