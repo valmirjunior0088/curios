@@ -64,6 +64,21 @@ fn set(local: &LocalName) -> Instr {
     }
 }
 
+/// The type a bridge function is declared against: final, no supertypes, and the given signature. Every function this module adds is declared through this, so the six exports cannot end up built two ways.
+fn func_type(
+    inputs: impl IntoIterator<Item = ValType>,
+    outputs: impl IntoIterator<Item = ValType>,
+) -> SubType {
+    SubType {
+        is_final: true,
+        super_types: vec![],
+        comp_type: CompType::Func(FuncType {
+            inputs: ResultType::from(inputs),
+            outputs: ResultType::from(outputs),
+        }),
+    }
+}
+
 /// The bridge as a `curios_wasm::Module`: the canonical `bytes` type, the four accessor exports (`bytes_len`, `bytes_get`, `bytes_new`, `bytes_set` — each body its parameters' `local.get`s followed by one array op), and the bulk lane — a memory this module declares and exports, plus `bytes_load`/`bytes_store`, which copy a whole byte string between a `bytes` array and the memory at offset 0 so JS pays one boundary call per string instead of one per byte. The memory is declared here because it is this module's, and nothing in `curios-wasm` supplies one: a compiled program declares none and carries no memory section at all.
 pub(crate) fn bridge_module() -> Module {
     let mut module = Module::new("bridge");
@@ -122,14 +137,7 @@ pub(crate) fn bridge_module() -> Module {
 
         module.add_type(
             type_name.clone(),
-            SubType {
-                is_final: true,
-                super_types: vec![],
-                comp_type: CompType::Func(FuncType {
-                    inputs: ResultType::from(params.iter().map(|(_, val_type)| val_type.clone())),
-                    outputs: ResultType::from(outputs),
-                }),
-            },
+            func_type(params.iter().map(|(_, val_type)| val_type.clone()), outputs),
         );
 
         module.add_func(
@@ -173,15 +181,6 @@ pub(crate) fn bridge_module() -> Module {
         mem_name: memory.clone(),
         align: 0,
         offset: 0,
-    };
-
-    let func_type = |inputs: Vec<ValType>, outputs: Vec<ValType>| SubType {
-        is_final: true,
-        super_types: vec![],
-        comp_type: CompType::Func(FuncType {
-            inputs: ResultType::from(inputs),
-            outputs: ResultType::from(outputs),
-        }),
     };
 
     let b = LocalName::from("b");
