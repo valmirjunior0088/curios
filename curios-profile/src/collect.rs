@@ -178,6 +178,7 @@ impl Visit for SampleValue {
     fn record_debug(&mut self, _: &Field, _: &dyn fmt::Debug) {}
 }
 
+#[derive(Default)]
 struct Aggregate {
     calls: u64,
     total: Duration,
@@ -189,18 +190,6 @@ struct Aggregate {
 }
 
 impl Aggregate {
-    fn new() -> Self {
-        Self {
-            calls: 0,
-            total: Duration::ZERO,
-            min: None,
-            max: Duration::ZERO,
-            retained: 0,
-            allocated: 0,
-            allocations: 0,
-        }
-    }
-
     fn record(&mut self, timing: &SpanTiming) {
         let elapsed = timing.elapsed();
         self.calls += 1;
@@ -314,10 +303,7 @@ impl ProfileLayer {
             .lock()
             .expect("profiling aggregate lock poisoned");
 
-        aggregates
-            .entry(timing.key())
-            .or_insert_with(Aggregate::new)
-            .record(&timing);
+        aggregates.entry(timing.key()).or_default().record(&timing);
     }
 }
 
