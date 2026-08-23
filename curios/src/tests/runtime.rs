@@ -909,6 +909,9 @@ fn a_member_read_through_a_closure_the_verifier_cannot_see_is_forced() {
 }
 
 /// An evaluation cycle hidden where the verifier cannot see it — `n`'s initializer runs `p`, whose step reads `n` — is met by forcing: `n` is read while its own initializer runs, and the cell's *forcing* state is the trap. The frame is the member's force function, which is what names the member in the report.
+///
+/// Gated on `profile` because that report names a frame only when the wasm name section survived Binaryen, and `to_cwasm` keeps it for a profiling build alone — the same shape as `fixpoint` and `churn`, each gated on the spans that supply what it reads. Ungated it failed under a plain `cargo test -p curios` with the frame rendered `<wasm function 10>`, which reads like a codegen regression and is not one.
+#[cfg(feature = "profile")]
 #[test]
 fn a_cycle_hidden_behind_a_closure_traps_at_the_member_being_forced() {
     let error = error(
