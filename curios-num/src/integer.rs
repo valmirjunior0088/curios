@@ -21,12 +21,12 @@ impl Integer {
         self.value.to_i32()
     }
 
-    /// The same number as a [`Natural`]; `None` on a negative, which no natural equals. [`From<Natural>`](Integer::from) is the total inverse.
     /// How many bits the magnitude occupies, ignoring the sign — [`Natural::bits`], for the signed carrier.
     pub fn bits(&self) -> u64 {
         self.value.bits()
     }
 
+    /// The same number as a [`Natural`]; `None` on a negative, which no natural equals. [`From<Natural>`](Integer::from) is the total inverse.
     pub fn to_natural(&self) -> Option<Natural> {
         self.value.to_biguint().map(Natural::new)
     }
