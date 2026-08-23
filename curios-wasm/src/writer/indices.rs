@@ -6,7 +6,7 @@ use {
     std::collections::HashMap,
 };
 
-/// Every index space the binary format is defined over, derived once from the module's declaration order with imports leading — the only place a numeric index exists. A name absent from it is a dangling cross-reference, which every resolver reports by panicking with the name rather than encoding a wrong number.
+/// Every index space the binary format is defined over, derived once from the module's declaration order with imports leading — the only place a numeric index exists. A name absent from it is a dangling cross-reference, which every resolver reports by panicking with the name rather than encoding a wrong number — and a name declared twice is the same failure from the other side, refused at construction rather than silently resolving every reference to whichever declaration came second.
 #[derive(Debug, Clone)]
 pub(super) struct Indices<'a> {
     types: HashMap<&'a TypeName, usize>,
@@ -31,11 +31,17 @@ impl<'a> Indices<'a> {
             .flat_map(|rec_type| rec_type.sub_types.iter())
             .enumerate()
         {
-            types.insert(type_name, index);
+            assert!(
+                types.insert(type_name, index).is_none(),
+                "type `{type_name}` is declared twice"
+            );
 
             if let Some(struct_type) = sub_type.struct_type() {
                 for (index, (field_name, _)) in struct_type.fields.iter().enumerate() {
-                    fields.insert((type_name, field_name), index);
+                    assert!(
+                        fields.insert((type_name, field_name), index).is_none(),
+                        "type `{type_name}` declares the field `{field_name}` twice"
+                    );
                 }
             }
         }
@@ -49,14 +55,23 @@ impl<'a> Indices<'a> {
             .flat_map(|(_, _, import)| import.func_name())
             .enumerate()
         {
-            funcs.insert(func_name, index);
+            assert!(
+                funcs.insert(func_name, index).is_none(),
+                "func `{func_name}` is declared twice"
+            );
         }
 
         for (index, (func_name, func)) in (funcs.len()..).zip(module.funcs()) {
-            funcs.insert(func_name, index);
+            assert!(
+                funcs.insert(func_name, index).is_none(),
+                "func `{func_name}` is declared twice"
+            );
 
             for (index, local_name) in func.local_names().enumerate() {
-                locals.insert((func_name, local_name), index);
+                assert!(
+                    locals.insert((func_name, local_name), index).is_none(),
+                    "func `{func_name}` declares the local `{local_name}` twice"
+                );
             }
         }
 
@@ -68,11 +83,17 @@ impl<'a> Indices<'a> {
             .flat_map(|(_, _, import)| import.table_name())
             .enumerate()
         {
-            tables.insert(table_name, index);
+            assert!(
+                tables.insert(table_name, index).is_none(),
+                "table `{table_name}` is declared twice"
+            );
         }
 
         for (index, (table_name, _)) in (tables.len()..).zip(module.tables()) {
-            tables.insert(table_name, index);
+            assert!(
+                tables.insert(table_name, index).is_none(),
+                "table `{table_name}` is declared twice"
+            );
         }
 
         let mut mems = HashMap::new();
@@ -83,11 +104,17 @@ impl<'a> Indices<'a> {
             .flat_map(|(_, _, import)| import.mem_name())
             .enumerate()
         {
-            mems.insert(mem_name, index);
+            assert!(
+                mems.insert(mem_name, index).is_none(),
+                "memory `{mem_name}` is declared twice"
+            );
         }
 
         for (index, (mem_name, _)) in (mems.len()..).zip(module.mems()) {
-            mems.insert(mem_name, index);
+            assert!(
+                mems.insert(mem_name, index).is_none(),
+                "memory `{mem_name}` is declared twice"
+            );
         }
 
         let mut globals = HashMap::new();
@@ -98,23 +125,35 @@ impl<'a> Indices<'a> {
             .flat_map(|(_, _, import)| import.global_name())
             .enumerate()
         {
-            globals.insert(global_name, index);
+            assert!(
+                globals.insert(global_name, index).is_none(),
+                "global `{global_name}` is declared twice"
+            );
         }
 
         for (index, (global_name, _)) in (globals.len()..).zip(module.globals()) {
-            globals.insert(global_name, index);
+            assert!(
+                globals.insert(global_name, index).is_none(),
+                "global `{global_name}` is declared twice"
+            );
         }
 
         let mut elems = HashMap::new();
 
         for (index, (elem_name, _)) in module.elems().iter().enumerate() {
-            elems.insert(elem_name, index);
+            assert!(
+                elems.insert(elem_name, index).is_none(),
+                "elem `{elem_name}` is declared twice"
+            );
         }
 
         let mut datas = HashMap::new();
 
         for (index, (data_name, _)) in module.datas().iter().enumerate() {
-            datas.insert(data_name, index);
+            assert!(
+                datas.insert(data_name, index).is_none(),
+                "data `{data_name}` is declared twice"
+            );
         }
 
         Self {
