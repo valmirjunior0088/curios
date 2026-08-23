@@ -194,6 +194,8 @@ fn build(entry: &Path) {
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
+    // The cache marker carries the C++ toolchain's own identity, and `toolchain()` reads `CXX` to find it — but a build script only re-runs on an environment change it declares. Without this, switching `CXX` replays the cached link directives and the marker is never consulted, which is precisely the case the probe exists for.
+    println!("cargo:rerun-if-env-changed=CXX");
 
     let target_triple = env::var("TARGET").unwrap();
     let binaryen_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
