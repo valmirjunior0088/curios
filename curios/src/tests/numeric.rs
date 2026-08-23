@@ -130,6 +130,30 @@ fn overflowing_computations_trap_at_the_backend_boundary() {
     ]);
 }
 
+/// A shift whose product leaves the *widened* intermediate as well, compiled both ways.
+///
+/// **The two axes above are each covered alone, and this is their product.** `2^30 << 15` is a large value with a small count and `1 << 40` a small value with a large count; widening the fold to `u64` answers both, and with a value of `1` no count can defeat it. Together they defeat it: `2^30 << 40` is `2^70`, whose low sixty-four bits are zero, so the truncated intermediate read back as a representable `0`. The folded half printed `0` while the executed half trapped — the same expression, two answers.
+///
+/// **It sits apart from the trap list because that list cannot see it.** [`runtime_traps`] compiles the tainted table only, so a row there exercises the backend and never the folder; the disagreement here is between the two. Both tables are therefore compiled, and both must trap. The fold's count is now clamped at the carrier's width, which is `curios-cont`'s `emit_clamped_shift` argument made one layer up: a nonzero value shifted that far has already left, so one count decides every larger one.
+#[test]
+fn a_shift_past_the_widened_intermediate_traps_folded_and_executed() {
+    let rows = [
+        "Nat/to_str(Nat/shl(1073741824 + n, 40))",
+        "Int/to_str(Int/shl(Int/add(+536870912, i), +35))",
+    ];
+
+    for tainted in [false, true] {
+        let compiled = compile(&table(&rows, tainted)).expect("the table compiles");
+        for (index, row) in rows.iter().enumerate() {
+            let error = run_row(&compiled, index).expect_err("the expression should trap");
+            assert!(
+                error.contains("execution failed"),
+                "expected a trap for {row} (tainted: {tainted}), got: {error}"
+            );
+        }
+    }
+}
+
 /// A shift count past the carrier's width answers the arithmetic, not Wasm's modulo.
 ///
 /// **These agree by computing rather than by refusing, which is why they sit apart from the trap list.** `⌊v / 2^k⌋` is zero for every `k` at or above the width and every `v` the carrier holds, and zero is representable — so refusing here would refuse a value the theory has and the carrier can hold. `Natural`'s bignum shift in `curios-core` is the oracle: it answers zero, and both erased stages must too. Before the count was clamped rather than masked, `1024 >> 40` answered `4`.

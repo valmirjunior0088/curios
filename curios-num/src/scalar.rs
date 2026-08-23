@@ -34,12 +34,14 @@ pub fn nat_mul(left: u32, right: u32) -> Result<u32, ScalarTrap> {
 ///
 /// Widened rather than checked in place, because neither of the obvious tests is the condition. `u32::checked_shl` refuses only a *count* of 32 or more, so it answers `Some(0)` for `2^30 << 15`, where fifteen bits left the top; and testing the result's high bit afterwards cannot see bits that are already gone. The count is not reduced modulo anything: Wasm's mask is a property of `i32.shl`, not of `value · 2^shift`, and `curios-core` computes the latter over an unbounded `Natural`.
 ///
+/// **The widening is not the condition on its own, which is the same defect one width up.** A large enough count pushes every bit past the intermediate's top as well — `2^30 << 40` is `2^70`, whose low sixty-four bits are zero — and the truncated `u64` reads back as a perfectly representable result. Clamping the count at the carrier's width closes it: a nonzero value shifted [`u32::BITS`] places has already left `u32`, so that count reaches the same verdict as every larger one, and below it the widened shift loses nothing. This is the argument `curios-cont`'s `emit_clamped_shift` makes at the i31 envelope, one layer down and at its own width.
+///
 /// Zero is answered before the count is looked at, since `0 · 2^k` is zero at every count and refusing it would refuse a value the carrier holds.
 pub fn nat_shl(value: u32, shift: u32) -> Result<u32, ScalarTrap> {
     match value {
         0 => Ok(0),
         value => u64::from(value)
-            .checked_shl(shift)
+            .checked_shl(shift.min(u32::BITS))
             .and_then(|widened| u32::try_from(widened).ok())
             .ok_or(ScalarTrap::Overflow),
     }
@@ -95,14 +97,14 @@ pub fn int_mul(left: i32, right: i32) -> Result<i32, ScalarTrap> {
 
 /// `Int` left shift — `value · 2^shift` — refusing a result past the carrier, and declining a negative count.
 ///
-/// The outer `None` is the theory's silence rather than a trap: `Integer::checked_shl` converts its amount through `to_usize`, which fails on a negative, so `curios-core` leaves such a term unfolded and this must too. Widened for the reason [`nat_shl`] gives, and signed, so `-1 · 2^31` is `i32::MIN` and stays representable where the unsigned twin would refuse.
+/// The outer `None` is the theory's silence rather than a trap: `Integer::checked_shl` converts its amount through `to_usize`, which fails on a negative, so `curios-core` leaves such a term unfolded and this must too. Widened *and clamped* for the reasons [`nat_shl`] gives, and signed, so `-1 · 2^31` is `i32::MIN` and stays representable where the unsigned twin would refuse.
 pub fn int_shl(value: i32, shift: i32) -> Option<Result<i32, ScalarTrap>> {
     let shift = u32::try_from(shift).ok()?;
 
     Some(match value {
         0 => Ok(0),
         value => i64::from(value)
-            .checked_shl(shift)
+            .checked_shl(shift.min(i32::BITS))
             .and_then(|widened| i32::try_from(widened).ok())
             .ok_or(ScalarTrap::Overflow),
     })
