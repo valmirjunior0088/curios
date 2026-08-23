@@ -407,6 +407,21 @@ pub rec raw_succ_out_r(
         end
     end;
 
+-- A carry entering on the right, shifted inward: `raw(raw(x, y, false), z, true)` is that same sum with the carry folded into the inner addition instead. Eight leaves of `raw_assoc`'s carry analysis reduce to exactly this step, and each used to spell the whole chain out. `assoc` is the associativity instance the leaf already holds, taken as a parameter so this lemma stays outside the recursion.
+let carry_shift(
+    x: Bits,
+    y: Bits,
+    z: Bits,
+    assoc: Eq(raw(raw(x, y, false), z, true), raw(x, raw(y, z, false), true)),
+) -> Eq(raw(raw(x, y, false), z, true), raw(x, raw(y, z, true), false)) =
+    Eq/trans(
+        assoc,
+        Eq/trans(
+            raw_carry_spec(x, raw(y, z, false)),
+            Eq/trans(
+                Eq/sym(raw_succ_out_r(x, raw(y, z, false), false)),
+                cong_raw_r(x, Eq/sym(raw_carry_spec(y, z)), false))));
+
 pub rec raw_assoc(
     x: Bits,
     y: Bits,
@@ -487,31 +502,11 @@ pub rec raw_assoc(
                             | true =>
                                 cong_cons2(
                                     refl_at(true),
-                                    Eq/trans(
-                                        raw_assoc(b[], yt, zt, false, true),
-                                        Eq/trans(
-                                            raw_carry_spec(b[], raw(yt, zt, false)),
-                                            Eq/trans(
-                                                Eq/sym(
-                                                    raw_succ_out_r(b[], raw(yt, zt, false), false)),
-                                                cong_raw_r(
-                                                    b[],
-                                                    Eq/sym(raw_carry_spec(yt, zt)),
-                                                    false)))))
+                                    carry_shift(b[], yt, zt, raw_assoc(b[], yt, zt, false, true)))
                             | false =>
                                 cong_cons2(
                                     refl_at(false),
-                                    Eq/trans(
-                                        raw_assoc(b[], yt, zt, false, true),
-                                        Eq/trans(
-                                            raw_carry_spec(b[], raw(yt, zt, false)),
-                                            Eq/trans(
-                                                Eq/sym(
-                                                    raw_succ_out_r(b[], raw(yt, zt, false), false)),
-                                                cong_raw_r(
-                                                    b[],
-                                                    Eq/sym(raw_carry_spec(yt, zt)),
-                                                    false)))))
+                                    carry_shift(b[], yt, zt, raw_assoc(b[], yt, zt, false, true)))
                             end
                         end
                     | false =>
@@ -540,31 +535,11 @@ pub rec raw_assoc(
                             | true =>
                                 cong_cons2(
                                     refl_at(true),
-                                    Eq/trans(
-                                        raw_assoc(b[], yt, zt, false, true),
-                                        Eq/trans(
-                                            raw_carry_spec(b[], raw(yt, zt, false)),
-                                            Eq/trans(
-                                                Eq/sym(
-                                                    raw_succ_out_r(b[], raw(yt, zt, false), false)),
-                                                cong_raw_r(
-                                                    b[],
-                                                    Eq/sym(raw_carry_spec(yt, zt)),
-                                                    false)))))
+                                    carry_shift(b[], yt, zt, raw_assoc(b[], yt, zt, false, true)))
                             | false =>
                                 cong_cons2(
                                     refl_at(false),
-                                    Eq/trans(
-                                        raw_assoc(b[], yt, zt, false, true),
-                                        Eq/trans(
-                                            raw_carry_spec(b[], raw(yt, zt, false)),
-                                            Eq/trans(
-                                                Eq/sym(
-                                                    raw_succ_out_r(b[], raw(yt, zt, false), false)),
-                                                cong_raw_r(
-                                                    b[],
-                                                    Eq/sym(raw_carry_spec(yt, zt)),
-                                                    false)))))
+                                    carry_shift(b[], yt, zt, raw_assoc(b[], yt, zt, false, true)))
                             end
                         | false =>
                             match c2
@@ -972,37 +947,11 @@ pub rec raw_assoc(
                                 | true =>
                                     cong_cons2(
                                         refl_at(true),
-                                        Eq/trans(
-                                            raw_assoc(xt, yt, zt, false, true),
-                                            Eq/trans(
-                                                raw_carry_spec(xt, raw(yt, zt, false)),
-                                                Eq/trans(
-                                                    Eq/sym(
-                                                        raw_succ_out_r(
-                                                            xt,
-                                                            raw(yt, zt, false),
-                                                            false)),
-                                                    cong_raw_r(
-                                                        xt,
-                                                        Eq/sym(raw_carry_spec(yt, zt)),
-                                                        false)))))
+                                        carry_shift(xt, yt, zt, raw_assoc(xt, yt, zt, false, true)))
                                 | false =>
                                     cong_cons2(
                                         refl_at(false),
-                                        Eq/trans(
-                                            raw_assoc(xt, yt, zt, false, true),
-                                            Eq/trans(
-                                                raw_carry_spec(xt, raw(yt, zt, false)),
-                                                Eq/trans(
-                                                    Eq/sym(
-                                                        raw_succ_out_r(
-                                                            xt,
-                                                            raw(yt, zt, false),
-                                                            false)),
-                                                    cong_raw_r(
-                                                        xt,
-                                                        Eq/sym(raw_carry_spec(yt, zt)),
-                                                        false)))))
+                                        carry_shift(xt, yt, zt, raw_assoc(xt, yt, zt, false, true)))
                                 end
                             end
                         | false =>
@@ -1032,37 +981,11 @@ pub rec raw_assoc(
                                 | true =>
                                     cong_cons2(
                                         refl_at(true),
-                                        Eq/trans(
-                                            raw_assoc(xt, yt, zt, false, true),
-                                            Eq/trans(
-                                                raw_carry_spec(xt, raw(yt, zt, false)),
-                                                Eq/trans(
-                                                    Eq/sym(
-                                                        raw_succ_out_r(
-                                                            xt,
-                                                            raw(yt, zt, false),
-                                                            false)),
-                                                    cong_raw_r(
-                                                        xt,
-                                                        Eq/sym(raw_carry_spec(yt, zt)),
-                                                        false)))))
+                                        carry_shift(xt, yt, zt, raw_assoc(xt, yt, zt, false, true)))
                                 | false =>
                                     cong_cons2(
                                         refl_at(false),
-                                        Eq/trans(
-                                            raw_assoc(xt, yt, zt, false, true),
-                                            Eq/trans(
-                                                raw_carry_spec(xt, raw(yt, zt, false)),
-                                                Eq/trans(
-                                                    Eq/sym(
-                                                        raw_succ_out_r(
-                                                            xt,
-                                                            raw(yt, zt, false),
-                                                            false)),
-                                                    cong_raw_r(
-                                                        xt,
-                                                        Eq/sym(raw_carry_spec(yt, zt)),
-                                                        false)))))
+                                        carry_shift(xt, yt, zt, raw_assoc(xt, yt, zt, false, true)))
                                 end
                             | false =>
                                 match c2
