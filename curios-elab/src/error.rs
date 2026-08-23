@@ -20,6 +20,8 @@ pub struct GoalReport {
     pub scope: Vec<(Term, Term)>,
     pub goal: Term,
     pub solution: Option<Term>,
+    /// Conversions the item drain could not decide because this goal (perhaps with others) was all that held them up, each as the two sides that must become equal — rendered as `? must make:` lines. What tells the reader of `Eq/cong(?, ih)` that the hole has to send `double(p)` to `double(p) + 2`.
+    pub obligations: Vec<(Term, Term)>,
     /// Sandboxed candidate fits for an unsolved goal, display-ready and rendered as `? ≈` lines; empty for a solved goal. Observation-only: the compiler re-checks whatever the author pastes.
     pub candidates: Vec<Term>,
 }
@@ -34,6 +36,10 @@ impl GoalReport {
         }
         names.extend(display_names(&self.goal));
         names.extend(self.solution.iter().flat_map(display_names));
+        for (this, that) in &self.obligations {
+            names.extend(display_names(this));
+            names.extend(display_names(that));
+        }
         names.extend(self.candidates.iter().flat_map(display_names));
         Rc::new(build_rename(&names, shorten))
     }
@@ -1732,6 +1738,7 @@ impl fmt::Display for Displayed<'_> {
                     scope: scope.clone(),
                     goal: (**goal).clone(),
                     solution: solution.as_deref().cloned(),
+                    obligations: Vec::new(),
                     candidates: Vec::new(),
                 };
                 Displayed(&Error::Goals(vec![report]), Rc::clone(spelling)).fmt(f)
@@ -1769,6 +1776,14 @@ impl fmt::Display for Displayed<'_> {
                     write!(f, "\n  ? : {}", clause(&report.goal))?;
                     if let Some(solution) = &report.solution {
                         write!(f, "\n  ? = {}", clause(solution))?;
+                    }
+                    for (this, that) in &report.obligations {
+                        write!(
+                            f,
+                            "\n  ? must make: {} \u{2261} {}",
+                            clause(this),
+                            clause(that)
+                        )?;
                     }
                     for candidate in &report.candidates {
                         write!(f, "\n  ? \u{2248} {}", clause(candidate))?;

@@ -99,6 +99,7 @@ fn a_surviving_conversion_reports_postponement_naming_its_blockers() {
         "unexpected report: {error}"
     );
     assert!(error.contains("never solved"), "unexpected report: {error}");
+    assert!(!mentions_metavar_id(&error), "id leaked: {error}");
 }
 
 #[test]
@@ -808,8 +809,8 @@ fn a_suggested_imported_candidate_compiles_when_pasted() {
 }
 
 #[test]
-fn a_hole_where_a_congruences_function_belongs_is_undecided_not_mismatched() {
-    // Pasting the refinement above: `?f(double(p))` against `double(p) + 2` is a metavariable-headed application against a value, which has no imitation to try but no refutation either — a constant solution could exist. It used to fall through the structural match to a hard `type mismatch`, telling the author the program was wrong; it parks now, and the drain reports what it is: undecided on the hole.
+fn a_hole_where_a_congruences_function_belongs_reports_as_a_goal_with_its_obligation() {
+    // Pasting the refinement above: `?f(double(p))` against `double(p) + 2` is a metavariable-headed application against a value, which has no imitation to try but no refutation either — a constant solution could exist. It used to fall through the structural match to a hard `type mismatch`, telling the author the program was wrong; then, parked, it survived the drain as a postponed-conversion error. Now a survivor held up by written goals alone is the goals' own report: the batch names the hole, its type, and — as `? must make:` lines — the conversions it has to make true, which is what tells the author `f` sends `double(p)` to `double(p) + 2`. A program with a goal in it never compiles, so the surrendered conversion is never unchecked; the classification is incomplete, not failure.
     let source = r#"
         use /std/{Nat, Eq};
         rec double(n : Nat) -> Nat = match n | 0 => 0 | p + 1 => double(p) + 2 end;
@@ -823,41 +824,71 @@ fn a_hole_where_a_congruences_function_belongs_is_undecided_not_mismatched() {
 
     let error = compile(source, Some("/std/Nat")).unwrap_err();
 
+    assert!(error.contains("goal `?`"), "unexpected error: {error}");
     assert!(
-        error.contains("cannot decide a postponed conversion"),
+        error.contains("? : (Nat) -> Nat"),
+        "unexpected error: {error}"
+    );
+    assert!(
+        error.contains("? must make: ?(double(p)) \u{2261} double(p) + 2"),
         "unexpected error: {error}"
     );
     assert!(
         !error.contains("type mismatch"),
         "unexpected error: {error}"
     );
+    assert!(
+        !error.contains("cannot decide"),
+        "unexpected error: {error}"
+    );
+    // `subst`'s result `P(y)` meets any goal once `ih` fills its proof slot; an undecided fit of a parameter-headed result is refused.
+    assert!(!error.contains("Eq/subst("), "vacuous fit offered: {error}");
+
+    let entrypoint = with_entrypoint_type(source, Some("/std/Nat"));
+    assert!(matches!(
+        compile_with_prelude(
+            DEFAULT_STEP_BUDGET,
+            &entrypoint,
+            &RootSource::none(),
+            |_| {}
+        ),
+        Err(CompileError::Incomplete(_))
+    ));
 }
 
 #[test]
-fn a_mismatch_spells_an_unfolded_rec_by_its_definitions_name() {
-    // Both sides of a mismatch are normalized so the disagreement shows, and normalizing `double(p + 1)` unfolds the global through its structural group, which carries no name: the report used to read `rec #0: (n: Nat) -> Nat = n => Nat.fold n: …; #0(p) + 2` where the author wrote `double`. The unfolded group is recognized as the definition the context holds and spelled by it.
+fn a_conversion_held_up_by_a_goal_and_an_implicit_still_reports_postponement() {
+    // The diversion above applies only when written goals are *all* that holds a conversion up. Here `f`'s implicit `A` meets `Eq(?f(k), ?f(7))` and can never be pinned — an embedded-metavariable candidate postpones — so the survivor watches the goal and the implicit both, and reports as a postponement naming each by what it is: never by an id, which is elaboration state the reader cannot decode. The sides show every solved metavariable beside the open one — `?(k)`, not `?(?)` — because display materializes tolerantly.
     let source = r#"
         use /std/{Nat, Eq};
-        rec double(n : Nat) -> Nat = match n | 0 => 0 | p + 1 => double(p) + 2 end;
-        let double_correct(n : Nat) -> Eq(double(n), n * 2) =
-            match n : (m) => Eq(double(m), m * 2)
-            | 0 => Eq/refl()
-            | p + 1; ih => Eq/cong((x) => x + 3, ih)
-            end;
+        let f(@A : Type, a : A) -> {} = ();
+        let stuck(k : Nat, h : Eq(k, 7)) -> {} = f(Eq/cong(?, h));
         0
     "#;
 
     let error = compile(source, Some("/std/Nat")).unwrap_err();
 
     assert!(
-        error.contains("expected: Eq(@Nat, double(p) + 2, (2 * p) + 2)"),
+        error.contains("cannot decide a postponed conversion"),
         "unexpected error: {error}"
     );
     assert!(
-        error.contains("inferred: Eq(@Nat, double(p) + 3, (2 * p) + 3)"),
+        error.contains("between: Eq(@?, ?(k), ?(7))"),
         "unexpected error: {error}"
     );
-    assert!(!error.contains("rec "), "unexpected error: {error}");
+    assert!(
+        error.contains("never solved: a written goal `?`, the implicit argument 'A' of"),
+        "unexpected error: {error}"
+    );
+    assert!(!mentions_metavar_id(&error), "id leaked: {error}");
+}
+
+/// Whether a report spells a metavariable by its id — `?2659` — which no report should.
+fn mentions_metavar_id(report: &str) -> bool {
+    report
+        .chars()
+        .zip(report.chars().skip(1))
+        .any(|(a, b)| a == '?' && b.is_ascii_digit())
 }
 
 #[test]

@@ -17,7 +17,8 @@ use {
     },
     curios_analysis::{Invert, case_target_indices, invert_indices},
     curios_core::{
-        Free, FuncType, Global, InductType, Item, Module, StructType, Subterm, Telescope, Term, Var,
+        Apply, Free, FuncType, Global, InductType, Item, Module, StructType, Subterm, Telescope,
+        Term, Var,
     },
     curios_utilities::Plicity,
     std::collections::{BTreeMap, BTreeSet},
@@ -270,6 +271,14 @@ fn apply_fit_within(
             .any_metavar(&mut |id| context.metavar_solution(id).is_none())
     };
 
+    // A lemma whose result type is headed by one of its own parameters — `subst`'s `P(y)` — meets any goal at all once its proof slot is filled, by the imitation `P := (_) => goal`. Such a fit says nothing unless the conversion decides it outright, so an undecided one is refused below.
+    let flex_result = match &**output {
+        Subterm::Apply(Apply { head, .. }) => head.metavars(),
+        _ => output.metavars(),
+    }
+    .into_iter()
+    .any(|id| args.iter().any(|(arg, _)| arg.metavars().contains(&id)));
+
     // The goal first: what it pins, it pins.
     let mut outcome = convert_outcome(context, &Term::type_ground(), output, goal_type).ok()?;
     if matches!(outcome, Outcome::Mismatch) {
@@ -342,7 +351,7 @@ fn apply_fit_within(
         Outcome::Converts => {}
         // Undecided on exactly the open slots is the advisory refinement; undecided on anything else — a hidden slot the goal never reached — is a fit nothing distinguishes from a mismatch.
         Outcome::Blocked(goals) => {
-            if holes == 0 {
+            if holes == 0 || flex_result {
                 return None;
             }
             let blockers: BTreeSet<_> = goals

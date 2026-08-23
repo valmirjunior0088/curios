@@ -874,6 +874,18 @@ pub(crate) fn collect_goal_reports(context: &mut Context, module: &Module) -> Ve
                 solution: context
                     .metavar_solution(*id)
                     .map(|term| display(&binders, term)),
+                // The drain's surrendered conversions this goal holds up, already in display form; the batch's own pipeline re-runs over them harmlessly.
+                obligations: context
+                    .goal_obligations()
+                    .iter()
+                    .filter(|obligation| obligation.goals.contains(id))
+                    .map(|obligation| {
+                        (
+                            display(&binders, &obligation.this),
+                            display(&binders, &obligation.that),
+                        )
+                    })
+                    .collect(),
                 candidates: candidates
                     .iter()
                     .map(|term| display(&binders, term))

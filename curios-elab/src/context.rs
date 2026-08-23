@@ -129,8 +129,18 @@ pub struct Context {
     checked_site: Rc<str>,
     // The `/syn` names the type-directed features synthesize — infix dispatch and row subsumption. Supplied rather than spelled: the elaborator knows *which* declaration it needs, and `curios-prelude` knows what that declaration is called. See [`Context::syntax`].
     syntax: SyntaxRegistry,
+    // Conversions the item drain gave up on because written goals alone held them up — what each such `?` must make true, carried to the goal batch rather than reported as an error. See `Context::note_goal_obligation`.
+    goal_obligations: Vec<GoalObligation>,
     // What the unit's `use` declarations brought into scope, by canonical name, with the spelling each resolves under — the text stage's table, installed by the driver before elaboration. Read by goal suggestions alone, as the pool a candidate may come from beyond the names the program already mentions. Empty means nothing was imported, which is also what every embedding that never installs one gets: the pools then stop at the referenced globals, as they always did.
     imports: BTreeMap<Global, String>,
+}
+
+/// A conversion the item drain surrendered to the written goals holding it up: the goals, and the two sides as a report displays them.
+#[derive(Debug, Clone)]
+pub(crate) struct GoalObligation {
+    pub goals: BTreeSet<MetaId>,
+    pub this: Term,
+    pub that: Term,
 }
 
 impl Context {
@@ -163,7 +173,19 @@ impl Context {
             checked_site: Rc::from("the entrypoint"),
             syntax,
             imports: BTreeMap::new(),
+            goal_obligations: Vec::new(),
         }
+    }
+
+    /// Record a conversion the drain dropped because the written goals in `goals` were all that held it up, with its two sides already in display form. A program holding a goal never compiles, so nothing is lost by not deciding it; what is kept is the constraint the hole must satisfy, which the goal's report shows beside its type.
+    pub(crate) fn note_goal_obligation(&mut self, goals: BTreeSet<MetaId>, this: Term, that: Term) {
+        self.goal_obligations
+            .push(GoalObligation { goals, this, that });
+    }
+
+    /// Every obligation [`Context::note_goal_obligation`] recorded, in drain order.
+    pub(crate) fn goal_obligations(&self) -> &[GoalObligation] {
+        &self.goal_obligations
     }
 
     /// The `/syn` names this elaboration may synthesize.

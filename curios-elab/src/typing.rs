@@ -7,6 +7,7 @@ use curios_core::{
     MetaId, Metavar, MetavarOrigin, Proj, ReduceError, Scope, Subterm, Telescope, Term, Transient,
     UniverseConstraintKind, UniverseConstraintOrigin, UniverseRole, Visit,
 };
+use curios_utilities::Span;
 use std::{
     cell::RefCell,
     collections::{BTreeMap, BTreeSet},
@@ -83,13 +84,12 @@ pub(crate) fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term,
     }
 }
 
-/// Best-effort display form for a mismatch report: substitute the solutions that have landed, so the message names the actual disagreement rather than the metavariables it arrived wrapped in, then deep-[`normalize`](super::normalize) the result so a stuck concept-method projection standing in an index position collapses to the value it denotes (`Vec(Nat, (sys/witness@0).0(0, 1))` → `Vec(Nat, 1)`) rather than surfacing compiler-internal witness machinery. An unsolved metavariable makes `zonk` fail, in which case the raw spelling is kept; a normalization that exhausts its budget falls back to the merely-zonked form.
+/// Best-effort display form for a mismatch report: substitute the solutions that have landed, so the message names the actual disagreement rather than the metavariables it arrived wrapped in, then deep-[`normalize`](super::normalize) the result so a stuck concept-method projection standing in an index position collapses to the value it denotes (`Vec(Nat, (sys/witness@0).0(0, 1))` → `Vec(Nat, 1)`) rather than surfacing compiler-internal witness machinery. Materialization is tolerant: a metavariable still open spells `?` while every solved one beside it shows its value — the strict `zonk` used here refused the whole term on the first open hole, so one unsolved `f` rendered `?(?)` where `?(double(p))` was known. Universe levels come through verbatim and the report's spelling erases them. A normalization that exhausts its budget falls back to the merely-materialized form.
 ///
 /// Normalization is the whole denoising story only while the operand type is concrete. Under a `use Add(A)` parameter the projection is stuck on an abstract witness and no amount of reduction reaches the operator, so the structural fold the goal reports use runs afterwards over the live local scope — the same three witness forms, the same infix spelling.
 fn resolved_for_display(context: &mut Context, term: &Term) -> Term {
-    let Ok(zonked) = super::zonk(context, term) else {
-        return term.clone();
-    };
+    // Refolded on both sides of normalization. Before: a committed solution spells a stuck recursive call as its canonical neutral, the `Rec` node itself, and `normalize` keeps a name only where the *written* head is one (`stalled_unfolding`) — so the node is first given back its name, which the stall rule then holds. After: whatever normalization exposed elsewhere.
+    let zonked = super::refold_recs(context, &super::zonk_solved_term_metas(context, term));
     let resolved = super::normalize(context, zonked.clone()).unwrap_or(zonked);
     let resolved = super::refold_recs(context, &resolved);
     let operators = super::operator_table(context);
@@ -309,15 +309,23 @@ impl Context {
                 retry_one(self, parked)?;
             }
 
-            // No progress in a full sweep: the rest can never resolve. Report the first at its origin.
+            // No progress in a full sweep: the rest can never resolve. A conversion held up by written goals alone is not an error but the goals' own report — the batch at module end names each `?`, and this obligation goes with it as what the hole must make true; the program never compiles with a goal in it, so the dropped constraint is never unchecked. Anything else reports the first survivor at its origin.
             if self.parked_len() >= before && !self.has_newly_solved() {
-                if let Some(parked) = self.take_parked().into_iter().next() {
+                for parked in self.take_parked() {
                     let super::ParkedGoal {
                         work,
                         origin: parked_origin,
                         frame,
                         watching,
                     } = parked;
+                    if let ParkedWork::Conversion(goal) = &work
+                        && let Some(goals) = blocked_on_written_goals(self, &watching, goal)
+                    {
+                        let this = resolved_for_display(self, &goal.this);
+                        let that = resolved_for_display(self, &goal.that);
+                        self.note_goal_obligation(goals, this, that);
+                        continue;
+                    }
                     return Err(match work {
                         ParkedWork::Conversion(goal) => {
                             // A conversion stuck between two witness holes reads as a bare metavariable mismatch; name the unresolved witness it actually is instead.
@@ -377,16 +385,68 @@ impl Context {
     }
 }
 
-/// Render a surviving conversion goal's still-unsolved watched metavariables. Insertion provenance rides the *occurrence*, not the birth entry, so both sides are scanned for the watched ids; a watched metavariable no occurrence names (solved away from the spelling, or watched through a spine) still renders as its bare id.
+/// The written goals a surviving conversion is held up by, when they are all that holds it up: every still-unsolved watched metavariable occurs in the goal with `Goal` provenance. `None` when any blocker is anything else — an uninferred implicit, a witness, a hole no occurrence names — or when nothing is watched at all, since a conversion nothing could wake is not the goals' to carry.
+fn blocked_on_written_goals(
+    context: &Context,
+    watching: &BTreeSet<MetaId>,
+    goal: &super::Goal,
+) -> Option<BTreeSet<MetaId>> {
+    let origins = metavar_origins(&[&goal.this, &goal.that]);
+    let unsolved: BTreeSet<MetaId> = watching
+        .iter()
+        .copied()
+        .filter(|id| context.metavar_solution(*id).is_none())
+        .collect();
+    if unsolved.is_empty() {
+        return None;
+    }
+    unsolved
+        .iter()
+        .all(|id| matches!(origins.get(id), Some((MetavarOrigin::Goal, _))))
+        .then_some(unsolved)
+}
+
+/// Render a surviving conversion goal's still-unsolved watched metavariables, each by what it *is* — the implicit or witness argument it fills, the written goal it stands for — never by its id: an id is elaboration state the reader cannot decode, and two blockers rendering alike decides nothing, for the reason the printer's anonymous-metavariable axis gives. Insertion provenance rides the *occurrence*, not the birth entry, so both sides are scanned for the watched ids; a watched metavariable no occurrence names (solved away from the spelling, or watched through a spine) is an inferred hole.
 fn watched_blockers(
     context: &Context,
     watching: &BTreeSet<MetaId>,
     this: &Term,
     that: &Term,
 ) -> Vec<String> {
-    let origins: Rc<RefCell<BTreeMap<MetaId, MetavarOrigin>>> =
-        Rc::new(RefCell::new(BTreeMap::new()));
-    for side in [this, that] {
+    let origins = metavar_origins(&[this, that]);
+    watching
+        .iter()
+        .filter(|id| context.metavar_solution(**id).is_none())
+        .map(|id| match origins.get(id) {
+            Some((MetavarOrigin::Implicit(origin), _)) => {
+                format!(
+                    "the implicit argument '{}' of '{}'",
+                    origin.binder, origin.func
+                )
+            }
+            Some((MetavarOrigin::Witness(origin), _)) => {
+                format!(
+                    "the witness argument '{}' of '{}'",
+                    origin.binder, origin.func
+                )
+            }
+            Some((MetavarOrigin::Goal, Some(span))) => {
+                let (line, column) = span.line_column();
+                format!("the written goal `?` at {line}:{column}")
+            }
+            Some((MetavarOrigin::Goal, None)) => "a written goal `?`".to_string(),
+            None => "an inferred hole".to_string(),
+        })
+        .collect()
+}
+
+/// A metavariable's insertion provenance and the span of the occurrence it was read off — what a report names a blocker by.
+type Provenance = (MetavarOrigin, Option<Span>);
+
+/// Every metavariable occurrence across `terms` that carries an origin, by id, with the span of its first occurrence.
+fn metavar_origins(terms: &[&Term]) -> BTreeMap<MetaId, Provenance> {
+    let origins: Rc<RefCell<BTreeMap<MetaId, Provenance>>> = Rc::new(RefCell::new(BTreeMap::new()));
+    for term in terms {
         let sink = Rc::clone(&origins);
         let mut visit = Visit::rewriting(
             |_, _| None,
@@ -399,28 +459,16 @@ fn watched_blockers(
                 {
                     sink.borrow_mut()
                         .entry(*id)
-                        .or_insert_with(|| origin.clone());
+                        .or_insert_with(|| (origin.clone(), term.span()));
                 }
                 None
             }),
         );
-        let _: Term = side.traverse(&mut visit);
+        let _: Term = term.traverse(&mut visit);
     }
-
-    let origins = origins.borrow();
-    watching
-        .iter()
-        .filter(|id| context.metavar_solution(**id).is_none())
-        .map(|id| match origins.get(id) {
-            Some(MetavarOrigin::Implicit(origin)) => {
-                format!(
-                    "the implicit argument '{}' of '{}'",
-                    origin.binder, origin.func
-                )
-            }
-            _ => format!("?{}", id.0),
-        })
-        .collect()
+    Rc::try_unwrap(origins)
+        .map(RefCell::into_inner)
+        .unwrap_or_else(|shared| shared.borrow().clone())
 }
 
 fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Error> {
