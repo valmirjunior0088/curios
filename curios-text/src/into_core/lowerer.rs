@@ -305,7 +305,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     Field::Label(label) => curios_core::Term::proj_label(head, label.clone()),
                 }
             }
-            // A struct literal lowers to a `curios_elab::Struct` carrying the resolved (qualified) struct name, the head parameters (empty → core elaboration mints metavariables), and the written entries — plain field values with their names (validated positionally and dropped by elaborate), `use <term>` fills for a concept's `use`-marked positions, and a `..base` spread carrying its base. Construction privacy and spread shape are enforced in core (`elaborate_struct`), alongside projection privacy.
+            // A struct literal lowers to a `curios_core::Struct` carrying the resolved (qualified) struct name, the head parameters (empty → core elaboration mints metavariables), and the written entries — plain field values with their names (validated positionally and dropped by elaborate), `use <term>` fills for a concept's `use`-marked positions, and a `..base` spread carrying its base. Construction privacy and spread shape are enforced in core (`elaborate_struct`), alongside projection privacy.
             Subterm::StructLit(lit) => curios_core::Term::struct_entries(
                 self.resolve_nominal(&lit.head)?,
                 lit.params
