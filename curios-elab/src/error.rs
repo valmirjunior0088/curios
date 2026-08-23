@@ -20,7 +20,7 @@ pub struct GoalReport {
     pub scope: Vec<(Term, Term)>,
     pub goal: Term,
     pub solution: Option<Term>,
-    /// Conversions the item drain could not decide because this goal (perhaps with others) was all that held them up, each as the two sides that must become equal — rendered as `? must make:` lines. What tells the reader of `Eq/cong(?, ih)` that the hole has to send `double(p)` to `double(p) + 2`.
+    /// Conversions the item drain could not decide because this goal (perhaps with others) was all that held them up, each as the two sides that must become equal — rendered as `? such that` lines. What tells the reader of `Eq/cong(?, ih)` that the hole has to send `double(p)` to `double(p) + 2`.
     pub obligations: Vec<(Term, Term)>,
     /// Sandboxed candidate fits for an unsolved goal, display-ready and rendered as `? ≈` lines; empty for a solved goal. Observation-only: the compiler re-checks whatever the author pastes.
     pub candidates: Vec<Term>,
@@ -1780,7 +1780,7 @@ impl fmt::Display for Displayed<'_> {
                     for (this, that) in &report.obligations {
                         write!(
                             f,
-                            "\n  ? must make: {} \u{2261} {}",
+                            "\n  ? such that {} \u{2261} {}",
                             clause(this),
                             clause(that)
                         )?;

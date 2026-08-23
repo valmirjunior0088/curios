@@ -810,7 +810,7 @@ fn a_suggested_imported_candidate_compiles_when_pasted() {
 
 #[test]
 fn a_hole_where_a_congruences_function_belongs_reports_as_a_goal_with_its_obligation() {
-    // Pasting the refinement above: `?f(double(p))` against `double(p) + 2` is a metavariable-headed application against a value, which has no imitation to try but no refutation either — a constant solution could exist. It used to fall through the structural match to a hard `type mismatch`, telling the author the program was wrong; then, parked, it survived the drain as a postponed-conversion error. Now a survivor held up by written goals alone is the goals' own report: the batch names the hole, its type, and — as `? must make:` lines — the conversions it has to make true, which is what tells the author `f` sends `double(p)` to `double(p) + 2`. A program with a goal in it never compiles, so the surrendered conversion is never unchecked; the classification is incomplete, not failure.
+    // Pasting the refinement above: `?f(double(p))` against `double(p) + 2` is a metavariable-headed application against a value, which has no imitation to try but no refutation either — a constant solution could exist. It used to fall through the structural match to a hard `type mismatch`, telling the author the program was wrong; then, parked, it survived the drain as a postponed-conversion error. Now a survivor held up by written goals alone is the goals' own report: the batch names the hole, its type, and — as `? such that` lines — the conversions it has to make true, which is what tells the author `f` sends `double(p)` to `double(p) + 2`. A program with a goal in it never compiles, so the surrendered conversion is never unchecked; the classification is incomplete, not failure.
     let source = r#"
         use /std/{Nat, Eq};
         rec double(n : Nat) -> Nat = match n | 0 => 0 | p + 1 => double(p) + 2 end;
@@ -830,7 +830,7 @@ fn a_hole_where_a_congruences_function_belongs_reports_as_a_goal_with_its_obliga
         "unexpected error: {error}"
     );
     assert!(
-        error.contains("? must make: ?(double(p)) \u{2261} double(p) + 2"),
+        error.contains("? such that ?(double(p)) \u{2261} double(p) + 2"),
         "unexpected error: {error}"
     );
     assert!(
