@@ -1,4 +1,4 @@
-use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, List, Map, Option, Result, Parse};
+use /std/{Nat, Int, Flt, Bool, Byte, Bytes, Char, Str, List, Map, Option, Result, Parse, BigNat};
 use /std/Toml/{Toml};
 use /std/Toml/scan/{hex_val};
 
@@ -128,12 +128,12 @@ pub let int_value: Parse(Toml) =
     end;
 
 let flt_digits_stop(
-    sig: Nat,
+    sig: BigNat,
     count: Nat,
     shift: Nat,
     seen: Bool,
     pend: Bool,
-) -> Parse({Nat, Nat, Nat}) =
+) -> Parse({BigNat, Nat, Nat}) =
     match pend
     | true => Parse/fail("malformed underscore")
     | false =>
@@ -143,9 +143,9 @@ let flt_digits_stop(
         end
     end;
 
--- significand digits: at most nine significant decimal digits are kept exactly; `frac` selects whether consumed digits shift the decimal point down (fraction) or dropped digits shift it up (integer part past nine digits)
-let flt_digits(sig0: Nat, count0: Nat, frac: Bool) -> Parse({Nat, Nat, Nat}) =
-    rec go(sig: Nat, count: Nat, shift: Nat, seen: Bool, pend: Bool) -> Parse({Nat, Nat, Nat}) =
+-- Significand digits, every one of them kept: the significand is a `BigNat`, so no digit is dropped before `Flt/of_decimal` rounds the exact value once. `count` is how many digits were read, which bounds the significand above for the underflow clamp; `shift` counts the fraction digits, each of which moves the decimal point one place down.
+let flt_digits(sig0: BigNat, count0: Nat, frac: Bool) -> Parse({BigNat, Nat, Nat}) =
+    rec go(sig: BigNat, count: Nat, shift: Nat, seen: Bool, pend: Bool) -> Parse({BigNat, Nat, Nat}) =
         let next = Parse/peek!;
         match next
         | none() => flt_digits_stop(sig, count, shift, seen, pend)
@@ -160,19 +160,9 @@ let flt_digits(sig0: Nat, count0: Nat, frac: Bool) -> Parse({Nat, Nat, Nat}) =
                 | false => Parse/fail("malformed underscore")
                 end
             | Nat/in_range(n, 0x30, 0x39) =>
-                let d = n - 0x30;
                 let _ = Parse/any_byte!;
-                choose
-                | sig == 0 && d == 0 =>
-                    let shift2 = match frac | true => shift + 1 | false => shift end;
-                    go(0, 0, shift2, true, false)
-                | count < 9 =>
-                    let shift2 = match frac | true => shift + 1 | false => shift end;
-                    go(sig * 10 + d, count + 1, shift2, true, false)
-                | _ =>
-                    let shift2 = match frac | true => shift | false => shift + 1 end;
-                    go(sig, count, shift2, true, false)
-                end
+                let shift2 = match frac | true => shift + 1 | false => shift end;
+                go(BigNat/mul/small(sig, 10) + BigNat/of_nat(n - 0x30), count + 1, shift2, true, false)
             | _ => flt_digits_stop(sig, count, shift, seen, pend)
             end
         end;
@@ -188,7 +178,7 @@ let exp_stop(acc: Nat, seen: Bool, pend: Bool) -> Parse(Nat) =
         end
     end;
 
--- exponent digits saturate at 2000: binary32 scaling is pinned to infinity or zero long before that bound, so saturation cannot change any result
+-- exponent digits saturate at 2000: a binary32 is infinity or zero long before that bound for any significand short of two thousand digits, so saturation cannot change a result that could be written down
 let exp_digits: Parse(Nat) =
     rec go(acc: Nat, seen: Bool, pend: Bool) -> Parse(Nat) =
         let next = Parse/peek!;
@@ -220,16 +210,16 @@ pub let flt_special: Parse(Toml) =
             (_) => Toml/flt(match negative | true => Flt/neg_inf | false => Flt/pos_inf end)),
         Parse/map(Parse/take_literal("nan"), (_) => Toml/flt(Flt/nan)));
 
--- The fraction continues the *same* significand the integer part built, which is why it takes it as an argument rather than starting afresh: `1.5` keeps nine significant digits across the point, not nine on each side. Returns the significand, the decimal-point shift, and whether a fraction was there at all.
-let frac_fields(sig0: Nat, count0: Nat) -> Parse({Nat, Nat, Bool}) =
-    let (sig, _, down) = flt_digits(sig0, count0, true)!;
-    Parse/pure((sig, down, true));
+-- The fraction continues the *same* significand the integer part built, which is why it takes it as an argument rather than starting afresh: `1.5` is the digits `15` with the point one place down. Returns the significand, its digit count, the decimal-point shift, and whether a fraction was there at all.
+let frac_fields(sig0: BigNat, count0: Nat) -> Parse({BigNat, Nat, Nat, Bool}) =
+    let (sig, count, down) = flt_digits(sig0, count0, true)!;
+    Parse/pure((sig, count, down, true));
 
 -- The dot commits: past it, `1.` is a float missing its digits, not the integer `1` followed by junk. The exponent marker commits the same way.
-let frac_part(sig0: Nat, count0: Nat) -> Parse({Nat, Nat, Bool}) =
+let frac_part(sig0: BigNat, count0: Nat) -> Parse({BigNat, Nat, Nat, Bool}) =
     let dot = Parse/optional(Parse/take_byte(0x2E))!;
     match dot
-    | none() => Parse/pure((sig0, 0, false))
+    | none() => Parse/pure((sig0, count0, 0, false))
     | some(_) => Parse/commit(frac_fields(sig0, count0))
     end;
 
@@ -252,16 +242,15 @@ pub let flt_number: Parse(Toml) =
     match leading
     | true => Parse/fail("leading zero")
     | false =>
-        let (sig1, count1, up1) = flt_digits(0, 0, false)!;
-        let (sig2, down2, has_frac) = frac_part(sig1, count1)!;
+        let (sig1, count1, _) = flt_digits(BigNat/zero, 0, false)!;
+        let (sig2, count2, down2, has_frac) = frac_part(sig1, count1)!;
         let (emag, eneg, has_exp) = exp_part!;
         match has_frac || has_exp
         | true =>
-            let up = match eneg | true => up1 | false => up1 + emag end;
-            let down = match eneg | true => down2 + emag | false => down2 end;
-            let scaled =
-                Nat/to_flt(sig2) * Flt/pow10(Nat/min(up, 2000)) / Flt/pow10(Nat/min(down, 2000));
-            Parse/pure(Toml/flt(match negative | true => Flt/neg(scaled) | false => scaled end))
+            -- The exact value is `sig2 · 10^(±emag − down2)`, narrowed once by `Flt/of_decimal`; the sign is applied there, last, so a zero keeps it.
+            let exponent = match eneg | true => +0 - Nat/to_int(emag) | false => Nat/to_int(emag) end;
+            let scale = exponent - Nat/to_int(down2);
+            Parse/pure(Toml/flt(Flt/of_decimal(negative, sig2, scale, count2)))
         | false => Parse/fail("expected float")
         end
     end;

@@ -180,6 +180,75 @@ fn toml_floats_pin_binary32_bit_patterns() {
     );
 }
 
+/// The float lexeme is correctly rounded — every digit reaches `Flt/of_decimal`, which narrows the exact decimal once. The oracle is Rust's parser, bit for bit, over the inputs the old nine-digit `Nat` significand scaled by repeated `pow10` multiplication got wrong: a mantissa past nine digits, exponents past `10^10` where that `pow10` is inexact, subnormals (the old scale was `1 / pow10(39)`, which is `1 / inf`), and the overflow boundary, where `3.4028236e38` is above the largest finite value yet rounds down to it.
+#[test]
+fn toml_floats_are_correctly_rounded() {
+    let inputs = [
+        "1.2345679e-5",
+        "123456.79",
+        "7.1551326e37",
+        "3.4028235e38",
+        "3.4028236e38",
+        "3.4028237e38",
+        "2.137381e-39",
+        "1.0e-45",
+        "1.1754942e-38",
+        "0.1000000000000000055511151231257827",
+        "1234567891.0",
+        "9.999999999e9",
+        "1.00000006",
+        "-1.5e-40",
+        "1_2.5e1_0",
+    ];
+    let array = inputs
+        .iter()
+        .map(|input| format!("fbits(\"f = {input}\")"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let source = format!(
+        r#"
+        use /std/{{Handle, Str, Toml, Result, List, Map, Option, Byte, Bytes, Char, Nat, Flt}};
+        use /std/Toml/{{flt}};
+        let hexs(b : Bytes) -> Str =
+            Bytes/fold(b, "", (byte, acc) =>
+                let n = Byte/to_nat(byte);
+                let hi = Option/unwrap_or(Str/of_bytes(Char/to_utf8(Char/hex_digit(n / 16))), "");
+                let lo = Option/unwrap_or(Str/of_bytes(Char/to_utf8(Char/hex_digit(n % 16))), "");
+                Str/flatten([acc, hi, lo]));
+        let fbits(input : Str) -> Str =
+            match Toml/decode(input)
+            | failure(_) => "reject"
+            | success(root) =>
+                match Map/get(root, "f")
+                | some(v) =>
+                    match v : (_) => Str
+                    | flt(x) => hexs(Flt/to_le_bytes(x))
+                    | _ => "not-flt"
+                    end
+                | none() => "missing"
+                end
+            end;
+        /std/print(Str/join("|", [{array}]))
+        "#
+    );
+    let expected = inputs
+        .iter()
+        .map(|input| {
+            let value = input
+                .replace('_', "")
+                .parse::<f32>()
+                .expect("a float the oracle parses");
+            value
+                .to_le_bytes()
+                .iter()
+                .map(|byte| format!("{byte:02x}"))
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("|");
+    assert_eq!(run(&source), expected.into_bytes());
+}
+
 /// Each malformed input is pinned to the *message* it is rejected with, not merely to the fact that it is rejected.
 ///
 /// The decoder hands these strings to its caller through `Result(_, Str)`, so they are contract rather than debug output — and a reformulation of the scanners into `/std/Parse` combinators can flatten a specific reason into whichever generic message the combinator that happened to fail carries. Accept-versus-reject cannot see that happen; this table can.
