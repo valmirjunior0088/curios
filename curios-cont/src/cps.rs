@@ -42,7 +42,7 @@ pub enum CpsAtom {
     Literal(CpsLiteral),
     /// No value: a slot belonging to a wider constructor than the edge or call carrying it fills.
     ///
-    /// It is not a literal zero, and was one until an `Option(Flt)` trapped on the `none` edge. The carrier a slot is held at is decided by [`represent`](crate::cps::represent) during backend lowering, from the *uses* of the parameter it feeds — which is strictly after the passes that create fillers, so no constant chosen here can know it. A `Nat(0)` was therefore right only where the slot happened to be `Nat`-carried or boxed, and where it was a raw `Flt` the edge coerced the `i31` with a `ref.cast` that trapped. Saying "nothing" instead defers the choice to the one place the carrier is known: the emitter materialises it as the zero of whatever the destination holds.
+    /// It is not a literal zero, and was one until an `Option(Flt)` trapped on the `none` edge. The carrier a slot is held at is decided by `represent` during backend lowering, from the *uses* of the parameter it feeds — which is strictly after the passes that create fillers, so no constant chosen here can know it. A `Nat(0)` was therefore right only where the slot happened to be `Nat`-carried or boxed, and where it was a raw `Flt` the edge coerced the `i31` with a `ref.cast` that trapped. Saying "nothing" instead defers the choice to the one place the carrier is known: the emitter materialises it as the zero of whatever the destination holds.
     Filler,
 }
 

@@ -23,7 +23,7 @@ const STORED: &str = "payload.cwasm";
 
 /// What a payload is filed for: the executable it builds, and the entry it builds from.
 ///
-/// One bundle rather than five parameters, because the five are one subject. The two names decide the *address* and the three entry-side facts decide the *record*, which is the same split the whole scheme rests on. The engine is not among them: it is a fact about this machine rather than about the program, so [`engine`] answers for it once and no caller can get it wrong.
+/// One bundle rather than five parameters, because the five are one subject. The two names decide the *address* and the three entry-side facts decide the *record*, which is the same split the whole scheme rests on. The engine is not among them: it is a fact about this machine rather than about the program, so `engine` answers for it once and no caller can get it wrong.
 pub struct Program<'a> {
     /// The package declaring the executable. Its name and the executable's are together the one identity in a compilation that cannot collide, which is why the address carries them instead of a path.
     pub package: &'a str,
@@ -58,7 +58,7 @@ struct Record {
 impl Verdicts {
     /// The payload filed for `program` after `units`, when everything it was made from still agrees.
     ///
-    /// **Decidable without deserializing anything.** The units are verified through [`Verdicts::chain`] — the same slot and record checks the fold makes, minus the decode a payload hit has no use for — and the payload itself is bytes to hand on, not a structure to read. A stale unit is a miss by construction, since it is about to recompile into bytes no record could match.
+    /// **Decidable without deserializing anything.** The units are verified through `Verdicts::chain` — the same slot and record checks the fold makes, minus the decode a payload hit has no use for — and the payload itself is bytes to hand on, not a structure to read. A stale unit is a miss by construction, since it is about to recompile into bytes no record could match.
     ///
     /// Consulting this does not enter the fold's chain: a hit means no fold runs at all, and a miss leaves the fold to place its own units as it always did.
     pub fn payload_get(&self, program: &Program<'_>, units: &[UnitSource<'_>]) -> Option<Vec<u8>> {
@@ -80,7 +80,7 @@ impl Verdicts {
 
     /// File `bytes` as `program`'s payload, against the chain the fold just placed.
     ///
-    /// Called after the fold, which is what makes [`Verdicts::placed`] the right chain to record: it holds what every unit of *this* compilation was filed as, whether it was reused or compiled. Best effort, exactly as a unit's write is — a store that cannot be written costs the next invocation the work it would have saved and nothing else, and the refusal is kept for a caller to report rather than raised here.
+    /// Called after the fold, which is what makes `Verdicts::placed` the right chain to record: it holds what every unit of *this* compilation was filed as, whether it was reused or compiled. Best effort, exactly as a unit's write is — a store that cannot be written costs the next invocation the work it would have saved and nothing else, and the refusal is kept for a caller to report rather than raised here.
     pub fn payload_put(&self, program: &Program<'_>, bytes: &[u8]) {
         let placed = self.placed.borrow();
 

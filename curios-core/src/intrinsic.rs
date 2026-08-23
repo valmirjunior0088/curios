@@ -542,7 +542,7 @@ impl Intrinsic {
         }
     }
 
-    /// This operation's term operands, in the same order [`for_each_operand`](Self::for_each_operand) visits them — which is the order [`signature`](Self::signature) states their types in.
+    /// This operation's term operands, in the same order `for_each_operand` visits them — which is the order [`signature`](Self::signature) states their types in.
     ///
     /// Collected rather than visited because the checking walks zip it against that table, and a `zip` needs a sequence. Not for the hot paths: `reach` and `any_metavar` keep the visiting form precisely so they allocate nothing.
     pub fn operands(&self) -> Vec<&Term> {
