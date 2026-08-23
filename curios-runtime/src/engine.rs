@@ -314,6 +314,18 @@ fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBinding
         move |name: Vec<u8>| host.env(&name)
     });
 
+    // Completeness — the half the per-`define` asserts cannot see: a store row with no binding would otherwise surface only when a program that imports it reaches `link`. Membership and uniqueness are asserted per `define`, so no unbound row is exactly one binding per row.
+    let missing = impls
+        .foreigns
+        .iter()
+        .filter(|function| !impls.trampolines.contains_key(&function.name))
+        .map(|function| function.name.as_str())
+        .collect::<Vec<_>>();
+    assert!(
+        missing.is_empty(),
+        "host_ops rows without a sys binding: {missing:?}"
+    );
+
     impls
 }
 
