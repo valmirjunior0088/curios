@@ -16,19 +16,9 @@ pub struct Prefix<'a> {
 }
 
 impl<'a> Prefix<'a> {
-    /// Nothing in scope: this unit is the first, and defines every name it mentions.
-    pub fn nothing() -> Self {
-        Self { units: &[] }
-    }
-
-    /// Everything `units` established, in dependency order.
+    /// Everything `units` established, in dependency order. Empty is the entrypoint's case: nothing is in scope, so that unit defines every name it mentions.
     pub fn over(units: &'a [&'a Unit]) -> Self {
         Self { units }
-    }
-
-    /// Whether nothing is in scope.
-    pub fn is_empty(&self) -> bool {
-        self.units.is_empty()
     }
 
     /// The units themselves, in dependency order.
@@ -66,11 +56,5 @@ impl<'a> Prefix<'a> {
             .last()
             .map(|unit| unit.arena())
             .unwrap_or_default()
-    }
-}
-
-impl Default for Prefix<'_> {
-    fn default() -> Self {
-        Self::nothing()
     }
 }
