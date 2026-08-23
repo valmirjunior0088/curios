@@ -159,6 +159,88 @@ fn flt_to_str_matches_rust_shortest_format() {
 }
 
 #[test]
+#[allow(clippy::approx_constant)] // "3.14" is a parse-and-render test vector, not π
+fn flt_of_str_matches_rust_parse() {
+    // `Flt/of_str` is exact: the digits go into a `BigNat` and `D · 10^E` is narrowed to binary32 once, ties to even. The oracle is Rust's `str::parse::<f32>`, which is correctly rounded, rendered through the same `{:+}` the printer test uses so both halves of the codec answer to the same spelling. The table walks every rounding the old arithmetic got wrong: a nine-digit mantissa (rounded by `Nat/to_flt` before scaling), a large exponent (`pow10` by repeated multiplication is inexact past `10^10`), every subnormal (`pow10(39)` overflowed, so their reciprocal scale was zero), the overflow boundary — `3.4028236e38` is above the largest finite value yet below the rounding threshold `2^128 − 2^103`, so it is that value and not `inf` — and leading zeros, which the underflow clamp must count and the overflow clamp must not.
+    let cases = [
+        "12.0",
+        ".5",
+        "1e3",
+        "+0.1",
+        "-3.14",
+        "123456.79",
+        "1.2345679e-5",
+        "9.999999e9",
+        "16777217.0",
+        "0.30000001",
+        "3.4028235e38",
+        "3.4028236e38",
+        "3.4028237e38",
+        "1e39",
+        "1.1754944e-38",
+        "1.1754942e-38",
+        "2.137381e-39",
+        "7.0e-45",
+        "1.0e-45",
+        "1e-46",
+        "1e-50",
+        "-0.0",
+        "0.0e5",
+        "00000000000000000000000000000000000000000001.5e0",
+        "0.000000000000000000000000000000000000000000001",
+        "1.00000006",
+        "8388609.0",
+        "2.5e-2",
+        "7.1551326e37",
+    ];
+    let array = cases
+        .iter()
+        .map(|text| format!("Flt/to_str(Option/unwrap_or(Flt/of_str(\"{text}\"), Flt/nan))"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let source = format!(
+        r#"
+        use /std/{{Handle, Str, Flt, List, Option}};
+        /std/print(Str/join("|", [{array}]))
+        "#
+    );
+    let expected = cases
+        .iter()
+        .map(|text| {
+            format!(
+                "{:+}",
+                text.parse::<f32>().expect("a float the oracle parses")
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("|");
+    assert_eq!(run(&source), expected.into_bytes());
+}
+
+/// The codec round-trips at runtime: `to_str` prints the shortest decimal that reads back as its input, and `of_str` reads it back exactly. Every value is scaled by a runtime-tainted `1.0` so the whole pair runs in emitted Wasm rather than folding at compile time; a closed program would only exercise the partial evaluator. Before `of_str` was exact, about forty percent of finite values failed this.
+#[test]
+fn flt_codec_round_trips_on_runtime_values() {
+    let source = r#"
+        use /std/{Handle, Str, Nat, Flt, Bytes, Option, List, Bool};
+        let one = Nat/to_flt(Bytes/len(/std/rand/bytes(3)!)) / +3.0;
+        let check(x : Flt) -> Str =
+            let back = Option/unwrap_or(Flt/of_str(Flt/to_str(x)), Flt/nan);
+            match Bytes/eql(Flt/to_le_bytes(back), Flt/to_le_bytes(x))
+            | true => "ok"
+            | false => Str/concat(Flt/to_str(x), Str/concat(" -> ", Flt/to_str(back)))
+            end;
+        let values = [
+            +3.4028235e38, +1.1754944e-38, +1.0e-45, +2.137381e-39, +0.1, +123456.79,
+            +1.2345679e-5, +9.999999e9, +16777216.0, +0.30000001, +7.1551326e37,
+            +7.141006e-33, +7.734096e-28, +1.7387574e-25, +2.7182817, -0.0, +0.0, -1.5e-40,
+        ];
+        /std/print(Str/join("|", List/map(values, (x) => check(x * one))))
+        "#;
+    let expected = std::iter::repeat_n("ok", 18).collect::<Vec<_>>().join("|");
+    assert_eq!(run(source), expected.into_bytes());
+}
+
+#[test]
 fn flt_to_le_bytes_prints_raw_bytes() {
     let source = r#"
         let _ = std/Handle/write(std/Handle/stdout, std/Flt/to_le_bytes(+1.5))!;

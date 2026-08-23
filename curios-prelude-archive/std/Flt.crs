@@ -2,8 +2,8 @@ pub use /sys/{Flt};
 pub use /syn/Flt/{FourBytes};
 pub use /sys/Flt/{add, sub, mul, div, rem, min, max, eql, neq, lt, gt, le, ge, neg, abs, sqrt,
     floor, ceil, trunc, nearest, copysign, to_nat, to_int, to_le_bytes, of_le_bytes};
-use /std/{Nat, Byte, Int, Str, Bool, Option, Bytes, List, Order, BigNat, Eql, Cmp, Add, Sub, Mul,
-    Div, Rem, Show, Ord, True, False};
+use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Order, BigNat, Eql, Cmp, Add, Sub,
+    Mul, Div, Rem, Show, Ord, True, False};
 
 -- The two infinities are spelled by division rather than by their bit patterns, and that is a dependency fact rather than a style preference: `of_le_bytes` states a length precondition, so building an infinity from bytes would make these depend on the very operation whose bound wants naming an infinity. `div` states no precondition — `Flt` division is total, an IEEE infinity being a value rather than a failure — so this direction has no edge back.
 pub let pos_inf: Flt =
@@ -199,19 +199,109 @@ pub let to_str(f: Flt) -> Str =
 pub let pow10(n: Nat) -> Flt =
     match n | 0 => +1.0 | pred + 1; ih => ih * +10.0 end;
 
-let digits_or_zero(s: Str) -> Option(Nat) =
-    match Str/is_empty(s) | true => Option/some(0) | false => Nat/of_str(s) end;
+-- `of_str` is exact: the digits are read into a `BigNat` and `D · 10^E` is narrowed to the nearest binary32 once, ties to even, the way the printer above is exact in the other direction. It used to compute `to_flt(int) + to_flt(frac) / pow10(len) * pow10(exp)` — four roundings, `to_flt` already past nine digits, and `pow10(39)` is `inf`, which flushed every subnormal to zero — and failed `of_str(to_str(x)) == x` for about forty percent of finite values.
 
-let exp_factor(exp_int: Int) -> Flt =
-    match exp_int >= 0
-    | true => pow10(Int/to_nat(exp_int))
-    | false => +1.0 / pow10(Int/abs(exp_int))
+let pow10_big(n: Nat) -> BigNat =
+    match n | 0 => BigNat/of_nat(1) | p + 1; ih => BigNat/mul/small(ih, 10) end;
+
+-- The decimal digits of `s` as a number, or `none` on any other character. The empty string is zero, so an absent integer or fraction part reads as nothing rather than failing.
+let digits_big(s: Str) -> Option(BigNat) =
+    Str/fold(
+        s,
+        Option/some(BigNat/zero),
+        (c, acc) =>
+            let a = acc!;
+            match Char/is_digit(c)
+            | true => Option/some(BigNat/mul/small(a, 10) + BigNat/of_nat(Char/to_nat(c) - 0x30))
+            | false => Option/none()
+            end);
+
+-- `2^e` as a float, exact over the whole binary32 range: a power of two is representable from `2^-149` to `2^127`, and each doubling or halving on the way to one is exact. Halving rather than dividing by `2^|e|` is what reaches the subnormal powers, whose reciprocals overflow.
+let two_pow(e: Int) -> Flt =
+    let mag = Int/abs(e);
+    match e >= +0
+    | true => match mag | 0 => +1.0 | k + 1; ih => ih * +2.0 end
+    | false => match mag | 0 => +1.0 | k + 1; ih => ih * +0.5 end
     end;
 
-let exp_factor_of(s: Str, e_pos: Nat, len: Nat) -> Option(Flt) =
+-- `bits` quotient bits of `n / d`, most significant first, where `d` arrives scaled so that `d <= n < 2 · d`: each step keeps or drops the current power of `d`, halves it — exact, since every power down to the last is `d` times a power of two — and shifts the bit in. The remainder says whether anything was lost below the last bit.
+rec quotient(n: BigNat, d: BigNat, bits: Nat, acc: Nat) -> {Nat, BigNat} =
+    match bits
+    | 0 => (acc, n)
+    | b + 1 =>
+        match n >= d
+        | true => quotient(n - d, BigNat/div2(d), b, acc * 2 + 1)
+        | false => quotient(n, BigNat/div2(d), b, acc * 2)
+        end
+    end;
+
+-- Drop `shift` low bits of `q`, rounding half to even; `sticky` is whether anything below `q` itself was nonzero, which breaks a tie the dropped bits alone would call exact. Shifts rather than division, since a divisor built from a runtime `shift` states no decidable bound.
+let round_bits(q: Nat, shift: Nat, sticky: Bool) -> Nat =
+    let kept = Nat/shr(q, shift);
+    let dropped = q - Nat/shl(kept, shift);
+    let half = Nat/shl(1, shift - 1);
+    let up =
+        choose
+        | dropped > half => true
+        | dropped < half => false
+        | sticky => true
+        | _ => Nat/rem(kept, 2) == 1
+        end;
+    match up | true => kept + 1 | false => kept end;
+
+-- The binary32 nearest to `m · 2^e` given `m` as the 26 bits `q` of a quotient in `[2^25, 2^26)` and the sticky flag below them, with the value in `[2^s, 2^(s + 1))`. A normal result keeps 24 of the 26 bits; a subnormal one is rounded on the `2^-149` grid directly from the same 26 bits, so nothing is rounded twice; a carry out of the top bit renormalizes, and past the largest exponent the answer is infinity.
+let assemble(q: Nat, sticky: Bool, s: Int) -> Flt =
+    choose
+    | s > +127 => pos_inf
+    | s < -126 =>
+        let shift = Int/abs(+0 - (s + +124));
+        match shift >= 27
+        | true => +0.0
+        | false => Nat/to_flt(round_bits(q, shift, sticky)) * two_pow(-149)
+        end
+    | _ =>
+        let mant = round_bits(q, 2, sticky);
+        match mant == 0x1000000
+        | true => match s == +127 | true => pos_inf | false => Nat/to_flt(0x800000) * two_pow(s - +22) end
+        | false => Nat/to_flt(mant) * two_pow(s - +23)
+        end
+    end;
+
+-- The binary32 nearest to `D · 10^E`, correctly rounded, with the sign applied last so a zero keeps it. `digits` is how many decimal digits spelled `D`, leading zeros included, which bounds `D` above and so decides underflow before any power of ten is built; overflow is decided from `D`'s bit length, which bounds it below. Inside those two clamps the numerator and denominator are exact and the quotient's top 26 bits settle the rounding.
+pub let of_decimal(negative: Bool, d: BigNat, e: Int, digits: Nat) -> Flt =
+    let magnitude =
+        choose
+        | BigNat/is_zero(d) => +0.0
+        | e >= +0 && (BigNat/bit_len(d) >= 129 || e >= +39) => pos_inf
+        | e < +0 && Nat/to_int(digits) + e <= -46 => +0.0
+        | _ =>
+            let (n0, d0) =
+                match e >= +0: (_) => {BigNat, BigNat}
+                | true => (BigNat/mul(d, pow10_big(Int/abs(e))), BigNat/of_nat(1))
+                | false => (d, pow10_big(Int/abs(e)))
+                end;
+            -- Scale so the quotient has 26 bits: `2^24 < n1 / d1 < 2^26` from the bit lengths alone, then one doubling where it fell short of `2^25`.
+            let sh = Nat/to_int(25 + BigNat/bit_len(d0)) - Nat/to_int(BigNat/bit_len(n0));
+            let (n1, d1) =
+                match sh >= +0: (_) => {BigNat, BigNat}
+                | true => (BigNat/mul/pow2(n0, Int/abs(sh)), d0)
+                | false => (n0, BigNat/mul/pow2(d0, Int/abs(sh)))
+                end;
+            let top = BigNat/mul/pow2(d1, 25);
+            let (n2, sh2) =
+                match n1 < top: (_) => {BigNat, Int}
+                | true => (BigNat/mul/pow2(n1, 1), sh + +1)
+                | false => (n1, sh)
+                end;
+            let (q, rest) = quotient(n2, top, 26, 0);
+            assemble(q, Bool/not(BigNat/is_zero(rest)), +25 - sh2)
+        end;
+    match negative | true => neg(magnitude) | false => magnitude end;
+
+let exponent_of(s: Str, e_pos: Nat, len: Nat) -> Option(Int) =
     match e_pos < len
-    | true => Option/map(Int/of_str(Str/slice(s, e_pos + 1, len - (e_pos + 1))), exp_factor)
-    | false => Option/some(+1.0)
+    | true => Int/of_str(Str/slice(s, e_pos + 1, len - (e_pos + 1)))
+    | false => Option/some(+0)
     end;
 
 pub let of_str(s: Str) -> Option(Flt) =
@@ -236,12 +326,11 @@ pub let of_str(s: Str) -> Option(Flt) =
             end;
         match Bool/not(Str/is_empty(int_slice)) || Bool/not(Str/is_empty(frac_slice))
         | true =>
-            let int_val = digits_or_zero(int_slice)!;
-            let frac_val = digits_or_zero(frac_slice)!;
-            let factor = exp_factor_of(s, e_pos, len)!;
-            let mantissa = Nat/to_flt(int_val) + Nat/to_flt(frac_val) / pow10(Str/len(frac_slice));
-            let result = mantissa * factor;
-            match is_neg | true => Option/some(neg(result)) | false => Option/some(result) end
+            let spelled = Str/concat(int_slice, frac_slice);
+            let digits = digits_big(spelled)!;
+            let exponent = exponent_of(s, e_pos, len)!;
+            let scale = exponent - Nat/to_int(Str/len(frac_slice));
+            Option/some(of_decimal(is_neg, digits, scale, Str/len(spelled)))
         | false => Option/none()
         end
     end;

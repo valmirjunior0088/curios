@@ -204,7 +204,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Certified Unicode-scalar `Char` type and `Str` migration (`'…' : Char`, typed character APIs, explicit Byte/Char/Nat boundaries, and ASCII-explicit classification and casing policy)
 - [x] Parser-combinator library (`std/Parse`)
 - [x] Typed format strings (`std/Fmt`)
-- [x] Decimal numeric conversions (`of_str`/`to_str` for `Nat`, `Int`, and `Flt`; `Flt/to_str` renders the shortest round-trip binary32 decimal through exact `BigNat` digit generation)
+- [x] Decimal numeric conversions (`of_str`/`to_str` for `Nat`, `Int`, and `Flt`; `Flt/to_str` renders the shortest round-trip binary32 decimal through exact `BigNat` digit generation, and `Flt/of_str` narrows the exact decimal to the nearest binary32 through `BigNat` long division, so the pair round-trips)
 - [x] JSON codec (`std/Json`)
 - [x] TOML 1.0.0 codec over native `Int` and binary32 `Flt` (`std/Toml`; explicitly not fully TOML-conforming because numeric storage is native-width)
   - [ ] [Full TOML conformance over exact numerics](roadmap/toml-full-conformance-spec.md) _(not refined; after the general rational `BigFlt` sequence)_
