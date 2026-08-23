@@ -13,7 +13,9 @@ use std::{
     marker::PhantomData,
 };
 
-/// A `u32`-backed arena identity, implemented by every [`id!`](crate::id) newtype. `from_index` is the arena's minting intrinsic — loud on exhaustion, never wrapping — and not meant to be called outside an arena, which is what keeps "identities are minted by their owning arena" a discipline with one door.
+/// A `u32`-backed arena identity, implemented by every [`id!`](crate::id) newtype. `from_index` is the one narrowing intrinsic — loud on exhaustion, never wrapping — and both ways of minting an identity go through it: an arena's [`mint`](Arena::mint)/[`reserve`](Arena::reserve), and the `Entropy` gensym the `id!(Foo, "f", mint)` form implements. Nothing else calls it.
+///
+/// The discipline that buys is one *source* per identity space rather than one caller: an arena-backed identity is minted only by its arena, a gensym identity has no arena at all, and no identity type is both. Two sources over one space would hand out one index twice, which is the failure this rules out.
 pub trait ArenaId: Copy + Display {
     #[doc(hidden)]
     fn from_index(index: usize) -> Self;
