@@ -1,9 +1,9 @@
 use {
     super::*,
     curios_num::{
-        flt_max, flt_min, flt_to_int, flt_to_nat, int_add, int_div, int_mul, int_rem, int_shl,
-        int_shr, int_sub, int_to_nat, nat_add, nat_div, nat_mul, nat_rem, nat_shl, nat_shr,
-        nat_sub, nat_to_int,
+        Floating, flt_max, flt_min, flt_to_int, flt_to_nat, int_add, int_div, int_mul, int_rem,
+        int_shl, int_shr, int_sub, int_to_nat, nat_add, nat_div, nat_mul, nat_rem, nat_shl,
+        nat_shr, nat_sub, nat_to_int,
     },
 };
 
@@ -27,10 +27,11 @@ pub(super) fn evaluate(op: CpsIntrinsic, args: &[CpsAtom]) -> Option<CpsLiteral>
         _ => None,
     };
     let flt = |index: usize| match literals[index] {
-        CpsLiteral::Flt(value) => Some(*value),
+        CpsLiteral::Flt(value) => Some(value.to_f32()),
         _ => None,
     };
     let bool_ = |value: bool| Some(CpsLiteral::Nat(value as u32));
+    let flt_ = |value: f32| Some(CpsLiteral::Flt(Floating::from_f32(value)));
 
     match op {
         CpsIntrinsic::NatEql => bool_(nat(0)? == nat(1)?),
@@ -59,7 +60,7 @@ pub(super) fn evaluate(op: CpsIntrinsic, args: &[CpsAtom]) -> Option<CpsLiteral>
         CpsIntrinsic::NatShr => Some(CpsLiteral::Nat(nat_shr(nat(0)?, nat(1)?))),
         CpsIntrinsic::NatEqz => bool_(nat(0)? == 0),
         CpsIntrinsic::NatToInt => Some(CpsLiteral::Int(nat_to_int(nat(0)?)?)),
-        CpsIntrinsic::NatToFlt => Some(CpsLiteral::Flt(nat(0)? as f32)),
+        CpsIntrinsic::NatToFlt => flt_(nat(0)? as f32),
         CpsIntrinsic::IntEql => bool_(int(0)? == int(1)?),
         CpsIntrinsic::IntNeq => bool_(int(0)? != int(1)?),
         CpsIntrinsic::IntAdd => Some(CpsLiteral::Int(int_add(int(0)?, int(1)?).ok()?)),
@@ -78,28 +79,28 @@ pub(super) fn evaluate(op: CpsIntrinsic, args: &[CpsAtom]) -> Option<CpsLiteral>
         CpsIntrinsic::IntShr => Some(CpsLiteral::Int(int_shr(int(0)?, int(1)?)?)),
         CpsIntrinsic::IntEqz => bool_(int(0)? == 0),
         CpsIntrinsic::IntToNat => Some(CpsLiteral::Nat(int_to_nat(int(0)?)?)),
-        CpsIntrinsic::IntToFlt => Some(CpsLiteral::Flt(int(0)? as f32)),
-        CpsIntrinsic::FltAdd => Some(CpsLiteral::Flt(flt(0)? + flt(1)?)),
-        CpsIntrinsic::FltSub => Some(CpsLiteral::Flt(flt(0)? - flt(1)?)),
-        CpsIntrinsic::FltMul => Some(CpsLiteral::Flt(flt(0)? * flt(1)?)),
-        CpsIntrinsic::FltDiv => Some(CpsLiteral::Flt(flt(0)? / flt(1)?)),
-        CpsIntrinsic::FltRem => Some(CpsLiteral::Flt(flt(0)? % flt(1)?)),
+        CpsIntrinsic::IntToFlt => flt_(int(0)? as f32),
+        CpsIntrinsic::FltAdd => flt_(flt(0)? + flt(1)?),
+        CpsIntrinsic::FltSub => flt_(flt(0)? - flt(1)?),
+        CpsIntrinsic::FltMul => flt_(flt(0)? * flt(1)?),
+        CpsIntrinsic::FltDiv => flt_(flt(0)? / flt(1)?),
+        CpsIntrinsic::FltRem => flt_(flt(0)? % flt(1)?),
         CpsIntrinsic::FltEql => bool_(flt(0)? == flt(1)?),
         CpsIntrinsic::FltNeq => bool_(flt(0)? != flt(1)?),
         CpsIntrinsic::FltLt => bool_(flt(0)? < flt(1)?),
         CpsIntrinsic::FltGt => bool_(flt(0)? > flt(1)?),
         CpsIntrinsic::FltLe => bool_(flt(0)? <= flt(1)?),
         CpsIntrinsic::FltGe => bool_(flt(0)? >= flt(1)?),
-        CpsIntrinsic::FltMin => Some(CpsLiteral::Flt(flt_min(flt(0)?, flt(1)?)?)),
-        CpsIntrinsic::FltMax => Some(CpsLiteral::Flt(flt_max(flt(0)?, flt(1)?)?)),
-        CpsIntrinsic::FltNeg => Some(CpsLiteral::Flt(-flt(0)?)),
-        CpsIntrinsic::FltAbs => Some(CpsLiteral::Flt(flt(0)?.abs())),
-        CpsIntrinsic::FltSqrt => Some(CpsLiteral::Flt(flt(0)?.sqrt())),
-        CpsIntrinsic::FltFloor => Some(CpsLiteral::Flt(flt(0)?.floor())),
-        CpsIntrinsic::FltCeil => Some(CpsLiteral::Flt(flt(0)?.ceil())),
-        CpsIntrinsic::FltTrunc => Some(CpsLiteral::Flt(flt(0)?.trunc())),
-        CpsIntrinsic::FltNearest => Some(CpsLiteral::Flt(flt(0)?.round_ties_even())),
-        CpsIntrinsic::FltCopysign => Some(CpsLiteral::Flt(flt(0)?.copysign(flt(1)?))),
+        CpsIntrinsic::FltMin => flt_(flt_min(flt(0)?, flt(1)?)?),
+        CpsIntrinsic::FltMax => flt_(flt_max(flt(0)?, flt(1)?)?),
+        CpsIntrinsic::FltNeg => flt_(-flt(0)?),
+        CpsIntrinsic::FltAbs => flt_(flt(0)?.abs()),
+        CpsIntrinsic::FltSqrt => flt_(flt(0)?.sqrt()),
+        CpsIntrinsic::FltFloor => flt_(flt(0)?.floor()),
+        CpsIntrinsic::FltCeil => flt_(flt(0)?.ceil()),
+        CpsIntrinsic::FltTrunc => flt_(flt(0)?.trunc()),
+        CpsIntrinsic::FltNearest => flt_(flt(0)?.round_ties_even()),
+        CpsIntrinsic::FltCopysign => flt_(flt(0)?.copysign(flt(1)?)),
         CpsIntrinsic::FltToNat => Some(CpsLiteral::Nat(flt_to_nat(flt(0)?)?)),
         CpsIntrinsic::FltToInt => Some(CpsLiteral::Int(flt_to_int(flt(0)?)?)),
         // Folds over the *runtime* representation, not the literal's kind: `Nat` and `Int` ride i31, while an `Flt` is a boxed struct and a `Bin` a rope reference, so both answer 0.

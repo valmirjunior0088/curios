@@ -20,6 +20,11 @@ impl Floating {
         f32::from_bits(self.bits)
     }
 
+    /// The stored bit pattern — the identity `Eq` and `Hash` are derived over, for a caller keying on it.
+    pub fn to_bits(self) -> u32 {
+        self.bits
+    }
+
     pub fn abs(self) -> Self {
         Self::from_f32(self.to_f32().abs())
     }

@@ -2378,7 +2378,7 @@ impl Lowerer<'_> {
             Constant::Nat(value) => curios_cont::CpsLiteral::Nat(*value),
             Constant::Byte(value) => curios_cont::CpsLiteral::Nat(u32::from(*value)),
             Constant::Int(value) => curios_cont::CpsLiteral::Int(*value),
-            Constant::Flt(value) => curios_cont::CpsLiteral::Flt(value.to_f32()),
+            Constant::Flt(value) => curios_cont::CpsLiteral::Flt(*value),
             Constant::Bin(grain, value) => curios_cont::CpsLiteral::Bin(*grain, value.clone()),
             // A Handle descriptor token rides the packed-binary carrier: its little-endian bytes at byte grain.
             Constant::Handle(token) => curios_cont::CpsLiteral::Bin(

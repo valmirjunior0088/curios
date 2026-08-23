@@ -6,6 +6,7 @@ use {
         CpsIntrinsicCall, CpsLiteral, CpsModule, CpsNode, CpsSlot, CpsValueExpr, into_wasm,
     },
     curios_abi::host_ops,
+    curios_num::Floating,
     curios_utilities::{Grain, PackedBin},
     std::collections::BTreeMap,
 };
@@ -55,8 +56,8 @@ const fn int(value: i32) -> CpsAtom {
     CpsAtom::Literal(CpsLiteral::Int(value))
 }
 
-const fn flt(value: f32) -> CpsAtom {
-    CpsAtom::Literal(CpsLiteral::Flt(value))
+fn flt(value: f32) -> CpsAtom {
+    CpsAtom::Literal(CpsLiteral::Flt(Floating::from_f32(value)))
 }
 
 /// A nullary `main` that binds one intrinsic over `args` and exits with the result — the CPS analogue of the deleted fixtures' "compute one thing, exit with it". `into_wasm` does not fold, so the op lowers verbatim.

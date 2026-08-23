@@ -1048,3 +1048,19 @@ fn an_immediate_leaf_tree_builds_and_sums_at_runtime() {
     .expect("expected result");
     assert_eq!(io.output().to_vec(), b"496");
 }
+
+/// An `Option(Flt)` built in a bind's continuation, unwrapped against `Flt/nan`, is the shape that ran the Cont fixpoint to its 1024-round backstop: the NaN default rides a switch edge, and with `CpsLiteral::Flt` compared under IEEE equality `forward_continuations` read that untouched edge as rewritten on every round. The literal is bitwise now; this is the program that found it, kept so the fixpoint's convergence on a NaN-carrying edge is asserted end-to-end rather than only at the pass.
+#[test]
+fn a_nan_default_on_a_runtime_option_converges() {
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Flt, Str, Bytes, Option};
+        let taint = Bytes/len(/std/rand/bytes(3)!);
+        let f(s : Str) -> Option(Flt) =
+            let n = Nat/of_str(s)!;
+            Option/some(Nat/to_flt(n));
+        /std/print(Nat/to_str(Flt/to_nat(Option/unwrap_or(f(Nat/to_str(taint)), Flt/nan))))
+        "#),
+        b"3"
+    );
+}

@@ -4,6 +4,7 @@
 
 use {
     curios_abi::ForeignFunction,
+    curios_num::Floating,
     curios_utilities::{Arena, ArenaId, Grain, PackedBin, id},
     std::{
         collections::{BTreeMap, BTreeSet},
@@ -25,11 +26,12 @@ impl CpsFunId {
     }
 }
 
+/// A literal operand. `Flt` holds the bitwise [`Floating`] rather than an `f32` so that the derived equality is identity on the bit pattern: under IEEE equality a NaN literal is unequal to itself, and a pass comparing an edge it rebuilt against the edge it read would report a change on every round — `forward_continuations` did exactly that, and the fixpoint ran to its backstop on any module carrying a `NaN` through a jump.
 #[derive(Debug, Clone, PartialEq)]
 pub enum CpsLiteral {
     Nat(u32),
     Int(i32),
-    Flt(f32),
+    Flt(Floating),
     Bin(Grain, PackedBin),
 }
 

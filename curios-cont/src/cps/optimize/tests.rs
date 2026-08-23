@@ -19,6 +19,7 @@ use {
         CpsAtom, CpsCallee, CpsContId, CpsContinuation, CpsEdge, CpsFunId, CpsFunction,
         CpsIntrinsic, CpsLiteral, CpsModule, CpsNode, CpsNodeId, CpsValueExpr, CpsValueId, atoms,
     },
+    curios_num::Floating,
     std::collections::{BTreeMap, BTreeSet},
 };
 
@@ -600,6 +601,73 @@ fn forwarding_composes_jump_arguments_instead_of_only_retargeting() {
                     CpsAtom::Literal(CpsLiteral::Nat(7)),
                 ]
     ));
+    module.verify().unwrap();
+}
+
+/// A NaN literal riding a jump used to keep `forward_continuations` reporting a change on every round: `thread_edge` compared the edge it rebuilt against the edge it read, and under IEEE equality on an `f32` literal a NaN is unequal to itself, so an untouched edge read as rewritten and the fixpoint ran to its backstop. `CpsLiteral::Flt` is bitwise now, and this pins the consequence — the second call over a settled module reports nothing.
+#[test]
+fn forwarding_a_nan_literal_settles_in_one_round() {
+    let mut module = CpsModule::new();
+    let entry = module.reserve_function();
+    let return_cont = module.reserve_continuation();
+    let target = module.reserve_continuation();
+    let received = module.add_value(Some("received".into()));
+    let target_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        target: return_cont,
+        args: vec![CpsAtom::Value(received)],
+    }));
+    module.define_continuation(
+        target,
+        CpsContinuation {
+            debug_name: Some("target".into()),
+            params: vec![received],
+            body: target_body,
+        },
+    );
+    let forwarding = module.reserve_continuation();
+    let forwarded = module.add_value(Some("forwarded".into()));
+    let forwarding_body = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        target,
+        args: vec![CpsAtom::Value(forwarded)],
+    }));
+    module.define_continuation(
+        forwarding,
+        CpsContinuation {
+            debug_name: Some("forwarding".into()),
+            params: vec![forwarded],
+            body: forwarding_body,
+        },
+    );
+    let nan = CpsAtom::Literal(CpsLiteral::Flt(Floating::from_f32(f32::NAN)));
+    let call = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        target: forwarding,
+        args: vec![nan.clone()],
+    }));
+    let body = module.add_node(CpsNode::LetCont {
+        continuations: vec![forwarding, target],
+        body: call,
+    });
+    module.define_function(
+        entry,
+        CpsFunction {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont,
+            body,
+        },
+    );
+    module.set_entry(entry);
+
+    assert!(forward_continuations(&mut module));
+    assert!(matches!(
+        module.node(call),
+        Some(CpsNode::ApplyCont(CpsEdge { target: actual, args }))
+            if *actual == target && args == std::slice::from_ref(&nan)
+    ));
+    assert!(
+        !forward_continuations(&mut module),
+        "a settled module must report no change"
+    );
     module.verify().unwrap();
 }
 
@@ -2031,11 +2099,17 @@ fn identity_folds_leave_traps_and_flt_untouched() {
         ),
         (
             CpsIntrinsic::FltAdd,
-            vec![CpsAtom::Value(x), CpsAtom::Literal(CpsLiteral::Flt(0.0))],
+            vec![
+                CpsAtom::Value(x),
+                CpsAtom::Literal(CpsLiteral::Flt(Floating::from_f32(0.0))),
+            ],
         ),
         (
             CpsIntrinsic::FltMul,
-            vec![CpsAtom::Value(x), CpsAtom::Literal(CpsLiteral::Flt(1.0))],
+            vec![
+                CpsAtom::Value(x),
+                CpsAtom::Literal(CpsLiteral::Flt(Floating::from_f32(1.0))),
+            ],
         ),
     ];
     for (op, args) in cases {
