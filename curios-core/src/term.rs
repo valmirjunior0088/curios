@@ -106,6 +106,11 @@ impl Term {
         self.scalars().hash
     }
 
+    /// The cached structural hash, for a consumer that needs a deterministic total preorder on terms rather than equality — `Nat::product` orders a monomial's factors by it. Deterministic because the hasher is seeded with fixed keys; two distinct terms hashing alike are not distinguished, which a consumer must treat as "no order", never as "equal".
+    pub(crate) fn structural_hash(&self) -> u64 {
+        self.get_or_init_hash()
+    }
+
     /// Whether any *free* variable in this term is a binder some scope opened ([`Free::Local`]) rather than a top-level definition — the cached spelling of `Subterm::has_local_free`, which records why this is a discriminant test and not a spelling probe. Binder labels inside `Scope`s are closed occurrences, not free variables, and never count. Cached per node and computed from the children's cached scalars, so a shared subterm — a DAG-shaped lowered literal — pays O(degree) here, not O(size): the elaboration cache gates every `elaborate` call on this bit and must not re-walk shared chains.
     pub fn has_local_free(&self) -> bool {
         self.scalars().has_local_free

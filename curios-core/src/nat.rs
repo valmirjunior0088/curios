@@ -154,6 +154,68 @@ impl Nat {
         (Natural::one(), summand.clone())
     }
 
+    /// A reduced summand read as a monomial: its literal coefficient and its symbolic factors, the product spine flattened whatever its nesting, with every literal multiplied into the coefficient.
+    pub(crate) fn monomial(summand: &Term) -> (Natural, Vec<Term>) {
+        let mut coefficient = Natural::one();
+        let mut factors = Vec::new();
+        let mut pending = vec![summand.clone()];
+        while let Some(term) = pending.pop() {
+            match &*term {
+                Subterm::Intrinsic(Intrinsic::NatMul(left, right)) => {
+                    pending.push(right.clone());
+                    pending.push(left.clone());
+                }
+                _ => match term.as_nat().and_then(|value| value.to_natural()) {
+                    Some(literal) => coefficient = coefficient * literal,
+                    None => factors.push(term),
+                },
+            }
+        }
+        (coefficient, factors)
+    }
+
+    /// `coefficient · factors` in normal form: the factors in a canonical order, so `x · y` and `y · x` are one term, nested to the left, under [`Nat::scaled`]. The order is the factors' structural hash, which is deterministic; the sort is stable, so two distinct factors that happen to hash alike keep their written order and simply fail to canonicalize against each other — incompleteness, never a wrong equation. A monomial with no factors is its coefficient.
+    pub(crate) fn product(coefficient: Natural, mut factors: Vec<Term>) -> Term {
+        factors.sort_by_key(Term::structural_hash);
+        match factors
+            .into_iter()
+            .reduce(|left, right| Term::intrinsic(Intrinsic::nat_mul(left, right)))
+        {
+            Some(product) => Self::scaled(coefficient, product),
+            None => Term::intrinsic(Intrinsic::Nat(Nat::new(coefficient))),
+        }
+    }
+
+    /// The product of two reduced `Nat` terms, in the sum normal form: every summand of one — its floor counted as a constant summand — times every summand of the other, each product a monomial in canonical factor order, and the results summed through [`Nat::sum_over_floor`] so like monomials merge. This is distribution in full — `x · (y + z) = x · y + x · z` for a symbolic `x` — of which the literal-factor floor law, the unit and annihilation laws and the nested-factor fold are the special cases, each of which the value grid still states on its own.
+    pub(crate) fn multiply(left: &Term, right: &Term) -> Term {
+        let terms = |term: &Term| {
+            let (floor, inner) = Self::decompose(term);
+            let mut terms = Self::summands(&inner)
+                .iter()
+                .map(Self::monomial)
+                .collect::<Vec<_>>();
+            if !floor.is_zero() {
+                terms.push((floor, Vec::new()));
+            }
+            terms
+        };
+
+        let mut floor = Natural::zero();
+        let mut summands = Vec::new();
+        for (ca, fa) in terms(left) {
+            for (cb, fb) in terms(right) {
+                let coefficient = ca.clone() * cb;
+                let mut factors = fa.clone();
+                factors.extend(fb.iter().cloned());
+                match factors.is_empty() {
+                    true => floor += coefficient,
+                    false => summands.push(Self::product(coefficient, factors)),
+                }
+            }
+        }
+        Self::sum_over_floor(summands, floor)
+    }
+
     /// `coefficient · factor` in normal form: a zero coefficient is `0`, a unit coefficient is the factor itself, and anything else is the product with the literal on the left — so `x · 2` and `2 · x` are one term.
     pub(crate) fn scaled(coefficient: Natural, factor: Term) -> Term {
         if coefficient.is_zero() {

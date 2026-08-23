@@ -400,23 +400,6 @@ fn nat_literal_factor(summand: &Term) -> Option<(Natural, Term)> {
         .filter(|(_, factor)| factor != summand)
 }
 
-/// `coefficient · inner` for a reduced, floorless `inner`: zero stays zero, a sum distributes — `2 · (x + y)` is `2 · x + 2 · y`, each summand scaled in turn — a tail already carrying a literal coefficient takes the product, `2 · (3 · x)` is `6 · x`, and anything else is [`Nat::scaled`], which clears the unit and zero coefficients. The one place a literal meets a symbolic factor, so every such product lands in the sum normal form.
-fn nat_scale(coefficient: Natural, inner: Term) -> Term {
-    if Nat::is_zero(&inner) {
-        return inner;
-    }
-    let summands = Nat::summands(&inner);
-    if summands.len() > 1 {
-        let scaled = summands
-            .into_iter()
-            .map(|summand| nat_scale(coefficient.clone(), summand))
-            .collect();
-        return Nat::sum_over_floor(scaled, Natural::zero());
-    }
-    let (nested, factor) = Nat::literal_factor(&inner);
-    Nat::scaled(coefficient * nested, factor)
-}
-
 /// Split a reduced dividend against a literal divisor into `(quotient, remainder)`, or `None` where the division is not forced.
 ///
 /// Every summand must be either a literal multiple of `n` — contributing its cofactor to the quotient — or statically bounded. When the bounded summands together with the residual floor stay below `n`, none of them can carry into the next multiple, so the split is exact for every value the symbolic parts take. That is what makes `(256·x + Byte/to_nat(b)) / 256` reduce to `x`.
@@ -1053,28 +1036,15 @@ pub fn reduce_intrinsic(
             }
             Ok(Subterm::Intrinsic(Intrinsic::nat_sub(left, right)))
         }
-        // Multiplication distributes a literal factor over the other operand's successor floor: `(it + st) · c = (it · c) + (st · c)`. The literal floors multiply out and the symbolic tail is scaled by `nat_scale`, which is where the unit and annihilation laws live — `x · 1 = x`, `x · 0 = 0` — and where a tail already carrying a literal coefficient takes the product of the two, `2 · (3 · x) = 6 · x`. The multiplicative twin of `NatAdd`'s floor law — it lets `n · k` extract `k` past a symbolic `n` (`(x + 1) · 2 = x · 2 + 2`) the same way `n + k` does. Whichever side is the literal drives, and the scaled tail puts the coefficient on the left, so `x · 2` and `2 · x` reach one normal form; two symbolic operands have no literal factor, so their product stays neutral.
+        // Multiplication distributes in full, through `Nat::multiply`: every summand of one operand times every summand of the other, each product a monomial in canonical factor order, the results merged as a linear combination. The literal-factor floor law `(x + 1) · 2 = x · 2 + 2`, the unit and annihilation laws, the nested-factor fold `2 · (3 · x) = 6 · x`, a literal over a symbolic sum, a symbolic factor over a symbolic sum, and `x · y = y · x` are all the one rule; the floor only ever moves outward and a monomial is never nested, so the rewrite terminates.
         Intrinsic::NatMul(left, right) => {
             let left = reducer.reduce_forced(left.clone())?;
             let right = reducer.reduce_forced(right.clone())?;
-            let (sl, il) = Nat::decompose(&left);
-            let (sr, ir) = Nat::decompose(&right);
-
-            if Nat::is_zero(&ir) {
-                // right is the literal `sr`: distribute over the left floor.
-                return Ok(Term::unwrap_or_clone(Nat::rebuild(
-                    sl * sr.clone(),
-                    nat_scale(sr, il),
-                )));
-            }
-            if Nat::is_zero(&il) {
-                // left is the literal `sl`, right symbolic: distribute over the right floor.
-                return Ok(Term::unwrap_or_clone(Nat::rebuild(
-                    sl.clone() * sr,
-                    nat_scale(sl, ir),
-                )));
-            }
-            Ok(Subterm::Intrinsic(Intrinsic::nat_mul(left, right)))
+            reducer.spend(operand_bound(
+                left.as_nat().map_or(0, |value| value.bits()),
+                right.as_nat().map_or(0, |value| value.bits()),
+            ))?;
+            Ok(Term::unwrap_or_clone(Nat::multiply(&left, &right)))
         }
         Intrinsic::NatLt(left, right) => reduce_nat_compare(
             reducer,
@@ -3778,7 +3748,9 @@ mod tests {
         let fun = Free::local(9, Some("f"));
         let bool_p = Free::local(10, Some("p"));
         let int_i = Free::local(11, Some("i"));
+        let nat_z = Free::local(12, Some("z"));
         let x = Term::free_var(&nat_x);
+        let z = Term::free_var(&nat_z);
         let p = Term::free_var(&bool_p);
         let i = Term::free_var(&int_i);
         let boolean = |value: bool| Term::intrinsic(Intrinsic::Bool(value));
@@ -4340,6 +4312,49 @@ mod tests {
                     vec![(&nat_x, lit(0)), (&nat_y, lit(0))],
                     vec![(&nat_x, lit(2)), (&nat_y, lit(5))],
                     vec![(&nat_x, lit(7)), (&nat_y, lit(1))],
+                ],
+            ),
+            // Monomials: a product of symbols has one factor order, a product spine flattens, and a symbolic factor distributes over a symbolic sum.
+            (
+                "x * y = y * x",
+                mul(x.clone(), y.clone()),
+                mul(y.clone(), x.clone()),
+                vec![
+                    vec![(&nat_x, lit(0)), (&nat_y, lit(3))],
+                    vec![(&nat_x, lit(2)), (&nat_y, lit(5))],
+                ],
+            ),
+            (
+                "(x * y) * z = x * (y * z)",
+                mul(mul(x.clone(), y.clone()), z.clone()),
+                mul(x.clone(), mul(y.clone(), z.clone())),
+                vec![
+                    vec![(&nat_x, lit(1)), (&nat_y, lit(2)), (&nat_z, lit(3))],
+                    vec![(&nat_x, lit(4)), (&nat_y, lit(0)), (&nat_z, lit(3))],
+                ],
+            ),
+            (
+                "x * (y + z) = x * y + x * z",
+                mul(x.clone(), plus(y.clone(), z.clone())),
+                plus(mul(x.clone(), y.clone()), mul(x.clone(), z.clone())),
+                vec![
+                    vec![(&nat_x, lit(0)), (&nat_y, lit(2)), (&nat_z, lit(3))],
+                    vec![(&nat_x, lit(4)), (&nat_y, lit(5)), (&nat_z, lit(6))],
+                ],
+            ),
+            (
+                "(x + 1) * (y + 2) = x * y + 2 * x + y + 2",
+                mul(plus(x.clone(), lit(1)), plus(y.clone(), lit(2))),
+                plus(
+                    plus(
+                        plus(mul(x.clone(), y.clone()), mul(lit(2), x.clone())),
+                        y.clone(),
+                    ),
+                    lit(2),
+                ),
+                vec![
+                    vec![(&nat_x, lit(0)), (&nat_y, lit(0))],
+                    vec![(&nat_x, lit(3)), (&nat_y, lit(7))],
                 ],
             ),
         ];
