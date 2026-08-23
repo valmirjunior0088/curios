@@ -499,6 +499,24 @@ fn reduce_nat_division(
         return Ok(Subterm::Intrinsic(Intrinsic::Nat(folded)));
     }
 
+    // The unconditional laws a symbolic part cannot falsify: a zero dividend divides to `0` with remainder `0` by any divisor, a dividend divides by `1` to itself with remainder `0`, and a dividend divides by itself to `1` with remainder `0` — the last on the operation's own precondition that the divisor is nonzero, which its proof operand states for every value.
+    let zero = || Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero));
+    if Nat::is_zero(&left) {
+        return Ok(zero());
+    }
+    if divisor.as_ref().is_some_and(Natural::is_one) {
+        return Ok(match euclid {
+            Euclid::Quotient => Term::unwrap_or_clone(left),
+            Euclid::Remainder => zero(),
+        });
+    }
+    if left == right {
+        return Ok(match euclid {
+            Euclid::Quotient => Subterm::Intrinsic(Intrinsic::Nat(Nat::new(Natural::one()))),
+            Euclid::Remainder => zero(),
+        });
+    }
+
     if let Some(divisor) = &divisor {
         if let Some((quotient, remainder)) = nat_euclid_split(&left, divisor) {
             return Ok(Term::unwrap_or_clone(match euclid {
@@ -1013,6 +1031,18 @@ pub fn reduce_intrinsic(
                 if Nat::is_zero(&il) {
                     return Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)));
                 }
+            }
+            // A zero minuend: `0 - x = 0` for every `x`, truncation being what makes it so.
+            if Nat::is_zero(&left) {
+                return Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)));
+            }
+            // A neutral left that is itself a subtraction reassociates: `(a - b) - c = a - (b + c)` holds for truncated subtraction as it does for the integers, and the right-nested form is the one where a later literal subtrahend meets `a`'s floor. The sum is reduced so the cancellation above sees its summands, and the result re-enters this arm for the laws it may now satisfy.
+            if let Subterm::Intrinsic(Intrinsic::NatSub(minuend, subtrahend)) = &*left {
+                let subtrahend = reducer.reduce_forced(Term::intrinsic(Intrinsic::nat_add(
+                    subtrahend.clone(),
+                    right.clone(),
+                )))?;
+                return reduce_intrinsic(reducer, &Intrinsic::nat_sub(minuend.clone(), subtrahend));
             }
             Ok(Subterm::Intrinsic(Intrinsic::nat_sub(left, right)))
         }
@@ -4108,6 +4138,69 @@ mod tests {
                 Term::intrinsic(Intrinsic::IntNeq(i.clone(), i.clone())),
                 boolean(false),
                 ints(),
+            ),
+            // Subtraction's zero minuend and reassociation, and the division family's unconditional laws — the ones a symbolic part cannot falsify.
+            ("0 - x = 0", sub(lit(0), x.clone()), lit(0), nats()),
+            (
+                "(x - y) - 3 = x - (y + 3)",
+                sub(sub(x.clone(), y.clone()), lit(3)),
+                sub(x.clone(), plus(y.clone(), lit(3))),
+                vec![
+                    vec![(&nat_x, lit(0)), (&nat_y, lit(0))],
+                    vec![(&nat_x, lit(9)), (&nat_y, lit(2))],
+                    vec![(&nat_x, lit(4)), (&nat_y, lit(2))],
+                    vec![(&nat_x, lit(2)), (&nat_y, lit(9))],
+                ],
+            ),
+            (
+                "x / 1 = x",
+                Term::intrinsic(Intrinsic::NatDiv {
+                    dividend: x.clone(),
+                    divisor: lit(1),
+                    non_zero: qed(),
+                }),
+                x.clone(),
+                nats(),
+            ),
+            (
+                "x % 1 = 0",
+                Term::intrinsic(Intrinsic::NatRem {
+                    dividend: x.clone(),
+                    divisor: lit(1),
+                    non_zero: qed(),
+                }),
+                lit(0),
+                nats(),
+            ),
+            (
+                "0 / (x + 1) = 0",
+                Term::intrinsic(Intrinsic::NatDiv {
+                    dividend: lit(0),
+                    divisor: plus(x.clone(), lit(1)),
+                    non_zero: qed(),
+                }),
+                lit(0),
+                nats(),
+            ),
+            (
+                "(x + 1) / (x + 1) = 1",
+                Term::intrinsic(Intrinsic::NatDiv {
+                    dividend: plus(x.clone(), lit(1)),
+                    divisor: plus(x.clone(), lit(1)),
+                    non_zero: qed(),
+                }),
+                lit(1),
+                nats(),
+            ),
+            (
+                "(x + 1) % (x + 1) = 0",
+                Term::intrinsic(Intrinsic::NatRem {
+                    dividend: plus(x.clone(), lit(1)),
+                    divisor: plus(x.clone(), lit(1)),
+                    non_zero: qed(),
+                }),
+                lit(0),
+                nats(),
             ),
         ];
 

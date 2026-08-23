@@ -62,8 +62,10 @@ const CARRIERS: &[Carrier] = &[
             "Eq((x + y) - y, x)",
             "Eq((x + y) - x, y)",
             "Eq((x + 5) - 3, x + 2)",
+            "Eq(0 - x, 0)",
+            "Eq((x - y) - z, x - (y + z))",
         ],
-        refused: &["Eq(0 - x, 0)", "Eq((x - y) - z, x - (y + z))"],
+        refused: &[],
     },
     Carrier {
         name: "Nat under / and %",
@@ -72,14 +74,14 @@ const CARRIERS: &[Carrier] = &[
             "Eq((x * 2) / 2, x)",
             "Eq((x * 2) % 2, 0)",
             "Eq((x * 2 + 1) % 2, 1)",
-        ],
-        refused: &[
             "Eq(x / 1, x)",
             "Eq(x % 1, 0)",
             "Eq(0 / (x + 1), 0)",
             "Eq(0 % (x + 1), 0)",
             "Eq((x + 1) / (x + 1), 1)",
+            "Eq((x + 1) % (x + 1), 0)",
         ],
+        refused: &[],
     },
     Carrier {
         name: "Nat comparisons",
