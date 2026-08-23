@@ -20,15 +20,12 @@ profile = [
 
 [dependencies]
 curios-profile = { workspace = true }
-curios-abi = { workspace = true, features = ["archive"] }
 curios-utilities = { workspace = true, features = ["archive"] }
 curios-core = { workspace = true, features = ["archive"] }
 curios-text = { workspace = true, features = ["archive"] }
 curios-elab = { workspace = true, features = ["archive"] }
-curios-ersd = { workspace = true, features = ["archive"] }
 curios-unit = { workspace = true, features = ["archive"] }
 curios-archive = { workspace = true, features = ["enabled"] }
-sha2 = "0.11.0"
 
 # Deliberately absent: `curios-cert`. Elaborating the prelude does not depend on
 # the kernel, and Cargo's rebuild granularity is the build script — so a crate
