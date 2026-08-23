@@ -612,7 +612,7 @@ fn goal_types_spell_operators_as_infix_not_witness_projections() {
 
 #[test]
 fn a_computed_equality_goal_suggests_refl() {
-    // The motivating base case: `? : Eq(0 + 0, 0 * 2)` — the indices unify through reduction, so the report suggests the complete candidate. The step case's indices are distinct stuck terms, so `refl` is filtered there and the step goal gets no constructor suggestion.
+    // The motivating base case: `? : Eq(0 + 0, 0 * 2)` — the indices unify through reduction, so the report suggests the complete candidate. The step case used to get none, its sides being distinct stuck terms; since a sum is a linear combination, `(p + 1) + (p + 1)` and `(p + 1) * 2` both reduce to `2 · p + 2`, so it is suggested there too — the whole theorem is computation now, which is what makes the fixture a probe of the suggestion and no longer of its filtering.
     let source = r#"
         use /std/{Nat, Eq};
         let double(n : Nat) -> Nat = n + n;
@@ -630,10 +630,9 @@ fn a_computed_equality_goal_suggests_refl() {
         error.contains("? \u{2248} Eq/refl()"),
         "unexpected error: {error}"
     );
-    // The step case gets no suggestion: its sides are distinct stuck terms, so `refl` fails index validation there.
     assert_eq!(
         error.matches('\u{2248}').count(),
-        1,
+        2,
         "unexpected error: {error}"
     );
 }
