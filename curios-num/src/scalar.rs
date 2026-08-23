@@ -4,6 +4,9 @@
 //!
 //! **What a signature here says.** `Result<_, ScalarTrap>` is an operation that always has an answer in the theory and sometimes cannot represent it: `Err` means the program traps, and a folder must record that rather than decline. `Option` is an operation the theory itself leaves undefined at that argument — a negative shift count, which `Integer::checked_shl` also declines — so a folder must stay silent and leave the term alone. A bare return is total. `curios-core` folds the same operations over unbounded `Natural`/`Integer` and is the oracle for every one of them: what is stated here must be Core's answer or a refusal, never a third value.
 
+#[cfg(test)]
+mod tests;
+
 /// Why an operation with an answer in the theory cannot produce one in its carrier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScalarTrap {
@@ -165,12 +168,26 @@ pub fn flt_to_int(value: f32) -> Option<i32> {
         .then_some(truncated as i32)
 }
 
-/// Binary32 minimum; `None` declines the fold on a NaN operand (Rust and Wasm disagree on NaN propagation), which is not a trap — the runtime operation proceeds.
+/// Binary32 minimum as `f32.min` computes it. `None` declines the fold on a NaN operand (Rust and Wasm disagree on NaN propagation), which is not a trap — the runtime operation proceeds. Operands that compare equal are the two zeros, or one value twice, and Wasm names the answer: the negative-signed one. It is spelled here rather than left to `f32::min`, whose LLVM lowering leaves the sign of an equal pair open.
 pub fn flt_min(left: f32, right: f32) -> Option<f32> {
-    (!left.is_nan() && !right.is_nan()).then(|| left.min(right))
+    if left.is_nan() || right.is_nan() {
+        return None;
+    }
+    Some(match left == right {
+        true if left.is_sign_negative() => left,
+        true => right,
+        false => left.min(right),
+    })
 }
 
-/// Binary32 maximum; `None` declines the fold on a NaN operand, which is not a trap — the runtime operation proceeds.
+/// Binary32 maximum as `f32.max` computes it; the twin of [`flt_min`], with an equal pair answering the positive-signed one.
 pub fn flt_max(left: f32, right: f32) -> Option<f32> {
-    (!left.is_nan() && !right.is_nan()).then(|| left.max(right))
+    if left.is_nan() || right.is_nan() {
+        return None;
+    }
+    Some(match left == right {
+        true if left.is_sign_negative() => right,
+        true => left,
+        false => left.max(right),
+    })
 }

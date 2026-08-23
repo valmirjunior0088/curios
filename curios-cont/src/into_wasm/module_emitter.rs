@@ -721,6 +721,10 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             ropes.emit_box_func(Grain::X, self.table.bytes_box_func());
         }
 
+        if self.table.flt_rem_used() {
+            ropes.emit_flt_rem_func(self.table.flt_rem_func());
+        }
+
         if self.table.bits_box_used() {
             ropes.emit_box_func(Grain::B, self.table.bits_box_func());
         }

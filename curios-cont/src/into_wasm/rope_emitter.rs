@@ -1721,6 +1721,168 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
         );
     }
 
+    /// `$flt/rem (f32, f32) -> f32`: exact `fmod` over binary32, the one scalar helper among the rope ones — it shares their declaration path and nothing else. Long division by exponent-scaled subtraction, in f32 instructions alone: `t` starts at `|y|` and doubles while `2t ≤ |x|` (past the largest finite value the doubling gives `inf`, which fails the test and stops); then while `|x| ≥ |y|`, `t` halves until it no longer exceeds `|x|` and is subtracted. Each halving stays at or above `|y|`, so it is exact even in the subnormal range, and each subtraction has `t ≤ |x| < 2t`, which is Sterbenz's condition for exactness — so the result is the exact remainder `fmodf` computes. The sign is the dividend's, as C defines it. Checked bit-for-bit against `fmodf` over two million random pairs and the NaN, zero, infinity and extreme-magnitude grid before it was written down here; the worst case, the largest finite value against the smallest subnormal, takes a few hundred iterations.
+    pub(crate) fn emit_flt_rem_func(&mut self, func_name: curios_wasm::FuncName) {
+        let x = curios_wasm::LocalName::from("x");
+        let y = curios_wasm::LocalName::from("y");
+        let ax = curios_wasm::LocalName::from("ax");
+        let ay = curios_wasm::LocalName::from("ay");
+        let t = curios_wasm::LocalName::from("t");
+        let f32_val = curios_wasm::ValType::Num(curios_wasm::NumType::F32);
+        fn label(name: &str) -> curios_wasm::LabelName {
+            curios_wasm::LabelName::from(name)
+        }
+        let f32_const = |value: f32| curios_wasm::Instr::F32Const { value };
+        let not = || curios_wasm::Instr::I32Eqz;
+        let br_if = |name: &str| curios_wasm::Instr::BrIf {
+            label_name: label(name),
+        };
+        let br = |name: &str| curios_wasm::Instr::Br {
+            label_name: label(name),
+        };
+        let return_if = |condition: Vec<curios_wasm::Instr>, result: Vec<curios_wasm::Instr>| {
+            let mut instrs = condition;
+            instrs.push(curios_wasm::Instr::If {
+                label_name: label("return"),
+                block_type: curios_wasm::BlockType::Empty,
+                then_instructions: result
+                    .into_iter()
+                    .chain([curios_wasm::Instr::Return])
+                    .collect(),
+                else_instructions: vec![],
+            });
+            instrs
+        };
+
+        let mut instrs = Vec::new();
+        // A NaN operand, an infinite dividend or a zero divisor has no remainder: NaN.
+        instrs.extend(return_if(
+            vec![
+                get(&x),
+                get(&x),
+                curios_wasm::Instr::F32Ne,
+                get(&y),
+                get(&y),
+                curios_wasm::Instr::F32Ne,
+                curios_wasm::Instr::I32Or,
+                get(&x),
+                curios_wasm::Instr::F32Abs,
+                f32_const(f32::INFINITY),
+                curios_wasm::Instr::F32Eq,
+                curios_wasm::Instr::I32Or,
+                get(&y),
+                f32_const(0.0),
+                curios_wasm::Instr::F32Eq,
+                curios_wasm::Instr::I32Or,
+            ],
+            vec![f32_const(f32::NAN)],
+        ));
+        // An infinite divisor or a zero dividend leaves the dividend as it is, its sign included.
+        instrs.extend(return_if(
+            vec![
+                get(&y),
+                curios_wasm::Instr::F32Abs,
+                f32_const(f32::INFINITY),
+                curios_wasm::Instr::F32Eq,
+                get(&x),
+                f32_const(0.0),
+                curios_wasm::Instr::F32Eq,
+                curios_wasm::Instr::I32Or,
+            ],
+            vec![get(&x)],
+        ));
+        instrs.extend([
+            get(&x),
+            curios_wasm::Instr::F32Abs,
+            set(&ax),
+            get(&y),
+            curios_wasm::Instr::F32Abs,
+            set(&ay),
+        ]);
+        // A dividend below the divisor is its own remainder.
+        instrs.extend(return_if(
+            vec![get(&ax), get(&ay), curios_wasm::Instr::F32Lt],
+            vec![get(&x)],
+        ));
+        // t = |y| · 2^k, the largest such at or below |x|.
+        instrs.extend([
+            get(&ay),
+            set(&t),
+            curios_wasm::Instr::Block {
+                label_name: label("scaled"),
+                block_type: curios_wasm::BlockType::Empty,
+                instructions: vec![curios_wasm::Instr::Loop {
+                    label_name: label("double"),
+                    block_type: curios_wasm::BlockType::Empty,
+                    instructions: vec![
+                        get(&t),
+                        f32_const(2.0),
+                        curios_wasm::Instr::F32Mul,
+                        get(&ax),
+                        curios_wasm::Instr::F32Le,
+                        not(),
+                        br_if("scaled"),
+                        get(&t),
+                        f32_const(2.0),
+                        curios_wasm::Instr::F32Mul,
+                        set(&t),
+                        br("double"),
+                    ],
+                }],
+            },
+        ]);
+        // while |x| ≥ |y| { while t > |x| { t /= 2 }; |x| -= t }
+        instrs.push(curios_wasm::Instr::Block {
+            label_name: label("reduced"),
+            block_type: curios_wasm::BlockType::Empty,
+            instructions: vec![curios_wasm::Instr::Loop {
+                label_name: label("subtract"),
+                block_type: curios_wasm::BlockType::Empty,
+                instructions: vec![
+                    get(&ax),
+                    get(&ay),
+                    curios_wasm::Instr::F32Ge,
+                    not(),
+                    br_if("reduced"),
+                    curios_wasm::Instr::Block {
+                        label_name: label("aligned"),
+                        block_type: curios_wasm::BlockType::Empty,
+                        instructions: vec![curios_wasm::Instr::Loop {
+                            label_name: label("halve"),
+                            block_type: curios_wasm::BlockType::Empty,
+                            instructions: vec![
+                                get(&t),
+                                get(&ax),
+                                curios_wasm::Instr::F32Gt,
+                                not(),
+                                br_if("aligned"),
+                                get(&t),
+                                f32_const(0.5),
+                                curios_wasm::Instr::F32Mul,
+                                set(&t),
+                                br("halve"),
+                            ],
+                        }],
+                    },
+                    get(&ax),
+                    get(&t),
+                    curios_wasm::Instr::F32Sub,
+                    set(&ax),
+                    br("subtract"),
+                ],
+            }],
+        });
+        instrs.extend([get(&ax), get(&x), curios_wasm::Instr::F32Copysign]);
+
+        self.add_helper(
+            func_name,
+            vec![(x, f32_val.clone()), (y, f32_val.clone())],
+            f32_val.clone(),
+            vec![(ax, f32_val.clone()), (ay, f32_val.clone()), (t, f32_val)],
+            instrs,
+        );
+    }
+
     /// `$bytes/norm` / `$bits/norm (ref $rope/bin) -> (ref any)`: the canonical form of a packed rope — inside its grain's envelope it packs into the i31, and anything longer answers itself. Called at every producer's exit for its grain, which is what makes a mixed-representation pair unrepresentable and the immediate equality one instruction. The bit grain's force already zeroes final-byte padding, so the bytes OR in clean.
     pub(crate) fn emit_norm_func(
         &mut self,

@@ -53,14 +53,6 @@ impl Floating {
         Self::from_f32(self.to_f32().round_ties_even())
     }
 
-    pub fn min(self, other: Self) -> Self {
-        Self::from_f32(self.to_f32().min(other.to_f32()))
-    }
-
-    pub fn max(self, other: Self) -> Self {
-        Self::from_f32(self.to_f32().max(other.to_f32()))
-    }
-
     pub fn eql(self, other: Self) -> bool {
         self.to_f32() == other.to_f32()
     }
@@ -118,7 +110,7 @@ impl Div for Floating {
     }
 }
 
-// C `fmod`: `x - trunc(x / y) * y` (the sign of the dividend), matching `f32`'s `%` and the `cont -> wasm` expansion of `Flt.rem`.
+// C `fmod`, which `f32`'s `%` is: the exact remainder, with the dividend's sign. The emitted Wasm computes the same through `curios-cont`'s `$flt/rem` helper, since the inline `x - trunc(x / y) * y` it once expanded to rounds at every step and is a different function.
 impl Rem for Floating {
     type Output = Self;
 

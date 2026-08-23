@@ -1302,17 +1302,13 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             CpsIntrinsic::FltDiv => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F32Div)
             }
-            // WebAssembly has no `f32.rem`, so expand the C `fmod` definition `x - trunc(x / y) * y` inline (`x`/`y` are locals, loaded twice).
+            // WebAssembly has no `f32.rem`; the shared helper computes the exact `fmod` the folders compute (see `Table::flt_rem_func`).
             CpsIntrinsic::FltRem => {
-                let (left, right) = (&args[0], &args[1]);
-                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
-                self.emit_instrs(self.context.load_value_instrs(left, LoadAs::Flt));
-                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
-                self.emit_instr(curios_wasm::Instr::F32Div);
-                self.emit_instr(curios_wasm::Instr::F32Trunc);
-                self.emit_instrs(self.context.load_value_instrs(right, LoadAs::Flt));
-                self.emit_instr(curios_wasm::Instr::F32Mul);
-                self.emit_instr(curios_wasm::Instr::F32Sub);
+                self.emit_instrs(self.context.load_value_instrs(&args[0], LoadAs::Flt));
+                self.emit_instrs(self.context.load_value_instrs(&args[1], LoadAs::Flt));
+                self.emit_instr(curios_wasm::Instr::Call {
+                    func_name: self.context.table().flt_rem_func(),
+                });
                 self.emit_store(dest, &op.result_repr());
             }
             CpsIntrinsic::FltEql => {

@@ -85,6 +85,14 @@ fn folded_and_executed_scalar_ops_agree_inside_the_envelope() {
         "Nat/to_str(to_nat_or(Int/add(+12345, i), 0))",
         // Sign transfer.
         "Flt/to_str(Flt/copysign(Flt/add(2.5, Int/to_flt(i)), -1.0))",
+        // `Flt/rem` is exact `fmod` in every folder, and the emitted Wasm must compute the same: it once expanded `x - trunc(x / y) * y` inline, which rounds at each step and disagreed with the fold on about half of all finite pairs — `1e8 % 3` was `1` folded and `0` executed, and `1 % inf` was `1` folded and NaN executed. Each row below is a pair the expansion got wrong.
+        "Flt/to_str(Flt/rem(Flt/add(100000000.0, Nat/to_flt(n)), 3.0))",
+        "Flt/to_str(Flt/rem(Flt/add(5.0, Nat/to_flt(n)), 0.1))",
+        "Flt/to_str(Flt/rem(Flt/add(1.0, Nat/to_flt(n)), Flt/pos_inf))",
+        "Flt/to_str(Flt/rem(Flt/sub(-7.0, Nat/to_flt(n)), 2.0))",
+        // An equal pair under `min`/`max` answers by sign, as `f32.min`/`f32.max` do: the folder spells the rule rather than trusting the host's `min`. Both orders are the folder's own unit test; one each here is the runtime half.
+        "Flt/to_str(Flt/min(Nat/to_flt(n), Flt/neg(Nat/to_flt(n))))",
+        "Flt/to_str(Flt/max(Flt/neg(Nat/to_flt(n)), Nat/to_flt(n)))",
     ] {
         folded_matches_runtime(body);
     }

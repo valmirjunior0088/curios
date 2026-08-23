@@ -255,6 +255,7 @@ pub(crate) struct Table<'a> {
     bytes_embed: OnceCell<curios_wasm::FuncName>,
     bytes_box: OnceCell<curios_wasm::FuncName>,
     bytes_norm: OnceCell<curios_wasm::FuncName>,
+    flt_rem: OnceCell<curios_wasm::FuncName>,
     bits_box: OnceCell<curios_wasm::FuncName>,
     bits_norm: OnceCell<curios_wasm::FuncName>,
     list_embed: OnceCell<curios_wasm::FuncName>,
@@ -326,6 +327,7 @@ impl<'a> Table<'a> {
             bytes_embed: OnceCell::new(),
             bytes_box: OnceCell::new(),
             bytes_norm: OnceCell::new(),
+            flt_rem: OnceCell::new(),
             bits_box: OnceCell::new(),
             bits_norm: OnceCell::new(),
             list_embed: OnceCell::new(),
@@ -639,6 +641,17 @@ impl<'a> Table<'a> {
 
     pub(crate) fn bytes_box_used(&self) -> bool {
         self.bytes_box.get().is_some()
+    }
+
+    /// `$flt/rem (f32, f32) -> f32`: the exact `fmod` every constant folder computes, as a function because WebAssembly has no `f32.rem`. It used to be expanded inline as `x - trunc(x / y) * y`, which rounds at each step and disagrees with `fmod` on roughly half of all finite operand pairs — `1e8 % 3` came out `0` at runtime against the folded `1`.
+    pub(crate) fn flt_rem_func(&self) -> curios_wasm::FuncName {
+        self.flt_rem
+            .get_or_init(|| curios_wasm::FuncName::from("flt/rem"))
+            .clone()
+    }
+
+    pub(crate) fn flt_rem_used(&self) -> bool {
+        self.flt_rem.get().is_some()
     }
 
     /// `$bytes/norm (ref $rope/bin) -> (ref any)`: the canonical form of a byte rope — at most 3 bytes becomes the i31 (length in the top 2 payload bits, bytes LSB-first below), anything longer passes through. Every byte-grain producer answers through this, which is what makes a mixed-representation pair unrepresentable.
