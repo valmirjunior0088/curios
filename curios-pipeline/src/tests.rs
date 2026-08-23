@@ -834,6 +834,33 @@ fn a_hole_where_a_congruences_function_belongs_is_undecided_not_mismatched() {
 }
 
 #[test]
+fn a_mismatch_spells_an_unfolded_rec_by_its_definitions_name() {
+    // Both sides of a mismatch are normalized so the disagreement shows, and normalizing `double(p + 1)` unfolds the global through its structural group, which carries no name: the report used to read `rec #0: (n: Nat) -> Nat = n => Nat.fold n: …; #0(p) + 2` where the author wrote `double`. The unfolded group is recognized as the definition the context holds and spelled by it.
+    let source = r#"
+        use /std/{Nat, Eq};
+        rec double(n : Nat) -> Nat = match n | 0 => 0 | p + 1 => double(p) + 2 end;
+        let double_correct(n : Nat) -> Eq(double(n), n * 2) =
+            match n : (m) => Eq(double(m), m * 2)
+            | 0 => Eq/refl()
+            | p + 1; ih => Eq/cong((x) => x + 3, ih)
+            end;
+        0
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert!(
+        error.contains("expected: Eq(@Nat, double(p) + 2, (2 * p) + 2)"),
+        "unexpected error: {error}"
+    );
+    assert!(
+        error.contains("inferred: Eq(@Nat, double(p) + 3, (2 * p) + 3)"),
+        "unexpected error: {error}"
+    );
+    assert!(!error.contains("rec "), "unexpected error: {error}");
+}
+
+#[test]
 fn the_goals_own_definition_is_not_suggested() {
     // Suggesting the definition a goal sits inside would be circular for a plain `let`; the pools exclude the owner. The scope binder still fits.
     let source = r#"

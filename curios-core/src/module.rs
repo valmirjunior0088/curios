@@ -10,7 +10,7 @@ use {
     super::{
         Atom, Bound, ConceptDecl, Free, FuncType, Global, InductDecl, Many, RecGroup,
         RecMemberScopes, Scope, Sharing, Spelling, StructDecl, Subterm, Term, UniverseContext,
-        UniverseError, UniverseSeed, build_shorten, project_erased_universes,
+        UniverseError, UniverseSeed, build_shorten,
     },
     curios_utilities::{Mount, Plicity, Qualifier},
     std::{
@@ -101,10 +101,7 @@ impl RecItem {
     pub fn projected(&self) -> Self {
         Self {
             definitions: self.definitions.clone(),
-            group: self
-                .group
-                .map_members(project_erased_universes)
-                .with_universe_context(UniverseContext::empty()),
+            group: self.group.projected(),
         }
     }
 

@@ -188,6 +188,25 @@ impl Term {
         .is_break()
     }
 
+    /// Whether this term holds a `Rec` node at all — anywhere, at any depth. The cheap precheck before a display pass that would otherwise gather every recursive definition in scope to look for one.
+    pub fn mentions_rec(&self) -> bool {
+        let mut seen: HashSet<*const Node> = HashSet::new();
+        self.try_walk(
+            &mut seen,
+            |seen, term| {
+                if !seen.insert(Rc::as_ptr(&term.inner)) {
+                    return ControlFlow::Continue(Enter::Skip(()));
+                }
+                if matches!(&**term, Subterm::Rec(_)) {
+                    return ControlFlow::Break(());
+                }
+                ControlFlow::Continue(Enter::Descend)
+            },
+            |_, _, _| (),
+        )
+        .is_break()
+    }
+
     /// Extend the two dependency sets in one explicit walk without rebuilding the term or warming its unrelated scalar caches. Declaration universe closure uses both sets together: direct level metas join the closure, while term metas lead to their result, telescope, and solved body in the context store. A metavariable's children are its spine entries, whose bare `Var`s carry nothing but dedup for free.
     pub fn collect_universe_dependencies(
         &self,
@@ -2019,6 +2038,12 @@ impl RecGroup {
 
     pub fn universe_context(&self) -> &UniverseContext {
         &self.scheme.context
+    }
+
+    /// This group with universe data projected out of every member and its context cleared — the shape under which a generalized group and any instance of it are one group, which is what lets a diagnostic recognize an unfolded `rec` as the definition it came from.
+    pub fn projected(&self) -> Self {
+        self.map_members(super::project_erased_universes)
+            .with_universe_context(UniverseContext::empty())
     }
 
     pub fn with_universe_context(mut self, universe_context: UniverseContext) -> Self {

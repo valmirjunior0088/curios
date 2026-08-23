@@ -21,9 +21,9 @@ use {
     curios_core::{
         Bound, ConceptDecl, Consumption, Cost, DEFAULT_RETENTION_QUOTA, DefinitionKind, Free,
         Global, HeadTag, ImplicitOrigin, InductDecl, Level, MetaId, Metavar, MetavarOrigin,
-        Retention, StructDecl, Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, UniverseError, UniverseMetaId, UniverseRole, UniverseSeed, WitnessOrigin,
-        instantiate_universe_levels_scoped,
+        RecGroup, Retention, StructDecl, Term, Totality, UniverseConstraintKind,
+        UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseRole,
+        UniverseSeed, WitnessOrigin, instantiate_universe_levels_scoped,
     },
     curios_utilities::{Entropy, Mount, Qualifier, Span, SyntaxRegistry},
     std::{
@@ -535,6 +535,11 @@ impl Context {
 
     pub(crate) fn assumption(&self, name: &Free) -> Option<&Term> {
         self.frames.assumption(name)
+    }
+
+    /// [`Frames::rec_definitions`]: every top-level `rec` group defined so far, with its members' names.
+    pub(crate) fn rec_definitions(&self) -> Vec<(RecGroup, Vec<Global>)> {
+        self.frames.rec_definitions()
     }
 
     /// Collect universe metas reachable through a term and through any solved term metavariables it names. Declaration finalization runs before the final term-zonk pass, so a level occurring only in a solved hole must still join the declaration's universe closure. Recursive slots may point back to themselves; `seen` keeps this analysis finite.

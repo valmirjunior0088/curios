@@ -91,6 +91,7 @@ fn resolved_for_display(context: &mut Context, term: &Term) -> Term {
         return term.clone();
     };
     let resolved = super::normalize(context, zonked.clone()).unwrap_or(zonked);
+    let resolved = super::refold_recs(context, &resolved);
     let operators = super::operator_table(context);
     let binders = Rc::new(
         context

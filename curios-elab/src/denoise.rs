@@ -5,6 +5,8 @@
 //! The abstract case is the one reduction cannot reach. Where the operand type is concrete the projection reduces to its intrinsic and prints infix without any of this, so the fold only earns its keep under a `use Add(A)` parameter — exactly where the reader has least else to go on.
 //!
 //! The folded term reintroduces the elaboration-transient `Infix` node (under [`Subterm::Transient`]) purely for observation: it only ever meets the printer, never checking, reduction, or erasure.
+//!
+//! The second fold here is over recursion. A mismatch report normalizes both sides so the disagreement is visible, and normalizing `double(p + 1)` unfolds the global through its structural group, which carries no name: the report then spelled `rec #0: (n: Nat) -> Nat = n => …; #0(p) + 2` where the author wrote `double`. [`refold_recs`] recognizes a `Rec` node whose group is one the context defined — compared projected, so an instance of a universe-polymorphic group is the group it instantiates — and spells its tail with each member as the definition it is: `double(p) + 2`. This lives here rather than in the printer because the group to recognize is the *elaborated* one, which only the context holds; the lowered module the formatter has is a different structure, and on an error path there is no elaborated module at all.
 
 #[cfg(test)]
 mod tests;
@@ -12,8 +14,8 @@ mod tests;
 use {
     super::{Context, TermBuilders},
     curios_core::{
-        Apply, Bound, Field, Free, Global, Metavar, MetavarOrigin, Proj, StructType, Subterm, Term,
-        UniverseInst, Visit,
+        Apply, Bound, Field, Free, Global, Metavar, MetavarOrigin, Proj, Rec, RecGroup, StructType,
+        Subterm, Term, UniverseInst, Var, Visit,
     },
     curios_utilities::InfixOp,
     std::{collections::BTreeMap, rc::Rc},
@@ -71,6 +73,48 @@ pub(crate) fn denoise_for_display(table: &Operators, binders: &BinderTypes, term
         Box::new(move |_, term| fold(&captured, &scope, term)),
     );
     term.traverse(&mut visit)
+}
+
+/// Spell every unfolded top-level `rec` in `term` by its definitions' names. Display-only — see the module documentation. The table of groups is gathered only when the term holds a `Rec` node at all, which a mismatch rarely does.
+pub(crate) fn refold_recs(context: &Context, term: &Term) -> Term {
+    if !term.mentions_rec() {
+        return term.clone();
+    }
+    let table: Rc<Vec<(RecGroup, Vec<Global>)>> = Rc::new(
+        context
+            .rec_definitions()
+            .into_iter()
+            .map(|(group, names)| (group.projected(), names))
+            .collect(),
+    );
+    refold_with(&table, term)
+}
+
+fn refold_with(table: &Rc<Vec<(RecGroup, Vec<Global>)>>, term: &Term) -> Term {
+    let captured = Rc::clone(table);
+    let mut visit = Visit::rewriting(
+        |_, _| None,
+        Box::new(move |_, term| refold_node(&captured, term)),
+    );
+    term.traverse(&mut visit)
+}
+
+/// The node-level refold: a `Rec` whose group the table knows opens its tail over the members' names, and the opened tail is refolded in turn, since a substituted node is not descended into.
+fn refold_node(table: &Rc<Vec<(RecGroup, Vec<Global>)>>, term: &Term) -> Option<Term> {
+    let Subterm::Rec(Rec { group, tail }) = &**term else {
+        return None;
+    };
+    let projected = group.projected();
+    let (_, names) = table.iter().find(|(known, _)| *known == projected)?;
+    if names.len() != group.length() {
+        return None;
+    }
+    let members = names
+        .iter()
+        .map(|name| Term::var(Var::free(Free::Global(name.clone()))))
+        .collect::<Vec<_>>();
+    let refs = members.iter().collect::<Vec<_>>();
+    Some(refold_with(table, &tail.open(&refs)))
 }
 
 /// The node-level fold. A substituted node is not descended into, so a folded call denoises its own operands before wrapping them.

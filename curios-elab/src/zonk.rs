@@ -841,7 +841,10 @@ pub(crate) fn collect_goal_reports(context: &mut Context, module: &Module) -> Ve
         super::denoise_for_display(
             &operators,
             binders,
-            &project_erased_universes(&zonk_solved_term_metas(context, term)),
+            &super::refold_recs(
+                context,
+                &project_erased_universes(&zonk_solved_term_metas(context, term)),
+            ),
         )
     };
     goal_sites

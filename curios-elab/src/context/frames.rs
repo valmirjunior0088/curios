@@ -4,7 +4,10 @@
 
 use {
     super::{SharedSpine, SharedTelescope},
-    curios_core::{DefinitionKind, Free, HeadTag, Term, UniverseContext, project_erased_universes},
+    curios_core::{
+        DefinitionKind, Free, Global, HeadTag, RecGroup, Term, UniverseContext,
+        project_erased_universes,
+    },
     curios_utilities::Entropy,
     std::{collections::HashMap, rc::Rc},
 };
@@ -286,6 +289,38 @@ impl Frames {
             .rev()
             .find_map(|definitions| definitions.get(name))
             .map(|entry| &entry.term)
+    }
+
+    /// Every top-level `rec` group defined in any frame, each with its members' global names in member order. A member's definition is the group with a projecting tail, so the groups are read off the members and their names gathered by index; a group read only partially — a member never defined — is dropped, since a spelling with a gap is no spelling.
+    pub(crate) fn rec_definitions(&self) -> Vec<(RecGroup, Vec<Global>)> {
+        let mut groups: Vec<(RecGroup, Vec<Option<Global>>)> = Vec::new();
+        for definitions in &self.definitions {
+            for (name, entry) in definitions {
+                let Free::Global(global) = name else {
+                    continue;
+                };
+                let Some((group, index)) = entry.term.as_rec_proj() else {
+                    continue;
+                };
+                let names = match groups.iter_mut().find(|(known, _)| known == group) {
+                    Some((_, names)) => names,
+                    None => {
+                        groups.push((group.clone(), vec![None; group.length()]));
+                        &mut groups.last_mut().expect("just pushed").1
+                    }
+                };
+                if let Some(slot) = names.get_mut(index) {
+                    *slot = Some(global.clone());
+                }
+            }
+        }
+        groups
+            .into_iter()
+            .filter_map(|(group, names)| {
+                let names = names.into_iter().collect::<Option<Vec<_>>>()?;
+                Some((group, names))
+            })
+            .collect()
     }
 
     /// The reduct of a variable: its definition, or — unless refinements are suppressed — its counterfactual refinement. A name never appears in both stores (definitions name `let`/`rec` binders; refinements name assumed scrutinee heads), so the order between them is immaterial.
