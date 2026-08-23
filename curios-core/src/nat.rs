@@ -122,7 +122,7 @@ impl Nat {
         matches!(&**term, Subterm::Intrinsic(Intrinsic::Nat(Nat::Zero)))
     }
 
-    /// The summands of a reduced `Nat`'s symbolic inner, flattening the neutral `add` spine. `NatAdd` hoists every literal floor outward, so no summand reached here is successor-headed.
+    /// The summands of a reduced `Nat`'s symbolic inner, flattening the neutral `add` spine, in the order they are written. `NatAdd` hoists every literal floor outward, so no summand reached here is successor-headed. The order matters: [`Nat::sum_over_floor`] folds the list back left-to-right, so reading it left-to-right is what makes read-then-rebuild the identity on a sum already in normal form — a rebuild that reordered would hand the reducer a new term every pass, and that oscillation once overflowed the stack building the prelude.
     pub(crate) fn summands(inner: &Term) -> Vec<Term> {
         let mut summands = Vec::new();
         let mut pending = vec![inner.clone()];
@@ -130,8 +130,8 @@ impl Nat {
         while let Some(term) = pending.pop() {
             match &*term {
                 Subterm::Intrinsic(Intrinsic::NatAdd(left, right)) => {
-                    pending.push(left.clone());
                     pending.push(right.clone());
+                    pending.push(left.clone());
                 }
                 _ if Self::is_zero(&term) => {}
                 _ => summands.push(term),
@@ -141,11 +141,64 @@ impl Nat {
         summands
     }
 
-    /// The sum of `summands` over a literal `floor`, landing in the same normal form [`Nat::decompose`] reads back.
+    /// A reduced summand read as `coefficient · factor`: a product with a literal on either side, or the summand itself under the coefficient `1`. The literal side is the left after [`Nat::scaled`], but a product written the other way by a stage that builds terms without reducing them reads the same.
+    pub(crate) fn literal_factor(summand: &Term) -> (Natural, Term) {
+        if let Subterm::Intrinsic(Intrinsic::NatMul(left, right)) = &**summand {
+            if let Some(coefficient) = left.as_nat().and_then(|value| value.to_natural()) {
+                return (coefficient, right.clone());
+            }
+            if let Some(coefficient) = right.as_nat().and_then(|value| value.to_natural()) {
+                return (coefficient, left.clone());
+            }
+        }
+        (Natural::one(), summand.clone())
+    }
+
+    /// `coefficient · factor` in normal form: a zero coefficient is `0`, a unit coefficient is the factor itself, and anything else is the product with the literal on the left — so `x · 2` and `2 · x` are one term.
+    pub(crate) fn scaled(coefficient: Natural, factor: Term) -> Term {
+        if coefficient.is_zero() {
+            return Term::intrinsic(Intrinsic::Nat(Nat::Zero));
+        }
+        match coefficient.is_one() {
+            true => factor,
+            false => Term::intrinsic(Intrinsic::nat_mul(
+                Term::intrinsic(Intrinsic::Nat(Nat::new(coefficient))),
+                factor,
+            )),
+        }
+    }
+
+    /// `summands` as a linear combination: like factors merged by adding their coefficients, in first-appearance order, keyed up to universe instances exactly as [`Nat::cancel_common`] keys them. This is the sum normal form — `x + x` is `2 · x`, and `2 · x + 3 · x` is `5 · x` — and it is what makes a sum's like terms definitionally equal rather than merely cancellable against each other.
+    pub(crate) fn linear(summands: impl IntoIterator<Item = Term>) -> Vec<(Natural, Term)> {
+        let mut combination: Vec<(Natural, Term)> = Vec::new();
+        let mut keys: Vec<Term> = Vec::new();
+        for summand in summands {
+            if Self::is_zero(&summand) {
+                continue;
+            }
+            let (coefficient, factor) = Self::literal_factor(&summand);
+            let key = crate::project_erased_universes(&factor);
+            match keys.iter().position(|candidate| *candidate == key) {
+                Some(index) => combination[index].0 += coefficient,
+                None => {
+                    combination.push((coefficient, factor));
+                    keys.push(key);
+                }
+            }
+        }
+        combination
+    }
+
+    /// The sum of `summands` over a literal `floor`, landing in the same normal form [`Nat::decompose`], [`Nat::summands`] and [`Nat::linear`] read back: like terms merged, each spelled by [`Nat::scaled`], folded left-to-right.
     pub(crate) fn sum_over_floor(summands: Vec<Term>, floor: Natural) -> Term {
-        let inner = summands
+        Self::from_linear(Self::linear(summands), floor)
+    }
+
+    /// [`Nat::sum_over_floor`] from a combination already merged.
+    pub(crate) fn from_linear(combination: Vec<(Natural, Term)>, floor: Natural) -> Term {
+        let inner = combination
             .into_iter()
-            .filter(|summand| !Self::is_zero(summand))
+            .map(|(coefficient, factor)| Self::scaled(coefficient, factor))
             .reduce(|left, right| Term::intrinsic(Intrinsic::nat_add(left, right)))
             .unwrap_or_else(|| Term::intrinsic(Intrinsic::Nat(Nat::Zero)));
 
@@ -178,22 +231,33 @@ impl Nat {
         let (floor_left, inner_left) = Nat::decompose(left);
         let (floor_right, inner_right) = Nat::decompose(right);
 
-        let mut held = Self::summands(&inner_left);
+        // Over the linear combination, so a like term cancels by coefficient: `2 · x + a` against `x + b` leaves `x + a` against `b` — the multiset rule below, with the multiplicity read off the coefficient rather than counted.
+        let mut held = Self::linear(Self::summands(&inner_left));
         let mut keys = held
             .iter()
-            .map(crate::project_erased_universes)
+            .map(|(_, factor)| crate::project_erased_universes(factor))
             .collect::<Vec<_>>();
         let mut residual_right = Vec::new();
         let mut cancelled = false;
-        for summand in Self::summands(&inner_right) {
-            let key = crate::project_erased_universes(&summand);
+        for (coefficient, factor) in Self::linear(Self::summands(&inner_right)) {
+            let key = crate::project_erased_universes(&factor);
             match keys.iter().position(|candidate| *candidate == key) {
                 Some(index) => {
-                    held.remove(index);
-                    keys.remove(index);
+                    let shared = held[index].0.clone().min(coefficient.clone());
+                    let remaining = held[index].0.clone() - &shared;
+                    if remaining.is_zero() {
+                        held.remove(index);
+                        keys.remove(index);
+                    } else {
+                        held[index].0 = remaining;
+                    }
+                    let rest = coefficient - &shared;
+                    if !rest.is_zero() {
+                        residual_right.push((rest, factor));
+                    }
                     cancelled = true;
                 }
-                None => residual_right.push(summand),
+                None => residual_right.push((coefficient, factor)),
             }
         }
 
@@ -208,8 +272,8 @@ impl Nat {
         }
 
         (
-            Self::sum_over_floor(held, floor_left - &shared),
-            Self::sum_over_floor(residual_right, floor_right - &shared),
+            Self::from_linear(held, floor_left - &shared),
+            Self::from_linear(residual_right, floor_right - &shared),
         )
     }
 }

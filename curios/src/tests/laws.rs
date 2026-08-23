@@ -42,13 +42,16 @@ const CARRIERS: &[Carrier] = &[
             "Eq((x * 2) * 3, x * 6)",
             // A literal coefficient has one side, so the two spellings meet.
             "Eq(x * 2, 2 * x)",
+            // A sum is a linear combination: like terms merge, and a literal distributes over a symbolic sum.
+            "Eq(x + x, 2 * x)",
+            "Eq(x * 2, x + x)",
+            "Eq(x * 2 + x * 3, x * 5)",
+            "Eq((x + y) * 2, x * 2 + y * 2)",
+            "Eq((x + y + 1) + (x + 2), 2 * x + y + 3)",
         ],
         refused: &[
-            "Eq((x + y) * 2, x * 2 + y * 2)",
+            // Two symbols under `*` have no normal form yet: monomials are the next step.
             "Eq(x * (y + z), x * y + x * z)",
-            "Eq(x * 2 + x * 3, x * 5)",
-            "Eq(x * 2, x + x)",
-            "Eq(x + x, 2 * x)",
             "Eq(x * y, y * x)",
             "Eq((x * y) * z, x * (y * z))",
         ],

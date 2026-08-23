@@ -129,20 +129,21 @@ fn a_tail_accumulator_fold_carries_values_not_chains() {
     );
 }
 
-/// The same fold with a combining operation nothing folds — `acc + h` at the byte head, which no rule reads — so the accumulator becomes a genuinely neutral chain one link longer per element, exactly as it would under the hosts. The machine's run-scoped value memo is what keeps re-encountering that chain linear; without it this fold is quadratic in transitions and prices *worse* than the strategy it replaces.
+/// The same fold with a combining operation nothing folds — `Nat/and(acc + 1, h)` at the byte head, which no rule reads: the left is never the absorbing `0` and never identical to the right, and a successor floor over a stuck `and` is neutral — so the accumulator becomes a genuinely neutral chain one link longer per element, exactly as it would under the hosts. The machine's run-scoped value memo is what keeps re-encountering that chain linear; without it this fold is quadratic in transitions and prices *worse* than the strategy it replaces. (`acc + h` no longer builds a chain: the sum normal form merges like terms, so two thousand `h`s become `2000 · h`.)
 #[test]
 fn a_closed_neutral_accumulator_stays_linear() {
     let n = 2_000usize;
     let mut host = Host::new(400 * n as u64);
 
     let term = tail_fold(vec![3; n], |acc, h| {
-        Term::intrinsic(Intrinsic::nat_add(acc, h))
+        let bumped = Term::intrinsic(Intrinsic::nat_add(acc, nat(1)));
+        Term::intrinsic(Intrinsic::NatAnd(bumped, h))
     });
 
     let result = reduce_closed(&mut host, term, Demand::Forced).expect("stays within the budget");
     assert!(matches!(
         &*result,
-        Subterm::Intrinsic(Intrinsic::NatAdd(..))
+        Subterm::Intrinsic(Intrinsic::NatAnd(..))
     ));
 }
 

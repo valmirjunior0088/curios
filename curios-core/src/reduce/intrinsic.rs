@@ -393,46 +393,28 @@ fn nat_bound(term: &Term) -> Option<Natural> {
     }
 }
 
-/// A reduced summand read as `coefficient · factor` with a literal coefficient, in either operand order. `NatMul` folds two literals, so at most one side is literal by the time this sees it.
+/// A reduced summand read as `coefficient · factor` with a *literal* coefficient, or `None` for a summand that is not such a product — the reading [`Nat::literal_factor`] takes, minus its unit default, for the callers that need to know whether a literal was there.
 fn nat_literal_factor(summand: &Term) -> Option<(Natural, Term)> {
-    let Subterm::Intrinsic(Intrinsic::NatMul(left, right)) = &**summand else {
-        return None;
-    };
-
-    if let Some(coefficient) = left.as_nat().and_then(|value| value.to_natural()) {
-        return Some((coefficient, right.clone()));
-    }
-
-    right
-        .as_nat()
-        .and_then(|value| value.to_natural())
-        .map(|coefficient| (coefficient, left.clone()))
+    matches!(&**summand, Subterm::Intrinsic(Intrinsic::NatMul(..)))
+        .then(|| Nat::literal_factor(summand))
+        .filter(|(_, factor)| factor != summand)
 }
 
-/// `coefficient · inner` for a reduced, floorless `inner`: zero stays zero, a tail already carrying a literal coefficient takes the product — `2 · (3 · x)` is `6 · x` — and anything else is scaled by [`nat_scaled`], which clears the unit and zero coefficients. The one place a literal meets a symbolic factor, so every such product lands in the same normal form.
+/// `coefficient · inner` for a reduced, floorless `inner`: zero stays zero, a sum distributes — `2 · (x + y)` is `2 · x + 2 · y`, each summand scaled in turn — a tail already carrying a literal coefficient takes the product, `2 · (3 · x)` is `6 · x`, and anything else is [`Nat::scaled`], which clears the unit and zero coefficients. The one place a literal meets a symbolic factor, so every such product lands in the sum normal form.
 fn nat_scale(coefficient: Natural, inner: Term) -> Term {
     if Nat::is_zero(&inner) {
         return inner;
     }
-    match nat_literal_factor(&inner) {
-        Some((nested, factor)) => nat_scaled(coefficient * nested, factor),
-        None => nat_scaled(coefficient, inner),
+    let summands = Nat::summands(&inner);
+    if summands.len() > 1 {
+        let scaled = summands
+            .into_iter()
+            .map(|summand| nat_scale(coefficient.clone(), summand))
+            .collect();
+        return Nat::sum_over_floor(scaled, Natural::zero());
     }
-}
-
-/// `coefficient · factor`, dropping a zero product and a unit coefficient rather than emitting `0 · t` or `1 · t` for reduction to clear afterwards.
-fn nat_scaled(coefficient: Natural, factor: Term) -> Term {
-    if coefficient.is_zero() {
-        return Term::intrinsic(Intrinsic::Nat(Nat::Zero));
-    }
-
-    match coefficient.is_one() {
-        true => factor,
-        false => Term::intrinsic(Intrinsic::nat_mul(
-            Term::intrinsic(Intrinsic::Nat(Nat::new(coefficient))),
-            factor,
-        )),
-    }
+    let (nested, factor) = Nat::literal_factor(&inner);
+    Nat::scaled(coefficient * nested, factor)
 }
 
 /// Split a reduced dividend against a literal divisor into `(quotient, remainder)`, or `None` where the division is not forced.
@@ -447,7 +429,7 @@ fn nat_euclid_split(dividend: &Term, divisor: &Natural) -> Option<(Term, Term)> 
     for summand in Nat::summands(&inner) {
         match nat_literal_factor(&summand) {
             Some((coefficient, factor)) if (&coefficient % divisor).is_zero() => {
-                quotient.push(nat_scaled(coefficient / divisor, factor));
+                quotient.push(Nat::scaled(coefficient / divisor, factor));
             }
             _ => {
                 ceiling += nat_bound(&summand)?;
@@ -1037,15 +1019,8 @@ pub fn reduce_intrinsic(
         Intrinsic::NatAdd(left, right) => {
             let left = reducer.reduce_forced(left.clone())?;
             let right = reducer.reduce_forced(right.clone())?;
-            let (sl, il) = Nat::decompose(&left);
-            let (sr, ir) = Nat::decompose(&right);
-
-            let inner = match (Nat::is_zero(&il), Nat::is_zero(&ir)) {
-                (false, false) => Term::intrinsic(Intrinsic::nat_add(il, ir)),
-                (true, _) => ir,
-                (_, true) => il,
-            };
-            Ok(Term::unwrap_or_clone(Nat::rebuild(sl + sr, inner)))
+            // Through the sum normal form, which is what merges like terms: `x + x` is `2 · x`, and `2 · x + 3 · x` is `5 · x`. Idempotent by construction — `Nat::summands` reads in the order `Nat::from_linear` writes — which is what lets the reducer rebuild a sum it was handed already reduced without changing it.
+            Ok(Term::unwrap_or_clone(Nat::sum(&left, &right)))
         }
         // `(il + sl) - k` for a literal subtrahend `k`: when the floor covers it (`sl ≥ k`) the borrow stays within the floor and the tail `il ≥ 0` is untouched, so the result is `il + (sl - k)`. The subtraction twin of the addition floor law (and it gives `x - 0 = x` for any `x`, the unit law `NatAdd` already has): it turns the `succ e - 1` bounds the cons-slice rule produces back into `e`, so a slice over a symbolic cons keeps reducing instead of stalling on a stuck `Nat/sub`. Both-literal subtraction with `k` overshooting the floor truncates to zero; anything else stays neutral.
         Intrinsic::NatSub(left, right) => {
@@ -3139,9 +3114,10 @@ mod tests {
         }
 
         // Every verdict above holds vacuously of a grid that reaches only one of them, and `Continue` is the one a shape falls to when nothing fires — so a grid that decided nothing would pass while checking nothing. This is the count that says otherwise, and it is an assertion rather than a comment because the perimeter's own record is that inert rules are what hide defects.
+        // `2·x + 1 ~ x + x + 1` moved from `Continue` to `Equal` when the sum normal form began merging like terms: both sides now *reduce* to `2·x + 1`, so the peel has nothing left to carry.
         assert_eq!(
             (equal, clash, carried, stuck),
-            (3, 4, 5, 1),
+            (4, 4, 4, 1),
             "the grid stopped reaching every peel verdict",
         );
     }
@@ -4328,6 +4304,42 @@ mod tests {
                 vec![
                     vec![(&list_base, nat_list(&[]))],
                     vec![(&list_base, nat_list(&[1, 2, 3]))],
+                ],
+            ),
+            // The sum normal form as a linear combination: like terms merge by coefficient, and a literal distributes over a symbolic sum.
+            (
+                "x + x = 2 * x",
+                plus(x.clone(), x.clone()),
+                mul(lit(2), x.clone()),
+                nats(),
+            ),
+            (
+                "2 * x + 3 * x = 5 * x",
+                plus(mul(lit(2), x.clone()), mul(lit(3), x.clone())),
+                mul(lit(5), x.clone()),
+                nats(),
+            ),
+            (
+                "(x + y) * 2 = 2 * x + 2 * y",
+                mul(plus(x.clone(), y.clone()), lit(2)),
+                plus(mul(lit(2), x.clone()), mul(lit(2), y.clone())),
+                vec![
+                    vec![(&nat_x, lit(0)), (&nat_y, lit(0))],
+                    vec![(&nat_x, lit(2)), (&nat_y, lit(5))],
+                    vec![(&nat_x, lit(7)), (&nat_y, lit(1))],
+                ],
+            ),
+            (
+                "(x + y + 1) + (x + 2) = 2 * x + y + 3",
+                plus(
+                    plus(plus(x.clone(), y.clone()), lit(1)),
+                    plus(x.clone(), lit(2)),
+                ),
+                plus(plus(mul(lit(2), x.clone()), y.clone()), lit(3)),
+                vec![
+                    vec![(&nat_x, lit(0)), (&nat_y, lit(0))],
+                    vec![(&nat_x, lit(2)), (&nat_y, lit(5))],
+                    vec![(&nat_x, lit(7)), (&nat_y, lit(1))],
                 ],
             ),
         ];
