@@ -4,6 +4,7 @@
 /.codex
 /.claude/worktrees
 /.antigravitycli
+/.learn
 /*.wasm
 **/.artifacts
 **/.lake
