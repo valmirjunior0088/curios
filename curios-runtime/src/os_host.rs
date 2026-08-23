@@ -46,9 +46,11 @@ enum OsResource {
     /// A listening socket, held behind an `Arc` so `accept` can share it out and drop the table lock across the blocking wait with a cheap refcount bump instead of a per-call `dup`/`close`.
     Listener(Arc<Socket>),
     /// A client-side TLS stream: the encrypted conduit a `Connected` socket became under `start_tls`, serving the same `read`/`write`/`close`.
-    ClientTls(StreamOwned<ClientConnection, Socket>),
+    ///
+    /// Boxed, and so is [`OsResource::ServerTls`], because an enum is as large as its largest variant and a `rustls` connection carries its record buffers inline — around a kilobyte each. Unboxed they set the size of *every* entry in the handle table, so an open file or a plain socket paid a kilobyte for TLS state it does not have.
+    ClientTls(Box<StreamOwned<ClientConnection, Socket>>),
     /// A server-side TLS stream: the encrypted conduit an accepted socket became under `start_tls_server`.
-    ServerTls(StreamOwned<ServerConnection, Socket>),
+    ServerTls(Box<StreamOwned<ServerConnection, Socket>>),
     /// An opaque server TLS configuration minted by `tls_server_config`, held in the table as a handle and consumed by `start_tls_server`.
     TlsConfig(Arc<ServerConfig>),
 }
@@ -293,7 +295,7 @@ impl HostOps for OsHost {
                 self.table
                     .lock()
                     .unwrap()
-                    .insert(&io, OsResource::ClientTls(stream));
+                    .insert(&io, OsResource::ClientTls(Box::new(stream)));
 
                 Status::Ok
             }
@@ -349,7 +351,7 @@ impl HostOps for OsHost {
                 self.table
                     .lock()
                     .unwrap()
-                    .insert(&io, OsResource::ServerTls(stream));
+                    .insert(&io, OsResource::ServerTls(Box::new(stream)));
 
                 Status::Ok
             }
@@ -487,8 +489,8 @@ impl HostOps for OsHost {
                 let stream: &mut dyn Read = match table.get_mut(&io) {
                     Some(OsResource::File(file)) => file,
                     Some(OsResource::Connected(socket)) => socket,
-                    Some(OsResource::ClientTls(tls)) => tls,
-                    Some(OsResource::ServerTls(tls)) => tls,
+                    Some(OsResource::ClientTls(tls)) => &mut **tls,
+                    Some(OsResource::ServerTls(tls)) => &mut **tls,
                     // A missing or non-stream handle is a fault, not an exhausted stream — mirror write's `NotFound` so use-after-close stays loud.
                     _ => return (Status::NotFound, vec![]),
                 };
@@ -540,8 +542,8 @@ impl HostOps for OsHost {
         let stream = match table.get_mut(&io) {
             Some(OsResource::File(file)) => file as &mut dyn Write,
             Some(OsResource::Connected(socket)) => socket,
-            Some(OsResource::ClientTls(tls)) => tls,
-            Some(OsResource::ServerTls(tls)) => tls,
+            Some(OsResource::ClientTls(tls)) => &mut **tls,
+            Some(OsResource::ServerTls(tls)) => &mut **tls,
             _ => return (Status::NotFound, 0),
         };
 
@@ -588,5 +590,24 @@ impl HostOps for OsHost {
             Some(value) => (Status::Ok, value.into_encoded_bytes()),
             None => (Status::NotFound, vec![]),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Every entry in the handle table is one [`OsResource`], so the enum's size is what a plain file or an unconnected socket costs to hold. Boxing the two TLS variants took that from 1176 bytes to 16, measured 2026-08-23 by the `size_of` calls below — a `rustls` connection carries its record buffers inline, and unboxed it set the size of every other kind.
+    ///
+    /// The bound is the guard rather than the figure: unboxing either variant, or adding a third large one inline, puts a kilobyte back on every handle and fails here.
+    #[test]
+    fn a_table_entry_does_not_carry_a_tls_connection_inline() {
+        assert!(
+            size_of::<OsResource>() <= 64,
+            "OsResource is {} bytes; the TLS streams are {} and {}",
+            size_of::<OsResource>(),
+            size_of::<StreamOwned<ClientConnection, Socket>>(),
+            size_of::<StreamOwned<ServerConnection, Socket>>(),
+        );
     }
 }
