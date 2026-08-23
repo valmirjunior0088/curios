@@ -129,6 +129,8 @@ pub struct Context {
     checked_site: Rc<str>,
     // The `/syn` names the type-directed features synthesize — infix dispatch and row subsumption. Supplied rather than spelled: the elaborator knows *which* declaration it needs, and `curios-prelude` knows what that declaration is called. See [`Context::syntax`].
     syntax: SyntaxRegistry,
+    // What the unit's `use` declarations brought into scope, by canonical name, with the spelling each resolves under — the text stage's table, installed by the driver before elaboration. Read by goal suggestions alone, as the pool a candidate may come from beyond the names the program already mentions. Empty means nothing was imported, which is also what every embedding that never installs one gets: the pools then stop at the referenced globals, as they always did.
+    imports: BTreeMap<Global, String>,
 }
 
 impl Context {
@@ -160,12 +162,23 @@ impl Context {
             checked: Vec::new(),
             checked_site: Rc::from("the entrypoint"),
             syntax,
+            imports: BTreeMap::new(),
         }
     }
 
     /// The `/syn` names this elaboration may synthesize.
     pub(crate) fn syntax(&self) -> SyntaxRegistry {
         self.syntax
+    }
+
+    /// Install what the unit's `use` declarations brought into scope — each binding's canonical name with the spelling it resolves under — so a goal report may suggest an imported definition the program has not mentioned yet, spelled the way the author would paste it.
+    pub fn set_imports(&mut self, imports: BTreeMap<Global, String>) {
+        self.imports = imports;
+    }
+
+    /// The table [`Context::set_imports`] installed.
+    pub(crate) fn imports(&self) -> &BTreeMap<Global, String> {
+        &self.imports
     }
 
     /// Record one settled term and the type it settled at — obligation (V)'s seed, collected where elaboration already knows the answer.

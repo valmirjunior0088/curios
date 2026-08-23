@@ -120,6 +120,7 @@ pub fn typecheck_measured(
         metavariable_floor: metavars,
         universe_floor,
         unbound,
+        imports,
         ..
     } = into_core_with_prelude(entrypoint, loader, &text, syntax)
         .map_err(|error| CompileError::Failure(error.format()))?;
@@ -130,6 +131,7 @@ pub fn typecheck_measured(
     };
 
     let mut context = Context::new(budget, *syntax);
+    context.set_imports(imports.clone());
     let (module, _core_type, obligations) = elaborate_and_zonk_unit_reporting(
         &mut context,
         Established::over(&cores),
@@ -139,12 +141,15 @@ pub fn typecheck_measured(
         core_mode,
     )
     .map_err(|error| {
-        CompileError::of(&error, error.format_with_hints(&lowered, &cores, &unbound))
+        CompileError::of(
+            &error,
+            error.format_with_hints(&lowered, &cores, &unbound, &imports),
+        )
     })?;
 
     let obligations = obligations
         .into_iter()
-        .map(|error| error.format_with_hints(&lowered, &cores, &unbound))
+        .map(|error| error.format_with_hints(&lowered, &cores, &unbound, &imports))
         .collect();
 
     Ok((
@@ -180,6 +185,7 @@ where
         universe_floor,
         foreigns: user_foreigns,
         unbound,
+        imports,
     } = into_core_with_prelude(entrypoint, loader, &text, syntax)
         .map_err(|error| CompileError::Failure(error.format()))?;
 
@@ -193,8 +199,10 @@ where
         None => Mode::Check(Term::intrinsic(Intrinsic::io_type(Term::tuple_type_unit()))),
     };
 
+    let mut context = Context::new(budget, *syntax);
+    context.set_imports(imports.clone());
     let (module, core_type) = elaborate_and_zonk_unit(
-        &mut Context::new(budget, *syntax),
+        &mut context,
         Established::over(&cores),
         &lowered,
         metavars,
@@ -202,7 +210,10 @@ where
         core_mode,
     )
     .map_err(|error| {
-        CompileError::of(&error, error.format_with_hints(&lowered, &cores, &unbound))
+        CompileError::of(
+            &error,
+            error.format_with_hints(&lowered, &cores, &unbound, &imports),
+        )
     })?;
 
     observe(Stage::CoreElab(&module));
@@ -258,8 +269,10 @@ pub fn compile_unit(
     let lowered = into_core_unit(source, &text, syntax)
         .map_err(|error| CompileError::Failure(error.format()))?;
 
+    let mut context = Context::new(budget, *syntax);
+    context.set_imports(lowered.imports().clone());
     let (core, _body_type) = elaborate_and_zonk_unit(
-        &mut Context::new(budget, *syntax),
+        &mut context,
         Established::over(&cores),
         lowered.core(),
         lowered.metavariable_floor(),
@@ -269,7 +282,7 @@ pub fn compile_unit(
     .map_err(|error| {
         CompileError::of(
             &error,
-            error.format_with_hints(lowered.core(), &cores, lowered.unbound()),
+            error.format_with_hints(lowered.core(), &cores, lowered.unbound(), lowered.imports()),
         )
     })?;
 

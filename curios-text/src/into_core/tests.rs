@@ -2539,3 +2539,34 @@ fn the_sys_io_roster_offers_no_eliminator() {
         );
     }
 }
+
+#[test]
+fn imports_record_each_binding_under_the_spelling_it_resolves_by() {
+    // The table goal suggestions draw imported candidates from, and spell them by. A module import spells the module's bindings through its label; a named binding import and a glob spell theirs bare; and when one binding arrives twice the shorter spelling wins, since it is the one a reader would write.
+    let src = r#"
+        pub mod Outer
+            pub mod M
+                pub let f: Type = Type;
+                pub let g: Type = Type;
+            end
+            pub mod N
+                pub let h: Type = Type;
+            end
+        end
+        use Outer/{M, N};
+        use Outer/M/{g};
+        Type
+    "#;
+    let unit = super::into_core_unit(
+        &super::UnitSource::entry(&src.parse::<Entrypoint>().unwrap(), &RootSource::none()),
+        &[],
+        syntax(),
+    )
+    .unwrap();
+    let spelling = |path: &str| unit.imports().get(&global_name(path)).map(String::as_str);
+
+    assert_eq!(spelling("/Outer/M/f"), Some("M/f"));
+    assert_eq!(spelling("/Outer/M/g"), Some("g"));
+    assert_eq!(spelling("/Outer/N/h"), Some("N/h"));
+    assert_eq!(spelling("/Outer/M"), None, "a module is not a binding");
+}

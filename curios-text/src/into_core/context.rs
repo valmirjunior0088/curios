@@ -235,6 +235,8 @@ pub(super) struct Context<'a> {
     witnesses: &'a RefCell<BTreeMap<Qualifier, u32>>,
     // Every bare name that resolved to nothing, keyed by the binder identity it lowered to, with the public bindings in scope of that name. Shared across nested contexts like the counters, because the table is the unit's: `curios-elab` reports the unbound binder, and this is what lets its report say what the reader probably meant.
     unbound: &'a RefCell<BTreeMap<curios_core::Free, Vec<Qualifier>>>,
+    // Every binding a `use` brought into some lexical scope of this unit, by its canonical target, with the shortest path a reader wrote it under — `/std/Eq/cong` as `Eq/cong` after `use /std/{Eq}`, or as `cong` after a glob. Shared across nested contexts like `unbound`, and for the same reason: Core keeps the canonical name, and only this stage knows the spelling that resolves at the use site, which is what a goal report's candidate must be pasteable under. Scoping is point-of-use in the body and unit-wide here; a candidate offered to a goal written above its import still pastes under the absolute path the display falls back to.
+    imports: &'a RefCell<BTreeMap<Qualifier, String>>,
     syntax: &'a SyntaxRegistry,
 }
 
@@ -252,6 +254,7 @@ impl<'a> Context<'a> {
         binders: &'a Entropy,
         witnesses: &'a RefCell<BTreeMap<Qualifier, u32>>,
         unbound: &'a RefCell<BTreeMap<curios_core::Free, Vec<Qualifier>>>,
+        imports: &'a RefCell<BTreeMap<Qualifier, String>>,
         syntax: &'a SyntaxRegistry,
     ) -> Context<'a> {
         Context {
@@ -269,6 +272,7 @@ impl<'a> Context<'a> {
             binders,
             witnesses,
             unbound,
+            imports,
             syntax,
         }
     }
@@ -289,6 +293,7 @@ impl<'a> Context<'a> {
             binders: self.binders,
             witnesses: self.witnesses,
             unbound: self.unbound,
+            imports: self.imports,
             syntax: self.syntax,
         }
     }
@@ -499,6 +504,7 @@ impl<'a> Context<'a> {
         {
             Some(target) => {
                 self.insert_scope(label.to_string(), target.clone())?;
+                self.record_module_import(&target, label);
                 Ok(target)
             }
             None => Err(
@@ -530,6 +536,7 @@ impl<'a> Context<'a> {
         ) {
             Some(target) => {
                 self.insert_binding(label.to_string(), target.clone())?;
+                self.record_import(&target, label.to_string());
                 Ok(target)
             }
             None => Err(
@@ -561,15 +568,48 @@ impl<'a> Context<'a> {
 
         if let Some(target) = module {
             self.insert_scope(label.to_string(), target.clone())?;
+            self.record_module_import(&target, label);
             result.module = Some(target);
         }
 
         if let Some(target) = binding {
             self.insert_binding(label.to_string(), target.clone())?;
+            self.record_import(&target, label.to_string());
             result.binding = Some(target);
         }
 
         Ok(result)
+    }
+
+    // Record that `target` is in scope under `spelling`. The shortest spelling wins, and a tie keeps the first: both resolve, and the shorter is the one a reader would write.
+    fn record_import(&self, target: &Qualifier, spelling: String) {
+        let mut imports = self.imports.borrow_mut();
+        match imports.get(target) {
+            Some(existing) if existing.len() <= spelling.len() => {}
+            _ => {
+                imports.insert(target.clone(), spelling);
+            }
+        }
+    }
+
+    // Record every public binding of the module imported under `label`, each spelled through it — `Eq/cong` for `use /std/{Eq}`. Direct bindings only: a deeper member is reached by a longer path the reader has not written, and its own module's import is the place it would be recorded.
+    fn record_module_import(&self, module: &Qualifier, label: &str) {
+        let Some(interface) = self.public.get(module) else {
+            return;
+        };
+        let mut labels = interface.bindings.keys().cloned().collect::<Vec<_>>();
+        labels.sort();
+        for binding in labels {
+            if let Some(target) = super::interface::visible_binding(
+                self.public,
+                self.table,
+                &self.prefix,
+                module,
+                &binding,
+            ) {
+                self.record_import(&target, format!("{label}/{binding}"));
+            }
+        }
     }
 
     pub(super) fn resolve_module_use(&mut self, name: &Name) -> Result<Qualifier, Error> {

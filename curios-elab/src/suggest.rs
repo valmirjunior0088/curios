@@ -1,6 +1,8 @@
 //! Candidate suggestions for unsolved written goals — the `? ≈` lines of a goal report.
 //!
-//! Two families, both computed by machinery elaboration already runs. *Local fits*: a scope binder whose type converts to the goal type (the sandboxed `probe_match` witness resolution uses), and a constructor the goal's indices admit (the shared `invert_indices` unifier match elaboration runs for omitted arms, here for the opposite verdict). *Application fits*: a function from the goal's scope, the entry module's definitions, or the globals the module already references, whose instantiated output type converts to the goal — the witness-table instantiation generalized to an arbitrary candidate, so arguments the unification pins display filled (`mk(3)`). Suggestions are observation-only text the compiler re-checks when the author pastes them, so a wrong candidate costs nothing and checking semantics are untouched.
+//! Two families, both computed by machinery elaboration already runs. *Local fits*: a scope binder whose type converts to the goal type (the sandboxed `probe_match` witness resolution uses), and a constructor the goal's indices admit (the shared `invert_indices` unifier match elaboration runs for omitted arms, here for the opposite verdict). *Application fits*: a function from the goal's scope, the entry module's definitions, the globals the module already references, or the bindings its `use` declarations imported, whose instantiated output type converts to the goal — the witness-table instantiation generalized to an arbitrary candidate, so arguments the unification pins display filled (`mk(3)`). An explicit slot the output leaves unpinned is then offered each scope binder in turn, and the first whose type fits is taken — `Eq/sym(h)` for `Eq(7, k)` from `h : Eq(k, 7)` — since a lemma's proof argument is never determined by the goal and almost always *is* a hypothesis in scope. Suggestions are observation-only text the compiler re-checks when the author pastes them, so a wrong candidate costs nothing and checking semantics are untouched.
+//!
+//! A fit is kept only when it says something: a candidate whose head has explicit parameters, none of which the goal pinned or the scope filled, is `Eq/sym(?)` — true of every equation, and an arity rather than a suggestion — so it is dropped. And a fit whose output conversion is undecided is kept when its blockers are exactly the explicit slots still open: `Eq/cong(?, ih)` has its hypothesis placed and its function genuinely unknown, which is the refinement a reader wants, where the same hole-free candidate would have had to convert outright. Pool 1 admits a holed constructor on the same reasoning.
 //!
 //! Every attempt runs inside the `solution_mark`/`rollback_solutions` bracket, and a hit is materialized (committed solutions spliced) *before* rollback — the pinned values the display shows would otherwise die with the transaction. Any error skips its candidate: the pass is infallible. Attempts are capped at [`ATTEMPTS`] per goal and the rendered list at [`CANDIDATES`], ranked complete-first, then fewest holes, then pool order.
 //!
@@ -27,7 +29,7 @@ const CANDIDATES: usize = 3;
 /// The attempt cap per goal across the application-fit pools — a hard bound on error-path work, not a completeness promise.
 const ATTEMPTS: usize = 128;
 
-/// A found fit: the display term, its residual hole count, and its pool rank (scope values, constructors, scope functions, module definitions, referenced globals — in that order).
+/// A found fit: the display term, its residual hole count, and its pool rank (scope values, constructors, scope functions, module definitions, referenced globals, imported bindings — in that order).
 struct Candidate {
     term: Term,
     holes: usize,
@@ -82,7 +84,7 @@ fn suggest_in_scope(
         constructor_fits(context, goal_type, &reduced, &hole, &mut candidates);
     }
 
-    // Pools 2–4 — application fits: scope binders with function types, then the module's own definitions, then the globals its items reference. Unnameable heads are skipped for the same reason as pool 0.
+    // Pools 2–5 — application fits: scope binders with function types, then the module's own definitions, then the globals its items reference, then the bindings its `use` declarations imported. Unnameable heads are skipped for the same reason as pool 0. The imports come last so the attempt cap truncates them first: a program imports far more than it mentions.
     let mut attempts = 0usize;
     for (name, type_) in telescope {
         if !name.nameable() {
@@ -92,9 +94,14 @@ fn suggest_in_scope(
             break;
         }
         attempts += 1;
-        if let Some((term, holes)) =
-            apply_fit(context, &Term::free_var(name), type_, goal_type, &hole)
-        {
+        if let Some((term, holes)) = apply_fit(
+            context,
+            telescope,
+            &Term::free_var(name),
+            type_,
+            goal_type,
+            &hole,
+        ) {
             candidates.push(Candidate {
                 term,
                 holes,
@@ -108,7 +115,8 @@ fn suggest_in_scope(
         }
         attempts += 1;
         let head = Term::var(Var::free(Free::Global(name)));
-        if let Some((term, holes)) = apply_fit(context, &head, &type_, goal_type, &hole) {
+        if let Some((term, holes)) = apply_fit(context, telescope, &head, &type_, goal_type, &hole)
+        {
             candidates.push(Candidate { term, holes, pool });
         }
     }
@@ -131,7 +139,7 @@ fn suggest_in_scope(
         .collect()
 }
 
-/// Pools 3 and 4: the entry module's own definitions, then every other global its items reference, each with its recorded type. The goal's owning definition is excluded.
+/// Pools 3 to 5: the entry module's own definitions, then every other global its items reference, then every binding its `use` declarations imported that neither earlier pool holds, each with its recorded type. The goal's owning definition is excluded.
 fn module_pool(
     context: &Context,
     module: &Module,
@@ -178,22 +186,35 @@ fn module_pool(
     if let Some(body) = &module.body {
         collect(body);
     }
-    for global in referenced {
-        if own.contains(&global) || Some(&global) == owner {
+    for global in &referenced {
+        if own.contains(global) || Some(global) == owner {
             continue;
         }
         let free = Free::Global(global.clone());
         if let Some(type_) = context.assumption(&free) {
-            pool.push((4, (global, type_.clone())));
+            pool.push((4, (global.clone(), type_.clone())));
+        }
+    }
+
+    for global in context.imports().keys() {
+        if own.contains(global) || referenced.contains(global) || Some(global) == owner {
+            continue;
+        }
+        let free = Free::Global(global.clone());
+        if let Some(type_) = context.assumption(&free) {
+            pool.push((5, (global.clone(), type_.clone())));
         }
     }
 
     pool
 }
 
-/// One application attempt: when `head_type` reduces to a function type, instantiate its telescope with fresh metavariables, probe the instantiated output against the goal, and on a definite fit hand back the applied candidate with its hole count — materialized before rollback, so pinned arguments display filled. Hidden slots are omitted from the spelling (they re-infer on paste); an unsolved explicit slot spells the shared hole.
+/// One application attempt: when `head_type` reduces to a function type, instantiate its telescope with fresh metavariables, probe the instantiated output against the goal, offer each explicit slot the output left unpinned to the scope's binders, and hand back the applied candidate with its hole count when the fit is definite, or undecided on exactly the holes — materialized before rollback, so pinned arguments display filled. Hidden slots are omitted from the spelling (they re-infer on paste); an unsolved explicit slot spells the shared hole.
+///
+/// The output is probed *before* any slot is filled, so a slot the goal determines keeps the goal's value (`mk(3)` against `Eq(3, 3)` with a `k : Nat` in scope stays `mk(3)`, not `mk(k)`), and a binder is offered only to what the goal left open. The first binder whose type fits a slot is taken, in binding order; a later hypothesis that would also have fit is not a second candidate, since the cap is three lines and the reader can see the scope. Every trial is its own transaction inside the attempt's, so a rejected binder leaves no solution behind for the next.
 fn apply_fit(
     context: &mut Context,
+    telescope: &[(Free, Term)],
     head: &Term,
     head_type: &Term,
     goal_type: &Term,
@@ -203,7 +224,7 @@ fn apply_fit(
         return None;
     };
     let Subterm::FuncType(FuncType {
-        telescope,
+        telescope: params,
         plicities,
     }) = &*reduced
     else {
@@ -211,48 +232,139 @@ fn apply_fit(
     };
 
     let mark = context.solution_mark();
-    let mut args: Vec<Term> = Vec::new();
-    let mut cursor = telescope.clone();
+    let mut args: Vec<(Term, Term)> = Vec::new();
+    let mut cursor = params.clone();
     let output = loop {
         match cursor {
             Telescope::Done(output) => break *output,
             Telescope::Cons(domain, rest) => {
-                let arg = context.fresh_unmarked_metavar(domain, None);
+                let arg = context.fresh_unmarked_metavar(domain.clone(), None);
                 cursor = rest.open(&[&arg]);
-                args.push(arg);
+                args.push((arg, domain));
             }
         }
     };
 
-    let fit = match convert_outcome(context, &Term::type_ground(), &output, goal_type) {
-        Ok(Outcome::Converts) => {
-            let mut holes = 0usize;
-            let kept: Vec<Term> = args
-                .iter()
-                .zip(plicities)
-                .filter_map(|(arg, plicity)| {
-                    let arg = zonk_solved_term_metas(context, arg);
-                    let unsolved =
-                        arg.any_metavar(&mut |id| context.metavar_solution(id).is_none());
-                    match (plicity, unsolved) {
-                        // Hidden slots re-infer on paste, solved or not.
-                        (Plicity::Implicit | Plicity::Witness, _) => None,
-                        (Plicity::Explicit, true) => {
-                            holes += 1;
-                            Some(hole.clone())
-                        }
-                        (Plicity::Explicit, false) => Some(arg),
-                    }
-                })
-                .collect();
-            let built = zonk_solved_term_metas(context, &Term::apply(head.clone(), kept));
-            Some((built, holes))
-        }
-        _ => None,
-    };
+    let fit = apply_fit_within(
+        context, telescope, head, &args, plicities, &output, goal_type, hole,
+    );
     context.rollback_solutions(mark);
     context.end_solutions(mark);
     fit
+}
+
+/// The body of [`apply_fit`], inside its transaction.
+#[allow(clippy::too_many_arguments)]
+fn apply_fit_within(
+    context: &mut Context,
+    telescope: &[(Free, Term)],
+    head: &Term,
+    args: &[(Term, Term)],
+    plicities: &[Plicity],
+    output: &Term,
+    goal_type: &Term,
+    hole: &Term,
+) -> Option<(Term, usize)> {
+    let unsolved = |context: &Context, arg: &Term| {
+        zonk_solved_term_metas(context, arg)
+            .any_metavar(&mut |id| context.metavar_solution(id).is_none())
+    };
+
+    // The goal first: what it pins, it pins.
+    let mut outcome = convert_outcome(context, &Term::type_ground(), output, goal_type).ok()?;
+    if matches!(outcome, Outcome::Mismatch) {
+        return None;
+    }
+
+    // Then the scope, for each explicit slot still open, in slot order. A binder fits a slot when its type converts to the slot's domain and the slot's metavariable then converts to the binder — two committed conversions, so the domain's own metavariables (`x` and `y` in `p : Eq(x, y)`) pin from the hypothesis and the output is re-probed below with them in hand.
+    let mut filled = false;
+    for (arg, domain) in args
+        .iter()
+        .zip(plicities)
+        .filter_map(|(slot, plicity)| (*plicity == Plicity::Explicit).then_some(slot))
+    {
+        if !unsolved(context, arg) {
+            continue;
+        }
+        for (name, type_) in telescope {
+            if !name.nameable() {
+                continue;
+            }
+            let trial = context.solution_mark();
+            let domain = zonk_solved_term_metas(context, domain);
+            let binder = Term::free_var(name);
+            let fits = matches!(
+                convert_outcome(context, &Term::type_ground(), type_, &domain),
+                Ok(Outcome::Converts)
+            ) && matches!(
+                convert_outcome(context, &domain, arg, &binder),
+                Ok(Outcome::Converts)
+            );
+            if fits {
+                context.end_solutions(trial);
+                filled = true;
+                break;
+            }
+            context.rollback_solutions(trial);
+            context.end_solutions(trial);
+        }
+    }
+    if filled || matches!(outcome, Outcome::Blocked(_)) {
+        outcome = convert_outcome(context, &Term::type_ground(), output, goal_type).ok()?;
+    }
+
+    let mut holes = 0usize;
+    let mut pinned = 0usize;
+    let mut hole_ids = BTreeSet::new();
+    let kept: Vec<Term> = args
+        .iter()
+        .zip(plicities)
+        .filter_map(|(slot, plicity)| {
+            let (arg, _) = slot;
+            let arg = zonk_solved_term_metas(context, arg);
+            match (plicity, unsolved(context, &arg)) {
+                // Hidden slots re-infer on paste, solved or not.
+                (Plicity::Implicit | Plicity::Witness, _) => None,
+                (Plicity::Explicit, true) => {
+                    holes += 1;
+                    hole_ids.extend(arg.metavars());
+                    Some(hole.clone())
+                }
+                (Plicity::Explicit, false) => {
+                    pinned += 1;
+                    Some(arg)
+                }
+            }
+        })
+        .collect();
+
+    match outcome {
+        Outcome::Converts => {}
+        // Undecided on exactly the open slots is the advisory refinement; undecided on anything else — a hidden slot the goal never reached — is a fit nothing distinguishes from a mismatch.
+        Outcome::Blocked(goals) => {
+            if holes == 0 {
+                return None;
+            }
+            let blockers: BTreeSet<_> = goals
+                .iter()
+                .flat_map(|goal| [&goal.this, &goal.that, &goal.type_])
+                .flat_map(|term| zonk_solved_term_metas(context, term).metavars())
+                .filter(|id| context.metavar_solution(*id).is_none())
+                .collect();
+            if blockers.is_empty() || !blockers.is_subset(&hole_ids) {
+                return None;
+            }
+        }
+        Outcome::Mismatch => return None,
+    }
+
+    // An explicit parameter list nothing pinned is an arity, not a suggestion.
+    if holes > 0 && pinned == 0 {
+        return None;
+    }
+
+    let built = zonk_solved_term_metas(context, &Term::apply(head.clone(), kept));
+    Some((built, holes))
 }
 
 /// Pool 1: constructor fits for an inductive goal, and the literal shape for a struct goal.

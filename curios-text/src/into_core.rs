@@ -112,6 +112,8 @@ pub struct PreparedText {
     universe_floor: usize,
     /// Every bare name that resolved to nothing, by the binder it lowered to, with what it could have meant — see `Context::unbound_binder`. Empty for any unit that compiles, the prelude included.
     unbound: BTreeMap<curios_core::Free, Vec<Qualifier>>,
+    /// Every binding a `use` brought into scope somewhere in this unit, by its canonical name, with the shortest spelling a reader wrote it under — see `Context::imports`. What a goal report's candidate pool reaches beyond the names the program already mentions, and the spelling each such candidate is displayed under.
+    imports: BTreeMap<curios_core::Global, String>,
 }
 
 impl PreparedText {
@@ -149,6 +151,11 @@ impl PreparedText {
     /// What each unresolved bare name could have meant, by the binder it lowered to — the table `curios-elab`'s `unbound variable` report reads its suggestion from.
     pub fn unbound(&self) -> &BTreeMap<curios_core::Free, Vec<Qualifier>> {
         &self.unbound
+    }
+
+    /// What a `use` brought into scope, by canonical name, with the spelling it resolves under — the table `curios-elab`'s goal suggestions draw imported candidates from and spell them by.
+    pub fn imports(&self) -> &BTreeMap<curios_core::Global, String> {
+        &self.imports
     }
 }
 
@@ -1690,6 +1697,7 @@ fn into_core_unit_within(
     // No floor: an ordinal is scoped to its mount now, and this unit's mounts are disjoint from every predecessor's, so nothing it mints can collide with anything already stored.
     let witness_ids = RefCell::new(BTreeMap::new());
     let unbound = RefCell::new(BTreeMap::new());
+    let imports = RefCell::new(BTreeMap::new());
 
     let universe_role = Cell::new(curios_core::UniverseRole::Flexible);
     // The scope's seed table. A module carries the *cumulative* table from index zero rather than its own slice — `universe_floor` is asserted equal to its length — so the scope's table is the last unit's, already containing every earlier one. Concatenating them counts each predecessor once per successor, which is what the floor assertion catches.
@@ -1713,6 +1721,7 @@ fn into_core_unit_within(
         &binders,
         &witness_ids,
         &unbound,
+        &imports,
         syntax,
     );
     // Every named prefix in the compilation binds its own one-segment name. No two can repeat it: the disjointness check above refuses a unit claiming what the scope already holds, and the scope's own mounts were pairwise disjoint when each was compiled. The entry's prefix is the empty one, which has no name to bind.
@@ -1811,6 +1820,11 @@ fn into_core_unit_within(
         binder_floor: binders.count(),
         universe_floor: universes.count(),
         unbound: unbound.into_inner(),
+        imports: imports
+            .into_inner()
+            .into_iter()
+            .map(|(target, spelling)| (curios_core::Global::Authored(target), spelling))
+            .collect(),
     })
 }
 
@@ -1843,6 +1857,8 @@ pub struct LoweredEntry {
     pub foreigns: ForeignStore,
     /// See [`PreparedText::unbound`].
     pub unbound: BTreeMap<curios_core::Free, Vec<Qualifier>>,
+    /// See [`PreparedText::imports`].
+    pub imports: BTreeMap<curios_core::Global, String>,
 }
 
 /// Lower the entry program against the units already lowered.
@@ -1860,5 +1876,6 @@ pub fn into_core_with_prelude(
         universe_floor: unit.universe_floor,
         foreigns: unit.foreigns,
         unbound: unit.unbound,
+        imports: unit.imports,
     })
 }

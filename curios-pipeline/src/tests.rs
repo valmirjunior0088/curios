@@ -630,8 +630,9 @@ fn a_computed_equality_goal_suggests_refl() {
         error.contains("? \u{2248} Eq/refl()"),
         "unexpected error: {error}"
     );
+    // One refl line per arm. The step arm also offers `Eq/cong(?, ih)` from the imported `/std/Eq` — the hypothesis placed, the function open — which is why the count is of refl lines and not of every candidate line.
     assert_eq!(
-        error.matches('\u{2248}').count(),
+        error.matches("\u{2248} Eq/refl()").count(),
         2,
         "unexpected error: {error}"
     );
@@ -721,6 +722,115 @@ fn an_application_fit_mentioning_a_scope_binder_is_suggested() {
     let error = compile(source, Some("/std/Nat")).unwrap_err();
 
     assert!(error.contains("mk(k)"), "unexpected error: {error}");
+}
+
+#[test]
+fn an_imported_lemma_is_suggested_with_its_proof_slot_filled_from_the_scope() {
+    // Pool 5 and the scope fill together. `Eq/sym` is never mentioned by the program — it arrives through `use /std/{Eq}` — and its explicit slot is a proof the goal cannot pin; the output pins `x := k, y := 7`, and `h : Eq(k, 7)` is the one binder whose type then fits the slot. The complete fit leads; `Eq/cong(?, h)` follows as the refinement whose function is open. Spelled `Eq/sym`, the path the import resolves under, not the `/std/Eq/sym` Core holds.
+    let source = r#"
+        use /std/{Nat, Eq};
+        let flip(k : Nat, h : Eq(k, 7)) -> Eq(7, k) = ?;
+        0
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert!(
+        error.contains("? \u{2248} Eq/sym(h)"),
+        "unexpected error: {error}"
+    );
+    assert!(
+        error.contains("? \u{2248} Eq/cong(?, h)"),
+        "unexpected error: {error}"
+    );
+    let sym = error.find("Eq/sym(h)").expect("sym suggested");
+    let cong = error.find("Eq/cong(?, h)").expect("cong suggested");
+    assert!(sym < cong, "complete fit should lead: {error}");
+}
+
+#[test]
+fn a_hypothesis_fills_an_imported_lemmas_proof_slot_under_an_open_function() {
+    // The step case of a proof about a function the normalizer cannot unfold on a variable: `double(p + 1)` against `(p + 1) * 2` is not refl, and `Eq/cong`'s output `Eq(f(x), f(y))` is undecided on `f` alone once `ih` pins `x` and `y` — undecided on exactly the open slot, which is the advisory the report keeps. The vacuous `Eq/sym(?)` and `Eq/trans(?, ?)`, true of every equation, are not offered.
+    let source = r#"
+        use /std/{Nat, Eq};
+        rec double(n : Nat) -> Nat = match n | 0 => 0 | p + 1 => double(p) + 2 end;
+        let double_correct(n : Nat) -> Eq(double(n), n * 2) =
+            match n : (m) => Eq(double(m), m * 2)
+            | 0 => Eq/refl()
+            | p + 1; ih => ?
+            end;
+        0
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert!(
+        error.contains("? \u{2248} Eq/cong(?, ih)"),
+        "unexpected error: {error}"
+    );
+    assert!(!error.contains("Eq/sym("), "vacuous fit offered: {error}");
+    assert!(!error.contains("Eq/trans("), "vacuous fit offered: {error}");
+    assert!(
+        !error.contains("Eq/refl()"),
+        "refl cannot close this: {error}"
+    );
+}
+
+#[test]
+fn an_application_fit_nothing_pinned_is_not_suggested() {
+    // `touch`'s output `Eq(y + 1, x + 1)` converts with `Eq(3, 3)` by pinning only hidden slots; its one explicit slot stays a hole with nothing in scope to fill it. `touch(?)` says no more than `touch` has an argument, so it is dropped — where `mk(3)`, whose explicit slot the goal pinned, is kept (see `a_module_function_fitting_the_goal_is_suggested_with_pinned_arguments`).
+    let source = r#"
+        use /std/{Nat, Eq};
+        let touch(@x : Nat, @y : Nat, e : Eq(x, y)) -> Eq(y + 1, x + 1) = Eq/sym(Eq/cong((z) => z + 1, e));
+        let claim : Eq(3, 3) = ?;
+        0
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert!(
+        error.contains("? \u{2248} Eq/refl()"),
+        "unexpected error: {error}"
+    );
+    assert!(!error.contains("touch("), "unpinned fit offered: {error}");
+}
+
+#[test]
+fn a_suggested_imported_candidate_compiles_when_pasted() {
+    // The paste-and-recheck contract for a pool-5 candidate: `Eq/sym(h)` as suggested in `an_imported_lemma_is_suggested_with_its_proof_slot_filled_from_the_scope`.
+    let source = r#"
+        use /std/{Nat, Eq};
+        let flip(k : Nat, h : Eq(k, 7)) -> Eq(7, k) = Eq/sym(h);
+        0
+    "#;
+
+    assert!(compile(source, Some("/std/Nat")).is_ok());
+}
+
+#[test]
+fn a_hole_where_a_congruences_function_belongs_is_undecided_not_mismatched() {
+    // Pasting the refinement above: `?f(double(p))` against `double(p) + 2` is a metavariable-headed application against a value, which has no imitation to try but no refutation either — a constant solution could exist. It used to fall through the structural match to a hard `type mismatch`, telling the author the program was wrong; it parks now, and the drain reports what it is: undecided on the hole.
+    let source = r#"
+        use /std/{Nat, Eq};
+        rec double(n : Nat) -> Nat = match n | 0 => 0 | p + 1 => double(p) + 2 end;
+        let double_correct(n : Nat) -> Eq(double(n), n * 2) =
+            match n : (m) => Eq(double(m), m * 2)
+            | 0 => Eq/refl()
+            | p + 1; ih => Eq/cong(?, ih)
+            end;
+        0
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    assert!(
+        error.contains("cannot decide a postponed conversion"),
+        "unexpected error: {error}"
+    );
+    assert!(
+        !error.contains("type mismatch"),
+        "unexpected error: {error}"
+    );
 }
 
 #[test]
