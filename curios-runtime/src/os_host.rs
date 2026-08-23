@@ -116,38 +116,31 @@ impl OsHost {
     }
 
     /// Apply a `socket2` setter to a configurable handle. Every socket kind — unconnected, connected, or listening — exposes its typed setters directly; a `File` has no socket options, so that path records nothing and succeeds.
+    ///
+    /// The match selects a socket rather than answering, so the failure contract — a setter error is a [`status_from_error`], never a quiet `Ok` — is written once instead of once per kind. A resource added later picks its socket or returns; there is no copy of that contract for it to get wrong.
     fn with_socket<F>(&self, handle: &Handle, apply: F) -> Status
     where
         F: FnOnce(&Socket) -> std::io::Result<()>,
     {
         let table = self.table.lock().unwrap();
 
-        match table.get(handle) {
-            Some(OsResource::Unconnected(socket) | OsResource::Connected(socket)) => {
-                match apply(socket) {
-                    Ok(()) => Status::Ok,
-                    Err(error) => status_from_error(error),
-                }
-            }
-            // The listener is `Arc`-held; `&Arc<Socket>` deref-coerces to the `&Socket` the setter wants.
-            Some(OsResource::Listener(socket)) => match apply(socket) {
-                Ok(()) => Status::Ok,
-                Err(error) => status_from_error(error),
-            },
+        let socket = match table.get(handle) {
+            Some(OsResource::Unconnected(socket) | OsResource::Connected(socket)) => socket,
+            // The listener is `Arc`-held, and an arm's value position is not a coercion site the way the old `apply(socket)` call argument was.
+            Some(OsResource::Listener(socket)) => socket.as_ref(),
             // A TLS stream forwards setters to its underlying socket, so a timeout set after the upgrade still takes effect.
-            Some(OsResource::ClientTls(stream)) => match apply(&stream.sock) {
-                Ok(()) => Status::Ok,
-                Err(error) => status_from_error(error),
-            },
-            Some(OsResource::ServerTls(stream)) => match apply(&stream.sock) {
-                Ok(()) => Status::Ok,
-                Err(error) => status_from_error(error),
-            },
+            Some(OsResource::ClientTls(stream)) => &stream.sock,
+            Some(OsResource::ServerTls(stream)) => &stream.sock,
             // A file, a config token, and an in-flight lookup have no socket options: record nothing.
             Some(OsResource::File(_) | OsResource::TlsConfig(_) | OsResource::Resolving { .. }) => {
-                Status::Ok
+                return Status::Ok;
             }
-            None => Status::NotFound,
+            None => return Status::NotFound,
+        };
+
+        match apply(socket) {
+            Ok(()) => Status::Ok,
+            Err(error) => status_from_error(error),
         }
     }
 }
