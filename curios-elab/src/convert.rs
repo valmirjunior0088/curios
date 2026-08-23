@@ -6,7 +6,9 @@ use intrinsic::*;
 mod tests;
 
 use {
-    super::{Context, check, reduce, reduce_forced, unfold_rec, unfold_rec_apply},
+    super::{
+        Context, check, reduce, reduce_forced, stalled_unfolding, unfold_rec, unfold_rec_apply,
+    },
     curios_core::{
         Apply, Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Intrinsic,
         Level, Match, Metavar, Proj, Rec, ReduceError, Scope, Struct, StructType, Subterm,
@@ -1927,6 +1929,12 @@ impl Convert {
         rigid_raw: &Term,
     ) -> Result<Solved, ReduceError> {
         if !context.has_refinements() {
+            // A rigid side whose reduction only unfolded a name into a stuck form — `double(n)` to the folded call's neutral — is committed as written when that passes every check, and falls back to the reduced spelling on any other verdict, so no equation this decided before is lost. Reduction takes the name straight back to the same neutral, so nothing downstream can tell the two solutions apart; what differs is the spelling a report materializes, which keeps the name instead of the whole recursive group, and the Core term the kernel receives, which carries the call instead of an inlined copy of the group.
+            if stalled_unfolding(rigid_raw, rigid)
+                && let Solved::Done = self.solve(context, metavar, rigid_raw)?
+            {
+                return Ok(Solved::Done);
+            }
             return self.solve(context, metavar, rigid);
         }
 

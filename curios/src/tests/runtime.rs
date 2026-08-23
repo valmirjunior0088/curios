@@ -489,6 +489,31 @@ fn diagnostic_spells_index_arithmetic_infix() {
     );
 }
 
+// A name whose unfolding stalls keeps its name. `double` is a `rec`, so unfolding `double(n)` on a variable reaches the folded call's neutral, which the printer can only spell as the whole recursive group — twice, once per reference — with the author's `n` renamed against the binders the body brought in. The head stays as written and only the arguments normalize; the `2 + 3` and witness-collapse fixtures above are what still unfolds.
+#[test]
+fn diagnostic_keeps_the_name_of_a_stalled_unfolding() {
+    let source = r#"
+        use /std/{Nat, Eq};
+        rec double(n: Nat) -> Nat = match n | 0 => 0 | p + 1 => double(p) + 2 end;
+        let claim(n: Nat) -> Eq(double(n), n * 2) = Eq/refl();
+        claim
+        "#;
+
+    let error = error(source);
+    assert!(
+        error.contains("inferred: Eq(@Nat, double(n), double(n))"),
+        "stalled unfolding not kept by name: {error}"
+    );
+    assert!(
+        error.contains("expected: Eq(@Nat, double(n), "),
+        "stalled unfolding not kept by name: {error}"
+    );
+    assert!(
+        !error.contains("fold") && !error.contains("rec "),
+        "recursive body leaked into the report: {error}"
+    );
+}
+
 // A struct type is nominal: it never converts with a structural tuple type of the same fields.
 #[test]
 fn random_bin_returns_requested_length() {

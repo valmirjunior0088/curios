@@ -783,8 +783,13 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
 /// `reduce` alone stops at the head: an inductive type's indices are not sub-reduced, so a concept-method projection standing in an index position — `Vec(Nat, Add/add(0, 1))`, spelled `Vec(Nat, (sys/witness@0).0(0, 1))` once resolution has picked the intrinsic witness — survives verbatim into a type-mismatch message. Normalizing the index collapses it to the value it denotes (`Vec(Nat, 1)`), or, when an operand is symbolic, to the underlying operator intrinsic (`Vec(Nat, n + m)`) the printer spells infix.
 ///
 /// Display-only and best-effort: the result is never fed back into the kernel, and an exhausted step budget propagates so callers can fall back to the un-normalized spelling. The binder-heavy stuck forms (`Rec`, `Match`) keep their WHNF shape rather than being reduced under their own binders — they seldom carry the arithmetic this targets, and opening every case arm buys a diagnostic nothing.
+///
+/// A name whose unfolding stalls at one of those forms keeps its name. `double(n)` over a `rec` unfolds to the folded call's canonical neutral — a `RecProj`-headed application — and a `match`-defined function applied to a variable unfolds to a stuck `Match`; the printer has no name for either, so it spells the whole body, a recursive group twice over, once per reference, and the reader's `n` is renamed against the binders the body brought in. The body says nothing the name does not, so the head stays as written and only the arguments normalize. A name that unfolds to something that *computed* — a literal, a constructor, a type former — still unfolds, which is what the witness-collapse and `2 + 3` fixtures in `curios/src/tests/runtime.rs` and `curios-pipeline/src/tests.rs` hold.
 pub(crate) fn normalize(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
-    let reduced = reduce_forced(context, term)?;
+    let reduced = reduce_forced(context, term.clone())?;
+    if stalled_unfolding(&term, &reduced) {
+        return normalize_arguments(context, term);
+    }
     let span = reduced.span();
 
     let inner = match Term::unwrap_or_clone(reduced) {
@@ -889,6 +894,50 @@ pub(crate) fn normalize(context: &mut Context, term: Term) -> Result<Term, Reduc
 
 fn normalize_each(context: &mut Context, terms: Vec<Term>) -> Result<Vec<Term>, ReduceError> {
     terms.into_iter().map(|t| normalize(context, t)).collect()
+}
+
+/// The head of an application, or the term itself, looked at through a universe instance: the position a name sits in, and the position a stuck form shows at.
+fn applied_head(term: &Term) -> &Term {
+    let head = match &**term {
+        Subterm::Apply(Apply { head, .. }) => head,
+        _ => term,
+    };
+    match &**head {
+        Subterm::UniverseInst(UniverseInst { head, .. }) => head,
+        _ => head,
+    }
+}
+
+/// Whether reducing `written` to `reduced` only unfolded a name into one of the binder-heavy stuck forms — a folded recursive call or recursive group, a stuck `match`, a lambda or a `let`, bare or at the head of an application. `double(n)` over a `rec` is the paradigm: the name unfolds to the folded call's canonical neutral, which spells as the whole group and says nothing the name did not. [`normalize`] keeps the name for display, and `convert`'s solver commits it as a solution's spelling.
+pub(crate) fn stalled_unfolding(written: &Term, reduced: &Term) -> bool {
+    matches!(&**applied_head(written), Subterm::Var(_))
+        && matches!(
+            &**applied_head(reduced),
+            Subterm::Rec(_) | Subterm::Match(_) | Subterm::Func(_) | Subterm::Let(_)
+        )
+}
+
+/// [`normalize`] with the head held as written: the arguments are normalized, the name is not unfolded.
+fn normalize_arguments(context: &mut Context, term: Term) -> Result<Term, ReduceError> {
+    let span = term.span();
+
+    let inner = match Term::unwrap_or_clone(term) {
+        Subterm::Apply(Apply {
+            head,
+            params,
+            plicities,
+        }) => Subterm::Apply(Apply {
+            head,
+            params: normalize_each(context, params)?,
+            plicities,
+        }),
+        other => other,
+    };
+
+    Ok(match span {
+        Some(span) => Term::spanned(span, inner),
+        None => Term::from(inner),
+    })
 }
 
 /// Normalize a function/Π telescope (`Func`/`FuncType`): each parameter type, then the body opened under a fresh variable and re-closed under its label — the display-side counterpart of [`convert`]'s `compare_func_type` walk.
