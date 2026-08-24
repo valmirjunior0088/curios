@@ -106,6 +106,15 @@ impl Natural {
         }
     }
 
+    /// `⌊√self⌋`, exact and total — zero for zero.
+    ///
+    /// Here rather than in [`Floating`](crate::Floating) because it is a fact about ℕ, and it is the one operation binary32's square root needs that the ring operations do not supply: a root is exact when `isqrt(n)² = n` and rounds off the remainder otherwise, which is the sticky bit its caller wants.
+    pub fn isqrt(&self) -> Self {
+        Self {
+            value: self.value.sqrt(),
+        }
+    }
+
     /// `None` on a zero divisor — the reducer reports that case before folding.
     pub fn checked_div(self, other: Self) -> Option<Self> {
         (!other.value.is_zero()).then(|| Self {
