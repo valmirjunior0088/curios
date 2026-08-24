@@ -48,6 +48,7 @@ Grades only. Each entry's evidence is the entry it links to.
 | [Scrutinee refinement](soundness/per-term-rules/scrutinee-refinement.md) | **probed** |
 | [Intrinsic signatures](soundness/per-term-rules/intrinsic-signatures.md) | auditable only |
 | [Intrinsic fold laws and the free-monoid peel](soundness/per-term-rules/intrinsic-fold-laws-and-the-free-monoid-peel.md) | **probed** at the `Nat` peel, the `Bin`/`List` peel verdicts and open fold laws over values, the division family and its bounds oracle; **argued** for the bit-grain twins of the byte-grain arms |
+| [The binary32 model and its two canonicalizing sites](soundness/per-term-rules/the-binary32-model-and-its-two-canonicalizing-sites.md) | **probed** by the model against the host at all 2³² unary inputs and the fold against the engine at both canonicalizing sites; **argued** that the two are the only operations reading a NaN's bits |
 | [The closed machine](soundness/per-term-rules/the-closed-machine.md) | **probed** — behavioral battery, kernel differential at both demands, whole-prelude certification; one memo-keying divergence found and closed |
 | [Telescope instantiation](soundness/per-term-rules/telescope-instantiation.md) | **probed** incidentally, never directly |
 | [Checked rules at deferred child positions](soundness/per-term-rules/checked-rules-at-deferred-child-positions.md) | **argued** |

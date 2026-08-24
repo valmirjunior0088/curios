@@ -469,23 +469,25 @@ fn a_flt_narrowing_bound_discharges_behind_a_guard() {
 }
 
 /// The bounds refuse what they exclude, at runtime through the deciding pair: a NaN and either infinity are not numbers, and a negative is not a non-negative one. `-0.0` *is* non-negative, because IEEE says `-0.0 >= +0.0`, and that is the case a reader is most likely to think the bound rejects.
+///
+/// Both deciders appear, because they state different domains: `non_neg` excludes a negative where `finite` admits it, and each excludes both infinities and the NaN. Reading them side by side is what shows `-2.5` is the one column they disagree on.
 #[test]
 fn a_flt_narrowing_bound_refuses_what_is_not_a_number() {
     assert_eq!(
         run(r#"
-        use /std/{Flt, Nat, Str, Option, List};
-        let probe(f: Flt) -> Str =
-            match Flt/try_to_nat(f)
-            | some(n) => Nat/to_str(n)
-            | none() => "-"
-            end;
+        use /std/{Flt, Nat, Int, Str, Option, List};
+        let to_nat(f: Flt) -> Str =
+            match Flt/try_to_nat(f) | some(n) => Nat/to_str(n) | none() => "-" end;
+        let to_int(f: Flt) -> Str =
+            match Flt/try_to_int(f) | some(n) => Int/to_str(n) | none() => "-" end;
+        let probe(f: Flt) -> Str = Str/concat(Str/concat(to_nat(f), "/"), to_int(f));
         /std/print(List/fold(
             [probe(2.5), probe(-0.0), probe(-2.5), probe(Flt/pos_inf), probe(Flt/neg_inf),
                 probe(Flt/nan)],
             "",
             (s, acc) => Str/concat(acc, Str/concat(s, " "))))
         "#),
-        b"2 0 - - - - "
+        b"2/+2 0/+0 -/-2 -/- -/- -/- "
     );
 }
 
