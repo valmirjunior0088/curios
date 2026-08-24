@@ -182,8 +182,20 @@ impl Intrinsic {
                 nat_type(),
             ),
             IntToFlt(..) => un(int_type(), flt_type()),
-            FltToNat(..) => un(flt_type(), nat_type()),
-            FltToInt(..) => un(flt_type(), int_type()),
+            FltToNat { flt, .. } => sig(
+                vec![
+                    Operand::At(flt_type()),
+                    Operand::At(decided(syntax.proof.flt_non_neg, vec![flt.clone()])),
+                ],
+                nat_type(),
+            ),
+            FltToInt { flt, .. } => sig(
+                vec![
+                    Operand::At(flt_type()),
+                    Operand::At(decided(syntax.proof.flt_finite, vec![flt.clone()])),
+                ],
+                int_type(),
+            ),
             FltToLeBytes(..) => un(flt_type(), bin_type(Grain::X)),
             FltOfLeBytes { bin, .. } => sig(
                 vec![

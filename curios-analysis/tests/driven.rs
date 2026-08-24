@@ -76,6 +76,8 @@ const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         int_non_zero: syntax_name(&["syn", "Int", "NonZero"]),
         int_non_neg: syntax_name(&["syn", "Int", "NonNeg"]),
         bytes_four: syntax_name(&["syn", "Flt", "FourBytes"]),
+        flt_finite: syntax_name(&["syn", "Flt", "Finite"]),
+        flt_non_neg: syntax_name(&["syn", "Flt", "NonNeg"]),
     },
 };
 

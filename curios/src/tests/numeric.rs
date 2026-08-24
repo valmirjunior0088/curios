@@ -429,3 +429,50 @@ fn bytes_of_nat_is_minimal_big_endian() {
         "#);
     assert_eq!(output, b"0 1:1 1:255 2:1:0 3:1:0:0 3:1:0:1 ");
 }
+
+/// **The two narrowings out of `Flt` state their domains, and a guard discharges them.** `Flt/to_nat` demands `/syn/Flt/NonNeg` and `Flt/to_int` demands `/syn/Flt/Finite`, both decided over the raw comparisons — so refining the scrutinee is what makes the obligation reduce to `True`, exactly as `Int/to_nat`'s bound does.
+///
+/// The `try_` forms are the same discharge routed through `/std/Flt`'s deciders, which is the shape a caller who cannot guard in place reaches for. A closed literal is deliberately *not* probed here: it needs the fold, which is the next commit's, and this fixture is what says the bounds stand without it.
+#[test]
+fn a_flt_narrowing_bound_discharges_behind_a_guard() {
+    assert_eq!(
+        run(r#"
+        use /std/{Flt, Nat, Int, Str, Option};
+        let to_nat_or(f: Flt, fallback: Nat) -> Nat =
+            match f >= +0.0 && f <= 3.4028235e38
+            | true => Flt/to_nat(f)
+            | false => fallback
+            end;
+        let to_int_or(f: Flt, fallback: Int) -> Int =
+            match -3.4028235e38 <= f && f <= 3.4028235e38
+            | true => Flt/to_int(f)
+            | false => fallback
+            end;
+        /std/print(Str/concat(
+            Str/concat(Nat/to_str(to_nat_or(2.5, 9)), " "),
+            Int/to_str(to_int_or(-2.5, +9))))
+        "#),
+        b"2 -2"
+    );
+}
+
+/// The bounds refuse what they exclude, at runtime through the deciding pair: a NaN and either infinity are not numbers, and a negative is not a non-negative one. `-0.0` *is* non-negative, because IEEE says `-0.0 >= +0.0`, and that is the case a reader is most likely to think the bound rejects.
+#[test]
+fn a_flt_narrowing_bound_refuses_what_is_not_a_number() {
+    assert_eq!(
+        run(r#"
+        use /std/{Flt, Nat, Str, Option, List};
+        let probe(f: Flt) -> Str =
+            match Flt/try_to_nat(f)
+            | some(n) => Nat/to_str(n)
+            | none() => "-"
+            end;
+        /std/print(List/fold(
+            [probe(2.5), probe(-0.0), probe(-2.5), probe(Flt/pos_inf), probe(Flt/neg_inf),
+                probe(Flt/nan)],
+            "",
+            (s, acc) => Str/concat(acc, Str/concat(s, " "))))
+        "#),
+        b"2 0 - - - - "
+    );
+}

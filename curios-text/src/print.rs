@@ -632,8 +632,12 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             print_intrinsic_call("Int/to_nat", vec![], vec![operand])
         }
         Intrinsic::IntToFlt(operand) => print_intrinsic_call("Int/to_flt", vec![], vec![operand]),
-        Intrinsic::FltToNat(operand) => print_intrinsic_call("Flt/to_nat", vec![], vec![operand]),
-        Intrinsic::FltToInt(operand) => print_intrinsic_call("Flt/to_int", vec![], vec![operand]),
+        Intrinsic::FltToNat { flt: operand, .. } => {
+            print_intrinsic_call("Flt/to_nat", vec![], vec![operand])
+        }
+        Intrinsic::FltToInt { flt: operand, .. } => {
+            print_intrinsic_call("Flt/to_int", vec![], vec![operand])
+        }
         Intrinsic::BinType(grain) => pure(match grain {
             Grain::B => "Bits",
             Grain::X => "Bytes",

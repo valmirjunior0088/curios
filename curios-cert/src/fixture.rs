@@ -58,5 +58,7 @@ pub(crate) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         int_non_zero: name(&["syn", "Int", "NonZero"]),
         int_non_neg: name(&["syn", "Int", "NonNeg"]),
         bytes_four: name(&["syn", "Flt", "FourBytes"]),
+        flt_finite: name(&["syn", "Flt", "Finite"]),
+        flt_non_neg: name(&["syn", "Flt", "NonNeg"]),
     },
 };

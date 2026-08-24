@@ -898,14 +898,16 @@ fn reduce_flt_to_int_stays_stuck() {
     let mut context = context();
 
     // Opaque at the type level even on an exactly representable value: reading a float *is* float semantics, and none of it decides conversion.
-    let exact = Term::intrinsic(Intrinsic::FltToInt(Term::intrinsic(Intrinsic::Flt(
-        Floating::from_f32(2147483648.0),
-    ))));
+    let exact = Term::intrinsic(Intrinsic::FltToInt {
+        flt: Term::intrinsic(Intrinsic::Flt(Floating::from_f32(2147483648.0))),
+        finite: qed(),
+    });
     assert_eq!(reduce(&mut context, exact.clone()), Ok(exact));
 
-    let nan = Term::intrinsic(Intrinsic::FltToInt(Term::intrinsic(Intrinsic::Flt(
-        Floating::from_f32(f32::NAN),
-    ))));
+    let nan = Term::intrinsic(Intrinsic::FltToInt {
+        flt: Term::intrinsic(Intrinsic::Flt(Floating::from_f32(f32::NAN))),
+        finite: qed(),
+    });
     assert_eq!(reduce(&mut context, nan.clone()), Ok(nan));
 }
 

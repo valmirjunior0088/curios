@@ -471,9 +471,9 @@ impl Sort {
                 | Intrinsic::FltRem(..)
                 | Intrinsic::FltSqrt(..)
                 | Intrinsic::FltSub(..)
-                | Intrinsic::FltToInt(..)
+                | Intrinsic::FltToInt { .. }
                 | Intrinsic::FltToLeBytes(..)
-                | Intrinsic::FltToNat(..)
+                | Intrinsic::FltToNat { .. }
                 | Intrinsic::FltTrunc(..)
                 | Intrinsic::Handle(..)
                 | Intrinsic::HandleEql(..)

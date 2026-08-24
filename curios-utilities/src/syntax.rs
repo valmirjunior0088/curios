@@ -252,6 +252,10 @@ pub struct ProofSyntax {
     pub int_non_neg: SyntaxName,
     /// `len(b) = 4` over `Bytes`, the precondition reinterpreting one as a binary32 states. Decided on the length alone, which is the whole of what the reinterpretation needs.
     pub bytes_four: SyntaxName,
+    /// `a` is a number over `Flt` — finite, so neither infinity nor the NaN — the precondition truncating one to an `Int` states.
+    pub flt_finite: SyntaxName,
+    /// `0 <= a` and `a` is a number, the precondition truncating a `Flt` to a `Nat` states. Distinct from [`ProofSyntax::int_non_neg`]: an `Int` has no infinity to exclude, so its non-negativity needs no upper bound and this one does.
+    pub flt_non_neg: SyntaxName,
 }
 
 impl ProofSyntax {
@@ -264,6 +268,8 @@ impl ProofSyntax {
             int_non_zero,
             int_non_neg,
             bytes_four,
+            flt_finite,
+            flt_non_neg,
         } = self;
 
         [
@@ -274,6 +280,8 @@ impl ProofSyntax {
             int_non_zero,
             int_non_neg,
             bytes_four,
+            flt_finite,
+            flt_non_neg,
         ]
         .into_iter()
     }

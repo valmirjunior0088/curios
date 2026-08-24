@@ -718,10 +718,10 @@ impl<E: Env> Walk<'_, E> {
             | Intrinsic::NatToFlt(..)
             | Intrinsic::IntToNat { .. }
             | Intrinsic::IntToFlt(..)
-            | Intrinsic::FltToNat(..)
+            | Intrinsic::FltToNat { .. }
             | Intrinsic::FltToLeBytes(..)
             | Intrinsic::FltOfLeBytes { .. }
-            | Intrinsic::FltToInt(..)
+            | Intrinsic::FltToInt { .. }
             | Intrinsic::Bin(..)
             | Intrinsic::BinLen(..)
             | Intrinsic::BinEql(..)

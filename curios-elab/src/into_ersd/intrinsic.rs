@@ -296,8 +296,12 @@ pub(super) fn erase_intrinsic(
             op!(curios_ersd::Operation::IntToNat, int_type, inner)
         }
         Intrinsic::IntToFlt(inner) => op!(curios_ersd::Operation::IntToFlt, int_type, inner),
-        Intrinsic::FltToNat(inner) => op!(curios_ersd::Operation::FltToNat, flt_type, inner),
-        Intrinsic::FltToInt(inner) => op!(curios_ersd::Operation::FltToInt, flt_type, inner),
+        Intrinsic::FltToNat { flt: inner, .. } => {
+            op!(curios_ersd::Operation::FltToNat, flt_type, inner)
+        }
+        Intrinsic::FltToInt { flt: inner, .. } => {
+            op!(curios_ersd::Operation::FltToInt, flt_type, inner)
+        }
         Intrinsic::FltToLeBytes(inner) => {
             op!(curios_ersd::Operation::FltToLeBytes, flt_type, inner)
         }

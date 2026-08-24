@@ -512,8 +512,20 @@ fn flt_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
         unary("trunc", flt(), flt(), Intrinsic::FltTrunc),
         unary("nearest", flt(), flt(), Intrinsic::FltNearest),
         binary("copysign", flt(), flt(), Intrinsic::FltCopysign),
-        unary("to_nat", flt(), nat(), Intrinsic::FltToNat),
-        unary("to_int", flt(), int(), Intrinsic::FltToInt),
+        guarded_unary(
+            "to_nat",
+            flt(),
+            nat(),
+            applied(registered(syntax.proof.flt_non_neg), vec![name("a")]),
+            |flt, non_neg| Intrinsic::FltToNat { flt, non_neg },
+        ),
+        guarded_unary(
+            "to_int",
+            flt(),
+            int(),
+            applied(registered(syntax.proof.flt_finite), vec![name("a")]),
+            |flt, finite| Intrinsic::FltToInt { flt, finite },
+        ),
         unary("to_le_bytes", flt(), bin(Grain::X), Intrinsic::FltToLeBytes),
         guarded_unary(
             "of_le_bytes",

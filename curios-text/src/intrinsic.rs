@@ -121,13 +121,19 @@ pub enum Intrinsic {
         non_neg: Term,
     },
     IntToFlt(Term),
-    FltToNat(Term),
+    FltToNat {
+        flt: Term,
+        non_neg: Term,
+    },
     FltToLeBytes(Term),
     FltOfLeBytes {
         bin: Term,
         four_bytes: Term,
     },
-    FltToInt(Term),
+    FltToInt {
+        flt: Term,
+        finite: Term,
+    },
     BinType(Grain),
     Bin(Grain, Vec<BinSegment>),
     BinLen(Grain, Term),

@@ -1369,10 +1369,19 @@ pub fn reduce_intrinsic(
         Intrinsic::IntToFlt(inner) => {
             reduce_int_unary(reducer, inner, |_| None, Intrinsic::IntToFlt)
         }
-        Intrinsic::FltToNat(inner) => reduce_flt_unary(reducer, inner, Intrinsic::FltToNat),
-        Intrinsic::FltToInt(inner) => {
-            let inner = reducer.reduce_forced(inner.clone())?;
-            Ok(Subterm::Intrinsic(Intrinsic::FltToInt(inner)))
+        Intrinsic::FltToNat { flt, non_neg } => {
+            let flt = reducer.reduce_forced(flt.clone())?;
+            Ok(Subterm::Intrinsic(Intrinsic::FltToNat {
+                flt,
+                non_neg: non_neg.clone(),
+            }))
+        }
+        Intrinsic::FltToInt { flt, finite } => {
+            let flt = reducer.reduce_forced(flt.clone())?;
+            Ok(Subterm::Intrinsic(Intrinsic::FltToInt {
+                flt,
+                finite: finite.clone(),
+            }))
         }
         Intrinsic::BinType(Grain::X) => Ok(Subterm::Intrinsic(Intrinsic::BinType(Grain::X))),
         Intrinsic::Bin(Grain::X, bytes) => {

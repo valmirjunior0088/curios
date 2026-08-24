@@ -1232,8 +1232,12 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 curios_core::Intrinsic::int_to_nat(self.term(int)?, self.term(non_neg)?)
             }
             Intrinsic::IntToFlt(inner) => curios_core::Intrinsic::int_to_flt(self.term(inner)?),
-            Intrinsic::FltToNat(inner) => curios_core::Intrinsic::flt_to_nat(self.term(inner)?),
-            Intrinsic::FltToInt(inner) => curios_core::Intrinsic::flt_to_int(self.term(inner)?),
+            Intrinsic::FltToNat { flt, non_neg } => {
+                curios_core::Intrinsic::flt_to_nat(self.term(flt)?, self.term(non_neg)?)
+            }
+            Intrinsic::FltToInt { flt, finite } => {
+                curios_core::Intrinsic::flt_to_int(self.term(flt)?, self.term(finite)?)
+            }
             Intrinsic::BinType(grain) => curios_core::Intrinsic::BinType(*grain),
             // `\hex` is a raw byte sequence; `\..` segments splice other `Bin`s.
             Intrinsic::Bin(grain, segments) => {

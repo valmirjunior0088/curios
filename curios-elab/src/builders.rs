@@ -232,14 +232,16 @@ pub trait IntrinsicBuilders {
         T: Into<Term>;
 
     /// A `FltToInt` conversion node from anything term-shaped.
-    fn flt_to_int<T>(inner: T) -> Self
+    fn flt_to_int<T, P>(flt: T, finite: P) -> Self
     where
-        T: Into<Term>;
+        T: Into<Term>,
+        P: Into<Term>;
 
-    /// A `FltToNat` conversion node from anything term-shaped.
-    fn flt_to_nat<T>(inner: T) -> Self
+    /// A `FltToNat` conversion node from anything term-shaped, with the proof that its operand is a non-negative number.
+    fn flt_to_nat<T, P>(flt: T, non_neg: P) -> Self
     where
-        T: Into<Term>;
+        T: Into<Term>,
+        P: Into<Term>;
 
     /// A `FltToLeBytes` node (a float's four little-endian bytes as a `Bin`) from anything term-shaped.
     fn flt_to_le_bytes<T>(inner: T) -> Self
@@ -582,18 +584,26 @@ impl IntrinsicBuilders for Intrinsic {
         Self::NatToFlt(inner.into())
     }
 
-    fn flt_to_int<T>(inner: T) -> Self
+    fn flt_to_int<T, P>(flt: T, finite: P) -> Self
     where
         T: Into<Term>,
+        P: Into<Term>,
     {
-        Self::FltToInt(inner.into())
+        Self::FltToInt {
+            flt: flt.into(),
+            finite: finite.into(),
+        }
     }
 
-    fn flt_to_nat<T>(inner: T) -> Self
+    fn flt_to_nat<T, P>(flt: T, non_neg: P) -> Self
     where
         T: Into<Term>,
+        P: Into<Term>,
     {
-        Self::FltToNat(inner.into())
+        Self::FltToNat {
+            flt: flt.into(),
+            non_neg: non_neg.into(),
+        }
     }
 
     fn flt_to_le_bytes<T>(inner: T) -> Self

@@ -64,6 +64,8 @@ const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         int_non_zero: syn_name(&["syn", "Int", "NonZero"]),
         int_non_neg: syn_name(&["syn", "Int", "NonNeg"]),
         bytes_four: syn_name(&["syn", "Flt", "FourBytes"]),
+        flt_finite: syn_name(&["syn", "Flt", "Finite"]),
+        flt_non_neg: syn_name(&["syn", "Flt", "NonNeg"]),
     },
 };
 
@@ -209,6 +211,8 @@ fn lower_with_prelude(src: &str) -> Result<(), String> {
             end
             pub mod Flt
                 pub let FourBytes : Type = Type;
+                pub let Finite : Type = Type;
+                pub let NonNeg : Type = Type;
             end
         "#
         .parse()

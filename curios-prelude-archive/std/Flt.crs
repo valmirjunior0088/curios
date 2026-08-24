@@ -1,5 +1,5 @@
 pub use /sys/{Flt};
-pub use /syn/Flt/{FourBytes};
+pub use /syn/Flt/{FourBytes, Finite, NonNeg};
 pub use /sys/Flt/{add, sub, mul, div, rem, min, max, eql, neq, lt, gt, le, ge, neg, abs, sqrt,
     floor, ceil, trunc, nearest, copysign, to_nat, to_int, to_le_bytes, of_le_bytes};
 use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Order, BigNat, Eql, Cmp, Add, Sub,
@@ -27,21 +27,36 @@ pub let try_of_le_bytes(b: Bytes) -> Option(Flt) =
     | false => Option/none()
     end;
 
--- The total forms of the two narrowings, which is where their partiality is answered rather than in a stated precondition. `to_nat` and `to_int` keep trapping: their bounds are the one family in the prelude that could not be *decided*, since `curios-core` folds no `Flt` operation, so stating them would have bought a compile-time refusal only by widening what the kernel folds. The rule that settles it, and the one to apply to the next carrier: bound what is cheap to decide, trap what is not, and pair either with a `try_` form. `Int/to_nat` is on the other side of that line and is bounded, because `Int` comparisons do fold.
+-- The procedures that decide the two narrowings' bounds, in the `Int/non_neg` idiom: the guard refines the scrutinee, so each arm's proposition reduces to `True` or to `False` and the `some` arm's obligation is discharged by the comparison itself.
 --
--- `some` means the truncation is *defined*, which is exactly what a precondition would have said. It is deliberately not a promise that the conversion cannot trap: a defined result too large for the runtime carrier still refuses at the narrowing, as `Nat` arithmetic does past the same envelope, and checking for that here would write a backend width into `/std`.
---
--- `to_nat` needs no `is_finite`: `f >= +0.0` already rejects a NaN and `-inf`, so only `+inf` is left to exclude.
-pub let try_to_nat(f: Flt) -> Option(Nat) =
-    match f >= +0.0 && f < pos_inf
-    | true => Option/some(to_nat(f))
+-- Each scrutinee must be spelled as its proposition spells it, operand order included — a refinement is keyed on the term written, and `min <= f` is not the term `f >= min`. The extremes are written out because `/syn/Flt` keeps them private, so the two spellings are checked against each other by this build rather than shared through a name.
+pub let finite(f: Flt) -> Option(Finite(f)) =
+    match -3.4028235e38 <= f && f <= 3.4028235e38:
+        (r) => Option(match r: (_) => Prop | true => True | false => False end)
+    | true => Option/some(True/qed())
     | false => Option/none()
     end;
 
-pub let try_to_int(f: Flt) -> Option(Int) =
-    match is_finite(f)
-    | true => Option/some(to_int(f))
+pub let non_neg(f: Flt) -> Option(NonNeg(f)) =
+    match f >= +0.0 && f <= 3.4028235e38:
+        (r) => Option(match r: (_) => Prop | true => True | false => False end)
+    | true => Option/some(True/qed())
     | false => Option/none()
+    end;
+
+-- The total forms of the two narrowings, written over the deciders above — the pairing every checked accessor carries. Both bounds are now *decided*: `Flt` comparisons fold, so a closed call discharges its own obligation and an open one discharges it behind a guard.
+--
+-- `some` means the truncation is *defined*, which is exactly what the precondition says. It is deliberately not a promise that the conversion cannot trap: a defined result too large for the runtime carrier still refuses at the narrowing, as `Nat` arithmetic does past the same envelope, and checking for that here would write a backend width into `/std`.
+pub let try_to_nat(f: Flt) -> Option(Nat) =
+    match non_neg(f)
+    | some(ok) => Option/some(to_nat(f, @ok))
+    | none() => Option/none()
+    end;
+
+pub let try_to_int(f: Flt) -> Option(Int) =
+    match finite(f)
+    | some(ok) => Option/some(to_int(f, @ok))
+    | none() => Option/none()
     end;
 
 let pow2(k: Nat) -> BigNat =

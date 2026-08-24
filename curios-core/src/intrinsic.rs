@@ -132,14 +132,22 @@ pub enum Intrinsic {
         non_neg: Term,
     },
     IntToFlt(Term),
-    FltToNat(Term),
+    /// `non_neg` proves the operand is a non-negative *number*, which is what excludes `+inf` and the NaN alongside every negative. Carried for the reason [`Intrinsic::NatDiv`]'s bound is.
+    FltToNat {
+        flt: Term,
+        non_neg: Term,
+    },
     FltToLeBytes(Term),
     /// `four_bytes` proves `len(bin) = 4`, which is the whole of what reinterpreting a binary32 needs.
     FltOfLeBytes {
         bin: Term,
         four_bytes: Term,
     },
-    FltToInt(Term),
+    /// `finite` proves the operand is a number — neither infinity, and not the NaN — which is the whole of what truncating toward zero needs.
+    FltToInt {
+        flt: Term,
+        finite: Term,
+    },
     BinType(Grain),
     Bin(Grain, PackedBin),
     BinLen(Grain, Term),
@@ -582,8 +590,6 @@ impl Intrinsic {
             | Intrinsic::NatToInt(t)
             | Intrinsic::NatToFlt(t)
             | Intrinsic::IntToFlt(t)
-            | Intrinsic::FltToNat(t)
-            | Intrinsic::FltToInt(t)
             | Intrinsic::ByteToNat(t)
             | Intrinsic::NatToByte(t)
             | Intrinsic::FltNeg(t)
@@ -734,7 +740,9 @@ impl Intrinsic {
                 bin: a,
                 four_bytes: p,
             }
-            | Intrinsic::IntToNat { int: a, non_neg: p } => {
+            | Intrinsic::IntToNat { int: a, non_neg: p }
+            | Intrinsic::FltToNat { flt: a, non_neg: p }
+            | Intrinsic::FltToInt { flt: a, finite: p } => {
                 visit(a);
                 visit(p);
             }
@@ -992,8 +1000,14 @@ impl Intrinsic {
                 non_neg: visit.visit_subterm(non_neg),
             },
             Intrinsic::IntToFlt(inner) => Intrinsic::IntToFlt(visit.visit_subterm(inner)),
-            Intrinsic::FltToNat(inner) => Intrinsic::FltToNat(visit.visit_subterm(inner)),
-            Intrinsic::FltToInt(inner) => Intrinsic::FltToInt(visit.visit_subterm(inner)),
+            Intrinsic::FltToNat { flt, non_neg } => Intrinsic::FltToNat {
+                flt: visit.visit_subterm(flt),
+                non_neg: visit.visit_subterm(non_neg),
+            },
+            Intrinsic::FltToInt { flt, finite } => Intrinsic::FltToInt {
+                flt: visit.visit_subterm(flt),
+                finite: visit.visit_subterm(finite),
+            },
             Intrinsic::BinType(grain) => Intrinsic::BinType(*grain),
             Intrinsic::Bin(grain, value) => Intrinsic::Bin(*grain, value.clone()),
             Intrinsic::BinLen(grain, bin) => Intrinsic::BinLen(*grain, visit.visit_subterm(bin)),
