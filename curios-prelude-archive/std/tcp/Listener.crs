@@ -7,15 +7,22 @@ pub struct Listener: Type {
 
 let bind_listen(addr: Bytes) -> Io(Result(Listener, Handle/Error)) =
     let s = /sys/socket/open(addr)!;
-    match s.status == /sys/status/ok
-    | true =>
+    match Handle/error_of(s.status)
+    | some(e) => Io/pure(Result/failure(e))
+    | none() =>
         let _ = /sys/socket/set_reuseaddr(s.handle, true)!;
         let bound = /sys/socket/bind(s.handle, addr)!;
-        match bound == /sys/status/ok
-        | true =>
+        match Handle/error_of(bound)
+        | some(e) =>
+            let _ = /sys/Handle/close(s.handle)!;
+            Io/pure(Result/failure(e))
+        | none() =>
             let status = /sys/socket/listen(s.handle, 128)!;
-            match status == /sys/status/ok
-            | true =>
+            match Handle/error_of(status)
+            | some(e) =>
+                let _ = /sys/Handle/close(s.handle)!;
+                Io/pure(Result/failure(e))
+            | none() =>
                 let nb = Async/nonblocking(s.handle)!;
                 match nb
                 | failure(e) =>
@@ -23,15 +30,8 @@ let bind_listen(addr: Bytes) -> Io(Result(Listener, Handle/Error)) =
                     Io/pure(Result/failure(e))
                 | success(_) => Io/pure(Result/success(Listener { s.handle }))
                 end
-            | false =>
-                let _ = /sys/Handle/close(s.handle)!;
-                Io/pure(Result/failure(Handle/error_of(status)))
             end
-        | false =>
-            let _ = /sys/Handle/close(s.handle)!;
-            Io/pure(Result/failure(Handle/error_of(bound)))
         end
-    | false => Io/pure(Result/failure(Handle/error_of(s.status)))
     end;
 
 let listen(host: Str, port: Nat) -> Async(Result(Listener, Handle/Error)) =
@@ -96,11 +96,11 @@ pub let serve_tls(
     handler: (Socket) -> Async({}),
 ) -> Async(Result({}, Handle/Error)) =
     let cfg = /sys/tls/server_config(cert, key)!;
-    match cfg.status == /sys/status/ok
-    | true =>
+    match Handle/error_of(cfg.status)
+    | some(e) => Async/pure(Result/failure(e))
+    | none() =>
         Async/using(
             cfg.handle,
             /sys/Handle/close(cfg.handle),
             listen_loop(host, port, (h) => serve_tls_conn(h, cfg.handle, handler)))
-    | false => Async/pure(Result/failure(Handle/error_of(cfg.status)))
     end;

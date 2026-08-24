@@ -36,16 +36,23 @@ let upgrade(h: Handle, host: Str, tls: Bool) -> Io(Nat) =
 -- Every step here is a syscall and none of them suspends, so this is an `Io` chain the caller lifts into a single `Async` step rather than a fiber that could yield partway through connecting.
 let connect_addr(settings: Settings, host: Str, addr: Bytes) -> Io(Result(Socket, Handle/Error)) =
     let s = /sys/socket/open(addr)!;
-    match s.status == /sys/status/ok
-    | true =>
+    match Handle/error_of(s.status)
+    | some(e) => Io/pure(Result/failure(e))
+    | none() =>
         let _ = configure(s.handle, settings)!;
         let status = /sys/socket/connect(s.handle, addr)!;
-        match status == /sys/status/ok
-        | true =>
+        match Handle/error_of(status)
+        | some(e) =>
+            let _ = /sys/Handle/close(s.handle)!;
+            Io/pure(Result/failure(e))
+        | none() =>
             let upgraded = upgrade(s.handle, host, settings.tls)!;
-            match upgraded == /sys/status/ok
+            match Handle/error_of(upgraded)
+            | some(e) =>
+                let _ = /sys/Handle/close(s.handle)!;
+                Io/pure(Result/failure(e))
             -- A TLS stream is driven by rustls, not polled at the socket layer, so it is left blocking on purpose.
-            | true =>
+            | none() =>
                 match settings.tls
                 | true => Io/pure(Result/success(Socket { s.handle }))
                 | false =>
@@ -57,15 +64,8 @@ let connect_addr(settings: Settings, host: Str, addr: Bytes) -> Io(Result(Socket
                     | success(_) => Io/pure(Result/success(Socket { s.handle }))
                     end
                 end
-            | false =>
-                let _ = /sys/Handle/close(s.handle)!;
-                Io/pure(Result/failure(Handle/error_of(upgraded)))
             end
-        | false =>
-            let _ = /sys/Handle/close(s.handle)!;
-            Io/pure(Result/failure(Handle/error_of(status)))
         end
-    | false => Io/pure(Result/failure(Handle/error_of(s.status)))
     end;
 
 let connect_socket(

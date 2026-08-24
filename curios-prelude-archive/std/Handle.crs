@@ -1,6 +1,6 @@
 pub use /sys/{Handle};
 pub use /sys/Handle/{stdin, stdout, stderr, eql};
-use /std/{Bytes, Nat, Result, List, Io, True, Bool, Eql};
+use /std/{Bytes, Nat, Result, List, Io, True, Bool, Option, Eql};
 
 pub induct Error: pub Type
 | not_found()
@@ -21,12 +21,19 @@ let errors: List({Nat, Error}) =
         (/sys/status/tls, Error/tls()),
         (/sys/status/would_block, Error/would_block())];
 
-pub let error_of(status: Nat) -> Error =
-    List/fold(
-        errors,
-        -- Not a named code: the errno passthrough lane, offset by other_base so an errno never collides with a named code.
-        Error/other(status - /sys/status/other_base),
-        (entry, acc) => match status == entry.0 | true => entry.1 | false => acc end);
+-- The failure `status` names, or `none` for the two non-failure codes, `ok` and `eof` — stated here once so a status that is not an error cannot be manufactured into one. It used to be total, and the two non-failure codes fell through the passthrough monus to `other(0)`, indistinguishable from the errno-less catch-all a host legitimately reports; every caller had to pre-filter them, and twelve of sixteen guarded only `ok`.
+pub let error_of(status: Nat) -> Option(Error) =
+    choose
+    | status == /sys/status/ok => Option/none()
+    | status == /sys/status/eof => Option/none()
+    | _ =>
+        Option/some(
+            List/fold(
+                errors,
+                -- Not a named code: the errno passthrough lane, offset by other_base so an errno never collides with a named code.
+                Error/other(status - /sys/status/other_base),
+                (entry, acc) => match status == entry.0 | true => entry.1 | false => acc end))
+    end;
 
 pub induct Read: pub Type
 | chunk(Bytes)
@@ -37,21 +44,27 @@ end
 pub let read(h: Handle, n: Nat) -> Io(Read) =
     let r = /sys/Handle/read(h, n)!;
     Io/pure(
-        choose
-        | r.status == /sys/status/ok => Read/chunk(r.bytes)
-        | r.status == /sys/status/eof => Read/eof()
-        | _ => Read/error(error_of(r.status))
+        match error_of(r.status)
+        | some(e) => Read/error(e)
+        | none() =>
+            match r.status == /sys/status/eof
+            | true => Read/eof()
+            | false => Read/chunk(r.bytes)
+            end
         end);
 
 pub rec write(h: Handle, b: Bytes) -> Io(Result({}, Error)) =
     let r = /sys/Handle/write(h, b)!;
-    choose
-    | r.status != /sys/status/ok => Io/pure(Result/failure(error_of(r.status)))
-    | r.written < Bytes/len(b) =>
-        write(
-            h,
-            Bytes/drop(b, r.written, @Nat/Lt/le_of_lt(r.written, Bytes/len(b), True/qed())))
-    | _ => Io/pure(Result/success(()))
+    match error_of(r.status)
+    | some(e) => Io/pure(Result/failure(e))
+    | none() =>
+        match r.written < Bytes/len(b)
+        | true =>
+            write(
+                h,
+                Bytes/drop(b, r.written, @Nat/Lt/le_of_lt(r.written, Bytes/len(b), True/qed())))
+        | false => Io/pure(Result/success(()))
+        end
     end;
 
 satisfy Eql(Handle) {

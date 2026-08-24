@@ -106,9 +106,9 @@ pub let go(body: Fiber) -> Async({}) =
 pub let nonblocking(h: Handle) -> Io(Result({}, Handle/Error)) =
     let status = /sys/socket/set_nonblocking(h, true)!;
     Io/pure(
-        match status == /sys/status/ok
-        | true => Result/success(())
-        | false => Result/failure(Handle/error_of(status))
+        match Handle/error_of(status)
+        | some(e) => Result/failure(e)
+        | none() => Result/success(())
         end);
 
 pub let read(h: Handle, n: Nat) -> Async(Handle/Read) =
@@ -118,13 +118,19 @@ pub let read(h: Handle, n: Nat) -> Async(Handle/Read) =
     | success(_) =>
         rec go() -> Async(Handle/Read) =
             let r = /sys/Handle/read(h, n)!;
-            choose
-            | r.status == /sys/status/would_block =>
+            match r.status == /sys/status/would_block
+            | true =>
                 let _ = wait(h, /sys/poll/read)!;
                 go()
-            | r.status == /sys/status/eof => pure(Handle/Read/eof())
-            | r.status == /sys/status/ok => pure(Handle/Read/chunk(r.bytes))
-            | _ => pure(Handle/Read/error(Handle/error_of(r.status)))
+            | false =>
+                match Handle/error_of(r.status)
+                | some(e) => pure(Handle/Read/error(e))
+                | none() =>
+                    match r.status == /sys/status/eof
+                    | true => pure(Handle/Read/eof())
+                    | false => pure(Handle/Read/chunk(r.bytes))
+                    end
+                end
             end;
         go()
     end;
@@ -136,19 +142,25 @@ pub let write(h: Handle, b: Bytes) -> Async(Result({}, Handle/Error)) =
     | success(_) =>
         rec go(rest: Bytes) -> Async(Result({}, Handle/Error)) =
             let r = /sys/Handle/write(h, rest)!;
-            choose
-            | r.status == /sys/status/would_block =>
+            match r.status == /sys/status/would_block
+            | true =>
                 let _ = wait(h, /sys/poll/write)!;
                 go(rest)
-            | r.status != /sys/status/ok => pure(Result/failure(Handle/error_of(r.status)))
-            | r.written < Bytes/len(rest) =>
-                let _ = wait(h, /sys/poll/write)!;
-                go(
-                    Bytes/drop(
-                        rest,
-                        r.written,
-                        @Nat/Lt/le_of_lt(r.written, Bytes/len(rest), True/qed())))
-            | _ => pure(Result/success(()))
+            | false =>
+                match Handle/error_of(r.status)
+                | some(e) => pure(Result/failure(e))
+                | none() =>
+                    match r.written < Bytes/len(rest)
+                    | true =>
+                        let _ = wait(h, /sys/poll/write)!;
+                        go(
+                            Bytes/drop(
+                                rest,
+                                r.written,
+                                @Nat/Lt/le_of_lt(r.written, Bytes/len(rest), True/qed())))
+                    | false => pure(Result/success(()))
+                    end
+                end
             end;
         go(b)
     end;
@@ -160,12 +172,15 @@ pub let accept(l: Handle) -> Async(Result(Handle, Handle/Error)) =
     | success(_) =>
         rec go() -> Async(Result(Handle, Handle/Error)) =
             let r = /sys/socket/accept(l)!;
-            choose
-            | r.status == /sys/status/would_block =>
+            match r.status == /sys/status/would_block
+            | true =>
                 let _ = wait(l, /sys/poll/read)!;
                 go()
-            | r.status == /sys/status/ok => pure(Result/success(r.handle))
-            | _ => pure(Result/failure(Handle/error_of(r.status)))
+            | false =>
+                match Handle/error_of(r.status)
+                | some(e) => pure(Result/failure(e))
+                | none() => pure(Result/success(r.handle))
+                end
             end;
         go()
     end;

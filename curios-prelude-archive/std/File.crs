@@ -25,8 +25,9 @@ pub let write(f: File, b: Bytes) -> Async(Result({}, Handle/Error)) =
 
 pub let open(path: Str, mode: Mode) -> Async(Result(File, Handle/Error)) =
     let r = /sys/file/open(Str/to_bytes(path), of_mode(mode))!;
-    match r.status == /sys/status/ok
-    | true =>
+    match Handle/error_of(r.status)
+    | some(e) => Async/pure(Result/failure(e))
+    | none() =>
         let nb = Async/nonblocking(r.handle)!;
         match nb
         | failure(e) =>
@@ -36,7 +37,6 @@ pub let open(path: Str, mode: Mode) -> Async(Result(File, Handle/Error)) =
             let _ = Async/acquire(r.handle, /sys/Handle/close(r.handle))!;
             Async/pure(Result/success(File { r.handle }))
         end
-    | false => Async/pure(Result/failure(Handle/error_of(r.status)))
     end;
 
 pub let close(f: File) -> Async({}) =

@@ -303,7 +303,7 @@ fn async_drain_surfaces_a_read_error_instead_of_a_partial_prefix() {
                 end
             end;
         let error_first(n : Nat) -> Async(Handle/Read) =
-            Async/pure(Handle/Read/error(Handle/error_of(255)));
+            Async/pure(Handle/Read/error(Handle/Error/other(247)));
         let chunk_then_error : Io((Nat) -> Async(Handle/Read)) =
             let calls = Cell/new(0)!;
             Io/pure((n) =>
@@ -311,7 +311,7 @@ fn async_drain_surfaces_a_read_error_instead_of_a_partial_prefix() {
                 let _ = Async/lift(Cell/set(calls, k + 1))!;
                 match k
                 | 0 => Async/pure(Handle/Read/chunk(x[0x41, 0x42]))
-                | _ => Async/pure(Handle/Read/error(Handle/error_of(255)))
+                | _ => Async/pure(Handle/Read/error(Handle/Error/other(247)))
                 end);
         let chunk_then_eof : Io((Nat) -> Async(Handle/Read)) =
             let calls = Cell/new(0)!;
