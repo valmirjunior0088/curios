@@ -1002,3 +1002,54 @@ fn a_recursive_call_read_twice_is_evaluated_once() {
         "the pair form's cost is not linear in width — a recursive call read twice is being evaluated twice: {paired:?} (increments {increments:?})"
     );
 }
+
+/// **A bound over a computed `BigNat` subject is affordable, and stays affordable as the subject widens.**
+///
+/// `compare_nat` matches two summands *up to universe instances*, which means projecting both through [`project_erased_universes`](curios_core) at every comparison. That projection rebuilds the term, and its traversal mode was the one memoizing mode's opposite: a reduct is a DAG whose tree expansion doubles per level, so each projection walked `2^n` while the *unit* counter — which prices transitions and constructions, not re-walks of one node — saw a linear program. A bound over `BigNat/sub` therefore had linear units and exponential wall clock, which no budget could refuse because no budget could see it.
+///
+/// What this asserts is the shape: widening the subject by sixteen bits must not multiply its cost. The units are linear either way, so a unit assertion would have passed throughout the defect — the fixture has to read the clock, and it reads it coarsely, as a factor rather than a figure.
+///
+/// **Run against the defect and observed to fail**, which is what makes it a detector: with `Mode::ErasingUniverses` taken back out of `Visit::memoizes`, it reports `46.397584ms at 7 bits against 67.041283875s at 23`. Reproduce by removing that arm.
+///
+/// Measured 2026-08-24, `aarch64-apple-darwin`, debug:
+///
+/// ```text
+///   subject                 before        after
+///   sub @ 7 bits             43 ms        47 ms
+///   sub @ 23 bits          49 400 ms      71 ms
+///   Flt/of_decimal         77 000 ms     105 ms
+///   Flt/of_str under a bound  78 000 ms   133 ms
+/// ```
+#[test]
+fn a_bound_over_a_widening_subject_stays_affordable() {
+    let elapsed = |shift: usize| {
+        let subject = match shift {
+            0 => "BigNat/of_nat(120) - BigNat/of_nat(10)".to_string(),
+            k => format!("BigNat/mul/pow2(BigNat/of_nat(120), {k}) - BigNat/of_nat(10)"),
+        };
+        let source = format!(
+            r#"
+            use /std/{{Nat, Bool, BigNat}};
+            let n : Nat = Nat/div(100, BigNat/bit_len({subject}));
+            /std/print("")
+            "#
+        );
+        let entrypoint = source.parse::<Entrypoint>().expect("the program parses");
+        let started = Instant::now();
+        typecheck_with_prelude(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
+            .expect("the bound discharges within the default budget");
+
+        started.elapsed()
+    };
+
+    // The first call carries the run's warm-up, so the pair that is compared is taken after it.
+    let _ = elapsed(0);
+    let narrow = elapsed(0);
+    let wide = elapsed(16);
+
+    // Sixteen further bits doubled the cost sixteen times under the defect. A generous factor keeps this about the *shape* rather than about this host's speed.
+    assert!(
+        wide < narrow * 20,
+        "a bound over a wider subject costs disproportionately more — the universe-erased projection is walking a shared graph as a tree: {narrow:?} at 7 bits against {wide:?} at 23"
+    );
+}

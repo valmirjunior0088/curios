@@ -1027,7 +1027,7 @@ enum Mode {
     /// A level-level hook, visiting only nodes that carry universe data.
     RewritingLevels(LevelRewrite),
     /// Replace every level with the ground representative, visiting only nodes that carry universe data.
-    ErasingUniverses,
+    ErasingUniverses(HashMap<usize, Term>),
     /// Hash-consing: memoize on input identity, and replace each rebuilt node with the canonical node of its structure.
     Sharing(HashMap<usize, Term>, Sharing),
     /// Stand every child term down to `placeholder`, keeping the ones removed in `children`. Because a substituted node is never descended into, the rebuilt node carries this level's own payload and nothing below it — which is what lets [`Term`]'s equality compare one node at a time instead of recursing to the bottom of the term.
@@ -1132,7 +1132,7 @@ where
             term_depth: 0,
             universe_depth: 0,
             visit,
-            mode: Mode::ErasingUniverses,
+            mode: Mode::ErasingUniverses(HashMap::new()),
         }
     }
 
@@ -1211,7 +1211,7 @@ where
             | Mode::PlainSharedAtDepth(_)
             | Mode::Pruning
             | Mode::RewritingLevels(_)
-            | Mode::ErasingUniverses
+            | Mode::ErasingUniverses(_)
             | Mode::Sharing(..) => None,
         }
     }
@@ -1225,27 +1225,32 @@ where
     }
 
     pub(crate) fn erases_universes(&self) -> bool {
-        matches!(self.mode, Mode::ErasingUniverses)
+        matches!(self.mode, Mode::ErasingUniverses(_))
     }
 
     pub(crate) fn universes_only(&self) -> bool {
         matches!(
             self.mode,
-            Mode::RewritingUniverses(_) | Mode::RewritingLevels(_) | Mode::ErasingUniverses
+            Mode::RewritingUniverses(_) | Mode::RewritingLevels(_) | Mode::ErasingUniverses(_)
         )
     }
 
     pub(crate) fn memoizes(&self) -> bool {
         matches!(
             self.mode,
-            Mode::RewritingShared(..) | Mode::Sharing(..) | Mode::PlainSharedAtDepth(_)
+            Mode::RewritingShared(..)
+                | Mode::Sharing(..)
+                | Mode::PlainSharedAtDepth(_)
+                | Mode::ErasingUniverses(_)
         )
     }
 
     /// The memoized rebuild of the input node at `key`, at the depth this visit currently stands at for the modes whose memo is depth-keyed.
     pub(crate) fn memo_get(&self, key: usize) -> Option<Term> {
         match &self.mode {
-            Mode::RewritingShared(_, memo) | Mode::Sharing(memo, _) => memo.get(&key).cloned(),
+            Mode::RewritingShared(_, memo)
+            | Mode::Sharing(memo, _)
+            | Mode::ErasingUniverses(memo) => memo.get(&key).cloned(),
             Mode::PlainSharedAtDepth(memo) => memo.get(&(key, self.term_depth)).cloned(),
             _ => None,
         }
@@ -1254,7 +1259,9 @@ where
     pub(crate) fn memo_put(&mut self, key: usize, term: Term) {
         let depth = self.term_depth;
         match &mut self.mode {
-            Mode::RewritingShared(_, memo) | Mode::Sharing(memo, _) => {
+            Mode::RewritingShared(_, memo)
+            | Mode::Sharing(memo, _)
+            | Mode::ErasingUniverses(memo) => {
                 memo.insert(key, term);
             }
             Mode::PlainSharedAtDepth(memo) => {
