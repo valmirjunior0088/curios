@@ -491,6 +491,14 @@ fn numerics(rules: usize) -> String {
     source
 }
 
+/// The numeric door at a size that used to be unreachable: ten definitions took between three and seven minutes, ten gigabytes, and then a `SIGBUS`, where eight took thirteen seconds — the recorded flat table in [`scrutinee_refinement_measurements`] predates distribution in full, which doubles the sum's summands per definition. Three things closed it, and this is their positive control: a monomial and each of its factors are one node per distinct structure inside a product, so a merge is a pointer test and a fresh spine is never cache-warmed; and a traversal re-enters `recurse` per level, so capturing the normal form for a conversion goal chains stack segments instead of running one to its guard page. Not a measurement — a refusal to regress to not compiling.
+#[test]
+fn a_ten_definition_numeric_web_compiles() {
+    let (outcome, _) = compile_only(&numerics(10));
+
+    assert_eq!(outcome, Ok(()), "the ten-definition numeric web compiles");
+}
+
 /// A web of `rules` predicate definitions whose combinators dispatch through a stuck `match` rather than through `&&`, so the web's weak-head normal form is a tower of stuck matches rather than a tree of folded intrinsics.
 ///
 /// Same fan-out as [`predicates`] — each rule names the one before it twice — and the same scrutinized consumer. What differs is the shape reduction has to build, and that is what the step in [`scrutinee_retention_measurements`] is a function of.

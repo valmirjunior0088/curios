@@ -176,20 +176,17 @@ impl Nat {
         (coefficient, factors)
     }
 
-    /// `coefficient · factors` in normal form: the factors in a canonical order, so `x · y` and `y · x` are one term, nested to the left, under [`Nat::scaled`]. The order is the factors' structural hash, which is deterministic; the sort is stable, so two distinct factors that happen to hash alike keep their written order and simply fail to canonicalize against each other — incompleteness, never a wrong equation. A monomial with no factors is its coefficient.
-    pub(crate) fn product(coefficient: Natural, mut factors: Vec<Term>) -> Term {
-        factors.sort_by_key(Term::structural_hash);
-        match factors
-            .into_iter()
+    /// The bare monomial over `factors`, which the caller has already put in canonical order: nested to the left, so `x · y` and `y · x` are one term once sorted. The order is the factors' structural hash, which is deterministic; the sort is stable, so two distinct factors that happen to hash alike keep their written order and simply fail to canonicalize against each other — incompleteness, never a wrong equation. `None` for no factors, since a monomial with none is its coefficient and not a term; [`Nat::multiply`] keys its canonical table on the sorted list and applies the coefficient through [`Nat::scaled`].
+    fn spine(factors: &[Term]) -> Option<Term> {
+        factors
+            .iter()
+            .cloned()
             .reduce(|left, right| Term::intrinsic(Intrinsic::nat_mul(left, right)))
-        {
-            Some(product) => Self::scaled(coefficient, product),
-            None => Term::intrinsic(Intrinsic::Nat(Nat::new(coefficient))),
-        }
     }
 
     /// The product of two reduced `Nat` terms, in the sum normal form: every summand of one — its floor counted as a constant summand — times every summand of the other, each product a monomial in canonical factor order, and the results summed through [`Nat::sum_over_floor`] so like monomials merge. This is distribution in full — `x · (y + z) = x · y + x · z` for a symbolic `x` — of which the literal-factor floor law, the unit and annihilation laws and the nested-factor fold are the special cases, each of which the value grid still states on its own.
     pub(crate) fn multiply(left: &Term, right: &Term) -> Term {
+        curios_profile::profile!("nat::multiply");
         let terms = |term: &Term| {
             let (floor, inner) = Self::decompose(term);
             let mut terms = Self::summands(&inner)
@@ -204,18 +201,49 @@ impl Nat {
 
         let mut floor = Natural::zero();
         let mut summands = Vec::new();
-        for (ca, fa) in terms(left) {
-            for (cb, fb) in terms(right) {
+        let left_terms = terms(left);
+        let right_terms = terms(right);
+        // **One node per distinct monomial, not one per product.** A cross product builds the same monomial many times over — every pair of summands whose factors multiply to it — and each fresh spine had to be cache-warmed on construction and then compared structurally when the sum merged it, because an equal spine built a moment earlier was a different allocation and `Rc::ptr_eq` could not see it. On a nine-definition web of definitions each naming the one before it twice that was 198 793 spines, 204 113 structural comparisons every one of which concluded equal, and 2.4 s of a 6.1 s compile. Keyed on the sorted factor list, whose hash is one cached word per factor, so a lookup walks nothing; scoped to this product, which is where every duplicate the sum will merge is born.
+        let mut canonical: HashMap<Vec<Term>, Term> = HashMap::new();
+        // The factors are interned too, because the table above compares its keys element-wise and a leaf reached through `left` is a different allocation from the same leaf reached through `right`: each operand is its own reduct. Measured before this, a lookup that should allocate nothing spent 28 allocations walking factor structure — 548 ms of an 827 ms product. One canonical `Rc` per distinct leaf makes every element comparison a pointer test.
+        let mut interned: HashMap<Term, Term> = HashMap::new();
+        let mut intern = |factor: Term| match interned.get(&factor) {
+            Some(canonical) => canonical.clone(),
+            None => {
+                interned.insert(factor.clone(), factor.clone());
+                factor
+            }
+        };
+        for (ca, fa) in left_terms {
+            for (cb, fb) in right_terms.iter().cloned() {
                 let coefficient = ca.clone() * cb;
-                let mut factors = fa.clone();
-                factors.extend(fb.iter().cloned());
-                match factors.is_empty() {
-                    true => floor += coefficient,
-                    false => summands.push(Self::product(coefficient, factors)),
+                let mut factors = fa.iter().cloned().map(&mut intern).collect::<Vec<_>>();
+                factors.extend(fb.iter().cloned().map(&mut intern));
+                if factors.is_empty() {
+                    floor += coefficient;
+                    continue;
                 }
+                factors.sort_by_key(Term::structural_hash);
+                let spine = match canonical.get(&factors) {
+                    Some(spine) => spine.clone(),
+                    None => {
+                        let spine = Self::spine(&factors).expect("a monomial with a factor");
+                        canonical.insert(factors, spine.clone());
+                        spine
+                    }
+                };
+                summands.push(Self::scaled(coefficient, spine));
             }
         }
-        Self::sum_over_floor(summands, floor)
+        // The two magnitudes that say what distribution in full costs: monomials built against summands kept. On a web of definitions each naming the one before it twice they read 198 793 against 9 083 at nine definitions and 1 222 222 against 25 412 at ten — products grow as the square of what survives, which is what an eager cross product is.
+        curios_profile::sample!("multiply::products", summands.len() as u64);
+        let merged = Self::sum_over_floor(summands, floor);
+        #[cfg(feature = "profile")]
+        curios_profile::sample!(
+            "multiply::merged",
+            Self::summands(&Self::decompose(&merged).1).len() as u64
+        );
+        merged
     }
 
     /// `coefficient · factor` in normal form: a zero coefficient is `0`, a unit coefficient is the factor itself, and anything else is the product with the literal on the left — so `x · 2` and `2 · x` are one term.
