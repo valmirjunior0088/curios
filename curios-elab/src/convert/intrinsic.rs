@@ -6,8 +6,9 @@
 
 use {
     super::Convert,
+    crate::Context,
     curios_core::{
-        Intrinsic, Operand, Peel, ReduceError, Subterm, Term, Var, Visit, peel_bin, peel_list,
+        Intrinsic, Nat, Operand, Peel, ReduceError, Subterm, Term, Var, Visit, peel_bin, peel_list,
         peel_nat_pair,
     },
     curios_utilities::{Grain, PackedBin, SyntaxRegistry},
@@ -15,10 +16,34 @@ use {
 
 pub(crate) fn convert_intrinsic(
     cmp: &mut Convert,
+    context: &mut Context,
     syntax: &SyntaxRegistry,
     this: Intrinsic,
     that: Intrinsic,
 ) -> Result<bool, ReduceError> {
+    // **A pair of `Nat`s decides how much of itself to build** — the kernel's rule, stated once more here because the two checkers keep their strategies apart on purpose. Both sides arrived at weak-head form. A literal against a sum with nothing left to force clashes from the head; anything else is forced to its linear combination first, and the peel below reads that pair. A `Stuck` verdict then falls into the operand congruence on the normalized operands rather than re-enqueueing the pair, which would come back here.
+    // **Two symbolic `Nat`s are distributed before they are peeled.** The fold leaves a product of two symbolic sums as a stuck node, so `(a + b) · (c + d)` and its expansion arrive as two shapes the peel cannot cancel against each other; normalizing both sides is the one demand that relates them, and it is asked for here by name. A literal on either side needs nothing: sums and differences are already merged and cancelled by the fold, so the peel decides those as it always did.
+    let as_intrinsic = |term: &Term| match &**term {
+        Subterm::Intrinsic(intrinsic) => Some(intrinsic.clone()),
+        _ => None,
+    };
+    let stuck = |intrinsic: &Intrinsic| Nat::has_stuck_product(&Term::intrinsic(intrinsic.clone()));
+    // A literal on either side is the peel's: sums and differences are merged and cancelled by the fold, so a side with a symbolic summand — and a stuck product is one — is never a literal, and distributing it would build the polynomial to answer what the first summand settles.
+    let literal = |intrinsic: &Intrinsic| matches!(intrinsic, Intrinsic::Nat(value) if value.to_natural().is_some());
+    let (this, that) = match !(literal(&this) || literal(&that)) && (stuck(&this) || stuck(&that)) {
+        false => (this.clone(), that.clone()),
+        true => {
+            let this = Nat::normalize(context, Term::intrinsic(this.clone()))?;
+            let that = Nat::normalize(context, Term::intrinsic(that.clone()))?;
+            match (as_intrinsic(&this), as_intrinsic(&that)) {
+                (Some(this), Some(that)) => (this, that),
+                _ => {
+                    cmp.enqueue(Term::type_ground(), this, that);
+                    return Ok(true);
+                }
+            }
+        }
+    };
     // `Nat`, `Bin`, and `List` are free monoids, so two values of one are equal exactly when they agree after their longest common prefix is peeled off (`core::spine`). This is shared spine algebra over the representation, not a rule: it decides `x + 2 ≡ y + 2` by comparing `x` with `y` rather than by comparing two opaque literals. `Stuck` falls through to the congruence below, which still compares like-shaped symbolic operands, so the peel can only ever strengthen conversion.
     if let Some(peel) = peel_nat_pair(&this, &that)
         .or_else(|| peel_bin(&this, &that))

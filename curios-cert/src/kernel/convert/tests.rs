@@ -71,6 +71,26 @@ fn distinct_literals_do_not_convert() {
     );
 }
 
+/// Like terms convert and a sum against a literal clashes — decided in the fold, which merges eagerly; this pins that the product-only deferral left both untouched, in the trusted checker.
+#[test]
+fn like_terms_convert_and_a_stuck_sum_clashes_with_a_literal() {
+    let mut kernel = kernel();
+    let x = binder(0, "x");
+    let sum = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), Term::free_var(&x)));
+    let scaled = Term::intrinsic(Intrinsic::nat_mul(nat(2), Term::free_var(&x)));
+    assert_eq!(
+        convert(&mut kernel, &nat_type(), &sum, &scaled),
+        Ok(true),
+        "x + x converts with 2 · x"
+    );
+    let stuck = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), nat(1)));
+    assert_eq!(
+        convert(&mut kernel, &nat_type(), &stuck, &nat(0)),
+        Ok(false),
+        "x + 1 clashes with 0"
+    );
+}
+
 /// Conversion is up to computation, so a redex converts with its value.
 #[test]
 fn beta_equal_terms_convert() {

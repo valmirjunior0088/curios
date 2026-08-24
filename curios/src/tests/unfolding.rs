@@ -491,7 +491,33 @@ fn numerics(rules: usize) -> String {
     source
 }
 
-/// The numeric door at a size that used to be unreachable: ten definitions took between three and seven minutes, ten gigabytes, and then a `SIGBUS`, where eight took thirteen seconds — the recorded flat table in [`scrutinee_refinement_measurements`] predates distribution in full, which doubles the sum's summands per definition. Three things closed it, and this is their positive control: a monomial and each of its factors are one node per distinct structure inside a product, so a merge is a pointer test and a fresh spine is never cache-warmed; and a traversal re-enters `recurse` per level, so capturing the normal form for a conversion goal chains stack segments instead of running one to its guard page. Not a measurement — a refusal to regress to not compiling.
+/// **The decision's own probe.** Deciding `Eq(top(n), 0)` for a symbolic `n` needs the sum's head, not its normal form: a stuck sum whose summands are not literal zero is not zero. Under eager folding the fold built the linear combination first — ~φ²ⁿ monomials, since the web's degree is Fibonacci in its size — and the units grew with it. The folds now answer the weak-head form and the peel clashes from the head, so the units grow with the weak-head DAG, which memoization keeps linear in `n`. The control is the increment: each further definition costs about what the previous one did.
+#[test]
+fn a_symbolic_web_compares_against_zero_in_linear_units() {
+    let units = |rules: usize| {
+        let source = numerics(rules);
+        let entrypoint = source.parse::<Entrypoint>().expect("the web parses");
+        let (_, _, consumption, _) =
+            typecheck_with_prelude_measured(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
+                .expect("the web elaborates within the default budget");
+        consumption.units()
+    };
+
+    let curve = [6usize, 7, 8, 9].map(units);
+    let increments = [
+        curve[1] - curve[0],
+        curve[2] - curve[1],
+        curve[3] - curve[2],
+    ];
+
+    // Linear: the last increment is within a small factor of the first. Doubling per definition would put it at four times or more, which is exactly what this refuses.
+    assert!(
+        increments[2] <= increments[0].saturating_mul(2).max(2_000),
+        "units grew superlinearly across the web: {curve:?}, increments {increments:?}"
+    );
+}
+
+/// The numeric door at a size that used to be unreachable: ten definitions took between three and seven minutes, ten gigabytes, and then a `SIGBUS`, where eight took thirteen seconds — the recorded flat table in [`scrutinee_refinement_measurements`] predates distribution in full, which doubles the sum's summands per definition. Four things closed it, and this is their positive control — the last being the decision that a product of two symbolic sums is its own weak-head form, distributed by `Nat::normalize` only where a value is asked for, which is what took this from 87 s and six gigabytes to four seconds and a tenth of one: a monomial and each of its factors are one node per distinct structure inside a product, so a merge is a pointer test and a fresh spine is never cache-warmed; and a traversal re-enters `recurse` per level, so capturing the normal form for a conversion goal chains stack segments instead of running one to its guard page. Not a measurement — a refusal to regress to not compiling.
 #[test]
 fn a_ten_definition_numeric_web_compiles() {
     let (outcome, _) = compile_only(&numerics(10));

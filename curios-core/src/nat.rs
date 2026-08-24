@@ -1,6 +1,7 @@
 use {
-    super::{Intrinsic, Subterm, Term},
+    super::{Cost, Intrinsic, ReduceError, Reducer, Subterm, Term},
     curios_num::Natural,
+    curios_utilities::recurse,
     std::collections::HashMap,
 };
 
@@ -301,6 +302,75 @@ impl Nat {
             .unwrap_or_else(|| Term::intrinsic(Intrinsic::Nat(Nat::Zero)));
 
         Self::rebuild(floor, inner)
+    }
+
+    /// A weak-head `Nat` with every product of two symbolic sums distributed, and the result re-merged — the one normalization the fold no longer performs on its own, asked for by name where a comparison needs the value: `compare_nat`, the converters' rule for two symbolic `Nat`s. See `documentation/design/toolchain/a-sum-is-merged-when-it-is-forced-not-when-it-is-built.md`.
+    ///
+    /// The fold keeps every sum merged and every difference cancelled, so this walks only into products and the sums that hold them; a term with no stuck product comes back untouched. A memo keyed on node identity keeps a shared operand distributed once and holds each input alive beside its answer, since an identity is an address; the descent re-enters [`recurse`] per level. A product is priced here by what it builds — the concat fold's idiom, one collection and one node per product — because `operand_bound` at the fold prices by literal width, and a symbolic cross product read as zero bits.
+    pub fn normalize(reducer: &mut impl Reducer, term: Term) -> Result<Term, ReduceError> {
+        let mut memo: HashMap<usize, (Term, Term)> = HashMap::new();
+        Self::normalize_within(reducer, term, &mut memo)
+    }
+
+    fn normalize_within(
+        reducer: &mut impl Reducer,
+        term: Term,
+        memo: &mut HashMap<usize, (Term, Term)>,
+    ) -> Result<Term, ReduceError> {
+        recurse(|| {
+            let key = term.identity();
+            if let Some((_, done)) = memo.get(&key) {
+                return Ok(done.clone());
+            }
+            let reduced = reducer.reduce_forced(term.clone())?;
+            let result = match &*reduced {
+                Subterm::Intrinsic(Intrinsic::NatMul(left, right)) => {
+                    let left = Self::normalize_within(reducer, left.clone(), memo)?;
+                    let right = Self::normalize_within(reducer, right.clone(), memo)?;
+                    let count = |term: &Term| {
+                        let (floor, inner) = Self::decompose(term);
+                        Self::summands(&inner).len() as u64 + u64::from(!floor.is_zero())
+                    };
+                    let products = count(&left).saturating_mul(count(&right));
+                    reducer.spend(
+                        Cost::collection(products)
+                            .saturating_add(Cost::term(2).saturating_mul(products)),
+                    )?;
+                    Self::multiply(&left, &right)
+                }
+                Subterm::Intrinsic(Intrinsic::NatAdd(..))
+                | Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(..))) => {
+                    let (floor, inner) = Self::decompose(&reduced);
+                    let summands = Self::summands(&inner)
+                        .into_iter()
+                        .map(|summand| Self::normalize_within(reducer, summand, memo))
+                        .collect::<Result<Vec<_>, _>>()?;
+                    Self::sum_over_floor(summands, floor)
+                }
+                _ => reduced,
+            };
+            memo.insert(key, (term, result.clone()));
+            Ok(result)
+        })
+    }
+
+    /// Whether a weak-head `Nat` holds a product of two symbolic sums somewhere under its sums — the one shape [`Nat::normalize`] changes.
+    pub fn has_stuck_product(term: &Term) -> bool {
+        let mut pending = vec![term.clone()];
+        while let Some(term) = pending.pop() {
+            match &*term {
+                Subterm::Intrinsic(Intrinsic::NatMul(..)) => return true,
+                Subterm::Intrinsic(Intrinsic::NatAdd(l, r)) => {
+                    pending.push(l.clone());
+                    pending.push(r.clone());
+                }
+                Subterm::Intrinsic(Intrinsic::Nat(Nat::Succ(_, inner))) => {
+                    pending.push(inner.clone())
+                }
+                _ => {}
+            }
+        }
+        false
     }
 
     /// The sum of two already-reduced `Nat` terms, landing in the normal form [`Nat::decompose`] and [`Nat::summands`] read back: the literal floors added and hoisted outward, the symbolic summands juxtaposed.

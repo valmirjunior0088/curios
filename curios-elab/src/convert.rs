@@ -2091,7 +2091,7 @@ impl Convert {
             let syntax = context.syntax();
             let ok = match (Term::unwrap_or_clone(this), Term::unwrap_or_clone(that)) {
                 (Subterm::Intrinsic(this), Subterm::Intrinsic(that)) => {
-                    convert_intrinsic(self, &syntax, this, that)?
+                    convert_intrinsic(self, context, &syntax, this, that)?
                 }
                 (Subterm::Type(this), Subterm::Type(that)) => {
                     context

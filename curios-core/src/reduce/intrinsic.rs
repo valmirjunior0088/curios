@@ -667,8 +667,9 @@ fn compare_nat(
     left: Term,
     right: Term,
 ) -> Result<(Comparison, Term, Term), ReduceError> {
-    let left = reducer.reduce_forced(left)?;
-    let right = reducer.reduce_forced(right)?;
+    // The comparison cancels like terms across both sides, so a stuck product on either is distributed first, by name.
+    let left = Nat::normalize(reducer, left)?;
+    let right = Nat::normalize(reducer, right)?;
     // Cancel first, so everything below reads the residuals: the shared part decides nothing on its own, and removing it is what lets `cmp(x + a, x + b)` reach `cmp(a, b)` — and `cmp(a + b, b + a)` reach equality — instead of stalling on two inners that differ only by what they share.
     let (left, right) = Nat::cancel_common(&left, &right);
 
@@ -1057,6 +1058,11 @@ pub fn reduce_intrinsic(
         Intrinsic::NatMul(left, right) => {
             let left = reducer.reduce_forced(left.clone())?;
             let right = reducer.reduce_forced(right.clone())?;
+            // **A product of two symbolic sums is its own weak-head form.** Distribution is the one quadratic step in the `Nat` normal form — every summand of one operand against every summand of the other — and a web of definitions each naming the one before it twice made it build 1 222 222 monomials to keep 25 412, to answer a comparison a head clash settles. A product with a literal or a single symbolic summand on either side distributes here as it always did, in O(summands); only sum × sum stays stuck, and `Nat::normalize` distributes it where a value is asked for by name — see `documentation/design/toolchain/a-sum-is-merged-when-it-is-forced-not-when-it-is-built.md`.
+            let symbolic_summands = |term: &Term| Nat::summands(&Nat::decompose(term).1).len();
+            if symbolic_summands(&left) > 1 && symbolic_summands(&right) > 1 {
+                return Ok(Subterm::Intrinsic(Intrinsic::nat_mul(left, right)));
+            }
             reducer.spend(operand_bound(
                 left.as_nat().map_or(0, |value| value.bits()),
                 right.as_nat().map_or(0, |value| value.bits()),

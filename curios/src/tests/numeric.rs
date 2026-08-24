@@ -321,6 +321,34 @@ fn a_guard_discharges_a_window_bound_stated_over_a_sum() {
     );
 }
 
+// The guard records `n + n <= Bytes/len(b)` as written; the slice asks for `2 * n <= Bytes/len(b)`. The fold merges both to `2 · n` the moment they are built, so the refinement key matches; this pins that a sum keeps merging eagerly while a product of two sums does not.
+#[test]
+fn a_guard_over_like_terms_discharges_a_bound_spelled_the_other_way() {
+    assert_eq!(
+        run(r#"
+        use /std/{Handle, Str, Bytes, Nat};
+        let doubled(b : Bytes, n : Nat) -> Bytes =
+            match n + n <= Bytes/len(b) | true => Bytes/slice(b, 0, 2 * n) | false => x[] end;
+        /std/print("ok")
+        "#),
+        b"ok"
+    );
+}
+
+// A shape from `/std/Str/utf8`: `len(h :: t) - 1` is a difference over a folded recursive application, and `len(t)` is that recursion one step further. Both checkers judge the `refl`.
+#[test]
+fn a_difference_over_a_folded_recursion_converts_with_its_unfolding() {
+    assert_eq!(
+        run(r#"
+        use /std/{Handle, Str, Bytes, Byte, Nat, Eq};
+        rec len(b : Bytes) -> Nat = match b | x[] => 0 | x[_, ..t] => 1 + len(t) end;
+        let step(h : Byte, t : Bytes) -> Eq(Nat/sub(len(x[h, ..t]), 1), len(t)) = Eq/refl();
+        /std/print("ok")
+        "#),
+        b"ok"
+    );
+}
+
 // A bound whose subject is a *computed* value is discharged by evaluating that value, at elaboration time. `Bytes/slice` states `10 <= Bytes/len(b)`, so `Bytes/slice(built, 0, 10)` puts `go(100000, x[])` in a type and the compiler runs the loop. A hundred thousand iterations costs about seventeen million reduction steps — sixteen times the default budget — so the refusal below is the budget doing exactly its job, and the small figure stated here only makes the fixture cheap.
 //
 // **What this used to pin was something worse, and the difference is the point.** The budget counted transitions, and the memory a reduction allocated was bounded by nothing: fusing an all-literal concatenation recopied the whole accumulator every step, so the same program spent a quadratic volume of construction against a linear step count and exhausted the machine rather than refusing. `curios-core`'s `FUSION_CAP` and its measure removed that, and `curios`'s `tests::reduction` holds the figures. What is left is an ordinary bounded computation that happens to be bigger than the default allowance.

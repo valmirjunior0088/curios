@@ -162,6 +162,18 @@ fn func<const N: usize>(binders: [&Free; N], body: impl Into<Term>) -> Term {
     )
 }
 
+/// The elaborator's half of the kernel's fixture: like terms convert, and a sum against a literal clashes, both in the fold.
+#[test]
+fn like_terms_convert_and_a_stuck_sum_clashes_with_a_literal() {
+    let mut context = context();
+    let x = context.fresh(Some("x"));
+    let sum = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), Term::free_var(&x)));
+    let scaled = Term::intrinsic(Intrinsic::nat_mul(nat(2), Term::free_var(&x)));
+    assert_eq!(conv(&mut context, &sum, &scaled), Ok(true));
+    let stuck = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), nat(1)));
+    assert_eq!(conv(&mut context, &stuck, &nat(0)), Ok(false));
+}
+
 #[test]
 fn convert_func_type_is_alpha_equivalent() {
     let mut context = context();
