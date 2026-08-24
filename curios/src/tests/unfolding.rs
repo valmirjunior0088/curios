@@ -338,7 +338,20 @@ fn combinator_sharing_measurements() {
 ///
 /// # What it last printed
 ///
-/// Taken **2026-08-22**, **release**, `x86_64-unknown-linux-gnu`, with the kernel remembering a local-bearing reduct for as long as the equations in force stand, the elaborator's cache admitting a universe metavariable, `capture` and `Term::eq` each walking a graph in its own size, and — from the day before — `&&`/`||` reducing their right operand only behind a literal left and the closed machine keeping a global argument as a name.
+/// Taken **2026-08-24**, **debug**, `aarch64-apple-darwin`, with a product of two symbolic sums left as its own weak-head form and distributed only where a value is asked for by name (`262e5387`, `82f424bc`), one node per distinct monomial and factor inside a product, a term comparison answering before it allocates, and a traversal re-entering its stack guard per level. Debug rather than release deliberately: debug has been the canary for exhaustion that release hid, and the 3.3 s every row shares is the debug prelude restore plus a trivial compile — read the columns against each other, not against the release tables below.
+///
+/// | definitions | applied | scrutinized | proved | numeric, proved |
+/// | --- | --- | --- | --- | --- |
+/// | 8 | 3.57 s | 3.33 s | 3.36 s | 3.35 s |
+/// | 10 | 3.27 s | 3.33 s | 3.35 s | 3.35 s |
+/// | 12 | 3.30 s | 3.32 s | 3.35 s | 3.37 s |
+/// | 13 | 3.30 s | 3.33 s | 3.37 s | 3.37 s |
+///
+/// **Every door is flat, and the numeric one is now indistinguishable from the rest.** The `once` and `closed` scrutinized columns read the same and are omitted. This is the section that replaces one that had decayed: the table below it was taken twenty hours *before* `3a624381` distributed multiplication in full, and after that commit the numeric door at ten definitions did not finish — seven minutes and ten gigabytes on this host, then a stack fault — while the recorded figure still read 0.15 s. A figure whose method no longer reproduces it is what `documentation/roadmap.md`'s measurement rule forbids, and it cost a day's investigation a wrong premise before it was dated. `a_ten_definition_numeric_web_compiles` and `a_symbolic_web_compares_against_zero_in_linear_units` are the fixtures that refuse that regression now, so this table has a control that the last did not.
+///
+/// # What it printed before distribution in full
+///
+/// Taken **2026-08-22**, **release**, `x86_64-unknown-linux-gnu`, twenty hours before `3a624381` made `NatMul` distribute in full — which is why the numeric column below is flat on a compiler that did not yet build the polynomial — with the kernel remembering a local-bearing reduct for as long as the equations in force stand, the elaborator's cache admitting a universe metavariable, `capture` and `Term::eq` each walking a graph in its own size, and — from the day before — `&&`/`||` reducing their right operand only behind a literal left and the closed machine keeping a global argument as a name.
 ///
 /// | definitions | proved | numeric, proved |
 /// | --- | --- | --- |
