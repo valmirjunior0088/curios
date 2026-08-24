@@ -581,6 +581,27 @@ fn deep_terms_are_released_without_native_recursion() {
     assert_eq!(sharing, Term::tuple([shared.clone(), shared]));
 }
 
+/// Past one 32 MiB stack segment several times over, which is what proves a walk can chain another rather than merely start on one. `DEEP` would prove the same thing at twenty segments; this asks for four.
+const TALL: u32 = 20_000;
+
+#[test]
+fn deep_terms_are_captured_without_native_recursion() {
+    // `capture` runs in `Plain` mode, which the iterative spine path is not gated for, so every link here is one native descent — the case the two fixtures above never reach, since equality walks a worklist and the drop is iterative. A ten-definition numeric web died here as a bare `SIGBUS` under the kernel's conversion history, which captures a whole normal form to key a goal: the walk began inside the `grown` segment and, with no check per level, ran it to the guard page. The traversal now re-enters `recurse` at every level, so it maps another segment instead.
+    let name = Free::local(0, None);
+    let argument = Term::free_var(&name);
+    let mut term = Term::free_var(&name);
+    for _ in 0..TALL {
+        term = Term::apply(term, [argument.clone()]);
+    }
+
+    let captured = term.capture(&[&name]);
+
+    assert!(
+        !captured.free_vars().contains(&name),
+        "every occurrence was bound"
+    );
+}
+
 /// Two equal graphs built apart compare equal in the size of the graph, not of its tree. Each level here is the sum of the previous level with itself, so the tree doubles per level and twenty-two levels of it is four million pairs a path-by-path walk would have masked and compared one at a time; the walk remembers each pair of shared nodes it has entered, and answers in a few dozen.
 #[test]
 fn equal_graphs_compare_in_their_own_size() {

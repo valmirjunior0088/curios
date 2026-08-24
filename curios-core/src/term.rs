@@ -17,7 +17,7 @@ use {
     curios_abi::ForeignFunction,
     curios_num::{Floating, Integer, Natural},
     curios_print::{run_printer, run_printer_within},
-    curios_utilities::{Grain, InfixOp, Mint, Plicity, Span},
+    curios_utilities::{Grain, InfixOp, Mint, Plicity, Span, recurse},
     std::{
         collections::{BTreeMap, BTreeSet, HashSet},
         fmt,
@@ -1380,17 +1380,20 @@ impl Bound for Term {
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
-        if visit.memoizes() {
-            let key = Rc::as_ptr(&self.inner) as usize;
-            if let Some(hit) = visit.memo_get(key) {
-                return hit;
+        // **Guarded per level, so a descent can chain stack segments.** Every child re-enters here, which makes this the one place a check per level lives — the intent [`recurse`] states. Without it a walk that starts inside a segment runs to that segment's end with no chance to map another: a `NatAdd` chain of a few thousand links, five debug frames per link, exhausted the 32 MiB `grown` reserve under the kernel's conversion history, which `capture`s a whole normal form to key a goal, and died as a bare `SIGBUS` with nothing on stderr. The iterative spine path below is no substitute — it is gated on the rewriting modes, and `capture` runs in `Plain`.
+        recurse(|| {
+            if visit.memoizes() {
+                let key = Rc::as_ptr(&self.inner) as usize;
+                if let Some(hit) = visit.memo_get(key) {
+                    return hit;
+                }
+                let rebuilt = self.traverse_unmemoized(visit).canonicalized(visit);
+                visit.memo_put(key, rebuilt.clone());
+                return rebuilt;
             }
-            let rebuilt = self.traverse_unmemoized(visit).canonicalized(visit);
-            visit.memo_put(key, rebuilt.clone());
-            return rebuilt;
-        }
 
-        self.traverse_unmemoized(visit).canonicalized(visit)
+            self.traverse_unmemoized(visit).canonicalized(visit)
+        })
     }
 
     fn reach(&self) -> usize {
