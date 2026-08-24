@@ -10,7 +10,7 @@ mod tests;
 use {
     super::{CellOperation, Constant, Intrinsic, Operation, Rhs, SequenceOp, Terminator},
     curios_num::{
-        Floating, ScalarTrap, flt_max, flt_min, flt_to_int, flt_to_nat, int_add, int_div, int_mul,
+        Floating, Integer, Natural, ScalarTrap, flt_to_int, flt_to_nat, int_add, int_div, int_mul,
         int_rem, int_shl, int_shr, int_sub, int_to_nat, nat_add, nat_div, nat_mul, nat_rem,
         nat_shl, nat_shr, nat_sub, nat_to_int,
     },
@@ -433,8 +433,8 @@ impl Semantics {
                 FltMul => Constant::Flt(flt(0)? * flt(1)?),
                 FltDiv => Constant::Flt(flt(0)? / flt(1)?),
                 FltRem => Constant::Flt(flt(0)? % flt(1)?),
-                FltMin => Constant::Flt(fold_min(flt(0)?, flt(1)?)?),
-                FltMax => Constant::Flt(fold_max(flt(0)?, flt(1)?)?),
+                FltMin => Constant::Flt(flt(0)?.min(flt(1)?)),
+                FltMax => Constant::Flt(flt(0)?.max(flt(1)?)),
                 FltCopysign => Constant::Flt(flt(0)?.copysign(flt(1)?)),
                 FltNeg => Constant::Flt(-flt(0)?),
                 FltAbs => Constant::Flt(flt(0)?.abs()),
@@ -453,16 +453,16 @@ impl Semantics {
                 HandleEql => Constant::Bool(io(0)? == io(1)?),
 
                 NatToInt => return Some(fold_nat_to_int(nat(0)?)),
-                NatToFlt => Constant::Flt(Floating::from_f32(nat(0)? as f32)),
+                NatToFlt => Constant::Flt(Floating::of_natural(&Natural::from(nat(0)?))),
                 IntToNat => return Some(fold_int_to_nat(int(0)?)),
-                IntToFlt => Constant::Flt(Floating::from_f32(int(0)? as f32)),
+                IntToFlt => Constant::Flt(Floating::of_integer(&Integer::from(int(0)?))),
                 FltToNat => return Some(fold_flt_to_nat(flt(0)?)),
                 FltToInt => return Some(fold_flt_to_int(flt(0)?)),
                 ByteToNat => Constant::Nat(byte(0)? as u32),
                 NatToByte => Constant::Byte(nat(0)? as u8),
                 FltToLeBytes => Constant::Bin(
                     Grain::X,
-                    PackedBin::from_bytes(flt(0)?.to_f32().to_le_bytes().to_vec()),
+                    PackedBin::from_bytes(flt(0)?.to_bits().to_le_bytes().to_vec()),
                 ),
                 FltOfLeBytes => return Some(flt_of_le_bytes(bin_x(0)?)),
             }))
@@ -564,15 +564,6 @@ fn scalar_result<T>(
     }
 }
 
-/// Float min/max decline on a NaN operand (see [`flt_min`]).
-fn fold_min(left: Floating, right: Floating) -> Option<Floating> {
-    flt_min(left.to_f32(), right.to_f32()).map(Floating::from_f32)
-}
-
-fn fold_max(left: Floating, right: Floating) -> Option<Floating> {
-    flt_max(left.to_f32(), right.to_f32()).map(Floating::from_f32)
-}
-
 /// `Nat` to `Int` preserving the number, trapping above `i32::MAX`.
 fn fold_nat_to_int(value: u32) -> Result<Constant, TrapKind> {
     nat_to_int(value)
@@ -588,14 +579,14 @@ fn fold_int_to_nat(value: i32) -> Result<Constant, TrapKind> {
 }
 
 fn fold_flt_to_nat(value: Floating) -> Result<Constant, TrapKind> {
-    flt_to_nat(value.to_f32())
+    flt_to_nat(value)
         .map(Constant::Nat)
         .ok_or(TrapKind::ConversionRange)
 }
 
 /// Truncate to `i32`, trapping outside `[-2^31, 2^31)`.
 fn fold_flt_to_int(value: Floating) -> Result<Constant, TrapKind> {
-    flt_to_int(value.to_f32())
+    flt_to_int(value)
         .map(Constant::Int)
         .ok_or(TrapKind::ConversionRange)
 }
@@ -606,6 +597,6 @@ fn flt_of_le_bytes(value: &PackedBin) -> Result<Constant, TrapKind> {
         .to_bytes()
         .as_deref()
         .and_then(|bytes| <[u8; 4]>::try_from(bytes).ok())
-        .map(|le_bytes| Constant::Flt(Floating::from_f32(f32::from_le_bytes(le_bytes))))
+        .map(|le_bytes| Constant::Flt(Floating::from_bits(u32::from_le_bytes(le_bytes))))
         .ok_or(TrapKind::MalformedInput)
 }

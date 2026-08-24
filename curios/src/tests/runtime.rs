@@ -559,13 +559,16 @@ fn int_of_str_returns_option() {
 #[test]
 fn flt_of_str_returns_option() {
     // `12.0`, `.5` (empty integer part), and `1e3` parse; `abc` is `none` → default `+4.0`. Values are truncated to `Nat` for an exact assertion: `12 + (0.5*2) + 1000 + 4`.
+    //
+    // Through `try_to_nat` rather than the bounded `to_nat`, which is the shape a *computed* subject wants: `Flt/of_str` narrows a decimal through `BigNat` long division, and discharging a bound over it at elaboration time would run that division under the step budget for no gain. The deciding pair exists exactly so a caller can pay at runtime instead.
     assert_eq!(
         run(r#"
         use /std/{Nat, Flt, Str, Option, Handle};
-        let whole = Flt/to_nat(Option/unwrap_or(Flt/of_str("12.0"), +0.0));
-        let half = Flt/to_nat(Flt/mul(Option/unwrap_or(Flt/of_str(".5"), +0.0), +2.0));
-        let exp = Flt/to_nat(Option/unwrap_or(Flt/of_str("1e3"), +0.0));
-        let bad = Flt/to_nat(Option/unwrap_or(Flt/of_str("abc"), +4.0));
+        let to_nat(f : Flt) -> Nat = Option/unwrap_or(Flt/try_to_nat(f), 0);
+        let whole = to_nat(Option/unwrap_or(Flt/of_str("12.0"), +0.0));
+        let half = to_nat(Flt/mul(Option/unwrap_or(Flt/of_str(".5"), +0.0), +2.0));
+        let exp = to_nat(Option/unwrap_or(Flt/of_str("1e3"), +0.0));
+        let bad = to_nat(Option/unwrap_or(Flt/of_str("abc"), +4.0));
         let _ = Handle/write(Handle/stdout, Str/to_bytes(Nat/to_str(Nat/add(Nat/add(whole, half), Nat/add(exp, bad)))))!;
         /std/Io/pure(())
         "#),
@@ -1062,7 +1065,8 @@ fn a_nan_default_on_a_runtime_option_converges() {
         let f(s : Str) -> Option(Flt) =
             let n = Nat/of_str(s)!;
             Option/some(Nat/to_flt(n));
-        /std/print(Nat/to_str(Flt/to_nat(Option/unwrap_or(f(Nat/to_str(taint)), Flt/nan))))
+        /std/print(Nat/to_str(
+            Option/unwrap_or(Flt/try_to_nat(Option/unwrap_or(f(Nat/to_str(taint)), Flt/nan)), 0)))
         "#),
         b"3"
     );

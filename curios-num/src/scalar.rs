@@ -7,6 +7,8 @@
 #[cfg(test)]
 mod tests;
 
+use crate::Floating;
+
 /// Why an operation with an answer in the theory cannot produce one in its carrier.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScalarTrap {
@@ -156,40 +158,14 @@ pub fn int_to_nat(value: i32) -> Option<u32> {
     u32::try_from(value).ok()
 }
 
-/// Truncate to `u32`; `None` traps outside `(-1, 2^32)` or on a non-finite input.
-pub fn flt_to_nat(value: f32) -> Option<u32> {
-    let truncated = value.trunc();
-    (value.is_finite() && truncated > -1.0 && truncated < 4_294_967_296.0)
-        .then_some(truncated as u32)
+/// Truncate a binary32 to `u32`; `None` outside the domain [`Floating::to_natural`] states, or past the carrier.
+///
+/// Two refusals, and only the second belongs here. The model decides what the truncation *is* — undefined on a NaN, an infinity or a negative — and this adds the erased carrier's own width on top of it. The semantics is not consulted about `u32`, and the carrier is not consulted about what a float means.
+pub fn flt_to_nat(value: Floating) -> Option<u32> {
+    value.to_natural()?.to_u32()
 }
 
-/// Truncate to `i32`; `None` traps outside `[-2^31, 2^31)` or on a non-finite input.
-pub fn flt_to_int(value: f32) -> Option<i32> {
-    let truncated = value.trunc();
-    (value.is_finite() && (-2_147_483_648.0..2_147_483_648.0).contains(&truncated))
-        .then_some(truncated as i32)
-}
-
-/// Binary32 minimum as `f32.min` computes it. `None` declines the fold on a NaN operand (Rust and Wasm disagree on NaN propagation), which is not a trap — the runtime operation proceeds. Operands that compare equal are the two zeros, or one value twice, and Wasm names the answer: the negative-signed one. It is spelled here rather than left to `f32::min`, whose LLVM lowering leaves the sign of an equal pair open.
-pub fn flt_min(left: f32, right: f32) -> Option<f32> {
-    if left.is_nan() || right.is_nan() {
-        return None;
-    }
-    Some(match left == right {
-        true if left.is_sign_negative() => left,
-        true => right,
-        false => left.min(right),
-    })
-}
-
-/// Binary32 maximum as `f32.max` computes it; the twin of [`flt_min`], with an equal pair answering the positive-signed one.
-pub fn flt_max(left: f32, right: f32) -> Option<f32> {
-    if left.is_nan() || right.is_nan() {
-        return None;
-    }
-    Some(match left == right {
-        true if left.is_sign_negative() => right,
-        true => left,
-        false => left.max(right),
-    })
+/// Truncate a binary32 to `i32`, the twin of [`flt_to_nat`] over [`Floating::to_integer`]'s domain.
+pub fn flt_to_int(value: Floating) -> Option<i32> {
+    value.to_integer()?.to_i32()
 }
