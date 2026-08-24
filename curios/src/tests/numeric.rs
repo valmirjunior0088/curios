@@ -104,9 +104,21 @@ fn folded_and_executed_scalar_ops_agree_inside_the_envelope() {
         "Flt/to_str(Flt/rem(Flt/add(5.0, Nat/to_flt(n)), 0.1))",
         "Flt/to_str(Flt/rem(Flt/add(1.0, Nat/to_flt(n)), Flt/pos_inf))",
         "Flt/to_str(Flt/rem(Flt/sub(-7.0, Nat/to_flt(n)), 2.0))",
-        // An equal pair under `min`/`max` answers by sign, as `f32.min`/`f32.max` do: the folder spells the rule rather than trusting the host's `min`. Both orders are the folder's own unit test; one each here is the runtime half.
+        // An equal pair under `min`/`max` answers by sign, as 754-2019's `minimum`/`maximum` do — and a NaN operand propagates rather than being dropped, which is where Rust's `f32::min` and Wasm's `f32.min` part company. The model defines all three answers, so these rows compare a fold to an execution rather than either to a host.
         "Flt/to_str(Flt/min(Nat/to_flt(n), Flt/neg(Nat/to_flt(n))))",
         "Flt/to_str(Flt/max(Flt/neg(Nat/to_flt(n)), Nat/to_flt(n)))",
+        "Flt/to_str(Flt/min(Flt/add(Flt/nan, Nat/to_flt(n)), 1.0))",
+        "Flt/to_str(Flt/max(1.0, Flt/add(Flt/nan, Nat/to_flt(n))))",
+        // **The two canonicalizing sites**, and the only two operations whose non-NaN result can read a NaN's bits. The fold answers the one canonical NaN; without the emitter's canonicalization the engine answers whatever pattern it is holding, and these rows are what makes the two agree.
+        //
+        // The NaN is *assembled from bytes* rather than computed, and that is the whole design of these rows. A computed NaN — `0.0 / 0.0` — carries the hardware's default pattern, which on aarch64 is already `0x7fc00000`, so a row built on one passes whether or not the canonicalization is emitted. Reinterpreting a byte pattern the program chose is bit-preserving on every engine, so a payload bit set here reaches the instruction on any architecture. The tainted byte is what keeps the executed side from folding; the folded side canonicalizes in `Floating::from_bits`, so the two disagree unless the emitter closes it.
+        //
+        // **Both halves of that were measured rather than argued**, 2026-08-24 on aarch64-apple-darwin, by neutering the two `select`s in `code_emitter` and re-running this test. On a computed NaN it still passed — the row proved nothing. On the assembled NaN below it failed, folded `:0:0:192:127` against executed `:1:0:192:127`, which is the payload surviving into a result the model says has none. Reproduce by deleting the two selects; that failure is what these rows are for.
+        "Bytes/fold(Flt/to_le_bytes(Flt/of_le_bytes(x[Nat/to_byte(n + 1), 0x00, 0xc0, 0x7f])), \"\", \
+            (b, acc) => Str/concat(Str/concat(acc, \":\"), Nat/to_str(Byte/to_nat(b))))",
+        // The sign operand is a *negative* non-canonical NaN, so an engine reading its sign bit answers `-1.0` where the model says `abs(1.0)`.
+        "Flt/to_str(Flt/copysign(1.0, Flt/of_le_bytes(x[Nat/to_byte(n + 1), 0x00, 0xc0, 0xff])))",
+        "Flt/to_str(Flt/copysign(-1.0, Flt/of_le_bytes(x[Nat/to_byte(n + 1), 0x00, 0xc0, 0xff])))",
     ]);
 }
 

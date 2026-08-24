@@ -1356,13 +1356,32 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             CpsIntrinsic::FltNearest => {
                 self.emit_unary_op(dest, &op, &args[0], curios_wasm::Instr::F32Nearest)
             }
-            CpsIntrinsic::FltCopysign => self.emit_binary_op(
-                dest,
-                &op,
-                &args[0],
-                &args[1],
-                curios_wasm::Instr::F32Copysign,
-            ),
+            // One of the two operations whose non-NaN result would otherwise read a NaN's bits, and so one of the two the engine must be held to the model at. `Flt` has exactly one NaN, which has no sign; Wasm's `f32.copysign` reads the sign bit of whatever pattern the hardware produced, and x86's default NaN is negative where ARM's is positive. Substituting `+0.0` for a NaN sign operand answers `abs(x)`, which is what the model says and what every engine then computes.
+            CpsIntrinsic::FltCopysign => {
+                let sign_local = self.context.push_local(
+                    "copysign_sign",
+                    curios_wasm::ValType::Num(curios_wasm::NumType::F32),
+                );
+                self.emit_operand(&op, 0, &args[0]);
+                self.emit_instr(curios_wasm::Instr::F32Const { value: 0.0 });
+                self.emit_operand(&op, 1, &args[1]);
+                self.emit_instr(curios_wasm::Instr::LocalTee {
+                    local_name: sign_local.clone(),
+                });
+                self.emit_instr(curios_wasm::Instr::LocalGet {
+                    local_name: sign_local.clone(),
+                });
+                self.emit_instr(curios_wasm::Instr::LocalGet {
+                    local_name: sign_local,
+                });
+                // `x != x` is the NaN test that reads no bits.
+                self.emit_instr(curios_wasm::Instr::F32Ne);
+                self.emit_instr(curios_wasm::Instr::Select {
+                    val_types: vec![curios_wasm::ValType::Num(curios_wasm::NumType::F32)],
+                });
+                self.emit_instr(curios_wasm::Instr::F32Copysign);
+                self.emit_store(dest, &op.result_repr());
+            }
             CpsIntrinsic::NatToInt => {
                 let operand = &args[0];
                 // The conversion preserves the number: below 2^30 the i31 bits already spell the same value, and a `Nat` at or above it has no signed-i31 `Int` holding it, so it traps at the boundary rather than silently reloading negative.
@@ -1420,11 +1439,30 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
                     "flt_bits",
                     curios_wasm::ValType::Num(curios_wasm::NumType::I32),
                 );
+                // The other canonicalizing site. Wasm leaves a computed NaN's sign and payload to the implementation, so reinterpreting one would hand the program bits the model does not define; the model has one NaN, and this is where that is made true of the running program. Selected rather than branched: `x != x` decides NaN without reading a bit, and the non-NaN path pays one `select`.
+                let flt_local = self.context.push_local(
+                    "flt_value",
+                    curios_wasm::ValType::Num(curios_wasm::NumType::F32),
+                );
                 let rope = self.context.table().bin_rope();
                 self.emit_instr(curios_wasm::Instr::I32Const { value: 0 });
                 self.emit_instr(curios_wasm::Instr::I32Const { value: 4 });
+                self.emit_instr(curios_wasm::Instr::I32Const { value: 0x7fc0_0000 });
                 self.emit_instrs(self.context.load_value_instrs(operand, LoadAs::Flt));
+                self.emit_instr(curios_wasm::Instr::LocalTee {
+                    local_name: flt_local.clone(),
+                });
                 self.emit_instr(curios_wasm::Instr::I32ReinterpretF32);
+                self.emit_instr(curios_wasm::Instr::LocalGet {
+                    local_name: flt_local.clone(),
+                });
+                self.emit_instr(curios_wasm::Instr::LocalGet {
+                    local_name: flt_local,
+                });
+                self.emit_instr(curios_wasm::Instr::F32Ne);
+                self.emit_instr(curios_wasm::Instr::Select {
+                    val_types: vec![curios_wasm::ValType::Num(curios_wasm::NumType::I32)],
+                });
                 self.emit_instr(curios_wasm::Instr::LocalTee {
                     local_name: bits_local.clone(),
                 });
