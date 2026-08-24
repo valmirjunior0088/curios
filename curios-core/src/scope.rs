@@ -1004,6 +1004,25 @@ pub struct Visit<F> {
     universe_depth: usize,
     visit: F,
     mode: Mode,
+    memo: Memo,
+}
+
+/// Whether a traversal remembers what it rebuilt, and under what key.
+///
+/// **Orthogonal to [`Mode`], and stated separately because it is.** It used to be encoded by doubling variants — `Plain` beside `PlainSharedAtDepth`, `Rewriting` beside `RewritingShared` — which made a walk's memo a property of *which mode it picked* rather than a decision its author made. Three modes then had no memoized twin at all, and two of those three were `2^n` waiting to be found: the machine's forced recursive call and the universe-erased projection a `Nat` comparison takes.
+///
+/// **The law.** Within one pass over an immutable DAG a node's answer is determined by the node and by whatever else the visit is parameterised on, so a revisit of the same key may be skipped. A reduct is a DAG whose *tree* expansion doubles per level — one substitution landing a term in two positions is enough — so a walk that rebuilds per occurrence is exponential in a term the node count, and therefore the unit budget, reads as linear.
+///
+/// **When it is legal.** [`Memo::ByNode`] needs the variable callback and the rewrite hook pure in the node; [`Memo::ByNodeAndDepth`] needs them pure in the node and the depth. Purity is not the whole condition: a hook with an *effect* may still memoize when the effect is idempotent — a set insert, a first-error latch — and may not when it is not. Three hooks serve operands by position (an `index` or an iterator) and one pushes into a `Vec`; for those the answer differs per occurrence and [`Memo::None`] is the only correct choice.
+///
+/// Every constructor takes one explicitly. There is no default, deliberately: both defects above were omissions, so neither defaulting direction is safe — a wrong `None` costs an exponent and a wrong memo costs a wrong answer.
+enum Memo {
+    /// Rebuild every occurrence. Correct for a hook whose answer depends on how many times it has run.
+    None,
+    /// Keyed on input node identity. Addresses are stable for the traversal because the caller's value holds every node alive.
+    ByNode(HashMap<usize, Term>),
+    /// Keyed on input node identity *and* binder depth, for a visit whose effect depends on the depth it runs at — `capture` is the case, where a depth-blind memo would hand a second occurrence the wrong indices.
+    ByNodeAndDepth(HashMap<(usize, usize), Term>),
 }
 
 /// What a traversal does beyond rewriting variables.
@@ -1014,22 +1033,18 @@ pub struct Visit<F> {
 enum Mode {
     /// Rebuild every node, rewriting variables only.
     Plain,
-    /// [`Mode::Plain`], memoized on input node identity *and* binder depth, so a structurally shared input stays shared in the output under a visit whose effect depends on the depth it runs at. `capture` is the case: a term reached twice at one depth captures to one node, and [`Mode::RewritingShared`]'s depth-blind memo would hand the second occurrence the wrong indices wherever the depths differed. Keys are addresses of input nodes, held alive by the caller's value for the whole traversal, paired with the depth.
-    PlainSharedAtDepth(HashMap<(usize, usize), Term>),
     /// Skip subtrees whose `reach` proves no loose index can be touched.
     Pruning,
     /// A term-level pre-hook substitutes whole nodes before descending. A substituted node is not descended into.
     Rewriting(Rewrite),
-    /// [`Mode::Rewriting`], memoized on *input* node identity so a structurally shared input stays shared in the output instead of expanding to a tree. Keys are addresses of input nodes, which the caller's value keeps alive for the whole traversal, so an address cannot be recycled under the memo.
-    RewritingShared(Rewrite, HashMap<usize, Term>),
     /// [`Mode::Rewriting`], visiting only nodes that carry universe data.
     RewritingUniverses(Rewrite),
     /// A level-level hook, visiting only nodes that carry universe data.
     RewritingLevels(LevelRewrite),
     /// Replace every level with the ground representative, visiting only nodes that carry universe data.
-    ErasingUniverses(HashMap<usize, Term>),
-    /// Hash-consing: memoize on input identity, and replace each rebuilt node with the canonical node of its structure.
-    Sharing(HashMap<usize, Term>, Sharing),
+    ErasingUniverses,
+    /// Hash-consing: replace each rebuilt node with the canonical node of its structure. Pairs with [`Memo::ByNode`], which is what keeps the input's sharing as well as the output's.
+    Sharing(Sharing),
     /// Stand every child term down to `placeholder`, keeping the ones removed in `children`. Because a substituted node is never descended into, the rebuilt node carries this level's own payload and nothing below it — which is what lets [`Term`]'s equality compare one node at a time instead of recursing to the bottom of the term.
     ///
     /// The removed children and the node they came out of are produced by the same pass, so the two can never disagree about what a child is.
@@ -1049,16 +1064,18 @@ where
             universe_depth: 0,
             visit,
             mode: Mode::Plain,
+            memo: Memo::None,
         }
     }
 
-    /// Like `new`, memoized on node identity and binder depth together — for a visit whose effect depends on the depth, which [`Visit::rewriting_shared`]'s depth-blind memo would answer wrongly. A shared input stays shared in the output, so a DAG-shaped term is rebuilt in its own size rather than its tree's. Sound when the variable callback is pure in the node and the depth.
+    /// Like `new`, memoized on node identity and binder depth together — for a visit whose effect depends on the depth, which a depth-blind memo would answer wrongly. `capture` is the case. See [`Memo`] for when this is legal.
     fn shared_at_depth(visit: F) -> Self {
         Self {
             term_depth: 0,
             universe_depth: 0,
             visit,
-            mode: Mode::PlainSharedAtDepth(HashMap::new()),
+            mode: Mode::Plain,
+            memo: Memo::ByNodeAndDepth(HashMap::new()),
         }
     }
 
@@ -1069,6 +1086,8 @@ where
             universe_depth: 0,
             visit,
             mode: Mode::Pruning,
+            // **Measured twice as inert, and there is a reason it must be.** `shift` and `release` are pure in the node and the depth, so [`Memo::ByNodeAndDepth`] would be *legal* here — it is not taken because it cannot help. A tree that expands exponentially is a reduction result, and a reduct substituted here is closed, so `reach` is zero and pruning already answers it in O(1) before a memo could. Installed anyway, `str_literal_cost_measurements` reported all ten rows byte-for-byte identical (2026-08-24), matching an earlier swap of `release` alone that moved a `BigNat/sub` ladder not at all. Reopening it wants a workload where a substituted term is *open* and shared, which nothing in the corpus produces.
+            memo: Memo::None,
         }
     }
 
@@ -1079,6 +1098,8 @@ where
             universe_depth: 0,
             visit,
             mode: Mode::Rewriting(rewrite),
+            // The unmemoized rewrite. Four of its callers serve operands by position and one pushes into a `Vec`, so their answers differ per occurrence — see [`Memo`].
+            memo: Memo::None,
         }
     }
 
@@ -1092,6 +1113,8 @@ where
                 placeholder,
                 children: Vec::new(),
             },
+            // Masking never descends past one level, so there is nothing to revisit.
+            memo: Memo::None,
         }
     }
 
@@ -1105,7 +1128,8 @@ where
             term_depth: 0,
             universe_depth: 0,
             visit,
-            mode: Mode::RewritingShared(rewrite, HashMap::new()),
+            mode: Mode::Rewriting(rewrite),
+            memo: Memo::ByNode(HashMap::new()),
         }
     }
 
@@ -1115,6 +1139,7 @@ where
             universe_depth: 0,
             visit,
             mode: Mode::RewritingUniverses(rewrite),
+            memo: Memo::None,
         }
     }
 
@@ -1124,6 +1149,7 @@ where
             universe_depth: 0,
             visit,
             mode: Mode::RewritingLevels(rewrite),
+            memo: Memo::None,
         }
     }
 
@@ -1132,7 +1158,9 @@ where
             term_depth: 0,
             universe_depth: 0,
             visit,
-            mode: Mode::ErasingUniverses(HashMap::new()),
+            mode: Mode::ErasingUniverses,
+            // A comparison projects both operands through this at every `Nat` comparison, and the projection walks the whole term: unmemoized it was `2^n` in the operand's width while the unit budget read linear.
+            memo: Memo::ByNode(HashMap::new()),
         }
     }
 
@@ -1144,7 +1172,8 @@ where
             term_depth: 0,
             universe_depth: 0,
             visit,
-            mode: Mode::Sharing(HashMap::new(), table),
+            mode: Mode::Sharing(table),
+            memo: Memo::ByNode(HashMap::new()),
         }
     }
 }
@@ -1197,9 +1226,9 @@ where
     pub(crate) fn rewrite_term(&mut self, term: &Term) -> Option<Term> {
         let term_depth = self.term_depth;
         match &mut self.mode {
-            Mode::Rewriting(rewrite)
-            | Mode::RewritingShared(rewrite, _)
-            | Mode::RewritingUniverses(rewrite) => rewrite(term_depth, term),
+            Mode::Rewriting(rewrite) | Mode::RewritingUniverses(rewrite) => {
+                rewrite(term_depth, term)
+            }
             Mode::Masking {
                 placeholder,
                 children,
@@ -1208,11 +1237,10 @@ where
                 Some(placeholder.clone())
             }
             Mode::Plain
-            | Mode::PlainSharedAtDepth(_)
             | Mode::Pruning
             | Mode::RewritingLevels(_)
-            | Mode::ErasingUniverses(_)
-            | Mode::Sharing(..) => None,
+            | Mode::ErasingUniverses
+            | Mode::Sharing(_) => None,
         }
     }
 
@@ -1225,66 +1253,53 @@ where
     }
 
     pub(crate) fn erases_universes(&self) -> bool {
-        matches!(self.mode, Mode::ErasingUniverses(_))
+        matches!(self.mode, Mode::ErasingUniverses)
     }
 
     pub(crate) fn universes_only(&self) -> bool {
         matches!(
             self.mode,
-            Mode::RewritingUniverses(_) | Mode::RewritingLevels(_) | Mode::ErasingUniverses(_)
+            Mode::RewritingUniverses(_) | Mode::RewritingLevels(_) | Mode::ErasingUniverses
         )
     }
 
     pub(crate) fn memoizes(&self) -> bool {
-        matches!(
-            self.mode,
-            Mode::RewritingShared(..)
-                | Mode::Sharing(..)
-                | Mode::PlainSharedAtDepth(_)
-                | Mode::ErasingUniverses(_)
-        )
+        !matches!(self.memo, Memo::None)
     }
 
     /// The memoized rebuild of the input node at `key`, at the depth this visit currently stands at for the modes whose memo is depth-keyed.
     pub(crate) fn memo_get(&self, key: usize) -> Option<Term> {
-        match &self.mode {
-            Mode::RewritingShared(_, memo)
-            | Mode::Sharing(memo, _)
-            | Mode::ErasingUniverses(memo) => memo.get(&key).cloned(),
-            Mode::PlainSharedAtDepth(memo) => memo.get(&(key, self.term_depth)).cloned(),
-            _ => None,
+        match &self.memo {
+            Memo::None => None,
+            Memo::ByNode(memo) => memo.get(&key).cloned(),
+            Memo::ByNodeAndDepth(memo) => memo.get(&(key, self.term_depth)).cloned(),
         }
     }
 
     pub(crate) fn memo_put(&mut self, key: usize, term: Term) {
         let depth = self.term_depth;
-        match &mut self.mode {
-            Mode::RewritingShared(_, memo)
-            | Mode::Sharing(memo, _)
-            | Mode::ErasingUniverses(memo) => {
+        match &mut self.memo {
+            Memo::None => {}
+            Memo::ByNode(memo) => {
                 memo.insert(key, term);
             }
-            Mode::PlainSharedAtDepth(memo) => {
+            Memo::ByNodeAndDepth(memo) => {
                 memo.insert((key, depth), term);
             }
-            _ => {}
         }
     }
 
     pub(crate) fn rewrites_terms(&self) -> bool {
         matches!(
             self.mode,
-            Mode::Rewriting(_)
-                | Mode::RewritingShared(..)
-                | Mode::RewritingUniverses(_)
-                | Mode::Masking { .. }
+            Mode::Rewriting(_) | Mode::RewritingUniverses(_) | Mode::Masking { .. }
         )
     }
 
     /// The canonical node for a rebuilt term, or `None` when not hash-consing.
     pub(crate) fn share_structure(&self, rebuilt: &Term) -> Option<Term> {
         match &self.mode {
-            Mode::Sharing(_, sharing) => sharing.canonical(rebuilt),
+            Mode::Sharing(sharing) => sharing.canonical(rebuilt),
             _ => None,
         }
     }
