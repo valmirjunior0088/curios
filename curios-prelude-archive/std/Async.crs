@@ -396,9 +396,10 @@ struct Queues: Type {
     parked: Cell(List(Slot)),
 }
 
+-- Appends, and `drive` pops the head, so the run queue is FIFO — which is what makes `yield_now` yield. Prepending made it a stack: the yielder came back off the top ahead of every fiber already waiting, so a yield loop starved its siblings and a wake resumed fibers in reverse arrival order.
 let enqueue(q: Queues, j: Job) -> Io({}) =
     let current = Cell/get(q.runq)!;
-    Cell/set(q.runq, [j, ..current]);
+    Cell/set(q.runq, [..current, j]);
 
 let block_on_handle(q: Queues, job: Job, h: Handle, interest: Nat) -> Io({}) =
     let current = Cell/get(q.blocked)!;
@@ -462,9 +463,10 @@ and resume_after(q: Queues, job: Job, pause: Pause, next: Io(Step({}))) -> Io({}
     match pause
     | wait(h, interest) => block_on_handle(q, resumed, h, interest)
     | sleep(d) => sleep_until(q, resumed, d)
+    -- The child ahead of the forker's continuation: a `go` child runs — and acquires whatever its body acquires — before the forker takes another step, which is what lets a root that finishes immediately still hand a just-forked handler its first turn. The stack queue gave this ordering by accident; the FIFO queue states it.
     | fork(child, child_token) =>
-        let _ = enqueue(q, resumed)!;
-        enqueue(q, Job { resume = Async { child }, token = child_token, guards = [] })
+        let _ = enqueue(q, Job { resume = Async { child }, token = child_token, guards = [] })!;
+        enqueue(q, resumed)
     | park(register) => park_on_waker(q, resumed, register)
     -- Acquiring and releasing a guard are bookkeeping, not suspension: the fiber is served again immediately rather than going back through the queue.
     | acquire(h, release) =>
