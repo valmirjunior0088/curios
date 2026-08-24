@@ -1,6 +1,7 @@
 use {
     super::{Intrinsic, Subterm, Term},
     curios_num::Natural,
+    std::collections::HashMap,
 };
 
 /// A type-level natural in successor-floor form: `Zero`, or `Succ(floor, inner)` — a [`Natural`] count of successors stacked on a tail term `inner`, so a closed literal is one node and `x + 3` is `Succ(3, x)`, never a unary chain. Unbounded — the type level pretends ℕ, like `Integer`'s ℤ; the runtime's 31-bit range is enforced only where a literal must materialize (`erase`'s narrowing) and by the runtime's own overflow traps. Reduction keeps the form canonical — nested `Succ` flattened, zero floors collapsed (see `Nat::decompose` and `Nat::rebuild`) — so arithmetic on the floor is [`Natural`] arithmetic.
@@ -233,18 +234,21 @@ impl Nat {
     /// `summands` as a linear combination: like factors merged by adding their coefficients, in first-appearance order, keyed up to universe instances exactly as [`Nat::cancel_common`] keys them. This is the sum normal form — `x + x` is `2 · x`, and `2 · x + 3 · x` is `5 · x` — and it is what makes a sum's like terms definitionally equal rather than merely cancellable against each other.
     pub(crate) fn linear(summands: impl IntoIterator<Item = Term>) -> Vec<(Natural, Term)> {
         let mut combination: Vec<(Natural, Term)> = Vec::new();
-        let mut keys: Vec<Term> = Vec::new();
+        // **The index is a map, and the combination stays a vector.** Those are two separate obligations that a single `Vec<Term>` of keys used to serve at once, badly: finding a like factor was a scan comparing whole terms, one `Term::eq` per candidate, while first-appearance order — which the sum normal form above promises and which a caller relies on to reach a fixed point — only ever needed `combination` to be pushed to in order. Keeping them apart makes the lookup a hash and leaves the order exactly where it was.
+        //
+        // A key is a *projected* term rather than the factor, so two instances of one polymorphic name merge; `Term`'s hash is memoized per node, and `clippy.toml` names `Term` for `ignore-interior-mutability` on the same grounds the map relies on — a cache fill moves neither hash nor equality.
+        let mut index_of: HashMap<Term, usize> = HashMap::new();
         for summand in summands {
             if Self::is_zero(&summand) {
                 continue;
             }
             let (coefficient, factor) = Self::literal_factor(&summand);
             let key = crate::project_erased_universes(&factor);
-            match keys.iter().position(|candidate| *candidate == key) {
-                Some(index) => combination[index].0 += coefficient,
+            match index_of.get(&key) {
+                Some(&index) => combination[index].0 += coefficient,
                 None => {
+                    index_of.insert(key, combination.len());
                     combination.push((coefficient, factor));
-                    keys.push(key);
                 }
             }
         }
