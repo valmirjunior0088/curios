@@ -2334,6 +2334,23 @@ impl Subterm {
         <Subterm as Bound>::free_vars(self)
     }
 
+    /// Collect every infix operator occurring in this subterm. Like [`Subterm::construction_names`], this feeds `order_flat_items`' edges: an operator dispatches through an anonymous witness of its `/syn` concept, so no `Var` can spell the dependency, and the scheduler must learn it from the operator itself. `Infix` nodes are elaboration-transient — born in `into_core`, consumed by `elaborate` — so only lowered, pre-elaboration terms have any to collect, which is exactly where the scheduler walks.
+    pub fn infix_ops(&self) -> HashSet<InfixOp> {
+        let mut ops = HashSet::new();
+        self.collect_infix_ops(&mut ops);
+        ops
+    }
+
+    fn collect_infix_ops(&self, ops: &mut HashSet<InfixOp>) {
+        if let Subterm::Transient(Transient::Infix(Infix { op, .. })) = self {
+            ops.insert(*op);
+        }
+        self.any_child_term(&mut |child| {
+            child.collect_infix_ops(ops);
+            false
+        });
+    }
+
     /// Collect the head name of every inductive/struct *construction* and *type-former normal form* occurring in this subterm. These names are not `Var`s (they live in the registry, not the variable graph), so they do not appear in `free_vars`; the reachability prune (`order_flat_items`) needs them as edges so a definition that *builds* a `Struct`/`Variant` (e.g. the string-literal meta-emitter's `/syn/Str/Str`) keeps the backing type-former and field-type definitions alive even when no `Var` mentions them.
     pub fn construction_names(&self) -> BTreeSet<Global> {
         let mut names = BTreeSet::new();

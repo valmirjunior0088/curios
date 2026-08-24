@@ -477,6 +477,35 @@ fn a_concept_with_two_superclasses_lowers() {
          C");
 }
 
+/// The scheduler's witness edges (`witness_dep_nodes`): `probe`'s declared type only converts by unfolding `+` within `probe`'s own item, the row satisfying it is declared *last* and referenced by no name, and only the operator's soft edge can order the row first — the deferred-witness store retries between items, which is too late for a conversion the item drain must decide. Under name edges alone `probe` elaborates first and fails exactly as `/std/BigPos/add`'s certificate once did.
+#[test]
+fn an_operator_in_a_dependent_type_orders_after_its_witness_row() {
+    elaborate_source(
+        "mod syn
+             pub concept Add(A : Type) : pub Type {
+                 add(A, A) -> A,
+             }
+         end
+         use /syn/{Add};
+         pub induct One : pub Type
+         | point()
+         end
+         pub induct Box : pub Type
+         | box()
+         end
+         pub let join(a : Box, b : Box) -> Box =
+             Box/box();
+         pub let Probe(b : Box) -> Type =
+             match b : (_) => Type | box() => One end;
+         pub let probe(a : Box, b : Box) -> Probe(a + b) =
+             One/point();
+         satisfy Add(Box) {
+             add = join,
+         }
+         Type",
+    );
+}
+
 /// A generated method wrapper belongs to *its concept's* universe context, not to one generalized from its own signature. The wrapper's type names only the levels its own field needs, yet it also carries `use w : C(…)` applied at all of the concept's; a level outside the wrapper's own generalized set would then have nothing to denote it.
 #[test]
 fn a_concept_method_wrapper_shares_its_concept_universe_context() {

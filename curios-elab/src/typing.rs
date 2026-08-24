@@ -347,11 +347,24 @@ impl Context {
                                 None => {
                                     let blockers =
                                         watched_blockers(self, &watching, &goal.this, &goal.that);
+                                    // A watched blocker whose witness goal sits in the deferred store is the one blocker inference could never have decided: its table entry had not registered by this item, and items order by the names they reference — which an operator's anonymous witness has none of. Diagnose it as what it is, with its fix, instead of leaving a bare unsolved metavariable.
+                                    let deferred_goals = self
+                                        .deferred_witness_goals()
+                                        .filter(|(slot, _)| watching.contains(slot))
+                                        .map(|(_, witness_goal)| witness_goal.clone())
+                                        .collect::<Vec<Term>>();
+                                    let deferred_witnesses = deferred_goals
+                                        .iter()
+                                        .map(|witness_goal| {
+                                            resolved_for_display(self, witness_goal).to_string()
+                                        })
+                                        .collect();
                                     Error::postponed_conversion(
                                         resolved_for_display(self, &goal.this),
                                         resolved_for_display(self, &goal.that),
                                         blockers,
                                         frame.carries_refinements(),
+                                        deferred_witnesses,
                                     )
                                     .at_opt(parked_origin.span())
                                 }

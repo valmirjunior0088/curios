@@ -1073,6 +1073,93 @@ fn node_reference_names(
     names
 }
 
+/// The concept a witness row registers into — the head of its signature's terminal concept application, peeled through the premise telescope. Lowered form only: pre-elaboration the terminal is an `Apply`/`Var` spine, so the head is a free global rather than a `StructType` normal form (kept as a fallback for synthetic inputs).
+fn witness_concept(let_: &FlatLet) -> Option<curios_core::Global> {
+    fn head_of(term: &curios_core::Term) -> Option<curios_core::Global> {
+        match &**term {
+            curios_core::Subterm::FuncType(func_type) => {
+                let mut telescope = &func_type.telescope;
+                loop {
+                    match telescope {
+                        curios_core::Telescope::Done(body) => return head_of(body),
+                        curios_core::Telescope::Cons(_, scope) => telescope = scope.body(),
+                    }
+                }
+            }
+            curios_core::Subterm::Apply(apply) => head_of(&apply.head),
+            curios_core::Subterm::UniverseInst(inst) => head_of(&inst.head),
+            curios_core::Subterm::Var(var) => {
+                var.as_free().and_then(|free| free.as_global()).cloned()
+            }
+            curios_core::Subterm::StructType(struct_type) => Some(struct_type.name.clone()),
+            _ => None,
+        }
+    }
+
+    matches!(let_.kind, curios_core::DefinitionKind::Witness)
+        .then(|| head_of(&let_.type_))
+        .flatten()
+}
+
+/// Method-wrapper name → owning concept, over every item in the compilation: a wrapper referenced from either partition identifies its concept, wherever that concept's witness rows live.
+fn wrapper_owners(items: &[FlatItem]) -> HashMap<curios_core::Global, Qualifier> {
+    items
+        .iter()
+        .flat_map(|item| match item {
+            FlatItem::Let(let_) => std::slice::from_ref(let_),
+            FlatItem::Rec(lets) => lets.as_slice(),
+        })
+        .filter_map(|let_| match &let_.kind {
+            curios_core::DefinitionKind::ConceptMethod { owner } => {
+                Some((let_.name.clone(), owner.clone()))
+            }
+            _ => None,
+        })
+        .collect()
+}
+
+/// The witness rows among `nodes`, grouped by the concept they register into.
+fn witness_rows(items: &[FlatItem], nodes: &[usize]) -> HashMap<Qualifier, Vec<usize>> {
+    let mut rows: HashMap<Qualifier, Vec<usize>> = HashMap::new();
+    for &node in nodes {
+        if let FlatItem::Let(let_) = &items[node]
+            && let Some(concept) = witness_concept(let_)
+            && let Some(qualifier) = concept.qualifier()
+        {
+            rows.entry(qualifier.clone()).or_default().push(node);
+        }
+    }
+    rows
+}
+
+/// A witness row is anonymous, so no name can order a concept's use after its registrations — and one class of use needs exactly that order: a dependent type that must unfold through the operation within its own item, where elaboration's deferred-witness store (which covers every value-level use by retrying between items) comes too late. These edges spell what names cannot: an item that dispatches through a concept — by infix operator, or by referencing one of the concept's method wrappers — wants every witness row of that concept emitted first. Deliberately over-approximate, and therefore *soft*: `topological_order` honors them whenever the hard name edges allow and drops them a node at a time when they deadlock, since which row a use actually needs is a typing fact this stage cannot know, and the genuine `/syn`↔`/std` reference cycle guarantees some deadlock. A dropped node merely returns to the pre-edge order, which every value-level use tolerates. Postfix `!` contributes no edge: `!` cannot appear in a type, so `Monad`/`Lift` witnesses are never needed within-item, and their edges would only widen the deadlocks.
+fn witness_dep_nodes(
+    node: usize,
+    item: &FlatItem,
+    names: &HashSet<curios_core::Global>,
+    wrapper_owner: &HashMap<curios_core::Global, Qualifier>,
+    rows: &HashMap<Qualifier, Vec<usize>>,
+    syntax: &SyntaxRegistry,
+) -> HashSet<usize> {
+    let mut concepts: HashSet<Qualifier> = item
+        .infix_ops()
+        .into_iter()
+        .map(|op| syntax.operator.concept_field(op).concept.qualifier())
+        .collect();
+    concepts.extend(
+        names
+            .iter()
+            .filter_map(|name| wrapper_owner.get(name).cloned()),
+    );
+
+    concepts
+        .iter()
+        .flat_map(|concept| rows.get(concept).into_iter().flatten())
+        .copied()
+        .filter(|&dep| dep != node)
+        .collect()
+}
+
 /// The nodes a node depends on: those `owner` maps its referenced names to. Self-edges and names `owner` does not map (intrinsics, or items outside the partition `owner` was restricted to) drop out.
 fn dep_nodes(
     node: usize,
@@ -1094,8 +1181,12 @@ fn owner_of(items: &[FlatItem], nodes: &[usize]) -> HashMap<curios_core::Global,
         .collect()
 }
 
-/// Topologically order `nodes` (assumed ascending, for the lowest-index tiebreak) under `deps` restricted to that set: lowest-index node whose deps are all emitted; on a cycle, the lowest remaining one breaks the deadlock.
-fn topological_order(nodes: &[usize], deps: &HashMap<usize, HashSet<usize>>) -> Vec<usize> {
+/// Topologically order `nodes` (assumed ascending, for the lowest-index tiebreak) under `deps` restricted to that set, honoring `soft_deps` — the witness edges — as preferences. Each round emits the lowest-index node whose hard and soft deps are all emitted; when none is fully ready, the lowest hard-ready node gives up its soft constraints (witness edges over-approximate, and `/syn`'s operator uses against `/std`'s string-literal references form one genuine cross-root cycle, so someone must — and dropping a *soft* edge only restores the pre-edge order for that node, where an emission that skipped a *name* edge would manufacture an unbound variable); on a genuine hard cycle, the lowest remaining one breaks the deadlock as before.
+fn topological_order(
+    nodes: &[usize],
+    deps: &HashMap<usize, HashSet<usize>>,
+    soft_deps: &HashMap<usize, HashSet<usize>>,
+) -> Vec<usize> {
     let mut emitted = HashSet::with_capacity(nodes.len());
     let mut order = Vec::with_capacity(nodes.len());
 
@@ -1103,7 +1194,16 @@ fn topological_order(nodes: &[usize], deps: &HashMap<usize, HashSet<usize>>) -> 
         let ready = nodes
             .iter()
             .copied()
-            .find(|&n| !emitted.contains(&n) && deps[&n].iter().all(|dep| emitted.contains(dep)))
+            .find(|&n| {
+                !emitted.contains(&n)
+                    && deps[&n].iter().all(|dep| emitted.contains(dep))
+                    && soft_deps[&n].iter().all(|dep| emitted.contains(dep))
+            })
+            .or_else(|| {
+                nodes.iter().copied().find(|&n| {
+                    !emitted.contains(&n) && deps[&n].iter().all(|dep| emitted.contains(dep))
+                })
+            })
             .or_else(|| nodes.iter().copied().find(|&n| !emitted.contains(&n)))
             .expect("a node remains while order is incomplete");
 
@@ -1123,30 +1223,36 @@ fn prelude_permutation(
     induct_decls: &BTreeMap<curios_core::Global, curios_core::InductDecl>,
     struct_decls: &BTreeMap<curios_core::Global, curios_core::StructDecl>,
     rest_owner: &HashMap<curios_core::Global, usize>,
+    wrapper_owner: &HashMap<curios_core::Global, Qualifier>,
+    syntax: &SyntaxRegistry,
 ) -> Vec<usize> {
     let owner = owner_of(items, prelude_nodes);
-    let deps = prelude_nodes
-        .iter()
-        .map(|&n| {
-            let declared = items[n].names();
-            let names = node_reference_names(&items[n], &declared, induct_decls, struct_decls);
-            if let Some(name) = names
-                .iter()
-                .find(|name| !owner.contains_key(*name) && rest_owner.contains_key(*name))
-            {
-                panic!(
-                    "'{}' (in the standard library) references '{}', which is only declared \
-                     in the entry program — the standard library is always compiled before the \
-                     entry program, so this is a bug in the embedded prelude source",
-                    declared
-                        .first()
-                        .map_or("<anonymous>".to_string(), curios_core::Global::symbol),
-                    name.symbol(),
-                );
-            }
-            (n, dep_nodes(n, &names, &owner))
-        })
-        .collect::<HashMap<usize, HashSet<usize>>>();
+    let rows = witness_rows(items, prelude_nodes);
+    let mut deps = HashMap::with_capacity(prelude_nodes.len());
+    let mut soft_deps = HashMap::with_capacity(prelude_nodes.len());
+    for &n in prelude_nodes {
+        let declared = items[n].names();
+        let names = node_reference_names(&items[n], &declared, induct_decls, struct_decls);
+        if let Some(name) = names
+            .iter()
+            .find(|name| !owner.contains_key(*name) && rest_owner.contains_key(*name))
+        {
+            panic!(
+                "'{}' (in the standard library) references '{}', which is only declared \
+                 in the entry program — the standard library is always compiled before the \
+                 entry program, so this is a bug in the embedded prelude source",
+                declared
+                    .first()
+                    .map_or("<anonymous>".to_string(), curios_core::Global::symbol),
+                name.symbol(),
+            );
+        }
+        deps.insert(n, dep_nodes(n, &names, &owner));
+        soft_deps.insert(
+            n,
+            witness_dep_nodes(n, &items[n], &names, wrapper_owner, &rows, syntax),
+        );
+    }
 
     let relative = prelude_nodes
         .iter()
@@ -1154,7 +1260,7 @@ fn prelude_permutation(
         .map(|(rel, &node)| (node, rel))
         .collect::<HashMap<usize, usize>>();
 
-    topological_order(prelude_nodes, &deps)
+    topological_order(prelude_nodes, &deps, &soft_deps)
         .iter()
         .map(|node| relative[node])
         .collect()
@@ -1165,6 +1271,7 @@ fn order_flat_items(
     mounts: &[Mount],
     induct_decls: &BTreeMap<curios_core::Global, curios_core::InductDecl>,
     struct_decls: &BTreeMap<curios_core::Global, curios_core::StructDecl>,
+    syntax: &SyntaxRegistry,
 ) -> Vec<FlatItem> {
     let count = items.len();
 
@@ -1180,6 +1287,7 @@ fn order_flat_items(
         .collect::<Vec<usize>>();
 
     let rest_owner = owner_of(&items, &rest);
+    let wrapper_owner = wrapper_owners(&items);
 
     let mut order = Vec::with_capacity(count);
 
@@ -1190,20 +1298,26 @@ fn order_flat_items(
             induct_decls,
             struct_decls,
             &rest_owner,
+            &wrapper_owner,
+            syntax,
         );
         order.extend(permutation.into_iter().map(|rel| prelude_nodes[rel]));
     }
 
-    // Everything else (user code, plus any non-prelude library a custom loader serves): topologically ordered among itself, after the whole prelude. Its dependencies on prelude items are already satisfied by the prefix above, so the owner map (and thus the dep edges) need only cover `rest`.
-    let rest_deps = rest
-        .iter()
-        .map(|&n| {
-            let declared = items[n].names();
-            let names = node_reference_names(&items[n], &declared, induct_decls, struct_decls);
-            (n, dep_nodes(n, &names, &rest_owner))
-        })
-        .collect::<HashMap<usize, HashSet<usize>>>();
-    order.extend(topological_order(&rest, &rest_deps));
+    // Everything else (user code, plus any non-prelude library a custom loader serves): topologically ordered among itself, after the whole prelude. Its dependencies on prelude items are already satisfied by the prefix above, so the owner map (and thus the dep edges) need only cover `rest` — witness edges included: a rest item's needed prelude rows sit in the emitted prefix, and only its own partition's rows still need ordering.
+    let rest_rows = witness_rows(&items, &rest);
+    let mut rest_deps = HashMap::with_capacity(rest.len());
+    let mut rest_soft_deps = HashMap::with_capacity(rest.len());
+    for &n in &rest {
+        let declared = items[n].names();
+        let names = node_reference_names(&items[n], &declared, induct_decls, struct_decls);
+        rest_deps.insert(n, dep_nodes(n, &names, &rest_owner));
+        rest_soft_deps.insert(
+            n,
+            witness_dep_nodes(n, &items[n], &names, &wrapper_owner, &rest_rows, syntax),
+        );
+    }
+    order.extend(topological_order(&rest, &rest_deps, &rest_soft_deps));
 
     let mut slots = items
         .into_iter()
@@ -1797,7 +1911,7 @@ fn into_core_unit_within(
     )?;
 
     // This unit's own items alone. A predecessor reaches later stages as an *environment* they are seeded from — `Globals` at the certifier, a replayed context at elaboration and erasure — and copying its items into every compilation only ever existed so those stages could then skip them again by index. See `documentation/design/toolchain/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md`.
-    let items = order_flat_items(flat_items, &mounts, &induct_decls, &struct_decls)
+    let items = order_flat_items(flat_items, &mounts, &induct_decls, &struct_decls, syntax)
         .into_iter()
         .map(FlatItem::into_core)
         .collect();

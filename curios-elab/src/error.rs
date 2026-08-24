@@ -313,6 +313,8 @@ pub enum Error {
         watching: Vec<String>,
         /// Whether the goal's frozen frame carried live match-arm refinements — a solution holding only under them is deliberately never committed, one way a goal stays undecided.
         under_refinements: bool,
+        /// The watched witness goals whose registration never arrived in time, pre-rendered: their table entries were still missing when this item's drain ran, so the conversion could not unfold through them. Items order by the names they reference and a witness is anonymous, which is why the report suggests naming the operation.
+        deferred_witnesses: Vec<String>,
     },
     /// A postfix `!` whose region's monad can never be determined: an inference-position region, or one whose expected type stayed an unsolved metavariable through every retry. Strict postponement reads the monad from the region's type and never infers it from the action, so a region that never names one cannot sequence.
     BangRegionUndetermined,
@@ -515,12 +517,14 @@ impl Error {
         that: U,
         watching: Vec<String>,
         under_refinements: bool,
+        deferred_witnesses: Vec<String>,
     ) -> Self {
         Self::PostponedConversion {
             this: Box::new(this.into()),
             that: Box::new(that.into()),
             watching,
             under_refinements,
+            deferred_witnesses,
         }
     }
 
@@ -1636,6 +1640,7 @@ impl fmt::Display for Displayed<'_> {
                 that,
                 watching,
                 under_refinements,
+                deferred_witnesses,
             } => {
                 let this = this.spelled(spelling);
                 let that = that.spelled(spelling);
@@ -1650,6 +1655,12 @@ impl fmt::Display for Displayed<'_> {
                     write!(
                         f,
                         "\n  the goal sits under match-arm refinements; a solution holding only under them is never committed"
+                    )?;
+                }
+                for goal in deferred_witnesses {
+                    write!(
+                        f,
+                        "\n  a witness for '{goal}' is not declared by this point in elaboration order, and this conversion must unfold through it within its own declaration\n  name the operation the witness supplies directly, or declare the witness where this declaration's dependencies can order it first"
                     )?;
                 }
                 Ok(())

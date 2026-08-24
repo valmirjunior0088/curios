@@ -290,4 +290,14 @@ impl Solutions {
     pub(crate) fn take_deferred_witnesses(&mut self) -> Vec<ParkedGoal> {
         mem::take(&mut self.deferred_witnesses)
     }
+
+    /// The deferred witness goals' slots and goal types, read-only — the item drain's diagnosis of a conversion stuck on a witness whose registration never arrived in time.
+    pub(crate) fn deferred_witness_goals(&self) -> impl Iterator<Item = (MetaId, &Term)> {
+        self.deferred_witnesses
+            .iter()
+            .filter_map(|parked| match &parked.work {
+                ParkedWork::Witness { slot, goal, .. } => Some((*slot, goal)),
+                _ => None,
+            })
+    }
 }

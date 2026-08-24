@@ -1026,6 +1026,11 @@ impl Context {
         self.solutions.take_deferred_witnesses()
     }
 
+    /// The deferred witness goals' slots and goal types ([`Solutions::deferred_witness_goals`]).
+    pub(crate) fn deferred_witness_goals(&self) -> impl Iterator<Item = (MetaId, &Term)> {
+        self.solutions.deferred_witness_goals()
+    }
+
     /// The module whose item is currently being elaborated (the qualifier prefix of its name; empty for the root), or `None` when no surface item is being elaborated — which suppresses the representation-privacy checks (see the field's invariant).
     pub(crate) fn island(&self) -> Option<&Qualifier> {
         self.island.as_ref()
