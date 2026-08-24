@@ -5,8 +5,9 @@ pub struct Duration: Type {
     nanos: Nat,
 }
 
+-- Normalized on the way in, so every stored `Duration` carries `nanos < 10^9` and `before`'s secs-first comparison is the value order: without the carry, `of(0, 1500000000)` and `of(1, 500000000)` spell one duration that compares as two, and a sleep deadline built from the first sorts ahead of shorter ones.
 pub let of(secs: Nat, nanos: Nat) -> Duration =
-    Duration { secs = secs, nanos = nanos };
+    Duration { secs = secs + nanos / 1000000000, nanos = nanos % 1000000000 };
 
 pub let zero: Duration =
     Duration { secs = 0, nanos = 0 };
