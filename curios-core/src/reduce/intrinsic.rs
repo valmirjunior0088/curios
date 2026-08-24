@@ -5,7 +5,7 @@ use {
         bin_measure, bin_window, list_locate, list_measure, list_window, normalize_concat,
         peel_bin, peel_first_atom, peel_first_elem, project_erased_universes,
     },
-    curios_num::{Integer, Natural},
+    curios_num::{Floating, Integer, Natural},
     curios_utilities::{Grain, PackedBin},
     std::cmp::Ordering,
 };
@@ -567,19 +567,32 @@ fn reduce_int_division(
     }))
 }
 
-/// `Flt` operations are opaque at the type level: operands reduce, the operation never folds — `FltAdd(1.0, 1.0)` is its own normal form, so `Eq(@Flt, 1.0 + 1.0, 2.0)` is deliberately unprovable. IEEE semantics inside definitional equality is a soundness hazard with no consumer: the corpus proves nothing about floats, and IEEE equality identifies values (`0.0`, `-0.0`) that `FltToLeBytes` observes apart — the exact shape the singleton guard exists to forbid. Runtime-faithful constant folding belongs downstream in `curios-ersd`'s partial evaluator, which is untrusted. The rule this instance establishes: an intrinsic needs a fold here only if a type or a proof can depend on its value.
+/// `Flt` operations fold on literal operands by calling the model, `curios_num::Floating` — binary32 computed exactly over unbounded integers and rounded once, rather than whatever the compiler's host computes. There is no decline gate: with exactly one NaN and a runtime held to the same clauses, the model leaves nothing undetermined, so `1.0 + 1.0` is `2.0`, `1.0 / 0.0` is `+inf`, `0.0 / 0.0` is the NaN, and each is true of the running program. A symbolic operand rebuilds the neutral term.
 ///
-/// One fact escapes the opacity without breaching it, and `free_monoid::bin_measure` is where: `Bin/len(Flt/to_le_bytes(x))` is `4` for every `x`. That is the arity of the operation's result rather than anything about the float — it folds no value, distinguishes no `0.0` from `-0.0`, and is what makes `Flt/of_le_bytes`'s length precondition dischargeable over the operation it inverts.
+/// **Why folding here is not the hazard the opacity this replaced was afraid of.** IEEE equality identifies `0.0` with `-0.0`, which `FltToLeBytes` tells apart — the singleton-forgery shape — but folding `FltEql(0.0, -0.0)` to the `Bool` `true` creates no convertibility: `Eq` still needs `refl`, conversion on literals is bitwise, and scrutinee refinement rewrites the scrutinee term rather than an operand. What *would* be a hazard is a fold the running program can disagree with, and the only thing IEEE and Wasm leave to the implementation is a computed NaN's sign and payload — which the one canonical NaN removes, and which `into_wasm` closes at the two operations that could read those bits.
+///
+/// The rule the opacity established survives verbatim: an intrinsic needs a fold here only if a type or a proof can depend on its value. `Flt` has moved to the other side of it, because [`/syn/Flt/Finite` and `/syn/Flt/NonNeg`](Intrinsic::signature) are bounds decided by a comparison.
+///
+/// One fact predates all of it, and `free_monoid::bin_measure` is where: `Bin/len(Flt/to_le_bytes(x))` is `4` for every `x`, symbolic `x` included. That is the arity of the operation's result rather than anything about the float, and it is what makes `Flt/of_le_bytes`'s length precondition dischargeable over the operation it inverts.
 fn reduce_flt_binary(
     reducer: &mut impl Reducer,
     left: &Term,
     right: &Term,
+    fold: impl FnOnce(Floating, Floating) -> Intrinsic,
     rebuild: impl FnOnce(Term, Term) -> Intrinsic,
 ) -> Result<Subterm, ReduceError> {
     let left = reducer.reduce_forced(left.clone())?;
     let right = reducer.reduce_forced(right.clone())?;
 
-    Ok(Subterm::Intrinsic(rebuild(left, right)))
+    let folded = match (left.as_flt(), right.as_flt()) {
+        (Some(l), Some(r)) => Some(fold(l, r)),
+        _ => None,
+    };
+
+    Ok(Subterm::Intrinsic(match folded {
+        Some(intrinsic) => intrinsic,
+        None => rebuild(left, right),
+    }))
 }
 
 /// Reduce the operand of a `Nat` unary intrinsic, then either `fold` the literal or `rebuild` the neutral term from the reduced operand.
@@ -612,15 +625,19 @@ fn reduce_int_unary(
     }))
 }
 
-/// [`reduce_flt_binary`]'s unary counterpart: opaque at the type level, the operand reduces and the operation always rebuilds.
+/// [`reduce_flt_binary`]'s unary counterpart. The fold's `None` rebuilds the neutral term, which is how the two narrowings answer an operand outside the domain their bound states: a well-typed call carries a proof that excludes it, and a term that reaches here without one stays stuck rather than being given a value the model does not define.
 fn reduce_flt_unary(
     reducer: &mut impl Reducer,
     inner: &Term,
+    fold: impl FnOnce(Floating) -> Option<Intrinsic>,
     rebuild: impl FnOnce(Term) -> Intrinsic,
 ) -> Result<Subterm, ReduceError> {
     let inner = reducer.reduce_forced(inner.clone())?;
 
-    Ok(Subterm::Intrinsic(rebuild(inner)))
+    Ok(Subterm::Intrinsic(match inner.as_flt().and_then(fold) {
+        Some(intrinsic) => intrinsic,
+        None => rebuild(inner),
+    }))
 }
 
 /// The structural outcome of comparing two `Nat`s. The whole comparison family (`eql`/`neq`/`lt`/`le`/`gt`/`ge`) reads this one result; each op differs only in how it maps the outcome to a `bool`. `Le`/`Ge` record a *non-strict* bound the operands force without pinning equality (e.g. `succ x ≥ 1`), letting `lt`/`ge` decide where `eql` still cannot; `Stuck` is undecidable, and the op's neutral term is rebuilt.
@@ -1290,54 +1307,176 @@ pub fn reduce_intrinsic(
         // 32-bit-carrier rotations and bit counts over the i32 view; a literal outside it stays neutral.
         Intrinsic::FltType => Ok(Subterm::Intrinsic(Intrinsic::FltType)),
         Intrinsic::Flt(flt) => Ok(Subterm::Intrinsic(Intrinsic::Flt(*flt))),
-        Intrinsic::FltAdd(left, right) => {
-            reduce_flt_binary(reducer, left, right, Intrinsic::FltAdd)
-        }
-        Intrinsic::FltSub(left, right) => {
-            reduce_flt_binary(reducer, left, right, Intrinsic::FltSub)
-        }
-        Intrinsic::FltMul(left, right) => {
-            reduce_flt_binary(reducer, left, right, Intrinsic::FltMul)
-        }
-        Intrinsic::FltDiv(left, right) => {
-            reduce_flt_binary(reducer, left, right, Intrinsic::FltDiv)
-        }
+        Intrinsic::FltAdd(left, right) => reduce_flt_binary(
+            reducer,
+            left,
+            right,
+            |l, r| Intrinsic::Flt(l + r),
+            Intrinsic::FltAdd,
+        ),
+        Intrinsic::FltSub(left, right) => reduce_flt_binary(
+            reducer,
+            left,
+            right,
+            |l, r| Intrinsic::Flt(l - r),
+            Intrinsic::FltSub,
+        ),
+        Intrinsic::FltMul(left, right) => reduce_flt_binary(
+            reducer,
+            left,
+            right,
+            |l, r| Intrinsic::Flt(l * r),
+            Intrinsic::FltMul,
+        ),
+        Intrinsic::FltDiv(left, right) => reduce_flt_binary(
+            reducer,
+            left,
+            right,
+            |l, r| Intrinsic::Flt(l / r),
+            Intrinsic::FltDiv,
+        ),
         // `%` on `f32` is C `fmod`: `x - trunc(x / y) * y`, sign of the dividend — the same value the `cont -> wasm` expansion computes.
-        Intrinsic::FltRem(left, right) => {
-            reduce_flt_binary(reducer, left, right, Intrinsic::FltRem)
-        }
-        Intrinsic::FltMin(left, right) => {
-            reduce_flt_binary(reducer, left, right, Intrinsic::FltMin)
-        }
-        Intrinsic::FltMax(left, right) => {
-            reduce_flt_binary(reducer, left, right, Intrinsic::FltMax)
-        }
-        Intrinsic::FltCopysign(left, right) => {
-            reduce_flt_binary(reducer, left, right, Intrinsic::FltCopysign)
-        }
-        Intrinsic::FltEql(left, right) => {
-            reduce_flt_binary(reducer, left, right, Intrinsic::FltEql)
-        }
-        Intrinsic::FltNeq(left, right) => {
-            reduce_flt_binary(reducer, left, right, Intrinsic::FltNeq)
-        }
-        Intrinsic::FltLt(left, right) => reduce_flt_binary(reducer, left, right, Intrinsic::FltLt),
-        Intrinsic::FltGt(left, right) => reduce_flt_binary(reducer, left, right, Intrinsic::FltGt),
-        Intrinsic::FltLe(left, right) => reduce_flt_binary(reducer, left, right, Intrinsic::FltLe),
-        Intrinsic::FltGe(left, right) => reduce_flt_binary(reducer, left, right, Intrinsic::FltGe),
-        Intrinsic::FltNeg(inner) => reduce_flt_unary(reducer, inner, Intrinsic::FltNeg),
-        Intrinsic::FltAbs(inner) => reduce_flt_unary(reducer, inner, Intrinsic::FltAbs),
-        Intrinsic::FltSqrt(inner) => reduce_flt_unary(reducer, inner, Intrinsic::FltSqrt),
-        Intrinsic::FltFloor(inner) => reduce_flt_unary(reducer, inner, Intrinsic::FltFloor),
-        Intrinsic::FltCeil(inner) => reduce_flt_unary(reducer, inner, Intrinsic::FltCeil),
-        Intrinsic::FltTrunc(inner) => reduce_flt_unary(reducer, inner, Intrinsic::FltTrunc),
-        Intrinsic::FltNearest(inner) => reduce_flt_unary(reducer, inner, Intrinsic::FltNearest),
-        Intrinsic::FltToLeBytes(inner) => reduce_flt_unary(reducer, inner, Intrinsic::FltToLeBytes),
+        Intrinsic::FltRem(left, right) => reduce_flt_binary(
+            reducer,
+            left,
+            right,
+            |l, r| Intrinsic::Flt(l % r),
+            Intrinsic::FltRem,
+        ),
+        Intrinsic::FltMin(left, right) => reduce_flt_binary(
+            reducer,
+            left,
+            right,
+            |l, r| Intrinsic::Flt(l.min(r)),
+            Intrinsic::FltMin,
+        ),
+        Intrinsic::FltMax(left, right) => reduce_flt_binary(
+            reducer,
+            left,
+            right,
+            |l, r| Intrinsic::Flt(l.max(r)),
+            Intrinsic::FltMax,
+        ),
+        Intrinsic::FltCopysign(left, right) => reduce_flt_binary(
+            reducer,
+            left,
+            right,
+            |l, r| Intrinsic::Flt(l.copysign(r)),
+            Intrinsic::FltCopysign,
+        ),
+        Intrinsic::FltEql(left, right) => reduce_flt_binary(
+            reducer,
+            left,
+            right,
+            |l, r| Intrinsic::Bool(l.eql(r)),
+            Intrinsic::FltEql,
+        ),
+        Intrinsic::FltNeq(left, right) => reduce_flt_binary(
+            reducer,
+            left,
+            right,
+            |l, r| Intrinsic::Bool(l.neq(r)),
+            Intrinsic::FltNeq,
+        ),
+        Intrinsic::FltLt(left, right) => reduce_flt_binary(
+            reducer,
+            left,
+            right,
+            |l, r| Intrinsic::Bool(l.lt(r)),
+            Intrinsic::FltLt,
+        ),
+        Intrinsic::FltGt(left, right) => reduce_flt_binary(
+            reducer,
+            left,
+            right,
+            |l, r| Intrinsic::Bool(l.gt(r)),
+            Intrinsic::FltGt,
+        ),
+        Intrinsic::FltLe(left, right) => reduce_flt_binary(
+            reducer,
+            left,
+            right,
+            |l, r| Intrinsic::Bool(l.le(r)),
+            Intrinsic::FltLe,
+        ),
+        Intrinsic::FltGe(left, right) => reduce_flt_binary(
+            reducer,
+            left,
+            right,
+            |l, r| Intrinsic::Bool(l.ge(r)),
+            Intrinsic::FltGe,
+        ),
+        Intrinsic::FltNeg(inner) => reduce_flt_unary(
+            reducer,
+            inner,
+            |v| Some(Intrinsic::Flt(-v)),
+            Intrinsic::FltNeg,
+        ),
+        Intrinsic::FltAbs(inner) => reduce_flt_unary(
+            reducer,
+            inner,
+            |v| Some(Intrinsic::Flt(v.abs())),
+            Intrinsic::FltAbs,
+        ),
+        Intrinsic::FltSqrt(inner) => reduce_flt_unary(
+            reducer,
+            inner,
+            |v| Some(Intrinsic::Flt(v.sqrt())),
+            Intrinsic::FltSqrt,
+        ),
+        Intrinsic::FltFloor(inner) => reduce_flt_unary(
+            reducer,
+            inner,
+            |v| Some(Intrinsic::Flt(v.floor())),
+            Intrinsic::FltFloor,
+        ),
+        Intrinsic::FltCeil(inner) => reduce_flt_unary(
+            reducer,
+            inner,
+            |v| Some(Intrinsic::Flt(v.ceil())),
+            Intrinsic::FltCeil,
+        ),
+        Intrinsic::FltTrunc(inner) => reduce_flt_unary(
+            reducer,
+            inner,
+            |v| Some(Intrinsic::Flt(v.trunc())),
+            Intrinsic::FltTrunc,
+        ),
+        Intrinsic::FltNearest(inner) => reduce_flt_unary(
+            reducer,
+            inner,
+            |v| Some(Intrinsic::Flt(v.nearest())),
+            Intrinsic::FltNearest,
+        ),
+        // The two reinterpretations, whose round-trip laws are now theorems of the model rather than a postulate: `of_le_bytes(to_le_bytes(x))` is `x` for every `x`, and `to_le_bytes(of_le_bytes(b))` is `b` for every `b` that is not a non-canonical NaN pattern — which every NaN pattern reaching `Floating` is turned into.
+        Intrinsic::FltToLeBytes(inner) => reduce_flt_unary(
+            reducer,
+            inner,
+            |v| {
+                Some(Intrinsic::Bin(
+                    Grain::X,
+                    PackedBin::from_bytes(v.to_bits().to_le_bytes().to_vec()),
+                ))
+            },
+            Intrinsic::FltToLeBytes,
+        ),
         Intrinsic::FltOfLeBytes { bin, four_bytes } => {
             let bin = reducer.reduce_forced(bin.clone())?;
-            Ok(Subterm::Intrinsic(Intrinsic::FltOfLeBytes {
-                bin,
-                four_bytes: four_bytes.clone(),
+
+            let folded = match &*bin {
+                Subterm::Intrinsic(Intrinsic::Bin(Grain::X, packed)) => packed
+                    .to_bytes()
+                    .and_then(|bytes| <[u8; 4]>::try_from(bytes).ok())
+                    .map(|bytes| Intrinsic::Flt(Floating::from_bits(u32::from_le_bytes(bytes)))),
+                _ => None,
+            };
+
+            Ok(Subterm::Intrinsic(match folded {
+                Some(intrinsic) => intrinsic,
+                None => Intrinsic::FltOfLeBytes {
+                    bin,
+                    four_bytes: four_bytes.clone(),
+                },
             }))
         }
         // The conversions preserve the number, never the bits — a bit view belongs to explicit `Bin` casts. `Nat/to_int` is total: ℕ embeds in ℤ, and both are unbounded here. The runtime's carrier-range traps stay where they always were, at the `into_wasm` boundary.
@@ -1347,10 +1486,13 @@ pub fn reduce_intrinsic(
             |v| Some(Intrinsic::Int(Integer::from(v.to_natural()?))),
             Intrinsic::NatToInt,
         ),
-        // Opaque at the type level, like every `Flt` operation: constructing a float *is* float semantics.
-        Intrinsic::NatToFlt(inner) => {
-            reduce_nat_unary(reducer, inner, |_| None, Intrinsic::NatToFlt)
-        }
+        // Into `Flt` the conversions are total and take no proof: rounding to nearest is the canonical extension of the embedding, forced by the structure the way monus is for `Nat/sub`, and a magnitude past the largest finite value answers the infinity of its sign.
+        Intrinsic::NatToFlt(inner) => reduce_nat_unary(
+            reducer,
+            inner,
+            |v| Some(Intrinsic::Flt(Floating::of_natural(&v.to_natural()?))),
+            Intrinsic::NatToFlt,
+        ),
         // `Int/to_nat` of a negative literal is a value no natural holds — reported like a zero divisor, never wrapped. The bound the operation now states does not retire that report: a bound is discharged in the context the call was written in, and an open term reduces under hypotheses that context may not have. A symbolic operand rebuilds the neutral term, carrying the proof it was handed.
         Intrinsic::IntToNat { int, non_neg } => {
             let span = int.span();
@@ -1366,23 +1508,31 @@ pub fn reduce_intrinsic(
                 })),
             }
         }
-        Intrinsic::IntToFlt(inner) => {
-            reduce_int_unary(reducer, inner, |_| None, Intrinsic::IntToFlt)
-        }
-        Intrinsic::FltToNat { flt, non_neg } => {
-            let flt = reducer.reduce_forced(flt.clone())?;
-            Ok(Subterm::Intrinsic(Intrinsic::FltToNat {
+        Intrinsic::IntToFlt(inner) => reduce_int_unary(
+            reducer,
+            inner,
+            |v| Some(Intrinsic::Flt(Floating::of_integer(&v))),
+            Intrinsic::IntToFlt,
+        ),
+        // The two narrowings truncate toward zero and answer the *exact* unbounded natural or integer: `to_nat(3.0e9)` is `3000000000`, a value no runtime carrier holds, refused downstream exactly as an overflowing `Nat` is rather than bent to fit here. Outside the domain each bound states, the model declines and the neutral is rebuilt, carrying the proof it was handed.
+        Intrinsic::FltToNat { flt, non_neg } => reduce_flt_unary(
+            reducer,
+            flt,
+            |v| Some(Intrinsic::Nat(Nat::new(v.to_natural()?))),
+            |flt| Intrinsic::FltToNat {
                 flt,
                 non_neg: non_neg.clone(),
-            }))
-        }
-        Intrinsic::FltToInt { flt, finite } => {
-            let flt = reducer.reduce_forced(flt.clone())?;
-            Ok(Subterm::Intrinsic(Intrinsic::FltToInt {
+            },
+        ),
+        Intrinsic::FltToInt { flt, finite } => reduce_flt_unary(
+            reducer,
+            flt,
+            |v| Some(Intrinsic::Int(v.to_integer()?)),
+            |flt| Intrinsic::FltToInt {
                 flt,
                 finite: finite.clone(),
-            }))
-        }
+            },
+        ),
         Intrinsic::BinType(Grain::X) => Ok(Subterm::Intrinsic(Intrinsic::BinType(Grain::X))),
         Intrinsic::Bin(Grain::X, bytes) => {
             Ok(Subterm::Intrinsic(Intrinsic::Bin(Grain::X, bytes.clone())))

@@ -15,7 +15,7 @@ use {
         UniverseScheme, Var, Visit, instantiate_universe_levels_scoped, print_term,
     },
     curios_abi::ForeignFunction,
-    curios_num::{Integer, Natural},
+    curios_num::{Floating, Integer, Natural},
     curios_print::{run_printer, run_printer_within},
     curios_utilities::{Grain, InfixOp, Mint, Plicity, Span},
     std::{
@@ -2318,6 +2318,13 @@ impl Subterm {
     pub(crate) fn as_int(&self) -> Option<Integer> {
         match self {
             Subterm::Intrinsic(Intrinsic::Int(value)) => Some(value.clone()),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn as_flt(&self) -> Option<Floating> {
+        match self {
+            Subterm::Intrinsic(Intrinsic::Flt(value)) => Some(*value),
             _ => None,
         }
     }

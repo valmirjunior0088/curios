@@ -417,16 +417,49 @@ fn reduce_int_eql_returns_true_or_false_bool() {
 }
 
 #[test]
-fn reduce_flt_mul_stays_stuck() {
+fn reduce_flt_folds_through_the_model() {
     let mut context = context();
 
-    // `Flt` is opaque at the type level: the operation is its own normal form even over literals, so no IEEE semantics enters definitional equality. Runtime-faithful folding belongs to `curios-ersd`'s partial evaluator.
-    let product: Term = Subterm::Intrinsic(Intrinsic::flt_mul(
-        Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f32(1.5))),
-        Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f32(2.0))),
-    ))
-    .into();
-    assert_eq!(reduce(&mut context, product.clone()), Ok(product));
+    let flt = |value: f32| {
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f32(
+            value,
+        ))))
+    };
+
+    // Two literals fold by calling the model, so the answer is a value rather than a normal form standing in for one.
+    assert_eq!(
+        reduce(
+            &mut context,
+            Term::intrinsic(Intrinsic::flt_mul(flt(1.5), flt(2.0)))
+        ),
+        Ok(flt(3.0)),
+    );
+
+    // The cases the host would leave to itself, and the model does not: division by zero is a value, and `0.0 / 0.0` is the one NaN, whose sign `copysign` therefore cannot read.
+    assert_eq!(
+        reduce(
+            &mut context,
+            Term::intrinsic(Intrinsic::flt_div(flt(1.0), flt(0.0)))
+        ),
+        Ok(flt(f32::INFINITY)),
+    );
+    assert_eq!(
+        reduce(
+            &mut context,
+            Term::intrinsic(Intrinsic::FltCopysign(
+                flt(1.0),
+                Term::intrinsic(Intrinsic::flt_div(flt(0.0), flt(0.0))),
+            ))
+        ),
+        Ok(flt(1.0)),
+    );
+
+    // A symbolic operand still rebuilds the neutral term.
+    let symbolic = Term::intrinsic(Intrinsic::flt_mul(
+        Term::free_var(&Free::local(1, Some("x"))),
+        flt(2.0),
+    ));
+    assert_eq!(reduce(&mut context, symbolic.clone()), Ok(symbolic));
 }
 
 #[test]
@@ -894,16 +927,20 @@ fn reduce_int_arithmetic_is_unbounded() {
 }
 
 #[test]
-fn reduce_flt_to_int_stays_stuck() {
+fn reduce_flt_to_int_answers_the_exact_integer() {
     let mut context = context();
 
-    // Opaque at the type level even on an exactly representable value: reading a float *is* float semantics, and none of it decides conversion.
+    // The narrowing answers the *exact* unbounded integer, past what any runtime carrier holds: `2^31` is out of `i32` range, and that refusal belongs to the erasure boundary rather than here, where `Int` pretends ℤ.
     let exact = Term::intrinsic(Intrinsic::FltToInt {
         flt: Term::intrinsic(Intrinsic::Flt(Floating::from_f32(2147483648.0))),
         finite: qed(),
     });
-    assert_eq!(reduce(&mut context, exact.clone()), Ok(exact));
+    assert_eq!(
+        reduce(&mut context, exact),
+        Ok(Term::intrinsic(Intrinsic::Int(Integer::from(1i64 << 31)))),
+    );
 
+    // Outside the domain `Finite` states there is no integer to answer, so the operation stays stuck rather than inventing one. A well-typed call cannot reach this — the bound excludes a NaN — and reduction does not rely on being handed only well-typed terms.
     let nan = Term::intrinsic(Intrinsic::FltToInt {
         flt: Term::intrinsic(Intrinsic::Flt(Floating::from_f32(f32::NAN))),
         finite: qed(),

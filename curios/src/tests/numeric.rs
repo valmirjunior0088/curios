@@ -476,3 +476,53 @@ fn a_flt_narrowing_bound_refuses_what_is_not_a_number() {
         b"2 0 - - - - "
     );
 }
+
+/// **The call the fold buys.** With `Flt` operations folding through the model, a closed narrowing discharges its own bound: `NonNeg(2.5)` reduces to `True` because the comparisons in it reduce, so nothing is written at the call site. That is exactly the one shape a guard could not stand in for, and it is why the two narrowings could not state their domains while the family was opaque.
+///
+/// The `refl` laws beside it are the same fold read as an equation, and each holds *here* rather than being a property of whatever machine compiled the program.
+///
+/// `0.1 + 0.2 == 0.3` is the row worth reading twice. It is **true** in binary32 and false in binary64, so the famous example is the other format's — and this fixture is where the difference is pinned rather than assumed. Its first spelling here asserted the binary64 folklore and the fold refused it, which is the mechanism working: a claim about floats is now something the compiler checks instead of something a comment asserts.
+#[test]
+fn a_closed_flt_bound_discharges_and_the_model_decides_the_laws() {
+    assert_eq!(
+        run(r#"
+        use /std/{Flt, Nat, Int, Str, Eq, Bool};
+        let two: Nat = Flt/to_nat(2.5);
+        let minus_two: Int = Flt/to_int(-2.5);
+        let sum: Eq(Flt/add(1.0, 1.0), 2.0) = Eq/refl();
+        let binary32_is_not_binary64: Eq(Flt/eql(Flt/add(0.1, 0.2), 0.3), true) = Eq/refl();
+        let tie: Eq(Flt/nearest(2.5), 2.0) = Eq/refl();
+        let subnormal_tie: Eq(Flt/div(1.0e-45, 2.0), +0.0) = Eq/refl();
+        let signed_zero: Eq(Flt/add(-0.0, +0.0), +0.0) = Eq/refl();
+        let round_trip: Eq(Flt/of_le_bytes(Flt/to_le_bytes(2.5)), 2.5) = Eq/refl();
+        let widen: Eq(Flt/to_nat(Nat/to_flt(16777215)), 16777215) = Eq/refl();
+        /std/print(Str/concat(Nat/to_str(two), Int/to_str(minus_two)))
+        "#),
+        b"2-2"
+    );
+}
+
+/// `0.0` and `-0.0` stay distinct terms — one NaN made bitwise identity *value* identity, and it did not merge the zeros. What the fold does make available is the IEEE comparison, which calls them numerically equal; conversion still refuses to identify the terms, which is what keeps `to_le_bytes` from telling apart two things the type level called the same.
+#[test]
+fn the_two_zeros_stay_distinct_terms_while_comparing_equal() {
+    assert_eq!(
+        run(r#"
+        use /std/{Flt, Str, Eq, Bool};
+        let compares_equal: Eq(Flt/eql(+0.0, -0.0), true) = Eq/refl();
+        /std/print(Str/concat(Flt/to_str(+0.0), Flt/to_str(-0.0)))
+        "#),
+        b"+0-0"
+    );
+
+    assert!(
+        typecheck(
+            r#"
+        use /std/{Flt, Eq};
+        let same: Eq(+0.0, -0.0) = Eq/refl();
+        /std/print("")
+        "#
+        )
+        .is_err(),
+        "the two zeros are not the same term"
+    );
+}
