@@ -71,6 +71,7 @@ pub fn reduce_closed<H: ClosedHost>(
     demand: Demand,
 ) -> Result<Term, ReduceError> {
     curios_profile::sample!("walk::reduce_closed", 1);
+    curios_profile::profile!("machine::reduce_closed");
     Machine {
         stack: Vec::new(),
         peak: 0,

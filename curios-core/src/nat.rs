@@ -125,6 +125,7 @@ impl Nat {
 
     /// The summands of a reduced `Nat`'s symbolic inner, flattening the neutral `add` spine, in the order they are written. `NatAdd` hoists every literal floor outward, so no summand reached here is successor-headed. The order matters: [`Nat::sum_over_floor`] folds the list back left-to-right, so reading it left-to-right is what makes read-then-rebuild the identity on a sum already in normal form — a rebuild that reordered would hand the reducer a new term every pass, and that oscillation once overflowed the stack building the prelude.
     pub(crate) fn summands(inner: &Term) -> Vec<Term> {
+        curios_profile::profile!("nat::summands");
         let mut summands = Vec::new();
         let mut pending = vec![inner.clone()];
 
@@ -233,6 +234,7 @@ impl Nat {
 
     /// `summands` as a linear combination: like factors merged by adding their coefficients, in first-appearance order, keyed up to universe instances exactly as [`Nat::cancel_common`] keys them. This is the sum normal form — `x + x` is `2 · x`, and `2 · x + 3 · x` is `5 · x` — and it is what makes a sum's like terms definitionally equal rather than merely cancellable against each other.
     pub(crate) fn linear(summands: impl IntoIterator<Item = Term>) -> Vec<(Natural, Term)> {
+        curios_profile::profile!("nat::linear");
         let mut combination: Vec<(Natural, Term)> = Vec::new();
         // **The index is a map, and the combination stays a vector.** Those are two separate obligations that a single `Vec<Term>` of keys used to serve at once, badly: finding a like factor was a scan comparing whole terms, one `Term::eq` per candidate, while first-appearance order — which the sum normal form above promises and which a caller relies on to reach a fixed point — only ever needed `combination` to be pushed to in order. Keeping them apart makes the lookup a hash and leaves the order exactly where it was.
         //
@@ -257,11 +259,13 @@ impl Nat {
 
     /// The sum of `summands` over a literal `floor`, landing in the same normal form [`Nat::decompose`], [`Nat::summands`] and [`Nat::linear`] read back: like terms merged, each spelled by [`Nat::scaled`], folded left-to-right.
     pub(crate) fn sum_over_floor(summands: Vec<Term>, floor: Natural) -> Term {
+        curios_profile::profile!("nat::sum_over_floor");
         Self::from_linear(Self::linear(summands), floor)
     }
 
     /// [`Nat::sum_over_floor`] from a combination already merged.
     pub(crate) fn from_linear(combination: Vec<(Natural, Term)>, floor: Natural) -> Term {
+        curios_profile::profile!("nat::from_linear");
         let inner = combination
             .into_iter()
             .map(|(coefficient, factor)| Self::scaled(coefficient, factor))
@@ -275,6 +279,7 @@ impl Nat {
     ///
     /// The one place a sum is needed *without* a reducer in hand. `spine`'s window fusion adds two lengths while flattening a value for comparison, and a flattening walk cannot re-enter reduction — so the form has to be constructed rather than folded into. Stating it here is what keeps it this module's invariant instead of a second opinion about it held next door: a fused window's length is then the same term `NatAdd`'s fold would have produced, which is what lets it still compare against an unfused window's.
     pub(crate) fn sum(left: &Term, right: &Term) -> Term {
+        curios_profile::profile!("nat::sum");
         let (floor_left, inner_left) = Nat::decompose(left);
         let (floor_right, inner_right) = Nat::decompose(right);
 
@@ -294,6 +299,7 @@ impl Nat {
     ///
     /// The literal floors cancel by the same law, which is why the minimum comes off both: it is the one-summand case of the same rule, and doing it here rather than at each consumer is what keeps the two spellings from drifting.
     pub(crate) fn cancel_common(left: &Term, right: &Term) -> (Term, Term) {
+        curios_profile::profile!("nat::cancel_common");
         let (floor_left, inner_left) = Nat::decompose(left);
         let (floor_right, inner_right) = Nat::decompose(right);
 

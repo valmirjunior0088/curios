@@ -70,6 +70,7 @@ impl History {
     ///
     /// The rename is by position in the local context, so a goal reached again under an identically-typed prefix maps onto the same entry. `capture` turns each binder into a bound index; the results are keys and are never opened, so the loose indices they leave behind are inert.
     fn enter(&mut self, kernel: &Kernel, type_: &Term, this: &Term, that: &Term) -> Option<Goal> {
+        curios_profile::profile!("convert::enter");
         let binders = kernel.local_names();
         let refs = binders.iter().collect::<Vec<_>>();
         let rename = |term: &Term| term.capture(&refs);

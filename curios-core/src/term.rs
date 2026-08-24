@@ -1273,6 +1273,8 @@ impl PartialEq for Term {
         if self.get_or_init_hash() != other.get_or_init_hash() {
             return false;
         }
+        // Past both O(1) verdicts: this comparison does structural work.
+        curios_profile::sample!("term_eq::structural", 1);
         // One visit for the whole comparison: the placeholder is allocated once, and each node's children are taken off it in turn.
         let mut visit = Visit::masking(|_, _| None, Term::from(Subterm::Prop));
         // Entering as a `Subterm` is what keeps the node itself unmasked — the hook fires per `Term`, and the node being compared is not one.
@@ -1313,6 +1315,8 @@ impl PartialEq for Term {
             work.extend(this_children.into_iter().zip(that_children));
         }
 
+        // The structural walk concluded equal — as opposed to the three `return false` exits above.
+        curios_profile::sample!("term_eq::structural_true", 1);
         true
     }
 }
@@ -1446,10 +1450,25 @@ impl Term {
     where
         F: FnMut(usize, &Var) -> Option<Subterm>,
     {
-        // Preserve the span across traversal; the rebuilt node is a fresh structure, so its cache starts empty.
+        self.rebuilt((**self).traverse(visit))
+    }
+
+    /// This term carrying `subterm` — **the node itself when `subterm` is what it already held.**
+    ///
+    /// The one place a traversal turns a rewritten payload back into a `Term`, so the sharing rule is stated once rather than at each reconstruction. Every child is compared by [`Term::eq`], whose first act is `Rc::ptr_eq`, so an untouched child settles in one pointer comparison and an untouched subtree of any size settles at its root: the check cascades, because unchanged leaves are what make a parent unchanged.
+    ///
+    /// What it replaces is a fresh `Rc` whose caches start empty, discarding every `hash`, `frees` and `scalars` fill the original had earned. That is affordable when a rewrite rewrites something and pure waste when it does not — and *does not* is the common case. `project_erased_universes` was measured returning an equal term on 1 491 163 of 1 491 163 calls on a nine-definition web of definitions each naming the one before it twice, spending 1.0 s rebuilding and a further 1.6 s re-hashing what it rebuilt, for 4.9 GB of allocation that answered the identity function.
+    ///
+    /// No caller can tell the difference, because three of them already receive the original node: [`Visit::universes_only`] and [`Visit::prune`] both short-circuit to `self.clone()`, and [`Mode::Sharing`] substitutes a canonical node outright. A span lives on this wrapper rather than on the node, so sharing one node across occurrences was always representable.
+    fn rebuilt(&self, subterm: Subterm) -> Self {
+        if subterm == **self {
+            return self.clone();
+        }
+
+        // Preserve the span across traversal; a genuinely rebuilt node is a fresh structure, so its cache starts empty.
         Self {
             span: self.span.clone(),
-            inner: Rc::new(Node::new((**self).traverse(visit))),
+            inner: Rc::new(Node::new(subterm)),
         }
     }
 
@@ -1557,10 +1576,7 @@ impl Term {
                         }
                         _ => unreachable!("only spine nodes create universe traversal frames"),
                     };
-                    let rebuilt = Self {
-                        span: term.span.clone(),
-                        inner: Rc::new(Node::new(subterm)),
-                    };
+                    let rebuilt = term.rebuilt(subterm);
                     visit.memo_put(Rc::as_ptr(&term.inner) as usize, rebuilt.clone());
                     rewritten.push(rebuilt);
                 }
