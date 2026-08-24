@@ -100,7 +100,7 @@ pub(super) fn parse_flt_value<'a>() -> Parser<'a, Term> {
             .and(take_while(|char| {
                 ".-+eE".contains(char) || char.is_ascii_digit()
             }))
-            .flat_map::<f32, _>(|(sign, digits)| {
+            .flat_map::<Floating, _>(|(sign, digits)| {
                 let has_dot = digits.contains('.');
 
                 let has_decimal = digits
@@ -117,23 +117,46 @@ pub(super) fn parse_flt_value<'a>() -> Parser<'a, Term> {
                     return fail("Expected float literal with dot and decimal");
                 }
 
-                match format!("{sign}{digits}").parse() {
-                    Ok(value) => pure(value),
-                    Err(_) => fail("Expected float literal"),
+                // Narrowed by the model rather than by the host's parser, so what a literal *means* is stated in this repository like every other `Flt` value. `str::parse::<f32>` is correctly rounded and gives the same bits on every input, so no program changes; what changes is that the answer no longer depends on the machine the compiler runs on.
+                match decimal_parts(digits) {
+                    Some((value, scale)) => pure(Floating::of_decimal(sign == "-", &value, scale)),
+                    None => fail("Expected float literal"),
                 }
             })
             .and_drop(parse_whitespace()),
     )
-    .flat_map::<f32, _>(|value: f32| {
-        // Rust's float parse saturates an overflowing magnitude to infinity, a value the grammar has no spelling for — refused here, past the catch, so the digits that committed this branch as a float literal cannot silently reparse as something else.
+    .flat_map::<Floating, _>(|value: Floating| {
+        // An overflowing magnitude rounds to the infinity of its sign, a value the grammar has no spelling for — refused here, past the catch, so the digits that committed this branch as a float literal cannot silently reparse as something else.
         if value.is_finite() {
             pure(value)
         } else {
             fail("Float literal overflows Flt")
         }
     })
-    .map(|value| Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f32(value))))
+    .map(|value| Subterm::Intrinsic(Intrinsic::Flt(value)))
     .map(Into::into)
+}
+
+/// Split a float literal's digits into the numeral they spell and the power of ten scaling it: `12.5e3` is `125` scaled by `2`. The grammar has already established a dot with at least one digit after it, so what is left to refuse is a malformed exponent or a stray character the character class admitted.
+///
+/// The same decomposition `/std/Flt/of_str` performs, and deliberately so — one decimal is narrowed by one routine, whether a program spells it as a literal or reads it from a string.
+fn decimal_parts(digits: &str) -> Option<(Natural, i32)> {
+    let (mantissa, exponent) = match digits.split_once(['e', 'E']) {
+        Some((mantissa, exponent)) => (mantissa, exponent.parse::<i32>().ok()?),
+        None => (digits, 0),
+    };
+
+    let (integral, fractional) = mantissa.split_once('.')?;
+    let spelled = format!("{integral}{fractional}");
+
+    if fractional.is_empty() || !spelled.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+
+    Some((
+        Natural::parse_bytes(spelled.as_bytes(), 10)?,
+        exponent.checked_sub(i32::try_from(fractional.len()).ok()?)?,
+    ))
 }
 
 pub(super) fn parse_string_chunk<'a>() -> Parser<'a, String> {

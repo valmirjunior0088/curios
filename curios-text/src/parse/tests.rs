@@ -84,15 +84,35 @@ fn parse_integer_literals_are_polymorphic_num_lits() {
 
 #[test]
 fn parse_rejects_a_float_literal_that_overflows_to_infinity() {
-    // Rust's float parse saturates overflow to infinity, which the grammar cannot spell — the literal is refused outright rather than backtracked into a different parse of the same digits.
+    // The model rounds an overflowing magnitude to the infinity of its sign, which the grammar cannot spell — the literal is refused outright rather than backtracked into a different parse of the same digits.
     assert!("1.0e999".parse::<Term>().is_err());
     assert!("-1.0e999".parse::<Term>().is_err());
-    // The largest finite magnitudes still parse.
+    // An exponent too large to be a decimal exponent at all is refused before any narrowing, rather than overflowing the count it is read into.
+    assert!("1.0e99999999999".parse::<Term>().is_err());
+    // The largest finite magnitudes still parse, and the pair below brackets the rounding threshold — `2^128 − 2^103`, which sits *above* the largest finite value. A numeral under it narrows to that value; one over it is an overflow. Both were taken from the model's own oracle table against `str::parse::<f32>`, not from arithmetic done in prose.
     assert_eq!(
         "3.4e38".parse::<Term>().unwrap(),
         Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f32(
             3.4e38
         ))))
+    );
+    assert_eq!(
+        "3.4028235e38".parse::<Term>().unwrap(),
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f32(
+            f32::MAX
+        ))))
+    );
+    assert!("3.4028236e38".parse::<Term>().is_err());
+    // A subnormal narrows on the `2^-149` grid rather than flushing to zero, and one below half that grid step rounds away.
+    assert_eq!(
+        "1.0e-45".parse::<Term>().unwrap(),
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f32(
+            1.0e-45
+        ))))
+    );
+    assert_eq!(
+        "1.0e-50".parse::<Term>().unwrap(),
+        Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f32(0.0))))
     );
 }
 

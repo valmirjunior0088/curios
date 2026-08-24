@@ -185,6 +185,11 @@ impl Floating {
         self.bits == NAN_BITS
     }
 
+    /// Whether this is a *number*: finite, so neither infinity and not the NaN. The same reading `/syn/Flt/Finite` states, and what the surface lexer refuses a literal for.
+    pub fn is_finite(self) -> bool {
+        self.bits & EXPONENT_MASK != EXPONENT_MASK
+    }
+
     fn sign_bit(negative: bool) -> u32 {
         match negative {
             true => SIGN_MASK,
