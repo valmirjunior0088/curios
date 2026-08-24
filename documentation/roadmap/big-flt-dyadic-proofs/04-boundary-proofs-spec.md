@@ -6,7 +6,7 @@ This is the final dyadic `BigFlt` layer. It depends on the exported abstract alg
 
 ## Boundary discipline
 
-All quantified theorems are stated over `Bytes` and `BigFlt`. Native `Flt` reinterpretation remains the explicit unproved trust boundary because open intrinsic applications are opaque to reduction and conversion.
+All quantified theorems are stated over `Bytes` and `BigFlt`. Native `Flt` reinterpretation is no longer opaque — it folds through the binary32 model like every other `Flt` operation — but it remains *unproved* here, since the model is trusted code rather than a Curios proof; that is the boundary these theorems stop at.
 
 Statements avoid postfix `!` in types by carrying successful decode hypotheses as equations.
 

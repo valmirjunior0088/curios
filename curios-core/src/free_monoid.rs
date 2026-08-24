@@ -446,7 +446,7 @@ fn list_segments(value: &Term) -> Option<Vec<(&Term, usize)>> {
 ///
 /// Crediting it as a segment instead would be wrong twice over: `bin_locate` would hand the node back to `Bin/get` as the operand holding the index, which re-enters this same node and never terminates, and `bin_window` would try to narrow a value it cannot read.
 ///
-/// The length is the one thing about such a node knowable without observing the float, which is what keeps `reduce::intrinsic`'s `Flt` opacity intact — no float is folded here and `0.0`/`-0.0` stay apart. Without it `Flt/of_le_bytes`'s length precondition is undischargeable over the very operation it inverts, so the pair's round trip could not be written at all.
+/// The length is the one thing about such a node knowable without observing the float, and that is what this reads. `Flt` folds through the binary32 model now, so a *literal* operand is answered by `reduce::intrinsic` before it ever reaches here; what survives is the case this was written for — a **symbolic** operand, where `Bin/len(Flt/to_le_bytes(x))` is still `4` because it is the arity of the result rather than anything about the float. Without it `Flt/of_le_bytes`'s length precondition is undischargeable over the very operation it inverts, so the pair's round trip could not be written at all.
 pub(crate) fn bin_measure(grain: Grain, value: &Term) -> Option<usize> {
     let mut total = 0usize;
     let mut pending = vec![value];

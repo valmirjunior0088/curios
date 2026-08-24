@@ -6,9 +6,9 @@ This pre-bootstrap document specifies executable conversion behavior. Formal rou
 
 ## Boundary architecture
 
-Native `Flt` is IEEE-754 binary32 stored bitwise in `curios-num/src/flt.rs`. Term identity is bitwise: NaN equals itself as a term and `+0.0` differs from `-0.0`, unlike IEEE numeric equality.
+Native `Flt` is IEEE 754-2019 binary32 with exactly one NaN, computed exactly over unbounded integers by `curios-num`'s `Floating` and rounded once. Term identity is bitwise, which with one NaN is value identity: `+0.0` differs from `-0.0`, and a NaN is one term.
 
-Open native intrinsics are opaque to reduction. `Flt/to_le_bytes` and `Flt/of_le_bytes` are therefore the explicit trust boundary, while all inspectable conversion logic operates on `Bytes`.
+Every `Flt` operation folds on literal operands by calling that model, so `Flt/to_le_bytes` and `Flt/of_le_bytes` are no longer a trust boundary and their round-trip laws are theorems rather than postulates. What is trusted is the model itself, held to the host at all 2³² unary inputs and to the engine differentially — see [The binary32 model and its two canonicalizing sites](../../soundness/per-term-rules/the-binary32-model-and-its-two-canonicalizing-sites.md). Inspectable conversion logic still operates on `Bytes`, because that is what `BigFlt` is being built out of.
 
 Do not add a conversion rule asserting `of_le_bytes(to_le_bytes(x)) ≡ x`; that would be a postulate disguised as reduction.
 
@@ -60,7 +60,7 @@ Compute the unbiased binary exponent from the magnitude bit length and exact exp
 - subnormal-range values round on the `2^-149` grid rather than retaining a fixed 24 leading bits;
 - a nonzero value that rounds to zero preserves its sign in the emitted byte pattern.
 
-Use structural bit views, exact shifts, and comparisons. Do not implement conversion through opaque native division.
+Use structural bit views, exact shifts, and comparisons rather than native division — not because the native operation is opaque, which it no longer is, but because `BigFlt` exists to be *proved* and a native fold is trusted rather than proved.
 
 The native wrapper is:
 
