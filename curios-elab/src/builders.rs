@@ -215,10 +215,11 @@ pub trait IntrinsicBuilders {
     where
         T: Into<Term>;
 
-    /// An `IntToNat` conversion node from anything term-shaped.
-    fn int_to_nat<T>(inner: T) -> Self
+    /// An `IntToNat` conversion node from anything term-shaped, with the proof that its operand is non-negative.
+    fn int_to_nat<T, P>(int: T, non_neg: P) -> Self
     where
-        T: Into<Term>;
+        T: Into<Term>,
+        P: Into<Term>;
 
     /// An `IntToFlt` conversion node from anything term-shaped.
     fn int_to_flt<T>(inner: T) -> Self
@@ -556,11 +557,15 @@ impl IntrinsicBuilders for Intrinsic {
         Self::NatToInt(inner.into())
     }
 
-    fn int_to_nat<T>(inner: T) -> Self
+    fn int_to_nat<T, P>(int: T, non_neg: P) -> Self
     where
         T: Into<Term>,
+        P: Into<Term>,
     {
-        Self::IntToNat(inner.into())
+        Self::IntToNat {
+            int: int.into(),
+            non_neg: non_neg.into(),
+        }
     }
 
     fn int_to_flt<T>(inner: T) -> Self

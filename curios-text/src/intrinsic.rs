@@ -116,7 +116,10 @@ pub enum Intrinsic {
     FltCopysign(Term, Term),
     NatToInt(Term),
     NatToFlt(Term),
-    IntToNat(Term),
+    IntToNat {
+        int: Term,
+        non_neg: Term,
+    },
     IntToFlt(Term),
     FltToNat(Term),
     FltToLeBytes(Term),

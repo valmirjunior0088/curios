@@ -126,7 +126,11 @@ pub enum Intrinsic {
     FltCopysign(Term, Term),
     NatToInt(Term),
     NatToFlt(Term),
-    IntToNat(Term),
+    /// `non_neg` proves `0 <= int`, the domain the narrowing to `Nat` has. Carried for the reason [`Intrinsic::NatDiv`]'s bound is: a bound stated only on `/sys`'s wrapper stops constraining anything the moment that wrapper unfolds, leaving the kernel a bare narrowing to admit.
+    IntToNat {
+        int: Term,
+        non_neg: Term,
+    },
     IntToFlt(Term),
     FltToNat(Term),
     FltToLeBytes(Term),
@@ -577,7 +581,6 @@ impl Intrinsic {
             Intrinsic::FltToLeBytes(t)
             | Intrinsic::NatToInt(t)
             | Intrinsic::NatToFlt(t)
-            | Intrinsic::IntToNat(t)
             | Intrinsic::IntToFlt(t)
             | Intrinsic::FltToNat(t)
             | Intrinsic::FltToInt(t)
@@ -730,7 +733,8 @@ impl Intrinsic {
             Intrinsic::FltOfLeBytes {
                 bin: a,
                 four_bytes: p,
-            } => {
+            }
+            | Intrinsic::IntToNat { int: a, non_neg: p } => {
                 visit(a);
                 visit(p);
             }
@@ -983,7 +987,10 @@ impl Intrinsic {
             },
             Intrinsic::NatToInt(inner) => Intrinsic::NatToInt(visit.visit_subterm(inner)),
             Intrinsic::NatToFlt(inner) => Intrinsic::NatToFlt(visit.visit_subterm(inner)),
-            Intrinsic::IntToNat(inner) => Intrinsic::IntToNat(visit.visit_subterm(inner)),
+            Intrinsic::IntToNat { int, non_neg } => Intrinsic::IntToNat {
+                int: visit.visit_subterm(int),
+                non_neg: visit.visit_subterm(non_neg),
+            },
             Intrinsic::IntToFlt(inner) => Intrinsic::IntToFlt(visit.visit_subterm(inner)),
             Intrinsic::FltToNat(inner) => Intrinsic::FltToNat(visit.visit_subterm(inner)),
             Intrinsic::FltToInt(inner) => Intrinsic::FltToInt(visit.visit_subterm(inner)),

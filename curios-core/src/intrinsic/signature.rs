@@ -8,7 +8,9 @@
 //!
 //! Measured 2026-08-19 rather than argued: declaring `Nat/div`'s operands `Int` while its body still builds `NatDiv` fails the build with `while elaborating /sys/Nat/div: type mismatch, inferred: Int, expected: Nat`. Reproduce by changing the first `nat()` in `prelude`'s `guarded_binary("div", …)` to `int()`.
 //!
-//! **All nine preconditions are here now, and the four that were missing were missing for a reason worth keeping.** `BinGet`, `BinSlice`, `ListGet` and `ListSlice` carried no bound field while `spine.rs`'s window fusion had to *compose* one — the fused window's `ordered : Le(s, e)` from its two halves, which is transitivity of `<=`, an implication no equality procedure supplies, so the reducer would have had to emit a proof at every fusion. A reducer that constructs proofs is the defect; deleting the degree of freedom removed the need for it. A window is a start and a *count*, so `ordered` has no proposition left to state, and the one bound that survives is carried from window₂ to the fused window unchanged: `spine`'s `push` moves a proof it was handed, and the reassociation that makes the two propositions one is `peel_nat_terms`'s to decide.
+//! **All ten preconditions are here now, and each one that arrived late was late for a reason worth keeping.** `BinGet`, `BinSlice`, `ListGet` and `ListSlice` carried no bound field while `spine.rs`'s window fusion had to *compose* one — the fused window's `ordered : Le(s, e)` from its two halves, which is transitivity of `<=`, an implication no equality procedure supplies, so the reducer would have had to emit a proof at every fusion. A reducer that constructs proofs is the defect; deleting the degree of freedom removed the need for it. A window is a start and a *count*, so `ordered` has no proposition left to state, and the one bound that survives is carried from window₂ to the fused window unchanged: `spine`'s `push` moves a proof it was handed, and the reassociation that makes the two propositions one is `peel_nat_terms`'s to decide.
+//!
+//! `IntToNat` was late for the opposite reason — nothing stood in its way. It stated `NonNeg` on `/sys`'s declaration and then dropped the proof from its body, so the bound was re-checked wherever the wrapper application survived and nowhere else: unfolding left a bare narrowing that this table typed from an `Int` alone. That is the `Nat::Succ` shape the last paragraph refuses, one operation later. It has a single producer and no fusion path, so nothing had to compose a proof and carrying it cost a field.
 //!
 //! **These rows cover what a program writes, and nothing below erasure.** The lowerings emit sequence reads of their own, where a proposition cannot be stated at all — so what holds those is that they name no extent to get wrong rather than a bound anything re-checks; see [A lowering names the elimination it performs](../../../documentation/design/toolchain/a-lowering-names-the-elimination-it-performs.md).
 //!
@@ -172,7 +174,13 @@ impl Intrinsic {
             NatToByte(..) => un(nat_type(), byte_type()),
             NatToInt(..) => un(nat_type(), int_type()),
             NatToFlt(..) => un(nat_type(), flt_type()),
-            IntToNat(..) => un(int_type(), nat_type()),
+            IntToNat { int, .. } => sig(
+                vec![
+                    Operand::At(int_type()),
+                    Operand::At(decided(syntax.proof.int_non_neg, vec![int.clone()])),
+                ],
+                nat_type(),
+            ),
             IntToFlt(..) => un(int_type(), flt_type()),
             FltToNat(..) => un(flt_type(), nat_type()),
             FltToInt(..) => un(flt_type(), int_type()),

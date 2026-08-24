@@ -494,7 +494,7 @@ impl Sort {
                 | Intrinsic::IntShr(..)
                 | Intrinsic::IntSub(..)
                 | Intrinsic::IntToFlt(..)
-                | Intrinsic::IntToNat(..)
+                | Intrinsic::IntToNat { .. }
                 | Intrinsic::IntXor(..)
                 | Intrinsic::IoBind { .. }
                 | Intrinsic::IoPure { .. }

@@ -758,7 +758,7 @@ fn print_intrinsic(intrinsic: Intrinsic, frame: Frame) -> Printer {
         }
         Intrinsic::NatToInt(i) => print_call("Nat/to_int", vec![], vec![i], frame),
         Intrinsic::NatToFlt(i) => print_call("Nat/to_flt", vec![], vec![i], frame),
-        Intrinsic::IntToNat(i) => print_call("Int/to_nat", vec![], vec![i], frame),
+        Intrinsic::IntToNat { int: i, .. } => print_call("Int/to_nat", vec![], vec![i], frame),
         Intrinsic::IntToFlt(i) => print_call("Int/to_flt", vec![], vec![i], frame),
         Intrinsic::FltToNat(i) => print_call("Flt/to_nat", vec![], vec![i], frame),
         Intrinsic::FltToInt(i) => print_call("Flt/to_int", vec![], vec![i], frame),

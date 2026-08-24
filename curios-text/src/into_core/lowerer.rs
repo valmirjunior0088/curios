@@ -1228,7 +1228,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             }
             Intrinsic::ProcExit(code) => curios_core::Intrinsic::ProcExit(self.term(code)?),
             Intrinsic::NatToFlt(inner) => curios_core::Intrinsic::nat_to_flt(self.term(inner)?),
-            Intrinsic::IntToNat(inner) => curios_core::Intrinsic::int_to_nat(self.term(inner)?),
+            Intrinsic::IntToNat { int, non_neg } => {
+                curios_core::Intrinsic::int_to_nat(self.term(int)?, self.term(non_neg)?)
+            }
             Intrinsic::IntToFlt(inner) => curios_core::Intrinsic::int_to_flt(self.term(inner)?),
             Intrinsic::FltToNat(inner) => curios_core::Intrinsic::flt_to_nat(self.term(inner)?),
             Intrinsic::FltToInt(inner) => curios_core::Intrinsic::flt_to_int(self.term(inner)?),

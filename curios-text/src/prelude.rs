@@ -478,18 +478,12 @@ fn int_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
         binary("xor", int(), int(), Intrinsic::IntXor),
         binary("shl", int(), int(), Intrinsic::IntShl),
         binary("shr", int(), int(), Intrinsic::IntShr),
-        pub_fn_marked(
+        guarded_unary(
             "to_nat",
-            vec![
-                (Plicity::Explicit, "a", int()),
-                (
-                    Plicity::Implicit,
-                    "ok",
-                    applied(registered(syntax.proof.int_non_neg), vec![name("a")]),
-                ),
-            ],
+            int(),
             nat(),
-            intrinsic(Intrinsic::IntToNat(name("a"))),
+            applied(registered(syntax.proof.int_non_neg), vec![name("a")]),
+            |int, non_neg| Intrinsic::IntToNat { int, non_neg },
         ),
         unary("to_flt", int(), flt(), Intrinsic::IntToFlt),
     ]

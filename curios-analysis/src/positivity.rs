@@ -716,7 +716,7 @@ impl<E: Env> Walk<'_, E> {
             | Intrinsic::FltCopysign(..)
             | Intrinsic::NatToInt(..)
             | Intrinsic::NatToFlt(..)
-            | Intrinsic::IntToNat(..)
+            | Intrinsic::IntToNat { .. }
             | Intrinsic::IntToFlt(..)
             | Intrinsic::FltToNat(..)
             | Intrinsic::FltToLeBytes(..)

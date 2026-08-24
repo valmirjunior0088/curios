@@ -1351,16 +1351,19 @@ pub fn reduce_intrinsic(
         Intrinsic::NatToFlt(inner) => {
             reduce_nat_unary(reducer, inner, |_| None, Intrinsic::NatToFlt)
         }
-        // `Int/to_nat` of a negative literal is a value no natural holds — reported like a zero divisor, never wrapped. A symbolic operand rebuilds the neutral term.
-        Intrinsic::IntToNat(inner) => {
-            let span = inner.span();
-            let inner = reducer.reduce_forced(inner.clone())?;
-            match inner.as_int() {
+        // `Int/to_nat` of a negative literal is a value no natural holds — reported like a zero divisor, never wrapped. The bound the operation now states does not retire that report: a bound is discharged in the context the call was written in, and an open term reduces under hypotheses that context may not have. A symbolic operand rebuilds the neutral term, carrying the proof it was handed.
+        Intrinsic::IntToNat { int, non_neg } => {
+            let span = int.span();
+            let int = reducer.reduce_forced(int.clone())?;
+            match int.as_int() {
                 Some(value) => match value.to_natural() {
                     Some(number) => Ok(Subterm::Intrinsic(Intrinsic::Nat(Nat::new(number)))),
                     None => Err(ReduceError::IntToNatNegative { value, span }),
                 },
-                None => Ok(Subterm::Intrinsic(Intrinsic::IntToNat(inner))),
+                None => Ok(Subterm::Intrinsic(Intrinsic::IntToNat {
+                    int,
+                    non_neg: non_neg.clone(),
+                })),
             }
         }
         Intrinsic::IntToFlt(inner) => {
@@ -2602,7 +2605,14 @@ mod tests {
         }
         for i in [0i64, 1, 0x3FFF_FFFF, 0x7FFF_FFFF, 0x1_0000_0000] {
             let int = Term::intrinsic(Intrinsic::Int(Integer::from(i)));
-            let reduced = reduce_intrinsic(&mut Inert, &Intrinsic::IntToNat(int)).expect("reduces");
+            let reduced = reduce_intrinsic(
+                &mut Inert,
+                &Intrinsic::IntToNat {
+                    int,
+                    non_neg: qed(),
+                },
+            )
+            .expect("reduces");
             assert_eq!(
                 reduced,
                 Subterm::Intrinsic(Intrinsic::Nat(Nat::new(i as u64))),
@@ -2611,7 +2621,13 @@ mod tests {
         }
         for i in [-1i64, -0x4000_0000, i32::MIN as i64, i64::MIN] {
             let int = Term::intrinsic(Intrinsic::Int(Integer::from(i)));
-            let reduced = reduce_intrinsic(&mut Inert, &Intrinsic::IntToNat(int));
+            let reduced = reduce_intrinsic(
+                &mut Inert,
+                &Intrinsic::IntToNat {
+                    int,
+                    non_neg: qed(),
+                },
+            );
             assert!(
                 matches!(reduced, Err(ReduceError::IntToNatNegative { .. })),
                 "Int/to_nat failed to report the negative {i}",

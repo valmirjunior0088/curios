@@ -628,7 +628,9 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
         Intrinsic::ByteGe(left, right) => {
             print_intrinsic_call("Byte/ge", vec![], vec![left, right])
         }
-        Intrinsic::IntToNat(operand) => print_intrinsic_call("Int/to_nat", vec![], vec![operand]),
+        Intrinsic::IntToNat { int: operand, .. } => {
+            print_intrinsic_call("Int/to_nat", vec![], vec![operand])
+        }
         Intrinsic::IntToFlt(operand) => print_intrinsic_call("Int/to_flt", vec![], vec![operand]),
         Intrinsic::FltToNat(operand) => print_intrinsic_call("Flt/to_nat", vec![], vec![operand]),
         Intrinsic::FltToInt(operand) => print_intrinsic_call("Flt/to_int", vec![], vec![operand]),
