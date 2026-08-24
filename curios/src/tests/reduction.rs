@@ -918,3 +918,87 @@ fn a_growing_accumulation_is_bounded_by_what_it_has_already_built() {
         "expected a spent-budget refusal, got: {refusal}"
     );
 }
+
+/// A `Bits` fold over `width` bits returning a pair, and its single-value twin. `let (a, b) = go(…)` is projection sugar, so the pair form demands the *same* recursive call once per component; the twin demands it once. Everything else about the two is identical, so the gap between their curves is the cost of that second demand and nothing else.
+fn paired_fold(width: usize, paired: bool) -> String {
+    let ones = vec!["1"; 32].join(", ");
+    match paired {
+        true => format!(
+            r#"
+            use /std/{{Nat, Bool, Bits, BigNat}};
+            rec go(x: Bits, c: Bool) -> {{Bits, Bool}} =
+                match x
+                | b[] => (b[], c)
+                | b[h, ..t] =>
+                    let (rest, out) = go(t, BigNat/xor3(h, c, c));
+                    (b[BigNat/xor3(h, c, c), ..rest], out)
+                end;
+            let (bits, _) = go(Bits/slice(b[{ones}], 0, {width}), false);
+            let n : Nat = Nat/div(100, Bits/len(bits) + 3);
+            /std/print("")
+            "#
+        ),
+        false => format!(
+            r#"
+            use /std/{{Nat, Bool, Bits, BigNat}};
+            rec go(x: Bits, c: Bool) -> Bits =
+                match x
+                | b[] => b[]
+                | b[h, ..t] => b[BigNat/xor3(h, c, c), ..go(t, BigNat/xor3(h, c, c))]
+                end;
+            let n : Nat = Nat/div(100, Bits/len(go(Bits/slice(b[{ones}], 0, {width}), false)) + 3);
+            /std/print("")
+            "#
+        ),
+    }
+}
+
+/// **A recursive call whose result is read at two positions is evaluated once, not twice.**
+///
+/// The machine records a forced application's value under the application itself, and [`Frame::Head`](curios_core) used to drop that key on the one path whose head is a recursive member — on the premise, written in its eval arm, that *a member selection's calls never repeat within a run because the fold argument strictly shrinks*. That premise is false for every tuple-returning recursion: `let (a, b) = go(…)` lowers to two projections of one call, so each level demanded the same call twice and the fold cost `2^n`.
+///
+/// What this asserts is the *shape* rather than a figure: the pair form's increment per four bits must not grow. The single-value twin is the control — it makes one demand per level and was never affected, so a regression that slowed both equally would not read as this defect.
+///
+/// **Run against the defect and observed to fail**, which is what makes it a detector rather than a description: with the record removed the pair form reads `[12146, 39978, 481810, 7547642]`, increments `[27832, 441832, 7065832]`, and the assertion names them. Reproduce by deleting the `Frame::Memo` push at the head frame's entry in `curios-core`'s machine.
+///
+/// The figures, `cargo test --package curios -- a_recursive_call_read_twice`, 2026-08-24, aarch64-apple-darwin:
+///
+/// ```text
+///   width   single    paired (before)    paired (after)
+///       4     8622             11058              9789
+///       8     8622             38954             10469
+///      12     8622            480850             11149
+///      16     8622           7546746             11829
+/// ```
+#[test]
+fn a_recursive_call_read_twice_is_evaluated_once() {
+    let units = |width: usize, paired: bool| {
+        let source = paired_fold(width, paired);
+        let entrypoint = source.parse::<Entrypoint>().expect("the program parses");
+        let (_, _, consumption, _) =
+            typecheck_with_prelude_measured(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
+                .expect("the fold elaborates within the default budget");
+
+        consumption.units()
+    };
+
+    let paired = [4usize, 8, 12, 16].map(|width| units(width, true));
+    let single = [4usize, 8, 12, 16].map(|width| units(width, false));
+
+    // The control is flat, so the pair form's growth is about the second demand rather than about the fold.
+    assert_eq!(
+        single[0], single[3],
+        "the single-value twin should not grow with width: {single:?}"
+    );
+
+    // Linear growth: each further four bits costs about what the previous four did. Doubling per bit makes the later increments explode, which is exactly what this refuses.
+    let increments = [
+        paired[1] - paired[0],
+        paired[2] - paired[1],
+        paired[3] - paired[2],
+    ];
+    assert!(
+        increments[2] <= increments[0] * 2,
+        "the pair form's cost is not linear in width — a recursive call read twice is being evaluated twice: {paired:?} (increments {increments:?})"
+    );
+}

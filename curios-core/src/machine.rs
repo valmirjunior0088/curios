@@ -523,6 +523,11 @@ impl Machine {
                 demand,
                 memo_key,
             } => {
+                // Recorded once here, for every shape the head turns out to have, rather than by each arm below deciding for itself. The eval arm used to defer the decision on two grounds and only one of them survives: a folded spelling must indeed never be served to a demand that would unfold it, which [`Frame::Memo`] itself enforces by refusing to record a rec-shaped value — but *a member selection's calls never repeat within a run* is false. `let (a, b) = go(…)` is projection sugar, so one call is demanded once per component, and with the recursive arm alone left unrecorded each level doubled: a `Bits` fold returning a pair cost 7,546,746 units at sixteen bits against a single-value twin's 8,622, and costs 11,829 once this records.
+                if let Some(key) = memo_key {
+                    self.push(host, Frame::Memo { key })?;
+                }
+
                 if value.as_rec_proj().is_some() {
                     return match demand {
                         // A folded recursive application is the canonical weak-head normal form.
@@ -556,21 +561,19 @@ impl Machine {
                 match Term::unwrap_or_clone(value) {
                     // `expose_rec_tail`: a `rec` block at an application head strips to its tail even under plain reduction.
                     Subterm::Rec(rec) => {
+                        // The memo frame is already on the stack from this frame's entry, so the re-pushed head carries no key of its own — one record per application, whatever chain of heads it strips through.
                         self.push(
                             host,
                             Frame::Head {
                                 params,
                                 plicities,
                                 demand,
-                                memo_key,
+                                memo_key: None,
                             },
                         )?;
                         Ok(Step::Eval(unfold_rec(rec), Demand::Whnf))
                     }
                     Subterm::Func(Func { telescope, .. }) if telescope.len() == params.len() => {
-                        if let Some(key) = memo_key {
-                            self.push(host, Frame::Memo { key })?;
-                        }
                         self.beta(host, telescope, params, demand)
                     }
                     head => Ok(Step::Value(Term::from(Subterm::Apply(Apply {
