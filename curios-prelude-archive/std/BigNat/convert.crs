@@ -38,10 +38,6 @@ satisfy Cmp(BigNat) {
     ge = cmp/ge,
 }
 
-satisfy Add(BigNat) {
-    add = add/add,
-}
-
 satisfy Sub(BigNat) {
     sub = sub/sub,
 }

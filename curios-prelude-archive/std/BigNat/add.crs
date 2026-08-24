@@ -1,9 +1,9 @@
 use /std/{Nat, Bool, Bits, Str, Order, Eq, False, True, Eql, Cmp, Add, Sub, Mul, Show, Ord};
 use /std/Bool/{false_neq_true};
 use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
-use /std/BigNat/{BigNat, cong_bits, cong_cons2, cong_is_trimmed, cong_of_bits, cons_inj_head,
-    cons_inj_tail, eq, is_trimmed, is_trimmed_cons, is_trimmed_of_canonical, maj3, nonempty,
-    of_bits, refl_at, tail_is_trimmed, trim_of_trimmed, xor3, mod succ};
+use /std/BigNat/{BigNat, cong_bits, cong_cons2, cong_is_trimmed, cons_inj_head, cons_inj_tail,
+    eq, is_trimmed, is_trimmed_cons, is_trimmed_of_canonical, maj3, nonempty, of_trimmed_bits,
+    refl_at, tail_is_trimmed, xor3, mod succ};
 
 pub rec raw(x: Bits, y: Bits, carry: Bool) -> Bits =
     match x
@@ -19,8 +19,140 @@ pub rec raw(x: Bits, y: Bits, carry: Bool) -> Bits =
         end
     end;
 
+rec raw_zero_r(x: Bits) -> Eq(raw(x, b[], false), x) =
+    match x: (a) => Eq(raw(a, b[], false), a)
+    | b[] => Eq/refl()
+    | b[h, ..t] =>
+        match h
+        | true => cong_cons2(refl_at(true), raw_zero_r(t))
+        | false => cong_cons2(refl_at(false), raw_zero_r(t))
+        end
+    end;
+
+pub rec raw_zero_l(y: Bits) -> Eq(raw(b[], y, false), y) =
+    match y: (b) => Eq(raw(b[], b, false), b)
+    | b[] => Eq/refl()
+    | b[h, ..t] =>
+        match h
+        | true => cong_cons2(refl_at(true), raw_zero_l(t))
+        | false => cong_cons2(refl_at(false), raw_zero_l(t))
+        end
+    end;
+
+rec raw_succ_r(x: Bits) -> Eq(raw(x, b[], true), succ/raw(x)) =
+    match x: (a) => Eq(raw(a, b[], true), succ/raw(a))
+    | b[] => Eq/refl()
+    | b[h, ..t] =>
+        match h
+        | true => cong_cons2(refl_at(false), raw_succ_r(t))
+        | false => cong_cons2(refl_at(true), raw_zero_r(t))
+        end
+    end;
+
+rec raw_succ_l(y: Bits) -> Eq(raw(b[], y, true), succ/raw(y)) =
+    match y: (b) => Eq(raw(b[], b, true), succ/raw(b))
+    | b[] => Eq/refl()
+    | b[h, ..t] =>
+        match h
+        | true => cong_cons2(refl_at(false), raw_succ_l(t))
+        | false => cong_cons2(refl_at(true), raw_zero_l(t))
+        end
+    end;
+
+let raw_nonempty_l(
+    xh: Bool,
+    xt: Bits,
+    y: Bits,
+    c: Bool,
+) -> Eq(nonempty(raw(b[xh, ..xt], y, c)), true) =
+    match y: (b) => Eq(nonempty(raw(b[xh, ..xt], b, c)), true)
+    | b[] => Eq/refl()
+    | b[_, .._] => Eq/refl()
+    end;
+
+let raw_nonempty_r(
+    x: Bits,
+    yh: Bool,
+    yt: Bits,
+    c: Bool,
+) -> Eq(nonempty(raw(x, b[yh, ..yt], c)), true) =
+    match x: (a) => Eq(nonempty(raw(a, b[yh, ..yt], c)), true)
+    | b[] => Eq/refl()
+    | b[_, .._] => Eq/refl()
+    end;
+
+pub rec raw_trimmed(
+    x: Bits,
+    y: Bits,
+    c: Bool,
+    px: Eq(is_trimmed(x), true),
+    py: Eq(is_trimmed(y), true),
+) -> Eq(is_trimmed(raw(x, y, c)), true) =
+    match x: (a) => Eq(is_trimmed(raw(a, y, c)), true)
+    | b[] =>
+        match c
+        | true => Eq/trans(cong_is_trimmed(raw_succ_l(y)), succ/raw_trimmed(y, py))
+        | false => Eq/trans(cong_is_trimmed(raw_zero_l(y)), py)
+        end
+    | b[xh, ..xt] =>
+        match y: (b) => Eq(is_trimmed(raw(b[xh, ..xt], b, c)), true)
+        | b[] =>
+            match c
+            | true =>
+                Eq/trans(
+                    cong_is_trimmed(raw_succ_r(b[xh, ..xt])),
+                    succ/raw_trimmed(b[xh, ..xt], px))
+            | false => Eq/trans(cong_is_trimmed(raw_zero_r(b[xh, ..xt])), px)
+            end
+        | b[yh, ..yt] =>
+            match xt: (u) => Eq(is_trimmed(raw(b[xh, ..u], b[yh, ..yt], c)), true)
+            | b[] =>
+                match yt: (v) => Eq(is_trimmed(raw(b[xh], b[yh, ..v], c)), true)
+                | b[] =>
+                    match xh
+                    | true =>
+                        match yh
+                        | true => Eq/refl()
+                        | false => match false_neq_true(py) end
+                        end
+                    | false => match false_neq_true(px) end
+                    end
+                | b[a2, ..b2] =>
+                    is_trimmed_cons(
+                        xor3(xh, yh, c),
+                        raw(b[], b[a2, ..b2], maj3(xh, yh, c)),
+                        raw_trimmed(b[], b[a2, ..b2], maj3(xh, yh, c), refl_at(true), py),
+                        raw_nonempty_r(b[], a2, b2, maj3(xh, yh, c)))
+                end
+            | b[a2, ..b2] =>
+                match yt: (v) => Eq(is_trimmed(raw(b[xh, a2, ..b2], b[yh, ..v], c)), true)
+                | b[] =>
+                    is_trimmed_cons(
+                        xor3(xh, yh, c),
+                        raw(b[a2, ..b2], b[], maj3(xh, yh, c)),
+                        raw_trimmed(b[a2, ..b2], b[], maj3(xh, yh, c), px, refl_at(true)),
+                        raw_nonempty_l(a2, b2, b[], maj3(xh, yh, c)))
+                | b[d2, ..e2] =>
+                    is_trimmed_cons(
+                        xor3(xh, yh, c),
+                        raw(b[a2, ..b2], b[d2, ..e2], maj3(xh, yh, c)),
+                        raw_trimmed(b[a2, ..b2], b[d2, ..e2], maj3(xh, yh, c), px, py),
+                        raw_nonempty_l(a2, b2, b[d2, ..e2], maj3(xh, yh, c)))
+                end
+            end
+        end
+    end;
+
+-- `raw_trimmed` proves the ripple of two canonical words is already canonical, so addition owes no boundary trim: the `of_trimmed_bits` door, as `succ` takes, saves the second walk and spine `of_bits` would spend re-trimming a word this certificate already covers.
 pub let add(a: BigNat, b: BigNat) -> BigNat =
-    of_bits(raw(a.bits, b.bits, false));
+    of_trimmed_bits(
+        raw(a.bits, b.bits, false),
+        raw_trimmed(
+            a.bits,
+            b.bits,
+            false,
+            is_trimmed_of_canonical(a.bits, a.canonical),
+            is_trimmed_of_canonical(b.bits, b.canonical)));
 
 -- Facts about the full-adder bit functions above. They exist only to justify this ladder's commutativity and cancellation, so they live with the adder rather than with `xor3`/`maj3` themselves, which `sub` and `mul` share.
 let xor3_comm(a: Bool, b: Bool, c: Bool) -> Eq(xor3(a, b, c), xor3(b, a, c)) =
@@ -174,46 +306,6 @@ pub let cong_raw_r(
     c: Bool,
 ) -> Eq(raw(x, s, c), raw(x, t, c)) =
     Eq/cong((w) => raw(x, w, c), p);
-
-rec raw_zero_r(x: Bits) -> Eq(raw(x, b[], false), x) =
-    match x: (a) => Eq(raw(a, b[], false), a)
-    | b[] => Eq/refl()
-    | b[h, ..t] =>
-        match h
-        | true => cong_cons2(refl_at(true), raw_zero_r(t))
-        | false => cong_cons2(refl_at(false), raw_zero_r(t))
-        end
-    end;
-
-pub rec raw_zero_l(y: Bits) -> Eq(raw(b[], y, false), y) =
-    match y: (b) => Eq(raw(b[], b, false), b)
-    | b[] => Eq/refl()
-    | b[h, ..t] =>
-        match h
-        | true => cong_cons2(refl_at(true), raw_zero_l(t))
-        | false => cong_cons2(refl_at(false), raw_zero_l(t))
-        end
-    end;
-
-rec raw_succ_r(x: Bits) -> Eq(raw(x, b[], true), succ/raw(x)) =
-    match x: (a) => Eq(raw(a, b[], true), succ/raw(a))
-    | b[] => Eq/refl()
-    | b[h, ..t] =>
-        match h
-        | true => cong_cons2(refl_at(false), raw_succ_r(t))
-        | false => cong_cons2(refl_at(true), raw_zero_r(t))
-        end
-    end;
-
-rec raw_succ_l(y: Bits) -> Eq(raw(b[], y, true), succ/raw(y)) =
-    match y: (b) => Eq(raw(b[], b, true), succ/raw(b))
-    | b[] => Eq/refl()
-    | b[h, ..t] =>
-        match h
-        | true => cong_cons2(refl_at(false), raw_succ_l(t))
-        | false => cong_cons2(refl_at(true), raw_zero_l(t))
-        end
-    end;
 
 pub rec raw_carry_spec(x: Bits, y: Bits) -> Eq(raw(x, y, true), succ/raw(raw(x, y, false))) =
     match x: (a) => Eq(raw(a, y, true), succ/raw(raw(a, y, false)))
@@ -1029,121 +1121,11 @@ pub rec raw_one_r(x: Bits) -> Eq(raw(x, b[1], false), succ/raw(x)) =
         end
     end;
 
-let raw_nonempty_l(
-    xh: Bool,
-    xt: Bits,
-    y: Bits,
-    c: Bool,
-) -> Eq(nonempty(raw(b[xh, ..xt], y, c)), true) =
-    match y: (b) => Eq(nonempty(raw(b[xh, ..xt], b, c)), true)
-    | b[] => Eq/refl()
-    | b[_, .._] => Eq/refl()
-    end;
-
-let raw_nonempty_r(
-    x: Bits,
-    yh: Bool,
-    yt: Bits,
-    c: Bool,
-) -> Eq(nonempty(raw(x, b[yh, ..yt], c)), true) =
-    match x: (a) => Eq(nonempty(raw(a, b[yh, ..yt], c)), true)
-    | b[] => Eq/refl()
-    | b[_, .._] => Eq/refl()
-    end;
-
-pub rec raw_trimmed(
-    x: Bits,
-    y: Bits,
-    c: Bool,
-    px: Eq(is_trimmed(x), true),
-    py: Eq(is_trimmed(y), true),
-) -> Eq(is_trimmed(raw(x, y, c)), true) =
-    match x: (a) => Eq(is_trimmed(raw(a, y, c)), true)
-    | b[] =>
-        match c
-        | true => Eq/trans(cong_is_trimmed(raw_succ_l(y)), succ/raw_trimmed(y, py))
-        | false => Eq/trans(cong_is_trimmed(raw_zero_l(y)), py)
-        end
-    | b[xh, ..xt] =>
-        match y: (b) => Eq(is_trimmed(raw(b[xh, ..xt], b, c)), true)
-        | b[] =>
-            match c
-            | true =>
-                Eq/trans(
-                    cong_is_trimmed(raw_succ_r(b[xh, ..xt])),
-                    succ/raw_trimmed(b[xh, ..xt], px))
-            | false => Eq/trans(cong_is_trimmed(raw_zero_r(b[xh, ..xt])), px)
-            end
-        | b[yh, ..yt] =>
-            match xt: (u) => Eq(is_trimmed(raw(b[xh, ..u], b[yh, ..yt], c)), true)
-            | b[] =>
-                match yt: (v) => Eq(is_trimmed(raw(b[xh], b[yh, ..v], c)), true)
-                | b[] =>
-                    match xh
-                    | true =>
-                        match yh
-                        | true => Eq/refl()
-                        | false => match false_neq_true(py) end
-                        end
-                    | false => match false_neq_true(px) end
-                    end
-                | b[a2, ..b2] =>
-                    is_trimmed_cons(
-                        xor3(xh, yh, c),
-                        raw(b[], b[a2, ..b2], maj3(xh, yh, c)),
-                        raw_trimmed(b[], b[a2, ..b2], maj3(xh, yh, c), refl_at(true), py),
-                        raw_nonempty_r(b[], a2, b2, maj3(xh, yh, c)))
-                end
-            | b[a2, ..b2] =>
-                match yt: (v) => Eq(is_trimmed(raw(b[xh, a2, ..b2], b[yh, ..v], c)), true)
-                | b[] =>
-                    is_trimmed_cons(
-                        xor3(xh, yh, c),
-                        raw(b[a2, ..b2], b[], maj3(xh, yh, c)),
-                        raw_trimmed(b[a2, ..b2], b[], maj3(xh, yh, c), px, refl_at(true)),
-                        raw_nonempty_l(a2, b2, b[], maj3(xh, yh, c)))
-                | b[d2, ..e2] =>
-                    is_trimmed_cons(
-                        xor3(xh, yh, c),
-                        raw(b[a2, ..b2], b[d2, ..e2], maj3(xh, yh, c)),
-                        raw_trimmed(b[a2, ..b2], b[d2, ..e2], maj3(xh, yh, c), px, py),
-                        raw_nonempty_l(a2, b2, b[d2, ..e2], maj3(xh, yh, c)))
-                end
-            end
-        end
-    end;
-
 pub let comm(a: BigNat, b: BigNat) -> Eq(add(a, b), add(b, a)) =
-    cong_of_bits(raw_comm(a.bits, b.bits, false));
+    eq(add(a, b), add(b, a), raw_comm(a.bits, b.bits, false));
 
 pub let assoc(a: BigNat, b: BigNat, c: BigNat) -> Eq(add(add(a, b), c), add(a, add(b, c))) =
-    cong_of_bits(
-        Eq/trans(
-            cong_raw_l(
-                trim_of_trimmed(
-                    raw(a.bits, b.bits, false),
-                    raw_trimmed(
-                        a.bits,
-                        b.bits,
-                        false,
-                        is_trimmed_of_canonical(a.bits, a.canonical),
-                        is_trimmed_of_canonical(b.bits, b.canonical))),
-                c.bits,
-                false),
-            Eq/trans(
-                raw_assoc(a.bits, b.bits, c.bits, false, false),
-                cong_raw_r(
-                    a.bits,
-                    Eq/sym(
-                        trim_of_trimmed(
-                            raw(b.bits, c.bits, false),
-                            raw_trimmed(
-                                b.bits,
-                                c.bits,
-                                false,
-                                is_trimmed_of_canonical(b.bits, b.canonical),
-                                is_trimmed_of_canonical(c.bits, c.canonical)))),
-                    false))));
+    eq(add(add(a, b), c), add(a, add(b, c)), raw_assoc(a.bits, b.bits, c.bits, false, false));
 
 pub rec raw_cancel_l(
     x: Bits,
@@ -1248,26 +1230,12 @@ pub let cancel_l(a: BigNat, b: BigNat, c: BigNat, p: Eq(add(a, b), add(a, c))) -
             false,
             is_trimmed_of_canonical(b.bits, b.canonical),
             is_trimmed_of_canonical(c.bits, c.canonical),
-            Eq/trans(
-                Eq/sym(
-                    trim_of_trimmed(
-                        raw(a.bits, b.bits, false),
-                        raw_trimmed(
-                            a.bits,
-                            b.bits,
-                            false,
-                            is_trimmed_of_canonical(a.bits, a.canonical),
-                            is_trimmed_of_canonical(b.bits, b.canonical)))),
-                Eq/trans(
-                    cong_bits(p),
-                    trim_of_trimmed(
-                        raw(a.bits, c.bits, false),
-                        raw_trimmed(
-                            a.bits,
-                            c.bits,
-                            false,
-                            is_trimmed_of_canonical(a.bits, a.canonical),
-                            is_trimmed_of_canonical(c.bits, c.canonical)))))));
+            cong_bits(p)));
 
 pub let cancel_r(a: BigNat, b: BigNat, c: BigNat, p: Eq(add(b, a), add(c, a))) -> Eq(b, c) =
     cancel_l(a, b, c, Eq/trans(comm(a, b), Eq/trans(p, comm(c, a))));
+
+-- Registered beside the operation it witnesses rather than in `convert` with its siblings, so the facade is complete in one file: the operation, its laws, and its `+` spelling.
+satisfy Add(BigNat) {
+    add = add,
+}

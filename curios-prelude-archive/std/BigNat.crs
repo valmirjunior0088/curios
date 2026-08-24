@@ -1,4 +1,4 @@
--- Arbitrary-precision naturals over the packed `Bits` substrate. A `BigNat` is a transparent record pairing an LSB-first `Bits` word with a `Canonical` proof that the word is trimmed (no redundant high zero bit), so equality is decided at the `.bits` level and the certificate erases away. `View` (zero / succ low tail) is the structural accessor consumers and single-operand recursions go through; two-operand ops match `.bits` directly, build a raw untrimmed result, and route it through `of_bits` — a single `trim` — at the public boundary.
+-- Arbitrary-precision naturals over the packed `Bits` substrate. A `BigNat` is a transparent record pairing an LSB-first `Bits` word with a `Canonical` proof that the word is trimmed (no redundant high zero bit), so equality is decided at the `.bits` level and the certificate erases away. `View` (zero / succ low tail) is the structural accessor consumers and single-operand recursions go through; two-operand ops match `.bits` directly and build a raw result. One whose ripple can untrim (`mul`, `sub`) routes it through `of_bits` — a single `trim` — at the public boundary; `add`'s cannot, so it carries the `raw_trimmed` certificate through `of_trimmed_bits` and pays no trim at all.
 use /std/{Nat, Bool, Bits, Str, Order, Eq, False, True, Eql, Cmp, Add, Sub, Mul, Show, Ord};
 use /std/Bool/{false_neq_true};
 use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
@@ -166,9 +166,6 @@ pub let cong_cons2(
 pub let cong_combine(h: Bool, @s: Bits, @t: Bits, p: Eq(s, t)) -> Eq(combine(h, s), combine(h, t)) =
     Eq/cong((w) => combine(h, w), p);
 
-let cong_of_bits(@s: Bits, @t: Bits, p: Eq(s, t)) -> Eq(of_bits(s), of_bits(t)) =
-    Eq/cong(of_bits, p);
-
 let cong_bits(@s: BigNat, @t: BigNat, p: Eq(s, t)) -> Eq(s.bits, t.bits) =
     Eq/cong((n: BigNat) => n.bits, p);
 
@@ -227,7 +224,7 @@ pub rec trim_of_trimmed(x: Bits, p: Eq(is_trimmed(x), true)) -> Eq(trim(x), x) =
         end
     end;
 
--- Each operation family is a facade: the module's namesake binding is the operation, and the laws about it nest underneath — `BigNat/add` adds, `BigNat/add/assoc` is its associativity, `BigNat/add/raw` is the untrimmed `Bits` ladder it is built from.
+-- Each operation family is a facade: the module's namesake binding is the operation, and the laws about it nest underneath — `BigNat/add` adds, `BigNat/add/assoc` is its associativity, `BigNat/add/raw` is the raw `Bits` ladder it is built from.
 pub mod add;
 pub use add/{let add};
 
