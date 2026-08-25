@@ -492,19 +492,8 @@ impl Floating {
         self.compare(other) == Some(Ordering::Less)
     }
 
-    pub fn gt(self, other: Self) -> bool {
-        self.compare(other) == Some(Ordering::Greater)
-    }
-
     pub fn le(self, other: Self) -> bool {
         matches!(self.compare(other), Some(Ordering::Less | Ordering::Equal))
-    }
-
-    pub fn ge(self, other: Self) -> bool {
-        matches!(
-            self.compare(other),
-            Some(Ordering::Greater | Ordering::Equal)
-        )
     }
 
     /// The correctly rounded binary32 nearest `value`, total: rounding is the canonical extension of the embedding, and a magnitude past the largest finite value answers `+inf`.

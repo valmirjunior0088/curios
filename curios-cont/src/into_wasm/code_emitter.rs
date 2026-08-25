@@ -1158,14 +1158,8 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             CpsIntrinsic::NatRem => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32RemU)
             }
-            CpsIntrinsic::NatGt => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32GtU)
-            }
             CpsIntrinsic::NatLe => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32LeU)
-            }
-            CpsIntrinsic::NatGe => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32GeU)
             }
             CpsIntrinsic::IntEql => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32Eq)
@@ -1235,14 +1229,8 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             CpsIntrinsic::IntLt => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32LtS)
             }
-            CpsIntrinsic::IntGt => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32GtS)
-            }
             CpsIntrinsic::IntLe => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32LeS)
-            }
-            CpsIntrinsic::IntGe => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32GeS)
             }
             CpsIntrinsic::NatAnd => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::I32And)
@@ -1320,14 +1308,8 @@ impl<'a, 'b, 'c> CodeEmitter<'a, 'b, 'c> {
             CpsIntrinsic::FltLt => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F32Lt)
             }
-            CpsIntrinsic::FltGt => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F32Gt)
-            }
             CpsIntrinsic::FltLe => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F32Le)
-            }
-            CpsIntrinsic::FltGe => {
-                self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F32Ge)
             }
             CpsIntrinsic::FltMin => {
                 self.emit_binary_op(dest, &op, &args[0], &args[1], curios_wasm::Instr::F32Min)

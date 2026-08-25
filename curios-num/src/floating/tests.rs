@@ -128,9 +128,10 @@ fn check_binary(left: f32, right: f32) {
     assert_eq!(a.eql(b), left == right, "eql on {}", case());
     assert_eq!(a.neq(b), left != right, "neq on {}", case());
     assert_eq!(a.lt(b), left < right, "lt on {}", case());
-    assert_eq!(a.gt(b), left > right, "gt on {}", case());
     assert_eq!(a.le(b), left <= right, "le on {}", case());
-    assert_eq!(a.ge(b), left >= right, "ge on {}", case());
+    // The model has no `gt`/`ge`: `a > b` is spelled `b < a` from the `/sys` row on (`documentation/design/toolchain/a-comparison-is-spelled-one-way-when-it-is-stuck.md`), so what the grid closes is the mirror itself, at every instantiation the NaN rows included.
+    assert_eq!(b.lt(a), left > right, "gt as the lt mirror on {}", case());
+    assert_eq!(b.le(a), left >= right, "ge as the le mirror on {}", case());
 }
 
 #[test]

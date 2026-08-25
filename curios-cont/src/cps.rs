@@ -66,9 +66,7 @@ pub enum CpsIntrinsic {
     NatLt,
     NatDiv,
     NatRem,
-    NatGt,
     NatLe,
-    NatGe,
     NatAnd,
     NatOr,
     NatXor,
@@ -85,9 +83,7 @@ pub enum CpsIntrinsic {
     IntDiv,
     IntRem,
     IntLt,
-    IntGt,
     IntLe,
-    IntGe,
     IntAnd,
     IntOr,
     IntXor,
@@ -104,9 +100,7 @@ pub enum CpsIntrinsic {
     FltEql,
     FltNeq,
     FltLt,
-    FltGt,
     FltLe,
-    FltGe,
     FltMin,
     FltMax,
     FltNeg,
@@ -202,23 +196,21 @@ impl CpsIntrinsic {
             (TupleGet(_) | RowGet(..), _) => Repr::Ref,
 
             (
-                NatEql | NatNeq | NatAdd | NatSub | NatMul | NatLt | NatDiv | NatRem | NatGt
-                | NatLe | NatGe | NatAnd | NatOr | NatXor | NatShl | NatShr | NatEqz | NatToInt
-                | NatToFlt,
+                NatEql | NatNeq | NatAdd | NatSub | NatMul | NatLt | NatDiv | NatRem | NatLe
+                | NatAnd | NatOr | NatXor | NatShl | NatShr | NatEqz | NatToInt | NatToFlt,
                 _,
             ) => Repr::Nat,
 
             (
-                IntEql | IntNeq | IntAdd | IntSub | IntMul | IntDiv | IntRem | IntLt | IntGt
-                | IntLe | IntGe | IntAnd | IntOr | IntXor | IntShl | IntShr | IntEqz | IntToNat
-                | IntToFlt,
+                IntEql | IntNeq | IntAdd | IntSub | IntMul | IntDiv | IntRem | IntLt | IntLe
+                | IntAnd | IntOr | IntXor | IntShl | IntShr | IntEqz | IntToNat | IntToFlt,
                 _,
             ) => Repr::Int,
 
             (
-                FltAdd | FltSub | FltMul | FltDiv | FltRem | FltEql | FltNeq | FltLt | FltGt
-                | FltLe | FltGe | FltMin | FltMax | FltNeg | FltAbs | FltSqrt | FltFloor | FltCeil
-                | FltTrunc | FltNearest | FltCopysign | FltToNat | FltToLeBytes | FltToInt,
+                FltAdd | FltSub | FltMul | FltDiv | FltRem | FltEql | FltNeq | FltLt | FltLe
+                | FltMin | FltMax | FltNeg | FltAbs | FltSqrt | FltFloor | FltCeil | FltTrunc
+                | FltNearest | FltCopysign | FltToNat | FltToLeBytes | FltToInt,
                 _,
             ) => Repr::Flt,
         }
@@ -230,9 +222,8 @@ impl CpsIntrinsic {
 
         match self {
             // Every comparison and predicate answers a `Bool`, whose carrier is a `Nat`.
-            NatEql | NatNeq | NatLt | NatGt | NatLe | NatGe | NatEqz | IntEql | IntNeq | IntLt
-            | IntGt | IntLe | IntGe | IntEqz | FltEql | FltNeq | FltLt | FltGt | FltLe | FltGe
-            | BinEql(_) => Repr::Nat,
+            NatEql | NatNeq | NatLt | NatLe | NatEqz | IntEql | IntNeq | IntLt | IntLe | IntEqz
+            | FltEql | FltNeq | FltLt | FltLe | BinEql(_) => Repr::Nat,
 
             NatAdd | NatSub | NatMul | NatDiv | NatRem | NatAnd | NatOr | NatXor | NatShl
             | NatShr | IntToNat | FltToNat | BinLen(_) | ListLen => Repr::Nat,
@@ -353,9 +344,7 @@ impl CpsIntrinsic {
             | Self::NatNeq
             | Self::NatSub
             | Self::NatLt
-            | Self::NatGt
             | Self::NatLe
-            | Self::NatGe
             | Self::NatAnd
             | Self::NatOr
             | Self::NatXor
@@ -365,9 +354,7 @@ impl CpsIntrinsic {
             | Self::IntEql
             | Self::IntNeq
             | Self::IntLt
-            | Self::IntGt
             | Self::IntLe
-            | Self::IntGe
             | Self::IntAnd
             | Self::IntOr
             | Self::IntXor
@@ -382,9 +369,7 @@ impl CpsIntrinsic {
             | Self::FltEql
             | Self::FltNeq
             | Self::FltLt
-            | Self::FltGt
             | Self::FltLe
-            | Self::FltGe
             | Self::FltMin
             | Self::FltMax
             | Self::FltNeg
