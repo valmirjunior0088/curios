@@ -71,6 +71,9 @@ pub enum Namespace {
     Ffi,
 }
 
+/// The one `sys` import that is not a store row: `exit` traps rather than returns, so no [`WireSignature`] describes it and it stays a hardcoded intrinsic — but its *name* is still wire, stamped by the emitter and matched by the runtime linker, so it is spelled here where both ends read it rather than once at each.
+pub const EXIT: &str = "exit";
+
 impl Namespace {
     /// The wasm import string: what the emitter stamps on the import and the runtime linker matches.
     pub const fn as_str(self) -> &'static str {

@@ -3,7 +3,7 @@ use {
         Handle, HostOps, Lift, Lower, Mode, Poll,
         lower::{anyref_array_type, i8_array_type},
     },
-    curios_abi::{ForeignFunction, ForeignStore, Namespace, WireType, host_ops},
+    curios_abi::{EXIT, ForeignFunction, ForeignStore, Namespace, WireType, host_ops},
     std::{
         collections::HashMap,
         error::Error,
@@ -379,11 +379,11 @@ fn instantiate<H: HostOps + Send + Sync + 'static>(
         match import.module() {
             SYS => match import.name() {
                 // `exit` never returns: it traps with the code, which the caller below catches. A registry trampoline cannot trap, so it is wired directly, outside the store.
-                "exit" => {
+                EXIT => {
                     let exit_type = FuncType::new(engine, [ValType::I32], []);
 
                     linker
-                        .func_new(SYS, "exit", exit_type, move |_caller, params, _| {
+                        .func_new(SYS, EXIT, exit_type, move |_caller, params, _| {
                             let code = match params.first() {
                                 Some(wasmtime::Val::I32(code)) => *code,
                                 _ => 0,
