@@ -163,11 +163,3 @@ impl ForeignStore {
         }
     }
 }
-
-#[cfg(test)]
-impl ForeignStore {
-    /// Test-only: the number of rows in the store.
-    pub(crate) fn len(&self) -> usize {
-        self.functions.len()
-    }
-}

@@ -70,7 +70,7 @@ fn placements_are_unique() {
         .map(|function| (&function.subject, &function.label))
         .collect();
 
-    assert_eq!(placements.len(), store.len());
+    assert_eq!(placements.len(), store.iter().count());
 }
 
 /// Every builtin states the `/sys` module it surfaces in: the prelude places rows by that column rather than by a list beside the table, so a row without one is a table it cannot read.
