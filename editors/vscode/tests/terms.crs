@@ -1,0 +1,35 @@
+pub induct Vec(T: Type): (length: Nat) -> pub Type
+| nil(): (0)
+| cons(@n: Nat, head: T, tail: Vec(T, n)): (n + 1)
+end
+
+pub struct Pair(A: Type, B: Type): pub Type {
+    fst: A,
+    snd: B,
+}
+
+pub concept Ord(A: Type): Type {
+    use Eql(A),
+    cmp(A, A) -> Order,
+}
+
+pub mod Internal
+    foreign random: Nat;
+end
+
+let literals = ("a \"q\" \n \% b", '\'', 'c', 1.5e3, -42, 0xFF, 0b10, true, false, ?);
+let packed = b[0, 1, ..rest];
+let bytes = x[0x48, ..suffix];
+let list = [1, ..more];
+let proj = pair.0 + pair.fst;
+let built = Pair(Nat, Bool) { ..base, snd = false };
+let ops = a || b && c == d != e <= f >= g < h > i + j - k * l / m % n;
+let seq = act! + x;
+let path = a/b;
+let lambda = (x: Nat, y) => x;
+choose
+| flag => 1
+| some(value) = lookup(key) => value
+| _ => 0
+end
+let Point { x, y } = point;

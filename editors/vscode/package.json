@@ -1,0 +1,47 @@
+{
+  "name": "curios",
+  "displayName": "Curios",
+  "description": "Syntax highlighting for the Curios language",
+  "version": "0.1.0",
+  "publisher": "valmirjunior0088",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/valmirjunior0088/curios.git"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "contributes": {
+    "languages": [
+      {
+        "id": "curios",
+        "aliases": [
+          "Curios",
+          "curios"
+        ],
+        "extensions": [
+          ".crs"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "curios",
+        "scopeName": "source.curios",
+        "path": "./syntaxes/curios.tmLanguage.json"
+      }
+    ]
+  },
+  "scripts": {
+    "test": "vscode-tmgrammar-snap \"tests/**/*.crs\"",
+    "test:update": "vscode-tmgrammar-snap -u \"tests/**/*.crs\""
+  },
+  "devDependencies": {
+    "vscode-tmgrammar-test": "^0.1.3"
+  }
+}

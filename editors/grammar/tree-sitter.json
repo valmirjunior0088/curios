@@ -1,0 +1,24 @@
+{
+  "grammars": [
+    {
+      "name": "curios",
+      "camelcase": "Curios",
+      "scope": "source.curios",
+      "file-types": ["crs"]
+    }
+  ],
+  "metadata": {
+    "version": "0.1.0",
+    "license": "Apache-2.0",
+    "description": "Curios grammar for tree-sitter",
+    "authors": [
+      {
+        "name": "Valmir Pretto",
+        "email": "valmirjunior0088@gmail.com"
+      }
+    ],
+    "links": {
+      "repository": "https://github.com/valmirjunior0088/curios"
+    }
+  }
+}

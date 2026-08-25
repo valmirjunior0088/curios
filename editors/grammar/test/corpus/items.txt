@@ -1,0 +1,447 @@
+================================================================================
+Definitions with and without sugar
+================================================================================
+
+pub let zero: Nat = 0;
+let map(@A: Type, @B: Type, m: Option(A), f: (A) -> B) -> Option(B) = m;
+pub foreign log: (Bytes) -> Nat;
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (let_item
+    (identifier)
+    (path
+      (identifier))
+    (number))
+  (let_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier)
+        (sort))
+      (parameter
+        (identifier)
+        (sort))
+      (parameter
+        (identifier)
+        (call
+          (path
+            (identifier))
+          (arguments
+            (argument
+              (path
+                (identifier))))))
+      (parameter
+        (identifier)
+        (function_type
+          (function_type_parameters
+            (function_type_parameter
+              (path
+                (identifier))))
+          (path
+            (identifier)))))
+    (call
+      (path
+        (identifier))
+      (arguments
+        (argument
+          (path
+            (identifier)))))
+    (path
+      (identifier)))
+  (foreign_item
+    (identifier)
+    (function_type
+      (function_type_parameters
+        (function_type_parameter
+          (path
+            (identifier))))
+      (path
+        (identifier)))))
+
+================================================================================
+A recursive group, each member with its own visibility
+================================================================================
+
+pub rec even(n: Nat) -> Bool = odd(n)
+and odd(n: Nat) -> Bool = even(n);
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (rec_item
+    (rec_binding
+      (identifier)
+      (parameters
+        (parameter
+          (identifier)
+          (path
+            (identifier))))
+      (path
+        (identifier))
+      (call
+        (path
+          (identifier))
+        (arguments
+          (argument
+            (path
+              (identifier))))))
+    (rec_binding
+      (identifier)
+      (parameters
+        (parameter
+          (identifier)
+          (path
+            (identifier))))
+      (path
+        (identifier))
+      (call
+        (path
+          (identifier))
+        (arguments
+          (argument
+            (path
+              (identifier))))))))
+
+================================================================================
+Modules and imports
+================================================================================
+
+pub mod Nat;
+mod Internal
+    pub let value: Nat = 1;
+end
+use /std/{Nat, mod Syntax, let parse};
+pub use Option/*;
+use /{X};
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (mod_item
+    (identifier))
+  (mod_item
+    (identifier)
+    (let_item
+      (identifier)
+      (path
+        (identifier))
+      (number)))
+  (use_item
+    (path
+      (identifier))
+    (use_group
+      (use_entry
+        (identifier))
+      (use_entry
+        (identifier))
+      (use_entry
+        (identifier))))
+  (use_item
+    (path
+      (identifier))
+    (use_glob))
+  (use_item
+    (use_group
+      (use_entry
+        (identifier)))))
+
+================================================================================
+Inductives, indexed and mutual
+================================================================================
+
+pub induct Option(A: Type): pub Type
+| some(A)
+| none()
+end
+pub induct Vec(T: Type): (length: Nat) -> pub Type
+| nil(): (0)
+| cons(@n: Nat, head: T, tail: Vec(T, n)): (n + 1)
+and Eq(@A: Type): (A, A) -> Prop
+| refl(@value: A): (value, value)
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (induct_item
+    (induct_body
+      (identifier)
+      (type_parameters
+        (type_parameter
+          (identifier)
+          (sort)))
+      (sort)
+      (constructor
+        (identifier)
+        (payload
+          (path
+            (identifier))))
+      (constructor
+        (identifier))))
+  (induct_item
+    (induct_body
+      (identifier)
+      (type_parameters
+        (type_parameter
+          (identifier)
+          (sort)))
+      (index
+        (identifier)
+        (path
+          (identifier)))
+      (sort)
+      (constructor
+        (identifier)
+        (number))
+      (constructor
+        (identifier)
+        (payload
+          (identifier)
+          (path
+            (identifier)))
+        (payload
+          (identifier)
+          (path
+            (identifier)))
+        (payload
+          (identifier)
+          (call
+            (path
+              (identifier))
+            (arguments
+              (argument
+                (path
+                  (identifier)))
+              (argument
+                (path
+                  (identifier))))))
+        (binary
+          (path
+            (identifier))
+          (number))))
+    (induct_body
+      (identifier)
+      (type_parameters
+        (type_parameter
+          (identifier)
+          (sort)))
+      (index
+        (path
+          (identifier)))
+      (index
+        (path
+          (identifier)))
+      (sort)
+      (constructor
+        (identifier)
+        (payload
+          (identifier)
+          (path
+            (identifier)))
+        (path
+          (identifier))
+        (path
+          (identifier))))))
+
+================================================================================
+Structures and concepts
+================================================================================
+
+pub struct Pair(A: Type, B: Type): pub Type {
+    fst: A,
+    snd: B,
+}
+pub struct Meters: pub Type { Nat }
+pub concept Ord(A: Type): Type {
+    use Eql(A),
+    cmp(A, A) -> Order,
+    law: (x: A) -> Eq(x, x),
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (struct_item
+    (identifier)
+    (type_parameters
+      (type_parameter
+        (identifier)
+        (sort))
+      (type_parameter
+        (identifier)
+        (sort)))
+    (sort)
+    (field_declaration
+      (identifier)
+      (path
+        (identifier)))
+    (field_declaration
+      (identifier)
+      (path
+        (identifier))))
+  (struct_item
+    (identifier)
+    (sort)
+    (field_declaration
+      (path
+        (identifier))))
+  (concept_item
+    (identifier)
+    (type_parameters
+      (type_parameter
+        (identifier)
+        (sort)))
+    (sort)
+    (concept_field
+      (call
+        (path
+          (identifier))
+        (arguments
+          (argument
+            (path
+              (identifier))))))
+    (concept_field
+      (field_declaration
+        (identifier)
+        (function_type_parameters
+          (function_type_parameter
+            (path
+              (identifier)))
+          (function_type_parameter
+            (path
+              (identifier))))
+        (path
+          (identifier))))
+    (concept_field
+      (field_declaration
+        (identifier)
+        (function_type
+          (function_type_parameters
+            (function_type_parameter
+              (identifier)
+              (path
+                (identifier))))
+          (call
+            (path
+              (identifier))
+            (arguments
+              (argument
+                (path
+                  (identifier)))
+              (argument
+                (path
+                  (identifier))))))))))
+
+================================================================================
+Witnesses, bare and parameterized
+================================================================================
+
+satisfy Show(Nat) {
+    show(n) = Nat/to_str(n),
+}
+satisfy (@A: Type, use Show(A)) => Show(List(A)) {
+    use custom,
+    show = show_list,
+    Ok(b) = Nat/Lt(0, b),
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (satisfy_item
+    (path
+      (identifier))
+    (type_arguments
+      (path
+        (identifier)))
+    (witness_entry
+      (field_definition
+        (identifier)
+        (sugar_parameters
+          (sugar_parameter
+            (identifier)))
+        (call
+          (path
+            (identifier)
+            (identifier))
+          (arguments
+            (argument
+              (path
+                (identifier))))))))
+  (satisfy_item
+    (parameters
+      (parameter
+        (identifier)
+        (sort))
+      (parameter
+        (call
+          (path
+            (identifier))
+          (arguments
+            (argument
+              (path
+                (identifier)))))))
+    (path
+      (identifier))
+    (type_arguments
+      (call
+        (path
+          (identifier))
+        (arguments
+          (argument
+            (path
+              (identifier))))))
+    (witness_entry
+      (path
+        (identifier)))
+    (witness_entry
+      (field_definition
+        (identifier)
+        (path
+          (identifier))))
+    (witness_entry
+      (field_definition
+        (identifier)
+        (sugar_parameters
+          (sugar_parameter
+            (identifier)))
+        (call
+          (path
+            (identifier)
+            (identifier))
+          (arguments
+            (argument
+              (number))
+            (argument
+              (path
+                (identifier)))))))))
+
+================================================================================
+An annotated top-level let is an item even when a term follows
+================================================================================
+
+let x: Nat = 1;
+let y = 2;
+print(y)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (let_item
+    (identifier)
+    (path
+      (identifier))
+    (number))
+  (let_term
+    (let_binding
+      (identifier)
+      (number))
+    (call
+      (path
+        (identifier))
+      (arguments
+        (argument
+          (path
+            (identifier)))))))

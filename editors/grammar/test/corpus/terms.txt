@@ -1,0 +1,387 @@
+================================================================================
+Lambdas, function types, tuples and parentheses share an opening paren
+================================================================================
+
+let f = (x: Nat, y) => x;
+let g: (x: Nat, use Show(Nat), @A: Type) -> Nat = f;
+let t = (1, true);
+let u = (only = 1);
+let e = ();
+(x + 1)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (let_term
+    (let_binding
+      (identifier)
+      (lambda
+        (lambda_parameters
+          (lambda_parameter
+            (identifier)
+            (path
+              (identifier)))
+          (lambda_parameter
+            (identifier)))
+        (path
+          (identifier))))
+    (let_term
+      (let_binding
+        (identifier)
+        (function_type
+          (function_type_parameters
+            (function_type_parameter
+              (identifier)
+              (path
+                (identifier)))
+            (function_type_parameter
+              (call
+                (path
+                  (identifier))
+                (arguments
+                  (argument
+                    (path
+                      (identifier))))))
+            (function_type_parameter
+              (identifier)
+              (sort)))
+          (path
+            (identifier)))
+        (path
+          (identifier)))
+      (let_term
+        (let_binding
+          (identifier)
+          (tuple
+            (tuple_field
+              (number))
+            (tuple_field
+              (boolean))))
+        (let_term
+          (let_binding
+            (identifier)
+            (tuple
+              (field_definition
+                (identifier)
+                (number))))
+          (let_term
+            (let_binding
+              (identifier)
+              (unit))
+            (parenthesized
+              (binary
+                (path
+                  (identifier))
+                (number)))))))))
+
+================================================================================
+Precedence climbs left-associatively
+================================================================================
+
+a || b && c == d + e * f
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (binary
+    (path
+      (identifier))
+    (binary
+      (path
+        (identifier))
+      (binary
+        (path
+          (identifier))
+        (binary
+          (path
+            (identifier))
+          (binary
+            (path
+              (identifier))
+            (path
+              (identifier))))))))
+
+================================================================================
+Calls carry implicit and witness arguments
+================================================================================
+
+join(@Nat, use custom_show, values)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (call
+    (path
+      (identifier))
+    (arguments
+      (argument
+        (path
+          (identifier)))
+      (argument
+        (path
+          (identifier)))
+      (argument
+        (path
+          (identifier))))))
+
+================================================================================
+Match with a motive and every leaf shape
+================================================================================
+
+match (n, xs, bs): (_) => Nat
+| (0, [], b[]) => 0
+| (p + 1; ih, [h, ..t]; (a, b), x[y, ..ys]) => ih
+| (some(@k, v), Point { x, y = z }, true) => v
+| _ => 1
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (match_term
+    (tuple
+      (tuple_field
+        (path
+          (identifier)))
+      (tuple_field
+        (path
+          (identifier)))
+      (tuple_field
+        (path
+          (identifier))))
+    (lambda
+      (lambda_parameters
+        (lambda_parameter
+          (identifier)))
+      (path
+        (identifier)))
+    (match_arm
+      (tuple_match_pattern
+        (match_pattern_field
+          (number))
+        (match_pattern_field
+          (list_pattern))
+        (match_pattern_field
+          (packed_pattern)))
+      (number))
+    (match_arm
+      (tuple_match_pattern
+        (match_pattern_field
+          (successor_pattern
+            (identifier)
+            (number)
+            (hypothesis
+              (identifier))))
+        (match_pattern_field
+          (list_pattern
+            (identifier)
+            (identifier)
+            (hypothesis
+              (tuple_pattern
+                (pattern_field
+                  (identifier))
+                (pattern_field
+                  (identifier))))))
+        (match_pattern_field
+          (packed_pattern
+            (identifier)
+            (identifier))))
+      (path
+        (identifier)))
+    (match_arm
+      (tuple_match_pattern
+        (match_pattern_field
+          (constructor_pattern
+            (identifier)
+            (constructor_argument
+              (identifier))
+            (constructor_argument
+              (identifier))))
+        (match_pattern_field
+          (struct_match_pattern
+            (path
+              (identifier))
+            (match_pattern_field
+              (identifier))
+            (match_pattern_field
+              (identifier)
+              (identifier))))
+        (match_pattern_field
+          (boolean)))
+      (path
+        (identifier)))
+    (match_arm
+      (identifier)
+      (number))))
+
+================================================================================
+Choose ladders
+================================================================================
+
+choose
+| flag => 1
+| some(value) = lookup(key) => value
+| _ => 0
+end
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (choose_term
+    (choose_arm
+      (path
+        (identifier))
+      (number))
+    (choose_arm
+      (call
+        (path
+          (identifier))
+        (arguments
+          (argument
+            (path
+              (identifier)))))
+      (call
+        (path
+          (identifier))
+        (arguments
+          (argument
+            (path
+              (identifier)))))
+      (path
+        (identifier)))
+    (choose_arm
+      (path
+        (identifier))
+      (number))))
+
+================================================================================
+Local let and rec with destructuring binders
+================================================================================
+
+let (a, (_, b)) = pair;
+let Point { loc = (x, y), color } = point;
+let inc(n: Nat) -> Nat = n + 1;
+rec loop(n: Nat) -> Nat = loop(n);
+loop(inc(a))
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (let_term
+    (let_binding
+      (tuple_pattern
+        (pattern_field
+          (identifier))
+        (pattern_field
+          (tuple_pattern
+            (pattern_field
+              (identifier))
+            (pattern_field
+              (identifier)))))
+      (path
+        (identifier)))
+    (let_term
+      (let_binding
+        (struct_pattern
+          (path
+            (identifier))
+          (pattern_field
+            (identifier)
+            (tuple_pattern
+              (pattern_field
+                (identifier))
+              (pattern_field
+                (identifier))))
+          (pattern_field
+            (identifier)))
+        (path
+          (identifier)))
+      (let_term
+        (let_binding
+          (identifier)
+          (parameters
+            (parameter
+              (identifier)
+              (path
+                (identifier))))
+          (path
+            (identifier))
+          (binary
+            (path
+              (identifier))
+            (number)))
+        (rec_term
+          (rec_binding
+            (identifier)
+            (parameters
+              (parameter
+                (identifier)
+                (path
+                  (identifier))))
+            (path
+              (identifier))
+            (call
+              (path
+                (identifier))
+              (arguments
+                (argument
+                  (path
+                    (identifier))))))
+          (call
+            (path
+              (identifier))
+            (arguments
+              (argument
+                (call
+                  (path
+                    (identifier))
+                  (arguments
+                    (argument
+                      (path
+                        (identifier)))))))))))))
+
+================================================================================
+A goal, sorts, and a tuple type
+================================================================================
+
+let compose(@A: Type, f: (A) -> Prop) -> {run(input: Bytes) -> Async(Nat), Nat} = ?;
+compose
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (let_item
+    (identifier)
+    (parameters
+      (parameter
+        (identifier)
+        (sort))
+      (parameter
+        (identifier)
+        (function_type
+          (function_type_parameters
+            (function_type_parameter
+              (path
+                (identifier))))
+          (sort))))
+    (tuple_type
+      (field_declaration
+        (identifier)
+        (function_type_parameters
+          (function_type_parameter
+            (identifier)
+            (path
+              (identifier))))
+        (call
+          (path
+            (identifier))
+          (arguments
+            (argument
+              (path
+                (identifier))))))
+      (field_declaration
+        (path
+          (identifier))))
+    (goal))
+  (path
+    (identifier)))

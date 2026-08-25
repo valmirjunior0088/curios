@@ -1,0 +1,12 @@
+id = "curios"
+name = "Curios"
+version = "0.1.0"
+schema_version = 1
+authors = ["Valmir Pretto <valmirjunior0088@gmail.com>"]
+description = "Curios language support for Zed"
+repository = "https://github.com/valmirjunior0088/curios"
+
+[grammars.curios]
+repository = "https://github.com/valmirjunior0088/curios"
+rev = "0000000000000000000000000000000000000000"
+path = "editors/grammar"

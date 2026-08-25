@@ -1,0 +1,360 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "Curios",
+  "scopeName": "source.curios",
+  "patterns": [
+    {
+      "include": "#comment"
+    },
+    {
+      "include": "#string"
+    },
+    {
+      "include": "#character"
+    },
+    {
+      "include": "#number"
+    },
+    {
+      "include": "#definition"
+    },
+    {
+      "include": "#keyword"
+    },
+    {
+      "include": "#contextual"
+    },
+    {
+      "include": "#literal-word"
+    },
+    {
+      "include": "#packed"
+    },
+    {
+      "include": "#path"
+    },
+    {
+      "include": "#projection"
+    },
+    {
+      "include": "#operator"
+    },
+    {
+      "include": "#punctuation"
+    }
+  ],
+  "repository": {
+    "comment": {
+      "name": "comment.line.double-dash.curios",
+      "match": "--.*$"
+    },
+    "string": {
+      "name": "string.quoted.double.curios",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.curios",
+          "match": "\\\\[ntr\\\\\"]"
+        }
+      ]
+    },
+    "character": {
+      "name": "string.quoted.single.curios",
+      "match": "'(?:[^'\\\\]|\\\\[ntr\\\\'])'",
+      "captures": {
+        "0": {
+          "patterns": [
+            {
+              "name": "constant.character.escape.curios",
+              "match": "\\\\[ntr\\\\']"
+            }
+          ]
+        }
+      }
+    },
+    "number": {
+      "patterns": [
+        {
+          "name": "constant.numeric.float.curios",
+          "match": "(?<![\\w/])[+-]?\\d+\\.\\d+(?:[eE][+-]?\\d+)?\\b"
+        },
+        {
+          "name": "constant.numeric.hex.curios",
+          "match": "(?<![\\w/])[+-]?0x[0-9a-fA-F]+\\b"
+        },
+        {
+          "name": "constant.numeric.binary.curios",
+          "match": "(?<![\\w/])[+-]?0b[01]+\\b"
+        },
+        {
+          "name": "constant.numeric.decimal.curios",
+          "match": "(?<![\\w/])[+-]?\\d+\\b"
+        }
+      ]
+    },
+    "definition": {
+      "patterns": [
+        {
+          "match": "(?<![\\w/])(use)\\s+(/?(?:[\\p{L}\\p{N}_]+/)*[\\p{L}\\p{N}_]+)?(?=/[{*])",
+          "captures": {
+            "1": {
+              "name": "keyword.other.curios"
+            },
+            "2": {
+              "patterns": [
+                {
+                  "name": "support.module.curios",
+                  "match": "[\\p{L}\\p{N}_]+"
+                },
+                {
+                  "name": "punctuation.separator.path.curios",
+                  "match": "/"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "match": "\\b(let|rec|foreign)\\s+(\\p{Lu}[\\p{L}\\p{N}_]*)(?=\\s*[{])",
+          "captures": {
+            "1": {
+              "name": "keyword.control.curios"
+            },
+            "2": {
+              "name": "entity.name.type.curios"
+            }
+          }
+        },
+        {
+          "match": "\\b(let|rec|foreign)\\s+([\\p{L}\\p{N}_]+)",
+          "captures": {
+            "1": {
+              "name": "keyword.control.curios"
+            },
+            "2": {
+              "name": "entity.name.function.curios"
+            }
+          }
+        },
+        {
+          "match": "\\b(induct|struct|concept|mod)\\s+([\\p{L}\\p{N}_]+)",
+          "captures": {
+            "1": {
+              "name": "keyword.other.curios"
+            },
+            "2": {
+              "name": "entity.name.type.curios"
+            }
+          }
+        },
+        {
+          "match": "\\b(satisfy)\\s+(?!\\()(/?[\\p{L}\\p{N}_]+(?:/[\\p{L}\\p{N}_]+)*)",
+          "captures": {
+            "1": {
+              "name": "keyword.other.curios"
+            },
+            "2": {
+              "name": "entity.name.type.curios"
+            }
+          }
+        }
+      ]
+    },
+    "keyword": {
+      "patterns": [
+        {
+          "name": "keyword.control.curios",
+          "match": "(?<![\\w/])(let|rec|match|choose|end)(?![\\w/])"
+        },
+        {
+          "name": "keyword.other.curios",
+          "match": "(?<![\\w/])(mod|use|pub|induct|struct|foreign)(?![\\w/])"
+        }
+      ]
+    },
+    "contextual": {
+      "patterns": [
+        {
+          "name": "keyword.other.curios",
+          "match": "(?<![\\w/])(concept|satisfy)(?=\\s)"
+        },
+        {
+          "match": "(?<![\\w/.])(and)(?=\\s+[\\p{L}\\p{N}_]+\\s*[(:])",
+          "captures": {
+            "1": {
+              "name": "keyword.control.curios"
+            }
+          }
+        }
+      ]
+    },
+    "literal-word": {
+      "patterns": [
+        {
+          "name": "constant.language.boolean.curios",
+          "match": "(?<![\\w/])(true|false)(?![\\w/])"
+        },
+        {
+          "name": "storage.type.sort.curios",
+          "match": "(?<![\\w/])(Type|Prop)(?![\\w/])"
+        }
+      ]
+    },
+    "path": {
+      "patterns": [
+        {
+          "match": "(?<![\\w/])(/?)((?:[\\p{L}\\p{N}_]+/)+)([\\p{L}\\p{N}_]+)(?=\\()",
+          "captures": {
+            "1": {
+              "name": "punctuation.separator.path.curios"
+            },
+            "2": {
+              "patterns": [
+                {
+                  "name": "support.module.curios",
+                  "match": "[\\p{L}\\p{N}_]+"
+                },
+                {
+                  "name": "punctuation.separator.path.curios",
+                  "match": "/"
+                }
+              ]
+            },
+            "3": {
+              "name": "entity.name.function.curios"
+            }
+          }
+        },
+        {
+          "match": "(?<![\\w/])(/?)((?:[\\p{L}\\p{N}_]+/)+)([\\p{L}\\p{N}_]+)",
+          "captures": {
+            "1": {
+              "name": "punctuation.separator.path.curios"
+            },
+            "2": {
+              "patterns": [
+                {
+                  "name": "support.module.curios",
+                  "match": "[\\p{L}\\p{N}_]+"
+                },
+                {
+                  "name": "punctuation.separator.path.curios",
+                  "match": "/"
+                }
+              ]
+            },
+            "3": {
+              "patterns": [
+                {
+                  "include": "#name"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "match": "(?<![\\w/])/([\\p{L}\\p{N}_]+)",
+          "captures": {
+            "0": {
+              "name": "punctuation.separator.path.curios"
+            },
+            "1": {
+              "patterns": [
+                {
+                  "include": "#name"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "include": "#name"
+        }
+      ]
+    },
+    "name": {
+      "patterns": [
+        {
+          "name": "entity.name.type.curios",
+          "match": "\\b\\p{Lu}[\\p{L}\\p{N}_]*\\b"
+        },
+        {
+          "name": "entity.name.function.curios",
+          "match": "\\b[\\p{L}\\p{N}_]+(?=\\()"
+        },
+        {
+          "name": "variable.other.curios",
+          "match": "\\b[\\p{L}\\p{N}_]+\\b"
+        }
+      ]
+    },
+    "projection": {
+      "match": "(\\.)([\\p{L}\\p{N}_]+)",
+      "captures": {
+        "1": {
+          "name": "punctuation.accessor.curios"
+        },
+        "2": {
+          "name": "variable.other.property.curios"
+        }
+      }
+    },
+    "operator": {
+      "patterns": [
+        {
+          "name": "keyword.operator.arrow.curios",
+          "match": "->|=>"
+        },
+        {
+          "name": "keyword.operator.comparison.curios",
+          "match": "==|!=|<=|>=|<|>"
+        },
+        {
+          "name": "keyword.operator.logical.curios",
+          "match": "\\|\\||&&"
+        },
+        {
+          "name": "keyword.operator.arithmetic.curios",
+          "match": "(?<=\\s)[-+*/%](?=\\s)"
+        },
+        {
+          "name": "keyword.operator.spread.curios",
+          "match": "\\.\\."
+        },
+        {
+          "name": "keyword.operator.bang.curios",
+          "match": "!(?!=)"
+        },
+        {
+          "name": "keyword.operator.goal.curios",
+          "match": "\\?"
+        },
+        {
+          "name": "storage.modifier.implicit.curios",
+          "match": "@"
+        },
+        {
+          "name": "keyword.operator.assignment.curios",
+          "match": "=|:"
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "name": "punctuation.bracket.curios",
+          "match": "[()\\[\\]{}]"
+        },
+        {
+          "name": "punctuation.separator.curios",
+          "match": "[,;|]"
+        }
+      ]
+    },
+    "packed": {
+      "name": "punctuation.definition.packed.curios",
+      "match": "(?<![\\w/])[bx]\\["
+    }
+  }
+}

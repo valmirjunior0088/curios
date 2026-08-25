@@ -1,2 +1,3 @@
 benchmarks/** linguist-vendored
+editors/** linguist-vendored
 programs/** linguist-vendored

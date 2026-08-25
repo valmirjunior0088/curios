@@ -18,7 +18,7 @@ env:
 
 jobs:
   fmt:
-    name: Run `fmt`
+    name: Formatting
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -29,8 +29,8 @@ jobs:
       - name: Run rustfmt
         run: cargo fmt --all -- --check
 
-  check:
-    name: Run `check`
+  compile:
+    name: Compilation
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -46,8 +46,8 @@ jobs:
       - name: Run cargo check
         run: cargo check --workspace --all-targets --all-features
 
-  clippy:
-    name: Run `clippy`
+  lints:
+    name: Lints
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -65,8 +65,8 @@ jobs:
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets --all-features -- -Dwarnings
 
-  test:
-    name: Run `test`
+  tests:
+    name: Tests
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -82,8 +82,8 @@ jobs:
       - name: Run tests
         run: cargo test --workspace --all-targets --all-features
 
-  doc:
-    name: Run `doc`
+  docs:
+    name: Documentation
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
@@ -102,7 +102,7 @@ jobs:
         run: cargo doc --workspace --no-deps
 
   wasm:
-    name: Build `curios-js`
+    name: Browser bundle
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
@@ -119,3 +119,39 @@ jobs:
           cargo install wasm-bindgen-cli --version "$version" --locked
       - name: Build curios-js
         run: make curios/js
+
+  grammar:
+    name: Grammar parser
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: editors/grammar/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+        working-directory: editors/grammar
+      - name: Run grammar tests
+        run: npm test
+        working-directory: editors/grammar
+
+  textmate:
+    name: TextMate grammar
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: editors/vscode/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+        working-directory: editors/vscode
+      - name: Run grammar snapshot tests
+        run: npm test
+        working-directory: editors/vscode

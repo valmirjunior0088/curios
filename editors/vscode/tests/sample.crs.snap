@@ -1,0 +1,333 @@
+>-- A line comment.
+#^^^^^^^^^^^^^^^^^^ source.curios comment.line.double-dash.curios
+>use /std/{Nat, Option, mod Syntax, let parse};
+#^^^ source.curios keyword.other.curios
+#   ^ source.curios
+#    ^ source.curios punctuation.separator.path.curios
+#     ^^^ source.curios support.module.curios
+#        ^ source.curios
+#         ^ source.curios punctuation.bracket.curios
+#          ^^^ source.curios entity.name.type.curios
+#             ^ source.curios punctuation.separator.curios
+#              ^ source.curios
+#               ^^^^^^ source.curios entity.name.type.curios
+#                     ^ source.curios punctuation.separator.curios
+#                      ^ source.curios
+#                       ^^^ source.curios keyword.other.curios
+#                          ^ source.curios
+#                           ^^^^^^ source.curios entity.name.type.curios
+#                                 ^ source.curios punctuation.separator.curios
+#                                  ^ source.curios
+#                                   ^^^ source.curios keyword.control.curios
+#                                      ^ source.curios
+#                                       ^^^^^ source.curios entity.name.function.curios
+#                                            ^ source.curios punctuation.bracket.curios
+#                                             ^ source.curios punctuation.separator.curios
+>pub use Option/*;
+#^^^ source.curios keyword.other.curios
+#   ^ source.curios
+#    ^^^ source.curios keyword.other.curios
+#       ^ source.curios
+#        ^^^^^^ source.curios support.module.curios
+#              ^^ source.curios
+#                ^ source.curios punctuation.separator.curios
+>
+>pub let zero: Nat = 0;
+#^^^ source.curios keyword.other.curios
+#   ^ source.curios
+#    ^^^ source.curios keyword.control.curios
+#       ^ source.curios
+#        ^^^^ source.curios entity.name.function.curios
+#            ^ source.curios keyword.operator.assignment.curios
+#             ^ source.curios
+#              ^^^ source.curios entity.name.type.curios
+#                 ^ source.curios
+#                  ^ source.curios keyword.operator.assignment.curios
+#                   ^ source.curios
+#                    ^ source.curios constant.numeric.decimal.curios
+#                     ^ source.curios punctuation.separator.curios
+>
+>pub let map(@A: Type, @B: Type, m: Option(A), f: (A) -> B) -> Option(B) =
+#^^^ source.curios keyword.other.curios
+#   ^ source.curios
+#    ^^^ source.curios keyword.control.curios
+#       ^ source.curios
+#        ^^^ source.curios entity.name.function.curios
+#           ^ source.curios punctuation.bracket.curios
+#            ^ source.curios storage.modifier.implicit.curios
+#             ^ source.curios entity.name.type.curios
+#              ^ source.curios keyword.operator.assignment.curios
+#               ^ source.curios
+#                ^^^^ source.curios storage.type.sort.curios
+#                    ^ source.curios punctuation.separator.curios
+#                     ^ source.curios
+#                      ^ source.curios storage.modifier.implicit.curios
+#                       ^ source.curios entity.name.type.curios
+#                        ^ source.curios keyword.operator.assignment.curios
+#                         ^ source.curios
+#                          ^^^^ source.curios storage.type.sort.curios
+#                              ^ source.curios punctuation.separator.curios
+#                               ^ source.curios
+#                                ^ source.curios variable.other.curios
+#                                 ^ source.curios keyword.operator.assignment.curios
+#                                  ^ source.curios
+#                                   ^^^^^^ source.curios entity.name.type.curios
+#                                         ^ source.curios punctuation.bracket.curios
+#                                          ^ source.curios entity.name.type.curios
+#                                           ^ source.curios punctuation.bracket.curios
+#                                            ^ source.curios punctuation.separator.curios
+#                                             ^ source.curios
+#                                              ^ source.curios variable.other.curios
+#                                               ^ source.curios keyword.operator.assignment.curios
+#                                                ^ source.curios
+#                                                 ^ source.curios punctuation.bracket.curios
+#                                                  ^ source.curios entity.name.type.curios
+#                                                   ^ source.curios punctuation.bracket.curios
+#                                                    ^ source.curios
+#                                                     ^^ source.curios keyword.operator.arrow.curios
+#                                                       ^ source.curios
+#                                                        ^ source.curios entity.name.type.curios
+#                                                         ^ source.curios punctuation.bracket.curios
+#                                                          ^ source.curios
+#                                                           ^^ source.curios keyword.operator.arrow.curios
+#                                                             ^ source.curios
+#                                                              ^^^^^^ source.curios entity.name.type.curios
+#                                                                    ^ source.curios punctuation.bracket.curios
+#                                                                     ^ source.curios entity.name.type.curios
+#                                                                      ^ source.curios punctuation.bracket.curios
+#                                                                       ^ source.curios
+#                                                                        ^ source.curios keyword.operator.assignment.curios
+>    match m | some(a) => Option/some(f(a)) | none() => Option/none() end;
+#^^^^ source.curios
+#    ^^^^^ source.curios keyword.control.curios
+#         ^ source.curios
+#          ^ source.curios variable.other.curios
+#           ^ source.curios
+#            ^ source.curios punctuation.separator.curios
+#             ^ source.curios
+#              ^^^^ source.curios entity.name.function.curios
+#                  ^ source.curios punctuation.bracket.curios
+#                   ^ source.curios variable.other.curios
+#                    ^ source.curios punctuation.bracket.curios
+#                     ^ source.curios
+#                      ^^ source.curios keyword.operator.arrow.curios
+#                        ^ source.curios
+#                         ^^^^^^ source.curios support.module.curios
+#                               ^ source.curios punctuation.separator.path.curios
+#                                ^^^^ source.curios entity.name.function.curios
+#                                    ^ source.curios punctuation.bracket.curios
+#                                     ^ source.curios entity.name.function.curios
+#                                      ^ source.curios punctuation.bracket.curios
+#                                       ^ source.curios variable.other.curios
+#                                        ^ source.curios punctuation.bracket.curios
+#                                         ^ source.curios punctuation.bracket.curios
+#                                          ^ source.curios
+#                                           ^ source.curios punctuation.separator.curios
+#                                            ^ source.curios
+#                                             ^^^^ source.curios entity.name.function.curios
+#                                                 ^ source.curios punctuation.bracket.curios
+#                                                  ^ source.curios punctuation.bracket.curios
+#                                                   ^ source.curios
+#                                                    ^^ source.curios keyword.operator.arrow.curios
+#                                                      ^ source.curios
+#                                                       ^^^^^^ source.curios support.module.curios
+#                                                             ^ source.curios punctuation.separator.path.curios
+#                                                              ^^^^ source.curios entity.name.function.curios
+#                                                                  ^ source.curios punctuation.bracket.curios
+#                                                                   ^ source.curios punctuation.bracket.curios
+#                                                                    ^ source.curios
+#                                                                     ^^^ source.curios keyword.control.curios
+#                                                                        ^ source.curios punctuation.separator.curios
+>
+>pub rec even(n: Nat) -> Bool = match n | 0 => true | p + 1; _ => odd(p) end
+#^^^ source.curios keyword.other.curios
+#   ^ source.curios
+#    ^^^ source.curios keyword.control.curios
+#       ^ source.curios
+#        ^^^^ source.curios entity.name.function.curios
+#            ^ source.curios punctuation.bracket.curios
+#             ^ source.curios variable.other.curios
+#              ^ source.curios keyword.operator.assignment.curios
+#               ^ source.curios
+#                ^^^ source.curios entity.name.type.curios
+#                   ^ source.curios punctuation.bracket.curios
+#                    ^ source.curios
+#                     ^^ source.curios keyword.operator.arrow.curios
+#                       ^ source.curios
+#                        ^^^^ source.curios entity.name.type.curios
+#                            ^ source.curios
+#                             ^ source.curios keyword.operator.assignment.curios
+#                              ^ source.curios
+#                               ^^^^^ source.curios keyword.control.curios
+#                                    ^ source.curios
+#                                     ^ source.curios variable.other.curios
+#                                      ^ source.curios
+#                                       ^ source.curios punctuation.separator.curios
+#                                        ^ source.curios
+#                                         ^ source.curios constant.numeric.decimal.curios
+#                                          ^ source.curios
+#                                           ^^ source.curios keyword.operator.arrow.curios
+#                                             ^ source.curios
+#                                              ^^^^ source.curios constant.language.boolean.curios
+#                                                  ^ source.curios
+#                                                   ^ source.curios punctuation.separator.curios
+#                                                    ^ source.curios
+#                                                     ^ source.curios variable.other.curios
+#                                                      ^ source.curios
+#                                                       ^ source.curios keyword.operator.arithmetic.curios
+#                                                        ^ source.curios
+#                                                         ^ source.curios constant.numeric.decimal.curios
+#                                                          ^ source.curios punctuation.separator.curios
+#                                                           ^ source.curios
+#                                                            ^ source.curios variable.other.curios
+#                                                             ^ source.curios
+#                                                              ^^ source.curios keyword.operator.arrow.curios
+#                                                                ^ source.curios
+#                                                                 ^^^ source.curios entity.name.function.curios
+#                                                                    ^ source.curios punctuation.bracket.curios
+#                                                                     ^ source.curios variable.other.curios
+#                                                                      ^ source.curios punctuation.bracket.curios
+#                                                                       ^ source.curios
+#                                                                        ^^^ source.curios keyword.control.curios
+>and odd(n: Nat) -> Bool = even(n);
+#^^^ source.curios keyword.control.curios
+#   ^ source.curios
+#    ^^^ source.curios entity.name.function.curios
+#       ^ source.curios punctuation.bracket.curios
+#        ^ source.curios variable.other.curios
+#         ^ source.curios keyword.operator.assignment.curios
+#          ^ source.curios
+#           ^^^ source.curios entity.name.type.curios
+#              ^ source.curios punctuation.bracket.curios
+#               ^ source.curios
+#                ^^ source.curios keyword.operator.arrow.curios
+#                  ^ source.curios
+#                   ^^^^ source.curios entity.name.type.curios
+#                       ^ source.curios
+#                        ^ source.curios keyword.operator.assignment.curios
+#                         ^ source.curios
+#                          ^^^^ source.curios entity.name.function.curios
+#                              ^ source.curios punctuation.bracket.curios
+#                               ^ source.curios variable.other.curios
+#                                ^ source.curios punctuation.bracket.curios
+#                                 ^ source.curios punctuation.separator.curios
+>
+>pub let and(p: Parse(A), q: Parse(B)) -> Parse({A, B}) = Parse/and(p, q);
+#^^^ source.curios keyword.other.curios
+#   ^ source.curios
+#    ^^^ source.curios keyword.control.curios
+#       ^ source.curios
+#        ^^^ source.curios entity.name.function.curios
+#           ^ source.curios punctuation.bracket.curios
+#            ^ source.curios variable.other.curios
+#             ^ source.curios keyword.operator.assignment.curios
+#              ^ source.curios
+#               ^^^^^ source.curios entity.name.type.curios
+#                    ^ source.curios punctuation.bracket.curios
+#                     ^ source.curios entity.name.type.curios
+#                      ^ source.curios punctuation.bracket.curios
+#                       ^ source.curios punctuation.separator.curios
+#                        ^ source.curios
+#                         ^ source.curios variable.other.curios
+#                          ^ source.curios keyword.operator.assignment.curios
+#                           ^ source.curios
+#                            ^^^^^ source.curios entity.name.type.curios
+#                                 ^ source.curios punctuation.bracket.curios
+#                                  ^ source.curios entity.name.type.curios
+#                                   ^ source.curios punctuation.bracket.curios
+#                                    ^ source.curios punctuation.bracket.curios
+#                                     ^ source.curios
+#                                      ^^ source.curios keyword.operator.arrow.curios
+#                                        ^ source.curios
+#                                         ^^^^^ source.curios entity.name.type.curios
+#                                              ^ source.curios punctuation.bracket.curios
+#                                               ^ source.curios punctuation.bracket.curios
+#                                                ^ source.curios entity.name.type.curios
+#                                                 ^ source.curios punctuation.separator.curios
+#                                                  ^ source.curios
+#                                                   ^ source.curios entity.name.type.curios
+#                                                    ^ source.curios punctuation.bracket.curios
+#                                                     ^ source.curios punctuation.bracket.curios
+#                                                      ^ source.curios
+#                                                       ^ source.curios keyword.operator.assignment.curios
+#                                                        ^ source.curios
+#                                                         ^^^^^ source.curios support.module.curios
+#                                                              ^ source.curios punctuation.separator.path.curios
+#                                                               ^^^ source.curios entity.name.function.curios
+#                                                                  ^ source.curios punctuation.bracket.curios
+#                                                                   ^ source.curios variable.other.curios
+#                                                                    ^ source.curios punctuation.separator.curios
+#                                                                     ^ source.curios
+#                                                                      ^ source.curios variable.other.curios
+#                                                                       ^ source.curios punctuation.bracket.curios
+#                                                                        ^ source.curios punctuation.separator.curios
+>
+>satisfy Show(Nat) {
+#^^^^^^^ source.curios keyword.other.curios
+#       ^ source.curios
+#        ^^^^ source.curios entity.name.type.curios
+#            ^ source.curios punctuation.bracket.curios
+#             ^^^ source.curios entity.name.type.curios
+#                ^ source.curios punctuation.bracket.curios
+#                 ^ source.curios
+#                  ^ source.curios punctuation.bracket.curios
+>    show(n) = Nat/to_str(n),
+#^^^^ source.curios
+#    ^^^^ source.curios entity.name.function.curios
+#        ^ source.curios punctuation.bracket.curios
+#         ^ source.curios variable.other.curios
+#          ^ source.curios punctuation.bracket.curios
+#           ^ source.curios
+#            ^ source.curios keyword.operator.assignment.curios
+#             ^ source.curios
+#              ^^^ source.curios support.module.curios
+#                 ^ source.curios punctuation.separator.path.curios
+#                  ^^^^^^ source.curios entity.name.function.curios
+#                        ^ source.curios punctuation.bracket.curios
+#                         ^ source.curios variable.other.curios
+#                          ^ source.curios punctuation.bracket.curios
+#                           ^ source.curios punctuation.separator.curios
+>}
+#^ source.curios punctuation.bracket.curios
+>
+>satisfy (@A: Type, use Show(A)) => Show(List(A)) {
+#^^^^^^^ source.curios keyword.other.curios
+#       ^ source.curios
+#        ^ source.curios punctuation.bracket.curios
+#         ^ source.curios storage.modifier.implicit.curios
+#          ^ source.curios entity.name.type.curios
+#           ^ source.curios keyword.operator.assignment.curios
+#            ^ source.curios
+#             ^^^^ source.curios storage.type.sort.curios
+#                 ^ source.curios punctuation.separator.curios
+#                  ^ source.curios
+#                   ^^^ source.curios keyword.other.curios
+#                      ^ source.curios
+#                       ^^^^ source.curios entity.name.type.curios
+#                           ^ source.curios punctuation.bracket.curios
+#                            ^ source.curios entity.name.type.curios
+#                             ^ source.curios punctuation.bracket.curios
+#                              ^ source.curios punctuation.bracket.curios
+#                               ^ source.curios
+#                                ^^ source.curios keyword.operator.arrow.curios
+#                                  ^ source.curios
+#                                   ^^^^ source.curios entity.name.type.curios
+#                                       ^ source.curios punctuation.bracket.curios
+#                                        ^^^^ source.curios entity.name.type.curios
+#                                            ^ source.curios punctuation.bracket.curios
+#                                             ^ source.curios entity.name.type.curios
+#                                              ^ source.curios punctuation.bracket.curios
+#                                               ^ source.curios punctuation.bracket.curios
+#                                                ^ source.curios
+#                                                 ^ source.curios punctuation.bracket.curios
+>    show = show_list,
+#^^^^ source.curios
+#    ^^^^ source.curios variable.other.curios
+#        ^ source.curios
+#         ^ source.curios keyword.operator.assignment.curios
+#          ^ source.curios
+#           ^^^^^^^^^ source.curios variable.other.curios
+#                    ^ source.curios punctuation.separator.curios
+>}
+#^ source.curios punctuation.bracket.curios
+>

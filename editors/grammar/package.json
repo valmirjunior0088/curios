@@ -1,0 +1,16 @@
+{
+  "name": "tree-sitter-curios",
+  "version": "0.1.0",
+  "description": "Curios grammar for tree-sitter",
+  "license": "Apache-2.0",
+  "private": true,
+  "scripts": {
+    "generate": "tree-sitter generate",
+    "test": "tree-sitter generate && git status --short src && test -z \"$(git status --porcelain src)\" && tree-sitter test && npm run test:corpus && npm run test:highlights",
+    "test:corpus": "find ../../curios-prelude-archive/std ../../curios-prelude-archive/syn ../../programs -name '*.crs' -exec tree-sitter parse -q {} +",
+    "test:highlights": "find ../../curios-prelude-archive/std ../../curios-prelude-archive/syn ../../programs -name '*.crs' -exec tree-sitter query -q ../zed/languages/curios/highlights.scm {} +"
+  },
+  "devDependencies": {
+    "tree-sitter-cli": "0.26.13"
+  }
+}

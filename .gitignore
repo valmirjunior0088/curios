@@ -8,3 +8,5 @@
 /*.wasm
 **/.artifacts
 **/.lake
+**/node_modules
+editors/zed/grammars

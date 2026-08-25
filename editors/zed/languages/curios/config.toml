@@ -1,0 +1,4 @@
+name = "Curios"
+grammar = "curios"
+path_suffixes = ["crs"]
+line_comments = ["-- "]

@@ -1,0 +1,220 @@
+================================================================================
+A path is whitespace-free; a spaced slash is division
+================================================================================
+
+let a = x/y;
+let b = x / y;
+a
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (let_term
+    (let_binding
+      (identifier)
+      (path
+        (identifier)
+        (identifier)))
+    (let_term
+      (let_binding
+        (identifier)
+        (binary
+          (path
+            (identifier))
+          (path
+            (identifier))))
+      (path
+        (identifier)))))
+
+================================================================================
+A glued sign is part of the literal; a spaced minus is subtraction
+================================================================================
+
+let c = -42;
+let d = x - 42;
+c
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (let_term
+    (let_binding
+      (identifier)
+      (number))
+    (let_term
+      (let_binding
+        (identifier)
+        (binary
+          (path
+            (identifier))
+          (number)))
+      (path
+        (identifier)))))
+
+================================================================================
+The grain letter glues to the bracket
+================================================================================
+
+b[0, 1, ..rest]
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (packed_literal
+    (number)
+    (number)
+    (spread
+      (path
+        (identifier)))))
+
+================================================================================
+Postfix bang is not the head of an inequality
+================================================================================
+
+let g = act!;
+x != y
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (let_term
+    (let_binding
+      (identifier)
+      (bang
+        (path
+          (identifier))))
+    (binary
+      (path
+        (identifier))
+      (path
+        (identifier)))))
+
+================================================================================
+Projections and spreads
+================================================================================
+
+let i = pair.0 + pair.fst;
+Pair(Nat, Bool) { ..base, snd = false }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (let_term
+    (let_binding
+      (identifier)
+      (binary
+        (projection
+          (path
+            (identifier))
+          (field_identifier))
+        (projection
+          (path
+            (identifier))
+          (field_identifier))))
+    (struct_literal
+      (path
+        (identifier))
+      (type_arguments
+        (path
+          (identifier))
+        (path
+          (identifier)))
+      (struct_entry
+        (spread
+          (path
+            (identifier))))
+      (struct_entry
+        (field_definition
+          (identifier)
+          (boolean))))))
+
+================================================================================
+Literals
+================================================================================
+
+let k = "a \"q\" \n \% b";
+let l = '\'';
+let m = 1.5e3 + 0xFF + 0b10;
+[1, 2, ..more]
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (let_term
+    (let_binding
+      (identifier)
+      (string))
+    (let_term
+      (let_binding
+        (identifier)
+        (character))
+      (let_term
+        (let_binding
+          (identifier)
+          (binary
+            (binary
+              (number)
+              (number))
+            (number)))
+        (list_literal
+          (number)
+          (number)
+          (spread
+            (path
+              (identifier))))))))
+
+================================================================================
+A comment runs to the end of the line
+================================================================================
+
+-- A whole line.
+x -- trailing
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (comment)
+  (path
+    (identifier))
+  (comment))
+
+================================================================================
+Contextual words stay identifiers outside their positions
+================================================================================
+
+use /std/{and, concept};
+let and = Parse/and(p, q);
+satisfy(and)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (use_item
+    (path
+      (identifier))
+    (use_group
+      (use_entry
+        (identifier))
+      (use_entry
+        (identifier))))
+  (let_term
+    (let_binding
+      (identifier)
+      (call
+        (path
+          (identifier)
+          (identifier))
+        (arguments
+          (argument
+            (path
+              (identifier)))
+          (argument
+            (path
+              (identifier))))))
+    (call
+      (path
+        (identifier))
+      (arguments
+        (argument
+          (path
+            (identifier)))))))

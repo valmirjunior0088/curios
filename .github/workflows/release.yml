@@ -12,8 +12,8 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
-    name: Build `${{ matrix.target }}`
+  native:
+    name: Native binary (${{ matrix.target }})
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
 
@@ -56,8 +56,8 @@ jobs:
           path: target/${{ matrix.target }}/release/curios
           retention-days: 1
 
-  build-wasm:
-    name: Build `curios-js`
+  wasm:
+    name: Browser bundle
     runs-on: ubuntu-24.04
     timeout-minutes: 10
 
@@ -90,8 +90,8 @@ jobs:
           path: curios-js.tar.gz
           retention-days: 1
 
-  build-docs:
-    name: Build docs
+  docs:
+    name: Documentation
     runs-on: ubuntu-24.04
     timeout-minutes: 20
 
@@ -127,10 +127,10 @@ jobs:
           retention-days: 1
 
   release:
-    name: Create release
+    name: GitHub release
     runs-on: ubuntu-24.04
     timeout-minutes: 10
-    needs: [build, build-wasm, build-docs]
+    needs: [native, wasm, docs]
 
     permissions:
       contents: write
