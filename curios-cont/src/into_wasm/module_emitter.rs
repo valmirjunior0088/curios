@@ -6,7 +6,7 @@ use {
         rope_leaf_sub_type, rope_node_sub_type, rope_view_sub_type,
     },
     crate::CpsSlot,
-    curios_abi::WireType,
+    curios_abi::{Namespace, WireType},
     curios_utilities::{Grain, PackedBin},
     std::iter,
 };
@@ -155,7 +155,7 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
 
         if self.table.exit_used() {
             self.add_host_import(
-                "sys",
+                Namespace::Sys.as_str(),
                 "exit",
                 curios_wasm::TypeName::from("exit"),
                 self.table.exit_func().clone(),

@@ -73,7 +73,7 @@ pub enum Namespace {
 
 impl Namespace {
     /// The wasm import string: what the emitter stamps on the import and the runtime linker matches.
-    pub fn as_str(self) -> &'static str {
+    pub const fn as_str(self) -> &'static str {
         match self {
             Namespace::Sys => "sys",
             Namespace::Ffi => "ffi",

@@ -3,7 +3,7 @@ use {
         Handle, HostOps, Lift, Lower, Mode, Poll,
         lower::{anyref_array_type, i8_array_type},
     },
-    curios_abi::{ForeignFunction, ForeignStore, WireType, host_ops},
+    curios_abi::{ForeignFunction, ForeignStore, Namespace, WireType, host_ops},
     std::{
         collections::HashMap,
         error::Error,
@@ -141,7 +141,7 @@ impl ForeignBindings {
         &self,
         linker: &mut Linker<()>,
         engine: &Engine,
-        namespace: &str,
+        namespace: Namespace,
         name: &str,
     ) -> Result<(), String> {
         let (function, trampoline) = self
@@ -154,7 +154,7 @@ impl ForeignBindings {
 
         linker
             .func_new(
-                namespace,
+                namespace.as_str(),
                 name,
                 host_func_type(engine, function),
                 move |caller, params, results| trampoline(caller, params, results),
@@ -370,16 +370,20 @@ fn instantiate<H: HostOps + Send + Sync + 'static>(
     let impls = sys_impls(Arc::new(host));
     let mut linker = Linker::new(engine);
 
+    // The namespaces as the emitter spells them — `curios-abi`'s, read rather than restated, so the two ends of the wire cannot drift on the one string they link on.
+    const SYS: &str = Namespace::Sys.as_str();
+    const FFI: &str = Namespace::Ffi.as_str();
+
     // Pull-based linking: the module's own import section drives what gets defined, so only the functions the program calls are wired and a demand the registry cannot meet is a named error.
     for import in module.imports() {
         match import.module() {
-            "sys" => match import.name() {
+            SYS => match import.name() {
                 // `exit` never returns: it traps with the code, which the caller below catches. A registry trampoline cannot trap, so it is wired directly, outside the store.
                 "exit" => {
                     let exit_type = FuncType::new(engine, [ValType::I32], []);
 
                     linker
-                        .func_new("sys", "exit", exit_type, move |_caller, params, _| {
+                        .func_new(SYS, "exit", exit_type, move |_caller, params, _| {
                             let code = match params.first() {
                                 Some(wasmtime::Val::I32(code)) => *code,
                                 _ => 0,
@@ -389,16 +393,14 @@ fn instantiate<H: HostOps + Send + Sync + 'static>(
                         })
                         .map_err(|error| format!("failed to define exit: {error}"))?;
                 }
-                name => impls.link(&mut linker, engine, "sys", name)?,
+                name => impls.link(&mut linker, engine, Namespace::Sys, name)?,
             },
-            "ffi" => bindings.link(&mut linker, engine, "ffi", import.name())?,
+            FFI => bindings.link(&mut linker, engine, Namespace::Ffi, import.name())?,
             namespace => {
                 return Err(format!(
-                    "the module imports {}.{}, but host imports live in {} or {}",
+                    "the module imports {}.{}, but host imports live in {SYS} or {FFI}",
                     namespace,
                     import.name(),
-                    "sys",
-                    "ffi"
                 ));
             }
         }
