@@ -98,7 +98,7 @@ impl Mul for Integer {
     }
 }
 
-/// Unbounded bitwise `and`/`or`/`xor`, on the infinite two's-complement representation `num-bigint` models. The type level pretends ℤ, so these impose no 31-bit limit; the runtime's i31 carrier is enforced only in the backend (see `scalar_eval`/`code_emitter`).
+/// Unbounded bitwise `and`/`or`/`xor`, on the infinite two's-complement representation `num-bigint` models. The type level pretends ℤ, so these impose no 31-bit limit; the runtime's i31 carrier is enforced only in the backend.
 impl BitAnd for Integer {
     type Output = Self;
 
