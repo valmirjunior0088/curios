@@ -84,3 +84,35 @@ fn a_scaffolded_manifest_declares_a_package() {
 
     fs::remove_dir_all(root).unwrap();
 }
+
+/// The store is the one directory the toolchain generates, and a fresh package starts out ignoring it.
+#[test]
+fn a_scaffolded_package_ignores_its_store() {
+    let root = temp_dir("scaffold_ignore");
+    let written = scaffold(&root).expect("a fresh directory");
+
+    let ignore = root.join(IGNORE);
+    assert!(written.contains(&ignore), "and it is reported as written");
+    assert_eq!(
+        fs::read_to_string(&ignore).unwrap(),
+        format!("/{STORE}/\n"),
+        "the store and nothing else"
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+/// An ignore file that is already there is the user's, so `new` refuses before writing anything rather than replacing it.
+#[test]
+fn an_existing_ignore_file_is_not_overwritten() {
+    let root = temp_dir("scaffold_ignore_occupied");
+    fs::create_dir_all(&root).unwrap();
+    fs::write(root.join(IGNORE), "theirs\n").unwrap();
+
+    let refusal = scaffold(&root).expect_err("a directory that already holds an ignore file");
+    assert!(refusal.contains("already holds a .gitignore"), "{refusal}");
+    assert_eq!(fs::read_to_string(root.join(IGNORE)).unwrap(), "theirs\n");
+    assert!(!root.join(MANIFEST).exists(), "nothing else was written");
+
+    fs::remove_dir_all(root).unwrap();
+}

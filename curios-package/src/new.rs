@@ -2,13 +2,13 @@
 //!
 //! Last of the machinery rather than first, and deliberately: scaffolding writes what everything else reads, so it can only be written once there is something for it to be right *about*. What it produces is a package the rest of this crate already accepts — no template escapes the rules, and nothing here knows a rule the manifest parser does not.
 //!
-//! It writes every part a package has: a manifest, a library header, and one executable. A package can still be a program alone or a library alone — the manifest decides, and deleting either file says so — but *starting* one is not the moment to ask which, and a flag asking would only be answerable by somebody who already knows what the two are.
+//! It writes every part a package has: a manifest, a library header, and one executable. A package can still be a program alone or a library alone — the manifest decides, and deleting either file says so — but *starting* one is not the moment to ask which, and a flag asking would only be answerable by somebody who already knows what the two are. Beside them goes a `.gitignore` for the store, since the one directory the toolchain generates is the one thing in a fresh package that should never be committed.
 
 #[cfg(test)]
 mod tests;
 
 use {
-    crate::{EXECUTABLE, LIBRARY, MANIFEST, canonical},
+    crate::{EXECUTABLE, LIBRARY, MANIFEST, STORE, canonical},
     std::{
         fs,
         path::{Path, PathBuf},
@@ -35,6 +35,15 @@ pub fn scaffold(directory: &Path) -> Result<Vec<PathBuf>, String> {
         ));
     }
 
+    // Refused for the same reason as the manifest: a file that is already there is the user's, and `new` writes rather than adopts.
+    let ignore = directory.join(IGNORE);
+    if ignore.exists() {
+        return Err(format!(
+            "{} already holds a {IGNORE}; `new` writes one rather than adopting one",
+            directory.display()
+        ));
+    }
+
     fs::create_dir_all(directory)
         .map_err(|error| format!("failed to create {}: {error}", directory.display()))?;
 
@@ -51,10 +60,20 @@ pub fn scaffold(directory: &Path) -> Result<Vec<PathBuf>, String> {
         &program,
         &format!("use /std/{{Fmt}};\nuse /{name}/{{message}};\n\nFmt/print(\"%\\n\")(message)\n"),
     )?;
+    write(&ignore, &format!("/{STORE}/\n"))?;
 
     // In the order they were written, which is the order a reader wants them: the directory that now exists, then what is in it.
-    Ok(vec![directory.to_path_buf(), manifest, library, program])
+    Ok(vec![
+        directory.to_path_buf(),
+        manifest,
+        library,
+        program,
+        ignore,
+    ])
 }
+
+/// The ignore file a scaffolded package starts with, holding the store and nothing else.
+const IGNORE: &str = ".gitignore";
 
 /// One scaffolded file.
 fn write(path: &Path, contents: &str) -> Result<(), String> {
