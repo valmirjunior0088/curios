@@ -659,9 +659,7 @@ impl<E: Env> Walk<'_, E> {
             | Intrinsic::NatLt(..)
             | Intrinsic::NatDiv { .. }
             | Intrinsic::NatRem { .. }
-            | Intrinsic::NatGt(..)
             | Intrinsic::NatLe(..)
-            | Intrinsic::NatGe(..)
             | Intrinsic::NatAnd(..)
             | Intrinsic::NatOr(..)
             | Intrinsic::NatXor(..)
@@ -673,8 +671,6 @@ impl<E: Env> Walk<'_, E> {
             | Intrinsic::ByteEql(..)
             | Intrinsic::ByteLt(..)
             | Intrinsic::ByteLe(..)
-            | Intrinsic::ByteGt(..)
-            | Intrinsic::ByteGe(..)
             | Intrinsic::Int(_)
             | Intrinsic::IntEql(..)
             | Intrinsic::IntNeq(..)
@@ -684,9 +680,7 @@ impl<E: Env> Walk<'_, E> {
             | Intrinsic::IntDiv { .. }
             | Intrinsic::IntRem { .. }
             | Intrinsic::IntLt(..)
-            | Intrinsic::IntGt(..)
             | Intrinsic::IntLe(..)
-            | Intrinsic::IntGe(..)
             | Intrinsic::IntAnd(..)
             | Intrinsic::IntOr(..)
             | Intrinsic::IntXor(..)
@@ -701,9 +695,7 @@ impl<E: Env> Walk<'_, E> {
             | Intrinsic::FltEql(..)
             | Intrinsic::FltNeq(..)
             | Intrinsic::FltLt(..)
-            | Intrinsic::FltGt(..)
             | Intrinsic::FltLe(..)
-            | Intrinsic::FltGe(..)
             | Intrinsic::FltMin(..)
             | Intrinsic::FltMax(..)
             | Intrinsic::FltNeg(..)

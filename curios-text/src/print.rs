@@ -496,9 +496,7 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             divisor: right,
             ..
         } => print_intrinsic_call("Nat/rem", vec![], vec![left, right]),
-        Intrinsic::NatGt(left, right) => print_intrinsic_call("Nat/gt", vec![], vec![left, right]),
         Intrinsic::NatLe(left, right) => print_intrinsic_call("Nat/le", vec![], vec![left, right]),
-        Intrinsic::NatGe(left, right) => print_intrinsic_call("Nat/ge", vec![], vec![left, right]),
         Intrinsic::NatAnd(left, right) => {
             print_intrinsic_call("Nat/and", vec![], vec![left, right])
         }
@@ -540,9 +538,7 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             ..
         } => print_intrinsic_call("Int/rem", vec![], vec![left, right]),
         Intrinsic::IntLt(left, right) => print_intrinsic_call("Int/lt", vec![], vec![left, right]),
-        Intrinsic::IntGt(left, right) => print_intrinsic_call("Int/gt", vec![], vec![left, right]),
         Intrinsic::IntLe(left, right) => print_intrinsic_call("Int/le", vec![], vec![left, right]),
-        Intrinsic::IntGe(left, right) => print_intrinsic_call("Int/ge", vec![], vec![left, right]),
         Intrinsic::IntAnd(left, right) => {
             print_intrinsic_call("Int/and", vec![], vec![left, right])
         }
@@ -580,9 +576,7 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             print_intrinsic_call("Flt/neq", vec![], vec![left, right])
         }
         Intrinsic::FltLt(left, right) => print_intrinsic_call("Flt/lt", vec![], vec![left, right]),
-        Intrinsic::FltGt(left, right) => print_intrinsic_call("Flt/gt", vec![], vec![left, right]),
         Intrinsic::FltLe(left, right) => print_intrinsic_call("Flt/le", vec![], vec![left, right]),
-        Intrinsic::FltGe(left, right) => print_intrinsic_call("Flt/ge", vec![], vec![left, right]),
         Intrinsic::FltMin(left, right) => {
             print_intrinsic_call("Flt/min", vec![], vec![left, right])
         }
@@ -621,12 +615,6 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
         }
         Intrinsic::ByteLe(left, right) => {
             print_intrinsic_call("Byte/le", vec![], vec![left, right])
-        }
-        Intrinsic::ByteGt(left, right) => {
-            print_intrinsic_call("Byte/gt", vec![], vec![left, right])
-        }
-        Intrinsic::ByteGe(left, right) => {
-            print_intrinsic_call("Byte/ge", vec![], vec![left, right])
         }
         Intrinsic::IntToNat { int: operand, .. } => {
             print_intrinsic_call("Int/to_nat", vec![], vec![operand])

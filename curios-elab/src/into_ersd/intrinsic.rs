@@ -186,8 +186,6 @@ pub(super) fn erase_intrinsic(
         Intrinsic::ByteEql(l, r) => op!(curios_ersd::Operation::ByteEql, byte_type, l, r),
         Intrinsic::ByteLt(l, r) => op!(curios_ersd::Operation::ByteLt, byte_type, l, r),
         Intrinsic::ByteLe(l, r) => op!(curios_ersd::Operation::ByteLe, byte_type, l, r),
-        Intrinsic::ByteGt(l, r) => op!(curios_ersd::Operation::ByteGt, byte_type, l, r),
-        Intrinsic::ByteGe(l, r) => op!(curios_ersd::Operation::ByteGe, byte_type, l, r),
 
         Intrinsic::Nat(Nat::Zero) => Ok(lowering.constant(curios_ersd::Constant::Nat(0))),
         Intrinsic::Nat(Nat::Succ(spine, inner)) => {
@@ -228,9 +226,7 @@ pub(super) fn erase_intrinsic(
             divisor: r,
             ..
         } => op!(curios_ersd::Operation::NatRem, nat_type, l, r),
-        Intrinsic::NatGt(l, r) => op!(curios_ersd::Operation::NatGt, nat_type, l, r),
         Intrinsic::NatLe(l, r) => op!(curios_ersd::Operation::NatLe, nat_type, l, r),
-        Intrinsic::NatGe(l, r) => op!(curios_ersd::Operation::NatGe, nat_type, l, r),
         Intrinsic::NatAnd(l, r) => op!(curios_ersd::Operation::NatAnd, nat_type, l, r),
         Intrinsic::NatOr(l, r) => op!(curios_ersd::Operation::NatOr, nat_type, l, r),
         Intrinsic::NatXor(l, r) => op!(curios_ersd::Operation::NatXor, nat_type, l, r),
@@ -258,9 +254,7 @@ pub(super) fn erase_intrinsic(
             ..
         } => op!(curios_ersd::Operation::IntRem, int_type, l, r),
         Intrinsic::IntLt(l, r) => op!(curios_ersd::Operation::IntLt, int_type, l, r),
-        Intrinsic::IntGt(l, r) => op!(curios_ersd::Operation::IntGt, int_type, l, r),
         Intrinsic::IntLe(l, r) => op!(curios_ersd::Operation::IntLe, int_type, l, r),
-        Intrinsic::IntGe(l, r) => op!(curios_ersd::Operation::IntGe, int_type, l, r),
         Intrinsic::IntAnd(l, r) => op!(curios_ersd::Operation::IntAnd, int_type, l, r),
         Intrinsic::IntOr(l, r) => op!(curios_ersd::Operation::IntOr, int_type, l, r),
         Intrinsic::IntXor(l, r) => op!(curios_ersd::Operation::IntXor, int_type, l, r),
@@ -276,9 +270,7 @@ pub(super) fn erase_intrinsic(
         Intrinsic::FltEql(l, r) => op!(curios_ersd::Operation::FltEql, flt_type, l, r),
         Intrinsic::FltNeq(l, r) => op!(curios_ersd::Operation::FltNeq, flt_type, l, r),
         Intrinsic::FltLt(l, r) => op!(curios_ersd::Operation::FltLt, flt_type, l, r),
-        Intrinsic::FltGt(l, r) => op!(curios_ersd::Operation::FltGt, flt_type, l, r),
         Intrinsic::FltLe(l, r) => op!(curios_ersd::Operation::FltLe, flt_type, l, r),
-        Intrinsic::FltGe(l, r) => op!(curios_ersd::Operation::FltGe, flt_type, l, r),
         Intrinsic::FltMin(l, r) => op!(curios_ersd::Operation::FltMin, flt_type, l, r),
         Intrinsic::FltMax(l, r) => op!(curios_ersd::Operation::FltMax, flt_type, l, r),
         Intrinsic::FltCopysign(l, r) => op!(curios_ersd::Operation::FltCopysign, flt_type, l, r),

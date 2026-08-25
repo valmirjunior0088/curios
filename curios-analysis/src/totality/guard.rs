@@ -46,8 +46,6 @@ impl Guard {
         let (left, right, relation) = match &**term {
             Subterm::Intrinsic(Intrinsic::NatLt(left, right)) => (left, right, Relation::Lt),
             Subterm::Intrinsic(Intrinsic::NatLe(left, right)) => (left, right, Relation::Le),
-            Subterm::Intrinsic(Intrinsic::NatGt(left, right)) => (left, right, Relation::Gt),
-            Subterm::Intrinsic(Intrinsic::NatGe(left, right)) => (left, right, Relation::Ge),
             Subterm::Intrinsic(Intrinsic::NatEql(left, right)) => (left, right, Relation::Eql),
             Subterm::Intrinsic(Intrinsic::NatNeq(left, right)) => (left, right, Relation::Neq),
             _ => return None,

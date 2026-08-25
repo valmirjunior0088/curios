@@ -992,7 +992,7 @@ mod intrinsic {
         assert_eq!(
             reduced(
                 &mut context,
-                Term::intrinsic(Intrinsic::nat_gte(succ(x()), lit(1)))
+                Term::intrinsic(Intrinsic::nat_lte(lit(1), succ(x())))
             ),
             Subterm::Intrinsic(Intrinsic::Bool(true)),
         );
@@ -1004,7 +1004,7 @@ mod intrinsic {
             Subterm::Intrinsic(Intrinsic::Bool(true)),
         );
 
-        // Shared inner: `lt(x, succ x) = true`, `ge(x, succ x) = false`.
+        // Shared inner: `lt(x, succ x) = true`, `le(succ x, x) = false`.
         assert_eq!(
             reduced(
                 &mut context,
@@ -1015,7 +1015,7 @@ mod intrinsic {
         assert_eq!(
             reduced(
                 &mut context,
-                Term::intrinsic(Intrinsic::nat_gte(x(), succ(x())))
+                Term::intrinsic(Intrinsic::nat_lte(succ(x()), x()))
             ),
             Subterm::Intrinsic(Intrinsic::Bool(false)),
         );

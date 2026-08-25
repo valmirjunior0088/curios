@@ -1035,12 +1035,6 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Intrinsic::ByteLe(left, right) => {
                 curios_core::Intrinsic::ByteLe(self.term(left)?, self.term(right)?)
             }
-            Intrinsic::ByteGt(left, right) => {
-                curios_core::Intrinsic::ByteGt(self.term(left)?, self.term(right)?)
-            }
-            Intrinsic::ByteGe(left, right) => {
-                curios_core::Intrinsic::ByteGe(self.term(left)?, self.term(right)?)
-            }
             Intrinsic::NatEql(left, right) => {
                 curios_core::Intrinsic::nat_eql(self.term(left)?, self.term(right)?)
             }
@@ -1077,14 +1071,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 self.term(divisor)?,
                 self.term(non_zero)?,
             ),
-            Intrinsic::NatGt(left, right) => {
-                curios_core::Intrinsic::nat_gt(self.term(left)?, self.term(right)?)
-            }
             Intrinsic::NatLe(left, right) => {
                 curios_core::Intrinsic::nat_lte(self.term(left)?, self.term(right)?)
-            }
-            Intrinsic::NatGe(left, right) => {
-                curios_core::Intrinsic::nat_gte(self.term(left)?, self.term(right)?)
             }
             Intrinsic::NatAnd(left, right) => {
                 curios_core::Intrinsic::NatAnd(self.term(left)?, self.term(right)?)
@@ -1139,14 +1127,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Intrinsic::IntLt(left, right) => {
                 curios_core::Intrinsic::int_lt(self.term(left)?, self.term(right)?)
             }
-            Intrinsic::IntGt(left, right) => {
-                curios_core::Intrinsic::int_gt(self.term(left)?, self.term(right)?)
-            }
             Intrinsic::IntLe(left, right) => {
                 curios_core::Intrinsic::int_lte(self.term(left)?, self.term(right)?)
-            }
-            Intrinsic::IntGe(left, right) => {
-                curios_core::Intrinsic::int_gte(self.term(left)?, self.term(right)?)
             }
             Intrinsic::IntAnd(left, right) => {
                 curios_core::Intrinsic::IntAnd(self.term(left)?, self.term(right)?)
@@ -1189,14 +1171,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Intrinsic::FltLt(left, right) => {
                 curios_core::Intrinsic::flt_lt(self.term(left)?, self.term(right)?)
             }
-            Intrinsic::FltGt(left, right) => {
-                curios_core::Intrinsic::flt_gt(self.term(left)?, self.term(right)?)
-            }
             Intrinsic::FltLe(left, right) => {
                 curios_core::Intrinsic::flt_lte(self.term(left)?, self.term(right)?)
-            }
-            Intrinsic::FltGe(left, right) => {
-                curios_core::Intrinsic::flt_gte(self.term(left)?, self.term(right)?)
             }
             Intrinsic::FltMin(left, right) => {
                 curios_core::Intrinsic::flt_min(self.term(left)?, self.term(right)?)

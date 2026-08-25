@@ -984,12 +984,6 @@ pub fn reduce_intrinsic(
         Intrinsic::ByteLe(l, r) => {
             reduce_byte_binary(reducer, l, r, |l, r| l <= r, Intrinsic::ByteLe)
         }
-        Intrinsic::ByteGt(l, r) => {
-            reduce_byte_binary(reducer, l, r, |l, r| l > r, Intrinsic::ByteGt)
-        }
-        Intrinsic::ByteGe(l, r) => {
-            reduce_byte_binary(reducer, l, r, |l, r| l >= r, Intrinsic::ByteGe)
-        }
         Intrinsic::NatEql(left, right) => reduce_nat_compare(
             reducer,
             left,
@@ -1090,10 +1084,6 @@ pub fn reduce_intrinsic(
             divisor,
             non_zero,
         } => reduce_nat_division(reducer, dividend, divisor, non_zero, Euclid::Remainder),
-        // **A stuck comparison is spelled one way.** `a > b` reduces as `b < a` and `a >= b` as `b <= a`, on every carrier, so the six comparison heads leave the reducer as four and a `/syn` proposition's `Int/ge(a, 0)` is the same term as a guard's `0 <= a`. Sound because the comparison is antisymmetric, and on `Flt` both readings of a NaN are false — see `documentation/design/toolchain/a-comparison-is-spelled-one-way-when-it-is-stuck.md`.
-        Intrinsic::NatGt(left, right) => {
-            reduce_intrinsic(reducer, &Intrinsic::nat_lt(right.clone(), left.clone()))
-        }
         Intrinsic::NatLe(left, right) => reduce_nat_compare(
             reducer,
             left,
@@ -1105,9 +1095,6 @@ pub fn reduce_intrinsic(
             },
             Intrinsic::nat_lte,
         ),
-        Intrinsic::NatGe(left, right) => {
-            reduce_intrinsic(reducer, &Intrinsic::nat_lte(right.clone(), left.clone()))
-        }
         // Bitwise ops fold on the unbounded ℕ the type level pretends: `and`, `or`, `xor` on the infinite binary expansion, `shl` as `· 2^n` and `shr` as `⌊·/2^n⌋`. The runtime's 31-bit carrier (truncating `shl`, logical `shr`) is imposed only in the backend, never here.
         Intrinsic::NatAnd(left, right) => Ok(then_laws(
             reduce_nat_binary(
@@ -1244,9 +1231,6 @@ pub fn reduce_intrinsic(
             |left, right| Some(Intrinsic::Bool(left < right)),
             Intrinsic::IntLt,
         ),
-        Intrinsic::IntGt(left, right) => {
-            reduce_intrinsic(reducer, &Intrinsic::IntLt(right.clone(), left.clone()))
-        }
         Intrinsic::IntLe(left, right) => reduce_int_binary(
             reducer,
             left,
@@ -1254,9 +1238,6 @@ pub fn reduce_intrinsic(
             |left, right| Some(Intrinsic::Bool(left <= right)),
             Intrinsic::IntLe,
         ),
-        Intrinsic::IntGe(left, right) => {
-            reduce_intrinsic(reducer, &Intrinsic::IntLe(right.clone(), left.clone()))
-        }
         // Bitwise ops fold on the unbounded ℤ the type level pretends: `and`, `or`, `xor` on the infinite two's-complement expansion, `shl` as `· 2^n` and `shr` as the arithmetic `⌊·/2^n⌋`. The runtime's signed 31-bit carrier (truncating `shl`, `shr_s`) is imposed only in the backend, never here.
         Intrinsic::IntAnd(left, right) => reduce_int_binary(
             reducer,
@@ -1368,9 +1349,6 @@ pub fn reduce_intrinsic(
             |l, r| Intrinsic::Bool(l.lt(r)),
             Intrinsic::FltLt,
         ),
-        Intrinsic::FltGt(left, right) => {
-            reduce_intrinsic(reducer, &Intrinsic::FltLt(right.clone(), left.clone()))
-        }
         Intrinsic::FltLe(left, right) => reduce_flt_binary(
             reducer,
             left,
@@ -1378,9 +1356,6 @@ pub fn reduce_intrinsic(
             |l, r| Intrinsic::Bool(l.le(r)),
             Intrinsic::FltLe,
         ),
-        Intrinsic::FltGe(left, right) => {
-            reduce_intrinsic(reducer, &Intrinsic::FltLe(right.clone(), left.clone()))
-        }
         Intrinsic::FltNeg(inner) => reduce_flt_unary(
             reducer,
             inner,

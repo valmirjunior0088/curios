@@ -85,20 +85,8 @@ pub trait IntrinsicBuilders {
         F: Into<Term>,
         S: Into<Term>;
 
-    /// An `IntGt` node from anything term-shaped.
-    fn int_gt<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>;
-
     /// An `IntLe` node from anything term-shaped.
     fn int_lte<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>;
-
-    /// An `IntGe` node from anything term-shaped.
-    fn int_gte<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>;
@@ -192,20 +180,8 @@ pub trait IntrinsicBuilders {
         F: Into<Term>,
         S: Into<Term>;
 
-    /// A `FltGt` node from anything term-shaped.
-    fn flt_gt<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>;
-
     /// A `FltLe` node from anything term-shaped.
     fn flt_lte<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>;
-
-    /// A `FltGe` node from anything term-shaped.
-    fn flt_gte<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>;
@@ -383,28 +359,12 @@ impl IntrinsicBuilders for Intrinsic {
         Self::IntLt(left.into(), right.into())
     }
 
-    fn int_gt<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::IntGt(left.into(), right.into())
-    }
-
     fn int_lte<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
     {
         Self::IntLe(left.into(), right.into())
-    }
-
-    fn int_gte<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::IntGe(left.into(), right.into())
     }
 
     fn flt_add<F, S>(left: F, right: S) -> Self
@@ -528,28 +488,12 @@ impl IntrinsicBuilders for Intrinsic {
         Self::FltLt(left.into(), right.into())
     }
 
-    fn flt_gt<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::FltGt(left.into(), right.into())
-    }
-
     fn flt_lte<F, S>(left: F, right: S) -> Self
     where
         F: Into<Term>,
         S: Into<Term>,
     {
         Self::FltLe(left.into(), right.into())
-    }
-
-    fn flt_gte<F, S>(left: F, right: S) -> Self
-    where
-        F: Into<Term>,
-        S: Into<Term>,
-    {
-        Self::FltGe(left.into(), right.into())
     }
 
     fn nat_to_int<T>(inner: T) -> Self

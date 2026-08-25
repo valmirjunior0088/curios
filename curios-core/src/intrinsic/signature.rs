@@ -123,18 +123,10 @@ impl Intrinsic {
 
             // Comparisons: same-typed operands in, a boolean out.
             BoolEql(..) | BoolNeq(..) => bin_op(bool_type(), bool_type()),
-            NatEql(..) | NatNeq(..) | NatLt(..) | NatGt(..) | NatLe(..) | NatGe(..) => {
-                bin_op(nat_type(), bool_type())
-            }
-            ByteEql(..) | ByteLt(..) | ByteLe(..) | ByteGt(..) | ByteGe(..) => {
-                bin_op(byte_type(), bool_type())
-            }
-            IntEql(..) | IntNeq(..) | IntLt(..) | IntGt(..) | IntLe(..) | IntGe(..) => {
-                bin_op(int_type(), bool_type())
-            }
-            FltEql(..) | FltNeq(..) | FltLt(..) | FltGt(..) | FltLe(..) | FltGe(..) => {
-                bin_op(flt_type(), bool_type())
-            }
+            NatEql(..) | NatNeq(..) | NatLt(..) | NatLe(..) => bin_op(nat_type(), bool_type()),
+            ByteEql(..) | ByteLt(..) | ByteLe(..) => bin_op(byte_type(), bool_type()),
+            IntEql(..) | IntNeq(..) | IntLt(..) | IntLe(..) => bin_op(int_type(), bool_type()),
+            FltEql(..) | FltNeq(..) | FltLt(..) | FltLe(..) => bin_op(flt_type(), bool_type()),
             HandleEql(..) => bin_op(handle_type(), bool_type()),
 
             // Arithmetic and bitwise: closed on their carrier.
