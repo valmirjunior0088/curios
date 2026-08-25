@@ -122,6 +122,36 @@ fn folded_and_executed_scalar_ops_agree_inside_the_envelope() {
     ]);
 }
 
+/// A reassociating pass may not change *which* programs trap, and multiplication is where it would.
+///
+/// `k(1)` is zero, so the product is zero and no partial of the written order — innermost-out, `((1 * k(1)) * k(2)) * k(3)` — ever exceeds it. The accumulator rebase in `curios-ersd` threads the addends the other way, and the reversed order reaches `2¹⁶ * 2¹⁶` before it meets the zero, which leaves the `u32` carrier and traps.
+///
+/// **Both spellings are the same program and the pair is the claim.** Binding the factor before the recursive call is the shape the rebase envelope accepts; using it inline puts the addend after the call, which the envelope declines. A rebase licensed by associativity alone makes the two disagree — this printed `0` and a trap when `NatMul` was a registered monoid — and the licence it actually needs is monotone definedness, which multiplication has not: see `curios-ersd`'s `optimize::rebase` and `documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md`.
+///
+/// **Falsifiable, and checked to be.** Re-admitting the `NatMul` row to that table fails this fixture on the first assertion and leaves the second passing, which is the disagreement itself rather than a program that merely stopped working.
+#[test]
+fn a_reassociated_product_agrees_with_the_written_one() {
+    let program = |combine: &str| {
+        format!(
+            "use /std/{{Nat, Bool, Fmt, List, proc}};\n\
+             let k(n: Nat) -> Nat = match n == 1 | true => 0 | false => 65536 end;\n\
+             rec prod(n: Nat) -> Nat =\n\
+             match n | 0 => 1 | p + 1; _ => {combine} end;\n\
+             Fmt/print(\"%\")(Nat/to_str(prod(List/len(proc/args!))))\n"
+        )
+    };
+    let answer = |combine: &str| {
+        let (system, io) = MockHost::builder().args(["a", "b", "c"]).build();
+        run_text(&program(combine), system).expect("the product runs");
+        io.output()
+    };
+
+    // The addend bound before the call: the rebase envelope accepts this one.
+    assert_eq!(answer("let factor: Nat = k(p + 1); prod(p) * factor"), b"0");
+    // The addend used inline, so it is computed after the call: the envelope declines this one.
+    assert_eq!(answer("prod(p) * k(p + 1)"), b"0");
+}
+
 #[test]
 fn overflowing_computations_trap_at_the_backend_boundary() {
     // Each expression is a valid computation whose value leaves the carrier; the backend refuses it and traps instead of silently answering something else. Three ways a shift used to answer something else are covered below, and each was a different defect: a truncated product, a masked count, and the signed envelope being one place narrower than the unsigned one.
