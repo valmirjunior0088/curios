@@ -1,6 +1,6 @@
 //! The semantic Rust types a builtin host operation speaks in — the pure halves, free of any native-platform dependency, that the [`HostOps`](super::HostOps) trait's signatures reference and every host adapter shares.
 //!
-//! Each mirrors a guest-side notion and lifts from / lowers to its wire shape: a [`Handle`] is its token bytes (a `Bytes`), a [`Status`]/[`Poll`] its raw `Nat` code, a [`Mode`] its `0`/`1`/`2` tag. The native adapter's own concerns — mapping an `io::Error` to a `Status`, a `Poll` mask to platform `poll` flags — live with the adapter (`curios-runtime`), not here.
+//! Each mirrors a guest-side notion at its wire shape: a [`Handle`] is its token bytes (a `Bytes`), a [`Status`]/[`Poll`] its raw `Nat` code, a [`Mode`] its `0`/`1`/`2` tag. [`Handle`] and [`Poll`] lift from and lower to that shape here; [`Status`] only lowers, since a host produces one and never reads one back; and [`Mode`] is lifted by the adapter that reads the tag off the wire. The native adapter's own concerns — mapping an `io::Error` to a `Status`, a `Poll` mask to platform `poll` flags — live with the adapter (`curios-runtime`), not here.
 
 use {
     crate::{status, stdio},
@@ -87,7 +87,7 @@ impl Default for TokenMint {
     }
 }
 
-/// A `poll` event mask — the interest a guest registers for a handle, and the readiness the host reports back. The one bitfield in the host design: a set of flags riding a `u32`, mirroring the guest's per-handle `Nat` mask. Lifts from / lowers to the raw `Nat` bits, exactly as [`Status`] does for its code. The mapping to platform `POLLIN`/`POLLOUT`/… (whose raw values differ per platform) is the native adapter's concern.
+/// A `poll` event mask — the interest a guest registers for a handle, and the readiness the host reports back. The one bitfield in the host design: a set of flags riding a `u32`, mirroring the guest's per-handle `Nat` mask. Lifts from / lowers to the raw `Nat` bits; [`Status`] lowers to its code the same way. The mapping to platform `POLLIN`/`POLLOUT`/… (whose raw values differ per platform) is the native adapter's concern.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Poll(u32);
 
@@ -143,7 +143,7 @@ impl Status {
     }
 }
 
-/// The open mode of `/sys/file/open`, mirrored by `/std/File`'s `Mode` inductive. Lifts from its `0`/`1`/`2` tag; an out-of-range tag panics — `/std/File` only ever marshals those three, so anything else is a codegen bug.
+/// The open mode of `/sys/file/open`, mirrored by `/std/File`'s `Mode` inductive. Its `0`/`1`/`2` tag is [`mode`](crate::mode)'s; lifting a tag is the native adapter's (`curios-runtime`'s `Lift`), which is where an out-of-range one is refused.
 #[derive(Clone, Copy, PartialEq)]
 pub enum Mode {
     Read,
