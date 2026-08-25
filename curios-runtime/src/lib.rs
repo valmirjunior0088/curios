@@ -40,6 +40,6 @@ pub use lower::*;
 mod engine;
 pub use engine::*;
 
-/// Deliberately a namespace rather than flattened into the root, and the one place in this workspace that keeps one. The other crates' namespaces existed to hold colliding names apart and were dissolved into crate boundaries; this one is not about ambiguity at all. `curios_runtime::test_support::GuestInstance` says at its use site that the caller reached for scaffolding rather than product API, which a flat `curios_runtime::GuestInstance` beside `run_bytes` would not. The path is the warning label.
+/// Deliberately a namespace rather than flattened into the root, and one of the two places in this workspace that keep one — `curios-ersd`'s `test_support` is the other, for the same reason. The other crates' namespaces existed to hold colliding names apart and were dissolved into crate boundaries; this one is not about ambiguity at all. `curios_runtime::test_support::GuestInstance` says at its use site that the caller reached for scaffolding rather than product API, which a flat `curios_runtime::GuestInstance` beside `run_bytes` would not. The path is the warning label.
 #[cfg(feature = "test-support")]
 pub mod test_support;
