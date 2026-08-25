@@ -35,20 +35,26 @@ pub fn scaffold(directory: &Path) -> Result<Vec<PathBuf>, String> {
         ));
     }
 
-    // Refused for the same reason as the manifest: a file that is already there is the user's, and `new` writes rather than adopts.
+    let library = directory.join(LIBRARY);
+    let program = directory.join(EXECUTABLE);
     let ignore = directory.join(IGNORE);
-    if ignore.exists() {
-        return Err(format!(
-            "{} already holds a {IGNORE}; `new` writes one rather than adopting one",
-            directory.display()
-        ));
+
+    // Every file it would write is checked before any is, for the same reason as the manifest: a file that is already there is the user's, and `new` writes rather than adopts.
+    for (path, name) in [
+        (&library, LIBRARY),
+        (&program, EXECUTABLE),
+        (&ignore, IGNORE),
+    ] {
+        if path.exists() {
+            return Err(format!(
+                "{} already holds a {name}; `new` writes one rather than adopting one",
+                directory.display()
+            ));
+        }
     }
 
     fs::create_dir_all(directory)
         .map_err(|error| format!("failed to create {}: {error}", directory.display()))?;
-
-    let library = directory.join(LIBRARY);
-    let program = directory.join(EXECUTABLE);
 
     write(&manifest, &format!("name = {name:?}\n"))?;
     // The program reads its own library rather than printing a literal, so the two files it starts with demonstrate the one thing a package *is*: a namespace mounted at its declared name. Neither file is named after the package, which is what keeps `use /hello/{message}` from reading `hello` twice for two different things.

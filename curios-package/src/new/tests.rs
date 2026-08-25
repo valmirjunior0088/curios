@@ -102,17 +102,22 @@ fn a_scaffolded_package_ignores_its_store() {
     fs::remove_dir_all(root).unwrap();
 }
 
-/// An ignore file that is already there is the user's, so `new` refuses before writing anything rather than replacing it.
+/// A file that is already there is the user's, so `new` refuses before writing anything rather than replacing it — for every file it would write, not only the manifest.
 #[test]
-fn an_existing_ignore_file_is_not_overwritten() {
-    let root = temp_dir("scaffold_ignore_occupied");
-    fs::create_dir_all(&root).unwrap();
-    fs::write(root.join(IGNORE), "theirs\n").unwrap();
+fn an_existing_file_is_not_overwritten() {
+    for name in [LIBRARY, EXECUTABLE, IGNORE] {
+        let root = temp_dir("scaffold_occupied_file");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join(name), "theirs\n").unwrap();
 
-    let refusal = scaffold(&root).expect_err("a directory that already holds an ignore file");
-    assert!(refusal.contains("already holds a .gitignore"), "{refusal}");
-    assert_eq!(fs::read_to_string(root.join(IGNORE)).unwrap(), "theirs\n");
-    assert!(!root.join(MANIFEST).exists(), "nothing else was written");
+        let refusal = scaffold(&root).expect_err("a directory that already holds the file");
+        assert!(
+            refusal.contains(&format!("already holds a {name}")),
+            "{refusal}"
+        );
+        assert_eq!(fs::read_to_string(root.join(name)).unwrap(), "theirs\n");
+        assert!(!root.join(MANIFEST).exists(), "nothing else was written");
 
-    fs::remove_dir_all(root).unwrap();
+        fs::remove_dir_all(root).unwrap();
+    }
 }
