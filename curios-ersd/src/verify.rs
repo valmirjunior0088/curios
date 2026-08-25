@@ -547,15 +547,16 @@ impl<'m> Verifier<'m> {
     fn check_schema_links(&self) -> Result<(), VerifyError> {
         let mut listed = vec![0usize; self.module.constructors().len()];
         for (index, family) in self.module.families().iter().enumerate() {
+            let id = FamilyId(index as u32);
             for &constructor in &family.constructors {
                 let Some(definition) = self.module.constructor(constructor) else {
                     return Err(VerifyError(format!(
-                        "family ~d{index} lists dead constructor {constructor}"
+                        "family {id} lists dead constructor {constructor}"
                     )));
                 };
-                if definition.family.index() != index {
+                if definition.family != id {
                     return Err(VerifyError(format!(
-                        "family ~d{index} lists {constructor}, which belongs to {}",
+                        "family {id} lists {constructor}, which belongs to {}",
                         definition.family
                     )));
                 }
@@ -564,15 +565,17 @@ impl<'m> Verifier<'m> {
         }
         for (index, count) in listed.iter().enumerate() {
             if *count != 1 {
+                let id = ConstructorId(index as u32);
                 return Err(VerifyError(format!(
-                    "constructor ~t{index} is listed {count} times by its family"
+                    "constructor {id} is listed {count} times by its family"
                 )));
             }
         }
         for (index, constructor) in self.module.constructors().iter().enumerate() {
             if self.module.family(constructor.family).is_none() {
+                let id = ConstructorId(index as u32);
                 return Err(VerifyError(format!(
-                    "constructor ~t{index} references dead {}",
+                    "constructor {id} references dead {}",
                     constructor.family
                 )));
             }
@@ -583,30 +586,33 @@ impl<'m> Verifier<'m> {
     /// After the walk: every live slot in a tombstoned arena was owned exactly once (the walk already rejected double ownership), so anything unvisited is leaked.
     fn check_ownership_complete(&self) -> Result<(), VerifyError> {
         for (index, slot) in self.module.blocks().iter().enumerate() {
-            if slot.is_some() && !self.visited_blocks.contains(&BlockId(index as u32)) {
-                return Err(VerifyError(format!("block ~b{index} has no owner")));
+            let id = BlockId(index as u32);
+            if slot.is_some() && !self.visited_blocks.contains(&id) {
+                return Err(VerifyError(format!("block {id} has no owner")));
             }
         }
         for (index, slot) in self.module.statements().iter().enumerate() {
-            if slot.is_some() && !self.visited_statements.contains(&StatementId(index as u32)) {
-                return Err(VerifyError(format!("statement ~s{index} has no owner")));
+            let id = StatementId(index as u32);
+            if slot.is_some() && !self.visited_statements.contains(&id) {
+                return Err(VerifyError(format!("statement {id} has no owner")));
             }
         }
         for (index, slot) in self.module.functions().iter().enumerate() {
-            if slot.is_some() && !self.bound_functions.contains(&FunctionId(index as u32)) {
-                return Err(VerifyError(format!("function ~f{index} is never bound")));
+            let id = FunctionId(index as u32);
+            if slot.is_some() && !self.bound_functions.contains(&id) {
+                return Err(VerifyError(format!("function {id} is never bound")));
             }
         }
         for (index, slot) in self.module.values().iter().enumerate() {
-            if slot.is_some() && !self.defined_values.contains(&ValueId(index as u32)) {
-                return Err(VerifyError(format!("value ~v{index} is never defined")));
+            let id = ValueId(index as u32);
+            if slot.is_some() && !self.defined_values.contains(&id) {
+                return Err(VerifyError(format!("value {id} is never defined")));
             }
         }
         for (index, slot) in self.module.rec_groups().iter().enumerate() {
-            if slot.is_some() && !self.visited_groups.contains(&RecGroupId(index as u32)) {
-                return Err(VerifyError(format!(
-                    "recursive group ~r{index} has no owner"
-                )));
+            let id = RecGroupId(index as u32);
+            if slot.is_some() && !self.visited_groups.contains(&id) {
+                return Err(VerifyError(format!("recursive group {id} has no owner")));
             }
         }
         Ok(())
