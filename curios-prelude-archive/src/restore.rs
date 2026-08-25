@@ -119,7 +119,7 @@ mod tests {
     #[test]
     fn string_literal_machinery_is_monomorphic() {
         // Selected by name because these are exactly the hidden lowering targets `curios-prelude-archive/src/syntax.rs` registers that are emitted more than once per literal; nothing infers behavior from the spelling. `of_scan_eq` and `refl_scan` are deliberately absent — see above.
-        let lowering_targets = ["/syn/Str", "/syn/Str/scan_from", "/syn/Char"];
+        let lowering_targets = ["/syn/Str/Str", "/syn/Str/scan_from", "/syn/Char/Char"];
 
         with_prelude(|prelude| {
             let mut parameters = std::collections::BTreeMap::new();
@@ -155,7 +155,7 @@ mod tests {
             }
             // Without this the test passes vacuously if `/syn` is renamed.
             assert!(
-                checked >= lowering_targets.len() / 2,
+                checked == lowering_targets.len(),
                 "found only {checked} of the expected lowering targets; \
                  the `/syn` names this pins have moved"
             );
