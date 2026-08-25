@@ -205,7 +205,7 @@ impl Module {
         &self.imports
     }
 
-    /// Adds an import under the two-level `module_name`/`name` key the host resolves at instantiation. Imported functions and globals always take the leading indices of their index spaces, ahead of module-defined ones.
+    /// Adds an import under the two-level `module_name`/`name` key the host resolves at instantiation. Imported items always take the leading indices of their index spaces, ahead of module-defined ones.
     pub fn add_import<M, N>(&mut self, module_name: M, name: N, import: Import)
     where
         M: Into<String>,
@@ -265,7 +265,7 @@ impl Module {
         &self.exports
     }
 
-    /// Exports a previously added function or global under the host-visible string `name`.
+    /// Exports a previously added function, table, memory or global under the host-visible string `name`.
     pub fn add_export<N>(&mut self, name: N, export: Export)
     where
         N: Into<String>,
