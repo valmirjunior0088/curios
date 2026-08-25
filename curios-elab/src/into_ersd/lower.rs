@@ -462,7 +462,7 @@ impl Lowering {
     }
 }
 
-/// What one unit's erasure provides to its successors: its items in an arena module, together with the environment mapping its Core names to arena operands. Archived behind the `archive` feature and restored once per thread; every production compile consumes an owned clone, so a stored unit is never re-erased from source.
+/// What one unit's erasure provides to its successors: its items in an erased module, together with the environment mapping its Core names to erased operands. Archived behind the `archive` feature and restored once per thread; every production compile consumes an owned clone, so a stored unit is never re-erased from source.
 ///
 /// `Default` is the empty scope, and it is what makes "erase the first unit" the same call as "erase a later one": `ErsdBuilder::resume` over an empty module reindexes nothing and yields exactly a fresh builder.
 #[derive(Debug, Clone, Default)]
@@ -487,7 +487,7 @@ impl ErasedArena {
         self.environment.remap(&compaction);
     }
 
-    /// The finished arena module, for a unit whose entrypoint was sealed — what the back half of the pipeline lowers. A unit without one is a scope rather than a program, and its arena is resumed over instead.
+    /// The finished erased module, for a unit whose entrypoint was sealed — what the back half of the pipeline lowers. A unit without one is a scope rather than a program, and its arena is resumed over instead.
     pub fn into_module(self) -> curios_ersd::Module {
         self.module
     }

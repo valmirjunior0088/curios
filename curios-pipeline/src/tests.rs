@@ -2250,7 +2250,7 @@ fn dead_user_definition_is_still_typechecked() {
 /// Elaborate `source` to its meta-free Core module and erase it exactly as `compile_entrypoint` does — the archived erased prelude replayed, the entry's own items erased onto it.
 ///
 /// It used to erase *fresh*, passing the whole module to `erase_module`, which worked only because a compiled module carried the prelude spliced into its items. It no longer does, and a from-scratch erasure of the entry alone leaves every prelude name unbound. Replaying is also the path production takes, so what these tests exercise is what actually runs; erasing the prelude fresh is `erase_unit`'s job at archive-build time, where a failure panics the build.
-fn erase_to_ir(source: &str, type_: Option<&str>) -> curios_ersd::Module {
+fn erase_to_ersd(source: &str, type_: Option<&str>) -> curios_ersd::Module {
     let entrypoint = with_entrypoint_type(source, type_);
     let (module, core_type, _foreigns) = with_prelude(|prelude| {
         super::elaborate_and_zonk(
@@ -2271,14 +2271,14 @@ fn erase_to_ir(source: &str, type_: Option<&str>) -> curios_ersd::Module {
             Some(&core_type),
         )
     })
-    .expect("the elaborated module erases into a verified arena module")
+    .expect("the elaborated module erases into a verified erased module")
     .into_module()
 }
 
 #[test]
 fn arena_erasure_covers_the_fixed_prelude() {
-    // The entrypoint pulls in string formatting, so the erased module carries the whole fixed prelude — every construct the corpus uses — replayed onto the arena path and verified as one module.
-    let module = erase_to_ir(r#"/std/Fmt/print("hello")"#, None);
+    // The entrypoint pulls in string formatting, so the erased module carries the whole fixed prelude — every construct the corpus uses — replayed onto the erased prefix and verified as one module.
+    let module = erase_to_ersd(r#"/std/Fmt/print("hello")"#, None);
     assert!(
         module.functions().len() > 100,
         "the fixed prelude erased with the program: {} functions",
@@ -2289,15 +2289,15 @@ fn arena_erasure_covers_the_fixed_prelude() {
 #[test]
 fn arena_erasure_is_deterministic_across_compiles() {
     let source = "/std/Nat/add(20, 22)";
-    let first = erase_to_ir(source, Some("/std/Nat")).to_string();
-    let second = erase_to_ir(source, Some("/std/Nat")).to_string();
+    let first = erase_to_ersd(source, Some("/std/Nat")).to_string();
+    let second = erase_to_ersd(source, Some("/std/Nat")).to_string();
     assert_eq!(first, second);
 }
 
 #[test]
 fn arena_erasure_stores_no_captures_for_the_prelude() {
     // Functions carry no capture lists anywhere in the erased prelude; free values are derived on demand. The analysis on the full module is the witness that derivation covers every function.
-    let module = erase_to_ir("/std/Nat/to_str(7)", Some("/std/Str"));
+    let module = erase_to_ersd("/std/Nat/to_str(7)", Some("/std/Str"));
     let analysis = Analysis::analyze(&module);
     let counted = module.function_ids().count();
     assert!(counted > 0);
@@ -2314,7 +2314,7 @@ fn arena_erasure_handles_deep_input_on_the_default_stack() {
         source.push_str(&format!("let x{index} = {index} + 1;\n"));
     }
     source.push_str("x0");
-    let module = erase_to_ir(&source, Some("/std/Nat"));
+    let module = erase_to_ersd(&source, Some("/std/Nat"));
     let printed = module.to_string();
     assert!(printed.contains("NatAdd"));
 }

@@ -37,7 +37,7 @@ pub struct ValueDef {
     pub debug_name: Option<String>,
 }
 
-/// The erased program as flat, first-order data. See the crate's `ir` module documentation for the representation contract.
+/// The erased program as flat, first-order data. See the crate documentation for the representation contract.
 ///
 /// Archived (behind the `archive` feature) as the fixed prelude's replayable prefix. The constant interning index is skipped — it is exactly the inverse of the `constants` arena, rebuilt by `reindex_constants` on restore — so the serialized bytes stay deterministic (a hash map's iteration order is not).
 #[derive(Debug, Clone, Default)]

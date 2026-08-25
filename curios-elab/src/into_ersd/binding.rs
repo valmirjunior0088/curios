@@ -58,7 +58,7 @@ impl Lowering {
 
 /// The module's top-level items in dominance order — every item precedes the items that reference it — as indices into `module.items`.
 ///
-/// The surface-to-core lowering already sorts the items it can see, but a witness reference is only spliced into its consumer during elaboration, after that sort has run — so a witness definition can sit after a consumer in the flat list. Eager erasure resolves every reference to an already-bound operand as it threads the chain, so it needs a true dominance order: the same Kahn sort, re-run over the elaborated terms whose free variables now include the spliced witness references. (The legacy path resolves top-level names lazily against one global environment and never needed this.)
+/// The surface-to-core lowering already sorts the items it can see, but a witness reference is only spliced into its consumer during elaboration, after that sort has run — so a witness definition can sit after a consumer in the flat list. Eager erasure resolves every reference to an already-bound operand as it threads the chain, so it needs a true dominance order: the same Kahn sort, re-run over the elaborated terms whose free variables now include the spliced witness references.
 ///
 /// Independent items keep their flat order (lowest-index-ready tiebreak). A value cycle across top-level items is unexpressible, so the stall fallback that emits the lowest remaining item only guarantees termination.
 fn dominance_order(module: &Module) -> Vec<usize> {

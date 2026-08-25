@@ -4,13 +4,13 @@ The Curios erased IR: the flat, explicit, first-order stage between `curios-elab
 
 ## Design
 
-### The arena optimizer is thin
+### The Ersd optimizer is thin
 
-**Decision.** The arena runs exactly the transformations whose leverage is semantic — pruning, compile-time partial evaluation, and the monoid worker/wrapper rebase — and nothing else. Every structural and local optimization — folding, dead code, inlining, contification, specialization — belongs to `curios-cont`, which runs after the lowering.
+**Decision.** The Ersd optimizer runs exactly the transformations whose leverage is semantic — pruning, compile-time partial evaluation, and the monoid worker/wrapper rebase — and nothing else. Every structural and local optimization — folding, dead code, inlining, contification, specialization — belongs to `curios-cont`, which runs after the lowering.
 
-**Rationale.** The arena's leverage is what it still knows: don't hand Cont work it can delete (pruning), run what compile time has already decided (partial evaluation), and re-base what would exhaust the runtime stack (worker/wrapper). A second local-rewrite engine here would restate Cont's reductions over a second representation, and the two would drift.
+**Rationale.** Ersd's leverage is what it still knows: don't hand Cont work it can delete (pruning), run what compile time has already decided (partial evaluation), and re-base what would exhaust the runtime stack (worker/wrapper). A second local-rewrite engine here would restate Cont's reductions over a second representation, and the two would drift.
 
-**Rejected.** Local reductions in the arena.
+**Rejected.** Local reductions in Ersd.
 
 ### Shapes stay distinct
 

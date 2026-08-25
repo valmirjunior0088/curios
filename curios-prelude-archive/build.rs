@@ -156,7 +156,7 @@ fn build() {
     )
     .unwrap_or_else(|error| {
         panic!(
-            "fixed prelude failed to erase into the arena prefix: {}",
+            "fixed prelude failed to erase into the erased prefix: {}",
             error.format_with(&core, &[])
         )
     });
