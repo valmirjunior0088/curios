@@ -162,10 +162,8 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
+      # The pinned toolchain, not stable: `rust-toolchain.toml` governs cargo in this tree, and its `targets` row is what installs wasm32-wasip2.
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: wasm32-wasip2
-          components: clippy, rustfmt
       - uses: Swatinem/rust-cache@v2
         with:
           key: wasm32-wasip2
