@@ -59,7 +59,7 @@ jobs:
   build-wasm:
     name: Build `curios-js`
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v6
@@ -93,7 +93,7 @@ jobs:
   build-docs:
     name: Build docs
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 20
 
     steps:
       - uses: actions/checkout@v6
