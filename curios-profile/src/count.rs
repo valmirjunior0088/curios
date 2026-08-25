@@ -23,6 +23,11 @@ static PEAK: AtomicUsize = AtomicUsize::new(0);
 /// ```
 pub struct CountingAllocator;
 
+// This crate's own test binary installs it, because the accounting tests are otherwise unfalsifiable: nothing but this allocator writes the counters, so under the system allocator every memory column reads zero and an assertion over them holds whatever the accounting does. Inverting the sign of `retained` was observed to pass the suite without this line and to fail `capture_accounts_retained_and_allocated_bytes` with it.
+#[cfg(test)]
+#[global_allocator]
+static ALLOCATOR: CountingAllocator = CountingAllocator;
+
 impl CountingAllocator {
     /// One trip through the allocator, whatever it was for. Counted separately from the bytes because the two choose different fixes: many small requests want fewer allocations, one large request wants a smaller structure, and a byte total alone cannot tell them apart.
     fn requested() {

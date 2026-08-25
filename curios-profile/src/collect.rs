@@ -425,7 +425,7 @@ mod tests {
         let _span = tracing::trace_span!("inner").entered();
     }
 
-    // The workspace's test binaries do not install `CountingAllocator`, so this asserts the shape of the accounting rather than concrete byte counts: a span that holds an allocation to its exit retains, and one that drops it does not. Under the system allocator every reading is zero and both sides hold trivially.
+    // Falsifiable only because this crate's test binary installs `CountingAllocator` — see `count.rs`; on the system allocator every reading is zero and both assertions hold whatever the accounting does. What they pin is its shape rather than concrete byte counts: a span that holds an allocation to its exit retains, and one that drops it does not. The megabyte is the margin — the counters are process-wide, so a parallel test thread's kilobytes are noise against it.
     #[test]
     fn capture_accounts_retained_and_allocated_bytes() {
         let (_, report) = capture(|| {
