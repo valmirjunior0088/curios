@@ -260,7 +260,7 @@ mod tests {
             }
 
             println!(
-                "\n=== {} of {} prelude items refused ===",
+                "\n=== {} refusals over {} prelude items ===",
                 verdicts.len(),
                 prelude.core().items.len()
             );

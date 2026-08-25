@@ -27,7 +27,8 @@ fn main() {
             };
 
             panic!(
-                "fixed prelude failed the kernel: {} of {} items refused, first: {name} — {}",
+                // A refusal count over a corpus size, not a subset of it: the walk pushes a verdict per *failing pass*, and its passes run over declarations and over each definition of a `rec` group, so the count can exceed the item count outright.
+                "fixed prelude failed the kernel: {} refusals over {} items, first: {name} — {}",
                 refusals.len(),
                 core.items.len(),
                 verdict.error,
