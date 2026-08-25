@@ -7,8 +7,8 @@ mod tests;
 
 use {
     super::{
-        Atom, BlockId, Constant, Field, FieldShape, FunctionId, Module, Rhs, Sign, Statement,
-        StatementId, Terminator, ValueId,
+        Atom, BlockId, Constant, FamilyId, Field, FieldShape, ForeignId, FunctionId, Module,
+        ProductId, Rhs, Sign, Statement, StatementId, Terminator, ValueId,
     },
     curios_utilities::Grain,
     std::fmt,
@@ -49,13 +49,15 @@ impl Printer<'_, '_, '_> {
         let mut jobs = Vec::new();
 
         for (index, schema) in self.module.products().iter().enumerate() {
+            let id = ProductId(index as u32);
             jobs.push(Job::Line(format!(
-                "product ~p{index}{}({})",
+                "product {id}{}({})",
                 hint(&schema.debug_name),
                 fields(&schema.fields)
             )));
         }
         for (index, family) in self.module.families().iter().enumerate() {
+            let id = FamilyId(index as u32);
             let constructors = family
                 .constructors
                 .iter()
@@ -70,13 +72,14 @@ impl Printer<'_, '_, '_> {
                 .collect::<Vec<_>>()
                 .join(" ");
             jobs.push(Job::Line(format!(
-                "family ~d{index}{} {{ {constructors} }}",
+                "family {id}{} {{ {constructors} }}",
                 hint(&family.debug_name)
             )));
         }
         for (index, row) in self.module.foreigns().iter().enumerate() {
+            let id = ForeignId(index as u32);
             jobs.push(Job::Line(format!(
-                "foreign ~x{index} {}/{}",
+                "foreign {id} {}/{}",
                 row.namespace, row.name
             )));
         }
@@ -89,6 +92,7 @@ impl Printer<'_, '_, '_> {
         }
         for (index, slot) in self.module.functions().iter().enumerate() {
             let Some(function) = slot else { continue };
+            let id = FunctionId(index as u32);
             let params = function
                 .params
                 .iter()
@@ -96,7 +100,7 @@ impl Printer<'_, '_, '_> {
                 .collect::<Vec<_>>()
                 .join(", ");
             jobs.push(Job::Blocked(
-                format!("function ~f{index}{}({params})", hint(&function.debug_name)),
+                format!("function {id}{}({params})", hint(&function.debug_name)),
                 function.body,
             ));
         }
