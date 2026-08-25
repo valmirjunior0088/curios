@@ -4,7 +4,7 @@ argument-hint: "[crate or path to hunt in — curios-cont, curios-elab/src/conve
 allowed-tools: Read, Edit, Write, Grep, Glob, Bash(rg:*), Bash(cargo:*), Bash(git:*), Bash(make:*)
 ---
 
-Hunt the scope `$ARGUMENTS` names for one thing at a time worth fixing. With no scope given, check the hunt-progress memories for what is finished or deferred, pick a crate, and say why.
+Hunt the scope `$ARGUMENTS` names for one thing at a time worth fixing. With no scope given, pick a crate, and say why.
 
 ## What to look for
 
@@ -30,4 +30,4 @@ Files already modified at session start belong to the user — do not edit or st
 
 ## Stopping
 
-Stop when the remaining candidates are taste with no consequence, and say so rather than trickling them out. If any Rust changed, run CLAUDE.md's full hand-off gate once. Report fixed (subjects), skipped, and where the hunt should resume, then update the hunt-progress memory to match.
+Stop when the remaining candidates are taste with no consequence, and say so rather than trickling them out. If any Rust changed, run CLAUDE.md's full hand-off gate once. Report fixed (subjects), skipped, and where the hunt should resume.
