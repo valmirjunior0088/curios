@@ -37,8 +37,24 @@ impl Module {
     /// Check the module against the representation contract, reporting the first violation. Deterministic: the same module always reports the same diagnostic.
     pub fn verify(&self) -> Result<(), VerifyError> {
         curios_profile::profile!("verify_module");
-        grown(|| Verifier::new(self).run())
+        grown(|| Verifier::new(self).run(Entry::Required))
     }
+
+    /// [`verify`](Self::verify) for a *prefix* — a unit that carries no entrypoint, so there is no entry block and its absence is not a fault.
+    ///
+    /// Every other rule applies unchanged: an entry contributes no rule of its own, it is one more block walked after the items, so what a prefix cannot be checked against is exactly the one clause that asks for it. That is worth a second entry point rather than a silent skip, because the prefix is the thing that gets *stored*: the fixed prelude's image is erased, compacted and serialized without ever passing through [`ErsdBuilder::finalize`](crate::ErsdBuilder::finalize), and a compaction that misses an identity rewrites nothing and reports nothing — the stale index still addresses a live slot, just the wrong entity. Without this the first walk over those bytes is a later program's own `finalize`, which reports the fault against that program.
+    ///
+    /// The prelude's own build profile prices it: **76.1 ms against `erase_unit`'s 2344.9 ms** on 2026-08-25, debug, one call each. Retake with `cargo build --package curios-prelude --features profile` and read `verify_prefix` out of the `OUT_DIR/profile.tsv` it announces.
+    pub fn verify_prefix(&self) -> Result<(), VerifyError> {
+        curios_profile::profile!("verify_prefix");
+        grown(|| Verifier::new(self).run(Entry::Absent))
+    }
+}
+
+/// Whether the module under check is a finished program, which owes an entry block, or a prefix, which does not.
+enum Entry {
+    Required,
+    Absent,
 }
 
 struct Verifier<'m> {
@@ -66,11 +82,15 @@ impl<'m> Verifier<'m> {
         }
     }
 
-    fn run(mut self) -> Result<(), VerifyError> {
+    fn run(mut self, entry: Entry) -> Result<(), VerifyError> {
         self.check_schema_links()?;
 
-        let Some(entry) = self.module.entry() else {
-            return Err(VerifyError("the module has no entry block".into()));
+        let block = match (self.module.entry(), entry) {
+            (Some(block), _) => Some(block),
+            (None, Entry::Absent) => None,
+            (None, Entry::Required) => {
+                return Err(VerifyError("the module has no entry block".into()));
+            }
         };
 
         // The module's top level is a virtual block: items in order, then the entry block, with item bindings ambient for everything after them.
@@ -78,7 +98,9 @@ impl<'m> Verifier<'m> {
         for item in items {
             self.check_statement(item)?;
         }
-        self.enter_block(entry)?;
+        if let Some(block) = block {
+            self.enter_block(block)?;
+        }
 
         self.check_ownership_complete()
     }

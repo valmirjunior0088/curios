@@ -580,9 +580,12 @@ fn erase_unit_within(
 
         match (&module.body, &expected) {
             (Some(body), Some(expected)) => seal_entry(lowering, context, body, expected),
-            // No entrypoint: the arena stays open, which is exactly what a successor resumes over.
+            // No entrypoint: the arena stays open, which is exactly what a successor resumes over. The hand-off still checks every rule a prefix can satisfy, so an image reaches the archive walked rather than merely constructed.
             _ => Ok(ErasedArena {
-                module: lowering.builder.into_module(),
+                module: lowering
+                    .builder
+                    .into_module()
+                    .map_err(|error| Error::erased_module_invalid(error.to_string()))?,
                 environment: lowering.environment,
             }),
         }
