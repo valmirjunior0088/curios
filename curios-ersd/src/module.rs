@@ -320,7 +320,6 @@ impl Module {
         self.blocks.define(id, block);
     }
 
-    /// Tombstone every function outside `keep`. Identities are never reused.
     /// Drop every tombstone from every arena and rewrite each stored identity to where it moved.
     ///
     /// The one pass that invalidates identities, so it reports the two spaces anything *outside* a module can hold: [`Atom`](crate::Atom) carries a `ValueId`, a `FunctionId`, or a `ConstantId`, and constants are interned in a plain vector this never touches. Blocks, statements and recursive groups are named only from within, so they are compacted and not reported.
@@ -399,6 +398,7 @@ impl Module {
         Compaction { values, functions }
     }
 
+    /// Tombstone every function outside `keep`. Identities are never reused.
     pub(crate) fn retain_functions(&mut self, keep: &std::collections::BTreeSet<FunctionId>) {
         self.functions.retain(keep);
     }
