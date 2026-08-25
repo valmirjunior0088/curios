@@ -1,6 +1,6 @@
-//! The arena-level transformations — the three the specification forces and nothing else.
+//! The Ersd transformations — the ones whose leverage is semantic, and nothing else.
 //!
-//! This driver runs all three, plus literal-spine specialization beside the partial evaluator. All structural and local optimization — folding, dead code, inlining, contification, specialization — belongs to Cont, which runs after the lowering; the arena's leverage is semantic: don't hand Cont work (pruning), run what is already decided (partial evaluation), and re-base what would exhaust the stack (worker/wrapper).
+//! Pruning, compile-time partial evaluation with literal-spine specialization beside it, and the monoid worker/wrapper rebase. All structural and local optimization — folding, dead code, inlining, contification, specialization — belongs to Cont, which runs after the lowering; Ersd's leverage is what it still knows: don't hand Cont work it can delete (pruning), run what compile time has already decided (partial evaluation), and re-base what would exhaust the runtime stack (worker/wrapper).
 
 mod prune;
 
