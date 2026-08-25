@@ -172,7 +172,7 @@ cargo test --workspace --all-targets --all-features > /tmp/curios-tests.txt 2>&1
 
 A change to Ersd is *not*, and the reason is worth knowing: a unit with no entrypoint leaves erasure through `ErsdBuilder::into_module`, which hands the prefix over unverified — a prefix has no entry block, and `Module::verify` requires one. The prelude is that case, so the archive build never runs the Ersd verifier over it; the archive build's own `profile.tsv` carries `erase_unit` and no `verify_module` at all. The restored prefix is first verified when a program compiles on top of it and `finalize` walks the whole module, which is `cargo test` rather than a workspace build.
 
-A change *below* Ersd is not. The archive stops there, so nothing in a workspace check reaches `curios-cont` or `curios-wasm`, and their detector is the cross-stage corpus in `curios`. That line, rather than the size of a diff, is what decides whether a change can be verified cheaply.
+Nothing *below* Ersd is reached at all: the archive stops there, so a workspace check never enters `curios-cont` or `curios-wasm`, and their detector is the same cross-stage corpus in `curios`. Where a change sits against that line, rather than the size of its diff, is what decides whether it can be verified cheaply.
 
 ### Before handing off code changes
 
