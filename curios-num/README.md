@@ -22,7 +22,7 @@ The consequence to accept is that adding an operation to `Natural` or `Integer` 
 
 ### Two layers, and neither is expressible in the other
 
-**Decision.** `Natural`/`Integer` are *type-level* values — unbounded, pretending ℕ and ℤ. The `scalar` functions are a separate layer giving the exact semantics of the *erased* carriers, where `Nat` is a `u32` that wraps and `Int` an `i32` that traps. Every stage's constant folder shares the second layer so its arithmetic cannot drift from the backend's; the runtime's 31-bit range is enforced only where a literal must materialize, in erasure's narrowing and in the runtime's own overflow traps.
+**Decision.** `Natural`/`Integer` are *type-level* values — unbounded, pretending ℕ and ℤ. The `scalar` functions are a separate layer giving the exact semantics of the *erased* carriers, where `Nat` is a `u32` and `Int` an `i32`, and a computed value past either is a refusal rather than a wrapped number. Every stage's constant folder shares the second layer so its arithmetic cannot drift from the backend's; the runtime's 31-bit range is enforced only where a literal must materialize, in erasure's narrowing and in the runtime's own overflow traps.
 
 **Rationale.** A type-level natural bounded by a machine word would make a term's *meaning* depend on the host, which is not a tradeoff a dependent type theory can take. Conversely an erased carrier that reasoned in ℕ would be describing something the emitted Wasm does not do.
 

@@ -9,7 +9,7 @@ use {
 
 /// A type-level natural. Unbounded — the type level pretends ℕ, the way [`Integer`](crate::Integer) pretends ℤ; the runtime's 31-bit range is enforced only where a literal must materialize (`erase`'s narrowing) and by the runtime's own overflow traps.
 ///
-/// The wrapped magnitude is private, which is the point: this crate is the only one that names `num-bigint`, so a consumer reaches ℕ through the operations below rather than through a bignum type it would have to depend on. The scalar semantics of the *erased* carrier — where `Nat` is a `u32` that wraps — live in [`nat_add`](crate::nat_add) and its siblings instead; nothing here imposes a width.
+/// The wrapped magnitude is private, which is the point: this crate is the only one that names `num-bigint`, so a consumer reaches ℕ through the operations below rather than through a bignum type it would have to depend on. The scalar semantics of the *erased* carrier — where `Nat` is a `u32` that refuses past its width — live in [`nat_add`](crate::nat_add) and its siblings instead; nothing here imposes a width.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[curios_archive::archived]
 pub struct Natural {
