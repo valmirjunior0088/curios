@@ -20,8 +20,14 @@ fn main() {
         );
 
         if let Some(verdict) = refusals.first() {
+            // The name, not only the error: a `KernelError` renders terms and sorts and never the top-level item it came from, so without this the one diagnostic this crate exists to produce points nowhere in a prelude of a thousand items.
+            let name = match &verdict.name {
+                Some(name) => format!("{name}"),
+                None => "<entrypoint>".to_owned(),
+            };
+
             panic!(
-                "fixed prelude failed the kernel: {} of {} items refused, first: {}",
+                "fixed prelude failed the kernel: {} of {} items refused, first: {name} — {}",
                 refusals.len(),
                 core.items.len(),
                 verdict.error,
