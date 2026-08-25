@@ -329,7 +329,7 @@ fn sys_impls<H: HostOps + Send + Sync + 'static>(host: Arc<H>) -> ForeignBinding
     impls
 }
 
-/// A process exit requested via `proc/exit`. Carried out of the wasm call as a trap so it unwinds cleanly; `instantiate_and_run` catches it and recovers the code, distinguishing a clean exit from a real trap.
+/// A process exit requested via `proc/exit`. Carried out of the wasm call as a trap so it unwinds cleanly; `instantiate` catches it and recovers the code, distinguishing a clean exit from a real trap.
 #[derive(Debug)]
 struct ExitTrap(i32);
 

@@ -105,7 +105,7 @@ pub(crate) enum EmissionValue {
     Eval(EmissionCode),
 }
 
-/// A labeled join point inside a region: `params` are its block parameters — the SSA replacement for φ-nodes, bound afresh on every entry from a [`EmissionJumpTarget`] — and `region` its body. Blocks are also how calls continue: a call's `resume` names the block that receives its result, and a backward jump to a loop header block is how `tail_recursion`'s loops close.
+/// A labeled join point inside a region: `params` are its block parameters — the SSA replacement for φ-nodes, bound afresh on every entry from a [`EmissionJumpTarget`] — and `region` its body. Blocks are also how calls continue: a call's `resume` names the block that receives its result, and a backward jump to a loop header block is how the loops contification leaves behind close.
 #[derive(Debug, Clone)]
 pub(crate) struct EmissionBlock {
     pub(crate) params: Vec<EmissionValueName>,

@@ -21,7 +21,7 @@ use {
     },
 };
 
-/// Substitute every solved metavariable in `term` by its (recursively zonked) solution, yielding a meta-free term. An unsolved metavariable is a residual hole the elaborator never pinned down — reported as `cannot_infer` at its occurrence span. The result flows downstream to `erase`, which is then guaranteed never to meet a `Subterm::Metavar`.
+/// Substitute every solved metavariable in `term` by its (recursively zonked) solution, yielding a meta-free term. An unsolved metavariable is a residual hole the elaborator never pinned down — reported as `Error::CannotInfer` at its occurrence span. The result flows downstream to `erase`, which is then guaranteed never to meet a `Subterm::Metavar`.
 ///
 /// Substitution replaces a metavariable node by its solution. A solution is spelled with the birth telescope's names and is *not* in general a closed term; the occurrence's spine (its delayed substitution) records what each birth binder corresponds to at the splice site, so `zonk_term` resolves by rewriting the solution through it. Every solved occurrence carries its spine — `elaborate_apply` opens telescopes with rebuilt arguments, so no bare copy of a birthed hole survives to be spliced.
 pub(crate) fn zonk(context: &Context, term: &Term) -> Result<Term, Error> {

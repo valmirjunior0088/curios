@@ -1693,7 +1693,7 @@ pub struct Infix {
     pub right: Term,
 }
 
-/// A polymorphic numeric literal: an integer `magnitude` with an optional written sign. Resolved to a concrete `Nat`/`Int`/`Flt` intrinsic by `elaborate_numlit` once the expected type is known (or defaulted by shape). Decimal literals are *not* `NumLit` — they parse straight to `Intrinsic::Flt`.
+/// A polymorphic numeric literal: an integer `magnitude` with an optional written sign. Resolved to a concrete `Nat`/`Int`/`Flt` intrinsic by `elaborate_num_lit` once the expected type is known (or defaulted by shape). Decimal literals are *not* `NumLit` — they parse straight to `Intrinsic::Flt`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct NumLit {
@@ -1718,7 +1718,7 @@ pub struct Bang {
 pub enum Transient {
     /// An unresolved infix operator application; consumed by `elaborate_infix`.
     Infix(Infix),
-    /// A polymorphic numeric literal; consumed by `elaborate_numlit`.
+    /// A polymorphic numeric literal; consumed by `elaborate_num_lit`.
     NumLit(NumLit),
     /// A postfix `!` sequencing site; consumed by `elaborate_bang`.
     Bang(Bang),
@@ -3094,7 +3094,7 @@ fn max_reach<'a>(terms: impl IntoIterator<Item = &'a Term>) -> usize {
         .unwrap_or(0)
 }
 
-/// Stamp one arm's payload binders with [`Plicity::Explicit`], the shape the `_marked` inductive-match builders consume — the all-explicit builders' per-arm adapter.
+/// Stamp one arm's payload binders with [`Plicity::Explicit`], the shape the plicity-marked inductive-match builders consume — the all-explicit builders' per-arm adapter.
 fn explicit_arm<L>(binders: Vec<L>) -> Vec<(Plicity, L)> {
     binders
         .into_iter()

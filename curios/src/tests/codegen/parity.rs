@@ -146,7 +146,7 @@ fn operation_ending_at(dump: &str, at: usize) -> Option<String> {
         })
 }
 
-/// The comparison concept folds the same way: `Cmp/lt` at `Nat` is the bare `Nat.lt` instruction. Unlike the single-method operators, `Cmp` is a many-method concept whose witness is a *tuple* of methods, so its resolved instance does not newtype-collapse to a bare field — it is baked in by closure specialization (`specialize_calls`), whose `Tuple.get`s then fold to the same intrinsic. The specialized-clone names therefore differ from the direct wrapper's, so the dumps are no longer byte-identical; what must still match is the emitted instructions — the concept path lowers `Cmp/lt` to the bare `Nat.lt` with no witness dispatch left behind, so it emits exactly the direct intrinsic's operations.
+/// The comparison concept folds the same way: `Cmp/lt` at `Nat` is the bare `Nat.lt` instruction. Unlike the single-method operators, `Cmp` is a many-method concept whose witness is a *tuple* of methods, so its resolved instance does not newtype-collapse to a bare field — it is baked in by closure specialization, whose `Tuple.get`s then fold to the same intrinsic. The specialized-clone names therefore differ from the direct wrapper's, so the dumps are no longer byte-identical; what must still match is the emitted instructions — the concept path lowers `Cmp/lt` to the bare `Nat.lt` with no witness dispatch left behind, so it emits exactly the direct intrinsic's operations.
 #[test]
 fn concept_comparison_matches_direct_intrinsic_codegen() {
     let through_concept = r#"

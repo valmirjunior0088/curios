@@ -686,7 +686,7 @@ impl Convert {
 
     /// The history fingerprint of a goal: every opening label this conversion minted (see [`Convert::opening`]) is renamed to a per-run placeholder, in mint order. A comparison recurring under later openings — the same match arm re-opened at a fresh binder on each round of an unfolding cycle — differs from its previous visit only in that entropy, so the rename collapses the rounds onto one `history` entry and the recurrence rule in `drain` fires: a cycle with no finite disagreement is definitional equality, as for equirecursive types. Genuinely growing comparisons never recur and still spend the budget.
     ///
-    /// A pure key transform: the goal conversion processes keeps its globally-unique labels, so no freshness contract (`capture` inversion, `abstract_occurrences`, `define_fresh`) is involved — the placeholders are themselves entropy-fresh and never enter a real term.
+    /// A pure key transform: the goal conversion processes keeps its globally-unique labels, so no freshness contract (`capture` inversion, `abstract_occurrences`) is involved — the placeholders are themselves entropy-fresh and never enter a real term.
     fn history_key(&mut self, context: &mut Context, goal: &Goal) -> Goal {
         if self.minted.is_empty() {
             return goal.clone();

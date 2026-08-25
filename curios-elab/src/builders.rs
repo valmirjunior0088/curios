@@ -683,7 +683,7 @@ pub trait TermBuilders {
     where
         M: Into<Term>;
 
-    /// A polymorphic numeric literal ([`NumLit`]) — elaboration-transient, resolved to a concrete `Nat`/`Int`/`Flt` intrinsic by `elaborate_numlit`.
+    /// A polymorphic numeric literal ([`NumLit`]) — elaboration-transient, resolved to a concrete `Nat`/`Int`/`Flt` intrinsic by `elaborate_num_lit`.
     fn num_lit(magnitude: Natural, signed: bool, negative: bool) -> Self;
 
     /// A struct literal carrying the written entry shapes from `into_core`; elaboration validates them against the declared fields and rebuilds entry-free, exactly like `tuple_named`.

@@ -93,7 +93,7 @@ impl Spelling {
         self.shorten.clone().unwrap_or_default()
     }
 
-    /// Mark a nominal family's implicit parameters (axis (d)), from `build_nominal_plicities`.
+    /// Mark a nominal family's implicit parameters (axis (d)), from `Module::nominal_plicities`.
     pub fn with_nominal_plicities(mut self, plicities: Rc<BTreeMap<Global, Vec<Plicity>>>) -> Self {
         self.nominal_plicities = Some(plicities);
         self

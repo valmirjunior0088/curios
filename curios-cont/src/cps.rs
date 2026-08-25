@@ -140,7 +140,7 @@ pub enum CpsIntrinsic {
     ListConcat(usize),
     /// `(list) -> list`: the same value, flat — a leaf answers itself, and anything else answers a fresh leaf over its forced payload (an O(1) wrap, since payload arrays are filled once and never rewritten). Semantically the identity; representationally the settle the door inserts on stores into fields the Ersd census marked indexed-only, so the values a program only ever indexes are flat by the time they are stored.
     ListSettle,
-    /// `(list…) -> list`: one exact-length flat leaf holding every element of every operand in order — the eager concatenation `fuse_settle_trees` builds where the reads that would have paid the gather are already in evidence. Minted only by the optimizer, like [`CpsIntrinsic::BinChunk`].
+    /// `(list…) -> list`: one exact-length flat leaf holding every element of every operand in order — the eager concatenation `fuse_append_chains` builds where the reads that would have paid the gather are already in evidence. Minted only by the optimizer, like [`CpsIntrinsic::BinChunk`].
     ListFlat(usize),
     TupleGet(usize),
     /// `(row) -> value`: slot `index` of a [`CpsValueExpr::Row`] of `row`. Which slot holds what is the row's to say — a family's slot zero is its tag — and the door is what knows it. Distinct from [`CpsIntrinsic::TupleGet`] so a row read names the row whose final type the emitter casts to exactly, and so a structural projection can never silently read a row value through the roster cascade: the two vocabularies meet only in the verifier, which refuses a mismatch.
@@ -1709,7 +1709,7 @@ impl CpsModule {
         Ok(())
     }
 
-    /// Check one transfer's argument count against its target's. A return edge is covered by the same rule, `self_arity` being the arity [`CpsModule::return_arities`] read off the function's own edges — so an edge that disagrees with its siblings is reported here rather than reaching the emitter.
+    /// Check one transfer's argument count against its target's. A return edge is covered by the same rule: a transfer to the enclosing function's own return continuation carries its return arity, read off [`CpsModule::return_arities`] — so an edge that disagrees with its siblings is reported here rather than reaching the emitter.
     fn verify_edge(
         &self,
         function: CpsFunId,
@@ -1730,7 +1730,7 @@ impl CpsModule {
         Ok(())
     }
 
-    /// How many values a transfer to `target` carries, `self_arity` being what a transfer to the enclosing function's own sentinel carries — its return.
+    /// How many values a transfer to `target` carries; a transfer to the enclosing function's own return continuation carries its return.
     fn continuation_arity(
         &self,
         function: CpsFunId,

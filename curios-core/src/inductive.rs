@@ -125,7 +125,7 @@ impl InductDecl {
             .map(|param| &param.plicities[param_count..])
     }
 
-    /// Constructor tags in runtime dispatch order — which is declaration order: position `i` here is the tag `erase` assigns as runtime index `i` (`erase_variant`) and the arm order it builds a `Match` in (`erase_induct_match`). Both sites must derive that correspondence from this one method, not from their own walk over `constructors`, so the two can never disagree about what "index `i`" means.
+    /// Constructor tags in runtime dispatch order — which is declaration order: position `i` here is the tag `erase` assigns as runtime index `i` (`erase_variant`) and the arm order it builds a `Match` in (`erase_match`). Both sites must derive that correspondence from this one method, not from their own walk over `constructors`, so the two can never disagree about what "index `i`" means.
     pub fn constructor_order(&self) -> impl Iterator<Item = &Atom> {
         self.constructors.iter().map(|(tag, _)| tag)
     }
