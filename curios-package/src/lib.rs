@@ -27,6 +27,9 @@ pub use layout::*;
 mod manifest;
 pub use manifest::*;
 
+mod membership;
+pub use membership::*;
+
 mod new;
 pub use new::*;
 

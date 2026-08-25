@@ -155,3 +155,27 @@ jobs:
       - name: Run grammar snapshot tests
         run: npm test
         working-directory: editors/vscode
+
+  zed:
+    name: Zed extension
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+          components: clippy, rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: wasm32-wasip2
+          workspaces: editors/zed
+      - name: Run rustfmt
+        run: cargo fmt --all -- --check
+        working-directory: editors/zed
+      - name: Run Clippy
+        run: cargo clippy --target wasm32-wasip2 -- -Dwarnings
+        working-directory: editors/zed
+      - name: Build extension
+        run: cargo build --release --target wasm32-wasip2
+        working-directory: editors/zed

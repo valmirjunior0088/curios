@@ -10,3 +10,7 @@ repository = "https://github.com/valmirjunior0088/curios"
 repository = "https://github.com/valmirjunior0088/curios"
 rev = "d90c63c461a3ffb7901f63fd02b3369daf5a1b1d"
 path = "editors/grammar"
+
+[language_servers.curios]
+name = "Curios"
+languages = ["Curios"]

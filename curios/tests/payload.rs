@@ -1,6 +1,6 @@
 //! What the CLI does across two invocations of one target — the half of payload reuse that is a command-line decision rather than a store mechanism.
 //!
-//! The store's own behaviour is covered where it lives, in `cache::payload`'s tests: those decide when a slot may be believed. These decide what the *subcommands* do with the answer — that one slot serves `run` and `compile` alike, that a hit reports itself, that a program's output and exit code do not depend on whether it was compiled just now, that `--print` files what it built, and that a bare file has nothing to do with any of it.
+//! The store's own behaviour is covered where it lives, in `cache::payload`'s tests: those decide when a slot may be believed. These decide what the *subcommands* do with the answer — that one slot serves `run` and `compile` alike, that a hit reports itself, that a program's output and exit code do not depend on whether it was compiled just now, that a stage query files nothing, and that a bare file has nothing to do with any of it.
 //!
 //! Not `#[ignore]`d, unlike `bundle`: nothing here execs a produced executable. `curios run` runs its program in-process.
 
@@ -125,21 +125,26 @@ fn one_slot_serves_run_and_compile() {
     fs::remove_dir_all(root).unwrap();
 }
 
-/// A stage dump exists only when compilation runs, so asking for one is asking for the work — but what that work produced is filed like any other, because filing a real compilation is always safe.
+/// A stage is a question, and a question never writes the store: `wonder stage` compiles to answer and files nothing, so the plain invocation after it still compiles — where `--print`, which it replaced, filed what it built.
 #[test]
-fn printing_a_stage_compiles_and_still_files() {
-    let root = project("printing");
+fn asking_for_a_stage_compiles_and_files_nothing() {
+    let root = project("asking");
 
-    let dumped = curios(&root, &["--print=wasm", "run"]);
-    assert!(!reused(&dumped), "a dump is a compilation");
+    let shown = curios(&root, &["wonder", "stage", "wasm"]);
     assert!(
-        String::from_utf8_lossy(&dumped.stderr).contains("=== wasm ==="),
-        "and it dumped the stage that was asked for"
+        shown.status.success(),
+        "{}",
+        String::from_utf8_lossy(&shown.stderr)
     );
+    assert!(
+        String::from_utf8_lossy(&shown.stdout).starts_with("(module"),
+        "the answer is the rung, on stdout"
+    );
+    assert!(shown.stderr.is_empty(), "and nothing was narrated");
 
     assert!(
-        reused(&curios(&root, &["run"])),
-        "and filed what it built, so the next plain invocation hits"
+        !reused(&curios(&root, &["run"])),
+        "and nothing was filed, so the next plain invocation compiles"
     );
 
     fs::remove_dir_all(root).unwrap();

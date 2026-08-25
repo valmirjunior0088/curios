@@ -359,8 +359,8 @@ impl Entrypoint {
     /// The pairing is the point: [`from_path`](Self::from_path) leaves a parsed entrypoint's file-backed `mod` declarations unresolved, and every caller that opens a file then has to know which `RootSource` goes with it. That is one answer, not a caller's choice, so it lives beside the two calls it makes.
     ///
     /// **The source comes back because the entry's own header is the one file no loader records.** A `RootSource` logs what it resolves, and the entry's header is deliberately never resolved through it — the caller already has the body. A cache that verifies a compilation against what it read therefore has to be handed the entry separately, and it must be *this* text rather than a re-read of the path: re-reading races an edit landing between the parse and the digest, and records newer text against an older artifact, which is the one direction that admits stale.
-    pub fn opened(path: &Path) -> Result<(Self, RootSource, Rc<Source>), String> {
-        let (entrypoint, source) = Self::sourced(path).map_err(|error| error.format())?;
+    pub fn opened(path: &Path) -> Result<(Self, RootSource, Rc<Source>), LoadError> {
+        let (entrypoint, source) = Self::sourced(path)?;
 
         Ok((entrypoint, RootSource::entry(path), source))
     }
@@ -370,11 +370,29 @@ impl Entrypoint {
     /// **Nothing resolves because there is nowhere to resolve from.** A header's file-backed modules live in its stem directory, and text has no stem, so `mod util;` fails here as an unfound module rather than reading a directory somebody upstream had to invent. Inline modules are untouched, which leaves a supplied program able to declare everything it uses — it just cannot spread itself over files it has no name for.
     ///
     /// The pairing lives here for the reason [`opened`](Self::opened)'s does: which `RootSource` goes with an entrypoint is one answer, not a caller's choice. The source comes back for the same reason too, though nothing verifies a supplied program against it — text that was never on disk cannot go stale, so what a caller has here is the third element of one shape rather than a second one to handle.
-    pub fn supplied(label: &str, text: &str) -> Result<(Self, RootSource, Rc<Source>), String> {
+    pub fn supplied(
+        label: &str,
+        text: &str,
+    ) -> Result<(Self, RootSource, Rc<Source>), ParserError> {
         let source = Source::labelled(label, text);
-        let entrypoint = Self::parse(&source).map_err(|error| error.format())?;
+        let entrypoint = Self::parse(&source)?;
 
         Ok((entrypoint, RootSource::none(), source))
+    }
+}
+
+impl Entrypoint {
+    /// [`opened`](Self::opened) with `text` standing in for what `path` holds — an editor's unsaved buffer — paired with the same [`RootSource`](crate::RootSource) the file would get, so its file-backed `mod` declarations resolve from its stem directory exactly as if it had been saved. The source names `path`, so a diagnostic about it reads as one about the file.
+    ///
+    /// The overlay for the *rest* of the unit is the loader's to carry (`RootSource::with_overlay`); this is the one file the loader never reads, supplied the one way it can be.
+    pub fn overlaid(
+        path: &Path,
+        text: &str,
+    ) -> Result<(Self, RootSource, Rc<Source>), ParserError> {
+        let source = Source::held(path, text);
+        let entrypoint = Self::parse(&source)?;
+
+        Ok((entrypoint, RootSource::entry(path), source))
     }
 }
 
@@ -413,6 +431,7 @@ mod tests {
             panic!("the string literal never closes");
         };
 
+        let error = error.format();
         assert!(error.contains("<stdin>:2:1"), "{error}");
     }
 

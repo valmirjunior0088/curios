@@ -5,7 +5,7 @@ use {
         UniverseConstraintOrigin, UniverseError, build_rename, build_shorten, display_names,
     },
     curios_num::{Integer, Natural},
-    curios_utilities::{Grain, Plicity, Qualifier, Span},
+    curios_utilities::{Grain, Plicity, Qualifier, Report, Span},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
         fmt,
@@ -1022,7 +1022,12 @@ impl Error {
 
     /// Render this error with source-style names, shortening global names against `module`'s symbols together with `scope`'s (axis (b)) — the qualified-name universe an error's globals are spelled relative to. Every elaboration error reaching a reader comes through here, so all three axes are set in one place; axis (c) belongs to the whole render rather than any one variant, since every error that prints a term prints it from the raw elaborated spelling.
     pub fn format_with(&self, module: &Module, scope: &[&Module]) -> String {
-        self.format_with_hints(module, scope, &BTreeMap::new(), &Imports::default())
+        Report::render_all(&self.reports_with(module, scope))
+    }
+
+    /// [`Error::format_with`] as data: one [`Report`] per thing said, located. See [`Error::reports_with_hints`].
+    pub fn reports_with(&self, module: &Module, scope: &[&Module]) -> Vec<Report> {
+        self.reports_with_hints(module, scope, &BTreeMap::new(), &Imports::default())
     }
 
     /// [`Error::format_with`], with two tables of the text stage's. `unbound` is what each unresolved bare name could have meant — keyed by the binder the name lowered to, valued by the absolute paths of the public bindings in scope that carry it; an `unbound variable` report whose binder the table knows gets a line per candidate, and every other error ignores it. `imports` is what the unit's `use` declarations brought into scope, with the spelling each resolves under; a global the table knows displays under its shortest such spelling rather than its shortest unambiguous suffix, since the suffix is not always a name in scope (`/sys/Nat/add` shortens to `add`, which nothing imported) while the written path is by construction — which is what makes a suggested imported candidate pasteable. Both tables are the text stage's because only it sees re-exports — `/std/Bool` is a `pub use`, and Core holds the `/sys/Bool/Bool` it stands for — and they arrive here rather than on the error because the error records what was written and nothing about where.
@@ -1033,6 +1038,17 @@ impl Error {
         unbound: &BTreeMap<Free, Vec<Qualifier>>,
         imports: &Imports,
     ) -> String {
+        Report::render_all(&self.reports_with_hints(module, scope, unbound, imports))
+    }
+
+    /// [`Error::format_with_hints`] as data, and the primitive it renders: every error is one report at its innermost span, except a goal batch, which is one report *per goal* at that goal's own occurrence — a goal's identity is its source location, and a consumer placing each where it was written needs them apart. Rendering the list is exactly the text the compile path prints, so the located form and the printed form cannot drift.
+    pub fn reports_with_hints(
+        &self,
+        module: &Module,
+        scope: &[&Module],
+        unbound: &BTreeMap<Free, Vec<Qualifier>>,
+        imports: &Imports,
+    ) -> Vec<Report> {
         // Everything a reader could see: `module`'s own declarations *and* whatever its environment put in scope. A module carries only its own, so both halves of the spelling have to be told the prelude exists — the shortening table to know `Vec` is an unambiguous suffix, and the plicity marks to know `Eq`'s first parameter is implicit.
         //
         // Taking the scope as a `Module` rather than as one of its projections is deliberate: this was first fixed by passing a name slice, which repaired the shortening and left the plicities reading a module that no longer holds the prelude. A second projection would have been a second thing to forget.
@@ -1059,7 +1075,7 @@ impl Error {
                 .with_anonymous_metavars(),
         );
         let suggestion = self.unbound_suggestion(unbound, &spelling);
-        self.render(&spelling, suggestion)
+        self.reports(&spelling, suggestion)
     }
 
     /// The lines an `unbound variable` report adds from the text stage's table, or `None` for any other error or an unknown binder. A candidate nested below a root is offered both ways it can be reached — through its parent's name, `Eq/cong` once `Eq` is in scope, and by its own import; a root's direct child has no route shorter than the import or the absolute path.
@@ -1102,18 +1118,48 @@ impl Error {
         (!lines.is_empty()).then(|| lines.join("\n"))
     }
 
-    /// One snippet per rendered error, for the innermost span attached to it.
+    /// One report per rendered error, at the innermost span attached to it — or one per goal for a batch, each at its own occurrence, under whatever declaration prefix the wrappers add.
     ///
-    /// [`Error::at`] is first-wins *per wrapper*, so the innermost span is the first one stamped — but `in_declaration` may wrap a located error, after which a further `at` sees a non-`Located` head and stamps again, leaving the coarser span outermost. Rendering therefore searches for the innermost rather than reading the outermost, and the message body is assembled separately so a nested `Located` cannot swallow it: `Display` for the wrappers deliberately prints no snippet, and a body rendered through `to_string` would drop the inner span silently.
-    fn render(&self, spelling: &Rc<Spelling>, suggestion: Option<String>) -> String {
+    /// [`Error::at`] is first-wins *per wrapper*, so the innermost span is the first one stamped — but `in_declaration` may wrap a located error, after which a further `at` sees a non-`Located` head and stamps again, leaving the coarser span outermost. Locating therefore searches for the innermost rather than reading the outermost, and the message body is assembled separately so a nested `Located` cannot swallow it: `Display` for the wrappers deliberately prints no snippet, and a body rendered through `to_string` would drop the inner span silently.
+    fn reports(&self, spelling: &Rc<Spelling>, suggestion: Option<String>) -> Vec<Report> {
+        if let Self::Goals(goals) = self.unwrapped() {
+            let prefix = self.declaration_prefix();
+            return goals
+                .iter()
+                .map(|goal| Report {
+                    span: goal.span.clone(),
+                    message: format!("{prefix}{}", goal_text(goal, spelling)),
+                })
+                .collect();
+        }
+
         let mut body = self.render_body(spelling);
         if let Some(suggestion) = suggestion {
             body.push('\n');
             body.push_str(&suggestion);
         }
-        match self.innermost_span() {
-            Some(span) => format!("{body}\n\n{}", span.render_snippet()),
-            None => body,
+        vec![Report {
+            span: self.innermost_span().cloned(),
+            message: body,
+        }]
+    }
+
+    /// The error under every wrapper.
+    fn unwrapped(&self) -> &Self {
+        match self {
+            Self::Located { error, .. } | Self::InDeclaration { error, .. } => error.unwrapped(),
+            error => error,
+        }
+    }
+
+    /// What the wrappers prefix a body with — `render_body`'s own lines for them, without the body.
+    fn declaration_prefix(&self) -> String {
+        match self {
+            Self::Located { error, .. } => error.declaration_prefix(),
+            Self::InDeclaration { name, error } => {
+                format!("while elaborating {name}:\n{}", error.declaration_prefix())
+            }
+            _ => String::new(),
         }
     }
 
@@ -1239,6 +1285,50 @@ impl From<UniverseError> for Error {
 }
 
 /// Whether a goal-scope binder is unnameable — a hintless local no written expression can reference. Its scope line spells `_` the way source does, instead of the synthesized name the rename map would mint for it.
+/// One goal's report without its snippet: the turnstile idiom under its own rename map (see [`GoalReport::rename_map`]) — the batch-wide one the caller installed is replaced, not extended, since every name this report shows is in the narrower map by construction. The message half of a goal's [`Report`], and what the batch's `Display` writes before each snippet.
+fn goal_text(report: &GoalReport, spelling: &Rc<Spelling>) -> String {
+    // A report's terms render within a fixed width — the pipeline is pure and stays terminal-blind, so the target is a constant — and a broken term's continuation lines re-indent under the clause body rather than restarting at column zero.
+    const WIDTH: usize = 100;
+
+    let shorten = spelling.short_names();
+    let spelling = Rc::new(
+        spelling
+            .as_ref()
+            .clone()
+            .with_pretty_names(report.rename_map(&shorten)),
+    );
+    let clause = |term: &Term| {
+        term.spelled(&spelling)
+            .within(WIDTH)
+            .to_string()
+            .replace('\n', "\n    ")
+    };
+
+    let mut text = String::from("goal `?`");
+    for (name, type_) in &report.scope {
+        let shown = match unnameable_binder(name) {
+            true => "_".to_string(),
+            false => clause(name),
+        };
+        text.push_str(&format!("\n  {shown} : {}", clause(type_)));
+    }
+    text.push_str(&format!("\n  ? : {}", clause(&report.goal)));
+    if let Some(solution) = &report.solution {
+        text.push_str(&format!("\n  ? = {}", clause(solution)));
+    }
+    for (this, that) in &report.obligations {
+        text.push_str(&format!(
+            "\n  ? such that {} \u{2261} {}",
+            clause(this),
+            clause(that)
+        ));
+    }
+    for candidate in &report.candidates {
+        text.push_str(&format!("\n  ? \u{2248} {}", clause(candidate)));
+    }
+    text
+}
+
 fn unnameable_binder(name: &Term) -> bool {
     match &**name {
         Subterm::Var(var) => var.as_free().is_some_and(|free| !free.nameable()),
@@ -1755,50 +1845,12 @@ impl fmt::Display for Displayed<'_> {
                 Displayed(&Error::Goals(vec![report]), Rc::clone(spelling)).fmt(f)
             }
             Error::Goals(reports) => {
-                // A report's terms render within a fixed width — the pipeline is pure and stays terminal-blind, so the target is a constant — and a broken term's continuation lines re-indent under the clause body rather than restarting at column zero.
-                const WIDTH: usize = 100;
-
-                // Each entry is the single-goal turnstile idiom followed by its own snippet — message first, then location, matching how `render` orders a `Located` diagnostic. Entries are separated by a blank line. Each renders under its own rename map (see [`GoalReport::rename_map`]); the batch-wide one the caller installed is replaced, not extended, since every name this report shows is in the narrower map by construction.
+                // Each entry is the single-goal turnstile idiom followed by its own snippet — message first, then location, matching how `reports` orders a `Located` diagnostic. Entries are separated by a blank line.
                 for (index, report) in reports.iter().enumerate() {
                     if index > 0 {
                         write!(f, "\n\n")?;
                     }
-                    let shorten = spelling.short_names();
-                    let spelling = Rc::new(
-                        spelling
-                            .as_ref()
-                            .clone()
-                            .with_pretty_names(report.rename_map(&shorten)),
-                    );
-                    let clause = |term: &Term| {
-                        term.spelled(&spelling)
-                            .within(WIDTH)
-                            .to_string()
-                            .replace('\n', "\n    ")
-                    };
-                    write!(f, "goal `?`")?;
-                    for (name, type_) in &report.scope {
-                        let shown = match unnameable_binder(name) {
-                            true => "_".to_string(),
-                            false => clause(name),
-                        };
-                        write!(f, "\n  {shown} : {}", clause(type_))?;
-                    }
-                    write!(f, "\n  ? : {}", clause(&report.goal))?;
-                    if let Some(solution) = &report.solution {
-                        write!(f, "\n  ? = {}", clause(solution))?;
-                    }
-                    for (this, that) in &report.obligations {
-                        write!(
-                            f,
-                            "\n  ? such that {} \u{2261} {}",
-                            clause(this),
-                            clause(that)
-                        )?;
-                    }
-                    for candidate in &report.candidates {
-                        write!(f, "\n  ? \u{2248} {}", clause(candidate))?;
-                    }
+                    f.write_str(&goal_text(report, spelling))?;
                     if let Some(span) = &report.span {
                         write!(f, "\n\n{}", span.render_snippet())?;
                     }

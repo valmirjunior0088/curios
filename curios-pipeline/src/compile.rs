@@ -16,40 +16,50 @@ use {
         Entrypoint, LoweredEntry, RootSource, UnitSource, into_core_unit, into_core_with_prelude,
     },
     curios_unit::{Prefix, Unit},
-    curios_utilities::{Qualifier, SyntaxRegistry},
+    curios_utilities::{Qualifier, Report, SyntaxRegistry},
     std::fmt,
 };
 
-/// A compile failure, split for process-level reporting: a written-goal batch is *incomplete* development state, everything else a hard *failure*. The CLI maps the two to distinct exit codes — 2 for incomplete, 1 for failure — so tooling can distinguish "here is your goal batch" from "something is wrong" without parsing stderr. Both carry the fully formatted report; an embedder that does not care converts to it via `Display` or the `String` conversion.
+/// A compile failure, split for process-level reporting: a written-goal batch is *incomplete* development state, everything else a hard *failure*. The CLI maps the two to distinct exit codes — 2 for incomplete, 1 for failure — so tooling can distinguish "here is your goal batch" from "something is wrong" without parsing stderr.
+///
+/// Both carry what was said as located [`Report`]s — one per goal for a batch, one otherwise — rather than as text, so a consumer placing a diagnostic in a buffer reads the span instead of parsing the `-->` header back out. The text is the reports rendered, through `Display` or the `String` conversion, and it is exactly the text the CLI prints: the located form and the printed form are one value.
 #[derive(Debug)]
 pub enum CompileError {
-    Incomplete(String),
-    Failure(String),
+    Incomplete(Vec<Report>),
+    Failure(Vec<Report>),
 }
 
 impl CompileError {
-    /// Classify a front-end error by [`curios_elab::Error::is_incomplete`], pairing it with its already-formatted report.
-    fn of(error: &curios_elab::Error, message: String) -> Self {
+    /// Classify a front-end error by [`curios_elab::Error::is_incomplete`], pairing it with its already-located reports.
+    fn of(error: &curios_elab::Error, reports: Vec<Report>) -> Self {
         match error.is_incomplete() {
-            true => Self::Incomplete(message),
-            false => Self::Failure(message),
+            true => Self::Incomplete(reports),
+            false => Self::Failure(reports),
+        }
+    }
+
+    /// A hard failure about nothing in particular — a store, a manifest, a backend — which is what every message that arrives as plain text is.
+    pub fn failure(message: impl Into<String>) -> Self {
+        Self::Failure(vec![Report::unlocated(message)])
+    }
+
+    /// What was said, located, whichever way it was classified.
+    pub fn reports(&self) -> &[Report] {
+        match self {
+            Self::Incomplete(reports) | Self::Failure(reports) => reports,
         }
     }
 }
 
 impl fmt::Display for CompileError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Incomplete(message) | Self::Failure(message) => formatter.write_str(message),
-        }
+        formatter.write_str(&Report::render_all(self.reports()))
     }
 }
 
 impl From<CompileError> for String {
     fn from(error: CompileError) -> Self {
-        match error {
-            CompileError::Incomplete(message) | CompileError::Failure(message) => message,
-        }
+        error.to_string()
     }
 }
 
@@ -123,7 +133,7 @@ pub fn typecheck_measured(
         imports,
         ..
     } = into_core_with_prelude(entrypoint, loader, &text, syntax)
-        .map_err(|error| CompileError::Failure(error.format()))?;
+        .map_err(|error| CompileError::Failure(vec![error.report()]))?;
 
     let core_mode = match &lowered.type_ {
         Some(type_) => Mode::Check(type_.clone()),
@@ -143,7 +153,7 @@ pub fn typecheck_measured(
     .map_err(|error| {
         CompileError::of(
             &error,
-            error.format_with_hints(&lowered, &cores, &unbound, &imports),
+            error.reports_with_hints(&lowered, &cores, &unbound, &imports),
         )
     })?;
 
@@ -187,7 +197,7 @@ where
         unbound,
         imports,
     } = into_core_with_prelude(entrypoint, loader, &text, syntax)
-        .map_err(|error| CompileError::Failure(error.format()))?;
+        .map_err(|error| CompileError::Failure(vec![error.report()]))?;
 
     observe(Stage::Core(&lowered));
 
@@ -212,7 +222,7 @@ where
     .map_err(|error| {
         CompileError::of(
             &error,
-            error.format_with_hints(&lowered, &cores, &unbound, &imports),
+            error.reports_with_hints(&lowered, &cores, &unbound, &imports),
         )
     })?;
 
@@ -222,6 +232,48 @@ where
     let core_type = core_type.expect("the entrypoint's type comes back with its body");
 
     Ok((module, core_type, user_foreigns))
+}
+
+/// Everything [`compile_entrypoint`] decides *about* a program before it builds anything from it: lowered, elaborated, zonked, and judged by the kernel, with a refusal from either checker reported as the compile path reports it. What a question about a program's correctness is answered by — the stages below this one produce the program, and change no verdict.
+pub fn check_entrypoint(
+    budget: u64,
+    scope: Prefix<'_>,
+    syntax: &SyntaxRegistry,
+    entrypoint: &Entrypoint,
+    loader: &RootSource,
+) -> Result<curios_core::Module, CompileError> {
+    check_observed(budget, scope, syntax, entrypoint, loader, &mut |_| {})
+        .map(|(module, _core_type, _foreigns)| module)
+}
+
+/// [`check_entrypoint`] with the stages it passes observed, and the entry's type and foreign rows kept for the lowering that follows it.
+fn check_observed<O>(
+    budget: u64,
+    scope: Prefix<'_>,
+    syntax: &SyntaxRegistry,
+    entrypoint: &Entrypoint,
+    loader: &RootSource,
+    observe: &mut O,
+) -> Result<(curios_core::Module, Term, ForeignStore), CompileError>
+where
+    O: FnMut(Stage<'_>),
+{
+    let (module, core_type, foreigns) =
+        elaborate_and_zonk(budget, scope, syntax, entrypoint, loader, observe)?;
+
+    // The independent kernel's second opinion, on the compile path: each unit in scope was walked when it was built and arrives here as environment, so only what it does not already answer for is judged — a refusal fails the compile.
+    {
+        curios_profile::profile!("recheck");
+        if let Some(verdict) = recheck(&module, budget, scope, syntax).into_iter().next() {
+            let refusal = verdict.error.format_with(&module, &scope.cores());
+            return Err(CompileError::failure(match &verdict.name {
+                Some(name) => format!("the kernel refused {name}: {refusal}"),
+                None => format!("the kernel refused the entrypoint: {refusal}"),
+            }));
+        }
+    }
+
+    Ok((module, core_type, foreigns))
 }
 
 /// The back half of [`compile_entrypoint`]: from a verified erased module through optimization, the lowering into Cont, Cont optimization, and wasm emission, observing every stage in order.
@@ -267,7 +319,7 @@ pub fn compile_unit(
     let cores = scope.cores();
 
     let lowered = into_core_unit(source, &text, syntax)
-        .map_err(|error| CompileError::Failure(error.format()))?;
+        .map_err(|error| CompileError::Failure(vec![error.report()]))?;
 
     let mut context = Context::new(budget, *syntax);
     context.set_imports(lowered.imports().clone());
@@ -282,13 +334,13 @@ pub fn compile_unit(
     .map_err(|error| {
         CompileError::of(
             &error,
-            error.format_with_hints(lowered.core(), &cores, lowered.unbound(), lowered.imports()),
+            error.reports_with_hints(lowered.core(), &cores, lowered.unbound(), lowered.imports()),
         )
     })?;
 
     if let Some(verdict) = recheck(&core, budget, scope, syntax).into_iter().next() {
         let refusal = verdict.error.format_with(&core, &cores);
-        return Err(CompileError::Failure(match &verdict.name {
+        return Err(CompileError::failure(match &verdict.name {
             Some(name) => format!("the kernel refused {name}: {refusal}"),
             None => format!("the kernel refused a unit: {refusal}"),
         }));
@@ -300,7 +352,7 @@ pub fn compile_unit(
         &core,
         None,
     )
-    .map_err(|error| CompileError::Failure(error.format_with(&core, &cores)))?;
+    .map_err(|error| CompileError::Failure(error.reports_with(&core, &cores)))?;
 
     let binder_floor = derived_binder_floor(&core);
 
@@ -402,20 +454,8 @@ where
 {
     curios_profile::profile!("compile_entrypoint");
     let (module, core_type, foreigns) =
-        elaborate_and_zonk(budget, scope, syntax, entrypoint, loader, &mut observe)?;
+        check_observed(budget, scope, syntax, entrypoint, loader, &mut observe)?;
     let cores = scope.cores();
-
-    // The independent kernel's second opinion, on the compile path: each unit in scope was walked when it was built and arrives here as environment, so only what it does not already answer for is judged — a refusal fails the compile.
-    {
-        curios_profile::profile!("recheck");
-        if let Some(verdict) = recheck(&module, budget, scope, syntax).into_iter().next() {
-            let refusal = verdict.error.format_with(&module, &cores);
-            return Err(CompileError::Failure(match &verdict.name {
-                Some(name) => format!("the kernel refused {name}: {refusal}"),
-                None => format!("the kernel refused the entrypoint: {refusal}"),
-            }));
-        }
-    }
 
     let ersd_module = erase_unit(
         &mut Context::new(budget, *syntax),
@@ -424,7 +464,7 @@ where
         Some(&core_type),
     )
     .map(|erased| erased.into_module())
-    .map_err(|error| CompileError::Failure(error.format_with(&module, &cores)))?;
+    .map_err(|error| CompileError::Failure(error.reports_with(&module, &cores)))?;
 
     // Every unit's rows, not the entry's alone: an embedder binds one registry, and a dependency that declares a `foreign` row has to reach it. Disjoint by mount, so the union cannot collide.
     let mut all_foreigns = scope.foreigns();

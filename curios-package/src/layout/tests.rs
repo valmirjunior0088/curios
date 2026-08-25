@@ -78,19 +78,17 @@ fn a_package_with_no_library_header_has_no_library() {
     fs::remove_dir_all(directory).unwrap();
 }
 
-/// Only the header's *absence* is an answer: one that fails to parse is still a refusal.
+/// Only the header's *absence* is an answer: one that fails to parse is still mounted, and the refusal is discovery's to raise — located at the line that failed, rather than text raised here.
 #[test]
-fn an_unparsable_library_header_is_refused() {
+fn an_unparsable_library_header_is_mounted_for_discovery_to_refuse() {
     let directory = package(
         "layout-broken-header",
         "name = \"json\"\n",
         &[("lib.crs", "pub let x : = ;")],
     );
 
-    let refusal = package_at(&directory)
-        .map(|_| ())
-        .expect_err("a header that does not parse");
-    assert!(refusal.contains("lib.crs"), "{refusal}");
+    let (_, source) = package_at(&directory).expect("the layout is not what is wrong");
+    assert!(source.is_some(), "the header is there to be read");
 
     fs::remove_dir_all(directory).unwrap();
 }

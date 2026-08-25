@@ -39,19 +39,18 @@ pub fn package_at(directory: &Path) -> Result<(Package, Option<RootSource>), Str
 
 /// The resolver `package`'s library is lowered from, its header beside the manifest in `directory`, or `None` when there is no header there.
 ///
-/// The header is read here and read again when discovery asks for it. That is deliberate: the stem refusal below has to fire before elaboration, and a header is one small file — paying for it twice is cheaper than a refusal arriving as an unbound name.
+/// The header is read here and read again when discovery asks for it. That is deliberate: the stem refusal below has to fire before elaboration, and a header is one small file — paying for it twice is cheaper than a refusal arriving as an unbound name. Read from disk both times; a source overlay reaches discovery's read and not this one, so a stem collision is judged on what is saved, which is the only thing a collision can be between.
 pub fn package_source(package: &Package, directory: &Path) -> Result<Option<RootSource>, String> {
     let header = directory.join(LIBRARY);
 
-    // A package of nothing but programs has no body, and no vestigial file to write saying so. A header that fails to *parse* is still a refusal — only its absence is an answer.
+    // A package of nothing but programs has no body, and no vestigial file to write saying so. Only absence is an answer: a header that fails to *parse* is still a refusal, but discovery's — it reads the same file through the unit's own loader and reports the failure as a located diagnostic, where a refusal raised here would be text with a snippet in it. The stem check simply has nothing to check until the header parses.
     if !header.is_file() {
         return Ok(None);
     }
 
-    let library = Module::from_path(&header)
-        .map_err(|error| format!("{}: {}", header.display(), error.format()))?;
-
-    stems(package, &library)?;
+    if let Ok(library) = Module::from_path(&header) {
+        stems(package, &library)?;
+    }
 
     Ok(Some(RootSource::mounted(
         &package.name,

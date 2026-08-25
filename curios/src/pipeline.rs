@@ -1,12 +1,13 @@
-//! Driving the compile pipeline for the CLI, from a resolved target to the `.cwasm` payload both subcommands consume — including the store consultation that can skip the whole thing. `stage_printer` is the single owner of how each IR stage is selected and rendered.
+//! Driving the compile pipeline for the CLI, from a resolved target to the `.cwasm` payload both subcommands consume — including the store consultation that can skip the whole thing. Observing a stage is not here: that is a question about a program, and questions are `wonder`'s.
 //!
 //! **The payload, not the wasm module, is what this hands back**, and that is what lets one stored artifact serve `run` and `compile` alike: `run` executes it in-process exactly as it executes a fresh one, and `compile` appends it to the embedded launcher. Optimization and precompilation therefore happen here rather than in `main`, which is left dispatching.
 
 use {
-    crate::{Heading, Line, STDIN_LABEL, Subject, fact},
-    curios::{Program, Verdicts, to_cwasm, to_cwasm_dumped},
+    crate::{Heading, Line, Subject, fact},
+    curios::STDIN_LABEL,
+    curios::{Program, Verdicts, to_cwasm},
     curios_package::Target,
-    curios_pipeline::{Cache, CompileError, Progress, Stage, compile_with_units},
+    curios_pipeline::{Cache, CompileError, Progress, compile_with_units},
     curios_text::{Entrypoint, RootSource, UnitSource},
     curios_utilities::Source,
     curios_wasm::Module,
@@ -17,33 +18,11 @@ use {
     },
 };
 
-/// Build the observer closure that prints each requested IR stage to stderr. `print` is the comma-separated stage list from `--print`; empty segments are dropped (the flag's absence arrives as `""`), and an unknown stage name is an error rather than a silently empty selection. The stage `to_cwasm_dumped` emits downstream of the pipeline goes through a second one built the same way, so the two rendering paths cannot drift.
-pub(crate) fn stage_printer(print: &str) -> Result<impl Fn(Stage<'_>) + '_, String> {
-    let stages = print
-        .split(',')
-        .filter(|name| !name.is_empty())
-        .collect::<Vec<_>>();
-
-    if let Some(unknown) = stages.iter().find(|name| !Stage::NAMES.contains(name)) {
-        return Err(format!(
-            "unknown --print stage {unknown:?}; the stages are {}",
-            Stage::NAMES.join(", ")
-        ));
-    }
-
-    Ok(move |stage: Stage<'_>| {
-        if stages.contains(&stage.name()) {
-            eprintln!("\n=== {} ===\n{stage}", stage.name());
-        }
-    })
-}
-
 /// The precompiled payload for `target`, taken from the store when nothing it was made from has changed and compiled otherwise.
 ///
 /// A `--unit` package is the already-resolved form of a manifest entry, so it goes in front of the graph's own order: the order arguments arrive in *is* dependency order. The error keeps the incomplete/failure split so `main` can map a goal batch to its own exit code.
 pub(crate) fn payload_of(
     budget: u64,
-    print: &str,
     units: &[PathBuf],
     target: Target,
 ) -> Result<Vec<u8>, CompileError> {
@@ -69,7 +48,7 @@ pub(crate) fn payload_of(
     };
 
     // Opened before the store is consulted, because the entry's own text is half of what a stored payload is verified against — and it has to be the text that was *parsed*, not a re-read taken afterwards.
-    let (entrypoint, loader, source) = open(entry.as_deref()).map_err(CompileError::Failure)?;
+    let (entrypoint, loader, source) = open(entry.as_deref())?;
 
     // A payload is filed only where all three exist: a store to put it in, a declared name to file it under, and an entry file to verify it against. Standard input has none of them, and reaches this as the `None` that skips both the get and the put.
     let filed = cache
@@ -89,9 +68,7 @@ pub(crate) fn payload_of(
             )
         });
 
-    // `--print` skips the get and still puts: a stage dump exists only when compilation runs, so asking for one is asking for the work — and filing what a real compilation produced is always safe.
-    if print.is_empty()
-        && let Some((cache, program)) = &filed
+    if let Some((cache, program)) = &filed
         && let Some(payload) = cache.payload_get(
             program,
             &scope.iter().map(UnitSource::mounted).collect::<Vec<_>>(),
@@ -107,14 +84,13 @@ pub(crate) fn payload_of(
 
     let compiled = compile_entry(
         budget,
-        print,
         &scope,
         &entrypoint,
         &loader,
         &subject,
         cache.as_ref().map(|cache| cache as &dyn Cache),
     )
-    .and_then(|module| precompiled(print, &module));
+    .and_then(|module| to_cwasm(&module).map_err(CompileError::failure));
 
     if let (Ok(payload), Some((cache, program))) = (&compiled, &filed) {
         cache.payload_put(program, payload);
@@ -131,17 +107,6 @@ pub(crate) fn payload_of(
     compiled
 }
 
-/// Optimize and precompile `module`, dumping Binaryen's own rendering of the optimized module when `--print` asked for it.
-///
-/// Chosen before optimizing rather than filtered after, unlike the driver's stages: this one's payload costs — Binaryen's text capture, and the name section riding into the artifact.
-fn precompiled(print: &str, module: &Module) -> Result<Vec<u8>, CompileError> {
-    match print.split(',').any(|name| name == "wasm-optm") {
-        true => to_cwasm_dumped(module, stage_printer(print).map_err(CompileError::Failure)?),
-        false => to_cwasm(module),
-    }
-    .map_err(CompileError::Failure)
-}
-
 /// What a target is reported as — the name that was asked for, never the file it resolved to.
 ///
 /// A declared executable resolves to an absolute path somewhere under the governing root, and echoing that back fills a status line with what the reader already knew. A bare file *is* what was asked for, so it reports as written. Standard input was asked for as `-`, which reports as nothing a reader can act on, so it is the one subject named rather than echoed.
@@ -156,29 +121,28 @@ pub(crate) fn subject_of(target: &Target) -> Subject {
 /// The entry program, what its own modules resolve against, and the text it was parsed from: a file when there is one, and otherwise standard input, drained to end.
 ///
 /// Draining is why this is worth naming rather than inlining. The program's own standard input is gone once the compiler has read the source out of it, so `/std/read()` reports end-of-input — unavoidable when both want one descriptor, and the reason a program that reads its input belongs in a file.
-fn open(entry: Option<&Path>) -> Result<(Entrypoint, RootSource, Rc<Source>), String> {
+fn open(entry: Option<&Path>) -> Result<(Entrypoint, RootSource, Rc<Source>), CompileError> {
     let Some(path) = entry else {
-        let text = io::read_to_string(io::stdin())
-            .map_err(|error| format!("failed to read standard input: {error}"))?;
+        let text = io::read_to_string(io::stdin()).map_err(|error| {
+            CompileError::failure(format!("failed to read standard input: {error}"))
+        })?;
 
-        return Entrypoint::supplied(STDIN_LABEL, &text);
+        return Entrypoint::supplied(STDIN_LABEL, &text)
+            .map_err(|error| CompileError::Failure(vec![error.report()]));
     };
 
-    Entrypoint::opened(path)
+    Entrypoint::opened(path).map_err(|error| CompileError::Failure(vec![error.report()]))
 }
 
-/// Compile `entrypoint` against `units` in the order given, printing any requested IR stages along the way.
+/// Compile `entrypoint` against `units` in the order given, narrating each step.
 pub(crate) fn compile_entry(
     budget: u64,
-    print: &str,
     units: &[RootSource],
     entrypoint: &Entrypoint,
     loader: &RootSource,
     subject: &Subject,
     cache: Option<&dyn Cache>,
 ) -> Result<Module, CompileError> {
-    let printer = stage_printer(print).map_err(CompileError::Failure)?;
-
     // Having a scope to show is what makes this a group: with units to nest, the target heads them and its own compile closes that header, and with none the header *is* that compile's line. A group of one line under a heading naming the same work twice is worse than the plain line it replaces.
     let grouped = !units.is_empty();
 
@@ -196,7 +160,7 @@ pub(crate) fn compile_entry(
         entrypoint,
         loader,
         cache,
-        printer,
+        |_| {},
         |progress| report(&mut line, subject, grouped, progress),
     )
     .map(|(module, _foreigns)| module)
@@ -206,14 +170,14 @@ pub(crate) fn compile_entry(
 #[cfg(feature = "profile")]
 pub(crate) fn compile_file(
     budget: u64,
-    print: &str,
     units: Vec<RootSource>,
     entry: &Path,
     subject: &Subject,
 ) -> Result<Module, CompileError> {
-    let (entrypoint, loader, _source) = Entrypoint::opened(entry).map_err(CompileError::Failure)?;
+    let (entrypoint, loader, _source) =
+        Entrypoint::opened(entry).map_err(|error| CompileError::Failure(vec![error.report()]))?;
 
-    compile_entry(budget, print, &units, &entrypoint, &loader, subject, None)
+    compile_entry(budget, &units, &entrypoint, &loader, subject, None)
 }
 
 /// Fold one [`Progress`] event onto the open status line, opening and closing lines as subjects begin and end.
@@ -255,5 +219,5 @@ fn opened(mut line: Line) -> Line {
 
 /// Read every `--unit DIR`'s manifest in the order written, which is the order they are compiled in.
 pub(crate) fn load_units(units: &[PathBuf]) -> Result<Vec<RootSource>, CompileError> {
-    curios_package::mounted(units).map_err(CompileError::Failure)
+    curios_package::mounted(units).map_err(CompileError::failure)
 }

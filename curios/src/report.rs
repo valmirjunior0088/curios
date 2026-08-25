@@ -15,12 +15,10 @@
 //! **A group's header is the one line terminated before its work is done.** Nesting costs that much of the rule above: `Building hello` has to close so the `↳` lines can follow it, and the group ends by dedent rather than by a closing line of its own. What the rule protects survives and sharpens — the unterminated line is now the innermost one, so an interrupted compile names the step it died in rather than the group around it.
 
 use {
+    curios::STDIN_LABEL,
     curios_utilities::Qualifier,
     std::{fmt, path::PathBuf, time::Instant},
 };
-
-/// What a program read from standard input is called: in a status line, and — because the source it is parsed from is labelled with this too — in the `--> <stdin>:2:1` header of any diagnostic about it. One constant, so a reader is never told two names for one program. Angle brackets because no file is spelled that way, so neither line reads as naming something openable.
-pub(crate) const STDIN_LABEL: &str = "<stdin>";
 
 /// What a status line is about.
 ///

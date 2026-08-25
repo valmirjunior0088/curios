@@ -72,7 +72,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | Packages and projects | `curios-package` | The workspace's only TOML dependency: the `curios.toml` manifest, the governance walk, the dependency resolver, and the store. Beside the pipeline, never under it |
 | Binaryen integration | `curios-binaryen` | Binaryen source build, static FFI, and Wasm optimization |
 | Runtime | `curios-runtime` | The workspace's only `wasmtime` dependency — the pin, the feature set, and the `cranelift` opt-in — plus the engine, host bindings, `validate`/`precompile`, `.cwasm` deserialization, bundle payload format, and slim launcher |
-| Native product | `curios` | The native back end — Binaryen optimization, Wasmtime precompilation, in-process running — plus the CLI, the unit cache, executable bundling, and the cross-stage test corpus. Compiling itself is `curios-pipeline`'s |
+| Native product | `curios` | The native back end — Binaryen optimization, Wasmtime precompilation, in-process running — plus the CLI, the unit cache, executable bundling, the cross-stage test corpus, and `wonder`: the engine that answers a question about a program from the compilation that would build it, in `src/wonder/`, and its two transports, the one-shot `ask` and the language `server`, which hold the workspace's only `lsp-server`/`lsp-types` rows. Compiling itself is `curios-pipeline`'s |
 | Browser product | `curios-js` | wasm-bindgen compiler exports and JavaScript execution harness |
 | Profiling | `curios-profile` | The workspace's only `tracing` dependency: `profile!`/`profile_span!` span macros and the `capture` aggregate-timing subscriber, gated per-crate on a `profile` feature |
 
@@ -94,6 +94,7 @@ Data flows downward through the diagram, while Rust dependencies between compile
 | Host operations or foreign calls | `curios-abi/src/` | Core validation, Wasm imports, runtime bindings, and the JavaScript harness |
 | What a unit hands its successors | `curios-unit/src/` | Every stage whose artifact `Unit` holds, `curios-pipeline`'s fold, and the store's stored-unit format |
 | Pipeline orchestration | `curios-pipeline/src/compile.rs`, `stage.rs`, `standard.rs` | Native and browser callers |
+| A query, a record, or what a diagnostic carries | `curios/src/wonder/` | `curios-utilities`'s `Report` and every stage's `report`/`reports_with_hints` that produces one, `curios-pipeline`'s `CompileError` and `check_with_units`, the transports `curios/src/ask.rs` and `server.rs`, `curios-package`'s `Membership`, and `documentation/roadmap/wonder-spec.md` for what is not yet here |
 | Manifests, dependency resolution, or the store | `curios-package/src/` | The CLI subcommands that wrap it, `curios-utilities`'s `Qualifier`/`Mount`, and `documentation/soundness/admission-without-judgment/cached-verdicts.md` when the store's keys are involved |
 | Runtime or bundle format | `curios-runtime/src/`, `curios/src/bundle.rs` | Slim-launcher dependency boundary and bundle integration tests |
 | CLI or native compile behavior | `curios/src/` | `README.md`, public helpers, and integration tests |

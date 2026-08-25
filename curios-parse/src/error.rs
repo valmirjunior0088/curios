@@ -1,6 +1,6 @@
 use {
     super::ParserState,
-    curios_utilities::{Source, Span},
+    curios_utilities::{Report, Source, Span},
     std::rc::Rc,
 };
 
@@ -44,12 +44,16 @@ impl ParserError {
         self.fatal && self.offset != state.offset
     }
 
-    /// Renders the error for humans: the message, then a caret snippet (via `Span::render_snippet` on an empty span at the failure offset) pointing into the offending line — the form the CLI and pipeline surface to the user.
-    pub fn format(&self) -> String {
-        format!(
-            "{message}\n\n{snippet}",
-            message = self.message,
-            snippet = Span::new(self.source.clone(), self.offset, self.offset).render_snippet(),
+    /// The error as data: its message at an empty span at the failure offset — which is what the caret of [`format`](Self::format) has always pointed at, so a consumer reading the span sees exactly where the rendering does.
+    pub fn report(&self) -> Report {
+        Report::at(
+            Span::new(self.source.clone(), self.offset, self.offset),
+            self.message.clone(),
         )
+    }
+
+    /// Renders the error for humans: the message, then a caret snippet pointing into the offending line — the form the CLI and pipeline surface to the user. [`report`](Self::report) rendered, so the two cannot disagree about where.
+    pub fn format(&self) -> String {
+        self.report().render()
     }
 }

@@ -8,5 +8,11 @@ pub use cache::*;
 mod compile;
 pub use compile::*;
 
+mod wonder;
+pub use wonder::*;
+
+/// What a program read from standard input is called: in a status line, and — because the source it is parsed from is labelled with this too — in the `--> <stdin>:2:1` header of any diagnostic about it. One constant, so a reader is never told two names for one program. Angle brackets because no file is spelled that way, so neither line reads as naming something openable.
+pub const STDIN_LABEL: &str = "<stdin>";
+
 #[cfg(test)]
 mod tests;

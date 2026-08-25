@@ -10,3 +10,5 @@
 **/.lake
 **/node_modules
 editors/zed/grammars
+editors/zed/target
+editors/zed/extension.wasm

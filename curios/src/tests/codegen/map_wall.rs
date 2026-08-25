@@ -68,7 +68,7 @@ pub(super) fn timed(cwasm: &[u8], n: u64) -> f64 {
 ///
 /// Taken at the campaign branch's start (stock emission, Binaryen optimize 2 / shrink 1), x86-64 dev box, release: N=25000: 47.4 ms, N=75000: 463.4 ms, **slope 8320 ns/insert**.
 ///
-/// The spec's free experiment, run the same day: at Binaryen optimize 3 / shrink 0 the optimized `spines` module still carries all 15 `call $bytes/read` sites (counted over `--print=wasm-optm`), so no level setting produces the leaf split and the invariant is written in the emitter, not delegated to a third-party heuristic. No partial-inlining knobs are bound in `curios-binaryen/src/sys.rs` to try beyond the levels.
+/// The spec's free experiment, run the same day: at Binaryen optimize 3 / shrink 0 the optimized `spines` module still carries all 15 `call $bytes/read` sites (counted over `wonder stage wasm-optm`), so no level setting produces the leaf split and the invariant is written in the emitter, not delegated to a third-party heuristic. No partial-inlining knobs are bound in `curios-binaryen/src/sys.rs` to try beyond the levels.
 ///
 /// # Step 1, 2026-08-19
 ///

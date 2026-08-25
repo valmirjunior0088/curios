@@ -38,6 +38,11 @@ impl Source {
         Self::new(label, text)
     }
 
+    /// Text standing in for the file at `path` — an editor's unsaved buffer, consulted where the file would have been read. Diagnostics name the path exactly as they would had it been read, because to everything downstream it was.
+    pub fn held(path: impl Into<PathBuf>, text: impl Into<String>) -> Rc<Self> {
+        Self::new(path, text)
+    }
+
     /// Loads the file at `path` as a source, keeping the path so diagnostics can print a `--> path:line` header.
     pub fn read(path: impl Into<PathBuf>) -> io::Result<Rc<Self>> {
         let path = path.into();
@@ -116,6 +121,48 @@ impl Span {
             Some(path) => format!("   --> {}:{number}:{column}\n{snippet}", path.display()),
             None => snippet,
         }
+    }
+}
+
+/// A diagnostic as data: the message, and the span it is about when it is about one. Every stage's error renders through this — [`Report::render`] is the message followed by [`Span::render_snippet`], the one shape a Curios diagnostic has ever had — so a consumer that wants the location gets it as a span rather than by parsing the `-->` header back out of the text. The message is text rather than the stage's own error, deliberately: a report is what a stage *said*, and it survives the crate boundary that the error, with its terms and spellings, does not.
+#[derive(Debug, Clone)]
+pub struct Report {
+    pub span: Option<Span>,
+    pub message: String,
+}
+
+impl Report {
+    /// A report about `span`.
+    pub fn at(span: Span, message: impl Into<String>) -> Self {
+        Self {
+            span: Some(span),
+            message: message.into(),
+        }
+    }
+
+    /// A report about nothing in particular: a manifest, a store, a kernel refusal that names an item rather than a position.
+    pub fn unlocated(message: impl Into<String>) -> Self {
+        Self {
+            span: None,
+            message: message.into(),
+        }
+    }
+
+    /// The report as a reader sees it: the message, then a blank line and the snippet when there is a span.
+    pub fn render(&self) -> String {
+        match &self.span {
+            Some(span) => format!("{}\n\n{}", self.message, span.render_snippet()),
+            None => self.message.clone(),
+        }
+    }
+
+    /// Several reports rendered in order, a blank line between each — how a goal batch has always read.
+    pub fn render_all(reports: &[Report]) -> String {
+        reports
+            .iter()
+            .map(Report::render)
+            .collect::<Vec<_>>()
+            .join("\n\n")
     }
 }
 

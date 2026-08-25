@@ -6,8 +6,8 @@ use {
     std::{path::PathBuf, sync::LazyLock},
 };
 
-/// [`curios_pipeline::Stage::NAMES`] joined with `,`, computed once on first use — the `--print` flag's default and help text.
-static NAMES: LazyLock<String> = LazyLock::new(|| Stage::NAMES.join(","));
+/// [`curios_pipeline::Stage::NAMES`] joined with `, `, computed once on first use — `wonder stage`'s help text.
+static NAMES: LazyLock<String> = LazyLock::new(|| Stage::NAMES.join(", "));
 
 #[derive(Debug, Subcommand)]
 pub(crate) enum Mode {
@@ -79,6 +79,13 @@ pub(crate) enum Mode {
         check: bool,
     },
 
+    /// Questions about a program, answered by the compilation that would build it. The query is first and the target last, so `wonder diagnostics app` and `wonder stage core app` read as the sentence they are; `server` sits in the query position because it is the same questions asked over a protocol.
+    #[command(about = "Ask what the compiler knows about a program")]
+    Wonder {
+        #[command(subcommand)]
+        query: Query,
+    },
+
     /// Present only in profiling builds: the mode exists exactly when the spans it collects do.
     #[cfg(feature = "profile")]
     #[command(about = "Profile one compilation and print per-span aggregates")]
@@ -86,6 +93,38 @@ pub(crate) enum Mode {
         #[arg(value_name = "PATH", help = "Path to the .crs entrypoint file")]
         input_path: PathBuf,
     },
+}
+
+/// One question each, of fixed arity. A target takes the four forms `run` takes, dispatched lexically — but a file is placed in the unit that declares it rather than compiled alone, since nothing here executes and what is at stake is only whether the answer is true (see `curios_package::Membership`).
+#[derive(Debug, Subcommand)]
+pub(crate) enum Query {
+    #[command(
+        about = "Every diagnostic and goal, located; exit 0 once answered, whatever the answer"
+    )]
+    Diagnostics {
+        #[arg(
+            value_name = "TARGET",
+            help = "A declared executable's name, a path to a .crs file, or `-` for standard input (default: the governing package entire)"
+        )]
+        target: Option<String>,
+    },
+
+    #[command(about = "The program's representation at one rung of the pipeline, reprinted")]
+    Stage {
+        #[arg(value_name = "STAGE", help = format!("One of: {}", *NAMES))]
+        name: String,
+
+        #[arg(
+            value_name = "TARGET",
+            help = "A declared executable's name, a path to a .crs file, or `-` for standard input (default: the governing package's sole or `default` executable)"
+        )]
+        target: Option<String>,
+    },
+
+    #[command(
+        about = "Answer an editor over the language server protocol on standard input and output"
+    )]
+    Server,
 }
 
 #[derive(Debug, Parser)]
@@ -108,19 +147,6 @@ pub(crate) struct Cli {
         help = "Units of reduction work each declaration may spend while type checking"
     )]
     pub(crate) budget: u64,
-
-    #[arg(
-        long,
-        value_name = "STAGES",
-        num_args = 0..=1,
-        require_equals = true,
-        default_missing_value = NAMES.as_str(),
-        help = format!(
-            "Print selected IRs to stderr (comma-separated: {}; bare --print prints all)",
-            *NAMES
-        )
-    )]
-    pub(crate) print: Option<String>,
 
     /// The order these arrive in *is* the dependency order — nothing here resolves or sorts, which is what keeps this a hand-written stand-in for the manifest rather than a small one. What the flag deliberately does *not* take is a prefix: the directory holds the package's own `curios.toml`, and a package's name is declared there and nowhere else.
     #[arg(

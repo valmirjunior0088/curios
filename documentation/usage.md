@@ -109,6 +109,34 @@ The directory's name is the package's, and it is checked before anything is writ
 
 It writes every part a package has: the manifest, `lib.crs`, and `exe.crs`, plus a `.gitignore` for `.curios/`. There is deliberately no flag asking for only one of them. A package may be a library alone or a program alone — deleting either file says so, and the manifest decides — but *starting* one is not the moment to be asked, and a flag asking would only be answerable by somebody who already knows what the two are.
 
+## Asking about a program
+
+`curios wonder <QUERY> [ARGS] [TARGET]` answers a question from the compilation that would build the target, and executes nothing. The answer goes to stdout and nothing else does, so it can be redirected; exit 0 means the question was answered, including when the answer is a list of errors, and non-zero that it could not be asked — no such target, no such stage, a scope that cannot be assembled.
+
+| Query | Answers |
+| --- | --- |
+| `diagnostics [TARGET]` | every diagnostic and goal, each rendered as `run` would report it, a blank line between; nothing when the target compiles |
+| `stage <STAGE> [TARGET]` | the program's representation at one rung of the pipeline, reprinted. A program that stops before the rung has not answered: its diagnostics go to stderr and the exit is 1 |
+| `server` | the same questions over the language server protocol, on standard input and output — what an editor integration launches |
+
+The target takes the four forms `run` takes, dispatched the same way, with one deliberate difference: **a file is placed in the unit that declares it** rather than compiled alone. Nothing executes, so nothing is escalated by supplying context, and a library module analysed without its library reports every import unresolved. A file under a package's directory is analysed as that package's library; one that is an executable's entry, or sits under its stem directory, as that executable; one no manifest above it claims, standalone. The project is decided from the file's own location, not the working directory, and `--manifest` overrides it. No target at all is the governing package entire for `diagnostics` — its library, then every executable — and the sole or `default` executable for `stage`, which needs a program.
+
+The stages, in the order the compiler passes them:
+
+| Stage | Is |
+| --- | --- |
+| `text` | the surface syntax tree, reprinted |
+| `core` | the lowered core term, which nothing has checked yet |
+| `core-elab` | the same after elaboration and zonking — the module every later stage consumes |
+| `ersd` | the erased term |
+| `ersd-optm` | the erased term after optimization |
+| `cont` | the continuation IR |
+| `cont-optm` | the continuation IR after optimization |
+| `wasm` | the emitted WebAssembly module |
+| `wasm-optm` | the module after Binaryen optimization, rendered by Binaryen's own text writer |
+
+A question reads the store — a dependency already built is reused exactly as `run` reuses it — and never writes it, so asking costs nothing on disk and a server asking on every keystroke files nothing.
+
 ## Exit codes
 
 Exit status is a tri-state, so tooling can tell "here is your goal batch" from "something is wrong" without parsing stderr.
@@ -183,7 +211,7 @@ Set `CURIOS_CACHE` to share the content-addressed half across projects; unset, e
 
 Neither `run` nor `compile` recompiles a declared executable nothing has changed. The precompiled payload is filed in the store beside the units, and an invocation whose entry file, whose entry's own modules and whose dependencies all still hold what they held is served from it — reported as `reused` on the target's line. One slot serves both subcommands, so `compile` after `run` only writes the executable, and `run` after `compile` compiles nothing.
 
-An edit anywhere the program was built from is a miss, and so is a damaged or half-written store entry; the invocation that misses recompiles and refiles, and the one after it is fast again. `--print` always compiles, since a stage dump only exists when the work runs, and files what it built. A bare `.crs` file consults and writes nothing: it has no project, hence no store — the same declared-versus-bare split as everywhere else.
+An edit anywhere the program was built from is a miss, and so is a damaged or half-written store entry; the invocation that misses recompiles and refiles, and the one after it is fast again. A question about a program (`wonder`) reads the store and never writes it. A bare `.crs` file consults and writes nothing: it has no project, hence no store — the same declared-versus-bare split as everywhere else.
 
 Payloads are native code for the machine that built them, so an entry is found only by an engine that can run it; two machines share one only when their engines agree. Nothing has to be cleaned up by hand as sources change: each executable occupies one slot per dependency chain, overwritten in place.
 
@@ -194,23 +222,8 @@ Payloads are native code for the machine that built them, so an entry is found o
 | `--manifest <PATH>` | use this `curios.toml` as the governing package's, instead of the working directory's |
 | `--unit <DIR>` | mount the package in `DIR` ahead of the entry program, with no manifest edge; repeat for more, in dependency order |
 | `--budget <UNITS>` | units of reduction work each declaration may spend while type checking — a transition costs one, a construction costs what it builds |
-| `--print[=STAGES]` | dump selected intermediate representations to stderr |
 | `--version` | the build's version, so a bug report can say which compiler produced the output |
 
 The budget is restored at every declaration boundary, so it bounds the heaviest declaration rather than the compilation; `curios --help` prints the default it was built with.
-
-`--print` takes a comma-separated list of stage names, and bare `--print` means all of them. It is the one flag whose value must be attached with `=` — `--print=core,wasm`, never `--print core,wasm`, since a detached word would be read as the target:
-
-| Stage | Is |
-| --- | --- |
-| `text` | the surface syntax tree, reprinted |
-| `core` | the lowered core term, which nothing has checked yet |
-| `core-elab` | the same after elaboration and zonking — the module every later stage consumes |
-| `ersd` | the erased term |
-| `ersd-optm` | the erased term after optimization |
-| `cont` | the continuation IR |
-| `cont-optm` | the continuation IR after optimization |
-| `wasm` | the emitted WebAssembly module |
-| `wasm-optm` | the module after Binaryen optimization, rendered by Binaryen's own text writer — `run` and `compile` only, since only the native back end optimizes |
 
 `--manifest` overrides exactly which manifest is the package's. Which umbrella governs is still enumeration's answer, because a manifest cannot declare itself governed.

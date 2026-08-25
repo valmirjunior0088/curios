@@ -18,6 +18,7 @@ use report::*;
 
 use {
     clap::Parser,
+    curios::{serve, wonder_diagnostics, wonder_stage},
     curios_package::{Governing, Target, curate, scaffold},
     curios_pipeline::CompileError,
     curios_runtime::{ForeignBindings, OsHost, run_bytes},
@@ -53,8 +54,8 @@ impl From<String> for Failure {
 impl From<CompileError> for Failure {
     fn from(error: CompileError) -> Self {
         match error {
-            CompileError::Incomplete(message) => Failure::Incomplete(message),
-            CompileError::Failure(message) => Failure::Error(message),
+            CompileError::Incomplete(_) => Failure::Incomplete(error.to_string()),
+            CompileError::Failure(_) => Failure::Error(error.to_string()),
         }
     }
 }
@@ -62,13 +63,10 @@ impl From<CompileError> for Failure {
 fn dispatch() -> Result<(), Failure> {
     let Cli {
         budget,
-        print,
         units,
         manifest,
         mode,
     } = Cli::parse();
-
-    let print = print.unwrap_or_default();
 
     match mode {
         Mode::Run { target, args } => {
@@ -79,7 +77,7 @@ fn dispatch() -> Result<(), Failure> {
                 |path| path.to_string_lossy().into_owned(),
             );
             let subject = subject_of(&target);
-            let cwasm = payload_of(budget, &print, &units, target)?;
+            let cwasm = payload_of(budget, &units, target)?;
 
             fact(Heading::Running, &subject);
 
@@ -124,7 +122,7 @@ fn dispatch() -> Result<(), Failure> {
             }
 
             let started = Instant::now();
-            let cwasm = payload_of(budget, &print, &units, target)?;
+            let cwasm = payload_of(budget, &units, target)?;
 
             emit_exe(&cwasm, &output)?;
 
@@ -174,12 +172,25 @@ fn dispatch() -> Result<(), Failure> {
                 )));
             }
         }
+        Mode::Wonder { query } => match query {
+            Query::Diagnostics { target } => {
+                wonder_diagnostics(budget, &units, manifest.as_deref(), target.as_deref())?
+            }
+            Query::Stage { name, target } => wonder_stage(
+                budget,
+                &units,
+                manifest.as_deref(),
+                &name,
+                target.as_deref(),
+            )?,
+            Query::Server => serve(budget, &units, manifest.as_deref())?,
+        },
         #[cfg(feature = "profile")]
         Mode::Profile { input_path } => {
             let scope = load_units(&units)?;
             let subject = Subject::File(input_path.clone());
             let (compilation, report) =
-                capture(|| compile_file(budget, &print, scope, &input_path, &subject));
+                capture(|| compile_file(budget, scope, &input_path, &subject));
 
             println!(
                 "total_ms\tcalls\tmin_ms\tmax_ms\tretained_mb\tallocated_mb\tallocs\ttarget\tname\t(peak {:.1} MiB)",

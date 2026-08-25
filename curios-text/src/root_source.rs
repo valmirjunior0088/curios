@@ -5,7 +5,7 @@
 //! A stem is never part of a name. `<dir>` and `main` are spelling, and `/util` is the qualifier — which is why [`RootSource::mounted`] takes the header and the directory as two arguments rather than deriving one from the other: a package's library header sits beside its manifest while its namespace *is* the manifest's directory, and that exception is the manifest's to state, not this crate's to guess. See `curios-package`'s `layout` module.
 
 use {
-    super::{Error, Module},
+    super::{Error, LoadError, Module},
     curios_utilities::{Mount, Qualifier, RootKind, Source, is_identifier},
     std::{
         cell::RefCell,
@@ -22,6 +22,8 @@ use {
 /// Lookup is longest-match over the claimed prefixes, exactly as [`Mount::owning`] is everywhere else, and the mounts of one source are pairwise disjoint because a unit claims each of its prefixes once.
 pub struct RootSource {
     bases: Vec<(Mount, Base)>,
+    /// Text consulted before the disk for every file this source would read. See [`Overlay`].
+    overlay: Overlay,
     /// Every file this source has read, by the canonical path it was read from. See [`RootSource::reads`].
     ///
     /// Interior mutability because resolution is a `&self` operation everywhere above this, and recording what was read is not a reason to thread `&mut` through the lowering. Nothing here was ever `Send` — a module holds `Rc<Source>` spans — so this costs no bound that was not already spent.
@@ -88,8 +90,14 @@ impl RootSource {
     fn over(bases: Vec<(Mount, Base)>) -> Self {
         Self {
             bases,
+            overlay: Overlay::default(),
             reads: RefCell::new(BTreeMap::new()),
         }
+    }
+
+    /// This source with `overlay` consulted before the disk on every read.
+    pub fn with_overlay(self, overlay: Overlay) -> Self {
+        Self { overlay, ..self }
     }
 
     /// Claim `prefix` as a supplied root, `module` being the header it is declared in.
@@ -181,8 +189,11 @@ impl RootSource {
                     false => file(directory, qualifier, mount.prefix.segments().len()),
                 };
 
-                let (module, source) =
-                    Module::read(&path).map_err(|cause| Error::ModuleLoadFailed {
+                let (module, source) = self
+                    .overlay
+                    .read(&path)
+                    .unwrap_or_else(|| Module::read(&path))
+                    .map_err(|cause| Error::ModuleLoadFailed {
                         label: qualifier.join(),
                         cause: Box::new(cause),
                     })?;
@@ -218,6 +229,62 @@ impl RootSource {
 impl Default for RootSource {
     fn default() -> Self {
         Self::supplied()
+    }
+}
+
+/// Text standing in for files: `path → text`, consulted before the disk by every [`RootSource`] it is handed to, and by the entry opened through [`Entrypoint::overlaid`](crate::Entrypoint::overlaid).
+///
+/// **One door for every source.** An editor holds documents the disk does not have yet, and a program on standard input has no file at all; both reach the compiler as an overlay rather than as a second way to read, so the path a language server takes is the path the one-shot query is tested on. A read that misses the overlay falls through to the disk unchanged, and a read that hits is recorded exactly as a disk read is — under the path, with the text that was parsed — so what a compilation was verified against stays one list.
+///
+/// Keys are compared by [`identity`]: the canonical path when the file exists, and the canonical parent joined with the file name when it does not yet — which is the case an unsaved new module is.
+#[derive(Clone, Default)]
+pub struct Overlay {
+    texts: Rc<BTreeMap<PathBuf, String>>,
+}
+
+impl Overlay {
+    /// An overlay holding `texts`.
+    pub fn of(texts: impl IntoIterator<Item = (PathBuf, String)>) -> Self {
+        Self {
+            texts: Rc::new(
+                texts
+                    .into_iter()
+                    .map(|(path, text)| (identity(&path), text))
+                    .collect(),
+            ),
+        }
+    }
+
+    /// The text held for `path`, if any.
+    pub fn get(&self, path: &Path) -> Option<&str> {
+        self.texts.get(&identity(path)).map(String::as_str)
+    }
+
+    /// The module held for `path`, parsed, or `None` to say the disk answers.
+    fn read(&self, path: &Path) -> Option<Result<(Module, Rc<Source>), LoadError>> {
+        let text = self.get(path)?;
+        let source = Source::held(path, text);
+
+        Some(
+            Module::parse(&source)
+                .map(|module| (module, source))
+                .map_err(LoadError::Parse),
+        )
+    }
+}
+
+/// The one spelling two paths to a file share: canonical when the file exists, and the canonical parent joined with the file name when it does not — so a document an editor has not saved yet still meets the `mod` declaration that will read it.
+pub fn identity(path: &Path) -> PathBuf {
+    if let Ok(canonical) = path.canonicalize() {
+        return canonical;
+    }
+
+    match (path.parent(), path.file_name()) {
+        (Some(parent), Some(name)) => parent
+            .canonicalize()
+            .map(|parent| parent.join(name))
+            .unwrap_or_else(|_| path.to_path_buf()),
+        _ => path.to_path_buf(),
     }
 }
 

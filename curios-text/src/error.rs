@@ -1,6 +1,6 @@
 use {
     curios_parse::ParserError,
-    curios_utilities::Span,
+    curios_utilities::{Report, Span},
     std::{fmt, io, path::PathBuf},
 };
 
@@ -121,14 +121,37 @@ impl Error {
         }
     }
 
-    /// Renders the error for the user: the `Display` message plus, when the error is `Located`, the source snippet its span points at. Callers should prefer this over `to_string()`, which prints the message alone.
-    pub fn format(&self) -> String {
+    /// The error as data: the `Display` message, at the span `Located` wraps it in when one does — except a module that failed to parse, whose location is the parser's own rather than the `mod` line that asked for it, and whose message therefore carries the parser's message and no snippet of its own.
+    pub fn report(&self) -> Report {
         match self {
-            Self::Located { span, error } => {
-                format!("{error}\n\n{}", span.render_snippet())
-            }
-            error => error.to_string(),
+            Self::Located { span, error } => error
+                .parse_failure()
+                .unwrap_or_else(|| Report::at(span.clone(), error.to_string())),
+            error => error
+                .parse_failure()
+                .unwrap_or_else(|| Report::unlocated(error.to_string())),
         }
+    }
+
+    /// The nested parser's report, prefixed with which module was being loaded, when this is a module that failed to parse.
+    fn parse_failure(&self) -> Option<Report> {
+        let Self::ModuleLoadFailed { label, cause } = self else {
+            return None;
+        };
+        let LoadError::Parse(error) = &**cause else {
+            return None;
+        };
+        let report = error.report();
+
+        Some(Report {
+            span: report.span,
+            message: format!("failed to load module {label}:\n{}", report.message),
+        })
+    }
+
+    /// Renders the error for the user: the `Display` message plus, when the error is `Located`, the source snippet its span points at. Callers should prefer this over `to_string()`, which prints the message alone. [`report`](Self::report) rendered, so the two cannot disagree about where.
+    pub fn format(&self) -> String {
+        self.report().render()
     }
 }
 
@@ -262,13 +285,18 @@ pub enum LoadError {
 }
 
 impl LoadError {
-    /// Renders the failure for the user: the offending path plus the io error, or the parser's own formatted diagnostic (which carries its source snippet).
-    pub fn format(&self) -> String {
+    /// The failure as data: the offending path plus the io error, located nowhere, or the parser's own report at the offset it stopped.
+    pub fn report(&self) -> Report {
         match self {
             LoadError::Read { path, error } => {
-                format!("failed to read {}: {error}", path.display())
+                Report::unlocated(format!("failed to read {}: {error}", path.display()))
             }
-            LoadError::Parse(error) => error.format(),
+            LoadError::Parse(error) => error.report(),
         }
+    }
+
+    /// Renders the failure for the user. [`report`](Self::report) rendered, so the two cannot disagree about where.
+    pub fn format(&self) -> String {
+        self.report().render()
     }
 }

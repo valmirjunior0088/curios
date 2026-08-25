@@ -150,7 +150,7 @@ const WALK_MIRROR_INDEXED: &str = include_str!(concat!(
 /// Retaken **2026-08-13** by reading the emitted body rather than grepping the module, which is what the count above should have done from the start:
 ///
 /// ```sh
-/// cargo run --package curios -- --print=wasm compile programs/parse_digits.crs -o /tmp/parse_digits
+/// cargo run --package curios -- wonder stage wasm programs/parse_digits.crs
 /// ```
 ///
 /// The raw pre-Binaryen module goes to stderr. `$func/…$/std/Str/fold` then holds five `struct.new $tuple/2` — four in the arms, plus the seed built before the loop — one `struct.new $tuple/4`, three `call $bytes/slice`, three `call $bytes/read` and two `call_ref $clsr/2`. Exactly one arm runs per character, which is what turns those site counts into the per-character row above.

@@ -5,7 +5,10 @@
 //! It used to be written three times. The native product, the browser product and this crate's own test suite each spelled `with_prelude(|prelude| … Prefix::over(from_ref(&prelude)), &SYNTAX, …)` by hand, under the reading that naming the standard library is a product's decision. That reading survives — a product may still hand the fold any prefix it likes — but three callers deciding it identically is a missing function rather than a policy, and the third of them was not a product at all.
 
 use {
-    crate::{Cache, CompileError, Progress, Stage, compile_entrypoint, compile_units, recheck},
+    crate::{
+        Cache, CompileError, Progress, Stage, check_entrypoint, compile_entrypoint, compile_units,
+        recheck,
+    },
     curios_prelude::{SYNTAX, with_prelude},
     curios_unit::Prefix,
     std::slice::from_ref,
@@ -36,11 +39,72 @@ pub fn compile_with_units<O, P>(
     loader: &curios_text::RootSource,
     cache: Option<&dyn Cache>,
     observe: O,
-    mut progress: P,
+    progress: P,
 ) -> Result<(curios_wasm::Module, curios_abi::ForeignStore), CompileError>
 where
     O: FnMut(Stage<'_>),
     P: FnMut(Progress<'_>),
+{
+    fold_with_units(budget, units, cache, progress, |scope| {
+        compile_entrypoint(budget, scope, &SYNTAX, entrypoint, loader, observe)
+    })
+}
+
+/// [`compile_with_units`] stopped where the verdicts stop: `units` in the order given, then `entrypoint` lowered, elaborated and judged against all of them and the prelude — see [`check_entrypoint`]. The same fold, so a unit the store already holds is reused here exactly as a compile reuses it, and one that is not is compiled and judged in full: a question about the entry is answered against the dependencies it would actually be built on.
+pub fn check_with_units<P>(
+    budget: u64,
+    units: &[curios_text::RootSource],
+    entrypoint: &curios_text::Entrypoint,
+    loader: &curios_text::RootSource,
+    cache: Option<&dyn Cache>,
+    progress: P,
+) -> Result<curios_core::Module, CompileError>
+where
+    P: FnMut(Progress<'_>),
+{
+    fold_with_units(budget, units, cache, progress, |scope| {
+        check_entrypoint(budget, scope, &SYNTAX, entrypoint, loader)
+    })
+}
+
+/// The fold with no entry: `units` in the order given, each lowered, elaborated, judged and erased against everything before it and the prelude, and nothing compiled on top. What a question about a *unit* — a library, which has no entrypoint to check through — is answered by: the last unit's verdicts are the answer, and the ones before it are its scope.
+pub fn check_units_with_prelude<P>(
+    budget: u64,
+    units: &[curios_text::RootSource],
+    cache: Option<&dyn Cache>,
+    mut progress: P,
+) -> Result<(), CompileError>
+where
+    P: FnMut(Progress<'_>),
+{
+    with_prelude(|prelude| {
+        let sources = units
+            .iter()
+            .map(curios_text::UnitSource::mounted)
+            .collect::<Vec<_>>();
+        compile_units(
+            budget,
+            Prefix::over(from_ref(&prelude)),
+            &SYNTAX,
+            &sources,
+            cache,
+            &mut progress,
+        )
+        .map(|_produced| ())
+    })
+}
+
+/// The fold both entry points share: the prelude, then `units` in order, then `entry` over the whole scope, bracketed by the progress events the entry step cannot announce for itself.
+fn fold_with_units<P, E, T>(
+    budget: u64,
+    units: &[curios_text::RootSource],
+    cache: Option<&dyn Cache>,
+    mut progress: P,
+    entry: E,
+) -> Result<T, CompileError>
+where
+    P: FnMut(Progress<'_>),
+    E: FnOnce(Prefix<'_>) -> Result<T, CompileError>,
 {
     with_prelude(|prelude| {
         let sources = units
@@ -61,14 +125,7 @@ where
 
         // The entry is announced here rather than inside `compile_entrypoint`, which stays free of the concern: it is the last step of this fold, and bracketing it costs one event where threading a second callback down would cost a signature.
         progress(Progress::Entry);
-        let compiled = compile_entrypoint(
-            budget,
-            Prefix::over(&scope),
-            &SYNTAX,
-            entrypoint,
-            loader,
-            observe,
-        )?;
+        let compiled = entry(Prefix::over(&scope))?;
         progress(Progress::Compiled);
 
         Ok(compiled)
