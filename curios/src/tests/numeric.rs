@@ -372,6 +372,19 @@ fn a_bound_over_a_diverging_subject_is_refused_by_name() {
     );
 }
 
+// `Int/NonNeg` says `Int/ge(a, 0)`; the guard says `0 <= a`. Before the mirror they were two neutrals neither conversion nor refinement related, and the guard did not discharge the bound; the `/sys` rows now build both as `Int/le(0, a)`, and the reducer mirrors one built by hand.
+#[test]
+fn a_guard_spelled_the_other_way_discharges_a_bound() {
+    assert_eq!(
+        run(r#"
+        use /std/{Handle, Str, Nat, Int};
+        let narrow(a : Int) -> Nat = match 0 <= a | true => Int/to_nat(a) | false => 0 end;
+        /std/print(Nat/to_str(narrow(+7)))
+        "#),
+        b"7"
+    );
+}
+
 // A bound whose subject is a *computed* value is discharged by evaluating that value, at elaboration time. `Bytes/slice` states `10 <= Bytes/len(b)`, so `Bytes/slice(built, 0, 10)` puts `go(100000, x[])` in a type and the compiler runs the loop. A hundred thousand iterations costs about seventeen million reduction steps — sixteen times the default budget — so the refusal below is the budget doing exactly its job, and the small figure stated here only makes the fixture cheap.
 //
 // **What this used to pin was something worse, and the difference is the point.** The budget counted transitions, and the memory a reduction allocated was bounded by nothing: fusing an all-literal concatenation recopied the whole accumulator every step, so the same program spent a quadratic volume of construction against a linear step count and exhausted the machine rather than refusing. `curios-core`'s `FUSION_CAP` and its measure removed that, and `curios`'s `tests::reduction` holds the figures. What is left is an ordinary bounded computation that happens to be bigger than the default allowance.

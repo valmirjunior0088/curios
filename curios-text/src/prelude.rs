@@ -404,9 +404,10 @@ fn nat_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
             },
         ),
         binary("lt", nat(), bool_(), Intrinsic::NatLt),
-        binary("gt", nat(), bool_(), Intrinsic::NatGt),
+        // **`gt` and `ge` are built as their `lt`/`le` mirrors, on every carrier.** A comparison is spelled one way from the moment it enters Core, so a case equation recorded on a guard as written and the same guard met reduced inside a proposition are one term — the reducer's own mirror covers an intrinsic built by hand, but a spelling that never exists cannot be keyed on. See `documentation/design/toolchain/a-comparison-is-spelled-one-way-when-it-is-stuck.md`.
+        binary("gt", nat(), bool_(), |a, b| Intrinsic::NatLt(b, a)),
         binary("le", nat(), bool_(), Intrinsic::NatLe),
-        binary("ge", nat(), bool_(), Intrinsic::NatGe),
+        binary("ge", nat(), bool_(), |a, b| Intrinsic::NatLe(b, a)),
         binary("and", nat(), nat(), Intrinsic::NatAnd),
         binary("or", nat(), nat(), Intrinsic::NatOr),
         binary("xor", nat(), nat(), Intrinsic::NatXor),
@@ -424,8 +425,8 @@ fn byte_ops() -> Vec<TopItem> {
         binary("eql", byte(), bool_(), Intrinsic::ByteEql),
         binary("lt", byte(), bool_(), Intrinsic::ByteLt),
         binary("le", byte(), bool_(), Intrinsic::ByteLe),
-        binary("gt", byte(), bool_(), Intrinsic::ByteGt),
-        binary("ge", byte(), bool_(), Intrinsic::ByteGe),
+        binary("gt", byte(), bool_(), |a, b| Intrinsic::ByteLt(b, a)),
+        binary("ge", byte(), bool_(), |a, b| Intrinsic::ByteLe(b, a)),
     ]
 }
 
@@ -469,9 +470,9 @@ fn int_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
             },
         ),
         binary("lt", int(), bool_(), Intrinsic::IntLt),
-        binary("gt", int(), bool_(), Intrinsic::IntGt),
+        binary("gt", int(), bool_(), |a, b| Intrinsic::IntLt(b, a)),
         binary("le", int(), bool_(), Intrinsic::IntLe),
-        binary("ge", int(), bool_(), Intrinsic::IntGe),
+        binary("ge", int(), bool_(), |a, b| Intrinsic::IntLe(b, a)),
         // Bitwise ops on the signed i31 carrier. `and`/`or`/`xor` are exact bit ops; `shl` truncates into the carrier like `Nat/shl`; `shr` is arithmetic (sign-preserving). `not` is `/std/Int`'s `xor(x, -1)`.
         binary("and", int(), int(), Intrinsic::IntAnd),
         binary("or", int(), int(), Intrinsic::IntOr),
@@ -501,9 +502,9 @@ fn flt_ops(syntax: &SyntaxRegistry) -> Vec<TopItem> {
         binary("eql", flt(), bool_(), Intrinsic::FltEql),
         binary("neq", flt(), bool_(), Intrinsic::FltNeq),
         binary("lt", flt(), bool_(), Intrinsic::FltLt),
-        binary("gt", flt(), bool_(), Intrinsic::FltGt),
+        binary("gt", flt(), bool_(), |a, b| Intrinsic::FltLt(b, a)),
         binary("le", flt(), bool_(), Intrinsic::FltLe),
-        binary("ge", flt(), bool_(), Intrinsic::FltGe),
+        binary("ge", flt(), bool_(), |a, b| Intrinsic::FltLe(b, a)),
         unary("neg", flt(), flt(), Intrinsic::FltNeg),
         unary("abs", flt(), flt(), Intrinsic::FltAbs),
         unary("sqrt", flt(), flt(), Intrinsic::FltSqrt),
