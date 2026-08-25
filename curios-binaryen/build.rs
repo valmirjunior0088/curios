@@ -72,6 +72,13 @@ fn build_marker() -> String {
     )
 }
 
+/// Where a cache entry records its completion: written last by [`build`], so its presence is what says the entry is usable.
+///
+/// Spelled here rather than at each use because [`main`] declares it to Cargo as a rerun input and [`build`] reads and writes it, and the two must be the same file.
+fn completion_marker(entry: &Path) -> PathBuf {
+    entry.join("complete")
+}
+
 fn lock(path: &Path) -> File {
     let file = OpenOptions::new()
         .create(true)
@@ -152,7 +159,7 @@ fn archive(archive_path: &Path) -> Vec<u8> {
 
 fn build(entry: &Path) {
     let work = entry.join("work");
-    let complete = entry.join("complete");
+    let complete = completion_marker(entry);
     let archive_path = entry.join(format!("{BINARYEN_VERSION}.tar.gz"));
     let marker = build_marker();
 
@@ -201,6 +208,12 @@ fn main() {
     let binaryen_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap())
         .join(".artifacts")
         .join(&target_triple);
+    // Every directive this script emits is an absolute path into the entry below, and the entry sits outside Cargo's target tree — so nothing else tells Cargo when it goes away. Without this, deleting `.artifacts` by hand replays stale `-L` paths into a directory that no longer exists instead of rebuilding it. `curios/build.rs` declares its launcher for the same reason, and states it.
+    println!(
+        "cargo:rerun-if-changed={}",
+        completion_marker(&binaryen_dir).display()
+    );
+
     fs::create_dir_all(&binaryen_dir).expect("create Binaryen cache entry");
     let _lock = lock(&binaryen_dir.join("lock"));
 
