@@ -48,7 +48,7 @@ pub fn stage(
 
     let (entrypoint, loader) = open(origin, overlay).map_err(Refusal::Diagnostics)?;
     let units = overlaid(units, overlay);
-    let read_only = cache.map(ReadOnly);
+    let read_only = cache.map(|cache| ReadOnly { cache, overlay });
     let cache = read_only.as_ref().map(|cache| cache as &dyn Cache);
 
     let mut text = None;

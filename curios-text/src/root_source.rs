@@ -260,6 +260,23 @@ impl Overlay {
         self.texts.get(&identity(path)).map(String::as_str)
     }
 
+    /// Whether any document held lies under one of `directories` — the question a caller asks before believing something else about what those directories contain.
+    ///
+    /// Answered here because the comparison is against keys this type spells by [`identity`], and a caller comparing raw paths against them would be comparing two conventions. `directories` is spelled the same way before the containment test, so however a manifest walk wrote a directory it meets the key the same path was stored under.
+    pub fn reaches(&self, directories: &[&Path]) -> bool {
+        let directories = directories
+            .iter()
+            .copied()
+            .map(identity)
+            .collect::<Vec<_>>();
+
+        self.texts.keys().any(|held| {
+            directories
+                .iter()
+                .any(|directory| held.starts_with(directory))
+        })
+    }
+
     /// The module held for `path`, parsed, or `None` to say the disk answers.
     fn read(&self, path: &Path) -> Option<Result<(Module, Rc<Source>), LoadError>> {
         let text = self.get(path)?;

@@ -40,7 +40,7 @@ pub fn diagnostics(
     overlay: &Overlay,
     cache: Option<&dyn Cache>,
 ) -> Vec<Diagnostic> {
-    let read_only = cache.map(ReadOnly);
+    let read_only = cache.map(|cache| ReadOnly { cache, overlay });
     let cache = read_only.as_ref().map(|cache| cache as &dyn Cache);
 
     let checked = match subject {
@@ -110,12 +110,20 @@ pub(crate) fn overlaid(units: Vec<RootSource>, overlay: &Overlay) -> Vec<RootSou
         .collect()
 }
 
-/// A cache that answers and never records: what a query is allowed to do with the store.
-pub(crate) struct ReadOnly<'a>(pub(crate) &'a dyn Cache);
+/// A cache that answers about the disk alone and never records: what a query is allowed to do with the store.
+///
+/// **A unit the overlay reaches is a miss.** A stored unit is believed on a re-read of every file it was compiled from, and that re-read knows only the disk — so a unit whose source an editor holds unsaved would be handed back against text nobody asked about, and the document being edited is exactly the one whose verdicts were asked for. Refusing the hit costs that one unit's compilation; every unit the overlay does not reach still comes from the store, which is what keeps a check per keystroke from rebuilding a package's dependencies.
+pub(crate) struct ReadOnly<'a> {
+    pub(crate) cache: &'a dyn Cache,
+    pub(crate) overlay: &'a Overlay,
+}
 
 impl Cache for ReadOnly<'_> {
     fn get(&self, source: &UnitSource<'_>) -> Option<Unit> {
-        self.0.get(source)
+        match self.overlay.reaches(&source.directories()) {
+            true => None,
+            false => self.cache.get(source),
+        }
     }
 
     fn put(&self, _source: &UnitSource<'_>, _unit: &Unit) {}
