@@ -1,4 +1,4 @@
-//! Eliminations: the semantic identity selection the specification names.
+//! Eliminations: the semantic identity each Core elimination selects.
 //!
 //! Each Core elimination erases to its most precise erased form — `SwitchBool`, `SwitchNat`, `FoldNat`, first-class `FoldSequence` over the sequence itself, and schema-carrying `MatchVariant` whose arms bind the payload directly. Both sequence forms keep the peel-versus-fold distinction: a cons arm that ignores its induction hypothesis erases to `UnconsSequence`, one peel rather than an n-step fold, so a non-tail recursive caller does not re-run the whole fold at every level. Neither names a read: how a sequence is taken apart belongs to the lowering that performs it, and this crate names no index, window or length at all — see [A lowering names the elimination it performs](../../../documentation/design/toolchain/a-lowering-names-the-elimination-it-performs.md).
 //!

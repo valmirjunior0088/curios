@@ -1,6 +1,6 @@
 //! Derived analyses — computed on demand from the current module state as one immutable snapshot, never maintained as shadow state.
 //!
-//! The snapshot holds exactly the facts the specification names consumers for: per-value use counts, per-function lexical free values (functions store no capture lists — this is where captures come from), the function reference graph (an edge for a referenced function atom and for a function bound within another's body, so recursion through nesting is visible), and its strongly connected components with a recursion test. All maps are ordered, every walk is an explicit worklist, and the same module always produces an equal snapshot.
+//! The snapshot holds exactly the facts its consumers need: per-value use counts, per-function lexical free values (functions store no capture lists — this is where captures come from), the function reference graph (an edge for a referenced function atom and for a function bound within another's body, so recursion through nesting is visible), and its strongly connected components with a recursion test. All maps are ordered, every walk is an explicit worklist, and the same module always produces an equal snapshot.
 //!
 //! Precondition: the module verifies. Analysis of an unverified module may produce arbitrary (but still terminating) results.
 
