@@ -168,7 +168,9 @@ cargo test --workspace --all-targets --all-features > /tmp/curios-tests.txt 2>&1
 
 ### What a workspace check already exercises
 
-`cargo clippy --workspace` (or any workspace build) is not only a compile. It builds `curios-prelude-archive`, whose build script elaborates every `/std` and `/syn` module, erases them through `erase_unit` — which runs `curios-ersd`'s verifier over the result — and then `curios-prelude`'s script certifies the whole module with the kernel, which decides universe satisfiability for every context before assuming it. So a change on the Text, Core, Ersd or certification path is exercised over the entire standard library by a step already in the gate, and needs only its own crate's tests beside it.
+`cargo clippy --workspace` (or any workspace build) is not only a compile. It builds `curios-prelude-archive`, whose build script elaborates every `/std` and `/syn` module and erases them through `erase_unit`, and then `curios-prelude`'s script certifies the whole module with the kernel, which decides universe satisfiability for every context before assuming it. So a change on the Text, Core or certification path is exercised over the entire standard library by a step already in the gate, and needs only its own crate's tests beside it.
+
+A change to Ersd is *not*, and the reason is worth knowing: a unit with no entrypoint leaves erasure through `ErsdBuilder::into_module`, which hands the prefix over unverified — a prefix has no entry block, and `Module::verify` requires one. The prelude is that case, so the archive build never runs the Ersd verifier over it; the archive build's own `profile.tsv` carries `erase_unit` and no `verify_module` at all. The restored prefix is first verified when a program compiles on top of it and `finalize` walks the whole module, which is `cargo test` rather than a workspace build.
 
 A change *below* Ersd is not. The archive stops there, so nothing in a workspace check reaches `curios-cont` or `curios-wasm`, and their detector is the cross-stage corpus in `curios`. That line, rather than the size of a diff, is what decides whether a change can be verified cheaply.
 
