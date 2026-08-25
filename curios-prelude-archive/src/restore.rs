@@ -96,8 +96,8 @@ mod tests {
     /// So what stays pinned is what a literal still emits per byte: nothing. The type itself is checked because a polymorphic `Str` would put a level on every literal value.
     #[test]
     fn string_literal_machinery_is_monomorphic() {
-        // Selected by name because these are exactly the hidden lowering targets `curios-prelude-archive/src/syntax.rs` registers that are emitted more than once per literal; nothing infers behavior from the spelling. `of_scan_eq` and `refl_scan` are deliberately absent — see above.
-        let lowering_targets = ["/syn/Str/Str", "/syn/Str/scan_from", "/syn/Char/Char"];
+        // The literal machinery whose universe parameters would be paid per literal *value* or per byte of *reduction* — not what lowering emits repeatedly, which is nothing (see above). `Str` and `Char` are the carriers a literal builds; `scan_from` is the fold its proof is discharged by running, so a level on it is minted once per byte checked. `of_scan_eq` and `refl_scan` are deliberately absent — see above. `scan_from` is deliberately not in `curios-prelude-archive/src/syntax.rs` either: nothing in Rust emits it, it is reached through the other two's types.
+        let pinned = ["/syn/Str/Str", "/syn/Str/scan_from", "/syn/Char/Char"];
 
         with_prelude(|prelude| {
             let mut parameters = std::collections::BTreeMap::new();
@@ -121,7 +121,7 @@ mod tests {
             }
 
             let mut checked = 0;
-            for target in lowering_targets {
+            for target in pinned {
                 let Some(count) = parameters.get(target) else {
                     continue;
                 };
@@ -133,9 +133,9 @@ mod tests {
             }
             // Without this the test passes vacuously if `/syn` is renamed.
             assert!(
-                checked == lowering_targets.len(),
-                "found only {checked} of the expected lowering targets; \
-                 the `/syn` names this pins have moved"
+                checked == pinned.len(),
+                "found only {checked} of the pinned `/syn` names; \
+                 the names this pins have moved"
             );
         });
     }
