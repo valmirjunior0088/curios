@@ -235,6 +235,53 @@ fn the_server_publishes_from_the_buffer_and_clears() {
     fs::remove_dir_all(root).unwrap();
 }
 
+/// A store a build already filled answers about the disk, so it does not answer here: the library's unit is in the store, the editor holds a module of it that does not type-check, and the record is published anyway. A stored unit is believed on a re-read of the files it was compiled from, which still hold what was built — so a hit taken here would report on the file rather than on the document that was asked about.
+///
+/// The second half is that the record goes when the buffer stops disagreeing, with the store warm throughout. It does not witness a surviving hit: the document is still open, so the overlay still reaches its unit either way, and no progress event reaches this transport to say which happened.
+#[test]
+fn a_warm_store_does_not_answer_for_the_buffer() {
+    let root = project("warm");
+
+    // Filled as a build fills it — `wonder` itself never writes a store.
+    let built = curios(&root, &["run", "app"], "");
+    assert!(
+        built.status.success(),
+        "{}",
+        String::from_utf8_lossy(&built.stderr)
+    );
+    assert!(
+        root.join(".curios/unit").is_dir(),
+        "a build files the library's unit"
+    );
+
+    let uri = format!("file://{}", root.join("util.crs").display());
+    let mut editor = Editor::launch(&root);
+    editor.send(r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"capabilities":{}}}"#);
+    editor.receive();
+    editor.send(r#"{"jsonrpc":"2.0","method":"initialized","params":{}}"#);
+
+    editor.send(&format!(
+        r#"{{"jsonrpc":"2.0","method":"textDocument/didOpen","params":{{"textDocument":{{"uri":"{uri}","languageId":"curios","version":1,"text":"pub let word : /std/Str = 1;\n"}}}}}}"#
+    ));
+    let published = editor.receive();
+    assert!(published.contains("type mismatch"), "{published}");
+
+    editor.send(&format!(
+        r#"{{"jsonrpc":"2.0","method":"textDocument/didChange","params":{{"textDocument":{{"uri":"{uri}","version":2}},"contentChanges":[{{"text":"pub let word : /std/Str = \"placed\";\n"}}]}}}}"#
+    ));
+    let cleared = editor.receive();
+    assert!(cleared.contains(r#""diagnostics":[]"#), "{cleared}");
+
+    let output = editor.finish();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+
+    fs::remove_dir_all(root).unwrap();
+}
+
 /// A library header that does not parse is a located record like any other: published on the header, at the line the parser stopped, with a message that holds no snippet — the editor draws the location, and a caret drawn in text cannot line up in a proportional font.
 #[test]
 fn a_header_that_does_not_parse_is_located_without_a_snippet() {
