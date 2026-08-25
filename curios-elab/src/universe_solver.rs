@@ -540,11 +540,6 @@ impl UniverseSolver {
         self.consistency = None;
     }
 
-    #[cfg(test)]
-    pub(crate) fn constraints(&self) -> &[UniverseConstraint] {
-        self.constraints.as_slice()
-    }
-
     /// Release inference constraints after their enclosing declaration has finalized. Any relation that remains externally meaningful has already been projected into that declaration's [`UniverseContext`]; later uses reinsert the stored residual context at fresh instances.
     pub(crate) fn clear_constraints(&mut self) {
         self.constraints.clear();
@@ -707,15 +702,6 @@ impl UniverseSolver {
         }
         self.constraints.push(constraint);
         Ok(())
-    }
-
-    /// Minimize flexible metas from their current lower bounds. Repeating to a fixpoint handles classifier chains; unconstrained flexible metas become zero. Generalizable metas are left for declaration finalization. Production reaches minimization through [`UniverseSolver::solve_flexible_in`]; this whole-store form is test surface.
-    #[cfg(test)]
-    pub(crate) fn solve_flexible(&mut self) -> Result<(), UniverseError> {
-        let metas = (0..self.metas.len())
-            .map(UniverseMetaId)
-            .collect::<BTreeSet<_>>();
-        self.solve_flexible_in(&metas)
     }
 
     /// Whether `meta` is unsolved and eligible for minimization.

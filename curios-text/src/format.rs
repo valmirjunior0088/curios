@@ -43,14 +43,6 @@ impl Formatted {
         let source = Source::read(path).map_err(|error| located(error.to_string()))?;
         Self::from_source(&source).map_err(located)
     }
-
-    /// The canonical text, either way. Production callers match the variants directly (changed-ness decides the exit path); only the round-trip tests want the text alone.
-    #[cfg(test)]
-    pub(crate) fn into_text(self) -> String {
-        match self {
-            Formatted::Unchanged(text) | Formatted::Changed(text) => text,
-        }
-    }
 }
 
 /// The canonical width — the same target goal reports render within.

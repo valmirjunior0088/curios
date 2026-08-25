@@ -1,9 +1,10 @@
 use {super::Formatted, curios_utilities::Source};
 
+/// The canonical text, either way: production callers match the variants directly, since changed-ness decides the exit path, and only these round-trip tests want the text alone.
 fn formatted(source: &str) -> String {
-    Formatted::from_source(&Source::inline(source))
-        .expect("fixture formats")
-        .into_text()
+    match Formatted::from_source(&Source::inline(source)).expect("fixture formats") {
+        Formatted::Unchanged(text) | Formatted::Changed(text) => text,
+    }
 }
 
 #[test]
