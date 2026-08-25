@@ -349,6 +349,29 @@ fn a_difference_over_a_folded_recursion_converts_with_its_unfolding() {
     );
 }
 
+// A bound whose subject genuinely diverges used to spend the whole budget and report exhaustion, where the same subject in a declared type was refused by name before anything ran. The check still runs — a subject that terminates discharges, whatever the analysis classified it — and only an exhausted one is re-read for the partial definition it names. `spin` recurses on `p + 1`, which no size-change order accepts.
+#[test]
+fn a_bound_over_a_diverging_subject_is_refused_by_name() {
+    let error = typecheck(
+        r#"
+        use /std/{Nat, Int};
+        rec spin(n : Nat) -> Int = match n | 0 => +0 | p + 1; _ => spin(p + 1) end;
+        let k : Nat = Int/to_nat(spin(3));
+        /std/print("unreachable")
+        "#,
+    )
+    .expect_err("a diverging subject cannot discharge a bound");
+
+    assert!(
+        error.contains("is a proof position but reaches '/spin'"),
+        "expected the totality refusal by name, got: {error}"
+    );
+    assert!(
+        !error.contains("ran out of steps"),
+        "exhaustion should have been re-reported by name, got: {error}"
+    );
+}
+
 // A bound whose subject is a *computed* value is discharged by evaluating that value, at elaboration time. `Bytes/slice` states `10 <= Bytes/len(b)`, so `Bytes/slice(built, 0, 10)` puts `go(100000, x[])` in a type and the compiler runs the loop. A hundred thousand iterations costs about seventeen million reduction steps — sixteen times the default budget — so the refusal below is the budget doing exactly its job, and the small figure stated here only makes the fixture cheap.
 //
 // **What this used to pin was something worse, and the difference is the point.** The budget counted transitions, and the memory a reduction allocated was bounded by nothing: fusing an all-literal concatenation recopied the whole accumulator every step, so the same program spent a quadratic volume of construction against a linear step count and exhausted the machine rather than refusing. `curios-core`'s `FUSION_CAP` and its measure removed that, and `curios`'s `tests::reduction` holds the figures. What is left is an ordinary bounded computation that happens to be bigger than the default allowance.

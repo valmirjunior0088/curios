@@ -1,4 +1,4 @@
-use super::*;
+use {super::*, crate::exhausted_bound};
 
 pub(super) fn elaborate_func_type(
     context: &mut Context,
@@ -56,16 +56,25 @@ pub(super) fn insert_auto_argument(
 
     match plicity {
         // An obligation already decided in the goal's favour is filled here rather than deferred, because *here* is where the facts that decide it are in scope. A scrutinee refinement lives only inside its arm, so an index guarded by `i < len(b)` has its bound established at the call and nowhere afterwards — a hole minted now and swept at the item boundary would be reduced with the refinement already out of scope, and would report as uninferred against a caller who did establish it.
-        Plicity::Implicit => Ok(trivially_inhabited(context, type_)?.unwrap_or_else(|| {
-            context.fresh_metavar(
-                type_.clone(),
-                origin.span(),
-                ImplicitOrigin {
-                    func: func.to_string(),
-                    binder: binder.clone(),
-                },
-            )
-        })),
+        Plicity::Implicit => Ok(trivially_inhabited(context, type_)
+            .map_err(|error| {
+                exhausted_bound(
+                    context,
+                    error,
+                    type_,
+                    format!("the bound '{binder}' of '{func}'"),
+                )
+            })?
+            .unwrap_or_else(|| {
+                context.fresh_metavar(
+                    type_.clone(),
+                    origin.span(),
+                    ImplicitOrigin {
+                        func: func.to_string(),
+                        binder: binder.clone(),
+                    },
+                )
+            })),
         Plicity::Witness => {
             let provenance = WitnessOrigin {
                 func: func.to_string(),

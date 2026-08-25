@@ -54,22 +54,43 @@ pub fn record_definition_totality(context: &mut Context, definition: &Definition
 /// The whole-module gate runs post-zonk, which is after elaboration has already performed the type-level reduction it exists to make safe. A type that reaches a partial definition and *is productive* survives elaboration and the gate rejects it; one that is not productive spins until the step budget dies, and the program is refused for apparently running out of a resource no amount of which would have helped. This refuses it first, by name, for the reason it is actually wrong.
 ///
 /// It reads the *lowered* type, before elaboration touches it, so the mentions it sees are the written ones. That is why it is an early net rather than a replacement: the post-zonk gate still runs, and still sees everything elaboration produces.
-pub fn check_written_type_totality(
-    context: &mut Context,
-    type_: &Term,
-    site: &str,
-) -> Result<(), Error> {
-    let offender = type_
-        .free_vars()
+/// The first global `term` names by spelling whose recorded totality is not total — the syntactic reading behind [`check_written_type_totality`], shared with the bound site that re-reports an exhausted discharge by the same name.
+pub(crate) fn partial_offender(context: &Context, term: &Term) -> Option<Global> {
+    term.free_vars()
         .into_iter()
         .filter_map(|free| free.as_global().cloned())
         .find(|name| {
             context
                 .definition_totality(name)
                 .is_some_and(|totality| !totality.is_total())
-        });
+        })
+}
 
-    match offender {
+/// An exhausted discharge of `proposition`, re-reported by the partial definition it names when it names one, and the exhaustion itself otherwise. A bound whose subject does not terminate used to spend the budget and report that, where the same subject in a declared type is refused by name before anything is reduced; the check still runs — a subject that terminates discharges, whatever the analysis classified it — and only a spent budget is re-read for a name. The obligation is `documentation/design/language/totality-of-the-erased-program.md`'s.
+pub(crate) fn exhausted_bound(
+    context: &Context,
+    error: Error,
+    proposition: &Term,
+    site: String,
+) -> Error {
+    match (&error, partial_offender(context, proposition)) {
+        (Error::ReduceExhausted { .. } | Error::ConvertExhausted { .. }, Some(offender)) => {
+            Error::PartialInErasedPosition {
+                erased: Erased::Proof,
+                site,
+                offender: Some(offender.to_string()),
+            }
+        }
+        _ => error,
+    }
+}
+
+pub fn check_written_type_totality(
+    context: &mut Context,
+    type_: &Term,
+    site: &str,
+) -> Result<(), Error> {
+    match partial_offender(context, type_) {
         None => Ok(()),
         Some(offender) => Err(Error::PartialInErasedPosition {
             erased: Erased::Type,

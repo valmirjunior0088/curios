@@ -184,6 +184,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 
 ## Diagnostics
 
+- [x] A bound whose subject does not terminate is refused by the name of the definition it reaches, as a declared type is — the check runs as before and only a spent budget is re-read for a name, so a terminating subject the analysis could not classify still discharges (`a_bound_over_a_diverging_subject_is_refused_by_name`)
 - [x] Span-based error quality across all stages
 - [x] A self-referential value reports rather than asserts — the erased verifier refuses a computed `rec` member whose initializer evaluates itself, naming the path (`p evaluates p`; `a, through a call, evaluates b evaluates a`), and the lowering assertion that once met the shape went with the eager lowering it guarded
 - [x] Diagnostic terms printed with names in scope

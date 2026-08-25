@@ -1,6 +1,6 @@
 use {
     super::{Context, Error, Mode, elaborate, expect},
-    crate::reduce_with,
+    crate::{exhausted_bound, reduce_with},
     curios_core::{Intrinsic, Operand, Produced, Subterm, Term, Var, Visit},
 };
 
@@ -69,7 +69,19 @@ fn synth_intrinsic(
 
         let operand = operands[done.len()].clone();
         done.push(match demand {
-            Operand::At(type_) => elaborate(context, &operand, Mode::Check(type_.clone()))?.0,
+            // A directly written bound: the same re-report the implicit fill in `apply.rs` makes, since a subject that does not terminate is refused by name either way.
+            Operand::At(type_) => {
+                elaborate(context, &operand, Mode::Check(type_.clone()))
+                    .map_err(|error| {
+                        exhausted_bound(
+                            context,
+                            error,
+                            type_,
+                            format!("the bound of '{}'", Term::intrinsic(current.clone())),
+                        )
+                    })?
+                    .0
+            }
             Operand::IsType => crate::check_is_sort(context, &operand)?.0,
             Operand::Function { domain, codomain } => {
                 let binder = context.fresh(Some("x"));
