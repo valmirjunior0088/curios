@@ -19,9 +19,7 @@ pub enum Operation {
     NatLt,
     NatDiv,
     NatRem,
-    NatGt,
     NatLe,
-    NatGe,
     NatAnd,
     NatOr,
     NatXor,
@@ -32,8 +30,6 @@ pub enum Operation {
     ByteEql,
     ByteLt,
     ByteLe,
-    ByteGt,
-    ByteGe,
     IntEql,
     IntNeq,
     IntAdd,
@@ -42,9 +38,7 @@ pub enum Operation {
     IntDiv,
     IntRem,
     IntLt,
-    IntGt,
     IntLe,
-    IntGe,
     IntAnd,
     IntOr,
     IntXor,
@@ -58,9 +52,7 @@ pub enum Operation {
     FltEql,
     FltNeq,
     FltLt,
-    FltGt,
     FltLe,
-    FltGe,
     FltMin,
     FltMax,
     FltCopysign,
@@ -116,9 +108,7 @@ impl Operation {
             | Self::NatLt
             | Self::NatDiv
             | Self::NatRem
-            | Self::NatGt
             | Self::NatLe
-            | Self::NatGe
             | Self::NatAnd
             | Self::NatOr
             | Self::NatXor
@@ -127,8 +117,6 @@ impl Operation {
             | Self::ByteEql
             | Self::ByteLt
             | Self::ByteLe
-            | Self::ByteGt
-            | Self::ByteGe
             | Self::IntEql
             | Self::IntNeq
             | Self::IntAdd
@@ -137,9 +125,7 @@ impl Operation {
             | Self::IntDiv
             | Self::IntRem
             | Self::IntLt
-            | Self::IntGt
             | Self::IntLe
-            | Self::IntGe
             | Self::IntAnd
             | Self::IntOr
             | Self::IntXor
@@ -153,9 +139,7 @@ impl Operation {
             | Self::FltEql
             | Self::FltNeq
             | Self::FltLt
-            | Self::FltGt
             | Self::FltLe
-            | Self::FltGe
             | Self::FltMin
             | Self::FltMax
             | Self::FltCopysign
