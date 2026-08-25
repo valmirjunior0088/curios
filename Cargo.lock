@@ -658,7 +658,6 @@ version = "0.10.2"
 dependencies = [
  "curios-cert",
  "curios-prelude-archive",
- "curios-profile",
 ]
 
 [[package]]
@@ -729,7 +728,6 @@ dependencies = [
  "curios-core",
  "curios-elab",
  "curios-ersd",
- "curios-profile",
  "curios-text",
  "curios-utilities",
 ]
