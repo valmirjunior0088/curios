@@ -99,10 +99,12 @@ fn dependency_order(module: &Module, judged: &[usize]) -> Vec<usize> {
     order
 }
 
-/// One item the kernel refused.
+/// One refusal the kernel reached.
+///
+/// **Not one per item, and not always an item.** The walk runs several independent passes, so one definition failing two of them yields two verdicts; and the passes over `induct_decls`/`struct_decls` refuse registry entries, which are not in [`Module::items`] at all. A caller counting these against `items.len()` is comparing two different rosters.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Verdict {
-    /// The item that failed — a recursive group is named by its first member, since a group is checked and refused as a unit. `None` is the entrypoint expression, which has no name to export.
+    /// What failed: an item, or the registry entry a declaration pass refused — a recursive group is named by its first member, since a group is checked and refused as a unit. `None` is the entrypoint expression, which has no name to export.
     pub name: Option<Global>,
     pub error: KernelError,
 }
