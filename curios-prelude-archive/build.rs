@@ -17,7 +17,6 @@ use {
     },
     curios_text::{Module, RootSource, prepare_prelude, sys_module},
     curios_utilities::{Qualifier, RootKind},
-    sha2::{Digest, Sha256},
     std::{
         collections::BTreeSet,
         env, fs,
@@ -93,12 +92,6 @@ fn build() {
     }
     let sources = source_files(&manifest);
 
-    let fingerprint = fingerprint(&manifest, &sources);
-    println!(
-        "cargo:rustc-env=CURIOS_PRELUDE_FINGERPRINT={}",
-        hex(&fingerprint)
-    );
-
     let mut modules = RootSource::supplied();
     modules.insert_root("sys", RootKind::Internal, sys_module(&host_ops(), &SYNTAX));
     modules.insert_root(
@@ -145,7 +138,7 @@ fn build() {
         )
     });
 
-    // Every universe invariant the archive is trusted to satisfy is asserted here, on the value about to be serialized, and nowhere else. Restoration establishes that the bytes it reads are exactly the bytes written from this value — schema, source fingerprint, and bytecheck — so re-deriving the invariants per compilation only re-answers a question already settled. `erase_unit` below happens to project through the same check, but inheriting the guarantee from an unrelated call is not the same as stating it.
+    // Every universe invariant the archive is trusted to satisfy is asserted here, on the value about to be serialized, and nowhere else. Restoration reads exactly the bytes written from this value — a constant of the same build, whose structure bytecheck confirms — so re-deriving the invariants per compilation only re-answers a question already settled. `erase_unit` below happens to project through the same check, but inheriting the guarantee from an unrelated call is not the same as stating it.
     validate_universes(&core)
         .unwrap_or_else(|error| panic!("elaborated fixed prelude universes are invalid: {error}"));
 
@@ -186,8 +179,6 @@ fn build() {
     // Derived here, where the walk that establishes this image runs, so per-compile rechecking reads the bound instead of re-deriving it over every archived term.
     let binder_floor = derived_binder_floor(&core);
     let image = PreludeArchive {
-        schema: SCHEMA,
-        fingerprint,
         prepared,
         core,
         binder_floor,
@@ -255,24 +246,6 @@ fn source_qualifier(manifest: &Path, source: &Path) -> Qualifier {
     Qualifier::from(segments)
 }
 
-fn fingerprint(manifest: &Path, sources: &[PathBuf]) -> [u8; 32] {
-    let mut digest = Sha256::new();
-    digest.update(SCHEMA.to_le_bytes());
-    for source in sources {
-        let relative = source
-            .strip_prefix(manifest)
-            .expect("prelude source lies below its crate");
-        let path = relative.to_string_lossy();
-        let bytes = fs::read(source)
-            .unwrap_or_else(|error| panic!("failed to read {}: {error}", source.display()));
-        digest.update((path.len() as u64).to_le_bytes());
-        digest.update(path.as_bytes());
-        digest.update((bytes.len() as u64).to_le_bytes());
-        digest.update(bytes);
-    }
-    digest.finalize().into()
-}
-
 fn validate_syntax_targets(module: &curios_core::Module) {
     let names = module
         .items
@@ -311,8 +284,4 @@ fn validate_syntax_targets(module: &curios_core::Module) {
             concept.fields
         );
     }
-}
-
-fn hex(bytes: &[u8]) -> String {
-    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
