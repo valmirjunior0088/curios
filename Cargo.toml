@@ -27,7 +27,7 @@ members = [
     "curios-binaryen",
     "curios-runtime",
 ]
-# The Zed extension is a wasm32-wasip1 crate against Zed's own API, built by Zed from its checkout; it is a root of its own, not a member.
+# The Zed extension is a wasm32-wasip2 crate against Zed's own API, built by Zed from its checkout; it is a root of its own, not a member.
 exclude = ["editors/zed"]
 
 [workspace.package]

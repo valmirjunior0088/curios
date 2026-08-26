@@ -5,7 +5,7 @@ edition = "2021"
 publish = false
 description = "The Zed extension for Curios: launches `curios wonder server` for the grammar the extension ships"
 
-# Its own root, not a member of the compiler's workspace: it builds for wasm32-wasip1 against Zed's extension API, and nothing in the compiler depends on it or it on the compiler.
+# Its own root, not a member of the compiler's workspace: it builds for wasm32-wasip2 against Zed's extension API, and nothing in the compiler depends on it or it on the compiler.
 [workspace]
 
 [lib]
