@@ -321,8 +321,8 @@ impl DependencyRow {
             Source::Member => Ok(Dependency::Member),
             Source::Catalog => Ok(Dependency::Catalog),
             Source::Git => Ok(Dependency::Git {
-                url: require("url", url)?,
-                rev: require("rev", rev)?,
+                url: optionless("url", require("url", url)?, subject)?,
+                rev: optionless("rev", require("rev", rev)?, subject)?,
                 hash: TreeHash::parse(&require("hash", hash)?)
                     .map_err(|refusal| format!("the {subject}: {refusal}"))?,
             }),
@@ -330,6 +330,22 @@ impl DependencyRow {
                 path: require("path", path)?.into(),
             }),
         }
+    }
+}
+
+/// `value`, refused when it would reach a fetch as an option rather than as itself.
+///
+/// **`curate` hands a `url` and a `rev` to `git` as positional arguments, and git reads a leading `-` as an option wherever it sits.** The hash is what a *delivery* is accepted against, and it is checked after three `git` commands have already run — so it answers for the bytes and not for the invocation that obtained them. This is the check that answers for the invocation, and it belongs here beside the hash's, because a row is refused where a row is read.
+///
+/// It matters past the manifest somebody wrote: `curate` walks each fetched dependency's own manifest for further rows, so a pinned tree supplies these fields for fetches on its consumer's machine. Vouching for a tree's bytes is not authorizing it to pass options to that consumer's `git`.
+///
+/// A leading `-` and nothing more. Demanding a full object name would forbid pinning by tag or branch, which is a decision about what a pin may be rather than a repair — and `--` is no alternative to either, since `git checkout --detach -- <rev>` reads what follows as a path.
+fn optionless(field: &str, value: String, subject: &str) -> Result<String, String> {
+    match value.starts_with('-') {
+        true => Err(format!(
+            "the {subject} states a `{field}` beginning with `-` ({value:?}); `curios curate` hands it to `git`, which would read it as an option rather than as a {field}"
+        )),
+        false => Ok(value),
     }
 }
 
