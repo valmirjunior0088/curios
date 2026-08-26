@@ -42,22 +42,23 @@ pub fn package_at(directory: &Path) -> Result<(Package, Option<RootSource>), Str
 /// The header is read here and read again when discovery asks for it. That is deliberate: the stem refusal below has to fire before elaboration, and a header is one small file — paying for it twice is cheaper than a refusal arriving as an unbound name. Read from disk both times; a source overlay reaches discovery's read and not this one, so a stem collision is judged on what is saved, which is the only thing a collision can be between.
 pub fn package_source(package: &Package, directory: &Path) -> Result<Option<RootSource>, String> {
     let header = directory.join(LIBRARY);
+    let present = header.is_file();
 
-    // A package of nothing but programs has no body, and no vestigial file to write saying so. Only absence is an answer: a header that fails to *parse* is still a refusal, but discovery's — it reads the same file through the unit's own loader and reports the failure as a located diagnostic, where a refusal raised here would be text with a snippet in it. The stem check simply has nothing to check until the header parses.
-    if !header.is_file() {
-        return Ok(None);
+    // A package of nothing but programs has no body, and no vestigial file to write saying so. Only absence is an answer: a header that fails to *parse* is still a refusal, but discovery's — it reads the same file through the unit's own loader and reports the failure as a located diagnostic, where a refusal raised here would be text with a snippet in it. What the header contributes to the stem space simply has nothing to contribute until it parses.
+    let library = present.then(|| Module::from_path(&header).ok()).flatten();
+
+    // Asked whether or not there is a header, because the stem space is the package root's and not the library's: executables claim stems in it with nothing else there to collide with, and two that collide are the same refusal either way. Gating this on the header would mean adding or deleting one silently turned the rule on and off for a manifest that did not change.
+    stems(package, library.as_ref())?;
+
+    match present {
+        false => Ok(None),
+        true => Ok(Some(RootSource::mounted(
+            &package.name,
+            RootKind::Ordinary,
+            header,
+            directory,
+        ))),
     }
-
-    if let Ok(library) = Module::from_path(&header) {
-        stems(package, &library)?;
-    }
-
-    Ok(Some(RootSource::mounted(
-        &package.name,
-        RootKind::Ordinary,
-        header,
-        directory,
-    )))
 }
 
 /// The resolvers `directories` are lowered from, in the order given — which is the order they are compiled in.
@@ -79,15 +80,20 @@ pub fn mounted(directories: &[PathBuf]) -> Result<Vec<RootSource>, String> {
         .collect()
 }
 
-/// Refuse a stem claimed twice in the package root.
-fn stems(package: &Package, library: &Module) -> Result<(), String> {
-    let modules = library.items.iter().filter_map(|item| match item {
-        TopItem::Mod(declaration) => Some((
-            declaration.label.clone(),
-            format!("`mod {}` in `{LIBRARY}`", declaration.label),
-        )),
-        _ => None,
-    });
+/// Refuse a stem claimed twice in the package root: the library header when there is one, every module that header enumerates, and every executable compiled from a file directly inside it.
+///
+/// `library` is `None` for a package with no header, and for one whose header does not parse — neither has modules to enumerate, and neither holds the `lib` stem in a way worth naming a claimant for. The executables are checked in both cases, because what they claim does not depend on any of that.
+fn stems(package: &Package, library: Option<&Module>) -> Result<(), String> {
+    let modules = library
+        .into_iter()
+        .flat_map(|library| library.items.iter())
+        .filter_map(|item| match item {
+            TopItem::Mod(declaration) => Some((
+                declaration.label.clone(),
+                format!("`mod {}` in `{LIBRARY}`", declaration.label),
+            )),
+            _ => None,
+        });
 
     // An executable whose path leaves the package root claims a stem somewhere else, and somewhere else is not this stem space.
     let executables = package
@@ -101,10 +107,13 @@ fn stems(package: &Package, library: &Module) -> Result<(), String> {
             )
         });
 
-    let mut claimed = BTreeMap::from([(
-        stem(Path::new(LIBRARY)),
-        format!("the library header `{LIBRARY}`"),
-    )]);
+    let mut claimed = BTreeMap::new();
+    if library.is_some() {
+        claimed.insert(
+            stem(Path::new(LIBRARY)),
+            format!("the library header `{LIBRARY}`"),
+        );
+    }
 
     for (stem, claimant) in modules.chain(executables) {
         if let Some(earlier) = claimed.insert(stem.clone(), claimant.clone()) {

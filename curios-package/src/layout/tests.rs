@@ -115,6 +115,44 @@ fn a_stem_claimed_twice_is_refused() {
     fs::remove_dir_all(directory).unwrap();
 }
 
+/// The stem space is the package root's, not the library's: a package of nothing but programs has one too.
+///
+/// **The regression for the rule having been enforced from inside the library's own branch.** `package_source` returned early for a package with no `lib.crs` and only then checked stems, so a row aliasing the discovered `exe.crs` — two names for one file, two payload slots, two emitted binaries — was refused in a package with a library and accepted in one without. Adding or deleting a header turned the rule on and off for a manifest that had not changed, and `curios new` scaffolds a header, so the check was present exactly while a project stayed conventional.
+#[test]
+fn a_stem_claimed_twice_is_refused_without_a_library() {
+    let directory = package(
+        "layout-stem-clash-programs",
+        "name = \"json\"\n\n[[executables]]\nname = \"foo\"\npath = \"exe.crs\"\n",
+        &[("exe.crs", "")],
+    );
+
+    let refusal = package_at(&directory)
+        .map(|_| ())
+        .expect_err("a stem claimed twice, library or no library");
+    assert!(refusal.contains("claims the stem `exe` twice"), "{refusal}");
+    assert!(refusal.contains("the executable \"foo\""), "{refusal}");
+    assert!(refusal.contains("the executable \"json\""), "{refusal}");
+
+    fs::remove_dir_all(directory).unwrap();
+}
+
+/// A header that does not parse is discovery's refusal to report, and what the executables claim does not wait on it.
+#[test]
+fn an_unparseable_header_still_leaves_the_executables_checked() {
+    let directory = package(
+        "layout-stem-clash-unparseable",
+        "name = \"json\"\n\n[[executables]]\nname = \"foo\"\npath = \"exe.crs\"\n",
+        &[("lib.crs", "pub let ="), ("exe.crs", "")],
+    );
+
+    let refusal = package_at(&directory)
+        .map(|_| ())
+        .expect_err("a stem claimed twice");
+    assert!(refusal.contains("claims the stem `exe` twice"), "{refusal}");
+
+    fs::remove_dir_all(directory).unwrap();
+}
+
 /// An executable whose path leaves the package root claims its stem somewhere else, so it does not collide here.
 #[test]
 fn an_executable_outside_the_root_claims_no_stem_in_it() {
