@@ -584,7 +584,7 @@ fn selection_module(body: Term) -> Module {
 #[test]
 fn a_registry_index_target_is_checked_rather_than_believed() {
     let verdicts = recheck_module_verdicts(
-        &indexed_module(Term::metavar(7_usize)),
+        &indexed_module(Term::hole(7_usize)),
         1_000_000,
         &Globals::default(),
         crate::fixture::SYNTAX,

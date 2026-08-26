@@ -1,4 +1,4 @@
-use super::{error, run};
+use super::{error, run, typecheck};
 
 #[test]
 fn an_implicit_solves_against_a_reduction_through_a_let() {
@@ -338,4 +338,70 @@ fn a_literal_depth_packed_recursion_compiles_within_the_default_budget() {
         end
         "#;
     assert_eq!(run(source), b"ok\n");
+}
+
+#[test]
+fn a_goal_in_a_local_let_annotation_is_reported() {
+    // `let y : ? = e` inside a body lowers to the same bare metavariable the typeless `let y = e` does, marked as a goal. `elaborate_let` used to take the typeless let's inference path for both, which discarded the goal unelaborated — nothing was left for zonk to report, and a program with a `?` in it compiled. The goal must take the annotation path, where the check solves it and the report carries the solution, exactly as a top-level `let y : ? = e` is reported.
+    let source = r#"
+        use /std/{Nat};
+
+        let g(x : Nat) -> Nat =
+            let y : ? = x + 1;
+            y;
+
+        /std/print("unreachable\n")
+        "#;
+    let error = typecheck(source).expect_err("a program with a written goal never compiles");
+    assert!(error.contains("goal `?`"), "{error}");
+    assert!(error.contains("? = Nat"), "{error}");
+}
+
+#[test]
+fn a_typeless_local_let_still_infers_its_body() {
+    // The positive control for the fix above: an absent annotation is the origin-less hole, and keeps the inference path — a lambda body needs it, since checking a lambda against an unsolved hole would park and never resolve.
+    let source = r#"
+        use /std/{Nat};
+
+        let g(x : Nat) -> Nat =
+            let f = (n : Nat) => n + 1;
+            f(x);
+
+        match g(1) == 2
+        | true => /std/print("ok\n")
+        | false => /std/print("bad\n")
+        end
+        "#;
+    assert_eq!(run(source), b"ok\n");
+}
+
+#[test]
+fn a_goal_as_a_lambda_domain_is_reported() {
+    // `elaborate_func_infer` refuses a lambda whose domain nothing pins, and used to refuse a written `?` domain the same way — "cannot infer" where the author had asked a question. Only a silent hole is refused; the goal rides on, is solved by the application, and is reported with its solution.
+    let source = r#"
+        use /std/{Nat};
+
+        let h = (x : ?) => x;
+        let r = h(1);
+
+        /std/print("unreachable\n")
+        "#;
+    let error = typecheck(source).expect_err("a program with a written goal never compiles");
+    assert!(error.contains("goal `?`"), "{error}");
+    assert!(error.contains("? = Nat"), "{error}");
+}
+
+#[test]
+fn a_goal_as_a_match_motive_is_reported() {
+    // An elided motive is synthesized from the arms, and a written `?` motive used to count as elided — synthesized over, never elaborated, never reported, and the program compiled. It is a user-written motive the author is asking about: checked against the eliminator's motive type and reported.
+    let source = r#"
+        use /std/{Nat, Bool};
+
+        let g(b : Bool) -> Nat =
+            match b : ? | true => 1 | false => 0 end;
+
+        /std/print("unreachable\n")
+        "#;
+    let error = typecheck(source).expect_err("a program with a written goal never compiles");
+    assert!(error.contains("goal `?`"), "{error}");
 }

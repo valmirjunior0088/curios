@@ -29,7 +29,7 @@ use {
 enum Solved {
     /// Committed `m := t`.
     Done,
-    /// Not yet solvable (embedded unsolved metavariable): the goal is parked on the `blocked` queue and retried after later progress.
+    /// Not yet solvable (embedded unsolved metavariable): the problem is parked on the `blocked` queue and retried after later progress.
     Postponed,
     /// Unsolvable: occurs-check, scope-check, or re-validation failure.
     Failed,
@@ -75,15 +75,15 @@ pub(crate) enum Outcome {
     Converts,
     /// A hard structural mismatch — provably unequal, no solution can help.
     Mismatch,
-    /// Quiesced with constraints still blocked on unsolved metavariables: undecided either way. The blocked goals are surrendered to the caller — the elaboration turnaround parks them on the `Context` to be retried when a watched metavariable is solved.
-    Blocked(Vec<Goal>),
+    /// Quiesced with constraints still blocked on unsolved metavariables: undecided either way. The blocked problems are surrendered to the caller — the elaboration turnaround parks them on the `Context` to be retried when a watched metavariable is solved.
+    Blocked(Vec<Problem>),
 }
 
-/// Decide a goal whose sides differ only in universe levels by *identifying* the levels: commit every differing pair as the same `Conversion` equality constraint the structural path emits for a type's vectors, and accept — after the commitment the two spellings are one term, which is the license the acceptance stands on. Neither side is reduced, which is the point: two spellings of one computation are identified without running it, so registering the fact does not cost the fact's own subject — a partial definition at two fresh instances, an accumulation under a strict operation.
+/// Decide a problem whose sides differ only in universe levels by *identifying* the levels: commit every differing pair as the same `Conversion` equality constraint the structural path emits for a type's vectors, and accept — after the commitment the two spellings are one term, which is the license the acceptance stands on. Neither side is reduced, which is the point: two spellings of one computation are identified without running it, so registering the fact does not cost the fact's own subject — a partial definition at two fresh instances, an accumulation under a strict operation.
 ///
 /// This replaces a rule that compared the two sides through `project_erased_universes` and accepted on projection equality, on the premise that a universe instance cannot affect computation. That premise is false, and `documentation/soundness/what-the-kernel-consults/the-refinement-key.md` records the kernel's copy of it falling: `Type u` embeds a level *in a term*, so a definition carrying a level into a constructor payload reduces to genuinely different values at two instances — and the projection accepted such pairs with no residue for the declaration boundary to refuse. Identification leaves the residue.
 ///
-/// Declines — answering `false` with **nothing inserted**, so the structural path below judges the goal instead — on a pair of unequal ground levels, where there is nothing to identify and the goal may still hold by value, and on a differing pair under a universe binder, whose bound parameters the ambient solver cannot constrain. Every pair is checked before any is committed, because a decline that had already inserted would not be a fall-through.
+/// Declines — answering `false` with **nothing inserted**, so the structural path below judges the problem instead — on a pair of unequal ground levels, where there is nothing to identify and the problem may still hold by value, and on a differing pair under a universe binder, whose bound parameters the ambient solver cannot constrain. Every pair is checked before any is committed, because a decline that had already inserted would not be a fall-through.
 fn identify_universe_levels(
     context: &mut Context,
     this: &Term,
@@ -157,7 +157,7 @@ fn identify_universe_levels(
 
 /// Binders opened locally by [`Sort::of`] while walking a telescope, innermost last.
 ///
-/// These deliberately do *not* go into the [`Context`]. `Sort::of` runs on every conversion goal (through `is_prop`), and `Context::assume` bumps `mutation_stamp`, which is what validates the memoization caches — assuming here would invalidate them continuously and starve a coinductive comparison of its budget. Keeping the binders local also keeps `Sort::of` observationally read-only, which the conversion history relies on: labels minted here are never recorded in `Convert::minted`, so they must never reach a goal. They cannot, because `Sort::of` returns a `Sort`.
+/// These deliberately do *not* go into the [`Context`]. `Sort::of` runs on every conversion problem (through `is_prop`), and `Context::assume` bumps `mutation_stamp`, which is what validates the memoization caches — assuming here would invalidate them continuously and starve a coinductive comparison of its budget. Keeping the binders local also keeps `Sort::of` observationally read-only, which the conversion history relies on: labels minted here are never recorded in `Convert::minted`, so they must never reach a problem. They cannot, because `Sort::of` returns a `Sort`.
 pub(crate) type Opened = [(Free, Term)];
 
 /// Synthesize the type of a neutral (a `Var`/`Apply`/`Proj` spine) *without* validating its subterms. Returns `None` when the head is out of scope or the spine is not a typeable neutral — callers fall back conservatively. Built only from the same intrinsics `infer` uses (`Context::assumption`, `reduce`, `Telescope::open`/`nth`), so there is no duplicated typing judgment to drift from `infer`.
@@ -328,7 +328,7 @@ pub(crate) enum Sort {
 }
 
 impl Sort {
-    /// The sort of `type_`. Any two inhabitants of a `Prop` are definitionally equal (proof irrelevance), so a conversion goal at a prop type is discharged without comparing the sides. Conservative: a shape this cannot classify is reported as `Type` — under-approximating prop-ness is sound; the reverse (a non-prop reported as a prop) is the unsound direction and never happens.
+    /// The sort of `type_`. Any two inhabitants of a `Prop` are definitionally equal (proof irrelevance), so a conversion problem at a prop type is discharged without comparing the sides. Conservative: a shape this cannot classify is reported as `Type` — under-approximating prop-ness is sound; the reverse (a non-prop reported as a prop) is the unsound direction and never happens.
     pub(crate) fn of(context: &mut Context, type_: &Term) -> Result<Sort, ReduceError> {
         Sort::of_in(context, &mut Vec::new(), type_)
     }
@@ -610,9 +610,9 @@ impl Sort {
     }
 }
 
-/// One conversion constraint, `this ≡ that : type_` (comparison is type-directed: the type drives η-expansion and proof irrelevance). Public because a [`Outcome::Blocked`] verdict surrenders its still-blocked goals to the caller, which parks them on the [`Context`] (as `ParkedWork::Conversion`) for retry once a watched metavariable is solved.
+/// One conversion constraint, `this ≡ that : type_` (comparison is type-directed: the type drives η-expansion and proof irrelevance). Public because a [`Outcome::Blocked`] verdict surrenders its still-blocked problems to the caller, which parks them on the [`Context`] (as `ParkedWork::Conversion`) for retry once a watched metavariable is solved.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct Goal {
+pub(crate) struct Problem {
     pub type_: Term,
     pub this: Term,
     pub that: Term,
@@ -620,14 +620,14 @@ pub(crate) struct Goal {
 
 #[derive(Debug)]
 pub(crate) struct Convert {
-    // Structural goals already seen, stored as `history_key` fingerprints. A recurring goal is assumed to hold — the coinductive reading: a genuine cycle leaves nothing but itself to check, and any finite disagreement surfaces on a sibling goal first.
-    history: HashSet<Goal>,
-    pending: VecDeque<Goal>,
+    // Structural problems already seen, stored as `history_key` fingerprints. A recurring problem is assumed to hold — the coinductive reading: a genuine cycle leaves nothing but itself to check, and any finite disagreement surfaces on a sibling problem first.
+    history: HashSet<Problem>,
+    pending: VecDeque<Problem>,
     // Constraints postponed because a side is flexible but not yet solvable (flex–flex with distinct heads, or a candidate carrying an unsolved metavariable). Retried whenever a fresh solution lands.
-    blocked: Vec<Goal>,
+    blocked: Vec<Problem>,
     // Whether a metavariable was solved since the last `blocked` sweep — the signal that retrying `blocked` could make further progress.
     progress: bool,
-    // The opening labels this conversion minted to compare under binders (label → mint sequence), and the placeholder pool `history_key` renames them into. Fingerprints only — the goals actually processed keep their globally-unique labels.
+    // The opening labels this conversion minted to compare under binders (label → mint sequence), and the placeholder pool `history_key` renames them into. Fingerprints only — the problems actually processed keep their globally-unique labels.
     minted: HashMap<Free, usize>,
     placeholders: Vec<Term>,
 }
@@ -657,7 +657,7 @@ impl Convert {
     fn new(type_: Term, this: Term, that: Term) -> Self {
         Self {
             history: HashSet::new(),
-            pending: VecDeque::from([Goal { type_, this, that }]),
+            pending: VecDeque::from([Problem { type_, this, that }]),
             blocked: Vec::new(),
             progress: false,
             minted: HashMap::new(),
@@ -665,8 +665,8 @@ impl Convert {
         }
     }
 
-    fn in_history(&mut self, goal: &Goal) -> bool {
-        !self.history.insert(goal.clone())
+    fn in_history(&mut self, problem: &Problem) -> bool {
+        !self.history.insert(problem.clone())
     }
 
     /// Mint a fresh label for opening scopes under structural comparison, recording it for `history_key`. The label itself is ordinary entropy freshness — recording changes nothing about the terms conversion builds.
@@ -676,24 +676,24 @@ impl Convert {
         binder
     }
 
-    /// The history fingerprint of a goal: every opening label this conversion minted (see [`Convert::opening`]) is renamed to a per-run placeholder, in mint order. A comparison recurring under later openings — the same match arm re-opened at a fresh binder on each round of an unfolding cycle — differs from its previous visit only in that entropy, so the rename collapses the rounds onto one `history` entry and the recurrence rule in `drain` fires: a cycle with no finite disagreement is definitional equality, as for equirecursive types. Genuinely growing comparisons never recur and still spend the budget.
+    /// The history fingerprint of a problem: every opening label this conversion minted (see [`Convert::opening`]) is renamed to a per-run placeholder, in mint order. A comparison recurring under later openings — the same match arm re-opened at a fresh binder on each round of an unfolding cycle — differs from its previous visit only in that entropy, so the rename collapses the rounds onto one `history` entry and the recurrence rule in `drain` fires: a cycle with no finite disagreement is definitional equality, as for equirecursive types. Genuinely growing comparisons never recur and still spend the budget.
     ///
-    /// A pure key transform: the goal conversion processes keeps its globally-unique labels, so no freshness contract (`capture` inversion, `abstract_occurrences`) is involved — the placeholders are themselves entropy-fresh and never enter a real term.
-    fn history_key(&mut self, context: &mut Context, goal: &Goal) -> Goal {
+    /// A pure key transform: the problem conversion processes keeps its globally-unique labels, so no freshness contract (`capture` inversion, `abstract_occurrences`) is involved — the placeholders are themselves entropy-fresh and never enter a real term.
+    fn history_key(&mut self, context: &mut Context, problem: &Problem) -> Problem {
         if self.minted.is_empty() {
-            return goal.clone();
+            return problem.clone();
         }
 
-        let mut free = goal.type_.free_vars();
-        free.extend(goal.this.free_vars());
-        free.extend(goal.that.free_vars());
+        let mut free = problem.type_.free_vars();
+        free.extend(problem.this.free_vars());
+        free.extend(problem.that.free_vars());
 
         let mut present = free
             .iter()
             .filter_map(|name| self.minted.get(name).map(|&seq| (seq, name)))
             .collect::<Vec<_>>();
         if present.is_empty() {
-            return goal.clone();
+            return problem.clone();
         }
 
         // Mint order, so a recurrence — whose structural steps minted their openings in the same relative order — maps positionally onto the same placeholders.
@@ -705,15 +705,15 @@ impl Convert {
         }
         let refs = self.placeholders[..labels.len()].iter().collect::<Vec<_>>();
 
-        Goal {
-            type_: goal.type_.capture(&labels).release(&refs),
-            this: goal.this.capture(&labels).release(&refs),
-            that: goal.that.capture(&labels).release(&refs),
+        Problem {
+            type_: problem.type_.capture(&labels).release(&refs),
+            this: problem.this.capture(&labels).release(&refs),
+            that: problem.that.capture(&labels).release(&refs),
         }
     }
 
     pub(crate) fn enqueue(&mut self, type_: Term, this: Term, that: Term) {
-        self.pending.push_back(Goal { type_, this, that });
+        self.pending.push_back(Problem { type_, this, that });
     }
 
     /// Enqueue the bodies of two arity-3 cons arms (`Bin`/`List`) for comparison, opened under shared fresh binders for `(head, tail, ih)`.
@@ -733,7 +733,7 @@ impl Convert {
         );
     }
 
-    fn dequeue(&mut self, context: &Context) -> Result<Option<Goal>, ReduceError> {
+    fn dequeue(&mut self, context: &Context) -> Result<Option<Problem>, ReduceError> {
         context.spend(Cost::STEP)?;
 
         Ok(self.pending.pop_front())
@@ -1757,11 +1757,11 @@ impl Convert {
         Ok(Solved::Done)
     }
 
-    /// Park a goal from inside a structural arm: remove it from `history` (so a retry after fresh progress is not skipped as already-handled) and push it to `blocked`. Returns `Ok(true)` — a blocked goal is undecided, never a mismatch.
-    fn block(&mut self, context: &mut Context, goal: Goal) -> Result<bool, ReduceError> {
-        let key = self.history_key(context, &goal);
+    /// Park a problem from inside a structural arm: remove it from `history` (so a retry after fresh progress is not skipped as already-handled) and push it to `blocked`. Returns `Ok(true)` — a blocked problem is undecided, never a mismatch.
+    fn block(&mut self, context: &mut Context, problem: Problem) -> Result<bool, ReduceError> {
+        let key = self.history_key(context, &problem);
         self.history.remove(&key);
-        self.blocked.push(goal);
+        self.blocked.push(problem);
         Ok(true)
     }
 
@@ -1772,7 +1772,7 @@ impl Convert {
     /// - imitation only — the constant (`?m := λ_. T(b̄)`) and projection (`?m := λx. x`) solutions are never produced;
     /// - rigid heads only — nominal constructors and the unary intrinsic formers (`List`, `Cell`), whose argument rides inside the `Intrinsic` node;
     /// - flex–flex stays blocked (dispatched before the structural match);
-    /// - a rejected or postponed guess *blocks* the goal, never hard-fails it: refuting the imitation does not prove the equation unsatisfiable (a constant solution could still exist), and blocking preserves the drain's retry semantics — a permanently blocked goal surfaces as a type mismatch at its origin.
+    /// - a rejected or postponed guess *blocks* the problem, never hard-fails it: refuting the imitation does not prove the equation unsatisfiable (a constant solution could still exist), and blocking preserves the drain's retry semantics — a permanently blocked problem surfaces as a type mismatch at its origin.
     ///
     /// The callers' arms fire for *any* `Apply` against a nominal type; the unsolved-bare-metavariable-head test lives here, and its else branch reproduces the `eta_expand_neutral` fallthrough these pairs took before this rule existed.
     fn imitate_flex_apply(
@@ -1781,10 +1781,10 @@ impl Convert {
         flex: Apply,
         rigid: Term,
         rigid_raw: &Term,
-        goal: Goal,
+        problem: Problem,
     ) -> Result<bool, ReduceError> {
         let Some(metavar) = as_metavar(&flex.head).cloned() else {
-            return self.eta_expand_neutral(context, goal.this, goal.that, goal.type_);
+            return self.eta_expand_neutral(context, problem.this, problem.that, problem.type_);
         };
 
         type MkBody = Box<dyn Fn(&[Term]) -> Term>;
@@ -1843,19 +1843,19 @@ impl Convert {
 
         // Right-biased: a spine shorter than the rigid argument list abstracts the *suffix*, with the prefix baked in from the rigid side; a longer spine has no imitation.
         if spine > arity {
-            return self.block(context, goal);
+            return self.block(context, problem);
         }
 
         // The candidate's binders come from `?m`'s frozen birth type, which must itself reduce to a function type of the spine's arity. Peeling opens each binder as a free variable of its own label (elaborated labels are entropy-fresh), so dependent domains stay well-scoped.
         let Some(entry) = context.metavar_entry(metavar.id) else {
-            return self.block(context, goal);
+            return self.block(context, problem);
         };
         let result = reduce(context, entry.result.clone())?;
         let Subterm::FuncType(func_type) = &*result else {
-            return self.block(context, goal);
+            return self.block(context, problem);
         };
         if func_type.plicities.len() != spine {
-            return self.block(context, goal);
+            return self.block(context, problem);
         }
 
         // The candidate copies `?m`'s birth function type's plicities so the imitation is convertible with that type (plicity is part of function identity — see `compare_func`).
@@ -1889,14 +1889,14 @@ impl Convert {
             let suppressed = context
                 .with_suppressed_refinements(|context| reduce(context, rigid_raw.clone()))?;
             if suppressed != rigid {
-                return self.block(context, goal);
+                return self.block(context, problem);
             }
         }
 
         // `solve` supplies the occurs check, the embedded-metavariable guard, the spine inversion and scope check (against `?m`'s own birth spine), and re-validation: the candidate is `check`ed against the frozen birth type under the birth context, which is what rejects an ill-kinded imitation before it commits.
         match self.solve(context, &metavar, &candidate)? {
             Solved::Done => {}
-            Solved::Postponed | Solved::Failed => return self.block(context, goal),
+            Solved::Postponed | Solved::Failed => return self.block(context, problem),
         }
 
         // Equate the spine against the rigid *suffix* pairwise, at the candidate telescope's domains (mirroring `compare_apply`'s recovered argument types). The baked-in prefix needs no equations: after substitution both sides carry it verbatim.
@@ -1912,7 +1912,7 @@ impl Convert {
         Ok(true)
     }
 
-    /// Solve flex–rigid with a *refinement-free* candidate. The drain reduces goals under the live frame, where counterfactual match-arm refinements apply — sound for discharging a goal, but not for committing a solution: a metavariable must not be pinned to a value that holds only counterfactually inside an arm (`?k := 0` because the nil arm refined `n := 0`). When refinements are in scope, re-reduce the original rigid term with them suppressed and solve against that spelling; refinements only ever *add* reductions, so a solution found this way still discharges the refined goal. A goal whose verdict changes under suppression is the refinement's doing — nothing is globally forced, so it postpones rather than failing or committing.
+    /// Solve flex–rigid with a *refinement-free* candidate. The drain reduces problems under the live frame, where counterfactual match-arm refinements apply — sound for discharging a problem, but not for committing a solution: a metavariable must not be pinned to a value that holds only counterfactually inside an arm (`?k := 0` because the nil arm refined `n := 0`). When refinements are in scope, re-reduce the original rigid term with them suppressed and solve against that spelling; refinements only ever *add* reductions, so a solution found this way still discharges the refined problem. A problem whose verdict changes under suppression is the refinement's doing — nothing is globally forced, so it postpones rather than failing or committing.
     fn solve_refinement_free(
         &mut self,
         context: &mut Context,
@@ -1945,7 +1945,7 @@ impl Convert {
 
         Ok(match self.solve(context, metavar, &suppressed)? {
             Solved::Done => Solved::Done,
-            // A verdict the refinement-free spelling cannot reach (out of scope, ill-typed at the birth context) is not a hard failure of the goal — the refined spelling may still discharge it once the metavariable is pinned elsewhere.
+            // A verdict the refinement-free spelling cannot reach (out of scope, ill-typed at the birth context) is not a hard failure of the problem — the refined spelling may still discharge it once the metavariable is pinned elsewhere.
             Solved::Postponed | Solved::Failed => Solved::Postponed,
         })
     }
@@ -1974,13 +1974,13 @@ impl Convert {
 
     /// Drain `pending` once. Returns `Ok(false)` on a hard mismatch; `Ok(true)` when the queue empties (possibly leaving `blocked` constraints).
     fn drain(&mut self, context: &mut Context) -> Result<bool, ReduceError> {
-        while let Some(Goal { type_, this, that }) = self.dequeue(context)? {
+        while let Some(Problem { type_, this, that }) = self.dequeue(context)? {
             // Reflexivity needs no evaluation. In particular, do not force an identical folded recursive computation merely because it sits under a strict intrinsic operation.
             if this == that {
                 continue;
             }
 
-            // Sides differing only in universe levels are decided by identifying the levels, never by erasing them — see `identify_universe_levels` for the rule, its license, and the refuted premise of the projection comparison it replaces. Sound at every goal type, universes included: `Type a ~ Type b` gets the same equality constraint the structural arm below would emit, without the descent.
+            // Sides differing only in universe levels are decided by identifying the levels, never by erasing them — see `identify_universe_levels` for the rule, its license, and the refuted premise of the projection comparison it replaces. Sound at every problem type, universes included: `Type a ~ Type b` gets the same equality constraint the structural arm below would emit, without the descent.
             if (this.has_universe_data() || that.has_universe_data())
                 && identify_universe_levels(context, &this, &that)?
             {
@@ -1999,8 +1999,8 @@ impl Convert {
                 continue;
             }
 
-            // A goal that must park does so under its *raw* spelling. The reduced forms applied the live frame's counterfactual refinements and any already-solved motive, so parking them loses exactly what a retry needs: the watch set misses the metavariables only the raw spelling mentions (an unsolved motive heading the expected type), and the refinement-suppression analysis can no longer recover the solvable unrefined spelling — a candidate instantiated through an arm refinement is well-typed only under it, which re-validation rightly rejects forever. The retry re-reduces the raw goal under its restored frame, so nothing is lost by deferring the reduction.
-            let raw_goal = |type_: &Term| Goal {
+            // A problem that must park does so under its *raw* spelling. The reduced forms applied the live frame's counterfactual refinements and any already-solved motive, so parking them loses exactly what a retry needs: the watch set misses the metavariables only the raw spelling mentions (an unsolved motive heading the expected type), and the refinement-suppression analysis can no longer recover the solvable unrefined spelling — a candidate instantiated through an arm refinement is well-typed only under it, which re-validation rightly rejects forever. The retry re-reduces the raw problem under its restored frame, so nothing is lost by deferring the reduction.
+            let raw_problem = |type_: &Term| Problem {
                 type_: type_.clone(),
                 this: this_raw.clone(),
                 that: that_raw.clone(),
@@ -2009,7 +2009,7 @@ impl Convert {
             // Flexible heads are dispatched before history and before the structural/η fallthrough — a flexible head must never be η-expanded into a spine.
             match (as_metavar(&this).cloned(), as_metavar(&that).cloned()) {
                 (Some(this_m), Some(that_m)) => {
-                    // Same head, different spines (node duplication under different openings): entrywise spine agreement is a *sufficient* congruence condition. Probed only when both spines are meta-free — a probe that could solve metavariables would overcommit, since agreement is not necessary for the goal to hold.
+                    // Same head, different spines (node duplication under different openings): entrywise spine agreement is a *sufficient* congruence condition. Probed only when both spines are meta-free — a probe that could solve metavariables would overcommit, since agreement is not necessary for the problem to hold.
                     if this_m.id == that_m.id
                         && this_m
                             .spine
@@ -2030,18 +2030,18 @@ impl Convert {
                     }
 
                     // Rec slots, and distinct heads (or an undecided probe): v1 flex–flex does no intersection — postpone.
-                    self.blocked.push(raw_goal(&type_));
+                    self.blocked.push(raw_problem(&type_));
                     continue;
                 }
                 (Some(metavar), None) => {
                     if context.is_rec_slot(metavar.id) {
-                        self.blocked.push(raw_goal(&type_));
+                        self.blocked.push(raw_problem(&type_));
                         continue;
                     }
                     match self.solve_refinement_free(context, &metavar, &that, &that_raw)? {
                         Solved::Done => continue,
                         Solved::Postponed => {
-                            self.blocked.push(raw_goal(&type_));
+                            self.blocked.push(raw_problem(&type_));
                             continue;
                         }
                         Solved::Failed => return Ok(false),
@@ -2049,13 +2049,13 @@ impl Convert {
                 }
                 (None, Some(metavar)) => {
                     if context.is_rec_slot(metavar.id) {
-                        self.blocked.push(raw_goal(&type_));
+                        self.blocked.push(raw_problem(&type_));
                         continue;
                     }
                     match self.solve_refinement_free(context, &metavar, &this, &this_raw)? {
                         Solved::Done => continue,
                         Solved::Postponed => {
-                            self.blocked.push(raw_goal(&type_));
+                            self.blocked.push(raw_problem(&type_));
                             continue;
                         }
                         Solved::Failed => return Ok(false),
@@ -2069,13 +2069,13 @@ impl Convert {
                 continue;
             }
 
-            let goal = Goal {
+            let problem = Problem {
                 type_: type_.clone(),
                 this: this.clone(),
                 that: that.clone(),
             };
 
-            let key = self.history_key(context, &goal);
+            let key = self.history_key(context, &problem);
             if self.in_history(&key) {
                 continue;
             }
@@ -2104,7 +2104,7 @@ impl Convert {
                         true
                     }
                 }
-                // Same-kind matches compare structurally; cross-kind pairs fall through to `eta_expand_neutral` (e.g. proof irrelevance at unit). One gate: a match stuck on a *flex* scrutinee decomposes against another match only when their motives and case tables are syntactically identical — then the two are instances of one source match and the scrutinee goal is an exact congruence (what solves `?b1 := yh` when `xor3(xh, ?b1, c)` meets `xor3(xh, yh, c)`). With differing arms the pair may be layer-misaligned — reduction carried the rigid-scrutinee side past the layer the flex side is stuck at (`xor3(xh, false, c)` reduces through its `b`-match while `xor3(xh, ?b1, c)` cannot) — and the scrutinee goal would solve the metavariable with the wrong layer's scrutinee. Such a pair falls through, and the blocked-on-metavariable path below parks it until the scrutinee's metavariable resolves.
+                // Same-kind matches compare structurally; cross-kind pairs fall through to `eta_expand_neutral` (e.g. proof irrelevance at unit). One gate: a match stuck on a *flex* scrutinee decomposes against another match only when their motives and case tables are syntactically identical — then the two are instances of one source match and the scrutinee problem is an exact congruence (what solves `?b1 := yh` when `xor3(xh, ?b1, c)` meets `xor3(xh, yh, c)`). With differing arms the pair may be layer-misaligned — reduction carried the rigid-scrutinee side past the layer the flex side is stuck at (`xor3(xh, false, c)` reduces through its `b`-match while `xor3(xh, ?b1, c)` cannot) — and the scrutinee problem would solve the metavariable with the wrong layer's scrutinee. Such a pair falls through, and the blocked-on-metavariable path below parks it until the scrutinee's metavariable resolves.
                 (Subterm::Match(this), Subterm::Match(that))
                     if mem::discriminant(&this.cases) == mem::discriminant(&that.cases)
                         && ((!flex_scrutinee(&this.head) && !flex_scrutinee(&that.head))
@@ -2241,7 +2241,7 @@ impl Convert {
                         apply,
                         rigid,
                         &that_raw,
-                        raw_goal(&goal.type_),
+                        raw_problem(&problem.type_),
                     )?
                 }
                 (Subterm::InductType(rigid), Subterm::Apply(apply)) => {
@@ -2251,7 +2251,7 @@ impl Convert {
                         apply,
                         rigid,
                         &this_raw,
-                        raw_goal(&goal.type_),
+                        raw_problem(&problem.type_),
                     )?
                 }
                 (Subterm::Apply(apply), Subterm::StructType(rigid)) => {
@@ -2261,7 +2261,7 @@ impl Convert {
                         apply,
                         rigid,
                         &that_raw,
-                        raw_goal(&goal.type_),
+                        raw_problem(&problem.type_),
                     )?
                 }
                 (Subterm::StructType(rigid), Subterm::Apply(apply)) => {
@@ -2271,7 +2271,7 @@ impl Convert {
                         apply,
                         rigid,
                         &this_raw,
-                        raw_goal(&goal.type_),
+                        raw_problem(&problem.type_),
                     )?
                 }
                 (
@@ -2288,7 +2288,7 @@ impl Convert {
                         apply,
                         rigid,
                         &that_raw,
-                        raw_goal(&goal.type_),
+                        raw_problem(&problem.type_),
                     )?
                 }
                 (
@@ -2305,7 +2305,7 @@ impl Convert {
                         apply,
                         rigid,
                         &this_raw,
-                        raw_goal(&goal.type_),
+                        raw_problem(&problem.type_),
                     )?
                 }
                 (this_n, that_n) => {
@@ -2314,13 +2314,13 @@ impl Convert {
             };
 
             if !ok {
-                // A structural mismatch where a side is stuck on an unsolved metavariable is undecided, not provably unequal: solving the metavariable may fold an intrinsic (`?m - 1` against `0` folds once `?m := 1` lands) or a match (`Below(?c, …)` reduces to `True` once `?c` is pinned and the arm refinement applies), which no structural rule anticipates. Park the goal instead of failing — rigid-head disagreements with no metavariable in a blocking position, which no solution can repair, still mismatch here. The goal leaves `history` so a retry after fresh progress is not skipped as already-handled.
-                if blocked_on_unsolved_metavar(context, &goal.this)
-                    || blocked_on_unsolved_metavar(context, &goal.that)
+                // A structural mismatch where a side is stuck on an unsolved metavariable is undecided, not provably unequal: solving the metavariable may fold an intrinsic (`?m - 1` against `0` folds once `?m := 1` lands) or a match (`Below(?c, …)` reduces to `True` once `?c` is pinned and the arm refinement applies), which no structural rule anticipates. Park the problem instead of failing — rigid-head disagreements with no metavariable in a blocking position, which no solution can repair, still mismatch here. The problem leaves `history` so a retry after fresh progress is not skipped as already-handled.
+                if blocked_on_unsolved_metavar(context, &problem.this)
+                    || blocked_on_unsolved_metavar(context, &problem.that)
                 {
-                    let key = self.history_key(context, &goal);
+                    let key = self.history_key(context, &problem);
                     self.history.remove(&key);
-                    self.blocked.push(raw_goal(&goal.type_));
+                    self.blocked.push(raw_problem(&problem.type_));
                     continue;
                 }
                 return Ok(false);

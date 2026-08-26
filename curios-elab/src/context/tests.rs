@@ -20,10 +20,7 @@ fn universe_dependencies_of_a_solved_meta_follow_only_its_materialized_solution(
     );
     context.solve_metavar(MetaId(0), Term::type_at(Level::meta(solution)));
 
-    assert_eq!(
-        context.universe_metas_in(&Term::metavar(0)),
-        [solution].into()
-    );
+    assert_eq!(context.universe_metas_in(&Term::hole(0)), [solution].into());
 }
 
 #[test]
@@ -40,7 +37,7 @@ fn universe_dependencies_of_an_unsolved_meta_keep_its_birth_context() {
     );
 
     assert_eq!(
-        context.universe_metas_in(&Term::metavar(0)),
+        context.universe_metas_in(&Term::hole(0)),
         [result, telescope].into()
     );
 }

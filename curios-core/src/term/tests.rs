@@ -117,7 +117,7 @@ fn free_vars_share_the_single_carrier_child_allocation() {
 
 #[test]
 fn metavar_is_a_closed_global_head() {
-    let m = Term::metavar(7);
+    let m = Term::hole(7);
     assert_eq!(m.reach(), 0);
     assert!(m.closed());
     assert_eq!(format!("{m}"), "?7");
@@ -128,10 +128,10 @@ fn metavars_collects_ids_across_structure() {
     let x = Free::local(0, Some("x"));
     // (λx. ?1)(?2, Nat.add ?3 ?1)
     let term = Term::apply(
-        Term::func([(x.clone(), Term::type_ground())], Term::metavar(1)),
+        Term::func([(x.clone(), Term::type_ground())], Term::hole(1)),
         [
-            Term::metavar(2),
-            Term::intrinsic(Intrinsic::nat_add(Term::metavar(3), Term::metavar(1))),
+            Term::hole(2),
+            Term::intrinsic(Intrinsic::nat_add(Term::hole(3), Term::hole(1))),
         ],
     );
     assert_eq!(term.metavars(), BTreeSet::from([1, 2, 3].map(MetaId)));
@@ -142,10 +142,10 @@ fn any_metavar_short_circuits_and_agrees_with_collection() {
     let x = Free::local(0, Some("x"));
     // (λx. ?1)(?2, Nat.add ?3 ?1)
     let term = Term::apply(
-        Term::func([(x.clone(), Term::type_ground())], Term::metavar(1)),
+        Term::func([(x.clone(), Term::type_ground())], Term::hole(1)),
         [
-            Term::metavar(2),
-            Term::intrinsic(Intrinsic::nat_add(Term::metavar(3), Term::metavar(1))),
+            Term::hole(2),
+            Term::intrinsic(Intrinsic::nat_add(Term::hole(3), Term::hole(1))),
         ],
     );
 
@@ -175,7 +175,7 @@ fn any_metavar_short_circuits_and_agrees_with_collection() {
 // The elaboration-runaway pin: a metavariable below a shared node defeats the `has_metavar` prune on every ancestor, so without the walk's visited set this term — 64 levels of self-application over a metavar, a 2^64-node tree expansion of a 65-node DAG — cannot be walked at all. Terminating is the assertion; the exact id set and the single predicate firing pin that dedup skips revisits, not nodes.
 #[test]
 fn any_metavar_visits_a_shared_subterm_once() {
-    let mut term = Term::metavar(1);
+    let mut term = Term::hole(1);
     for _ in 0..64 {
         term = Term::apply(term.clone(), [term]);
     }
@@ -228,11 +228,11 @@ fn has_local_free_flags_locals_not_globals() {
 #[test]
 fn has_metavar_flags_any_metavariable_node() {
     let x = Free::local(0, Some("x"));
-    assert!(Term::metavar(1).has_metavar());
+    assert!(Term::hole(1).has_metavar());
     assert!(
         Term::apply(
             Term::func([(x.clone(), Term::type_ground())], Term::free_var(&x)),
-            [Term::metavar(2)],
+            [Term::hole(2)],
         )
         .has_metavar()
     );
@@ -244,26 +244,26 @@ fn metavar_is_inert_under_traversal() {
     let x = Free::local(0, Some("x"));
     let y = Free::local(1, Some("y"));
     // shifting/capture must not disturb a metavariable node
-    let m = Term::metavar(4);
+    let m = Term::hole(4);
     assert_eq!(m.shift(3), m);
-    let scope = Scope::close(One, &[&x], Term::metavar(4));
-    assert_eq!(scope.open(&[&Term::free_var(&y)]), Term::metavar(4));
+    let scope = Scope::close(One, &[&x], Term::hole(4));
+    assert_eq!(scope.open(&[&Term::free_var(&y)]), Term::hole(4));
 }
 
 #[test]
 fn variant_collects_metavars_and_prints_as_function_call() {
     let ctor = Term::variant(
         nominal("Result"),
-        [Term::metavar(1)],
+        [Term::hole(1)],
         "success",
-        [Term::metavar(2)],
+        [Term::hole(2)],
     );
     assert_eq!(ctor.metavars(), BTreeSet::from([1, 2].map(MetaId)));
     assert_eq!(format!("{ctor}"), "/Result/success(?2)");
 
     let type_ = Term::induct_type(
         nominal("Result"),
-        [Term::intrinsic(Intrinsic::NatType), Term::metavar(3)],
+        [Term::intrinsic(Intrinsic::NatType), Term::hole(3)],
         Vec::<Term>::new(),
     );
     assert_eq!(type_.metavars(), BTreeSet::from([3].map(MetaId)));

@@ -256,7 +256,7 @@ fn universe_escape<B: Bound>(value: &B, parameter_count: usize) -> Option<Kernel
 /// Every kind of elaboration residue an `induct` registry entry can carry.
 fn induct_residue(declaration: &InductDecl) -> Option<KernelError> {
     induct_metavar(declaration)
-        .map(|id| KernelError::NotCore(Term::metavar(id)))
+        .map(|id| KernelError::NotCore(Term::hole(id)))
         .or_else(|| universe_residue(&declaration.arity))
         .or_else(|| universe_residue(&declaration.result_sort))
         .or_else(|| {
@@ -279,7 +279,7 @@ fn induct_residue(declaration: &InductDecl) -> Option<KernelError> {
 /// [`induct_residue`] for a `struct` registry entry.
 fn struct_residue(declaration: &StructDecl) -> Option<KernelError> {
     struct_metavar(declaration)
-        .map(|id| KernelError::NotCore(Term::metavar(id)))
+        .map(|id| KernelError::NotCore(Term::hole(id)))
         .or_else(|| universe_residue(&declaration.arity))
         .or_else(|| universe_residue(&declaration.result_sort))
         .or_else(|| {

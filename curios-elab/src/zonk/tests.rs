@@ -72,7 +72,7 @@ fn zonk_replaces_a_solved_metavariable_with_its_solution() {
     context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
     context.solve_metavar(MetaId(0), nat());
 
-    let zonked = zonk(&context, &Term::metavar(0)).unwrap();
+    let zonked = zonk(&context, &Term::hole(0)).unwrap();
 
     assert_eq!(zonked, nat());
 }
@@ -92,7 +92,7 @@ fn zonk_resolves_a_metavariable_in_an_inductive_match_default() {
         Some(&motive),
         nat(),
         [("none", Vec::<Free>::new(), nat_lit(0))],
-        Term::metavar(0),
+        Term::hole(0),
     );
 
     let expected = Term::induct_match_default(
@@ -115,7 +115,7 @@ fn zonk_resolves_a_metavariable_nested_in_a_structure() {
 
     // A tuple `{ ?0 }` zonks to `{ Nat }`.
     let term = Subterm::Tuple(Tuple {
-        fields: vec![Term::metavar(0)],
+        fields: vec![Term::hole(0)],
         names: vec![],
     })
     .into();
@@ -140,9 +140,9 @@ fn zonk_chases_a_solution_that_mentions_another_metavariable() {
     context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
     context.birth_metavar(MetaId(1), Vec::new(), Term::type_ground());
     context.solve_metavar(MetaId(1), nat());
-    context.solve_metavar(MetaId(0), Term::metavar(1));
+    context.solve_metavar(MetaId(0), Term::hole(1));
 
-    let zonked = zonk(&context, &Term::metavar(0)).unwrap();
+    let zonked = zonk(&context, &Term::hole(0)).unwrap();
 
     assert_eq!(zonked, nat());
 }
@@ -153,7 +153,7 @@ fn zonk_rejects_an_unsolved_metavariable() {
 
     context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
 
-    let result = zonk(&context, &Term::metavar(0));
+    let result = zonk(&context, &Term::hole(0));
 
     assert!(result.is_err());
 }

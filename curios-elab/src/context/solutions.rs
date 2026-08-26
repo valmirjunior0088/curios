@@ -4,7 +4,7 @@
 
 use {
     super::{FrozenFrame, SharedTelescope},
-    crate::Goal,
+    crate::Problem,
     curios_core::{Bound, MetaId, Metavar, MetavarOrigin, Subterm, Term, WitnessOrigin},
     curios_utilities::Entropy,
     std::{collections::BTreeSet, mem},
@@ -33,7 +33,7 @@ pub(crate) enum MetaKind {
 #[derive(Debug)]
 pub(crate) enum ParkedWork {
     /// A conversion constraint that quiesced blocked on unsolved metavariables.
-    Conversion(Goal),
+    Conversion(Problem),
     /// A whole checking problem: a checked-only introduction form met an expected type whose structure is still an unsolved metavariable. The `placeholder` metavariable stands in for the rebuilt term in the tree and is solved with it once the check can run — the spine machinery then splices it everywhere the occurrence travelled.
     Checking {
         term: Term,
@@ -50,7 +50,7 @@ pub(crate) enum ParkedWork {
 
 /// A problem parked by `expect` (or a blocked intro-form check) to outlive its call. Like a [`MetaEntry`], it freezes the local frame it was born under.
 #[derive(Debug)]
-pub(crate) struct ParkedGoal {
+pub(crate) struct ParkedProblem {
     pub work: ParkedWork,
     /// The term being checked at park time; its span anchors the eventual error if the problem never resolves.
     pub origin: Term,
@@ -67,7 +67,7 @@ pub(crate) struct Solutions {
     /// The next metavariable id this store may mint (implicit-argument insertion). Seeded by `elaborate_module_suffix` with its `metavar_floor` argument so core-minted ids sit strictly above `into_core`'s.
     next_metavar: Entropy<MetaId>,
     /// Parked conversion constraints — frame-independent, like the entries.
-    parked: Vec<ParkedGoal>,
+    parked: Vec<ParkedProblem>,
     /// Ids solved since the last `wake_parked` sweep: the wake signal.
     newly_solved: Vec<MetaId>,
     /// Journal of every committed solution id, in commit order — never consumed, only marked and rolled back. The watermark/rollback pair lets re-validation unwind solutions that landed while validating a candidate it then rejected.
@@ -75,7 +75,7 @@ pub(crate) struct Solutions {
     /// While set, `expect` may not park: conversion is being used as a yes/no oracle (re-validation) and provisional success would leak into it.
     suppress_parking: bool,
     /// Witness goals whose key is rigid but has no table entry *yet*: a later item may register the missing witness (the table is program-wide while items elaborate in order), so these defer — retried after each item, reported as errors only when the whole module has been elaborated.
-    deferred_witnesses: Vec<ParkedGoal>,
+    deferred_witnesses: Vec<ParkedProblem>,
 }
 
 impl Solutions {
@@ -161,7 +161,7 @@ impl Solutions {
         let Subterm::Metavar(metavar) = &**term else {
             return None;
         };
-        let Some(MetavarOrigin::Witness(origin)) = &metavar.origin else {
+        let MetavarOrigin::Witness(origin) = &metavar.origin else {
             return None;
         };
         let goal = self.entry(metavar.id)?.result.clone();
@@ -232,7 +232,7 @@ impl Solutions {
                 .collect(),
         };
 
-        self.parked.push(ParkedGoal {
+        self.parked.push(ParkedProblem {
             work,
             origin,
             frame,
@@ -241,7 +241,7 @@ impl Solutions {
     }
 
     /// Take the parked goals woken by solutions landed since the last sweep. Consumes the wake signals; empty when nothing new has been solved.
-    pub(crate) fn wake_parked(&mut self) -> Vec<ParkedGoal> {
+    pub(crate) fn wake_parked(&mut self) -> Vec<ParkedProblem> {
         if self.newly_solved.is_empty() || self.parked.is_empty() {
             self.newly_solved.clear();
 
@@ -260,7 +260,7 @@ impl Solutions {
     }
 
     /// Take every parked goal — the drain's final sweep.
-    pub(crate) fn take_parked(&mut self) -> Vec<ParkedGoal> {
+    pub(crate) fn take_parked(&mut self) -> Vec<ParkedProblem> {
         mem::take(&mut self.parked)
     }
 
@@ -282,12 +282,12 @@ impl Solutions {
     }
 
     /// Defer a witness goal whose key is rigid but has no table entry yet. The façade stamps the write.
-    pub(crate) fn defer_witness(&mut self, goal: ParkedGoal) {
-        self.deferred_witnesses.push(goal);
+    pub(crate) fn defer_witness(&mut self, parked: ParkedProblem) {
+        self.deferred_witnesses.push(parked);
     }
 
     /// Take every deferred witness goal for a retry sweep.
-    pub(crate) fn take_deferred_witnesses(&mut self) -> Vec<ParkedGoal> {
+    pub(crate) fn take_deferred_witnesses(&mut self) -> Vec<ParkedProblem> {
         mem::take(&mut self.deferred_witnesses)
     }
 

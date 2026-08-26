@@ -20,9 +20,9 @@ pub(super) fn elaborate_let(
                 )
             };
 
-            // A bare metavar annotation is the lowering of a typeless local `let x = e` (equivalently `let x : _ = e`): infer the body's type instead of checking the body against the hole. This is what lets a lambda/tuple/atom body — which `check` against an unsolved hole would reject — be bound without an annotation. Otherwise check the body against the (possibly partial) annotation, as before.
+            // A silent hole as the annotation is the lowering of a typeless local `let x = e`: infer the body's type instead of checking the body against the hole. This is what lets a lambda/tuple/atom body — which `check` against an unsolved hole would reject — be bound without an annotation. A written goal `let x : ? = e` is a bare metavariable too but not a hole (`MetavarOrigin` states the rule): it takes the annotation path below, as every other annotation site does, so the goal term is elaborated, solved by the check and reported by zonk. Otherwise check the body against the (possibly partial) annotation, as before.
             let (type_elaborated, body_elaborated) = match &*type_ {
-                Subterm::Metavar(_) => {
+                Subterm::Metavar(metavar) if metavar.is_hole() => {
                     let (body_elaborated, inferred) = elaborate(context, &body, Mode::Infer)?;
                     (inferred, body_elaborated)
                 }
@@ -775,7 +775,9 @@ pub(super) fn elaborate_func_infer(
             Telescope::Cons(domain, body_rest) => {
                 let domain = crate::check_is_sort(context, &domain)?.0;
 
-                if matches!(&*reduce_with(context, &domain)?, Subterm::Metavar(_)) {
+                // A domain nothing pins is refused here rather than left to fail obscurely downstream — but only a silent hole is: a written `?` domain is the author asking what the domain is, and it rides on to zonk's report (`MetavarOrigin` states the rule).
+                if matches!(&*reduce_with(context, &domain)?, Subterm::Metavar(metavar) if metavar.is_hole())
+                {
                     return Err(Error::CannotInfer);
                 }
 

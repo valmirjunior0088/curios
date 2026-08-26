@@ -12,8 +12,9 @@ use {
     },
     curios_cert::Kernel,
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Intrinsic, MetaId, Metavar, Nat, Polarity,
-        Rec, StructType, Subterm, Telescope, Term, Totality, UniverseContext, UniverseInst,
+        Atom, Free, Global, InductDecl, InductParam, Intrinsic, MetaId, Metavar, MetavarOrigin,
+        Nat, Polarity, Rec, StructType, Subterm, Telescope, Term, Totality, UniverseContext,
+        UniverseInst,
     },
     curios_utilities::{
         CharacterSyntax, ConceptField, LiftSyntax, MonadSyntax, OperatorSyntax, Plicity,
@@ -556,7 +557,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
             Subterm::Metavar(Metavar {
                 id: MetaId::from(0usize),
                 spine: Rc::new(vec![call()]),
-                origin: None,
+                origin: MetavarOrigin::Hole,
             })
             .into(),
             false,

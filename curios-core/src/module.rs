@@ -796,7 +796,7 @@ mod tests {
     #[test]
     fn a_stored_unit_may_not_carry_a_metavariable() {
         let module = stored(
-            Term::metavar(crate::MetaId::from(3)),
+            Term::hole(crate::MetaId::from(3)),
             Term::intrinsic(crate::Intrinsic::NatType),
         );
 

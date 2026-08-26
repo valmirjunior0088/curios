@@ -782,7 +782,7 @@ fn a_list_or_cell_of_proofs_is_not_a_proposition() {
 fn elaboration_only_syntax_is_refused() {
     let mut kernel = kernel();
 
-    let metavar = Term::metavar(MetaId::from(0usize));
+    let metavar = Term::hole(MetaId::from(0usize));
     assert!(matches!(
         infer(&mut kernel, &metavar),
         Err(KernelError::NotCore(_)),

@@ -823,7 +823,8 @@ fn elaborate_induct_match(
 
 /// Whether a motive scope is the lowering's elided form — a bare metavariable body (`match s | ..` or the explicit hole `match s : _ | ..`), as opposed to a user-written constant or scrutinee-binding motive. Synthesis only steps in for the elided form; everything else is taken verbatim.
 fn is_elided_motive(motive: &Scope<Many>) -> bool {
-    matches!(&**motive.body(), Subterm::Metavar(_))
+    // A silent hole only: a written `?` motive is a user-written motive the author is asking about, checked against the eliminator's motive type like any other and reported by zonk (`MetavarOrigin` states the rule).
+    matches!(&**motive.body(), Subterm::Metavar(metavar) if metavar.is_hole())
 }
 
 /// The label by which a flat motive slot (or the scrutinee) abstracts the expected type: a slot whose actual value is a not-yet-used free variable abstracts by that variable's name, so the eliminator specialises the goal at each constructor when it reopens the motive; a forced constructor, a compound term, or a repeated variable takes a fresh label and binds vacuously (the inversion already pins it).

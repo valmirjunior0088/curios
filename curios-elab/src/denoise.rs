@@ -156,7 +156,7 @@ fn operator_call<'a>(
     let op = match &**witness {
         // Unsolved: the insertion provenance rides the metavariable and names the operator directly.
         Subterm::Metavar(Metavar {
-            origin: Some(MetavarOrigin::Witness(origin)),
+            origin: MetavarOrigin::Witness(origin),
             ..
         }) => InfixOp::from_symbol(&origin.func)?,
         Subterm::Var(var) => {

@@ -4,13 +4,11 @@
 
 use {
     curios_core::{
-        Apply, Bang, Free, Func, FuncType, Global, Infix, Intrinsic, Level, Many, MetaId, Metavar,
-        MetavarOrigin, NumLit, Scope, Struct, StructEntry, StructType, Subterm, Term, Transient,
-        Tuple,
+        Apply, Bang, Free, Func, FuncType, Global, Infix, Intrinsic, Level, Many, NumLit, Scope,
+        Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple,
     },
     curios_num::Natural,
     curios_utilities::InfixOp,
-    std::rc::Rc,
 };
 
 /// Constructors for [`Intrinsic`] operations no judgment ever builds.
@@ -611,9 +609,6 @@ pub trait TermBuilders {
     /// The declared type must structurally end in a literal [`Subterm::Type`] or [`Subterm::Prop`] after peeling only function-type telescopes. The body is then peeled through function literals and application spines, again structurally and without reduction or substitution. Computed heads, local heads, and aliased universe annotations are deliberately excluded.
     fn direct_type_alias_target(&self, declared_type: &Term) -> Option<&Free>;
 
-    /// A written goal `?`, as `into_core` mints one: a bare metavariable (empty spine, like [`Term::metavar`]) whose [`MetavarOrigin::Goal`] origin makes zonk *report* what elaboration determined for it — scope, type, and solution — instead of splicing silently.
-    fn goal(id: impl Into<MetaId>) -> Self;
-
     /// An unresolved infix application ([`Infix`]) — elaboration-transient, consumed by `elaborate_infix`.
     fn infix(op: InfixOp, left: Term, right: Term) -> Self;
 
@@ -688,14 +683,6 @@ impl TermBuilders for Term {
             .then(|| direct_head(self))
             .flatten()
             .filter(|target| !target.is_local())
-    }
-
-    fn goal(id: impl Into<MetaId>) -> Self {
-        Self::from(Subterm::Metavar(Metavar {
-            id: id.into(),
-            spine: Rc::new(Vec::new()),
-            origin: Some(MetavarOrigin::Goal),
-        }))
     }
 
     fn infix(op: InfixOp, left: Term, right: Term) -> Self {

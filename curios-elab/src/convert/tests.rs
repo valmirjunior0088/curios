@@ -1139,7 +1139,7 @@ fn solve_flex_rigid_commits_solution() {
 
     // ?0 ≟ Nat  (at type Type)
     let nat = Term::intrinsic(Intrinsic::NatType);
-    assert_eq!(conv(&mut context, &Term::metavar(0), &nat), Ok(true));
+    assert_eq!(conv(&mut context, &Term::hole(0), &nat), Ok(true));
     assert_eq!(context.metavar_solution(MetaId(0)), Some(&nat));
 }
 
@@ -1150,7 +1150,7 @@ fn solve_is_symmetric() {
 
     let nat = Term::intrinsic(Intrinsic::NatType);
     // rigid on the left, flex on the right
-    assert_eq!(conv(&mut context, &nat, &Term::metavar(0)), Ok(true));
+    assert_eq!(conv(&mut context, &nat, &Term::hole(0)), Ok(true));
     assert_eq!(context.metavar_solution(MetaId(0)), Some(&nat));
 }
 
@@ -1162,10 +1162,10 @@ fn occurs_check_rejects_cyclic_solution() {
 
     // ?0 ≟ (x : ?0) -> Nat  — the candidate mentions ?0 itself.
     let cyclic = Term::func_type(
-        [(x.clone(), Term::metavar(0))],
+        [(x.clone(), Term::hole(0))],
         Term::intrinsic(Intrinsic::NatType),
     );
-    assert_eq!(conv(&mut context, &Term::metavar(0), &cyclic), Ok(false));
+    assert_eq!(conv(&mut context, &Term::hole(0), &cyclic), Ok(false));
     assert_eq!(context.metavar_solution(MetaId(0)), None);
 }
 
@@ -1178,7 +1178,7 @@ fn scope_check_rejects_out_of_context_variable() {
 
     // ?0 ≟ x  — `x` is not available to ?0.
     let x = Term::free_var(&x_binder);
-    assert_eq!(conv(&mut context, &Term::metavar(0), &x), Ok(false));
+    assert_eq!(conv(&mut context, &Term::hole(0), &x), Ok(false));
     assert_eq!(context.metavar_solution(MetaId(0)), None);
 }
 
@@ -1195,7 +1195,7 @@ fn scope_check_allows_in_context_variable() {
     );
 
     let x = Term::free_var(&x_binder);
-    let occurrence = Term::metavar_birthed(0, None, vec![x.clone()]);
+    let occurrence = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![x.clone()]);
     assert_eq!(conv(&mut context, &occurrence, &x), Ok(true));
     assert_eq!(context.metavar_solution(MetaId(0)), Some(&x));
 }
@@ -1214,7 +1214,7 @@ fn revalidation_admits_checkable_but_not_inferable_candidate() {
 
     // ?0 ≟ (1, 2). A bare tuple has no synthesizable type (`elaborate_tuple` is Check-only), so synthesize-then-convert re-validation rejected it; checking it against the frozen tuple result type admits it.
     let pair = Term::tuple([nat(1), nat(2)]);
-    assert_eq!(conv(&mut context, &Term::metavar(0), &pair), Ok(true));
+    assert_eq!(conv(&mut context, &Term::hole(0), &pair), Ok(true));
     assert_eq!(context.metavar_solution(MetaId(0)), Some(&pair));
 }
 
@@ -1232,7 +1232,7 @@ fn revalidation_rejects_ill_typed_candidate_through_checking() {
 
     // ?0 ≟ (1, 2, 3): a three-field tuple does not check against a two-field tuple type, so checking still rejects the candidate and commits nothing.
     let wrong = Term::tuple([nat(1), nat(2), nat(3)]);
-    assert_eq!(conv(&mut context, &Term::metavar(0), &wrong), Ok(false));
+    assert_eq!(conv(&mut context, &Term::hole(0), &wrong), Ok(false));
     assert_eq!(context.metavar_solution(MetaId(0)), None);
 }
 
@@ -1242,10 +1242,7 @@ fn flex_flex_equal_id_short_circuits() {
     context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
 
     // ?0 ≟ ?0 is trivially true and leaves the metavariable unsolved.
-    assert_eq!(
-        conv(&mut context, &Term::metavar(0), &Term::metavar(0)),
-        Ok(true)
-    );
+    assert_eq!(conv(&mut context, &Term::hole(0), &Term::hole(0)), Ok(true));
     assert_eq!(context.metavar_solution(MetaId(0)), None);
 }
 
@@ -1257,7 +1254,7 @@ fn flex_flex_distinct_is_residual() {
 
     // ?0 ≟ ?1 postpones with no way to progress — a residual constraint.
     assert_eq!(
-        conv(&mut context, &Term::metavar(0), &Term::metavar(1)),
+        conv(&mut context, &Term::hole(0), &Term::hole(1)),
         Ok(false)
     );
 }
@@ -1287,10 +1284,10 @@ fn embedded_metavar_postpones_to_residual() {
 
     // ?0 ≟ (x : ?1) -> Nat — ?1 is an unsolved embedded metavariable, so the solve is postponed; nothing solves ?1, so it stays residual.
     let candidate = Term::func_type(
-        [(x.clone(), Term::metavar(1))],
+        [(x.clone(), Term::hole(1))],
         Term::intrinsic(Intrinsic::NatType),
     );
-    assert_eq!(conv(&mut context, &Term::metavar(0), &candidate), Ok(false));
+    assert_eq!(conv(&mut context, &Term::hole(0), &candidate), Ok(false));
     assert_eq!(context.metavar_solution(MetaId(0)), None);
 }
 
@@ -1301,7 +1298,7 @@ fn revalidation_rejects_ill_typed_solution() {
     context.birth_metavar(MetaId(0), Vec::new(), Term::intrinsic(Intrinsic::NatType));
 
     let bool_ = Term::intrinsic(Intrinsic::BoolType);
-    assert_eq!(conv(&mut context, &Term::metavar(0), &bool_), Ok(false));
+    assert_eq!(conv(&mut context, &Term::hole(0), &bool_), Ok(false));
     assert_eq!(context.metavar_solution(MetaId(0)), None);
 }
 
@@ -1320,7 +1317,7 @@ fn revalidation_suppresses_refinements_rejecting_a_refined_solution() {
 
     // `?0 ≟ 5` at type `t`. Locally (refinement on) `t ⇝ Nat` and `5 : t` holds, but re-validation suppresses refinements, leaving `t` abstract, so `5 : t` fails and the solution is rejected — the program is unsound otherwise.
     let t = Term::free_var(&t_binder);
-    let occurrence = Term::metavar_birthed(0, None, vec![t.clone()]);
+    let occurrence = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![t.clone()]);
     let five = Term::intrinsic(Intrinsic::Nat(Nat::new(5usize)));
     assert_eq!(convert(&mut context, &t, &occurrence, &five), Ok(false));
     assert_eq!(context.metavar_solution(MetaId(0)), None);
@@ -1340,7 +1337,7 @@ fn revalidation_accepts_a_refinement_independent_solution() {
     );
 
     let nat = Term::intrinsic(Intrinsic::NatType);
-    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var(&t)]);
+    let occurrence = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![Term::free_var(&t)]);
     let five = Term::intrinsic(Intrinsic::Nat(Nat::new(5usize)));
     assert_eq!(convert(&mut context, &nat, &occurrence, &five), Ok(true));
     assert_eq!(context.metavar_solution(MetaId(0)), Some(&five));
@@ -1359,7 +1356,7 @@ fn solve_inverts_a_renaming() {
     let y = context.fresh(Some("y"));
     // ?0 born under Γ = [a : Nat]; this occurrence's spine maps `a` to the live name `y` (the enclosing binders were re-closed and reopened).
     context.birth_metavar(MetaId(0), vec![(a.clone(), nat_type())], nat_type());
-    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var(&y)]);
+    let occurrence = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![Term::free_var(&y)]);
 
     // ?0[y] ≟ y — inverting the renaming stores the solution in birth-named form: `a`, not `y`.
     assert_eq!(
@@ -1377,7 +1374,7 @@ fn solve_through_an_identity_spine_matches_legacy() {
     let mut context = context();
     let a = context.fresh(Some("a"));
     context.birth_metavar(MetaId(0), vec![(a.clone(), nat_type())], nat_type());
-    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var(&a)]);
+    let occurrence = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![Term::free_var(&a)]);
 
     // The identity spine behaves exactly like the empty (legacy bare-hole) spine: the candidate is stored unchanged.
     assert_eq!(conv(&mut context, &occurrence, &nat(1)), Ok(true));
@@ -1396,7 +1393,11 @@ fn solve_postpones_a_duplicated_renaming() {
         nat_type(),
     );
     // Both entries are the same live name: which birth binder `y` stands for is ambiguous, so a candidate mentioning it is undecided, not unequal.
-    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var(&y), Term::free_var(&y)]);
+    let occurrence = Term::metavar_birthed(
+        0,
+        MetavarOrigin::Hole,
+        vec![Term::free_var(&y), Term::free_var(&y)],
+    );
 
     let outcome = convert_outcome(
         &mut context,
@@ -1422,7 +1423,11 @@ fn solve_prunes_dependence_on_a_non_pattern_entry() {
     );
     // First slot a pattern variable, second a compound term: the candidate may depend on the first but not (yet) on the second.
     let compound: Term = Subterm::Intrinsic(Intrinsic::nat_add(Term::free_var(&z), nat(1))).into();
-    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var(&y), compound.clone()]);
+    let occurrence = Term::metavar_birthed(
+        0,
+        MetavarOrigin::Hole,
+        vec![Term::free_var(&y), compound.clone()],
+    );
 
     // ?0[y, z+1] ≟ y — solvable through the pattern slot alone.
     assert_eq!(
@@ -1448,7 +1453,8 @@ fn solve_postpones_a_candidate_reaching_through_a_non_pattern_entry() {
         nat_type(),
     );
     let compound: Term = Subterm::Intrinsic(Intrinsic::nat_add(Term::free_var(&z), nat(1))).into();
-    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var(&y), compound]);
+    let occurrence =
+        Term::metavar_birthed(0, MetavarOrigin::Hole, vec![Term::free_var(&y), compound]);
 
     // ?0[y, z+1] ≟ z — `z` is reachable only through the non-pattern slot (and is not an occurrence of the whole entry): undecided.
     let outcome = convert_outcome(
@@ -1468,7 +1474,7 @@ fn solve_rejects_an_out_of_image_variable() {
     let y = context.fresh(Some("y"));
     let z = context.fresh(Some("z"));
     context.birth_metavar(MetaId(0), vec![(a.clone(), nat_type())], nat_type());
-    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var(&y)]);
+    let occurrence = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![Term::free_var(&y)]);
 
     // ?0[y] ≟ z — `z` corresponds to no birth binder and never can: a hard mismatch, not a postponement.
     let outcome = convert_outcome(
@@ -1490,10 +1496,10 @@ fn solve_classifies_a_solved_metavariable_spine_entry_by_its_value() {
     // ?0 is already solved to its own binder, so an occurrence ?0[y] stands for `y` — a perfectly good pattern variable hiding behind a node.
     context.birth_metavar(MetaId(0), vec![(a.clone(), nat_type())], nat_type());
     context.solve_metavar(MetaId(0), Term::free_var(&a));
-    let entry = Term::metavar_birthed(0, None, vec![Term::free_var(&y)]);
+    let entry = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![Term::free_var(&y)]);
 
     context.birth_metavar(MetaId(1), vec![(b.clone(), nat_type())], nat_type());
-    let occurrence = Term::metavar_birthed(1, None, vec![entry]);
+    let occurrence = Term::metavar_birthed(1, MetavarOrigin::Hole, vec![entry]);
 
     // ?1[?0[y]] ≟ y — the entry resolves to `y` and inverts to `b`.
     assert_eq!(
@@ -1520,7 +1526,11 @@ fn solve_abstracts_a_non_pattern_occurrence() {
     );
     // A reduce-stable compound (a tuple is a normal form), matched by the raw spelling; the reduced-spelling case is the next test.
     let compound = Term::tuple([Term::free_var(&z)]);
-    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var(&y), compound.clone()]);
+    let occurrence = Term::metavar_birthed(
+        0,
+        MetavarOrigin::Hole,
+        vec![Term::free_var(&y), compound.clone()],
+    );
 
     // ?0[y, (z,)] ≟ (z,) — the candidate *is* an occurrence of the non-pattern entry, which abstracts to its birth binder `b`.
     assert_eq!(conv(&mut context, &occurrence, &compound), Ok(true));
@@ -1542,7 +1552,7 @@ fn parked_goals_retry_under_their_frozen_refinements() {
         context.assume(&b, &Term::type_ground());
         context.refine(&b, &nat_type());
         context.park(
-            ParkedWork::Conversion(Goal {
+            ParkedWork::Conversion(Problem {
                 type_: Term::type_ground(),
                 this: Term::free_var(&b),
                 that: nat_type(),
@@ -1564,7 +1574,7 @@ fn parked_goals_without_their_refinement_mismatch() {
     context.with_frame(|context| {
         context.assume(&b, &Term::type_ground());
         context.park(
-            ParkedWork::Conversion(Goal {
+            ParkedWork::Conversion(Problem {
                 type_: Term::type_ground(),
                 this: Term::free_var(&b),
                 that: nat_type(),
@@ -1590,7 +1600,11 @@ fn solve_abstracts_a_reduced_spelling_occurrence() {
     );
     // `z + 1` successor-peels under reduction, and the candidate side arrives reduced — each subject contributes both spellings, so the occurrence still abstracts, and the round-trip verification accepts the pair by definitional (not syntactic) equality.
     let compound: Term = Subterm::Intrinsic(Intrinsic::nat_add(Term::free_var(&z), nat(1))).into();
-    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var(&y), compound.clone()]);
+    let occurrence = Term::metavar_birthed(
+        0,
+        MetavarOrigin::Hole,
+        vec![Term::free_var(&y), compound.clone()],
+    );
 
     assert_eq!(conv(&mut context, &occurrence, &compound), Ok(true));
     assert_eq!(
@@ -1607,8 +1621,8 @@ fn flex_flex_same_id_converts_through_equal_spines() {
 
     // Two occurrences of the same unsolved metavariable whose spines differ syntactically but agree definitionally (`1 + 1` reduces to `2`): the congruence probe discharges the goal without solving anything.
     let sum: Term = Subterm::Intrinsic(Intrinsic::nat_add(nat(1), nat(1))).into();
-    let this = Term::metavar_birthed(0, None, vec![sum]);
-    let that = Term::metavar_birthed(0, None, vec![nat(2)]);
+    let this = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![sum]);
+    let that = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![nat(2)]);
 
     assert_eq!(conv(&mut context, &this, &that), Ok(true));
     assert_eq!(context.metavar_solution(MetaId(0)), None);
@@ -1621,8 +1635,8 @@ fn flex_flex_same_id_with_disagreeing_spines_stays_blocked() {
     context.birth_metavar(MetaId(0), vec![(a.clone(), nat_type())], nat_type());
 
     // Disagreeing spines are not *unequal* — the solution may ignore the slot — so the pair parks rather than mismatching.
-    let this = Term::metavar_birthed(0, None, vec![nat(1)]);
-    let that = Term::metavar_birthed(0, None, vec![nat(2)]);
+    let this = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![nat(1)]);
+    let that = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![nat(2)]);
 
     let outcome = convert_outcome(&mut context, &Term::type_ground(), &this, &that);
     assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
@@ -1638,8 +1652,8 @@ fn flex_flex_distinct_heads_with_a_common_solution_stays_blocked() {
     context.birth_metavar(MetaId(0), vec![(a.clone(), nat_type())], nat_type());
     context.birth_metavar(MetaId(1), vec![(b.clone(), nat_type())], nat_type());
 
-    let this = Term::metavar_birthed(0, None, vec![Term::free_var(&x)]);
-    let that = Term::metavar_birthed(1, None, vec![Term::free_var(&x)]);
+    let this = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![Term::free_var(&x)]);
+    let that = Term::metavar_birthed(1, MetavarOrigin::Hole, vec![Term::free_var(&x)]);
 
     let outcome = convert_outcome(&mut context, &Term::type_ground(), &this, &that);
     assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
@@ -1670,7 +1684,7 @@ fn stuck_intrinsic_on_a_metavar_parks_instead_of_mismatching() {
     let mut context = context();
     let a = context.fresh(Some("a"));
     context.birth_metavar(MetaId(0), vec![(a.clone(), nat_type())], nat_type());
-    let m = Term::metavar_birthed(0, None, vec![Term::free_var(&a)]);
+    let m = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![Term::free_var(&a)]);
     let stuck: Term = Subterm::Intrinsic(Intrinsic::NatSub(m.clone(), nat(1))).into();
 
     // `?0 - 1 ≈ 0` is undecided, not unequal: solving `?0` may fold the subtraction. (`NatAdd` escapes via successor peeling; the other operators rely on this parking.)
@@ -1690,7 +1704,7 @@ fn rigid_head_mismatch_with_a_metavar_inside_still_fails_fast() {
     let mut context = context();
     let a = context.fresh(Some("a"));
     context.birth_metavar(MetaId(0), vec![(a.clone(), nat_type())], nat_type());
-    let m = Term::metavar_birthed(0, None, vec![Term::free_var(&a)]);
+    let m = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![Term::free_var(&a)]);
 
     // An inductive type against `Nat` is provably unequal whatever `?0` becomes — the heads are rigid — so the mismatch stays hard (and is reported at the use site, not deferred to the drain).
     let induct_decl = Term::induct_type(nominal("Vec"), [m], Vec::<Term>::new());
@@ -1709,7 +1723,7 @@ fn arm_refinement_does_not_taint_a_committed_solution() {
     let n = context.fresh(Some("n"));
     context.assume(&n, &nat_type());
     context.birth_metavar(MetaId(0), vec![(n.clone(), nat_type())], nat_type());
-    let occurrence = Term::metavar_birthed(0, None, vec![Term::free_var(&n)]);
+    let occurrence = Term::metavar_birthed(0, MetavarOrigin::Hole, vec![Term::free_var(&n)]);
 
     // Inside a frame that counterfactually refines `n := 0` (a match arm), the goal `?0[n] ≈ n` still discharges — but the *committed* solution is the refinement-free `n`, not the arm-local `0`: a metavariable must not be pinned to a value that holds only counterfactually inside the arm.
     let converts = context.with_frame(|context| {
@@ -1799,13 +1813,13 @@ fn imitation_solves_flex_apply_against_inductive() {
     context.birth_metavar(MetaId(0), Vec::new(), kind);
 
     // ?0(Nat) ≟ List(Nat)  — commits ?0 := λA. List(A).
-    let flex = Term::apply(Term::metavar(0), [nat_type()]);
+    let flex = Term::apply(Term::hole(0), [nat_type()]);
     let rigid = Term::induct_type(nominal("List"), [nat_type()], Vec::<Term>::new());
     assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
     assert!(context.metavar_solution(MetaId(0)).is_some());
 
     // The committed solution is the imitation, not the constant: applied to a different argument it yields List of *that* argument.
-    let at_bool = Term::apply(Term::metavar(0), [Term::intrinsic(Intrinsic::BoolType)]);
+    let at_bool = Term::apply(Term::hole(0), [Term::intrinsic(Intrinsic::BoolType)]);
     let list_bool = Term::induct_type(
         nominal("List"),
         [Term::intrinsic(Intrinsic::BoolType)],
@@ -1822,7 +1836,7 @@ fn imitation_is_symmetric() {
     context.birth_metavar(MetaId(0), Vec::new(), kind);
 
     // Rigid on the left, stuck application on the right.
-    let flex = Term::apply(Term::metavar(0), [nat_type()]);
+    let flex = Term::apply(Term::hole(0), [nat_type()]);
     let rigid = Term::induct_type(nominal("List"), [nat_type()], Vec::<Term>::new());
     assert_eq!(conv(&mut context, &rigid, &flex), Ok(true));
     assert!(context.metavar_solution(MetaId(0)).is_some());
@@ -1837,7 +1851,7 @@ fn imitation_equates_arguments_pairwise() {
     context.birth_metavar(MetaId(1), Vec::new(), Term::type_ground());
 
     // ?0(?1) ≟ List(Nat) — the imitation solves ?0, the pairwise equation ?1.
-    let flex = Term::apply(Term::metavar(0), [Term::metavar(1)]);
+    let flex = Term::apply(Term::hole(0), [Term::hole(1)]);
     let rigid = Term::induct_type(nominal("List"), [nat_type()], Vec::<Term>::new());
     assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
     assert!(context.metavar_solution(MetaId(0)).is_some());
@@ -1863,13 +1877,13 @@ fn imitation_splits_params_and_indices() {
     );
 
     // ?0(Nat, 3) ≟ Vec(Nat, 3) — arity 2 = 1 param + 1 index; the candidate's body must mirror the rigid node's split or re-validation rejects it.
-    let flex = Term::apply(Term::metavar(0), [nat_type(), nat(3)]);
+    let flex = Term::apply(Term::hole(0), [nat_type(), nat(3)]);
     let rigid = Term::induct_type(nominal("Vec"), [nat_type()], [nat(3)]);
     assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
     assert!(context.metavar_solution(MetaId(0)).is_some());
 
     let at_two = Term::apply(
-        Term::metavar(0),
+        Term::hole(0),
         [Term::intrinsic(Intrinsic::BoolType), nat(2)],
     );
     let vec_two = Term::induct_type(
@@ -1916,7 +1930,7 @@ fn imitation_solves_against_struct_type() {
         ),
     );
 
-    let flex = Term::apply(Term::metavar(0), [nat_type(), nat_type()]);
+    let flex = Term::apply(Term::hole(0), [nat_type(), nat_type()]);
     let rigid = Term::struct_type(nominal("Pair"), [nat_type(), nat_type()]);
     assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
     assert!(context.metavar_solution(MetaId(0)).is_some());
@@ -1930,7 +1944,7 @@ fn imitation_arity_mismatch_blocks() {
     context.birth_metavar(MetaId(0), Vec::new(), kind);
 
     // ?0(Nat) ≟ Vec(Nat, 3) — apply arity 1 against constructor arity 2: v1 has no partial-application solutions, so the goal blocks (it is not provably unequal — a constant solution could exist).
-    let flex = Term::apply(Term::metavar(0), [nat_type()]);
+    let flex = Term::apply(Term::hole(0), [nat_type()]);
     let rigid = Term::induct_type(nominal("Vec"), [nat_type()], [nat(3)]);
     let outcome = convert_outcome(&mut context, &Term::type_ground(), &flex, &rigid);
     assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
@@ -1944,7 +1958,7 @@ fn imitation_non_function_birth_type_blocks() {
     // ?0's frozen type is not a function type: no candidate can be built.
     context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
 
-    let flex = Term::apply(Term::metavar(0), [nat_type()]);
+    let flex = Term::apply(Term::hole(0), [nat_type()]);
     let rigid = Term::induct_type(nominal("List"), [nat_type()], Vec::<Term>::new());
     let outcome = convert_outcome(&mut context, &Term::type_ground(), &flex, &rigid);
     assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
@@ -1973,7 +1987,7 @@ fn imitation_solves_flex_apply_against_intrinsic_former() {
 
     // ?0(?1) ≟ List(Nat) — the imitation solves ?0 := λT. List(T), the pairwise equation ?1 := Nat. This is what pins `M := List` for `Monad(List)`.
     context.birth_metavar(MetaId(1), Vec::new(), Term::type_ground());
-    let flex = Term::apply(Term::metavar(0), [Term::metavar(1)]);
+    let flex = Term::apply(Term::hole(0), [Term::hole(1)]);
     let rigid = Term::intrinsic(Intrinsic::ListType(nat_type()));
     assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
     assert!(context.metavar_solution(MetaId(0)).is_some());
@@ -2061,7 +2075,7 @@ fn an_intrinsic_without_a_hand_written_arm_solves_a_metavariable_in_its_operand(
         nat_type.clone(),
         nat_type.clone(),
         Term::free_var(&xs),
-        Term::metavar(0),
+        Term::hole(0),
     ));
     let rigid = Term::intrinsic(Intrinsic::list_map(
         nat_type.clone(),

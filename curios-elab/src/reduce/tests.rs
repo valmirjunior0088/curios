@@ -753,7 +753,7 @@ fn leave_frame_with_definitions_invalidates_cached_reduction() {
 #[test]
 fn reduce_unsolved_metavar_is_neutral() {
     let mut context = context();
-    let m = Term::metavar(0);
+    let m = Term::hole(0);
 
     // No store entry, or an unsolved one, both reduce to the metavariable itself.
     assert_eq!(reduce(&mut context, m.clone()), Ok(m.clone()));
@@ -765,7 +765,7 @@ fn reduce_unsolved_metavar_is_neutral() {
 #[test]
 fn reduce_solved_metavar_yields_solution() {
     let mut context = context();
-    let m = Term::metavar(0);
+    let m = Term::hole(0);
 
     context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
 

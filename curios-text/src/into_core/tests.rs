@@ -2131,7 +2131,7 @@ fn bang_lowers_to_the_bang_transient() {
         curios_core::Term::func(
             [(
                 curios_core::Free::local(1, None),
-                curios_core::Term::metavar(0),
+                curios_core::Term::hole(0),
             )],
             curios_core::Term::var(curios_core::Var::free(curios_core::Free::local(1, None))),
         ),

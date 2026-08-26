@@ -184,7 +184,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             Vec::<(curios_core::Free, curios_core::Term)>::new(),
             default,
         );
-        let hole = curios_core::Term::metavar(self.context.fresh_metavar());
+        let hole = curios_core::Term::hole(self.context.fresh_metavar());
         Ok(curios_core::Term::let_(&k, hole, thunk, matrix))
     }
 
@@ -195,7 +195,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
     ) -> Result<curios_core::Scope<curios_core::Many>, Error> {
         Ok(curios_core::Term::match_motive_written(match motive {
             Some(motive) => self.term(motive)?,
-            None => curios_core::Term::metavar(self.context.fresh_metavar()),
+            None => curios_core::Term::hole(self.context.fresh_metavar()),
         }))
     }
 
@@ -709,7 +709,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
 
         Ok(curios_core::Term::list_match_scoped(
             scrutinee,
-            curios_core::Term::metavar(self.context.fresh_metavar()),
+            curios_core::Term::hole(self.context.fresh_metavar()),
             motive,
             empty_case,
             &head_label,
@@ -971,7 +971,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
             .into_iter()
             .rev()
             .fold(body, |tail, ((_, id), value)| {
-                let hole = curios_core::Term::metavar(self.context.fresh_metavar());
+                let hole = curios_core::Term::hole(self.context.fresh_metavar());
                 curios_core::Term::let_(&id, hole, value, tail)
             }))
     }

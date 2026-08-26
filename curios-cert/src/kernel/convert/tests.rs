@@ -421,8 +421,8 @@ fn a_folded_recursive_call_converts_without_unfolding_forever() {
 #[test]
 fn a_metavariable_does_not_convert_with_anything_else() {
     let mut kernel = kernel();
-    let left = Term::metavar(MetaId::from(0usize));
-    let right = Term::metavar(MetaId::from(1usize));
+    let left = Term::hole(MetaId::from(0usize));
+    let right = Term::hole(MetaId::from(1usize));
 
     assert!(matches!(
         convert(&mut kernel, &Term::type_ground(), &left, &right),

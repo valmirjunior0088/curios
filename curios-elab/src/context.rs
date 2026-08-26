@@ -1017,12 +1017,12 @@ impl Context {
     }
 
     /// Defer a witness goal ([`Solutions::defer_witness`]), stamping the write.
-    pub(crate) fn defer_witness(&mut self, goal: ParkedGoal) {
+    pub(crate) fn defer_witness(&mut self, parked: ParkedProblem) {
         self.caches.note_write();
-        self.solutions.defer_witness(goal);
+        self.solutions.defer_witness(parked);
     }
 
-    pub(crate) fn take_deferred_witnesses(&mut self) -> Vec<ParkedGoal> {
+    pub(crate) fn take_deferred_witnesses(&mut self) -> Vec<ParkedProblem> {
         self.solutions.take_deferred_witnesses()
     }
 
@@ -1071,7 +1071,7 @@ impl Context {
         let id = self.solutions.mint();
         let (telescope, spine) = self.identity_snapshot();
         self.solutions.birth_rec_slot(id, telescope, result);
-        (id, Term::metavar_birthed(id, None, spine))
+        (id, Term::metavar_birthed(id, MetavarOrigin::Hole, spine))
     }
 
     pub(crate) fn is_rec_slot(&self, id: MetaId) -> bool {
@@ -1108,7 +1108,7 @@ impl Context {
         span: Option<Span>,
         origin: ImplicitOrigin,
     ) -> Term {
-        self.fresh_metavar_with(result, span, Some(MetavarOrigin::Implicit(origin)))
+        self.fresh_metavar_with(result, span, MetavarOrigin::Implicit(origin))
             .1
     }
 
@@ -1119,19 +1119,19 @@ impl Context {
         span: Option<Span>,
         origin: WitnessOrigin,
     ) -> (MetaId, Term) {
-        self.fresh_metavar_with(result, span, Some(MetavarOrigin::Witness(origin)))
+        self.fresh_metavar_with(result, span, MetavarOrigin::Witness(origin))
     }
 
-    /// Mint an unmarked (silently spliced) metavariable — the stand-in type a written goal in synthesis position gets, so the goal survives to zonk's report instead of dying with `CannotInfer` (`elaborate_metavar`).
-    pub(crate) fn fresh_unmarked_metavar(&mut self, result: Term, span: Option<Span>) -> Term {
-        self.fresh_metavar_with(result, span, None).1
+    /// Mint a silent hole — the stand-in type a written goal in synthesis position gets, so the goal survives to zonk's report instead of dying with `CannotInfer` (`elaborate_metavar`).
+    pub(crate) fn fresh_hole_metavar(&mut self, result: Term, span: Option<Span>) -> Term {
+        self.fresh_metavar_with(result, span, MetavarOrigin::Hole).1
     }
 
     fn fresh_metavar_with(
         &mut self,
         result: Term,
         span: Option<Span>,
-        origin: Option<MetavarOrigin>,
+        origin: MetavarOrigin,
     ) -> (MetaId, Term) {
         let id = self.solutions.mint();
         let (telescope, spine) = self.identity_snapshot();
@@ -1357,7 +1357,7 @@ impl Context {
         let id = self.solutions.mint();
         let (telescope, spine) = self.identity_snapshot();
         self.birth_metavar(id, telescope, result);
-        let term = Term::metavar_birthed(id, None, spine);
+        let term = Term::metavar_birthed(id, MetavarOrigin::Hole, spine);
 
         let term = match span {
             Some(span) => term.with_span(span),
@@ -1367,11 +1367,11 @@ impl Context {
         (id, term)
     }
 
-    pub(crate) fn wake_parked(&mut self) -> Vec<ParkedGoal> {
+    pub(crate) fn wake_parked(&mut self) -> Vec<ParkedProblem> {
         self.solutions.wake_parked()
     }
 
-    pub(crate) fn take_parked(&mut self) -> Vec<ParkedGoal> {
+    pub(crate) fn take_parked(&mut self) -> Vec<ParkedProblem> {
         self.solutions.take_parked()
     }
 

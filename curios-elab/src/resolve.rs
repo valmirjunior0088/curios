@@ -9,7 +9,7 @@
 
 use {
     super::{
-        Context, EmbeddingDiagnosis, Error, HeadKey, Outcome, ParkedGoal, ParkedWork, Witness,
+        Context, EmbeddingDiagnosis, Error, HeadKey, Outcome, ParkedProblem, ParkedWork, Witness,
         WitnessKey, convert_outcome, reduce_with,
     },
     curios_core::{
@@ -574,7 +574,7 @@ pub(crate) fn attempt_witness_goal(
         }
         Resolution::Missing => {
             let frame = context.freeze_frame();
-            context.defer_witness(ParkedGoal {
+            context.defer_witness(ParkedProblem {
                 work: ParkedWork::Witness {
                     slot,
                     goal: goal.clone(),
@@ -624,7 +624,7 @@ pub(crate) fn retry_witness(
             Ok(())
         }
         Resolution::Missing => {
-            context.defer_witness(ParkedGoal {
+            context.defer_witness(ParkedProblem {
                 work: ParkedWork::Witness {
                     slot,
                     goal,
@@ -650,7 +650,7 @@ pub(crate) fn retry_deferred_witnesses(context: &mut Context) -> Result<(), Erro
     }
 
     for parked in deferred {
-        let ParkedGoal {
+        let ParkedProblem {
             work:
                 ParkedWork::Witness {
                     slot,
@@ -689,7 +689,7 @@ pub(crate) fn finish_deferred_witnesses(context: &mut Context) -> Result<(), Err
     retry_deferred_witnesses(context)?;
 
     if let Some(parked) = context.take_deferred_witnesses().into_iter().next() {
-        let ParkedGoal {
+        let ParkedProblem {
             work: ParkedWork::Witness {
                 goal, provenance, ..
             },

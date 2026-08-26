@@ -219,7 +219,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         Ok(match term {
             Subterm::Type => curios_core::Term::type_at(self.context.fresh_universe(span)),
             Subterm::Prop => curios_core::Term::prop(),
-            Subterm::Hole => curios_core::Term::metavar(self.context.fresh_metavar()),
+            Subterm::Hole => curios_core::Term::hole(self.context.fresh_metavar()),
             // A written goal `?`: same fresh metavariable, but marked so zonk reports what elaboration determined for it instead of splicing.
             Subterm::Goal => curios_core::Term::goal(self.context.fresh_metavar()),
             // A `/syn` literal (string or list) desugars via the meta-emitter to a `/syn` construction (see `syn_literal`), never a core intrinsic.
@@ -336,7 +336,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                         ChooseTest::Cond(condition) => curios_core::Term::bool_match(
                             self.term(condition)?,
                             None,
-                            curios_core::Term::metavar(self.context.fresh_metavar()),
+                            curios_core::Term::hole(self.context.fresh_metavar()),
                             acc,
                             self.term(&arm.body)?,
                         ),
@@ -644,7 +644,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                         self.bound(&binders[..seen], || self.input_type(annotation))?;
                     self.wrap_pattern_chains(&chains, annotation)
                 }
-                None => curios_core::Term::metavar(self.context.fresh_metavar()),
+                None => curios_core::Term::hole(self.context.fresh_metavar()),
             };
             // The mark applies to the outer function slot the parameter occupies, whatever the pattern shape: a compound pattern's fresh core binder still claims a slot of the written plicity.
             let leaves = &binders[seen..seen + pattern_names(pattern).len()];
@@ -778,7 +778,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 Some(label) => curios_core::Term::proj_label(scrutinee, label.clone()),
                 None => curios_core::Term::proj(scrutinee, index),
             };
-            let hole = curios_core::Term::metavar(self.context.fresh_metavar());
+            let hole = curios_core::Term::hole(self.context.fresh_metavar());
             tail = self.bind_pattern(&field.value, taken, hole, proj, tail);
         }
         tail
@@ -809,7 +809,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 action,
                 span,
             } = hoisted;
-            let domain = curios_core::Term::metavar(self.context.fresh_metavar());
+            let domain = curios_core::Term::hole(self.context.fresh_metavar());
             let cont = curios_core::Term::func([(binder, domain)], acc);
             let bang = curios_core::Term::bang(action, cont);
             Ok(match span {
@@ -827,7 +827,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         operands: &mut Vec<curios_core::Term>,
         run: &mut Vec<curios_core::Term>,
     ) {
-        let element = || curios_core::Term::metavar(self.context.fresh_metavar());
+        let element = || curios_core::Term::hole(self.context.fresh_metavar());
 
         match (run.len(), operands.last()) {
             (0, _) => {}
@@ -852,7 +852,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         mut lower: impl FnMut(&Term) -> Result<curios_core::Term, Error>,
     ) -> Result<curios_core::Intrinsic, Error> {
         // The literal's element-type slot: an implicit the literal cannot name, minted fresh and solved by elaboration — bidirectionally from the expected type when checking, from the elements otherwise.
-        let element = || curios_core::Term::metavar(self.context.fresh_metavar());
+        let element = || curios_core::Term::hole(self.context.fresh_metavar());
 
         let mut operands = Vec::new();
         let mut run = Vec::new();

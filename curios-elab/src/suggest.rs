@@ -246,7 +246,7 @@ fn apply_fit(
         match cursor {
             Telescope::Done(output) => break *output,
             Telescope::Cons(domain, rest) => {
-                let arg = context.fresh_unmarked_metavar(domain.clone(), None);
+                let arg = context.fresh_hole_metavar(domain.clone(), None);
                 cursor = rest.open(&[&arg]);
                 args.push((arg, domain));
             }

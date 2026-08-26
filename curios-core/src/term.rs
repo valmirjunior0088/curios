@@ -672,19 +672,20 @@ impl Term {
         }
     }
 
-    /// A bare metavariable, as `into_core` mints one for a desugared hole (an omitted annotation, motive, or lambda domain): empty spine (which resolves as the identity — see [`Metavar::spine`]) and no insertion origin, so its solution is spliced silently at zonk.
-    pub fn metavar(id: impl Into<MetaId>) -> Self {
-        Self::from(Subterm::Metavar(Metavar {
-            id: id.into(),
-            spine: Rc::new(Vec::new()),
-            origin: None,
-        }))
+    /// A bare silent hole, as `into_core` mints one for a desugared omission (an omitted annotation, motive, or lambda domain): empty spine (which resolves as the identity — see [`Metavar::spine`]) and [`MetavarOrigin::Hole`], so its solution is spliced silently at zonk.
+    pub fn hole(id: impl Into<MetaId>) -> Self {
+        Self::metavar_birthed(id, MetavarOrigin::Hole, Vec::new())
     }
 
-    /// A metavariable carrying its (optional) provenance mark and birth spine: a hole or goal rebuilt at its birth point with the identity spine over its frozen telescope, or an elaborator insertion minted with its provenance (see [`Metavar::origin`] and [`Metavar::spine`]).
+    /// A bare written goal `?`, as `into_core` mints one: the same empty spine as [`Term::hole`] under [`MetavarOrigin::Goal`], which makes zonk *report* what elaboration determined for it — scope, type, and solution — instead of splicing silently.
+    pub fn goal(id: impl Into<MetaId>) -> Self {
+        Self::metavar_birthed(id, MetavarOrigin::Goal, Vec::new())
+    }
+
+    /// A metavariable carrying its provenance and birth spine: a hole or goal rebuilt at its birth point with the identity spine over its frozen telescope, or an elaborator insertion minted with its provenance (see [`Metavar::origin`] and [`Metavar::spine`]).
     pub fn metavar_birthed(
         id: impl Into<MetaId>,
-        origin: Option<MetavarOrigin>,
+        origin: MetavarOrigin,
         spine: impl Into<Rc<Vec<Term>>>,
     ) -> Self {
         Self::from(Subterm::Metavar(Metavar {
@@ -2205,10 +2206,14 @@ pub struct WitnessOrigin {
     pub binder: String,
 }
 
-/// Provenance of a marked metavariable — which mechanism created it, deciding how zonk reports it: an unsolved `Implicit`/`Witness` survivor names the binder it filled, while a `Goal` is reported unconditionally.
+/// Provenance of a metavariable — which mechanism minted it, deciding both how zonk reports it unsolved and what an elaboration site may do with it. An unsolved `Implicit`/`Witness` survivor names the binder it filled and an unsolved `Hole` is a bare "cannot infer", while a `Goal` is reported unconditionally.
+///
+/// **A site may special-case a `Hole`; a `Goal` always takes the general path.** Inferring a binding over an elided annotation, synthesizing an elided motive, refusing a lambda whose domain nothing pins — each of those is a decision about a *silent* hole, and each once matched any bare metavariable, which is how a written `?` in those positions was discarded unelaborated and the program compiled with a goal in it. [`Metavar::is_hole`] is the one predicate those sites ask, so the rule is stated in the type rather than re-derived per site.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum MetavarOrigin {
+    /// A silent inference hole: an elided annotation, motive, lambda domain or element type (`into_core` mints it via `Term::hole`), or an elaborator placeholder with no provenance of its own — a parked problem's stand-in, a recursive group's slot, the type a goal in synthesis position stands over. Its solution is spliced without comment; unsolved, it is the bare "cannot infer".
+    Hole,
     Implicit(ImplicitOrigin),
     Witness(WitnessOrigin),
     /// A written goal `?` (`into_core` mints it via `Term::goal`): the user asked what elaboration determines here, so zonk errors with the goal's scope, type, and solution — solved or not — instead of splicing.
@@ -2240,7 +2245,7 @@ impl fmt::Display for MetaId {
 
 /// A metavariable: a placeholder term standing for an as-yet-unknown subterm, born from a surface hole `?` and (possibly) solved by unification. The solution, when one exists, lives in the `Context`'s `MetaStore`, keyed by `id`, spelled with the *birth telescope's* free names.
 ///
-/// `origin` rides with the node: `Some` iff the metavariable was marked at its mint — an elaborator-inserted implicit/witness argument (zonk's unsolved-hole report then names the binder instead of a bare id) or a written goal `?` (zonk reports it unconditionally). Each id is minted exactly once (`into_core` desugared holes with `None` and written goals with `Some(Goal)`, core insertions above the floor `into_core` returns with `Some`), so every occurrence of an id carries the same origin and the derived equality never splits an id.
+/// `origin` rides with the node and says what minted it — a silent hole, an elaborator-inserted implicit/witness argument (zonk's unsolved report then names the binder instead of a bare id), or a written goal `?` (zonk reports it unconditionally). Each id is minted exactly once (`into_core` desugared holes as `Hole` and written goals as `Goal`, core insertions above the floor `into_core` returns with theirs), so every occurrence of an id carries the same origin and the derived equality never splits an id.
 ///
 /// `spine` is the delayed substitution — one term per binder of the birth telescope (`MetaEntry::telescope` order), recording what that binder corresponds to at this occurrence. Identity (`Var::free(name)`) at birth. The entries are ordinary term content: `traverse` walks them, so `close` captures them and `open` substitutes them, and the mapping survives re-closing under fresh names — which is what lets a solution mentioning a sibling binder resolve correctly wherever the occurrence ends up. An empty spine is a not-yet-birthed `into_core` hole and resolves as the identity.
 ///
@@ -2250,7 +2255,14 @@ impl fmt::Display for MetaId {
 pub struct Metavar {
     pub id: MetaId,
     pub spine: Rc<Vec<Term>>,
-    pub origin: Option<MetavarOrigin>,
+    pub origin: MetavarOrigin,
+}
+
+impl Metavar {
+    /// Whether this is a silent hole — the one origin an elaboration site may special-case (infer over, synthesize for, refuse as unpinned). Every other origin, the written goal above all, takes the site's general path; see [`MetavarOrigin`].
+    pub fn is_hole(&self) -> bool {
+        matches!(self.origin, MetavarOrigin::Hole)
+    }
 }
 
 /// An internal, occurrence-specific instantiation of a universe-polymorphic binding. The ordinary term binder structure remains entirely in `head`.

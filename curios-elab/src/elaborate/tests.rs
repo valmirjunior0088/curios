@@ -214,7 +214,7 @@ fn naturally_checked_func_elaborates_against_a_function_type() {
     // `\ _ -> 0` checked against `(_ : Nat) -> Nat`.
     let x = context.fresh(Some("x"));
     let func_type = Term::func_type([(x.clone(), nat())], nat());
-    let func = Term::func([(x, Term::metavar(0))], nat_lit(0));
+    let func = Term::func([(x, Term::hole(0))], nat_lit(0));
 
     let (term, type_) = elaborate(&mut context, &func, Mode::Check(func_type.clone())).unwrap();
 
@@ -229,7 +229,7 @@ fn naturally_checked_func_cannot_infer() {
 
     // A lambda whose domain is an unconstrained hole (the bare `(x) => …` sugar) has nothing to synthesize a domain from, so inference still fails.
     let x = context.fresh(Some("x"));
-    let func = Term::func([(x, Term::metavar(0))], nat_lit(0));
+    let func = Term::func([(x, Term::hole(0))], nat_lit(0));
     let result = elaborate(&mut context, &func, Mode::Infer);
 
     assert!(result.is_err());
@@ -265,14 +265,14 @@ fn check_on_a_hole_births_it_freezing_the_local_context() {
     let x = context.fresh(Some("x"));
     let (term, type_) = context.with_frame(|context| {
         context.assume(&x, &nat());
-        let hole = Term::metavar(0);
+        let hole = Term::hole(0);
         elaborate(context, &hole, Mode::Check(nat())).unwrap()
     });
 
     // Birth rebuilds the hole with the identity spine over its frozen Γ — the delayed substitution that keeps its eventual solution aligned through every later `close`/`open`.
     assert_eq!(
         term,
-        Term::metavar_birthed(0, None, vec![Term::free_var(&x)])
+        Term::metavar_birthed(0, MetavarOrigin::Hole, vec![Term::free_var(&x)])
     );
     assert_eq!(type_, nat());
 
@@ -285,7 +285,7 @@ fn check_on_a_hole_births_it_freezing_the_local_context() {
 fn infer_on_an_unborn_hole_cannot_infer() {
     let mut context = context();
 
-    let result = elaborate(&mut context, &Term::metavar(0), Mode::Infer);
+    let result = elaborate(&mut context, &Term::hole(0), Mode::Infer);
 
     assert!(result.is_err());
 }

@@ -71,7 +71,7 @@ pub(crate) fn is_prop_in(
 /// Elaborate `term` as a type/proposition without inventing an arbitrary expected universe upper bound.
 pub(crate) fn check_is_sort(context: &mut Context, term: &Term) -> Result<(Term, Sort), Error> {
     let (rebuilt, inferred) = if matches!(&**term, Subterm::Metavar(_)) {
-        let classifier = context.fresh_classifier_type("written type hole");
+        let classifier = context.fresh_classifier_type("type left to inference");
         elaborate(context, term, Mode::Check(classifier))?
     } else {
         elaborate(context, term, Mode::Infer)?
@@ -312,7 +312,7 @@ impl Context {
             // No progress in a full sweep: the rest can never resolve. A conversion held up by written goals alone is not an error but the goals' own report — the batch at module end names each `?`, and this obligation goes with it as what the hole must make true; the program never compiles with a goal in it, so the dropped constraint is never unchecked. Anything else reports the first survivor at its origin.
             if self.parked_len() >= before && !self.has_newly_solved() {
                 for parked in self.take_parked() {
-                    let super::ParkedGoal {
+                    let super::ParkedProblem {
                         work,
                         origin: parked_origin,
                         frame,
@@ -402,7 +402,7 @@ impl Context {
 fn blocked_on_written_goals(
     context: &Context,
     watching: &BTreeSet<MetaId>,
-    goal: &super::Goal,
+    goal: &super::Problem,
 ) -> Option<BTreeSet<MetaId>> {
     let origins = metavar_origins(&[&goal.this, &goal.that]);
     let unsolved: BTreeSet<MetaId> = watching
@@ -448,7 +448,7 @@ fn watched_blockers(
                 format!("the written goal `?` at {line}:{column}")
             }
             Some((MetavarOrigin::Goal, None)) => "a written goal `?`".to_string(),
-            None => "an inferred hole".to_string(),
+            Some((MetavarOrigin::Hole, _)) | None => "an inferred hole".to_string(),
         })
         .collect()
 }
@@ -464,12 +464,7 @@ fn metavar_origins(terms: &[&Term]) -> BTreeMap<MetaId, Provenance> {
         let mut visit = Visit::rewriting(
             |_, _| None,
             Box::new(move |_, term: &Term| {
-                if let Subterm::Metavar(Metavar {
-                    id,
-                    origin: Some(origin),
-                    ..
-                }) = &**term
-                {
+                if let Subterm::Metavar(Metavar { id, origin, .. }) = &**term {
                     sink.borrow_mut()
                         .entry(*id)
                         .or_insert_with(|| (origin.clone(), term.span()));
@@ -484,8 +479,8 @@ fn metavar_origins(terms: &[&Term]) -> BTreeMap<MetaId, Provenance> {
         .unwrap_or_else(|shared| shared.borrow().clone())
 }
 
-fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Error> {
-    let super::ParkedGoal {
+fn retry_one(context: &mut Context, parked: super::ParkedProblem) -> Result<(), Error> {
+    let super::ParkedProblem {
         work,
         origin,
         frame,
@@ -509,7 +504,7 @@ fn retry_one(context: &mut Context, parked: super::ParkedGoal) -> Result<(), Err
     enum Retry {
         Converts,
         Mismatch(Error),
-        Blocked(Vec<super::Goal>),
+        Blocked(Vec<super::Problem>),
     }
 
     let outcome = context.with_frame(|context| {

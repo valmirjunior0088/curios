@@ -13,7 +13,7 @@ pub(super) fn elaborate_metavar(
         Mode::Check(expected) => {
             if let Some(entry) = context.metavar_entry(id) {
                 let result = entry.result.clone();
-                // `into_core` mints a hole *bare* (`Term::metavar`), and the birth arm below rebuilds it over its frozen Γ — but that rebuild lands in the *returned* term, not in the node the traversal read. A node reached a second time in checking position therefore arrives bare again, and returning it unchanged puts a spineless copy of a birthed hole into a compared type, which is exactly what `solve`'s spine-arity invariant forbids. Re-attach the identity spine here so both traversals hand the same term downstream.
+                // `into_core` mints a hole *bare* (`Term::hole`), and the birth arm below rebuilds it over its frozen Γ — but that rebuild lands in the *returned* term, not in the node the traversal read. A node reached a second time in checking position therefore arrives bare again, and returning it unchanged puts a spineless copy of a birthed hole into a compared type, which is exactly what `solve`'s spine-arity invariant forbids. Re-attach the identity spine here so both traversals hand the same term downstream.
                 //
                 // Only the bare case is repaired: an occurrence that already carries a spine may be carrying a *substituted* one, opened under binders the birth Γ does not have, and that is the delayed substitution the whole representation exists to keep.
                 let restored =
@@ -51,10 +51,10 @@ pub(super) fn elaborate_metavar(
         // A hole in synthesis position has no type to offer — unless it was already born in a checking position, in which case report that type.
         Mode::Infer => match context.metavar_entry(id) {
             Some(entry) => Ok((term.clone(), entry.result.clone())),
-            // A written goal, though, must survive to zonk's report rather than die here: a fresh *unmarked* metavariable stands in as its type (unmarked so only the goal itself reports; the report then shows the stand-in — `?N` — if nothing ever pins it). Birth mirrors the checking arm, with the stand-in as `result`.
-            None if matches!(metavar.origin, Some(MetavarOrigin::Goal)) => {
+            // A written goal, though, must survive to zonk's report rather than die here: a fresh silent hole stands in as its type (a hole so only the goal itself reports; the report then shows the stand-in — `?N` — if nothing ever pins it). Birth mirrors the checking arm, with the stand-in as `result`.
+            None if matches!(metavar.origin, MetavarOrigin::Goal) => {
                 let classifier = context.fresh_classifier_type("inferred goal classifier");
-                let result = context.fresh_unmarked_metavar(classifier, term.span());
+                let result = context.fresh_hole_metavar(classifier, term.span());
                 let (telescope, spine) = context.identity_snapshot();
                 context.birth_metavar(id, telescope, result.clone());
 

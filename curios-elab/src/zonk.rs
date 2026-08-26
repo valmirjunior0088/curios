@@ -44,7 +44,7 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
                 let Subterm::Metavar(Metavar { id, spine, origin }) = &**term else {
                     return None;
                 };
-                if matches!(origin, Some(MetavarOrigin::Goal)) {
+                if matches!(origin, MetavarOrigin::Goal) {
                     return None;
                 }
                 let (labels, solution) = rewrite_solutions.get(id)?;
@@ -728,7 +728,7 @@ pub(crate) fn collect_goal_reports(context: &mut Context, module: &Module) -> Ve
             Box::new(move |_, term| {
                 if let Subterm::Metavar(Metavar { id, origin, .. }) = &**term {
                     match origin {
-                        Some(MetavarOrigin::Goal) => {
+                        MetavarOrigin::Goal => {
                             if seen_goals.borrow_mut().insert(*id) {
                                 goals.borrow_mut().push((*id, term.span(), owner.clone()));
                             }
@@ -917,17 +917,17 @@ fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
     // A metavariable node *is* the substitution site: replace it by its solution, recursively zonked (the solution may itself mention solved metavariables).
     if let Subterm::Metavar(Metavar { id, spine, origin }) = &**term {
         // A written goal `?` never splices — the whole point of writing it was the report. Solved or not, error with what elaboration determined: the frozen scope, the goal's type, and the solution when one landed.
-        if matches!(origin, Some(MetavarOrigin::Goal)) {
+        if matches!(origin, MetavarOrigin::Goal) {
             return Err(goal_report(context, *id).at_opt(term.span()));
         }
 
         let solution = context.metavar_solution(*id).ok_or_else(|| {
             // An unsolved metavariable the *elaborator* minted (an omitted implicit or witness argument) is reported by the binder it filled — the provenance rides on the node itself — not as a bare hole: the user never wrote this metavariable, so a generic "cannot infer" would point at nothing they can see.
             let error = match origin {
-                Some(MetavarOrigin::Implicit(origin)) => {
+                MetavarOrigin::Implicit(origin) => {
                     Error::uninferred_implicit(origin.func.clone(), origin.binder.clone())
                 }
-                Some(MetavarOrigin::Witness(origin)) => {
+                MetavarOrigin::Witness(origin) => {
                     // The birth record's `result` is the goal type; display it through whatever solutions landed, keeping the raw spelling if holes survive.
                     let goal = context
                         .metavar_entry(*id)
@@ -937,9 +937,9 @@ fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
                     // No embedding diagnosis on this path: zonk holds the context immutably, and a `Lift` goal that survives to the splice report has already been reported richer by the resolution drains.
                     Error::no_witness(goal, origin.func.clone(), origin.binder.clone(), None)
                 }
-                None => Error::CannotInfer,
+                MetavarOrigin::Hole => Error::CannotInfer,
                 // Handled by the unconditional report above.
-                Some(MetavarOrigin::Goal) => unreachable!("a goal never reaches the splice path"),
+                MetavarOrigin::Goal => unreachable!("a goal never reaches the splice path"),
             };
             match term.span() {
                 Some(span) => error.at(span),
