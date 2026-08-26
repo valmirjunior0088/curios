@@ -229,3 +229,97 @@ fn blank_lines_normalize_to_exactly_one_between_items() {
     assert!(output.contains(";\n\nlet c"), "unexpected output: {output}");
     assert!(!output.contains("\n\n\n"), "unexpected output: {output}");
 }
+
+/// Every syntactic position a comment can be attached at, one fixture each: a `let` signature over a `choose`, a `match` with a local `let`, an `induct`, a `concept` body, and a `satisfy` body.
+///
+/// Unbound names are deliberate — formatting is syntax-only, so these need to parse and nothing more.
+const POSITIONS: [&str; 5] = [
+    "use /std/{Bool, Str, Option};\n\npub let of_str(s: Str) -> Option(Bool) =\n    choose\n    | s == \"true\" => Option/some(true)\n    | _ => Option/none()\n    end;\n",
+    "use /std/{Bool, Str};\n\npub let to_str(b: Bool) -> Str =\n    let x: Str = \"y\";\n    match b | true => x | false => \"false\" end;\n",
+    "pub induct Order: pub Type\n| lt()\n| eq()\n| gt()\nend\n",
+    "use /std/{Eql, Order};\n\npub concept Ord(A: Type): pub Type {\n    use Eql(A),\n    cmp(A, A) -> Order,\n}\n",
+    "use /std/{Eql, Bool};\n\nsatisfy Eql(Bool) {\n    eql = eql,\n    neq = xor,\n}\n",
+];
+
+/// **Formatting converges: a second run over the first run's output changes nothing.**
+///
+/// The one property the formatter's own verification cannot check, and the reason it cannot is structural. [`verify`](super::verify) compares *programs* — comments are not part of one — and counts comments, so a comment that merely *moves* passes both halves. A comment that moves to a position the next parse reads differently moves again, and a single `curios format` then leaves a file that no later run agrees with.
+///
+/// Every line of every fixture is tried twice, once with a comment on its own line above it and once riding its end, which is the whole space of positions a writer has.
+///
+/// **Ignored until attachment is decided from spans rather than inferred at render time.** Today 7 of 54 positions fail — 6 trailing and 1 leading, the last inside a `concept` body — because a comment is claimed by whichever node's geometry happens to reach it, and the claimant differs between the written form and the printed one. Un-ignore this when the attachment pass lands; it is that work's acceptance criterion.
+///
+/// ```sh
+/// cargo test --package curios-text -- --ignored formatting_converges
+/// ```
+#[test]
+#[ignore = "fails until comment attachment is decided from spans rather than inferred while printing"]
+fn formatting_converges_from_every_comment_position() {
+    let mut wandering = Vec::new();
+
+    for (fixture, source) in POSITIONS.iter().enumerate() {
+        let lines = source
+            .trim_end_matches('\n')
+            .split('\n')
+            .collect::<Vec<_>>();
+
+        for (index, line) in lines.iter().enumerate() {
+            let mut placements = vec![("leading", with_line(&lines, index, "-- MARK"))];
+            if !line.trim().is_empty() {
+                placements.push((
+                    "trailing",
+                    replacing(&lines, index, &format!("{line} -- MARK")),
+                ));
+            }
+
+            for (placement, perturbed) in placements {
+                let once = match Formatted::from_source(&Source::inline(&perturbed)) {
+                    Ok(Formatted::Unchanged(text) | Formatted::Changed(text)) => text,
+                    Err(refusal) => {
+                        wandering.push(format!(
+                            "{fixture}:{} {placement}: refused: {refusal}",
+                            index + 1
+                        ));
+                        continue;
+                    }
+                };
+
+                match Formatted::from_source(&Source::inline(&once)) {
+                    Ok(Formatted::Unchanged(_)) => {}
+                    Ok(Formatted::Changed(twice)) => wandering.push(format!(
+                        "{fixture}:{} {placement}: moved again\n--- once ---\n{once}--- twice ---\n{twice}",
+                        index + 1
+                    )),
+                    Err(refusal) => wandering.push(format!(
+                        "{fixture}:{} {placement}: its own output was refused: {refusal}",
+                        index + 1
+                    )),
+                }
+            }
+        }
+    }
+
+    assert!(
+        wandering.is_empty(),
+        "{} positions do not converge:\n\n{}",
+        wandering.len(),
+        wandering.join("\n\n")
+    );
+}
+
+/// `lines` with `inserted` on a line of its own before `index`.
+fn with_line(lines: &[&str], index: usize, inserted: &str) -> String {
+    let mut out = lines[..index].to_vec();
+    out.push(inserted);
+    out.extend_from_slice(&lines[index..]);
+
+    format!("{}\n", out.join("\n"))
+}
+
+/// `lines` with the line at `index` replaced by `replacement`.
+fn replacing(lines: &[&str], index: usize, replacement: &str) -> String {
+    let mut out = lines.to_vec();
+    out[index] = replacement;
+
+    format!("{}\n", out.join("\n"))
+}
