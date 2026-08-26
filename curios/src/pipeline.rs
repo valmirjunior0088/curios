@@ -154,7 +154,7 @@ pub(crate) fn compile_entry(
     let mut line: Option<Line> = None;
 
     // The CLI doesn't yet expose a way to supply `foreign` implementations, so its `ForeignStore` is dropped here.
-    compile_with_units(
+    let compiled = compile_with_units(
         budget,
         units,
         entrypoint,
@@ -162,8 +162,14 @@ pub(crate) fn compile_entry(
         cache,
         |_| {},
         |progress| report(&mut line, subject, grouped, progress),
-    )
-    .map(|(module, _foreigns)| module)
+    );
+
+    // A refusal is not a compiler dying mid-operation, which is the one case an unterminated line is left to mean: this one finished, and is about to say why. Closing the innermost line here is what lets the report below start at column zero, as every line of it after the first already does — and as the same `Report` renders through `wonder`.
+    if compiled.is_err() && line.is_some() {
+        eprintln!();
+    }
+
+    compiled.map(|(module, _foreigns)| module)
 }
 
 /// [`compile_entry`] over a target that has already been resolved to a path, for the profiling mode — which compiles one bare file and consults nothing.
