@@ -98,7 +98,10 @@ else
     echo "$version installed to $BIN_DIR/curios"
 fi
 
-case ":$PATH:" in
+# Whether *this* shell can see the directory is not the question worth asking: it is interactive, so it has read files that a desktop session never does, and the usual way this is discovered is an editor that cannot find `curios` while every terminal on the machine can. So ask a shell that reads no interactive startup file, which is the PATH an application launched outside a terminal inherits. A shell that cannot be asked falls back to this one, which is the weaker check rather than no check.
+launched_path=$(env -i HOME="$HOME" "${SHELL:-/bin/sh}" -lc 'printf %s "$PATH"' 2> /dev/null) || launched_path="$PATH"
+
+case ":$launched_path:" in
     *":$BIN_DIR:"*) ;;
-    *) echo "note: $BIN_DIR is not on your PATH — add it with: export PATH=\"\$HOME/.local/bin:\$PATH\"" ;;
+    *) echo "note: $BIN_DIR is missing from the PATH a non-interactive shell builds, so an application launched outside a terminal — an editor, most likely — will not find it. Put it where every shell reads it (~/.zshenv for zsh, ~/.profile for bash) with: export PATH=\"\$HOME/.local/bin:\$PATH\"" ;;
 esac
