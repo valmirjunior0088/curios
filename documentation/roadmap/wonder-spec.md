@@ -2,11 +2,11 @@
 
 ## Status
 
-The first landing is in: `curios wonder diagnostics`, `curios wonder stage`, and `curios wonder server` publishing diagnostics. This file now states only what is left, against what landed. The landed contracts live with the code — `curios/src/wonder.rs` and its submodules, `curios-package/src/membership.rs`, `curios-utilities`'s `Report`, `curios-pipeline`'s `CompileError`/`check_with_units`/`check_units_with_prelude`, and `curios-text`'s `Overlay` — and in `documentation/usage.md`'s "Asking about a program".
+The first landing is in: `curios wonder diagnostics`, `curios wonder stage`, and `curios wonder server` publishing diagnostics. Written goals report in every position they can be written — a local `let` annotation, a lambda domain and a `match` motive used to be mistaken for silent holes and swallowed, which `MetavarOrigin` now rules out. This file states only what is left, against what landed. The landed contracts live with the code — `curios/src/wonder.rs` and its submodules, `curios-package/src/membership.rs`, `curios-utilities`'s `Report`, `curios-pipeline`'s `CompileError`/`check_with_units`/`check_units_with_prelude`, and `curios-text`'s `Overlay` — and in `documentation/usage.md`'s "Asking about a program".
 
 ## Mission, unchanged
 
-`curios wonder` lets an agent and an editor ask the compiler what it knows about a program, and get the same answer. One engine, one record per fact, two ways to reach it: a query addressed by name, and a language server addressed by cursor. Neither consumer is secondary.
+`curios wonder` lets an agent and an editor ask the compiler what it knows about a program, and get the same answer. One engine, one record per fact, two ways to reach it. Neither consumer is secondary — but they ask differently, and that difference is what organizes the rest of this file: **an agent addresses by text**, editing a `?` into the program and reading `diagnostics`, where **an editor addresses by cursor**. A query belongs to the surface whose addressing it needs.
 
 ## What landed, in one paragraph each
 
@@ -18,23 +18,28 @@ The first landing is in: `curios wonder diagnostics`, `curios wonder stage`, and
 
 **A snapshot stops at the first failure**, as the compile path does, and a question never writes the store.
 
-## What is left
+## The agent surface
 
-Each item below is what the first landing deliberately did not do, with the change it needs.
+Complete except for one query. An agent's two needs are *does this compile* and *what type goes here*, and the compiler already answers both.
 
-- **`--json`.** Records derive a serialization trait behind a default-off feature, and every query gets a second projection asserted for shape beside its rendering. The renderings are already computed from the records, so this is a projection, not a refactor.
-- **Snapshot identity and `--depth`.** A snapshot digested from the compiler's identity, the scope's unit addresses, the depth and every source's path and content; every answer names it. `--depth` parameterizes a compilation beside `--budget`, `--unit` and `--manifest`, and may ask for more than a query needs, never less. Today `diagnostics` always runs to `certified` and `stage` to whatever rung was named.
-- **Declaration label spans**, on `TopLet`, `TopInduct`, `TopStruct`, `TopConcept`, their cases and fields, following `TopMod.span`'s exclusion from `PartialEq`. This unlocks `symbols` (`documentSymbol`), and `at`/`type` under a selector (`binding:/std/Lst/map`, `module:/std/Lst`).
-- **Anchors under locations.** `at <path:line:column>` at a written goal and at a declaration name, which is `hover`. A goal's type and scope are already batched; a declaration's elaborated type is on its `Definition`. A position inside neither yields nothing rather than a guess.
-- **`witnesses [<concept>]`**, one read of the `Context`'s witness table before it is discarded.
-- **`modules`**, the module tree from `RootSource`'s reads, each with origin and source.
-- **The server's other methods**: `hover` and `documentSymbol`, once the anchors and label spans exist.
-- **The measurement test.** A front-end snapshot costs an order of magnitude less than a compile, which is why whole-unit re-elaboration per edit is the starting position; the ignored test that carries the figure and the command that retakes it is not written.
+- **`diagnostics`** is the loop: every error and goal, rendered as `run` reports it, exit 0 once answered.
+- **`?`** is the type oracle, addressed by text. `let y: ? = e` reports `? = ` the type of `e`; a bare `?` reports the scope, the expected type, the obligations that hold it up and the candidate fits. Several `?` in one program report in one compile. This is not a query, and none is planned beside it: a `type`/`at` for the agent would answer by coordinate what `?` already answers by text, and a coordinate is the one thing an agent produces badly.
+- **`witnesses [<concept>]`**, to add: one read of the witness table before the `Context` is discarded — per entry, the concept, the head key, the declaring name and its type. It is the one fact no source line holds. Everything else an agent needs is on disk — `/std` in the tree, dependencies materialized under `.curios/src/` — and grep answers it better than a query would, so nothing else joins this list.
+
+## The editor surface
+
+`hover` and `documentSymbol`, once two things exist: declaration label spans on `TopLet`, `TopInduct`, `TopStruct`, `TopConcept`, their cases and fields, following `TopMod.span`'s exclusion from `PartialEq`; and an anchor under a cursor, at a written goal and at a declaration name. `hover` is then the goal record read by position rather than by text — the same engine, a second address — and a position inside neither yields nothing rather than a guess.
+
+## Hygiene, when a caller exists
+
+- **`--json`.** A projection of records already computed, asserted for shape beside each rendering. Built for the first harness that consumes it, not before: an agent reads the rendering.
+- **Snapshot identity and `--depth`.** A snapshot digested from the compiler's identity, the scope's unit addresses, the depth and every source's path and content, named by every answer. `--depth` is how far down the pipeline a query runs, beside `--budget`, `--unit` and `--manifest`; it may ask for more than a query needs, never less. Today `diagnostics` always runs to `certified` and `stage` to whatever rung was named, and the measurement that would justify a shallower default — a front-end snapshot against a compile, in the ignored test that carries the figure and the command that retakes it — is not written. The server, re-elaborating per edit, is where the figure pays.
+- **`modules`**, the module tree from `RootSource`'s reads. `ls` answers it today.
 - **The `wasm-optm` rung in a unit-less snapshot** is the transport's, not the engine's, and stays so.
 
 ## Not in any near landing
 
-- **Per-item recovery** in parse, lowering and elaboration — the only way a broken file answers more than the failure that stopped it. A substantial change to three loops on the shared compile path.
+- **Per-item recovery** in parse, lowering and elaboration — the only way a broken file answers more than the failure that stopped it, and the reason an agent's loop is one error per compile. A substantial change to three loops on the shared compile path.
 - **Occurrence ids and per-occurrence types**, and with them `references`, `definition` at an arbitrary cursor, semantic tokens, and rename.
 - **`scope`/completion**, which waits on recovery specifically.
 - **The binder table stored with a unit**, so `definition` reaches into a dependency.
