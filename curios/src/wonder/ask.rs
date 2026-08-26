@@ -12,6 +12,7 @@ use {
     curios_package::{Governing, LIBRARY, Membership, Target, mounted, names_a_file, order},
     curios_text::{Overlay, RootSource},
     std::{
+        collections::BTreeSet,
         io,
         path::{Path, PathBuf},
     },
@@ -150,16 +151,28 @@ pub fn wonder_diagnostics(
         }
     };
 
-    let rendered = answers
-        .into_iter()
-        .flat_map(|asked| asked.diagnostics(budget, &overlay))
-        .map(|diagnostic| diagnostic.render())
-        .collect::<Vec<_>>();
-    if !rendered.is_empty() {
-        println!("{}", rendered.join("\n\n"));
+    let reports = rendered(answers, budget, &overlay);
+    if !reports.is_empty() {
+        println!("{}", reports.join("\n\n"));
     }
 
     Ok(())
+}
+
+/// Every answer's diagnostics, rendered, each distinct fact once.
+///
+/// **The subjects of a whole package overlap, and one fact is still one fact.** Every executable is compiled against the library, so a diagnostic in the library is reached by the library's own subject and again by each executable's — one unbound variable printed three times in a package declaring two programs, which is what an agent's one-error-at-a-time loop then walks through. Collapsing is safe because a rendering carries the source, the line and the column beneath the message: two that compare equal say the same thing about the same place, and two about different places never compare equal.
+///
+/// The subjects themselves are still compiled apart, which is what keeps this a report about a package rather than about one compilation of it. What that costs — the library folded once per subject, answered from the store when there is one and recompiled when there is not — is the price of the same independence.
+pub(crate) fn rendered(answers: Vec<Asked>, budget: u64, overlay: &Overlay) -> Vec<String> {
+    let mut seen = BTreeSet::new();
+
+    answers
+        .into_iter()
+        .flat_map(|asked| asked.diagnostics(budget, overlay))
+        .map(|diagnostic| diagnostic.render())
+        .filter(|rendered| seen.insert(rendered.clone()))
+        .collect()
 }
 
 /// `wonder stage STAGE [TARGET]`: the rung, reprinted, to stdout.

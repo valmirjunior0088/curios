@@ -1,6 +1,6 @@
 use {
-    super::{Origin, ReadOnly, Severity, Subject, diagnostics},
-    crate::Verdicts,
+    super::{Origin, ReadOnly, Severity, Subject, diagnostics, rendered},
+    crate::{Asked, Verdicts},
     curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, Progress, check_units_with_prelude},
     curios_text::Overlay,
     std::{
@@ -201,4 +201,44 @@ fn write(root: &Path, path: &str, contents: &str) {
     let path = root.join(path);
     fs::create_dir_all(path.parent().unwrap()).unwrap();
     fs::write(path, contents).unwrap();
+}
+
+/// One fact is reported once, however many subjects reach it.
+///
+/// **The regression for a package's subjects overlapping.** `wonder diagnostics` with no target asks about the library and about every executable the package declares, and every executable is compiled against that library — so one unbound variable in it printed once per subject, three times in a package declaring two programs, and an agent walking its errors one at a time walked the same one three times.
+///
+/// Two subjects over one text stand in for that overlap. What the fix rests on is only that equal renderings are one fact, which the second half pins from the other side: two subjects saying different things still say both.
+#[test]
+fn one_fact_reached_by_two_subjects_is_rendered_once() {
+    let asked = |text: &str| Asked {
+        subject: Subject::Entry {
+            units: Vec::new(),
+            origin: Origin::Text {
+                label: "<stdin>".to_string(),
+                text: text.to_string(),
+            },
+        },
+        store: None,
+    };
+
+    let same = rendered(
+        vec![asked("/std/print(nope)"), asked("/std/print(nope)")],
+        DEFAULT_STEP_BUDGET,
+        &Overlay::default(),
+    );
+    let [one] = same.as_slice() else {
+        panic!("two subjects, one fact, got {same:?}");
+    };
+    assert!(one.contains("unbound variable: nope"), "{one}");
+
+    let different = rendered(
+        vec![asked("/std/print(nope)"), asked("/std/print(other)")],
+        DEFAULT_STEP_BUDGET,
+        &Overlay::default(),
+    );
+    assert_eq!(
+        different.len(),
+        2,
+        "two subjects, two facts, got {different:?}"
+    );
 }
