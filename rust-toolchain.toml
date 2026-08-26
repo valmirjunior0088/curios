@@ -1,5 +1,4 @@
 [toolchain]
 channel = "1.95.0"
 components = ["rustfmt", "clippy"]
-# Both wasm targets the tree builds for: the browser bundle's, and the Zed extension's. Listed here rather than in the CI jobs' toolchain inputs, because those install a target for `stable` while cargo in this tree uses the channel above.
 targets = ["wasm32-unknown-unknown", "wasm32-wasip2"]
