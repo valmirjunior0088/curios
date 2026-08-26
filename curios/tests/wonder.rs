@@ -3,10 +3,10 @@
 //! The engine's own behaviour — which records a program yields — is covered beside it in `wonder/tests.rs`; these decide what the transports do with them: that an answer is stdout and exit 0 whatever it says, that a file is placed in its unit, and that the server publishes the same records where the editor is looking and clears them when they go.
 
 use std::{
-    fs,
+    env, fs,
     io::{BufRead, BufReader, Read, Write},
     path::{Path, PathBuf},
-    process::{Child, Command, Output, Stdio},
+    process::{self, Child, ChildStdout, Command, Output, Stdio},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -17,9 +17,10 @@ fn temporary(name: &str) -> PathBuf {
         .unwrap()
         .as_millis();
 
-    std::env::temp_dir().join(format!(
+    // Canonical, because the server publishes the root the governance walk canonicalizes, and macOS's temporary directory sits behind a symlink (`/var` → `/private/var`): a URI computed from the raw path would never match the one published.
+    env::temp_dir().canonicalize().unwrap().join(format!(
         "curios-cli-wonder-{name}-{}-{millis}",
-        std::process::id()
+        process::id()
     ))
 }
 
@@ -133,7 +134,7 @@ fn an_unreached_stage_leaves_stdout_empty() {
 /// One side of the wire: frame a JSON-RPC message, and read one back.
 struct Editor {
     child: Child,
-    reader: BufReader<std::process::ChildStdout>,
+    reader: BufReader<ChildStdout>,
 }
 
 impl Editor {
