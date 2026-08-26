@@ -77,6 +77,8 @@ impl Curios {
         let candidate = format!("{home}/{INSTALLED_PATH}");
 
         // Spawning is what fails when there is no file, so the error case is the one that means absence; a process that ran and refused is a binary that exists and cannot serve.
+        //
+        // That reading holds only while `extension.toml` grants `process:exec`. Without the grant the host refuses the call before reaching the file, and the refusal arrives here as the same error a missing binary does — which is how this line once reported a working compiler as absent.
         match zed::process::Command::new(&candidate)
             .arg("--version")
             .output()

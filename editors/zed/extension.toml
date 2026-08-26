@@ -14,3 +14,10 @@ path = "editors/grammar"
 [language_servers.curios]
 name = "Curios"
 languages = ["Curios"]
+
+# Running a command is gated twice, and an undeclared one fails exactly as a missing binary does: `run_command` calls `grant_exec`, which checks this list before the user's `granted_extension_capabilities` — which permits everything by default, so this row is the gate that is actually shut. The extension needs it to ask a candidate binary whether it works before offering it as the language server.
+# `command` is `*` because the candidate is `$HOME/.local/bin/curios`, whose spelling differs per user, and matching is exact-or-`*` with no template between. `args` is what narrows the grant instead: exactly one argument, and only `--version`.
+[[capabilities]]
+kind = "process:exec"
+command = "*"
+args = ["--version"]
