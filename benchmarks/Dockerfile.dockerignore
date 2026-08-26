@@ -1,6 +1,13 @@
-.git
-target
-.claude
+**/.DS_Store
 **/.artifacts
 **/.lake
-*.wasm
+**/target
+**/node_modules
+**/*.wasm
+.git
+.agents
+.codex
+.claude
+.antigravitycli
+.learn
+editors/zed/grammars

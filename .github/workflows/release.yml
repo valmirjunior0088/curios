@@ -72,13 +72,13 @@ jobs:
         run: cargo xtask js
 
       - name: Archive package
-        run: tar -czf curios-js.tar.gz -C curios-js/.artifacts/wasm32-unknown-unknown .
+        run: mkdir -p .artifacts && tar -czf .artifacts/curios-js.tar.gz -C curios-js/.artifacts/wasm32-unknown-unknown .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: curios-js
-          path: curios-js.tar.gz
+          path: .artifacts/curios-js.tar.gz
           retention-days: 1
 
   docs:
@@ -108,13 +108,13 @@ jobs:
         run: echo '<!DOCTYPE html><meta http-equiv="refresh" content="0; url=curios/index.html">' > target/doc/index.html
 
       - name: Archive docs
-        run: tar -czf curios-docs.tar.gz -C target/doc .
+        run: mkdir -p .artifacts && tar -czf .artifacts/curios-docs.tar.gz -C target/doc .
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: curios-docs
-          path: curios-docs.tar.gz
+          path: .artifacts/curios-docs.tar.gz
           retention-days: 1
 
   release:
@@ -131,21 +131,21 @@ jobs:
 
       - uses: actions/download-artifact@v7
         with:
-          path: artifacts
+          path: .artifacts/downloads
 
       - name: Rename artifacts
         run: |
-          mv artifacts/curios-linux-x86_64/curios curios-linux-x86_64
-          mv artifacts/curios-linux-aarch64/curios curios-linux-aarch64
-          mv artifacts/curios-macos-aarch64/curios curios-macos-aarch64
-          mv artifacts/curios-js/curios-js.tar.gz curios-js.tar.gz
-          mv artifacts/curios-docs/curios-docs.tar.gz curios-docs.tar.gz
+          mv .artifacts/downloads/curios-linux-x86_64/curios .artifacts/curios-linux-x86_64
+          mv .artifacts/downloads/curios-linux-aarch64/curios .artifacts/curios-linux-aarch64
+          mv .artifacts/downloads/curios-macos-aarch64/curios .artifacts/curios-macos-aarch64
+          mv .artifacts/downloads/curios-js/curios-js.tar.gz .artifacts/curios-js.tar.gz
+          mv .artifacts/downloads/curios-docs/curios-docs.tar.gz .artifacts/curios-docs.tar.gz
 
       # The installer's version is baked in here rather than discovered at run time, so the script a release ships installs that release's binary and a pinned URL stays pinned. The template is rendered to a fresh file rather than edited in place: what ships is a build product, never a mutated checkout.
       - name: Prepare installer
         run: |
-          sha256sum curios-linux-x86_64 curios-linux-aarch64 curios-macos-aarch64 > checksums.txt
-          sed "s/@VERSION@/${GITHUB_REF_NAME#release/}/" .github/workflows/install.sh.in > install.sh
+          (cd .artifacts && sha256sum curios-linux-x86_64 curios-linux-aarch64 curios-macos-aarch64 > checksums.txt)
+          sed "s/@VERSION@/${GITHUB_REF_NAME#release/}/" .github/workflows/install.sh.in > .artifacts/install.sh
 
       - name: Create release
         env:
@@ -154,10 +154,10 @@ jobs:
           gh release create ${{ github.ref_name }} \
             --title "${{ github.ref_name }}" \
             --generate-notes \
-            curios-linux-x86_64 \
-            curios-linux-aarch64 \
-            curios-macos-aarch64 \
-            curios-js.tar.gz \
-            curios-docs.tar.gz \
-            checksums.txt \
-            install.sh
+            .artifacts/curios-linux-x86_64 \
+            .artifacts/curios-linux-aarch64 \
+            .artifacts/curios-macos-aarch64 \
+            .artifacts/curios-js.tar.gz \
+            .artifacts/curios-docs.tar.gz \
+            .artifacts/checksums.txt \
+            .artifacts/install.sh
