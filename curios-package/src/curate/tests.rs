@@ -187,28 +187,7 @@ fn a_fetched_revision_is_verified_and_placed() {
     // What the delivery must hash to: the same files, with no repository around them.
     let expected = TreeHash::of(&tree("curate-expected", files)).unwrap();
 
-    let origin = tree("curate-origin", files);
-    for arguments in [
-        vec!["init", "--quiet"],
-        vec!["config", "user.email", "probe@example"],
-        vec!["config", "user.name", "probe"],
-        vec!["add", "."],
-        vec!["commit", "--quiet", "-m", "one"],
-    ] {
-        git(&origin, &arguments).expect("a repository on this machine");
-    }
-
-    let revision = String::from_utf8(
-        Command::new("git")
-            .current_dir(&origin)
-            .args(["rev-parse", "HEAD"])
-            .output()
-            .unwrap()
-            .stdout,
-    )
-    .unwrap()
-    .trim()
-    .to_string();
+    let (origin, revision) = origin("curate-origin", files);
 
     let root = tree("curate-fetch", &[("curios.toml", "name = \"app\"\n")]);
     let acquisition = Acquisition {
@@ -231,4 +210,117 @@ fn a_fetched_revision_is_verified_and_placed() {
 
     fs::remove_dir_all(origin).unwrap();
     fs::remove_dir_all(root).unwrap();
+}
+
+/// A repository on this machine holding `files`, on a branch and at a tag, with the object name of its one commit.
+///
+/// The remote every fetching test serves from: local, so none of them needs a network.
+fn origin(name: &str, files: &[(&str, &str)]) -> (PathBuf, String) {
+    let origin = tree(name, files);
+
+    for arguments in [
+        vec!["init", "--quiet"],
+        vec!["config", "user.email", "probe@example"],
+        vec!["config", "user.name", "probe"],
+        vec!["add", "."],
+        vec!["commit", "--quiet", "-m", "one"],
+        vec!["tag", "v1"],
+    ] {
+        git(&origin, &arguments).expect("a repository on this machine");
+    }
+
+    let revision = String::from_utf8(
+        Command::new("git")
+            .current_dir(&origin)
+            .args(["rev-parse", "HEAD"])
+            .output()
+            .unwrap()
+            .stdout,
+    )
+    .unwrap()
+    .trim()
+    .to_string();
+
+    (origin, revision)
+}
+
+/// One acquisition of `origin` at `rev`, pinned to `hash`.
+fn pinned(origin: &Path, rev: &str, hash: &TreeHash) -> Acquisition {
+    Acquisition {
+        name: "http".to_string(),
+        url: format!("file://{}", origin.display()),
+        snapshot: Snapshot {
+            rev: rev.to_string(),
+            hash: hash.clone(),
+        },
+    }
+}
+
+/// A revision the remote does not hold is refused naming the revision, never the hash.
+///
+/// **The regression for the deep fetch reaching for `FETCH_HEAD`.** A refspec-less fetch points `FETCH_HEAD` at the remote's default branch, so falling back to it delivered *that* for any pin the shallow fetch could not serve — a wrong `rev` included. The hash then refused what arrived, which reads as "your hash is wrong" and sends a reader to correct the one column that was right; correcting it would have pinned whatever the default branch held that day.
+#[test]
+#[ignore = "shells out to git; the remote is local, so this needs no network"]
+fn a_revision_the_remote_does_not_hold_is_refused_naming_the_revision() {
+    let files = &[
+        ("curios.toml", "name = \"http\"\n"),
+        ("lib.crs", "pub let get : Type = Type;"),
+    ];
+    let expected = TreeHash::of(&tree("curate-absent-expected", files)).unwrap();
+    let (origin, _) = origin("curate-absent-origin", files);
+
+    let root = tree("curate-absent", &[("curios.toml", "name = \"app\"\n")]);
+    let absent = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef";
+
+    let refusal = fetch(
+        &Store::at(root.clone()),
+        &pinned(&origin, absent, &expected),
+    )
+    .expect_err("a revision this remote does not hold");
+
+    assert!(refusal.contains(absent), "{refusal}");
+    assert!(
+        !refusal.contains("not what it is pinned to"),
+        "the fault is the revision, not the hash: {refusal}"
+    );
+
+    fs::remove_dir_all(origin).unwrap();
+    fs::remove_dir_all(root).unwrap();
+}
+
+/// A pin may name a branch or a tag, not only an object, and both still deliver.
+///
+/// The other side of the refusal above, and the reason it is not simply a deleted fallback: a shallow fetch of a *ref* leaves no local branch of that name, so `FETCH_HEAD` is the only spelling of what it brought. Checking out by name is what the deep fetch does, and only it.
+#[test]
+#[ignore = "shells out to git; the remote is local, so this needs no network"]
+fn a_pin_naming_a_branch_or_a_tag_is_delivered() {
+    let files = &[
+        ("curios.toml", "name = \"http\"\n"),
+        ("lib.crs", "pub let get : Type = Type;"),
+    ];
+    let expected = TreeHash::of(&tree("curate-refs-expected", files)).unwrap();
+    let (origin, revision) = origin("curate-refs-origin", files);
+
+    for rev in [revision.as_str(), "v1", "master", "main"] {
+        let root = tree("curate-refs", &[("curios.toml", "name = \"app\"\n")]);
+        let store = Store::at(root.clone());
+
+        // Whichever name `git init` gave the branch is the one that exists; the other is simply absent from this remote.
+        if rev == "master" || rev == "main" {
+            let held = git(&origin, &["rev-parse", "--verify", rev]).is_ok();
+            if !held {
+                fs::remove_dir_all(root).unwrap();
+                continue;
+            }
+        }
+
+        fetch(&store, &pinned(&origin, rev, &expected)).unwrap_or_else(|refusal| {
+            panic!("{rev} names a revision this remote holds: {refusal}")
+        });
+        assert!(store.src(&expected).join("lib.crs").is_file(), "{rev}");
+
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    fs::remove_dir_all(origin).unwrap();
 }

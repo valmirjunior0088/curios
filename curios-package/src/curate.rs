@@ -177,18 +177,19 @@ fn deliver(scratch: &Path, acquisition: &Acquisition) -> Result<(), String> {
     git(scratch, &["init", "--quiet"])?;
     git(scratch, &["remote", "add", "origin", &acquisition.url])?;
 
-    // A shallow fetch of one revision is what this wants, and a server may decline to serve one by object name; the deep fetch is the fallback rather than the default because the whole history is the thing worth not transferring.
-    if git(
+    // A shallow fetch of the one revision is what this wants, and what it brought is `FETCH_HEAD` — which is the pin whether it named an object, a branch or a tag, and the only spelling that is. A fetched branch leaves no local ref of its own, so checking one out by the name it was pinned under is what does not work here.
+    match git(
         scratch,
         &["fetch", "--quiet", "--depth", "1", "origin", rev],
-    )
-    .is_err()
-    {
-        git(scratch, &["fetch", "--quiet", "origin"])?;
-    }
+    ) {
+        Ok(()) => git(scratch, &["checkout", "--quiet", "--detach", "FETCH_HEAD"])?,
 
-    git(scratch, &["checkout", "--quiet", "--detach", rev])
-        .or_else(|_| git(scratch, &["checkout", "--quiet", "--detach", "FETCH_HEAD"]))?;
+        // A server may decline to serve one revision by object name, and the whole history is the fallback rather than the default because it is the thing worth not transferring. The revision is then resolved against that history *by name*, never through `FETCH_HEAD`: a refspec-less fetch points it at the remote's default branch, so reaching for it here would deliver whatever that branch holds for any pin the shallow fetch could not serve — including one naming a revision that does not exist, which is how a wrong `rev` came to be reported as a delivery disagreeing with its `hash`.
+        Err(_) => {
+            git(scratch, &["fetch", "--quiet", "origin"])?;
+            git(scratch, &["checkout", "--quiet", "--detach", rev])?;
+        }
+    }
 
     // Source is what was delivered; the object store is how it arrived. A fresh clone's differs run to run, so leaving it in would make the hash unreproducible and the store key meaningless.
     fs::remove_dir_all(scratch.join(".git"))
