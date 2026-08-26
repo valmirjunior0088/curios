@@ -34,11 +34,21 @@ esac
 
 if command -v curl > /dev/null 2>&1; then
     fetch() { curl -fsSL "$1" -o "$2"; }
+    fetch_with_progress() { curl -fL --progress-bar "$1" -o "$2"; }
 elif command -v wget > /dev/null 2>&1; then
     fetch() { wget -q "$1" -O "$2"; }
+    # `--show-progress` arrived in GNU wget 1.16, and without it the meter cannot be separated from the rest of the chatter `-q` suppresses. An older wget downloads silently rather than verbosely.
+    if wget --help 2>&1 | grep -q -- --show-progress; then
+        fetch_with_progress() { wget -q --show-progress "$1" -O "$2"; }
+    else
+        fetch_with_progress() { fetch "$1" "$2"; }
+    fi
 else
     die "neither curl nor wget is available"
 fi
+
+# A meter is for someone watching one. Piped into a CI log it is a line of redrawn noise, and curl draws it there regardless of the pipe, so whether to ask for one is decided here rather than left to the tool.
+[ -t 2 ] || fetch_with_progress() { fetch "$1" "$2"; }
 
 if command -v sha256sum > /dev/null 2>&1; then
     digest_of() { sha256sum "$1" | cut -d' ' -f1; }
@@ -55,7 +65,7 @@ trap 'rm -rf "$work" "$staged"' EXIT INT TERM
 base="$REPO/releases/download/release/$VERSION"
 
 echo "Downloading Curios $VERSION ($asset)"
-fetch "$base/$asset" "$work/curios" || die "could not download $base/$asset"
+fetch_with_progress "$base/$asset" "$work/curios" || die "could not download $base/$asset"
 fetch "$base/checksums.txt" "$work/checksums.txt" || die "could not download $base/checksums.txt"
 
 # Both come from the release named above rather than from `latest`, so a release published mid-install cannot pair one version's binary with another's checksum. This catches a truncated download or a swapped asset; it is not a defense against a compromised release, since the digest travels the same channel the binary does.
