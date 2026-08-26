@@ -1,6 +1,6 @@
 //! Supplies the runtime launcher's path to the `curios` binary.
 //!
-//! The launcher is produced by `make curios/runtime`, which builds `curios-runtime` in its own Cargo invocation so that workspace feature unification cannot reach it — this crate enables `curios-runtime/cranelift`, and a launcher built alongside it would carry a compiler. That isolation needs a second invocation, so it cannot happen here; this script only locates what that invocation left behind, and refuses clearly when it is absent or stale.
+//! The launcher is produced by `cargo xtask runtime`, which builds `curios-runtime` in its own Cargo invocation so that workspace feature unification cannot reach it — this crate enables `curios-runtime/cranelift`, and a launcher built alongside it would carry a compiler. That isolation needs a second invocation, so it cannot happen here; this script only locates what that invocation left behind, and refuses clearly when it is absent or stale.
 //!
 //! The path is `.artifacts/<triple>` beside this crate rather than anywhere under Cargo's target tree, so `cargo clean` does not delete it and no build script has to reconstruct Cargo's internal directory layout to find it. `CARGO_MANIFEST_DIR` is a documented interface; `OUT_DIR`'s ancestry is not.
 
@@ -36,7 +36,7 @@ fn main() {
     // `cargo::error` needs the *two*-colon form. `cargo:error` is parsed as an unknown metadata key and discarded without a word, so the single-colon spelling everywhere else in this file is not a style this line may be made to match.
     if !launcher.is_file() {
         println!(
-            "cargo::error=the {target_triple} runtime launcher is missing: run `make curios` to build it and this crate together, or `make curios/runtime` for the launcher alone"
+            "cargo::error=the {target_triple} runtime launcher is missing: run `cargo xtask build` to build it and this crate together, or `cargo xtask runtime` for the launcher alone"
         );
         return;
     }
@@ -59,7 +59,7 @@ fn main() {
         && built < sources
     {
         println!(
-            "cargo::warning=the {target_triple} runtime launcher is older than `curios-runtime`'s sources; run `make curios/runtime` to rebuild it"
+            "cargo::warning=the {target_triple} runtime launcher is older than `curios-runtime`'s sources; run `cargo xtask runtime` to rebuild it"
         );
     }
 

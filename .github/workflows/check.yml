@@ -42,7 +42,7 @@ jobs:
             curios/.artifacts
             curios-binaryen/.artifacts
       - name: Build runtime launcher
-        run: make curios/runtime
+        run: cargo xtask runtime
       - name: Run cargo check
         run: cargo check --workspace --all-targets --all-features
 
@@ -61,7 +61,7 @@ jobs:
             curios/.artifacts
             curios-binaryen/.artifacts
       - name: Build runtime launcher
-        run: make curios/runtime
+        run: cargo xtask runtime
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets --all-features -- -Dwarnings
 
@@ -78,7 +78,7 @@ jobs:
             curios/.artifacts
             curios-binaryen/.artifacts
       - name: Build runtime launcher
-        run: make curios/runtime
+        run: cargo xtask runtime
       - name: Run tests
         run: cargo test --workspace --all-targets --all-features
 
@@ -97,7 +97,7 @@ jobs:
             curios/.artifacts
             curios-binaryen/.artifacts
       - name: Build runtime launcher
-        run: make curios/runtime
+        run: cargo xtask runtime
       - name: Run cargo doc
         run: cargo doc --workspace --no-deps
 
@@ -113,12 +113,8 @@ jobs:
       - uses: Swatinem/rust-cache@v2
         with:
           key: wasm32-unknown-unknown
-      - name: Install wasm-bindgen-cli
-        run: |
-          version=$(grep -A1 'name = "wasm-bindgen"' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
-          cargo install wasm-bindgen-cli --version "$version" --locked
       - name: Build curios-js
-        run: make curios/js
+        run: cargo xtask js
 
   grammar:
     name: Grammar parser
@@ -131,12 +127,14 @@ jobs:
           node-version: lts/*
           cache: npm
           cache-dependency-path: editors/grammar/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: xtask
       - name: Install dependencies
-        run: npm ci
-        working-directory: editors/grammar
+        run: cargo xtask grammar ci
       - name: Run grammar tests
-        run: npm test
-        working-directory: editors/grammar
+        run: cargo xtask grammar test
 
   vscode:
     name: VS Code extension
@@ -149,16 +147,16 @@ jobs:
           node-version: lts/*
           cache: npm
           cache-dependency-path: editors/vscode/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: xtask
       - name: Install dependencies
-        run: npm ci
-        working-directory: editors/vscode
+        run: cargo xtask vscode ci
       - name: Run grammar snapshot tests
-        run: npm test
-        working-directory: editors/vscode
-      # Packaging is what a tester actually installs, and it runs the bundler, the manifest validation and the ignore list in one step — none of which the snapshot tests touch.
+        run: cargo xtask vscode test
       - name: Package the extension
-        run: npm run package
-        working-directory: editors/vscode
+        run: cargo xtask vscode run package
 
   zed:
     name: Zed extension
@@ -166,18 +164,16 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
-      # The pinned toolchain, not stable: `rust-toolchain.toml` governs cargo in this tree, and its `targets` row is what installs wasm32-wasip2.
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
           key: wasm32-wasip2
-          workspaces: editors/zed
+          workspaces: |
+            .
+            editors/zed
       - name: Run rustfmt
-        run: cargo fmt --all -- --check
-        working-directory: editors/zed
+        run: cargo xtask zed fmt --all -- --check
       - name: Run Clippy
-        run: cargo clippy --target wasm32-wasip2 -- -Dwarnings
-        working-directory: editors/zed
+        run: cargo xtask zed clippy --target wasm32-wasip2 -- -Dwarnings
       - name: Build extension
-        run: cargo build --release --target wasm32-wasip2
-        working-directory: editors/zed
+        run: cargo xtask zed build --release --target wasm32-wasip2

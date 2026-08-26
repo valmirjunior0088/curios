@@ -246,7 +246,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 
 - [x] CLI (`run` and `compile` subcommands — `compile` bundles a native executable: launcher + appended `.cwasm`)
 - [x] Staged IR debugging (`wonder stage <name>`, one pipeline rung reprinted to stdout; it retired the `--print` flag, which dumped comma-selected stages to stderr and filed what it built where a question files nothing)
-- [x] Built-in tracing-based profiling harness (`make curios/profile`; per-span aggregation through the workspace-wide `profile` feature)
+- [x] Built-in tracing-based profiling harness (`cargo xtask profile`; per-span aggregation through the workspace-wide `profile` feature)
 - [x] CI pipeline (fmt/check/clippy/test)
 - [x] Multi-platform release automation (Linux x86_64/aarch64, macOS aarch64 native binaries + wasm playground bundle, via tag-triggered GitHub Releases)
 - [x] Browser playground

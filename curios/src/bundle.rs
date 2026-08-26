@@ -5,7 +5,7 @@ use {
     std::{fs, os::unix::fs::PermissionsExt, path::Path},
 };
 
-/// The slim `curios-runtime` launcher stub, embedded at build time. Produced by `make curios/runtime` (an isolated `--package curios-runtime` build, kept Cranelift/Binaryen-free) into `curios/.artifacts/<triple>`, which is outside Cargo's target tree so `cargo clean` cannot remove it. Absence is caught before this line: `build.rs` emits a `cargo::error` naming the command to run. So `compile` needs no launcher lookup at runtime.
+/// The slim `curios-runtime` launcher stub, embedded at build time. Produced by `cargo xtask runtime` (an isolated `--package curios-runtime` build, kept Cranelift/Binaryen-free) into `curios/.artifacts/<triple>`, which is outside Cargo's target tree so `cargo clean` cannot remove it. Absence is caught before this line: `build.rs` emits a `cargo::error` naming the command to run. So `compile` needs no launcher lookup at runtime.
 const LAUNCHER: &[u8] = include_bytes!(env!("CURIOS_RUNTIME_BIN"));
 
 /// Build a self-contained executable: the embedded launcher stub with the `.cwasm` payload and its footer appended to the tail (see [`curios_runtime::append_payload`]).
@@ -56,7 +56,7 @@ mod tests {
                 !LAUNCHER
                     .windows(marker.len())
                     .any(|window| window == marker),
-                "the embedded launcher contains `{}` — it was not built by `make curios/runtime`, or a default feature now reaches a native backend",
+                "the embedded launcher contains `{}` — it was not built by `cargo xtask runtime`, or a default feature now reaches a native backend",
                 String::from_utf8_lossy(marker),
             );
         }
@@ -85,7 +85,7 @@ mod tests {
     /// 1. add `cranelift = ["wasmtime/cranelift"]` to `curios-runtime`'s `[features]`
     /// 2. `cargo build --release -p curios-runtime --target <triple> --features cranelift`
     /// 3. inspect `target/<triple>/release/curios-runtime`
-    /// 4. revert the manifest and re-run `make curios/runtime`
+    /// 4. revert the manifest and re-run `cargo xtask runtime`
     ///
     /// **2026-08-14, aarch64-apple-darwin, release profile (no `[profile]` section, so no stripping).** Slim: 3,633,792 bytes, zero occurrences of every marker. Cranelift-linked: **11,693,168 bytes**, `cranelift-codegen` ×113 and `cranelift_codegen` ×8. Both guards were run against that image and both failed, which is the evidence this test exists to record. Note that dead-code elimination does *not* remove the backend even though the launcher calls no compiling API — enabling the feature is enough.
     ///

@@ -26,6 +26,7 @@ members = [
     "curios",
     "curios-binaryen",
     "curios-runtime",
+    "xtask",
 ]
 exclude = ["editors/zed"]
 
@@ -65,3 +66,6 @@ curios-pipeline = { path = "curios-pipeline" }
 curios-package = { path = "curios-package" }
 curios-binaryen = { path = "curios-binaryen" }
 curios-runtime = { path = "curios-runtime" }
+clap = { version = "4.6.1", features = ["derive"] }
+wasm-bindgen = { version = "0.2.126" }
+wasm-bindgen-cli-support = { version = "0.2.126" }

@@ -29,7 +29,7 @@ curios-unit = { workspace = true, features = ["archive"] }
 curios-binaryen = { workspace = true }
 # The switch that turns Cranelift on for the shared runtime engine, which is what gives `curios_runtime::precompile` its `precompile_module`. Named nowhere in this crate's code: wasmtime itself is `curios-runtime`'s to own.
 curios-runtime = { workspace = true, features = ["cranelift"] }
-clap = { version = "4.6.1", features = ["derive"] }
+clap = { workspace = true }
 lsp-server = "0.10.0"
 lsp-types = "0.97.0"
 serde_json = "1.0.151"

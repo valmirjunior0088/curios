@@ -34,8 +34,6 @@ jobs:
       - uses: actions/checkout@v6
 
       - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
         with:
@@ -45,15 +43,13 @@ jobs:
             curios-binaryen/.artifacts
 
       - name: Build
-        run: |
-          make curios/runtime CURIOS_RUNTIME_TARGET_TRIPLE=${{ matrix.target }}
-          cargo build --release --target ${{ matrix.target }} --package curios
+        run: cargo xtask build
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: ${{ matrix.asset }}
-          path: target/${{ matrix.target }}/release/curios
+          path: target/release/curios
           retention-days: 1
 
   wasm:
@@ -72,13 +68,8 @@ jobs:
         with:
           key: wasm32-unknown-unknown
 
-      - name: Install wasm-bindgen-cli
-        run: |
-          version=$(grep -A1 'name = "wasm-bindgen"' Cargo.lock | grep version | head -1 | cut -d'"' -f2)
-          cargo install wasm-bindgen-cli --version "$version" --locked
-
       - name: Build curios-js
-        run: make curios/js
+        run: cargo xtask js
 
       - name: Archive package
         run: tar -czf curios-js.tar.gz -C curios-js/.artifacts/wasm32-unknown-unknown .
@@ -108,7 +99,7 @@ jobs:
             curios-binaryen/.artifacts
 
       - name: Build runtime launcher
-        run: make curios/runtime
+        run: cargo xtask runtime
 
       - name: Build docs
         run: cargo doc --workspace --no-deps

@@ -1,0 +1,14 @@
+[package]
+name = "xtask"
+description = "The workspace's build recipes as a cargo subcommand: the isolated runtime launcher, the compiler, the browser bundle, a profile run, and the benchmarks"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+wasm-bindgen-cli-support = { workspace = true }
+clap = { workspace = true }

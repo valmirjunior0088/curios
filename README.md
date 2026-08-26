@@ -128,10 +128,10 @@ Building requires Rust (`rustup` installs the pinned toolchain from `rust-toolch
 ```sh
 git clone https://github.com/valmirjunior0088/curios
 cd curios
-make curios
+cargo xtask build
 ```
 
-The resulting CLI is `target/release/curios`. The build has two stages — a slim runtime launcher, then the compiler that embeds it — and `make curios` runs both in order.
+The resulting CLI is `target/release/curios`. The build has two stages — a slim runtime launcher, then the compiler that embeds it — and `cargo xtask build` runs both in order.
 
 ## Go deeper
 
