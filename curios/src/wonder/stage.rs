@@ -4,6 +4,7 @@
 
 use {
     super::{Diagnostic, Origin, ReadOnly, of_error, open, overlaid},
+    crate::Verdicts,
     curios_pipeline::{Cache, Stage, compile_with_units},
     curios_text::{Overlay, RootSource},
 };
@@ -37,7 +38,7 @@ pub fn stage(
     units: Vec<RootSource>,
     origin: Origin,
     overlay: &Overlay,
-    cache: Option<&dyn Cache>,
+    cache: Option<&Verdicts>,
     name: &str,
 ) -> Result<Reached, Refusal> {
     let Some(name) = Stage::NAMES.into_iter().find(|known| *known == name) else {

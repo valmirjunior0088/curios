@@ -2,6 +2,7 @@
 
 use {
     super::{Diagnostic, Severity},
+    crate::Verdicts,
     curios_pipeline::{Cache, CompileError, check_units_with_prelude, check_with_units},
     curios_text::{Entrypoint, Overlay, RootSource, UnitSource},
     curios_unit::Unit,
@@ -38,7 +39,7 @@ pub fn diagnostics(
     budget: u64,
     subject: Subject,
     overlay: &Overlay,
-    cache: Option<&dyn Cache>,
+    cache: Option<&Verdicts>,
 ) -> Vec<Diagnostic> {
     let read_only = cache.map(|cache| ReadOnly { cache, overlay });
     let cache = read_only.as_ref().map(|cache| cache as &dyn Cache);
@@ -114,7 +115,7 @@ pub(crate) fn overlaid(units: Vec<RootSource>, overlay: &Overlay) -> Vec<RootSou
 ///
 /// **A unit the overlay reaches is a miss.** A stored unit is believed on a re-read of every file it was compiled from, and that re-read knows only the disk — so a unit whose source an editor holds unsaved would be handed back against text nobody asked about, and the document being edited is exactly the one whose verdicts were asked for. Refusing the hit costs that one unit's compilation; every unit the overlay does not reach still comes from the store, which is what keeps a check per keystroke from rebuilding a package's dependencies.
 pub(crate) struct ReadOnly<'a> {
-    pub(crate) cache: &'a dyn Cache,
+    pub(crate) cache: &'a Verdicts,
     pub(crate) overlay: &'a Overlay,
 }
 
@@ -126,5 +127,10 @@ impl Cache for ReadOnly<'_> {
         }
     }
 
-    fn put(&self, _source: &UnitSource<'_>, _unit: &Unit) {}
+    /// Placed, not filed — and this is why the store itself is held rather than a `dyn Cache`.
+    ///
+    /// Dropping the write is the whole of what read-only means. Dropping the *placement* with it is a second thing nobody asked for: a slot is addressed after the units placed before it, so a unit missing from that chain shifts every later address by one, and one declined hit becomes a miss for every unit after it. A `dyn Cache` has no way to say the first without the second.
+    fn put(&self, source: &UnitSource<'_>, unit: &Unit) {
+        self.cache.place(source, unit);
+    }
 }

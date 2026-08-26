@@ -10,7 +10,6 @@ use {
         to_cwasm_dumped,
     },
     curios_package::{Governing, LIBRARY, Membership, Target, mounted, names_a_file, order},
-    curios_pipeline::Cache,
     curios_text::{Overlay, RootSource},
     std::{
         io,
@@ -109,12 +108,7 @@ impl Asked {
 
     /// Every diagnostic and goal the subject reports.
     pub fn diagnostics(self, budget: u64, overlay: &Overlay) -> Vec<Diagnostic> {
-        diagnostics(
-            budget,
-            self.subject,
-            overlay,
-            self.store.as_ref().map(|store| store as &dyn Cache),
-        )
+        diagnostics(budget, self.subject, overlay, self.store.as_ref())
     }
 }
 
@@ -191,7 +185,7 @@ pub fn wonder_stage(
             "a library has no stages of its own — name an executable or a program file".to_string(),
         );
     };
-    let cache = asked.store.as_ref().map(|store| store as &dyn Cache);
+    let cache = asked.store.as_ref();
 
     match stage(budget, units, origin, &overlay, cache, name) {
         Ok(Reached::Rendered(rendering)) => println!("{}", rendering.text),

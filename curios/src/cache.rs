@@ -141,6 +141,41 @@ impl Verdicts {
 
         Some(placed)
     }
+
+    /// Place `unit` in the chain without filing it: what a caller that may read the store but not write it does with a unit it had to compile.
+    ///
+    /// **Placing and filing are one call but not one decision, and only filing is optional.** A slot is addressed after the units placed before it, so a unit left out of the chain shifts every later unit's address by one — turning one declined hit into a miss for the whole tail, which is the cost declining it was supposed to avoid. Serializing without writing is what placing costs instead: the digest of those bytes is the fact the next unit's record is verified against, and nothing cheaper produces it.
+    pub(crate) fn place(&self, source: &UnitSource<'_>, unit: &Unit) {
+        if let Some((placed, _)) = self.placement(source, unit) {
+            self.placed.borrow_mut().push(placed);
+        }
+    }
+
+    /// The place `unit` takes in the chain after everything placed so far, and the bytes it would be filed as — `None` when it may not be placed at all.
+    ///
+    /// Shared by [`Verdicts::place`] and [`Cache::put`], so the two cannot come to different answers about which units enter the chain: a unit this refuses is one neither may place, or a successor's record would vouch for a predecessor that nothing here can produce again.
+    fn placement(
+        &self,
+        source: &UnitSource<'_>,
+        unit: &Unit,
+    ) -> Option<(Placed, curios_archive::Serialized)> {
+        let slot = self.slot(source, &self.placed.borrow())?;
+
+        // The rule a stored unit is checked against, at the second seam a unit is written — the first being the prelude's build script. An identity meaningful only in the compilation that made it has no safe direction to degrade in: restored beside a unit whose own counters hand out the same index, it aliases silently rather than failing, which admits. Storing nothing is always safe, so a unit that would carry one is dropped rather than refused: the compilation it came from is correct, and only the record is withheld.
+        if curios_core::validate_stored_identities(unit.core()).is_err() {
+            return None;
+        }
+
+        let bytes = curios_archive::to_bytes(unit).ok()?;
+
+        Some((
+            Placed {
+                slot,
+                contained: digest(&bytes),
+            },
+            bytes,
+        ))
+    }
 }
 
 impl Cache for Verdicts {
@@ -169,33 +204,21 @@ impl Cache for Verdicts {
         Some(restored)
     }
 
-    fn put(&self, source: &UnitSource<'_>, unit_: &Unit) {
-        let Some(slot) = self.slot(source, &self.placed.borrow()) else {
-            return;
-        };
-
-        // The rule a stored unit is checked against, at the second seam a unit is written — the first being the prelude's build script. An identity meaningful only in the compilation that made it has no safe direction to degrade in: restored beside a unit whose own counters hand out the same index, it aliases silently rather than failing, which admits. Storing nothing is always safe, so a unit that would carry one is dropped rather than refused: the compilation it came from is correct, and only the record is withheld.
-        if curios_core::validate_stored_identities(unit_.core()).is_err() {
-            return;
-        }
-
-        let Ok(bytes) = curios_archive::to_bytes(unit_) else {
+    fn put(&self, source: &UnitSource<'_>, unit: &Unit) {
+        let Some((placed, bytes)) = self.placement(source, unit) else {
             return;
         };
 
         let filed = curios_archive::to_bytes(&recorded(source, &self.placed.borrow()))
             .map_err(io::Error::other)
-            .and_then(|record| replace(&self.store.unit(&slot), STORED, &bytes, &record));
+            .and_then(|record| replace(&self.store.unit(&placed.slot), STORED, &bytes, &record));
 
         // Best effort: a store that cannot be written costs the next compilation the work it would have saved, and nothing else. What it must never do is cost the verdict — so this unit enters the chain below whether or not any of it landed, and the refusal is kept for a caller to report rather than raised here.
         if let Err(error) = filed {
             self.refused.borrow_mut().get_or_insert(error.to_string());
         }
 
-        self.placed.borrow_mut().push(Placed {
-            slot,
-            contained: digest(&bytes),
-        });
+        self.placed.borrow_mut().push(placed);
     }
 }
 
