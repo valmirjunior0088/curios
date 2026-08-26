@@ -19,10 +19,21 @@ const INSTALLED_PATH: &str = ".local/bin/curios";
 const INSTALL_COMMAND: &str =
     "curl -fsSL https://github.com/valmirjunior0088/curios/releases/latest/download/install.sh | sh";
 
-/// What to say when no step found anything.
-fn not_found() -> String {
+/// What to say when nothing was found and the search was able to look everywhere it knows of.
+///
+/// The path is named rather than described, because this message is read twice: once by the user, who needs to know where to put a binary, and once from `Zed.log`, where it is the only evidence of which branch produced it.
+fn not_found(candidate: &str) -> String {
     format!(
-        "Could not find the `curios` binary on PATH or in ~/.local/bin.\n\nInstall it with:\n\n{INSTALL_COMMAND}\n\nThen restart the language server. To use a binary from somewhere else, set `lsp.curios.binary.path` to it."
+        "Could not find the `curios` binary. It is not on the PATH this editor was launched with, and there is nothing at `{candidate}`.\n\nInstall it with:\n\n{INSTALL_COMMAND}\n\nThen restart the language server. To use a binary from somewhere else, set `lsp.curios.binary.path` to it."
+    )
+}
+
+/// What to say when the shell environment names no `$HOME`, so the installer's directory could not even be spelled.
+///
+/// Zed gives an extension `PWD` and `RUST_BACKTRACE` and nothing else, so the process environment holds no `$HOME` to fall back to: when the loaded shell environment has none either, the last step cannot run at all. Reporting that as absence is what made this branch invisible — a binary sitting exactly where the installer put it, described as missing.
+fn no_home() -> String {
+    format!(
+        "Could not find the `curios` binary. It is not on the PATH this editor was launched with, and the environment loaded for this project names no HOME, so ~/.local/bin could not be checked.\n\nIf it is installed, point the extension straight at it with `lsp.curios.binary.path`, which does not depend on the environment. Otherwise install it with:\n\n{INSTALL_COMMAND}"
     )
 }
 
@@ -53,14 +64,14 @@ impl Curios {
 
     /// The installer's directory, checked before it is offered, because unlike the two steps above it is a guess: nobody named this path, so a wrong one would reach Zed as a spawn failure for a location the user never mentioned.
     ///
-    /// `$HOME` is read from the shell environment rather than the process's, for the same reason the `PATH` lookup ahead of this one fails: the environment Zed was launched with is not the one the user's shell builds.
+    /// `$HOME` comes from the shell environment because there is nowhere else to get it: Zed builds an extension's WASI environment with `PWD` and `RUST_BACKTRACE` alone, so the process holds none. A project whose loaded environment names no `$HOME` therefore cannot reach this step at all, which is a different report from finding nothing there.
     fn installed_path(worktree: &zed::Worktree) -> Result<String> {
         let Some(home) = worktree
             .shell_env()
             .into_iter()
             .find_map(|(name, value)| (name == "HOME").then_some(value))
         else {
-            return Err(not_found());
+            return Err(no_home());
         };
 
         let candidate = format!("{home}/{INSTALLED_PATH}");
@@ -70,7 +81,7 @@ impl Curios {
             .arg("--version")
             .output()
         {
-            Err(_) => Err(not_found()),
+            Err(_) => Err(not_found(&candidate)),
             Ok(output) if output.status == Some(0) => Ok(candidate),
             Ok(_) => Err(does_not_run(&candidate)),
         }
