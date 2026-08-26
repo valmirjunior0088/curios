@@ -63,6 +63,30 @@ thread_local! {
     static WEAVER: RefCell<Option<Vec<Comment>>> = const { RefCell::new(None) };
 }
 
+/// Claim every unclaimed trailing comment written inside `span`, in source order, as verbatim texts.
+///
+/// **The claim a node makes once its document is built, for the comments riding the line it just ended.** Registered there the suffix reaches the printer while that line is still open, which is the difference between a trailing comment staying where it was written and drifting to the next break. Claimed by the node that *follows* it instead — which is what [`claim_comments_before`] alone leaves to happen — it is prefixed to that node's document and reaches the channel after the newline closing its own line has gone out, so it surfaces a line down, and where the claiming node is the last inside a construct, past the construct's end entirely.
+///
+/// **Containment is the test because a term's span runs to the next token, not to the end of its own text.** Trailing trivia is inside it, so a comment written after a term sits within that term's span, and the innermost span holding it belongs to the content it was written after. Descendants build before their ancestors, so that innermost node is also the first to ask.
+pub(crate) fn claim_trailing_within(start: usize, end: usize) -> Vec<String> {
+    WEAVER.with(|weaver| match &mut *weaver.borrow_mut() {
+        Some(comments) => {
+            let mut claimed = Vec::new();
+            comments.retain(|comment| {
+                match comment.trailing && (start..end).contains(&comment.start) {
+                    true => {
+                        claimed.push(comment.text.clone());
+                        false
+                    }
+                    false => true,
+                }
+            });
+            claimed
+        }
+        None => Vec::new(),
+    })
+}
+
 /// Claim every unclaimed comment starting before `offset`, in source order, as `(text, trailing)` pairs. Empty outside a format run — the printer calls this unconditionally and ordinary printing pays one thread-local read.
 pub(crate) fn claim_comments_before(offset: usize) -> Vec<(String, bool)> {
     WEAVER.with(|weaver| match &mut *weaver.borrow_mut() {

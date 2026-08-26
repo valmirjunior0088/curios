@@ -11,7 +11,10 @@ use {
         TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType,
         TupleTypeParam, UseGroup, WitnessEntry,
     },
-    crate::{format::claim_comments_before, parse::op_precedence},
+    crate::{
+        format::{claim_comments_before, claim_trailing_within},
+        parse::op_precedence,
+    },
     curios_abi::{WireSignature, WireType, stdio},
     curios_num::Natural,
     curios_print::{
@@ -810,9 +813,37 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
 }
 
 pub(crate) fn print_term(term: Term) -> Printer {
-    // The formatter's comment weave: during a `format` run, a parsed term claims every not-yet-claimed comment written before its own start — a leading comment breaks onto its own line before the term, a trailing one rides its line's end through the suffix channel. Printing builds in source order and never reorders, which is what makes the claim order correct. Outside a format run the claim is empty and printing is unchanged.
-    let offset = term.span().map(|span| span.start);
-    claimed_before(offset, || print_term_inner(term))
+    // The formatter's comment weave: during a `format` run, a parsed term claims every not-yet-claimed comment written before its own start — a leading comment breaks onto its own line before the term — and, once built, every trailing comment written inside its own span. Printing builds in source order and never reorders, which is what makes the claim order correct. Outside a format run both claims are empty and printing is unchanged.
+    // Copied out before the build, which takes the term: both claims are about where it sat, and neither needs it afterwards.
+    let bounds = term.span().map(|span| (span.start, span.end));
+
+    claimed_before(bounds.map(|(start, _)| start), || {
+        claimed_within(bounds, print_term_inner(term))
+    })
+}
+
+/// Append every trailing comment written inside `bounds`, so it rides the line it was written on.
+///
+/// **Claimed after the build, which is the whole point.** Prefixed to the following node's document instead, a trailing comment reaches the suffix channel after the newline closing its own line has gone out — so it surfaces one line down, and where that node is the last inside a construct, at the document's end outside the construct. Claimed here it is registered while its own line is still open.
+///
+/// A term's span runs to the next token, so a comment written after the term is inside it; the innermost span holding one is the content it followed, and descendants build first, so that innermost node asks first. See [`claim_trailing_within`](crate::format::claim_trailing_within). A term with no span claims nothing, exactly as it leads nothing.
+fn claimed_within(bounds: Option<(usize, usize)>, doc: Printer) -> Printer {
+    let comments = match bounds {
+        Some((start, end)) => claim_trailing_within(start, end),
+        None => Vec::new(),
+    };
+    if comments.is_empty() {
+        return doc;
+    }
+
+    let mut parts = vec![doc];
+    parts.extend(
+        comments
+            .into_iter()
+            .map(|text| line_suffix(format!(" {text}"))),
+    );
+
+    flat(parts)
 }
 
 /// Claim every not-yet-claimed comment written before `offset` and prefix it to the document `build` produces — a leading comment on its own line, a trailing one riding its line's end through the suffix channel. The claim happens before the build, so an ancestor claims ahead of its descendants; `None` (a spanless term) claims nothing.

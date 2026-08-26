@@ -137,6 +137,63 @@ fn a_comment_relocated_into_an_arm_body_is_lifted_back_out() {
     assert_eq!(formatted(&output), output);
 }
 
+/// A trailing comment stays on the arm it was written on, however many arms carry one.
+///
+/// **The regression for a trailing comment drifting to the next break.** Claimed by the node that *follows* it, it was prefixed to that node's document and reached the suffix channel after the newline closing its own line had gone out — so each comment surfaced one arm down, and the last one, having no break left inside the construct, flushed at the document's end past `end;`. Here `-- affirmative` documented the negative arm and `-- negative` documented the declaration.
+#[test]
+fn a_trailing_comment_stays_on_the_arm_it_was_written_on() {
+    let source = "let d(b: /std/Bool) -> /std/Str =\n    choose\n    | b == true => \"yes\" -- affirmative\n    | _ => \"no\" -- negative\n    end;\n\nd(true)\n";
+    let output = formatted(source);
+
+    let affirmative = output
+        .lines()
+        .position(|line| line.contains("-- affirmative"))
+        .expect("the comment survives");
+    let negative = output
+        .lines()
+        .position(|line| line.contains("-- negative"))
+        .expect("the comment survives");
+
+    assert!(
+        output
+            .lines()
+            .nth(affirmative)
+            .is_some_and(|line| line.contains("\"yes\"")),
+        "the affirmative comment rides the arm it documents: {output}"
+    );
+    assert!(
+        output
+            .lines()
+            .nth(negative)
+            .is_some_and(|line| line.contains("\"no\"")),
+        "the negative comment rides the arm it documents: {output}"
+    );
+    assert_eq!(formatted(&output), output, "and formatting converges");
+}
+
+/// A trailing comment inside a construct does not escape it, and a second one on the construct's own last line survives beside it.
+///
+/// **The regression for the formatter refusing its own output.** Two comments driven onto one output line are *one* comment when it reparses — a line comment runs to the end of its line — so the verifier saw one fewer than it captured and refused to write. The shape below is exactly what the drift above used to produce, which is how a single `curios format` could leave a file that every later `curios format --check` rejected.
+#[test]
+fn an_interior_trailing_comment_does_not_escape_its_construct() {
+    let source = "let d(b: /std/Bool) -> /std/Str =\n    choose\n    | b == true => \"yes\"\n    | _ => \"no\" -- inner\n    end; -- tail\n\nd(true)\n";
+    let output = formatted(source);
+
+    assert!(
+        output.contains("-- inner"),
+        "the interior comment survives: {output}"
+    );
+    assert!(
+        output.contains("-- tail"),
+        "the item's own comment survives: {output}"
+    );
+    assert!(
+        output.lines().all(|line| line.matches("--").count() <= 1),
+        "two comments on one line reparse as one: {output}"
+    );
+    assert_eq!(formatted(&output), output, "and formatting converges");
+}
+
 #[test]
 fn an_interior_comment_survives_and_forces_a_break() {
     // The comment claims into the argument's document; its hard break keeps the call broken. `f` is unbound as far as formatting cares — formatting is syntax-only — so this must format, conserve the comment, and reparse.
