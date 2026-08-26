@@ -9,7 +9,7 @@ use {
         Diagnostic, Origin, Reached, Refusal, STDIN_LABEL, Subject, Verdicts, diagnostics, stage,
         to_cwasm_dumped,
     },
-    curios_package::{Governing, LIBRARY, Membership, Target, mounted, order},
+    curios_package::{Governing, LIBRARY, Membership, Target, mounted, names_a_file, order},
     curios_pipeline::Cache,
     curios_text::{Overlay, RootSource},
     std::{
@@ -118,11 +118,6 @@ impl Asked {
     }
 }
 
-/// Whether `argument` names a file rather than an executable — `run`'s own rule, so the two subcommands cannot read one spelling two ways.
-fn is_file(argument: &str) -> bool {
-    argument.ends_with(".crs") || argument.contains('/') || argument.contains('\\')
-}
-
 /// `wonder diagnostics [TARGET]`: render every diagnostic to stdout, a blank line between each.
 pub fn wonder_diagnostics(
     budget: u64,
@@ -134,7 +129,7 @@ pub fn wonder_diagnostics(
 
     let answers = match target {
         Some(Target::STDIN) => vec![Asked::about_stdin(mounted, read_stdin()?)?],
-        Some(argument) if is_file(argument) => {
+        Some(argument) if names_a_file(argument) => {
             vec![Asked::about_file(Path::new(argument), mounted, manifest)?]
         }
         Some(name) => vec![Asked::about_executable(Some(name), mounted, manifest)?],
@@ -185,7 +180,7 @@ pub fn wonder_stage(
 
     let asked = match target {
         Some(Target::STDIN) => Asked::about_stdin(mounted, read_stdin()?)?,
-        Some(argument) if is_file(argument) => {
+        Some(argument) if names_a_file(argument) => {
             Asked::about_file(Path::new(argument), mounted, manifest)?
         }
         name => Asked::about_executable(name, mounted, manifest)?,

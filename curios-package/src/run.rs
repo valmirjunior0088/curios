@@ -70,7 +70,9 @@ impl Target {
         // Both standalone forms answer here, before anything looks for a manifest — which is what "triggers no walk at all" means operationally.
         match argument {
             Some(Self::STDIN) => return Ok(Self::Stdin),
-            Some(argument) if is_file(argument) => return Ok(Self::File(PathBuf::from(argument))),
+            Some(argument) if names_a_file(argument) => {
+                return Ok(Self::File(PathBuf::from(argument)));
+            }
             _ => {}
         }
 
@@ -104,7 +106,9 @@ impl Target {
 /// Whether `argument` names a file rather than an executable.
 ///
 /// Both separators, not the platform's: an executable's name is an identifier, so neither can appear in one, and a path written with the other spelling is still plainly a path.
-fn is_file(argument: &str) -> bool {
+///
+/// Public because `curios wonder` resolves the same argument the same way, and a second spelling of one lexical rule is one the two subcommands can come to disagree about. Named for what it decides rather than `is_file`, which at this altitude reads as a question about the disk — and this asks nothing of it, which is the module's first sentence.
+pub fn names_a_file(argument: &str) -> bool {
     argument.ends_with(".crs") || argument.contains('/') || argument.contains('\\')
 }
 
