@@ -55,7 +55,9 @@ fn optimizes_to_a_smaller_valid_module() {
     );
 }
 
-/// `to_cwasm_dumped` emits `Stage::WasmOptm` at its production site — the second and only other emission site beside the driver's — and its payload is Binaryen's own rendering, captured in the session that optimized. The `(module` head pins that the payload is the folded text form; the export string pins that it renders *this* module, since exports survive optimization and print verbatim.
+/// `wasm_optm` emits `Stage::WasmOptm` at its production site — the second and only other emission site beside the driver's — and its payload is Binaryen's own rendering, captured in the session that optimized. The `(module` head pins that the payload is the folded text form; the export string pins that it renders *this* module, since exports survive optimization and print verbatim.
+///
+/// [`crate::to_cwasm`] is asserted beside it rather than through it: rendering and precompiling are two things the Binaryen path does, and one function doing both is what made every `wonder stage wasm-optm` pay for a payload it discarded. The double optimization is this test's alone.
 #[test]
 fn dumping_emits_the_optimized_module_as_text() {
     let source = r#"
@@ -82,11 +84,12 @@ fn dumping_emits_the_optimized_module_as_text() {
 
     let mut text = None;
 
-    let cwasm = crate::to_cwasm_dumped(&module, |stage| match stage {
+    crate::wasm_optm(&module, |stage| match stage {
         Stage::WasmOptm(dump) => text = Some(dump.to_string()),
         other => panic!("expected only Stage::WasmOptm, got {:?}", other.name()),
-    })
-    .expect("binaryen path precompiles");
+    });
+
+    let cwasm = crate::to_cwasm(&module).expect("binaryen path precompiles");
 
     assert!(!cwasm.is_empty());
 

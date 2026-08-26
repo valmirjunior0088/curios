@@ -25,18 +25,18 @@ pub fn to_cwasm(module: &curios_wasm::Module) -> Result<Vec<u8>, String> {
     curios_runtime::precompile(&bytes)
 }
 
-/// [`to_cwasm`], emitting `Stage::WasmOptm` — Binaryen's own text rendering of the optimized module — through `observe` at its production site, exactly as the driver emits every other stage at its. This is the one stage the pure pipeline cannot emit, produced here because this crate is where Binaryen runs; the caller chose this function over [`to_cwasm`] *because* it wants the dump, so names ride unconditionally, and the price is only that an explicitly-requested debugging run precompiles name-carrying bytes.
-pub fn to_cwasm_dumped<O>(module: &curios_wasm::Module, mut observe: O) -> Result<Vec<u8>, String>
+/// Optimize `module` and emit `Stage::WasmOptm` — Binaryen's own text rendering of the result — through `observe`, exactly as the driver emits every other stage at its production site. This is the one stage the pure pipeline cannot emit, produced here because this crate is where Binaryen runs; the caller chose this function *because* it wants the dump, so names ride unconditionally.
+///
+/// **The rung and nothing else.** [`to_cwasm`]'s Cranelift compilation is deliberately not here: a caller that asked to see a module has no use for machine code, and on the measurement corpus that compilation is a tenth to a sixth of the whole answer — `wonder stage wasm-optm` over `programs/monad_async.crs` spent 12.6s of which 2.1s was a payload it dropped. A caller wanting the payload too calls [`to_cwasm`] beside this, which optimizes a second time; only the one test asserting both halves of the Binaryen path does.
+pub fn wasm_optm<O>(module: &curios_wasm::Module, mut observe: O)
 where
     O: FnMut(curios_pipeline::Stage<'_>),
 {
     let raw = curios_wasm::to_bytes(module);
     validate(&raw);
-    let (bytes, text) = curios_binaryen::optimize_with_text(raw, true);
+    let (_optimized, text) = curios_binaryen::optimize_with_text(raw, true);
 
     observe(curios_pipeline::Stage::WasmOptm(&text));
-
-    curios_runtime::precompile(&bytes)
 }
 
 /// Run a compiled module in-process: precompile to `.cwasm`, then deserialize and run it on the shared runtime engine — the identical path a bundled executable takes. `bindings` supplies the `ffi`-tier implementations for the module's own `foreign` declarations (pass [`curios_runtime::ForeignBindings::empty`] for a program that declares none). Returns the process exit code.

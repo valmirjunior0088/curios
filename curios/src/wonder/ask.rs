@@ -7,7 +7,7 @@
 use {
     crate::{
         Diagnostic, Origin, Reached, Refusal, STDIN_LABEL, Subject, Verdicts, diagnostics, stage,
-        to_cwasm_dumped,
+        wasm_optm,
     },
     curios_package::{Governing, LIBRARY, Membership, Target, mounted, names_a_file, order},
     curios_text::{Overlay, RootSource},
@@ -189,9 +189,7 @@ pub fn wonder_stage(
 
     match stage(budget, units, origin, &overlay, cache, name) {
         Ok(Reached::Rendered(rendering)) => println!("{}", rendering.text),
-        Ok(Reached::Wasm(module)) => {
-            to_cwasm_dumped(&module, |stage| println!("{stage}"))?;
-        }
+        Ok(Reached::Wasm(module)) => wasm_optm(&module, |stage| println!("{stage}")),
         Err(Refusal::NoSuchStage { asked }) => {
             return Err(format!(
                 "no stage named {asked:?}; the stages are {}",
