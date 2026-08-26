@@ -138,8 +138,8 @@ jobs:
         run: npm test
         working-directory: editors/grammar
 
-  textmate:
-    name: TextMate grammar
+  vscode:
+    name: VS Code extension
     runs-on: ubuntu-24.04
     timeout-minutes: 60
     steps:
@@ -154,6 +154,10 @@ jobs:
         working-directory: editors/vscode
       - name: Run grammar snapshot tests
         run: npm test
+        working-directory: editors/vscode
+      # Packaging is what a tester actually installs, and it runs the bundler, the manifest validation and the ignore list in one step — none of which the snapshot tests touch.
+      - name: Package the extension
+        run: npm run package
         working-directory: editors/vscode
 
   zed:

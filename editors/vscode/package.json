@@ -9,16 +9,41 @@
     "type": "git",
     "url": "https://github.com/valmirjunior0088/curios.git"
   },
+  "bugs": {
+    "url": "https://github.com/valmirjunior0088/curios/issues"
+  },
+  "homepage": "https://github.com/valmirjunior0088/curios#readme",
   "categories": [
     "Programming Languages"
   ],
-  "engines": {
-    "vscode": "^1.75.0"
-  },
-  "main": "./extension.js",
-  "activationEvents": [
-    "onLanguage:curios"
+  "icon": "icons/curios.png",
+  "keywords": [
+    "curios",
+    "dependent types",
+    "functional",
+    "language server",
+    "webassembly"
   ],
+  "engines": {
+    "vscode": "^1.91.0"
+  },
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "The language server is the `curios` compiler itself, which elaborates the workspace's own sources. Diagnostics stay off until the workspace is trusted; syntax highlighting does not.",
+      "restrictedConfigurations": [
+        "curios.serverPath"
+      ]
+    },
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "The language server is a local `curios` binary reading the workspace from disk, neither of which a virtual file system provides."
+    }
+  },
+  "main": "./.artifacts/extension.js",
   "contributes": {
     "languages": [
       {
@@ -30,7 +55,11 @@
         "extensions": [
           ".crs"
         ],
-        "configuration": "./language-configuration.json"
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/curios-light.svg",
+          "dark": "./icons/curios-dark.svg"
+        }
       }
     ],
     "grammars": [
@@ -39,13 +68,36 @@
         "scopeName": "source.curios",
         "path": "./syntaxes/curios.tmLanguage.json"
       }
+    ],
+    "configuration": {
+      "title": "Curios",
+      "properties": {
+        "curios.serverPath": {
+          "type": "string",
+          "default": "curios",
+          "markdownDescription": "The `curios` binary to run as the language server. A bare name is looked up on `PATH`; an absolute path is used as given."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "curios.restartServer",
+        "title": "Restart Language Server",
+        "category": "Curios"
+      }
     ]
   },
   "scripts": {
+    "bundle": "esbuild extension.js --bundle --platform=node --target=node20 --format=cjs --external:vscode --outfile=.artifacts/extension.js",
+    "prepare": "npm run bundle",
+    "vscode:prepublish": "npm run bundle -- --minify",
+    "package": "vsce package --out .artifacts",
     "test": "vscode-tmgrammar-snap \"tests/**/*.crs\"",
     "test:update": "vscode-tmgrammar-snap -u \"tests/**/*.crs\""
   },
   "devDependencies": {
+    "@vscode/vsce": "^3.6.0",
+    "esbuild": "^0.25.0",
     "vscode-tmgrammar-test": "^0.1.3"
   },
   "dependencies": {

@@ -1,0 +1,7 @@
+# What ships is the bundle, its grammar, and the two files a marketplace page is made of. The sources that produced the bundle do not: `vscode:prepublish` has already run by the time this list is read.
+.vscodeignore
+extension.js
+package-lock.json
+node_modules/**
+tests/**
+.artifacts/*.vsix
