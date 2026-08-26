@@ -8,7 +8,8 @@ use {
     super::*,
     crate::to_cwasm,
     curios_pipeline::{Cache, DEFAULT_STEP_BUDGET, compile_with_units},
-    curios_text::Entrypoint,
+    curios_text::{Entrypoint, Module},
+    curios_utilities::RootKind,
     std::{
         path::PathBuf,
         time::{SystemTime, UNIX_EPOCH},
@@ -29,8 +30,15 @@ struct Invocation {
 ///
 /// The same sequence `payload_of` runs — consult, compile what must be compiled, file what was made — minus the terminal it reports to. `mounted` is the `--unit` flag, which is how a package outside the project enters the compilation.
 fn invoke(directory: &Path, target: Option<&str>, mounted: &[PathBuf]) -> Invocation {
-    let mut scope = curios_package::mounted(mounted).expect("mountable packages");
+    invoke_over(
+        directory,
+        target,
+        curios_package::mounted(mounted).expect("mountable packages"),
+    )
+}
 
+/// [`invoke`] over a scope whose front is already built, for the one unit a directory cannot supply.
+fn invoke_over(directory: &Path, target: Option<&str>, mut scope: Vec<RootSource>) -> Invocation {
     let (entry, package, name, root) =
         match curios_package::Target::of(target, None, directory).expect("a governed package") {
             curios_package::Target::Executable {
@@ -81,7 +89,7 @@ fn invoke(directory: &Path, target: Option<&str>, mounted: &[PathBuf]) -> Invoca
     .expect("the package compiles");
 
     let payload = to_cwasm(&module).expect("the module precompiles");
-    verdicts.payload_put(&program, &payload);
+    verdicts.payload_put(&program, &sources, &payload);
 
     Invocation {
         reused: false,
@@ -142,6 +150,11 @@ fn library(word: &str) -> String {
 /// A module of the entry's own, saying `word`.
 fn greeting(word: &str) -> String {
     format!("pub let word : /std/Str =\n    \"{word}\";\n")
+}
+
+/// The payload slots at `root`, counting a store that was never created as the none it holds — which is what a refusal to file leaves behind.
+fn filed(root: &Path) -> usize {
+    fs::read_dir(root.join(".curios").join("payload")).map_or(0, Iterator::count)
 }
 
 /// The slots the payload family holds for the project at `root`.
@@ -465,4 +478,38 @@ fn an_unwritable_store_refuses_once_and_stops_nothing() {
     );
 
     fs::remove_dir_all(root).unwrap();
+}
+
+/// A payload is filed only over a chain a later look-up can derive — never over one with a gap in it.
+///
+/// **A unit with nothing on disk is the gap, and `RootSource::supplied` is what builds one.** It holds no directory, so `Verdicts::slot` declines to address it: the fold compiles it every time and places nothing for it, which leaves `Verdicts::placed` one entry shorter than the scope it folded. [`Verdicts::payload_get`] derives its own chain through `Verdicts::chain`, which refuses that unit outright — so a payload filed against the short chain is addressed under a prefix the probe never computes. Nothing stale comes back; a slot is simply written that nothing will ever read, on every invocation, forever.
+///
+/// Nothing in this product folds such a unit — the CLI's scope is disk-backed throughout — but the constructor is public API and the two halves must not be able to disagree about what the chain is. The assertion is on the store's own shape rather than on a reuse verdict, because the defect never produced a wrong answer to assert against: it produced a write.
+#[test]
+fn a_payload_is_not_filed_over_a_chain_with_a_gap() {
+    let root = project("gapped");
+    write(&root, "supplied.crs", &library("supplied"));
+
+    let mut supplied = RootSource::supplied();
+    supplied.insert_root(
+        "supplied",
+        RootKind::Ordinary,
+        Module::from_path(root.join("supplied.crs")).expect("the supplied module parses"),
+    );
+
+    let gapped = invoke_over(&root, None, vec![supplied]);
+    assert!(!gapped.reused, "nothing is stored for the first invocation");
+    assert_eq!(
+        filed(&root),
+        0,
+        "the fold placed nothing for the supplied unit, so there is no chain to file a payload under"
+    );
+
+    // The guard refuses a gap rather than refusing everything.
+    let plain = run(&root);
+    assert!(
+        !plain.reused,
+        "and the gapped invocation left nothing to reuse"
+    );
+    assert_eq!(filed(&root), 1, "a chain with no gap in it still files");
 }

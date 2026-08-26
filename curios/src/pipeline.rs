@@ -68,11 +68,11 @@ pub(crate) fn payload_of(
             )
         });
 
+    // Built once and handed to both halves of the payload family, which is what keeps them agreeing about what the chain is: the probe refuses a unit the fold could not place, and the write must refuse the same one.
+    let sources = scope.iter().map(UnitSource::mounted).collect::<Vec<_>>();
+
     if let Some((cache, program)) = &filed
-        && let Some(payload) = cache.payload_get(
-            program,
-            &scope.iter().map(UnitSource::mounted).collect::<Vec<_>>(),
-        )
+        && let Some(payload) = cache.payload_get(program, &sources)
     {
         // Announced after the store is consulted, exactly as the fold announces a reused unit: a reported operation is one that actually happened.
         let mut line = Line::open(Heading::Building, &subject);
@@ -93,7 +93,7 @@ pub(crate) fn payload_of(
     .and_then(|module| to_cwasm(&module).map_err(CompileError::failure));
 
     if let (Ok(payload), Some((cache, program))) = (&compiled, &filed) {
-        cache.payload_put(program, payload);
+        cache.payload_put(program, &sources, payload);
     }
 
     // After the fold rather than during it: one unwritable store refuses everything for the same reason, so this is one line however many units went past it. Reported even when the compilation failed, because a store nobody can write is true either way and the next run pays for it either way.

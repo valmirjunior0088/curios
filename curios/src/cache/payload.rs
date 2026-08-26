@@ -78,11 +78,17 @@ impl Verdicts {
         }
     }
 
-    /// File `bytes` as `program`'s payload, against the chain the fold just placed.
+    /// File `bytes` as `program`'s payload, against the chain the fold just placed over `units`.
     ///
     /// Called after the fold, which is what makes `Verdicts::placed` the right chain to record: it holds what every unit of *this* compilation was filed as, whether it was reused or compiled. Best effort, exactly as a unit's write is — a store that cannot be written costs the next invocation the work it would have saved and nothing else, and the refusal is kept for a caller to report rather than raised here.
-    pub fn payload_put(&self, program: &Program<'_>, bytes: &[u8]) {
+    ///
+    /// **`units` is taken so this can refuse a chain with a gap in it, and it is the same slice [`Verdicts::payload_get`] probes with.** The two halves derived their chain by different rules until they were made to take one input: the probe builds it with `Verdicts::chain`, which refuses any unit `Verdicts::slot` declines, while this read whatever the fold happened to place — and a unit the fold could not place is simply absent from that. Filing under the shorter chain writes a slot addressed by a prefix no probe will ever compute: not a stale answer, but a directory the store grows and nothing reads, forever. Withholding the record is free, since the compilation it came from is correct either way.
+    pub fn payload_put(&self, program: &Program<'_>, units: &[UnitSource<'_>], bytes: &[u8]) {
         let placed = self.placed.borrow();
+
+        if placed.len() != units.len() {
+            return;
+        }
 
         let Some(slot) = slot(self, program, &placed) else {
             return;
