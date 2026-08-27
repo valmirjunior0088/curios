@@ -8,7 +8,8 @@
 
 use {
     curios_analysis::{
-        Coverage, Declarations, Invert, group_totality, invert_indices, positivity_vectors,
+        Coverage, Declarations, Invert, fixture::SYNTAX, group_totality, invert_indices,
+        positivity_vectors,
     },
     curios_cert::Kernel,
     curios_core::{
@@ -16,70 +17,8 @@ use {
         Nat, Polarity, Rec, StructType, Subterm, Telescope, Term, Totality, UniverseContext,
         UniverseInst,
     },
-    curios_utilities::{
-        CharacterSyntax, ConceptField, LiftSyntax, MonadSyntax, OperatorSyntax, Plicity,
-        ProofSyntax, Qualifier, StringSyntax, SyntaxName, SyntaxRegistry,
-    },
+    curios_utilities::{Plicity, Qualifier},
     std::{collections::BTreeMap, rc::Rc, slice},
-};
-
-use Polarity::Strict;
-
-const fn syntax_name(segments: &'static [&'static str]) -> SyntaxName {
-    SyntaxName::new(segments)
-}
-
-const fn concept_field(segments: &'static [&'static str], label: &'static str) -> ConceptField {
-    ConceptField {
-        concept: syntax_name(segments),
-        field: label,
-    }
-}
-
-/// The registry a `Kernel` is built with. Spelled here rather than borrowed because `curios-cert`'s own fixture is `#[cfg(test)]` and an integration test links the library, not its tests. No probe below resolves one of these names — they exist so a kernel can be constructed at all.
-const SYNTAX: SyntaxRegistry = SyntaxRegistry {
-    monad: MonadSyntax {
-        bind: syntax_name(&["syn", "Monad", "bind"]),
-    },
-    lift: LiftSyntax {
-        lift: concept_field(&["syn", "Lift"], "lift"),
-    },
-    operator: OperatorSyntax {
-        add: concept_field(&["syn", "Add"], "add"),
-        sub: concept_field(&["syn", "Sub"], "sub"),
-        mul: concept_field(&["syn", "Mul"], "mul"),
-        div: concept_field(&["syn", "Div"], "div"),
-        rem: concept_field(&["syn", "Rem"], "rem"),
-        eql: concept_field(&["syn", "Eql", "Eql"], "eql"),
-        neq: concept_field(&["syn", "Eql", "Eql"], "neq"),
-        lt: concept_field(&["syn", "Cmp"], "lt"),
-        gt: concept_field(&["syn", "Cmp"], "gt"),
-        le: concept_field(&["syn", "Cmp"], "le"),
-        ge: concept_field(&["syn", "Cmp"], "ge"),
-        and: concept_field(&["syn", "And"], "and"),
-        or: concept_field(&["syn", "Or"], "or"),
-    },
-    character: CharacterSyntax {
-        character: syntax_name(&["syn", "Char", "Char"]),
-        scalar_below: syntax_name(&["syn", "Char", "Scalar", "below"]),
-        scalar_above: syntax_name(&["syn", "Char", "Scalar", "above"]),
-    },
-    string: StringSyntax {
-        string: syntax_name(&["syn", "Str", "Str"]),
-        of_scan_eq: syntax_name(&["syn", "Str", "of_scan_eq"]),
-        refl_scan: syntax_name(&["syn", "Str", "refl_scan"]),
-    },
-    proof: ProofSyntax {
-        true_qed: syntax_name(&["syn", "True", "True", "qed"]),
-        true_type: syntax_name(&["syn", "True", "True"]),
-        lt: syntax_name(&["syn", "Nat", "Lt"]),
-        le: syntax_name(&["syn", "Nat", "Le"]),
-        int_non_zero: syntax_name(&["syn", "Int", "NonZero"]),
-        int_non_neg: syntax_name(&["syn", "Int", "NonNeg"]),
-        bytes_four: syntax_name(&["syn", "Flt", "FourBytes"]),
-        flt_finite: syntax_name(&["syn", "Flt", "Finite"]),
-        flt_non_neg: syntax_name(&["syn", "Flt", "NonNeg"]),
-    },
 };
 
 /// The member every probe below plants a call to.
@@ -667,7 +606,7 @@ fn an_out_of_set_vector_is_believed_only_under_partial_coverage() {
                 Telescope::done(()),
             ),
             constructors: Vec::new(),
-            polarities: vec![Strict],
+            polarities: vec![Polarity::Strict],
             ..single_payload(Term::type_ground(), Term::type_ground())
         },
     );

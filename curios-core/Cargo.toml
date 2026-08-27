@@ -11,6 +11,8 @@ workspace = true
 [features]
 archive = ["curios-archive/enabled", "curios-abi/archive", "curios-utilities/archive", "curios-num/archive"]
 profile = ["curios-profile/enabled"]
+# `into_nested_term`, for the lowering suite in `curios-text` that still asserts against the nested shape this module type replaced. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, so a `cfg(test)` item is invisible to another crate's tests — the same reason `curios-runtime`'s `test-support` is a feature. **Never add this to `default`.**
+test-support = []
 
 [dependencies]
 curios-archive = { workspace = true }

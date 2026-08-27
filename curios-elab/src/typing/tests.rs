@@ -43,7 +43,7 @@ fn display_parameterless_witness_concept_states_the_rule() {
 
 /// The predicate deciding what a `Prop` may carry is written twice, and this is where the two are put to each other.
 ///
-/// [`is_prop`] is this side's answer and `curios_cert::carries_information` is the kernel's. The large-elimination guard's singleton condition and the `Prop`-field rule both turn on one or the other, with the shared `pinned_by_targets` walk supplying the rest of each. The two disagreed once, in the direction that matters: the kernel additionally exempted a position whose *type is a universe* — a position holding a type — reasoning that erasure deletes a type either way, and a closed inhabitant of `False` followed. `curios-cert/src/recheck/tests.rs` holds that derivation.
+/// [`is_prop`] is this side's answer and `curios_cert::carries_information` is the kernel's. The large-elimination guard's singleton condition and the `Prop`-field rule both turn on one or the other, with the shared `pinned_by_targets` walk supplying the rest of each. The two disagreed once, in the direction that matters: the kernel additionally exempted a position whose *type is a universe* — a position holding a type — reasoning that erasure deletes a type either way, and a closed inhabitant of `False` followed. `curios-cert/src/recheck/proposition_tests.rs` holds that derivation.
 ///
 /// No compile could have observed the disagreement. This side refuses such a declaration during elaboration, so the kernel's copy is asked only about declarations that already passed here — which is what `Expect::NotAsked` records for `informative_prop_field` and `multi_constructor_prop` in `curios/src/tests/perimeter.rs`, a cell that file's own documentation calls "not a pass". So the comparison has to be made directly, as `curios-cert`'s `satisfy` module now does for universe contexts.
 ///
@@ -53,7 +53,7 @@ fn display_parameterless_witness_concept_states_the_rule() {
 #[test]
 fn both_checkers_decide_non_informativeness_alike() {
     let mut context = Context::new(100_000, crate::SYNTAX);
-    let mut kernel = Kernel::new(100_000, crate::fixture::SYNTAX);
+    let mut kernel = Kernel::new(100_000, crate::SYNTAX);
     kernel.set_local_floor(1_000);
 
     let nat = || Term::intrinsic(Intrinsic::NatType);

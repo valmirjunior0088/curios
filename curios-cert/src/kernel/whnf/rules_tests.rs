@@ -1,0 +1,335 @@
+//! Beta, delta, zeta, iota, projection, eta and the switch arms — one reduction rule each.
+
+use {
+    super::unfold_rec,
+    crate::whnf,
+    curios_core::{Apply, Free, Global, Intrinsic, Level, Reducer, Subterm, Term},
+    curios_utilities::Qualifier,
+};
+
+use super::test_support::*;
+
+#[test]
+fn beta_opens_a_function_over_its_arguments() {
+    let mut kernel = kernel();
+    let x = binder(0, "x");
+
+    let term = Term::apply(
+        Term::func([(x.clone(), nat_type())], Term::free_var(&x)),
+        [nat(7)],
+    );
+
+    assert_eq!(whnf(&mut kernel, term), Ok(nat(7)));
+}
+
+#[test]
+fn delta_unfolds_a_monomorphic_definition() {
+    let mut kernel = kernel();
+    let f = binder(0, "f");
+    kernel.define(&f, &nat_type(), &nat(3), &monomorphic());
+
+    assert_eq!(whnf(&mut kernel, Term::free_var(&f)), Ok(nat(3)));
+}
+
+/// A definition generalized over universe parameters denotes no particular instance, so a bare occurrence of it is a normal form. Unfolding it here would silently pick an instance nobody stated.
+#[test]
+fn delta_withholds_a_universe_polymorphic_definition() {
+    let mut kernel = kernel();
+    let f = binder(0, "f");
+    kernel.define(&f, &nat_type(), &nat(3), &polymorphic());
+
+    let occurrence = Term::free_var(&f);
+    assert_eq!(whnf(&mut kernel, occurrence.clone()), Ok(occurrence));
+}
+
+/// The same definition *does* unfold through a stated instance, which is the one position that names which one it is.
+#[test]
+fn a_universe_instance_unfolds_what_a_bare_occurrence_withholds() {
+    let mut kernel = kernel();
+    let f = binder(0, "f");
+    kernel.define(&f, &nat_type(), &nat(3), &polymorphic());
+
+    let instance = Term::universe_inst(Term::free_var(&f), vec![Level::zero()]);
+    assert_eq!(whnf(&mut kernel, instance), Ok(nat(3)));
+}
+
+#[test]
+fn an_undefined_variable_is_its_own_normal_form() {
+    let mut kernel = kernel();
+    let x = binder(0, "x");
+
+    let occurrence = Term::free_var(&x);
+    assert_eq!(whnf(&mut kernel, occurrence.clone()), Ok(occurrence));
+}
+
+/// Zeta. The second binding refers to the first, so this also pins the left-to-right order: `y` must see `x`'s value, not `x` itself.
+#[test]
+fn zeta_substitutes_let_bindings_left_to_right() {
+    let mut kernel = kernel();
+    let x = binder(0, "x");
+    let y = binder(1, "y");
+
+    let term = Term::let_(
+        &x,
+        nat_type(),
+        nat(2),
+        Term::let_(
+            &y,
+            nat_type(),
+            Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), nat(3))),
+            Term::free_var(&y),
+        ),
+    );
+
+    assert_eq!(whnf(&mut kernel, term), Ok(nat(5)));
+}
+
+/// The intrinsic folds are shared with the elaborator through `Reducer`; this is the kernel reaching them with its own strategy underneath.
+#[test]
+fn intrinsics_fold_through_the_reducer_seam() {
+    let mut kernel = kernel();
+    let x = binder(0, "x");
+    kernel.define(&x, &nat_type(), &nat(2), &monomorphic());
+
+    let term = Term::intrinsic(Intrinsic::nat_add(Term::free_var(&x), nat(2)));
+
+    assert_eq!(whnf(&mut kernel, term), Ok(nat(4)));
+}
+
+#[test]
+fn iota_selects_an_inductive_arm_and_binds_its_payload() {
+    let mut kernel = kernel();
+    let motive = binder(0, "m");
+    let payload = binder(1, "a");
+
+    let term = Term::induct_match(
+        Term::variant(
+            Global::Authored(Qualifier::from(["E"])),
+            Vec::<Term>::new(),
+            "some",
+            [nat(42)],
+        ),
+        Some(&motive),
+        nat_type(),
+        [
+            ("none", Vec::<Free>::new(), nat(0)),
+            ("some", vec![payload.clone()], Term::free_var(&payload)),
+        ],
+    );
+
+    assert_eq!(whnf(&mut kernel, term), Ok(nat(42)));
+}
+
+#[test]
+fn iota_peels_one_successor_off_a_nat() {
+    let mut kernel = kernel();
+    let motive = binder(0, "m");
+    let pred = binder(1, "pred");
+    let hypothesis = binder(2, "ih");
+
+    // `match 3 { 0 => 0 | succ(pred, _) => pred }` peels exactly one layer.
+    let term = Term::nat_match(
+        nat(3),
+        Some(&motive),
+        nat_type(),
+        nat(0),
+        &pred,
+        &hypothesis,
+        Term::free_var(&pred),
+    );
+
+    assert_eq!(whnf(&mut kernel, term), Ok(nat(2)));
+}
+
+#[test]
+fn a_switch_takes_the_case_a_literal_names() {
+    let mut kernel = kernel();
+    let motive = binder(0, "m");
+
+    let term = Term::switch(
+        nat(2),
+        Some(&motive),
+        nat_type(),
+        [(1u32, nat(10)), (2, nat(20))],
+        nat(99),
+    );
+
+    assert_eq!(whnf(&mut kernel, term), Ok(nat(20)));
+}
+
+#[test]
+fn a_switch_falls_through_to_its_default() {
+    let mut kernel = kernel();
+    let motive = binder(0, "m");
+
+    let term = Term::switch(
+        nat(7),
+        Some(&motive),
+        nat_type(),
+        [(1u32, nat(10)), (2, nat(20))],
+        nat(99),
+    );
+
+    assert_eq!(whnf(&mut kernel, term), Ok(nat(99)));
+}
+
+/// A symbolic scrutinee decides nothing, so the switch rebuilds as the neutral term it is rather than guessing an arm.
+#[test]
+fn a_switch_on_a_symbolic_scrutinee_stays_stuck() {
+    let mut kernel = kernel();
+    let motive = binder(0, "m");
+    let n = binder(1, "n");
+
+    let term = Term::switch(
+        Term::free_var(&n),
+        Some(&motive),
+        nat_type(),
+        [(1u32, nat(10))],
+        nat(99),
+    );
+
+    let reduced = whnf(&mut kernel, term).expect("a stuck term still reduces");
+    assert!(matches!(&*reduced, Subterm::Match(_)));
+}
+
+#[test]
+fn a_bool_match_dispatches_on_a_literal() {
+    let mut kernel = kernel();
+    let motive = binder(0, "m");
+
+    let term = Term::bool_match(
+        Term::intrinsic(Intrinsic::Bool(true)),
+        Some(&motive),
+        nat_type(),
+        nat(0),
+        nat(1),
+    );
+
+    assert_eq!(whnf(&mut kernel, term), Ok(nat(1)));
+}
+
+#[test]
+fn projection_selects_a_tuple_field() {
+    let mut kernel = kernel();
+
+    let term = Term::proj(Term::tuple([nat(10), nat(20), nat(30)]), 1);
+
+    assert_eq!(whnf(&mut kernel, term), Ok(nat(20)));
+}
+
+/// A constructor is projected through the flat runtime view `(tag, payload...)`, so field 1 is payload component 0 — unlike a struct, which has no tag to skip.
+#[test]
+fn projection_skips_a_variants_tag_but_not_a_structs() {
+    let mut kernel = kernel();
+    let name = Global::Authored(Qualifier::from(["E"]));
+
+    let variant = Term::proj(
+        Term::variant(name.clone(), Vec::<Term>::new(), "some", [nat(42)]),
+        1,
+    );
+    assert_eq!(whnf(&mut kernel, variant), Ok(nat(42)));
+
+    let struct_ = Term::proj(Term::struct_(name, Vec::<Term>::new(), [nat(42)]), 0);
+    assert_eq!(whnf(&mut kernel, struct_), Ok(nat(42)));
+}
+
+#[test]
+fn eta_contracts_a_function_that_only_forwards() {
+    let mut kernel = kernel();
+    let x = binder(0, "x");
+    let f = binder(1, "f");
+
+    let term = Term::func(
+        [(x.clone(), nat_type())],
+        Term::apply(Term::free_var(&f), [Term::free_var(&x)]),
+    );
+
+    assert_eq!(whnf(&mut kernel, term), Ok(Term::free_var(&f)));
+}
+
+/// The side condition is load-bearing: contracting `(x) => x(x)` would move an occurrence of `x` out from under the binder that gives it meaning.
+#[test]
+fn eta_declines_when_the_head_mentions_the_binder() {
+    let mut kernel = kernel();
+    let x = binder(0, "x");
+
+    let term = Term::func(
+        [(x.clone(), nat_type())],
+        Term::apply(Term::free_var(&x), [Term::free_var(&x)]),
+    );
+
+    assert_eq!(whnf(&mut kernel, term.clone()), Ok(term));
+}
+
+/// A recursive call keeps its folded spelling until an eliminator demands the value, which is what stops an occurrence from unfolding forever.
+#[test]
+fn a_recursive_application_stays_folded_until_forced() {
+    let mut kernel = kernel();
+    let n = binder(0, "n");
+    let motive = binder(1, "m");
+    let pred = binder(2, "pred");
+    let hypothesis = binder(3, "ih");
+    let countdown = binder(4, "countdown");
+    let x = binder(5, "x");
+
+    let body = Term::func(
+        [(n.clone(), nat_type())],
+        Term::nat_match(
+            Term::free_var(&n),
+            Some(&motive),
+            nat_type(),
+            nat(0),
+            &pred,
+            &hypothesis,
+            Term::apply(Term::free_var(&countdown), [Term::free_var(&pred)]),
+        ),
+    );
+
+    let group = [(
+        countdown.clone(),
+        Term::func_type([(n.clone(), nat_type())], nat_type()),
+        body,
+    )];
+
+    // Applied to a symbolic argument, it reduces to a folded recursive call.
+    let symbolic = Term::rec(
+        group.clone(),
+        Term::apply(Term::free_var(&countdown), [Term::free_var(&x)]),
+    );
+    let Subterm::Rec(rec) = Term::unwrap_or_clone(symbolic) else {
+        unreachable!("built as a rec")
+    };
+    let reduced = whnf(&mut kernel, unfold_rec(rec)).expect("ordinary reduction terminates");
+    assert!(matches!(
+        &*reduced,
+        Subterm::Apply(Apply { head, .. }) if head.as_rec_proj().is_some()
+    ));
+
+    // Applied to a literal, forcing runs it to the end.
+    let concrete = Term::rec(group, Term::apply(Term::free_var(&countdown), [nat(3)]));
+    assert_eq!(kernel.reduce_forced(concrete), Ok(nat(0)));
+}
+
+/// A boolean operation reduces its right operand only once its left is a literal. The left here is a local, so the right — a fold that would answer `true` — is handed back as written; with the left `true`, the same right folds and so does the whole. This is the rule that keeps weak-head reduction of a `&&`/`||` tree from being its full normalization, which on a web of predicate definitions naming each other twice was `2^n` under every demand — see `reduce_bool_binary`.
+#[test]
+fn a_stuck_left_operand_leaves_the_right_as_written() {
+    let mut kernel = kernel();
+    let x = binder(0, "x");
+    kernel.assume(&x, &Term::intrinsic(Intrinsic::BoolType));
+    let literal = |value: bool| Term::intrinsic(Intrinsic::Bool(value));
+    let folds = Term::intrinsic(Intrinsic::BoolAnd(literal(true), literal(true)));
+
+    let stuck = Term::intrinsic(Intrinsic::BoolAnd(Term::free_var(&x), folds.clone()));
+    assert_eq!(
+        whnf(&mut kernel, stuck.clone()),
+        Ok(stuck),
+        "a stuck left settles the fold, and the right is not reduced for an answer it cannot change"
+    );
+
+    let open = Term::intrinsic(Intrinsic::BoolAnd(literal(true), folds));
+    assert_eq!(
+        whnf(&mut kernel, open),
+        Ok(literal(true)),
+        "a literal left reads the right and folds"
+    );
+}

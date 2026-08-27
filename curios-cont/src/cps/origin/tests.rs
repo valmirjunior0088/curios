@@ -1,30 +1,12 @@
 use {
     super::{Origin, origins},
+    crate::cps::test_support::module_with,
     crate::{
         CpsAtom, CpsCallee, CpsContinuation, CpsEdge, CpsFunction, CpsLiteral, CpsModule, CpsNode,
         CpsSlot, CpsValueExpr, CpsValueId,
     },
     std::collections::BTreeSet,
 };
-
-/// One function whose body is `body_of(&mut module)`, so each test states only the flow it is about.
-fn module_with(body_of: impl FnOnce(&mut CpsModule) -> crate::CpsNodeId) -> CpsModule {
-    let mut module = CpsModule::default();
-    let body = body_of(&mut module);
-    let function = module.reserve_function();
-    let return_cont = module.reserve_continuation();
-    module.define_function(
-        function,
-        CpsFunction {
-            debug_name: Some("main".into()),
-            params: vec![],
-            return_cont,
-            body,
-        },
-    );
-    module.set_entry(function);
-    module
-}
 
 /// A two-field construction jumped into a join point reaches its parameter exactly.
 #[test]

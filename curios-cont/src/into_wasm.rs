@@ -45,7 +45,19 @@ mod types;
 pub use types::*;
 
 #[cfg(test)]
-mod tests;
+mod aggregate_tests;
+#[cfg(test)]
+mod foreign_tests;
+#[cfg(test)]
+mod hoist_tests;
+#[cfg(test)]
+mod intrinsic_tests;
+#[cfg(test)]
+mod module_tests;
+#[cfg(test)]
+mod rope_tests;
+#[cfg(test)]
+mod test_support;
 
 /// Lower an optimized CPS module to a wasm-GC module — the pipeline's final stage. The private machine CFG is built and its reducible control structurized into blocks and loops, then a `Table` is computed over the whole module (the name maps, the closure type per `clsr_arities` arity, tuple arities, rope helpers) and `ModuleEmitter` declares the host imports and emits every const, closure, and function, exporting the entry under its emitted name (`func/main` — the entry is always `main`).
 pub fn into_wasm(module: &CpsModule) -> curios_wasm::Module {

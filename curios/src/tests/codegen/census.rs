@@ -1116,7 +1116,7 @@ fn step_specialization_extent() {
 
 /// Pins the census machinery to the shapes the string walk still carries — and to the two it no longer does. The accumulator region dissolved when continuation scalar replacement landed (M2), and the suffix-view rope region dissolved when the window split landed (M4): both absences are the campaign's acceptance echoed by its own instrument. What survives, until a variant-width capability exists, is the scan-state flow: a blocked tuple region whose parameters receive call results.
 #[test]
-fn census_surveys_the_fold_accumulator_region() {
+fn surveys_the_fold_accumulator_region() {
     let source = r#"
         use /std/{Handle, Nat, Str, Char, List, proc};
         let taint = List/len(proc/args!);

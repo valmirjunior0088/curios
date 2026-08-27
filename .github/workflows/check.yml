@@ -81,6 +81,8 @@ jobs:
         run: cargo xtask runtime
       - name: Run tests
         run: cargo test --workspace --all-targets --all-features
+      - name: Run doctests
+        run: cargo test --workspace --doc --all-features
 
   docs:
     name: Documentation

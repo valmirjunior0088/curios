@@ -18,7 +18,23 @@ mod top_level;
 pub(crate) use top_level::parse_top_item;
 
 #[cfg(test)]
-mod tests;
+mod concept_tests;
+#[cfg(test)]
+mod expr_tests;
+#[cfg(test)]
+mod grammar_tests;
+#[cfg(test)]
+mod literals_tests;
+#[cfg(test)]
+mod match_expr_tests;
+#[cfg(test)]
+mod module_tests;
+#[cfg(test)]
+mod test_support;
+#[cfg(test)]
+mod top_level_tests;
+#[cfg(test)]
+mod tuples_tests;
 
 use {
     super::{

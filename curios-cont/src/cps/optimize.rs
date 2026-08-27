@@ -2,9 +2,6 @@
 //!
 //! The pipeline never keys on input names: every rewrite depends only on graph structure and the enforced budget constants below, so the same module always optimizes identically. Every pass carries a permanent span and a sample of whether it fired, as `curios-profile` prescribes for optimizer passes: the span's `calls` is the round count and its total the pass's share, and the sample's total is the number of rounds that pass kept the fixpoint alive. Anything finer is investigated with revision worktrees and temporary instrumentation, never a permanent metrics API.
 
-#[cfg(test)]
-mod tests;
-
 use super::{
     CpsModule,
     analysis::known_values,

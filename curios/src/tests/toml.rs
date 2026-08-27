@@ -611,32 +611,32 @@ fn check(table: &'static [Row]) {
 }
 
 #[test]
-fn toml_scalar_documents_round_trip_deterministically() {
+fn scalar_documents_round_trip_deterministically() {
     check(SCALARS);
 }
 
 #[test]
-fn toml_string_forms_and_escapes_decode() {
+fn string_forms_and_escapes_decode() {
     check(STRINGS);
 }
 
 #[test]
-fn toml_date_times_cover_the_rfc3339_subset() {
+fn date_times_cover_the_rfc3339_subset() {
     check(DATE_TIMES);
 }
 
 #[test]
-fn toml_integer_boundaries_hold_in_every_radix() {
+fn integer_boundaries_hold_in_every_radix() {
     check(INTEGERS);
 }
 
 #[test]
-fn toml_floats_pin_binary32_bit_patterns() {
+fn floats_pin_binary32_bit_patterns() {
     check(FLOAT_BITS);
 }
 
 #[test]
-fn toml_floats_are_correctly_rounded() {
+fn floats_are_correctly_rounded() {
     let offset = TABLES.iter().map(|table| table.len()).sum::<usize>();
     for (index, (expr, expected)) in rounded_float_rows().iter().enumerate() {
         assert_eq!(run_row(offset + index), *expected, "for: {expr}");
@@ -644,28 +644,28 @@ fn toml_floats_are_correctly_rounded() {
 }
 
 #[test]
-fn toml_malformed_numbers_and_escapes_reject() {
+fn malformed_numbers_and_escapes_reject() {
     check(REASONS);
 }
 
 #[test]
-fn toml_table_construction_conflicts_reject() {
+fn table_construction_conflicts_reject() {
     check(TABLE_CONFLICTS);
 }
 
 #[test]
-fn toml_arrays_and_inline_tables_nest_and_reach_a_fixpoint() {
+fn arrays_and_inline_tables_nest_and_reach_a_fixpoint() {
     check(NESTING);
 }
 
 #[test]
-fn toml_comments_line_endings_and_trailing_input() {
+fn comments_line_endings_and_trailing_input() {
     check(COMMENTS);
 }
 
 /// The encoder on a map built by hand rather than decoded, which is the one path no row above reaches.
 #[test]
-fn toml_encode_rejects_a_non_utf8_key() {
+fn encode_rejects_a_non_utf8_key() {
     let source = r#"
         use /std/{Handle, Str, Toml, Result, Map, Nat, Bytes, rand};
         let taint = Bytes/len(rand/bytes(0)!);

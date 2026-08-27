@@ -23,3 +23,7 @@ pub use totality::*;
 
 mod erased;
 pub use erased::*;
+
+// A namespace rather than a root export, for `curios-runtime`'s `test_support` reason: `curios_analysis::fixture::SYNTAX` says at its use site that the caller reached for scaffolding rather than product API. The path is the warning label.
+#[cfg(feature = "test-support")]
+pub mod fixture;

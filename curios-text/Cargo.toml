@@ -22,3 +22,7 @@ curios-print = { workspace = true }
 curios-core = { workspace = true }
 curios-elab = { workspace = true }
 curios-num = { workspace = true }
+
+[dev-dependencies]
+# `curios_core::test_support::into_nested_term`, which the lowering suite folds a finished module with. A dev-dependency entry beside the normal one, because the feature must not reach a build that ships.
+curios-core = { workspace = true, features = ["test-support"] }

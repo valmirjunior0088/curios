@@ -15,7 +15,27 @@ mod scoped;
 use scoped::*;
 
 #[cfg(test)]
-mod tests;
+mod binding_tests;
+#[cfg(test)]
+mod exposure_tests;
+#[cfg(test)]
+mod foreign_tests;
+#[cfg(test)]
+mod lower_tests;
+#[cfg(test)]
+mod ordering_tests;
+#[cfg(test)]
+mod re_export_tests;
+#[cfg(test)]
+mod sys_tests;
+#[cfg(test)]
+mod test_support;
+#[cfg(test)]
+mod universe_tests;
+#[cfg(test)]
+mod use_tests;
+#[cfg(test)]
+mod visibility_tests;
 
 use {
     super::*,

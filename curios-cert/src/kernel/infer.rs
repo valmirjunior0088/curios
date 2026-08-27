@@ -19,7 +19,17 @@ mod intrinsic;
 use intrinsic::infer_intrinsic;
 
 #[cfg(test)]
-mod tests;
+mod declaration_tests;
+#[cfg(test)]
+mod intrinsic_tests;
+#[cfg(test)]
+mod sort_tests;
+#[cfg(test)]
+mod structure_tests;
+#[cfg(test)]
+mod test_support;
+#[cfg(test)]
+mod typing_tests;
 
 use {
     super::{

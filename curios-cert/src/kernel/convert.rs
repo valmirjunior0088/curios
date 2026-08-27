@@ -24,7 +24,13 @@ mod intrinsic;
 use intrinsic::convert_intrinsic;
 
 #[cfg(test)]
-mod tests;
+mod conversion_tests;
+#[cfg(test)]
+mod irrelevance_tests;
+#[cfg(test)]
+mod recursion_tests;
+#[cfg(test)]
+mod test_support;
 
 use {
     super::{Kernel, KernelError, Sort, unfold_spelling},

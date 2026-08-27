@@ -55,7 +55,7 @@ fn lowered_module_validation_rejects_a_seed_floor_mismatch() {
 }
 
 #[test]
-fn zonk_leaves_a_meta_free_term_unchanged() {
+fn leaves_a_meta_free_term_unchanged() {
     let mut context = context();
     let x = context.fresh(Some("x"));
 
@@ -66,7 +66,7 @@ fn zonk_leaves_a_meta_free_term_unchanged() {
 }
 
 #[test]
-fn zonk_replaces_a_solved_metavariable_with_its_solution() {
+fn replaces_a_solved_metavariable_with_its_solution() {
     let mut context = context();
 
     context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
@@ -78,7 +78,7 @@ fn zonk_replaces_a_solved_metavariable_with_its_solution() {
 }
 
 #[test]
-fn zonk_resolves_a_metavariable_in_an_inductive_match_default() {
+fn resolves_a_metavariable_in_an_inductive_match_default() {
     let mut context = context();
 
     context.birth_metavar(MetaId(0), Vec::new(), nat());
@@ -107,7 +107,7 @@ fn zonk_resolves_a_metavariable_in_an_inductive_match_default() {
 }
 
 #[test]
-fn zonk_resolves_a_metavariable_nested_in_a_structure() {
+fn resolves_a_metavariable_nested_in_a_structure() {
     let mut context = context();
 
     context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
@@ -133,7 +133,7 @@ fn zonk_resolves_a_metavariable_nested_in_a_structure() {
 }
 
 #[test]
-fn zonk_chases_a_solution_that_mentions_another_metavariable() {
+fn chases_a_solution_that_mentions_another_metavariable() {
     let mut context = context();
 
     // ?0 := ?1, ?1 := Nat. Zonking ?0 must resolve through to `Nat`.
@@ -148,7 +148,7 @@ fn zonk_chases_a_solution_that_mentions_another_metavariable() {
 }
 
 #[test]
-fn zonk_rejects_an_unsolved_metavariable() {
+fn rejects_an_unsolved_metavariable() {
     let mut context = context();
 
     context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
@@ -159,7 +159,7 @@ fn zonk_rejects_an_unsolved_metavariable() {
 }
 
 #[test]
-fn zonk_reports_a_solved_goal() {
+fn reports_a_solved_goal() {
     let mut context = context();
 
     // A written goal `?` errors even when solved — the report carries the frozen scope, the goal's type, and the committed solution.
@@ -178,7 +178,7 @@ fn zonk_reports_a_solved_goal() {
 }
 
 #[test]
-fn zonk_reports_an_unsolved_goal_as_undetermined() {
+fn reports_an_unsolved_goal_as_undetermined() {
     let mut context = context();
 
     context.birth_metavar(MetaId(0), Vec::new(), nat());

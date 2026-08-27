@@ -15,7 +15,27 @@
 //! What is *not* re-judged is decided by name. An item whose declared names the environment already answers for was judged by the walk that built the environment; every other item is judged here. Nothing reads a length, and nothing requires the already-judged items to sit anywhere in particular — which is the difference between an environment and a prefix.
 
 #[cfg(test)]
-mod tests;
+mod elimination_tests;
+#[cfg(test)]
+mod foreign_tests;
+#[cfg(test)]
+mod occurrence_tests;
+#[cfg(test)]
+mod plicity_tests;
+#[cfg(test)]
+mod proposition_tests;
+#[cfg(test)]
+mod recursion_tests;
+#[cfg(test)]
+mod registry_tests;
+#[cfg(test)]
+mod scope_tests;
+#[cfg(test)]
+mod test_support;
+#[cfg(test)]
+mod totality_tests;
+#[cfg(test)]
+mod universes_tests;
 
 use {
     super::{

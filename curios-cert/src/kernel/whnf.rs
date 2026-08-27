@@ -7,7 +7,17 @@
 //! Two things *are* shared, and both are representation rather than judgment: the binder discipline that `open`/`release` implement, and [`reduce_intrinsic`](curios_core::reduce_intrinsic), which decides what `2 + 2` folds to. Neither can admit an ill-typed program on its own.
 
 #[cfg(test)]
-mod tests;
+mod budget_tests;
+#[cfg(test)]
+mod closed_machine_tests;
+#[cfg(test)]
+mod equations_tests;
+#[cfg(test)]
+mod memo_tests;
+#[cfg(test)]
+mod rules_tests;
+#[cfg(test)]
+mod test_support;
 
 use {
     super::Kernel,

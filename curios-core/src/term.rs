@@ -1,5 +1,11 @@
 #[cfg(test)]
-mod tests;
+mod binder_tests;
+#[cfg(test)]
+mod sharing_tests;
+#[cfg(test)]
+mod test_support;
+#[cfg(test)]
+mod traversal_tests;
 
 // Deliberately not re-exported: the caches are [`Node`]'s private business.
 mod scalars;

@@ -14,10 +14,9 @@
 //!
 //! The crate is a flat module space: every module re-exports at the root, so downstream crates use `curios_elab::Context`, not paths into the modules.
 
+// The `/syn` registry stand-in every context these tests build is handed. Shared with `curios-cert` and with `curios-analysis`'s own suite rather than copied into each, and gated there behind `test-support` so it reaches no build that ships.
 #[cfg(test)]
-mod fixture;
-#[cfg(test)]
-pub(crate) use fixture::*;
+pub(crate) use curios_analysis::fixture::SYNTAX;
 
 mod builders;
 pub use builders::*;

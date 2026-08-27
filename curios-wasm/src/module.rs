@@ -1,5 +1,11 @@
 #[cfg(test)]
-mod tests;
+mod array_tests;
+#[cfg(test)]
+mod memory_tests;
+#[cfg(test)]
+mod table_tests;
+#[cfg(test)]
+mod test_support;
 
 use {
     super::{

@@ -67,3 +67,7 @@ pub use polarity::*;
 
 mod print;
 pub use print::*;
+
+// A namespace rather than a root export, for `curios-runtime`'s `test_support` reason: `curios_core::test_support::into_nested_term` says at its use site that the caller reached for scaffolding rather than product API. The path is the warning label.
+#[cfg(feature = "test-support")]
+pub mod test_support;

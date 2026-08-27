@@ -3,7 +3,17 @@ use crate::TermBuilders;
 use intrinsic::*;
 
 #[cfg(test)]
-mod tests;
+mod conversion_tests;
+#[cfg(test)]
+mod imitation_tests;
+#[cfg(test)]
+mod intrinsic_tests;
+#[cfg(test)]
+mod solve_tests;
+#[cfg(test)]
+mod structural_tests;
+#[cfg(test)]
+mod test_support;
 
 use {
     super::{

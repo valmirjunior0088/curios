@@ -10,6 +10,8 @@ workspace = true
 
 [features]
 profile = ["curios-profile/enabled", "curios-core/profile"]
+# The shared `/syn` registry stand-in both checkers' tests are built against, in `fixture`. A feature rather than `#[cfg(test)]` because that cfg is set only while this crate is its own test harness, so a `cfg(test)` item is invisible to `curios-cert`'s and `curios-elab`'s tests — the same reason `curios-runtime`'s `test-support` is a feature. **Never add this to `default`.** The module spells `/syn` names, and the gate is what keeps them out of every build that ships.
+test-support = []
 
 [dependencies]
 curios-profile = { workspace = true }
@@ -25,3 +27,7 @@ curios-num = { workspace = true }
 # other copy and the bound would not hold.
 [dev-dependencies]
 curios-cert = { workspace = true }
+# This crate on itself, only to turn `test-support` on for its own tests: `tests/driven.rs`
+# links the library as an external crate, so `#[cfg(test)]` inside the lib would not reach it
+# and the feature is the only switch that does.
+curios-analysis = { path = ".", features = ["test-support"] }

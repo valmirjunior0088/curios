@@ -8,7 +8,7 @@ use {
 };
 
 fn kernel() -> Kernel {
-    let mut kernel = Kernel::new(100_000, crate::fixture::SYNTAX);
+    let mut kernel = Kernel::new(100_000, crate::SYNTAX);
     kernel.set_local_floor(1_000);
     kernel
 }

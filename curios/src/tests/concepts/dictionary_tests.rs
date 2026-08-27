@@ -1,0 +1,201 @@
+//! Filling a concept's fields explicitly: `use` entries, superclass slots, and literal spreads.
+
+use super::super::{error, run};
+
+// An explicit `use <term>` fill in a concept literal overrides table resolution for that field: the flipped equality rides inside the `Ord2` value, while the registered witness is untouched. The superclass field is anonymous, so the override is observed by resolution — with `o` in instance scope, the omitted `Eq2(Nat)` goal projects its superclass (the flipped equality), taking precedence over the global table.
+#[test]
+fn use_entry_fills_a_concept_field_explicitly() {
+    let source = r#"
+        use /std/{Nat, Bool, Handle, Str, Order};
+        pub concept Eq2(A : Type) : pub Type {
+            eq2(A, A) -> Bool
+        }
+        pub concept Ord2(A : Type) : pub Type {
+            use Eq2(A),
+            cmp2(A, A) -> Order
+        }
+        satisfy Eq2(Nat) {
+            eq2(a, b) = a == b
+        }
+        let flipped : Eq2(Nat) = Eq2 { eq2(a, b) = false };
+        let o : Ord2(Nat) = Ord2 { use flipped, cmp2(a, b) = Order/lt() };
+        pub let observe(use Ord2(Nat)) -> Bool = Eq2/eq2(1, 1);
+        /std/print(Bool/to_str(observe(use o)))
+        "#;
+
+    assert_eq!(run(source), b"false");
+}
+
+// A witness body is a concept literal, so `use <term>` fills its superclass field there too.
+#[test]
+fn use_entry_fills_a_witness_superclass() {
+    let source = r#"
+        use /std/{Nat, Bool, Handle, Str, Order};
+        pub concept Eq3(A : Type) : pub Type {
+            eq3(A, A) -> Bool
+        }
+        pub concept Ord3(A : Type) : pub Type {
+            use Eq3(A),
+            cmp3(A, A) -> Order
+        }
+        satisfy Ord3(Nat) {
+            use Eq3 { eq3(a, b) = a == b },
+            cmp3(a, b) = Order/lt()
+        }
+        pub let same(@A : Type, use Ord3(A), x : A, y : A) -> Bool = Eq3/eq3(x, y);
+        /std/print(Bool/to_str(same(2, 2)))
+        "#;
+
+    assert_eq!(run(source), b"true");
+}
+
+// A superclass field is anonymous, so its concept's former field name is not a label: assigning it is a plain unknown-field error, with no special `use`-field diagnostic (`Eql`'s superclass is reached by resolution, never by name).
+#[test]
+fn labeled_fill_of_a_former_superclass_is_unknown() {
+    let source = r#"
+        use /std/{Nat, Bool, Handle, Str, Order};
+        pub concept Eq4(A : Type) : pub Type {
+            eq4(A, A) -> Bool
+        }
+        pub concept Ord4(A : Type) : pub Type {
+            use Eq4(A),
+            cmp4(A, A) -> Order
+        }
+        satisfy Eq4(Nat) {
+            eq4(a, b) = a == b
+        }
+        let bad : Ord4(Nat) = Ord4 { eq4 = Eq4 { eq4(a, b) = a == b } };
+        /std/print("no")
+        "#;
+
+    let message = error(source);
+    assert!(message.contains("'eq4'"), "got: {message}");
+    assert!(message.contains("no field"), "got: {message}");
+}
+
+// `use` entries are rejected outside concept literals, and surplus entries are rejected against the concept's `use`-field count.
+#[test]
+fn misplaced_use_entries_are_errors() {
+    let non_concept = r#"
+        use /std/{Nat, Handle, Str};
+        pub struct Pair : pub Type { fst : Nat, snd : Nat }
+        let p = Pair { use 1, snd = 2 };
+        /std/print("no")
+        "#;
+    assert!(error(non_concept).contains("not a concept"));
+
+    let surplus = r#"
+        use /std/{Nat, Bool, Handle, Str, Order};
+        pub concept Eq5(A : Type) : pub Type {
+            eq5(A, A) -> Bool
+        }
+        pub concept Ord5(A : Type) : pub Type {
+            use Eq5(A),
+            cmp5(A, A) -> Order
+        }
+        satisfy Eq5(Nat) {
+            eq5(a, b) = a == b
+        }
+        satisfy Ord5(Nat) {
+            use Eq5 { eq5(a, b) = a == b },
+            use Eq5 { eq5(a, b) = a == b },
+            cmp5(a, b) = Order/lt()
+        }
+        /std/print("no")
+        "#;
+    assert!(error(surplus).contains("'use' entr"));
+}
+
+// An omitted superclass field inside a *premised* witness resolves through the local `use` premise (resolution's local step), not the table: the element equality is the premise's, threaded structurally.
+#[test]
+fn omitted_superclass_resolves_from_a_premise() {
+    let source = r#"
+        use /std/{Nat, Bool, Handle, Str, Order, List};
+        pub concept Eq6(A : Type) : pub Type {
+            eq6(A, A) -> Bool
+        }
+        pub concept Ord6(A : Type) : pub Type {
+            use Eq6(A),
+            cmp6(A, A) -> Order
+        }
+        satisfy Eq6(Nat) {
+            eq6(a, b) = a == b
+        }
+        satisfy (@A : Type, use Eq6(A)) => Eq6(List(A)) {
+            eq6(a, b) = List/len(a) == List/len(b)
+        }
+        satisfy (@A : Type, use Ord6(A)) => Ord6(List(A)) {
+            cmp6(a, b) = Order/lt()
+        }
+        satisfy Ord6(Nat) {
+            cmp6(a, b) = Order/lt()
+        }
+        pub let same(@A : Type, use Ord6(A), x : A, y : A) -> Bool = Eq6/eq6(x, y);
+        let l : List(Nat) = [1, 2];
+        /std/print(Bool/to_str(same(l, l)))
+        "#;
+
+    assert_eq!(run(source), b"true");
+}
+
+// A spread in a concept literal *copies* the anonymous superclass field from the base rather than re-resolving it: `o` carries the flipped (always false) equality, and the update must preserve it — table resolution would find the registered `Eq2(Nat)` and answer true.
+#[test]
+fn concept_literal_spread_copies_superclass() {
+    let source = r#"
+        use /std/{Nat, Bool, Handle, Str, Order};
+        pub concept Eq2(A : Type) : pub Type {
+            eq2(A, A) -> Bool
+        }
+        pub concept Ord2(A : Type) : pub Type {
+            use Eq2(A),
+            cmp2(A, A) -> Order
+        }
+        satisfy Eq2(Nat) {
+            eq2(a, b) = a == b
+        }
+        let flipped : Eq2(Nat) = Eq2 { eq2(a, b) = false };
+        let o : Ord2(Nat) = Ord2 { use flipped, cmp2(a, b) = Order/lt() };
+        let o2 : Ord2(Nat) = Ord2 { ..o, cmp2(a, b) = Order/gt() };
+        pub let observe(use Ord2(Nat)) -> Bool = Eq2/eq2(1, 1);
+        /std/print(Bool/to_str(observe(use o2)))
+        "#;
+
+    assert_eq!(run(source), b"false");
+}
+
+// An explicit `use <term>` entry after the spread still overrides the superclass, while the plain fields copy across.
+#[test]
+fn concept_literal_spread_use_override() {
+    let source = r#"
+        use /std/{Nat, Bool, Handle, Str, Order};
+        pub concept Eq2(A : Type) : pub Type {
+            eq2(A, A) -> Bool
+        }
+        pub concept Ord2(A : Type) : pub Type {
+            use Eq2(A),
+            cmp2(A, A) -> Order
+        }
+        let flipped : Eq2(Nat) = Eq2 { eq2(a, b) = false };
+        let straight : Eq2(Nat) = Eq2 { eq2(a, b) = true };
+        let o : Ord2(Nat) = Ord2 { use flipped, cmp2(a, b) = Order/lt() };
+        let o2 : Ord2(Nat) = Ord2 { ..o, use straight };
+        pub let observe(use Ord2(Nat)) -> Bool = Eq2/eq2(1, 1);
+        /std/print(Bool/to_str(observe(use o2)))
+        "#;
+
+    assert_eq!(run(source), b"true");
+}
+
+// A `use` entry after a spread is still only legal in concept literals.
+#[test]
+fn concept_literal_spread_use_on_non_concept_rejected() {
+    let source = r#"
+        use /std/{Nat, Handle};
+        pub struct Pair(A : Type, B : Type) : pub Type { fst : A, snd : B }
+        let p : Pair(Nat, Nat) = Pair { fst = 1, snd = 2 };
+        let bad = Pair { ..p, use 1 };
+        /std/print("no")
+        "#;
+
+    assert!(error(source).contains("not a concept"));
+}

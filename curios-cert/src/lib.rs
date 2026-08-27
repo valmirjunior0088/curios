@@ -10,8 +10,9 @@
 //!
 //! The crate is a flat module space: every module re-exports at the root, so consumers use `curios_cert::Kernel` and `curios_cert::convert`. The crate name itself is what keeps the two checkers tellable apart — the judgments here name the same things the elaborator names its own, and `curios_cert::convert` versus the elaborator's bare `convert` reads exactly as the second opinion it is.
 
+// The `/syn` registry stand-in every kernel these tests build is handed. Shared with `curios-elab` and with `curios-analysis`'s own suite rather than copied into each, and gated there behind `test-support` so it reaches no build that ships.
 #[cfg(test)]
-mod fixture;
+pub(crate) use curios_analysis::fixture::SYNTAX;
 
 mod entail;
 pub(crate) use entail::*;

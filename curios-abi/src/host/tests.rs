@@ -75,7 +75,7 @@ fn placements_are_unique() {
 
 /// Every builtin states the `/sys` module it surfaces in: the prelude places rows by that column rather than by a list beside the table, so a row without one is a table it cannot read.
 #[test]
-fn host_ops_rows_name_a_subject() {
+fn ops_rows_name_a_subject() {
     assert!(host_ops().iter().all(|function| function.subject.is_some()));
 }
 
@@ -143,7 +143,7 @@ fn register_rejects_a_duplicate_name() {
 
 /// Every `host_ops` row is stamped with the `sys` wasm namespace — the fixed substrate `emit_sys_imports` reads instead of re-deriving membership by rebuilding this same store.
 #[test]
-fn host_ops_rows_are_stamped_with_the_sys_namespace() {
+fn ops_rows_are_stamped_with_the_sys_namespace() {
     assert!(
         host_ops()
             .iter()

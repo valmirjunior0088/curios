@@ -203,7 +203,7 @@ fn chain_collection_decomposition() {
 
 /// The `churn` workload's threaded record travels as fields: over a million spread-update steps the emitted program allocates so little that the collector never runs, because continuation scalar replacement and the known-function field split erase the reconstruction the source spells. The workload's Curios column therefore prices dispatch and checked arithmetic rather than allocation, and the campaign's record-update question narrows to records at rest — which is what the specification's `spines` workload and the census exist to reach. Collection counts are deterministic, which is what makes the absence assertable rather than merely measurable; the anchor is cross-checked against the Rust and Node contestants.
 #[test]
-fn churn_threaded_record_allocates_nothing() {
+fn threaded_record_allocates_nothing() {
     let cwasm = cwasm_of(CHURN);
 
     let ((_, output), records) = capture_host_records(GC_TARGET, || run(&cwasm, 1_000_000));

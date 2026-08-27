@@ -127,7 +127,7 @@ Both are in the harness and its spellings, not the compiler, and neither had eve
 
 ## `churn` — 1.13× off the mutation floor, and ahead of Perceus
 
-Curios is second in the native table, behind Rust and ahead of Node, Lean and OCaml. That ordering is the erasure the workload was specified to expose, and it is already pinned structurally: `churn_threaded_record_allocates_nothing` in `curios/src/tests/codegen/churn.rs` asserts that a million spread-update steps reach the collector zero times, because continuation scalar replacement and the known-function field split erase the record the source spells. The threaded record travels as fields, so this column never allocates.
+Curios is second in the native table, behind Rust and ahead of Node, Lean and OCaml. That ordering is the erasure the workload was specified to expose, and it is already pinned structurally: `threaded_record_allocates_nothing` in `curios/src/tests/codegen/churn.rs` asserts that a million spread-update steps reach the collector zero times, because continuation scalar replacement and the known-function field split erase the record the source spells. The threaded record travels as fields, so this column never allocates.
 
 That is why the comparison lands where it does in both directions. Rust mutates a struct in place and allocates nothing, so its 243.6 ms is the mutation floor — and Curios's 1.13× over it is what checked i31 arithmetic and dispatch cost, with allocation contributing nothing on either side. OCaml and Grain allocate a fresh six-field record per step and pay for it. Lean's `{ r with … }` is the shape Perceus rewrites in place, so it should also be near the floor, and at 1.34× it is *behind Curios* — reference counting is not free even when it succeeds in reusing.
 
