@@ -168,10 +168,11 @@ pub let get(s: Str, i: Nat, ok: Nat/Lt(i, len(s))) -> Char =
                         t,
                         peel_byte(True/qed(), valid),
                         pred,
-                        match le: (x, y, le) => Nat/Le/Ind(x - 1, y - 1) | s(@a, @c, prev) => prev end)
+                        match le: (x, y, le) => Nat/Le/Ind(x - 1, y - 1)
+                        | s(@a, @c, prev) => prev
+                        end)
                 end
-            | cont(rem, lo, hi) =>
-                go(step(h, sc), t, peel_byte(True/qed(), valid), i, le)
+            | cont(rem, lo, hi) => go(step(h, sc), t, peel_byte(True/qed(), valid), i, le)
             | bad() => go(step(h, Scan/bad()), t, peel_byte(True/qed(), valid), i, le)
             end
         end;

@@ -321,10 +321,7 @@ pub let distrib_l(
                 Eq/sym(trim_add_raw_trim_l(raw(a.bits, b.bits), raw(a.bits, c.bits), false)),
                 Eq/trans(
                     Eq/sym(
-                        trim_add_raw_trim_r(
-                            trim(raw(a.bits, b.bits)),
-                            raw(a.bits, c.bits),
-                            false)),
+                        trim_add_raw_trim_r(trim(raw(a.bits, b.bits)), raw(a.bits, c.bits), false)),
                     trim_of_trimmed(
                         add/raw(trim(raw(a.bits, b.bits)), trim(raw(a.bits, c.bits)), false),
                         add/raw_trimmed(
@@ -348,10 +345,7 @@ pub let distrib_r(
                 Eq/sym(trim_add_raw_trim_l(raw(b.bits, a.bits), raw(c.bits, a.bits), false)),
                 Eq/trans(
                     Eq/sym(
-                        trim_add_raw_trim_r(
-                            trim(raw(b.bits, a.bits)),
-                            raw(c.bits, a.bits),
-                            false)),
+                        trim_add_raw_trim_r(trim(raw(b.bits, a.bits)), raw(c.bits, a.bits), false)),
                     trim_of_trimmed(
                         add/raw(trim(raw(b.bits, a.bits)), trim(raw(c.bits, a.bits)), false),
                         add/raw_trimmed(

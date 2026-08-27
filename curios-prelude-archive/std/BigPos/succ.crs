@@ -11,7 +11,4 @@ let raw_cons(x: Bits) -> is_cons(BigNat/succ/raw(x)) =
 
 -- `BigNat/succ` answers with its raw ripple untrimmed, so the certificate is `raw_cons` directly — no transport across a trim.
 pub let succ(p: BigPos) -> BigPos =
-    BigPos {
-        value = BigNat/succ/succ(p.value),
-        non_zero = raw_cons(p.value.bits),
-    };
+    BigPos { value = BigNat/succ/succ(p.value), non_zero = raw_cons(p.value.bits) };

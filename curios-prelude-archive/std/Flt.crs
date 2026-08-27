@@ -7,14 +7,14 @@ use /std/{Nat, Byte, Int, Str, Char, Bool, Option, Bytes, List, Order, BigNat, E
 
 -- The two infinities are spelled by division rather than by their bit patterns, and that is a dependency fact rather than a style preference: `of_le_bytes` states a length precondition, so building an infinity from bytes would make these depend on the very operation whose bound wants naming an infinity. `div` states no precondition — `Flt` division is total, an IEEE infinity being a value rather than a failure — so this direction has no edge back.
 pub let pos_inf: Flt =
-    div(1.0, 0.0);
+    div(+1.0, +0.0);
 
 pub let neg_inf: Flt =
-    div(-1.0, 0.0);
+    div(-1.0, +0.0);
 
 -- `nan` keeps its bit pattern, because `0.0 / 0.0` is *a* NaN whose payload the standard leaves to the implementation while `Flt` preserves bits and compares them — and `/std/Toml` promises one encoding. Nothing here depends on it: no precondition mentions NaN, since every comparison already rejects one. The literal operand settles `of_le_bytes`'s length bound by reduction, so the obligation is discharged with nothing written.
 pub let nan: Flt =
-    of_le_bytes(x[0x00, 0x00, 0xc0, 0x7f]);
+    of_le_bytes(x[0x0, 0x0, 0xC0, 0x7F]);
 
 -- Finite is stated as an open interval between the two infinities, which rejects all three non-finite floats with one ordered pair: `+inf` fails the upper bound, `-inf` the lower, and a NaN fails both, since every IEEE comparison with one is false. No `f == f` idiom and no separate NaN test.
 pub let is_finite(f: Flt) -> Bool =
@@ -31,15 +31,16 @@ pub let try_of_le_bytes(b: Bytes) -> Option(Flt) =
 --
 -- Each scrutinee must be spelled as its proposition spells it, operand order included — a refinement is keyed on the term written, and `min <= f` is not the term `f >= min`. The extremes are written out because `/syn/Flt` keeps them private, so the two spellings are checked against each other by this build rather than shared through a name.
 pub let finite(f: Flt) -> Option(Finite(f)) =
-    match -3.4028235e38 <= f && f <= 3.4028235e38:
-        (r) => Option(match r: (_) => Prop | true => True | false => False end)
+    match -340282350000000000000000000000000000000.0 <= f
+        && f <= +340282350000000000000000000000000000000.0: (r) =>
+        Option(match r: (_) => Prop | true => True | false => False end)
     | true => Option/some(True/qed())
     | false => Option/none()
     end;
 
 pub let non_neg(f: Flt) -> Option(NonNeg(f)) =
-    match f >= +0.0 && f <= 3.4028235e38:
-        (r) => Option(match r: (_) => Prop | true => True | false => False end)
+    match f >= +0.0 && f <= +340282350000000000000000000000000000000.0: (r) =>
+        Option(match r: (_) => Prop | true => True | false => False end)
     | true => Option/some(True/qed())
     | false => Option/none()
     end;
@@ -48,16 +49,10 @@ pub let non_neg(f: Flt) -> Option(NonNeg(f)) =
 --
 -- `some` means the truncation is *defined*, which is exactly what the precondition says. It is deliberately not a promise that the conversion cannot trap: a defined result too large for the runtime carrier still refuses at the narrowing, as `Nat` arithmetic does past the same envelope, and checking for that here would write a backend width into `/std`.
 pub let try_to_nat(f: Flt) -> Option(Nat) =
-    match non_neg(f)
-    | some(ok) => Option/some(to_nat(f, @ok))
-    | none() => Option/none()
-    end;
+    match non_neg(f) | some(ok) => Option/some(to_nat(f, @ok)) | none() => Option/none() end;
 
 pub let try_to_int(f: Flt) -> Option(Int) =
-    match finite(f)
-    | some(ok) => Option/some(to_int(f, @ok))
-    | none() => Option/none()
-    end;
+    match finite(f) | some(ok) => Option/some(to_int(f, @ok)) | none() => Option/none() end;
 
 let pow2(k: Nat) -> BigNat =
     BigNat/mul/pow2(BigNat/of_nat(1), k);
@@ -215,7 +210,6 @@ pub let pow10(n: Nat) -> Flt =
     match n | 0 => +1.0 | pred + 1; ih => ih * +10.0 end;
 
 -- `of_str` is exact: the digits are read into a `BigNat` and `D · 10^E` is narrowed to the nearest binary32 once, ties to even, the way the printer above is exact in the other direction. It used to compute `to_flt(int) + to_flt(frac) / pow10(len) * pow10(exp)` — four roundings, `to_flt` already past nine digits, and `pow10(39)` is `inf`, which flushed every subnormal to zero — and failed `of_str(to_str(x)) == x` for about forty percent of finite values.
-
 let pow10_big(n: Nat) -> BigNat =
     match n | 0 => BigNat/of_nat(1) | p + 1; ih => BigNat/mul/small(ih, 10) end;
 
@@ -277,7 +271,8 @@ let assemble(q: Nat, sticky: Bool, s: Int) -> Flt =
     | _ =>
         let mant = round_bits(q, 2, sticky);
         match mant == 0x1000000
-        | true => match s == +127 | true => pos_inf | false => Nat/to_flt(0x800000) * two_pow(s - +22) end
+        | true =>
+            match s == +127 | true => pos_inf | false => Nat/to_flt(0x800000) * two_pow(s - +22) end
         | false => Nat/to_flt(mant) * two_pow(s - +23)
         end
     end;

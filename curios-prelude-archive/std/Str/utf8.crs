@@ -71,8 +71,7 @@ pub rec drop_valid(
             | pred + 1 => drop_valid(pred, step(c, Scan/lead()), rest)
             end
         end
-    | cont(rem, lo, hi) =>
-        match d | more(c, st, t, rest) => drop_valid(n, step(c, s), rest) end
+    | cont(rem, lo, hi) => match d | more(c, st, t, rest) => drop_valid(n, step(c, s), rest) end
     | bad() => match d | more(c, st, t, rest) => drop_valid(n, step(c, Scan/bad()), rest) end
     end;
 
@@ -200,9 +199,7 @@ pub rec peel_byte(
     @b: Bytes,
     nz: Nat/Lt(0, Bytes/len(b)),
     w: Utf8(s, b),
-) -> Utf8(
-    step(Bytes/get(b, 0, @nz), s),
-    Bytes/drop(b, 1, @Nat/Lt/le_one_of_positive(nz))) =
+) -> Utf8(step(Bytes/get(b, 0, @nz), s), Bytes/drop(b, 1, @Nat/Lt/le_one_of_positive(nz))) =
     match w
     | stop() => match nz end
     | more(c, st, t, rest) => rest

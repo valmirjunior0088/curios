@@ -77,8 +77,8 @@ let escape_fields: Parse(Bytes) =
     | 34 => Parse/pure(Str/to_bytes("\""))
     | 92 => Parse/pure(Str/to_bytes("\\"))
     | 47 => Parse/pure(Str/to_bytes("/"))
-    | 98 => Parse/pure(x[0x08])
-    | 102 => Parse/pure(x[0x0c])
+    | 98 => Parse/pure(x[0x8])
+    | 102 => Parse/pure(x[0xC])
     | 110 => Parse/pure(Str/to_bytes("\n"))
     | 114 => Parse/pure(Str/to_bytes("\r"))
     | 116 => Parse/pure(Str/to_bytes("\t"))
@@ -148,10 +148,7 @@ let bracketed(@A: Type, open: Byte, elem: Parse(A), close: Byte, after: Str) -> 
     end;
 
 let is_num_start(byte: Byte) -> Bool =
-    match Byte/to_nat(byte)
-    | 45 => true
-    | _ => Nat/in_range(Byte/to_nat(byte), 0x30, 0x39)
-    end;
+    match Byte/to_nat(byte) | 45 => true | _ => Nat/in_range(Byte/to_nat(byte), 0x30, 0x39) end;
 
 -- The dispatch reads the first byte without consuming it, so each arm parses the value whole -- including the byte that selected it.
 pub rec decode: Parse(Json) =
@@ -164,11 +161,7 @@ pub rec decode: Parse(Json) =
     | 34 => parse_str_value
     | 91 => parse_arr
     | 123 => parse_obj
-    | _ =>
-        match is_num_start(byte)
-        | true => parse_num
-        | false => Parse/fail("expected value")
-        end
+    | _ => match is_num_start(byte) | true => parse_num | false => Parse/fail("expected value") end
     end
 and parse_arr: Parse(Json) =
     Parse/map(bracketed(0x5B, decode, 0x5D, "expected ',' or ']'"), (elems) => Json/arr(elems))

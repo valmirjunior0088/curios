@@ -14,10 +14,7 @@ induct Refusal: Type
 end
 
 let message(refusal: Refusal) -> Str =
-    match refusal
-    | declined(msg) => msg
-    | committed(msg) => msg
-    end;
+    match refusal | declined(msg) => msg | committed(msg) => msg end;
 
 pub let run(@A: Type, p: Parse(A), input: Bytes) -> Result(A, Str) =
     match p.run(input, 0)
@@ -195,10 +192,7 @@ pub let take_while(pred: (Byte) -> Bool) -> Parse(Bytes) =
             | some(within) =>
                 let (taken, at_stop, _) =
                     match Bytes/len(input) - pos: (_) =>
-                        {
-                            taken: Nat,
-                            within: Nat/Le(pos + taken, Bytes/len(input)),
-                            stopped: Bool}
+                        {taken: Nat, within: Nat/Le(pos + taken, Bytes/len(input)), stopped: Bool}
                     | 0 => (0, within, false)
                     | step + 1; ih =>
                         let (taken, at_cur, stopped) = ih;
@@ -212,10 +206,7 @@ pub let take_while(pred: (Byte) -> Bool) -> Parse(Bytes) =
                                 | true =>
                                     (
                                         taken + 1,
-                                        Nat/Lt/le_succ_of_lt(
-                                            pos + taken,
-                                            Bytes/len(input),
-                                            ok),
+                                        Nat/Lt/le_succ_of_lt(pos + taken, Bytes/len(input), ok),
                                         false)
                                 | false => (taken, at_cur, true)
                                 end
@@ -244,8 +235,7 @@ pub let rest: Parse(Bytes) =
         run(input, pos) =
             match Nat/Le/try(pos, Bytes/len(input))
             | none() => Result/failure(Refusal/declined("position past the end of input"))
-            | some(within) =>
-                Result/success((Bytes/len(input), Bytes/drop(input, pos, @within)))
+            | some(within) => Result/success((Bytes/len(input), Bytes/drop(input, pos, @within)))
             end,
     };
 

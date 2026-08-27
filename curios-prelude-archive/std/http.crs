@@ -129,10 +129,7 @@ let guard_header: Parse({}) =
     match next
     | none() => Parse/fail("unexpected end of headers")
     | some(byte) =>
-        match byte == 0xD
-        | true => Parse/fail("end of header block")
-        | false => Parse/pure(())
-        end
+        match byte == 0xD | true => Parse/fail("end of header block") | false => Parse/pure(()) end
     end;
 
 let header_line: Parse({Str, Str}) =

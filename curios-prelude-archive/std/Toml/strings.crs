@@ -37,13 +37,13 @@ let escape: Parse(Bytes) =
     | some(b) =>
         let _ = Parse/any_byte!;
         match Byte/to_nat(b)
-        | 98 => Parse/pure(x[0x08])
-        | 116 => Parse/pure(x[0x09])
-        | 110 => Parse/pure(x[0x0a])
-        | 102 => Parse/pure(x[0x0c])
-        | 114 => Parse/pure(x[0x0d])
+        | 98 => Parse/pure(x[0x8])
+        | 116 => Parse/pure(x[0x9])
+        | 110 => Parse/pure(x[0xA])
+        | 102 => Parse/pure(x[0xC])
+        | 114 => Parse/pure(x[0xD])
         | 34 => Parse/pure(x[0x22])
-        | 92 => Parse/pure(x[0x5c])
+        | 92 => Parse/pure(x[0x5C])
         | 117 =>
             let code = hex_digits(4, 0)!;
             scalar_utf8(code)
@@ -56,7 +56,7 @@ let escape: Parse(Bytes) =
 
 -- A carriage return is only ever legal as the first half of a CRLF, so consuming one is all-or-nothing: `optional` gives a lone one back, and every caller turns that into the same refusal.
 let crlf: Parse(Option({Byte, Byte})) =
-    Parse/optional(Parse/and(Parse/take_byte(0x0D), Parse/take_byte(0x0A)));
+    Parse/optional(Parse/and(Parse/take_byte(0xD), Parse/take_byte(0xA)));
 
 let quotes(quote: Byte, count: Nat) -> Bytes =
     match count | 0 => x[] | pred + 1; ih => x[..ih, quote] end;
@@ -146,7 +146,7 @@ rec trim_run(seen_nl: Bool) -> Parse({}) =
 
 -- A multiline string's opening delimiter may be followed by one newline, which is not part of the content.
 let skip_opening_newline: Parse({}) =
-    let lf = Parse/optional(Parse/take_byte(0x0A))!;
+    let lf = Parse/optional(Parse/take_byte(0xA))!;
     match lf
     | some(_) => Parse/pure(())
     | none() =>
@@ -194,7 +194,7 @@ rec ml_basic_body(acc: Bytes) -> Parse(Bytes) =
         | n == 0xD =>
             let pair = crlf!;
             match pair
-            | some(_) => ml_basic_body(x[..acc, 0x0d, 0x0a])
+            | some(_) => ml_basic_body(x[..acc, 0xD, 0xA])
             | none() => Parse/fail("bare carriage return")
             end
         | n == 0x9 =>
@@ -229,7 +229,7 @@ rec ml_literal_body(acc: Bytes) -> Parse(Bytes) =
         | n == 0xD =>
             let pair = crlf!;
             match pair
-            | some(_) => ml_literal_body(x[..acc, 0x0d, 0x0a])
+            | some(_) => ml_literal_body(x[..acc, 0xD, 0xA])
             | none() => Parse/fail("bare carriage return")
             end
         | n == 0x9 =>

@@ -116,27 +116,15 @@ rec insert1(@V: Type, t: Node(V), k: Bytes, v: V) -> {Node(V), Nat, Nat} =
 -- The same single descent for removal, over three states: 0 unchanged, 1 removed, 2 emptied. A fork whose child emptied answers its other child, which is the collapse that keeps the shape canonical; `emptied` reaching the root means the map held exactly this one entry. The node answered alongside `emptied` is the untouched original and is never read.
 rec remove1(@V: Type, t: Node(V), k: Bytes) -> {Node(V), Nat} =
     match t
-    | leaf(k0, v0) =>
-        match Bytes/eql(k0, k)
-        | true => (t, 2)
-        | false => (t, 0)
-        end
+    | leaf(k0, v0) => match Bytes/eql(k0, k) | true => (t, 2) | false => (t, 0) end
     | fork(c, z, o) =>
         match bit(k, c)
         | 0 =>
             let (z2, st) = remove1(z, k);
-            match st
-            | 2 => (o, 1)
-            | 1 => (Node/fork(c, z2, o), 1)
-            | _ => (t, 0)
-            end
+            match st | 2 => (o, 1) | 1 => (Node/fork(c, z2, o), 1) | _ => (t, 0) end
         | _ =>
             let (o2, st) = remove1(o, k);
-            match st
-            | 2 => (z, 1)
-            | 1 => (Node/fork(c, z, o2), 1)
-            | _ => (t, 0)
-            end
+            match st | 2 => (z, 1) | 1 => (Node/fork(c, z, o2), 1) | _ => (t, 0) end
         end
     end;
 

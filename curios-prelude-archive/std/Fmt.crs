@@ -52,12 +52,7 @@ and parse_lit_at(bytes: Bytes, start: Nat, taken: Nat, fuel: Nat) -> Fmt =
         | none() => flush(bytes, start, taken, Fmt/nil())
         | some(ok) =>
             match Byte/to_nat(Bytes/get(bytes, start + taken, @ok))
-            | 37 =>
-                flush(
-                    bytes,
-                    start,
-                    taken,
-                    Fmt/show(parse_at(bytes, start + taken + 1, rest)))
+            | 37 => flush(bytes, start, taken, Fmt/show(parse_at(bytes, start + taken + 1, rest)))
             | 92 => parse_esc_at(bytes, start, taken, rest)
             | _ => parse_lit_at(bytes, start, taken + 1, rest)
             end
@@ -72,11 +67,7 @@ and parse_esc_at(bytes: Bytes, start: Nat, taken: Nat, fuel: Nat) -> Fmt =
         | some(ok) =>
             match Byte/to_nat(Bytes/get(bytes, start + taken + 1, @ok))
             | 37 =>
-                flush(
-                    bytes,
-                    start,
-                    taken,
-                    Fmt/lit("%", parse_at(bytes, start + taken + 2, rest)))
+                flush(bytes, start, taken, Fmt/lit("%", parse_at(bytes, start + taken + 2, rest)))
             | _ => parse_lit_at(bytes, start, taken + 1, rest)
             end
         end

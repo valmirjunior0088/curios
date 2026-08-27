@@ -25,7 +25,6 @@ let val_number_signed: Parse(Toml) =
 let val_number_digit: Parse(Toml) =
     Parse/or(datetime_value, Parse/or(flt_number, int_value));
 
-
 -- The nested collections and the value dispatcher are one mutually recursive group: an array holds values, a value may be an array.
 rec array_parse: Parse(Toml) =
     let _ = Parse/label(Parse/take_byte(0x5B), "expected array")!;
@@ -54,10 +53,7 @@ and inline_parse: Parse(Toml) =
     let _ = Parse/label(Parse/take_byte(0x7B), "expected inline table")!;
     let _ = ws!;
     let empty = Parse/optional(Parse/take_byte(0x7D))!;
-    match empty
-    | some(_) => Parse/pure(Toml/table(Map/empty()))
-    | none() => inline_items([])
-    end
+    match empty | some(_) => Parse/pure(Toml/table(Map/empty())) | none() => inline_items([]) end
 and inline_items(acc: List({List(Str), Toml})) -> Parse(Toml) =
     let path = key_dotted!;
     let _ = ws!;

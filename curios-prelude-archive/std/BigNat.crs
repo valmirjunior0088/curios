@@ -121,7 +121,10 @@ pub rec of_nat(n: Nat) -> BigNat =
         let tail = of_nat(n / 2);
         of_trimmed_bits(
             combine(n % 2 == 1, tail.bits),
-            combine_is_trimmed(n % 2 == 1, tail.bits, is_trimmed_of_canonical(tail.bits, tail.canonical)))
+            combine_is_trimmed(
+                n % 2 == 1,
+                tail.bits,
+                is_trimmed_of_canonical(tail.bits, tail.canonical)))
     end;
 
 pub let xor3(a: Bool, b: Bool, c: Bool) -> Bool =

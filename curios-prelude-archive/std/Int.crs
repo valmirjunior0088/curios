@@ -1,7 +1,7 @@
 pub use /sys/{Int};
 pub use /syn/Int/{NonZero, NonNeg};
-pub use /sys/Int/{eql, neq, add, sub, mul, div, rem, lt, gt, le, ge, and, or, xor, shl, shr,
-    to_nat, to_flt};
+pub use /sys/Int/{eql, neq, add, sub, mul, div, rem, lt, gt, le, ge, and, or, xor, shl, shr, to_nat,
+    to_flt};
 use /std/{Nat, Str, Option, Order, Eql, Cmp, Add, Sub, Mul, Div, Rem, Show, Ord, True, False};
 
 pub let to_str(n: Int) -> Str =

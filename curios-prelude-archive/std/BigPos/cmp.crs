@@ -23,9 +23,5 @@ pub let trans(
 ) -> Eq(cmp(p, r), Order/lt()) =
     BigNat/cmp/trans(p.value, q.value, r.value, u, v);
 
-pub let gt_to_lt(
-    p: BigPos,
-    q: BigPos,
-    w: Eq(cmp(p, q), Order/gt()),
-) -> Eq(cmp(q, p), Order/lt()) =
+pub let gt_to_lt(p: BigPos, q: BigPos, w: Eq(cmp(p, q), Order/gt())) -> Eq(cmp(q, p), Order/lt()) =
     Eq/trans(flip(p, q), cong_flip(w));

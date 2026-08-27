@@ -15,18 +15,18 @@ let seg_key(pre: Bytes, seg: Seg) -> Bytes =
     match seg
     | plain(name) =>
         let nb = Str/to_bytes(name);
-        x[..pre, 0x70, ..Str/to_bytes(Nat/to_str(Bytes/len(nb))), 0x3a, ..nb]
+        x[..pre, 0x70, ..Str/to_bytes(Nat/to_str(Bytes/len(nb))), 0x3A, ..nb]
     | at(name, index) =>
         let nb = Str/to_bytes(name);
         x[
             ..pre,
             0x61,
             ..Str/to_bytes(Nat/to_str(Bytes/len(nb))),
-            0x3a,
+            0x3A,
             ..nb,
             0x23,
             ..Str/to_bytes(Nat/to_str(index)),
-            0x3b]
+            0x3B]
     end;
 
 let seg_name(seg: Seg) -> Str =

@@ -5,6 +5,7 @@
 -- The inductive form is a *child* of this module rather than its sibling, and the names say which is which: `Nat/Le` is the relation, `Nat/Le/Ind` is the relation done by induction. The pair used to be `Nat/Le` and `Nat/Le/Ind`, two spellings of one abbreviation that named the difference nowhere.
 pub use /syn/Nat/{Le};
 use /std/{Nat, Option, True, False, Eq};
+
 pub mod Ind;
 pub use Ind/{let Ind};
 

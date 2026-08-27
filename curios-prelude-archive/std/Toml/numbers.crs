@@ -18,11 +18,7 @@ let is_dec_byte(b: Byte) -> Bool =
 let magnitude_stop(acc: Nat, seen: Bool, pend: Bool) -> Parse(Nat) =
     match pend
     | true => Parse/fail("malformed underscore")
-    | false =>
-        match seen
-        | true => Parse/pure(acc)
-        | false => Parse/fail("expected digit")
-        end
+    | false => match seen | true => Parse/pure(acc) | false => Parse/fail("expected digit") end
     end;
 
 -- digit run with TOML underscore placement; `guard` is the per-radix wrap-safety ceiling checked before each multiply
@@ -70,13 +66,15 @@ let leading_zero: Parse(Bool) =
 -- (negative, signed)
 let sign: Parse({Bool, Bool}) =
     let s = Parse/optional(Parse/take_if((b) => b == 0x2B || b == 0x2D))!;
-    match s
-    | some(b) => Parse/pure((b == 0x2D, true))
-    | none() => Parse/pure((false, false))
-    end;
+    match s | some(b) => Parse/pure((b == 0x2D, true)) | none() => Parse/pure((false, false)) end;
 
 let is_radix_marker(b: Byte) -> Bool =
-    match Byte/to_nat(b) | 120 => true | 111 => true | 98 => true | _ => false end;
+    match Byte/to_nat(b)
+    | 120 => true
+    | 111 => true
+    | 98 => true
+    | _ => false
+    end;
 
 let prefixed: Parse(Nat) =
     let _ = Parse/take_byte(0x30)!;
@@ -102,12 +100,8 @@ let int_magnitude(signed: Bool) -> Parse(Nat) =
     | false =>
         let marked =
             Parse/optional(
-                Parse/lookahead(
-                    Parse/and(Parse/take_byte(0x30), Parse/take_if(is_radix_marker))))!;
-        match marked
-        | some(_) => prefixed
-        | none() => decimal
-        end
+                Parse/lookahead(Parse/and(Parse/take_byte(0x30), Parse/take_if(is_radix_marker))))!;
+        match marked | some(_) => prefixed | none() => decimal end
     end;
 
 pub let int_value: Parse(Toml) =
@@ -145,7 +139,13 @@ let flt_digits_stop(
 
 -- Significand digits, every one of them kept: the significand is a `BigNat`, so no digit is dropped before `Flt/of_decimal` rounds the exact value once. `count` is how many digits were read, which bounds the significand above for the underflow clamp; `shift` counts the fraction digits, each of which moves the decimal point one place down.
 let flt_digits(sig0: BigNat, count0: Nat, frac: Bool) -> Parse({BigNat, Nat, Nat}) =
-    rec go(sig: BigNat, count: Nat, shift: Nat, seen: Bool, pend: Bool) -> Parse({BigNat, Nat, Nat}) =
+    rec go(
+        sig: BigNat,
+        count: Nat,
+        shift: Nat,
+        seen: Bool,
+        pend: Bool,
+    ) -> Parse({BigNat, Nat, Nat}) =
         let next = Parse/peek!;
         match next
         | none() => flt_digits_stop(sig, count, shift, seen, pend)
@@ -162,7 +162,12 @@ let flt_digits(sig0: BigNat, count0: Nat, frac: Bool) -> Parse({BigNat, Nat, Nat
             | Nat/in_range(n, 0x30, 0x39) =>
                 let _ = Parse/any_byte!;
                 let shift2 = match frac | true => shift + 1 | false => shift end;
-                go(BigNat/mul/small(sig, 10) + BigNat/of_nat(n - 0x30), count + 1, shift2, true, false)
+                go(
+                    BigNat/mul/small(sig, 10) + BigNat/of_nat(n - 0x30),
+                    count + 1,
+                    shift2,
+                    true,
+                    false)
             | _ => flt_digits_stop(sig, count, shift, seen, pend)
             end
         end;
@@ -171,11 +176,7 @@ let flt_digits(sig0: BigNat, count0: Nat, frac: Bool) -> Parse({BigNat, Nat, Nat
 let exp_stop(acc: Nat, seen: Bool, pend: Bool) -> Parse(Nat) =
     match pend
     | true => Parse/fail("malformed underscore")
-    | false =>
-        match seen
-        | true => Parse/pure(acc)
-        | false => Parse/fail("expected digit")
-        end
+    | false => match seen | true => Parse/pure(acc) | false => Parse/fail("expected digit") end
     end;
 
 -- exponent digits saturate at 2000: a binary32 is infinity or zero long before that bound for any significand short of two thousand digits, so saturation cannot change a result that could be written down
@@ -246,9 +247,10 @@ pub let flt_number: Parse(Toml) =
         let (sig2, count2, down2, has_frac) = frac_part(sig1, count1)!;
         let (emag, eneg, has_exp) = exp_part!;
         match has_frac || has_exp
+        -- The exact value is `sig2 · 10^(±emag − down2)`, narrowed once by `Flt/of_decimal`; the sign is applied there, last, so a zero keeps it.
         | true =>
-            -- The exact value is `sig2 · 10^(±emag − down2)`, narrowed once by `Flt/of_decimal`; the sign is applied there, last, so a zero keeps it.
-            let exponent = match eneg | true => +0 - Nat/to_int(emag) | false => Nat/to_int(emag) end;
+            let exponent =
+                match eneg | true => +0 - Nat/to_int(emag) | false => Nat/to_int(emag) end;
             let scale = exponent - Nat/to_int(down2);
             Parse/pure(Toml/flt(Flt/of_decimal(negative, sig2, scale, count2)))
         | false => Parse/fail("expected float")
