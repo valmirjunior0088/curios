@@ -104,3 +104,19 @@ pub fn if_break(flat: impl Into<String>, broken: impl Into<String>) -> Printer {
 pub fn line_suffix(text: impl Into<String>) -> Printer {
     Printer::LineSuffix(text.into())
 }
+
+/// Note that something written at source offset `offset` begins here — see [`Printer::Mark`]. Zero width and no output.
+pub fn begins(offset: usize) -> Printer {
+    Printer::Mark {
+        at: offset,
+        begins: true,
+    }
+}
+
+/// Note that the document now holds source up to `offset` — see [`Printer::Mark`]. Zero width and no output.
+pub fn reaches(offset: usize) -> Printer {
+    Printer::Mark {
+        at: offset,
+        begins: false,
+    }
+}

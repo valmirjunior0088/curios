@@ -247,13 +247,8 @@ const POSITIONS: [&str; 5] = [
 ///
 /// Every line of every fixture is tried twice, once with a comment on its own line above it and once riding its end, which is the whole space of positions a writer has.
 ///
-/// **Ignored until attachment is decided from spans rather than inferred at render time.** Today 7 of 54 positions fail — 6 trailing and 1 leading, the last inside a `concept` body — because a comment is claimed by whichever node's geometry happens to reach it, and the claimant differs between the written form and the printed one. Un-ignore this when the attachment pass lands; it is that work's acceptance criterion.
-///
-/// ```sh
-/// cargo test --package curios-text -- --ignored formatting_converges
-/// ```
+/// **This held at 7 of 54 failures while a comment's place was decided by whichever node's geometry happened to reach it**, and the claimant differed between the written form and the printed one. It reads zero now that a trailing comment is placed by the renderer, which is the only thing that knows where an output line ends.
 #[test]
-#[ignore = "fails until comment attachment is decided from spans rather than inferred while printing"]
 fn formatting_converges_from_every_comment_position() {
     let mut wandering = Vec::new();
 

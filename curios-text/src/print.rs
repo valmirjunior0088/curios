@@ -11,15 +11,12 @@ use {
         TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType,
         TupleTypeParam, UseGroup, WitnessEntry,
     },
-    crate::{
-        format::{claim_comments_before, claim_trailing_within},
-        parse::op_precedence,
-    },
+    crate::parse::op_precedence,
     curios_abi::{WireSignature, WireType, stdio},
     curios_num::Natural,
     curios_print::{
-        Printer, fill, flat, group, hard_line, if_break, indent, line, line_suffix, pure, sep_flat,
-        soft_line,
+        Printer, begins, fill, flat, group, hard_line, if_break, indent, line, pure, reaches,
+        sep_flat, soft_line,
     },
     curios_utilities::{Grain, Plicity},
 };
@@ -115,12 +112,19 @@ fn riding_call(head: Term, params: Vec<(Plicity, Term)>) -> Printer {
 }
 
 /// The always-broken brace block a `struct`, `concept`, or `satisfy` body is: one field per line at the next indent with a trailing comma, the closing brace at the opening's column, regardless of how little would fit flat. An empty body prints the bare delimiters.
-fn listed_hard(open: &'static str, items: Vec<Printer>, close: &'static str) -> Printer {
+fn listed_hard(
+    open: &'static str,
+    opens_at: Option<usize>,
+    items: Vec<Printer>,
+    close: &'static str,
+) -> Printer {
     if items.is_empty() {
         return pure(format!("{open}{close}"));
     }
     flat([
         pure(open),
+        // The body's first break comes before the first field's own mark, so a comment riding the opening delimiter's line is reported here instead — see `reached_before`. `opens_at` is where the first field begins.
+        reached_before(opens_at),
         indent(flat([
             hard_line(),
             sep_flat(items, || flat([pure(","), hard_line()])),
@@ -132,8 +136,18 @@ fn listed_hard(open: &'static str, items: Vec<Printer>, close: &'static str) -> 
 }
 
 /// A body that rides its introducer — ` => body`, ` = body` — inline when it fits, on the next line one level deeper when it does not.
-fn attached_body(introducer: &'static str, body: Printer) -> Printer {
-    group(flat([pure(introducer), indent(flat([line(), body]))]))
+fn attached_body(introducer: &'static str, body: Term) -> Printer {
+    // Taken as a term rather than a document so the body's own start is in reach: a comment written after the introducer, on the introducer's line, is owed as soon as the source is reported consumed up to the body. Reported *before* the break, because paying it after would carry it onto the body's line — and each run would carry it one construct deeper than the last, which is a formatter that never settles.
+    let reached = match body.span() {
+        Some(span) => reaches(span.start),
+        None => flat([]),
+    };
+
+    group(flat([
+        pure(introducer),
+        reached,
+        indent(flat([line(), print_term(body)])),
+    ]))
 }
 
 /// The most arms a ladder may keep on one line. Beyond this it is a dispatch table rather than a decision, and a table reads as rows.
@@ -207,15 +221,15 @@ fn print_tuple_field(field: TupleField) -> Printer {
     // A labeled field's label carries no span, so the claim is what keeps a comment written above the field from being claimed by the value and printed inside it. An unlabeled field *is* its value, and `print_term` already claims at the right place.
     let claim = member_claim_offset([&field.value]);
     match (field.label, field.func_params) {
-        (Some(label), Some(params)) => claimed_before(claim, || {
+        (Some(label), Some(params)) => marked(claim, || {
             flat([
                 pure(label),
                 listed("(", params.into_iter().map(print_func_param).collect(), ")"),
-                attached_body(" =", print_term(field.value)),
+                attached_body(" =", field.value),
             ])
         }),
-        (Some(label), None) => claimed_before(claim, || {
-            flat([pure(label), attached_body(" =", print_term(field.value))])
+        (Some(label), None) => marked(claim, || {
+            flat([pure(label), attached_body(" =", field.value)])
         }),
         (None, _) => print_term(field.value),
     }
@@ -813,61 +827,35 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
 }
 
 pub(crate) fn print_term(term: Term) -> Printer {
-    // The formatter's comment weave: during a `format` run, a parsed term claims every not-yet-claimed comment written before its own start — a leading comment breaks onto its own line before the term — and, once built, every trailing comment written inside its own span. Printing builds in source order and never reorders, which is what makes the claim order correct. Outside a format run both claims are empty and printing is unchanged.
-    // Copied out before the build, which takes the term: both claims are about where it sat, and neither needs it afterwards.
+    // The formatter's comment weave: during a `format` run, a parsed term claims every not-yet-claimed *leading* comment written before its own start, which breaks onto its own line before the term. Printing builds in source order and never reorders, which is what makes the claim order correct. Outside a format run the claim is empty and printing is unchanged.
+    //
+    // A trailing comment is not claimed at all — it is placed by the renderer, which the marks below tell how far into the source the output has reached. The *end* mark is what reaches a comment written past a separator the enclosing printer emits: a term's span runs to the next token, so such a comment falls inside it, and the line comes to owe the comment before the break that would otherwise carry it away.
     let bounds = term.span().map(|span| (span.start, span.end));
 
-    claimed_before(bounds.map(|(start, _)| start), || {
-        claimed_within(bounds, print_term_inner(term))
+    marked(bounds.map(|(start, _)| start), || match bounds {
+        Some((start, end)) => flat([begins(start), print_term_inner(term), reaches(end)]),
+        None => print_term_inner(term),
     })
 }
 
-/// Append every trailing comment written inside `bounds`, so it rides the line it was written on.
+/// Note that `build`'s document begins at `offset`, so the renderer can place there whatever the source held and the document does not — see [`Printer::Mark`](curios_print::Printer::Mark). `None` (a spanless node) notes nothing.
 ///
-/// **Claimed after the build, which is the whole point.** Prefixed to the following node's document instead, a trailing comment reaches the suffix channel after the newline closing its own line has gone out — so it surfaces one line down, and where that node is the last inside a construct, at the document's end outside the construct. Claimed here it is registered while its own line is still open.
-///
-/// A term's span runs to the next token, so a comment written after the term is inside it; the innermost span holding one is the content it followed, and descendants build first, so that innermost node asks first. See [`claim_trailing_within`](crate::format::claim_trailing_within). A term with no span claims nothing, exactly as it leads nothing.
-fn claimed_within(bounds: Option<(usize, usize)>, doc: Printer) -> Printer {
-    let comments = match bounds {
-        Some((start, end)) => claim_trailing_within(start, end),
-        None => Vec::new(),
-    };
-    if comments.is_empty() {
-        return doc;
+/// **Nothing is claimed and nothing is decided here.** A comment's place is a fact about the output — which line it rides, or which line it takes — and only the renderer knows that. What this marks is the one thing the builder does know: where in the source the document has reached.
+fn marked(offset: Option<usize>, build: impl FnOnce() -> Printer) -> Printer {
+    match offset {
+        Some(offset) => flat([begins(offset), build()]),
+        None => build(),
     }
-
-    let mut parts = vec![doc];
-    parts.extend(
-        comments
-            .into_iter()
-            .map(|text| line_suffix(format!(" {text}"))),
-    );
-
-    flat(parts)
 }
 
-/// Claim every not-yet-claimed comment written before `offset` and prefix it to the document `build` produces — a leading comment on its own line, a trailing one riding its line's end through the suffix channel. The claim happens before the build, so an ancestor claims ahead of its descendants; `None` (a spanless term) claims nothing.
-fn claimed_before(offset: Option<usize>, build: impl FnOnce() -> Printer) -> Printer {
-    let comments = match offset {
-        Some(offset) => claim_comments_before(offset),
-        None => Vec::new(),
-    };
-    let doc = build();
-    if comments.is_empty() {
-        return doc;
+/// Report the source consumed up to `offset` before a break, so a comment written on the line the break ends is paid onto that line rather than carried past it.
+///
+/// **The law every member list obeys.** A break separating one source construct from the next comes *before* the next construct's own mark, so a comment written after the previous one — on the line the break is about to end — is not yet owed when the line closes, and is paid on the following line instead. Each run then finds it one construct deeper than the last, which is a formatter that never settles. Reporting the position first pays it where it was written; a comment on a line of its own is untouched, since only what *begins* something pays one of those.
+fn reached_before(offset: Option<usize>) -> Printer {
+    match offset {
+        Some(offset) => reaches(offset),
+        None => flat([]),
     }
-    let mut parts: Vec<Printer> = comments
-        .into_iter()
-        .map(|(text, trailing)| {
-            if trailing {
-                line_suffix(format!(" {text}"))
-            } else {
-                flat([pure(text), hard_line()])
-            }
-        })
-        .collect();
-    parts.push(doc);
-    flat(parts)
 }
 
 /// Where a member of a delimited list claims its leading comments: a `match` or `choose` arm, a tuple or struct-literal field, a concept or witness field, an `induct` case.
@@ -984,7 +972,7 @@ fn print_term_inner(term: Term) -> Printer {
                 params.into_iter().map(print_func_pattern_param).collect(),
                 ")",
             ),
-            attached_body(" =>", print_term(body)),
+            attached_body(" =>", body),
         ]),
         Subterm::Apply(Apply { head, params }) => riding_call(head, params),
         Subterm::TupleType(TupleType { fields }) => {
@@ -1056,8 +1044,10 @@ fn print_term_inner(term: Term) -> Printer {
                             ]);
                             let ChooseArm { test, body } = arm;
                             flat([
+                                // Reported before the break, so a comment riding the previous line is paid there — see `reached_before`.
+                                reached_before(claim),
                                 separator(),
-                                claimed_before(claim, || {
+                                marked(claim, || {
                                     let head = match test {
                                         ChooseTest::Cond(condition) => {
                                             flat([pure("| "), print_term(condition)])
@@ -1069,15 +1059,15 @@ fn print_term_inner(term: Term) -> Printer {
                                             print_term(value),
                                         ]),
                                     };
-                                    flat([head, attached_body(" =>", print_term(body))])
+                                    flat([head, attached_body(" =>", body)])
                                 }),
                             ])
                         })
                         .collect::<Vec<_>>(),
                 ),
                 separator(),
-                claimed_before(member_claim_offset([&default]), || {
-                    flat([pure("| _"), attached_body(" =>", print_term(default))])
+                marked(member_claim_offset([&default]), || {
+                    flat([pure("| _"), attached_body(" =>", default)])
                 }),
                 separator(),
                 pure("end"),
@@ -1097,15 +1087,16 @@ fn print_term_inner(term: Term) -> Printer {
                 flat(
                     arms.into_iter()
                         .map(|arm| {
-                            // The claim sits *after* the separator: it is what breaks the line, so a comment claimed before it would ride the end of the previous arm's body instead of leading this one.
+                            // The mark sits *after* the separator: it is what breaks the line, so a comment written on its own line before it leads this arm rather than riding the previous one. The position is reported *before* the break, so a comment riding the previous line is paid there — see `reached_before`.
                             let claim = member_claim_offset([&arm.body]);
                             flat([
+                                reached_before(claim),
                                 separator(),
-                                claimed_before(claim, || {
+                                marked(claim, || {
                                     flat([
                                         pure("| "),
                                         print_match_pattern(arm.pattern),
-                                        attached_body(" =>", print_term(arm.body)),
+                                        attached_body(" =>", arm.body),
                                     ])
                                 }),
                             ])
@@ -1121,7 +1112,7 @@ fn print_term_inner(term: Term) -> Printer {
             let bindings = bindings
                 .into_iter()
                 .map(|binding| {
-                    claimed_before(signature_claim_offset(&binding.signature), || {
+                    marked(signature_claim_offset(&binding.signature), || {
                         flat([
                             pure("let "),
                             print_pattern(binding.binder),
@@ -1147,7 +1138,7 @@ fn print_term_inner(term: Term) -> Printer {
                 }
                 let claim = signature_claim_offset(&item.signature);
                 parts.push(hard_line());
-                parts.push(claimed_before(claim, || {
+                parts.push(marked(claim, || {
                     flat([
                         pure("and "),
                         pure(item.label),
@@ -1195,7 +1186,7 @@ fn print_let_signature(signature: LetSignature, top: bool) -> Printer {
         if top {
             flat([pure(" ="), hard_line(), indent(print_term(body))])
         } else {
-            attached_body(" =", print_term(body))
+            attached_body(" =", body)
         }
     };
     match signature {
@@ -1342,7 +1333,7 @@ fn print_top_rec(items: Vec<TopLet>) -> Printer {
                     // The separator stays outside the claim, so a comment leading this clause opens a line of its own above `and` rather than running on from the previous clause's last character.
                     flat([
                         hard_line(),
-                        claimed_before(claim, || {
+                        marked(claim, || {
                             flat([
                                 // `pub` precedes `and`, which is the spelling the grammar accepts and the one the `induct` group beside this already emits. Reversed, a `pub` member of a `rec` group printed as `and pub f` and would not reparse — the formatter's verify gate refused the file rather than writing it, which is why `/std/Toml/values.crs` had never been formatted.
                                 print_pub(item.vis_pub),
@@ -1417,7 +1408,7 @@ fn print_top_induct_case(case: TopCase) -> Printer {
 
     flat([
         hard_line(),
-        claimed_before(claim, || {
+        marked(claim, || {
             flat([
                 pure(format!("| {}", case.label)),
                 listed("(", payload, ")"),
@@ -1514,7 +1505,7 @@ fn print_top_induct(group: Vec<TopInduct>) -> Printer {
                     let claim = induct_claim_offset(&u);
                     flat([
                         hard_line(),
-                        claimed_before(claim, || {
+                        marked(claim, || {
                             flat([
                                 print_pub(u.vis_pub),
                                 pure("and "),
@@ -1548,7 +1539,15 @@ fn print_top_struct(item: TopStruct) -> Printer {
         print_pub(item.rep_pub),
         print_term(item.result_sort),
         pure(" "),
-        listed_hard("{", item.fields.into_iter().map(print_field).collect(), "}"),
+        listed_hard(
+            "{",
+            item.fields
+                .first()
+                .and_then(|field| field.type_.span())
+                .map(|span| span.start),
+            item.fields.into_iter().map(print_field).collect(),
+            "}",
+        ),
     ])
 }
 
@@ -1558,10 +1557,10 @@ fn print_concept_field(field: ConceptField) -> Printer {
 
     // A superclass field is anonymous: `use <type>`, no label.
     if field.is_super {
-        return claimed_before(claim, || flat([pure("use "), print_term(field.type_)]));
+        return marked(claim, || flat([pure("use "), print_term(field.type_)]));
     }
     match field.func_params {
-        Some(params) => claimed_before(claim, || {
+        Some(params) => marked(claim, || {
             flat([
                 pure(field.label),
                 listed(
@@ -1573,7 +1572,7 @@ fn print_concept_field(field: ConceptField) -> Printer {
                 print_term(field.type_),
             ])
         }),
-        None => claimed_before(claim, || {
+        None => marked(claim, || {
             flat([pure(field.label), pure(": "), print_term(field.type_)])
         }),
     }
@@ -1591,6 +1590,10 @@ fn print_top_concept(item: TopConcept) -> Printer {
         pure(" "),
         listed_hard(
             "{",
+            item.fields
+                .first()
+                .and_then(|field| field.type_.span())
+                .map(|span| span.start),
             item.fields.into_iter().map(print_concept_field).collect(),
             "}",
         ),
@@ -1632,10 +1635,21 @@ fn print_top_witness(item: TopWitness) -> Printer {
         pure(" "),
         listed_hard(
             "{",
+            item.entries.first().and_then(witness_entry_start),
             item.entries.into_iter().map(print_witness_entry).collect(),
             "}",
         ),
     ])
+}
+
+/// Where a witness-body entry begins, for the mark that pays a comment riding the opening brace's line.
+fn witness_entry_start(entry: &WitnessEntry) -> Option<usize> {
+    let term = match entry {
+        WitnessEntry::Use(term) => term,
+        WitnessEntry::Field(field) => &field.value,
+    };
+
+    term.span().map(|span| span.start)
 }
 
 /// A witness-body entry: a `use <term>` fill or an implementation field — `label = value`, or the definition sugar `label(params) = value` re-sugared from the retained parameter list.
@@ -1647,18 +1661,15 @@ fn print_witness_entry(entry: WitnessEntry) -> Printer {
 
     let claim = member_claim_offset([&field.value]);
     match field.func_params {
-        Some(params) => claimed_before(claim, || {
+        Some(params) => marked(claim, || {
             flat([
                 pure(field.label),
                 listed("(", params.into_iter().map(print_func_param).collect(), ")"),
-                attached_body(" =", print_term(field.value)),
+                attached_body(" =", field.value),
             ])
         }),
-        None => claimed_before(claim, || {
-            flat([
-                pure(field.label),
-                attached_body(" =", print_term(field.value)),
-            ])
+        None => marked(claim, || {
+            flat([pure(field.label), attached_body(" =", field.value)])
         }),
     }
 }

@@ -7,7 +7,7 @@
 use {
     super::{FormatInput, TopItem, parse_for_format},
     crate::print::{print_term, print_top_item},
-    curios_print::{Printer, run_printer_within},
+    curios_print::{Owed, Printer, begins, flat, hard_line, reaches, run_printer_placing},
     curios_utilities::{Source, Span},
     std::{cell::RefCell, fmt, path::Path, rc::Rc},
 };
@@ -26,9 +26,18 @@ impl Formatted {
         let comments = classify(&source.text, input.comments.clone());
         let expected_comments = comments.len();
 
-        WEAVER.with(|weaver| *weaver.borrow_mut() = Some(comments));
+        // Every comment goes to the renderer, which is the only thing that knows where an output line begins and ends — see `Owed`. Nothing here decides a comment's place; the printer only marks how far into the source its document has reached.
+        OWED.with(|owed| {
+            *owed.borrow_mut() = comments
+                .into_iter()
+                .map(|comment| Owed {
+                    at: comment.start,
+                    own_line: !comment.trailing,
+                    text: format!(" {}", comment.text),
+                })
+                .collect();
+        });
         let output = emit(&input);
-        WEAVER.with(|weaver| *weaver.borrow_mut() = None);
 
         verify(&input, expected_comments, &output)?;
         Ok(match output == source.text {
@@ -59,46 +68,10 @@ struct Comment {
 }
 
 thread_local! {
-    /// The active weave: comments not yet claimed, in offset order. Present only while [`Formatted::from_source`] renders, so `Display` printing never consults it.
-    static WEAVER: RefCell<Option<Vec<Comment>>> = const { RefCell::new(None) };
-}
-
-/// Claim every unclaimed trailing comment written inside `span`, in source order, as verbatim texts.
-///
-/// **The claim a node makes once its document is built, for the comments riding the line it just ended.** Registered there the suffix reaches the printer while that line is still open, which is the difference between a trailing comment staying where it was written and drifting to the next break. Claimed by the node that *follows* it instead — which is what [`claim_comments_before`] alone leaves to happen — it is prefixed to that node's document and reaches the channel after the newline closing its own line has gone out, so it surfaces a line down, and where the claiming node is the last inside a construct, past the construct's end entirely.
-///
-/// **Containment is the test because a term's span runs to the next token, not to the end of its own text.** Trailing trivia is inside it, so a comment written after a term sits within that term's span, and the innermost span holding it belongs to the content it was written after. Descendants build before their ancestors, so that innermost node is also the first to ask.
-pub(crate) fn claim_trailing_within(start: usize, end: usize) -> Vec<String> {
-    WEAVER.with(|weaver| match &mut *weaver.borrow_mut() {
-        Some(comments) => {
-            let mut claimed = Vec::new();
-            comments.retain(|comment| {
-                match comment.trailing && (start..end).contains(&comment.start) {
-                    true => {
-                        claimed.push(comment.text.clone());
-                        false
-                    }
-                    false => true,
-                }
-            });
-            claimed
-        }
-        None => Vec::new(),
-    })
-}
-
-/// Claim every unclaimed comment starting before `offset`, in source order, as `(text, trailing)` pairs. Empty outside a format run — the printer calls this unconditionally and ordinary printing pays one thread-local read.
-pub(crate) fn claim_comments_before(offset: usize) -> Vec<(String, bool)> {
-    WEAVER.with(|weaver| match &mut *weaver.borrow_mut() {
-        Some(comments) => {
-            let split = comments.partition_point(|comment| comment.start < offset);
-            comments
-                .drain(..split)
-                .map(|comment| (comment.text, comment.trailing))
-                .collect()
-        }
-        None => Vec::new(),
-    })
+    /// The comments this run owes the renderer, by the offset each was written at — ascending, since `classify` walks the parse's own ascending spans.
+    ///
+    /// Present only while [`Formatted::from_source`] renders, so `Display` printing never carries any and renders exactly as it always did.
+    static OWED: RefCell<Vec<Owed>> = const { RefCell::new(Vec::new()) };
 }
 
 fn classify(source: &str, spans: Vec<Span>) -> Vec<Comment> {
@@ -126,74 +99,45 @@ fn render(printer: Printer) -> String {
     impl fmt::Display for Within {
         fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
             let printer = self.0.borrow_mut().take().expect("rendered once");
-            run_printer_within(printer, formatter, INDENT, WIDTH)
+            let owed = OWED.with(|owed| std::mem::take(&mut *owed.borrow_mut()));
+
+            run_printer_placing(printer, formatter, INDENT, WIDTH, owed)
         }
     }
     Within(RefCell::new(Some(printer))).to_string()
 }
 
-/// Render the parsed file: items separated by exactly one blank line — except consecutive `use` declarations and a `use` directly following a `mod`, which stack with none, as the corpus writes its import heads and its `mod X; use X/{…}` pairs — each preceded by its leading comments, trailing comments riding their lines, dangling comments closing the file. Element-boundary comments are claimed by this driver — a trailing one appends to the previous element's final line, a leading one gets its own lines before the next element — while comments *interior* to an element are claimed during its document's build (an interior trailing comment surfaces at the following break, one line later than written: conserved and valid, a known coarseness).
+/// The parsed file as one document: items separated by exactly one blank line — except consecutive `use` declarations and a `use` directly following a `mod`, which stack with none, as the corpus writes its import heads and its `mod X; use X/{…}` pairs — and the tail last.
+///
+/// **One document for the whole file, rendered once.** Every comment is placed by that single run, which is what lets a comment between two items be placed at all: rendering each item separately gave each its own renderer, and a comment belonging to neither had to be spliced in as text by this function. Nothing here handles comments now; it marks where each item begins and lets the renderer do the rest.
 fn emit(input: &FormatInput) -> String {
-    let mut out = String::new();
+    let mut parts: Vec<Printer> = Vec::new();
     let mut previous: Option<&TopItem> = None;
 
-    // Split a boundary claim: trailing comments ride the previous element's last line, leading ones return as the next element's preamble.
-    let boundary = |out: &mut String, upto: usize| -> Vec<String> {
-        let mut lead = Vec::new();
-        for (text, trailing) in claim_comments_before(upto) {
-            if trailing {
-                out.push(' ');
-                out.push_str(&text);
-            } else {
-                lead.push(text);
-            }
-        }
-        lead
-    };
-
     for (item, span) in input.module.items.iter().zip(&input.item_spans) {
-        // Claimed before the item's document builds, or the item's first term would weave these into its own middle.
-        let lead = boundary(&mut out, span.start);
         match previous {
             None => {}
             Some(TopItem::Use(_) | TopItem::Mod(_)) if matches!(item, TopItem::Use(_)) => {
-                out.push('\n')
+                parts.push(hard_line());
             }
-            Some(_) => out.push_str("\n\n"),
+            Some(_) => parts.extend([hard_line(), hard_line()]),
         }
-        for text in lead {
-            out.push_str(&text);
-            out.push('\n');
-        }
-        out.push_str(&render(print_top_item(item.clone())));
+
+        // Marked at both ends, as a term is: the start is where a comment leading the item stops leading whatever came before, and the end is what makes a comment written after the item's own `;` owed before the break that would carry it to the next item.
+        parts.push(begins(span.start));
+        parts.push(print_top_item(item.clone()));
+        parts.push(reaches(span.end));
         previous = Some(item);
     }
 
     if let Some(tail) = &input.tail {
-        let upto = tail.span().map(|span| span.start).unwrap_or(usize::MAX);
-        let lead = boundary(&mut out, upto);
         if previous.is_some() {
-            out.push_str("\n\n");
+            parts.extend([hard_line(), hard_line()]);
         }
-        for text in lead {
-            out.push_str(&text);
-            out.push('\n');
-        }
-        out.push_str(&render(print_term(tail.clone())));
+        parts.push(print_term(tail.clone()));
     }
 
-    for (text, trailing) in claim_comments_before(usize::MAX) {
-        if trailing {
-            out.push(' ');
-            out.push_str(&text);
-        } else {
-            out.push_str("\n\n");
-            out.push_str(&text);
-        }
-    }
-
-    out.push('\n');
-    out
+    format!("{}\n", render(flat(parts)))
 }
 
 /// The refuse-to-write gate: the output must reparse to the same program (structural equality — spans are excluded from it by design) carrying the same number of comments.
