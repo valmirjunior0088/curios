@@ -8,6 +8,9 @@
 //!
 //! Certification is [`curios-prelude`](../curios_prelude/index.html)'s, whose own build script restores this image, walks it with the kernel, and fails the build on any refusal. **Consumers depend on that crate, never on this one.** The invariant an archive rests on — *one that exists is one whose every item the kernel accepted* — holds because the only crate that hands out the prelude is one that cannot build without certifying it.
 
+#[cfg(test)]
+mod tests;
+
 mod archive;
 pub(crate) use archive::*;
 
