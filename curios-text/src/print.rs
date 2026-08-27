@@ -1553,12 +1553,13 @@ fn print_top_struct(item: TopStruct) -> Printer {
 }
 
 fn print_concept_field(field: ConceptField) -> Printer {
+    // Claimed before the branch, because every branch prints a field and a comment above one leads the field however it is spelled. A superclass field used to return before claiming, so its comment fell through to the type term and surfaced *inside* the field, between `use` and the type it leads.
+    let claim = member_claim_offset([&field.type_]);
+
     // A superclass field is anonymous: `use <type>`, no label.
     if field.is_super {
-        return flat([pure("use "), print_term(field.type_)]);
+        return claimed_before(claim, || flat([pure("use "), print_term(field.type_)]));
     }
-    // The signature sugar `label(params) -> type` re-sugars from the retained parameter list (never set on a super field).
-    let claim = member_claim_offset([&field.type_]);
     match field.func_params {
         Some(params) => claimed_before(claim, || {
             flat([
