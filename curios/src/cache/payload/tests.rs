@@ -512,4 +512,6 @@ fn a_payload_is_not_filed_over_a_chain_with_a_gap() {
         "and the gapped invocation left nothing to reuse"
     );
     assert_eq!(filed(&root), 1, "a chain with no gap in it still files");
+
+    fs::remove_dir_all(root).unwrap();
 }

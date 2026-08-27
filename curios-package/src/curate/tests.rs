@@ -185,7 +185,8 @@ fn a_fetched_revision_is_verified_and_placed() {
     ];
 
     // What the delivery must hash to: the same files, with no repository around them.
-    let expected = TreeHash::of(&tree("curate-expected", files)).unwrap();
+    let measured = tree("curate-expected", files);
+    let expected = TreeHash::of(&measured).unwrap();
 
     let (origin, revision) = origin("curate-origin", files);
 
@@ -208,6 +209,7 @@ fn a_fetched_revision_is_verified_and_placed() {
         "source is what was delivered; the object store is how it arrived"
     );
 
+    fs::remove_dir_all(measured).unwrap();
     fs::remove_dir_all(origin).unwrap();
     fs::remove_dir_all(root).unwrap();
 }
@@ -266,7 +268,8 @@ fn a_revision_the_remote_does_not_hold_is_refused_naming_the_revision() {
         ("curios.toml", "name = \"http\"\n"),
         ("lib.crs", "pub let get : Type = Type;"),
     ];
-    let expected = TreeHash::of(&tree("curate-absent-expected", files)).unwrap();
+    let measured = tree("curate-absent-expected", files);
+    let expected = TreeHash::of(&measured).unwrap();
     let (origin, _) = origin("curate-absent-origin", files);
 
     let root = tree("curate-absent", &[("curios.toml", "name = \"app\"\n")]);
@@ -284,6 +287,7 @@ fn a_revision_the_remote_does_not_hold_is_refused_naming_the_revision() {
         "the fault is the revision, not the hash: {refusal}"
     );
 
+    fs::remove_dir_all(measured).unwrap();
     fs::remove_dir_all(origin).unwrap();
     fs::remove_dir_all(root).unwrap();
 }
@@ -298,7 +302,8 @@ fn a_pin_naming_a_branch_or_a_tag_is_delivered() {
         ("curios.toml", "name = \"http\"\n"),
         ("lib.crs", "pub let get : Type = Type;"),
     ];
-    let expected = TreeHash::of(&tree("curate-refs-expected", files)).unwrap();
+    let measured = tree("curate-refs-expected", files);
+    let expected = TreeHash::of(&measured).unwrap();
     let (origin, revision) = origin("curate-refs-origin", files);
 
     for rev in [revision.as_str(), "v1", "master", "main"] {
@@ -322,5 +327,6 @@ fn a_pin_naming_a_branch_or_a_tag_is_delivered() {
         fs::remove_dir_all(root).unwrap();
     }
 
+    fs::remove_dir_all(measured).unwrap();
     fs::remove_dir_all(origin).unwrap();
 }

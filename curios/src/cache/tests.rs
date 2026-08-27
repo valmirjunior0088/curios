@@ -105,6 +105,8 @@ fn an_unchanged_unit_is_reused() {
 
     assert!(!reused(&root), "nothing is stored for the first compile");
     assert!(reused(&root), "and the second finds what the first filed");
+
+    fs::remove_dir_all(root).unwrap();
 }
 
 /// The regression for what the tree-hashed scheme got wrong. Filing a unit writes into `.curios/`, which sits inside the very directory that scheme hashed into the unit's address — so a package's own library missed forever and the store grew a directory per compile. What a unit was compiled from is now recorded and verified rather than addressed, and a generated file is not something it was compiled from.
@@ -117,6 +119,8 @@ fn writing_into_the_store_does_not_invalidate_it() {
 
     write(&root, ".curios/unrelated", "not a source file");
     assert!(reused(&root), "and neither is anything else under it");
+
+    fs::remove_dir_all(root).unwrap();
 }
 
 /// A slot is addressed without its contents, so it is the *verification* that has to notice an edit. This is the half that would still pass if the record were never checked.
@@ -129,6 +133,8 @@ fn an_edited_unit_is_not_reused() {
 
     write(&root, "shape/lib.crs", &library("second"));
     assert!(!reused(&root), "and refused once its source differs");
+
+    fs::remove_dir_all(root).unwrap();
 }
 
 /// A slot filed by one project must not answer for another's, even when both address it identically — which two projects holding a package of one name, compiled by one compiler after one chain, always do.
@@ -149,6 +155,9 @@ fn a_slot_does_not_answer_for_another_projects_source() {
         !reused(&mine),
         "their record names their files, which are not mine to have read"
     );
+
+    fs::remove_dir_all(mine).unwrap();
+    fs::remove_dir_all(theirs).unwrap();
 }
 
 /// The other half of that clause, and the reason it checks containment rather than re-deriving the read set: a dependency materialized once and read from that same path by every project *is* shared, and must still hit.
@@ -176,6 +185,10 @@ fn a_slot_answers_for_a_dependency_both_projects_read() {
         reused_from(&mine, &materialized),
         "and the record names a path mine reads from too, so the unit crosses"
     );
+
+    fs::remove_dir_all(materialized).unwrap();
+    fs::remove_dir_all(mine).unwrap();
+    fs::remove_dir_all(theirs).unwrap();
 }
 
 /// The store holds one slot per unit rather than one per compile — the property the address exists to have, and the one the previous scheme lost.
@@ -192,4 +205,6 @@ fn compiling_repeatedly_files_one_slot() {
         .count();
 
     assert_eq!(slots, 1, "four compiles of one unit, one slot");
+
+    fs::remove_dir_all(root).unwrap();
 }
