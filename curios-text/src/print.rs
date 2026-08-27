@@ -47,6 +47,45 @@ fn listed(open: impl Into<String>, items: Vec<Printer>, close: &'static str) -> 
     ]))
 }
 
+/// A bracketed **block**: flat when it fits, and otherwise broken open with its elements *wrapped* across as many lines as they need rather than stacked one per line.
+///
+/// **The shape a run of values takes, which is neither of the two either side of it.** [`listed`] gives a group and stacks when it breaks, which is right for a structure and spends a line per element on a table of 256 bytes. [`filled`] wraps but has no group at all, which is right for an import that owns its whole line and wrong for anything nested: the group is a *break opportunity the enclosing construct relies on*, and a literal that drops it leaves a deeply nested arm ladder with nowhere to split, printing wide however the fill itself is measured. This keeps the group and fills the broken form.
+///
+/// The closer rides the last element, as [`listed`]'s does and for the same reason.
+fn listed_block_wrapped(open: &'static str, items: Vec<Printer>, close: &'static str) -> Printer {
+    if items.is_empty() {
+        return flat([pure(open), pure(close)]);
+    }
+
+    let last = items.len() - 1;
+    let entries = items
+        .into_iter()
+        .enumerate()
+        .map(|(index, item)| match index == last {
+            true => item,
+            false => flat([item, pure(",")]),
+        })
+        .collect::<Vec<_>>();
+
+    group(flat([
+        pure(open),
+        indent(flat([soft_line(), fill(entries)])),
+        pure(close),
+    ]))
+}
+
+/// Whether every element of a packed literal is an atom — a plain numeral or a name — so that printing one flat costs nothing.
+///
+/// **What decides between [`listed_block_wrapped`] and [`listed`], and the reason the choice is about content rather than length.** A fill lays out the *gaps* between items and prints each item flat, never breaking inside one; that is right for a run of bytes and wrong for an element with structure of its own, which would be laid out on a single line however wide it grows. `/std/BigNat`'s proofs pack whole `Eq/trans(…)` chains into their literals and printed 545 columns that way. [`listed`] gives each element a line and lets it break within itself, which is what such an element needs.
+fn packs_atoms(segments: &[BinSegment]) -> bool {
+    segments.iter().all(|segment| match segment {
+        BinSegment::Atom(term) => {
+            matches!(term.as_subterm(), Subterm::NumLit(_) | Subterm::Name(_))
+        }
+        BinSegment::Spread(_) => false,
+    })
+}
+
 /// A bracketed **record**: padded flat (`{ a, b }`), and broken with a trailing comma and the closer on a line of its own.
 ///
 /// The one shape that does *not* ride its closer, and the difference is about editing rather than looks. A record's fields are the thing that grows: with the brace riding, adding one is a two-line change, because the field above has to give the brace up and take a comma. A sequence's elements do not grow that way, so [`listed`] rides and this does not. Struct literals and patterns take this shape, matching the declaration bodies in [`listed_hard`] — a literal and the `struct` it inhabits close the same way.
@@ -648,20 +687,26 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
             Grain::X => "Bytes",
         }),
         // Entries are comma-delimited, so an operand is an ordinary term needing no parenthesization — a constant atom is a numeral term and prints as written. An empty segment list prints `b[]`/`x[]` on its own.
-        Intrinsic::Bin(grain, segments) => listed(
-            match grain {
+        Intrinsic::Bin(grain, segments) => {
+            let open = match grain {
                 Grain::B => "b[",
                 Grain::X => "x[",
-            },
-            segments
+            };
+            // A run of atoms wraps as a block; anything with structure in it takes a line per element, so each may break within itself — see `packs_atoms`.
+            let wrapped = packs_atoms(&segments);
+            let entries = segments
                 .into_iter()
                 .map(|segment| match segment {
                     BinSegment::Atom(operand) => print_term(operand),
                     BinSegment::Spread(operand) => flat([pure(".."), print_term(operand)]),
                 })
-                .collect(),
-            "]",
-        ),
+                .collect();
+
+            match wrapped {
+                true => listed_block_wrapped(open, entries, "]"),
+                false => listed(open, entries, "]"),
+            }
+        }
         Intrinsic::BinLen(grain, operand) => print_intrinsic_call(
             format!(
                 "{}/len",
