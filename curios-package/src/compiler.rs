@@ -8,7 +8,9 @@
 //!
 //! **Why not a fingerprint over chosen sources.** That is a list somebody maintains, and the failure of forgetting an entry is silent admission. There is nothing to forget here.
 //!
-//! **Why it is memoized.** Digesting a compiler binary costs more per compile than the certification it saves, so the digest is recorded beside the store against the binary's size and modification time, and recomputed only when those move — the arrangement `sccache` uses. The common path is one `stat`.
+//! **Why it is memoized.** Digesting a compiler binary costs more per compile than the certification it saves — 0.37s for a 570 MiB debug build, which a language server would pay on every keystroke — so the digest is recorded beside the store against a stamp of the binary, and recomputed only when the stamp moves. The common path is one `stat`.
+//!
+//! **What the stamp identifies, and why size and modification time are not enough.** Those two alone are what `sccache` uses, and they are forgeable by the ordinary means of moving a binary about: `cp -p`, `rsync -a`, `tar -x` and a restored artifact cache all preserve a modification time, so two builds that happen to agree on length would share a stamp and the second would be handed the first's digest — a verdict believed on behalf of a compiler that never reached it, which is the one direction that admits. The stamp therefore also carries the inode and the *status change* time, which the kernel writes on every modification and no copying tool can set. What is identified is the file this compiler is running from, not merely how large it is and when someone says it was written.
 
 #[cfg(test)]
 mod tests;
@@ -19,6 +21,7 @@ use {
     std::{
         fs::{self, File},
         io::Read,
+        os::unix::fs::MetadataExt,
         path::Path,
         time::UNIX_EPOCH,
     },
@@ -33,14 +36,18 @@ pub fn compiler(store: &Store) -> Option<String> {
     let executable = std::env::current_exe().ok()?;
     let metadata = fs::metadata(&executable).ok()?;
     let stamp = format!(
-        "{} {}",
+        "{} {} {} {} {}.{}",
         metadata.len(),
         metadata
             .modified()
             .ok()?
             .duration_since(UNIX_EPOCH)
             .ok()?
-            .as_nanos()
+            .as_nanos(),
+        metadata.dev(),
+        metadata.ino(),
+        metadata.ctime(),
+        metadata.ctime_nsec(),
     );
 
     let record = store.compiler();
