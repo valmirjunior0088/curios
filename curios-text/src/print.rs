@@ -218,17 +218,17 @@ fn print_func_param((plicity, name, annotation): (Plicity, String, Option<Term>)
 
 /// A tuple-literal / struct-literal field: positional, `label = value`, or the definition sugar `label(params) = value` re-sugared from the retained parameter list.
 fn print_tuple_field(field: TupleField) -> Printer {
-    // A labeled field's label carries no span, so the claim is what keeps a comment written above the field from being claimed by the value and printed inside it. An unlabeled field *is* its value, and `print_term` already claims at the right place.
-    let claim = member_claim_offset([&field.value]);
+    // A labeled field's label carries no span, so this is what puts the mark at the field's own head rather than at its value — without it a comment written above the field would be placed inside it. An unlabeled field *is* its value, and `print_term` already marks the right place.
+    let start = member_start([&field.value]);
     match (field.label, field.func_params) {
-        (Some(label), Some(params)) => marked(claim, || {
+        (Some(label), Some(params)) => marked(start, || {
             flat([
                 pure(label),
                 listed("(", params.into_iter().map(print_func_param).collect(), ")"),
                 attached_body(" =", field.value),
             ])
         }),
-        (Some(label), None) => marked(claim, || {
+        (Some(label), None) => marked(start, || {
             flat([pure(label), attached_body(" =", field.value)])
         }),
         (None, _) => print_term(field.value),
@@ -827,9 +827,9 @@ fn print_intrinsic(intrinsic: Intrinsic) -> Printer {
 }
 
 pub(crate) fn print_term(term: Term) -> Printer {
-    // The formatter's comment weave: during a `format` run, a parsed term claims every not-yet-claimed *leading* comment written before its own start, which breaks onto its own line before the term. Printing builds in source order and never reorders, which is what makes the claim order correct. Outside a format run the claim is empty and printing is unchanged.
+    // The formatter's comment weave, and the whole of what the printer contributes to it: a term reports where its own text begins and how far into the source it reaches. Nothing here decides where a comment goes — that is a fact about the output line, which only the renderer knows.
     //
-    // A trailing comment is not claimed at all — it is placed by the renderer, which the marks below tell how far into the source the output has reached. The *end* mark is what reaches a comment written past a separator the enclosing printer emits: a term's span runs to the next token, so such a comment falls inside it, and the line comes to owe the comment before the break that would otherwise carry it away.
+    // The *end* mark is what reaches a comment written past a separator the enclosing printer emits: a term's span runs to the next token, so such a comment falls inside it, and the line comes to owe the comment before the break that would otherwise carry it away. Outside a format run there are no comments and both marks emit nothing.
     let bounds = term.span().map(|span| (span.start, span.end));
 
     marked(bounds.map(|(start, _)| start), || match bounds {
@@ -858,22 +858,22 @@ fn reached_before(offset: Option<usize>) -> Printer {
     }
 }
 
-/// Where a member of a delimited list claims its leading comments: a `match` or `choose` arm, a tuple or struct-literal field, a concept or witness field, an `induct` case.
+/// Where a member of a delimited list begins: a `match` or `choose` arm, a tuple or struct-literal field, a concept or witness field, an `induct` case.
 ///
-/// None of these records a span of its own — an arm is a pattern and a body, a field a bare label and a value — so without a claim at the member's own head the first spanned *descendant* claims instead, and a comment written above the member surfaces inside the member's body. [`signature_claim_offset`] is this same rule for `let` and `rec` clauses, and its doc records the convergence failure both exist to prevent.
+/// None of these records a span of its own — an arm is a pattern and a body, a field a bare label and a value — so without a position derived at the member's own head, the mark would sit at the first spanned *descendant* and a comment written above the member would surface inside the member's body. [`signature_start`] is this same rule for `let` and `rec` clauses, and its doc records the convergence failure both exist to prevent.
 ///
-/// The earliest spanned component bounds the claim, for the reason it does there: a comment above the member precedes every component, so any one of them would claim it, and taking the earliest keeps a comment written *inside* the member's head with the component it leads. A member whose components are all spanless claims nothing, exactly as a signature with no spanned component does.
-fn member_claim_offset<'a>(terms: impl IntoIterator<Item = &'a Term>) -> Option<usize> {
+/// The earliest spanned component bounds it, for the reason it does there: a comment above the member precedes every component, so any one of them would place it, and taking the earliest keeps a comment written *inside* the member's head with the component it leads. A member whose components are all spanless reports nothing, exactly as a signature with no spanned component does.
+fn member_start<'a>(terms: impl IntoIterator<Item = &'a Term>) -> Option<usize> {
     terms
         .into_iter()
         .filter_map(|term| term.span().map(|span| span.start))
         .min()
 }
 
-/// Where a `let` binding or a `rec` clause claims its leading comments: the start of its earliest spanned component, since none of the introducer keyword, the binder pattern, and the clause label records a span. A comment above the binding precedes all of these, so any of them bounds the claim; taking the earliest keeps comments written inside the signature with the component they lead.
+/// Where a `let` binding or a `rec` clause begins: the start of its earliest spanned component, since none of the introducer keyword, the binder pattern, and the clause label records a span. A comment above the binding precedes all of these, so any of them bounds it; taking the earliest keeps comments written inside the signature with the component they lead.
 ///
-/// A clause that does not claim at its own head does not thereby keep its comment: the first *descendant* with a span claims it instead, which is how a comment above an `and` clause once surfaced between a parameter and its type. It then reparsed as a leading comment somewhere new, so the next format run moved it again — the one way this formatter can fail to converge.
-fn signature_claim_offset(signature: &LetSignature) -> Option<usize> {
+/// A clause with no position of its own does not thereby keep its comment: the mark falls to the first *descendant* with a span, which is how a comment above an `and` clause once surfaced between a parameter and its type. It then reparsed as a leading comment somewhere new, so the next format run moved it again — the one way this formatter can fail to converge, and what `formatting_converges_from_every_comment_position` now checks.
+fn signature_start(signature: &LetSignature) -> Option<usize> {
     let earliest = match signature {
         LetSignature::Name {
             type_: Some(type_), ..
@@ -1034,8 +1034,8 @@ fn print_term_inner(term: Term) -> Printer {
                 flat(
                     arms.into_iter()
                         .map(|arm| {
-                            // A choose arm's test is spanned and precedes its body, so it is the earliest component; the head is built *inside* the claim so that printing the test cannot claim this arm's leading comment first.
-                            let claim = member_claim_offset([
+                            // A choose arm's test is spanned and precedes its body, so it is the earliest component; the head is built *inside* the mark so that printing the test cannot report a later position first.
+                            let start = member_start([
                                 match &arm.test {
                                     ChooseTest::Cond(condition) => condition,
                                     ChooseTest::Bind { value, .. } => value,
@@ -1045,9 +1045,9 @@ fn print_term_inner(term: Term) -> Printer {
                             let ChooseArm { test, body } = arm;
                             flat([
                                 // Reported before the break, so a comment riding the previous line is paid there — see `reached_before`.
-                                reached_before(claim),
+                                reached_before(start),
                                 separator(),
-                                marked(claim, || {
+                                marked(start, || {
                                     let head = match test {
                                         ChooseTest::Cond(condition) => {
                                             flat([pure("| "), print_term(condition)])
@@ -1066,7 +1066,7 @@ fn print_term_inner(term: Term) -> Printer {
                         .collect::<Vec<_>>(),
                 ),
                 separator(),
-                marked(member_claim_offset([&default]), || {
+                marked(member_start([&default]), || {
                     flat([pure("| _"), attached_body(" =>", default)])
                 }),
                 separator(),
@@ -1088,11 +1088,11 @@ fn print_term_inner(term: Term) -> Printer {
                     arms.into_iter()
                         .map(|arm| {
                             // The mark sits *after* the separator: it is what breaks the line, so a comment written on its own line before it leads this arm rather than riding the previous one. The position is reported *before* the break, so a comment riding the previous line is paid there — see `reached_before`.
-                            let claim = member_claim_offset([&arm.body]);
+                            let start = member_start([&arm.body]);
                             flat([
-                                reached_before(claim),
+                                reached_before(start),
                                 separator(),
-                                marked(claim, || {
+                                marked(start, || {
                                     flat([
                                         pure("| "),
                                         print_match_pattern(arm.pattern),
@@ -1108,11 +1108,11 @@ fn print_term_inner(term: Term) -> Printer {
             ]))
         }
         Subterm::Let(Let { bindings, tail }) => {
-            // The binding documents materialize before the tail's: claiming is a build-order side effect, and an eagerly evaluated tail would claim every comment in the chain, including those leading later bindings. Each binding claims at its own head, so a comment above a `let` stays above it instead of sliding under the `=`.
+            // The binding documents materialize before the tail's, so the marks come out in source order; an eagerly evaluated tail would report its own position ahead of every binding's. Each binding marks its own head, so a comment above a `let` stays above it instead of sliding under the `=`.
             let bindings = bindings
                 .into_iter()
                 .map(|binding| {
-                    marked(signature_claim_offset(&binding.signature), || {
+                    marked(signature_start(&binding.signature), || {
                         flat([
                             pure("let "),
                             print_pattern(binding.binder),
@@ -1126,7 +1126,7 @@ fn print_term_inner(term: Term) -> Printer {
             flat(bindings.into_iter().chain([print_term(tail)]))
         }
         Subterm::Rec(Rec { items, tail }) => {
-            // Every clause after the first claims at its own head, for the reason the `let` arm above states. That moves `and` inside the claim: a separator carrying the keyword would print it before the comment the clause is claiming, which is the mangling this exists to prevent. The first clause needs none — a comment above the block precedes `rec` itself, which the enclosing `print_term` has already claimed.
+            // Every clause after the first marks its own head, for the reason the `let` arm above states. That moves `and` inside the mark: a separator carrying the keyword would print it before the comment the clause leads, which is the mangling this exists to prevent. The first clause needs none — a comment above the block precedes `rec` itself, which the enclosing `print_term` already marks.
             let mut parts = Vec::from([pure("rec ")]);
             for (index, item) in items.into_iter().enumerate() {
                 if index == 0 {
@@ -1136,9 +1136,9 @@ fn print_term_inner(term: Term) -> Printer {
                     ]));
                     continue;
                 }
-                let claim = signature_claim_offset(&item.signature);
+                let start = signature_start(&item.signature);
                 parts.push(hard_line());
-                parts.push(marked(claim, || {
+                parts.push(marked(start, || {
                     flat([
                         pure("and "),
                         pure(item.label),
@@ -1329,11 +1329,11 @@ fn print_top_rec(items: Vec<TopLet>) -> Printer {
         flat(
             rest.into_iter()
                 .map(|item| {
-                    let claim = signature_claim_offset(&item.signature);
-                    // The separator stays outside the claim, so a comment leading this clause opens a line of its own above `and` rather than running on from the previous clause's last character.
+                    let start = signature_start(&item.signature);
+                    // The separator stays outside the mark, so a comment leading this clause opens a line of its own above `and` rather than running on from the previous clause's last character.
                     flat([
                         hard_line(),
-                        marked(claim, || {
+                        marked(start, || {
                             flat([
                                 // `pub` precedes `and`, which is the spelling the grammar accepts and the one the `induct` group beside this already emits. Reversed, a `pub` member of a `rec` group printed as `and pub f` and would not reparse — the formatter's verify gate refused the file rather than writing it, which is why `/std/Toml/values.crs` had never been formatted.
                                 print_pub(item.vis_pub),
@@ -1375,8 +1375,8 @@ pub(crate) fn print_module_items(items: Vec<TopItem>) -> Printer {
 }
 
 fn print_top_induct_case(case: TopCase) -> Printer {
-    // Computed before anything below builds a document, since printing a payload type would otherwise claim this case's leading comment into the payload list.
-    let claim = member_claim_offset(
+    // Computed before anything below builds a document, since printing a payload type would otherwise report its own position first and place this case's leading comment inside the payload list.
+    let start = member_start(
         case.payload
             .iter()
             .map(|param| &param.type_)
@@ -1408,7 +1408,7 @@ fn print_top_induct_case(case: TopCase) -> Printer {
 
     flat([
         hard_line(),
-        marked(claim, || {
+        marked(start, || {
             flat([
                 pure(format!("| {}", case.label)),
                 listed("(", payload, ")"),
@@ -1459,10 +1459,10 @@ fn print_top_induct_arity(
     ])
 }
 
-/// [`signature_claim_offset`] for an `induct` clause, over the components an inductive head has: its parameters, then its index telescope, then its result sort, then the first payload or target its cases carry.
+/// [`signature_start`] for an `induct` clause, over the components an inductive head has: its parameters, then its index telescope, then its result sort, then the first payload or target its cases carry.
 ///
-/// The label is spanless like a `let`'s binder, so a clause that did not claim here would leave its leading comment to the first spanned descendant. The cases are the fallback because a *sort* is spanless too — `parse_type` and `parse_prop` build their term from a bare `Subterm` — so `and Odd : Type` has no located component in its head at all. Any offset within the clause bounds the claim equally well: only the clause's own text lies between its head and its first case, and a comment written in there is one this hoists above `and` rather than one it misplaces.
-fn induct_claim_offset(item: &TopInduct) -> Option<usize> {
+/// The label is spanless like a `let`'s binder, so a clause with no position of its own would leave its leading comment to the first spanned descendant. The cases are the fallback because a *sort* is spanless too — `parse_type` and `parse_prop` build their term from a bare `Subterm` — so `and Odd : Type` has no located component in its head at all. Any offset within the clause bounds it equally well: only the clause's own text lies between its head and its first case, and a comment written in there is one this hoists above `and` rather than one it misplaces.
+fn induct_start(item: &TopInduct) -> Option<usize> {
     let head = match (item.params.first(), item.indices.first()) {
         (Some((_, _, type_)), _) => Some(type_),
         (None, Some((_, index))) => Some(index),
@@ -1502,10 +1502,10 @@ fn print_top_induct(group: Vec<TopInduct>) -> Printer {
         flat(
             rest.into_iter()
                 .map(|u| {
-                    let claim = induct_claim_offset(&u);
+                    let start = induct_start(&u);
                     flat([
                         hard_line(),
-                        marked(claim, || {
+                        marked(start, || {
                             flat([
                                 print_pub(u.vis_pub),
                                 pure("and "),
@@ -1552,15 +1552,15 @@ fn print_top_struct(item: TopStruct) -> Printer {
 }
 
 fn print_concept_field(field: ConceptField) -> Printer {
-    // Claimed before the branch, because every branch prints a field and a comment above one leads the field however it is spelled. A superclass field used to return before claiming, so its comment fell through to the type term and surfaced *inside* the field, between `use` and the type it leads.
-    let claim = member_claim_offset([&field.type_]);
+    // Marked before the branch, because every branch prints a field and a comment above one leads the field however it is spelled. A superclass field used to return before marking, so its comment fell through to the type term and surfaced *inside* the field, between `use` and the type it leads.
+    let start = member_start([&field.type_]);
 
     // A superclass field is anonymous: `use <type>`, no label.
     if field.is_super {
-        return marked(claim, || flat([pure("use "), print_term(field.type_)]));
+        return marked(start, || flat([pure("use "), print_term(field.type_)]));
     }
     match field.func_params {
-        Some(params) => marked(claim, || {
+        Some(params) => marked(start, || {
             flat([
                 pure(field.label),
                 listed(
@@ -1572,7 +1572,7 @@ fn print_concept_field(field: ConceptField) -> Printer {
                 print_term(field.type_),
             ])
         }),
-        None => marked(claim, || {
+        None => marked(start, || {
             flat([pure(field.label), pure(": "), print_term(field.type_)])
         }),
     }
@@ -1659,16 +1659,16 @@ fn print_witness_entry(entry: WitnessEntry) -> Printer {
         WitnessEntry::Field(field) => field,
     };
 
-    let claim = member_claim_offset([&field.value]);
+    let start = member_start([&field.value]);
     match field.func_params {
-        Some(params) => marked(claim, || {
+        Some(params) => marked(start, || {
             flat([
                 pure(field.label),
                 listed("(", params.into_iter().map(print_func_param).collect(), ")"),
                 attached_body(" =", field.value),
             ])
         }),
-        None => marked(claim, || {
+        None => marked(start, || {
             flat([pure(field.label), attached_body(" =", field.value)])
         }),
     }

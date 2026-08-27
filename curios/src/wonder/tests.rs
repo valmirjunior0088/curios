@@ -117,6 +117,8 @@ fn refusing_one_units_hit_does_not_refuse_the_units_after_it() {
         ["compiling /alpha", "reused /beta"],
         "the overlay reaches /alpha alone, so /beta is still the store's"
     );
+
+    fs::remove_dir_all(root).unwrap();
 }
 
 /// Two mountable packages and nothing else, at a directory of its own.

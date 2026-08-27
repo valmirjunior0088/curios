@@ -186,31 +186,6 @@ fn if_break_spells_per_mode_without_breaking() {
 }
 
 #[test]
-fn a_line_suffix_rides_to_the_end_of_its_line() {
-    let document = flat([
-        pure("code"),
-        line_suffix(" -- trailing"),
-        pure(" more"),
-        hard_line(),
-        pure("next"),
-    ]);
-    assert_eq!(render(document, None), "code more -- trailing\nnext");
-}
-
-#[test]
-fn a_line_suffix_flushes_at_document_end() {
-    let document = flat([pure("code"), line_suffix(" -- last")]);
-    assert_eq!(render(document, None), "code -- last");
-}
-
-#[test]
-fn a_line_suffix_forces_its_group_to_break() {
-    // A trailing comment means the line must end, so the group cannot stay flat however wide the width.
-    let document = group(flat([pure("a"), line_suffix(" -- c"), line(), pure("b")]));
-    assert_eq!(render(document, Some(100)), "a -- c\nb");
-}
-
-#[test]
 fn a_fill_is_measured_with_the_gaps_it_will_emit() {
     // The spaces between the names are part of the fill's width, so what follows one starts where the gaps leave off and not where the names do. Counted short, this fits at eight.
     let document = || group(flat([fill([pure("aa,"), pure("bb")]), line(), pure("cc")]));

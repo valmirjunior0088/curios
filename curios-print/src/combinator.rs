@@ -100,11 +100,6 @@ pub fn if_break(flat: impl Into<String>, broken: impl Into<String>) -> Printer {
     }
 }
 
-/// Buffers `text` until just before the next emitted newline (or the document's end) — how a trailing comment rides at the end of whatever line it lands on without its builder knowing where that line ends. `text` must not contain a newline; a pending suffix fails the fits scan, so the group it lands in always breaks.
-pub fn line_suffix(text: impl Into<String>) -> Printer {
-    Printer::LineSuffix(text.into())
-}
-
 /// Note that something written at source offset `offset` begins here — see [`Printer::Mark`]. Zero width and no output.
 pub fn begins(offset: usize) -> Printer {
     Printer::Mark {

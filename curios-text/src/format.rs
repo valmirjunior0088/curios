@@ -1,8 +1,14 @@
-//! The canonical formatter behind `curios format`: parse with comments, weave them through width-aware rendering, verify, emit.
+//! The canonical formatter behind `curios format`: parse with comments, render the file as one document, verify, emit.
 //!
-//! The laws: formatting never changes a program — the output is reparsed and compared structurally, and a mismatch refuses to emit; every captured comment appears in the output exactly once — the verifier recounts them; the result is deterministic and idempotent; and nothing is ever reordered, which is also what makes the weave correct: printing follows source order, so each parsed node may simply *claim* every not-yet-claimed comment written before its own start.
+//! The laws: formatting never changes a program — the output is reparsed and compared structurally, and a mismatch refuses to emit; every captured comment appears in the output exactly once — the verifier recounts them; nothing is ever reordered; and **the result is idempotent**, which `formatting_converges_from_every_comment_position` checks from every position a comment can be written in rather than leaving it to be believed.
 //!
-//! Comments are classified once, from the source text: a comment with source content earlier on its own line is *trailing* — it rides that line's end via the printer's line-suffix channel — and every other comment *leads* the next element, breaking onto its own line. A trailing comment's suffix fails the fits scan, so the group it lands in always breaks: the comment-is-a-hard-break law needs no special-casing. The weave is a thread-local present only during a `format` run; `Display` paths never consult it, so ordinary printing is untouched.
+//! **A comment's place is decided by the renderer, not by the tree.** Where a comment goes is a fact about the *output*: one riding a line's end follows whatever was written last there — frequently punctuation the enclosing printer emits, which no node of the tree owns — and one on its own line must be placed where a line can begin. So the printer only reports *positions*, through [`Printer::Mark`](curios_print::Printer::Mark), and the whole comment list is handed to the renderer as [`Owed`](curios_print::Owed).
+//!
+//! That replaced a weave in which each node claimed the comments written before it. The claim had to be written by hand at every syntactic position, could not reach the ones no node owns, and depended on build order — a comment claimed by the wrong node reparsed somewhere new and moved again on the next run, which is the one way a formatter fails to converge.
+//!
+//! Comments are classified once, from the source text: one with source content earlier on its own line *rides* that line, and every other takes a line of its own. Nothing is classified twice and nothing is decided twice.
+//!
+//! **One document for the whole file.** [`emit`] builds it and renders once, which is what lets a comment between two items be placed at all — rendering item by item gave each its own renderer, and a comment belonging to neither had to be spliced in as text.
 
 use {
     super::{FormatInput, TopItem, parse_for_format},

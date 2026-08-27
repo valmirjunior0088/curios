@@ -19,7 +19,7 @@ struct PrinterState<'a, 'b> {
     column: usize,
     /// The line width [`Printer::Group`]s try to fit; `None` is unbounded, so every group renders flat.
     width: Option<usize>,
-    /// [`Printer::LineSuffix`] text pending for the current line, flushed just before the next newline (or at the document's end).
+    /// Text pending for the current line, flushed just before the next newline (or at the document's end) — how a comment rides the end of whatever line it was paid onto. Filled by [`PrinterState::reached`] and by nothing else.
     suffix: String,
     /// Source-derived text still owed a place, ascending by the offset it was written at — a formatter's comments, each flagged `own_line` when it must take a line of its own rather than ride one. Empty for every ordinary `Display`, which is what keeps a document with no marks rendering exactly as it always did.
     ///
@@ -155,7 +155,7 @@ struct Measured<'a> {
     filling: bool,
 }
 
-/// Whether `printer`'s flat rendering fits in `available` characters — the [`Printer::Group`] decision. Within the group a hard [`Printer::Line`] or a [`Printer::LineSuffix`] fails the scan outright: a group containing a mandatory break never renders flat, which is what replaces build-time break propagation.
+/// Whether `printer`'s flat rendering fits in `available` characters — the [`Printer::Group`] decision. Within the group a hard [`Printer::Line`], or a [`Printer::Mark`] that a comment is due at, fails the scan outright: a group containing a mandatory break never renders flat, which is what replaces build-time break propagation.
 ///
 /// The scan does not stop at the group's edge: a group that fits exactly while unbreakable content trails it would otherwise overrun the line, so measurement continues into `rest` — the renderer's remaining work, in its recorded modes — until the line provably ends. Beyond the group the polarity of a mandatory break flips: a hard line, a text newline, or a soft [`Printer::Line`] in broken surroundings simply ends the line, deciding the scan in favor, and a pending suffix is skipped rather than counted — a trailing comment never reflows the code it rides.
 ///
@@ -273,18 +273,12 @@ fn fits(
                     return filling;
                 }
             }
-            // Zero width, but not always silent: a mark reached at or past the earliest comment still owed means one is about to be placed on this line, so the line must end here. That is the comment-is-a-hard-break law arriving for a comment the document does not carry, exactly as a pending `Printer::LineSuffix` carries it for one that does.
+            // Zero width, but not always silent: a mark reached at or past the earliest comment still owed means one is about to be placed on this line, so the line must end here. That is the comment-is-a-hard-break law, and this is the only place it is stated now that a comment is never a node of the document.
             Printer::Mark { at, begins } => {
                 // Only a comment this mark would actually place ends the line, by the same rule `PrinterState::reached` pays by: a mark that merely reports how far the source has been consumed pays nothing waiting for the next element to begin, so it must not break a line on its behalf either.
                 let due =
                     owed.is_some_and(|(owed, own_line)| owed <= *at && (*begins || !own_line));
                 if inside && due {
-                    return false;
-                }
-            }
-            // A pending suffix means the line must end here — the comment-is-a-hard-break law. Beyond the group it flushes at the line's eventual end without reflowing what precedes it.
-            Printer::LineSuffix(_) => {
-                if inside {
                     return false;
                 }
             }
@@ -440,10 +434,6 @@ fn run<'b, 'c>(
                 } => {
                     let spelling = mem::take(if flat { on_flat } else { broken });
                     state.write(&spelling)?;
-                }
-                Printer::LineSuffix(text) => {
-                    debug_assert!(!text.contains('\n'), "a line suffix stays on one line");
-                    state.suffix.push_str(text);
                 }
                 // Reaching a mark is what tells the renderer which source text the line now holds, and so which trailing comments it owes — see `Printer::Mark`.
                 Printer::Mark { at, begins } => state.reached(*at, *begins)?,
