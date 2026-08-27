@@ -32,6 +32,45 @@ let seg_key(pre: Bytes, seg: Seg) -> Bytes =
 let seg_name(seg: Seg) -> Str =
     match seg | plain(name) => name | at(name, _) => name end;
 
+-- Whether the table already at `kp` may be extended by `act`, and why not when it may not.
+--
+-- The two directions are not symmetric. A dotted-key assignment may only extend a table that dotted keys themselves created: anything else is a table defined elsewhere, and TOML forbids reaching back into it. A header may extend one a header or an implicit parent created, but not one dotted keys did.
+-- `items` with the element at `index` replaced by `value`.
+--
+-- The proofs are what a total slice costs, and they are derived here once rather than at each caller: `index < len` gives `0 ..= index` for the prefix and `index + 1 ..= len` for the suffix, so both halves are in range by construction. Replacing the *last* element is this with an empty suffix, which is why the array-of-tables append below reaches for it too rather than open-coding a second splice.
+let replace_at(
+    items: List(Toml),
+    index: Nat,
+    ok: Nat/Lt(index, List/len(items)),
+    value: Toml,
+) -> List(Toml) =
+    let count = List/len(@Toml, items);
+    [
+        ..List/slice(@Toml, items, 0, index, @Nat/Lt/le_of_lt(index, count, ok)),
+        value,
+        ..List/drop(@Toml, items, index + 1, @Nat/Lt/le_succ_of_lt(index, count, ok))];
+
+let may_extend(side: Map(State), kp: Bytes, act: Act) -> Result({}, Str) =
+    match Map/get(side, kp)
+    | some(st) =>
+        match act
+        | act_value(_) =>
+            match st
+            | dotted() => Result/success(())
+            | inline() => Result/failure("cannot extend an inline table")
+            | _ => Result/failure("cannot extend a table defined elsewhere with dotted keys")
+            end
+        | _ =>
+            match st
+            | header() => Result/success(())
+            | implicit() => Result/success(())
+            | dotted() => Result/failure("cannot extend a table created by dotted keys")
+            | _ => Result/failure("cannot extend an inline table")
+            end
+        end
+    | none() => Result/failure("cannot extend an inline table")
+    end;
+
 let walk_final(
     m: Map(Toml),
     side: Map(State),
@@ -155,21 +194,8 @@ rec walk(
                                         unchecked - 1,
                                         act)
                                     | success((inner2, side2, res)) =>
-                                        let count = List/len(@Toml, items);
                                         let items2 =
-                                            [
-                                                ..List/slice(
-                                                    @Toml,
-                                                    items,
-                                                    0,
-                                                    index,
-                                                    @Nat/Lt/le_of_lt(index, count, in_range)),
-                                                Toml/table(inner2),
-                                                ..List/drop(
-                                                    @Toml,
-                                                    items,
-                                                    index + 1,
-                                                    @Nat/Lt/le_succ_of_lt(index, count, in_range))];
+                                            replace_at(items, index, in_range, Toml/table(inner2));
                                         Result/success(
                                             (
                                                 Map/insert(m, name, Toml/arr(items2)),
@@ -205,31 +231,7 @@ rec walk(
                 | some(existing) =>
                     match existing
                     | table(inner) =>
-                        let permitted: Result({}, Str) =
-                            match Map/get(side, kp)
-                            | some(st) =>
-                                match act
-                                | act_value(_) =>
-                                    match st
-                                    | dotted() => Result/success(())
-                                    | inline() => Result/failure("cannot extend an inline table")
-                                    | _ =>
-                                        Result/failure(
-                                            "cannot extend a table defined elsewhere with dotted keys")
-                                    end
-                                | _ =>
-                                    match st
-                                    | header() => Result/success(())
-                                    | implicit() => Result/success(())
-                                    | dotted() =>
-                                        Result/failure(
-                                            "cannot extend a table created by dotted keys")
-                                    | _ => Result/failure("cannot extend an inline table")
-                                    end
-                                end
-                            | none() => Result/failure("cannot extend an inline table")
-                            end;
-                        match permitted
+                        match may_extend(side, kp, act)
                         | failure(msg) => Result/failure(msg)
                         | success(_) =>
                             match walk(inner, side, kp, rest, 0, act)
@@ -263,17 +265,11 @@ rec walk(
                                         match walk(inner, side, seg_key(pre, seg2), rest, 0, act)
                                         | success((inner2, side2, res)) =>
                                             let items2 =
-                                                [
-                                                    ..List/slice(
-                                                        @Toml,
-                                                        items,
-                                                        0,
-                                                        index,
-                                                        @Nat/Lt/le_of_lt(
-                                                            index,
-                                                            List/len(items),
-                                                            in_range)),
-                                                    Toml/table(inner2)];
+                                                replace_at(
+                                                    items,
+                                                    index,
+                                                    in_range,
+                                                    Toml/table(inner2));
                                             Result/success(
                                                 (
                                                     Map/insert(m, name, Toml/arr(items2)),
