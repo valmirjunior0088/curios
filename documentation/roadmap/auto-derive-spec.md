@@ -28,7 +28,7 @@ What is borrowed, and from where:
 - [x] 4. An introduction form parks on a type stuck on a metavariable
 - [x] 5. A witness may recurse through its own entry
 - [x] 6. `wonder stage` answers for any rung it reached
-- [ ] 7. Unlabeled tuple fields print as written
+- [x] 7. Unlabeled tuple fields print as written
 - [ ] 8. A missing-witness report names the premise and the head
 - [ ] 9. Re-probe on stable ground
 - [ ] 10. Rewrite the design into what remains
