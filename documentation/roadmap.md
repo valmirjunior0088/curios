@@ -230,11 +230,11 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [ ] Dyadic `BigFlt` exact core
   - [ ] [Canonical representation, exact operations, comparison, and witnesses](roadmap/big-flt-dyadic/01-core-spec.md)
   - [ ] [Exact binary32 conversion and correctly rounded output](roadmap/big-flt-dyadic/02-binary32-spec.md)
-- [ ] [`BigInt` certified algebra, order, and binary-scale laws](roadmap/big-flt-dyadic-proofs/01-big-int-laws-spec.md)
+- [ ] [`BigInt` certified algebra, order, and binary-scale laws](roadmap/big-flt-dyadic/03-big-int-laws-spec.md)
 - [ ] Dyadic `BigFlt` proof and quotient-boundary completion
-  - [ ] [Algebra and order theorem corpus](roadmap/big-flt-dyadic-proofs/02-laws-spec.md)
-  - [ ] [Correctly rounded exact quotient conversion to binary32](roadmap/big-flt-dyadic-proofs/03-ratio-narrowing-spec.md)
-  - [ ] [Binary32 round-trip and correct-rounding proofs](roadmap/big-flt-dyadic-proofs/04-boundary-proofs-spec.md)
+  - [ ] [Algebra and order theorem corpus](roadmap/big-flt-dyadic/04-laws-spec.md)
+  - [ ] [Correctly rounded exact quotient conversion to binary32](roadmap/big-flt-dyadic/05-ratio-narrowing-spec.md)
+  - [ ] [Binary32 round-trip and correct-rounding proofs](roadmap/big-flt-dyadic/06-boundary-proofs-spec.md)
 - [ ] General rational `BigFlt` sequence _(after `curios wonder`)_
   - [ ] [`BigNat` certified Euclidean division, GCD, divisibility, and coprimality](roadmap/big-flt-general/01-big-nat-euclidean-spec.md)
   - [ ] [General `BigFlt` reduced rational representation and exact operations](roadmap/big-flt-general/02-core-spec.md)
