@@ -117,7 +117,7 @@ Data flows downward; Rust dependencies between stages point upward, because a lo
 | Host operations or foreign calls | `curios-abi/src/` | Core validation, Wasm imports, runtime bindings, and the JavaScript harness |
 | What a unit hands its successors | `curios-unit/src/` | Every stage whose artifact `Unit` holds, `curios-pipeline`'s fold, and the store's stored-unit format |
 | Pipeline orchestration | `curios-pipeline/src/compile.rs`, `stage.rs`, `standard.rs` | Native and browser callers |
-| A `wonder` query, a record, or what a diagnostic carries | `curios/src/wonder/` | `curios-utilities`'s `Report` and every stage's `report`/`reports_with_hints`, `curios-pipeline`'s `CompileError` and `check_with_units`, the transports `curios/src/wonder/ask.rs` and `server.rs`, `curios-package`'s `Membership`, and `documentation/roadmap/wonder-spec.md` |
+| A `wonder` query, a record, or what a diagnostic carries | `curios/src/wonder/` | `curios-utilities`'s `Report` and every stage's `report`/`reports_with_hints`, `curios-pipeline`'s `CompileError` and `check_with_units`, the transports `curios/src/wonder/ask.rs` and `server.rs`, and `curios-package`'s `Membership` |
 | Manifests, dependency resolution, or the store | `curios-package/src/` | The CLI subcommands that wrap it, `curios-utilities`'s `Qualifier`/`Mount`, and `documentation/soundness/admission-without-judgment/cached-verdicts.md` when the store's keys are involved |
 | Runtime or bundle format | `curios-runtime/src/`, `curios/src/bundle.rs` | Slim-launcher dependency boundary and bundle integration tests |
 | CLI or native compile behavior | `curios/src/` | `README.md`, `documentation/usage.md`, public helpers, and integration tests |

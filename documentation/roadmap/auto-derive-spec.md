@@ -2,7 +2,7 @@
 
 ## Status
 
-Not started. Ten steps in reading order: eight fixes to defects found while probing the design — none derive-specific, each an ordinary program a user can write today — then a re-probe once the ground is stable, then a rewrite of this file's design section into what remains. A landed step is replaced here by one checked line; its contracts move to their owners (`syntax.md`, the owning module's rustdoc, `Fmt.crs`, a decision file under `documentation/design/language/`), and the design section is rewritten by step 10 in `wonder-spec.md`'s manner: what landed, what is left, nothing restated.
+Not started. Ten steps in reading order: eight fixes to defects found while probing the design — none derive-specific, each an ordinary program a user can write today — then a re-probe once the ground is stable, then a rewrite of this file's design section into what remains. A landed step is replaced here by one checked line; its contracts move to their owners (`syntax.md`, the owning module's rustdoc, `Fmt.crs`, a decision file under `documentation/design/language/`), and the design section is rewritten by step 10 to state what is left against what landed, restating nothing its owner now holds.
 
 The design was reached after a survey of deriving mechanisms in Lean 4, Rocq (coq-elpi, Equations, `Scheme Equality`), GHC, Idris 2, Agda, Isabelle/HOL, Scala 3, Swift, Rust, OCaml, PureScript, Roc and Elixir, and after probing the tree's compiler; the probes are the ledger below, and every claim in the design section that a probe bears on names its row.
 
@@ -135,7 +135,7 @@ Each step is one authorization and one commit, lands its repro as a test before 
 
 ### 10. Rewrite the design into what remains
 
-The design section below is provisional in every sentence. This step rewrites it to state only the machinery still to build — the body-less `satisfy` form, `Transient::Derive`, the `Spell` derivation, `/syn/Spell` and its `/std/Spell` facade, `Fmt`'s `#`, `/syn/Fields`, `Tupled`, the tuple witnesses and the adapter — or further numbered fixes, in `wonder-spec.md`'s shape, with nothing a landed step already owns. The ledger is retired with it: rows that became tests are named by their test, rows that decided a question are cited by the decision.
+The design section below is provisional in every sentence. This step rewrites it to state only the machinery still to build — the body-less `satisfy` form, `Transient::Derive`, the `Spell` derivation, `/syn/Spell` and its `/std/Spell` facade, `Fmt`'s `#`, `/syn/Fields`, `Tupled`, the tuple witnesses and the adapter — or further numbered fixes, with nothing a landed step already owns. The ledger is retired with it: rows that became tests are named by their test, rows that decided a question are cited by the decision.
 
 ## Probe ledger
 

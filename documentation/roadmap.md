@@ -260,7 +260,6 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Cross-language benchmarks (a Docker harness against seven other languages)
 - [ ] Developer tooling
   - [x] `curios wonder` — questions answered by the compilation, over a CLI and a language server
-  - [ ] [`curios wonder`, the rest](roadmap/wonder-spec.md) — the records it does not hand out yet
   - [x] Editor support — a tree-sitter grammar, and Zed and VS Code extensions on `wonder server`
   - [x] Code formatter (`curios format`, in-place with `--check`; verified by reparse)
   - [ ] Terminal REPL
