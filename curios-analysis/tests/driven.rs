@@ -642,3 +642,57 @@ fn an_out_of_set_vector_is_believed_only_under_partial_coverage() {
         "under partial coverage the registry vector is this pass's own earlier result",
     );
 }
+
+/// A declaration whose payload type an inline `rec` computes by calling itself: `rec Count : (n : Nat) -> Type = (n) => {Nat, Count(n)}`, planted as `Count(0)`.
+///
+/// The walk forces the `rec` head because a mutual `induct` group lowers its type constructors into one, then descends into what forcing exposed — and `RecGroup::member_body` substitutes `Term::rec_proj` for every recursive occurrence, so what it descends into holds the same group again. Each turn of the loop opens a fresh binder, so nothing about the term repeats for a memo on terms to catch, and `unfolded` cannot catch it either: it keys on `Free`, and an inline group has no name.
+///
+/// Written against the kernel rather than as a Curios program because this is where the shared analysis is *the* subject: the elaborator has its own copy of the divergence, but the kernel's is the one inside the soundness perimeter, and a program-level fixture exercises the elaborator's first and aborts before reaching this one.
+#[test]
+fn a_self_calling_type_level_rec_leaves_the_walk_terminating() {
+    let mut kernel = kernel();
+
+    let count = Free::local(1, Some("Count"));
+    let n = Free::local(2, Some("n"));
+    let nat = || Term::intrinsic(Intrinsic::NatType);
+
+    let rec = Term::rec(
+        vec![(
+            count.clone(),
+            Term::func_type([(n.clone(), nat())], Term::type_ground()),
+            Term::func(
+                [(n.clone(), nat())],
+                Term::tuple_type([
+                    (Free::local(3, None), nat()),
+                    (
+                        Free::local(4, None),
+                        Term::apply(Term::free_var(&count), [Term::free_var(&n)]),
+                    ),
+                ]),
+            ),
+        )],
+        Term::free_var(&count),
+    );
+    let Subterm::Rec(Rec { group, .. }) = &*rec else {
+        panic!("the fixture changed shape");
+    };
+
+    let name = Global::Authored(Qualifier::from(["Boxed"]));
+    let payload = Term::apply(
+        Term::rec_proj(group.clone(), 0),
+        [Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)))],
+    );
+    let mut inducts = BTreeMap::new();
+    inducts.insert(name.clone(), single_payload(payload, Term::type_ground()));
+    for (entry_name, entry) in &inducts {
+        kernel.declare_induct(entry_name, entry);
+    }
+
+    let vectors = positivity_vectors(
+        &mut kernel,
+        Declarations::of(&inducts, &BTreeMap::new()),
+        Coverage::Complete,
+    )
+    .expect("a payload the walk cannot see through is admitted, not refused");
+    assert_eq!(vectors.get(&name), Some(&Vec::new()));
+}

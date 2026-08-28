@@ -20,8 +20,8 @@ mod tests;
 use {
     crate::{Env, forceable},
     curios_core::{
-        Bound, Free, FuncType, Global, InductDecl, InductType, Intrinsic, One, Polarity, Scope,
-        StructDecl, StructType, Subterm, Telescope, Term, TupleType,
+        Bound, Free, FuncType, Global, InductDecl, InductType, Intrinsic, One, Polarity, RecGroup,
+        Scope, StructDecl, StructType, Subterm, Telescope, Term, TupleType,
     },
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -247,6 +247,7 @@ fn sweep<E: Env>(env: &mut E, vectors: &Vectors, split: &Split) -> BTreeMap<Targ
             params: split.params.clone(),
             vectors,
             unfolded: BTreeSet::new(),
+            forcing: Vec::new(),
             found: BTreeMap::new(),
         };
         walk.walk(&part.type_, Polarity::Strict);
@@ -365,6 +366,7 @@ fn refusal<E: Env>(
             params: entry.params.clone(),
             vectors,
             unfolded: BTreeSet::new(),
+            forcing: Vec::new(),
             found: BTreeMap::new(),
         };
         walk.walk(&part.type_, Polarity::Strict);
@@ -462,7 +464,24 @@ struct Walk<'a, E: Env> {
     vectors: &'a Vectors,
     /// Definitions already unfolded on this traversal. A type-level `let` can be mentioned from many positions, and a recursive group can mention itself; without this the sweep in `blocked` would not terminate.
     unfolded: BTreeSet<Free>,
+    /// The `rec` members this walk is already inside, innermost last — the path, not the traversal.
+    ///
+    /// [`Self::unfolded`] cannot serve. It keys on `Free`, and the recursive occurrence [`curios_core::RecGroup::member_body`] substitutes is an inline `rec` node with no name to key on. A stack rather than a set because it is popped on the way out: two *sibling* occurrences of one member sit on different paths and must each still force, or an occurrence that is `Strict` would read `Mixed` and the declaration holding it would be refused.
+    forcing: Vec<(RecGroup, usize)>,
     found: BTreeMap<Target, Polarity>,
+}
+
+/// The `rec` member `term` is a folded call to, if it is one: the node [`Term::rec_proj`] builds, standing bare or under an application.
+///
+/// These are exactly the shapes [`curios_core::RecGroup::member_body`] substitutes for a recursive occurrence, so they are the shapes a cycle in the walk is built from. A head that has yet to unfold to one — a definition's name, a group with a computed tail — carries no key and forces unguarded.
+fn rec_member(term: &Term) -> Option<(RecGroup, usize)> {
+    let head = match &**term {
+        Subterm::Apply(apply) => &apply.head,
+        _ => term,
+    };
+
+    head.as_rec_proj()
+        .map(|(group, index)| (group.clone(), index))
 }
 
 impl<E: Env> Walk<'_, E> {
@@ -562,7 +581,25 @@ impl<E: Env> Walk<'_, E> {
             return;
         }
 
-        let term = self.forced(term);
+        // A `rec` member this path is already inside is left folded. Forcing it again exposes the same node one level deeper — `member_body` substitutes the group into its own body, and every turn opens a fresh binder, so no memo on *terms* would ever see a repeat — and the descent would not terminate. Folded, it falls to `opaque` below, which still visits every child at `Mixed`: the guard costs precision, never sight.
+        //
+        // The guard fires only where the walk is already inside the member it is about to force, which is to say only on a path that has no end. A walk that reaches one never meets it, so what it costs is nothing any declaration can observe.
+        let member = rec_member(term);
+        let cyclic = member
+            .as_ref()
+            .is_some_and(|member| self.forcing.contains(member));
+        let term = match cyclic {
+            true => term.clone(),
+            false => self.forced(term),
+        };
+        let entered = match (cyclic, member) {
+            (false, Some(member)) => {
+                self.forcing.push(member);
+                true
+            }
+            _ => false,
+        };
+
         match &*term {
             // Sorts name nothing.
             Subterm::Type(_) | Subterm::Prop => {}
@@ -615,6 +652,11 @@ impl<E: Env> Walk<'_, E> {
             | Subterm::UniverseInst(_)
             | Subterm::Metavar(_)
             | Subterm::Transient(_) => self.opaque(&term),
+        }
+
+        // Every arm above falls through — the match holds no early return — so the path is popped however the walk leaves it.
+        if entered {
+            self.forcing.pop();
         }
     }
 

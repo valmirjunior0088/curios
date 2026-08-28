@@ -808,7 +808,7 @@ fn a_str_literal_costs_transitions_rather_than_frames() {
 
 /// A user's own refinement over a packed carrier, `n` bytes long: an authored `rec` fold decides ASCII-ness, and a literal's proof of it is discharged by conversion running the closed fold — exactly the shape of `Str`'s validity check with nothing of `Str` in it.
 ///
-/// The proof is bound by a `let` rather than packed into a dependent record deliberately: checking a *struct declaration* whose field applies a fold to an earlier field costs native stack this fixture does not measure, and overflows the default test-thread stack in debug builds with or without the closed machine — the pre-existing cliff [`a_struct_refinement_field_overflows_the_test_thread_stack`] reproduces, hit nowhere else only because the prelude's own instance of the shape (`/std/BigNat`) is checked on a main thread with four times the stack.
+/// The proof is bound by a `let` rather than packed into a dependent record deliberately: this fixture measures the machine, and a *struct declaration* whose field applies a fold to an earlier field is measured by nothing here. What it costs is the strict-positivity walk's, spent after every item over the declarations alone, where no reduction budget reaches and no closed machine applies. That shape is `a_refinement_field_over_a_self_calling_fold_is_admitted` in `positivity.rs`.
 fn ascii_refinement(n: usize) -> String {
     let entries = (0..n)
         .map(|index| format!("0x{:02x}", b'a' + (index % 26) as u8))
@@ -831,28 +831,6 @@ fn ascii_refinement(n: usize) -> String {
         /std/print("ok")
         "#
     )
-}
-
-/// **A pre-existing defect's repro, not a passing test: running it aborts the harness.** Checking a struct declaration whose proof field applies a `rec` fold to an earlier field — `ok: Certified(bytes)`, the exact shape `/std/BigNat` ships — recurses natively past the default test-thread stack, in debug, at any data size, with the closed machine on or off (established by running this with both checkers' machine gates hardwired shut). The prelude never notices because build scripts check it on a main thread with four times the stack; `documentation/syntax.md`'s conformance promise and the "works on the default test-thread stack" invariant are what it breaks. Kept ignored under this name so the defect has an address; the fix is elsewhere ­— somewhere in struct-declaration checking's open-term reduction, which no closed machine can reach.
-#[test]
-#[ignore = "repro of a pre-existing stack overflow in struct-declaration checking; running it aborts the process"]
-fn a_struct_refinement_field_overflows_the_test_thread_stack() {
-    let source = r#"
-        use /std/{Bytes, Bool, Eq, Handle};
-        use /syn/{True, False};
-        rec always(b : Bytes) -> Bool =
-            match b | x[] => true | x[h, ..t] => always(t) end;
-        let Certified(b: Bytes) -> Prop =
-            match always(b) | true => True | false => False end;
-        struct Wrapped: Type {
-            bytes: Bytes,
-            ok: Certified(bytes),
-        }
-        let w : Wrapped = Wrapped { bytes = x[0x61], ok = True/qed() };
-        /std/print("ok")
-    "#;
-
-    let _ = typecheck_within(DEFAULT_STEP_BUDGET, source);
 }
 
 /// **The fixture the closed machine's acceptance asks for: a refinement that is not `Str`.** The machine fires on closedness, not on anything about strings, so a user's fold over a packed carrier gets the same flat depth and sub-frame per-element price a `Str` literal gets — asserted with the same two bounds as [`a_str_literal_costs_transitions_rather_than_frames`], so this cannot quietly hold for the prelude's type and not for a user's.
