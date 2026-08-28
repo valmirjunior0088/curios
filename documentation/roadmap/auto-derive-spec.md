@@ -26,7 +26,7 @@ What is borrowed, and from where:
 - [x] 2. A struct's parameters are checked against elaborated telescopes
 - [x] 3. A tuple literal synthesizes when nothing pins it
 - [x] 4. An introduction form parks on a type stuck on a metavariable
-- [ ] 5. A witness may recurse through its own entry
+- [x] 5. A witness may recurse through its own entry
 - [ ] 6. `wonder stage` answers for any rung it reached
 - [ ] 7. Unlabeled tuple fields print as written
 - [ ] 8. A missing-witness report names the premise and the head
