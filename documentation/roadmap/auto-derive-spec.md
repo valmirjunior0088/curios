@@ -22,9 +22,9 @@ What is borrowed, and from where:
 
 ## Steps
 
-- [ ] 1. The positivity walk terminates on a type-level `rec`
-- [ ] 2. A struct's parameters are checked against elaborated telescopes
-- [ ] 3. A tuple literal synthesizes when nothing pins it
+- [x] 1. The positivity walk terminates on a type-level `rec`
+- [x] 2. A struct's parameters are checked against elaborated telescopes
+- [x] 3. A tuple literal synthesizes when nothing pins it
 - [ ] 4. An introduction form parks on a type stuck on a metavariable
 - [ ] 5. A witness may recurse through its own entry
 - [ ] 6. `wonder stage` answers for any rung it reached
