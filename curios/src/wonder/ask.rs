@@ -201,7 +201,13 @@ pub fn wonder_stage(
     let cache = asked.store.as_ref();
 
     match stage(budget, units, origin, &overlay, cache, name) {
-        Ok(Reached::Rendered(rendering)) => println!("{}", rendering.text),
+        Ok(Reached::Rendered(rendering)) => {
+            println!("{}", rendering.text);
+            // The rung is the answer and goes to stdout; what stopped the compilation afterwards is context and goes to stderr, so a pipeline reading the rendering is unaffected by it.
+            for diagnostic in &rendering.diagnostics {
+                eprintln!("{}", diagnostic.render());
+            }
+        }
         Ok(Reached::Wasm(module)) => wasm_optm(&module, |stage| println!("{stage}")),
         Err(Refusal::NoSuchStage { asked }) => {
             return Err(format!(

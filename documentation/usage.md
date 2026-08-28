@@ -116,7 +116,7 @@ It writes every part a package has: the manifest, `lib.crs`, and `exe.crs`, plus
 | Query | Answers |
 | --- | --- |
 | `diagnostics [TARGET]` | every diagnostic and goal, each rendered as `run` would report it, a blank line between; nothing when the target compiles |
-| `stage <STAGE> [TARGET]` | the program's representation at one rung of the pipeline, reprinted. A program that stops before the rung has not answered: its diagnostics go to stderr and the exit is 1 |
+| `stage <STAGE> [TARGET]` | the program's representation at one rung of the pipeline, reprinted. A rung the compilation reached is answered even when a later stage refuses: the rendering goes to stdout, what stopped the program goes to stderr, and the exit is 0. Only a program that stops *before* the rung has not answered, and exits 1 |
 | `server` | the same questions over the language server protocol, on standard input and output — what an editor integration launches |
 
 The target takes the four forms `run` takes, dispatched the same way, with one deliberate difference: **a file is placed in the unit that declares it** rather than compiled alone. Nothing executes, so nothing is escalated by supplying context, and a library module analysed without its library reports every import unresolved. A file under a package's directory is analysed as that package's library; one that is an executable's entry, or sits under its stem directory, as that executable; one no manifest above it claims, standalone. The project is decided from the file's own location, not the working directory, and `--manifest` overrides it. No target at all is the governing package entire for `diagnostics` — its library, then every executable — and the sole or `default` executable for `stage`, which needs a program.

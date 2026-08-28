@@ -14,6 +14,8 @@ use {
 pub struct Rendering {
     pub name: &'static str,
     pub text: String,
+    /// What stopped the compilation *after* this rung was reached, if anything. A rung the driver already emitted is an answer, and a later failure does not unmake it — the transport prints these beside the rendering rather than in place of it.
+    pub diagnostics: Vec<Diagnostic>,
 }
 
 /// What asking for a rung reached.
@@ -25,10 +27,11 @@ pub enum Reached {
 }
 
 /// Why a rung could not be shown.
+#[derive(Debug)]
 pub enum Refusal {
     /// No rung of that name — the question could not be asked.
     NoSuchStage { asked: String },
-    /// The program did not compile as far as the rung: what stopped it.
+    /// The program did not compile *as far as* the rung: what stopped it. A failure past the rung is not a refusal — see [`Rendering::diagnostics`].
     Diagnostics(Vec<Diagnostic>),
 }
 
@@ -53,7 +56,7 @@ pub fn stage(
     let cache = read_only.as_ref().map(|cache| cache as &dyn Cache);
 
     let mut text = None;
-    let (module, _foreigns) = compile_with_units(
+    let compiled = compile_with_units(
         budget,
         &units,
         &entrypoint,
@@ -65,11 +68,21 @@ pub fn stage(
             }
         },
         |_| {},
-    )
-    .map_err(|error| Refusal::Diagnostics(of_error(error)))?;
+    );
 
-    match text {
-        Some(text) => Ok(Reached::Rendered(Rendering { name, text })),
-        None => Ok(Reached::Wasm(Box::new(module))),
+    // A rung the driver emitted has been answered, whatever happens downstream of it. Asking for `core` on a program that fails to elaborate is asking what the lowering produced — which is most of why one asks — and discarding it because a later stage refused answers a question nobody put. What the transport's contract refuses is a program that stopped *before* the rung, which is exactly the case where nothing was observed.
+    match (text, compiled) {
+        (Some(text), Ok(_)) => Ok(Reached::Rendered(Rendering {
+            name,
+            text,
+            diagnostics: Vec::new(),
+        })),
+        (Some(text), Err(error)) => Ok(Reached::Rendered(Rendering {
+            name,
+            text,
+            diagnostics: of_error(error),
+        })),
+        (None, Ok((module, _foreigns))) => Ok(Reached::Wasm(Box::new(module))),
+        (None, Err(error)) => Err(Refusal::Diagnostics(of_error(error))),
     }
 }
