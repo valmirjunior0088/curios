@@ -208,8 +208,6 @@ Measure a step and name the step; never quote a whole-gate total. Documentation-
 
 Profile through the built-in `tracing` mechanism, not an external sampler: `cargo xtask profile programs/hello_world.crs` builds `curios` with `--features profile` — the only build in which the `profile` subcommand exists — and prints per-span aggregate timings sorted by total time. The instrumentation mechanics are documented in `curios-profile`.
 
-Keep a figure beside the probe that reproduces it, or do not record it: a number belongs in an ignored test carrying the command, the date, the profile and what it last printed (`curios-prelude-archive`'s `stored_prelude_measurements` is the pattern), never in prose alone. Documentation states what a measurement decided; the measurement lives with the code.
-
 ## Documentation ownership
 
 Document each fact at the narrowest authoritative level and link to it elsewhere; do not maintain parallel explanations that can drift. Do not hardwrap Markdown prose: one source line per paragraph or list item.
