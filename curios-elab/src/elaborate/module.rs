@@ -112,6 +112,27 @@ fn check_telescope_entries<B: Bound>(
     }
 }
 
+/// Open an already-elaborated telescope: assume one fresh binder per entry and hand the entries back, without checking them again.
+///
+/// The counterpart to [`check_telescope_entries`] for a telescope that has been through elaboration once already. Re-checking such a telescope is not merely wasted work — it elaborates terms that carry universe instances a *second* time, and what a caller then files is a set of instances no earlier check ever agreed to.
+fn assume_telescope_entries<B: Bound>(
+    context: &mut Context,
+    mut telescope: Telescope<B>,
+) -> (Vec<(Free, Term)>, B) {
+    let mut entries = Vec::new();
+    loop {
+        match telescope {
+            Telescope::Done(body) => break (entries, *body),
+            Telescope::Cons(ty, rest) => {
+                let label = context.fresh(rest.first_hint());
+                context.assume(&label, &ty);
+                telescope = rest.open(&[&Term::free_var(&label)]);
+                entries.push((label, ty));
+            }
+        }
+    }
+}
+
 /// Record what a telescope's domains impose on `result_level`, in the caller's frame, and hand back the terminal opened under the binders assumed for them. The first `uniform_count` domains are parameters and get one rung of slack; the rest must fit under the result level itself. Split out of [`add_declaration_sizing`] so a nested arity can size its terminal inside its parameters' own scope.
 fn telescope_sizing<B: Bound>(
     context: &mut Context,
@@ -345,9 +366,11 @@ fn elaborate_struct(context: &mut Context, name: &Global) -> Result<(), Error> {
         Subterm::Prop
     );
 
-    // Walk the parameters, then the field telescope they terminate in, checking each entry type against `Type` under the binders before it.
+    // Open the parameters, then check the field telescope they terminate in against `Type` under the binders before it.
+    //
+    // The parameters are opened rather than checked: `share_struct_params` elaborated them before the former's body was, and they are the terms that body was checked against. Elaborating them again would file a second set of universe instances beside the ones already in play.
     let (param_entries, field_entries) = context.with_frame(|context| -> Result<_, Error> {
-        let (params, inner) = check_telescope_entries(context, struct_decl.arity.clone())?;
+        let (params, inner) = assume_telescope_entries(context, struct_decl.arity.clone());
         let (fields, ()) = check_telescope_entries(context, inner)?;
 
         // Soundness of a `Prop`-sorted struct: a `Prop` is governed by proof irrelevance, yet projection is an *unguarded* eliminator — it reads a field out of a value the theory believes is interchangeable with any other. That is consistent only when no field is informative, the singleton-elimination condition (`elaborate_match::singleton_eliminable`) checked here at declaration time rather than per projection. A struct carries no indices, so nothing is forced and the condition reduces to: every field type is itself a proposition. With this enforced, every projection lands in a `Prop`, so `elaborate_proj` needs no guard.
@@ -609,14 +632,19 @@ fn finalize_definition(
 /// The two can never be reconciled, and not for want of trying: [`Frames::var_reduct`](crate::context) refuses to unfold a universe-polymorphic global reached through a bare `Var`, because there is no instance to substitute into its body. So the raw side is irreducible by construction, and conversion is being handed a problem no reduction could decide. Elaborating the telescope a second time here would only mint a *third* set of instances; taking the one the former's type already holds makes the comparison compare a term with itself.
 ///
 /// Parameters only. A field type may mention the struct itself, so the field telescope stays with [`elaborate_struct`], which runs once the former is defined; a parameter type cannot, since the struct is not yet a type where its own parameters are written.
-fn share_struct_params(context: &mut Context, name: &Global, type_: &Term) -> Result<(), Error> {
+fn share_struct_params(context: &mut Context, name: &Global, type_: &Term) {
     let Some(struct_decl) = context.struct_decl(name).cloned() else {
-        return Ok(());
+        return;
     };
     let count = struct_decl.param_count();
+    // A nullary struct has no parameters to share, and its former is declared at the result sort rather than at a function type.
+    if count == 0 {
+        return;
+    }
+
+    // Both invariants below belong to the lowerer, and both are stated rather than tolerated because `elaborate_struct` now *opens* this telescope instead of re-checking it: a silent return would leave the raw arity in place with nothing downstream left to notice.
     let Subterm::FuncType(FuncType { telescope, .. }) = &**type_ else {
-        // A nullary struct's former has no telescope to share, and nothing checks its parameters.
-        return Ok(());
+        unreachable!("a parameterized struct's type-former is declared at a function type");
     };
 
     let mut written = telescope.clone();
@@ -626,8 +654,9 @@ fn share_struct_params(context: &mut Context, name: &Global, type_: &Term) -> Re
         let (Telescope::Cons(domain, written_rest), Telescope::Cons(_, lowered_rest)) =
             (written, lowered)
         else {
-            // The declared type and the registry entry disagree on arity, which is not this function's to report: leave the entry alone and let the body check say so.
-            return Ok(());
+            unreachable!(
+                "the former's telescope and the registry arity lower from one parameter list"
+            );
         };
         // One binder opens both sides, so a later domain and the field telescope below refer to the same one.
         let binder = context.fresh(lowered_rest.first_hint());
@@ -652,8 +681,6 @@ fn share_struct_params(context: &mut Context, name: &Global, type_: &Term) -> Re
             polarities: struct_decl.polarities,
         },
     );
-
-    Ok(())
 }
 
 /// Type-check a single non-recursive top-level definition, `define` it into the *current* (persistent base) frame, and return its rebuilt form. The flat analogue of `elaborate_let`'s per-binding work, minus the `with_frame`/tail recursion: the binding must stay in scope for every later item and the entrypoint body. The *rebuilt* body is `define`d (implicit insertion makes the lowered one no longer interchangeable; see the comment below), and the rebuilt `Definition` flows on to `zonk`/`erase`.
@@ -677,7 +704,7 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
     }
 
     // Before the body: a struct former's body checks its parameters against the registry arity, which is lowered raw. Share the elaborated telescope the type above just produced, so the two sides are one term.
-    share_struct_params(context, &def.name, &type_)?;
+    share_struct_params(context, &def.name, &type_);
 
     let body = check(context, &def.body, type_.clone())?;
     context.sweep_parked()?;
