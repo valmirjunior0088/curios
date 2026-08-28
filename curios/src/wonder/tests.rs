@@ -65,9 +65,7 @@ fn a_rung_reached_before_the_failure_is_still_answered() {
 /// The other side of the same boundary: a rung the program never reached has not been answered, and stays a refusal. `ersd` sits past elaboration, which is where this program stops.
 #[test]
 fn a_rung_the_program_never_reached_is_refused() {
-    let refusal = rung("ersd", REFUSED_LATER)
-        .err()
-        .expect("ersd is never reached");
+    let refusal = rung("ersd", REFUSED_LATER).expect_err("ersd is never reached");
     assert!(
         matches!(refusal, super::Refusal::Diagnostics(diagnostics) if !diagnostics.is_empty()),
         "expected the refusal to carry what stopped the program"
