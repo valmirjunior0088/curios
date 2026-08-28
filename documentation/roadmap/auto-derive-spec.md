@@ -390,7 +390,6 @@ A `curios/src/tests/derive.rs` in the `run(source)`/`error(source)` style of `co
 - `Fmt`: `#` renders through `Spell` beside `%` through `Show`; `\#` is literal; a `Str` argument is quoted under `#` and verbatim under `%`; a tuple argument under `#`; a missing witness reports at the call.
 - Formatter: `satisfy C(T);` round-trips unexpanded; `wonder stage core-elab` shows the expansion and `stage core` the transient.
 - Prelude: the derived `Option`/`Result`/`Order` witnesses are held by the archive build; carrier witnesses round-trip through parse for every literal form, including `Flt`'s non-finite values and negative zero.
-- The specialization figure: an ignored test carrying the command, the date, and what `ersd-optm` printed for a closed description, in the pattern of `stored_prelude_measurements`.
 
 ### Completion criteria
 
