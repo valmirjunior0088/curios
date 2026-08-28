@@ -270,5 +270,5 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] `curios new` scaffolding (a package named after its directory, with both halves written)
   - [x] One-line installer (`install.sh`, versioned by its URL and checksum-verified)
   - [ ] Linter
-  - [ ] Test runner
+  - [ ] [Test runner](roadmap/test-harness-spec.md) (`curios test`; no way to state or run a test today)
   - [ ] Documentation generator
