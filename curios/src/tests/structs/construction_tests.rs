@@ -273,3 +273,20 @@ fn a_field_naming_its_own_struct_is_admitted_beside_a_shared_parameter() {
 
     assert_eq!(run(source), b"3");
 }
+
+// What a report calls an unlabeled tuple. Labels are part of a tuple type's identity, so a mismatch between a labeled and an unlabeled product is a real refusal — and the message has to spell the unlabeled side the way source writes it, rather than inventing positional names for fields that have none.
+#[test]
+fn a_mismatch_names_an_unlabeled_tuple_the_way_source_writes_it() {
+    let source = r#"
+        use /std/{Nat, Bool, Str, Handle};
+        let p : {fst : Nat, snd : Bool, thd : Str} = (1, true, "x");
+        let q : {Nat, Bool, Str} = p;
+        /std/print("unreachable")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("expected: {Nat, Bool, Str}"),
+        "expected the unlabeled product spelled as written:\n{report}"
+    );
+}

@@ -25,3 +25,49 @@ fn a_deep_term_is_printed_without_overflowing() {
 
     assert_eq!(term.to_string().matches('(').count(), DEEP);
 }
+
+/// A tuple type's unlabeled positions print as source writes them.
+///
+/// The rebuild that restores source labels reads them from [`Telescope::labels`], which renders a hintless binder as `""`. Restoring that as a *hint* would make every unlabeled position look labeled to this printer, and the rename map would then disambiguate the shared empty spelling into `2`, `3` — so `{Nat, Bool, Str}` printed as `{: Nat, 2: Bool, 3: Str}` in every report that named one.
+#[test]
+fn an_unlabeled_tuple_type_prints_without_labels() {
+    let telescope = Telescope::build(
+        [
+            (Free::local(0, None), Term::intrinsic(Intrinsic::NatType)),
+            (Free::local(1, None), Term::intrinsic(Intrinsic::BoolType)),
+            (Free::local(2, None), Term::intrinsic(Intrinsic::ByteType)),
+        ],
+        (),
+    );
+    let labels = telescope.labels();
+    let relabelled = telescope.clone().relabel(&labels);
+
+    let tuple: Term = Subterm::TupleType(TupleType {
+        telescope: relabelled,
+    })
+    .into();
+    assert_eq!(tuple.to_string(), "{Nat, Bool, Byte}");
+}
+
+/// The other half of the same rule: a position the source *did* label keeps it through the identical rebuild.
+#[test]
+fn a_labeled_tuple_type_keeps_its_labels_through_a_rebuild() {
+    let telescope = Telescope::build(
+        [
+            (
+                Free::local(0, Some("fst")),
+                Term::intrinsic(Intrinsic::NatType),
+            ),
+            (Free::local(1, None), Term::intrinsic(Intrinsic::BoolType)),
+        ],
+        (),
+    );
+    let labels = telescope.labels();
+    let relabelled = telescope.clone().relabel(&labels);
+
+    let tuple: Term = Subterm::TupleType(TupleType {
+        telescope: relabelled,
+    })
+    .into();
+    assert_eq!(tuple.to_string(), "{fst: Nat, Bool}");
+}

@@ -195,9 +195,11 @@ impl Free {
     }
 
     /// The same identity rendering as `hint`. A global has no hint to replace — its rendering is its path — so it is returned unchanged.
+    ///
+    /// The empty hint is *no* hint, and restoring it as one is not the same thing. [`Telescope::labels`](crate::Telescope::labels) renders a hintless binder as `""` — the convention a positional field is compared under — so a rebuild that relabels from those labels would otherwise hand every unlabeled position a hint that is present but says nothing. A printer then reads "present" as "labeled" and a rename map disambiguates the shared spelling into `2`, `3`, turning `{Nat, Bool, Str}` into `{: Nat, 2: Bool, 3: Str}` in every report that names one.
     pub(crate) fn relabelled(&self, hint: &str) -> Self {
         match self {
-            Free::Local(mint) => Free::Local(mint.with_hint(Some(hint))),
+            Free::Local(mint) => Free::Local(mint.with_hint((!hint.is_empty()).then_some(hint))),
             Free::Global(_) => self.clone(),
         }
     }
