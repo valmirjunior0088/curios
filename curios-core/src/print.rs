@@ -82,6 +82,14 @@ impl Spelling {
         self
     }
 
+    /// Show universe instances again, undoing axis (c).
+    ///
+    /// For the one report that cannot afford the suppression: two terms differing in nothing but their instances render as the same string, so a mismatch between them says `X ≠ X` and carries no information at all. A consumer that has detected that case re-renders under this.
+    pub fn with_shown_universes(mut self) -> Self {
+        self.erase_universes = false;
+        self
+    }
+
     /// Spell every metavariable as a bare `?` (axis (e)).
     pub fn with_anonymous_metavars(mut self) -> Self {
         self.anonymous_metavars = true;

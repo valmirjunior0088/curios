@@ -207,3 +207,69 @@ fn function_field_sugar_runs_end_to_end() {
 
     assert_eq!(run(source), b"8");
 }
+
+// A parameter whose type is universe-polymorphic. The former's body is the `StructType` node over its own parameters, checked against the registry arity — which the lowerer files as the *written* telescope, carrying no universe instances. The binders that body meets come from the former's elaborated type and do carry them, and the two can never be reconciled: a universe-polymorphic global reached through a bare `Var` does not unfold, because there is no instance to substitute into its body. So the raw side is irreducible and conversion is handed a problem no reduction decides. The declared type's telescope is the one both sides now share.
+#[test]
+fn a_parameter_typed_by_a_universe_polymorphic_family_is_admitted() {
+    let source = r#"
+        use /std/{Nat, List, Handle};
+        struct Boxed(xs : List(Nat)) : pub Type { size : Nat }
+        let b : Boxed([1, 2]) = Boxed([1, 2]) { size = 2 };
+        /std/print(Nat/to_str(b.size))
+        "#;
+
+    assert_eq!(run(source), b"2");
+}
+
+// The same, where the polymorphism is the declaration's own rather than an intrinsic's: a family carrying a `Type` payload is universe-polymorphic, and a bare reference to it is what the registry held.
+#[test]
+fn a_parameter_typed_by_a_family_carrying_a_type_payload_is_admitted() {
+    let source = r#"
+        use /std/{Nat, Handle};
+        induct Carrier : pub Type | wrap(Type) end
+        struct Tagged(c : Carrier) : pub Type { size : Nat }
+        let t : Tagged(Carrier/wrap(Nat)) = Tagged(Carrier/wrap(Nat)) { size = 7 };
+        /std/print(Nat/to_str(t.size))
+        "#;
+
+    assert_eq!(run(source), b"7");
+}
+
+// A parameter telescope whose later entry names an earlier one, so sharing has to open both sides against one binder rather than splice two telescopes side by side.
+#[test]
+fn a_dependent_parameter_telescope_is_admitted() {
+    let source = r#"
+        use /std/{Nat, List, Handle};
+        struct Dep(A : Type, xs : List(A)) : pub Type { size : Nat }
+        let d : Dep(Nat, [1]) = Dep(Nat, [1]) { size = 1 };
+        /std/print(Nat/to_str(d.size))
+        "#;
+
+    assert_eq!(run(source), b"1");
+}
+
+// A concept is struct-backed, so its parameters reach the same check by the same route. Supplied as a dictionary rather than registered: a list literal is not a keyable head, which is the keying rule doing its job and not this test's subject.
+#[test]
+fn a_concept_parameter_typed_by_a_universe_polymorphic_family_is_admitted() {
+    let source = r#"
+        use /std/{Nat, List, Handle};
+        concept Sized(F : List(Type)) : pub Type { size(Nat) -> Nat, }
+        let s : Sized([Nat]) = Sized([Nat]) { size(n) = n };
+        /std/print(Nat/to_str(Sized/size(use s, 4)))
+        "#;
+
+    assert_eq!(run(source), b"4");
+}
+
+// The field telescope stays with the late rebuild, and this is why: a field type may name the struct itself, which a parameter type cannot. Sharing the parameters early must not drag the fields forward with them.
+#[test]
+fn a_field_naming_its_own_struct_is_admitted_beside_a_shared_parameter() {
+    let source = r#"
+        use /std/{Nat, Option, Handle};
+        struct Cell(A : Type) : pub Type { value : A, next : Option(Cell(A)) }
+        let c : Cell(Nat) = Cell(Nat) { value = 3, next = Option/none() };
+        /std/print(Nat/to_str(c.value))
+        "#;
+
+    assert_eq!(run(source), b"3");
+}

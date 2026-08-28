@@ -2,6 +2,9 @@
 //!
 //! The rendering is separated from the error roster for size alone — [`Error`] and its inherent impl are already a long file — and the seam is exact: nothing here decides *what* went wrong, only how it reads. [`Displayed`] is the whole mechanism, and [`goal_text`] is the one piece the roster itself reaches for, when it turns a goal batch into per-goal [`Report`]s.
 
+#[cfg(test)]
+mod tests;
+
 use {
     super::{Erased, Error, GoalReport},
     curios_core::{Spelling, Subterm, Term},
@@ -86,8 +89,33 @@ impl fmt::Display for Displayed<'_> {
                 write!(f, "conversion ran out of steps between {this} and {that}")
             }
             Error::TypeMismatch { inferred, expected } => {
-                let shown_expected = expected.spelled(spelling);
-                let shown_inferred = inferred.spelled(spelling);
+                // Reports erase universe instances, which reads better everywhere except here: when the instances *are* the disagreement, both sides render as one string and the message states nothing. Detected on the rendering rather than on the terms, so it covers every axis that could collapse two sides into one spelling and not merely the one that is known to.
+                let plain = (
+                    inferred.spelled(spelling).to_string(),
+                    expected.spelled(spelling).to_string(),
+                );
+                let detailed = (plain.0 == plain.1).then(|| {
+                    let shown = Rc::new(spelling.as_ref().clone().with_shown_universes());
+                    let pair = (
+                        inferred.spelled(&shown).to_string(),
+                        expected.spelled(&shown).to_string(),
+                    );
+                    // Universes were not the axis that collapsed them: fall back to core's own spelling, which abbreviates nothing. Unreadable beside the shortened form, and better than a message that says two things are unequal in identical words.
+                    match pair.0 == pair.1 {
+                        false => pair,
+                        true => {
+                            let bare = Rc::new(Spelling::default());
+                            (
+                                inferred.spelled(&bare).to_string(),
+                                expected.spelled(&bare).to_string(),
+                            )
+                        }
+                    }
+                });
+                let (shown_inferred, shown_expected) = match detailed {
+                    Some(detailed) => detailed,
+                    None => plain,
+                };
                 write!(
                     f,
                     "type mismatch\n  inferred: {shown_inferred}\n  expected: {shown_expected}"

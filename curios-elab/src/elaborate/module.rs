@@ -602,6 +602,60 @@ fn finalize_definition(
     Ok((universe_context, type_, body))
 }
 
+/// Replace a struct's registry parameter telescope with the one its type-former's declared type already carries, before that former's body is checked.
+///
+/// The lowerer files a `StructDecl` whose arity is the *written* telescope, untouched by elaboration (`curios-text/src/into_core.rs`, `universe_context: empty()`). The former's body is the `StructType` node over its own parameters, and `elaborate_struct_type` checks those parameters against that arity — against terms carrying no universe instances, while the binders the body meets come from `type_`, which was just elaborated and does carry them.
+///
+/// The two can never be reconciled, and not for want of trying: [`Frames::var_reduct`](crate::context) refuses to unfold a universe-polymorphic global reached through a bare `Var`, because there is no instance to substitute into its body. So the raw side is irreducible by construction, and conversion is being handed a problem no reduction could decide. Elaborating the telescope a second time here would only mint a *third* set of instances; taking the one the former's type already holds makes the comparison compare a term with itself.
+///
+/// Parameters only. A field type may mention the struct itself, so the field telescope stays with [`elaborate_struct`], which runs once the former is defined; a parameter type cannot, since the struct is not yet a type where its own parameters are written.
+fn share_struct_params(context: &mut Context, name: &Global, type_: &Term) -> Result<(), Error> {
+    let Some(struct_decl) = context.struct_decl(name).cloned() else {
+        return Ok(());
+    };
+    let count = struct_decl.param_count();
+    let Subterm::FuncType(FuncType { telescope, .. }) = &**type_ else {
+        // A nullary struct's former has no telescope to share, and nothing checks its parameters.
+        return Ok(());
+    };
+
+    let mut written = telescope.clone();
+    let mut lowered = struct_decl.arity.clone();
+    let mut params = Vec::with_capacity(count);
+    for _ in 0..count {
+        let (Telescope::Cons(domain, written_rest), Telescope::Cons(_, lowered_rest)) =
+            (written, lowered)
+        else {
+            // The declared type and the registry entry disagree on arity, which is not this function's to report: leave the entry alone and let the body check say so.
+            return Ok(());
+        };
+        // One binder opens both sides, so a later domain and the field telescope below refer to the same one.
+        let binder = context.fresh(lowered_rest.first_hint());
+        let occurrence = Term::free_var(&binder);
+        written = written_rest.open(&[&occurrence]);
+        lowered = lowered_rest.open(&[&occurrence]);
+        params.push((binder, domain));
+    }
+
+    let Telescope::Done(fields) = lowered else {
+        unreachable!("the arity's parameters are exactly `param_count` entries");
+    };
+
+    context.update_struct(
+        name,
+        StructDecl {
+            universe_context: struct_decl.universe_context,
+            arity: Telescope::build(params, *fields),
+            result_sort: struct_decl.result_sort,
+            module: struct_decl.module,
+            rep_public: struct_decl.rep_public,
+            polarities: struct_decl.polarities,
+        },
+    );
+
+    Ok(())
+}
+
 /// Type-check a single non-recursive top-level definition, `define` it into the *current* (persistent base) frame, and return its rebuilt form. The flat analogue of `elaborate_let`'s per-binding work, minus the `with_frame`/tail recursion: the binding must stay in scope for every later item and the entrypoint body. The *rebuilt* body is `define`d (implicit insertion makes the lowered one no longer interchangeable; see the comment below), and the rebuilt `Definition` flows on to `zonk`/`erase`.
 fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Definition, Error> {
     // Γ and the definition store key on the free-variable identity; the nominal registries key on the definition's own name.
@@ -621,6 +675,9 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
         )
         .map_err(|error| error.at_opt(def.type_.span()))?;
     }
+
+    // Before the body: a struct former's body checks its parameters against the registry arity, which is lowered raw. Share the elaborated telescope the type above just produced, so the two sides are one term.
+    share_struct_params(context, &def.name, &type_)?;
 
     let body = check(context, &def.body, type_.clone())?;
     context.sweep_parked()?;
