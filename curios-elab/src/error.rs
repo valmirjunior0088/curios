@@ -349,6 +349,11 @@ pub enum Error {
         /// Present when the goal is the registry's `Lift`: the embedding-specific half of the report.
         embedding: Option<EmbeddingDiagnosis>,
     },
+    /// Two witnesses that resolve each other. A witness may recurse through its *own* table entry — its declaration registers before its body elaborates for exactly that reason — but a cycle between two of them has no binding order: whichever is emitted first names one that does not exist yet, and the kernel refuses it as an unbound name. Caught here so the refusal is stated in the language's own terms, at a span, with the way out named.
+    WitnessCycle {
+        this: Box<Term>,
+        that: Box<Term>,
+    },
     /// A written goal `?` reaching zonk — reported unconditionally, solved or not: writing `?` asks what elaboration determined there, so the report *is* the outcome and the program never compiles. Carries the display frozen at the goal's birth: the local scope in binding order, the goal's type, and the solution unification committed (if any). Each scope binder is a free `Var` term (not a raw string) so it runs through the same pretty-rename map as the types and solution, and the report spells every name consistently — except an unnameable binder, whose line spells `_` the way source does.
     ///
     /// The compile path batches goals via [`Error::Goals`] before zonk runs, so this single-goal form survives as the safety net for direct zonk callers.
@@ -827,6 +832,13 @@ impl Error {
             func,
             binder,
             embedding,
+        }
+    }
+
+    pub(crate) fn witness_cycle<U: Into<Term>, V: Into<Term>>(this: U, that: V) -> Self {
+        Self::WitnessCycle {
+            this: Box::new(this.into()),
+            that: Box::new(that.into()),
         }
     }
 

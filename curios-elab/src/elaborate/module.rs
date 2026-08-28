@@ -463,6 +463,7 @@ fn finalize_definition(
     kind: &DefinitionKind,
     type_: Term,
     body: Term,
+    self_reference: SelfReference,
 ) -> Result<(UniverseContext, Term, Term), Error> {
     curios_profile::profile!("finalize_definition");
     let type_ = zonk_solved_term_metas(context, &type_);
@@ -571,8 +572,8 @@ fn finalize_definition(
     let universe_context = context.finalize_universe_metas(interface, internal)?;
     let levels = universe_context.identity_instance();
     let owned = BTreeSet::from([name.clone()]);
-    // A non-recursive definition's own name stays free in its signature, body, and registry entry: nothing captures it, so each occurrence carries the instance itself.
-    let free = SelfReference::Free;
+    // A non-recursive definition's own name stays free in its signature, body, and registry entry: nothing captures it, so each occurrence carries the instance itself. A definition whose body names *itself* is about to be captured by a single-member group instead, and its occurrences reach that binder — see [`elaborate_module_let`].
+    let free = self_reference;
     let type_ = stamp_declaration_instance(
         &context.zonk_universe_levels(&type_)?,
         &owned,
@@ -684,7 +685,7 @@ fn share_struct_params(context: &mut Context, name: &Global, type_: &Term) {
 }
 
 /// Type-check a single non-recursive top-level definition, `define` it into the *current* (persistent base) frame, and return its rebuilt form. The flat analogue of `elaborate_let`'s per-binding work, minus the `with_frame`/tail recursion: the binding must stay in scope for every later item and the entrypoint body. The *rebuilt* body is `define`d (implicit insertion makes the lowered one no longer interchangeable; see the comment below), and the rebuilt `Definition` flows on to `zonk`/`erase`.
-fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Definition, Error> {
+fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Item, Error> {
     // Γ and the definition store key on the free-variable identity; the nominal registries key on the definition's own name.
     let name = Free::from(&def.name);
     let outer_site = context.set_checked_site(&format!("'{}'", def.name));
@@ -715,8 +716,20 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
     // A struct's type-former lowers to a standalone `let`; rebuild its registry telescopes now that the former is defined (no-op for an ordinary let).
     elaborate_struct(context, &def.name)?;
 
+    // A witness may resolve through its own table entry — the registration above exists to let it — and a body that does names itself. Cross-definition value recursion is unexpressible outside a `rec` item by construction, so such a witness becomes a single-member group below, and its self-references are bound by that group's binder rather than free.
+    let recursive_witness = context.is_witness_declaration(&def.name) && {
+        // Read the *zonked* body: the self-reference arrives as a witness metavariable that resolution solved, so an unzonked body does not mention the name yet. `finalize_definition` zonks again, which costs nothing and keeps that its own business.
+        zonk_solved_term_metas(context, &body)
+            .free_vars()
+            .contains(&name)
+    };
+    let self_reference = match recursive_witness {
+        true => SelfReference::Bound,
+        false => SelfReference::Free,
+    };
+
     let (universe_context, type_, body) =
-        finalize_definition(context, &def.name, &def.kind, type_, body)?;
+        finalize_definition(context, &def.name, &def.kind, type_, body, self_reference)?;
     context.reassume(&name, &type_);
     context.define(&name, &body, Some(&def.kind));
     context.set_assumption_universe_context(&name, universe_context.clone());
@@ -736,10 +749,24 @@ fn elaborate_module_let(context: &mut Context, def: &Definition) -> Result<Defin
         body,
     };
 
-    // Classify now, so a later item's *written* type can be refused before it is reduced. A `let` is its own group, hence total as far as the group verdict is concerned.
-    record_definition_totality(context, &definition, Totality::Total);
+    if !recursive_witness {
+        // Classify now, so a later item's *written* type can be refused before it is reduced. A `let` is its own group, hence total as far as the group verdict is concerned.
+        record_definition_totality(context, &definition, Totality::Total);
+        return Ok(Item::Let(definition));
+    }
 
-    Ok(definition)
+    // The witness is a recursive group of one. Its members' occurrences were stamped `Bound` above, which is what `RecItem::try_new` then captures; the context binding moves from the self-mentioning body to the group's own projection, so a later item reducing this witness meets the fold rather than a free name the kernel would refuse.
+    let rec = RecItem::try_new(vec![definition]).map_err(Error::from)?;
+    let member = Term::rec_proj(rec.group.clone(), 0);
+    context.define(&name, &member, Some(&def.kind));
+
+    // Classified as the group it now is, not assumed total the way a `let` may be: a witness that evaluates itself descends on nothing, and the erasure obligations are entitled to know.
+    let verdict = group_totality(context, &rec.group);
+    for definition in rec.definitions() {
+        record_definition_totality(context, &definition, verdict);
+    }
+
+    Ok(Item::Rec(rec))
 }
 
 /// Type-check a flat top-level `rec` item and return its rebuilt structural group. The input is opened over the export names for elaboration; the output captures those names back into one [`RecItem`] and publishes each export as its folded structural member.
@@ -998,7 +1025,7 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Item, Err
     context.restore_budget();
 
     let elaborated = match item {
-        Item::Let(definition) => elaborate_module_let(context, definition).map(Item::Let),
+        Item::Let(definition) => elaborate_module_let(context, definition),
         Item::Rec(rec) => elaborate_module_rec(context, rec).map(Item::Rec),
     }
     // Attribute *every* failure to the item that caused it, not only universe invariants. A whole-module diagnostic with no declaration name — an exhausted budget or an effect reduced at the type level — costs a full prelude rebuild to localize, which is the expensive way to learn one string.
@@ -1009,6 +1036,45 @@ fn elaborate_module_item(context: &mut Context, item: &Item) -> Result<Item, Err
     context.finish_universe_transaction();
 
     Ok(elaborated)
+}
+
+/// Refuse two witnesses that resolve each other, naming the cycle rather than leaving it to the kernel.
+///
+/// A witness may recurse through its own entry — `elaborate_module_let` registers the declaration before the body for that purpose, and such a witness becomes a group of one. A cycle between *two* has no such binding: the lowerer orders a witness before the uses that dispatch through it (`curios-text/src/into_core/order.rs`), and when two witnesses each want the other first that preference deadlocks and is dropped, so one is emitted naming a witness that does not exist yet. The kernel then refuses it as `unbound name /witness@N`, which names an anonymous id and says nothing a reader can act on.
+///
+/// Checked over the *emitted* order, which is the order the kernel will walk. Both directions are required before the report claims a cycle: a witness merely referencing a later one is ordinary and already works, because the ordering pass puts the referent first.
+fn check_witness_cycles(context: &mut Context, items: &[Item]) -> Result<(), Error> {
+    // Each witness definition with the item that holds it, and its zonked body: a witness reached through the deferred store arrives as a *solved metavariable*, so an unzonked body does not mention the name yet — the module's own zonk runs later, in `finalize_and_check`. A reference inside a group is bound by that group rather than pointing outward, which is why the item position travels along.
+    let mut declared: Vec<(Free, usize, Definition, Term)> = Vec::new();
+    for (position, item) in items.iter().enumerate() {
+        let definitions = match item {
+            Item::Let(definition) => vec![definition.clone()],
+            Item::Rec(rec) => rec.definitions(),
+        };
+        for definition in definitions {
+            if context.is_witness_declaration(&definition.name) {
+                let body = zonk_solved_term_metas(context, &definition.body);
+                declared.push((Free::from(&definition.name), position, definition, body));
+            }
+        }
+    }
+
+    for (this_name, this_at, this, this_body) in &declared {
+        for (that_name, that_at, that, that_body) in &declared {
+            // One report per cycle, raised from the earlier member, and never for two members of one group.
+            if this_at >= that_at
+                || !this_body.free_vars().contains(that_name)
+                || !that_body.free_vars().contains(this_name)
+            {
+                continue;
+            }
+
+            return Err(Error::witness_cycle(this.type_.clone(), that.type_.clone())
+                .at_opt(this.type_.span()));
+        }
+    }
+
+    Ok(())
 }
 
 /// Elaborate a [`Module`] against an already-elaborated scope, returning what it added. Each top-level item is checked and `define`d *cumulatively in the persistent base frame* — never a popped `with_frame` — so every definition stays in scope for later items, the entrypoint `body`, and (through `mode`) its type annotation. Returns the rebuilt suffix alongside the body's type, reduced through the accumulated definitions.
@@ -1063,6 +1129,9 @@ fn elaborate_module_suffix(
     for item in &module.items {
         items.push(elaborate_module_item(context, item)?);
     }
+
+    // After every item, because a cycle is only visible once both halves have resolved: the second witness's goal against the first is deferred and lands between items.
+    check_witness_cycles(context, &items)?;
 
     context.set_island(Qualifier::empty());
     // The entrypoint expression is not an item, so it gets its own budget on the same footing as one.

@@ -93,6 +93,16 @@ impl<'a> Established<'a> {
                                 &Term::rec_proj(rec.group.clone(), index),
                                 Some(&definition.kind),
                             );
+                            // A witness that resolves through its own entry is lowered as a group of one, so the table has to be rebuilt from this arm as well — a replayed unit would otherwise hand its successors a scope in which that witness is undeclared.
+                            if module.witnesses.contains(&definition.name) {
+                                register_witness(
+                                    context,
+                                    &definition.name,
+                                    &rec.group.member_type(index),
+                                    rec.group.universe_context().clone(),
+                                    &definition.island,
+                                )?;
+                            }
                         }
                     }
                 }

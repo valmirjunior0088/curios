@@ -529,6 +529,14 @@ impl fmt::Display for Displayed<'_> {
                     "call supplies {got} 'use' argument(s) but the function has only {expected} 'use' parameter(s)"
                 )
             }
+            Error::WitnessCycle { this, that } => {
+                let this = this.spelled(spelling);
+                let that = that.spelled(spelling);
+                write!(
+                    f,
+                    "witnesses for {this} and {that} resolve each other\n  a witness may recurse through its own entry, but a cycle between two has no order to declare them in — whichever comes first names the other before it exists\n  hoist the recursion into a top-level 'rec ... and' group and have each witness delegate to it"
+                )
+            }
             Error::NoWitness {
                 goal,
                 func,
