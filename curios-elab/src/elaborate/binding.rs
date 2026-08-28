@@ -364,8 +364,15 @@ impl InfixMethod {
                 Telescope::Done(terminal) => return Ok((arguments, *terminal)),
                 Telescope::Cons(domain, rest) => {
                     let plicity = marks.next().unwrap_or(Plicity::Explicit);
-                    let filled =
-                        insert_auto_argument(context, plicity, &domain, None, op.symbol(), origin)?;
+                    let filled = insert_auto_argument(
+                        context,
+                        plicity,
+                        &domain,
+                        None,
+                        op.symbol(),
+                        origin,
+                        premise_label(0),
+                    )?;
                     telescope = rest.open(&[&filled]);
                     arguments.push((plicity, filled));
                 }
@@ -410,7 +417,7 @@ fn infix_method(
     );
     let provenance = WitnessOrigin {
         func: op.symbol().to_string(),
-        binder: field_name.to_string(),
+        binder: format!("its '{field_name}' implementation"),
     };
     let (slot, witness) =
         context.fresh_witness_metavar(goal.clone(), term.span(), provenance.clone());

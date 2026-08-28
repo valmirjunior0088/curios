@@ -1,4 +1,5 @@
 mod apply;
+pub(crate) use apply::premise_label;
 use apply::*;
 
 mod aggregate;

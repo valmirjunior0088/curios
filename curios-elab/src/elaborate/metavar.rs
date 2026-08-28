@@ -125,11 +125,16 @@ pub(super) fn insert_implicits_on_check(
     let output = context.with_frame(|context| -> Result<Term, Error> {
         let mut tele = ift.telescope.clone();
         let mut plicities = ift.plicities.iter();
+        let mut auto_premises = 0usize;
         loop {
             match tele {
                 Telescope::Done(output) => break Ok(*output),
                 Telescope::Cons(domain, rest) => match plicities.next() {
                     Some(&plicity @ (Plicity::Implicit | Plicity::Witness)) => {
+                        let premise = super::premise_label(auto_premises);
+                        if matches!(plicity, Plicity::Witness) {
+                            auto_premises += 1;
+                        }
                         let arg = insert_auto_argument(
                             context,
                             plicity,
@@ -137,6 +142,7 @@ pub(super) fn insert_implicits_on_check(
                             rest.first_hint(),
                             &func_label,
                             term,
+                            premise,
                         )?;
                         tele = rest.open(&[&arg]);
                         head_args.push((plicity, arg));

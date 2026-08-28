@@ -546,7 +546,7 @@ impl fmt::Display for Displayed<'_> {
                 let goal = goal.spelled(spelling);
                 write!(f, "no witness of {goal} found")?;
                 match embedding {
-                    None => write!(f, "\n  needed by '{func}' for its 'use' binder '{binder}'"),
+                    None => write!(f, "\n  needed by '{func}' for {binder}"),
                     Some(diagnosis) => {
                         let source = diagnosis.source.spelled(spelling).to_string();
                         let target = diagnosis.target.spelled(spelling);

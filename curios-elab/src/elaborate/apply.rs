@@ -44,6 +44,26 @@ pub(super) fn elaborate_func_type(
 }
 
 /// Fill an omitted non-explicit slot: an implicit binder gets a fresh metavariable; a witness binder gets a fresh metavariable *plus* a resolution goal, attempted eagerly (solved now, parked on a flex key, or deferred on a missing table entry). `origin` is the application node — the span anchor for the goal.
+/// A one-based position as an English ordinal, for naming which slot of a call a goal belongs to.
+pub(crate) fn ordinal(index: usize) -> String {
+    let position = index + 1;
+    let suffix = match (position % 10, position % 100) {
+        (_, 11..=13) => "th",
+        (1, _) => "st",
+        (2, _) => "nd",
+        (3, _) => "rd",
+        _ => "th",
+    };
+    format!("{position}{suffix}")
+}
+
+/// How a witness goal names the slot it fills: its position among the head's `use` slots.
+///
+/// A position rather than a name, because a `use` parameter *has* no name — `let`, `rec` and `satisfy` sugar all declare one anonymously, so every premise of user-written code reported as `_`. Only the generated method wrappers write `use w`, and `w` is an implementation detail appearing in no program.
+pub(crate) fn premise_label(index: usize) -> String {
+    format!("its {} 'use' premise", ordinal(index))
+}
+
 pub(super) fn insert_auto_argument(
     context: &mut Context,
     plicity: Plicity,
@@ -51,6 +71,7 @@ pub(super) fn insert_auto_argument(
     label: Option<&str>,
     func: &str,
     origin: &Term,
+    premise: String,
 ) -> Result<Term, Error> {
     let binder = binder_name(label);
 
@@ -78,7 +99,7 @@ pub(super) fn insert_auto_argument(
         Plicity::Witness => {
             let provenance = WitnessOrigin {
                 func: func.to_string(),
-                binder,
+                binder: premise,
             };
             let (id, metavar) =
                 context.fresh_witness_metavar(type_.clone(), origin.span(), provenance.clone());
@@ -108,11 +129,18 @@ pub(super) fn elaborate_apply(
         plicities,
     } = apply;
 
-    // Insertion provenance: name the applied function in the uninferred-implicit report. Heads are references in practice; anything else gets a placeholder (the span still locates the call).
-    let func_label = match &**head {
-        Subterm::Var(var) => var.unwrap().to_string(),
-        _ => "<function>".to_string(),
-    };
+    // Insertion provenance: name the applied function in the uninferred-implicit report.
+    //
+    // Through the spine, not just at its top: a curried call — `Fmt/print(fmt)(a)(b)`, and every partial application — heads the outer apply with another *apply*, so reading only the outermost node reported `<function>` for exactly the calls a reader most needs named. The innermost reference is the one the program wrote.
+    fn innermost_reference(term: &Term) -> Option<String> {
+        match &**term {
+            Subterm::Var(var) => Some(var.unwrap().to_string()),
+            Subterm::Apply(apply) => innermost_reference(&apply.head),
+            Subterm::UniverseInst(instance) => innermost_reference(&instance.head),
+            _ => None,
+        }
+    }
+    let func_label = innermost_reference(head).unwrap_or_else(|| "<function>".to_string());
 
     let (mut head, head_type) = elaborate(context, head, Mode::Infer)?;
     let mut head_type = reduce_with(context, &head_type)?;
@@ -130,6 +158,7 @@ pub(super) fn elaborate_apply(
     }
 
     // All-auto telescopes (the curried `bind` shape, e.g. `(@A, @B) -> (M A, A -> M B) -> M B`, or a method wrapper's `(@A, use w) -> …`): when the head telescope has zero explicit slots but plain arguments were given, saturate it — marked queues first, fresh metavariables (and witness goals) for the rest — reduce the output, and re-target the plain arguments at the next telescope. This fires *only* with zero explicit slots, so application stays arity-strict everywhere else (this is deliberately not general partial application).
+    let mut auto_premises = 0usize;
     let ft = loop {
         let ft = match &*head_type {
             Subterm::FuncType(ft) => ft.clone(),
@@ -155,14 +184,21 @@ pub(super) fn elaborate_apply(
             };
             let arg = match queue.pop_front() {
                 Some(arg) => check(context, &arg, ty.clone())?,
-                None => insert_auto_argument(
-                    context,
-                    *plicity,
-                    &ty,
-                    rest.first_hint(),
-                    &func_label,
-                    term,
-                )?,
+                None => {
+                    let premise = premise_label(auto_premises);
+                    if matches!(plicity, Plicity::Witness) {
+                        auto_premises += 1;
+                    }
+                    insert_auto_argument(
+                        context,
+                        *plicity,
+                        &ty,
+                        rest.first_hint(),
+                        &func_label,
+                        term,
+                        premise,
+                    )?
+                }
             };
             tele = rest.open(&[&arg]);
             args.push((*plicity, arg));
@@ -269,7 +305,19 @@ pub(super) fn elaborate_apply(
                 }
             }
             None => {
-                insert_auto_argument(context, *plicity, &ty, rest.first_hint(), &func_label, term)?
+                let premise = premise_label(auto_premises);
+                if matches!(plicity, Plicity::Witness) {
+                    auto_premises += 1;
+                }
+                insert_auto_argument(
+                    context,
+                    *plicity,
+                    &ty,
+                    rest.first_hint(),
+                    &func_label,
+                    term,
+                    premise,
+                )?
             }
         };
         tele = rest.open(&[&arg]);

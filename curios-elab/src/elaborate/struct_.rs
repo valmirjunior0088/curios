@@ -122,7 +122,7 @@ pub(super) fn check_dependent_fields(
                 FieldSource::Resolve { func, binder } => {
                     let provenance = WitnessOrigin {
                         func: func.clone(),
-                        binder: binder.clone(),
+                        binder: format!("its 'use' field '{binder}'"),
                     };
                     let (id, metavar) = context.fresh_witness_metavar(
                         ty.clone(),

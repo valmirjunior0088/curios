@@ -437,3 +437,55 @@ fn a_witness_keys_through_a_partially_applied_family() {
 
     assert_eq!(run(source), b"42");
 }
+
+// Which call needs the witness. A curried application — every partial application, and `Fmt/print(fmt)(a)(b)` in particular — heads its outer apply with another apply, so reading only the outermost node named `<function>` for exactly the calls a reader most needs identified.
+#[test]
+fn a_missing_witness_names_a_curried_head_by_its_innermost_reference() {
+    let source = r#"
+        use /std/{Nat, Bool, Fmt, Handle};
+        let s = Fmt/print("issue % -> %")(42)((1, true));
+        /std/print("unreachable")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("needed by '/std/Fmt/print'"),
+        "expected the head named through the spine:\n{report}"
+    );
+}
+
+// Which premise needs it. A `use` parameter is anonymous by design — `let`, `rec` and `satisfy` sugar declare one without a name — so naming the binder reported `_` for every premise a program actually writes. The position is always there to be named.
+#[test]
+fn a_missing_witness_names_the_premise_by_position() {
+    let source = r#"
+        use /std/{Nat, Bool, Show, Str, Handle};
+        let f(@A : Type, use Show(A), a : A) -> Str = Show/show(a);
+        let s : Str = f((1, true));
+        /std/print("unreachable")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("needed by '/f' for its 1st 'use' premise"),
+        "expected the premise named by position:\n{report}"
+    );
+}
+
+// The position is a position, not a decoration: a head with two premises whose *second* is the unsatisfied one says so, which is the whole reason a number beats a name here.
+#[test]
+fn a_later_premise_is_named_by_its_own_position() {
+    let source = r#"
+        use /std/{Nat, Str, Show, Eql, Handle};
+        induct T : pub Type | t() end
+        satisfy Show(T) { show(x) = "t", }
+        let g(@A : Type, use Show(A), use Eql(A), a : A) -> Str = Show/show(a);
+        let s : Str = g(T/t());
+        /std/print("unreachable")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("needed by '/g' for its 2nd 'use' premise"),
+        "expected the second premise named as the second:\n{report}"
+    );
+}
