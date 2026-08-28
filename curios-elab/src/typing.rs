@@ -215,6 +215,27 @@ pub(crate) fn expect(
     }
 }
 
+/// Whether a *weak-head-reduced* term is stuck on an unsolved metavariable — headed by one, applied from one, eliminated on one, or projected from one.
+///
+/// The four shapes are one fact: reduction cannot proceed until some metavariable is solved, so nothing about the term is decided yet. Conversion already treats each of them as [`Outcome::Blocked`](crate::Outcome) rather than as a mismatch; this is the same reading for the checked-only introduction forms, which otherwise refuse a program one step before the turnaround that would have solved the blocker. `Count(?L)` is the case that motivates the `Match` arm: the payload type of a description-indexed constructor, stuck until the index is known.
+pub(crate) fn stuck_on_metavar(context: &Context, reduced: &Term) -> bool {
+    match &**reduced {
+        Subterm::Metavar(Metavar { id, .. }) => context.metavar_solution(*id).is_none(),
+        Subterm::Match(matched) => stuck_on_metavar(context, &matched.head),
+        Subterm::Proj(proj) => stuck_on_metavar(context, &proj.head),
+        Subterm::Apply(apply) => {
+            // A folded recursive call is the fourth shape, and it does not wear its blocker on its head: `force_rec` hands the call itself back when unfolding cannot choose an arm, so what reduction is waiting for sits in an *argument*. `Count(?L)` is that term — a description-indexed payload type before its index is known. An argument that is rigid instead blocks on nothing a solution could change, and rightly refuses.
+            stuck_on_metavar(context, &apply.head)
+                || (apply.head.as_rec_proj().is_some()
+                    && apply
+                        .params
+                        .iter()
+                        .any(|param| stuck_on_metavar(context, param)))
+        }
+        _ => false,
+    }
+}
+
 /// Synthesize a checked-only form whose expectation never gained structure, and pin the expectation to what it inferred.
 ///
 /// `None` when the form cannot be synthesized — a lambda has no domain to invent — or when the expectation *does* have structure, in which case ordinary checking owns it.
@@ -257,16 +278,16 @@ pub(crate) fn blocked_on_metavar(
         return Ok(false);
     }
     let reduced = reduce_with(context, ty)?;
+    if stuck_on_metavar(context, &reduced) {
+        // A tuple/list/lambda whose whole expected type is stuck on an unsolved metavar — a bare one, or a reduction waiting on one.
+        return Ok(true);
+    }
     Ok(match &*reduced {
-        // A tuple/list/lambda whose whole expected type is an unsolved metavar.
-        Subterm::Metavar(Metavar { id, .. }) => context.metavar_solution(*id).is_none(),
         Subterm::FuncType(FuncType { telescope, .. }) if is_lambda => match telescope {
             Telescope::Cons(domain, _) => {
-                // A lambda whose expected *domain* is an unsolved metavar: its body may need the domain's structure (to project the parameter), so postpone it until a sibling argument (e.g. `p : Parse(A)`) pins the domain.
-                let domain_blocked = match &*reduce_with(context, domain)? {
-                    Subterm::Metavar(Metavar { id, .. }) => context.metavar_solution(*id).is_none(),
-                    _ => false,
-                };
+                // A lambda whose expected *domain* is stuck: its body may need the domain's structure (to project the parameter), so postpone it until a sibling argument (e.g. `p : Parse(A)`) pins the domain.
+                let reduced_domain = reduce_with(context, domain)?;
+                let domain_blocked = stuck_on_metavar(context, &reduced_domain);
                 // ...or a lambda whose *codomain* still carries an unsolved metavar that the result type will pin: postpone until `expect(output, expected)` solves it, so the body is checked against the refined codomain. This is the `let !`-continuation case — `(x) => …` checked against `?dom => Parse(?B)`, where `?dom` is already pinned by the bind's action but `?B` (the bind's own result type) is solved only by the turnaround. Gating on `result_metavars` keeps it to metavars `expect` will address; gating on `expected_ground` ensures that turnaround actually grounds `?B` (vs. a flex-flex alias that the eager body must ground instead).
                 domain_blocked
                     || (expected_ground

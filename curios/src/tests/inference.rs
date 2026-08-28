@@ -466,3 +466,69 @@ fn a_written_tuple_type_still_checks_the_literal_against_itself() {
 
     assert_eq!(run(source), b"1");
 }
+
+// A description-indexed constructor written the way a user writes one, with the index left implicit. The payload's type is `Count(?L)` — a `rec` that cannot choose an arm until `?L` is known, so reduction hands back the folded call itself. That is not a tuple type *yet*, and refusing there refuses one step before the turnaround that solves `?L` from the written result type.
+#[test]
+fn a_tuple_payload_waits_for_the_index_that_types_it() {
+    let source = r#"
+        use /std/{Nat, Str, Handle};
+        induct Labels : pub Type | nil() | cons(Str, Labels) end
+        rec Count(L : Labels) -> Type =
+            match L : (_) => Type
+            | nil() => {}
+            | cons(l, rest) => {Nat, Count(rest)}
+            end;
+        induct Boxed(L : Labels) : pub Type | mk(Count(L)) end
+        let b : Boxed(Labels/cons("a", Labels/nil())) = Boxed/mk((1, ()));
+        match b | mk(_) => /std/print("unlocked") end
+        "#;
+
+    assert_eq!(run(source), b"unlocked");
+}
+
+// The blocker has to be a *metavariable*, not merely a stuck reduction. `Count(L)` over a bound parameter is stuck for good — no solution is coming — so it refuses at the literal with the expectation named, rather than parking into a report about structure that never arrived.
+#[test]
+fn a_payload_stuck_on_a_rigid_index_is_refused_at_the_literal() {
+    let source = r#"
+        use /std/{Nat, Str, Handle};
+        induct Labels : pub Type | nil() | cons(Str, Labels) end
+        rec Count(L : Labels) -> Type =
+            match L : (_) => Type
+            | nil() => {}
+            | cons(l, rest) => {Nat, Count(rest)}
+            end;
+        let f(L : Labels) -> Nat =
+            let x : Count(L) = (1, ());
+            0;
+        /std/print("unreachable")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("expected type is not a tuple type") && report.contains("Count(L)"),
+        "expected the refusal to name the stuck expectation:\n{report}"
+    );
+}
+
+// Waiting also sharpens the wrong program's report: once the index solves, the payload type reduces and the literal is measured against it, so a mismatched shape is named as the arity it is instead of as a type that never became a tuple.
+#[test]
+fn a_settled_index_measures_the_literal_against_the_type_it_computes() {
+    let source = r#"
+        use /std/{Nat, Str, Handle};
+        induct Labels : pub Type | nil() | cons(Str, Labels) end
+        rec Count(L : Labels) -> Type =
+            match L : (_) => Type
+            | nil() => {}
+            | cons(l, rest) => {Nat, Count(rest)}
+            end;
+        induct Boxed(L : Labels) : pub Type | mk(Count(L)) end
+        let b : Boxed(Labels/nil()) = Boxed/mk((1, ()));
+        /std/print("unreachable")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("tuple has 2 field(s) but expected type has 0"),
+        "expected the arity report the reduced payload type makes possible:\n{report}"
+    );
+}
