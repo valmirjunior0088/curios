@@ -171,9 +171,9 @@ fn checking_problem_parks_until_an_outer_pin_lands() {
     assert_eq!(run(source), b"2");
 }
 
+// A tuple argument that is the *only* thing determining a call's type variable, where the result type does not mention it — so the apply's turnaround pins nothing and the literal is left holding its own expectation. The force tier settles it there, inside the call, rather than leaving it for the item's drain.
 #[test]
-fn checking_problem_without_a_pin_still_rejects() {
-    // A checking problem whose expected type is never pinned drains as a cannot-infer at the tuple's own span — parked, not silently accepted.
+fn a_tuple_argument_no_caller_pins_settles_to_its_product() {
     let source = r#"
         use /std/{Nat, Handle};
         let swallow(@A : Type, a : A) -> Nat = 0;
@@ -182,7 +182,7 @@ fn checking_problem_without_a_pin_still_rejects() {
         /std/Io/pure(())
         "#;
 
-    error(source);
+    assert_eq!(run(source), b"0");
 }
 
 // Regression: an `Eq/subst` whose motive contains `Eq(_, _)` — whose `@A` is implicit — must insert that implicit when the motive is instantiated. It used to drop it, leaving `Eq` (a 3-telescope `@A, x, y`) applied to 2 args, which panicked `reduce_apply` with "telescope arity mismatch".
@@ -277,13 +277,15 @@ fn operator_scrutinee_refines_a_proof_carrying_arm() {
     assert_eq!(run(source), b"refined");
 }
 
-// A parked checking problem that survives every retry — a tuple against an implicit nothing ever pins — is reported by the item drain at the expression's own span, naming the expected type it waited on rather than the bare `cannot infer` it used to raise.
+// A parked checking problem that survives every retry is reported by the item drain at the expression's own span, naming the expected type it waited on rather than the bare `cannot infer` it used to raise.
+//
+// The subject is a lambda rather than a tuple, and that is the whole distinction: a tuple has a product to fall back on and settles, a lambda has no domain to invent and cannot. Both once produced this message, which is what made them look like one problem.
 #[test]
 fn unresolvable_parked_check_reports_its_expected_type() {
     let source = r#"
         use /std/{Nat, Str};
         let use_it(@A : Type, a : A) -> Nat = 0;
-        let z : Nat = use_it((1, true));
+        let z : Nat = use_it((x) => x);
         /std/print(Nat/to_str(z))
         "#;
     let error = error(source);
@@ -404,4 +406,63 @@ fn a_goal_as_a_match_motive_is_reported() {
         "#;
     let error = typecheck(source).expect_err("a program with a written goal never compiles");
     assert!(error.contains("goal `?`"), "{error}");
+}
+
+// A non-empty tuple literal parks against a bare expected metavariable, and rightly: a dependent telescope can only ever arrive from the expectation, so committing to the non-dependent product while one could still arrive would be a guess. When the drain has established that nothing is left to send one, the guess is no longer a guess — and `?` must answer, as it already does for `()` and for a list literal.
+#[test]
+fn a_tuple_literal_synthesizes_when_its_expected_type_never_gains_structure() {
+    let source = r#"
+        let y : ? = (1, true);
+        /std/print("ok\n")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("? = {Nat, Bool}"),
+        "expected the goal to report the synthesized product:\n{report}"
+    );
+}
+
+// The one-field literal takes the same route. Its trailing comma is all that separates it from a parenthesized term, so a reader has no other way to learn which one the elaborator saw.
+#[test]
+fn a_one_field_tuple_literal_synthesizes_against_a_written_goal() {
+    let source = r#"
+        let y : ? = (1,);
+        /std/print("ok\n")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("? = {Nat}"),
+        "expected a one-field product:\n{report}"
+    );
+}
+
+// Settling the literal wakes whatever was parked on the metavariable it solved, and a woken obligation reports for itself. Here that is the missing tuple witness — the answer the program deserves, where before the same program said only that some type never gained structure.
+#[test]
+fn a_settled_tuple_reports_the_obligation_it_unblocked() {
+    let source = r#"
+        use /std/{Bool, Show, Str};
+        let s : Str = Show/show((true, false));
+        /std/print("ok\n")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("no witness of Show({Bool, Bool})"),
+        "expected the witness goal the tuple unblocked:\n{report}"
+    );
+}
+
+// An expectation that *does* arrive must still win: the product here is written, and the literal is checked against it rather than synthesized.
+#[test]
+fn a_written_tuple_type_still_checks_the_literal_against_itself() {
+    let source = r#"
+        use /std/{Nat, Bool, Handle};
+        let id(@A : Type, a : A) -> A = a;
+        let z : {Nat, Bool} = id((1, true));
+        /std/print(Nat/to_str(z.0))
+        "#;
+
+    assert_eq!(run(source), b"1");
 }

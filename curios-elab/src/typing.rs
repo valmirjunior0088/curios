@@ -215,6 +215,33 @@ pub(crate) fn expect(
     }
 }
 
+/// Synthesize a checked-only form whose expectation never gained structure, and pin the expectation to what it inferred.
+///
+/// `None` when the form cannot be synthesized — a lambda has no domain to invent — or when the expectation *does* have structure, in which case ordinary checking owns it.
+///
+/// Parking a non-empty tuple literal against a bare metavariable is right while a dependent telescope could still arrive from that expectation, since only an expectation can supply one. This serves the two places where nothing is left to send one: an apply's force tier, after the authoritative turnaround and with no later slot opening through this one, and the drain's no-progress sweep. `()` and a list literal reach the same conclusion at their own arms and `elaborate_num_lit` reaches it for a numeral; the non-empty tuple is the one checked-only form that had no route to it.
+pub(crate) fn settle_against(
+    context: &mut Context,
+    term: &Term,
+    expected: &Term,
+) -> Result<Option<Term>, Error> {
+    if !matches!(&**term, Subterm::Tuple(tuple) if !tuple.fields.is_empty()) {
+        return Ok(None);
+    }
+
+    let structured = match &*reduce_with(context, expected)? {
+        Subterm::Metavar(Metavar { id, .. }) => context.metavar_solution(*id).is_some(),
+        _ => true,
+    };
+    if structured {
+        return Ok(None);
+    }
+
+    let (rebuilt, inferred) = elaborate(context, term, Mode::Infer)?;
+    expect(context, term, &inferred, expected)?;
+    Ok(Some(rebuilt))
+}
+
 /// Whether `arg` is a checked-only introduction form (tuple, lambda, list literal) that cannot be elaborated yet because the type structure it needs is an unsolved metavar — a tuple or list literal whose whole expected type, or a lambda whose expected *domain*, reduces to one. (A lambda only needs its domain known: the body, which may project the parameter, can't be checked against an unknown domain; its codomain may stay a metavar. A list literal borrows its element type from `expected`, so it needs the expected head — `List _` — to be known.) Synthesizable forms return `false`: they have a turnaround of their own and must run eagerly so their solutions feed the result unification.
 pub(crate) fn blocked_on_metavar(
     context: &mut Context,
@@ -293,6 +320,60 @@ impl Context {
         self.retry_parked()
     }
 
+    /// Give every parked checking problem whose form can be *synthesized* one last chance, once the drain has established that no further solution is coming.
+    ///
+    /// A non-empty tuple literal parks against a bare expected metavariable, and rightly: a dependent telescope can only ever arrive from the expectation, so committing to the non-dependent product while one could still arrive would be a guess. When nothing is left to send one the guess is no longer a guess — the non-dependent product is the only thing the literal could be — and this is the point where "nothing newly solved, nothing left to retry" is decidable. `()` and a list literal reach the same conclusion eagerly at their own arms, `elaborate_num_lit` reaches it for a numeral; this is where the non-empty tuple reaches it.
+    ///
+    /// A lambda is deliberately not settled here. It cannot be synthesized at all — there is no domain to invent — so it stays parked and is reported, which is the honest answer rather than this defect.
+    ///
+    /// Answers whether anything settled, so the drain can loop once more: an obligation watching the metavariable this just solved — a witness goal on the tuple's own type — must get its retry before anything is reported.
+    fn settle_synthesizable(&mut self) -> Result<bool, Error> {
+        let mut settled = false;
+        for parked in self.take_parked() {
+            let super::ParkedProblem {
+                work,
+                origin,
+                frame,
+                ..
+            } = parked;
+
+            let ParkedWork::Checking {
+                term,
+                expected,
+                placeholder,
+            } = &work
+            else {
+                self.repark(work, origin, frame);
+                continue;
+            };
+
+            if self.metavar_solution(*placeholder).is_some() {
+                self.repark(work, origin, frame);
+                continue;
+            }
+
+            let (term, expected, placeholder) = (term.clone(), expected.clone(), *placeholder);
+            let settled_term = self.with_frame(|context| {
+                context.restore_frame(&frame);
+                settle_against(context, &term, &expected)
+            });
+            let rebuilt = match settled_term {
+                Ok(None) => {
+                    self.repark(work, origin, frame);
+                    continue;
+                }
+                Ok(Some(rebuilt)) => Ok(rebuilt),
+                Err(error) => Err(error),
+            };
+
+            // A failure here is not the literal's. Solving the expectation wakes whatever was parked on it, and a woken obligation reports for itself — `Show/show((true, false))` settles the tuple to `{Bool, Bool}` and *then* discovers no witness of `Show({Bool, Bool})`, which is the answer the program deserves. Swallowing that would report the tuple's own check as the survivor and bury the real one.
+            self.solve_metavar(placeholder, rebuilt?);
+            settled = true;
+        }
+
+        Ok(settled)
+    }
+
     /// Drain the parked store: retry everything to a fixpoint, then report any survivor as a mismatch at its origin. Run after each top-level item and after the entrypoint body, so an unresolvable constraint is attributed to the definition that produced it and frozen frames do not pile up.
     pub(crate) fn drain_parked(&mut self) -> Result<(), Error> {
         loop {
@@ -311,6 +392,11 @@ impl Context {
 
             // No progress in a full sweep: the rest can never resolve. A conversion held up by written goals alone is not an error but the goals' own report — the batch at module end names each `?`, and this obligation goes with it as what the hole must make true; the program never compiles with a goal in it, so the dropped constraint is never unchecked. Anything else reports the first survivor at its origin.
             if self.parked_len() >= before && !self.has_newly_solved() {
+                // A form that can be synthesized is settled before anything is reported: parking was right while its expectation could still gain structure, and this is where that stops being true.
+                if self.settle_synthesizable()? {
+                    continue;
+                }
+
                 for parked in self.take_parked() {
                     let super::ParkedProblem {
                         work,

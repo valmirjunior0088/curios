@@ -292,7 +292,11 @@ pub(super) fn elaborate_apply(
                         .clone()
                         .nth(*slot, |k| elaborated[k].clone())
                         .expect("pending slot is within the telescope");
-                    let checked = check(context, written, slot_ty)?;
+                    // The turnaround has run and no later slot opens through this one, so nothing is left to give this expectation structure. A form that can be synthesized takes its product *here* rather than at the item's drain, so the rest of the item sees a real type — a projection off the result would otherwise check against a metavariable that only settles after every expression around it.
+                    let checked = match crate::settle_against(context, written, &slot_ty)? {
+                        Some(settled) => settled,
+                        None => check(context, written, slot_ty)?,
+                    };
                     context.solve_metavar(*placeholder, checked.clone());
                     elaborated[*slot] = checked;
                 }
