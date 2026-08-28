@@ -151,7 +151,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] [A variant collapses when nothing needs to distinguish it](design/toolchain/a-variant-collapses-when-nothing-needs-to-distinguish-it.md)
 - [x] [A variant travels as the fields of its widest constructor](design/toolchain/a-variant-travels-as-the-fields-of-its-widest-constructor.md)
 - [x] [A pure program rebuilds what an impure one would mutate](design/toolchain/the-heap-is-sized-ahead-of-its-churn.md)
-- [ ] [A young value dies free](roadmap/generational-nursery-spec.md) (not refined yet)
+- [ ] [The survivors are what cost](roadmap/collector-economics-spec.md) (the mechanism is settled; the route is not)
 - [x] [The map wall falls by classes, not by symptom](design/toolchain/the-map-wall-falls-by-classes-not-by-symptom.md)
 - [x] [A monomorphic field carries its own type](design/toolchain/a-field-is-declared-at-the-carrier-its-shape-names.md)
 - [x] The map's remaining distance is decomposed before it is spent
