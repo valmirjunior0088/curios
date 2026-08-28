@@ -28,7 +28,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] `Lift` embeddings (`/syn/Lift(M, N)`; one witness per ordered pair, never chained)
   - [x] Orphan rule (a witness is declared where its concept, or a type in its key, is)
   - [x] Concept-based operators (every infix, `&&`/`||` included, dispatches through a concept)
-- [ ] [Auto-derive: a witness whose body the compiler writes](roadmap/auto-derive-spec.md) (sequenced behind eight elaborator defects)
+- [ ] [Auto-derive: a witness whose body the compiler writes](roadmap/auto-derive-spec.md)
 - [x] Unified `struct` declarations (independent nominal and representation visibility)
 - [x] Inductive types (`induct` declarations)
   - [x] Independent nominal/representation visibility, with opaque construction
