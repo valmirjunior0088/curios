@@ -4,7 +4,7 @@ use {
         machine::structurize, machine::value_id, machine::value_name,
     },
     curios_abi::ForeignFunction,
-    curios_utilities::{Grain, PackedBin},
+    curios_utilities::{Grain, PackedBin, grown},
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
         sync::Arc,
@@ -61,6 +61,11 @@ mod test_support;
 
 /// Lower an optimized CPS module to a wasm-GC module — the pipeline's final stage. The private machine CFG is built and its reducible control structurized into blocks and loops, then a `Table` is computed over the whole module (the name maps, the closure type per `clsr_arities` arity, tuple arities, rope helpers) and `ModuleEmitter` declares the host imports and emits every const, closure, and function, exporting the entry under its emitted name (`func/main` — the entry is always `main`).
 pub fn into_wasm(module: &CpsModule) -> curios_wasm::Module {
+    // On a segment of its own, as every other stage enters: the emitter below recurses per nested region, and its frames are large enough that a knot's few thousand lines of CPS outgrew the default test-thread stack.
+    grown(|| into_wasm_within(module))
+}
+
+fn into_wasm_within(module: &CpsModule) -> curios_wasm::Module {
     curios_profile::profile!("into_wasm");
     let raw = raw_locals(module);
     let machine = lower(module);

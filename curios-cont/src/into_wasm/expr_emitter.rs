@@ -4,7 +4,7 @@ use {
         EmissionData, EmissionValue, EmissionValueName, Frame, LayoutItem, LoadAs, LocalData,
         region_layout, slot_zero_instrs,
     },
-    curios_utilities::Grain,
+    curios_utilities::{Grain, recurse},
     std::collections::{BTreeMap, HashMap, HashSet},
 };
 
@@ -285,7 +285,17 @@ impl<'a, 'b> ExprEmitter<'a, 'b> {
     }
 
     /// Emit one region: its bindings, then its blocks laid out as a structured nesting of `loop`, forward `block`, and localized-dispatcher scopes derived from the region's control-flow analysis ([`region_layout`]). Enters a frame the caller is responsible for leaving.
+    ///
+    /// Guarded at the entry, as every data-shaped walk is: regions nest once per layout block, and a debug frame of this walk runs to tens of kilobytes, which is what put a mutually recursive dictionary group's knot past a test thread's stack at eight levels.
     fn emit_region(
+        &mut self,
+        params: HashMap<&'a EmissionValueName, LocalData>,
+        region: &'a EmissionBody,
+    ) {
+        recurse(|| self.emit_region_within(params, region))
+    }
+
+    fn emit_region_within(
         &mut self,
         params: HashMap<&'a EmissionValueName, LocalData>,
         region: &'a EmissionBody,
