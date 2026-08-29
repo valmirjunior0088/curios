@@ -240,7 +240,7 @@ pub(crate) fn stuck_on_metavar(context: &Context, reduced: &Term) -> bool {
 ///
 /// `None` when the form cannot be synthesized — a lambda has no domain to invent — or when the expectation *does* have structure, in which case ordinary checking owns it.
 ///
-/// Parking a non-empty tuple literal against a bare metavariable is right while a dependent telescope could still arrive from that expectation, since only an expectation can supply one. This serves the two places where nothing is left to send one: an apply's force tier, after the authoritative turnaround and with no later slot opening through this one, and the drain's no-progress sweep. `()` and a list literal reach the same conclusion at their own arms and `elaborate_num_lit` reaches it for a numeral; the non-empty tuple is the one checked-only form that had no route to it.
+/// Parking a non-empty tuple literal against a bare metavariable is right while a dependent telescope could still arrive from that expectation, since only an expectation can supply one. This serves the two places where nothing is left to send one: an apply's force tier — after the turnaround when the apply is checked, and directly when it is inferred — with no later slot opening through this one, and the drain's no-progress sweep. `()` and a list literal reach the same conclusion at their own arms and `elaborate_num_lit` reaches it for a numeral; the non-empty tuple is the one checked-only form that had no route to it.
 pub(crate) fn settle_against(
     context: &mut Context,
     term: &Term,

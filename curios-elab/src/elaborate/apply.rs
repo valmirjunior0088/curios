@@ -241,8 +241,6 @@ pub(super) fn elaborate_apply(
         return Err(Error::too_many_witness_args(witness_slots, used.len()));
     }
 
-    let checking = matches!(mode, Mode::Check(_));
-
     // Whether the expected type is fully ground. The codomain postponement is only a win when `expect(output, expected)` actually *grounds* the result metavar; if `expected` itself carries an unsolved metavar, that turnaround is flex-flex and the metavar must instead be grounded by the continuation's body — so postponing it would strand the metavar (flex-flex-under-constructor) rather than refine it. When expected is not ground the argument checks eagerly.
     let expected_ground = match &mode {
         Mode::Check(expected) => expected
@@ -252,7 +250,7 @@ pub(super) fn elaborate_apply(
         Mode::Infer => false,
     };
 
-    // The single walk. Every slot settles in telescope order, and the dependent substitution only ever receives elaborated terms or compiler-born metavariables — the invariant is the code path, not a guard. A written argument is checked at its domain, opened through the elaborated prefix; a checked-only intro form whose structure is still blocked (see `blocked_on_metavar`) becomes a parked checking problem whose placeholder stands in the telescope, retried by the wake machinery the moment a solution lands — which subsumes the retired clear loop, since a sibling's turnaround retries the parked check before any later slot opens through it. A missing hidden slot is inserted at that same true domain. Under suppressed parking the blocked case checks eagerly instead: re-validation re-elaborates rebuilt nodes whose types are already solved, so the branch is dead over the corpus (fact F1) and merely safe.
+    // The single walk. Every slot settles in telescope order, and the dependent substitution only ever receives elaborated terms or compiler-born metavariables — the invariant is the code path, not a guard. A written argument is checked at its domain, opened through the elaborated prefix; a checked-only intro form whose structure is still blocked (see `blocked_on_metavar`) becomes a parked checking problem whose placeholder stands in the telescope, retried by the wake machinery the moment a solution lands — which subsumes the retired clear loop, since a sibling's turnaround retries the parked check before any later slot opens through it. The park is minted in both modes: an inferred apply has no turnaround, but the force tier below settles what the walk leaves blocked, and a park `check` made on its own would sit in the store beyond that tier's reach. A missing hidden slot is inserted at that same true domain. Under suppressed parking the blocked case checks eagerly instead: re-validation re-elaborates rebuilt nodes whose types are already solved, so the branch is dead over the corpus (fact F1) and merely safe.
     let original = ft.telescope.clone();
     let mut elaborated: Vec<Term> = Vec::with_capacity(ft.plicities.len());
     // The pendings this apply minted: (slot, placeholder, written term), consulted by the fallback pin below.
@@ -269,8 +267,7 @@ pub(super) fn elaborate_apply(
         };
         let arg = match written {
             Some(written) => {
-                let blocked = checking
-                    && !context.parking_suppressed()
+                let blocked = !context.parking_suppressed()
                     && matches!(
                         &*written,
                         Subterm::Func(_)
@@ -331,26 +328,30 @@ pub(super) fn elaborate_apply(
     if let Mode::Check(expected) = &mode {
         // The output carries any pending's placeholder, which *blocks* rather than manufacturing the raw-substitution false mismatches the retired design had to bracket against — so this turnaround runs unbracketed, a mismatch propagates as genuine, and its pins wake parked checks through the ordinary retry machinery with every discharged obligation's solutions kept.
         expect(context, term, &output, expected)?;
+    }
 
-        if !pendings.is_empty() {
-            // The force tier — the retired settle, kept: a pending still undischarged after the turnaround above is checked now, under whatever it pinned. A lambda whose domain only its own body can ground is grounded by that body here, exactly as the settle once grounded it; the placeholder takes the checked term, so no pending outlives its apply undischarged. The parked copy of the obligation reconciles against this solution when its retry fires. The retired design also ran a bracketed best-effort expect over the *raw* spellings before settling — measured across the corpus, that pin never discharged a pending the wake machinery and this tier did not, so it is gone rather than kept.
-            for (slot, placeholder, written) in &pendings {
-                if context.metavar_solution(*placeholder).is_none() {
-                    let slot_ty = original
-                        .clone()
-                        .nth(*slot, |k| elaborated[k].clone())
-                        .expect("pending slot is within the telescope");
-                    // The turnaround has run and no later slot opens through this one, so nothing is left to give this expectation structure. A form that can be synthesized takes its product *here* rather than at the item's drain, so the rest of the item sees a real type — a projection off the result would otherwise check against a metavariable that only settles after every expression around it.
-                    let checked = match crate::settle_against(context, written, &slot_ty)? {
-                        Some(settled) => settled,
-                        None => check(context, written, slot_ty)?,
-                    };
-                    context.solve_metavar(*placeholder, checked.clone());
-                    elaborated[*slot] = checked;
-                }
+    if !pendings.is_empty() {
+        // The force tier — the retired settle, kept: a pending still undischarged after the turnaround above is checked now, under whatever it pinned. A lambda whose domain only its own body can ground is grounded by that body here, exactly as the settle once grounded it; the placeholder takes the checked term, so no pending outlives its apply undischarged. The parked copy of the obligation reconciles against this solution when its retry fires. The retired design also ran a bracketed best-effort expect over the *raw* spellings before settling — measured across the corpus, that pin never discharged a pending the wake machinery and this tier did not, so it is gone rather than kept.
+        //
+        // The tier runs in both modes. In checking mode the turnaround above has consulted the expectation; in inference mode there is no expectation to consult, and a `let z = id((1, true))` left its tuple parked until the item's drain, where `z.0` had already met a bare metavariable. Either way no later slot opens through this one, so the tier's premise holds: nothing is left to give the expectation structure, and an inferred call commits to its argument's product exactly as a bare literal does.
+        for (slot, placeholder, written) in &pendings {
+            if context.metavar_solution(*placeholder).is_none() {
+                let slot_ty = original
+                    .clone()
+                    .nth(*slot, |k| elaborated[k].clone())
+                    .expect("pending slot is within the telescope");
+                // A form that can be synthesized takes its product *here* rather than at the item's drain, so the rest of the item sees a real type — a projection off the result would otherwise check against a metavariable that only settles after every expression around it.
+                let checked = match crate::settle_against(context, written, &slot_ty)? {
+                    Some(settled) => settled,
+                    None => check(context, written, slot_ty)?,
+                };
+                context.solve_metavar(*placeholder, checked.clone());
+                elaborated[*slot] = checked;
             }
+        }
 
-            // The authoritative turnaround, through fully settled arguments.
+        // The authoritative turnaround, through fully settled arguments.
+        if let Mode::Check(expected) = &mode {
             expect(context, term, &output, expected)?;
         }
     }

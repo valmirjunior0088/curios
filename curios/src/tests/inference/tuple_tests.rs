@@ -169,3 +169,34 @@ fn a_synthesized_labeled_product_reports_its_labels() {
         "expected the synthesized product to carry its labels:\n{report}"
     );
 }
+
+// An inferred call has no expectation to turn around, so its force tier is the only thing that can settle a tuple argument before the drain. Left to the drain, `z.0` met a bare metavariable and was refused as a projection from a non-tuple.
+#[test]
+fn a_tuple_argument_settles_inside_an_inferred_call() {
+    let source = r#"
+        use /std/{Nat, Bool, Handle};
+        let id(@A : Type, a : A) -> A = a;
+        let z = id((1, true));
+        /std/print(Nat/to_str(z.0))
+        "#;
+
+    assert_eq!(run(source), b"1");
+}
+
+// Settling inside the call commits to the argument's own product, so a later labeled annotation can no longer relabel it — the same commitment a bare `let z = (1, true)` makes. Pinned so the trade is visible: a program that relied on the drain-time pin is now refused by the same report as the bare literal.
+#[test]
+fn an_inferred_call_commits_to_the_product_as_a_bare_literal_does() {
+    let source = r#"
+        use /std/{Nat, Bool};
+        let id(@A : Type, a : A) -> A = a;
+        let z = id((1, true));
+        let w : {a: Nat, b: Bool} = z;
+        /std/print("unreachable")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("inferred: {Nat, Bool}") && report.contains("expected: {a: Nat, b: Bool}"),
+        "expected the bare literal's mismatch:\n{report}"
+    );
+}
