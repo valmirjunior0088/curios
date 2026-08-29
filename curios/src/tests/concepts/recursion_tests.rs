@@ -132,3 +132,19 @@ fn a_parameterized_witness_group_resolves_under_its_premises() {
 
     assert_eq!(run(source), b"1[2[]]");
 }
+
+// A member may also recurse through its own entry inside the group: the group's binder covers every member, itself included. This is also the program that once ran the CPS inliner without bound — the knot's forcing function, initializer and built closure reach one another through a definition rather than a call — and it holds the inliner's recursion verdict to what an inline copies.
+#[test]
+fn a_group_member_also_resolves_through_its_own_entry() {
+    let source = r#"
+        use /std/{Nat, Str, Show, Handle};
+        induct A : pub Type | a(Nat) | aa(A) | ab(B) and B : pub Type | b(Nat) | ba(A) end
+        satisfy Show(A) {
+            show(x) = match x | a(n) => Nat/to_str(n) | aa(y) => Str/concat("(", Str/concat(Show/show(y), ")")) | ab(y) => Show/show(y) end,
+        }
+        and Show(B) { show(x) = match x | b(n) => Nat/to_str(n) | ba(y) => Show/show(y) end, }
+        /std/print(Show/show(A/aa(A/ab(B/ba(A/a(7))))))
+        "#;
+
+    assert_eq!(run(source), b"(7)");
+}

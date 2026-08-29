@@ -9,8 +9,8 @@ use {
         value::{Bail, Closure, Value},
     },
     crate::{
-        Atom, Constant, FunctionId, Module, Rhs, SequenceOp, Statement, StatementId, ValueId,
-        walk::control_blocks,
+        Atom, BlockId, Constant, FunctionId, Module, Rhs, SequenceOp, Statement, StatementId,
+        ValueId, walk::control_blocks,
     },
     std::{
         collections::{BTreeMap, BTreeSet, HashMap},
@@ -53,6 +53,9 @@ pub(super) fn reify_check(
             // A closure over nothing needs no specialized copy — see `reify_closure`.
             if closure.env.borrow().is_empty() && scope.is_item_bound(module, closure.function) {
                 return Ok(());
+            }
+            if scope.escapes_knot(module, closure.function) {
+                return Err(Bail::Unsupported);
             }
             // Captures first, then the copy, in `reify_closure`'s order. The real run pays a subset of these charges, so charging the same amounts *in the same sequence* is what makes "the probe fits" imply "the real run fits". The order is the real run's, not this one's: a memo key cannot be formed until the captures have atoms.
             for (_, held) in closure.env.borrow().iter() {
@@ -165,6 +168,10 @@ fn reify_closure(
     if captures.is_empty() && scope.is_item_bound(module, closure.function) {
         return Ok(Atom::Function(closure.function));
     }
+    // A knot's own function stays in its initializer — see `ReifyScope::escapes_knot`.
+    if scope.escapes_knot(module, closure.function) {
+        return Err(Bail::Unsupported);
+    }
     let mut substitution = BTreeMap::new();
     for (value, held) in &captures {
         substitution.insert(*value, reify(module, held, budget, out, scope)?);
@@ -225,6 +232,12 @@ pub(super) struct ReifyScope {
     local: HashMap<Specialization, Atom>,
     shared: HashMap<Specialization, (Atom, usize)>,
     position: Option<usize>,
+    /// Every function bound within a knot member's initializer — in its blocks, or in the body of a function so bound, transitively — mapped to that initializer's root block. See [`ReifyScope::escapes_knot`].
+    knot_inits: Option<BTreeMap<FunctionId, BlockId>>,
+    /// The blocks an initializer's own region spans, computed once per initializer asked about.
+    init_regions: BTreeMap<BlockId, BTreeSet<BlockId>>,
+    /// The block the current candidate stands in, or `None` at item level.
+    owner: Option<BlockId>,
 }
 
 impl ReifyScope {
@@ -237,15 +250,39 @@ impl ReifyScope {
             local: HashMap::new(),
             shared: HashMap::new(),
             position: None,
+            knot_inits: None,
+            init_regions: BTreeMap::new(),
+            owner: None,
         }
     }
 
     /// Drop the previous replacement's copies before reifying the next one's value.
     ///
-    /// The memo is scoped to one replacement because a copy is bound where it is spliced: the `Functions` statement goes immediately before *its* candidate, so the function it binds is in scope for that candidate and for nothing that does not follow it. Carrying an atom into the next replacement would name a function bound in a block that need not dominate it. The pass-stable facts above are untouched.
-    pub(super) fn begin_replacement(&mut self, position: Option<usize>) {
+    /// The memo is scoped to one replacement because a copy is bound where it is spliced: the `Functions` statement goes immediately before *its* candidate, so the function it binds is in scope for that candidate and for nothing that does not follow it. Carrying an atom into the next replacement would name a function bound in a block that need not dominate it. The pass-stable facts above are untouched. `owner` is the block the candidate stands in, which [`ReifyScope::escapes_knot`] reads.
+    pub(super) fn begin_replacement(&mut self, position: Option<usize>, owner: Option<BlockId>) {
         self.local.clear();
         self.position = position;
+        self.owner = owner;
+    }
+
+    /// Whether copying `function` for the current candidate would carry it out of the knot initializer it is bound in.
+    ///
+    /// A recursive value's dictionary of methods is built by its initializer, so the closures it holds are functions bound *inside* that initializer, and a call that projects one — `Show/show(dict)` — is a closed candidate whose result is such a closure. Materialized as a copy where the candidate stands, the copy carries the same candidate, so the next round folds it again into another copy: the recursive dispatch is unrolled one level per round, linearly for two members that resolve through each other and exponentially once a member also reaches itself, and only the round limit ends it. A copy taken *within* the initializer's own blocks is the fold a parser knot's construction relies on and stays; one taken outside them — at item level, or inside any function's body, the knot's own included — is the unrolling, and is declined so the candidate stays the call it was.
+    pub(super) fn escapes_knot(&mut self, module: &Module, function: FunctionId) -> bool {
+        let knot_inits = self
+            .knot_inits
+            .get_or_insert_with(|| knot_bound_functions(module));
+        let Some(&init) = knot_inits.get(&function) else {
+            return false;
+        };
+        let Some(owner) = self.owner else {
+            return true;
+        };
+        let region = self
+            .init_regions
+            .entry(init)
+            .or_insert_with(|| control_blocks(module, init).into_iter().collect());
+        !region.contains(&owner)
     }
 
     /// The copy already materialized for this specialization, if one is in scope here.
@@ -310,6 +347,43 @@ impl ReifyScope {
         self.weights.insert(function, weight);
         weight
     }
+}
+
+/// Every function bound within a knot member's initializer, mapped to that initializer's root block: the functions a `Functions` statement in the initializer's blocks binds, and — since a function bound there may bind further ones in its own body — everything bound within those, transitively.
+fn knot_bound_functions(module: &Module) -> BTreeMap<FunctionId, BlockId> {
+    let mut bound = BTreeMap::new();
+    for &item in module.items() {
+        let Some(Statement::Rec { group }) = module.statement(item) else {
+            continue;
+        };
+        let Some(group) = module.rec_group(*group) else {
+            continue;
+        };
+        for member in &group.values {
+            let mut roots = vec![member.init];
+            while let Some(root) = roots.pop() {
+                for block in control_blocks(module, root) {
+                    let Some(definition) = module.block(block) else {
+                        continue;
+                    };
+                    for &statement in &definition.statements {
+                        let Some(Statement::Functions { functions }) = module.statement(statement)
+                        else {
+                            continue;
+                        };
+                        for &function in functions {
+                            if bound.insert(function, member.init).is_none()
+                                && let Some(function) = module.function(function)
+                            {
+                                roots.push(function.body);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    bound
 }
 
 /// Every function bound at item level.

@@ -114,3 +114,134 @@ fn a_block_candidates_copy_is_bound_at_item_level() {
         "make, the two hosts, and the shared copy:\n{module}"
     );
 }
+
+/// A recursive value's dictionary: `rec { dict = init { method(x) = x; product(method, 0) } }`, with `get(d) = d.0` bound at item level to project the method out.
+fn define_knot(builder: &mut ErsdBuilder) -> (ValueId, FunctionId, FunctionId) {
+    let schema = builder.product(ProductSchema {
+        debug_name: Some("Dict".into()),
+        fields: vec![
+            Field::opaque(Some("method".into())),
+            Field::opaque(Some("mark".into())),
+        ],
+        shared: false,
+    });
+    let dict = builder.value(Some("dict".into()));
+    let method = builder.reserve_function();
+
+    builder.open_block();
+    let x = builder.value(Some("x".into()));
+    builder.open_block();
+    let method_body = builder.seal_block(Terminator::Return(Atom::Value(x)));
+    builder.define_function(method, Some("method".into()), vec![x], method_body);
+    builder.let_functions(vec![method]);
+    let zero = builder.constant(Constant::Nat(0));
+    let built = builder.let_value(
+        None,
+        Rhs::Product {
+            schema,
+            fields: vec![Atom::Function(method), Atom::Constant(zero)],
+        },
+    );
+    let init = builder.seal_block(Terminator::Return(Atom::Value(built)));
+    let group = builder.rec_group(vec![], vec![(dict, init)]);
+    builder.item_rec(group);
+
+    let get = builder.reserve_function();
+    let d = builder.value(Some("d".into()));
+    builder.open_block();
+    let projected = builder.let_value(
+        None,
+        Rhs::Project {
+            schema,
+            product: Atom::Value(d),
+            field: 0,
+        },
+    );
+    let get_body = builder.seal_block(Terminator::Return(Atom::Value(projected)));
+    builder.define_function(get, Some("get".into()), vec![d], get_body);
+    builder.item_functions(vec![get]);
+
+    (dict, method, get)
+}
+
+/// A candidate outside the knot — `get(dict)` in a host of its own — folds to a closure over `method`, which is bound inside the knot's initializer. Copied out to the host it would carry the knot's dispatch with it: this is the shape that unrolled a mutually recursive witness group one level per round, exponentially once a member also reached itself. The candidate is left the call it was, and nothing is copied.
+#[test]
+fn a_knots_function_is_not_copied_out_of_its_initializer() {
+    let mut builder = ErsdBuilder::new();
+    let (dict, _, get) = define_knot(&mut builder);
+    let host = builder.reserve_function();
+    builder.open_block();
+    let projected = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Function(get),
+            arguments: vec![Atom::Value(dict)],
+        },
+    );
+    let host_body = builder.seal_block(Terminator::Return(Atom::Value(projected)));
+    builder.define_function(host, Some("host".into()), vec![], host_body);
+    builder.item_functions(vec![host]);
+    let zero = builder.constant(Constant::Nat(0));
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(Atom::Constant(zero)));
+    builder.set_entry(entry);
+    let mut module = builder.finalize().expect("the fixture verifies");
+    let before = live_functions(&module);
+
+    assert!(
+        !evaluate_closed_terms(&mut module),
+        "the candidate must stay a call:\n{module}"
+    );
+    assert_eq!(
+        live_functions(&module),
+        before,
+        "nothing is copied:\n{module}"
+    );
+}
+
+/// Within the initializer the same closure still folds: a candidate there — `pick(method)` with `pick(f) = f` — is the parser-knot construction the fold exists for, and its copy is bound where the knot's own blocks can see it.
+#[test]
+fn a_knots_function_still_folds_within_its_initializer() {
+    let mut builder = ErsdBuilder::new();
+    let pick = builder.reserve_function();
+    let f = builder.value(Some("f".into()));
+    builder.open_block();
+    let pick_body = builder.seal_block(Terminator::Return(Atom::Value(f)));
+    builder.define_function(pick, Some("pick".into()), vec![f], pick_body);
+    builder.item_functions(vec![pick]);
+
+    let dict = builder.value(Some("dict".into()));
+    let method = builder.reserve_function();
+    builder.open_block();
+    let x = builder.value(Some("x".into()));
+    builder.open_block();
+    let method_body = builder.seal_block(Terminator::Return(Atom::Value(x)));
+    builder.define_function(method, Some("method".into()), vec![x], method_body);
+    builder.let_functions(vec![method]);
+    let picked = builder.let_value(
+        None,
+        Rhs::Apply {
+            callee: Atom::Function(pick),
+            arguments: vec![Atom::Function(method)],
+        },
+    );
+    let init = builder.seal_block(Terminator::Return(Atom::Value(picked)));
+    let group = builder.rec_group(vec![], vec![(dict, init)]);
+    builder.item_rec(group);
+    let zero = builder.constant(Constant::Nat(0));
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(Atom::Constant(zero)));
+    builder.set_entry(entry);
+    let mut module = builder.finalize().expect("the fixture verifies");
+    let before = live_functions(&module);
+
+    assert!(
+        evaluate_closed_terms(&mut module),
+        "the candidate inside the initializer folds:\n{module}"
+    );
+    assert_eq!(
+        live_functions(&module) - before,
+        1,
+        "one copy of the method, bound in the initializer:\n{module}"
+    );
+}

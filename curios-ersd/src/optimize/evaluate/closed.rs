@@ -122,23 +122,6 @@ fn apply(module: &mut Module, planned: Vec<Planned>) -> bool {
         if reify_pool == 0 {
             break;
         }
-        // Dry-run first: a plan that cannot fully materialize is skipped before anything is emitted, so nothing is ever stranded.
-        {
-            let mut probe = ReifyBudget::within(reify_pool);
-            let ok = match &plan.kind {
-                Kind::Value(value) => reify_check(module, value, &mut probe, &mut scope).is_ok(),
-                Kind::Foreign(_, values) | Kind::Call(_, values) => {
-                    reify_check_all(module, values, &mut probe, &mut scope).is_ok()
-                }
-            };
-            if !ok {
-                continue;
-            }
-        }
-        let mut spliced = Vec::new();
-        let mut budget = ReifyBudget::within(reify_pool);
-        // The probe above shares nothing, so it charges at least what this run will; the memos only ever remove copies from under a gate that already fit without them.
-        //
         // **Where the group is bound, which is not where the candidate stands.** Every statement a replacement emits is closed by construction — interned constants, functions [`ReifyScope::outward_ok`] proved item-bound, and earlier statements of the same group — so the group can be bound ahead of the *item* enclosing the candidate instead of inside the candidate's own block. Item bindings are ambient for everything after them, so that puts it in scope at the candidate and at every candidate after it, and gives a block-owned candidate an item position to share from.
         //
         // Binding it in the block instead is what made the same grammar cost `n² + 2` copies where the identical applications written at item level cost `n + 2`: a group bound inside a block that need not dominate anything contributed to no other replacement, so every definition re-materialized the whole chain below it.
@@ -156,7 +139,30 @@ fn apply(module: &mut Module, planned: Vec<Planned>) -> bool {
             },
         };
         let hoisting = plan.owner != splice_owner;
-        scope.begin_replacement(position);
+        // Before the dry run, which reads the candidate's block through the same gates the real run does.
+        scope.begin_replacement(
+            position,
+            match plan.owner {
+                Owner::Block(block) => Some(block),
+                Owner::Items => None,
+            },
+        );
+        // Dry-run first: a plan that cannot fully materialize is skipped before anything is emitted, so nothing is ever stranded.
+        {
+            let mut probe = ReifyBudget::within(reify_pool);
+            let ok = match &plan.kind {
+                Kind::Value(value) => reify_check(module, value, &mut probe, &mut scope).is_ok(),
+                Kind::Foreign(_, values) | Kind::Call(_, values) => {
+                    reify_check_all(module, values, &mut probe, &mut scope).is_ok()
+                }
+            };
+            if !ok {
+                continue;
+            }
+        }
+        let mut spliced = Vec::new();
+        let mut budget = ReifyBudget::within(reify_pool);
+        // The probe above shares nothing, so it charges at least what this run will; the memos only ever remove copies from under a gate that already fit without them.
         let rhs = match plan.kind {
             Kind::Value(value) => {
                 match reify(module, &value, &mut budget, &mut spliced, &mut scope) {
