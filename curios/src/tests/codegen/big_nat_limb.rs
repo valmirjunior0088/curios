@@ -12,7 +12,7 @@ use {
 const SPIN: &str = r#"
 use /std/{Str, Nat, BigNat, Option, Io};
 
-rec spin(n: Nat, acc: BigNat) -> BigNat =
+let spin(n: Nat, acc: BigNat) -> BigNat =
     match n: (_) => BigNat
     | 0 => acc
     | k + 1 => spin(k, BigNat/succ(acc))

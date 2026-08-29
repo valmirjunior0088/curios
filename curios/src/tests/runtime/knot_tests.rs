@@ -73,7 +73,7 @@ fn a_stepper_a_fold_applies_inside_an_initializer_forces_what_it_reads() {
                 use /std/{{Nat, Str, Bytes, Byte, List, Io, rand, print}};
                 let main: Io({{}}) =
                     let bs = rand/bytes(1)!;
-                    rec {first}
+                    let {first}
                     and {second};
                     print(Nat/to_str(table));
                 main

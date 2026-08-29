@@ -31,25 +31,25 @@ end
 let cells: Nat = 10000;
 let ballast_cells: Nat = BALLAST_CELLS;
 
-rec build(n: Nat, x: Nat, acc: Chain) -> Chain =
+let build(n: Nat, x: Nat, acc: Chain) -> Chain =
     match n: (_) => Chain
     | 0 => acc
     | m + 1; ih => build(m, 75 * x % 65537, Chain/cons(x, acc))
     end;
 
-rec step(rest: Chain, acc: Chain) -> Chain =
+let step(rest: Chain, acc: Chain) -> Chain =
     match rest: (_) => Chain
     | nil() => acc
     | cons(v, tail) => step(tail, Chain/cons((75 * v + 13) % 65537, acc))
     end;
 
-rec rounds(k: Nat, c: Chain) -> Chain =
+let rounds(k: Nat, c: Chain) -> Chain =
     match k: (_) => Chain
     | 0 => c
     | m + 1; ih => rounds(m, step(c, Chain/nil()))
     end;
 
-rec total(c: Chain, acc: Nat) -> Nat =
+let total(c: Chain, acc: Nat) -> Nat =
     match c: (_) => Nat
     | nil() => acc
     | cons(v, tail) => total(tail, (acc + v) % 1000003)
@@ -235,19 +235,19 @@ end
 
 let ballast_cells: Nat = BALLAST_CELLS;
 
-rec build(n: Nat, x: Nat, acc: Chain) -> Chain =
+let build(n: Nat, x: Nat, acc: Chain) -> Chain =
     match n: (_) => Chain
     | 0 => acc
     | m + 1; ih => build(m, 75 * x % 65537, Chain/cons(x, acc))
     end;
 
-rec drain(c: Chain, acc: Nat) -> Nat =
+let drain(c: Chain, acc: Nat) -> Nat =
     match c: (_) => Nat
     | nil() => acc
     | cons(v, tail) => drain(tail, (acc + v) % 1000003)
     end;
 
-rec walk(n: Nat, i: Nat, x: Nat, m: Map(Nat)) -> Map(Nat) =
+let walk(n: Nat, i: Nat, x: Nat, m: Map(Nat)) -> Map(Nat) =
     match n: (_) => Map(Nat)
     | 0 => m
     | k + 1; ih =>

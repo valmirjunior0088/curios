@@ -64,7 +64,7 @@ fn a_proof_at_an_arm_binder_head_is_rejected() {
 
         let leak(h : Holder) -> /std/Nat =
             match h
-            | hold(f) => f(rec b : /std/False = b; b)
+            | hold(f) => f(let b : /std/False = b; b)
             end;
 
         /std/print(/std/Nat/to_str(leak(make())))
@@ -80,7 +80,7 @@ fn a_proof_at_a_fold_binder_head_is_rejected() {
         let apply_it(fs : /std/List((/std/False) -> /std/Nat)) -> /std/Nat =
             match fs
             | [] => 0
-            | [head, ..tail] => head(rec b : /std/False = b; b)
+            | [head, ..tail] => head(let b : /std/False = b; b)
             end;
 
         /std/print(/std/Nat/to_str(apply_it([])))
@@ -99,7 +99,7 @@ fn a_proof_at_a_struct_projection_head_is_rejected() {
 
         let api : Api = Api { take = (p) => 7 };
 
-        let leak() -> /std/Nat = api.take(rec b : /std/False = b; b);
+        let leak() -> /std/Nat = api.take(let b : /std/False = b; b);
 
         /std/print(/std/Nat/to_str(leak()))
         "#,
@@ -138,7 +138,7 @@ fn a_proof_looping_through_a_projected_inner_group_is_rejected() {
         use /std/{Nat, Str, False};
 
         let f(n : Nat) -> False =
-            (rec g(m : Nat) -> False = f(m); g)(n);
+            (let g(m : Nat) -> False = f(m); g)(n);
 
         /std/print(match f(0) : (_) => Str end)
         "#,
@@ -154,7 +154,7 @@ fn a_proof_projecting_an_inner_group_that_does_not_call_back_is_accepted() {
         let outer(n : Nat) -> True =
             match n
             | 0 => True/qed()
-            | p + 1; _ => (rec keep(t : True) -> True = t; keep)(outer(p))
+            | p + 1; _ => (let keep(t : True) -> True = t; keep)(outer(p))
             end;
 
         let proved : True = outer(3);

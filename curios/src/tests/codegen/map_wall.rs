@@ -126,7 +126,7 @@ fn map_wall_spines_slope() {
 const KEY_OFNAT: &str = r#"
 use /std/{Str, Nat, Bytes, Option, Io};
 
-rec walk(n: Nat, x: Nat, s: Nat) -> Nat =
+let walk(n: Nat, x: Nat, s: Nat) -> Nat =
     match n: (_) => Nat
     | 0 => s
     | k + 1; ih =>
@@ -152,7 +152,7 @@ end
 const KEY_CONTROL: &str = r#"
 use /std/{Str, Nat, Bytes, Option, Io};
 
-rec walk(n: Nat, x: Nat, s: Nat) -> Nat =
+let walk(n: Nat, x: Nat, s: Nat) -> Nat =
     match n: (_) => Nat
     | 0 => s
     | k + 1; ih =>

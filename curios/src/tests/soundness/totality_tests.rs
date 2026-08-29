@@ -325,7 +325,7 @@ fn the_entrypoint_expression_is_not_a_blind_spot() {
         let consume(u : {{}}) -> {{}} = u;
 
         consume(
-            let forge(x : (rec Bad : Type = Sink(Bad); Bad)) -> {{}} = ();
+            let forge(x : (let Bad : Type = Sink(Bad); Bad)) -> {{}} = ();
             ()
         )
         "#
@@ -356,7 +356,7 @@ fn a_local_type_level_rec_through_an_arrow_is_diagnosed_too() {
         let consume(u : {}) -> {} = u;
 
         consume(
-            let forge(x : (rec Bad : Type = (Bad) -> /std/False; Bad)) -> {} = ();
+            let forge(x : (let Bad : Type = (Bad) -> /std/False; Bad)) -> {} = ();
             ()
         )
         "#,

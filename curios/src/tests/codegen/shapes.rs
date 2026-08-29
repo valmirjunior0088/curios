@@ -221,13 +221,13 @@ induct F: Type
 | right()
 end
 
-rec build(n: Nat, acc: List(F)) -> List(F) =
+let build(n: Nat, acc: List(F)) -> List(F) =
     match n: (_) => List(F)
     | 0 => acc
     | m + 1; ih => build(m, [..acc, match m % 2 | 0 => F/left() | _ => F/right() end])
     end;
 
-rec rounds(r: Nat, l: List(F), s: Nat) -> Nat =
+let rounds(r: Nat, l: List(F), s: Nat) -> Nat =
     match r: (_) => Nat
     | 0 => s
     | q + 1; ih =>
@@ -258,13 +258,13 @@ induct F: Type
 | right(Nat)
 end
 
-rec build(n: Nat, acc: List(F)) -> List(F) =
+let build(n: Nat, acc: List(F)) -> List(F) =
     match n: (_) => List(F)
     | 0 => acc
     | m + 1; ih => build(m, [..acc, match m % 2 | 0 => F/left(m) | _ => F/right(m) end])
     end;
 
-rec rounds(r: Nat, l: List(F), s: Nat) -> Nat =
+let rounds(r: Nat, l: List(F), s: Nat) -> Nat =
     match r: (_) => Nat
     | 0 => s
     | q + 1; ih =>

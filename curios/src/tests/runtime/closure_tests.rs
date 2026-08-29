@@ -155,7 +155,7 @@ fn nested_local_rec_runs_correctly() {
         run(r#"
         use /std/{Handle, Nat, Str, Bytes};
         let f(n : Nat) -> Nat =
-            (rec go(i : Nat) -> Nat =
+            (let go(i : Nat) -> Nat =
                 match i
                 | 0 => 0
                 | k + 1; ih => go(k) + 1
@@ -174,7 +174,7 @@ fn local_rec_calls_enclosing_rec_member() {
         run(r#"
         use /std/{Handle, Nat, Str, Bytes};
         let f(n : Nat) -> Nat =
-            (rec go(i : Nat) -> Nat =
+            (let go(i : Nat) -> Nat =
                 match i
                 | 0 => 0
                 | k + 1; ih => f(k) + go(k)
