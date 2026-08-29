@@ -144,3 +144,47 @@ fn a_refined_prelude_scrutinee_carries_the_family_universe_levels() {
 
     assert_eq!(run(source), b"2");
 }
+
+// A level that occurs only in a declaration's result sort is one no use site can choose, and `finalize_definition` minimizes it rather than minting a parameter for it. The group path generalizes the same signatures, so the same rule must hold there: a `rec` returning a type, and a `rec` proof whose family level sits only in its result, take no more parameters than the `let` beside them. Without this a definition's scheme depended on which path elaborated it — a fact no reader can see once a group is decided by whether a body names itself.
+#[test]
+fn a_rec_result_sort_level_is_minimized_like_a_let_s() {
+    let source = r#"
+        use /std/{Nat, Eq};
+        induct N : pub Type | z() | s(N) end
+        let f(n: N) -> Type = N;
+        rec g(n: N) -> Type =
+            match n
+            | z() => N
+            | s(m) => g(m)
+            end;
+        rec count(n: N) -> Nat =
+            match n
+            | z() => 0
+            | s(m) => count(m) + 1
+            end;
+        rec count_self(n: N) -> Eq(count(n), count(n)) =
+            match n
+            | z() => Eq/refl()
+            | s(m) => Eq/refl()
+            end;
+        /std/print("same")
+        "#;
+
+    let parameters = universe_parameters(source);
+
+    assert_eq!(
+        parameters.get("/f"),
+        Some(&0),
+        "the let's result-sort level became a parameter: {parameters:?}",
+    );
+    assert_eq!(
+        parameters.get("/g"),
+        Some(&0),
+        "the rec's result-sort level was generalized where the let's was minimized: {parameters:?}",
+    );
+    assert_eq!(
+        parameters.get("/count_self"),
+        Some(&0),
+        "the rec proof's family level was generalized: {parameters:?}",
+    );
+}

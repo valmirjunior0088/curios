@@ -876,11 +876,24 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         );
     }
 
-    // As for a single definition, the group's interface is its member signatures and registry telescopes; levels reachable only through a member body are internal and minimized rather than generalized.
+    // As for a single definition, the group's interface is its member signatures and registry telescopes; levels reachable only through a member body are internal and minimized rather than generalized, and so are the levels of a member's result sort that no member's domain mentions — see [`result_sort_only_metas`]. The rule is the one `finalize_definition` applies, read over the group: a level one member keeps in its interface stays there for all of them, since the group shares a context, and only a level every member confines to its result sort is determined. A group of one is then generalized exactly as the same signature would be as a `let`, which is what keeps the path a definition takes from showing in its scheme.
     let mut interface = types
         .iter()
         .flat_map(|type_| context.universe_metas_in(type_))
         .collect::<BTreeSet<_>>();
+    let mut determined = BTreeSet::new();
+    let mut kept = BTreeSet::new();
+    for type_ in &types {
+        let member_determined = result_sort_only_metas(context, type_);
+        for meta in context.universe_metas_in(type_) {
+            if !member_determined.contains(&meta) {
+                kept.insert(meta);
+            }
+        }
+        determined.extend(member_determined);
+    }
+    determined.retain(|meta| !kept.contains(meta));
+    interface.retain(|meta| !determined.contains(meta));
     for def in &defs {
         if let Some(induct_decl) = context.induct_decl(&def.name) {
             interface.extend(universe_metas(&induct_decl.arity));
@@ -890,10 +903,11 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
             }
         }
     }
-    let internal = bodies
+    let mut internal = bodies
         .iter()
         .flat_map(|body| context.universe_metas_in(body))
         .collect::<BTreeSet<_>>();
+    internal.extend(determined);
     let universe_context = context.finalize_universe_metas(interface, internal)?;
 
     // The group's members are monomorphic in their own universes, so every occurrence of one member inside the group — in a signature, a body, or a rebuilt registry telescope — denotes the group's own instance. Those occurrences were elaborated before the parameters existed and carry no instance at all until this rewrite gives them one.
