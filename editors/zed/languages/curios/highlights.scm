@@ -37,7 +37,7 @@
 (induct_body name: (identifier) @type)
 (struct_item name: (identifier) @type)
 (concept_item name: (identifier) @type)
-(satisfy_item concept: (path (identifier) @type .))
+(satisfy_member concept: (path (identifier) @type .))
 (constructor name: (identifier) @constructor)
 (constructor_pattern name: (identifier) @constructor)
 

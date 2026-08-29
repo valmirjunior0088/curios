@@ -140,3 +140,24 @@ fn parametric_witnesses_over_one_family_still_collide() {
         "expected the key collision, got: {message}"
     );
 }
+
+// A group's members register on their signatures before any body elaborates, so a member whose key another member already holds is refused as any duplicate is.
+#[test]
+fn a_group_member_with_a_taken_key_is_a_duplicate() {
+    let source = r#"
+        use /std/{Nat, Str};
+        pub concept Show(A : Type) : pub Type {
+            show(A) -> Str
+        }
+        induct A : pub Type | a(Nat) end
+        satisfy Show(A) { show(x) = "first", }
+        and Show(A) { show(x) = "second", }
+        /std/print("unreachable")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("duplicate witness of '/Show' for head '/A'"),
+        "expected the member refused as a duplicate:\n{report}"
+    );
+}

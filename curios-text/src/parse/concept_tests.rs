@@ -89,9 +89,10 @@ fn parse_witness_item() {
             cmp(a, b) = Order/lt() \
         } u";
     let entrypoint = source.parse::<Entrypoint>().unwrap();
-    let TopItem::Witness(witness) = &entrypoint.module.items[0] else {
+    let TopItem::Witness(witnesses) = &entrypoint.module.items[0] else {
         panic!("expected a witness declaration");
     };
+    let witness = &witnesses[0];
 
     assert_eq!(witness.concept, Name::from(["Ord".to_string()]));
     assert_eq!(witness.args.len(), 1);
@@ -163,6 +164,8 @@ fn witness_use_round_trip() {
         "concept Convert(A : Type, B : Type) : Type { convert : A } u",
         "satisfy Show(Nat) { show = f } u",
         "satisfy (@A : Type, use Show(A)) => Show(List(A)) { show = g } u",
+        "satisfy Show(Nat) { show = f } and Show(Bool) { show = g } u",
+        "satisfy Show(Nat) { show = f } and (@A : Type, use Show(A)) => Show(List(A)) { show = g } u",
         "f(use dict, x)",
         "(@A : Type, use Show(A), x : A) -> A",
     ] {
@@ -198,4 +201,14 @@ fn witness_telescope_requires_nonempty_separator_form() {
             "unexpectedly parsed {source:?}"
         );
     }
+}
+
+#[test]
+fn a_witness_group_prints_each_member_on_its_own_and_line() {
+    let source = "satisfy Show(Nat) { show = f } and Show(Bool) { show = g }\nu";
+    let entrypoint = source.parse::<Entrypoint>().unwrap();
+    assert_eq!(
+        entrypoint.to_string(),
+        "satisfy Show(Nat) {\n    show = f,\n}\nand Show(Bool) {\n    show = g,\n}\nu"
+    );
 }

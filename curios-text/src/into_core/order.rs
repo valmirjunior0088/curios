@@ -78,11 +78,16 @@ fn wrapper_owners(items: &[FlatItem]) -> HashMap<curios_core::Global, Qualifier>
 fn witness_rows(items: &[FlatItem], nodes: &[usize]) -> HashMap<Qualifier, Vec<usize>> {
     let mut rows: HashMap<Qualifier, Vec<usize>> = HashMap::new();
     for &node in nodes {
-        if let FlatItem::Let(let_) = &items[node]
-            && let Some(concept) = witness_concept(let_)
-            && let Some(qualifier) = concept.qualifier()
-        {
-            rows.entry(qualifier.clone()).or_default().push(node);
+        let lets = match &items[node] {
+            FlatItem::Let(let_) => std::slice::from_ref(let_),
+            FlatItem::Rec(lets) => lets.as_slice(),
+        };
+        for let_ in lets {
+            if let Some(concept) = witness_concept(let_)
+                && let Some(qualifier) = concept.qualifier()
+            {
+                rows.entry(qualifier.clone()).or_default().push(node);
+            }
         }
     }
     rows

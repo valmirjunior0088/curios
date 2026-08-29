@@ -27,6 +27,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Multi-parameter keying (tuple of every parameter head)
   - [x] `Lift` embeddings (`/syn/Lift(M, N)`; one witness per ordered pair, never chained)
   - [x] Orphan rule (a witness is declared where its concept, or a type in its key, is)
+  - [x] Witness groups (`satisfy C(A) { … } and D(B) { … }`, members resolving through one another)
   - [x] Concept-based operators (every infix, `&&`/`||` included, dispatches through a concept)
 - [ ] [Auto-derive: a witness whose body the compiler writes](roadmap/auto-derive-spec.md)
 - [x] Unified `struct` declarations (independent nominal and representation visibility)

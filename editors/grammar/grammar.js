@@ -207,9 +207,12 @@ module.exports = grammar({
 
     concept_field: ($) => choice(seq("use", field("type", $._term)), $.field_declaration),
 
+    // One witness, or a `satisfy C(A) { … } and D(B) { … }` group of witnesses that resolve through one another.
     satisfy_item: ($) =>
+      seq("satisfy", $.satisfy_member, repeat(seq("and", $.satisfy_member))),
+
+    satisfy_member: ($) =>
       seq(
-        "satisfy",
         optional(seq(field("parameters", $.parameters), "=>")),
         field("concept", $.path),
         optional(field("arguments", $.type_arguments)),

@@ -486,39 +486,46 @@ pub(super) fn parse_witness_entry<'a>() -> Parser<'a, WitnessEntry> {
         .or(parse_witness_field().map(WitnessEntry::Field))
 }
 
-// A witness declaration is anonymous: `satisfy Concept(args) { … }`, or `satisfy (params) => Concept(args) { … }` with a nonempty telescope. The keyword is the commit point — nothing else at item position begins with `satisfy`. The separator makes the parameterized form's terminal concept application explicit; an empty telescope must use the bare form instead.
-pub(super) fn parse_top_witness<'a>() -> Parser<'a, TopItem> {
-    catch(parse_keyword("satisfy")).flat_map(|()| {
+// One witness: `Concept(args) { … }`, or `(params) => Concept(args) { … }` with a nonempty telescope. The separator makes the parameterized form's terminal concept application explicit; an empty telescope must use the bare form instead.
+fn parse_witness_member<'a>() -> Parser<'a, TopWitness> {
+    catch(
+        parse_literal("(")
+            .and_keep(sep_by1_trailing(parse_func_sugar_param, || {
+                parse_literal(",")
+            }))
+            .and_drop(parse_literal(")"))
+            .and_drop(parse_literal("=>")),
+    )
+    .or(pure(vec![]))
+    .and(parse_name())
+    .and(
         catch(
             parse_literal("(")
-                .and_keep(sep_by1_trailing(parse_func_sugar_param, || {
-                    parse_literal(",")
-                }))
-                .and_drop(parse_literal(")"))
-                .and_drop(parse_literal("=>")),
+                .and_keep(sep_by0_trailing(|| lazy(parse_term), || parse_literal(",")))
+                .and_drop(parse_literal(")")),
         )
-        .or(pure(vec![]))
-        .and(parse_name())
-        .and(
-            catch(
-                parse_literal("(")
-                    .and_keep(sep_by0_trailing(|| lazy(parse_term), || parse_literal(",")))
-                    .and_drop(parse_literal(")")),
-            )
-            .or(pure(vec![])),
-        )
-        .and_drop(parse_literal("{"))
-        .and(sep_by0_trailing(parse_witness_entry, || parse_literal(",")))
-        .and_drop(parse_literal("}"))
-        .map(move |(((params, concept), args), entries)| {
-            TopItem::Witness(TopWitness {
-                params,
-                concept,
-                args,
-                entries,
-            })
-        })
+        .or(pure(vec![])),
+    )
+    .and_drop(parse_literal("{"))
+    .and(sep_by0_trailing(parse_witness_entry, || parse_literal(",")))
+    .and_drop(parse_literal("}"))
+    .map(|(((params, concept), args), entries)| TopWitness {
+        params,
+        concept,
+        args,
+        entries,
     })
+}
+
+// A witness declaration is anonymous: `satisfy Concept(args) { … }`, or a group `satisfy C(A) { … } and D(B) { … }` of witnesses that resolve through one another. The keyword is the commit point — nothing else at item position begins with `satisfy`. A witness has no `pub`, so neither does an `and` member.
+pub(super) fn parse_top_witness<'a>() -> Parser<'a, TopItem> {
+    catch(parse_keyword("satisfy"))
+        .and_keep(parse_witness_member())
+        .and(many0(|| {
+            catch(parse_keyword("and")).and_keep(parse_witness_member())
+        }))
+        .map(|(first, rest)| iter::once(first).chain(rest).collect())
+        .map(TopItem::Witness)
 }
 
 pub(crate) fn parse_top_item<'a>() -> Parser<'a, TopItem> {

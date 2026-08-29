@@ -4206,6 +4206,21 @@
   {
     "type": "satisfy_item",
     "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "satisfy_member",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "satisfy_member",
+    "named": true,
     "fields": {
       "arguments": {
         "multiple": false,

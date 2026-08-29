@@ -2,7 +2,7 @@
 //!
 //! A witness declaration registers before its body elaborates, so a body may resolve the very entry it is defining. That makes the definition name itself, which no `let` can express: cross-definition value recursion exists only inside a `rec` item, so such a witness becomes a group of one and its self-reference is bound by that group rather than left free for the kernel to refuse.
 //!
-//! A cycle between *two* witnesses has no such binding, and the boundary is what these pin: one witness naming a later one is ordinary and works, because the lowerer orders a witness ahead of what dispatches through it; two naming each other deadlock that ordering and are refused here, in the language's own terms, rather than reaching the kernel as an unbound internal name.
+//! A cycle between *two* witnesses has no such binding unless the source declares it: one witness naming a later one is ordinary and works, because the lowerer orders a witness ahead of what dispatches through it; two naming each other are declared as one `satisfy … and …` group, whose members register before any body elaborates and are bound in one another, and an undeclared pair is refused here, in the language's own terms, rather than reaching the kernel as an unbound internal name.
 
 use crate::tests::{error, run};
 
@@ -77,7 +77,7 @@ fn two_witnesses_resolving_each_other_are_refused_with_the_way_out() {
         "expected the cycle named by its two concept applications:\n{report}"
     );
     assert!(
-        report.contains("let ... and"),
+        report.contains("satisfy C(A) { ... } and D(B) { ... }"),
         "expected the report to name the way out:\n{report}"
     );
 }
@@ -98,4 +98,37 @@ fn mutual_recursion_hoisted_into_one_group_is_admitted() {
         "#;
 
     assert_eq!(run(source), b"5");
+}
+
+// The declared form: one `satisfy … and …` group, every member registered before any body elaborates, so each resolves through the other's entry and the kernel meets one recursive group.
+#[test]
+fn a_witness_group_resolves_its_members_through_the_table() {
+    let source = r#"
+        use /std/{Nat, Str, Show, Handle};
+        induct A : pub Type | a(Nat) | ab(B) and B : pub Type | b(Nat) | ba(A) end
+        satisfy Show(A) { show(x) = match x | a(n) => Nat/to_str(n) | ab(y) => Show/show(y) end, }
+        and Show(B) { show(x) = match x | b(n) => Nat/to_str(n) | ba(y) => Show/show(y) end, }
+        /std/print(Show/show(A/ab(B/ba(A/a(5)))))
+        "#;
+
+    assert_eq!(run(source), b"5");
+}
+
+// A parameterized group: each member's premises are its own, and the group shares one universe context.
+#[test]
+fn a_parameterized_witness_group_resolves_under_its_premises() {
+    let source = r#"
+        use /std/{Nat, Str, Show, Handle};
+        induct Tree(A : Type) : pub Type | node(A, Forest(A))
+        and Forest(A : Type) : pub Type | nil() | cons(Tree(A), Forest(A)) end
+        satisfy (@A : Type, use Show(A)) => Show(Tree(A)) {
+            show(t) = match t | node(a, f) => Str/concat(Show/show(a), Str/concat("[", Str/concat(Show/show(f), "]"))) end,
+        }
+        and (@A : Type, use Show(A)) => Show(Forest(A)) {
+            show(f) = match f | nil() => "" | cons(t, rest) => Str/concat(Show/show(t), Show/show(rest)) end,
+        }
+        /std/print(Show/show(Tree/node(1, Forest/cons(Tree/node(2, Forest/nil()), Forest/nil()))))
+        "#;
+
+    assert_eq!(run(source), b"1[2[]]");
 }

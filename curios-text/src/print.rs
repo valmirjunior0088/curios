@@ -1629,7 +1629,24 @@ fn print_top_concept(item: TopConcept) -> Printer {
     ])
 }
 
-fn print_top_witness(item: TopWitness) -> Printer {
+fn print_top_witness(items: Vec<TopWitness>) -> Printer {
+    let mut iter = items.into_iter();
+    let first = iter.next().expect("a `satisfy` item has a member");
+    let rest = iter
+        .map(|item| {
+            let start = witness_member_start(&item);
+            // As for a `let` group: the separator stays outside the mark, so a comment leading this member opens a line of its own above `and`.
+            flat([
+                hard_line(),
+                marked(start, || print_witness_member(item, "and")),
+            ])
+        })
+        .collect::<Vec<_>>();
+
+    flat([print_witness_member(first, "satisfy"), flat(rest)])
+}
+
+fn print_witness_member(item: TopWitness, keyword: &'static str) -> Printer {
     let params = if item.params.is_empty() {
         pure("")
     } else {
@@ -1657,7 +1674,7 @@ fn print_top_witness(item: TopWitness) -> Printer {
     };
 
     flat([
-        pure("satisfy"),
+        pure(keyword),
         params,
         pure(" "),
         app,
@@ -1672,6 +1689,22 @@ fn print_top_witness(item: TopWitness) -> Printer {
 }
 
 /// Where a witness-body entry begins, for the mark that pays a comment riding the opening brace's line.
+/// Where an `and` witness clause begins: its earliest spanned component — a telescope parameter's type, a concept argument, or the first entry — since the keyword, the concept name and the braces record no span. [`signature_start`]'s rule for a `let` clause.
+fn witness_member_start(item: &TopWitness) -> Option<usize> {
+    [
+        item.params
+            .first()
+            .and_then(|param| param.type_.span().map(|span| span.start)),
+        item.args
+            .first()
+            .and_then(|arg| arg.span().map(|span| span.start)),
+        item.entries.first().and_then(witness_entry_start),
+    ]
+    .into_iter()
+    .flatten()
+    .min()
+}
+
 fn witness_entry_start(entry: &WitnessEntry) -> Option<usize> {
     let term = match entry {
         WitnessEntry::Use(term) => term,

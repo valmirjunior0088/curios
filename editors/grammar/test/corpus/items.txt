@@ -338,6 +338,66 @@ pub concept Ord(A: Type): Type {
                   (identifier))))))))))
 
 ================================================================================
+A witness group, each member resolving through the other
+================================================================================
+
+satisfy Show(A) {
+    show(x) = Show/show(x),
+}
+and (@B: Type) => Show(B) {
+    show(x) = Show/show(x),
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (satisfy_item
+    (satisfy_member
+      (path
+        (identifier))
+      (type_arguments
+        (path
+          (identifier)))
+      (witness_entry
+        (field_definition
+          (identifier)
+          (sugar_parameters
+            (sugar_parameter
+              (identifier)))
+          (call
+            (path
+              (identifier)
+              (identifier))
+            (arguments
+              (argument
+                (path
+                  (identifier))))))))
+    (satisfy_member
+      (parameters
+        (parameter
+          (identifier)
+          (sort)))
+      (path
+        (identifier))
+      (type_arguments
+        (path
+          (identifier)))
+      (witness_entry
+        (field_definition
+          (identifier)
+          (sugar_parameters
+            (sugar_parameter
+              (identifier)))
+          (call
+            (path
+              (identifier)
+              (identifier))
+            (arguments
+              (argument
+                (path
+                  (identifier))))))))))
+
+================================================================================
 Witnesses, bare and parameterized
 ================================================================================
 
@@ -354,72 +414,74 @@ satisfy (@A: Type, use Show(A)) => Show(List(A)) {
 
 (source_file
   (satisfy_item
-    (path
-      (identifier))
-    (type_arguments
+    (satisfy_member
       (path
-        (identifier)))
-    (witness_entry
-      (field_definition
-        (identifier)
-        (sugar_parameters
-          (sugar_parameter
-            (identifier)))
-        (call
-          (path
-            (identifier)
-            (identifier))
-          (arguments
-            (argument
-              (path
-                (identifier))))))))
-  (satisfy_item
-    (parameters
-      (parameter
-        (identifier)
-        (sort))
-      (parameter
-        (call
-          (path
-            (identifier))
-          (arguments
-            (argument
-              (path
-                (identifier)))))))
-    (path
-      (identifier))
-    (type_arguments
-      (call
+        (identifier))
+      (type_arguments
         (path
-          (identifier))
-        (arguments
-          (argument
+          (identifier)))
+      (witness_entry
+        (field_definition
+          (identifier)
+          (sugar_parameters
+            (sugar_parameter
+              (identifier)))
+          (call
             (path
-              (identifier))))))
-    (witness_entry
+              (identifier)
+              (identifier))
+            (arguments
+              (argument
+                (path
+                  (identifier)))))))))
+  (satisfy_item
+    (satisfy_member
+      (parameters
+        (parameter
+          (identifier)
+          (sort))
+        (parameter
+          (call
+            (path
+              (identifier))
+            (arguments
+              (argument
+                (path
+                  (identifier)))))))
       (path
-        (identifier)))
-    (witness_entry
-      (field_definition
-        (identifier)
-        (path
-          (identifier))))
-    (witness_entry
-      (field_definition
-        (identifier)
-        (sugar_parameters
-          (sugar_parameter
-            (identifier)))
+        (identifier))
+      (type_arguments
         (call
           (path
-            (identifier)
             (identifier))
           (arguments
             (argument
-              (number))
-            (argument
               (path
-                (identifier)))))))))
+                (identifier))))))
+      (witness_entry
+        (path
+          (identifier)))
+      (witness_entry
+        (field_definition
+          (identifier)
+          (path
+            (identifier))))
+      (witness_entry
+        (field_definition
+          (identifier)
+          (sugar_parameters
+            (sugar_parameter
+              (identifier)))
+          (call
+            (path
+              (identifier)
+              (identifier))
+            (arguments
+              (argument
+                (number))
+              (argument
+                (path
+                  (identifier))))))))))
 
 ================================================================================
 An annotated top-level let is an item even when a term follows

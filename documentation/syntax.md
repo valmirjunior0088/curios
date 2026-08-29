@@ -903,6 +903,17 @@ satisfy (@A: Type, use Show(A)) => Show(List(A)) {
 
 Every registered witness is keyed by the concept name and the tuple of rigid heads of every concept parameter. Each head must reduce to an inductive, structure, intrinsic type, or supported higher-kinded type constructor — including a *partially applied* family written as a lambda, `(A: Type) => State(S, A)`, which keys on the applied head. Remaining arguments below those heads are checked by unification after lookup.
 
+Two witnesses that resolve through each other are declared as one group with `and`; each member is a whole witness, with its own telescope where it has one, and the group's members register before any body elaborates. A lone witness may resolve through its own entry with nothing said; two that resolve through each other without being declared as a group are refused, naming both.
+
+```crs
+satisfy Show(Tree) {
+    show(t) = match t | leaf(n) => Nat/to_str(n) | node(f) => Show/show(f) end,
+}
+and Show(Forest) {
+    show(f) = match f | nil() => "" | cons(t, rest) => Str/concat(Show/show(t), Show/show(rest)) end,
+}
+```
+
 A globally registered witness therefore requires a concept with at least one parameter. A parameterless concept can still be used through an ordinary value supplied in a local `use` scope.
 
 For example, witnesses for `Into(Nat, Str)` and `Into(Nat, Bool)` have distinct keys. A call must determine both parameters from its explicit arguments, expected result, or an explicitly supplied witness before automatic lookup can proceed.
@@ -1011,4 +1022,5 @@ The standard equality operations include reflexivity, symmetry, transitivity, co
 | `choose ... end` | Ordered guarded ladder |
 | `satisfy C(args) { ... }` | Globally registered anonymous witness |
 | `satisfy (@A: Type, use C(A)) => D(args) { ... }` | Parameterized globally registered anonymous witness |
+| `satisfy C(A) { ... } and D(B) { ... }` | Witnesses that resolve through each other, declared as one group |
 | `let f(…) -> T = … and g(…) -> U = …;` | Mutually recursive group, at the top level or locally |

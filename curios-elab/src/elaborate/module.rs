@@ -792,6 +792,20 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         context.reassume(name, type_);
     }
 
+    // A `satisfy … and …` group registers every member's signature before any body elaborates, as `elaborate_module_let` does for one witness: the bodies resolve through one another's entries, and through their own.
+    for (def, type_) in defs.iter().zip(&types) {
+        if context.is_witness_declaration(&def.name) {
+            register_witness(
+                context,
+                &def.name,
+                type_,
+                def.universe_context.clone(),
+                &def.island,
+            )
+            .map_err(|error| error.at_opt(def.type_.span()))?;
+        }
+    }
+
     // An inductive's type bindings always lower as one `rec` group whose member names are the registry keys. Rebuild the registry index telescopes here — after the rebuilt signatures are assumed (index types may mention the group), before any body's `InductType` node checks against them.
     for def in &defs {
         elaborate_induct_indices(context, &def.name)?;
@@ -1009,6 +1023,13 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
             Some(&definition.kind),
         );
         context.set_assumption_universe_context(&name, universe_context.clone());
+        if context.is_witness_declaration(&definition.name) {
+            context.update_witness_scheme(
+                &definition.name,
+                universe_context.clone(),
+                rec.group.member_type(index),
+            );
+        }
     }
 
     // Classify the whole group at once: its members may mention each other, so no member's verdict is settled until the group's descent is.

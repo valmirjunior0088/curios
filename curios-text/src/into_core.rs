@@ -1015,50 +1015,65 @@ fn process_items(
                 }
             }
             // A witness desugars to an anonymous top-level definition satisfy (tele) -> C(args) = C(args) { f = e, … }; and marks it for registration in the program-wide witness table. It gets an *identity*, not a manufactured name: a `satisfy` block has no name a programmer wrote, and the module a diagnostic reports for it comes from `Definition::island`.
-            TopItem::Witness(witness) => {
-                let name = curios_core::Global::Witness(context.fresh_witness());
+            // A group `satisfy … and …` lowers to one `rec` item, so its members' anonymous names are bound in one another; a lone witness stays a `let` item, and may still resolve through its own entry — that repair is elaboration's, since a witness references itself by resolution rather than by name.
+            TopItem::Witness(group) => {
+                let mut items = group
+                    .iter()
+                    .map(|witness| {
+                        let name = curios_core::Global::Witness(context.fresh_witness());
 
-                let concept_app = witness_concept_application(&witness.concept, &witness.args);
-                let body: Term = Subterm::StructLit(StructLit {
-                    head: witness.concept.clone(),
-                    params: witness.args.clone(),
-                    entries: witness
-                        .entries
-                        .iter()
-                        .map(|entry| match entry {
-                            WitnessEntry::Field(field) => StructLitEntry::Field(TupleField {
-                                label: Some(field.label.clone()),
-                                func_params: field.func_params.clone(),
-                                value: field.value.clone(),
-                            }),
-                            WitnessEntry::Use(term) => StructLitEntry::Use(term.clone()),
+                        let concept_app =
+                            witness_concept_application(&witness.concept, &witness.args);
+                        let body: Term = Subterm::StructLit(StructLit {
+                            head: witness.concept.clone(),
+                            params: witness.args.clone(),
+                            entries: witness
+                                .entries
+                                .iter()
+                                .map(|entry| match entry {
+                                    WitnessEntry::Field(field) => {
+                                        StructLitEntry::Field(TupleField {
+                                            label: Some(field.label.clone()),
+                                            func_params: field.func_params.clone(),
+                                            value: field.value.clone(),
+                                        })
+                                    }
+                                    WitnessEntry::Use(term) => StructLitEntry::Use(term.clone()),
+                                })
+                                .collect(),
                         })
-                        .collect(),
-                })
-                .into();
+                        .into();
 
-                let signature = if witness.params.is_empty() {
-                    LetSignature::Name {
-                        type_: Some(concept_app),
-                        body,
-                    }
-                } else {
-                    LetSignature::Func {
-                        params: witness.params.clone(),
-                        output: concept_app,
-                        body,
-                    }
-                };
+                        let signature = if witness.params.is_empty() {
+                            LetSignature::Name {
+                                type_: Some(concept_app),
+                                body,
+                            }
+                        } else {
+                            LetSignature::Func {
+                                params: witness.params.clone(),
+                                output: concept_app,
+                                body,
+                            }
+                        };
 
-                let lower = Lowerer::new(context);
-                flat_items.push(FlatItem::Let(FlatLet {
-                    kind: curios_core::DefinitionKind::Witness,
-                    name: name.clone(),
-                    island: context.island(),
-                    type_: lower.term(&signature.type_())?,
-                    body: lower.value(&signature.body())?,
-                }));
-                witnesses.insert(name);
+                        let lower = Lowerer::new(context);
+                        let item = FlatLet {
+                            kind: curios_core::DefinitionKind::Witness,
+                            name: name.clone(),
+                            island: context.island(),
+                            type_: lower.term(&signature.type_())?,
+                            body: lower.value(&signature.body())?,
+                        };
+                        witnesses.insert(name);
+                        Ok(item)
+                    })
+                    .collect::<Result<Vec<_>, Error>>()?;
+
+                flat_items.push(match items.len() {
+                    1 => FlatItem::Let(items.pop().expect("a `satisfy` item has a member")),
+                    _ => FlatItem::Rec(items),
+                });
             }
         }
     }

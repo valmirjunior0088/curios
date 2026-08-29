@@ -1337,6 +1337,31 @@
           "value": "satisfy"
         },
         {
+          "type": "SYMBOL",
+          "name": "satisfy_member"
+        },
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "SEQ",
+            "members": [
+              {
+                "type": "STRING",
+                "value": "and"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "satisfy_member"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "satisfy_member": {
+      "type": "SEQ",
+      "members": [
+        {
           "type": "CHOICE",
           "members": [
             {
