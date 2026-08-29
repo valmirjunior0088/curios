@@ -534,7 +534,7 @@ impl fmt::Display for Displayed<'_> {
                 let that = that.spelled(spelling);
                 write!(
                     f,
-                    "witnesses for {this} and {that} resolve each other\n  a witness may recurse through its own entry, but a cycle between two has no order to declare them in — whichever comes first names the other before it exists\n  hoist the recursion into a top-level 'rec ... and' group and have each witness delegate to it"
+                    "witnesses for {this} and {that} resolve each other\n  a witness may recurse through its own entry, but a cycle between two has no order to declare them in — whichever comes first names the other before it exists\n  hoist the recursion into a top-level 'let ... and' group and have each witness delegate to it"
                 )
             }
             Error::NoWitness {

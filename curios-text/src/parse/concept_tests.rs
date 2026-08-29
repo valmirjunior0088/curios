@@ -129,7 +129,7 @@ fn use_parameter_forms() {
     else {
         panic!("expected a let");
     };
-    let LetSignature::Func { params, .. } = &item.signature else {
+    let LetSignature::Func { params, .. } = &item[0].signature else {
         panic!("expected function sugar");
     };
     assert_eq!(params.len(), 4);

@@ -150,7 +150,11 @@ fn the_sys_io_roster_offers_no_eliminator() {
     fn lets<'a>(items: &'a [TopItem], out: &mut Vec<(&'a str, &'a LetSignature)>) {
         for item in items {
             match item {
-                TopItem::Let(binding) => out.push((&binding.label, &binding.signature)),
+                TopItem::Let(bindings) => out.extend(
+                    bindings
+                        .iter()
+                        .map(|binding| (binding.label.as_str(), &binding.signature)),
+                ),
                 TopItem::Mod(module) => {
                     if let Some(module) = &module.module {
                         lets(&module.items, out);

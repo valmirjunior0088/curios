@@ -10,14 +10,14 @@ use {
 fn top_let_without_pub() {
     assert_eq!(
         "let x : Type = Type;".parse::<Module>().unwrap().items,
-        vec![TopItem::Let(TopLet {
+        vec![TopItem::Let(vec![TopLet {
             vis_pub: false,
             label: "x".to_string(),
             signature: LetSignature::Name {
                 type_: Some(Subterm::Type.into()),
                 body: Subterm::Type.into(),
             },
-        })]
+        }])]
     );
 }
 
@@ -137,14 +137,14 @@ fn foreign_declaration_round_trips() {
 fn top_let_with_pub() {
     assert_eq!(
         "pub let x : Type = Type;".parse::<Module>().unwrap().items,
-        vec![TopItem::Let(TopLet {
+        vec![TopItem::Let(vec![TopLet {
             vis_pub: true,
             label: "x".to_string(),
             signature: LetSignature::Name {
                 type_: Some(Subterm::Type.into()),
                 body: Subterm::Type.into(),
             },
-        })]
+        }])]
     );
 }
 
@@ -158,7 +158,7 @@ fn top_rec_mixed_pub() {
         .parse::<Module>()
         .unwrap()
         .items,
-        vec![TopItem::Rec(vec![
+        vec![TopItem::Let(vec![
             TopLet {
                 vis_pub: true,
                 label: "id".to_string(),
@@ -515,4 +515,52 @@ fn function_field_sugar_round_trips() {
             "item round-trip failed for {source:?}"
         );
     }
+}
+
+#[test]
+fn top_let_group_mixed_pub() {
+    assert_eq!(
+        r#"
+            pub let id : Type = Type
+            and helper : Type = Type;
+        "#
+        .parse::<Module>()
+        .unwrap()
+        .items,
+        vec![TopItem::Let(vec![
+            TopLet {
+                vis_pub: true,
+                label: "id".to_string(),
+                signature: LetSignature::Name {
+                    type_: Some(Subterm::Type.into()),
+                    body: Subterm::Type.into(),
+                },
+            },
+            TopLet {
+                vis_pub: false,
+                label: "helper".to_string(),
+                signature: LetSignature::Name {
+                    type_: Some(Subterm::Type.into()),
+                    body: Subterm::Type.into(),
+                },
+            },
+        ])]
+    );
+}
+
+#[test]
+fn top_rec_is_a_synonym_for_a_let_group_and_prints_as_one() {
+    let rec = "pub rec id : Type = Type\nand helper : Type = Type;\nu"
+        .parse::<Entrypoint>()
+        .unwrap();
+    let let_ = "pub let id : Type = Type\nand helper : Type = Type;\nu"
+        .parse::<Entrypoint>()
+        .unwrap();
+    assert_eq!(rec, let_);
+    let printed = rec.to_string();
+    assert!(
+        printed.starts_with("pub let id") && !printed.contains("rec"),
+        "unexpected print: {printed}"
+    );
+    assert_eq!(printed.parse::<Entrypoint>().unwrap(), let_);
 }

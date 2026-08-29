@@ -26,9 +26,9 @@ fn parse_module_roundtrip() {
     assert!(matches!(m.items[0], TopItem::Use(_)));
     assert!(matches!(
         m.items[1],
-        TopItem::Let(TopLet { vis_pub: true, .. })
+        TopItem::Let(ref items) if items[0].vis_pub
     ));
-    assert!(matches!(m.items[2], TopItem::Rec(_)));
+    assert!(matches!(m.items[2], TopItem::Let(_)));
 }
 
 #[test]
@@ -47,14 +47,14 @@ fn parse_nested_module() {
             vis_pub: false,
             label: "Inner".to_string(),
             module: Some(Module {
-                items: vec![TopItem::Let(TopLet {
+                items: vec![TopItem::Let(vec![TopLet {
                     vis_pub: true,
                     label: "x".to_string(),
                     signature: LetSignature::Name {
                         type_: Some(Subterm::Type.into()),
                         body: Subterm::Type.into(),
                     },
-                })],
+                }])],
             }),
         })]
     );
@@ -74,10 +74,10 @@ fn parse_entrypoint_roundtrip() {
     assert_eq!(entrypoint.module.items.len(), 4);
     assert!(matches!(entrypoint.module.items[0], TopItem::Use(_)));
     assert!(matches!(entrypoint.module.items[1], TopItem::Use(_)));
-    assert!(matches!(entrypoint.module.items[2], TopItem::Rec(_)));
+    assert!(matches!(entrypoint.module.items[2], TopItem::Let(_)));
     assert!(matches!(
         entrypoint.module.items[3],
-        TopItem::Let(TopLet { vis_pub: false, .. })
+        TopItem::Let(ref items) if !items[0].vis_pub
     ));
     assert_eq!(
         entrypoint.tail,

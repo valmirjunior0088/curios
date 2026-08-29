@@ -127,14 +127,14 @@ fn type_() -> Term {
 }
 
 fn pub_let(label: &str, type_: Term, body: Term) -> TopItem {
-    TopItem::Let(TopLet {
+    TopItem::Let(vec![TopLet {
         vis_pub: true,
         label: label.to_string(),
         signature: LetSignature::Name {
             type_: Some(type_),
             body,
         },
-    })
+    }])
 }
 
 fn pub_mod(label: &str, items: Vec<TopItem>) -> TopItem {
@@ -180,7 +180,7 @@ fn pub_fn_marked(
     output: Term,
     body: Term,
 ) -> TopItem {
-    TopItem::Let(fn_marked(true, label, params, output, body))
+    TopItem::Let(vec![fn_marked(true, label, params, output, body)])
 }
 
 fn fn_marked(
@@ -860,7 +860,7 @@ fn host_subjects(foreigns: &ForeignStore) -> Vec<(String, Vec<TopItem>)> {
             .subject
             .clone()
             .expect("a builtin host operation names its /sys subject");
-        let item = TopItem::Let(host_fn(function, true));
+        let item = TopItem::Let(vec![host_fn(function, true)]);
 
         match subjects.iter_mut().find(|(label, _)| *label == subject) {
             Some((_, items)) => items.push(item),

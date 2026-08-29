@@ -14,31 +14,33 @@ fn rec_func_and_apply() {
         "rec id : (x : Type) -> Type = (x) => x; id(a)"
             .parse::<Term>()
             .unwrap(),
-        Subterm::Rec(Rec {
-            items: vec![RecItem {
-                label: "id".to_string(),
-                signature: LetSignature::Name {
-                    type_: Some(
-                        Subterm::FuncType(FuncType {
-                            params: vec![FuncTypeParam {
+        Subterm::Let(Let {
+            groups: vec![LetGroup {
+                members: vec![LetBinding {
+                    binder: Pattern::Binder(Some("id".to_string())),
+                    signature: LetSignature::Name {
+                        type_: Some(
+                            Subterm::FuncType(FuncType {
+                                params: vec![FuncTypeParam {
+                                    plicity: Plicity::Explicit,
+                                    label: Some("x".to_string()),
+                                    type_: Subterm::Type.into(),
+                                }],
+                                output: Subterm::Type.into(),
+                            })
+                            .into(),
+                        ),
+                        body: Subterm::Func(Func {
+                            params: vec![FuncParam {
                                 plicity: Plicity::Explicit,
-                                label: Some("x".to_string()),
-                                type_: Subterm::Type.into(),
+                                pattern: Pattern::Binder(Some("x".to_string())),
+                                annotation: None,
                             }],
-                            output: Subterm::Type.into(),
+                            body: Subterm::Name(Name::from(["x".to_string()])).into(),
                         })
                         .into(),
-                    ),
-                    body: Subterm::Func(Func {
-                        params: vec![FuncParam {
-                            plicity: Plicity::Explicit,
-                            pattern: Pattern::Binder(Some("x".to_string())),
-                            annotation: None,
-                        }],
-                        body: Subterm::Name(Name::from(["x".to_string()])).into(),
-                    })
-                    .into(),
-                },
+                    },
+                }]
             }],
             tail: Subterm::Apply(Apply {
                 head: Subterm::Name(Name::from(["id".to_string()])).into(),
@@ -175,10 +177,16 @@ fn implicit_marks_on_let_shorthand_and_inductive_params() {
         .parse::<Module>()
         .unwrap();
     match &m.items[0] {
-        TopItem::Let(TopLet {
-            signature: LetSignature::Func { params, .. },
-            ..
-        }) => {
+        TopItem::Let(items) => {
+            let [
+                TopLet {
+                    signature: LetSignature::Func { params, .. },
+                    ..
+                },
+            ] = items.as_slice()
+            else {
+                panic!("expected one func let, got {items:?}");
+            };
             assert_eq!(params[0].plicity, Plicity::Implicit);
             assert_eq!(params[1].plicity, Plicity::Explicit);
         }
@@ -257,12 +265,14 @@ fn local_let_without_type() {
     assert_eq!(
         "let x = Type; x".parse::<Term>().unwrap(),
         Subterm::Let(Let {
-            bindings: vec![LetBinding {
-                binder: Pattern::Binder(Some("x".to_string())),
-                signature: LetSignature::Name {
-                    type_: None,
-                    body: Subterm::Type.into(),
-                },
+            groups: vec![LetGroup {
+                members: vec![LetBinding {
+                    binder: Pattern::Binder(Some("x".to_string())),
+                    signature: LetSignature::Name {
+                        type_: None,
+                        body: Subterm::Type.into(),
+                    },
+                }]
             }],
             tail: Subterm::Name(Name::from(["x".to_string()])).into(),
         })
@@ -275,12 +285,14 @@ fn local_let_with_type_still_works() {
     assert_eq!(
         "let x : Type = Type; x".parse::<Term>().unwrap(),
         Subterm::Let(Let {
-            bindings: vec![LetBinding {
-                binder: Pattern::Binder(Some("x".to_string())),
-                signature: LetSignature::Name {
-                    type_: Some(Subterm::Type.into()),
-                    body: Subterm::Type.into(),
-                },
+            groups: vec![LetGroup {
+                members: vec![LetBinding {
+                    binder: Pattern::Binder(Some("x".to_string())),
+                    signature: LetSignature::Name {
+                        type_: Some(Subterm::Type.into()),
+                        body: Subterm::Type.into(),
+                    },
+                }]
             }],
             tail: Subterm::Name(Name::from(["x".to_string()])).into(),
         })
@@ -379,12 +391,14 @@ fn bang_in_let_binding() {
     assert_eq!(
         "let x = e!; x".parse::<Term>().unwrap(),
         Subterm::Let(Let {
-            bindings: vec![LetBinding {
-                binder: Pattern::Binder(Some("x".to_string())),
-                signature: LetSignature::Name {
-                    type_: None,
-                    body: Subterm::Bang(name("e")).into(),
-                },
+            groups: vec![LetGroup {
+                members: vec![LetBinding {
+                    binder: Pattern::Binder(Some("x".to_string())),
+                    signature: LetSignature::Name {
+                        type_: None,
+                        body: Subterm::Bang(name("e")).into(),
+                    },
+                }]
             }],
             tail: name("x"),
         })
@@ -460,4 +474,40 @@ fn bang_round_trips() {
             "round-trip failed for {source:?}"
         );
     }
+}
+
+#[test]
+fn local_let_group() {
+    // `and` joins members into one statement, each a plain label with a mandatory type.
+    let member = |label: &str, body: &str| LetBinding {
+        binder: Pattern::Binder(Some(label.to_string())),
+        signature: LetSignature::Name {
+            type_: Some(Subterm::Type.into()),
+            body: name(body),
+        },
+    };
+    assert_eq!(
+        "let a : Type = b and b : Type = a; a"
+            .parse::<Term>()
+            .unwrap(),
+        Subterm::Let(Let {
+            groups: vec![LetGroup {
+                members: vec![member("a", "b"), member("b", "a")],
+            }],
+            tail: name("a"),
+        })
+        .into()
+    );
+}
+
+#[test]
+fn rec_is_a_synonym_for_a_let_group() {
+    assert_eq!(
+        "rec a : Type = b and b : Type = a; a"
+            .parse::<Term>()
+            .unwrap(),
+        "let a : Type = b and b : Type = a; a"
+            .parse::<Term>()
+            .unwrap(),
+    );
 }

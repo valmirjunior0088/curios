@@ -4,19 +4,29 @@ pub(super) fn parse_pub<'a>() -> Parser<'a, bool> {
     catch(parse_keyword("pub")).map(|()| true).or(pure(false))
 }
 
+// A top-level `let` item: one definition, or the group `let f … and g …;`. Each member takes its own `pub` — before `let` for the first, before `and` for each later one — and one `;` terminates the whole item.
 pub(super) fn parse_top_let<'a>() -> Parser<'a, TopItem> {
-    catch(parse_pub().and(parse_keyword("let"))).flat_map(|(vis_pub, ())| {
-        parse_identifier()
-            .and(parse_let_signature())
-            .and_drop(parse_literal(";"))
-            .map(move |(label, signature)| {
-                TopItem::Let(TopLet {
-                    vis_pub,
-                    label: label.to_string(),
-                    signature,
-                })
-            })
-    })
+    parse_top_let_group("let")
+}
+
+fn parse_top_let_group<'a>(keyword: &'static str) -> Parser<'a, TopItem> {
+    let member = |vis_pub: bool| {
+        parse_binding().map(move |(label, signature)| TopLet {
+            vis_pub,
+            label,
+            signature,
+        })
+    };
+
+    catch(parse_pub().and(parse_keyword(keyword)))
+        .flat_map(move |(vis_pub, ())| member(vis_pub))
+        .and(many0(move || {
+            catch(parse_pub().and(parse_keyword("and")))
+                .flat_map(move |(vis_pub, ())| member(vis_pub))
+        }))
+        .and_drop(parse_literal(";"))
+        .map(|(first, rest)| iter::once(first).chain(rest).collect())
+        .map(TopItem::Let)
 }
 
 // An `List` element type — the wire grammar minus `List` itself. Splitting it out of `parse_wire_type` is what makes `List(List(T))` unwritable: codegen forces and embeds exactly one level at the host boundary, so a second one would silently hand the host rope structs instead of flat arrays.
@@ -91,27 +101,9 @@ pub(super) fn parse_top_foreign<'a>() -> Parser<'a, TopItem> {
     })
 }
 
+// `rec` is a synonym for `let` until the keyword is removed: the same item, so a file written with `rec` prints with `let`.
 pub(super) fn parse_top_rec<'a>() -> Parser<'a, TopItem> {
-    catch(parse_pub().and(parse_keyword("rec")))
-        .flat_map(|(vis_pub, ())| {
-            parse_binding().map(move |item| TopLet {
-                vis_pub,
-                label: item.label,
-                signature: item.signature,
-            })
-        })
-        .and(many0(|| {
-            catch(parse_pub().and(parse_keyword("and"))).flat_map(|(vis_pub, ())| {
-                parse_binding().map(move |item| TopLet {
-                    vis_pub,
-                    label: item.label,
-                    signature: item.signature,
-                })
-            })
-        }))
-        .and_drop(parse_literal(";"))
-        .map(|(first, rest)| iter::once(first).chain(rest).collect())
-        .map(TopItem::Rec)
+    parse_top_let_group("rec")
 }
 
 pub(super) fn parse_top_mod<'a>() -> Parser<'a, TopItem> {

@@ -137,12 +137,12 @@ fn owner_of(items: &[FlatItem], nodes: &[usize]) -> HashMap<curios_core::Global,
         .collect()
 }
 
-/// Topologically order `nodes` (assumed ascending, for the lowest-index tiebreak) under `deps` restricted to that set, honoring `soft_deps` — the witness edges — as preferences. Each round emits the lowest-index node whose hard and soft deps are all emitted; when none is fully ready, the lowest hard-ready node gives up its soft constraints (witness edges over-approximate, and `/syn`'s operator uses against `/std`'s string-literal references form one genuine cross-root cycle, so someone must — and dropping a *soft* edge only restores the pre-edge order for that node, where an emission that skipped a *name* edge would manufacture an unbound variable); on a genuine hard cycle, the lowest remaining one breaks the deadlock as before.
+/// Topologically order `nodes` (assumed ascending, for the lowest-index tiebreak) under `deps` restricted to that set, honoring `soft_deps` — the witness edges — as preferences. Each round emits the lowest-index node whose hard and soft deps are all emitted; when none is fully ready, the lowest hard-ready node gives up its soft constraints (witness edges over-approximate, and `/syn`'s operator uses against `/std`'s string-literal references form one genuine cross-root cycle, so someone must — and dropping a *soft* edge only restores the pre-edge order for that node, where an emission that skipped a *name* edge would manufacture an unbound variable). A genuine hard cycle has no order at all, and is handed back as its members: a group of definitions that name one another is declared with `and`, which makes it one node here, so a cycle between nodes is a group the source did not declare.
 fn topological_order(
     nodes: &[usize],
     deps: &HashMap<usize, HashSet<usize>>,
     soft_deps: &HashMap<usize, HashSet<usize>>,
-) -> Vec<usize> {
+) -> Result<Vec<usize>, Vec<usize>> {
     let mut emitted = HashSet::with_capacity(nodes.len());
     let mut order = Vec::with_capacity(nodes.len());
 
@@ -159,15 +159,43 @@ fn topological_order(
                 nodes.iter().copied().find(|&n| {
                     !emitted.contains(&n) && deps[&n].iter().all(|dep| emitted.contains(dep))
                 })
-            })
-            .or_else(|| nodes.iter().copied().find(|&n| !emitted.contains(&n)))
-            .expect("a node remains while order is incomplete");
+            });
 
+        let Some(ready) = ready else {
+            return Err(hard_cycle(nodes, deps, &emitted));
+        };
         emitted.insert(ready);
         order.push(ready);
     }
 
-    order
+    Ok(order)
+}
+
+/// One cycle among the nodes `topological_order` could not emit, in dependency order. Every remaining node waits on a remaining node, so following the lowest unemitted dependency from the lowest remaining node must revisit a node, and the walk from that node's first visit is the cycle.
+fn hard_cycle(
+    nodes: &[usize],
+    deps: &HashMap<usize, HashSet<usize>>,
+    emitted: &HashSet<usize>,
+) -> Vec<usize> {
+    let start = nodes
+        .iter()
+        .copied()
+        .find(|node| !emitted.contains(node))
+        .expect("a node remains while order is incomplete");
+    let mut path = vec![start];
+    loop {
+        let current = *path.last().expect("the path starts non-empty");
+        let next = deps[&current]
+            .iter()
+            .copied()
+            .filter(|dep| !emitted.contains(dep))
+            .min()
+            .expect("a node no hard-ready set admits waits on a remaining node");
+        if let Some(position) = path.iter().position(|&node| node == next) {
+            return path[position..].to_vec();
+        }
+        path.push(next);
+    }
 }
 
 /// The prelude's topological order as positions *relative to* `prelude_nodes` (ascending), so the whole fixed-root block can be emitted before user code.
@@ -216,9 +244,24 @@ fn prelude_permutation(
         .map(|(rel, &node)| (node, rel))
         .collect::<HashMap<usize, usize>>();
 
-    topological_order(prelude_nodes, &deps, &soft_deps)
+    // A cycle here is a prelude bug for the same reason a forward cross-root reference is: no user program can put a `let` of its own among these nodes.
+    let order = topological_order(prelude_nodes, &deps, &soft_deps).unwrap_or_else(|cycle| {
+        panic!(
+            "the standard library declares {} as separate definitions that reference each other — \
+             a mutually recursive group is declared with `and`, so this is a bug in the embedded \
+             prelude source",
+            cycle_names(items, &cycle).join(", "),
+        )
+    });
+
+    order.iter().map(|node| relative[node]).collect()
+}
+
+/// The names a cycle is reported by: each node's first declared name, spelled as a path.
+fn cycle_names(items: &[FlatItem], cycle: &[usize]) -> Vec<String> {
+    cycle
         .iter()
-        .map(|node| relative[node])
+        .filter_map(|&node| items[node].names().first().map(curios_core::Global::symbol))
         .collect()
 }
 
@@ -228,7 +271,7 @@ pub(super) fn order_flat_items(
     induct_decls: &BTreeMap<curios_core::Global, curios_core::InductDecl>,
     struct_decls: &BTreeMap<curios_core::Global, curios_core::StructDecl>,
     syntax: &SyntaxRegistry,
-) -> Vec<FlatItem> {
+) -> Result<Vec<FlatItem>, Error> {
     let count = items.len();
 
     let is_prelude = items
@@ -273,16 +316,33 @@ pub(super) fn order_flat_items(
             witness_dep_nodes(n, &items[n], &names, &wrapper_owner, &rest_rows, syntax),
         );
     }
-    order.extend(topological_order(&rest, &rest_deps, &rest_soft_deps));
+    // Refused at the first member's declaration: the report names every definition on the cycle, and the source position it needs is one the reader can act on.
+    let rest_order = topological_order(&rest, &rest_deps, &rest_soft_deps).map_err(|cycle| {
+        let error = Error::UndeclaredCycle {
+            names: cycle_names(&items, &cycle),
+        };
+        match first_let(&items[cycle[0]]).type_.span() {
+            Some(span) => error.at(span.clone()),
+            None => error,
+        }
+    })?;
+    order.extend(rest_order);
 
     let mut slots = items
         .into_iter()
         .map(Some)
         .collect::<Vec<Option<FlatItem>>>();
-    order
+    Ok(order
         .into_iter()
         .map(|node| slots[node].take().unwrap())
-        .collect()
+        .collect())
+}
+
+fn first_let(item: &FlatItem) -> &FlatLet {
+    match item {
+        FlatItem::Let(let_) => let_,
+        FlatItem::Rec(lets) => lets.first().expect("a group has a member"),
+    }
 }
 
 /// The external references of an inductive registry entry: every free var of its telescopes. Binder names (parameters, payload binders) are captured by `Telescope::build` and never appear here; the index types' references also live in the type binding's own signature, but are included for robustness.

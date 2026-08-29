@@ -375,7 +375,7 @@ pub struct FuncSugarParam {
     pub type_: Term,
 }
 
-/// The right-hand side shared by every `let`-like binding site (local [`Let`], top-level [`TopLet`](crate::TopLet), [`RecItem`]): a plain annotated body, or the function-definition sugar `f(x : T, …) -> R = body`, kept verbatim so the printer round-trips it. Lowering undoes the sugar through the crate-internal `type_()`/`body()` accessors — the type becomes a Π-type, the body a lambda binding every parameter.
+/// The right-hand side shared by every `let`-like binding site (local [`Let`], top-level [`TopLet`](crate::TopLet)): a plain annotated body, or the function-definition sugar `f(x : T, …) -> R = body`, kept verbatim so the printer round-trips it. Lowering undoes the sugar through the crate-internal `type_()`/`body()` accessors — the type becomes a Π-type, the body a lambda binding every parameter.
 #[derive(Debug, Clone, PartialEq)]
 pub enum LetSignature {
     Name {
@@ -445,24 +445,16 @@ pub struct LetBinding {
     pub signature: LetSignature,
 }
 
-/// A local `let` block: a straight-line run of `bindings`, each in scope for the bindings after it and for `tail`. `let` is the only position where a type annotation may be omitted (`LetSignature::Name` with `type_: None`) — top-level `let` and every `rec` item always carry one. A whole run is one node, not a nest, so cloning/lowering it is a loop over `bindings` rather than one native stack frame per binding.
+/// One local `let` statement: a binding, or a `let … and …;` group of them. A group's members are in scope of one another's types and bodies; a lone binding is in scope of its own, which is what lets it recurse. Every member after the first is a plain label with a mandatory type — the parser makes it so — and lowering holds the first member to the same shape once the group has more than one member or mentions itself, since a recursive reference's type cannot be inferred from a body that mentions it and a pattern binds no name its own value could use.
+#[derive(Debug, Clone, PartialEq)]
+pub struct LetGroup {
+    pub members: Vec<LetBinding>,
+}
+
+/// A local `let` block: a straight-line run of `groups`, each in scope for the groups after it and for `tail`. `let` is the only position where a type annotation may be omitted (`LetSignature::Name` with `type_: None`) — top-level `let` always carries one, and so does every member of a group. A whole run is one node, not a nest, so cloning/lowering it is a loop over `groups` rather than one native stack frame per binding.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Let {
-    pub bindings: Vec<LetBinding>,
-    pub tail: Term,
-}
-
-/// One definition of a [`Rec`] block: a plain label (no destructuring — the binding must be nameable in its siblings' bodies) and its signature, whose type annotation the parser makes mandatory here.
-#[derive(Debug, Clone, PartialEq)]
-pub struct RecItem {
-    pub label: String,
-    pub signature: LetSignature,
-}
-
-/// A local `rec` block: a group of mutually recursive definitions, each in scope of every other and of `tail`. Unlike `let` there is no pattern binder or omitted annotation — every item is a plain label with a mandatory type (a recursive reference's type cannot be inferred from a body that mentions it).
-#[derive(Debug, Clone, PartialEq)]
-pub struct Rec {
-    pub items: Vec<RecItem>,
+    pub groups: Vec<LetGroup>,
     pub tail: Term,
 }
 
@@ -502,7 +494,6 @@ pub enum Subterm {
     /// An ordered guarded ladder (see [`Choose`]) — not a match, since it consumes no scrutinee.
     Choose(Choose),
     Let(Let),
-    Rec(Rec),
     /// A postfix bang `e!`: extracts the result of monadic action `e` inline. The operand is the action whose result is bound. The `into_core` pass hoists each bang to the top of its enclosing region (a value body, re-rooted at lambda bodies, match arms, and `rec` items) and sequences it through `/syn/Monad/bind`, whose `use` binder resolves the `Monad` witness from the action's type. Exists only between parsing and `into_core`, which eliminates it before core elaboration; a bang in a type is rejected.
     Bang(Term),
     Name(Name),

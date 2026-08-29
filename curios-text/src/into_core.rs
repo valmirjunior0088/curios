@@ -274,8 +274,7 @@ fn scan_module_info(items: &[TopItem]) -> Result<ModuleInfo, Error> {
     for item in items {
         match item {
             TopItem::Mod(m) => info.insert_child(m.label.clone(), m.vis_pub)?,
-            TopItem::Let(l) => info.insert_binding(l.label.clone(), l.vis_pub)?,
-            TopItem::Rec(ls) => {
+            TopItem::Let(ls) => {
                 for l in ls {
                     info.insert_binding(l.label.clone(), l.vis_pub)?;
                 }
@@ -360,10 +359,7 @@ fn process_items(
     for top_item in top_items {
         match top_item {
             TopItem::Mod(m) => context.insert_scope(m.label.clone(), context.prefixed(&m.label))?,
-            TopItem::Let(l) => {
-                context.insert_binding(l.label.clone(), context.prefixed(&l.label))?
-            }
-            TopItem::Rec(labels) => {
+            TopItem::Let(labels) => {
                 for l in labels {
                     context.insert_binding(l.label.clone(), context.prefixed(&l.label))?;
                 }
@@ -451,35 +447,9 @@ fn process_items(
                     }
                 }
             }
-            TopItem::Let(let_item) => {
-                context.record_import_scope(Some(&context.prefixed(&let_item.label)));
-                let lower = Lowerer::new(context);
-                let type_ = lower.term(&let_item.signature.type_())?;
-                flat_items.push(FlatItem::Let(FlatLet {
-                    kind: curios_core::DefinitionKind::Authored,
-                    name: curios_core::Global::Authored(context.prefixed(&let_item.label)),
-                    island: context.island(),
-                    type_,
-                    body: lower.value(&let_item.signature.body())?,
-                }));
-            }
-            TopItem::Foreign(f) => {
-                // All FFI-specific bookkeeping (the `ForeignFunction`, its registration, and `host_fn`'s wire-typed signature shape) stays inside `prelude`; from here a `foreign` declaration lowers exactly like an ordinary `TopItem::Let`.
-                let path = context.prefixed(&f.label);
-                let signature = foreign_signature(f, foreigns, path.join());
-
-                let lower = Lowerer::new(context);
-                let type_ = lower.term(&signature.type_())?;
-                flat_items.push(FlatItem::Let(FlatLet {
-                    kind: curios_core::DefinitionKind::Authored,
-                    name: curios_core::Global::Authored(path),
-                    island: context.island(),
-                    type_,
-                    body: lower.value(&signature.body())?,
-                }));
-            }
-            TopItem::Rec(ls) => {
-                let items = ls
+            // A `let` item is a group of one or more definitions. It lowers to a `rec` item when it is a declared group or when its one member names itself — read off the lowered terms, so a definition's own name is in scope of its type and body without anything said in the source — and to a plain `let` item otherwise. The kernel needs the distinction and the programmer does not: a `Rec` binds its members' names, a `Let` leaves a self-reference unbound.
+            TopItem::Let(ls) => {
+                let mut items = ls
                     .iter()
                     .map(|let_item| {
                         context.record_import_scope(Some(&context.prefixed(&let_item.label)));
@@ -495,7 +465,26 @@ fn process_items(
                     })
                     .collect::<Result<Vec<_>, Error>>()?;
 
-                flat_items.push(FlatItem::Rec(items));
+                let recursive = items.len() > 1 || items.iter().any(|let_| let_.mentions_itself());
+                flat_items.push(match recursive {
+                    true => FlatItem::Rec(items),
+                    false => FlatItem::Let(items.pop().expect("a `let` item has a member")),
+                });
+            }
+            TopItem::Foreign(f) => {
+                // All FFI-specific bookkeeping (the `ForeignFunction`, its registration, and `host_fn`'s wire-typed signature shape) stays inside `prelude`; from here a `foreign` declaration lowers exactly like an ordinary `TopItem::Let`.
+                let path = context.prefixed(&f.label);
+                let signature = foreign_signature(f, foreigns, path.join());
+
+                let lower = Lowerer::new(context);
+                let type_ = lower.term(&signature.type_())?;
+                flat_items.push(FlatItem::Let(FlatLet {
+                    kind: curios_core::DefinitionKind::Authored,
+                    name: curios_core::Global::Authored(path),
+                    island: context.island(),
+                    type_,
+                    body: lower.value(&signature.body())?,
+                }));
             }
             TopItem::Induct(group) => {
                 // Step 1: type bindings as one rec group. An inductive's type binding wraps an intrinsic `InductType` normal form in a `Func` over its type parameters and indices (so `Result(Nat, Bin)` beta-reduces to `InductType { Result, [Nat, Bin] }` and `Vec(Bin, 3)` to `InductType { Vec, [Bin], [3] }`), and its shape is recorded in the inductive registry.
@@ -1326,7 +1315,7 @@ fn into_core_unit_within(
     )?;
 
     // This unit's own items alone. A predecessor reaches later stages as an *environment* they are seeded from — `Globals` at the certifier, a replayed context at elaboration and erasure — and copying its items into every compilation only ever existed so those stages could then skip them again by index. See `documentation/design/toolchain/a-module-is-a-compilation-unit-and-the-prelude-is-an-environment.md`.
-    let items = order_flat_items(flat_items, &mounts, &induct_decls, &struct_decls, syntax)
+    let items = order_flat_items(flat_items, &mounts, &induct_decls, &struct_decls, syntax)?
         .into_iter()
         .map(FlatItem::into_core)
         .collect();

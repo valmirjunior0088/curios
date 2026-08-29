@@ -77,3 +77,11 @@ fn an_overflowing_operator_chain_leads_continuations_with_the_operator() {
 fn a_local_let_body_rides_its_equals() {
     assert_eq!(render("let x = 1; x", 80), "let x = 1;\nx");
 }
+
+#[test]
+fn a_local_let_group_breaks_before_each_and() {
+    assert_eq!(
+        render("let a : Type = b and b : Type = a; a", 80),
+        "let a: Type = b\nand b: Type = a;\na"
+    );
+}

@@ -3,8 +3,8 @@ use {
     super::{Context, MatchCompiler},
     crate::{
         BinSegment, Choose, ChooseTest, Error, Field, FuncParam, Intrinsic, Let, LetBinding,
-        ListEntry, Name, Nat, NatLiteral, NumLit, Pattern, PatternField, Rec, StructLitEntry,
-        Subterm, Syn, Term,
+        LetGroup, LetSignature, ListEntry, Name, Nat, NatLiteral, NumLit, Pattern, PatternField,
+        StructLitEntry, Subterm, Syn, Term,
     },
     curios_utilities::{Grain, PackedBin, Plicity, Qualifier, Span, SyntaxName, recurse},
     std::{cell::RefCell, sync::Arc},
@@ -364,28 +364,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     MatchCompiler::term,
                 )?
             }
-            // A `let` block is non-recursive: each binding is in scope for the bindings after it and the tail, never for its own type or value. Lower each binding's type/value in the scope of the bindings before it, then wrap them back (reverse) around the tail.
-            Subterm::Let(let_) => self.lower_let(&let_.bindings, &let_.tail)?,
-            // A `rec` is mutually recursive: every item label is in scope across all item types, all item bodies, and the tail.
-            Subterm::Rec(rec) => {
-                let binders = self.mint(rec.items.iter().map(|it| it.label.clone()));
-                self.bound(&binders, || {
-                    Ok(curios_core::Term::rec(
-                        rec.items
-                            .iter()
-                            .zip(&binders)
-                            .map(|(it, (_, id))| {
-                                Ok((
-                                    id.clone(),
-                                    self.term(&it.signature.type_())?,
-                                    self.term(&it.signature.body())?,
-                                ))
-                            })
-                            .collect::<Result<Vec<_>, Error>>()?,
-                        self.term(&rec.tail)?,
-                    ))
-                })?
-            }
+            // A `let` block: each statement is in scope for the statements after it and the tail, and for itself — a lone binding that names itself, or a `let … and …;` group, lowers to a core `rec`; see [`Self::lower_let_group`].
+            Subterm::Let(let_) => self.lower_let(&let_.groups, &let_.tail)?,
             // A bang here was reached through a *type* lowering (an annotation, a motive, a Π/Σ component): types have no region to hoist to. Value bodies enter through `value`/`region`, which eliminates every `Bang` before this arm could see it.
             Subterm::Bang(_) => return Err(Error::BangInTypePosition),
         })
@@ -395,7 +375,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     pub(super) fn region(&self, term: &Term) -> Result<curios_core::Term, Error> {
         match term.as_subterm() {
             // A `let`'s bound expression evaluates in place (its bangs hoist to this region); the tail continues the same region (a bang there hoists after `x` is bound, not above the `let`).
-            Subterm::Let(let_) => self.lower_let_region(&let_.bindings, &let_.tail),
+            Subterm::Let(let_) => self.lower_let_region(&let_.groups, &let_.tail),
             // The scrutinee evaluates before branching (its bangs hoist here); each arm is its own region (branch-local effects).
             Subterm::Match(match_) => {
                 let mut binds = Vec::new();
@@ -415,8 +395,6 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                 let (params, body) = self.lower_func_params(&func.params, &binders, body)?;
                 Ok(curios_core::Term::func_marked(params, body))
             }
-            // A `rec`'s item bodies are their own regions (hoisting an action out of a recursive binding would change how often it runs); the tail continues like a `let` tail.
-            Subterm::Rec(rec) => self.build_rec(rec),
             // Spine forms (atomic / apply / tuple / proj): collect bangs in left-to-right evaluation order, then wrap.
             _ => {
                 let mut binds = Vec::new();
@@ -426,65 +404,123 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         }
     }
 
-    /// Lowers a run of `let` `bindings` and its `tail` as one region: each binding's bound expression is a value in this region (its bangs hoist here, sequenced by `wrap`), the tail continues the same region. Loops over `bindings` rather than recursing once per binding — a `let` block is flat, so a long straight-line sequence costs one loop, not a stack of native frames. Shared by `region`'s `Let` arm (the whole block) and `build_let` (the bindings after the first, whose own bangs hoist to the enclosing region instead).
+    /// Lowers a run of `let` statements and their `tail` as one region: each statement's bound expressions are values in this region (their bangs hoist here, sequenced by `wrap`), the tail continues the same region. Loops over `groups` rather than recursing once per statement — a `let` block is flat, so a long straight-line sequence costs one loop, not a stack of native frames. Shared by `region`'s `Let` arm (the whole block) and `build_let` (the statements after the first, whose own bangs hoist to the enclosing region instead).
     pub(super) fn lower_let_region(
         &self,
-        bindings: &[LetBinding],
+        groups: &[LetGroup],
         tail: &Term,
     ) -> Result<curios_core::Term, Error> {
         recurse(|| {
-            let Some((first, rest)) = bindings.split_first() else {
+            let Some((first, rest)) = groups.split_first() else {
                 return self.region(tail);
             };
 
-            let mut binds = Vec::new();
-            let value = self.collect(&first.signature.body(), &mut binds)?;
-            let type_ = self.term(&first.signature.type_())?;
-            let binders = self.mint(pattern_names(&first.binder));
-            let inner = self.bound(&binders, || self.lower_let_region(rest, tail))?;
-            let let_term = self.bind_pattern(&first.binder, &binders, type_, value, inner);
+            let (binds, let_term) = self.lower_let_group(
+                first,
+                |term, binds| self.collect(term, binds),
+                || self.lower_let_region(rest, tail),
+            )?;
 
             self.wrap(binds, let_term)
         })
     }
 
     /// [`Self::lower_let_region`] for a `let` reached through [`Self::term`] — a type, an annotation, a motive — where there is no region to hoist a bang into, so a binding is a plain value and nothing wraps.
-    ///
-    /// Its bindings lower type-before-value, where the region form lowers value-before-type. The two orders mint identities in different sequences and are each what their site has always done; they are deliberately not unified here.
-    fn lower_let(&self, bindings: &[LetBinding], tail: &Term) -> Result<curios_core::Term, Error> {
+    fn lower_let(&self, groups: &[LetGroup], tail: &Term) -> Result<curios_core::Term, Error> {
         recurse(|| {
-            let Some((first, rest)) = bindings.split_first() else {
+            let Some((first, rest)) = groups.split_first() else {
                 return self.term(tail);
             };
 
-            let type_ = self.term(&first.signature.type_())?;
-            let value = self.term(&first.signature.body())?;
-            let binders = self.mint(pattern_names(&first.binder));
-            let inner = self.bound(&binders, || self.lower_let(rest, tail))?;
+            let (_, let_term) = self.lower_let_group(
+                first,
+                |term, _| self.term(term),
+                || self.lower_let(rest, tail),
+            )?;
 
-            Ok(self.bind_pattern(&first.binder, &binders, type_, value, inner))
+            Ok(let_term)
         })
     }
 
-    /// Builds the core `rec` for a `rec` inside a value body: item types are types, item bodies are fresh region roots, and the tail continues as its own region (a bang there hoists after the bindings, not above them).
-    pub(super) fn build_rec(&self, rec: &Rec) -> Result<curios_core::Term, Error> {
-        let binders = self.mint(rec.items.iter().map(|it| it.label.clone()));
-        self.bound(&binders, || {
-            Ok(curios_core::Term::rec(
-                rec.items
-                    .iter()
-                    .zip(&binders)
-                    .map(|(it, (_, id))| {
-                        Ok((
-                            id.clone(),
-                            self.term(&it.signature.type_())?,
-                            self.region(&it.signature.body())?,
-                        ))
-                    })
-                    .collect::<Result<Vec<_>, Error>>()?,
-                self.region(&rec.tail)?,
-            ))
-        })
+    /// Lowers one `let` statement — a lone binding or a `let … and …;` group — around `inner`, the lowering of what follows it in the statement's scope. `lower_value` lowers a member's value in that scope: `collect`, hoisting bangs into the binds this hands back, or `term` where there is no region to hoist into.
+    ///
+    /// A statement is recursive when it has more than one member or when a member's type or value mentions a member — read off the lowered terms, never declared. It then becomes a core `rec`, whose member bodies are their own regions (hoisting an action out of a recursive binding would change how often it runs), and every member must be a plain, typed name whose value hoists nothing: a pattern binds no name its own value could use, a type cannot be inferred from a body that mentions it, and an action cannot name the result it is still producing. Each is refused by name. Otherwise the statement is the plain `let` it always was, its pattern desugared by [`Self::bind_pattern`].
+    ///
+    /// The binders are minted before any member is lowered — the whole point, since that is what puts a binding in scope of its own value — so a `let n = n + 1` names the binding it declares rather than an outer `n`, and is refused as the recursive value it now is.
+    fn lower_let_group(
+        &self,
+        group: &LetGroup,
+        lower_value: impl Fn(&Term, &mut Vec<Hoisted>) -> Result<curios_core::Term, Error>,
+        inner: impl FnOnce() -> Result<curios_core::Term, Error>,
+    ) -> Result<(Vec<Hoisted>, curios_core::Term), Error> {
+        let binders = self.mint(
+            group
+                .members
+                .iter()
+                .flat_map(|member| pattern_names(&member.binder)),
+        );
+
+        let mut binds = Vec::new();
+        let (types, values) = self.bound(&binders, || {
+            let mut types = Vec::with_capacity(group.members.len());
+            let mut values = Vec::with_capacity(group.members.len());
+            for member in &group.members {
+                values.push(lower_value(&member.signature.body(), &mut binds)?);
+                types.push(self.term(&member.signature.type_())?);
+            }
+            Ok((types, values))
+        })?;
+
+        // The hoisted actions count: a `!` lifts its operand out of the value, and the self-reference travels with it.
+        let mentioned = binders.iter().any(|(_, id)| {
+            types
+                .iter()
+                .chain(&values)
+                .chain(binds.iter().map(|hoisted| &hoisted.action))
+                .any(|term| term.free_vars_shared().contains(id))
+        });
+        if group.members.len() == 1 && !mentioned {
+            let member = &group.members[0];
+            let (type_, value) = (types[0].clone(), values[0].clone());
+            let tail = self.bound(&binders, inner)?;
+            let let_term = self.bind_pattern(&member.binder, &binders, type_, value, tail);
+            return Ok((binds, let_term));
+        }
+
+        let located = |error: Error, member: &LetBinding| match member.signature.body().span() {
+            Some(span) => error.at(span.clone()),
+            None => error,
+        };
+        for member in &group.members {
+            let Pattern::Binder(Some(label)) = &member.binder else {
+                return Err(located(Error::RecursivePatternBinding, member));
+            };
+            if matches!(member.signature, LetSignature::Name { type_: None, .. }) {
+                return Err(located(
+                    Error::RecursiveBindingNeedsType {
+                        label: label.clone(),
+                    },
+                    member,
+                ));
+            }
+            if !binds.is_empty() {
+                return Err(located(
+                    Error::RecursiveBangBinding {
+                        label: label.clone(),
+                    },
+                    member,
+                ));
+            }
+        }
+
+        let tail = self.bound(&binders, inner)?;
+        let members = binders
+            .iter()
+            .zip(types)
+            .zip(values)
+            .map(|(((_, id), type_), value)| (id.clone(), type_, value));
+
+        Ok((Vec::new(), curios_core::Term::rec(members, tail)))
     }
 
     /// Walks a non-boundary expression, elaborating to core and accumulating each `Bang` into `binds` (in evaluation order) replaced by a fresh variable. Boundary/binding forms desugar as their own nested region; `let`/`match` hoist their bound-expression/scrutinee bangs into the *enclosing* `binds`.
@@ -591,8 +627,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Subterm::Let(let_) => self.build_let(let_, binds)?,
             Subterm::Match(match_) => MatchCompiler::new(self).match_region(match_, binds)?,
             Subterm::Choose(choose) => MatchCompiler::new(self).choose_region(choose, binds)?,
-            // A lambda is a value and a `rec` binds recursively: neither hoists anything outward, so desugar each as its own region.
-            Subterm::Func(_) | Subterm::Rec(_) => self.region(term)?,
+            // A lambda is a value and hoists nothing outward, so it desugars as its own region.
+            Subterm::Func(_) => self.region(term)?,
             // Leaves elaborate normally. A `Bang` reachable here (e.g. nested in a type position) hits `self.term`'s `Bang` arm and is rejected.
             _ => self.term(term)?,
         })
@@ -605,15 +641,17 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         binds: &mut Vec<Hoisted>,
     ) -> Result<curios_core::Term, Error> {
         let (first, rest) = let_
-            .bindings
+            .groups
             .split_first()
-            .expect("a `let` block has at least one binding");
+            .expect("a `let` block has at least one statement");
 
-        let value = self.collect(&first.signature.body(), binds)?;
-        let binders = self.mint(pattern_names(&first.binder));
-        let tail = self.bound(&binders, || self.lower_let_region(rest, &let_.tail))?;
-        let type_ = self.term(&first.signature.type_())?;
-        Ok(self.bind_pattern(&first.binder, &binders, type_, value, tail))
+        let (hoisted, let_term) = self.lower_let_group(
+            first,
+            |term, binds| self.collect(term, binds),
+            || self.lower_let_region(rest, &let_.tail),
+        )?;
+        binds.extend(hoisted);
+        Ok(let_term)
     }
 
     /// Lowers a function's parameters into core binder `(name, domain)` pairs. A plain-name parameter binds its name directly, unchanged; an un-annotated parameter takes a fresh metavar domain. A compound pattern's core binder is a fresh synthetic name, and the (already lowered) `body` is wrapped with its field-`let` chain.

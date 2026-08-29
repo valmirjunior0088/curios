@@ -62,14 +62,14 @@ fn a_comment_above_a_later_let_binding_stays_above_it() {
 
 /// A clause joined by `and` records no span of its own, so a comment leading one used to fall to the first *descendant* that had one — printing between a parameter and its type. That relocation reparsed as a leading comment somewhere new, so the next run moved it again: the one shape in which this formatter failed to converge. Each fixture below is already canonical, so equality pins the placement and the fixed point at once.
 #[test]
-fn a_comment_above_a_rec_clause_stays_above_and() {
-    let source = "rec even(n: /std/Nat) -> /std/Bool =\n    odd(n)\n-- what the second clause is for\nand odd(n: /std/Nat) -> /std/Bool =\n    even(n);\n";
+fn a_comment_above_a_let_group_clause_stays_above_and() {
+    let source = "let even(n: /std/Nat) -> /std/Bool =\n    odd(n)\n-- what the second clause is for\nand odd(n: /std/Nat) -> /std/Bool =\n    even(n);\n";
     assert_eq!(formatted(source), source);
 }
 
 #[test]
-fn a_comment_above_a_local_rec_clause_stays_above_and() {
-    let source = "let main(n: /std/Nat) -> /std/Bool =\n    rec a(x: /std/Nat) -> /std/Bool = b(x)\n    -- the local second clause\n    and b(x: /std/Nat) -> /std/Bool = a(x);\n    a(n);\n";
+fn a_comment_above_a_local_let_group_clause_stays_above_and() {
+    let source = "let main(n: /std/Nat) -> /std/Bool =\n    let a(x: /std/Nat) -> /std/Bool = b(x)\n    -- the local second clause\n    and b(x: /std/Nat) -> /std/Bool = a(x);\n    a(n);\n";
     assert_eq!(formatted(source), source);
 }
 
@@ -317,4 +317,12 @@ fn replacing(lines: &[&str], index: usize, replacement: &str) -> String {
     out[index] = replacement;
 
     format!("{}\n", out.join("\n"))
+}
+
+/// `rec` still parses, as a synonym, and never prints: a file written with it is migrated to `let` on contact, at both levels.
+#[test]
+fn a_rec_group_formats_as_a_let_group() {
+    let source = "rec even(n: /std/Nat) -> /std/Bool =\n    odd(n)\nand odd(n: /std/Nat) -> /std/Bool =\n    even(n);\n\nlet main(n: /std/Nat) -> /std/Bool =\n    rec a(x: /std/Nat) -> /std/Bool = b(x)\n    and b(x: /std/Nat) -> /std/Bool = a(x);\n    a(n);\n";
+    let expected = "let even(n: /std/Nat) -> /std/Bool =\n    odd(n)\nand odd(n: /std/Nat) -> /std/Bool =\n    even(n);\n\nlet main(n: /std/Nat) -> /std/Bool =\n    let a(x: /std/Nat) -> /std/Bool = b(x)\n    and b(x: /std/Nat) -> /std/Bool = a(x);\n    a(n);\n";
+    assert_eq!(formatted(source), expected);
 }

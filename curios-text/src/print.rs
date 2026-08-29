@@ -6,7 +6,7 @@ use {
         Apply, BinPattern, BinSegment, Choose, ChooseArm, ChooseTest, ConceptField, Field, Func,
         FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, Intrinsic, Let,
         LetSignature, ListEntry, ListPattern, Match, MatchPattern, MatchPatternField, Nat,
-        NatLiteral, NatPattern, NumLit, Pattern, PatternField, Proj, Radix, Rec, StructLit,
+        NatLiteral, NatPattern, NumLit, Pattern, PatternField, Proj, Radix, StructLit,
         StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem,
         TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType,
         TupleTypeParam, UseGroup, WitnessEntry,
@@ -936,8 +936,7 @@ fn signature_start(signature: &LetSignature) -> Option<usize> {
 fn print_operand(term: Term, min_prec: u8) -> Printer {
     let parenthesized = match term.as_subterm() {
         Subterm::Infix(infix) => op_precedence(infix.op) < min_prec,
-        Subterm::Rec(_)
-        | Subterm::Let(_)
+        Subterm::Let(_)
         | Subterm::Match(_)
         | Subterm::Choose(_)
         | Subterm::FuncType(_)
@@ -1152,47 +1151,42 @@ fn print_term_inner(term: Term) -> Printer {
                 pure("end"),
             ]))
         }
-        Subterm::Let(Let { bindings, tail }) => {
-            // The binding documents materialize before the tail's, so the marks come out in source order; an eagerly evaluated tail would report its own position ahead of every binding's. Each binding marks its own head, so a comment above a `let` stays above it instead of sliding under the `=`.
-            let bindings = bindings
+        Subterm::Let(Let { groups, tail }) => {
+            // The statement documents materialize before the tail's, so the marks come out in source order; an eagerly evaluated tail would report its own position ahead of every binding's. Every clause marks its own head, so a comment above a `let` stays above it instead of sliding under the `=` — and a clause after the first carries its `and` inside the mark, since a separator carrying the keyword would print it before the comment the clause leads.
+            let statements = groups
                 .into_iter()
-                .map(|binding| {
-                    marked(signature_start(&binding.signature), || {
-                        flat([
-                            pure("let "),
-                            print_pattern(binding.binder),
-                            print_let_signature(binding.signature, false),
-                            pure(";"),
-                            hard_line(),
-                        ])
-                    })
+                .map(|group| {
+                    let count = group.members.len();
+                    let mut parts = Vec::new();
+                    for (index, member) in group.members.into_iter().enumerate() {
+                        let start = signature_start(&member.signature);
+                        let keyword = match index {
+                            0 => "let ",
+                            _ => {
+                                parts.push(hard_line());
+                                "and "
+                            }
+                        };
+                        parts.push(marked(start, || {
+                            let mut clause = vec![
+                                pure(keyword),
+                                print_pattern(member.binder),
+                                print_let_signature(member.signature, false),
+                            ];
+                            // A lone binding keeps its terminator inside the mark; a group's terminator closes the last clause from outside it, as the top-level item's does.
+                            if count == 1 {
+                                clause.extend([pure(";"), hard_line()]);
+                            }
+                            flat(clause)
+                        }));
+                    }
+                    if count > 1 {
+                        parts.extend([pure(";"), hard_line()]);
+                    }
+                    flat(parts)
                 })
                 .collect::<Vec<_>>();
-            flat(bindings.into_iter().chain([print_term(tail)]))
-        }
-        Subterm::Rec(Rec { items, tail }) => {
-            // Every clause after the first marks its own head, for the reason the `let` arm above states. That moves `and` inside the mark: a separator carrying the keyword would print it before the comment the clause leads, which is the mangling this exists to prevent. The first clause needs none — a comment above the block precedes `rec` itself, which the enclosing `print_term` already marks.
-            let mut parts = Vec::from([pure("rec ")]);
-            for (index, item) in items.into_iter().enumerate() {
-                if index == 0 {
-                    parts.push(flat([
-                        pure(item.label),
-                        print_let_signature(item.signature, false),
-                    ]));
-                    continue;
-                }
-                let start = signature_start(&item.signature);
-                parts.push(hard_line());
-                parts.push(marked(start, || {
-                    flat([
-                        pure("and "),
-                        pure(item.label),
-                        print_let_signature(item.signature, false),
-                    ])
-                }));
-            }
-            parts.extend([pure(";"), hard_line(), print_term(tail)]);
-            flat(parts)
+            flat(statements.into_iter().chain([print_term(tail)]))
         }
         Subterm::Bang(term) => flat([print_suffix_head(term), pure("!")]),
         // An overflowing operator chain breaks with the operator leading the continuation line.
@@ -1300,12 +1294,36 @@ fn print_top_use(item: TopUse) -> Printer {
     ])
 }
 
-fn print_top_let(item: TopLet) -> Printer {
+fn print_top_let(items: Vec<TopLet>) -> Printer {
+    let mut iter = items.into_iter();
+    let first = iter.next().expect("a `let` item has a member");
+    let rest = iter.collect::<Vec<_>>();
+
     flat([
-        print_pub(item.vis_pub),
+        print_pub(first.vis_pub),
         pure("let "),
-        pure(item.label),
-        print_let_signature(item.signature, true),
+        pure(first.label),
+        print_let_signature(first.signature, true),
+        flat(
+            rest.into_iter()
+                .map(|item| {
+                    let start = signature_start(&item.signature);
+                    // The separator stays outside the mark, so a comment leading this clause opens a line of its own above `and` rather than running on from the previous clause's last character.
+                    flat([
+                        hard_line(),
+                        marked(start, || {
+                            flat([
+                                // `pub` precedes `and`, which is the spelling the grammar accepts and the one the `induct` group beside this already emits. Reversed, a `pub` member of a group printed as `and pub f` and would not reparse — the formatter's verify gate refused the file rather than writing it, which is why `/std/Toml/values.crs` had never been formatted.
+                                print_pub(item.vis_pub),
+                                pure("and "),
+                                pure(item.label),
+                                print_let_signature(item.signature, true),
+                            ])
+                        }),
+                    ])
+                })
+                .collect::<Vec<_>>(),
+        ),
         pure(";"),
     ])
 }
@@ -1357,40 +1375,6 @@ fn print_top_foreign(item: TopForeign) -> Printer {
         pure(item.label),
         pure(": "),
         print_wire_signature(item.signature),
-        pure(";"),
-    ])
-}
-
-fn print_top_rec(items: Vec<TopLet>) -> Printer {
-    let mut iter = items.into_iter();
-    let first = iter.next().unwrap();
-    let rest = iter.collect::<Vec<_>>();
-
-    flat([
-        print_pub(first.vis_pub),
-        pure("rec "),
-        pure(first.label),
-        print_let_signature(first.signature, true),
-        flat(
-            rest.into_iter()
-                .map(|item| {
-                    let start = signature_start(&item.signature);
-                    // The separator stays outside the mark, so a comment leading this clause opens a line of its own above `and` rather than running on from the previous clause's last character.
-                    flat([
-                        hard_line(),
-                        marked(start, || {
-                            flat([
-                                // `pub` precedes `and`, which is the spelling the grammar accepts and the one the `induct` group beside this already emits. Reversed, a `pub` member of a `rec` group printed as `and pub f` and would not reparse — the formatter's verify gate refused the file rather than writing it, which is why `/std/Toml/values.crs` had never been formatted.
-                                print_pub(item.vis_pub),
-                                pure("and "),
-                                pure(item.label),
-                                print_let_signature(item.signature, true),
-                            ])
-                        }),
-                    ])
-                })
-                .collect::<Vec<_>>(),
-        ),
         pure(";"),
     ])
 }
@@ -1724,7 +1708,6 @@ pub(crate) fn print_top_item(item: TopItem) -> Printer {
         TopItem::Mod(m) => print_top_mod(m),
         TopItem::Use(u) => print_top_use(u),
         TopItem::Let(l) => print_top_let(l),
-        TopItem::Rec(items) => print_top_rec(items),
         TopItem::Induct(group) => print_top_induct(group),
         TopItem::Struct(s) => print_top_struct(s),
         TopItem::Concept(c) => print_top_concept(c),

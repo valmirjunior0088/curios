@@ -1,21 +1,56 @@
 use super::*;
 
-pub(super) fn parse_binding<'a>() -> Parser<'a, RecItem> {
+// A plain-label binding with a mandatory type: every top-level member, and every member of a local group after the first.
+pub(super) fn parse_binding<'a>() -> Parser<'a, (String, LetSignature)> {
     parse_identifier()
         .and(parse_let_signature())
-        .map(|(label, signature)| RecItem {
-            label: label.to_string(),
-            signature,
+        .map(|(label, signature)| (label.to_string(), signature))
+}
+
+// `rec f … and g …; tail` — a synonym for the `let` group until the keyword is removed. It parses to the same node, so a file written with `rec` prints with `let`.
+pub(super) fn parse_rec<'a>() -> Parser<'a, Term> {
+    mark()
+        .and(
+            catch(parse_keyword("rec"))
+                .and_keep(sep_by1(parse_binding, || parse_keyword("and")))
+                .and_drop(parse_literal(";")),
+        )
+        .and(lazy(parse_term).and(mark()))
+        .map(|((start, members), (tail, end))| {
+            let span = start.to(&end);
+            let members = members
+                .into_iter()
+                .map(|(label, signature)| LetBinding {
+                    binder: Pattern::Binder(Some(label)),
+                    signature,
+                })
+                .collect();
+            Term::from(Subterm::Let(Let {
+                groups: vec![LetGroup { members }],
+                tail,
+            }))
+            .with_span(span)
         })
 }
 
-pub(super) fn parse_rec<'a>() -> Parser<'a, Term> {
-    catch(parse_keyword("rec"))
-        .and_keep(sep_by1(parse_binding, || parse_keyword("and")))
+// One `let` statement: `let pattern (: T)? = e;`, or the group `let f … and g … and h …;` whose later members are plain labels with mandatory types.
+fn parse_let_group<'a>() -> Parser<'a, LetGroup> {
+    catch(parse_keyword("let"))
+        .and_keep(parse_pattern())
+        .and(parse_local_let_signature())
+        .map(|(binder, signature)| LetBinding { binder, signature })
+        .and(many0(|| {
+            catch(parse_keyword("and"))
+                .and_keep(parse_binding())
+                .map(|(label, signature)| LetBinding {
+                    binder: Pattern::Binder(Some(label)),
+                    signature,
+                })
+        }))
         .and_drop(parse_literal(";"))
-        .and(lazy(parse_term))
-        .map(|(items, tail)| Subterm::Rec(Rec { items, tail }))
-        .map(Into::into)
+        .map(|(first, rest)| LetGroup {
+            members: iter::once(first).chain(rest).collect(),
+        })
 }
 
 // A `use` binder in function-definition sugar (`let`/`rec`/`satisfy` telescopes): `use term`. Always anonymous — there is no source binder position at all (lowering mints a fresh name directly) and joins the instance scope; an instance is reached by resolution, never by name.
@@ -95,30 +130,20 @@ pub(super) fn parse_local_let_signature<'a>() -> Parser<'a, LetSignature> {
     parse_func_let_signature().or(parse_optional_name_signature())
 }
 
-// `let x = e; tail` / `let x : T = e; tail` / `let (x, y) = e; tail` / `let f(p : T, …) -> R = …; tail`. The binder accepts a tuple/struct pattern (see `Pattern`), desugaring at lowering into a fresh binder plus a projection-`let` chain.
+// `let x = e; tail` / `let x : T = e; tail` / `let (x, y) = e; tail` / `let f(p : T, …) -> R = …; tail` / `let f … and g …; tail`. The binder accepts a tuple/struct pattern (see `Pattern`), desugaring at lowering into a fresh binder plus a projection-`let` chain.
 //
-// `many1` parses the whole run of `let` headers in a loop, then the tail once, and they become a single flat `Let` block — one node for the whole run, not a right-nested chain — so nothing downstream (clone, lowering) recurses once per binding. The leading `mark` on the first header and the trailing `mark` after the tail span the block.
+// `many1` parses the whole run of `let` statements in a loop, then the tail once, and they become a single flat `Let` block — one node for the whole run, not a right-nested chain — so nothing downstream (clone, lowering) recurses once per binding. The leading `mark` on the first statement and the trailing `mark` after the tail span the block.
 pub(super) fn parse_let<'a>() -> Parser<'a, Term> {
-    many1(|| {
-        mark().and(
-            catch(parse_keyword("let"))
-                .and_keep(parse_pattern())
-                .and(parse_local_let_signature())
-                .and_drop(parse_literal(";")),
-        )
-    })
-    .and(lazy(parse_term).and(mark()))
-    .map(|(headers, (tail, end))| {
-        // `many1` guarantees at least one header, so the span start is defined.
-        let span = headers[0].0.to(&end);
+    many1(|| mark().and(parse_let_group()))
+        .and(lazy(parse_term).and(mark()))
+        .map(|(statements, (tail, end))| {
+            // `many1` guarantees at least one statement, so the span start is defined.
+            let span = statements[0].0.to(&end);
 
-        let bindings = headers
-            .into_iter()
-            .map(|(_, (binder, signature))| LetBinding { binder, signature })
-            .collect();
+            let groups = statements.into_iter().map(|(_, group)| group).collect();
 
-        Term::from(Subterm::Let(Let { bindings, tail })).with_span(span)
-    })
+            Term::from(Subterm::Let(Let { groups, tail })).with_span(span)
+        })
 }
 
 // A glued `.index`/`.label` projection, consuming no whitespace — usable both as an ordinary term suffix (via the whitespace-eating [`parse_proj_suffix`]) and inside the tight `Bin`-literal spread operand.

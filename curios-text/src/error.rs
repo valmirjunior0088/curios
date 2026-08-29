@@ -100,6 +100,20 @@ pub enum Error {
     BindArmIrrefutable,
     /// A headed match ended in a *named* catch-all (`| x =>`) among concrete constructor arms. Only a bare `| _ =>` is a catch-all default; a named binder there is almost certainly a mistake (a misspelled constructor, or a binder that silently swallows every remaining case).
     MatchNamedCatchAll,
+    /// A recursive local binding — one that names itself, or a member of a `let … and …;` group — whose binder is a pattern. A pattern binds projections, none of which its own value could name.
+    RecursivePatternBinding,
+    /// A recursive local binding with no type annotation. A body that mentions the binding cannot be the source of its type.
+    RecursiveBindingNeedsType {
+        label: String,
+    },
+    /// A recursive local binding whose value performs `!`. The action runs before the binding exists, so it cannot name the result it produces.
+    RecursiveBangBinding {
+        label: String,
+    },
+    /// Top-level definitions that reference one another without being declared as one `let … and …;` group. A lone definition may name itself, but a cycle between two has no order to declare them in.
+    UndeclaredCycle {
+        names: Vec<String>,
+    },
     ModuleLoadFailed {
         label: String,
         cause: Box<LoadError>,
@@ -267,6 +281,40 @@ impl fmt::Display for Error {
                 write!(
                     f,
                     "a named final arm cannot be a catch-all; write `| _ =>` for a default, or name the constructor"
+                )
+            }
+            Error::RecursivePatternBinding => {
+                write!(
+                    f,
+                    "a recursive binding is a plain name: a pattern binds projections of a value, none of which the value itself can name; bind the value under a name and destructure it after"
+                )
+            }
+            Error::RecursiveBindingNeedsType { label } => {
+                write!(
+                    f,
+                    "`{label}` mentions itself and states no type; a recursive binding states its type, since a body that mentions the binding cannot be the source of it — and if an outer `{label}` was meant, the new binding shadows it: rename one of them"
+                )
+            }
+            Error::RecursiveBangBinding { label } => {
+                write!(
+                    f,
+                    "`{label}` is bound by an action that mentions it; the action runs before the binding exists, so it cannot name the result it produces"
+                )
+            }
+            Error::UndeclaredCycle { names } => {
+                let quoted = names
+                    .iter()
+                    .map(|name| format!("`{name}`"))
+                    .collect::<Vec<_>>();
+                let listed = match quoted.split_last() {
+                    Some((last, rest)) if !rest.is_empty() => {
+                        format!("{} and {last}", rest.join(", "))
+                    }
+                    _ => quoted.join(", "),
+                };
+                write!(
+                    f,
+                    "{listed} reference each other; a definition may name itself, but definitions that name one another are declared as one group — join them with `and`"
                 )
             }
             Error::ModuleLoadFailed { label, cause } => {

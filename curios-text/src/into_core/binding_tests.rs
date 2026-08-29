@@ -108,3 +108,59 @@ fn an_unannotated_local_let_is_pinned_through_a_type_alias() {
         "outer elaborated"
     );
 }
+
+// A local binding is in scope of its own value: one that names itself lowers to a core `rec`, and a lone binding that does not stays the plain `let` it always was.
+#[test]
+fn a_local_binding_that_names_itself_lowers_to_a_rec() {
+    let lowered = run(r#"
+        let f(n : Type) -> Type = f(n);
+        f
+    "#);
+    assert!(lowered.mentions_rec() && lowered.free_vars().is_empty());
+    assert!(
+        !run(r#"
+            let x : Type = Type;
+            x
+        "#)
+        .mentions_rec()
+    );
+}
+
+// A local `let … and …;` group is one core `rec`, its members bound in one another.
+#[test]
+fn a_local_group_lowers_to_one_rec() {
+    let lowered = run(r#"
+        let a(x : Type) -> Type = b(x)
+        and b(x : Type) -> Type = a(x);
+        a
+    "#);
+    assert!(lowered.mentions_rec() && lowered.free_vars().is_empty());
+}
+
+// The three shapes a recursive binding cannot take, each refused by name: no type, a pattern binder, an action.
+#[test]
+fn a_recursive_local_binding_without_a_type_is_refused() {
+    let report = run_err("let x = x; x");
+    assert!(
+        report.contains("`x` mentions itself and states no type"),
+        "unexpected report: {report}"
+    );
+}
+
+#[test]
+fn a_recursive_local_pattern_binding_is_refused() {
+    let report = run_err("let (a, b) : Type = (a, b); a");
+    assert!(
+        report.contains("a recursive binding is a plain name"),
+        "unexpected report: {report}"
+    );
+}
+
+#[test]
+fn a_recursive_local_action_binding_is_refused() {
+    let report = run_err("(y : Type) => let x : Type = f(x)!; x");
+    assert!(
+        report.contains("`x` is bound by an action that mentions it"),
+        "unexpected report: {report}"
+    );
+}

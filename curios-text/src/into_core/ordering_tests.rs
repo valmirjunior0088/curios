@@ -40,17 +40,46 @@ fn orders_dependency_through_type_annotation() {
     );
 }
 
-// A genuine non-atomic value cycle cannot be ordered; phase 5 emits it anyway and leaves one reference as a free name, which core rejects as unbound. There is nothing to repair — cross-declaration value recursion is unexpressible.
+// A genuine value cycle between separate items cannot be ordered, and it is not the lowering's to repair: cross-declaration recursion is declared with `and`, so a cycle the source did not declare is refused by name, with the way out.
 #[test]
-fn genuine_value_cycle_leaves_unbound_name() {
+fn an_undeclared_value_cycle_is_refused_by_name() {
+    let report = run_err(
+        r#"
+        pub mod A
+            pub let f : Type = /B/g;
+        end
+        pub mod B
+            pub let g : Type = /A/f;
+        end
+        Type
+    "#,
+    );
     assert!(
-        !run(r#"
-            pub mod A
-                pub let f : Type = /B/g;
-            end
-            pub mod B
-                pub let g : Type = /A/f;
-            end
+        report.contains("reference each other") && report.contains("`and`"),
+        "expected the cycle refused with its way out: {report}"
+    );
+}
+
+// A definition that names itself is the recursive group of one the kernel needs it to be — read off its body, never declared — so the reference is bound rather than left free.
+#[test]
+fn a_definition_that_names_itself_lowers_to_a_bound_group_of_one() {
+    assert!(
+        run(r#"
+            let f : (n : Type) -> Type = (n) => f(n);
+            Type
+        "#)
+        .free_vars()
+        .is_empty()
+    );
+}
+
+// A declared group binds every member's name in every member, whichever module each reference spells.
+#[test]
+fn a_declared_group_binds_its_members_in_one_item() {
+    assert!(
+        run(r#"
+            pub let f : Type = g
+            and g : Type = f;
             Type
         "#)
         .free_vars()
