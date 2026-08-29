@@ -54,14 +54,16 @@ pub(super) fn elaborate_tuple(
 
     let expected = match mode {
         Mode::Check(expected) => expected,
-        // Synthesis position: infer each field independently and form the *non-dependent* product. No field type can mention an earlier field (each is inferred in isolation), so the telescope is non-dependent — a dependent Σ-type only ever arises from a checking expectation. This is what lets an un-annotated `let (a, b) = (x, y)` infer `{ typeof x, typeof y }` instead of demanding an annotation.
+        // Synthesis position: infer each field independently and form the *non-dependent* product. No field type can mention an earlier field (each is inferred in isolation), so the telescope is non-dependent — a dependent Σ-type only ever arises from a checking expectation. This is what lets an un-annotated `let (a, b) = (x, y)` infer `{ typeof x, typeof y }` instead of demanding an annotation. The product is labeled as the literal was: labels are part of a tuple type's identity (see `compare_tuple_type`), so a synthesized `(a = 1, b = true)` must be `{a: Nat, b: Bool}` — the type its projections and any later annotation will be measured against — and not the unlabeled product that would refuse `z.a`.
         Mode::Infer => {
             let mut elaborated = Vec::with_capacity(fields.len());
             let mut field_types = Vec::with_capacity(fields.len());
-            for field in fields {
+            for (position, field) in fields.iter().enumerate() {
                 let (field, field_type) = elaborate(context, field, Mode::Infer)?;
                 elaborated.push(field);
-                field_types.push((context.fresh(None), field_type));
+                // `names` is empty for a positional literal, not a row of `None`s (see `Term::tuple`), so the label is read by position.
+                let name = names.get(position).and_then(|name| name.as_deref());
+                field_types.push((context.fresh(name), field_type));
             }
             return Ok((Term::tuple(elaborated), Term::tuple_type(field_types)));
         }

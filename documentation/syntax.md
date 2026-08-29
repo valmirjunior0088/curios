@@ -187,6 +187,8 @@ A tuple type is a dependent field telescope enclosed in braces.
 
 Later fields may refer to earlier named fields. The empty tuple type `{}` is the unit type.
 
+Labels are part of a tuple type's identity: `{Nat, Bool}`, `{a: Nat, b: Bool}` and `{x: Nat, y: Bool}` are three distinct types, and a value of one is not a value of another. Function-type parameter names carry no such weight; only tuple labels do.
+
 A labeled function field may use signature sugar:
 
 ```crs
@@ -214,6 +216,8 @@ Tuple values use parentheses and comma-separated fields:
 ```
 
 A one-field tuple is written `(x,)`; the trailing comma is what separates it from the parenthesized term `(x)`. A labeled single field needs no comma, since `=` already disambiguates it: `(only = 1)`.
+
+A literal is measured against the labels of its expected type position by position. An unlabeled literal checks against a labeled type and takes its labels from it, so `(1, true)` is a `{a: Nat, b: Bool}` where one is expected. A labeled literal is refused where the expected type's label at that position differs or is absent; fields are never reordered to match. A literal with no expected type — an unannotated `let`, a projection head — synthesizes the non-dependent product with the labels it wrote: `(a = 1, b = true)` is a `{a: Nat, b: Bool}`, and `(1, true)` a `{Nat, Bool}`, which no later annotation can relabel. A labeled tuple is projected by position or by label: `z.0` and `z.a` name the same field.
 
 Labeled fields may use function-definition sugar:
 

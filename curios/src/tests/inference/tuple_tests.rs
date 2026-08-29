@@ -142,3 +142,30 @@ fn a_settled_index_measures_the_literal_against_the_type_it_computes() {
         "expected the arity report the reduced payload type makes possible:\n{report}"
     );
 }
+
+// Labels are part of a tuple type's identity, so a literal synthesized with nothing expecting it must keep the labels it wrote: the product is what its projections are resolved against, and an unlabeled one has no field called `a`.
+#[test]
+fn a_labeled_literal_synthesizes_with_its_labels() {
+    let source = r#"
+        use /std/{Nat, Bool, Handle};
+        let z = (a = 1, b = true);
+        /std/print(Nat/to_str(z.a))
+        "#;
+
+    assert_eq!(run(source), b"1");
+}
+
+// The same product, read back through the oracle: the labels are in the type, not only in the literal.
+#[test]
+fn a_synthesized_labeled_product_reports_its_labels() {
+    let source = r#"
+        let y : ? = (a = 1, b = true);
+        /std/print("ok\n")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("? = {a: Nat, b: Bool}"),
+        "expected the synthesized product to carry its labels:\n{report}"
+    );
+}
