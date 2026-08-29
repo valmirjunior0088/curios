@@ -10,6 +10,7 @@ pub(super) struct CallAnalysis {
     pub(super) call_graph: BTreeMap<CpsFunId, BTreeSet<CpsFunId>>,
     pub(super) node_owners: BTreeMap<CpsNodeId, CpsFunId>,
     pub(super) escaping: BTreeSet<CpsFunId>,
+    /// On a cycle of the call graph closed under definition — a callee inherits the calls of every function nested within it — which is the inliner's question: see `analyze_calls`.
     pub(super) recursive: BTreeSet<CpsFunId>,
     pub(super) sccs: SccAnalysis,
 }
@@ -130,19 +131,44 @@ pub(super) fn analyze_calls(module: &CpsModule) -> CallAnalysis {
         }
     }
 
-    // A function is recursive exactly when it lies on a call cycle: it is in a multi-member SCC, or it is a singleton SCC with a self-edge. Deriving the set from the SCC phase keeps one source of truth for cyclicity.
-    let sccs = analyze_sccs(&analysis.call_graph);
-    for (&function, &component) in &sccs.component_of {
-        let multi_member = sccs.members[component].len() > 1;
-        let self_edge = analysis
-            .call_graph
+    // A function is recursive, for the inliner, when it lies on a cycle of what an inline *copies*. A callee's extent carries every function defined lexically within it (`copied_extent`), so a call one of those makes is reproduced by each copy as surely as a call the callee's own body makes — and a copy that reaches back to the caller is a call the next sweep meets again, with nothing but the size limits to end it. That is how a by-need knot's forcing function, its initializer and the closure the initializer builds — three small functions, none calling itself, each reaching the next through a call or a definition — inlined one another without bound. So the verdict is taken over the call graph closed under definition: an owner inherits the calls of every function nested within it, transitively. The body-only graph and its components stay what specialization and contification read, since to them a nested closure is a function of its own, and folding it into its definer's component would let an escaping closure disqualify a component it merely sits in.
+    let mut nested_in: BTreeMap<CpsFunId, Vec<CpsFunId>> = BTreeMap::new();
+    for (&node_id, &owner) in &analysis.node_owners {
+        if let Some(CpsNode::LetFun { functions, .. }) = module.node(node_id) {
+            nested_in
+                .entry(owner)
+                .or_default()
+                .extend(functions.iter().copied());
+        }
+    }
+    let mut closed = analysis.call_graph.clone();
+    // Nesting is a forest, so this settles in as many rounds as it is deep.
+    let mut changed = true;
+    while changed {
+        changed = false;
+        for (owner, nested) in &nested_in {
+            for function in nested {
+                let Some(edges) = closed.get(function).cloned() else {
+                    continue;
+                };
+                let own = closed.entry(*owner).or_default();
+                let before = own.len();
+                own.extend(edges);
+                changed |= own.len() != before;
+            }
+        }
+    }
+    let closed_sccs = analyze_sccs(&closed);
+    for (&function, &component) in &closed_sccs.component_of {
+        let multi_member = closed_sccs.members[component].len() > 1;
+        let self_edge = closed
             .get(&function)
             .is_some_and(|edges| edges.contains(&function));
         if multi_member || self_edge {
             analysis.recursive.insert(function);
         }
     }
-    analysis.sccs = sccs;
+    analysis.sccs = analyze_sccs(&analysis.call_graph);
     analysis
 }
 /// Every node in `function`'s own body, stopping at each nested function's boundary — see [`free_values`] for which callers that suits and which it does not.

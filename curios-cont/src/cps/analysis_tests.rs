@@ -3,7 +3,7 @@
 use {
     super::test_support::call_graph,
     crate::cps::{
-        analysis::{analyze_sccs, known_values},
+        analysis::{analyze_calls, analyze_sccs, known_values},
         inline::inline_single_use_continuations,
         optimize::optimize,
     },
@@ -368,5 +368,92 @@ fn a_join_every_transfer_hands_the_same_tag_has_its_tag_known() {
     assert!(
         !known.contains_key(&payload),
         "the payload differs per transfer"
+    );
+}
+
+// `f` calls `g`; `g` defines `h` and returns it as a closure; `h` calls `f`. No body calls back on its own, so the body-only graph is acyclic — yet inlining `g` copies `h`, and each copy is a fresh call to `f`, which the next sweep meets again: the shape a by-need knot's forcing function, initializer and built closure take. The recursive verdict closes the graph under definition, so `f` and `g` are recursive; `h` lies on no cycle of its own and is not.
+#[test]
+fn a_function_reached_back_through_a_function_it_defines_is_recursive() {
+    let mut module = CpsModule::default();
+    let f = module.reserve_function();
+    let g = module.reserve_function();
+    let h = module.reserve_function();
+    let f_return = module.reserve_continuation();
+    let g_return = module.reserve_continuation();
+    let h_return = module.reserve_continuation();
+
+    let h_body = module.add_node(CpsNode::ApplyFun {
+        callee: CpsCallee::Known(f),
+        args: vec![],
+        return_to: h_return,
+    });
+    module.define_function(
+        h,
+        CpsFunction {
+            debug_name: Some("h".into()),
+            params: vec![],
+            return_cont: h_return,
+            body: h_body,
+        },
+    );
+    let return_h = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        target: g_return,
+        args: vec![CpsAtom::Fun(h)],
+    }));
+    let g_body = module.add_node(CpsNode::LetFun {
+        functions: vec![h],
+        body: return_h,
+    });
+    module.define_function(
+        g,
+        CpsFunction {
+            debug_name: Some("g".into()),
+            params: vec![],
+            return_cont: g_return,
+            body: g_body,
+        },
+    );
+    let f_body = module.add_node(CpsNode::ApplyFun {
+        callee: CpsCallee::Known(g),
+        args: vec![],
+        return_to: f_return,
+    });
+    module.define_function(
+        f,
+        CpsFunction {
+            debug_name: Some("f".into()),
+            params: vec![],
+            return_cont: f_return,
+            body: f_body,
+        },
+    );
+    let entry = module.reserve_function();
+    let entry_return = module.reserve_continuation();
+    let call_f = module.add_node(CpsNode::ApplyFun {
+        callee: CpsCallee::Known(f),
+        args: vec![],
+        return_to: entry_return,
+    });
+    let entry_body = module.add_node(CpsNode::LetFun {
+        functions: vec![f, g],
+        body: call_f,
+    });
+    module.define_function(
+        entry,
+        CpsFunction {
+            debug_name: Some("main".into()),
+            params: vec![],
+            return_cont: entry_return,
+            body: entry_body,
+        },
+    );
+    module.set_entry(entry);
+
+    let analysis = analyze_calls(&module);
+    assert!(analysis.recursive.contains(&f) && analysis.recursive.contains(&g));
+    assert!(!analysis.recursive.contains(&h));
+    assert!(
+        !analysis.call_graph[&g].contains(&f),
+        "the body-only graph keeps a nested closure's calls its own"
     );
 }
