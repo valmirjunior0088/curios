@@ -92,3 +92,38 @@ fn higher_kinded_implicit_infers_by_imitation() {
 
     assert_eq!(run(source), b"2");
 }
+
+// Two applications of one global definition are unified by their spines before the head unfolds — the first-order approximation. `trim` is a fold that never names itself, so it is a `let` and reduction would unfold it: the left side steps to `combine(false, trim(x))`, the right to a fold stuck on `?t`, and nothing pins `?t` again. Comparing the spines first states the solution outright, as it always had for a `rec`-defined head, whose application stays folded.
+#[test]
+fn an_implicit_solves_by_spine_agreement_before_the_head_unfolds() {
+    let source = r#"
+        use /std/{Nat, Bool, Bits, Eq, Handle, Str};
+        let combine(head : Bool, t : Bits) -> Bits =
+            match t
+            | b[] => match head | true => b[head] | false => b[] end
+            | b[_, .._] => b[head, ..t]
+            end;
+        let trim(bits : Bits) -> Bits =
+            match bits | b[] => b[] | b[head, ..tail]; ih => combine(head, ih) end;
+        let through(@t : Bits, q : Eq(trim(t), b[])) -> Eq(trim(t), b[]) = q;
+        let probe(x : Bits, q : Eq(trim(b[0, ..x]), b[])) -> Eq(trim(b[0, ..x]), b[]) = through(q);
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
+        "#;
+
+    assert_eq!(run(source), b"ok");
+}
+
+// Agreeing spines are sufficient, never necessary: a constant function's applications to different arguments are still equal, and the attempt's mismatch must fall through to the unfolding that decides them — with whatever the attempt committed rolled back.
+#[test]
+fn a_spine_mismatch_falls_through_to_unfolding() {
+    let source = r#"
+        use /std/{Nat, Eq, Handle, Str};
+        let constant(n : Nat) -> Nat = 0;
+        let same : Eq(constant(2), constant(1)) = Eq/refl();
+        let _ = Handle/write(Handle/stdout, Str/to_bytes("ok"))!;
+        /std/Io/pure(())
+        "#;
+
+    assert_eq!(run(source), b"ok");
+}

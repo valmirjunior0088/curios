@@ -27,7 +27,8 @@ mod test_support;
 
 use {
     super::{
-        Context, check, reduce, reduce_forced, stalled_unfolding, unfold_rec, unfold_rec_apply,
+        Context, applied_head, check, reduce, reduce_forced, stalled_unfolding, unfold_rec,
+        unfold_rec_apply,
     },
     curios_core::{
         Apply, Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Intrinsic,
@@ -340,6 +341,57 @@ impl Convert {
         }
 
         Ok(true)
+    }
+
+    /// The first-order approximation for two applications of one global definition, taken on the raw spellings before either side is reduced. Reduction would unfold a `let`-defined head into its body on both sides — `trim(?t)` becomes a `match` stuck on `?t` — and lose the equation the spines state outright, `?t := X`. A `rec` member's application survives reduction as a folded neutral and reaches [`Self::compare_same_rec_apply`], which compares spines before it unfolds; this is the same rule for a head that does not survive, so what a program's unification does cannot depend on whether a definition happened to name itself (a fold through `; ih` names nothing, and `/std/BigNat/trim` is one). Congruence is sufficient and never necessary: agreeing spines decide the problem, and a spine that mismatches or blocks decides nothing — the problem falls through to the reduced comparison, where a genuinely different argument may still produce the same value. The attempt is bracketed: a solution it committed on the way to a verdict it did not reach is rolled back, so the fallthrough starts where the attempt did.
+    fn compare_same_global_apply(
+        context: &mut Context,
+        this: &Term,
+        that: &Term,
+    ) -> Result<bool, ReduceError> {
+        let (Subterm::Apply(this), Subterm::Apply(that)) = (&**this, &**that) else {
+            return Ok(false);
+        };
+        if this.params.len() != that.params.len() {
+            return Ok(false);
+        }
+        let global = |head: &Term| match &**applied_head(head) {
+            Subterm::Var(var) => var.as_free().and_then(Free::as_global).cloned(),
+            _ => None,
+        };
+        let (Some(this_global), Some(that_global)) = (global(&this.head), global(&that.head))
+        else {
+            return Ok(false);
+        };
+        if this_global != that_global {
+            return Ok(false);
+        }
+
+        let param_types = apply_param_types(context, &this.head, &this.params)?;
+        let mark = context.solution_mark();
+        let mut converts = matches!(
+            convert_outcome(context, &Term::type_ground(), &this.head, &that.head)?,
+            Outcome::Converts
+        );
+        for (index, (a, b)) in this.params.iter().zip(&that.params).enumerate() {
+            if !converts {
+                break;
+            }
+            let param_type = param_types
+                .as_ref()
+                .and_then(|types| types.get(index).cloned())
+                .unwrap_or_else(Term::type_ground);
+            converts = matches!(
+                convert_outcome(context, &param_type, a, b)?,
+                Outcome::Converts
+            );
+        }
+        match converts {
+            true => context.end_solutions(mark),
+            false => context.rollback_solutions(mark),
+        }
+
+        Ok(converts)
     }
 
     /// Compare applications of the same structural recursive member without assuming that member is injective. Convertible spines establish the result by congruence. A genuinely different spine instead triggers one symmetric delta step: distinct arguments may still produce equal results for a recursive function.
@@ -1479,6 +1531,11 @@ impl Convert {
             // The unreduced spellings, kept for the flex–rigid case: the reductions below apply counterfactual match-arm refinements, and a candidate *solution* must be derived without them (see `solve_refinement_free`).
             let this_raw = this.clone();
             let that_raw = that.clone();
+
+            // Two applications of one global definition are decided by their spines first, on these raw spellings — see `compare_same_global_apply` for why this must precede the reduction below.
+            if Self::compare_same_global_apply(context, &this_raw, &that_raw)? {
+                continue;
+            }
 
             let this = reduce(context, this)?;
             let that = reduce(context, that)?;

@@ -905,7 +905,7 @@ fn normalize_each(context: &mut Context, terms: Vec<Term>) -> Result<Vec<Term>, 
 }
 
 /// The head of an application, or the term itself, looked at through a universe instance: the position a name sits in, and the position a stuck form shows at.
-fn applied_head(term: &Term) -> &Term {
+pub(crate) fn applied_head(term: &Term) -> &Term {
     let head = match &**term {
         Subterm::Apply(Apply { head, .. }) => head,
         _ => term,
