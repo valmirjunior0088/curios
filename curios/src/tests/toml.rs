@@ -514,7 +514,7 @@ fn program() -> String {
         use /std/Toml/{{flt}};
         let taint = Bytes/len(rand/bytes(0)!);
         let opaque_n(n : Nat) -> Nat = (taint + 1) * n;
-        rec run_of(ch : Str, k : Nat) -> Str =
+        let run_of(ch : Str, k : Nat) -> Str =
             match k == 0
             | true => ""
             | false => Str/concat(ch, run_of(ch, k - 1))

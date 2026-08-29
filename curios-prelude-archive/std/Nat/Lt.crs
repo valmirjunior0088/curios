@@ -17,7 +17,7 @@ pub let le_one_of_positive(@n: Nat, p: Lt(0, n)) -> Nat/Le(1, n) =
     | pred + 1 => True/qed()
     end;
 
-pub rec succ_of_ind(@a: Nat, @b: Nat, p: Ind(a, b)) -> Lt(a, b + 1) =
+pub let succ_of_ind(@a: Nat, @b: Nat, p: Ind(a, b)) -> Lt(a, b + 1) =
     match p: (x, y, w) => Lt(x, y + 1)
     | z(@_) => True/qed()
     | s(@_, @_, prev) => succ_of_ind(prev)
@@ -27,7 +27,7 @@ pub let of_ind_succ(@a: Nat, @b: Nat, p: Ind(a + 1, b)) -> Lt(a, b) =
     match p: (x, y, w) => Lt(x - 1, y) | s(@a2, @b2, prev) => succ_of_ind(prev) end;
 
 -- The strict bound weakened into the inductive family, so a `<` guard can reach the laws that recurse over `Nat/Le/Ind`. The `ind_`/`le_` prefixes across this module say which form a law hands back; they used to be `lte_`/`le_`, which said only that the two were spelled differently. The zero case is immediate, the case where the bound has run out is `False` under the hypothesis, and the successor case is the hypothesis itself — `a + 1 < b + 1` and `a < b` are one term once the shared floor cancels.
-pub rec ind_of_lt(a: Nat, b: Nat, p: Lt(a, b)) -> Ind(a, b) =
+pub let ind_of_lt(a: Nat, b: Nat, p: Lt(a, b)) -> Ind(a, b) =
     match a
     | 0 => Ind/z()
     | ap + 1 =>
@@ -42,7 +42,7 @@ pub let le_of_lt(a: Nat, b: Nat, p: Lt(a, b)) -> Nat/Le(a, b) =
     Le/of_ind(ind_of_lt(a, b, p));
 
 -- `a < b` gives `a + 1 <= b`: the strict bound is exactly the non-strict one on the successor. Lived in `/std/Str/utf8` until the windows needed it too — a fact about `Nat`, homed with the rest of them.
-pub rec ind_succ_of_lt(i: Nat, n: Nat, p: Lt(i, n)) -> Ind(i + 1, n) =
+pub let ind_succ_of_lt(i: Nat, n: Nat, p: Lt(i, n)) -> Ind(i + 1, n) =
     match n
     | 0 => match p end
     | np + 1 => match i | 0 => Ind/s(Ind/z()) | ip + 1 => Ind/s(ind_succ_of_lt(ip, np, p)) end

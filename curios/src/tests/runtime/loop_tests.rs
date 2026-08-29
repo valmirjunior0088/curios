@@ -19,7 +19,7 @@ fn accumulation_loops_are_linear_by_construction() {
     assert_eq!(
         run(r#"
         use /std/{Handle, Bytes, Nat, Str};
-        rec go(i : Nat, acc : Bytes) -> Bytes =
+        let go(i : Nat, acc : Bytes) -> Bytes =
             match i
             | 0 => acc
             | k + 1; ih => go(k, x[..acc, ..Str/to_bytes("0123456789")])
@@ -40,14 +40,14 @@ fn peel_loops_are_linear_by_construction() {
     assert_eq!(
         run(r#"
         use /std/{Handle, Byte, Bytes, Nat, Str, Cell, Io};
-        rec build(i : Nat, acc : Bytes) -> Bytes =
+        let build(i : Nat, acc : Bytes) -> Bytes =
             match i
             | 0 => acc
             | k + 1; ih => build(k, x[..acc, ..Str/to_bytes("0123456789")])
             end;
         let built = build(10000, x[]);
         let c = Cell/new(built)!;
-        rec drain(fuel : Nat, acc : Nat) -> Io(Nat) =
+        let drain(fuel : Nat, acc : Nat) -> Io(Nat) =
             match fuel
             | 0 => Io/pure(acc)
             | f + 1; ih =>
@@ -130,12 +130,12 @@ fn an_immediate_leaf_tree_builds_and_sums_at_runtime() {
         | leaf(Nat)
         | node(Nat, Tree, Tree)
         end
-        rec build(d : Nat, v : Nat) -> Tree =
+        let build(d : Nat, v : Nat) -> Tree =
             match d : (_) => Tree
             | 0 => Tree/leaf(v)
             | dp + 1; ih => Tree/node(v, build(dp, v * 2), build(dp, v * 2 + 1))
             end;
-        rec sum(t : Tree) -> Nat =
+        let sum(t : Tree) -> Nat =
             match t : (_) => Nat
             | leaf(n) => n % 1000003
             | node(n, l, r) => (n + sum(l) + sum(r)) % 1000003
@@ -184,7 +184,7 @@ fn a_nan_default_on_a_runtime_option_converges() {
 fn arena_pure_computation_hugs_a_host_effect() {
     let source = r#"
         use /std/{Handle, Nat, Str};
-        rec triangle(n : Nat) -> Nat =
+        let triangle(n : Nat) -> Nat =
             match n : (_) => Nat
             | 0 => 0
             | p + 1; ih => n + ih
@@ -211,12 +211,12 @@ fn arena_deferred_context_recursion_is_stack_safe_at_depth() {
         format!(
             r#"
         use /std/{{Handle, Nat, Str, Bytes}};
-        rec count(b : Bytes) -> Nat =
+        let count(b : Bytes) -> Nat =
             match b : (_) => Nat
             | x[] => 0
             | x[h, ..t]; ih => count(t) + 1
             end;
-        rec build(n : Nat, acc : Bytes) -> Bytes =
+        let build(n : Nat, acc : Bytes) -> Bytes =
             match n : (_) => Bytes
             | 0 => acc
             | p + 1; ih => build(p, x[0x61, ..acc])

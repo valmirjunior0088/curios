@@ -11,7 +11,7 @@ induct Stmt: Type
 | array_header(List(Str))
 end
 
-rec key_path(acc: List(Str)) -> Parse(List(Str)) =
+let key_path(acc: List(Str)) -> Parse(List(Str)) =
     let k = key_part!;
     let _ = ws!;
     let acc2 = [..acc, k];
@@ -56,7 +56,7 @@ let stmt: Parse(Stmt) =
         end
     end;
 
-rec stmts(acc: List(Stmt)) -> Parse(List(Stmt)) =
+let stmts(acc: List(Stmt)) -> Parse(List(Stmt)) =
     let _ = trivia!;
     let done = Parse/optional(Parse/eof)!;
     match done

@@ -10,7 +10,7 @@ use {
 fn optimizes_to_a_smaller_valid_module() {
     // `curios_binaryen::optimize` is bytes -> bytes; producing a real input still needs the compiler, hence this test living alongside the pipeline rather than in `curios-binaryen` itself. That the optimized module still *behaves* identically is covered by the rest of this suite, whose run path optimizes on every execution.
     let source = r#"
-        rec sum(n : /std/Nat) -> /std/Nat =
+        let sum(n : /std/Nat) -> /std/Nat =
             match n : (_) => /std/Nat
             | 0 => 0
             | pred + 1; ih => /std/Nat/add(/std/Nat/succ(pred), ih)
@@ -61,7 +61,7 @@ fn optimizes_to_a_smaller_valid_module() {
 #[test]
 fn dumping_emits_the_optimized_module_as_text() {
     let source = r#"
-        rec sum(n : /std/Nat) -> /std/Nat =
+        let sum(n : /std/Nat) -> /std/Nat =
             match n : (_) => /std/Nat
             | 0 => 0
             | pred + 1; ih => /std/Nat/add(/std/Nat/succ(pred), ih)

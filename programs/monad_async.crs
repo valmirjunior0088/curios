@@ -6,7 +6,7 @@
 -- N is read from stdin so the loop survives constant folding; output is 3N.
 use /std/{Str, Nat, Option, Async, Io};
 
-rec loop(n: Nat, acc: Nat) -> Async(Nat) =
+let loop(n: Nat, acc: Nat) -> Async(Nat) =
     match n: (_) => Async(Nat)
     | 0 => Async/pure(acc)
     | m + 1 =>

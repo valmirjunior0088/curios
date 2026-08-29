@@ -697,7 +697,7 @@ pub(super) const A_PARAMETER_HEADED_SCRUTINEE_REFINES_AGAIN: &str = r#"
 pub(super) const PARTIAL_DIRECT: &str = r#"
     use /std/{Nat, False};
     struct Box : pub Type { p : False }
-    rec loop(n : Nat) -> Box = loop(n);
+    let loop(n : Nat) -> Box = loop(n);
     let bad : False = loop(0).p;
     /std/print("FORGED")
     "#;
@@ -706,7 +706,7 @@ pub(super) const PARTIAL_THROUGH_WITNESS: &str = r#"
     use /std/{Nat, False};
     struct Box : pub Type { p : False }
     concept Make(A : Type) : pub Type { make(A) -> Box, }
-    rec loop(n : Nat) -> Box = loop(n);
+    let loop(n : Nat) -> Box = loop(n);
     satisfy Make(Nat) { make(n) = loop(n), }
     let bad : False = Make/make(0).p;
     /std/print("FORGED")
@@ -715,7 +715,7 @@ pub(super) const PARTIAL_THROUGH_WITNESS: &str = r#"
 pub(super) const PARTIAL_HIGHER_ORDER: &str = r#"
     use /std/{Nat, False};
     struct Box : pub Type { p : False }
-    rec loop(n : Nat) -> Box = loop(n);
+    let loop(n : Nat) -> Box = loop(n);
     let apply(f : (Nat) -> Box, n : Nat) -> Box = f(n);
     let bad : False = apply(loop, 0).p;
     /std/print("FORGED")
@@ -725,7 +725,7 @@ pub(super) const PARTIAL_IN_FIELD: &str = r#"
     use /std/{Nat, False};
     struct Box : pub Type { p : False }
     struct Holder : pub Type { run : (Nat) -> Box }
-    rec loop(n : Nat) -> Box = loop(n);
+    let loop(n : Nat) -> Box = loop(n);
     let holder : Holder = Holder { run = loop };
     let bad : False = holder.run(0).p;
     /std/print("FORGED")
@@ -737,7 +737,7 @@ pub(super) const PARTIAL_IN_FIELD: &str = r#"
 pub(super) const INFERRED_PROOF_POSITION: &str = r#"
     use /std/{Nat, False};
     struct Box : pub Type { p : False }
-    rec loop(n : Nat) -> Box = loop(n);
+    let loop(n : Nat) -> Box = loop(n);
     let conjured : Nat =
         match loop(0).p : (_) => Nat
         end;
@@ -751,7 +751,7 @@ pub(super) const INLINE_REC_UNDER_CARRIER: &str = r#"
     use /std/{Nat, False};
     struct Box : pub Type { p : False }
     let make : Box =
-        rec r : Box = r;
+        let r : Box = r;
         r;
     let bad : False = make.p;
     /std/print("FORGED")
@@ -762,7 +762,7 @@ pub(super) const INLINE_REC_UNDER_CARRIER: &str = r#"
 /// `spin` is legal — general recursion at a relevant type is the language's design — but a type mentioning it is not, because erasure deletes types too, and a type-level loop reties the negative knot strict positivity exists to forbid. The elaborator seeds this syntactically from written type positions; the kernel seeds it from its own typing, where the body of a definition whose type is a sort is checked against that sort. This row is the only coverage either seeding has for (T).
 pub(super) const TYPE_REACHING_PARTIAL: &str = r#"
     use /std/{Nat, Vec};
-    rec spin(n : Nat) -> Nat = spin(n);
+    let spin(n : Nat) -> Nat = spin(n);
     let Sized(n : Nat) -> Type = Vec(Nat, spin(n));
     /std/print("FORGED")
     "#;
@@ -800,7 +800,7 @@ pub(super) const DISPATCH_DEFAULT_AT_A_CASE: &str = r#"
 /// `n - 1` is `0` at `0`, so `bogus(0)` calls itself forever. The declared result is a proposition, which obliges the group to descend, and the size-change engine decides that — an engine crediting `n - 1` as strictly smaller would certify a recursion that does not terminate, and since erasure deletes the proof, `False` follows immediately.
 pub(super) const SATURATING_SUBTRACTION_IS_NOT_DESCENT: &str = r#"
     use /std/{Nat, False};
-    rec bogus(n : Nat) -> False = bogus(n - 1);
+    let bogus(n : Nat) -> False = bogus(n - 1);
     let bad : False = bogus(0);
     /std/print("FORGED")
     "#;
@@ -810,7 +810,7 @@ pub(super) const SATURATING_SUBTRACTION_IS_NOT_DESCENT: &str = r#"
 /// The classic size-change subtlety: every call maps a parameter to a parameter, so each call matrix is full of `Same` entries and none is `Less`. Composing a swap with itself returns the identity, so no cycle carries a strict decrease and the group cannot be total — an engine reading "the argument came from a parameter" as progress would certify a recursion that runs forever.
 pub(super) const PERMUTING_ARGUMENTS_IS_NOT_DESCENT: &str = r#"
     use /std/{Nat, False};
-    rec bogus(a : Nat, b : Nat) -> False = bogus(b, a);
+    let bogus(a : Nat, b : Nat) -> False = bogus(b, a);
     let bad : False = bogus(0, 1);
     /std/print("FORGED")
     "#;
@@ -820,12 +820,12 @@ pub(super) const PERMUTING_ARGUMENTS_IS_NOT_DESCENT: &str = r#"
 /// Neither descends, so both are legal values, and both fold to themselves — which is the shape that puts conversion's recurrence rule to work: comparing them unfolds each once, arrives at the same goal, and a history that treated "already assumed" as "proved" would equate two definitions that differ. `f` is constantly zero and `g` constantly one, so equating them and transporting along the equality gives `Eq(0, 1)`.
 pub(super) const DISTINCT_RECURSIONS_ARE_NOT_EQUAL: &str = r#"
     use /std/{Nat, Eq};
-    rec f(n : Nat) -> Nat =
+    let f(n : Nat) -> Nat =
         match n
         | 0 => 0
         | k + 1; _ => f(k)
         end;
-    rec g(n : Nat) -> Nat =
+    let g(n : Nat) -> Nat =
         match n
         | 0 => 1
         | k + 1; _ => g(k)

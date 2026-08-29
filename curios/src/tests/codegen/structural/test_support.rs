@@ -22,7 +22,7 @@ use {
 
 pub(super) const LCG: &str = r#"
     use /std/{Handle, Nat, List, proc};
-    rec loop(k : Nat, x : Nat) -> Nat =
+    let loop(k : Nat, x : Nat) -> Nat =
         match k : (_) => Nat
         | 0 => x
         | kp + 1; ih => loop(kp, 75 * x % 65537)
@@ -38,12 +38,12 @@ pub(super) const TREES: &str = r#"
     | leaf(Nat)
     | node(Nat, Tree, Tree)
     end
-    rec build(d : Nat, v : Nat) -> Tree =
+    let build(d : Nat, v : Nat) -> Tree =
         match d : (_) => Tree
         | 0 => Tree/leaf(v)
         | dp + 1; ih => Tree/node(v, build(dp, v * 2), build(dp, v * 2 + 1))
         end;
-    rec sum(t : Tree) -> Nat =
+    let sum(t : Tree) -> Nat =
         match t : (_) => Nat
         | leaf(n) => n % 1000003
         | node(n, l, r) => (n + sum(l) + sum(r)) % 1000003
@@ -83,7 +83,7 @@ pub(super) const DIRECT_ESCAPING: &str = r#"
 
 pub(super) const FUNCTION_ONLY: &str = r#"
     use /std/{Handle, Nat, List, proc};
-    rec down(n : Nat, acc : Nat) -> Nat =
+    let down(n : Nat, acc : Nat) -> Nat =
         match n : (_) => Nat
         | 0 => acc
         | p + 1; ih => down(p, acc + 1)
@@ -96,7 +96,7 @@ pub(super) const FUNCTION_ONLY: &str = r#"
 /// Two mutually recursive functions entered from two arms of a runtime match — the closest surface shape to an irreducible cycle. Curios has no unstructured jump, so the structurizer lays this out reducibly (no dispatcher); see [`mutual_recursion_stays_reducible`].
 pub(super) const MUTUAL_RECURSION: &str = r#"
     use /std/{Handle, Nat, List, proc};
-    rec ping(n : Nat) -> Nat =
+    let ping(n : Nat) -> Nat =
         match n : (_) => Nat | 0 => 0 | p + 1; ih => pong(p) end
     and pong(n : Nat) -> Nat =
         match n : (_) => Nat | 0 => 1 | p + 1; ih => ping(p) end;
@@ -148,7 +148,7 @@ pub(super) const SPLIT_RETURN: &str = r#"
 /// Two details of its shape are load-bearing rather than decoration, and a smaller fixture measures nothing. The arithmetic puts `walk`'s extent past the multi-site inline budget — without it the inliner *peels* the recursion into itself, since the same invisible cycle that hides the loop from this transform also leaves `walk` unmarked as recursive, and no known call site survives to rewrite. And the applied argument is bound to `c` ahead of the call rather than written into the call, because an argument computed inside the continuation that receives the closure cannot move above it. See [`a_returned_closure_every_caller_applies_is_absorbed`].
 pub(super) const UNCURRY: &str = r#"
     use /std/{Handle, Nat, List, proc};
-    rec walk(n : Nat) -> (Nat) -> Nat =
+    let walk(n : Nat) -> (Nat) -> Nat =
         match n : (_) => (Nat) -> Nat
         | 0 => (s) => (s * 7 + 13) % 30011
         | m + 1 => (s) =>
@@ -165,7 +165,7 @@ pub(super) const UNCURRY: &str = r#"
 /// A capture-free closure selected and applied inside a loop — the constant-closure interning shape. Each iteration picks one of two lambdas by a runtime condition, so the call stays genuinely unknown (the parameter joins two closures, exactly [`HIGHER_ORDER`]'s conflict), but neither lambda captures anything: with the code field an ordinary `i32`, both are constant aggregates, so the loop must reference two module consts rather than construct an environment per iteration.
 pub(super) const LOOPED_PICK: &str = r#"
     use /std/{Handle, Nat, Bool, List, proc};
-    rec spin(k : Nat, acc : Nat) -> Nat =
+    let spin(k : Nat, acc : Nat) -> Nat =
         match k : (_) => Nat
         | 0 => acc
         | p + 1; ih =>
@@ -187,7 +187,7 @@ pub(super) const LOOPED_PICK: &str = r#"
 /// **The `none` edge has to be taken, and taken while other iterations take `some`.** A loop is what buys that: `o` is genuinely joined from both constructors, and the payload is read only under the tag. `p % 3` alternates the two so neither edge is dead, and the final iteration lands on `some`, so a run that reads the filler is reading something the program never stored.
 pub(super) const VARIANT_FILLER: &str = r#"
     use /std/{Handle, Nat, Flt, Option, List, proc};
-    rec spin(k : Nat, o : Option(Flt)) -> Flt =
+    let spin(k : Nat, o : Option(Flt)) -> Flt =
         match k : (_) => Flt
         | 0 => Option/unwrap_or(o, +0.25)
         | p + 1; ih =>

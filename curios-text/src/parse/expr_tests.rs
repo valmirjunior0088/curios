@@ -9,9 +9,9 @@ use {
 use super::test_support::*;
 
 #[test]
-fn rec_func_and_apply() {
+fn let_func_and_apply() {
     assert_eq!(
-        "rec id : (x : Type) -> Type = (x) => x; id(a)"
+        "let id : (x : Type) -> Type = (x) => x; id(a)"
             .parse::<Term>()
             .unwrap(),
         Subterm::Let(Let {

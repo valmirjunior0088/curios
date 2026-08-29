@@ -3,7 +3,7 @@ use /std/{Nat, Bool, Bits, Str, Order, Eq, False, True, Eql, Cmp, Add, Sub, Mul,
 use /std/Bool/{false_neq_true};
 use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
 
-pub rec is_trimmed(bits: Bits) -> Bool =
+pub let is_trimmed(bits: Bits) -> Bool =
     match bits
     | b[] => true
     | b[head, ..tail]; ih => match tail | b[] => head | b[_, .._] => ih end
@@ -18,10 +18,10 @@ pub let combine(head: Bool, t: Bits) -> Bits =
     | b[_, .._] => b[head, ..t]
     end;
 
-pub rec trim(bits: Bits) -> Bits =
+pub let trim(bits: Bits) -> Bits =
     match bits | b[] => b[] | b[head, ..tail]; ih => combine(head, ih) end;
 
-rec combine_is_trimmed(
+let combine_is_trimmed(
     head: Bool,
     t: Bits,
     p: Eq(is_trimmed(t), true),
@@ -35,7 +35,7 @@ rec combine_is_trimmed(
     | b[_, .._] => p
     end;
 
-pub rec trim_is_trimmed(bits: Bits) -> Eq(is_trimmed(trim(bits)), true) =
+pub let trim_is_trimmed(bits: Bits) -> Eq(is_trimmed(trim(bits)), true) =
     match bits: (r) => Eq(is_trimmed(trim(r)), true)
     | b[] => Eq/refl()
     | b[head, ..tail]; ih => combine_is_trimmed(head, trim(tail), ih)
@@ -114,7 +114,7 @@ let dbl_succ(a: BigNat) -> BigNat =
         combine(true, a.bits),
         combine_is_trimmed(true, a.bits, is_trimmed_of_canonical(a.bits, a.canonical)));
 
-pub rec of_nat(n: Nat) -> BigNat =
+pub let of_nat(n: Nat) -> BigNat =
     match n == 0
     | true => zero
     | false =>
@@ -213,7 +213,7 @@ let is_trimmed_cons(
     | b[_, .._] => pt
     end;
 
-pub rec trim_of_trimmed(x: Bits, p: Eq(is_trimmed(x), true)) -> Eq(trim(x), x) =
+pub let trim_of_trimmed(x: Bits, p: Eq(is_trimmed(x), true)) -> Eq(trim(x), x) =
     match x: (a) => Eq(trim(a), a)
     | b[] => Eq/refl()
     | b[h, ..t] =>

@@ -32,7 +32,7 @@ let encode_str(s: Str) -> Str =
     let body = Bytes/fold(Str/to_bytes(s), x[], (byte, acc) => x[..acc, ..escape_byte(byte)]);
     Str/concat(Str/concat("\"", Option/unwrap_or(Str/of_bytes(body), "")), "\"");
 
-pub rec encode(v: Json) -> Str =
+pub let encode(v: Json) -> Str =
     match v
     | null() => "null"
     | bool(b) => Bool/to_str(b)

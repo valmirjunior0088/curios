@@ -131,7 +131,7 @@ pub(super) fn elaborate_rec(
             Term::tuple(Vec::<Term>::new()),
         )) {
             Subterm::Rec(rec) => rec.group,
-            _ => unreachable!("rec constructs a recursive block"),
+            _ => unreachable!("let constructs a recursive block"),
         };
         // Before the members are defined and the tail elaborated: a local `rec Bad : Type = (Bad) -> False` overflows the stack at its first use, which is in that tail. Named by the hints the program wrote, not by the gensyms elaboration minted for them.
         let names = rec

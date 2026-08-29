@@ -3,7 +3,7 @@ use /std/Bool/{false_neq_true};
 use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
 use /std/BigNat/{BigNat, cong_cons2, eq};
 
-pub rec raw(x: Bits, y: Bits) -> Order =
+pub let raw(x: Bits, y: Bits) -> Order =
     match x
     | b[] => match y | b[] => Order/eq() | b[_, .._] => Order/lt() end
     | b[xh, ..xt] =>
@@ -54,7 +54,7 @@ let absorb_eq(
         Eq/sym(p),
         Eq/refl());
 
-pub rec raw_refl(x: Bits) -> Eq(raw(x, x), Order/eq()) =
+pub let raw_refl(x: Bits) -> Eq(raw(x, x), Order/eq()) =
     match x: (a) => Eq(raw(a, a), Order/eq())
     | b[] => Eq/refl()
     | b[h, ..t] =>
@@ -90,7 +90,7 @@ let cong_cmp_match(
     | refl(@z) => Eq/refl()
     end;
 
-pub rec raw_to_eq(x: Bits, y: Bits, p: Eq(raw(x, y), Order/eq())) -> Eq(x, y) =
+pub let raw_to_eq(x: Bits, y: Bits, p: Eq(raw(x, y), Order/eq())) -> Eq(x, y) =
     match x
     | b[] =>
         match y
@@ -147,7 +147,7 @@ let flip_heads(
     | false => match yh | true => Eq/refl() | false => Eq/refl() end
     end;
 
-pub rec raw_flip(x: Bits, y: Bits) -> Eq(raw(y, x), Order/flip(raw(x, y))) =
+pub let raw_flip(x: Bits, y: Bits) -> Eq(raw(y, x), Order/flip(raw(x, y))) =
     match x: (a) => Eq(raw(y, a), Order/flip(raw(a, y)))
     | b[] =>
         match y: (b) => Eq(raw(b, b[]), Order/flip(raw(b[], b)))
@@ -320,7 +320,7 @@ let trans_cons(
         end
     end;
 
-pub rec raw_trans(
+pub let raw_trans(
     x: Bits,
     y: Bits,
     z: Bits,

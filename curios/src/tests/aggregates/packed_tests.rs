@@ -35,7 +35,7 @@ fn atom_splices_are_the_cons_and_append_spellings() {
 #[test]
 fn vec_cons_with_nat_succ() {
     let source = r#"
-        rec Vec(T : Type, n : std/Nat) -> Type =
+        let Vec(T : Type, n : std/Nat) -> Type =
             match n : (_) => Type
             | 0 => {}
             | pred + 1; ih => { T, ih }
@@ -64,12 +64,12 @@ fn indexed_vec_append_executes() {
         | nil() : (0)
         | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
         end
-        rec append(@T : Type, @n : Nat, @m : Nat, v : Vec(T, n), w : Vec(T, m)) -> Vec(T, Nat/add(n, m)) =
+        let append(@T : Type, @n : Nat, @m : Nat, v : Vec(T, n), w : Vec(T, m)) -> Vec(T, Nat/add(n, m)) =
             match v : (k, v) => Vec(T, Nat/add(k, m))
             | nil() => w
             | cons(@j, x, xs) => Vec/cons(x, append(xs, w))
             end;
-        rec total(@n : Nat, v : Vec(Nat, n), acc : Nat) -> Nat =
+        let total(@n : Nat, v : Vec(Nat, n), acc : Nat) -> Nat =
             match v : (_, _) => Nat
             | nil() => acc
             | cons(@m, x, xs) => total(xs, Nat/add(acc, x))

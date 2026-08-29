@@ -4,7 +4,7 @@
 -- N is read from stdin so the loop survives constant folding; output stays bounded well inside i31.
 use /std/{Str, Char, Nat, Option, Io};
 
-rec loop(k: Nat, text: Str, acc: Nat) -> Nat =
+let loop(k: Nat, text: Str, acc: Nat) -> Nat =
     match k: (_) => Nat
     | 0 => acc
     | m + 1 => loop(m, text, (acc + Str/fold(text, 0, (c, a) => a + Char/to_nat(c))) % 1000003)

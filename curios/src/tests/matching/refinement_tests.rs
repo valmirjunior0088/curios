@@ -127,13 +127,13 @@ fn an_immediate_arm_payload_survives_arithmetic_in_a_loop() {
         | cons(Nat, L)
         end
 
-        rec build(n : Nat, acc : L) -> L =
+        let build(n : Nat, acc : L) -> L =
             match n : (_) => L
             | 0 => acc
             | m + 1; ih => build(m, L/cons(m, acc))
             end;
 
-        rec total(c : L, acc : Nat) -> Nat =
+        let total(c : L, acc : Nat) -> Nat =
             match c : (_) => Nat
             | stop(z) => acc + z
             | cons(v, tail) => total(tail, acc + v)

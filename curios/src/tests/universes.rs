@@ -108,7 +108,7 @@ fn a_refined_scrutinee_carries_the_family_universe_levels() {
         | nil()
         | cons(A, L(A))
         end
-        rec len(xs: L(Nat)) -> Nat =
+        let len(xs: L(Nat)) -> Nat =
             match xs
             | nil() => 0
             | cons(_, rest) => len(rest) + 1
@@ -129,12 +129,12 @@ fn a_refined_scrutinee_carries_the_family_universe_levels() {
 fn a_refined_prelude_scrutinee_carries_the_family_universe_levels() {
     let source = r#"
         use /std/{Nat, Eq, Vec};
-        rec count(@A: Type, @n: Nat, xs: Vec(A, n)) -> Nat =
+        let count(@A: Type, @n: Nat, xs: Vec(A, n)) -> Nat =
             match xs
             | nil() => 0
             | cons(@m, _, rest) => count(rest) + 1
             end;
-        rec count_is_n(@A: Type, @n: Nat, xs: Vec(A, n)) -> Eq(count(xs), n) =
+        let count_is_n(@A: Type, @n: Nat, xs: Vec(A, n)) -> Eq(count(xs), n) =
             match xs
             | nil() => Eq/refl()
             | cons(@m, x, rest) => Eq/cong((k) => k + 1, count_is_n(rest))
@@ -152,17 +152,17 @@ fn a_rec_result_sort_level_is_minimized_like_a_let_s() {
         use /std/{Nat, Eq};
         induct N : pub Type | z() | s(N) end
         let f(n: N) -> Type = N;
-        rec g(n: N) -> Type =
+        let g(n: N) -> Type =
             match n
             | z() => N
             | s(m) => g(m)
             end;
-        rec count(n: N) -> Nat =
+        let count(n: N) -> Nat =
             match n
             | z() => 0
             | s(m) => count(m) + 1
             end;
-        rec count_self(n: N) -> Eq(count(n), count(n)) =
+        let count_self(n: N) -> Eq(count(n), count(n)) =
             match n
             | z() => Eq/refl()
             | s(m) => Eq/refl()
@@ -185,6 +185,6 @@ fn a_rec_result_sort_level_is_minimized_like_a_let_s() {
     assert_eq!(
         parameters.get("/count_self"),
         Some(&0),
-        "the rec proof's family level was generalized: {parameters:?}",
+        "the recursive proof's family level was generalized: {parameters:?}",
     );
 }

@@ -347,7 +347,7 @@ fn a_hypothesis_fills_an_imported_lemmas_proof_slot_under_an_open_function() {
     // The step case of a proof about a function the normalizer cannot unfold on a variable: `double(p + 1)` against `(p + 1) * 2` is not refl, and `Eq/cong`'s output `Eq(f(x), f(y))` is undecided on `f` alone once `ih` pins `x` and `y` — undecided on exactly the open slot, which is the advisory the report keeps. The vacuous `Eq/sym(?)` and `Eq/trans(?, ?)`, true of every equation, are not offered.
     let source = r#"
         use /std/{Nat, Eq};
-        rec double(n : Nat) -> Nat = match n | 0 => 0 | p + 1 => double(p) + 2 end;
+        let double(n : Nat) -> Nat = match n | 0 => 0 | p + 1 => double(p) + 2 end;
         let double_correct(n : Nat) -> Eq(double(n), n * 2) =
             match n : (m) => Eq(double(m), m * 2)
             | 0 => Eq/refl()
@@ -406,7 +406,7 @@ fn a_hole_where_a_congruences_function_belongs_reports_as_a_goal_with_its_obliga
     // Pasting the refinement above: `?f(double(p))` against `double(p) + 2` is a metavariable-headed application against a value, which has no imitation to try but no refutation either — a constant solution could exist. It used to fall through the structural match to a hard `type mismatch`, telling the author the program was wrong; then, parked, it survived the drain as a postponed-conversion error. Now a survivor held up by written goals alone is the goals' own report: the batch names the hole, its type, and — as `? such that` lines — the conversions it has to make true, which is what tells the author `f` sends `double(p)` to `double(p) + 2`. A program with a goal in it never compiles, so the surrendered conversion is never unchecked; the classification is incomplete, not failure.
     let source = r#"
         use /std/{Nat, Eq};
-        rec double(n : Nat) -> Nat = match n | 0 => 0 | p + 1 => double(p) + 2 end;
+        let double(n : Nat) -> Nat = match n | 0 => 0 | p + 1 => double(p) + 2 end;
         let double_correct(n : Nat) -> Eq(double(n), n * 2) =
             match n : (m) => Eq(double(m), m * 2)
             | 0 => Eq/refl()

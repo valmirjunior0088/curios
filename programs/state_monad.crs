@@ -3,7 +3,7 @@
 -- N is read from stdin so the loop survives constant folding; output is 3N.
 use /std/{Str, Nat, Option, State, Io};
 
-rec loop(n: Nat) -> State(Nat, {}) =
+let loop(n: Nat) -> State(Nat, {}) =
     match n: (_) => State(Nat, {})
     | 0 => State/pure(())
     | m + 1 =>

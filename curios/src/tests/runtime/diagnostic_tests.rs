@@ -103,7 +103,7 @@ fn spells_index_arithmetic_infix() {
 fn keeps_the_name_of_a_stalled_unfolding() {
     let source = r#"
         use /std/{Nat, Eq};
-        rec double(n: Nat) -> Nat = match n | 0 => 0 | p + 1 => double(p) + 2 end;
+        let double(n: Nat) -> Nat = match n | 0 => 0 | p + 1 => double(p) + 2 end;
         let claim(n: Nat) -> Eq(double(n), n * 2) = Eq/refl();
         claim
         "#;

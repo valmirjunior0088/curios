@@ -1393,17 +1393,17 @@ fn death_birth_classifier_pins_the_canonical_pair() {
         | nil()
         | cons(Nat, Chain)
         end
-        rec step(rest: Chain, acc: Chain) -> Chain =
+        let step(rest: Chain, acc: Chain) -> Chain =
             match rest: (_) => Chain
             | nil() => acc
             | cons(v, tail) => step(tail, Chain/cons(v + 1, acc))
             end;
-        rec build(n: Nat, acc: Chain) -> Chain =
+        let build(n: Nat, acc: Chain) -> Chain =
             match n: (_) => Chain
             | 0 => acc
             | m + 1; ih => build(m, Chain/cons(n, acc))
             end;
-        rec total(c: Chain, acc: Nat) -> Nat =
+        let total(c: Chain, acc: Nat) -> Nat =
             match c: (_) => Nat
             | nil() => acc
             | cons(v, tail) => total(tail, (acc + v) % 1000003)

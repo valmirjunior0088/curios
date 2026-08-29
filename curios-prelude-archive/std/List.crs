@@ -22,7 +22,7 @@ pub let flatten(@T: Type, parts: List(List(T))) -> List(T) =
 
 pub let fold(@T: Type, @A: Type, l: List(T), init: A, f: (T, A) -> A) -> A =
     let n = len(l);
-    rec go(k: Nat, i: Nat, acc: A, inv: Eq(i + k, n)) -> A =
+    let go(k: Nat, i: Nat, acc: A, inv: Eq(i + k, n)) -> A =
         match k
         | 0 => acc
         -- `i < n` transported along the loop invariant: `i + (kp + 1) = n` gives `i ≤ i + kp`, whose successor is the bound `at` demands.
@@ -35,7 +35,7 @@ pub let fold(@T: Type, @A: Type, l: List(T), init: A, f: (T, A) -> A) -> A =
 
 -- The bound is scrutinised as `len(l)` rather than through a `let`-bound alias, for the reason `Map/bit` states: a refinement records the term it scrutinised, and `at` demands the bound spelled the way `Nat/Lt` states it.
 pub let find(@T: Type, l: List(T), pred: (T) -> Bool) -> Option(T) =
-    rec go(i: Nat) -> Option(T) =
+    let go(i: Nat) -> Option(T) =
         match i < len(l)
         | true =>
             let x = get(l, i);
@@ -45,7 +45,7 @@ pub let find(@T: Type, l: List(T), pred: (T) -> Bool) -> Option(T) =
     go(0);
 
 pub let balanced(@A: Type, n: Nat, empty: A, single: (Nat) -> A, combine: (A, A) -> A) -> A =
-    rec go(lo: Nat, hi: Nat) -> A =
+    let go(lo: Nat, hi: Nat) -> A =
         choose
         | lo + 1 < hi =>
             let mid = (lo + hi) / 2;

@@ -9,13 +9,13 @@ induct Tree: Type
 | node(Nat, Tree, Tree)
 end
 
-rec build(d: Nat, v: Nat) -> Tree =
+let build(d: Nat, v: Nat) -> Tree =
     match d: (_) => Tree
     | 0 => Tree/leaf(v)
     | dp + 1; ih => Tree/node(v, build(dp, v * 2), build(dp, v * 2 + 1))
     end;
 
-rec sum(t: Tree) -> Nat =
+let sum(t: Tree) -> Nat =
     match t: (_) => Nat
     | leaf(n) => n % 1000003
     | node(n, l, r) => (n + sum(l) + sum(r)) % 1000003

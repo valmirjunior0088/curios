@@ -14,7 +14,7 @@
 -- index, so later writes to a returning key are observable in the printed sum.
 use /std/{Str, Nat, Bytes, Option, Map, Io};
 
-rec walk(n: Nat, i: Nat, x: Nat, m: Map(Nat)) -> Map(Nat) =
+let walk(n: Nat, i: Nat, x: Nat, m: Map(Nat)) -> Map(Nat) =
     match n: (_) => Map(Nat)
     | 0 => m
     | k + 1; ih =>

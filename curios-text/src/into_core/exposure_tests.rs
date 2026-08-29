@@ -222,7 +222,7 @@ fn aliased_universe_annotation_is_not_a_direct_type_alias() {
 fn cyclic_direct_type_aliases_terminate_without_nominal_exposure() {
     run(r#"
         mod M
-            pub rec A(T : Type) -> Type = B(T)
+            pub let A(T : Type) -> Type = B(T)
             and B(T : Type) -> Type = A(T);
         end
         Type

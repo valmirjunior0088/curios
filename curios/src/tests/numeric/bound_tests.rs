@@ -13,7 +13,7 @@ fn a_bound_over_a_recursion_returning_a_literal_discharges() {
     assert_eq!(
         run(r#"
         use /std/{Handle, Str, Nat};
-        rec f(k : Nat, n : Nat) -> Nat =
+        let f(k : Nat, n : Nat) -> Nat =
             match k | 0 => 5 | j + 1; ih => f(j, n) end;
         let bound(n : Nat) -> Nat/Le(5, f(0, n)) = Nat/Le/refl(5);
         /std/print("ok")
@@ -30,7 +30,7 @@ fn a_bound_over_a_recursion_returning_a_parameter_discharges() {
     assert_eq!(
         run(r#"
         use /std/{Handle, Str, Nat};
-        rec f(k : Nat, n : Nat) -> Nat =
+        let f(k : Nat, n : Nat) -> Nat =
             match k | 0 => n | j + 1; ih => f(j, n) end;
         let bound(n : Nat) -> Nat/Le(n, f(0, n)) = Nat/Le/refl(n);
         /std/print("ok")
@@ -102,7 +102,7 @@ fn a_difference_over_a_folded_recursion_converts_with_its_unfolding() {
     assert_eq!(
         run(r#"
         use /std/{Handle, Str, Bytes, Byte, Nat, Eq};
-        rec len(b : Bytes) -> Nat = match b | x[] => 0 | x[_, ..t] => 1 + len(t) end;
+        let len(b : Bytes) -> Nat = match b | x[] => 0 | x[_, ..t] => 1 + len(t) end;
         let step(h : Byte, t : Bytes) -> Eq(Nat/sub(len(x[h, ..t]), 1), len(t)) = Eq/refl();
         /std/print("ok")
         "#),
@@ -116,7 +116,7 @@ fn a_bound_over_a_diverging_subject_is_refused_by_name() {
     let error = typecheck(
         r#"
         use /std/{Nat, Int};
-        rec spin(n : Nat) -> Int = match n | 0 => +0 | p + 1; _ => spin(p + 1) end;
+        let spin(n : Nat) -> Int = match n | 0 => +0 | p + 1; _ => spin(p + 1) end;
         let k : Nat = Int/to_nat(spin(3));
         /std/print("unreachable")
         "#,
@@ -157,7 +157,7 @@ fn a_bound_on_a_computed_subject_evaluates_it() {
         500_000,
         r#"
         use /std/{Handle, Bytes, Nat, Str};
-        rec go(i : Nat, acc : Bytes) -> Bytes =
+        let go(i : Nat, acc : Bytes) -> Bytes =
             match i | 0 => acc | k + 1; ih => go(k, x[..acc, ..Str/to_bytes("0123456789")]) end;
         let built = go(100000, x[]);
         let head = Bytes/slice(built, 0, 10);
@@ -179,7 +179,7 @@ fn a_bound_on_a_small_computed_subject_discharges() {
         DEFAULT_STEP_BUDGET,
         r#"
         use /std/{Handle, Bytes, Nat, Str};
-        rec go(i : Nat, acc : Bytes) -> Bytes =
+        let go(i : Nat, acc : Bytes) -> Bytes =
             match i | 0 => acc | k + 1; ih => go(k, x[..acc, ..Str/to_bytes("0123456789")]) end;
         let built = go(2000, x[]);
         let head = Bytes/slice(built, 0, 10);
@@ -198,7 +198,7 @@ fn a_bound_behind_a_parameter_evaluates_nothing() {
         500_000,
         r#"
         use /std/{Handle, Bytes, Nat, Str};
-        rec go(i : Nat, acc : Bytes) -> Bytes =
+        let go(i : Nat, acc : Bytes) -> Bytes =
             match i | 0 => acc | k + 1; ih => go(k, x[..acc, ..Str/to_bytes("0123456789")]) end;
         let head_of(b : Bytes) -> Bytes =
             match 10 <= Bytes/len(b) | true => Bytes/slice(b, 0, 10) | false => x[] end;

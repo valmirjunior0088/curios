@@ -76,7 +76,7 @@ pub let repeat(s: Str, n: Nat) -> Str =
 --
 -- Written as an induction, the result of folding the tail has to be a *function* of the scan state and the accumulator, because a right fold cannot carry a value leftwards any other way. That makes every step return a closure, so a walk of N characters allocates N of them and applies the composition once — the cost is in the encoding, not in the work. Here `sc` and `acc` are ordinary parameters that the tail call carries forward, and the scan witness rides along as a third, transported one byte at a time by `peel_byte` exactly as it was before. `at` below walks the same way, for the same reason.
 pub let fold(@A: Type, s: Str, init: A, f: (Char, A) -> A) -> A =
-    rec go(sc: Scan, b: Bytes, valid: Utf8(sc, b), acc: {A, Nat}) -> {A, Nat} =
+    let go(sc: Scan, b: Bytes, valid: Utf8(sc, b), acc: {A, Nat}) -> {A, Nat} =
         match b
         | x[] => acc
         | x[h, ..t] =>
@@ -148,7 +148,7 @@ pub let try_get(s: Str, i: Nat) -> Option(Char) =
     found;
 
 pub let get(s: Str, i: Nat, ok: Nat/Lt(i, len(s))) -> Char =
-    rec go(
+    let go(
         sc: Scan,
         b: Bytes,
         valid: Utf8(sc, b),

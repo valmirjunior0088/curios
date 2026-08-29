@@ -49,7 +49,7 @@ fn bare_tuple_continuation_tail_infers() {
         use /std/{Parse, Byte, Nat, Bytes, Handle};
         let pairer : Parse({ Byte, Byte }) =
             Parse/bind(Parse/any_byte, (a) => Parse/pure((a, a)));
-        rec with_sugar : Parse({ Byte, Byte }) =
+        let with_sugar : Parse({ Byte, Byte }) =
             let a = Parse/any_byte!;
             Parse/pure((a, 0));
         match Parse/run(pairer, /std/Str/to_bytes("hi"))

@@ -88,7 +88,7 @@ fn mutual_recursion_hoisted_into_one_group_is_admitted() {
     let source = r#"
         use /std/{Nat, Str, Show, Handle};
         induct A : pub Type | a(Nat) | ab(B) and B : pub Type | b(Nat) | ba(A) end
-        rec show_a(x : A) -> Str =
+        let show_a(x : A) -> Str =
             match x | a(n) => Nat/to_str(n) | ab(y) => show_b(y) end
         and show_b(x : B) -> Str =
             match x | b(n) => Nat/to_str(n) | ba(y) => show_a(y) end;

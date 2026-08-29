@@ -9,7 +9,7 @@ pub let flatten(parts: List(Bits)) -> Bits =
 
 pub let fold(@A: Type, b: Bits, init: A, f: (Bool, A) -> A) -> A =
     let n = len(b);
-    rec go(k: Nat, i: Nat, acc: A, inv: Eq(i + k, n)) -> A =
+    let go(k: Nat, i: Nat, acc: A, inv: Eq(i + k, n)) -> A =
         match k
         | 0 => acc
         -- `i < n` transported along the loop invariant: `i + (kp + 1) = n` gives `i ≤ i + kp`, whose successor is the bound `at` demands.

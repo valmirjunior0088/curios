@@ -57,13 +57,13 @@ pub let try_to_int(f: Flt) -> Option(Int) =
 let pow2(k: Nat) -> BigNat =
     BigNat/mul/pow2(BigNat/of_nat(1), k);
 
-rec divmod(r: BigNat, s: BigNat, d: Nat) -> {Nat, BigNat} =
+let divmod(r: BigNat, s: BigNat, d: Nat) -> {Nat, BigNat} =
     match r < s | true => (d, r) | false => divmod(r - s, s, d + 1) end;
 
-rec scale_up(rpm: BigNat, s: BigNat, k: Int) -> {BigNat, Int} =
+let scale_up(rpm: BigNat, s: BigNat, k: Int) -> {BigNat, Int} =
     match rpm > s | true => scale_up(rpm, BigNat/mul/small(s, 10), k + 1) | false => (s, k) end;
 
-rec scale_down(
+let scale_down(
     r: BigNat,
     mp: BigNat,
     mm: BigNat,
@@ -81,7 +81,7 @@ rec scale_down(
     | false => (r, mp, mm, k)
     end;
 
-rec generate(r: BigNat, s: BigNat, mp: BigNat, mm: BigNat, even: Bool) -> List(Nat) =
+let generate(r: BigNat, s: BigNat, mp: BigNat, mm: BigNat, even: Bool) -> List(Nat) =
     let r10 = BigNat/mul/small(r, 10);
     let mp10 = BigNat/mul/small(mp, 10);
     let mm10 = BigNat/mul/small(mm, 10);
@@ -104,7 +104,7 @@ rec generate(r: BigNat, s: BigNat, mp: BigNat, mm: BigNat, even: Bool) -> List(N
 let digits_to_str(ds: List(Nat)) -> Str =
     List/fold(ds, "", (d, acc) => Str/concat(acc, Nat/to_str(d)));
 
-rec normalize(ds: List(Nat)) -> {List(Nat), Bool} =
+let normalize(ds: List(Nat)) -> {List(Nat), Bool} =
     match ds
     | [] => ([], false)
     | [h, ..t] =>
@@ -234,7 +234,7 @@ let two_pow(e: Int) -> Flt =
     end;
 
 -- `bits` quotient bits of `n / d`, most significant first, where `d` arrives scaled so that `d <= n < 2 · d`: each step keeps or drops the current power of `d`, halves it — exact, since every power down to the last is `d` times a power of two — and shifts the bit in. The remainder says whether anything was lost below the last bit.
-rec quotient(n: BigNat, d: BigNat, bits: Nat, acc: Nat) -> {Nat, BigNat} =
+let quotient(n: BigNat, d: BigNat, bits: Nat, acc: Nat) -> {Nat, BigNat} =
     match bits
     | 0 => (acc, n)
     | b + 1 =>

@@ -254,7 +254,7 @@ pub let take(n: Nat) -> Parse(Bytes) =
 pub let many0(@A: Type, p: Parse(A)) -> Parse(List(A)) =
     Parse {
         run(input, pos) =
-            rec go(acc: List(A), cur: Nat) -> Result({Nat, List(A)}, Refusal) =
+            let go(acc: List(A), cur: Nat) -> Result({Nat, List(A)}, Refusal) =
                 match p.run(input, cur)
                 | failure(declined(_)) => Result/success((cur, acc))
                 | failure(committed(msg)) => Result/failure(Refusal/committed(msg))
@@ -274,7 +274,7 @@ pub let sep_by0(@A: Type, @S: Type, elem: Parse(A), sep: Parse(S)) -> Parse(List
             | failure(declined(_)) => Result/success((pos, []))
             | failure(committed(msg)) => Result/failure(Refusal/committed(msg))
             | success((first_end, first)) =>
-                rec go(acc: List(A), cur: Nat) -> Result({Nat, List(A)}, Refusal) =
+                let go(acc: List(A), cur: Nat) -> Result({Nat, List(A)}, Refusal) =
                     match sep.run(input, cur)
                     | failure(declined(_)) => Result/success((cur, acc))
                     | failure(committed(msg)) => Result/failure(Refusal/committed(msg))

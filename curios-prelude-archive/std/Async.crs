@@ -52,7 +52,7 @@ pub let Fiber: Type =
 pub let pure(@A: Type, a: A) -> Async(A) =
     Async { Io/pure(Step/done(a)) };
 
-rec bind_raw(@A: Type, @B: Type, m: Io(Step(A)), f: (A) -> Io(Step(B))) -> Io(Step(B)) =
+let bind_raw(@A: Type, @B: Type, m: Io(Step(A)), f: (A) -> Io(Step(B))) -> Io(Step(B)) =
     let s = m!;
     match s | done(a) => f(a) | step(p, k) => Io/pure(Step/step(p, bind_raw(k, f))) end;
 
@@ -116,7 +116,7 @@ pub let read(h: Handle, n: Nat) -> Async(Handle/Read) =
     match nb
     | failure(e) => pure(Handle/Read/error(e))
     | success(_) =>
-        rec go() -> Async(Handle/Read) =
+        let go() -> Async(Handle/Read) =
             let r = /sys/Handle/read(h, n)!;
             match r.status == /sys/status/would_block
             | true =>
@@ -140,7 +140,7 @@ pub let write(h: Handle, b: Bytes) -> Async(Result({}, Handle/Error)) =
     match nb
     | failure(e) => pure(Result/failure(e))
     | success(_) =>
-        rec go(rest: Bytes) -> Async(Result({}, Handle/Error)) =
+        let go(rest: Bytes) -> Async(Result({}, Handle/Error)) =
             let r = /sys/Handle/write(h, rest)!;
             match r.status == /sys/status/would_block
             | true =>
@@ -170,7 +170,7 @@ pub let accept(l: Handle) -> Async(Result(Handle, Handle/Error)) =
     match nb
     | failure(e) => pure(Result/failure(e))
     | success(_) =>
-        rec go() -> Async(Result(Handle, Handle/Error)) =
+        let go() -> Async(Result(Handle, Handle/Error)) =
             let r = /sys/socket/accept(l)!;
             match r.status == /sys/status/would_block
             | true =>
@@ -187,7 +187,7 @@ pub let accept(l: Handle) -> Async(Result(Handle, Handle/Error)) =
 
 -- `eof` is the stream's orderly terminator; an `error` means it ended without one, so the accumulated prefix is not the content and is dropped rather than passed off as complete.
 pub let drain(read: (Nat) -> Async(Handle/Read)) -> Async(Result(Bytes, Handle/Error)) =
-    rec go(acc: Bytes) -> Async(Result(Bytes, Handle/Error)) =
+    let go(acc: Bytes) -> Async(Result(Bytes, Handle/Error)) =
         let r = read(4096)!;
         match r
         | chunk(bytes) => go(x[..acc, ..bytes])
@@ -196,7 +196,7 @@ pub let drain(read: (Nat) -> Async(Handle/Read)) -> Async(Result(Bytes, Handle/E
         end;
     go(x[]);
 
-pub rec await(@A: Type, f: Future(A)) -> Async(A) =
+pub let await(@A: Type, f: Future(A)) -> Async(A) =
     let polled = Future/poll(f)!;
     match polled
     | some(a) => pure(a)
@@ -229,7 +229,7 @@ struct Sleeper: Type {
     guards: List(Guard),
 }
 
-rec run_guards(gs: List(Guard)) -> Io({}) =
+let run_guards(gs: List(Guard)) -> Io({}) =
     match gs
     | [] => Io/pure(())
     | [g, ..more] =>
@@ -237,7 +237,7 @@ rec run_guards(gs: List(Guard)) -> Io({}) =
         run_guards(more)
     end;
 
-rec release_guard(h: Handle, gs: List(Guard)) -> Io(List(Guard)) =
+let release_guard(h: Handle, gs: List(Guard)) -> Io(List(Guard)) =
     match gs
     | [] => Io/pure([])
     | [g, ..more] =>
@@ -251,7 +251,7 @@ rec release_guard(h: Handle, gs: List(Guard)) -> Io(List(Guard)) =
         end
     end;
 
-rec drain_jobs(js: List(Job)) -> Io({}) =
+let drain_jobs(js: List(Job)) -> Io({}) =
     match js
     | [] => Io/pure(())
     | [j, ..more] =>
@@ -259,7 +259,7 @@ rec drain_jobs(js: List(Job)) -> Io({}) =
         drain_jobs(more)
     end;
 
-rec drain_parked(ps: List(Parked)) -> Io({}) =
+let drain_parked(ps: List(Parked)) -> Io({}) =
     match ps
     | [] => Io/pure(())
     | [p, ..more] =>
@@ -267,7 +267,7 @@ rec drain_parked(ps: List(Parked)) -> Io({}) =
         drain_parked(more)
     end;
 
-rec drain_sleeping(ss: List(Sleeper)) -> Io({}) =
+let drain_sleeping(ss: List(Sleeper)) -> Io({}) =
     match ss
     | [] => Io/pure(())
     | [s, ..more] =>
@@ -275,7 +275,7 @@ rec drain_sleeping(ss: List(Sleeper)) -> Io({}) =
         drain_sleeping(more)
     end;
 
-rec drain_slots(ss: List(Slot)) -> Io({}) =
+let drain_slots(ss: List(Slot)) -> Io({}) =
     match ss
     | [] => Io/pure(())
     | [s, ..more] =>
@@ -288,7 +288,7 @@ rec drain_slots(ss: List(Slot)) -> Io({}) =
         end
     end;
 
-rec sweep_parked(ss: List(Slot)) -> Io(List(Slot)) =
+let sweep_parked(ss: List(Slot)) -> Io(List(Slot)) =
     match ss
     | [] => Io/pure([])
     | [s, ..more] =>
@@ -316,7 +316,7 @@ let poll_ready(blocked: List(Parked), timeout: Int) -> Io({List(Job), List(Parke
     let handles = List/map(blocked, (p: Parked) => p.handle);
     let events = List/map(blocked, (p: Parked) => p.interest);
     let results = /sys/Handle/poll(handles, events, timeout)!;
-    rec walk(
+    let walk(
         rest: List(Parked),
         i: Nat,
         woken: List(Job),
@@ -346,7 +346,7 @@ let poll_ready(blocked: List(Parked), timeout: Int) -> Io({List(Job), List(Parke
     walk(blocked, 0, [], []);
 
 let sleep_timeout(sleeping: List(Sleeper)) -> Io(Int) =
-    rec earliest(rest: List(Sleeper), best: Option(Duration)) -> Option(Duration) =
+    let earliest(rest: List(Sleeper), best: Option(Duration)) -> Option(Duration) =
         match rest
         | [] => best
         | [s, ..more] =>
@@ -374,7 +374,7 @@ let sleep_timeout(sleeping: List(Sleeper)) -> Io(Int) =
 
 let expire_sleepers(sleeping: List(Sleeper)) -> Io({List(Job), List(Sleeper)}) =
     let now = Duration/now()!;
-    rec walk(
+    let walk(
         rest: List(Sleeper),
         woken: List(Job),
         still: List(Sleeper),
@@ -461,7 +461,7 @@ let park_on_waker(q: Queues, job: Job, register: (Waker) -> Io({})) -> Io({}) =
     register(Waker/new(waker));
 
 -- Run one fiber until it suspends, finishes, or is found cancelled. A cancelled or finished fiber releases its guards and is not requeued; a suspended one is handed to `resume_after` with the continuation that will resume it.
-rec serve(q: Queues, job: Job) -> Io({}) =
+let serve(q: Queues, job: Job) -> Io({}) =
     let dead = is_cancelled(job.token)!;
     match dead
     | true => run_guards(job.guards)
@@ -536,7 +536,7 @@ let root_job(@A: Type, root: Async(A), answer: Cell(Option(A)), token: Token) ->
     };
 
 -- The scheduler loop: serve whatever is runnable, and when nothing is, either wait for the host or report that nothing ever will be.
-rec drive(@A: Type, q: Queues, answer: Cell(Option(A))) -> Io(Result(A, Deadlock)) =
+let drive(@A: Type, q: Queues, answer: Cell(Option(A))) -> Io(Result(A, Deadlock)) =
     let finished = Cell/get(answer)!;
     match finished
     | some(a) =>
@@ -606,7 +606,7 @@ pub let join(@A: Type, task: Task(A)) -> Async(A) =
 pub let cancel(@A: Type, task: Task(A)) -> Io({}) =
     cancel_token(task.token);
 
-rec cancel_all(ts: List(Token)) -> Io({}) =
+let cancel_all(ts: List(Token)) -> Io({}) =
     match ts
     | [] => Io/pure(())
     | [t, ..more] =>
@@ -615,7 +615,7 @@ rec cancel_all(ts: List(Token)) -> Io({}) =
     end;
 
 pub let join_all(@A: Type, tasks: List(Async(A))) -> Async(List(A)) =
-    rec go(i: Nat) -> Async(List(A)) =
+    let go(i: Nat) -> Async(List(A)) =
         match Nat/Lt/try(i, List/len(tasks))
         | none() => pure([])
         | some(ok) =>
@@ -628,7 +628,7 @@ pub let join_all(@A: Type, tasks: List(Async(A))) -> Async(List(A)) =
 
 pub let select(@A: Type, tasks: List(Async(A))) -> Async({Nat, A}) =
     let winner = Future/new()!;
-    rec arm(i: Nat) -> Async(List(Token)) =
+    let arm(i: Nat) -> Async(List(Token)) =
         match Nat/Lt/try(i, List/len(tasks))
         | none() => pure([])
         | some(ok) =>

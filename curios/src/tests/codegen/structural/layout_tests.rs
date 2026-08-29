@@ -230,7 +230,7 @@ fn small_bits_ride_the_immediate_and_overflow_boxes() {
         let t: Bool = taint == 0;
         let small = b[t, 1, 0, t];
         let grown = b[..small, 1];
-        rec widen(n: Nat, acc: Bits) -> Bits =
+        let widen(n: Nat, acc: Bits) -> Bits =
             match n | 0 => acc | _ => widen(n - 1, b[..acc, t]) end;
         let wide = widen(30 + taint, grown);
         let wide2 = widen(30 + taint, grown);
@@ -260,7 +260,7 @@ fn a_two_way_dispatch_is_a_branch_not_a_table() {
 
         let taint = List/len(proc/args!);
         let flag : Bool = taint == 0;
-        rec decide(n : Nat, acc : Nat) -> Nat =
+        let decide(n : Nat, acc : Nat) -> Nat =
             match n : (_) => Nat
             | 0 => acc
             | m + 1; ih =>
@@ -302,12 +302,12 @@ fn a_tuple_is_read_at_its_own_final_type() {
         end
 
         let taint = List/len(proc/args!);
-        rec build(n : Nat, acc : Chain) -> Chain =
+        let build(n : Nat, acc : Chain) -> Chain =
             match n : (_) => Chain
             | 0 => acc
             | m + 1; ih => build(m, Chain/link(m, acc))
             end;
-        rec total(c : Chain, acc : Nat) -> Nat =
+        let total(c : Chain, acc : Nat) -> Nat =
             match c
             | stop() => acc
             | link(v, rest) => total(rest, (acc + v) % 999983)
@@ -368,12 +368,12 @@ fn a_monomorphic_slot_carries_its_own_type() {
         end
 
         let taint = List/len(proc/args!);
-        rec build(n : Nat, acc : Chain) -> Chain =
+        let build(n : Nat, acc : Chain) -> Chain =
             match n : (_) => Chain
             | 0 => acc
             | m + 1; ih => build(m, Chain/link(m, acc))
             end;
-        rec total(c : Chain, acc : Nat) -> Nat =
+        let total(c : Chain, acc : Nat) -> Nat =
             match c
             | stop() => acc
             | link(v, rest) => total(rest, (acc + v) % 999983)

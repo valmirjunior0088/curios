@@ -3,7 +3,7 @@
 -- N is read from stdin so the loop survives constant folding; output is 3N.
 use /std/{Str, Nat, Option, Result, Throw, Io};
 
-rec loop(n: Nat, acc: Nat) -> Throw(Str, Nat) =
+let loop(n: Nat, acc: Nat) -> Throw(Str, Nat) =
     match n: (_) => Throw(Str, Nat)
     | 0 => Throw/pure(acc)
     | m + 1 =>

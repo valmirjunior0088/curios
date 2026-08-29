@@ -16,7 +16,7 @@ let raw_cons(x: Bits, y: Bits, c: Bool, ne: is_cons(x)) -> is_cons(BigNat/add/ra
     end;
 
 -- incrementing any suffix from an empty low half leaves something cons-headed
-rec carry_non_zero(x: Bits) -> is_cons(trim(BigNat/add/raw(b[], x, true))) =
+let carry_non_zero(x: Bits) -> is_cons(trim(BigNat/add/raw(b[], x, true))) =
     match x
     | b[] => True/qed()
     | b[xh, ..xt] =>
@@ -26,7 +26,7 @@ rec carry_non_zero(x: Bits) -> is_cons(trim(BigNat/add/raw(b[], x, true))) =
         end
     end;
 
-pub rec trim_non_zero(
+pub let trim_non_zero(
     a: Bits,
     b: Bits,
     c: Bool,

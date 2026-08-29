@@ -17,7 +17,7 @@ fn nullary_closure_survives_erasure_and_codegen() {
         | now(A)
         | later(() -> Susp(A))
         end
-        rec force(@A : Type, s : Susp(A)) -> A =
+        let force(@A : Type, s : Susp(A)) -> A =
             match s : (_) => A
             | now(a) => a
             | later(k) => force(k())
@@ -154,7 +154,7 @@ fn nested_local_rec_runs_correctly() {
     assert_eq!(
         run(r#"
         use /std/{Handle, Nat, Str, Bytes};
-        rec f(n : Nat) -> Nat =
+        let f(n : Nat) -> Nat =
             (rec go(i : Nat) -> Nat =
                 match i
                 | 0 => 0
@@ -173,7 +173,7 @@ fn local_rec_calls_enclosing_rec_member() {
     assert_eq!(
         run(r#"
         use /std/{Handle, Nat, Str, Bytes};
-        rec f(n : Nat) -> Nat =
+        let f(n : Nat) -> Nat =
             (rec go(i : Nat) -> Nat =
                 match i
                 | 0 => 0
@@ -193,7 +193,7 @@ fn self_referential_value_rec_never_forced_compiles_and_runs() {
         run(r#"
         use /std/{Handle, Nat, Str, Bytes};
         let make(n : Nat) -> Nat =
-            rec loop : Nat = loop;
+            let loop : Nat = loop;
             n;
         /std/print(Nat/to_str(make(Bytes/len(/std/rand/bytes(5)!))))
         "#),
@@ -208,7 +208,7 @@ fn recursive_group_signature_reduces_concrete_type_family() {
         run(r#"
         use /std/{Handle, Nat, Str, Bytes};
         let taint = Bytes/len(/std/rand/bytes(3)!);
-        rec T(n : Nat) -> Type =
+        let T(n : Nat) -> Type =
             match n
             | 0 => Nat
             | k + 1; ih => T(k)

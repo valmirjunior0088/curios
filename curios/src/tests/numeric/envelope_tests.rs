@@ -70,7 +70,7 @@ fn a_reassociated_product_agrees_with_the_written_one() {
         format!(
             "use /std/{{Nat, Bool, Fmt, List, proc}};\n\
              let k(n: Nat) -> Nat = match n == 1 | true => 0 | false => 65536 end;\n\
-             rec prod(n: Nat) -> Nat =\n\
+             let prod(n: Nat) -> Nat =\n\
              match n | 0 => 1 | p + 1; _ => {combine} end;\n\
              Fmt/print(\"%\")(Nat/to_str(prod(List/len(proc/args!))))\n"
         )

@@ -11,7 +11,7 @@ fn a_closure_built_by_a_call_inside_a_knot_reaches_a_later_member() {
         let wrap(f: (Nat) -> Nat) -> (Nat) -> Nat = (n) => f(n);
         let main: Io({}) =
             let bs = rand/bytes(1)!;
-            rec first: (Nat) -> Nat =
+            let first: (Nat) -> Nat =
                 wrap((n) => match n | 0 => 0 | p + 1; _ => second(p) end)
             and second: (Nat) -> Nat =
                 wrap((n) => helper(n))
@@ -41,7 +41,7 @@ fn an_initializer_calling_a_function_that_reads_a_later_member_forces_it_first()
                 use /std/{{Nat, Str, Bytes, Byte, Io, rand, print}};
                 let main: Io({{}}) =
                     let bs = rand/bytes(1)!;
-                    rec base: Nat = Bytes/len(bs) + 40
+                    let base: Nat = Bytes/len(bs) + 40
                     and {first}
                     and build(n: Nat) -> Nat = n + size
                     and {second};
@@ -92,7 +92,7 @@ fn a_member_read_through_a_closure_the_verifier_cannot_see_is_forced() {
         use /std/{Nat, Str, Bytes, Byte, Io, Result, Parse, rand, print};
         let main: Io({}) =
             let bs = rand/bytes(1)!;
-            rec p: Parse(Nat) = Parse/map(Parse/any_byte, (b) => Byte/to_nat(b) + size)
+            let p: Parse(Nat) = Parse/map(Parse/any_byte, (b) => Byte/to_nat(b) + size)
             and n: Nat =
                 match Parse/run(p, x[0x01])
                 | success(v) => v
@@ -117,7 +117,7 @@ fn a_cycle_hidden_behind_a_closure_traps_at_the_member_being_forced() {
         use /std/{Nat, Str, Bytes, Byte, Io, Result, Parse, rand, print};
         let main: Io({}) =
             let bs = rand/bytes(1)!;
-            rec p: Parse(Nat) = Parse/map(Parse/any_byte, (b) => Byte/to_nat(b) + n)
+            let p: Parse(Nat) = Parse/map(Parse/any_byte, (b) => Byte/to_nat(b) + n)
             and n: Nat =
                 match Parse/run(p, bs)
                 | success(v) => v
@@ -142,7 +142,7 @@ fn a_member_reading_itself_is_refused_before_it_can_trap() {
         use /std/{Nat, Str, Bytes, Io, Result, Parse, rand, print};
         let main: Io({}) =
             let bs = rand/bytes(1)!;
-            rec p: Parse(Nat) = Parse/or(Parse/map(Parse/any_byte, (_) => 1), Parse/map(p, (n) => n));
+            let p: Parse(Nat) = Parse/or(Parse/map(Parse/any_byte, (_) => 1), Parse/map(p, (n) => n));
             match Parse/run(p, bs)
             | success(v) => print(Nat/to_str(v))
             | failure(_) => print("0")

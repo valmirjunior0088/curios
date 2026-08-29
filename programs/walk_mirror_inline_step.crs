@@ -49,7 +49,7 @@ let mstep(c: Byte, s: MScan) -> MScan =
         end
     end;
 
-rec walk3(sc: MScan, b: Bytes, acc: {Nat, Nat}) -> {Nat, Nat} =
+let walk3(sc: MScan, b: Bytes, acc: {Nat, Nat}) -> {Nat, Nat} =
     match b
     | x[] => acc
     | x[h, ..t] =>
@@ -75,7 +75,7 @@ rec walk3(sc: MScan, b: Bytes, acc: {Nat, Nat}) -> {Nat, Nat} =
 let text_of(n: Nat) -> Bytes =
     Str/to_bytes(Str/concat(Nat/to_str(n), "é→𝄞é→𝄞"));
 
-rec iterate(k: Nat, b: Bytes, acc: Nat) -> Nat =
+let iterate(k: Nat, b: Bytes, acc: Nat) -> Nat =
     match k: (_) => Nat
     | 0 => acc
     | m + 1 => iterate(m, b, (acc + walk3(MScan/lead(), b, (0, 0)).0) % 1000003)

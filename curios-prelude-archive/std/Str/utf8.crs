@@ -3,7 +3,7 @@ use /syn/Str/{Class, classify, Scan, step, Utf8, Valid};
 use /syn/{True, False};
 use /std/{Char, Nat, Byte, Bytes, Eq, Option};
 
-rec seq(@s: Scan, @a: Bytes, @b: Bytes, va: Utf8(s, a), vb: Valid(b)) -> Utf8(s, x[..a, ..b]) =
+let seq(@s: Scan, @a: Bytes, @b: Bytes, va: Utf8(s, a), vb: Valid(b)) -> Utf8(s, x[..a, ..b]) =
     match va: (q, x, w) => Utf8(q, x[..x, ..b])
     | stop() => vb
     | more(c, st, t, rest) => Utf8/more(c, st, x[..t, ..b], seq(rest, vb))
@@ -13,7 +13,7 @@ pub let concat_closed(@a: Bytes, @b: Bytes, va: Valid(a), vb: Valid(b)) -> Valid
     seq(va, vb);
 
 -- The scan is threaded by the recursion, not by the motive, for the reason `/std/Str/fold` gives: written as an induction, every step returns a *function* of the scan, so validating N bytes allocates N closures and applies the chain once. Here the state is an ordinary parameter the tail call carries forward, exactly as `/syn/Str/scan_from` walks the same recursion.
-pub rec check(s: Scan, b: Bytes) -> Option(Utf8(s, b)) =
+pub let check(s: Scan, b: Bytes) -> Option(Utf8(s, b)) =
     match b
     | x[] =>
         match s
@@ -28,7 +28,7 @@ pub rec check(s: Scan, b: Bytes) -> Option(Utf8(s, b)) =
         end
     end;
 
-pub rec drop_width(n: Nat, s: Scan, b: Bytes) -> Nat =
+pub let drop_width(n: Nat, s: Scan, b: Bytes) -> Nat =
     match b
     | x[] => 0
     | x[h, ..t] =>
@@ -40,7 +40,7 @@ pub rec drop_width(n: Nat, s: Scan, b: Bytes) -> Nat =
     end;
 
 -- `drop_width` peels at most one byte per step and stops when `b` runs out, so its count never passes `b`'s length. Every window the transports below open is `slice(b, drop_width(..), len(b))`, and this is the ordering half of what that slice demands. Each arm is decided outright — the empty scan counts nothing, an exhausted `n` counts nothing — and the recursive arms cancel a shared successor against the hypothesis at the tail.
-pub rec drop_width_within(n: Nat, s: Scan, b: Bytes) -> Nat/Le(drop_width(n, s, b), Bytes/len(b)) =
+pub let drop_width_within(n: Nat, s: Scan, b: Bytes) -> Nat/Le(drop_width(n, s, b), Bytes/len(b)) =
     match b: (v) => Nat/Le(drop_width(n, s, v), Bytes/len(v))
     | x[] => True/qed()
     | x[h, ..t] =>
@@ -55,7 +55,7 @@ pub rec drop_width_within(n: Nat, s: Scan, b: Bytes) -> Nat/Le(drop_width(n, s, 
         end
     end;
 
-pub rec drop_valid(
+pub let drop_valid(
     n: Nat,
     s: Scan,
     @b: Bytes,
@@ -75,7 +75,7 @@ pub rec drop_valid(
     | bad() => match d | more(c, st, t, rest) => drop_valid(n, step(c, Scan/bad()), rest) end
     end;
 
-pub rec take_valid(
+pub let take_valid(
     n: Nat,
     s: Scan,
     @b: Bytes,
@@ -128,10 +128,10 @@ pub rec take_valid(
         end
     end;
 
-pub rec bad_uninhabited(@x: Bytes, w: Utf8(Scan/bad(), x)) -> False =
+pub let bad_uninhabited(@x: Bytes, w: Utf8(Scan/bad(), x)) -> False =
     match w | more(c, st, t, rest) => bad_uninhabited(rest) end;
 
-pub rec cont_len(
+pub let cont_len(
     k: Nat,
     @lo: Nat,
     @hi: Nat,
@@ -155,7 +155,7 @@ pub rec cont_len(
         end
     end;
 
-pub rec cont0_uninhabited(
+pub let cont0_uninhabited(
     @lo: Nat,
     @hi: Nat,
     @t: Bytes,
@@ -169,7 +169,7 @@ pub rec cont0_uninhabited(
         end
     end;
 
-pub rec take_continuations(
+pub let take_continuations(
     b: Bytes,
     off: Nat,
     remaining: Nat,
@@ -194,7 +194,7 @@ pub rec take_continuations(
             bound)
     end;
 
-pub rec peel_byte(
+pub let peel_byte(
     @s: Scan,
     @b: Bytes,
     nz: Nat/Lt(0, Bytes/len(b)),
@@ -205,7 +205,7 @@ pub rec peel_byte(
     | more(c, st, t, rest) => rest
     end;
 
-pub rec count_scalars(s: Scan, b: Bytes) -> Nat =
+pub let count_scalars(s: Scan, b: Bytes) -> Nat =
     match b
     | x[] => 0
     | x[h, ..t] =>

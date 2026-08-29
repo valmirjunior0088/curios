@@ -23,7 +23,7 @@ let magnitude_stop(acc: Nat, seen: Bool, pend: Bool) -> Parse(Nat) =
 
 -- digit run with TOML underscore placement; `guard` is the per-radix wrap-safety ceiling checked before each multiply
 let magnitude(radix: Nat, guard: Nat, digit_of: (Nat) -> Option(Nat)) -> Parse(Nat) =
-    rec go(acc: Nat, seen: Bool, pend: Bool) -> Parse(Nat) =
+    let go(acc: Nat, seen: Bool, pend: Bool) -> Parse(Nat) =
         let next = Parse/peek!;
         match next
         | none() => magnitude_stop(acc, seen, pend)
@@ -139,7 +139,7 @@ let flt_digits_stop(
 
 -- Significand digits, every one of them kept: the significand is a `BigNat`, so no digit is dropped before `Flt/of_decimal` rounds the exact value once. `count` is how many digits were read, which bounds the significand above for the underflow clamp; `shift` counts the fraction digits, each of which moves the decimal point one place down.
 let flt_digits(sig0: BigNat, count0: Nat, frac: Bool) -> Parse({BigNat, Nat, Nat}) =
-    rec go(
+    let go(
         sig: BigNat,
         count: Nat,
         shift: Nat,
@@ -181,7 +181,7 @@ let exp_stop(acc: Nat, seen: Bool, pend: Bool) -> Parse(Nat) =
 
 -- exponent digits saturate at 2000: a binary32 is infinity or zero long before that bound for any significand short of two thousand digits, so saturation cannot change a result that could be written down
 let exp_digits: Parse(Nat) =
-    rec go(acc: Nat, seen: Bool, pend: Bool) -> Parse(Nat) =
+    let go(acc: Nat, seen: Bool, pend: Bool) -> Parse(Nat) =
         let next = Parse/peek!;
         match next
         | none() => exp_stop(acc, seen, pend)

@@ -12,8 +12,8 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 
 - [x] Π-types, λ-abstractions, and application
 - [x] Σ-types and dependent pairs
-- [x] `let` and `let-rec` bindings
-- [x] Value-level mutual recursion in `rec`, forced by need and guarded by the erased verifier
+- [x] `let` bindings, recursive by their body, and `let … and …;` groups
+- [x] Value-level mutual recursion in a `let` group, forced by need and guarded by the erased verifier
 - [x] Bidirectional dependent type checking with full definitional equality
 - [x] Eta-reduction for Π-types and Σ-types
 - [x] Named tuple fields

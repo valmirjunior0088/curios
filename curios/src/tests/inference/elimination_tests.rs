@@ -25,7 +25,7 @@ fn omitted_motive_infers_over_a_compound_scrutinee() {
     // The motive hole's scope is opened with the scrutinee — a non-pattern spine entry when the scrutinee is compound. Occurrence abstraction in `solve` rewrites the scrutinee's occurrences in the expected type to the motive binder, so the dependent motive infers where it previously had to be spelled.
     let source = r#"
         use /std/{Nat, Vec, Handle};
-        rec build(n : Nat) -> Vec(Nat, n) =
+        let build(n : Nat) -> Vec(Nat, n) =
             match n : (m) => Vec(Nat, m)
             | 0 => Vec/nil()
             | pred + 1; ih => Vec/cons(0, ih)

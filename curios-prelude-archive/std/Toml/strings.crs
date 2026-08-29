@@ -15,7 +15,7 @@ let hex_digit: Parse(Nat) =
         end
     end;
 
-rec hex_digits(count: Nat, acc: Nat) -> Parse(Nat) =
+let hex_digits(count: Nat, acc: Nat) -> Parse(Nat) =
     match count
     | 0 => Parse/pure(acc)
     | pred + 1 =>
@@ -61,7 +61,7 @@ let crlf: Parse(Option({Byte, Byte})) =
 let quotes(quote: Byte, count: Nat) -> Bytes =
     match count | 0 => x[] | pred + 1; ih => x[..ih, quote] end;
 
-rec basic_body(acc: Bytes) -> Parse(Bytes) =
+let basic_body(acc: Bytes) -> Parse(Bytes) =
     let next = Parse/peek!;
     match next
     | none() => Parse/fail("unterminated string")
@@ -90,7 +90,7 @@ let basic_str_scan: Parse(Bytes) =
     let _ = Parse/label(Parse/take_byte(0x22), "expected string")!;
     basic_body(x[]);
 
-rec literal_body(acc: Bytes) -> Parse(Bytes) =
+let literal_body(acc: Bytes) -> Parse(Bytes) =
     let next = Parse/peek!;
     match next
     | none() => Parse/fail("unterminated string")
@@ -116,7 +116,7 @@ let literal_str_scan: Parse(Bytes) =
     literal_body(x[]);
 
 -- after a line-ending backslash: whitespace, then at least one newline, then any further whitespace and newlines
-rec trim_run(seen_nl: Bool) -> Parse({}) =
+let trim_run(seen_nl: Bool) -> Parse({}) =
     let stop: Parse({}) =
         match seen_nl | true => Parse/pure(()) | false => Parse/fail("invalid escape") end;
     let next = Parse/peek!;
@@ -155,7 +155,7 @@ let skip_opening_newline: Parse({}) =
     end;
 
 -- The closing delimiter is three quotes, but a run of up to five ends the string with the surplus kept as content -- so the whole run is read at once and its length decides, rather than a quote at a time.
-rec ml_basic_body(acc: Bytes) -> Parse(Bytes) =
+let ml_basic_body(acc: Bytes) -> Parse(Bytes) =
     let next = Parse/peek!;
     match next
     | none() => Parse/fail("unterminated string")
@@ -208,7 +208,7 @@ rec ml_basic_body(acc: Bytes) -> Parse(Bytes) =
         end
     end;
 
-rec ml_literal_body(acc: Bytes) -> Parse(Bytes) =
+let ml_literal_body(acc: Bytes) -> Parse(Bytes) =
     let next = Parse/peek!;
     match next
     | none() => Parse/fail("unterminated string")

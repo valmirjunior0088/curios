@@ -61,13 +61,13 @@ pub(super) const SHAPE: &str = r#"
     | more(rest : F)
     end
 
-    rec Shape(f : F) -> Type =
+    let Shape(f : F) -> Type =
         match f
         | stop() => Nat
         | more(rest) => Shape(rest)
         end;
 
-    rec inf : F = F/more(inf);
+    let inf : F = F/more(inf);
 "#;
 
 /// The productive twin of [`SHAPE`], whose `Shape(inf)` unfolds to `Sink(Shape(inf))` forever rather than to itself.
@@ -81,11 +81,11 @@ pub(super) const PRODUCTIVE_SHAPE: &str = r#"
     | more(rest : F)
     end
 
-    rec Shape(f : F) -> Type =
+    let Shape(f : F) -> Type =
         match f
         | stop() => /std/False
         | more(rest) => Sink(Shape(rest))
         end;
 
-    rec inf : F = F/more(inf);
+    let inf : F = F/more(inf);
 "#;

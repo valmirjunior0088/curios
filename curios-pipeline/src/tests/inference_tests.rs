@@ -121,7 +121,7 @@ fn a_packed_literal_decomposes_against_its_folded_spine() {
         ) -> Eq(h1, h2) =
             match p: (s, t, q) => Eq(head_of(s), head_of(t)) | refl(@z) => Eq/refl() end;
 
-        rec raw(x: Bits) -> Bits =
+        let raw(x: Bits) -> Bits =
             match x
             | b[] => b[1]
             | b[h, ..t] => match h | true => b[0, ..raw(t)] | false => b[1, ..t] end

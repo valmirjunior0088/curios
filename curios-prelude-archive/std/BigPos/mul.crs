@@ -4,7 +4,7 @@ use /std/Bool/{false_neq_true};
 use /std/BigNat/{is_trimmed, trim};
 use /std/BigPos/{is_cons, nz_trimmed, trim_head_non_zero, add};
 
-rec raw_trim_cons(
+let raw_trim_cons(
     p: Bits,
     q: Bits,
     tp: Eq(is_trimmed(p), true),

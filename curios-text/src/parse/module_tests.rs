@@ -18,7 +18,7 @@ fn parse_module_roundtrip() {
     let m = r#"
         use Bar/{x};
         pub let x : Type = Type;
-        rec f : Type = Type;
+        let f : Type = Type;
     "#
     .parse::<Module>()
     .unwrap();
@@ -65,7 +65,7 @@ fn parse_entrypoint_roundtrip() {
     let entrypoint = r#"
         use Foo/{x};
         use Bar/{x};
-        pub rec f : Type = Type;
+        pub let f : Type = Type;
         let x : Type = Type;
         f
     "#

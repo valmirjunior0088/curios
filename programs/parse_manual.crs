@@ -3,7 +3,7 @@
 -- N is read from stdin so the loop survives constant folding; the output matches `parse_digits.crs` exactly for the same input.
 use /std/{Str, Nat, Bytes, Byte, Option, Io};
 
-rec walk(b: Bytes, i: Nat, remaining: Nat, acc: Nat) -> Option(Nat) =
+let walk(b: Bytes, i: Nat, remaining: Nat, acc: Nat) -> Option(Nat) =
     match remaining: (_) => Option(Nat)
     | 0 => Option/some(acc)
     | m + 1 =>
@@ -27,7 +27,7 @@ let decode(s: Str) -> Option(Nat) =
     | false => walk(Str/to_bytes(s), 0, Bytes/len(Str/to_bytes(s)), 0)
     end;
 
-rec loop(k: Nat, digits: Str, acc: Nat) -> Nat =
+let loop(k: Nat, digits: Str, acc: Nat) -> Nat =
     match k: (_) => Nat
     | 0 => acc
     | m + 1 =>

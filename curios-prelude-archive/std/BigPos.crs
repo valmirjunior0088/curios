@@ -77,7 +77,7 @@ pub induct Split: pub Type
 | pos(BigPos)
 end
 
-pub rec of_big_nat(a: BigNat) -> Split =
+pub let of_big_nat(a: BigNat) -> Split =
     match view(a)
     | zero() => Split/zero()
     | succ(low, tail) =>

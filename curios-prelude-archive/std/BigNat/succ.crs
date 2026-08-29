@@ -4,7 +4,7 @@ use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
 use /std/BigNat/{BigNat, cong_cons2, cons_inj_head, cons_inj_tail, is_trimmed, is_trimmed_cons,
     is_trimmed_of_canonical, nonempty, of_trimmed_bits, refl_at, tail_is_trimmed};
 
-pub rec raw(x: Bits) -> Bits =
+pub let raw(x: Bits) -> Bits =
     match x
     | b[] => b[1]
     | b[h, ..t] => match h | true => b[0, ..raw(t)] | false => b[1, ..t] end
@@ -19,7 +19,7 @@ let raw_nonempty(x: Bits) -> Eq(nonempty(raw(x)), true) =
     | b[h, ..t] => match h | true => Eq/refl() | false => Eq/refl() end
     end;
 
-pub rec raw_trimmed(x: Bits, p: Eq(is_trimmed(x), true)) -> Eq(is_trimmed(raw(x)), true) =
+pub let raw_trimmed(x: Bits, p: Eq(is_trimmed(x), true)) -> Eq(is_trimmed(raw(x)), true) =
     match x: (a) => Eq(is_trimmed(raw(a)), true)
     | b[] => Eq/refl()
     | b[h, ..t] =>
@@ -63,7 +63,7 @@ let raw_inj_absurd(
         false_neq_true(shifted)
     end;
 
-pub rec raw_inj(
+pub let raw_inj(
     y: Bits,
     z: Bits,
     py: Eq(is_trimmed(y), true),

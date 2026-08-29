@@ -53,7 +53,7 @@ pub let read(h: Handle, n: Nat) -> Io(Read) =
             end
         end);
 
-pub rec write(h: Handle, b: Bytes) -> Io(Result({}, Error)) =
+pub let write(h: Handle, b: Bytes) -> Io(Result({}, Error)) =
     let r = /sys/Handle/write(h, b)!;
     match error_of(r.status)
     | some(e) => Io/pure(Result/failure(e))

@@ -10,7 +10,7 @@ fn nonproductive_inner_rec_in_type_position_exhausts_its_budget() {
     let source = r#"
         use /std/{Bool};
         let spin : Bool =
-            rec go : Bool = go;
+            let go : Bool = go;
             go;
         let bad : Type =
             match spin : (_) => Type
@@ -32,7 +32,7 @@ fn a_literal_depth_packed_recursion_refuses_within_a_small_budget() {
         let taint = List/len(proc/args!);
         let t: Bool = taint == 0;
         let grown = b[t, 1];
-        rec widen(n: Nat, acc: Bits) -> Bits =
+        let widen(n: Nat, acc: Bits) -> Bits =
             match n | 0 => acc | _ => widen(n - 1, b[..acc, t]) end;
         let wide = widen(30, grown);
         match Bits/len(wide) == 32
@@ -51,7 +51,7 @@ fn a_literal_depth_packed_recursion_compiles_within_the_default_budget() {
         let taint = List/len(proc/args!);
         let t: Bool = taint == 0;
         let grown = b[t, 1];
-        rec widen(n: Nat, acc: Bits) -> Bits =
+        let widen(n: Nat, acc: Bits) -> Bits =
             match n | 0 => acc | _ => widen(n - 1, b[..acc, t]) end;
         let wide = widen(30, grown);
         match Bits/len(wide) == 32

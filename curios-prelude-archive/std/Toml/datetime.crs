@@ -11,7 +11,7 @@ let digit: Parse(Nat) =
         "expected digit");
 
 -- Exactly `count` digits, as one number. A date-time field is fixed-width, so a short run is an error rather than a stopping point.
-rec fixed(count: Nat, acc: Nat) -> Parse(Nat) =
+let fixed(count: Nat, acc: Nat) -> Parse(Nat) =
     match count
     | 0 => Parse/pure(acc)
     | pred + 1 =>
@@ -32,7 +32,7 @@ let frac_stop(taken: Nat, acc: Nat, seen: Bool) -> Parse(Nat) =
     end;
 
 -- fractional seconds: at most nine digits honored, further digits truncated
-rec frac_digits(taken: Nat, acc: Nat, seen: Bool) -> Parse(Nat) =
+let frac_digits(taken: Nat, acc: Nat, seen: Bool) -> Parse(Nat) =
     let next = Parse/peek!;
     match next
     | none() => frac_stop(taken, acc, seen)

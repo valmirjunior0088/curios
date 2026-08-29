@@ -19,7 +19,7 @@ fn a_type_level_rec_cannot_tie_the_negative_knot() {
         r#"
         {SINK}
 
-        rec Bad : Type = Sink(Bad);
+        let Bad : Type = Sink(Bad);
 
         let delta(x : Bad) -> /std/False =
             match x
@@ -47,7 +47,7 @@ fn a_dispatch_that_does_not_enumerate_zero_licenses_no_decrease() {
         r#"
         use /std/{Nat};
 
-        rec Bad(n : Nat) -> Type =
+        let Bad(n : Nat) -> Type =
             match n
             | 1 => {}
             | _ => Bad(n - 1)
@@ -64,7 +64,7 @@ fn a_dispatch_that_enumerates_zero_licenses_the_decrease() {
     let source = r#"
         use /std/{Nat};
 
-        rec Good(n : Nat) -> Type =
+        let Good(n : Nat) -> Type =
             match n
             | 0 => {}
             | _ => Good(n - 1)
@@ -91,7 +91,7 @@ fn a_boolean_guard_that_does_not_exclude_zero_licenses_no_decrease() {
         r#"
         use /std/{Nat};
 
-        rec Bad(n : Nat) -> Type =
+        let Bad(n : Nat) -> Type =
             match n < 10
             | true => Bad(n - 1)
             | false => {}
@@ -106,7 +106,7 @@ fn a_boolean_guard_that_does_not_exclude_zero_licenses_no_decrease() {
         r#"
         use /std/{Nat};
 
-        rec Bad(n : Nat) -> Type =
+        let Bad(n : Nat) -> Type =
             match 10 > n
             | true => Bad(n - 1)
             | false => {}
@@ -123,7 +123,7 @@ fn a_boolean_guard_that_does_not_exclude_zero_licenses_no_decrease() {
 
         let small(n : Nat) -> Bool = n < 10;
 
-        rec Bad(n : Nat) -> Type =
+        let Bad(n : Nat) -> Type =
             match small(n)
             | true => Bad(n - 1)
             | false => {}
@@ -140,7 +140,7 @@ fn a_boolean_guard_that_excludes_zero_licenses_the_decrease() {
     let direct = r#"
         use /std/{Nat};
 
-        rec Good(n : Nat) -> Type =
+        let Good(n : Nat) -> Type =
             match n > 0
             | true => Good(n - 1)
             | false => {}
@@ -155,7 +155,7 @@ fn a_boolean_guard_that_excludes_zero_licenses_the_decrease() {
     let flipped = r#"
         use /std/{Nat};
 
-        rec Good(n : Nat) -> Type =
+        let Good(n : Nat) -> Type =
             match 0 < n
             | true => Good(n - 1)
             | false => {}
@@ -180,7 +180,7 @@ fn an_arithmetic_decrease_needs_a_literal_operand_that_shrinks() {
         r#"
         use /std/{Nat};
 
-        rec Bad(n : Nat) -> Type =
+        let Bad(n : Nat) -> Type =
             match n
             | 0 => {}
             | _ => Bad(n / 1)
@@ -195,7 +195,7 @@ fn an_arithmetic_decrease_needs_a_literal_operand_that_shrinks() {
         r#"
         use /std/{Nat};
 
-        rec Bad(n : Nat, k : Nat) -> Type =
+        let Bad(n : Nat, k : Nat) -> Type =
             match n
             | 0 => {}
             | _ => Bad(n / k, k)
@@ -212,7 +212,7 @@ fn a_division_by_a_literal_above_one_licenses_the_decrease() {
     let source = r#"
         use /std/{Nat};
 
-        rec Good(n : Nat) -> Type =
+        let Good(n : Nat) -> Type =
             match n
             | 0 => {}
             | _ => Good(n / 2)
@@ -238,7 +238,7 @@ fn a_nonzero_fact_does_not_escape_the_arm_that_established_it() {
         r#"
         use /std/{Nat};
 
-        rec Bad(n : Nat) -> Type =
+        let Bad(n : Nat) -> Type =
             match n > 0
             | true => {}
             | false => Bad(n - 1)
@@ -252,7 +252,7 @@ fn a_nonzero_fact_does_not_escape_the_arm_that_established_it() {
         r#"
         use /std/{Nat};
 
-        rec Bad(n : Nat) -> Type =
+        let Bad(n : Nat) -> Type =
             match n > 0
             | true => {}
             | false => Bad(n / 2)
@@ -269,7 +269,7 @@ fn a_partial_type_behind_a_projection_is_still_a_type() {
         r#"
         {SINK}
 
-        rec P : {{Type, /std/Nat}} = (Sink(P.0), 0);
+        let P : {{Type, /std/Nat}} = (Sink(P.0), 0);
 
         let delta(x : P.0) -> /std/False =
             match x
@@ -295,13 +295,13 @@ fn a_total_type_function_applied_to_a_partial_value_is_rejected() {
         | more(rest : F)
         end
 
-        rec Shape(f : F) -> Type =
+        let Shape(f : F) -> Type =
             match f
             | stop() => /std/False
             | more(rest) => Sink(Shape(rest))
             end;
 
-        rec inf : F = F/more(inf);
+        let inf : F = F/more(inf);
 
         let delta(x : Shape(inf)) -> /std/False =
             match x
@@ -337,7 +337,7 @@ fn the_entrypoint_expression_is_not_a_blind_spot() {
 fn a_type_level_rec_through_an_arrow_is_diagnosed_not_aborted() {
     rejected(
         r#"
-        rec Bad : Type = (Bad) -> /std/False;
+        let Bad : Type = (Bad) -> /std/False;
 
         let delta(x : Bad) -> /std/False = x(x);
 
@@ -369,7 +369,7 @@ fn a_partial_definition_stays_usable_in_a_program() {
     let source = r#"
         use /std/{Nat};
 
-        rec collatz(n : Nat, steps : Nat) -> Nat =
+        let collatz(n : Nat, steps : Nat) -> Nat =
             choose
             | n <= 1 => steps
             | n % 2 == 0 => collatz(n / 2, steps + 1)
@@ -454,7 +454,7 @@ fn a_sort_reached_through_an_alias_still_needs_descent() {
 
         let wrap(A : U) -> U = Option(A);
 
-        rec Bad(n : Nat) -> U = wrap(Bad(n));
+        let Bad(n : Nat) -> U = wrap(Bad(n));
 
         /std/print("unreachable")
         "#,
@@ -469,7 +469,7 @@ fn an_aliased_sort_that_descends_is_still_accepted() {
 
         let U : Type = Type;
 
-        rec Good(n : Nat) -> U =
+        let Good(n : Nat) -> U =
             match n
             | 0 => {}
             | _ => Good(n - 1)

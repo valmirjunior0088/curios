@@ -15,7 +15,7 @@ fn a_field_type_a_self_calling_rec_computes_is_admitted() {
         | cons(Str, Labels)
         end
 
-        rec Count(L : Labels) -> Type =
+        let Count(L : Labels) -> Type =
             match L : (_) => Type
             | nil() => {}
             | cons(l, rest) => {Nat, Count(rest)}
@@ -42,7 +42,7 @@ fn a_computed_field_type_under_a_parameterized_family_is_admitted() {
         | cons(Str, Labels)
         end
 
-        rec Count(L : Labels) -> Type =
+        let Count(L : Labels) -> Type =
             match L : (_) => Type
             | nil() => {}
             | cons(l, rest) => Option(Count(rest))
@@ -68,7 +68,7 @@ fn a_computed_field_type_that_is_a_bare_recursive_call_is_admitted() {
         | cons(Str, Labels)
         end
 
-        rec Count(L : Labels) -> Type =
+        let Count(L : Labels) -> Type =
             match L : (_) => Type
             | nil() => {}
             | cons(l, rest) => Count(rest)
@@ -89,7 +89,7 @@ fn a_field_type_computed_by_recursion_over_a_numeral_is_admitted() {
     let source = r#"
         use /std/{Nat, Bool};
 
-        rec Rep(n : Nat) -> Type =
+        let Rep(n : Nat) -> Type =
             match n : (_) => Type
             | 0 => {}
             | p + 1 => {Bool, Rep(p)}
@@ -115,7 +115,7 @@ fn a_constructor_payload_a_self_calling_rec_computes_is_admitted() {
         | cons(Str, Labels)
         end
 
-        rec Count(L : Labels) -> Type =
+        let Count(L : Labels) -> Type =
             match L : (_) => Type
             | nil() => {}
             | cons(l, rest) => {Nat, Count(rest)}
@@ -143,7 +143,7 @@ fn a_refinement_field_over_a_self_calling_fold_is_admitted() {
         use /std/{Bytes, Bool};
         use /syn/{True, False};
 
-        rec always(b : Bytes) -> Bool =
+        let always(b : Bytes) -> Bool =
             match b
             | x[] => true
             | x[h, ..t] => always(t)
@@ -171,7 +171,7 @@ fn a_refinement_field_over_a_fold_hypothesis_is_admitted() {
         use /std/{Bytes, Bool};
         use /syn/{True, False};
 
-        rec always(b : Bytes) -> Bool =
+        let always(b : Bytes) -> Bool =
             match b
             | x[] => true
             | x[h, ..t]; ih => ih

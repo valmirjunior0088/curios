@@ -152,7 +152,7 @@ pub let print_err(s: Str) -> Io({}) =
     Io/pure(());
 
 pub let read() -> Io(Option(Bytes)) =
-    rec go(acc: Bytes) -> Io(Option(Bytes)) =
+    let go(acc: Bytes) -> Io(Option(Bytes)) =
         let r = /sys/Handle/read(Handle/stdin, 1)!;
         choose
         | r.status != /sys/status/ok && Bytes/len(acc) == 0 => Io/pure(Option/none())

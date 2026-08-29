@@ -145,7 +145,7 @@ let walk_final(
     end;
 
 -- Resolve a segment path against the root, rebuilding the map spine persistently and threading side-table updates. The first `unchecked` segments are the already-validated scope prefix and are traversed without construction checks.
-rec walk(
+let walk(
     m: Map(Toml),
     side: Map(State),
     pre: Bytes,

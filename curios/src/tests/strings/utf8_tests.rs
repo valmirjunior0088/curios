@@ -53,7 +53,7 @@ fn slice_proof_aligns_with_byte_walk() {
 
         let Valid(b : Bytes) -> Type = Utf8(Scan/lead(), b);
 
-        rec to_lead_bytes(s : Scan, b : Bytes) -> Bytes =
+        let to_lead_bytes(s : Scan, b : Bytes) -> Bytes =
             match s
             | lead() => b
             | cont(rem, lo, hi) =>
@@ -68,7 +68,7 @@ fn slice_proof_aligns_with_byte_walk() {
                 end
             end;
 
-        rec to_lead_proof(s : Scan, b : Bytes, d : Utf8(s, b)) -> Valid(to_lead_bytes(s, b)) =
+        let to_lead_proof(s : Scan, b : Bytes, d : Utf8(s, b)) -> Valid(to_lead_bytes(s, b)) =
             let go =
                 match s : (s) => (p : Utf8(s, b)) -> Valid(to_lead_bytes(s, b))
                 | lead() => (p) => p
@@ -229,7 +229,7 @@ fn utf8_inductive_spike() {
             : (st, x[Nat/to_byte(c), ..t])
         end
 
-        rec seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Utf8(Scan/lead(), b))
+        let seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Utf8(Scan/lead(), b))
             -> Utf8(s, x[..a, ..b]) =
             match va : (q, x, w) => Utf8(q, x[..x, ..b])
             | stop() => vb
@@ -252,7 +252,7 @@ fn utf8_construction_spike() {
         | snoc(c : Nat, t : Bytes, rest : All(t)) : (x[Nat/to_byte(c), ..t])
         end
 
-        rec build(b : Bytes) -> All(b) =
+        let build(b : Bytes) -> All(b) =
             match b : (b) => All(b)
             | x[] => All/empty()
             | x[h, ..t]; ih => All/snoc(/std/Byte/to_nat(h), t, ih)
@@ -328,7 +328,7 @@ fn concat_closed_holds_for_the_real_automaton() {
 
         let Valid(b : Bytes) -> Type = Utf8(Scan/lead(), b);
 
-        rec seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
+        let seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
             -> Utf8(s, x[..a, ..b]) =
             match va : (q, x, w) => Utf8(q, x[..x, ..b])
             | stop() => vb
@@ -503,7 +503,7 @@ fn decimal_is_ascii_carries_its_proof() {
 
         let Valid(b : Bytes) -> Type = Utf8(Scan/lead(), b);
 
-        rec seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
+        let seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
             -> Utf8(s, x[..a, ..b]) =
             match va : (q, x, w) => Utf8(q, x[..x, ..b])
             | stop() => vb
@@ -538,7 +538,7 @@ fn decimal_is_ascii_carries_its_proof() {
             let g = digit(d);
             (x[Nat/to_byte(g.c)], single(g.c, g.ok));
 
-        rec decimal(n : Nat) -> { b : Bytes, v : Valid(b) } =
+        let decimal(n : Nat) -> { b : Bytes, v : Valid(b) } =
             match Nat/lt(n, 10)
             | true => single_digit(n)
             | false =>
@@ -614,7 +614,7 @@ fn slice_closed_peels_codepoints() {
 
         let Valid(b : Bytes) -> Type = Utf8(Scan/lead(), b);
 
-        rec seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
+        let seq(@s : Scan, @a : Bytes, @b : Bytes, va : Utf8(s, a), vb : Valid(b))
             -> Utf8(s, x[..a, ..b]) =
             match va : (q, x, w) => Utf8(q, x[..x, ..b])
             | stop() => vb
@@ -625,7 +625,7 @@ fn slice_closed_peels_codepoints() {
             -> Valid(x[..a, ..b]) =
             seq(va, vb);
 
-        rec take_to_lead(@s : Scan, @b : Bytes, d : Utf8(s, b))
+        let take_to_lead(@s : Scan, @b : Bytes, d : Utf8(s, b))
             -> { mid : Bytes, tail : Bytes, midd : Utf8(s, mid), tv : Valid(tail) } =
             let go =
                 match s : (s) => (p : Utf8(s, b))
@@ -664,7 +664,7 @@ fn slice_closed_peels_codepoints() {
                 (w.tail, w.tv)
             end;
 
-        rec drop_n(n : Nat, @b : Bytes, d : Valid(b)) -> { r : Bytes, v : Valid(r) } =
+        let drop_n(n : Nat, @b : Bytes, d : Valid(b)) -> { r : Bytes, v : Valid(r) } =
             match Nat/eql(n, 0)
             | true => (b, d)
             | false =>
@@ -672,7 +672,7 @@ fn slice_closed_peels_codepoints() {
                 drop_n(Nat/sub(n, 1), @w.rest, w.v)
             end;
 
-        rec take_n(n : Nat, @b : Bytes, d : Valid(b)) -> { r : Bytes, v : Valid(r) } =
+        let take_n(n : Nat, @b : Bytes, d : Valid(b)) -> { r : Bytes, v : Valid(r) } =
             match Nat/eql(n, 0)
             | true => (x[], Utf8/stop())
             | false =>

@@ -88,12 +88,12 @@ fn holds_many_keys_with_shared_prefixes() {
     // 300 sequential keys, rendered as decimal, share long prefixes — "1" against "10" against "100" — exercising deep shared paths and the presence markers that separate a key from its own extensions; deleting the even half exercises collapse at scale. Keys are `Str` because there is no `Key(Nat)`: see `/std/Map`, which records why a base-256 encoding of an intrinsic `Nat` cannot discharge `Key/injective`.
     let source = r#"
         use /std/{Handle, Str, Map, Nat, Option};
-        rec build(i : Nat, acc : Map(Str)) -> Map(Str) =
+        let build(i : Nat, acc : Map(Str)) -> Map(Str) =
             match i
             | 0 => acc
             | _ => build(i - 1, Map/insert(acc, Nat/to_str(i), Nat/to_str(i)))
             end;
-        rec drop_even(i : Nat, acc : Map(Str)) -> Map(Str) =
+        let drop_even(i : Nat, acc : Map(Str)) -> Map(Str) =
             match i
             | 0 => acc
             | _ =>

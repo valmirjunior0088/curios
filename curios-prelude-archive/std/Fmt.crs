@@ -6,7 +6,7 @@ pub induct Fmt: pub Type
 | show(Fmt)
 end
 
-pub rec format_type_with(T: Type, f: Fmt) -> Type =
+pub let format_type_with(T: Type, f: Fmt) -> Type =
     match f
     | nil() => T
     | lit(_, rest) => format_type_with(T, rest)
@@ -31,7 +31,7 @@ let flush(bytes: Bytes, start: Nat, count: Nat, rest: Fmt) -> Fmt =
 -- Each step either advances the position or hands off at the same one (`parse_at` to `parse_lit_at` to `parse_esc_at`), so three units per byte plus a constant is a bound the parse cannot reach; the `0` arms are unreachable in practice and terminate the format rather than truncating a directive mid-way.
 --
 -- Inside a literal the walk carries how much it has *taken* rather than where it has reached, so the window `flush` opens is the one the walk already holds. The position is `start + taken` wherever a byte is read, which is what the two used to be tracked separately to say.
-rec parse_at(bytes: Bytes, pos: Nat, fuel: Nat) -> Fmt =
+let parse_at(bytes: Bytes, pos: Nat, fuel: Nat) -> Fmt =
     match fuel
     | 0 => Fmt/nil()
     | rest + 1 =>
@@ -77,7 +77,7 @@ pub let parse(s: Str) -> Fmt =
     let bytes = Str/to_bytes(s);
     parse_at(bytes, 0, 3 * Bytes/len(bytes) + 3);
 
-rec go_with(T: Type, finish: (Str) -> T, f: Fmt, acc: Str) -> format_type_with(T, f) =
+let go_with(T: Type, finish: (Str) -> T, f: Fmt, acc: Str) -> format_type_with(T, f) =
     match f
     | nil() => finish(acc)
     | lit(piece, rest) => go_with(T, finish, rest, Str/concat(acc, piece))

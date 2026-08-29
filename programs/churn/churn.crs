@@ -18,7 +18,7 @@ struct Churn: Type {
     f: Nat,
 }
 
-rec walk(n: Nat, p: Nat, x: Nat, r: Churn) -> Churn =
+let walk(n: Nat, p: Nat, x: Nat, r: Churn) -> Churn =
     match n: (_) => Churn
     | 0 => r
     | m + 1; ih =>

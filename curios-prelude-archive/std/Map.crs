@@ -47,13 +47,13 @@ let bit(k: Bytes, j: Nat) -> Nat =
     end;
 
 let crit(a: Bytes, b: Bytes) -> Nat =
-    rec bits(x: Nat, y: Nat, g: Nat, o: Nat) -> Nat =
+    let bits(x: Nat, y: Nat, g: Nat, o: Nat) -> Nat =
         match Nat/and(Nat/shr(x, 8 - o), 1) == Nat/and(Nat/shr(y, 8 - o), 1)
         | true => bits(x, y, g, o + 1)
         | false => g * 9 + o
         end;
     -- Nested rather than conjoined, for the reason `bit` states: a refinement records the term it scrutinised, so a true `x && y` says nothing about `x`, and each bound has to be refined on its own before `Bytes/get` will take it. Both exhausted branches agree, so the split changes nothing but what is provable inside them.
-    rec bytes(g: Nat) -> Nat =
+    let bytes(g: Nat) -> Nat =
         match g < Bytes/len(a)
         | false => g * 9
         | true =>
@@ -67,7 +67,7 @@ let crit(a: Bytes, b: Bytes) -> Nat =
         end;
     bytes(0);
 
-rec lookup(@V: Type, t: Node(V), k: Bytes) -> {Bytes, V} =
+let lookup(@V: Type, t: Node(V), k: Bytes) -> {Bytes, V} =
     match t
     | leaf(k0, v0) => (k0, v0)
     | fork(c, z, o) => match bit(k, c) | 0 => lookup(z, k) | _ => lookup(o, k) end
@@ -81,7 +81,7 @@ let wedge(@V: Type, c: Nat, b: Nat, k: Bytes, v: V, t: Node(V)) -> Node(V) =
 -- Why the return side can decide it: the leaf reached by following `k`'s bits sits in the branch matching `k` at every fork on the path, so it agrees with `k` at every crit there, and `c = crit(k, k0)` is therefore never equal to a path crit. Crits increase strictly downward, so the wedge point — the shallowest fork whose crit exceeds `c` — is the child of the *deepest* fork whose crit is below `c`, and climbing from the leaf reaches that fork before any other with a crit below `c`. A fork still pending returns its own node untouched, so nothing above the wedge point is rebuilt and nothing below it was.
 --
 -- This was the retired map-wall campaign's step 3, held back there because the qp reshape would have replaced the crit descent outright. That reshape was built, measured and declined, so nothing supersedes it any more.
-rec insert1(@V: Type, t: Node(V), k: Bytes, v: V) -> {Node(V), Nat, Nat} =
+let insert1(@V: Type, t: Node(V), k: Bytes, v: V) -> {Node(V), Nat, Nat} =
     match t
     | leaf(k0, v0) =>
         match Bytes/eql(k0, k)
@@ -114,7 +114,7 @@ rec insert1(@V: Type, t: Node(V), k: Bytes, v: V) -> {Node(V), Nat, Nat} =
     end;
 
 -- The same single descent for removal, over three states: 0 unchanged, 1 removed, 2 emptied. A fork whose child emptied answers its other child, which is the collapse that keeps the shape canonical; `emptied` reaching the root means the map held exactly this one entry. The node answered alongside `emptied` is the untouched original and is never read.
-rec remove1(@V: Type, t: Node(V), k: Bytes) -> {Node(V), Nat} =
+let remove1(@V: Type, t: Node(V), k: Bytes) -> {Node(V), Nat} =
     match t
     | leaf(k0, v0) => match Bytes/eql(k0, k) | true => (t, 2) | false => (t, 0) end
     | fork(c, z, o) =>
@@ -176,7 +176,7 @@ pub let fold(@V: Type, @A: Type, m: Map(V), init: A, f: (Bytes, V, A) -> A) -> A
     match m.root
     | none() => init
     | some(n) =>
-        rec go(t: Node(V), acc: A) -> A =
+        let go(t: Node(V), acc: A) -> A =
             match t | leaf(k, v) => f(k, v, acc) | fork(c, z, o) => go(o, go(z, acc)) end;
         go(n, init)
     end;

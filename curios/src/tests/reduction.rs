@@ -27,7 +27,7 @@ fn bytes_opaque(n: usize) -> String {
     format!(
         r#"
         use /std/{{Handle, Bytes, Nat, Str}};
-        rec go(i : Nat, acc : Bytes) -> Bytes =
+        let go(i : Nat, acc : Bytes) -> Bytes =
             match i | 0 => acc | k + 1; ih => go(k, x[..acc, ..Str/to_bytes("0123456789")]) end;
         let head_of(b : Bytes) -> Bytes =
             match 10 <= Bytes/len(b) | true => Bytes/slice(b, 0, 10) | false => x[] end;
@@ -43,7 +43,7 @@ fn bytes_fixed(n: usize) -> String {
     format!(
         r#"
         use /std/{{Handle, Bytes, Nat, Str}};
-        rec go(i : Nat, acc : Bytes) -> Bytes =
+        let go(i : Nat, acc : Bytes) -> Bytes =
             match i | 0 => acc | k + 1; ih => go(k, Str/to_bytes("0123456789")) end;
         let built = go({n}, x[]);
         let head = Bytes/slice(built, 0, 10);
@@ -57,7 +57,7 @@ fn bytes_growing(n: usize) -> String {
     format!(
         r#"
         use /std/{{Handle, Bytes, Nat, Str}};
-        rec go(i : Nat, acc : Bytes) -> Bytes =
+        let go(i : Nat, acc : Bytes) -> Bytes =
             match i | 0 => acc | k + 1; ih => go(k, x[..acc, ..Str/to_bytes("0123456789")]) end;
         let built = go({n}, x[]);
         let head = Bytes/slice(built, 0, 10);
@@ -71,7 +71,7 @@ fn list_opaque(n: usize) -> String {
     format!(
         r#"
         use /std/{{Handle, List, Nat, Str}};
-        rec go(i : Nat, acc : List(Nat)) -> List(Nat) =
+        let go(i : Nat, acc : List(Nat)) -> List(Nat) =
             match i | 0 => acc | k + 1; ih => go(k, [..acc, ..[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]) end;
         let head_of(a : List(Nat)) -> List(Nat) =
             match 10 <= List/len(a) | true => List/slice(a, 0, 10) | false => [] end;
@@ -87,7 +87,7 @@ fn list_fixed(n: usize) -> String {
     format!(
         r#"
         use /std/{{Handle, List, Nat, Str}};
-        rec go(i : Nat, acc : List(Nat)) -> List(Nat) =
+        let go(i : Nat, acc : List(Nat)) -> List(Nat) =
             match i | 0 => acc | k + 1; ih => go(k, [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]) end;
         let built = go({n}, []);
         let head = List/slice(built, 0, 10);
@@ -101,7 +101,7 @@ fn list_growing(n: usize) -> String {
     format!(
         r#"
         use /std/{{Handle, List, Nat, Str}};
-        rec go(i : Nat, acc : List(Nat)) -> List(Nat) =
+        let go(i : Nat, acc : List(Nat)) -> List(Nat) =
             match i | 0 => acc | k + 1; ih => go(k, [..acc, ..[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]) end;
         let built = go({n}, []);
         let head = List/slice(built, 0, 10);
@@ -818,7 +818,7 @@ fn ascii_refinement(n: usize) -> String {
     format!(
         r#"
         use /std/{{Bytes, Byte, Nat, Bool, Eq, Handle}};
-        rec all_ascii(b : Bytes) -> Bool =
+        let all_ascii(b : Bytes) -> Bool =
             match b
             | x[] => true
             | x[h, ..t] =>
@@ -904,7 +904,7 @@ fn paired_fold(width: usize, paired: bool) -> String {
         true => format!(
             r#"
             use /std/{{Nat, Bool, Bits, BigNat}};
-            rec go(x: Bits, c: Bool) -> {{Bits, Bool}} =
+            let go(x: Bits, c: Bool) -> {{Bits, Bool}} =
                 match x
                 | b[] => (b[], c)
                 | b[h, ..t] =>
@@ -919,7 +919,7 @@ fn paired_fold(width: usize, paired: bool) -> String {
         false => format!(
             r#"
             use /std/{{Nat, Bool, Bits, BigNat}};
-            rec go(x: Bits, c: Bool) -> Bits =
+            let go(x: Bits, c: Bool) -> Bits =
                 match x
                 | b[] => b[]
                 | b[h, ..t] => b[BigNat/xor3(h, c, c), ..go(t, BigNat/xor3(h, c, c))]

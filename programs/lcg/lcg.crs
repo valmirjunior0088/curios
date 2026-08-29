@@ -4,7 +4,7 @@
 -- Pure integer ALU + a tail-recursive counted loop. Output matches all langs.
 use /std/{Str, Nat, Option, Io};
 
-rec loop(k: Nat, x: Nat) -> Nat =
+let loop(k: Nat, x: Nat) -> Nat =
     match k: (_) => Nat | 0 => x | kp + 1; ih => loop(kp, 75 * x % 65537) end;
 
 let input = /std/read()!;

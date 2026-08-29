@@ -18,7 +18,7 @@ let single_digit(d: Nat) -> Str =
     | _ => "0"
     end;
 
-pub rec to_str(n: Nat) -> Str =
+pub let to_str(n: Nat) -> Str =
     match n < 10
     | true => single_digit(n)
     | false => Str/concat(to_str(n / 10), single_digit(n % 10))

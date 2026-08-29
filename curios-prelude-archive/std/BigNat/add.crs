@@ -5,7 +5,7 @@ use /std/BigNat/{BigNat, cong_bits, cong_cons2, cong_is_trimmed, cons_inj_head, 
     is_trimmed, is_trimmed_cons, is_trimmed_of_canonical, maj3, nonempty, of_trimmed_bits, refl_at,
     tail_is_trimmed, xor3, mod succ};
 
-pub rec raw(x: Bits, y: Bits, carry: Bool) -> Bits =
+pub let raw(x: Bits, y: Bits, carry: Bool) -> Bits =
     match x
     | b[] =>
         match y
@@ -19,7 +19,7 @@ pub rec raw(x: Bits, y: Bits, carry: Bool) -> Bits =
         end
     end;
 
-rec raw_zero_r(x: Bits) -> Eq(raw(x, b[], false), x) =
+let raw_zero_r(x: Bits) -> Eq(raw(x, b[], false), x) =
     match x: (a) => Eq(raw(a, b[], false), a)
     | b[] => Eq/refl()
     | b[h, ..t] =>
@@ -29,7 +29,7 @@ rec raw_zero_r(x: Bits) -> Eq(raw(x, b[], false), x) =
         end
     end;
 
-pub rec raw_zero_l(y: Bits) -> Eq(raw(b[], y, false), y) =
+pub let raw_zero_l(y: Bits) -> Eq(raw(b[], y, false), y) =
     match y: (b) => Eq(raw(b[], b, false), b)
     | b[] => Eq/refl()
     | b[h, ..t] =>
@@ -39,7 +39,7 @@ pub rec raw_zero_l(y: Bits) -> Eq(raw(b[], y, false), y) =
         end
     end;
 
-rec raw_succ_r(x: Bits) -> Eq(raw(x, b[], true), succ/raw(x)) =
+let raw_succ_r(x: Bits) -> Eq(raw(x, b[], true), succ/raw(x)) =
     match x: (a) => Eq(raw(a, b[], true), succ/raw(a))
     | b[] => Eq/refl()
     | b[h, ..t] =>
@@ -49,7 +49,7 @@ rec raw_succ_r(x: Bits) -> Eq(raw(x, b[], true), succ/raw(x)) =
         end
     end;
 
-rec raw_succ_l(y: Bits) -> Eq(raw(b[], y, true), succ/raw(y)) =
+let raw_succ_l(y: Bits) -> Eq(raw(b[], y, true), succ/raw(y)) =
     match y: (b) => Eq(raw(b[], b, true), succ/raw(b))
     | b[] => Eq/refl()
     | b[h, ..t] =>
@@ -81,7 +81,7 @@ let raw_nonempty_r(
     | b[_, .._] => Eq/refl()
     end;
 
-pub rec raw_trimmed(
+pub let raw_trimmed(
     x: Bits,
     y: Bits,
     c: Bool,
@@ -263,7 +263,7 @@ let cong_raw_c(
 ) -> Eq(raw(x, y, c1), raw(x, y, c2)) =
     Eq/cong((c) => raw(x, y, c), p);
 
-pub rec raw_comm(x: Bits, y: Bits, c: Bool) -> Eq(raw(x, y, c), raw(y, x, c)) =
+pub let raw_comm(x: Bits, y: Bits, c: Bool) -> Eq(raw(x, y, c), raw(y, x, c)) =
     match x: (a) => Eq(raw(a, y, c), raw(y, a, c))
     | b[] =>
         match y: (b) => Eq(raw(b[], b, c), raw(b, b[], c))
@@ -307,7 +307,7 @@ pub let cong_raw_r(
 ) -> Eq(raw(x, s, c), raw(x, t, c)) =
     Eq/cong((w) => raw(x, w, c), p);
 
-pub rec raw_carry_spec(x: Bits, y: Bits) -> Eq(raw(x, y, true), succ/raw(raw(x, y, false))) =
+pub let raw_carry_spec(x: Bits, y: Bits) -> Eq(raw(x, y, true), succ/raw(raw(x, y, false))) =
     match x: (a) => Eq(raw(a, y, true), succ/raw(raw(a, y, false)))
     | b[] =>
         match y: (b) => Eq(raw(b[], b, true), succ/raw(raw(b[], b, false)))
@@ -341,7 +341,7 @@ pub rec raw_carry_spec(x: Bits, y: Bits) -> Eq(raw(x, y, true), succ/raw(raw(x, 
         end
     end;
 
-pub rec raw_succ_out_l(
+pub let raw_succ_out_l(
     u: Bits,
     v: Bits,
     c: Bool,
@@ -420,7 +420,7 @@ pub rec raw_succ_out_l(
         end
     end;
 
-pub rec raw_succ_out_r(
+pub let raw_succ_out_r(
     u: Bits,
     v: Bits,
     c: Bool,
@@ -514,7 +514,7 @@ let carry_shift(
                 Eq/sym(raw_succ_out_r(x, raw(y, z, false), false)),
                 cong_raw_r(x, Eq/sym(raw_carry_spec(y, z)), false))));
 
-pub rec raw_assoc(
+pub let raw_assoc(
     x: Bits,
     y: Bits,
     z: Bits,
@@ -1111,7 +1111,7 @@ pub rec raw_assoc(
         end
     end;
 
-pub rec raw_one_r(x: Bits) -> Eq(raw(x, b[1], false), succ/raw(x)) =
+pub let raw_one_r(x: Bits) -> Eq(raw(x, b[1], false), succ/raw(x)) =
     match x: (a) => Eq(raw(a, b[1], false), succ/raw(a))
     | b[] => Eq/refl()
     | b[h, ..t] =>
@@ -1127,7 +1127,7 @@ pub let comm(a: BigNat, b: BigNat) -> Eq(add(a, b), add(b, a)) =
 pub let assoc(a: BigNat, b: BigNat, c: BigNat) -> Eq(add(add(a, b), c), add(a, add(b, c))) =
     eq(add(add(a, b), c), add(a, add(b, c)), raw_assoc(a.bits, b.bits, c.bits, false, false));
 
-pub rec raw_cancel_l(
+pub let raw_cancel_l(
     x: Bits,
     y: Bits,
     z: Bits,

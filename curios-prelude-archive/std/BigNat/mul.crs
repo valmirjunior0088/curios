@@ -4,7 +4,7 @@ use /std/Order/{lt_neq_eq, gt_neq_eq, eq_neq_lt, gt_neq_lt};
 use /std/BigNat/{BigNat, combine, cong_combine, dbl, dbl_raw, eq, is_trimmed_of_canonical, maj3,
     of_bits, of_nat, refl_at, trim, trim_is_trimmed, trim_of_trimmed, xor3, mod add};
 
-pub rec raw(x: Bits, y: Bits) -> Bits =
+pub let raw(x: Bits, y: Bits) -> Bits =
     match x
     | b[] => b[]
     | b[xh, ..xt] =>
@@ -14,7 +14,7 @@ pub rec raw(x: Bits, y: Bits) -> Bits =
 pub let mul(a: BigNat, b: BigNat) -> BigNat =
     of_bits(raw(a.bits, b.bits));
 
-pub rec pow2(a: BigNat, k: Nat) -> BigNat =
+pub let pow2(a: BigNat, k: Nat) -> BigNat =
     match k | 0 => a | kp + 1; ih => dbl(ih) end;
 
 pub let small(a: BigNat, c: Nat) -> BigNat =
@@ -45,7 +45,7 @@ let add_combine_l(
     | b[_, .._] => Eq/refl()
     end;
 
-rec trim_add_raw_trim_l(
+let trim_add_raw_trim_l(
     u: Bits,
     v: Bits,
     c: Bool,
@@ -84,7 +84,7 @@ let combine_l(
     | b[_, .._] => Eq/refl()
     end;
 
-rec trim_raw_trim_l(u: Bits, v: Bits) -> Eq(trim(raw(trim(u), v)), trim(raw(u, v))) =
+let trim_raw_trim_l(u: Bits, v: Bits) -> Eq(trim(raw(trim(u), v)), trim(raw(u, v))) =
     match u: (a) => Eq(trim(raw(trim(a), v)), trim(raw(a, v)))
     | b[] => Eq/refl()
     | b[uh, ..ut] =>
@@ -103,7 +103,7 @@ rec trim_raw_trim_l(u: Bits, v: Bits) -> Eq(trim(raw(trim(u), v)), trim(raw(u, v
         end
     end;
 
-rec trim_raw_trim_r(u: Bits, v: Bits) -> Eq(trim(raw(u, trim(v))), trim(raw(u, v))) =
+let trim_raw_trim_r(u: Bits, v: Bits) -> Eq(trim(raw(u, trim(v))), trim(raw(u, v))) =
     match u: (a) => Eq(trim(raw(a, trim(v))), trim(raw(a, v)))
     | b[] => Eq/refl()
     | b[uh, ..ut] =>
@@ -151,7 +151,7 @@ let trim_add_raw_r_cong(
         Eq/sym(trim_add_raw_trim_r(u, s, c)),
         Eq/trans(cong_trim(add/cong_raw_r(u, p, c)), trim_add_raw_trim_r(u, t, c)));
 
-rec trim_zero_r(y: Bits) -> Eq(trim(raw(y, b[])), b[]) =
+let trim_zero_r(y: Bits) -> Eq(trim(raw(y, b[])), b[]) =
     match y: (a) => Eq(trim(raw(a, b[])), b[])
     | b[] => Eq/refl()
     | b[yh, ..yt] =>
@@ -164,7 +164,7 @@ rec trim_zero_r(y: Bits) -> Eq(trim(raw(y, b[])), b[]) =
         end
     end;
 
-pub rec trim_one_r(x: Bits) -> Eq(trim(raw(x, b[1])), trim(x)) =
+pub let trim_one_r(x: Bits) -> Eq(trim(raw(x, b[1])), trim(x)) =
     match x: (a) => Eq(trim(raw(a, b[1])), trim(a))
     | b[] => Eq/refl()
     | b[xh, ..xt] =>
@@ -175,7 +175,7 @@ pub rec trim_one_r(x: Bits) -> Eq(trim(raw(x, b[1])), trim(x)) =
         end
     end;
 
-pub rec trim_bit0_r(x: Bits, y: Bits) -> Eq(trim(raw(x, b[0, ..y])), trim(b[0, ..raw(x, y)])) =
+pub let trim_bit0_r(x: Bits, y: Bits) -> Eq(trim(raw(x, b[0, ..y])), trim(b[0, ..raw(x, y)])) =
     match x: (a) => Eq(trim(raw(a, b[0, ..y])), trim(b[0, ..raw(a, y)]))
     | b[] => Eq/refl()
     | b[xh, ..xt] =>
@@ -185,7 +185,7 @@ pub rec trim_bit0_r(x: Bits, y: Bits) -> Eq(trim(raw(x, b[0, ..y])), trim(b[0, .
         end
     end;
 
-pub rec trim_bit1_r(
+pub let trim_bit1_r(
     x: Bits,
     y: Bits,
 ) -> Eq(trim(raw(x, b[1, ..y])), trim(add/raw(x, b[0, ..raw(x, y)], false))) =
@@ -211,7 +211,7 @@ pub rec trim_bit1_r(
         end
     end;
 
-pub rec trim_comm(x: Bits, y: Bits) -> Eq(trim(raw(x, y)), trim(raw(y, x))) =
+pub let trim_comm(x: Bits, y: Bits) -> Eq(trim(raw(x, y)), trim(raw(y, x))) =
     match x: (a) => Eq(trim(raw(a, y)), trim(raw(y, a)))
     | b[] => Eq/sym(trim_zero_r(y))
     | b[xh, ..xt] =>
@@ -242,7 +242,7 @@ let add_raw_medial(
                     add/cong_raw_r(a, add/raw_assoc(c, b, d, false, false), false),
                     Eq/sym(add/raw_assoc(a, c, add/raw(b, d, false), false, false))))));
 
-pub rec trim_distrib_l(
+pub let trim_distrib_l(
     x: Bits,
     y: Bits,
     z: Bits,
@@ -276,7 +276,7 @@ pub let trim_distrib_r(
                 trim_add_raw_l_cong(trim_comm(x, y), raw(x, z), false),
                 trim_add_raw_r_cong(raw(y, x), trim_comm(x, z), false))));
 
-pub rec trim_assoc(
+pub let trim_assoc(
     x: Bits,
     y: Bits,
     z: Bits,

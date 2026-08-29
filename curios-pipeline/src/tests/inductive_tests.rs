@@ -154,7 +154,7 @@ fn indexed_inductive_declares_constructs_and_matches() {
         | nil() : (0)
         | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
         end
-        rec len(@T : Type, @n : Nat, v : Vec(T, n)) -> Nat =
+        let len(@T : Type, @n : Nat, v : Vec(T, n)) -> Nat =
             match v : (_, _) => Nat
             | nil() => 0
             | cons(@m, x, xs) => Nat/add(len(xs), 1)
@@ -194,7 +194,7 @@ fn indexed_inductive_motive_binds_the_index() {
         | nil() : (0)
         | cons(@m : Nat, x : T, xs : Vec(T, m)) : (Nat/succ(m))
         end
-        rec append(@T : Type, @n : Nat, @m : Nat, v : Vec(T, n), w : Vec(T, m)) -> Vec(T, Nat/add(n, m)) =
+        let append(@T : Type, @n : Nat, @m : Nat, v : Vec(T, n), w : Vec(T, m)) -> Vec(T, Nat/add(n, m)) =
             match v : (k, v) => Vec(T, Nat/add(k, m))
             | nil() => w
             | cons(@j, x, xs) => Vec/cons(x, append(xs, w))

@@ -13,7 +13,7 @@ pub use Ind/*;
 pub let refl(n: Nat) -> Ind(n, n) =
     match n: (m) => Ind(m, m) | 0 => Ind/z() | pred + 1; ih => Ind/s(ih) end;
 
-pub rec succ_r(@a: Nat, @b: Nat, p: Ind(a, b)) -> Ind(a, b + 1) =
+pub let succ_r(@a: Nat, @b: Nat, p: Ind(a, b)) -> Ind(a, b + 1) =
     match p: (x, y, w) => Ind(x, y + 1)
     | z(@_) => Ind/z()
     | s(@_, @_, prev) => Ind/s(succ_r(prev))
@@ -22,7 +22,7 @@ pub rec succ_r(@a: Nat, @b: Nat, p: Ind(a, b)) -> Ind(a, b + 1) =
 pub let add_r(a: Nat, k: Nat) -> Ind(a, a + k) =
     match k: (m) => Ind(a, a + m) | 0 => refl(a) | pred + 1; ih => succ_r(ih) end;
 
-pub rec trans(@a: Nat, @b: Nat, @c: Nat, p: Ind(a, b), q: Ind(b, c)) -> Ind(a, c) =
+pub let trans(@a: Nat, @b: Nat, @c: Nat, p: Ind(a, b), q: Ind(b, c)) -> Ind(a, c) =
     match p
     | z(@_) => Ind/z()
     | s(@a2, @b2, prev) => match q | s(@b3, @c3, q2) => Ind/s(trans(prev, q2)) end

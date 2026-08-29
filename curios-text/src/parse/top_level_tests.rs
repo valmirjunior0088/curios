@@ -149,55 +149,6 @@ fn top_let_with_pub() {
 }
 
 #[test]
-fn top_rec_mixed_pub() {
-    assert_eq!(
-        r#"
-            pub rec id : (x : Type) -> Type = (x) => x
-            and helper : Type = Type;
-        "#
-        .parse::<Module>()
-        .unwrap()
-        .items,
-        vec![TopItem::Let(vec![
-            TopLet {
-                vis_pub: true,
-                label: "id".to_string(),
-                signature: LetSignature::Name {
-                    type_: Some(
-                        Subterm::FuncType(FuncType {
-                            params: vec![FuncTypeParam {
-                                plicity: Plicity::Explicit,
-                                label: Some("x".to_string()),
-                                type_: Subterm::Type.into(),
-                            }],
-                            output: Subterm::Type.into(),
-                        })
-                        .into(),
-                    ),
-                    body: Subterm::Func(Func {
-                        params: vec![FuncParam {
-                            plicity: Plicity::Explicit,
-                            pattern: Pattern::Binder(Some("x".to_string())),
-                            annotation: None,
-                        }],
-                        body: Subterm::Name(Name::from(["x".to_string()])).into(),
-                    })
-                    .into(),
-                },
-            },
-            TopLet {
-                vis_pub: false,
-                label: "helper".to_string(),
-                signature: LetSignature::Name {
-                    type_: Some(Subterm::Type.into()),
-                    body: Subterm::Type.into(),
-                },
-            },
-        ])]
-    );
-}
-
-#[test]
 fn top_inductive_single_variant() {
     let m = "induct Foo : Type\n| bar()\nend".parse::<Module>().unwrap();
     assert_eq!(
@@ -276,10 +227,18 @@ fn let_requires_a_type() {
 }
 
 #[test]
-fn rec_binding_requires_a_type() {
-    // `rec` types cannot be inferred from their (mutually recursive) bodies, so a typeless `rec` binding is a parse error — both at the top level and locally.
-    assert!("rec f = Type;".parse::<Module>().is_err());
-    assert!("rec f = Type; f".parse::<Term>().is_err());
+fn a_group_member_states_its_type() {
+    // A member after `and` cannot have its type inferred from a body that may mention its siblings, so a typeless one is a parse error — at the top level and locally.
+    assert!(
+        "let f : Type = Type and g = Type;"
+            .parse::<Module>()
+            .is_err()
+    );
+    assert!(
+        "let f : Type = Type and g = Type; f"
+            .parse::<Term>()
+            .is_err()
+    );
 }
 
 #[test]

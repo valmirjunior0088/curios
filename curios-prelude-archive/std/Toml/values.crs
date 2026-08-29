@@ -26,7 +26,7 @@ let val_number_digit: Parse(Toml) =
     Parse/or(datetime_value, Parse/or(flt_number, int_value));
 
 -- The nested collections and the value dispatcher are one mutually recursive group: an array holds values, a value may be an array.
-rec array_parse: Parse(Toml) =
+let array_parse: Parse(Toml) =
     let _ = Parse/label(Parse/take_byte(0x5B), "expected array")!;
     array_items([])
 and array_items(acc: List(Toml)) -> Parse(Toml) =

@@ -21,7 +21,7 @@ let decode(s: Str) -> Option(Nat) =
                 end)
     end;
 
-rec loop(k: Nat, digits: Str, acc: Nat) -> Nat =
+let loop(k: Nat, digits: Str, acc: Nat) -> Nat =
     match k: (_) => Nat
     | 0 => acc
     | m + 1 =>

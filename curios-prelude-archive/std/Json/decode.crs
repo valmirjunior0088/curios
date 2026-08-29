@@ -151,7 +151,7 @@ let is_num_start(byte: Byte) -> Bool =
     match Byte/to_nat(byte) | 45 => true | _ => Nat/in_range(Byte/to_nat(byte), 0x30, 0x39) end;
 
 -- The dispatch reads the first byte without consuming it, so each arm parses the value whole -- including the byte that selected it.
-pub rec decode: Parse(Json) =
+pub let decode: Parse(Json) =
     let _ = ws!;
     let byte = Parse/peek_byte!;
     match Byte/to_nat(byte)

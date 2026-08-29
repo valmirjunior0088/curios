@@ -9,7 +9,7 @@ let borrow_out(a: Bool, b: Bool, bw: Bool) -> Bool =
     | false => match b | true => true | false => bw end
     end;
 
-pub rec raw(x: Bits, y: Bits, borrow: Bool) -> {Bits, Bool} =
+pub let raw(x: Bits, y: Bits, borrow: Bool) -> {Bits, Bool} =
     match x
     | b[] =>
         match y

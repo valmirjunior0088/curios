@@ -3,7 +3,7 @@
 -- N is read from stdin so the loop survives constant folding; output is 3N.
 use /std/{Str, Nat, Option, Io};
 
-rec loop(n: Nat, s: Nat) -> Nat =
+let loop(n: Nat, s: Nat) -> Nat =
     match n: (_) => Nat | 0 => s | m + 1 => loop(m, s + 3) end;
 
 let total(n: Nat) -> Nat =

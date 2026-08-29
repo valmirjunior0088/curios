@@ -94,7 +94,7 @@ pub let to_ascii(c: Char) -> Option(Byte) =
     match c.code < 0x80 | true => Option/some(Nat/to_byte(c.code)) | false => Option/none() end;
 
 -- Guarded on `0 < shift` rather than a refuted `shift == 0`, for the reason `Map/bit` states: the division's precondition is decided on *that* comparison, so refining it is what discharges the bound, where an equality refined to false leaves it stuck on a comparison nothing relates to it.
-rec emit_continuations(acc: Bytes, codepoint: Nat, shift: Nat) -> Bytes =
+let emit_continuations(acc: Bytes, codepoint: Nat, shift: Nat) -> Bytes =
     match 0 < shift
     | false => acc
     | true =>

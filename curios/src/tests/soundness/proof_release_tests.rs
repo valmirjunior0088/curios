@@ -21,7 +21,7 @@ fn a_partial_carrier_releasing_a_proof_is_rejected() {
         | box(p : /std/False)
         end
 
-        rec forge(n : /std/Nat) -> Box = forge(n + 1);
+        let forge(n : /std/Nat) -> Box = forge(n + 1);
 
         let boom : /std/False =
             match forge(0)
@@ -44,7 +44,7 @@ fn a_proof_at_a_polymorphic_head_is_rejected() {
         r#"
         let ignore(@A : Type, x : A, p : /std/False) -> A = x;
 
-        let leak() -> /std/Nat = ignore(0, rec b : /std/False = b; b);
+        let leak() -> /std/Nat = ignore(0, let b : /std/False = b; b);
 
         /std/print(/std/Nat/to_str(leak()))
         "#,
@@ -119,7 +119,7 @@ fn a_proof_at_a_concept_method_head_is_rejected() {
             drain(x, p) = x,
         }
 
-        let leak() -> /std/Nat = Sink/drain(5, rec b : /std/False = b; b);
+        let leak() -> /std/Nat = Sink/drain(5, let b : /std/False = b; b);
 
         /std/print(/std/Nat/to_str(leak()))
         "#,
@@ -137,7 +137,7 @@ fn a_proof_looping_through_a_projected_inner_group_is_rejected() {
         r#"
         use /std/{Nat, Str, False};
 
-        rec f(n : Nat) -> False =
+        let f(n : Nat) -> False =
             (rec g(m : Nat) -> False = f(m); g)(n);
 
         /std/print(match f(0) : (_) => Str end)
@@ -151,7 +151,7 @@ fn a_proof_projecting_an_inner_group_that_does_not_call_back_is_accepted() {
     let source = r#"
         use /std/{Nat, True};
 
-        rec outer(n : Nat) -> True =
+        let outer(n : Nat) -> True =
             match n
             | 0 => True/qed()
             | p + 1; _ => (rec keep(t : True) -> True = t; keep)(outer(p))
@@ -181,7 +181,7 @@ fn a_partial_argument_to_an_erased_call_is_still_reached() {
     let source = r#"
         use /std/{Nat, True};
 
-        rec spin(n : Nat) -> Nat = spin(n);
+        let spin(n : Nat) -> Nat = spin(n);
 
         let mk_proof(n : Nat) -> True = True/qed();
 
@@ -200,7 +200,7 @@ fn a_partial_argument_to_a_proof_constructor_is_still_reached() {
     let source = r#"
         use /std/{Nat};
 
-        rec spin(n : Nat) -> Nat = spin(n);
+        let spin(n : Nat) -> Nat = spin(n);
 
         induct Tagged : pub Prop
         | tag(n : Nat)
@@ -221,7 +221,7 @@ fn a_partial_erased_scrutinee_is_still_reached() {
     let source = r#"
         use /std/{Nat, True};
 
-        rec spin(n : Nat) -> Nat = spin(n);
+        let spin(n : Nat) -> Nat = spin(n);
 
         let mk(n : Nat) -> True = True/qed();
 
@@ -246,7 +246,7 @@ fn a_partial_proof_cannot_arrive_through_witness_resolution() {
         }
 
         satisfy Trivial(Nat) {
-            fact(n) = rec loop : True = loop; loop,
+            fact(n) = let loop : True = loop; loop,
         }
 
         let needs_witness(@A : Type, use Trivial(A), x : A) -> Nat = 0;

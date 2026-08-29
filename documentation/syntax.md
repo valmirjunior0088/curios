@@ -28,7 +28,7 @@ The following words are reserved and cannot be used as path segments:
 
 | Declaration and expression words | Literal words |
 | --- | --- |
-| `let`, `match`, `choose`, `rec`, `mod`, `use`, `pub`, `end`, `induct`, `struct`, `foreign` | `true`, `false` |
+| `let`, `match`, `choose`, `mod`, `use`, `pub`, `end`, `induct`, `struct`, `foreign` | `true`, `false` |
 
 `concept`, `satisfy`, and `and` are contextual words. They are recognized only in the grammatical positions that use them and remain valid identifiers and path segments elsewhere. `Type` and `Prop` denote sorts when parsed as terms, but they are not globally forbidden path segments.
 
@@ -302,7 +302,7 @@ let increment(n: Nat) -> Nat = n + 1;
 increment(4)
 ```
 
-Every parameter of a `let`, `rec`, or `satisfy` telescope must be annotated; only a `use` parameter is written without one. The `label(params) = value` sugar inside tuple, struct, and witness bodies takes the annotation as optional, since the field's declared type supplies it.
+Every parameter of a `let` or `satisfy` telescope must be annotated; only a `use` parameter is written without one. The `label(params) = value` sugar inside tuple, struct, and witness bodies takes the annotation as optional, since the field's declared type supplies it.
 
 The binder may be an irrefutable tuple or struct pattern:
 
@@ -312,12 +312,10 @@ let Point { x, y } = point;
 x + y
 ```
 
-### Local `rec`
-
-`rec` introduces locally scoped recursive definitions. Every recursive member requires a type. `and` joins a mutually recursive group.
+A binding is in scope of its own value, so a local function may call itself. A binding that mentions itself states its type, since a body that mentions the binding cannot be the source of it, and is a plain name rather than a pattern; a binding whose value performs `!` cannot mention itself, since the action runs before the binding exists. Bindings that mention one another are declared as one group with `and`, every member after the first a plain name with a type.
 
 ```crs
-rec even(n: Nat) -> Bool =
+let even(n: Nat) -> Bool =
     match n
     | 0 => true
     | p + 1; _ => odd(p)
@@ -329,6 +327,8 @@ and odd(n: Nat) -> Bool =
     end;
 even(input)
 ```
+
+Because a binding is in scope of its own value, `let n = n + 1;` names the binding it declares rather than an outer `n`, and is refused as the recursive value it is: a value may mention itself only under a lambda, where it is a recursive value computed the first time it is read.
 
 ### Irrefutable binder patterns
 
@@ -438,7 +438,7 @@ Embeddings never chain. Declaring `Lift(Io, Job)` and `Lift(Job, Sched)` does no
 
 ### Whole-term forms and operand positions
 
-`let`, `rec`, `match`, `choose`, lambdas, and function types are whole-term forms: a body or tail extends to the end of the enclosing term. There is no expression-level `term: type` ascription; a `:` annotation appears only in binder, signature, and motive positions.
+`let`, `match`, `choose`, lambdas, and function types are whole-term forms: a body or tail extends to the end of the enclosing term. There is no expression-level `term: type` ascription; a `:` annotation appears only in binder, signature, and motive positions.
 
 An infix operand is an applied atom: a literal, name, sort (`Type`/`Prop`), tuple, tuple type, structure literal, goal, or parenthesized term, followed by any chain of calls, projections, and postfix `!`. A whole-term form is not an operand; parenthesize it to use it as one.
 
@@ -679,7 +679,7 @@ pub let map(@A: Type, @B: Type, value: Option(A), f: (A) -> B) -> Option(B) =
     end;
 ```
 
-Top-level `rec` declarations also require types. `and` joins mutually recursive members; each member takes its own `pub` marker — before `rec` for the first member and before `and` for each later member — and one `;` terminates the whole group.
+A top-level definition is in scope of its own body, so it may recurse with nothing said. Definitions that reference one another are declared as one group with `and`; each member takes its own `pub` marker — before `let` for the first member and before `and` for each later member — and one `;` terminates the whole group. Two definitions that reference each other without being declared as a group are refused, naming both.
 
 ### Modules
 
@@ -1011,3 +1011,4 @@ The standard equality operations include reflexivity, symmetry, transitivity, co
 | `choose ... end` | Ordered guarded ladder |
 | `satisfy C(args) { ... }` | Globally registered anonymous witness |
 | `satisfy (@A: Type, use C(A)) => D(args) { ... }` | Parameterized globally registered anonymous witness |
+| `let f(…) -> T = … and g(…) -> U = …;` | Mutually recursive group, at the top level or locally |

@@ -9,7 +9,7 @@ let next() -> State(Nat, Nat) =
     let _ = State/put(n)!;
     State/pure(n);
 
-rec run(k: Nat, acc: Nat) -> State(Nat, Nat) =
+let run(k: Nat, acc: Nat) -> State(Nat, Nat) =
     match k: (_) => State(Nat, Nat)
     | 0 => State/pure(acc)
     | m + 1 =>

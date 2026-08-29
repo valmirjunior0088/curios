@@ -2,7 +2,7 @@
 -- N is read from stdin; output is the sum mod 1000003.
 use /std/{Str, Nat, Option, Io};
 
-rec run(k: Nat, s: Nat, acc: Nat) -> Nat =
+let run(k: Nat, s: Nat, acc: Nat) -> Nat =
     match k: (_) => Nat
     | 0 => acc
     | m + 1 =>

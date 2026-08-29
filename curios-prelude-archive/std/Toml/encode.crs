@@ -50,7 +50,7 @@ let ns_str(ns: Nat) -> Str =
     | true => ""
     | false =>
         let digits = pad(ns, 9);
-        rec keep(k: Nat) -> Nat =
+        let keep(k: Nat) -> Nat =
             match k <= 1
             | true => 1
             | false =>
@@ -111,7 +111,7 @@ let flt_str(f: Flt) -> Str =
         end
     end;
 
-rec value_str(v: Toml) -> Result(Str, Str) =
+let value_str(v: Toml) -> Result(Str, Str) =
     match v
     | str(s) => Result/success(quote_str(s))
     | int(n) => Result/success(int_str(n))
@@ -181,7 +181,7 @@ and pairs_str(entries: List({Bytes, Toml})) -> Result(Str, Str) =
     | failure(msg) => Result/failure(msg)
     end;
 
-rec encode_table(prefix: List(Str), m: Map(Toml)) -> Result(Str, Str) =
+let encode_table(prefix: List(Str), m: Map(Toml)) -> Result(Str, Str) =
     let entries = Map/entries(m);
     let start: Result(List(Str), Str) = Result/success([]);
     match List/fold(
