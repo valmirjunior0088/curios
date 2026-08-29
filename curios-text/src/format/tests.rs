@@ -318,11 +318,3 @@ fn replacing(lines: &[&str], index: usize, replacement: &str) -> String {
 
     format!("{}\n", out.join("\n"))
 }
-
-/// `rec` still parses, as a synonym, and never prints: a file written with it is migrated to `let` on contact, at both levels.
-#[test]
-fn a_rec_group_formats_as_a_let_group() {
-    let source = "rec even(n: /std/Nat) -> /std/Bool =\n    odd(n)\nand odd(n: /std/Nat) -> /std/Bool =\n    even(n);\n\nlet main(n: /std/Nat) -> /std/Bool =\n    rec a(x: /std/Nat) -> /std/Bool = b(x)\n    and b(x: /std/Nat) -> /std/Bool = a(x);\n    a(n);\n";
-    let expected = "let even(n: /std/Nat) -> /std/Bool =\n    odd(n)\nand odd(n: /std/Nat) -> /std/Bool =\n    even(n);\n\nlet main(n: /std/Nat) -> /std/Bool =\n    let a(x: /std/Nat) -> /std/Bool = b(x)\n    and b(x: /std/Nat) -> /std/Bool = a(x);\n    a(n);\n";
-    assert_eq!(formatted(source), expected);
-}

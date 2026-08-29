@@ -116,7 +116,7 @@
           }
         },
         {
-          "match": "\\b(let|rec|foreign)\\s+(\\p{Lu}[\\p{L}\\p{N}_]*)(?=\\s*[{])",
+          "match": "\\b(let|foreign)\\s+(\\p{Lu}[\\p{L}\\p{N}_]*)(?=\\s*[{])",
           "captures": {
             "1": {
               "name": "keyword.control.curios"
@@ -127,7 +127,7 @@
           }
         },
         {
-          "match": "\\b(let|rec|foreign)\\s+([\\p{L}\\p{N}_]+)",
+          "match": "\\b(let|foreign)\\s+([\\p{L}\\p{N}_]+)",
           "captures": {
             "1": {
               "name": "keyword.control.curios"
@@ -165,7 +165,7 @@
       "patterns": [
         {
           "name": "keyword.control.curios",
-          "match": "(?<![\\w/])(let|rec|match|choose|end)(?![\\w/])"
+          "match": "(?<![\\w/])(let|match|choose|end)(?![\\w/])"
         },
         {
           "name": "keyword.other.curios",
@@ -180,7 +180,7 @@
           "match": "(?<![\\w/])(concept|satisfy)(?=\\s)"
         },
         {
-          "match": "(?<![\\w/.])(and)(?=\\s+[\\p{L}\\p{N}_]+\\s*[(:])",
+          "match": "(?<![\\w/.])(and)(?=\\s+(?:[\\p{L}\\p{N}_]+\\s*[(:]|\\())",
           "captures": {
             "1": {
               "name": "keyword.control.curios"

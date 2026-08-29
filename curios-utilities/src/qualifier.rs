@@ -21,8 +21,8 @@ const CHARACTERS: &[char] = &['_'];
 
 /// The words the surface grammar claims for itself, which therefore cannot spell a segment.
 const KEYWORDS: &[&str] = &[
-    "let", "match", "choose", "rec", "mod", "use", "pub", "end", "false", "true", "induct",
-    "struct", "foreign",
+    "let", "match", "choose", "mod", "use", "pub", "end", "false", "true", "induct", "struct",
+    "foreign",
 ];
 
 /// Whether `character` may appear in an identifier.

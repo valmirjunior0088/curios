@@ -6,10 +6,6 @@ pub(super) fn parse_pub<'a>() -> Parser<'a, bool> {
 
 // A top-level `let` item: one definition, or the group `let f … and g …;`. Each member takes its own `pub` — before `let` for the first, before `and` for each later one — and one `;` terminates the whole item.
 pub(super) fn parse_top_let<'a>() -> Parser<'a, TopItem> {
-    parse_top_let_group("let")
-}
-
-fn parse_top_let_group<'a>(keyword: &'static str) -> Parser<'a, TopItem> {
     let member = |vis_pub: bool| {
         parse_binding().map(move |(label, signature)| TopLet {
             vis_pub,
@@ -18,7 +14,7 @@ fn parse_top_let_group<'a>(keyword: &'static str) -> Parser<'a, TopItem> {
         })
     };
 
-    catch(parse_pub().and(parse_keyword(keyword)))
+    catch(parse_pub().and(parse_keyword("let")))
         .flat_map(move |(vis_pub, ())| member(vis_pub))
         .and(many0(move || {
             catch(parse_pub().and(parse_keyword("and")))
@@ -99,11 +95,6 @@ pub(super) fn parse_top_foreign<'a>() -> Parser<'a, TopItem> {
                 })
             })
     })
-}
-
-// `rec` is a synonym for `let` until the keyword is removed: the same item, so a file written with `rec` prints with `let`.
-pub(super) fn parse_top_rec<'a>() -> Parser<'a, TopItem> {
-    parse_top_let_group("rec")
 }
 
 pub(super) fn parse_top_mod<'a>() -> Parser<'a, TopItem> {
@@ -538,6 +529,5 @@ pub(crate) fn parse_top_item<'a>() -> Parser<'a, TopItem> {
         .or(parse_top_let())
         .or(parse_top_induct())
         .or(parse_top_struct())
-        .or(parse_top_rec())
         .or(parse_top_foreign())
 }

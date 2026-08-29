@@ -379,7 +379,7 @@ pub struct FuncSugarParam {
 #[derive(Debug, Clone, PartialEq)]
 pub enum LetSignature {
     Name {
-        /// `None` only for a local `let x = body` (the parser forbids omitting the type for top-level `let` and for every `rec` binding). It lowers to a hole so the core elaborator infers the body's type.
+        /// `None` only for a local `let x = body` (the parser forbids omitting the type for top-level `let` and for every member after `and`). It lowers to a hole so the core elaborator infers the body's type.
         type_: Option<Term>,
         body: Term,
     },
@@ -494,7 +494,7 @@ pub enum Subterm {
     /// An ordered guarded ladder (see [`Choose`]) — not a match, since it consumes no scrutinee.
     Choose(Choose),
     Let(Let),
-    /// A postfix bang `e!`: extracts the result of monadic action `e` inline. The operand is the action whose result is bound. The `into_core` pass hoists each bang to the top of its enclosing region (a value body, re-rooted at lambda bodies, match arms, and `rec` items) and sequences it through `/syn/Monad/bind`, whose `use` binder resolves the `Monad` witness from the action's type. Exists only between parsing and `into_core`, which eliminates it before core elaboration; a bang in a type is rejected.
+    /// A postfix bang `e!`: extracts the result of monadic action `e` inline. The operand is the action whose result is bound. The `into_core` pass hoists each bang to the top of its enclosing region (a value body, re-rooted at lambda bodies, match arms, and recursive-group members) and sequences it through `/syn/Monad/bind`, whose `use` binder resolves the `Monad` witness from the action's type. Exists only between parsing and `into_core`, which eliminates it before core elaboration; a bang in a type is rejected.
     Bang(Term),
     Name(Name),
     /// A silent inference hole: a placeholder elaborated to a fresh metavariable whose solution zonk splices in without comment. Desugar-only — the parser mints [`Subterm::Goal`] for a written `?`; `Hole` stands in where a desugar omits a term (an unannotated local `let`'s type). Carries no payload — its span rides on the wrapping [`Term`].

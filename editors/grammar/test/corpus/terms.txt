@@ -255,13 +255,13 @@ end
       (number))))
 
 ================================================================================
-Local let and rec with destructuring binders
+Local let with destructuring binders and a recursive binding
 ================================================================================
 
 let (a, (_, b)) = pair;
 let Point { loc = (x, y), color } = point;
 let inc(n: Nat) -> Nat = n + 1;
-rec loop(n: Nat) -> Nat = loop(n);
+let loop(n: Nat) -> Nat = loop(n);
 loop(inc(a))
 
 --------------------------------------------------------------------------------
@@ -310,8 +310,8 @@ loop(inc(a))
             (path
               (identifier))
             (number)))
-        (rec_term
-          (rec_binding
+        (let_term
+          (let_binding
             (identifier)
             (parameters
               (parameter
@@ -351,37 +351,38 @@ compose
 
 (source_file
   (let_item
-    (identifier)
-    (parameters
-      (parameter
-        (identifier)
-        (sort))
-      (parameter
-        (identifier)
-        (function_type
+    (let_member
+      (identifier)
+      (parameters
+        (parameter
+          (identifier)
+          (sort))
+        (parameter
+          (identifier)
+          (function_type
+            (function_type_parameters
+              (function_type_parameter
+                (path
+                  (identifier))))
+            (sort))))
+      (tuple_type
+        (field_declaration
+          (identifier)
           (function_type_parameters
             (function_type_parameter
+              (identifier)
               (path
                 (identifier))))
-          (sort))))
-    (tuple_type
-      (field_declaration
-        (identifier)
-        (function_type_parameters
-          (function_type_parameter
-            (identifier)
+          (call
             (path
-              (identifier))))
-        (call
+              (identifier))
+            (arguments
+              (argument
+                (path
+                  (identifier))))))
+        (field_declaration
           (path
-            (identifier))
-          (arguments
-            (argument
-              (path
-                (identifier))))))
-      (field_declaration
-        (path
-          (identifier))))
-    (goal))
+            (identifier))))
+      (goal)))
   (path
     (identifier)))

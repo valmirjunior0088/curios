@@ -139,7 +139,7 @@
 #                                                                     ^^^ source.curios keyword.control.curios
 #                                                                        ^ source.curios punctuation.separator.curios
 >
->pub rec even(n: Nat) -> Bool = match n | 0 => true | p + 1; _ => odd(p) end
+>pub let even(n: Nat) -> Bool = match n | 0 => true | p + 1; _ => odd(p) end
 #^^^ source.curios keyword.other.curios
 #   ^ source.curios
 #    ^^^ source.curios keyword.control.curios

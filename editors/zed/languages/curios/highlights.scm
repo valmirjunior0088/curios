@@ -5,7 +5,6 @@
 ; Keywords, including the contextual ones — the grammar only lexes `concept`, `satisfy` and `and` as keywords in their positions.
 [
   "let"
-  "rec"
   "and"
   "mod"
   "use"
@@ -30,8 +29,7 @@
 (goal) @punctuation
 
 ; Definitions.
-(let_item name: (identifier) @function)
-(rec_binding name: (identifier) @function)
+(let_member name: (identifier) @function)
 (foreign_item name: (identifier) @function)
 (let_binding pattern: (identifier) @variable)
 (let_binding pattern: (identifier) @function parameters: (parameters))

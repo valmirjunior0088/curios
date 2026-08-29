@@ -232,7 +232,7 @@ fn print_func_type_param(param: FuncTypeParam) -> Printer {
     flat([print_plicity(param.plicity), body])
 }
 
-/// One function-sugar binder (a `let`/`rec`/`satisfy` telescope parameter). A `use` binder is anonymous — `use type`, no label; otherwise the plicity prefixes the name (`@x` = implicit).
+/// One function-sugar binder (a `let`/`satisfy` telescope parameter). A `use` binder is anonymous — `use type`, no label; otherwise the plicity prefixes the name (`@x` = implicit).
 fn print_func_sugar_param(param: FuncSugarParam) -> Printer {
     if param.plicity == Plicity::Witness {
         flat([pure("use "), print_term(param.type_)])
@@ -905,7 +905,7 @@ fn reached_before(offset: Option<usize>) -> Printer {
 
 /// Where a member of a delimited list begins: a `match` or `choose` arm, a tuple or struct-literal field, a concept or witness field, an `induct` case.
 ///
-/// None of these records a span of its own — an arm is a pattern and a body, a field a bare label and a value — so without a position derived at the member's own head, the mark would sit at the first spanned *descendant* and a comment written above the member would surface inside the member's body. [`signature_start`] is this same rule for `let` and `rec` clauses, and its doc records the convergence failure both exist to prevent.
+/// None of these records a span of its own — an arm is a pattern and a body, a field a bare label and a value — so without a position derived at the member's own head, the mark would sit at the first spanned *descendant* and a comment written above the member would surface inside the member's body. [`signature_start`] is this same rule for `let` and `and` clauses, and its doc records the convergence failure both exist to prevent.
 ///
 /// The earliest spanned component bounds it, for the reason it does there: a comment above the member precedes every component, so any one of them would place it, and taking the earliest keeps a comment written *inside* the member's head with the component it leads. A member whose components are all spanless reports nothing, exactly as a signature with no spanned component does.
 fn member_start<'a>(terms: impl IntoIterator<Item = &'a Term>) -> Option<usize> {
@@ -915,7 +915,7 @@ fn member_start<'a>(terms: impl IntoIterator<Item = &'a Term>) -> Option<usize> 
         .min()
 }
 
-/// Where a `let` binding or a `rec` clause begins: the start of its earliest spanned component, since none of the introducer keyword, the binder pattern, and the clause label records a span. A comment above the binding precedes all of these, so any of them bounds it; taking the earliest keeps comments written inside the signature with the component they lead.
+/// Where a `let` binding or an `and` clause begins: the start of its earliest spanned component, since none of the introducer keyword, the binder pattern, and the clause label records a span. A comment above the binding precedes all of these, so any of them bounds it; taking the earliest keeps comments written inside the signature with the component they lead.
 ///
 /// A clause with no position of its own does not thereby keep its comment: the mark falls to the first *descendant* with a span, which is how a comment above an `and` clause once surfaced between a parameter and its type. It then reparsed as a leading comment somewhere new, so the next format run moved it again — the one way this formatter can fail to converge, and what `formatting_converges_from_every_comment_position` now checks.
 fn signature_start(signature: &LetSignature) -> Option<usize> {
@@ -1219,7 +1219,7 @@ fn print_term_inner(term: Term) -> Printer {
     }
 }
 
-/// A `let`/`rec` signature and body. `top` selects the corpus's top-level shape — the body *always* on the next line after `=` — while a local binding's body rides the `=` inline when it fits.
+/// A `let` signature and body. `top` selects the corpus's top-level shape — the body *always* on the next line after `=` — while a local binding's body rides the `=` inline when it fits.
 fn print_let_signature(signature: LetSignature, top: bool) -> Printer {
     let bound = |body: Term| {
         if top {

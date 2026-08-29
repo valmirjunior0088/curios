@@ -7,7 +7,7 @@ pub let zero: Nat = 0;
 pub let map(@A: Type, @B: Type, m: Option(A), f: (A) -> B) -> Option(B) =
     match m | some(a) => Option/some(f(a)) | none() => Option/none() end;
 
-pub rec even(n: Nat) -> Bool = match n | 0 => true | p + 1; _ => odd(p) end
+pub let even(n: Nat) -> Bool = match n | 0 => true | p + 1; _ => odd(p) end
 and odd(n: Nat) -> Bool = even(n);
 
 pub let and(p: Parse(A), q: Parse(B)) -> Parse({A, B}) = Parse/and(p, q);

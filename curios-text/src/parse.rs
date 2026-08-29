@@ -50,7 +50,7 @@ use {
     curios_num::{Floating, Natural},
     curios_parse::{
         Parser, catch, fail, lazy, many0, many1, mark, memoize, not_ahead, preceded_by_space, pure,
-        sep_by0_trailing, sep_by1, sep_by1_trailing, spanned, take_exact, take_n, take_while,
+        sep_by0_trailing, sep_by1_trailing, spanned, take_exact, take_n, take_while,
     },
     curios_utilities::{Grain, InfixOp, Plicity, Qualifier, Span, is_identifier_char, is_keyword},
     std::{cell::RefCell, collections::BTreeMap, iter},

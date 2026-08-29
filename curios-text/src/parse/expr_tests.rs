@@ -499,15 +499,3 @@ fn local_let_group() {
         .into()
     );
 }
-
-#[test]
-fn rec_is_a_synonym_for_a_let_group() {
-    assert_eq!(
-        "rec a : Type = b and b : Type = a; a"
-            .parse::<Term>()
-            .unwrap(),
-        "let a : Type = b and b : Type = a; a"
-            .parse::<Term>()
-            .unwrap(),
-    );
-}

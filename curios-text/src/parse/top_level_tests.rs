@@ -1,4 +1,4 @@
-//! Top-level declarations: `let`, `rec`, `foreign`, inductives and structs, and the visibility spellings each admits.
+//! Top-level declarations: `let` and its `and` groups, `foreign`, inductives and structs, and the visibility spellings each admits.
 
 use {
     crate::*,
@@ -508,18 +508,8 @@ fn top_let_group_mixed_pub() {
 }
 
 #[test]
-fn top_rec_is_a_synonym_for_a_let_group_and_prints_as_one() {
-    let rec = "pub rec id : Type = Type\nand helper : Type = Type;\nu"
-        .parse::<Entrypoint>()
-        .unwrap();
-    let let_ = "pub let id : Type = Type\nand helper : Type = Type;\nu"
-        .parse::<Entrypoint>()
-        .unwrap();
-    assert_eq!(rec, let_);
-    let printed = rec.to_string();
-    assert!(
-        printed.starts_with("pub let id") && !printed.contains("rec"),
-        "unexpected print: {printed}"
-    );
-    assert_eq!(printed.parse::<Entrypoint>().unwrap(), let_);
+fn rec_is_an_ordinary_identifier() {
+    // Not a keyword any more, so it names a binding like any other word.
+    let entrypoint = "let rec : Type = Type;\nrec".parse::<Entrypoint>().unwrap();
+    assert!(matches!(&entrypoint.module.items[0], TopItem::Let(items) if items[0].label == "rec"));
 }

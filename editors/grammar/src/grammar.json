@@ -52,10 +52,6 @@
         },
         {
           "type": "SYMBOL",
-          "name": "rec_item"
-        },
-        {
-          "type": "SYMBOL",
           "name": "mod_item"
         },
         {
@@ -107,49 +103,8 @@
             "value": "let"
           },
           {
-            "type": "FIELD",
-            "name": "name",
-            "content": {
-              "type": "SYMBOL",
-              "name": "identifier"
-            }
-          },
-          {
             "type": "SYMBOL",
-            "name": "_signature"
-          },
-          {
-            "type": "STRING",
-            "value": ";"
-          }
-        ]
-      }
-    },
-    "rec_item": {
-      "type": "PREC_DYNAMIC",
-      "value": 1,
-      "content": {
-        "type": "SEQ",
-        "members": [
-          {
-            "type": "CHOICE",
-            "members": [
-              {
-                "type": "STRING",
-                "value": "pub"
-              },
-              {
-                "type": "BLANK"
-              }
-            ]
-          },
-          {
-            "type": "STRING",
-            "value": "rec"
-          },
-          {
-            "type": "SYMBOL",
-            "name": "rec_binding"
+            "name": "let_member"
           },
           {
             "type": "REPEAT",
@@ -174,7 +129,7 @@
                 },
                 {
                   "type": "SYMBOL",
-                  "name": "rec_binding"
+                  "name": "let_member"
                 }
               ]
             }
@@ -186,7 +141,7 @@
         ]
       }
     },
-    "rec_binding": {
+    "let_member": {
       "type": "SEQ",
       "members": [
         {
@@ -2179,10 +2134,6 @@
       "members": [
         {
           "type": "SYMBOL",
-          "name": "rec_term"
-        },
-        {
-          "type": "SYMBOL",
           "name": "let_term"
         },
         {
@@ -2204,52 +2155,6 @@
         {
           "type": "SYMBOL",
           "name": "_infix"
-        }
-      ]
-    },
-    "rec_term": {
-      "type": "SEQ",
-      "members": [
-        {
-          "type": "STRING",
-          "value": "rec"
-        },
-        {
-          "type": "SEQ",
-          "members": [
-            {
-              "type": "SYMBOL",
-              "name": "rec_binding"
-            },
-            {
-              "type": "REPEAT",
-              "content": {
-                "type": "SEQ",
-                "members": [
-                  {
-                    "type": "STRING",
-                    "value": "and"
-                  },
-                  {
-                    "type": "SYMBOL",
-                    "name": "rec_binding"
-                  }
-                ]
-              }
-            }
-          ]
-        },
-        {
-          "type": "STRING",
-          "value": ";"
-        },
-        {
-          "type": "FIELD",
-          "name": "body",
-          "content": {
-            "type": "SYMBOL",
-            "name": "_term"
-          }
         }
       ]
     },
@@ -2368,6 +2273,22 @@
               ]
             }
           ]
+        },
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "SEQ",
+            "members": [
+              {
+                "type": "STRING",
+                "value": "and"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "let_member"
+              }
+            ]
+          }
         },
         {
           "type": "STRING",
@@ -4608,10 +4529,6 @@
       "pattern_field"
     ],
     [
-      "rec_item",
-      "rec_term"
-    ],
-    [
       "function_type_parameter",
       "parenthesized"
     ],
@@ -4636,7 +4553,7 @@
       "path"
     ],
     [
-      "let_item",
+      "let_member",
       "_pattern"
     ],
     [

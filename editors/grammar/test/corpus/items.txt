@@ -10,46 +10,48 @@ pub foreign log: (Bytes) -> Nat;
 
 (source_file
   (let_item
-    (identifier)
-    (path
-      (identifier))
-    (number))
-  (let_item
-    (identifier)
-    (parameters
-      (parameter
-        (identifier)
-        (sort))
-      (parameter
-        (identifier)
-        (sort))
-      (parameter
-        (identifier)
-        (call
-          (path
-            (identifier))
-          (arguments
-            (argument
-              (path
-                (identifier))))))
-      (parameter
-        (identifier)
-        (function_type
-          (function_type_parameters
-            (function_type_parameter
-              (path
-                (identifier))))
-          (path
-            (identifier)))))
-    (call
+    (let_member
+      (identifier)
       (path
         (identifier))
-      (arguments
-        (argument
-          (path
-            (identifier)))))
-    (path
-      (identifier)))
+      (number)))
+  (let_item
+    (let_member
+      (identifier)
+      (parameters
+        (parameter
+          (identifier)
+          (sort))
+        (parameter
+          (identifier)
+          (sort))
+        (parameter
+          (identifier)
+          (call
+            (path
+              (identifier))
+            (arguments
+              (argument
+                (path
+                  (identifier))))))
+        (parameter
+          (identifier)
+          (function_type
+            (function_type_parameters
+              (function_type_parameter
+                (path
+                  (identifier))))
+            (path
+              (identifier)))))
+      (call
+        (path
+          (identifier))
+        (arguments
+          (argument
+            (path
+              (identifier)))))
+      (path
+        (identifier))))
   (foreign_item
     (identifier)
     (function_type
@@ -64,14 +66,14 @@ pub foreign log: (Bytes) -> Nat;
 A recursive group, each member with its own visibility
 ================================================================================
 
-pub rec even(n: Nat) -> Bool = odd(n)
+pub let even(n: Nat) -> Bool = odd(n)
 and odd(n: Nat) -> Bool = even(n);
 
 --------------------------------------------------------------------------------
 
 (source_file
-  (rec_item
-    (rec_binding
+  (let_item
+    (let_member
       (identifier)
       (parameters
         (parameter
@@ -87,7 +89,7 @@ and odd(n: Nat) -> Bool = even(n);
           (argument
             (path
               (identifier))))))
-    (rec_binding
+    (let_member
       (identifier)
       (parameters
         (parameter
@@ -124,10 +126,11 @@ use /{X};
   (mod_item
     (identifier)
     (let_item
-      (identifier)
-      (path
-        (identifier))
-      (number)))
+      (let_member
+        (identifier)
+        (path
+          (identifier))
+        (number))))
   (use_item
     (path
       (identifier))
@@ -430,10 +433,11 @@ print(y)
 
 (source_file
   (let_item
-    (identifier)
-    (path
-      (identifier))
-    (number))
+    (let_member
+      (identifier)
+      (path
+        (identifier))
+      (number)))
   (let_term
     (let_binding
       (identifier)

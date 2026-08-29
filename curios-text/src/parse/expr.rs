@@ -7,32 +7,6 @@ pub(super) fn parse_binding<'a>() -> Parser<'a, (String, LetSignature)> {
         .map(|(label, signature)| (label.to_string(), signature))
 }
 
-// `rec f … and g …; tail` — a synonym for the `let` group until the keyword is removed. It parses to the same node, so a file written with `rec` prints with `let`.
-pub(super) fn parse_rec<'a>() -> Parser<'a, Term> {
-    mark()
-        .and(
-            catch(parse_keyword("rec"))
-                .and_keep(sep_by1(parse_binding, || parse_keyword("and")))
-                .and_drop(parse_literal(";")),
-        )
-        .and(lazy(parse_term).and(mark()))
-        .map(|((start, members), (tail, end))| {
-            let span = start.to(&end);
-            let members = members
-                .into_iter()
-                .map(|(label, signature)| LetBinding {
-                    binder: Pattern::Binder(Some(label)),
-                    signature,
-                })
-                .collect();
-            Term::from(Subterm::Let(Let {
-                groups: vec![LetGroup { members }],
-                tail,
-            }))
-            .with_span(span)
-        })
-}
-
 // One `let` statement: `let pattern (: T)? = e;`, or the group `let f … and g … and h …;` whose later members are plain labels with mandatory types.
 fn parse_let_group<'a>() -> Parser<'a, LetGroup> {
     catch(parse_keyword("let"))
@@ -53,7 +27,7 @@ fn parse_let_group<'a>() -> Parser<'a, LetGroup> {
         })
 }
 
-// A `use` binder in function-definition sugar (`let`/`rec`/`satisfy` telescopes): `use term`. Always anonymous — there is no source binder position at all (lowering mints a fresh name directly) and joins the instance scope; an instance is reached by resolution, never by name.
+// A `use` binder in function-definition sugar (`let`/`satisfy` telescopes): `use term`. Always anonymous — there is no source binder position at all (lowering mints a fresh name directly) and joins the instance scope; an instance is reached by resolution, never by name.
 pub(super) fn parse_use_func_sugar_param<'a>() -> Parser<'a, FuncSugarParam> {
     catch(parse_keyword("use"))
         .and_keep(lazy(parse_term))
@@ -120,7 +94,7 @@ pub(super) fn parse_optional_name_signature<'a>() -> Parser<'a, LetSignature> {
         .map(|(type_, body)| LetSignature::Name { type_, body })
 }
 
-// Parses the part of a `let`/`rec` binding after its name where a type is **required**: the function sugar, or the `: T = body` form. Used for top-level `let` and every `rec` binding, whose types cannot be inferred.
+// Parses the part of a `let` binding after its name where a type is **required**: the function sugar, or the `: T = body` form. Used for top-level `let` and for every member after `and`, whose types cannot be inferred.
 pub(super) fn parse_let_signature<'a>() -> Parser<'a, LetSignature> {
     parse_func_let_signature().or(parse_required_name_signature())
 }
@@ -324,8 +298,7 @@ pub(crate) fn parse_term<'a>() -> Parser<'a, Term> {
 
 pub(super) fn parse_term_inner<'a>() -> Parser<'a, Term> {
     with_span(
-        parse_rec()
-            .or(parse_let())
+        parse_let()
             .or(parse_match())
             .or(parse_choose())
             .or(parse_func_type())

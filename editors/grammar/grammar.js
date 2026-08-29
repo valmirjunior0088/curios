@@ -32,14 +32,13 @@ module.exports = grammar({
     [$.struct_literal, $.struct_pattern],
     [$.lambda_parameter, $.parenthesized_pattern],
     [$.lambda_parameter, $.pattern_field],
-    [$.rec_item, $.rec_term],
     [$.function_type_parameter, $.parenthesized],
     [$.function_type_parameter, $.tuple_field],
     [$.field_definition, $.path],
     [$.path, $._pattern],
     [$.function_type_parameter, $._pattern],
     [$.field_declaration, $.path],
-    [$.let_item, $._pattern],
+    [$.let_member, $._pattern],
     [$._atom, $.struct_literal],
   ],
 
@@ -54,7 +53,6 @@ module.exports = grammar({
     _item: ($) =>
       choice(
         $.let_item,
-        $.rec_item,
         $.mod_item,
         $.use_item,
         $.induct_item,
@@ -65,25 +63,20 @@ module.exports = grammar({
       ),
 
     // An annotated top-level `let` is an item; an unannotated one is a local `let` opening the final term (`let_term`). The dynamic precedence settles the case both grammars accept — an annotated binding followed by a term — the way the compiler does, as an item.
+    // One definition, or a `let f … and g …;` group; each member takes its own `pub`.
     let_item: ($) =>
-      prec.dynamic(
-        1,
-        seq(optional("pub"), "let", field("name", $.identifier), $._signature, ";"),
-      ),
-
-    rec_item: ($) =>
       prec.dynamic(
         1,
         seq(
           optional("pub"),
-          "rec",
-          $.rec_binding,
-          repeat(seq(optional("pub"), "and", $.rec_binding)),
+          "let",
+          $.let_member,
+          repeat(seq(optional("pub"), "and", $.let_member)),
           ";",
         ),
       ),
 
-    rec_binding: ($) => seq(field("name", $.identifier), $._signature),
+    let_member: ($) => seq(field("name", $.identifier), $._signature),
 
     // `(params) -> type = body` or `: type = body`.
     _signature: ($) =>
@@ -290,7 +283,6 @@ module.exports = grammar({
 
     _term: ($) =>
       choice(
-        $.rec_term,
         $.let_term,
         $.match_term,
         $.choose_term,
@@ -298,8 +290,6 @@ module.exports = grammar({
         $.lambda,
         $._infix,
       ),
-
-    rec_term: ($) => seq("rec", separated($.rec_binding, "and"), ";", field("body", $._term)),
 
     let_term: ($) => seq($.let_binding, field("body", $._term)),
 
@@ -317,6 +307,7 @@ module.exports = grammar({
           ),
           seq(optional(seq(":", field("type", $._term))), "=", field("value", $._term)),
         ),
+        repeat(seq("and", $.let_member)),
         ";",
       ),
 
