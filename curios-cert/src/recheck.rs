@@ -414,24 +414,20 @@ fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> V
             }
         }
     }
-    // The module's own type and body stand under no scheme, so every parameter index in them escapes.
-    if let Some(error) = module
-        .type_
-        .as_ref()
-        .and_then(universe_residue)
-        .or_else(|| module.body.as_ref().and_then(universe_residue))
-        .or_else(|| {
-            module
-                .type_
-                .as_ref()
-                .and_then(|type_| universe_escape(type_, 0))
-        })
-        .or_else(|| {
-            module
-                .body
-                .as_ref()
-                .and_then(|body| universe_escape(body, 0))
-        })
+    // The module's own entry stands under no scheme, so every parameter index in it escapes.
+    if let Some(entry) = &module.entry
+        && let Some(error) = entry
+            .type_
+            .as_ref()
+            .and_then(universe_residue)
+            .or_else(|| universe_residue(&entry.body))
+            .or_else(|| {
+                entry
+                    .type_
+                    .as_ref()
+                    .and_then(|type_| universe_escape(type_, 0))
+            })
+            .or_else(|| universe_escape(&entry.body, 0))
     {
         verdicts.push(Verdict { name: None, error });
     }
@@ -510,8 +506,8 @@ fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> V
     }
 
     // A unit with no entrypoint has nothing here to judge — being the entry is what having one *means*, and a scope unit is not it. The prelude used to carry a dummy body and have this walk certify it.
-    if let Some(body) = &module.body
-        && let Err(error) = check_entrypoint(kernel, body, module.type_.as_ref())
+    if let Some(entry) = &module.entry
+        && let Err(error) = check_entrypoint(kernel, &entry.body, entry.type_.as_ref())
     {
         verdicts.push(Verdict { name: None, error });
     }

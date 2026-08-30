@@ -9,10 +9,10 @@ use {
     },
     curios_analysis::group_totality,
     curios_core::{
-        Bound, ConceptDecl, Definition, DefinitionKind, Free, FuncType, Global, InductDecl,
-        InductParam, Item, Level, Module, RecItem, SelfReference, StructDecl, Subterm, Telescope,
-        Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin, UniverseContext,
-        UniverseMetaId, Visit, stamp_declaration_instance, universe_metas,
+        Bound, ConceptDecl, Definition, DefinitionKind, Entrypoint, Free, FuncType, Global,
+        InductDecl, InductParam, Item, Level, Module, RecItem, SelfReference, StructDecl, Subterm,
+        Telescope, Term, Totality, UniverseConstraintKind, UniverseConstraintOrigin,
+        UniverseContext, UniverseMetaId, Visit, stamp_declaration_instance, universe_metas,
     },
     curios_utilities::{Qualifier, grown},
     std::{
@@ -1245,20 +1245,30 @@ fn elaborate_module_suffix(
     context.restore_budget();
     // The annotation is a written type like any item's, and elaborating it is what makes it usable as an expectation: a universe-polymorphic head arrives instantiated, and an application of a type former reduces to the intrinsic it denotes. Left raw it stayed exactly as lowered, so `List(Nat)` reached conversion as an `Apply` no unfolding could reconcile with the inferred `Intrinsic::ListType` — a mismatch reported between two spellings of the same type. Elaborating here rather than in the caller keeps it in the frame every item was just defined into, which is the scope its globals resolve against.
     //
-    // The rebuilt module carries the elaborated spelling, because `Module::type_` is what the kernel rechecks the entrypoint against and what `zonk` walks: a raw annotation would put the two checkers on different terms and hand zonk one that never passed through elaboration. Only a *written* annotation is kept, so a synthesized expectation leaves `type_` as absent as the program wrote it.
+    // The rebuilt module carries the elaborated spelling, because the entry's annotation is what the kernel rechecks the entrypoint against and what `zonk` walks: a raw annotation would put the two checkers on different terms and hand zonk one that never passed through elaboration. Only a *written* annotation is kept, so a synthesized expectation leaves the annotation as absent as the program wrote it.
     let (mode, annotation) = match mode {
         Mode::Check(expected) => {
             let elaborated = check_is_sort(context, &expected)?.0;
-            let annotation = module.type_.is_some().then(|| elaborated.clone());
+            let annotation = module
+                .entry
+                .as_ref()
+                .is_some_and(|entry| entry.type_.is_some())
+                .then(|| elaborated.clone());
             (Mode::Check(elaborated), annotation)
         }
         Mode::Infer => (Mode::Infer, None),
     };
-    // A unit with no entrypoint has none to elaborate and no type for one — the two are the same fact, which is why they travel together from here to the kernel.
-    let (body, body_type) = match &module.body {
-        Some(body) => {
-            let (body, body_type) = elaborate(context, body, mode)?;
-            (Some(body), Some(body_type))
+    // A unit with no entrypoint has none to elaborate and no type for one — the `Entrypoint` carries both, which is what keeps them one fact from here to the kernel.
+    let (entry, body_type) = match &module.entry {
+        Some(entry) => {
+            let (body, body_type) = elaborate(context, &entry.body, mode)?;
+            (
+                Some(Entrypoint {
+                    body,
+                    type_: annotation,
+                }),
+                Some(body_type),
+            )
         }
         None => (None, None),
     };
@@ -1314,8 +1324,7 @@ fn elaborate_module_suffix(
         concepts,
         witnesses,
         binder_floor: module.binder_floor,
-        type_: annotation,
-        body,
+        entry,
     };
 
     Ok((module, body_type))
@@ -1340,13 +1349,15 @@ fn finalize_and_check(
 ) -> Result<(Module, Option<Term>, Vec<Error>), Error> {
     curios_profile::profile!("finalize_and_check");
     let mut entry_terms = Vec::new();
-    let has_body = module.body.is_some();
-    let has_annotation = module.type_.is_some();
-    if let Some(body) = &module.body {
-        entry_terms.push(body.clone());
-    }
-    if let Some(type_) = &module.type_ {
-        entry_terms.push(type_.clone());
+    let has_annotation = module
+        .entry
+        .as_ref()
+        .is_some_and(|entry| entry.type_.is_some());
+    if let Some(entry) = &module.entry {
+        entry_terms.push(entry.body.clone());
+        if let Some(type_) = &entry.type_ {
+            entry_terms.push(type_.clone());
+        }
     }
     if let Some(body_type) = body_type {
         entry_terms.push(body_type);
@@ -1354,11 +1365,11 @@ fn finalize_and_check(
     let mut entry_terms = context
         .default_universes(&entry_terms.iter().collect::<Vec<_>>())?
         .into_iter();
-    if has_body {
-        module.body = Some(entry_terms.next().expect("entry body was finalized"));
-    }
-    if has_annotation {
-        module.type_ = Some(entry_terms.next().expect("entry annotation was finalized"));
+    if let Some(entry) = &mut module.entry {
+        entry.body = entry_terms.next().expect("entry body was finalized");
+        if has_annotation {
+            entry.type_ = Some(entry_terms.next().expect("entry annotation was finalized"));
+        }
     }
     let body_type = entry_terms.next();
 

@@ -83,8 +83,10 @@ fn the_floor_clears_every_local_a_term_mentions() {
         witnesses: BTreeSet::new(),
         // The understated claim the walk must not believe.
         binder_floor: 0,
-        type_: None,
-        body: Some(Term::intrinsic(crate::Intrinsic::NatType)),
+        entry: Some(Entrypoint {
+            body: Term::intrinsic(crate::Intrinsic::NatType),
+            type_: None,
+        }),
     };
 
     assert_eq!(derived_binder_floor(&module), 4_243);
@@ -109,8 +111,10 @@ fn stored(body: Term, entrypoint: Term) -> Module {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         binder_floor: 0,
-        type_: None,
-        body: Some(entrypoint),
+        entry: Some(Entrypoint {
+            body: entrypoint,
+            type_: None,
+        }),
     }
 }
 
@@ -223,8 +227,7 @@ fn a_meta_free_module_projects_as_zonked() {
         concepts: Default::default(),
         witnesses: Default::default(),
         binder_floor: 0,
-        type_: None,
-        body: None,
+        entry: None,
     };
 
     assert!(Zonked::project(&module).is_ok());
@@ -243,8 +246,7 @@ fn a_surviving_metavariable_refuses_the_zonked_projection() {
         concepts: Default::default(),
         witnesses: Default::default(),
         binder_floor: 0,
-        type_: None,
-        body: None,
+        entry: None,
     };
 
     let refusal = Zonked::project(&module).expect_err("the hole must refuse the projection");

@@ -67,7 +67,11 @@ fn a_polymorphic_definition_instantiates_at_prop_and_type() {
         .unwrap();
     assert_eq!(definition.universe_context.parameter_count, 1);
 
-    let body = module.body.as_ref().expect("the entrypoint has a body");
+    let body = &module
+        .entry
+        .as_ref()
+        .expect("the entrypoint has a body")
+        .body;
     let curios_core::Subterm::Tuple(tuple) = &**body else {
         panic!("the entrypoint is a tuple");
     };

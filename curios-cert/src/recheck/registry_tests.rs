@@ -7,8 +7,8 @@
 use {
     crate::{Globals, KernelError},
     curios_core::{
-        Definition, DefinitionKind, Global, InductDecl, Intrinsic, Item, Level, Module, Nat,
-        Telescope, Term, Totality, UniverseContext, UniverseParam,
+        Definition, DefinitionKind, Entrypoint, Global, InductDecl, Intrinsic, Item, Level, Module,
+        Nat, Telescope, Term, Totality, UniverseContext, UniverseParam,
     },
     curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet},
@@ -179,8 +179,10 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
-        type_: None,
-        body: Some(Term::tuple(Vec::<Term>::new())),
+        entry: Some(Entrypoint {
+            body: Term::tuple(Vec::<Term>::new()),
+            type_: None,
+        }),
     };
 
     let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);

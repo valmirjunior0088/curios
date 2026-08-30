@@ -15,8 +15,9 @@ use crate::{Free, Item, Module, Term};
 /// If the module carries no entrypoint body, since there would be nothing to fold the items around.
 pub fn into_nested_term(module: Module) -> Term {
     let body = module
-        .body
-        .expect("into_nested_term is for a module with an entrypoint");
+        .entry
+        .expect("into_nested_term is for a module with an entrypoint")
+        .body;
 
     module
         .items

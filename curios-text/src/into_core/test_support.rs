@@ -135,10 +135,10 @@ pub(super) fn elaboration_paths(src: &str) -> (curios_core::Module, curios_core:
     lowered_prefix.struct_decls.clear();
     lowered_prefix.concepts.clear();
     lowered_prefix.witnesses.clear();
-    lowered_prefix.type_ = None;
-    lowered_prefix.body = Some(curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(
-        curios_core::Nat::Zero,
-    )));
+    lowered_prefix.entry = Some(curios_core::Entrypoint {
+        body: curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(curios_core::Nat::Zero)),
+        type_: None,
+    });
     let prelude = curios_elab::elaborate_and_zonk_module(
         &mut curios_elab::Context::with_default_budget(SYNTAX),
         &lowered_prefix,

@@ -4,13 +4,13 @@ mod tests;
 use {
     super::{BinderTypes, Context, Error, GoalReport, UniverseSolver, universe_context_validate},
     curios_core::{
-        Apply, Bound, Carrier, Cases, ConceptDecl, Definition, DefinitionKind, Free, Func,
-        FuncType, Global, InductDecl, InductParam, InductType, Instance, InstanceHead, Intrinsic,
-        Item, Let, LetBinding, Level, LevelHead, Match, Metavar, MetavarId, MetavarOrigin, Module,
-        Proj, Rec, RecGroup, RecItem, RecMemberScopes, Struct, StructDecl, StructType, Subterm,
-        Telescope, Term, Tuple, TupleType, UniverseContext, UniverseError, UniverseMetaId, Var,
-        Variant, Visit, project_erased_universes, rewrite_universe_levels_scoped,
-        shift_universe_params, universe_metas,
+        Apply, Bound, Carrier, Cases, ConceptDecl, Definition, DefinitionKind, Entrypoint, Free,
+        Func, FuncType, Global, InductDecl, InductParam, InductType, Instance, InstanceHead,
+        Intrinsic, Item, Let, LetBinding, Level, LevelHead, Match, Metavar, MetavarId,
+        MetavarOrigin, Module, Proj, Rec, RecGroup, RecItem, RecMemberScopes, Struct, StructDecl,
+        StructType, Subterm, Telescope, Term, Tuple, TupleType, UniverseContext, UniverseError,
+        UniverseMetaId, Var, Variant, Visit, project_erased_universes,
+        rewrite_universe_levels_scoped, shift_universe_params, universe_metas,
     },
     curios_utilities::Span,
     std::{
@@ -118,16 +118,19 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
         .map(|item| zonk_item(context, item))
         .collect::<Result<Vec<_>, Error>>()?;
 
-    let body = module
-        .body
+    let entry = module
+        .entry
         .as_ref()
-        .map(|body| zonk_term(context, body))
-        .transpose()?;
-
-    let type_ = module
-        .type_
-        .as_ref()
-        .map(|type_| zonk_term(context, type_))
+        .map(|entry| {
+            Ok::<_, Error>(Entrypoint {
+                body: zonk_term(context, &entry.body)?,
+                type_: entry
+                    .type_
+                    .as_ref()
+                    .map(|type_| zonk_term(context, type_))
+                    .transpose()?,
+            })
+        })
         .transpose()?;
 
     // The registry's telescopes flow into `erase`, which runs meta-free with its own (solution-less) context — so they are zonked like everything else.
@@ -205,8 +208,7 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
             .collect::<Result<_, Error>>()?,
         witnesses: module.witnesses.clone(),
         binder_floor: module.binder_floor,
-        type_,
-        body,
+        entry,
     };
     validate_universes(&module)?;
     Ok(module)
@@ -504,11 +506,11 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
             | DefinitionKind::Witness => {}
         }
     }
-    if let Some(body) = &module.body {
-        validate!(body, "module body")?;
-    }
-    if let Some(type_) = &module.type_ {
-        validate!(type_, "module body annotation")?;
+    if let Some(entry) = &module.entry {
+        validate!(&entry.body, "module body")?;
+        if let Some(type_) = &entry.type_ {
+            validate!(type_, "module body annotation")?;
+        }
     }
     Ok(())
 }
@@ -597,11 +599,11 @@ pub fn validate_universes(module: &Module) -> Result<(), Error> {
             &format!("concept {name} parameters"),
         )?;
     }
-    if let Some(body) = &module.body {
-        validate_bound_universes(body, 0, "module body")?;
-    }
-    if let Some(type_) = &module.type_ {
-        validate_bound_universes(type_, 0, "module body annotation")?;
+    if let Some(entry) = &module.entry {
+        validate_bound_universes(&entry.body, 0, "module body")?;
+        if let Some(type_) = &entry.type_ {
+            validate_bound_universes(type_, 0, "module body annotation")?;
+        }
     }
     if !module.universe_seeds.is_empty() {
         return Err(Error::UniverseInvariant(
@@ -652,11 +654,11 @@ pub fn validate_lowered_universe_seeds(module: &Module, floor: usize) -> Result<
     for concept in module.concepts.values() {
         collect!(&concept.params);
     }
-    if let Some(body) = &module.body {
-        collect!(body);
-    }
-    if let Some(type_) = &module.type_ {
-        collect!(type_);
+    if let Some(entry) = &module.entry {
+        collect!(&entry.body);
+        if let Some(type_) = &entry.type_ {
+            collect!(type_);
+        }
     }
 
     if let Some(meta) = metas.into_iter().find(|meta| meta.0 >= floor) {
@@ -753,11 +755,11 @@ pub(crate) fn collect_goal_reports(context: &mut Context, module: &Module) -> Ve
             Item::Rec(rec) => rec.definitions().iter().for_each(&mut scan_definition),
         }
     }
-    if let Some(body) = &module.body {
-        scan(body, None, &goals, &seen_goals, &referenced);
-    }
-    if let Some(type_) = &module.type_ {
-        scan(type_, None, &goals, &seen_goals, &referenced);
+    if let Some(entry) = &module.entry {
+        scan(&entry.body, None, &goals, &seen_goals, &referenced);
+        if let Some(type_) = &entry.type_ {
+            scan(type_, None, &goals, &seen_goals, &referenced);
+        }
     }
     for induct_decl in module.induct_decls.values() {
         scan(&induct_decl.arity, None, &goals, &seen_goals, &referenced);

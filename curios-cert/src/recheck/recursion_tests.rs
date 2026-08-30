@@ -6,7 +6,9 @@
 
 use {
     crate::Globals,
-    curios_core::{Free, Global, Intrinsic, Many, Module, RecGroup, RecMemberScopes, Scope, Term},
+    curios_core::{
+        Entrypoint, Free, Global, Intrinsic, Many, Module, RecGroup, RecMemberScopes, Scope, Term,
+    },
     curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -92,8 +94,10 @@ fn a_member_of_a_legal_group_is_still_accepted() {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
-        type_: None,
-        body: Some(Term::tuple(Vec::<Term>::new())),
+        entry: Some(Entrypoint {
+            body: Term::tuple(Vec::<Term>::new()),
+            type_: None,
+        }),
     };
 
     assert_eq!(

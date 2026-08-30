@@ -7,8 +7,8 @@
 use {
     crate::{Globals, KernelError},
     curios_core::{
-        Definition, DefinitionKind, Free, Global, Intrinsic, Item, Level, Module, Nat, Term,
-        Totality, UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin,
+        Definition, DefinitionKind, Entrypoint, Free, Global, Intrinsic, Item, Level, Module, Nat,
+        Term, Totality, UniverseConstraint, UniverseConstraintKind, UniverseConstraintOrigin,
         UniverseContext, UniverseMetaId, UniverseParam,
     },
     curios_utilities::Qualifier,
@@ -53,8 +53,10 @@ fn an_unsatisfiable_universe_context_is_refused() {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         binder_floor: 0,
-        type_: None,
-        body: Some(Term::intrinsic(Intrinsic::NatType)),
+        entry: Some(Entrypoint {
+            body: Term::intrinsic(Intrinsic::NatType),
+            type_: None,
+        }),
     };
 
     assert!(
@@ -97,8 +99,10 @@ fn a_constraint_naming_an_undeclared_parameter_is_refused() {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         binder_floor: 0,
-        type_: None,
-        body: Some(Term::intrinsic(Intrinsic::NatType)),
+        entry: Some(Entrypoint {
+            body: Term::intrinsic(Intrinsic::NatType),
+            type_: None,
+        }),
     };
 
     assert!(
@@ -333,8 +337,10 @@ fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         binder_floor: 0,
-        type_: None,
-        body: Some(Term::intrinsic(Intrinsic::NatType)),
+        entry: Some(Entrypoint {
+            body: Term::intrinsic(Intrinsic::NatType),
+            type_: None,
+        }),
     };
 
     assert_eq!(
@@ -413,8 +419,10 @@ fn a_let_bound_instance_head_dissolves_under_reduction_rather_than_aborting_the_
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         binder_floor: 0,
-        type_: None,
-        body: Some(Term::intrinsic(Intrinsic::NatType)),
+        entry: Some(Entrypoint {
+            body: Term::intrinsic(Intrinsic::NatType),
+            type_: None,
+        }),
     };
 
     assert_eq!(

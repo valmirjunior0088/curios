@@ -7,7 +7,7 @@
 use {
     crate::{Globals, KernelError},
     curios_analysis::Erased,
-    curios_core::{Atom, Global, InductParam, Intrinsic, Module, Telescope, Term},
+    curios_core::{Atom, Entrypoint, Global, InductParam, Intrinsic, Module, Telescope, Term},
     curios_utilities::Qualifier,
     std::collections::{BTreeMap, BTreeSet},
 };
@@ -138,8 +138,10 @@ fn a_proposition_carrying_a_computed_proof_is_still_accepted() {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
-        type_: None,
-        body: Some(Term::intrinsic(Intrinsic::NatType)),
+        entry: Some(Entrypoint {
+            body: Term::intrinsic(Intrinsic::NatType),
+            type_: None,
+        }),
     };
 
     assert_eq!(

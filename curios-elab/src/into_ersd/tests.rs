@@ -46,8 +46,7 @@ fn module(items: Vec<Item>, body: Term) -> Module {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         binder_floor: 0,
-        type_: None,
-        body: Some(body),
+        entry: Some(Entrypoint { body, type_: None }),
     }
 }
 
@@ -299,7 +298,10 @@ fn universe_erasure_is_a_validated_structural_projection() {
         panic!("expected nominal type")
     };
     assert!(induct.universes.is_empty());
-    assert_eq!(projected.body, Some(Term::free_var(&global("poly"))));
+    assert_eq!(
+        projected.entry.as_ref().map(|entry| &entry.body),
+        Some(&Term::free_var(&global("poly")))
+    );
 
     let invalid = module(Vec::new(), Term::type_at(Level::meta(UniverseMetaId(0))));
     assert!(super::lower::UniverseErased::<Zonked<Module>>::project(&zonked(&invalid)).is_err());
@@ -470,8 +472,7 @@ fn a_variant_constructs_with_its_registered_schema() {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         binder_floor: 0,
-        type_: None,
-        body: Some(body),
+        entry: Some(Entrypoint { body, type_: None }),
     };
     let erased =
         erase_module(&mut context, &zonked(&fixture), &opt_type()).expect("the module erases");
@@ -756,8 +757,7 @@ fn a_variant_match_binds_payload_without_projections() {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         binder_floor: 0,
-        type_: None,
-        body: Some(body),
+        entry: Some(Entrypoint { body, type_: None }),
     };
     let erased = erase_module(
         &mut context,
@@ -1086,8 +1086,7 @@ fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         binder_floor: 0,
-        type_: None,
-        body: Some(body),
+        entry: Some(Entrypoint { body, type_: None }),
     };
     let erased =
         erase_module(&mut context, &zonked(&fixture), &expected).expect("the module erases");

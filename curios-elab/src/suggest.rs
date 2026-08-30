@@ -184,8 +184,8 @@ fn module_pool(
             }
         }
     }
-    if let Some(body) = &module.body {
-        collect(body);
+    if let Some(entry) = &module.entry {
+        collect(&entry.body);
     }
     for global in &referenced {
         if own.contains(global) || Some(global) == owner {

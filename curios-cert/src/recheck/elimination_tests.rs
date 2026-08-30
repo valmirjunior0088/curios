@@ -7,8 +7,8 @@
 use {
     crate::{Globals, KernelError},
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Intrinsic, Many, Module, Scope, Subterm,
-        Telescope, Term, UniverseContext,
+        Atom, Entrypoint, Free, Global, InductDecl, InductParam, Intrinsic, Many, Module, Scope,
+        Subterm, Telescope, Term, UniverseContext,
     },
     curios_utilities::{Plicity, Qualifier},
     std::collections::{BTreeMap, BTreeSet},
@@ -251,8 +251,10 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
-        type_: None,
-        body: Some(Term::tuple(Vec::<Term>::new())),
+        entry: Some(Entrypoint {
+            body: Term::tuple(Vec::<Term>::new()),
+            type_: None,
+        }),
     };
 
     let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);

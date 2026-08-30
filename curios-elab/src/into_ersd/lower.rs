@@ -10,8 +10,8 @@ use {
     },
     crate::{validate_bound_universes, validate_universes},
     curios_core::{
-        ConceptDecl, Definition, Free, Global, InductParam, Item, Module, StructDecl, Zonked,
-        project_erased_universes, wire_term,
+        ConceptDecl, Definition, Entrypoint, Free, Global, InductParam, Item, Module, StructDecl,
+        Zonked, project_erased_universes, wire_term,
     },
     curios_utilities::grown,
     std::{
@@ -167,8 +167,10 @@ fn project_module(module: &Module) -> Module {
             .collect(),
         witnesses: module.witnesses.clone(),
         binder_floor: module.binder_floor,
-        type_: module.type_.as_ref().map(project_erased_universes),
-        body: module.body.as_ref().map(project_erased_universes),
+        entry: module.entry.as_ref().map(|entry| Entrypoint {
+            body: project_erased_universes(&entry.body),
+            type_: entry.type_.as_ref().map(project_erased_universes),
+        }),
     }
 }
 
@@ -239,12 +241,12 @@ fn erase_module_within(
         let mut lowering = Lowering::default();
         lowering.erase_items(context, &module)?;
 
-        let body = module
-            .body
+        let entry = module
+            .entry
             .as_ref()
             .expect("erase_module is for a whole module with an entrypoint");
 
-        Ok(seal_entry(lowering, context, body, &expected)?.module)
+        Ok(seal_entry(lowering, context, &entry.body, &expected)?.module)
     })
 }
 
@@ -522,7 +524,7 @@ fn erase_unit_within(
     expected: Option<&Term>,
 ) -> Result<ErasedArena, Error> {
     assert_eq!(
-        module.as_module().body.is_some(),
+        module.as_module().entry.is_some(),
         expected.is_some(),
         "an entrypoint body and the type it is checked against arrive together or not at all",
     );
@@ -585,8 +587,8 @@ fn erase_unit_within(
         };
         lowering.erase_items(context, &module)?;
 
-        match (&module.body, &expected) {
-            (Some(body), Some(expected)) => seal_entry(lowering, context, body, expected),
+        match (&module.entry, &expected) {
+            (Some(entry), Some(expected)) => seal_entry(lowering, context, &entry.body, expected),
             // No entrypoint: the arena stays open, which is exactly what a successor resumes over. The hand-off still checks every rule a prefix can satisfy, so an image reaches the archive walked rather than merely constructed.
             _ => Ok(ErasedArena {
                 module: lowering

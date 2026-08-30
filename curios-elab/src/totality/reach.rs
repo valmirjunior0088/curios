@@ -58,13 +58,13 @@ pub(crate) fn type_positions(module: &Module) -> Vec<Position> {
     }
 
     // The entrypoint expression and its annotation are not items, so nothing above reaches them. An exploit needs only a local `rec` and one construction, both of which fit in the trailing expression.
-    if let Some(type_) = &module.type_ {
-        let site: Rc<str> = "the entrypoint's type".into();
-        push(&mut positions, &site, type_);
-        annotations(type_, &site, &mut positions);
-    }
-    if let Some(body) = &module.body {
-        annotations(body, &"the entrypoint".into(), &mut positions);
+    if let Some(entry) = &module.entry {
+        if let Some(type_) = &entry.type_ {
+            let site: Rc<str> = "the entrypoint's type".into();
+            push(&mut positions, &site, type_);
+            annotations(type_, &site, &mut positions);
+        }
+        annotations(&entry.body, &"the entrypoint".into(), &mut positions);
     }
 
     // A declaration's telescopes are types by construction, and its parameter and field types can name anything.

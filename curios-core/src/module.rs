@@ -261,7 +261,16 @@ impl Item {
     }
 }
 
-/// The whole program as a *flat* list of top-level `items`, the entrypoint `body`, and its optional `type_` annotation.
+/// A unit's entrypoint: the expression, with the optional annotation it is checked against. One type rather than two module fields, so an annotation without an entry — a type for no expression — is unspellable rather than asserted away; a unit that is not the entry simply carries no `Entry` at all.
+#[derive(Debug, Clone, PartialEq)]
+#[curios_archive::archived]
+pub struct Entrypoint {
+    pub body: Term,
+    /// The written annotation, when there is one: optional before elaboration, and the elaborated expectation after.
+    pub type_: Option<Term>,
+}
+
+/// The whole program as a *flat* list of top-level `items`, with the optional [`Entrypoint`].
 ///
 /// This replaces the single, N-deep nested `Subterm::Let`/`Rec` term that `text::into_core` used to fold the entire prelude into — the construction (`Scope::close` over the whole accumulator at each step) and every pass that recursed along its `.tail` spine were both O(N) in stack and overflowed at prelude depth. `Subterm::Let`/`Rec` remain for genuine *local*, in-expression bindings, which are shallow.
 #[derive(Debug, Clone, PartialEq)]
@@ -286,11 +295,10 @@ pub struct Module {
     ///
     /// Binder identities are one space shared with `Context::fresh`, so elaboration seeds its counter here (`Context::set_local_floor`). The archived prelude carries its own high-water mark for the same reason: a replayed term's binders were minted in an earlier compiler run, and a fresh mint that aliased one of them would silently capture.
     pub binder_floor: usize,
-    pub type_: Option<Term>,
-    /// The entrypoint expression, for the one unit in a compilation that has one.
+    /// The entrypoint, for the one unit in a compilation that has one.
     ///
     /// `None` is what makes a unit *not* the entry, and it is the only thing that does: a unit with no successors owns the entrypoint, and every other unit is a scope its successors are compiled against. The prelude used to store `Nat::Zero` here and have its build certify that dummy — a value standing in for "there is none", the same shape `RootId::Entry` had before it became a mount.
-    pub body: Option<Term>,
+    pub entry: Option<Entrypoint>,
 }
 
 impl Module {
@@ -351,8 +359,10 @@ impl Module {
                 .collect(),
             witnesses: self.witnesses.clone(),
             binder_floor: self.binder_floor,
-            type_: self.type_.as_ref().map(|type_| sharing.share(type_)),
-            body: self.body.as_ref().map(|body| sharing.share(body)),
+            entry: self.entry.as_ref().map(|entry| Entrypoint {
+                body: sharing.share(&entry.body),
+                type_: entry.type_.as_ref().map(|type_| sharing.share(type_)),
+            }),
         }
     }
 
@@ -436,12 +446,11 @@ impl fmt::Display for Module {
             }
         }
 
-        if let Some(body) = &self.body {
-            write!(formatter, "{}", body.spelled(&spelling))?;
-        }
-
-        if let Some(type_) = &self.type_ {
-            write!(formatter, "\n: {}", type_.spelled(&spelling))?;
+        if let Some(entry) = &self.entry {
+            write!(formatter, "{}", entry.body.spelled(&spelling))?;
+            if let Some(type_) = &entry.type_ {
+                write!(formatter, "\n: {}", type_.spelled(&spelling))?;
+            }
         }
 
         Ok(())
@@ -512,11 +521,11 @@ fn module_positions(
         visit(Some(name), &concept.params);
     }
 
-    if let Some(type_) = &module.type_ {
-        visit(None, type_);
-    }
-    if let Some(body) = &module.body {
-        visit(None, body);
+    if let Some(entry) = &module.entry {
+        if let Some(type_) = &entry.type_ {
+            visit(None, type_);
+        }
+        visit(None, &entry.body);
     }
 }
 
@@ -700,9 +709,9 @@ fn zonked_refusal(module: &Module) -> Option<String> {
             return Some(format!("a metavariable survives in {}", item.describe()));
         }
     }
-    if module.body.as_ref().is_some_and(Term::has_metavar)
-        || module.type_.as_ref().is_some_and(Term::has_metavar)
-    {
+    if module.entry.as_ref().is_some_and(|entry| {
+        entry.body.has_metavar() || entry.type_.as_ref().is_some_and(Term::has_metavar)
+    }) {
         return Some("a metavariable survives in the entrypoint".to_owned());
     }
     for (name, decl) in &module.induct_decls {

@@ -1338,16 +1338,16 @@ fn into_core_unit_within(
     // The entrypoint, for the one unit that has one. Its tail closes the root body, so the imports in scope there are the last the root saw.
     context.record_import_scope(None);
     let lower = Lowerer::new(&context);
-    let (type_, body) = match source.entrypoint() {
-        Some(entrypoint) => (
-            entrypoint
+    let entry = match source.entrypoint() {
+        Some(entrypoint) => Some(curios_core::Entrypoint {
+            body: lower.value(&entrypoint.tail)?,
+            type_: entrypoint
                 .type_
                 .as_ref()
                 .map(|type_| lower.term(type_))
                 .transpose()?,
-            Some(lower.value(&entrypoint.tail)?),
-        ),
-        None => (None, None),
+        }),
+        None => None,
     };
 
     audit_public_exposures(
@@ -1377,8 +1377,7 @@ fn into_core_unit_within(
             concepts,
             witnesses,
             binder_floor: binders.count(),
-            type_,
-            body,
+            entry,
         },
         metavariable_floor: metavars.count(),
         binder_floor: binders.count(),

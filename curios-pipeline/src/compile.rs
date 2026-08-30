@@ -135,7 +135,11 @@ pub fn typecheck_measured(
     } = into_core_with_prelude(entrypoint, loader, &text, syntax)
         .map_err(|error| CompileError::Failure(vec![error.report()]))?;
 
-    let core_mode = match &lowered.type_ {
+    let core_mode = match lowered
+        .entry
+        .as_ref()
+        .and_then(|entry| entry.type_.as_ref())
+    {
         Some(type_) => Mode::Check(type_.clone()),
         None => Mode::Infer,
     };
@@ -204,7 +208,11 @@ where
     // The entrypoint contract, as an ordinary expectation rather than a judgment after the fact: a program *is* a description of doing something and yielding nothing. An embedder that states its own type still gets it — that is how the typecheck-only fixtures reach both checkers with deliberately odd tails.
     //
     // `Io({})` is closed, which is what makes this a `Mode::Check` at all. Checking against `Io(?T)` would need a metavariable minted before the elaboration context exists, and that is why this contract used to be a post-hoc head test on the inferred type instead. Stating the unit payload removes the metavariable, and checking rather than inferring is what lets a tail spell itself `Io/pure(())` — the payload comes from the expectation exactly as it does under a written match motive.
-    let core_mode = match &lowered.type_ {
+    let core_mode = match lowered
+        .entry
+        .as_ref()
+        .and_then(|entry| entry.type_.as_ref())
+    {
         Some(type_) => Mode::Check(type_.clone()),
         None => Mode::Check(Term::intrinsic(Intrinsic::io_type(Term::tuple_type_unit()))),
     };

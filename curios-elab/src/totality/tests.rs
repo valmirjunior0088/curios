@@ -1,6 +1,6 @@
 use {
     super::*,
-    curios_core::{DefinitionKind, Free, Nat, UniverseContext},
+    curios_core::{DefinitionKind, Entrypoint, Free, Nat, UniverseContext},
     curios_utilities::Qualifier,
 };
 
@@ -32,8 +32,10 @@ fn module(items: Vec<Item>) -> Module {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         binder_floor: 0,
-        type_: None,
-        body: Some(Term::intrinsic(Intrinsic::Nat(Nat::new(0u32)))),
+        entry: Some(Entrypoint {
+            body: Term::intrinsic(Intrinsic::Nat(Nat::new(0u32))),
+            type_: None,
+        }),
     }
 }
 

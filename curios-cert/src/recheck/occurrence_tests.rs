@@ -7,8 +7,9 @@
 use {
     crate::{Globals, KernelError},
     curios_core::{
-        Atom, Definition, DefinitionKind, Free, Func, FuncType, Global, InductParam, Intrinsic,
-        Item, Module, Nat, StructType, Subterm, Telescope, Term, Totality, UniverseContext,
+        Atom, Definition, DefinitionKind, Entrypoint, Free, Func, FuncType, Global, InductParam,
+        Intrinsic, Item, Module, Nat, StructType, Subterm, Telescope, Term, Totality,
+        UniverseContext,
     },
     curios_utilities::{Plicity, Qualifier},
     std::{
@@ -194,8 +195,10 @@ fn a_saturated_application_in_a_type_position_is_accepted() {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
-        type_: None,
-        body: Some(Term::tuple(Vec::<Term>::new())),
+        entry: Some(Entrypoint {
+            body: Term::tuple(Vec::<Term>::new()),
+            type_: None,
+        }),
     };
 
     assert_eq!(
@@ -305,8 +308,10 @@ fn an_indexed_occurrence_at_a_well_typed_index_is_accepted() {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
-        type_: None,
-        body: Some(Term::intrinsic(Intrinsic::NatType)),
+        entry: Some(Entrypoint {
+            body: Term::intrinsic(Intrinsic::NatType),
+            type_: None,
+        }),
     };
 
     assert_eq!(
@@ -368,8 +373,10 @@ fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         binder_floor: 1_000,
-        type_: None,
-        body: Some(Term::intrinsic(Intrinsic::NatType)),
+        entry: Some(Entrypoint {
+            body: Term::intrinsic(Intrinsic::NatType),
+            type_: None,
+        }),
     };
 
     let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
@@ -413,8 +420,10 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
         binder_floor: 0,
-        type_: None,
-        body: Some(Term::intrinsic(Intrinsic::NatType)),
+        entry: Some(Entrypoint {
+            body: Term::intrinsic(Intrinsic::NatType),
+            type_: None,
+        }),
     };
 
     let applied: Term = Subterm::StructType(StructType {
