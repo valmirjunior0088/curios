@@ -4,7 +4,7 @@
 
 The ground is prepared; the mechanism is not built. Eight elaborator defects stood between the design and a compiler that could carry it, and all eight have landed with tests and a full gate:
 
-- [x] 1. The positivity walk terminates on a type-level `rec`
+- [x] 1. The positivity walk terminates on a type-level recursive definition
 - [x] 2. A struct's parameters are checked against elaborated telescopes
 - [x] 3. A tuple literal synthesizes when nothing pins it
 - [x] 4. An introduction form parks on a type stuck on a metavariable
@@ -13,7 +13,7 @@ The ground is prepared; the mechanism is not built. Eight elaborator defects sto
 - [x] 7. Unlabeled tuple fields print as written
 - [x] 8. A missing-witness report names the premise and the head
 
-What remains is the derivation itself, listed under [What is left to build](#what-is-left-to-build), and four items the work surfaced that belong to no part of it, listed under [Adjacent work](#adjacent-work).
+What remains is the derivation itself, listed under [What is left to build](#what-is-left-to-build). Four items the work surfaced that belong to no part of it are listed under [Adjacent work](#adjacent-work); all four have since landed, and the first changed the language: recursion is implicit and a mutual group is declared with `and`, for `let`, `satisfy`, `struct`, `concept` and `induct` alike.
 
 The design was reached after a survey of deriving mechanisms in Lean 4, Rocq (coq-elpi, Equations, `Scheme Equality`), GHC, Idris 2, Agda, Isabelle/HOL, Scala 3, Swift, Rust, OCaml, PureScript, Roc and Elixir, and after probing the tree's compiler.
 
@@ -37,7 +37,7 @@ Each of the design's prerequisites is a fact about the compiler in the tree, and
 
 | The design needs | Established by |
 | --- | --- |
-| A description-indexed family declares, and a `struct` field or constructor payload may have its type computed by a self-calling type-level `rec` | `curios/src/tests/positivity/computed_type_tests.rs`; `curios-analysis/tests/driven.rs` |
+| A description-indexed family declares, and a `struct` field or constructor payload may have its type computed by a self-calling type-level definition | `curios/src/tests/positivity/computed_type_tests.rs`; `curios-analysis/tests/driven.rs` |
 | A `struct` or `concept` takes a parameter whose type is universe-polymorphic — `Fields`, `List(A)`, any family carrying a `Type` payload | `curios/src/tests/structs/construction_tests.rs` |
 | A tuple literal reaches a type the description computes, both when the index is written and when it is left implicit | `curios/src/tests/inference/tuple_tests.rs` |
 | A witness recurses through its own table entry, including through another former's witness | `curios/src/tests/concepts/recursion_tests.rs` |
@@ -46,13 +46,13 @@ Each of the design's prerequisites is a fact about the compiler in the tree, and
 
 Two further facts, held by the compiler rather than by a test:
 
-- **Keying on a nominal wrapper works.** `satisfy (@F: Fields) => Show(Tupled(F))` registers, which is the route the tuple design depends on. Keying on a *computed* type — `Show(TupleOf(F))` — remains refused, as intended: the wrapper exists precisely because a `rec` is not a key.
+- **Keying on a nominal wrapper works.** `satisfy (@F: Fields) => Show(Tupled(F))` registers, which is the route the tuple design depends on. Keying on a *computed* type — `Show(TupleOf(F))` — remains refused, as intended: the wrapper exists precisely because a computed type is not a key.
 - **The walk over a closed description specializes away completely.** `wonder stage ersd-optm` of the generic tuple printer reduces 37,636 lines of erased output to 424, with the walk absent entirely. This is stronger than "unrolled into one function per level", which is what the design assumed when it argued the description-passing style costs nothing.
 
 ## Decisions now settled
 
 - **`Tupled` is a `struct`.** A value-parameterized struct is now accepted, so the wrapper takes the form the design preferred rather than the `induct` it would have had to settle for.
-- **A derived body recurses through the table, not through a walker.** A witness may name its own entry, so the generated body for a self-recursive family is a plain `match` with `Spell/spell(sub)` calls and no local `rec`.
+- **A derived body recurses through the table, not through a walker.** A witness may name its own entry, so the generated body for a self-recursive family is a plain `match` with `Spell/spell(sub)` calls and no local recursive group.
 - **A nested occurrence needs no supplied dictionary.** A witness whose recursive occurrence sits under another former — `List(Rose)` — resolves through that former's witness and back into its own entry unaided.
 - **Specialization is not a cost to argue about.** See the figure above.
 
@@ -109,7 +109,7 @@ satisfy (@A: Type, use Spell(A)) => Spell(Tree(A));
 satisfy (@T: Type, @n: Nat, use Spell(T)) => Spell(Vec(T, n));
 ```
 
-Grammar: after the concept application, `;` in place of `{ … }`, which the parser refuses today. Both forms remain: a body-ful `satisfy` is untouched. `TopWitness.entries` becomes a body that is either written entries or absent; the parser (`curios-text/src/parse/top_level.rs`, `parse_top_witness`) accepts either terminator after the application, and the printer (`curios-text/src/print.rs`) prints the absent body as `;`. `curios format` round-trips the body-less form and never expands it; the expansion is observable at `wonder stage core-elab`, and `wonder stage core` shows the `Derive` transient in place.
+Grammar: after the concept application, `;` in place of `{ … }`, which the parser refuses today. Both forms remain: a body-ful `satisfy` is untouched. A body-less member joins a group as a written one does — `satisfy Spell(A) and Spell(B);`, the one `;` closing the group — and a group may mix the two. `TopWitness.entries` becomes a body that is either written entries or absent; the parser (`curios-text/src/parse/top_level.rs`, `parse_top_witness`) accepts either terminator after the application, and the printer (`curios-text/src/print.rs`) prints the absent body as `;`. `curios format` round-trips the body-less form and never expands it; the expansion is observable at `wonder stage core-elab`, and `wonder stage core` shows the `Derive` transient in place.
 
 `satisfy Spell(Tree);` for a parameterized `Tree(A: Type)` is refused as it is today — `Tree` is a type constructor, not a `Type` — and the report says to write the telescope, quoting the form above.
 
@@ -178,7 +178,7 @@ Rules:
 
 - A field is spelled by `Spell/spell(field)`, resolved by ordinary witness resolution in the witness's own scope: a telescope variable's premise from the `use` binder, a concrete type from the table, a tuple through the adapter. Nothing is special-cased; a field type with no witness fails as any call would, inside a derive frame (see Diagnostics).
 - A direct recursive occurrence of **the family itself** resolves through the table: a witness may name its own entry, and one that does is lowered as a group of one.
-- A recursive occurrence in **another member of a mutual `induct` group** may not. Two witnesses that resolve each other have no order to declare them in, and the compiler refuses that cycle by name (`curios-elab/src/elaborate/module.rs`, `check_witness_cycles`). **A derivation reaching for the table form here would emit a program the kernel refuses**, which is why this rule is stated apart from the one above rather than folded into it. A mutual group's derived body carries one local `rec` group with one member per family member, so each member's witness is self-contained. Lifting this needs the first item under [Adjacent work](#adjacent-work).
+- A recursive occurrence in **another member of a mutual `induct` group** resolves through the table as well, provided the witnesses are declared as one group: `satisfy Spell(A) and Spell(B);`, every member registered before any body is derived. Two witnesses that resolve each other *without* being declared together are refused by name (`curios-elab/src/elaborate/module.rs`, `check_witness_cycles`), so a derived body for a mutual family is one body-less group, never a member per family with local walkers.
 - An occurrence *under another type former* — `List(Tree(A))`, `Option(Tree(A))`, a user `Pair(Tree(A), Nat)`, a tuple `{Tree(A), Nat}` — is spelled through that former's own witness, which returns to this witness's own entry one level down with nothing supplied by hand.
 - Indexed families: the body matches with an omitted motive, and index inversion prunes the arms it prunes for hand-written matches.
 - Constructor arguments are spelled in payload order, separated by `, `; a nullary constructor spells as `/Path/ctor()`; struct fields in declaration order, `label = ` before a labeled field and nothing before an unlabeled one, inside `{ ` and ` }`.
@@ -190,7 +190,7 @@ A tuple type is not a witness key: `HeadKey::of_whnf` (`curios-elab/src/concept.
 The design puts the logic in the language once and lets the compiler build only an adapter per shape the program asks for:
 
 - **`/syn/Fields`**, the description: `nil() | cons(label: Option(Str), A: Type, rest: Fields)`. Non-dependent; a dependent tuple carries a proof, which spells `?` anyway, so the generic witness refuses dependent tuples at the goal with its own message.
-- **`TupleOf(F)`**, a plain library `rec`: `nil() => {}`, `cons(l, A, rest) => {A, TupleOf(rest)}` — the nested encoding P5 used. Not an intrinsic: no kernel rows, no `tail`, no decomposition.
+- **`TupleOf(F)`**, a plain library `let`: `nil() => {}`, `cons(l, A, rest) => {A, TupleOf(rest)}` — the nested encoding P5 used. Not an intrinsic: no kernel rows, no `tail`, no decomposition.
 - **`/syn/Tupled(F: Fields)`**, a nominal wrapper over `TupleOf(F)` — the keyable head for "all tuples", `HeadKey::Nominal(Tupled)` with `F` solved by unification. A `struct`: a value-parameterized struct over a universe-polymorphic description is accepted, and a witness keyed on the wrapper registers.
 - **One witness per concept, in Curios**: `satisfy (@F: Fields, use SpellAll(F)) => Spell(Tupled(F))` around the `show_fields`-shaped walk, in `/std/Spell.crs`; `/std/Show.crs` writes its own; so can any user concept. Opt-in is that witness's existence; there is no registration table.
 - **The compiler's step at the goal**, in resolution's non-keyable arm when the head is a `TupleType`: build `F` from the telescope — labels as `/syn/Str` values, the same act as a string literal becoming a library value; resolve `C(Tupled(F))` from the table like any goal; build the flat↔nested view for the known arity (`(t.0, (t.1, ()))` and back); transport the resolved dictionary along each method's type — eta-expand, `nest` at every argument occurrence of the tuple type, `unnest` at every result occurrence — and hand back the witness term. Concept-agnostic for first-order methods (`Spell`, `Show`, `Eql`, `Ord`, a hash); an occurrence under a type former is refused with a message. Kernel unchanged: the result is an ordinary closed term inline at the goal; hoisting it into a per-unit definition cached by shape is an optimization if a census shows duplication, and such a definition must never enter the program-wide table.
@@ -319,9 +319,9 @@ A `curios/src/tests/derive.rs` in the `run(source)`/`error(source)` style of `co
 
 ## Adjacent work
 
-Four items the preparatory work surfaced that belong to no part of the derivation, listed so they are not lost with this file.
+Four items the preparatory work surfaced that belong to no part of the derivation. All four have landed, on 2026-08-29:
 
-1. **Mutually recursive witnesses.** Two witnesses that resolve each other are refused by name; the capability is unbuilt, and until it exists a derived body for a mutual `induct` group must use local walkers. Discovery has to be post-elaboration: the lowerer's witness edges (`curios-text/src/into_core/order.rs`) are deliberately over-approximate, and grouping on them would fuse unrelated witnesses — members of one group share a universe context and take a single `group_totality` verdict, so one partial member would poison every witness fused with it. Re-elaboration needs a fresh `Context`, since the module fold registers each declaration once and refuses a duplicate.
-2. **A settled tuple's type is available only at the item's drain.** `let z = id((1, true)); z.0` refuses with "projected from a non-tuple": the literal's product is synthesized when the drain establishes that nothing further can pin it, which is after every expression in the item has elaborated.
-3. **The two universe-generalization paths differ.** `finalize_definition` subtracts `result_sort_only_metas` before generalizing and `elaborate_module_rec` does not, so a witness that recurses through its own entry generalizes differently from one that does not. Nothing in `/std` is affected — no witness there is recursive — but the asymmetry is real and should be settled deliberately rather than discovered.
-4. **A tuple type's labels are part of its identity, and nothing yet states that in `syntax.md`.** The rule is what makes a per-arity written witness impossible and the description-passing design necessary; it is currently recorded only here.
+- [x] 1. **Mutually recursive witnesses.** Two witnesses that resolve each other are declared as one `satisfy … and …` group, registered before any body elaborates and bound in one another; an undeclared pair is still refused by name, with the group as the way out. This is one instance of the rule the whole language now follows — recursion is implicit, a mutual group is declared with `and` — which retired `rec` and gave `let`, `struct` and `concept` the same `and`. The two optimizer limits the first mutual dictionary knots exposed are closed beside it: the erased optimizer no longer copies a knot's functions out of its initializer, and the CPS inliner judges recursion over what a copy of the callee would contain.
+- [x] 2. **A settled tuple's type is available only at the item's drain.** A call's force tier now runs in inference mode too, so `let z = id((1, true)); z.0` compiles; an inferred call commits to its argument's product as a bare literal does.
+- [x] 3. **The two universe-generalization paths differ.** The asymmetry was between `let` and `rec` items — a self-recursive witness had always taken the `let` path — and mattered once a definition's path is chosen by its body: `elaborate_module_rec` now minimizes result-sort-only levels as `finalize_definition` does.
+- [x] 4. **A tuple type's labels are part of its identity.** Stated in `syntax.md`, together with the literal rules; the synthesis that dropped a labeled literal's labels is fixed beside it.
