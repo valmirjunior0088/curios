@@ -512,8 +512,7 @@ fn action_result_key(context: &mut Context, action: &Term) -> Option<HeadKey> {
         match &**head {
             Subterm::Apply(apply) => {
                 explicit_args += apply
-                    .plicities
-                    .iter()
+                    .plicities()
                     .filter(|plicity| matches!(plicity, Plicity::Explicit))
                     .count();
                 head = &apply.head;

@@ -12,12 +12,12 @@ mod test_support;
 use {
     super::{Context, zonk_solved_term_metas},
     curios_core::{
-        Apply, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free, FreeMonoid, Func,
-        FuncType, Global, InductDecl, InductType, Instance, InstanceHead, Intrinsic, Layer, Let,
-        Many, Match, Metavar, Nat, One, Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Struct,
-        StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType, Var, Variant, Visit,
-        accelerable, instantiate_universe_levels_scoped, project_erased_universes, reduce_closed,
-        reduce_intrinsic,
+        Apply, Argument, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free, FreeMonoid,
+        Func, FuncType, Global, InductDecl, InductType, Instance, InstanceHead, Intrinsic, Layer,
+        Let, Many, Match, Metavar, Nat, One, Proj, Rec, RecGroup, ReduceError, Reducer, Scope,
+        Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType, Var, Variant,
+        Visit, accelerable, instantiate_universe_levels_scoped, project_erased_universes,
+        reduce_closed, reduce_intrinsic,
     },
     curios_utilities::recurse,
 };
@@ -137,11 +137,11 @@ pub(crate) fn unfold_rec_apply(
     context: &mut Context,
     apply: Apply,
 ) -> Result<Option<Term>, ReduceError> {
-    let Apply {
-        head,
-        params,
-        plicities: _,
-    } = apply;
+    let Apply { head, arguments } = apply;
+    let params = arguments
+        .into_iter()
+        .map(|argument| argument.term)
+        .collect::<Vec<_>>();
     let head = reduce(context, head)?;
     let head = expose_rec_tail(context, head)?;
     let Some((group, index)) = head.as_rec_proj() else {
@@ -278,24 +278,25 @@ pub(crate) fn shallow_scrutinee(context: &Context, term: &Term) -> Term {
 /// Argument reduction is *best-effort*: an argument that cannot reduce at the type level (a runtime-only IO intrinsic like `is_ready`'s `/sys/Handle/poll` result, or an out-of-range access) is kept verbatim rather than forced. Such an argument was never going to differ in spelling — the only occurrence is the scrutinee itself, which matches the key raw — so keeping it raw both avoids forcing effects at elaboration and still matches. An `Exhausted` budget is the one error that propagates.
 pub(crate) fn canonical_scrutinee(context: &mut Context, term: &Term) -> Result<Term, ReduceError> {
     let canonical = match &**term {
-        Subterm::Apply(Apply {
-            head,
-            params,
-            plicities,
-        }) => {
-            let params = params
+        Subterm::Apply(Apply { head, arguments }) => {
+            let arguments = arguments
                 .iter()
-                .map(|p| match reduce(context, p.clone()) {
-                    Ok(reduced) => Ok(reduced),
-                    Err(spent) if spent.is_exhausted() => Err(spent),
-                    Err(_) => Ok(p.clone()),
+                .map(|argument| {
+                    let term = match reduce(context, argument.term.clone()) {
+                        Ok(reduced) => reduced,
+                        Err(spent) if spent.is_exhausted() => return Err(spent),
+                        Err(_) => argument.term.clone(),
+                    };
+                    Ok(Argument {
+                        term,
+                        plicity: argument.plicity,
+                    })
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 
             Ok(Subterm::Apply(Apply {
                 head: head.clone(),
-                params,
-                plicities: plicities.clone(),
+                arguments,
             })
             .into())
         }
@@ -339,13 +340,12 @@ pub(crate) fn canonical_scrutinee(context: &mut Context, term: &Term) -> Result<
 }
 
 fn reduce_apply(context: &mut Context, apply: Apply) -> Result<Reduce, ReduceError> {
-    let Apply {
-        head,
-        params,
-        plicities,
-    } = apply;
+    let Apply { head, arguments } = apply;
 
-    let param_refs = params.iter().collect::<Vec<_>>();
+    let param_refs = arguments
+        .iter()
+        .map(|argument| &argument.term)
+        .collect::<Vec<_>>();
 
     let head = reduce(context, head)?;
     let head = expose_rec_tail(context, head)?;
@@ -353,8 +353,7 @@ fn reduce_apply(context: &mut Context, apply: Apply) -> Result<Reduce, ReduceErr
         Subterm::Func(Func { telescope, .. }) => Ok(Reduce::Continue(telescope.open(&param_refs))),
         head => Ok(Reduce::Break(Term::from(Subterm::Apply(Apply {
             head: head.into(),
-            params,
-            plicities,
+            arguments,
         })))),
     }
 }
@@ -420,10 +419,10 @@ fn reduce_func_eta(context: &mut Context, func: Func) -> Result<Reduce, ReduceEr
     let y_refs = ys.iter().collect::<Vec<_>>();
 
     match Term::unwrap_or_clone(func.telescope.open(&y_refs)) {
-        Subterm::Apply(Apply { head, params, .. })
-            if params.len() == n
-                && params.iter().enumerate().all(
-                    |(i, p)| matches!(p.as_ref(), Subterm::Var(v) if v.unwrap() == &freshs[i]),
+        Subterm::Apply(Apply { head, arguments })
+            if arguments.len() == n
+                && arguments.iter().enumerate().all(
+                    |(i, a)| matches!(a.term.as_ref(), Subterm::Var(v) if v.unwrap() == &freshs[i]),
                 )
                 && freshs.iter().all(|f| !head.free_vars().contains(f)) =>
         {
@@ -809,14 +808,9 @@ pub(crate) fn normalize(context: &mut Context, term: Term) -> Result<Term, Reduc
     let span = reduced.span();
 
     let inner = match Term::unwrap_or_clone(reduced) {
-        Subterm::Apply(Apply {
-            head,
-            params,
-            plicities,
-        }) => Subterm::Apply(Apply {
+        Subterm::Apply(Apply { head, arguments }) => Subterm::Apply(Apply {
             head: normalize(context, head)?,
-            params: normalize_each(context, params)?,
-            plicities,
+            arguments: normalize_argument_vec(context, arguments)?,
         }),
         Subterm::Proj(Proj { head, field }) => Subterm::Proj(Proj {
             head: normalize(context, head)?,
@@ -908,6 +902,21 @@ fn normalize_each(context: &mut Context, terms: Vec<Term>) -> Result<Vec<Term>, 
     terms.into_iter().map(|t| normalize(context, t)).collect()
 }
 
+fn normalize_argument_vec(
+    context: &mut Context,
+    arguments: Vec<Argument>,
+) -> Result<Vec<Argument>, ReduceError> {
+    arguments
+        .into_iter()
+        .map(|argument| {
+            Ok(Argument {
+                term: normalize(context, argument.term)?,
+                plicity: argument.plicity,
+            })
+        })
+        .collect()
+}
+
 /// The head of an application, or the term itself: the position a name sits in, and the position a stuck form shows at. An instance wrapper is not looked through — its typed head is not a term — so a caller asking about the head's shape matches `Instance` beside the bare shape it wraps.
 pub(crate) fn applied_head(term: &Term) -> &Term {
     match &**term {
@@ -943,14 +952,9 @@ fn normalize_arguments(context: &mut Context, term: Term) -> Result<Term, Reduce
     let span = term.span();
 
     let inner = match Term::unwrap_or_clone(term) {
-        Subterm::Apply(Apply {
+        Subterm::Apply(Apply { head, arguments }) => Subterm::Apply(Apply {
             head,
-            params,
-            plicities,
-        }) => Subterm::Apply(Apply {
-            head,
-            params: normalize_each(context, params)?,
-            plicities,
+            arguments: normalize_argument_vec(context, arguments)?,
         }),
         other => other,
     };

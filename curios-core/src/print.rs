@@ -1023,19 +1023,16 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             };
             flat([pure(param_str), pure(" =>\n"), indent(sub(body, minting))])
         }
-        Subterm::Apply(Apply {
-            head,
-            params,
-            plicities,
-        }) => flat([
+        Subterm::Apply(Apply { head, arguments }) => flat([
             sub(head, frame),
             listed(
                 "(".into(),
                 false,
-                params
+                arguments
                     .into_iter()
-                    .zip(plicities)
-                    .map(|(p, plicity)| marked_argument(sub(p, frame), Some(&plicity)))
+                    .map(|argument| {
+                        marked_argument(sub(argument.term, frame), Some(&argument.plicity))
+                    })
                     .collect::<Vec<_>>(),
                 ")",
             ),

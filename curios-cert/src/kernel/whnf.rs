@@ -261,31 +261,29 @@ fn step_var(kernel: &mut Kernel, var: Var) -> Result<Step, ReduceError> {
 ///
 /// A `rec` head is exposed but not unfolded — the folded spelling stays the normal form of a recursive call, and [`force`] is what demands otherwise.
 fn step_apply(kernel: &mut Kernel, apply: Apply) -> Result<Step, ReduceError> {
-    let Apply {
-        head,
-        params,
-        plicities,
-    } = apply;
+    let Apply { head, arguments } = apply;
 
     let head = whnf(kernel, head)?;
     let head = expose_rec_tail(kernel, head)?;
 
     Ok(match Term::unwrap_or_clone(head) {
         // Saturation is the precondition of the β step, not an assumption about it: `Telescope::open` asserts on a count mismatch, so an under- or over-applied lambda would abort the walk rather than be refused. An application that does not saturate its lambda is stuck instead, which is the conservative direction — it leaves the term for the typing rules to reject with a diagnostic, and reduction that declines to fire can never admit anything.
-        Subterm::Func(Func { telescope, .. }) if telescope.len() == params.len() => {
+        Subterm::Func(Func { telescope, .. }) if telescope.len() == arguments.len() => {
             // The argument ref vector, and what `Telescope::open` costs on top of it: it clones the whole boxed chain and then substitutes once per binder, so an `n`-ary beta step is `n` boxes and `n` passes rather than one.
             kernel.spend(
-                Cost::collection(params.len() as u64)
-                    .saturating_add(Cost::term(1).saturating_mul(params.len() as u64)),
+                Cost::collection(arguments.len() as u64)
+                    .saturating_add(Cost::term(1).saturating_mul(arguments.len() as u64)),
             )?;
 
-            let refs = params.iter().collect::<Vec<_>>();
+            let refs = arguments
+                .iter()
+                .map(|argument| &argument.term)
+                .collect::<Vec<_>>();
             Step::Continue(telescope.open(&refs))
         }
         head => Step::Stop(Term::from(Subterm::Apply(Apply {
             head: head.into(),
-            params,
-            plicities,
+            arguments,
         }))),
     })
 }
@@ -338,10 +336,10 @@ fn step_func(kernel: &mut Kernel, func: Func) -> Result<Step, ReduceError> {
     let refs = occurrences.iter().collect::<Vec<_>>();
 
     Ok(match Term::unwrap_or_clone(func.telescope.open(&refs)) {
-        Subterm::Apply(Apply { head, params, .. })
-            if params.len() == arity
-                && params.iter().enumerate().all(|(i, param)| {
-                    matches!(param.as_ref(), Subterm::Var(var) if var.unwrap() == &binders[i])
+        Subterm::Apply(Apply { head, arguments })
+            if arguments.len() == arity
+                && arguments.iter().enumerate().all(|(i, argument)| {
+                    matches!(argument.term.as_ref(), Subterm::Var(var) if var.unwrap() == &binders[i])
                 })
                 && binders.iter().all(|binder| !head.free_vars().contains(binder)) =>
         {
@@ -650,7 +648,7 @@ pub(crate) fn unfold_spelling(
 
 /// Unfold one folded recursive application, when its result shape is demanded.
 fn unfold_rec_apply(kernel: &mut Kernel, apply: Apply) -> Result<Option<Term>, ReduceError> {
-    let Apply { head, params, .. } = apply;
+    let Apply { head, arguments } = apply;
 
     let head = whnf(kernel, head)?;
     let head = expose_rec_tail(kernel, head)?;
@@ -666,10 +664,13 @@ fn unfold_rec_apply(kernel: &mut Kernel, apply: Apply) -> Result<Option<Term>, R
         return Ok(None);
     };
     // Saturation, for the reason `step_apply` needs it: this is the recursive twin of the β step, and `Telescope::open` asserts. An application that does not saturate its member declines to unfold rather than aborting the walk.
-    if telescope.len() != params.len() {
+    if telescope.len() != arguments.len() {
         return Ok(None);
     }
 
-    let refs = params.iter().collect::<Vec<_>>();
+    let refs = arguments
+        .iter()
+        .map(|argument| &argument.term)
+        .collect::<Vec<_>>();
     Ok(Some(telescope.open(&refs)))
 }

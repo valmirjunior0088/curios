@@ -123,11 +123,7 @@ pub(super) fn elaborate_apply(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let Apply {
-        head,
-        params,
-        plicities,
-    } = apply;
+    let Apply { head, arguments } = apply;
 
     // Insertion provenance: name the applied function in the uninferred-implicit report.
     //
@@ -152,11 +148,11 @@ pub(super) fn elaborate_apply(
     let mut plain: VecDeque<Term> = VecDeque::new();
     let mut marked: VecDeque<Term> = VecDeque::new();
     let mut used: VecDeque<Term> = VecDeque::new();
-    for (plicity, param) in plicities.iter().zip(params) {
-        match plicity {
-            Plicity::Explicit => plain.push_back(param.clone()),
-            Plicity::Implicit => marked.push_back(param.clone()),
-            Plicity::Witness => used.push_back(param.clone()),
+    for argument in arguments {
+        match argument.plicity {
+            Plicity::Explicit => plain.push_back(argument.term.clone()),
+            Plicity::Implicit => marked.push_back(argument.term.clone()),
+            Plicity::Witness => used.push_back(argument.term.clone()),
         }
     }
 

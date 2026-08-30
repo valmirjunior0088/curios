@@ -133,12 +133,14 @@ fn operator_call<'a>(
     binders: &BinderTypes,
     term: &'a Term,
 ) -> Option<(InfixOp, &'a Term, &'a Term)> {
-    let Subterm::Apply(Apply { head, params, .. }) = &**term else {
+    let Subterm::Apply(apply) = &**term else {
         return None;
     };
-    let [left, right] = params.as_slice() else {
+    let head = &apply.head;
+    let [left, right] = apply.arguments.as_slice() else {
         return None;
     };
+    let (left, right) = (&left.term, &right.term);
     let Subterm::Proj(Proj {
         head: witness,
         field,

@@ -621,11 +621,12 @@ impl Term {
             Subterm::Func(Func { telescope, .. }) => {
                 // Read the eta-expansion under its binders instead of opening it: the parameters are exactly the innermost de Bruijn indices there, counting outwards, so the shape is decided without minting probe binders that would have to be proven not to collide with the body's own.
                 let arity = telescope.len();
-                let Subterm::Apply(Apply { head, params, .. }) = &**telescope.terminal() else {
+                let Subterm::Apply(apply) = &**telescope.terminal() else {
                     return None;
                 };
-                let eta = params.len() == arity
-                    && params.iter().enumerate().all(|(index, param)| {
+                let head = &apply.head;
+                let eta = apply.arguments.len() == arity
+                    && apply.params().enumerate().all(|(index, param)| {
                         matches!(&**param, Subterm::Var(var) if var.as_bound() == Some(arity - 1 - index))
                     });
 
@@ -799,15 +800,15 @@ impl Term {
         I: IntoIterator<Item = (Plicity, P)>,
         P: Into<Term>,
     {
-        let (plicities, params) = params
-            .into_iter()
-            .map(|(plicity, param)| (plicity, param.into()))
-            .unzip();
-
         Self::from(Subterm::Apply(Apply {
             head: head.into(),
-            params,
-            plicities,
+            arguments: params
+                .into_iter()
+                .map(|(plicity, param)| Argument {
+                    term: param.into(),
+                    plicity,
+                })
+                .collect(),
         }))
     }
 
@@ -1538,10 +1539,10 @@ impl Term {
                     }
 
                     let children = match &*term {
-                        Subterm::Apply(Apply { head, params, .. }) => {
-                            let mut children = Vec::with_capacity(params.len() + 1);
-                            children.push(head.clone());
-                            children.extend(params.iter().cloned());
+                        Subterm::Apply(apply) => {
+                            let mut children = Vec::with_capacity(apply.arguments.len() + 1);
+                            children.push(apply.head.clone());
+                            children.extend(apply.params().cloned());
                             children
                         }
                         Subterm::Variant(Variant {
@@ -1572,14 +1573,16 @@ impl Term {
                         .expect("each universe traversal frame owns its child results");
                     let mut children = rewritten.drain(child_start..);
                     let subterm = match &*term {
-                        Subterm::Apply(Apply { plicities, .. }) => {
+                        Subterm::Apply(apply) => {
                             let head = children
                                 .next()
                                 .expect("an application traversal preserves its head");
                             Subterm::Apply(Apply {
                                 head,
-                                params: children.collect(),
-                                plicities: plicities.clone(),
+                                arguments: children
+                                    .zip(apply.plicities())
+                                    .map(|(term, plicity)| Argument { term, plicity })
+                                    .collect(),
                             })
                         }
                         Subterm::Variant(Variant {

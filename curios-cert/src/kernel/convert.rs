@@ -270,13 +270,13 @@ fn structural(
         (
             Subterm::Tuple(Tuple { fields: left, .. }),
             Subterm::Tuple(Tuple { fields: right, .. }),
-        ) => compare_each(kernel, history, left, right),
+        ) => compare_each(kernel, history, left.iter(), right.iter()),
 
         // Spine against spine, and when that fails, one definitional unfolding each: two applications of the same fold can differ in an argument position the fold discards — `is_trimmed(h ++ rest)` against `is_trimmed(rest)` — so a spine mismatch is not yet a verdict when either head is a folded recursive call.
         (Subterm::Apply(left), Subterm::Apply(right)) => {
-            if left.plicities == right.plicities
+            if left.plicities().eq(right.plicities())
                 && ground(kernel, history, &left.head, &right.head)?
-                && compare_each(kernel, history, &left.params, &right.params)?
+                && compare_each(kernel, history, left.params(), right.params())?
             {
                 return Ok(true);
             }
@@ -332,13 +332,13 @@ fn structural(
             }),
         ) => Ok(left_name == right_name
             && kernel.levels_eq(left_universes, right_universes)
-            && compare_each(kernel, history, left_params, right_params)?),
+            && compare_each(kernel, history, left_params.iter(), right_params.iter())?),
 
         (Subterm::Variant(left), Subterm::Variant(right)) => Ok(left.name == right.name
             && left.tag == right.tag
             && kernel.levels_eq(&left.universes, &right.universes)
-            && compare_each(kernel, history, &left.params, &right.params)?
-            && compare_each(kernel, history, &left.payload, &right.payload)?),
+            && compare_each(kernel, history, left.params.iter(), right.params.iter())?
+            && compare_each(kernel, history, left.payload.iter(), right.payload.iter())?),
 
         (
             Subterm::Struct(Struct {
@@ -357,8 +357,8 @@ fn structural(
             }),
         ) => Ok(left_name == right_name
             && kernel.levels_eq(left_universes, right_universes)
-            && compare_each(kernel, history, left_params, right_params)?
-            && compare_each(kernel, history, left_fields, right_fields)?),
+            && compare_each(kernel, history, left_params.iter(), right_params.iter())?
+            && compare_each(kernel, history, left_fields.iter(), right_fields.iter())?),
 
         // Eta at a nominal struct, against a neutral inhabitant only — see `struct_eta` for the rule and the restriction.
         (Subterm::Struct(literal), _) if matches!(&**that, Subterm::Var(_) | Subterm::Proj(_)) => {
@@ -416,8 +416,10 @@ fn induct_type_args(
         Some(declaration) => declaration.arity.clone(),
         // A declaration the registry seeding refused: keep the grounded comparison rather than inventing types.
         None => {
-            return Ok(compare_each(kernel, history, left_params, right_params)?
-                && compare_each(kernel, history, left_indices, right_indices)?);
+            return Ok(
+                compare_each(kernel, history, left_params.iter(), right_params.iter())?
+                    && compare_each(kernel, history, left_indices.iter(), right_indices.iter())?,
+            );
         }
     };
     let mut arity = instantiate_universe_levels_scoped(&arity, universes)?;
@@ -759,17 +761,17 @@ fn compare_field_telescope(
 }
 
 /// Compare two term sequences pairwise at `Type`. Length is part of the shape.
-fn compare_each(
+fn compare_each<'a>(
     kernel: &mut Kernel,
     history: &mut History,
-    this: &[Term],
-    that: &[Term],
+    this: impl ExactSizeIterator<Item = &'a Term>,
+    that: impl ExactSizeIterator<Item = &'a Term>,
 ) -> Result<bool, KernelError> {
     if this.len() != that.len() {
         return Ok(false);
     }
 
-    for (left, right) in this.iter().zip(that) {
+    for (left, right) in this.zip(that) {
         if !ground(kernel, history, left, right)? {
             return Ok(false);
         }

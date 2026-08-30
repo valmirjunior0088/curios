@@ -323,16 +323,22 @@ impl Convert {
         this: Apply,
         that: Apply,
     ) -> Result<bool, ReduceError> {
-        if this.params.len() != that.params.len() {
+        if this.arguments.len() != that.arguments.len() {
             return Ok(false);
         }
 
         // Recover the real argument types from the head's function type so η fires at the correct type (e.g. a unit-typed argument is compared at `()`, where proof irrelevance makes distinct neutrals equal). Falls back to `Term::type_ground()` when the head's type is unavailable.
-        let param_types = apply_param_types(context, &this.head, &this.params)?;
+        let param_types = apply_param_types(context, &this.head, &this.arguments)?;
 
         self.enqueue(Term::type_ground(), this.head, that.head);
 
-        for (i, (a, b)) in this.params.into_iter().zip(that.params).enumerate() {
+        for (i, (a, b)) in this
+            .arguments
+            .into_iter()
+            .map(|argument| argument.term)
+            .zip(that.arguments.into_iter().map(|argument| argument.term))
+            .enumerate()
+        {
             let type_ = param_types
                 .as_ref()
                 .and_then(|types| types.get(i).cloned())
@@ -352,7 +358,7 @@ impl Convert {
         let (Subterm::Apply(this), Subterm::Apply(that)) = (&**this, &**that) else {
             return Ok(false);
         };
-        if this.params.len() != that.params.len() {
+        if this.arguments.len() != that.arguments.len() {
             return Ok(false);
         }
         let global = |head: &Term| match &**applied_head(head) {
@@ -367,13 +373,13 @@ impl Convert {
             return Ok(false);
         }
 
-        let param_types = apply_param_types(context, &this.head, &this.params)?;
+        let param_types = apply_param_types(context, &this.head, &this.arguments)?;
         let mark = context.solution_mark();
         let mut converts = matches!(
             convert_outcome(context, &Term::type_ground(), &this.head, &that.head)?,
             Outcome::Converts
         );
-        for (index, (a, b)) in this.params.iter().zip(&that.params).enumerate() {
+        for (index, (a, b)) in this.params().zip(that.params()).enumerate() {
             if !converts {
                 break;
             }
@@ -402,13 +408,15 @@ impl Convert {
         that: Apply,
         type_: Term,
     ) -> Result<bool, ReduceError> {
-        if this.params.len() != that.params.len() {
+        if this.arguments.len() != that.arguments.len() {
             return Ok(false);
         }
 
-        let param_types = apply_param_types(context, &this.head, &this.params)?;
+        let param_types = apply_param_types(context, &this.head, &this.arguments)?;
+        let this_params = this.params().cloned().collect::<Vec<_>>();
+        let that_params = that.params().cloned().collect::<Vec<_>>();
         let mut blocked = false;
-        for (index, (a, b)) in this.params.iter().zip(&that.params).enumerate() {
+        for (index, (a, b)) in this_params.iter().zip(&that_params).enumerate() {
             let param_type = param_types
                 .as_ref()
                 .and_then(|types| types.get(index).cloned())
@@ -1380,7 +1388,7 @@ impl Convert {
             _ => unreachable!("the callers pass a nominal or intrinsic-former rigid side"),
         };
         let arity = rigid_args.len();
-        let spine = flex.params.len();
+        let spine = flex.arguments.len();
 
         // Right-biased: a spine shorter than the rigid argument list abstracts the *suffix*, with the prefix baked in from the rigid side; a longer spine has no imitation.
         if spine > arity {
@@ -1442,8 +1450,9 @@ impl Convert {
 
         // Equate the spine against the rigid *suffix* pairwise, at the candidate telescope's domains (mirroring `compare_apply`'s recovered argument types). The baked-in prefix needs no equations: after substitution both sides carry it verbatim.
         for ((flex_arg, rigid_arg), (_, _, domain)) in flex
-            .params
+            .arguments
             .into_iter()
+            .map(|argument| argument.term)
             .zip(rigid_suffix.iter().cloned())
             .zip(domains)
         {

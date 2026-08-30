@@ -5,7 +5,7 @@
 use {
     super::*,
     curios_core::{
-        Apply, Free, FuncType, Instance, InstanceHead, Level, Proj, StructType, Subterm, Term,
+        Argument, Free, FuncType, Instance, InstanceHead, Level, Proj, StructType, Subterm, Term,
         UniverseConstraintKind, UniverseConstraintOrigin,
     },
 };
@@ -137,10 +137,11 @@ pub(crate) fn synth_neutral(
             }
         },
 
-        Subterm::Apply(Apply { head, params, .. }) => {
-            let Some(head_type) = synth_neutral(context, opened, head)? else {
+        Subterm::Apply(apply) => {
+            let Some(head_type) = synth_neutral(context, opened, &apply.head)? else {
                 return Ok(None);
             };
+            let params = apply.params().cloned().collect::<Vec<_>>();
 
             match Term::unwrap_or_clone(reduce(context, head_type)?) {
                 Subterm::FuncType(FuncType { telescope, .. })
@@ -154,7 +155,7 @@ pub(crate) fn synth_neutral(
                     telescope,
                     plicities,
                 }) if telescope.len() > params.len() => {
-                    let residual = telescope.open_params(params);
+                    let residual = telescope.open_params(&params);
                     Ok(Some(
                         Subterm::FuncType(FuncType {
                             telescope: residual,
@@ -211,21 +212,25 @@ pub(crate) fn synth_neutral(
 pub(super) fn apply_param_types(
     context: &mut Context,
     head: &Term,
-    params: &[Term],
+    arguments: &[Argument],
 ) -> Result<Option<Vec<Term>>, ReduceError> {
     let Some(head_type) = synth_neutral(context, &[], head)? else {
         return Ok(None);
     };
 
     let telescope = match Term::unwrap_or_clone(reduce(context, head_type)?) {
-        Subterm::FuncType(FuncType { telescope, .. }) if telescope.len() == params.len() => {
+        Subterm::FuncType(FuncType { telescope, .. }) if telescope.len() == arguments.len() => {
             telescope
         }
         _ => return Ok(None),
     };
 
+    let params = arguments
+        .iter()
+        .map(|argument| argument.term.clone())
+        .collect::<Vec<_>>();
     let mut types = Vec::with_capacity(params.len());
-    telescope.walk(params, |_, _, ty| {
+    telescope.walk(&params, |_, _, ty| {
         types.push(ty.clone());
         Ok(())
     })?;

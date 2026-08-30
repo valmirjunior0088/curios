@@ -37,7 +37,7 @@ use {
         sort::infer_sort, synth_neutral,
     },
     curios_core::{
-        Apply, Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Instance,
+        Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Instance,
         InstanceHead, Intrinsic, Let, Many, Nat, One, Proj, Rec, Reducer, Scope, Struct,
         StructType, Subterm, Telescope, Term, Tuple, TupleType, Variant, wire_term,
     },
@@ -128,8 +128,8 @@ fn infer_within(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
         }
 
         // Application: the head must be a function of matching arity, each argument checks against its domain, and the result is the codomain with the arguments substituted — which is where dependency lives.
-        Subterm::Apply(Apply { head, params, .. }) => {
-            let head_type = infer(kernel, head)?;
+        Subterm::Apply(apply) => {
+            let head_type = infer(kernel, &apply.head)?;
 
             let Subterm::FuncType(FuncType { telescope, .. }) =
                 Term::unwrap_or_clone(kernel.reduce_forced(head_type.clone())?)
@@ -137,16 +137,16 @@ fn infer_within(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
                 return Err(KernelError::NotAFunction(head_type));
             };
 
-            if telescope.len() != params.len() {
+            if telescope.len() != apply.arguments.len() {
                 return Err(KernelError::Arity {
                     counted: Counted::Arguments,
                     expected: telescope.len(),
-                    actual: params.len(),
+                    actual: apply.arguments.len(),
                 });
             }
 
             let mut telescope = telescope;
-            for param in params {
+            for param in apply.params() {
                 let Telescope::Cons(domain, rest) = telescope else {
                     unreachable!("arity was checked above")
                 };

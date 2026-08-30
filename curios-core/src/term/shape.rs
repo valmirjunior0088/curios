@@ -96,13 +96,31 @@ pub struct Func {
     pub plicities: Vec<Plicity>,
 }
 
-/// `plicities` parallels `params`, one mark per argument — the call-site `@` marks. Core must carry them (rather than `into_core` resolving them) because `into_core` is type-blind: only the elaborator, holding the head's function type, can decide which binder an `@`-argument fills.
+/// One call-site argument: the term with its written `@`/`use` mark. One vector of these rather than two parallel ones, so a mark can never drift out of correspondence with its term — the pairing `Cases::Induct` arms state for their bodies, applied to the spine. Core must carry the marks (rather than `into_core` resolving them) because `into_core` is type-blind: only the elaborator, holding the head's function type, can decide which binder an `@`-argument fills.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[curios_archive::archived]
+pub struct Argument {
+    pub term: Term,
+    pub plicity: Plicity,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Apply {
     pub head: Term,
-    pub params: Vec<Term>,
-    pub plicities: Vec<Plicity>,
+    pub arguments: Vec<Argument>,
+}
+
+impl Apply {
+    /// The argument terms alone, in application order — the dominant read; the marks ride beside them.
+    pub fn params(&self) -> impl ExactSizeIterator<Item = &Term> + Clone + '_ {
+        self.arguments.iter().map(|argument| &argument.term)
+    }
+
+    /// The marks alone, paralleling [`Apply::params`] by construction.
+    pub fn plicities(&self) -> impl ExactSizeIterator<Item = Plicity> + Clone + '_ {
+        self.arguments.iter().map(|argument| argument.plicity)
+    }
 }
 
 /// A dependent product (Σ-type). Erasure is sort-driven: a proof or type-valued field is a *subset type* witness — dropped at erasure, leaving the relevant fields (and collapsing to the bare field when only one remains).

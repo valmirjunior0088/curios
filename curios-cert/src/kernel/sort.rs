@@ -20,7 +20,7 @@ mod tests;
 use {
     super::{Counted, Kernel, KernelError, infer::infer_type, whnf::whnf},
     curios_core::{
-        Apply, Bound, Field, FuncType, Instance, InstanceHead, Intrinsic, Level, Proj, Reducer,
+        Bound, Field, FuncType, Instance, InstanceHead, Intrinsic, Level, Proj, Reducer,
         StructType, Subterm, Telescope, Term, TupleType, instantiate_universe_levels_scoped,
     },
 };
@@ -327,28 +327,28 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
             }
         },
 
-        Subterm::Apply(Apply { head, params, .. }) => {
-            let Some(head_type) = synth_neutral(kernel, head)? else {
+        Subterm::Apply(apply) => {
+            let Some(head_type) = synth_neutral(kernel, &apply.head)? else {
                 return Ok(None);
             };
 
+            let supplied = apply.arguments.len();
             match Term::unwrap_or_clone(whnf(kernel, head_type)?) {
-                Subterm::FuncType(FuncType { telescope, .. })
-                    if telescope.len() == params.len() =>
-                {
-                    let refs = params.iter().collect::<Vec<_>>();
+                Subterm::FuncType(FuncType { telescope, .. }) if telescope.len() == supplied => {
+                    let refs = apply.params().collect::<Vec<_>>();
                     Ok(Some(telescope.open(&refs)))
                 }
                 // A partially applied spine still has a type: the residual function type, with the supplied arguments substituted into the entries that remain.
-                // `plicities` is documented as parallel to the telescope and is *sliced* here, so the guard covers it as well: a vector shorter than the arguments supplied would panic rather than refuse, and a spine whose type is malformed has no residual type to report.
+                // The head type's `plicities` is documented as parallel to its telescope and is *sliced* here, so the guard covers it as well: a vector shorter than the arguments supplied would panic rather than refuse, and a spine whose type is malformed has no residual type to report.
                 Subterm::FuncType(FuncType {
                     telescope,
                     plicities,
-                }) if telescope.len() > params.len() && plicities.len() >= params.len() => {
+                }) if telescope.len() > supplied && plicities.len() >= supplied => {
+                    let params = apply.params().cloned().collect::<Vec<_>>();
                     Ok(Some(
                         Subterm::FuncType(FuncType {
-                            telescope: telescope.open_params(params),
-                            plicities: plicities[params.len()..].to_vec(),
+                            telescope: telescope.open_params(&params),
+                            plicities: plicities[supplied..].to_vec(),
                         })
                         .into(),
                     ))

@@ -24,12 +24,12 @@
 
 use {
     super::{
-        Apply, Bound, Carrier, Cases, Cost, Field, Free, FreeMonoid, Func, InstanceHead, Intrinsic,
-        Layer, Let, LetBinding, Many, Match, Nat, Proj, Rec, RecGroup, ReduceError, Reducer, Scope,
-        Subterm, Telescope, Term, instantiate_universe_levels_scoped, reduce_intrinsic,
+        Apply, Argument, Bound, Carrier, Cases, Cost, Field, Free, FreeMonoid, Func, InstanceHead,
+        Intrinsic, Layer, Let, LetBinding, Many, Match, Nat, Proj, Rec, RecGroup, ReduceError,
+        Reducer, Scope, Subterm, Telescope, Term, instantiate_universe_levels_scoped,
+        reduce_intrinsic,
     },
     curios_abi::ForeignFunction,
-    curios_utilities::Plicity,
     std::{collections::HashMap, sync::Arc},
 };
 
@@ -119,8 +119,7 @@ struct Args {
 enum Frame {
     /// An application waiting for its head. `memo_key` is the application itself, recorded with its value when the head exposes a plain function — see the machine's eval arm for why the decision lives here.
     Head {
-        params: Vec<Term>,
-        plicities: Vec<Plicity>,
+        arguments: Vec<Argument>,
         demand: Demand,
         memo_key: Option<Term>,
     },
@@ -315,19 +314,14 @@ impl Machine {
             aps @ Subterm::Apply(_) => {
                 // The application is remembered whole so that, if its head turns out to be a plain function, its value can be recorded under it — the same closed call, `step` at the same byte and state, then evaluates once per run and probes thereafter. Whether to record is the head frame's decision, because only there is the head known: a member selection's calls never repeat within a run (their fold argument strictly shrinks), and a folded spelling must never be served to a demand that would unfold it.
                 let key = Term::from(aps);
-                let Subterm::Apply(Apply {
-                    head,
-                    params,
-                    plicities,
-                }) = Term::unwrap_or_clone(key.clone())
+                let Subterm::Apply(Apply { head, arguments }) = Term::unwrap_or_clone(key.clone())
                 else {
                     unreachable!("rebuilt from the same value")
                 };
                 self.push(
                     host,
                     Frame::Head {
-                        params,
-                        plicities,
+                        arguments,
                         demand,
                         memo_key: Some(key),
                     },
@@ -489,10 +483,10 @@ impl Machine {
                 let refs = occurrences.iter().collect::<Vec<_>>();
 
                 match Term::unwrap_or_clone(func.telescope.open(&refs)) {
-                    Subterm::Apply(Apply { head, params, .. })
-                        if params.len() == arity
-                            && params.iter().enumerate().all(|(index, param)| {
-                                matches!(param.as_ref(), Subterm::Var(var) if var.unwrap() == &binders[index])
+                    Subterm::Apply(Apply { head, arguments })
+                        if arguments.len() == arity
+                            && arguments.iter().enumerate().all(|(index, argument)| {
+                                matches!(argument.term.as_ref(), Subterm::Var(var) if var.unwrap() == &binders[index])
                             })
                             && binders
                                 .iter()
@@ -523,8 +517,7 @@ impl Machine {
     ) -> Result<Step, ReduceError> {
         match frame {
             Frame::Head {
-                params,
-                plicities,
+                arguments,
                 demand,
                 memo_key,
             } => {
@@ -538,16 +531,18 @@ impl Machine {
                         // A folded recursive application is the canonical weak-head normal form.
                         Demand::Whnf => Ok(Step::Value(Term::from(Subterm::Apply(Apply {
                             head: value,
-                            params,
-                            plicities,
+                            arguments,
                         })))),
                         Demand::Forced => {
                             let (group, index) = value.as_rec_proj().expect("checked above");
                             let (group, index) = (group.clone(), index);
+                            let params = arguments
+                                .iter()
+                                .map(|argument| argument.term.clone())
+                                .collect();
                             let folded = Term::from(Subterm::Apply(Apply {
                                 head: value,
-                                params: params.clone(),
-                                plicities: plicities.clone(),
+                                arguments,
                             }));
                             let body = group.member_body(index);
                             self.push(
@@ -570,21 +565,23 @@ impl Machine {
                         self.push(
                             host,
                             Frame::Head {
-                                params,
-                                plicities,
+                                arguments,
                                 demand,
                                 memo_key: None,
                             },
                         )?;
                         Ok(Step::Eval(unfold_rec(rec), Demand::Whnf))
                     }
-                    Subterm::Func(Func { telescope, .. }) if telescope.len() == params.len() => {
+                    Subterm::Func(Func { telescope, .. }) if telescope.len() == arguments.len() => {
+                        let params = arguments
+                            .into_iter()
+                            .map(|argument| argument.term)
+                            .collect();
                         self.beta(host, telescope, params, demand)
                     }
                     head => Ok(Step::Value(Term::from(Subterm::Apply(Apply {
                         head: head.into(),
-                        params,
-                        plicities,
+                        arguments,
                     })))),
                 }
             }

@@ -227,10 +227,7 @@ pub(crate) fn stuck_on_metavar(context: &Context, reduced: &Term) -> bool {
             // A folded recursive call is the fourth shape, and it does not wear its blocker on its head: `force_rec` hands the call itself back when unfolding cannot choose an arm, so what reduction is waiting for sits in an *argument*. `Count(?L)` is that term — a description-indexed payload type before its index is known. An argument that is rigid instead blocks on nothing a solution could change, and rightly refuses.
             stuck_on_metavar(context, &apply.head)
                 || (apply.head.as_rec_proj().is_some()
-                    && apply
-                        .params
-                        .iter()
-                        .any(|param| stuck_on_metavar(context, param)))
+                    && apply.params().any(|param| stuck_on_metavar(context, param)))
         }
         _ => false,
     }
@@ -779,15 +776,15 @@ fn spine_whnf(context: &mut Context, term: &Term) -> Result<Option<Term>, Error>
 
     // Bounded: each step consumes one application layer of an elaborated dispatch, and a runaway is a bug rather than something to spin on.
     for step in 0..16 {
-        let Subterm::Apply(Apply { head, params, .. }) = &*current else {
+        let Subterm::Apply(apply) = &*current else {
             return Ok((step > 0).then_some(current));
         };
 
-        let Subterm::Func(Func { telescope, .. }) = &*reduce_with(context, head)? else {
+        let Subterm::Func(Func { telescope, .. }) = &*reduce_with(context, &apply.head)? else {
             return Ok((step > 0).then_some(current));
         };
 
-        let args = params.iter().collect::<Vec<_>>();
+        let args = apply.params().collect::<Vec<_>>();
         current = telescope.open(&args);
     }
 

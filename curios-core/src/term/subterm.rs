@@ -176,10 +176,10 @@ impl Subterm {
             Subterm::FuncType(FuncType { telescope, .. }) => {
                 telescope.collect_construction_names(names)
             }
-            Subterm::Apply(Apply { head, params, .. }) => {
-                head.collect_construction_names(names);
-                params
-                    .iter()
+            Subterm::Apply(apply) => {
+                apply.head.collect_construction_names(names);
+                apply
+                    .params()
                     .for_each(|p| p.collect_construction_names(names));
             }
             Subterm::TupleType(TupleType { telescope, .. }) => {
@@ -335,9 +335,7 @@ impl Subterm {
             Subterm::Foreign(_, args) => args.iter().any(&mut *pred),
             Subterm::Func(Func { telescope, .. }) => telescope.any_term(pred),
             Subterm::FuncType(FuncType { telescope, .. }) => telescope.any_term(pred),
-            Subterm::Apply(Apply { head, params, .. }) => {
-                pred(head) || params.iter().any(&mut *pred)
-            }
+            Subterm::Apply(apply) => pred(&apply.head) || apply.params().any(&mut *pred),
             Subterm::TupleType(TupleType { telescope, .. }) => telescope.any_term(pred),
             Subterm::Tuple(Tuple { fields, .. }) => fields.iter().any(&mut *pred),
             Subterm::Proj(Proj { head, .. }) => pred(head),
@@ -550,14 +548,15 @@ impl Bound for Subterm {
             Subterm::Transient(transient) => {
                 Subterm::Transient(transient.map_subterms(&mut |child| visit.visit_subterm(child)))
             }
-            Subterm::Apply(Apply {
-                head,
-                params,
-                plicities,
-            }) => Subterm::Apply(Apply {
+            Subterm::Apply(Apply { head, arguments }) => Subterm::Apply(Apply {
                 head: visit.visit_subterm(head),
-                params: params.iter().map(|p| visit.visit_subterm(p)).collect(),
-                plicities: plicities.clone(),
+                arguments: arguments
+                    .iter()
+                    .map(|argument| Argument {
+                        term: visit.visit_subterm(&argument.term),
+                        plicity: argument.plicity,
+                    })
+                    .collect(),
             }),
             Subterm::TupleType(TupleType { telescope }) => Subterm::TupleType(TupleType {
                 telescope: telescope.traverse(visit),
@@ -821,7 +820,7 @@ impl Bound for Subterm {
             Subterm::Foreign(_, args) => max_reach(args),
             Subterm::Func(Func { telescope, .. }) => telescope.reach(),
             Subterm::FuncType(FuncType { telescope, .. }) => telescope.reach(),
-            Subterm::Apply(Apply { head, params, .. }) => head.reach().max(max_reach(params)),
+            Subterm::Apply(apply) => apply.head.reach().max(max_reach(apply.params())),
             Subterm::TupleType(TupleType { telescope, .. }) => telescope.reach(),
             Subterm::Tuple(Tuple { fields, .. }) => max_reach(fields),
             Subterm::Proj(Proj { head, .. }) => head.reach(),

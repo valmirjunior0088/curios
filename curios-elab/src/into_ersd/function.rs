@@ -115,7 +115,8 @@ impl Lowering {
         apply: &Apply,
         hint: Option<&str>,
     ) -> Result<Outcome, Error> {
-        let Apply { head, params, .. } = apply;
+        let head = &apply.head;
+        let params = apply.params().cloned().collect::<Vec<_>>();
 
         let head_type = infer(context, head)?;
         let head_type = reduce_with(context, &head_type)?;
@@ -143,7 +144,7 @@ impl Lowering {
 
         // The drop decision is the signature mask (opaque-opened), so it agrees with the function's fixed runtime arity even when a polymorphic domain is instantiated at a prop here; the kept walk erases against the instantiated (dependent) domain.
         let mask = erasure_mask(context, ft.clone())?;
-        let arguments = match self.masked_fields(context, &mask, ft, params)? {
+        let arguments = match self.masked_fields(context, &mask, ft, &params)? {
             Ok(arguments) => arguments,
             Err(diverged) => return Ok(diverged),
         };

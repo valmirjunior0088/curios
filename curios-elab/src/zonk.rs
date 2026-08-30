@@ -4,12 +4,12 @@ mod tests;
 use {
     super::{BinderTypes, Context, Error, GoalReport, UniverseSolver, universe_context_validate},
     curios_core::{
-        Apply, Bound, Carrier, Cases, ConceptDecl, Definition, DefinitionKind, Entrypoint, Free,
-        Func, FuncType, Global, InductDecl, InductParam, InductType, Instance, InstanceHead,
-        Intrinsic, Item, Let, LetBinding, Level, LevelHead, Match, Metavar, MetavarId,
-        MetavarOrigin, Module, Proj, Rec, RecGroup, RecItem, RecMemberScopes, Struct, StructDecl,
-        StructType, Subterm, Telescope, Term, Tuple, TupleType, UniverseContext, UniverseError,
-        UniverseMetaId, Var, Variant, Visit, project_erased_universes,
+        Apply, Argument, Bound, Carrier, Cases, ConceptDecl, Definition, DefinitionKind,
+        Entrypoint, Free, Func, FuncType, Global, InductDecl, InductParam, InductType, Instance,
+        InstanceHead, Intrinsic, Item, Let, LetBinding, Level, LevelHead, Match, Metavar,
+        MetavarId, MetavarOrigin, Module, Proj, Rec, RecGroup, RecItem, RecMemberScopes, Struct,
+        StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType, UniverseContext,
+        UniverseError, UniverseMetaId, Var, Variant, Visit, project_erased_universes,
         rewrite_universe_levels_scoped, shift_universe_params, universe_metas,
     },
     curios_utilities::Span,
@@ -1046,14 +1046,17 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
             plicities: plicities.clone(),
         }),
 
-        Subterm::Apply(Apply {
-            head,
-            params,
-            plicities,
-        }) => Subterm::Apply(Apply {
+        Subterm::Apply(Apply { head, arguments }) => Subterm::Apply(Apply {
             head: zonk_term(context, head)?,
-            params: zonk_terms(context, params)?,
-            plicities: plicities.clone(),
+            arguments: arguments
+                .iter()
+                .map(|argument| {
+                    Ok(Argument {
+                        term: zonk_term(context, &argument.term)?,
+                        plicity: argument.plicity,
+                    })
+                })
+                .collect::<Result<_, Error>>()?,
         }),
 
         Subterm::TupleType(TupleType { telescope }) => Subterm::TupleType(TupleType {

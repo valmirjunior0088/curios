@@ -27,9 +27,9 @@ mod tests;
 use {
     crate::{Env, forceable},
     curios_core::{
-        Apply, Arity, Carrier, Cases, Free, FreeMonoid, Func, FuncType, InductType, Instance,
-        Intrinsic, Layer, Let, Many, Match, Nat, Proj, Rec, RecGroup, Scope, Struct, StructType,
-        Subterm, Telescope, Term, Three, Totality, Tuple, TupleType, Two, Variant,
+        Arity, Carrier, Cases, Free, FreeMonoid, Func, FuncType, InductType, Instance, Intrinsic,
+        Layer, Let, Many, Match, Nat, Proj, Rec, RecGroup, Scope, Struct, StructType, Subterm,
+        Telescope, Term, Three, Totality, Tuple, TupleType, Two, Variant,
     },
     curios_num::Natural,
     curios_utilities::recurse,
@@ -666,7 +666,7 @@ impl<E: Env> Walk<'_, E> {
                 self.call(index, &[]);
             }
 
-            Subterm::Apply(Apply { head, params, .. }) => {
+            Subterm::Apply(apply) => {
                 let (spine_head, arguments) = flatten(term);
                 if let Some((group, index)) = spine_head.as_rec_proj()
                     && group == self.group
@@ -675,8 +675,8 @@ impl<E: Env> Walk<'_, E> {
                     self.walks(&arguments);
                     return;
                 }
-                self.walk_term(head);
-                self.walks(params);
+                self.walk_term(&apply.head);
+                self.walks(apply.params());
             }
 
             Subterm::Match(Match {
@@ -765,15 +765,11 @@ fn flatten(term: &Term) -> (Term, Vec<Term>) {
     let mut head = term.clone();
     loop {
         match &*head.clone() {
-            Subterm::Apply(Apply {
-                head: inner,
-                params,
-                ..
-            }) => {
-                let mut prefix = params.clone();
+            Subterm::Apply(apply) => {
+                let mut prefix = apply.params().cloned().collect::<Vec<_>>();
                 prefix.extend(arguments);
                 arguments = prefix;
-                head = inner.clone();
+                head = apply.head.clone();
             }
             Subterm::Instance(Instance { head: inner, .. }) => head = inner.to_term(),
             _ => return (head, arguments),
