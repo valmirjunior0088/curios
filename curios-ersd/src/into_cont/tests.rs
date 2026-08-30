@@ -713,3 +713,50 @@ fn io_constants_ride_the_binary_carrier() {
     let printed = lowered(&module);
     assert!(printed.contains("BinEql"), "{printed}");
 }
+
+#[test]
+fn a_knot_member_read_only_by_an_item_is_kept() {
+    // rec { lazy = Pair { force: fn() = lazy, mark: 0 } }; let read = lazy.mark — the only read is a top-level item, which lives in no block. A member is dropped when nothing outside its initializer reads it, and a scan of the blocks alone missed this read, so the member vanished and the item's operand lowered to a value the arena lacked.
+    let mut builder = ErsdBuilder::new();
+    let schema = builder.product(ProductSchema {
+        debug_name: Some("Lazy".into()),
+        fields: vec![
+            Field::opaque(Some("force".into())),
+            Field::opaque(Some("mark".into())),
+        ],
+        shared: false,
+    });
+    let lazy = builder.value(Some("lazy".into()));
+    builder.open_block();
+    let force = builder.reserve_function();
+    builder.open_block();
+    let force_body = builder.seal_block(Terminator::Return(Atom::Value(lazy)));
+    builder.define_function(force, Some("force".into()), vec![], force_body);
+    builder.let_functions(vec![force]);
+    let mark = nat(&mut builder, 0);
+    let boxed = builder.let_value(
+        None,
+        Rhs::Product {
+            schema,
+            fields: vec![Atom::Function(force), mark],
+        },
+    );
+    let init = builder.seal_block(Terminator::Return(Atom::Value(boxed)));
+    let group = builder.rec_group(vec![], vec![(lazy, init)]);
+    builder.item_rec(group);
+    let read = builder.item_value(
+        Some("read".into()),
+        Rhs::Project {
+            schema,
+            product: Atom::Value(lazy),
+            field: 1,
+        },
+    );
+    builder.open_block();
+    let entry = builder.seal_block(Terminator::Return(Atom::Value(read)));
+    builder.set_entry(entry);
+    let module = builder.finalize().expect("verifies");
+
+    let printed = lowered(&module);
+    assert!(printed.contains("cell"), "{printed}");
+}
