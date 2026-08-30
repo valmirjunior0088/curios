@@ -4,7 +4,10 @@
 //!
 //! That is the verdict, and it is a build artifact rather than a recorded claim: exactly what Coq's `.vok` is, an otherwise-empty file whose existence means the proofs checked. There is nothing to serialize here and nothing for a later pass to believe.
 
-use curios_cert::{Globals, recheck_module_verdicts};
+use {
+    curios_cert::{Globals, recheck_module_verdicts},
+    curios_core::Zonked,
+};
 
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
@@ -12,8 +15,11 @@ fn main() {
     // The *restored* image, not the value the producing script held before serializing it. Those differ — hash-consing and the round trip sit between them — and it is the restored one every compilation actually uses, so it is the one worth certifying.
     curios_prelude_archive::with_prelude(|prelude| {
         let core = prelude.core();
+        // The restored image must be meta-free before the kernel walks it; projecting here is also what validates that claim about the archive at the same boundary that certifies its items.
+        let zonked = Zonked::project(core)
+            .unwrap_or_else(|refusal| panic!("restored fixed prelude is not zonked: {refusal}"));
         let refusals = recheck_module_verdicts(
-            core,
+            &zonked,
             curios_prelude_archive::DEFAULT_STEP_BUDGET,
             &Globals::default(),
             curios_prelude_archive::SYNTAX,

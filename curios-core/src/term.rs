@@ -230,7 +230,7 @@ impl Term {
     pub fn collect_universe_dependencies(
         &self,
         universes: &mut BTreeSet<UniverseMetaId>,
-        term_metas: &mut BTreeSet<MetaId>,
+        term_metas: &mut BTreeSet<MetavarId>,
     ) {
         let mut seen: HashSet<*const Node> = HashSet::new();
         self.walk(
@@ -254,7 +254,7 @@ impl Term {
 
     /// Rewrite this node, if it is an occurrence of one of `names`, to denote the declaration instance `levels`. Returns `None` for every other node, leaving it to ordinary traversal.
     ///
-    /// Two occurrence shapes carry an instance. A nominal normal form holds it in its own universe vector; a not-yet-reduced reference to a type former is an ordinary variable, which holds it as a wrapping [`UniverseInst`] — the same node an external use site receives from scheme instantiation. A variable already under a `UniverseInst` has been instantiated and is returned untouched rather than wrapped twice.
+    /// Two occurrence shapes carry an instance. A nominal normal form holds it in its own universe vector; a not-yet-reduced reference to a type former is an ordinary variable, which holds it as the head of a wrapping [`Instance`] — the same node an external use site receives from scheme instantiation. A variable already heading an `Instance` has been instantiated and is returned untouched rather than wrapped twice.
     ///
     /// Nominal children are stamped explicitly because a rewrite hook replaces its node wholesale: an occurrence nested in a parameter or index must receive the same instance as the occurrence containing it.
     pub(crate) fn stamp_declaration_node(
@@ -307,7 +307,7 @@ impl Term {
                 fields: stamp(&struct_.fields, names, self_reference, levels),
                 entries: struct_.entries.clone(),
             }),
-            Subterm::UniverseInst(instance)
+            Subterm::Instance(instance)
                 if instance
                     .head
                     .head_name()
@@ -323,7 +323,12 @@ impl Term {
                         .and_then(Free::as_global)
                         .is_some_and(|name| names.contains(name)) =>
             {
-                return Some(Term::universe_inst(self.clone(), levels.to_vec()));
+                // The occurrence's span moves onto the wrapping instance: the head is a bare `Var` with no span of its own.
+                let stamped = Term::instance(InstanceHead::Var(var.clone()), levels.to_vec());
+                return Some(match self.span() {
+                    Some(span) => stamped.with_span(span),
+                    None => stamped,
+                });
             }
             _ => return None,
         };
@@ -347,7 +352,7 @@ impl Term {
     pub fn head_name(&self) -> Option<&Free> {
         match &self.inner.subterm {
             Subterm::Apply(Apply { head, .. }) => head.head_name(),
-            Subterm::UniverseInst(UniverseInst { head, .. }) => head.head_name(),
+            Subterm::Instance(Instance { head, .. }) => head.head_name(),
             Subterm::Var(var) => var.as_free(),
             _ => None,
         }
@@ -572,7 +577,7 @@ impl Term {
     pub fn head_key(&self) -> Option<HeadTag<'_>> {
         match &self.inner.subterm {
             Subterm::Apply(Apply { head, .. }) => head.head_key(),
-            Subterm::UniverseInst(UniverseInst { head, .. }) => head.head_key(),
+            Subterm::Instance(Instance { head, .. }) => head.head_name().map(HeadTag::Name),
             Subterm::Var(var) => var.as_free().map(HeadTag::Name),
             // A decidable comparison's normal form is an intrinsic node, not an application, so it has no named head. Scrutinee refinement keys on this tag and the reducer's probe gates on it, so an untagged key can be registered but never looked up — which is how an operator-spelled scrutinee used to lose its arm refinement while the equivalent `Nat/le(a, b)` kept it. The boolean connectives are tagged for the same reason: `match x && g(7)` resolves to a `BoolAnd` the way `a <= b` resolves to a `NatLe`, and a `Bool`-valued scrutinee is one a program matches on.
             Subterm::Intrinsic(intrinsic) => match intrinsic {
@@ -675,28 +680,33 @@ impl Term {
         Self::var(Var::free(name.clone()))
     }
 
-    /// Instantiate a generalized binding at occurrence-specific levels.
-    pub fn universe_inst(head: Term, levels: Vec<Level>) -> Self {
+    /// An instance whose head references `name` — the shape elaboration mints for every occurrence of a universe-polymorphic binding.
+    pub fn instance_of(name: &Free, levels: Vec<Level>) -> Self {
+        Self::instance(InstanceHead::Var(Var::free(name.clone())), levels)
+    }
+
+    /// Instantiate a generalized binding at occurrence-specific levels. The result is span-less; a call site holding the occurrence lifts its span onto the wrapper, since the typed head carries none.
+    pub fn instance(head: InstanceHead, levels: Vec<Level>) -> Self {
         if levels.is_empty() {
-            head
+            head.to_term()
         } else {
-            Self::from(Subterm::UniverseInst(UniverseInst { head, levels }))
+            Self::from(Subterm::Instance(Instance { head, levels }))
         }
     }
 
     /// A bare silent hole, as `into_core` mints one for a desugared omission (an omitted annotation, motive, or lambda domain): empty spine (which resolves as the identity — see [`Metavar::spine`]) and [`MetavarOrigin::Hole`], so its solution is spliced silently at zonk.
-    pub fn hole(id: impl Into<MetaId>) -> Self {
+    pub fn hole(id: impl Into<MetavarId>) -> Self {
         Self::metavar_birthed(id, MetavarOrigin::Hole, Vec::new())
     }
 
     /// A bare written goal `?`, as `into_core` mints one: the same empty spine as [`Term::hole`] under [`MetavarOrigin::Goal`], which makes zonk *report* what elaboration determined for it — scope, type, and solution — instead of splicing silently.
-    pub fn goal(id: impl Into<MetaId>) -> Self {
+    pub fn goal(id: impl Into<MetavarId>) -> Self {
         Self::metavar_birthed(id, MetavarOrigin::Goal, Vec::new())
     }
 
     /// A metavariable carrying its provenance and birth spine: a hole or goal rebuilt at its birth point with the identity spine over its frozen telescope, or an elaborator insertion minted with its provenance (see [`Metavar::origin`] and [`Metavar::spine`]).
     pub fn metavar_birthed(
-        id: impl Into<MetaId>,
+        id: impl Into<MetavarId>,
         origin: MetavarOrigin,
         spine: impl Into<Rc<Vec<Term>>>,
     ) -> Self {
@@ -1649,7 +1659,7 @@ impl Term {
     }
 
     /// The ids of every metavariable in this term. Inherent, and gated on the memoized `has_metavar`: a ground term (every data spine) short-circuits without walking, so the enumeration only ever recurses through metavariable-bearing structure, whose depth is bounded by the written program.
-    pub fn metavars(&self) -> BTreeSet<MetaId> {
+    pub fn metavars(&self) -> BTreeSet<MetavarId> {
         let mut ids = BTreeSet::new();
         self.any_metavar(&mut |id| {
             ids.insert(id);
@@ -1659,11 +1669,11 @@ impl Term {
     }
 
     /// Whether any metavariable in this term satisfies `pred`, visiting each shared node once. The walk prunes on the cached `has_metavar` bit and dedupes revisits by node identity, because the two prunes fail in each other's gap: a reduction result is a DAG whose tree expansion can be exponential in its depth — one substitution landing a term in two positions doubles it — and a single metavariable at its base, solved or not, sets `has_metavar` on every ancestor, so without the visited set each occurrence of a shared subtree re-pays its whole expansion (measured as a ×2-per-depth elaboration runaway). Skipping a revisit is sound: `pred` is deterministic within one walk, a `true` ends the walk outright, so a recorded node is always one that answered `false`.
-    pub fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
+    pub fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
         self.any_metavar_walk(pred, &mut HashSet::new())
     }
 
-    fn any_metavar_walk<F: FnMut(MetaId) -> bool>(
+    fn any_metavar_walk<F: FnMut(MetavarId) -> bool>(
         &self,
         pred: &mut F,
         visited: &mut HashSet<*const Node>,

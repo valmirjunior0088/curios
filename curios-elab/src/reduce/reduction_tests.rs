@@ -205,7 +205,7 @@ fn polymorphic_definition_unfolds_only_through_an_explicit_universe_instance() {
     assert_eq!(
         reduce(
             &mut context,
-            Term::universe_inst(raw, vec![Level::constant(3)])
+            Term::instance_of(&poly, vec![Level::constant(3)])
         ),
         Ok(Term::type_at(Level::constant(3)))
     );
@@ -657,13 +657,12 @@ fn define_invalidates_cached_reduction() {
 fn scrutinee_refinement_ignores_fresh_universe_instances() {
     let mut context = context();
     let classify = context.fresh(Some("classify"));
-    let function = Term::free_var(&classify);
     let registered = Term::apply(
-        Term::universe_inst(function.clone(), vec![Level::meta(UniverseMetaId(0))]),
+        Term::instance_of(&classify, vec![Level::meta(UniverseMetaId(0))]),
         [nat(0)],
     );
     let probe = Term::apply(
-        Term::universe_inst(function, vec![Level::meta(UniverseMetaId(1))]),
+        Term::instance_of(&classify, vec![Level::meta(UniverseMetaId(1))]),
         [nat(0)],
     );
     let canonical = canonical_scrutinee(&mut context, &registered).unwrap();
@@ -676,13 +675,12 @@ fn scrutinee_refinement_ignores_fresh_universe_instances() {
 fn projection_refinement_ignores_fresh_universe_instances() {
     let mut context = context();
     let record_binder = context.fresh(Some("record"));
-    let record = Term::free_var(&record_binder);
     let registered = Term::apply(
-        Term::universe_inst(record.clone(), vec![Level::meta(UniverseMetaId(0))]),
+        Term::instance_of(&record_binder, vec![Level::meta(UniverseMetaId(0))]),
         [nat(0)],
     );
     let probe = Term::apply(
-        Term::universe_inst(record, vec![Level::meta(UniverseMetaId(1))]),
+        Term::instance_of(&record_binder, vec![Level::meta(UniverseMetaId(1))]),
         [nat(0)],
     );
     context.refine_projection(registered, 0, nat(1));
@@ -743,7 +741,7 @@ fn unsolved_metavar_is_neutral() {
     // No store entry, or an unsolved one, both reduce to the metavariable itself.
     assert_eq!(reduce(&mut context, m.clone()), Ok(m.clone()));
 
-    context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_ground());
     assert_eq!(reduce(&mut context, m.clone()), Ok(m));
 }
 
@@ -752,13 +750,13 @@ fn solved_metavar_yields_solution() {
     let mut context = context();
     let m = Term::hole(0);
 
-    context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_ground());
 
     // An unsolved metavariable reduces to itself, but that reduct names an unsolved metavariable, so it is deliberately not memoized.
     assert_eq!(reduce(&mut context, m.clone()), Ok(m.clone()));
 
     let solution = nat(1);
-    context.solve_metavar(MetaId(0), solution.clone());
+    context.solve_metavar(MetavarId(0), solution.clone());
 
     // Nothing stale was cached, so the reduct now follows the solution — `solve_metavar` needs no cache clear.
     assert_eq!(reduce(&mut context, m), Ok(solution));

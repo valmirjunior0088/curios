@@ -5,12 +5,12 @@ use {
     super::{BinderTypes, Context, Error, GoalReport, UniverseSolver, universe_context_validate},
     curios_core::{
         Apply, Bound, Carrier, Cases, ConceptDecl, Definition, DefinitionKind, Free, Func,
-        FuncType, Global, InductDecl, InductParam, InductType, Intrinsic, Item, Let, LetBinding,
-        Level, LevelHead, Match, MetaId, Metavar, MetavarOrigin, Module, Proj, Rec, RecGroup,
-        RecItem, RecMemberScopes, Struct, StructDecl, StructType, Subterm, Telescope, Term, Tuple,
-        TupleType, UniverseContext, UniverseError, UniverseInst, UniverseMetaId, Var, Variant,
-        Visit, project_erased_universes, rewrite_universe_levels_scoped, shift_universe_params,
-        universe_metas,
+        FuncType, Global, InductDecl, InductParam, InductType, Instance, InstanceHead, Intrinsic,
+        Item, Let, LetBinding, Level, LevelHead, Match, Metavar, MetavarId, MetavarOrigin, Module,
+        Proj, Rec, RecGroup, RecItem, RecMemberScopes, Struct, StructDecl, StructType, Subterm,
+        Telescope, Term, Tuple, TupleType, UniverseContext, UniverseError, UniverseMetaId, Var,
+        Variant, Visit, project_erased_universes, rewrite_universe_levels_scoped,
+        shift_universe_params, universe_metas,
     },
     curios_utilities::Span,
     std::{
@@ -36,7 +36,7 @@ pub(crate) fn zonk_solved_term_metas<B: Bound>(context: &Context, value: &B) -> 
 
     type Solution = (Vec<Free>, Term);
 
-    fn materialize<B: Bound>(value: &B, solutions: Rc<BTreeMap<MetaId, Solution>>) -> B {
+    fn materialize<B: Bound>(value: &B, solutions: Rc<BTreeMap<MetavarId, Solution>>) -> B {
         let rewrite_solutions = Rc::clone(&solutions);
         let mut visit = Visit::rewriting(
             |_, _| None,
@@ -303,30 +303,25 @@ fn validate_instance_arities<B: Bound>(
                 })
             };
             let invalid = match &**term {
-                Subterm::UniverseInst(instance) => match instance.head.as_rec_proj() {
-                    Some((group, _)) => mismatch(
+                Subterm::Instance(instance) => match &instance.head {
+                    InstanceHead::RecProj(group, _) => mismatch(
                         "recursive instance",
                         "<local rec>",
                         group.universe_context().parameter_count,
                         instance.levels.len(),
                     ),
-                    None => match &*instance.head {
-                        Subterm::Var(var) => {
-                            var.as_free().and_then(Free::as_global).and_then(|name| {
-                                definitions.get(name).and_then(|expected| {
-                                    mismatch(
-                                        "definition instance",
-                                        &name.symbol(),
-                                        *expected,
-                                        instance.levels.len(),
-                                    )
-                                })
+                    InstanceHead::Var(var) => {
+                        var.as_free().and_then(Free::as_global).and_then(|name| {
+                            definitions.get(name).and_then(|expected| {
+                                mismatch(
+                                    "definition instance",
+                                    &name.symbol(),
+                                    *expected,
+                                    instance.levels.len(),
+                                )
                             })
-                        }
-                        _ => Some(format!(
-                            "{owner}: a universe instance wraps neither a variable nor a projection of a recursive group"
-                        )),
-                    },
+                        })
+                    }
                 },
                 Subterm::InductType(induct) => inducts.get(&induct.name).and_then(|expected| {
                     mismatch(
@@ -705,19 +700,19 @@ fn zonk_definition(context: &Context, def: &Definition) -> Result<Definition, Er
 /// Each report's scope, type, and solution render through the tolerant [`zonk_solved_term_metas`], so committed substitutions appear while goal-origin and unsolved metavariables stay visible as neutral terms; universe instances are then erased ([`project_erased_universes`]) and operator witness projections folded back to infix, so every reported term is spelled the way the source could write it. An unsolved goal additionally carries sandboxed candidate suggestions ([`suggest_candidates`](super::suggest_candidates)), displayed through the same pipeline.
 pub(crate) fn collect_goal_reports(context: &mut Context, module: &Module) -> Vec<GoalReport> {
     /// Collected goal sites in discovery order: each goal's id, its first occurrence's span, and its owning definition when it sits inside one (the suggestion pools exclude the owner), shared into the scan closures.
-    type GoalSites = Rc<RefCell<Vec<(MetaId, Option<Span>, Option<Global>)>>>;
+    type GoalSites = Rc<RefCell<Vec<(MetavarId, Option<Span>, Option<Global>)>>>;
 
     let goals: GoalSites = Rc::new(RefCell::new(Vec::new()));
     let seen_goals = Rc::new(RefCell::new(BTreeSet::new()));
     // Append-only discovery log of ordinary metavariables, drained below by index so solution scans that append more keep a stable order.
-    let referenced: Rc<RefCell<Vec<MetaId>>> = Rc::new(RefCell::new(Vec::new()));
+    let referenced: Rc<RefCell<Vec<MetavarId>>> = Rc::new(RefCell::new(Vec::new()));
 
     fn scan<B: Bound>(
         value: &B,
         owner: Option<&Global>,
         goals: &GoalSites,
-        seen_goals: &Rc<RefCell<BTreeSet<MetaId>>>,
-        referenced: &Rc<RefCell<Vec<MetaId>>>,
+        seen_goals: &Rc<RefCell<BTreeSet<MetavarId>>>,
+        referenced: &Rc<RefCell<Vec<MetavarId>>>,
     ) {
         let goals = Rc::clone(goals);
         let seen_goals = Rc::clone(seen_goals);
@@ -811,7 +806,7 @@ pub(crate) fn collect_goal_reports(context: &mut Context, module: &Module) -> Ve
     }
 
     // Suggestions run first, on the mutable context — each attempt sandboxed and rolled back — before the display phase borrows it immutably. Solved goals get none: a suggestion beside a `? =` answer is noise. `restore_budget` puts the attempts on the same footing as the finalization passes.
-    let goal_sites: Vec<(MetaId, Option<Span>, Option<Global>)> = goals.borrow().clone();
+    let goal_sites: Vec<(MetavarId, Option<Span>, Option<Global>)> = goals.borrow().clone();
     context.restore_budget();
     let mut all_candidates: Vec<Vec<Term>> = Vec::with_capacity(goal_sites.len());
     for (id, _, owner) in &goal_sites {
@@ -896,7 +891,7 @@ pub(crate) fn collect_goal_reports(context: &mut Context, module: &Module) -> Ve
 }
 
 /// The report a written goal `?` errors out with: the local scope frozen at its birth, the goal's type, and the solution elaboration committed (if any) — each zonked for *display*, keeping the raw spelling where unsolved holes survive (the same tolerance the no-witness report uses).
-fn goal_report(context: &Context, id: MetaId) -> Error {
+fn goal_report(context: &Context, id: MetavarId) -> Error {
     let display = |term: &Term| zonk_term(context, term).unwrap_or_else(|_| term.clone());
     match context.metavar_entry(id) {
         Some(entry) => Error::goal(
@@ -1011,8 +1006,16 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
             Subterm::Foreign(Arc::clone(function), zonk_terms(context, args)?)
         }
         Subterm::Var(var) => Subterm::Var(var.clone()),
-        Subterm::UniverseInst(instance) => Subterm::UniverseInst(UniverseInst {
-            head: zonk_term(context, &instance.head)?,
+        Subterm::Instance(instance) => Subterm::Instance(Instance {
+            // A variable head holds nothing to zonk; a projection head's group is zonked through the term it abbreviates and re-classified — a zonked projection is still a projection.
+            head: match &instance.head {
+                InstanceHead::Var(var) => InstanceHead::Var(var.clone()),
+                head @ InstanceHead::RecProj(..) => {
+                    let zonked = zonk_term(context, &head.to_term())?;
+                    InstanceHead::from_subterm(&zonked)
+                        .expect("zonking a projection head yields a projection")
+                }
+            },
             levels: instance
                 .levels
                 .iter()

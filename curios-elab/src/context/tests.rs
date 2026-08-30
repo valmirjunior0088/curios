@@ -14,11 +14,11 @@ fn universe_dependencies_of_a_solved_meta_follow_only_its_materialized_solution(
 
     let x = context.fresh(Some("x"));
     context.birth_metavar(
-        MetaId(0),
+        MetavarId(0),
         vec![(x, Term::type_at(Level::meta(telescope)))],
         Term::type_at(Level::meta(result)),
     );
-    context.solve_metavar(MetaId(0), Term::type_at(Level::meta(solution)));
+    context.solve_metavar(MetavarId(0), Term::type_at(Level::meta(solution)));
 
     assert_eq!(context.universe_metas_in(&Term::hole(0)), [solution].into());
 }
@@ -31,7 +31,7 @@ fn universe_dependencies_of_an_unsolved_meta_keep_its_birth_context() {
 
     let x = context.fresh(Some("x"));
     context.birth_metavar(
-        MetaId(0),
+        MetavarId(0),
         vec![(x, Term::type_at(Level::meta(telescope)))],
         Term::type_at(Level::meta(result)),
     );

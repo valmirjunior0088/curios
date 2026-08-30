@@ -7,7 +7,7 @@
 //! It also holds the hand-built adversarial modules. A refusal the elaborator reaches first leaves no module behind, so a rule where `curios-elab` is the stricter of the two cannot be put to this crate by any surface program — `Expect::NotAsked` in `curios/src/tests/perimeter.rs` records exactly that gap. Reaching it means constructing the finished module here and asking `recheck_module_verdicts` directly.
 
 use {
-    crate::Globals,
+    crate::{Globals, Kernel, Verdict},
     curios_abi::{ForeignFunction, Namespace, WireSignature, WireType},
     curios_core::{
         Atom, Definition, DefinitionKind, Free, Func, FuncType, Global, InductDecl, InductParam,
@@ -15,7 +15,7 @@ use {
         StructType, Subterm, Telescope, Term, Totality, UniverseConstraint, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseContext, UniverseParam, derived_binder_floor,
     },
-    curios_utilities::{Plicity, Qualifier},
+    curios_utilities::{Plicity, Qualifier, SyntaxRegistry},
     std::{
         collections::{BTreeMap, BTreeSet},
         sync::Arc,
@@ -2210,9 +2210,10 @@ pub(super) fn universe_scheme_module(user: Option<(UniverseContext, Term)>) -> M
 
 /// `A` alone, and `A` at the using item's own two parameters — the two spellings of one occurrence.
 pub(super) fn scheme_occurrences() -> (Term, Term) {
-    let bare = Term::free_var(&Free::from(&Global::Authored(Qualifier::from(["A"]))));
-    let instance = Term::universe_inst(
-        bare.clone(),
+    let name = Free::from(&Global::Authored(Qualifier::from(["A"])));
+    let bare = Term::free_var(&name);
+    let instance = Term::instance_of(
+        &name,
         vec![
             Level::param(UniverseParam(0)),
             Level::param(UniverseParam(1)),
@@ -2328,7 +2329,7 @@ pub(super) fn universe_refinement_module(target: Level, route: Route) -> Module 
 
     let f_at = |level: Level, arg: &Free| {
         Term::apply(
-            Term::universe_inst(Term::free_var(&Free::from(&f_name)), vec![level]),
+            Term::instance_of(&Free::from(&f_name), vec![level]),
             [Term::free_var(arg)],
         )
     };
@@ -2489,4 +2490,14 @@ pub(super) fn shadowing_registry(payload: Term) -> Module {
             },
         )]),
     )
+}
+
+/// The whole-module walk over a bare fixture, the evidence wrapper bypassed: the modules built here are adversarial by design — some deliberately carry what `Zonked` refuses — and the kernel's own refusals are the thing under test, so nothing may stand between a forged module and the walk.
+pub(super) fn fixture_verdicts(
+    module: &Module,
+    budget: u64,
+    globals: &Globals,
+    syntax: SyntaxRegistry,
+) -> Vec<Verdict> {
+    super::verdicts_from(Kernel::new(budget, syntax), module, globals)
 }

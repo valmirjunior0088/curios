@@ -100,6 +100,7 @@ pub(super) fn erase_to_ersd(source: &str, type_: Option<&str>) -> curios_ersd::M
         )
     })
     .unwrap();
+    let module = curios_core::Zonked::project(&module).expect("the elaborated module is zonked");
     with_prelude(|prelude| {
         erase_unit(
             &mut Context::with_default_budget(SYNTAX),

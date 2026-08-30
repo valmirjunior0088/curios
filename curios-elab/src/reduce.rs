@@ -13,16 +13,16 @@ use {
     super::{Context, zonk_solved_term_metas},
     curios_core::{
         Apply, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free, FreeMonoid, Func,
-        FuncType, Global, InductDecl, InductType, Intrinsic, Layer, Let, Many, Match, Metavar, Nat,
-        One, Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Struct, StructDecl, StructType,
-        Subterm, Telescope, Term, Tuple, TupleType, UniverseInst, Var, Variant, Visit, accelerable,
-        instantiate_universe_levels_scoped, project_erased_universes, reduce_closed,
+        FuncType, Global, InductDecl, InductType, Instance, InstanceHead, Intrinsic, Layer, Let,
+        Many, Match, Metavar, Nat, One, Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Struct,
+        StructDecl, StructType, Subterm, Telescope, Term, Tuple, TupleType, Var, Variant, Visit,
+        accelerable, instantiate_universe_levels_scoped, project_erased_universes, reduce_closed,
         reduce_intrinsic,
     },
     curios_utilities::recurse,
 };
 
-/// The elaborator's side of the closed-machine seam: the same delta `reduce_var` and `reduce_universe_inst` perform, handed to the shared machine so a closed term evaluates at machine depth under this strategy's own charges.
+/// The elaborator's side of the closed-machine seam: the same delta `reduce_var` and `reduce_instance` perform, handed to the shared machine so a closed term evaluates at machine depth under this strategy's own charges.
 impl ClosedHost for Context {
     fn closed_body(&self, name: &Free) -> Option<&Term> {
         self.var_reduct(name)
@@ -588,27 +588,35 @@ fn reduce_metavar(context: &Context, metavar: Metavar) -> Reduce {
     }
 }
 
-fn reduce_universe_inst(context: &Context, instance: UniverseInst) -> Result<Reduce, ReduceError> {
-    let reduct = match &*instance.head {
-        Subterm::Var(var) => context.var_reduct_at(var.unwrap()).cloned(),
-        _ => Some(instance.head.clone()),
+fn reduce_instance(context: &Context, instance: Instance) -> Result<Reduce, ReduceError> {
+    let Instance { head, levels } = instance;
+
+    let reduct = match &head {
+        InstanceHead::Var(var) => match context.var_reduct_at(var.unwrap()).cloned() {
+            Some(reduct) => reduct,
+            None => return Ok(Reduce::Break(Term::instance(head, levels))),
+        },
+        InstanceHead::RecProj(group, index) => {
+            return Ok(Reduce::Continue(Term::rec_proj(
+                group
+                    .instantiate_universes(&levels)
+                    .map_err(ReduceError::Universe)?,
+                *index,
+            )));
+        }
     };
-    let Some(reduct) = reduct else {
-        return Ok(Reduce::Break(Term::universe_inst(
-            instance.head,
-            instance.levels,
-        )));
-    };
-    let arguments = instance.levels;
+
+    // The variable's stored value may itself be a projection, whose group takes the instance whole rather than a per-level rewrite.
     let reduct = match reduct.as_rec_proj() {
         Some((group, index)) => Term::rec_proj(
             group
-                .instantiate_universes(&arguments)
+                .instantiate_universes(&levels)
                 .map_err(ReduceError::Universe)?,
             index,
         ),
-        None => instantiate_universe_levels_scoped(&reduct, &arguments)
-            .map_err(ReduceError::Universe)?,
+        None => {
+            instantiate_universe_levels_scoped(&reduct, &levels).map_err(ReduceError::Universe)?
+        }
     };
     Ok(Reduce::Continue(reduct))
 }
@@ -628,7 +636,7 @@ fn canonical_key(context: &mut Context, key: &Term, original: &Term) -> Result<T
         return Ok(cached);
     }
 
-    // Canonicalized from the *original* spelling, never the key: the key is universes-erased, and erasure strips the `UniverseInst` a polymorphic global unfolds through, so reducing the key stalls exactly where the probe side reduced — reduce-then-erase and erase-then-reduce disagree, and the probe side is reduce-then-erase.
+    // Canonicalized from the *original* spelling, never the key: the key is universes-erased, and erasure strips the `Instance` a polymorphic global unfolds through, so reducing the key stalls exactly where the probe side reduced — reduce-then-erase and erase-then-reduce disagree, and the probe side is reduce-then-erase.
     let canonical = context
         .within_allowance(CANONICAL_KEY_ALLOWANCE, |context| {
             canonical_scrutinee(context, original)
@@ -770,7 +778,7 @@ fn reduce_within(context: &mut Context, mut term: Term) -> Result<Term, ReduceEr
                 Subterm::Let(let_) => reduce_let(context, let_)?,
                 Subterm::Var(var) => reduce_var(context, var),
                 Subterm::Metavar(metavar) => reduce_metavar(context, metavar),
-                Subterm::UniverseInst(instance) => reduce_universe_inst(context, instance)?,
+                Subterm::Instance(instance) => reduce_instance(context, instance)?,
                 // `InductType`/`Variant` and `StructType`/`Struct` are intrinsic normal forms, like `Tuple`: their sub-terms are not reduced in WHNF.
                 term => Reduce::Break(term.into()),
             }
@@ -860,10 +868,6 @@ pub(crate) fn normalize(context: &mut Context, term: Term) -> Result<Term, Reduc
             fields: normalize_each(context, fields)?,
             entries,
         }),
-        Subterm::UniverseInst(instance) => Subterm::UniverseInst(UniverseInst {
-            head: normalize(context, instance.head)?,
-            levels: instance.levels,
-        }),
         Subterm::Tuple(Tuple { fields, names }) => Subterm::Tuple(Tuple {
             fields: normalize_each(context, fields)?,
             names,
@@ -890,7 +894,7 @@ pub(crate) fn normalize(context: &mut Context, term: Term) -> Result<Term, Reduc
             spine: normalize_each(context, spine.to_vec())?.into(),
             origin,
         }),
-        // Leaves (`Type`/`Prop`/`Var`/`Intrinsic`, the last already carrying reduced operands) and the binder-heavy stuck forms (`Let`/`Rec`/`Match`) keep their weak-head normal shape.
+        // Leaves (`Type`/`Prop`/`Var`/`Intrinsic`, the last already carrying reduced operands) and the binder-heavy stuck forms (`Let`/`Rec`/`Match`) keep their weak-head normal shape. A stuck `Instance` is both at once: its head is a variable or an already-stuck projection, so there is nothing under it to normalize.
         other => other,
     };
 
@@ -904,25 +908,34 @@ fn normalize_each(context: &mut Context, terms: Vec<Term>) -> Result<Vec<Term>, 
     terms.into_iter().map(|t| normalize(context, t)).collect()
 }
 
-/// The head of an application, or the term itself, looked at through a universe instance: the position a name sits in, and the position a stuck form shows at.
+/// The head of an application, or the term itself: the position a name sits in, and the position a stuck form shows at. An instance wrapper is not looked through — its typed head is not a term — so a caller asking about the head's shape matches `Instance` beside the bare shape it wraps.
 pub(crate) fn applied_head(term: &Term) -> &Term {
-    let head = match &**term {
+    match &**term {
         Subterm::Apply(Apply { head, .. }) => head,
         _ => term,
-    };
-    match &**head {
-        Subterm::UniverseInst(UniverseInst { head, .. }) => head,
-        _ => head,
     }
 }
 
 /// Whether reducing `written` to `reduced` only unfolded a name into one of the binder-heavy stuck forms — a folded recursive call or recursive group, a stuck `match`, a lambda or a `let`, bare or at the head of an application. `double(n)` over a `rec` is the paradigm: the name unfolds to the folded call's canonical neutral, which spells as the whole group and says nothing the name did not. [`normalize`] keeps the name for display, and `convert`'s solver commits it as a solution's spelling.
 pub(crate) fn stalled_unfolding(written: &Term, reduced: &Term) -> bool {
-    matches!(&**applied_head(written), Subterm::Var(_))
-        && matches!(
-            &**applied_head(reduced),
-            Subterm::Rec(_) | Subterm::Match(_) | Subterm::Func(_) | Subterm::Let(_)
-        )
+    matches!(
+        &**applied_head(written),
+        Subterm::Var(_)
+            | Subterm::Instance(Instance {
+                head: InstanceHead::Var(_),
+                ..
+            })
+    ) && matches!(
+        &**applied_head(reduced),
+        Subterm::Rec(_)
+            | Subterm::Match(_)
+            | Subterm::Func(_)
+            | Subterm::Let(_)
+            | Subterm::Instance(Instance {
+                head: InstanceHead::RecProj(..),
+                ..
+            })
+    )
 }
 
 /// [`normalize`] with the head held as written: the arguments are normalized, the name is not unfolded.

@@ -197,7 +197,7 @@ fn prelude_monad_resolves_by_imitation() {
     assert_eq!(run(source), b"21");
 }
 
-// A *written* higher-kinded instantiation: `@Option` fills `M` at the call, so the `use Monad(M)` goal is minted from the telescope opened at the written argument. That argument must enter the telescope rebuilt (a `UniverseInst` at its fresh levels): substituted raw, the bare polymorphic `Option` reference is inert under the reducer's monomorphic-variable gate, resolution's global-table step finds no rigid head to key on, and the registered witness is missed while the inferred path (`lift(7)` against an expected `Option(Nat)`) resolves fine.
+// A *written* higher-kinded instantiation: `@Option` fills `M` at the call, so the `use Monad(M)` goal is minted from the telescope opened at the written argument. That argument must enter the telescope rebuilt (an `Instance` at its fresh levels): substituted raw, the bare polymorphic `Option` reference is inert under the reducer's monomorphic-variable gate, resolution's global-table step finds no rigid head to key on, and the registered witness is missed while the inferred path (`lift(7)` against an expected `Option(Nat)`) resolves fine.
 #[test]
 fn written_higher_kinded_argument_resolves_the_witness() {
     let source = r#"

@@ -176,7 +176,7 @@ pub fn typecheck_with_prelude_measured(
 
 /// Put `module` to the independent kernel with the fixed prelude in scope, handing back the walk's own kernel for a measurement to read. See `curios_cert::recheck_module_measured`.
 pub fn recheck_with_prelude_measured(
-    module: &curios_core::Module,
+    module: &curios_core::Zonked<curios_core::Module>,
     budget: u64,
 ) -> (Vec<curios_cert::Verdict>, curios_cert::Kernel) {
     with_prelude(|prelude| {
@@ -186,7 +186,7 @@ pub fn recheck_with_prelude_measured(
 
 /// Put `module` to the independent kernel with the fixed prelude in scope. See [`recheck`].
 pub fn recheck_with_prelude(
-    module: &curios_core::Module,
+    module: &curios_core::Zonked<curios_core::Module>,
     budget: u64,
 ) -> Vec<curios_cert::Verdict> {
     with_prelude(|prelude| recheck(module, budget, Prefix::over(from_ref(&prelude)), &SYNTAX))

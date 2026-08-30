@@ -96,8 +96,12 @@ fn euclid_split_is_a_euclidean_division() {
 // The control is the second pair, which shares that shape in every respect except the one that matters: distinct *arguments* under one instance must not cancel, or the key would be collapsing terms wholesale rather than levels.
 #[test]
 fn summands_cancel_across_a_universe_instance_and_not_across_an_argument() {
-    let instanced =
-        |level: u32| Term::universe_inst(symbol(0, "g"), vec![crate::Level::constant(level)]);
+    let instanced = |level: u32| {
+        Term::instance(
+            crate::InstanceHead::Var(crate::Var::free(Free::local(0, Some("g")))),
+            vec![crate::Level::constant(level)],
+        )
+    };
 
     let peel = peel_nat(
         &as_nat(&fold(plus(instanced(0), lit(1)))),

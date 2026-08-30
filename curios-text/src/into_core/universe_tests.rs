@@ -78,7 +78,7 @@ fn a_polymorphic_definition_instantiates_at_prop_and_type() {
             let curios_core::Subterm::Apply(apply) = &**field else {
                 panic!("each tuple field is an id application");
             };
-            let curios_core::Subterm::UniverseInst(instance) = &*apply.head else {
+            let curios_core::Subterm::Instance(instance) = &*apply.head else {
                 panic!("each external id use is universe-instantiated");
             };
             instance.levels.clone()

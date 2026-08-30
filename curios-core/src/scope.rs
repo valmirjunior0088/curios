@@ -4,7 +4,7 @@
 
 use {
     super::{
-        Free, Global, Level, LevelHead, MetaId, Subterm, Term, UniverseError, UniverseMetaId,
+        Free, Global, Level, LevelHead, MetavarId, Subterm, Term, UniverseError, UniverseMetaId,
         UniverseParam,
     },
     std::{
@@ -767,7 +767,7 @@ impl<B: Bound> Telescope<B> {
 
 impl Telescope<Term> {
     /// Whether any metavariable in a function/Π telescope (`Func`/`FuncType`) — the parameter types and the trailing body/return type — satisfies `pred`, short-circuiting on the first hit.
-    pub fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
+    pub fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Telescope::Cons(ty, rest) => ty.any_metavar(pred) || rest.body().any_metavar(pred),
             Telescope::Done(body) => body.any_metavar(pred),
@@ -796,7 +796,7 @@ impl Telescope<Term> {
 
 impl Telescope<Vec<Term>> {
     /// Whether any metavariable in a constructor signature — the payload domains, or one of the index targets it terminates in — satisfies `pred`, short-circuiting on the first hit.
-    pub fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
+    pub fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Telescope::Cons(ty, rest) => ty.any_metavar(pred) || rest.body().any_metavar(pred),
             Telescope::Done(targets) => targets.iter().any(|target| target.any_metavar(pred)),
@@ -806,7 +806,7 @@ impl Telescope<Vec<Term>> {
 
 impl Telescope<Telescope<()>> {
     /// Whether any metavariable in a nested arity telescope — a declaration's parameter domains and, at its terminal, its index or field domains — satisfies `pred`, short-circuiting on the first hit.
-    pub fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
+    pub fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Telescope::Cons(ty, rest) => ty.any_metavar(pred) || rest.body().any_metavar(pred),
             Telescope::Done(inner) => inner.any_metavar(pred),
@@ -816,7 +816,7 @@ impl Telescope<Telescope<()>> {
 
 impl Telescope<()> {
     /// Whether any metavariable in a Σ telescope (`TupleType`) — only the field types; its `Done` body is `()` — satisfies `pred`, short-circuiting on the first hit.
-    pub fn any_metavar<F: FnMut(MetaId) -> bool>(&self, pred: &mut F) -> bool {
+    pub fn any_metavar<F: FnMut(MetavarId) -> bool>(&self, pred: &mut F) -> bool {
         match self {
             Telescope::Cons(ty, rest) => ty.any_metavar(pred) || rest.body().any_metavar(pred),
             // The trailing body is `()`, which holds no metavariables.

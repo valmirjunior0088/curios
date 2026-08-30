@@ -1037,7 +1037,7 @@ impl UniverseSolver {
         Ok(levels)
     }
 
-    /// Insert a closed context's residual constraints at an already chosen occurrence instance. Used when re-elaborating an explicit `UniverseInst`: its stored arguments are authoritative and must not be replaced by a second fresh instantiation.
+    /// Insert a closed context's residual constraints at an already chosen occurrence instance. Used when re-elaborating an explicit `Instance`: its stored arguments are authoritative and must not be replaced by a second fresh instantiation.
     ///
     /// A stored context is validated where it is built ([`Self::generalize`]) and where it is restored (`validate_universes`), not here: every occurrence of every polymorphic binding instantiates, and re-deciding a context's consistency per occurrence repeats a whole constraint solve for an invariant that cannot have changed.
     pub fn instantiate_at(

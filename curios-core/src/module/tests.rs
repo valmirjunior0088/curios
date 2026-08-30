@@ -136,7 +136,7 @@ fn a_stored_unit_may_not_carry_a_free_local() {
 #[test]
 fn a_stored_unit_may_not_carry_a_metavariable() {
     let module = stored(
-        Term::hole(crate::MetaId::from(3)),
+        Term::hole(crate::MetavarId::from(3)),
         Term::intrinsic(crate::Intrinsic::NatType),
     );
 
@@ -210,4 +210,43 @@ fn a_stored_unit_may_carry_a_global_it_names() {
     );
 
     assert_eq!(validate_stored_identities(&module), Ok(()));
+}
+
+#[test]
+fn a_meta_free_module_projects_as_zonked() {
+    let module = Module {
+        items: vec![Item::Let(definition("plain", UniverseContext::empty()))],
+        mounts: Vec::new(),
+        universe_seeds: Vec::new(),
+        induct_decls: Default::default(),
+        struct_decls: Default::default(),
+        concepts: Default::default(),
+        witnesses: Default::default(),
+        binder_floor: 0,
+        type_: None,
+        body: None,
+    };
+
+    assert!(Zonked::project(&module).is_ok());
+}
+
+#[test]
+fn a_surviving_metavariable_refuses_the_zonked_projection() {
+    let mut holed = definition("holed", UniverseContext::empty());
+    holed.body = Term::hole(0);
+    let module = Module {
+        items: vec![Item::Let(holed)],
+        mounts: Vec::new(),
+        universe_seeds: Vec::new(),
+        induct_decls: Default::default(),
+        struct_decls: Default::default(),
+        concepts: Default::default(),
+        witnesses: Default::default(),
+        binder_floor: 0,
+        type_: None,
+        body: None,
+    };
+
+    let refusal = Zonked::project(&module).expect_err("the hole must refuse the projection");
+    assert!(refusal.to_string().contains("holed"), "{refusal}");
 }

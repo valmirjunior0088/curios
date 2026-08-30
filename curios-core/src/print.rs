@@ -929,8 +929,8 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             }
         }
         Subterm::Prop => pure("Prop"),
-        Subterm::UniverseInst(instance) => flat([
-            sub(instance.head, frame),
+        Subterm::Instance(instance) => flat([
+            sub(instance.head.to_term(), frame),
             pure(universe_suffix(&instance.levels, frame.spelling)),
         ]),
         Subterm::Intrinsic(intrinsic) => sub_intrinsic(intrinsic, frame),

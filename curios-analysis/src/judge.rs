@@ -30,7 +30,7 @@ pub(crate) fn forceable(term: &Term) -> bool {
         &**term,
         Subterm::Var(_)
             | Subterm::Apply(_)
-            | Subterm::UniverseInst(_)
+            | Subterm::Instance(_)
             | Subterm::Proj(_)
             | Subterm::Match(_)
             | Subterm::Let(_)

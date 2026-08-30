@@ -41,7 +41,7 @@ fn declaration_instance(value: &Term, name: &Global) -> Option<Vec<Level>> {
                 Subterm::InductType(induct_type) if induct_type.name == name => {
                     Some(induct_type.universes.clone())
                 }
-                Subterm::UniverseInst(instance)
+                Subterm::Instance(instance)
                     if instance
                         .head
                         .head_name()

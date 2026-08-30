@@ -5,7 +5,6 @@
 //! It also holds the hand-built adversarial modules. A refusal the elaborator reaches first leaves no module behind, so a rule where `curios-elab` is the stricter of the two cannot be put to this crate by any surface program — `Expect::NotAsked` in `curios/src/tests/perimeter.rs` records exactly that gap. Reaching it means constructing the finished module here and asking `recheck_module_verdicts` directly.
 
 use {
-    super::recheck_module_verdicts,
     crate::{Globals, KernelError},
     curios_analysis::Erased,
     curios_core::{Atom, Global, InductParam, Intrinsic, Module, Telescope, Term},
@@ -22,8 +21,7 @@ use super::test_support::*;
 /// While the hole was open `recheck_module_verdicts` returned zero refusals for exactly this module, with the evaluation memos on and off, and `check_induct_decl` accepted the declaration. It never compiled and never ran: `curios-elab`'s `singleton_eliminable` refused `unbox` at every surface spelling, which is what kept the certifier's copy of the rule unobserved. The fixtures in `crate::kernel::infer::eliminate::tests` pin the predicate; this pins the consequence, and it is the reason the predicate's two call sites are worth guarding separately.
 #[test]
 fn a_derivation_through_a_type_carrying_proposition_is_refused() {
-    let verdicts =
-        recheck_module_verdicts(&forgery(), 1_000_000, &Globals::default(), crate::SYNTAX);
+    let verdicts = fixture_verdicts(&forgery(), 1_000_000, &Globals::default(), crate::SYNTAX);
 
     assert!(
         verdicts
@@ -42,7 +40,7 @@ fn a_derivation_through_a_type_carrying_proposition_is_refused() {
 /// The control is the same module with `()` in place of the exit, which must stay accepted — a rule refusing every `Prop`-typed constructor application would satisfy the assertion above and nothing else here would notice.
 #[test]
 fn an_exit_inside_a_proof_is_refused_with_no_definition_to_blame() {
-    let verdicts = recheck_module_verdicts(
+    let verdicts = fixture_verdicts(
         &proof_carrying_unit(true),
         1_000_000,
         &Globals::default(),
@@ -65,7 +63,7 @@ fn an_exit_inside_a_proof_is_refused_with_no_definition_to_blame() {
 #[test]
 fn a_proof_carrying_the_unit_value_is_accepted() {
     assert_eq!(
-        recheck_module_verdicts(
+        fixture_verdicts(
             &proof_carrying_unit(false),
             1_000_000,
             &Globals::default(),
@@ -91,7 +89,7 @@ fn a_proof_carrying_the_unit_value_is_accepted() {
 /// The refusal is required to name `Wrap` and not merely to exist, because every later item in the derivation is built on the forged field and would mismatch for a downstream reason once anything at all went wrong. What has to be refused is the *declaration*, at the arm the motive lied about: a `Nat` at `Type 0` checked against the `Prop` the motive claims.
 #[test]
 fn a_proposition_may_not_carry_a_computed_relevant_field() {
-    let verdicts = recheck_module_verdicts(
+    let verdicts = fixture_verdicts(
         &computed_field_forgery(),
         1_000_000,
         &Globals::default(),
@@ -145,7 +143,7 @@ fn a_proposition_carrying_a_computed_proof_is_still_accepted() {
     };
 
     assert_eq!(
-        recheck_module_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX),
+        fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX),
         Vec::new()
     );
 }

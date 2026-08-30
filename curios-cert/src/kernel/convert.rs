@@ -35,9 +35,9 @@ mod test_support;
 use {
     super::{Kernel, KernelError, Sort, unfold_spelling},
     curios_core::{
-        Bound, Carrier, Cases, Cost, Field, FuncType, Global, InductType, Level, Many, Proj,
-        Reducer, Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple, TupleType, Two,
-        UniverseInst, instantiate_universe_levels_scoped,
+        Bound, Carrier, Cases, Cost, Field, FuncType, Global, InductType, Instance, Level, Many,
+        Proj, Reducer, Scope, Struct, StructType, Subterm, Telescope, Term, Three, Tuple,
+        TupleType, Two, instantiate_universe_levels_scoped,
     },
     curios_utilities::recurse,
     std::collections::HashSet,
@@ -369,17 +369,16 @@ fn structural(
         }
 
         (
-            Subterm::UniverseInst(UniverseInst {
+            Subterm::Instance(Instance {
                 head: left,
                 levels: left_levels,
             }),
-            Subterm::UniverseInst(UniverseInst {
+            Subterm::Instance(Instance {
                 head: right,
                 levels: right_levels,
             }),
-        ) => Ok(
-            kernel.levels_eq(left_levels, right_levels) && ground(kernel, history, left, right)?
-        ),
+        ) => Ok(kernel.levels_eq(left_levels, right_levels)
+            && ground(kernel, history, &left.to_term(), &right.to_term())?),
 
         // A stuck elimination. Everything is compared up to conversion: the scrutinee because that is the position an unfolding cycle travels through, and the motive and arms because a delta-unfolded caller and its spelled-out twin differ exactly there — `step(c, st)` against `step(at(cons(c, t), 0, _), st)` reduces to two stuck matches whose arms are convertible but not identical. The shape stays rigid: tags, plicities, arity, and default presence must agree exactly, because two eliminations enumerating different constructors compute differently on some input even where they agree on this one.
         (Subterm::Match(left), Subterm::Match(right)) => {

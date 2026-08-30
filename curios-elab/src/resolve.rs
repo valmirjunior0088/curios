@@ -13,7 +13,7 @@ use {
         WitnessKey, convert_outcome, reduce_with,
     },
     curios_core::{
-        ConceptDecl, Field, Free, Global, ImplicitOrigin, Level, MetaId, Metavar, StructType,
+        ConceptDecl, Field, Free, Global, ImplicitOrigin, Level, Metavar, MetavarId, StructType,
         Subterm, Telescope, Term, UniverseContext, WitnessOrigin,
     },
     curios_utilities::{Mount, Plicity, Qualifier},
@@ -452,14 +452,14 @@ fn instantiate(
     let head = if universes.is_empty() {
         Term::free_var(&name)
     } else {
-        Term::universe_inst(Term::free_var(&name), universes)
+        Term::instance_of(&name, universes)
     };
     let span = origin.span();
 
     let (args, premises, terminal) = match &*signature {
         Subterm::FuncType(ft) => {
             let mut args: Vec<(Plicity, Term)> = Vec::with_capacity(ft.plicities.len());
-            let mut premises: Vec<(MetaId, Term, WitnessOrigin)> = Vec::new();
+            let mut premises: Vec<(MetavarId, Term, WitnessOrigin)> = Vec::new();
             let mut resolved_premises = 0usize;
             let mut tele = ft.telescope.clone();
             for plicity in &ft.plicities {
@@ -553,7 +553,7 @@ fn instantiate(
 /// Attempt a freshly minted witness goal: solve it now, park it on a flex key, or defer it on a missing table entry. A definite failure is an error at `origin`'s span.
 pub(crate) fn attempt_witness_goal(
     context: &mut Context,
-    slot: MetaId,
+    slot: MetavarId,
     goal: &Term,
     provenance: WitnessOrigin,
     origin: &Term,
@@ -597,7 +597,7 @@ pub(crate) fn attempt_witness_goal(
 /// Retry a parked or deferred witness goal under its frozen frame. Called by `retry_parked`'s wake path and the deferred-goal sweeps.
 pub(crate) fn retry_witness(
     context: &mut Context,
-    slot: MetaId,
+    slot: MetavarId,
     goal: Term,
     provenance: WitnessOrigin,
     origin: Term,

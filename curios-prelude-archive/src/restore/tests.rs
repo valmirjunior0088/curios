@@ -8,6 +8,7 @@ use {
     curios_core::Global,
     curios_core::Item,
     curios_core::Term,
+    curios_core::Zonked,
     curios_core::derived_binder_floor,
     curios_elab::{Context, DEFAULT_STEP_BUDGET, ErasedArena, Resumed, erase_unit},
     std::{
@@ -184,12 +185,9 @@ fn class(error: &KernelError) -> String {
 #[ignore = "inventory: measures where the kernel disagrees rather than asserting"]
 fn kernel_disagreements() {
     with_prelude(|prelude| {
-        let verdicts = recheck_module_verdicts(
-            prelude.core(),
-            DEFAULT_STEP_BUDGET,
-            &Globals::default(),
-            crate::SYNTAX,
-        );
+        let zonked = Zonked::project(prelude.core()).expect("the restored prelude is zonked");
+        let verdicts =
+            recheck_module_verdicts(&zonked, DEFAULT_STEP_BUDGET, &Globals::default(), SYNTAX);
 
         let mut tally: BTreeMap<String, usize> = BTreeMap::new();
         for verdict in &verdicts {
@@ -223,18 +221,14 @@ fn kernel_disagreements() {
 #[ignore = "parity: runs the whole-prelude walk twice, the second time uncached"]
 fn kernel_memo_parity() {
     with_prelude(|prelude| {
+        let zonked = Zonked::project(prelude.core()).expect("the restored prelude is zonked");
         assert_eq!(
-            recheck_module_verdicts(
-                prelude.core(),
-                DEFAULT_STEP_BUDGET,
-                &Globals::default(),
-                crate::SYNTAX
-            ),
+            recheck_module_verdicts(&zonked, DEFAULT_STEP_BUDGET, &Globals::default(), SYNTAX),
             recheck_module_verdicts_uncached(
-                prelude.core(),
+                &zonked,
                 DEFAULT_STEP_BUDGET,
                 &Globals::default(),
-                crate::SYNTAX,
+                SYNTAX,
             ),
         );
     });
@@ -303,6 +297,7 @@ fn stored_prelude_measurements() {
 
     with_prelude(|prelude| {
         let core = prelude.core();
+        let zonked = Zonked::project(core).expect("the restored prelude is zonked");
 
         // Averaged, because a single shot at this magnitude is not a measurement: the other three take long enough that one sample says something, and this one does not.
         const CLONES: u32 = 100;
@@ -317,19 +312,15 @@ fn stored_prelude_measurements() {
         erase_unit(
             &mut erasure_context,
             Resumed::of(&[], ErasedArena::default()),
-            core,
+            &zonked,
             None,
         )
         .expect("the stored prelude re-erases");
         let erasure = start.elapsed();
 
         let start = Instant::now();
-        let (verdicts, kernel) = recheck_module_measured(
-            core,
-            DEFAULT_STEP_BUDGET,
-            &Globals::default(),
-            crate::SYNTAX,
-        );
+        let (verdicts, kernel) =
+            recheck_module_measured(&zonked, DEFAULT_STEP_BUDGET, &Globals::default(), SYNTAX);
         let certification = start.elapsed();
         let retained = kernel.retained();
         let heaviest = kernel.heaviest_declaration();

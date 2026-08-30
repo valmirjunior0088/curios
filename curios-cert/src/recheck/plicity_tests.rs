@@ -4,7 +4,7 @@
 //!
 //! It also holds the hand-built adversarial modules. A refusal the elaborator reaches first leaves no module behind, so a rule where `curios-elab` is the stricter of the two cannot be put to this crate by any surface program — `Expect::NotAsked` in `curios/src/tests/perimeter.rs` records exactly that gap. Reaching it means constructing the finished module here and asking `recheck_module_verdicts` directly.
 
-use {super::recheck_module_verdicts, crate::Globals};
+use crate::Globals;
 
 use super::test_support::*;
 
@@ -18,13 +18,13 @@ use super::test_support::*;
 #[test]
 fn a_registry_plicity_vector_is_read_by_no_kernel_rule() {
     assert_eq!(
-        recheck_module_verdicts(
+        fixture_verdicts(
             &plicity_module(true, 1),
             1_000_000,
             &Globals::default(),
             crate::SYNTAX
         ),
-        recheck_module_verdicts(
+        fixture_verdicts(
             &plicity_module(false, 1),
             1_000_000,
             &Globals::default(),
@@ -33,7 +33,7 @@ fn a_registry_plicity_vector_is_read_by_no_kernel_rule() {
         "a plicity vector no kernel rule reads changed a verdict",
     );
     assert_eq!(
-        recheck_module_verdicts(
+        fixture_verdicts(
             &plicity_module(false, 1),
             1_000_000,
             &Globals::default(),
@@ -48,7 +48,7 @@ fn a_registry_plicity_vector_is_read_by_no_kernel_rule() {
 #[test]
 fn a_wrong_payload_count_is_still_refused_under_a_lying_plicity_vector() {
     assert!(
-        !recheck_module_verdicts(
+        !fixture_verdicts(
             &plicity_module(false, 0),
             1_000_000,
             &Globals::default(),

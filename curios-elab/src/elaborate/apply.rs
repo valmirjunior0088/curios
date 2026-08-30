@@ -136,7 +136,10 @@ pub(super) fn elaborate_apply(
         match &**term {
             Subterm::Var(var) => Some(var.unwrap().to_string()),
             Subterm::Apply(apply) => innermost_reference(&apply.head),
-            Subterm::UniverseInst(instance) => innermost_reference(&instance.head),
+            Subterm::Instance(instance) => match &instance.head {
+                InstanceHead::Var(var) => Some(var.unwrap().to_string()),
+                InstanceHead::RecProj(..) => None,
+            },
             _ => None,
         }
     }
@@ -254,7 +257,7 @@ pub(super) fn elaborate_apply(
     let original = ft.telescope.clone();
     let mut elaborated: Vec<Term> = Vec::with_capacity(ft.plicities.len());
     // The pendings this apply minted: (slot, placeholder, written term), consulted by the fallback pin below.
-    let mut pendings: Vec<(usize, MetaId, Term)> = Vec::new();
+    let mut pendings: Vec<(usize, MetavarId, Term)> = Vec::new();
     let mut tele = original.clone();
     for plicity in &ft.plicities {
         let Telescope::Cons(ty, rest) = tele else {
@@ -367,7 +370,7 @@ pub(super) fn elaborate_apply(
 fn result_metavars_from(
     context: &mut Context,
     rest: &Scope<One, Telescope<Term>>,
-) -> BTreeSet<MetaId> {
+) -> BTreeSet<MetavarId> {
     let mut tele = rest
         .clone()
         .open(&[&Term::free_var(&context.fresh(rest.first_hint()))]);

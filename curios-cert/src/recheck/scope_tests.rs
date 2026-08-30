@@ -5,7 +5,6 @@
 //! It also holds the hand-built adversarial modules. A refusal the elaborator reaches first leaves no module behind, so a rule where `curios-elab` is the stricter of the two cannot be put to this crate by any surface program — `Expect::NotAsked` in `curios/src/tests/perimeter.rs` records exactly that gap. Reaching it means constructing the finished module here and asking `recheck_module_verdicts` directly.
 
 use {
-    super::recheck_module_verdicts,
     crate::{Globals, KernelError},
     curios_core::{Free, Level, Term},
 };
@@ -25,7 +24,7 @@ use super::test_support::*;
 fn a_definition_under_a_name_already_in_scope_is_replaced_rather_than_judged() {
     let module = shadowing_items();
 
-    let alone = recheck_module_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
+    let alone = fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
     assert!(
         alone
             .iter()
@@ -35,7 +34,7 @@ fn a_definition_under_a_name_already_in_scope_is_replaced_rather_than_judged() {
     );
 
     assert_eq!(
-        recheck_module_verdicts(
+        fixture_verdicts(
             &module,
             1_000_000,
             &already_judged(&judged_environment()),
@@ -59,7 +58,7 @@ fn a_definition_under_a_name_already_in_scope_is_replaced_rather_than_judged() {
 fn a_declaration_under_a_name_already_in_scope_is_live_but_unchecked() {
     let oversized = shadowing_registry(Term::type_at(Level::constant(5)));
 
-    let alone = recheck_module_verdicts(&oversized, 1_000_000, &Globals::default(), crate::SYNTAX);
+    let alone = fixture_verdicts(&oversized, 1_000_000, &Globals::default(), crate::SYNTAX);
     assert!(
         alone
             .iter()
@@ -68,7 +67,7 @@ fn a_declaration_under_a_name_already_in_scope_is_live_but_unchecked() {
     );
 
     assert_eq!(
-        recheck_module_verdicts(
+        fixture_verdicts(
             &oversized,
             1_000_000,
             &already_judged(&judged_environment()),
@@ -84,7 +83,7 @@ fn a_declaration_under_a_name_already_in_scope_is_live_but_unchecked() {
         family,
     ));
 
-    let verdicts = recheck_module_verdicts(
+    let verdicts = fixture_verdicts(
         &negative,
         1_000_000,
         &already_judged(&judged_environment()),

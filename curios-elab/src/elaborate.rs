@@ -33,9 +33,10 @@ use {
     },
     curios_core::{
         Apply, Bang, Bound, Field, Free, Func, FuncType, ImplicitOrigin, InductType, Infix,
-        Intrinsic, Let, MetaId, Metavar, MetavarOrigin, Nat, NumLit, One, Proj, Rec, Scope, Struct,
-        StructDecl, StructEntry, StructType, Subterm, Telescope, Term, Transient, Tuple, TupleType,
-        Variant, WitnessOrigin, instantiate_universe_levels_scoped, wire_term,
+        InstanceHead, Intrinsic, Let, Metavar, MetavarId, MetavarOrigin, Nat, NumLit, One, Proj,
+        Rec, Scope, Struct, StructDecl, StructEntry, StructType, Subterm, Telescope, Term,
+        Transient, Tuple, TupleType, Variant, WitnessOrigin, instantiate_universe_levels_scoped,
+        wire_term,
     },
     curios_num::{Floating, Integer},
     curios_utilities::{InfixOp, Plicity, recurse},
@@ -136,26 +137,20 @@ fn elaborate_subterm(
                 Term::intrinsic(Intrinsic::io_type(result)),
             )
         }
-        Subterm::UniverseInst(instance) => {
-            let type_ = if let Some((group, index)) = instance.head.as_rec_proj() {
-                context
-                    .universes_mut()
-                    .instantiate_at(group.universe_context(), &instance.levels)
-                    .map_err(Error::from)?;
+        Subterm::Instance(instance) => {
+            let type_ = match &instance.head {
+                InstanceHead::RecProj(group, index) => {
+                    context
+                        .universes_mut()
+                        .instantiate_at(group.universe_context(), &instance.levels)
+                        .map_err(Error::from)?;
 
-                instantiate_universe_levels_scoped(&group.member_type(index), &instance.levels)
-                    .map_err(Error::from)?
-            } else {
-                match &*instance.head {
-                    Subterm::Var(var) => context
-                        .instantiate_assumption_at(var.unwrap(), &instance.levels)?
-                        .ok_or_else(|| Error::unbound_variable(instance.head.clone()))?,
-                    _ => {
-                        return Err(Error::UniverseInvariant(
-                            "a universe instance must wrap a variable or a projection of a recursive group".into(),
-                        ));
-                    }
+                    instantiate_universe_levels_scoped(&group.member_type(*index), &instance.levels)
+                        .map_err(Error::from)?
                 }
+                InstanceHead::Var(var) => context
+                    .instantiate_assumption_at(var.unwrap(), &instance.levels)?
+                    .ok_or_else(|| Error::unbound_variable(instance.head.to_term()))?,
             };
             (term.clone(), type_)
         }
@@ -174,7 +169,12 @@ fn elaborate_subterm(
                 let rebuilt = if levels.is_empty() {
                     term.clone()
                 } else {
-                    Term::universe_inst(term.clone(), levels)
+                    // The occurrence's span moves onto the wrapping instance: the typed head carries none.
+                    let instance = Term::instance(InstanceHead::Var(var.clone()), levels);
+                    match term.span() {
+                        Some(span) => instance.with_span(span),
+                        None => instance,
+                    }
                 };
                 (rebuilt, type_)
             }

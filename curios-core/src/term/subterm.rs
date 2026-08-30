@@ -28,7 +28,7 @@ pub enum Subterm {
     Proj(Proj),
     Let(Let),
     Rec(Rec),
-    UniverseInst(UniverseInst),
+    Instance(Instance),
     Var(Var),
     Metavar(Metavar),
     /// The elaboration-transient constructors, grouped so post-elaboration consumers dismiss the class with one arm.
@@ -60,8 +60,17 @@ impl Subterm {
             };
         match self {
             Subterm::Type(level) => level_matches(level),
-            Subterm::UniverseInst(UniverseInst { levels, .. })
-            | Subterm::InductType(InductType {
+            // A projection head's group context is this node's own data now that the head is typed rather than a child term, so its constraints are direct here exactly as `Rec`'s are below.
+            Subterm::Instance(Instance { head, levels }) => {
+                levels.iter().any(&mut level_matches)
+                    || match head {
+                        InstanceHead::Var(_) => false,
+                        InstanceHead::RecProj(group, _) => {
+                            context_matches(group.universe_context(), &mut level_matches)
+                        }
+                    }
+            }
+            Subterm::InductType(InductType {
                 universes: levels, ..
             })
             | Subterm::Variant(Variant {
@@ -140,9 +149,15 @@ impl Subterm {
     pub(crate) fn collect_construction_names(&self, names: &mut BTreeSet<Global>) {
         match self {
             Subterm::Type(_) | Subterm::Prop | Subterm::Var(_) => {}
-            Subterm::UniverseInst(UniverseInst { head, .. }) => {
-                head.collect_construction_names(names);
-            }
+            Subterm::Instance(Instance { head, .. }) => match head {
+                InstanceHead::Var(_) => {}
+                InstanceHead::RecProj(group, _) => {
+                    for member in group.iter() {
+                        member.type_.body().collect_construction_names(names);
+                        member.body.body().collect_construction_names(names);
+                    }
+                }
+            },
             Subterm::Transient(transient) => {
                 transient
                     .subterms()
@@ -305,7 +320,13 @@ impl Subterm {
         match self {
             Subterm::Metavar(Metavar { spine, .. }) => spine.iter().any(&mut *pred),
             Subterm::Type(_) | Subterm::Prop | Subterm::Var(_) => false,
-            Subterm::UniverseInst(UniverseInst { head, .. }) => pred(head),
+            // A variable head is this node's own data, like `Var`'s identity; a projection head's children are its group's scope bodies, exactly `Rec`'s minus the tail (a projection's tail is a bare member variable, which contributes to no child predicate).
+            Subterm::Instance(Instance { head, .. }) => match head {
+                InstanceHead::Var(_) => false,
+                InstanceHead::RecProj(group, _) => group
+                    .iter()
+                    .any(|member| pred(member.type_.body()) || pred(member.body.body())),
+            },
             Subterm::Transient(transient) => {
                 let mut children = transient.subterms();
                 children.any(&mut *pred)
@@ -387,7 +408,11 @@ impl Subterm {
     /// A local is a [`Free::Local`], so this is a discriminant test. It used to be a search for a marker character in the spelling, which a compiler-made *global* could set by accident — and once did.
     pub(crate) fn has_local_free(&self) -> bool {
         match self {
-            Subterm::Var(var) => var.as_free().is_some_and(Free::is_local),
+            Subterm::Var(var)
+            | Subterm::Instance(Instance {
+                head: InstanceHead::Var(var),
+                ..
+            }) => var.as_free().is_some_and(Free::is_local),
             _ => self.any_child_term(&mut |t| t.has_local_free()),
         }
     }
@@ -404,8 +429,9 @@ impl Subterm {
         let level_has_meta = |level: &Level| level.metas().next().is_some();
         match self {
             Subterm::Type(level) => level_has_meta(level),
-            Subterm::UniverseInst(UniverseInst { head, levels }) => {
-                head.has_universe_meta() || levels.iter().any(level_has_meta)
+            Subterm::Instance(Instance { levels, .. }) => {
+                levels.iter().any(level_has_meta)
+                    || self.any_child_term(&mut |term| term.has_universe_meta())
             }
             Subterm::InductType(InductType { universes, .. })
             | Subterm::Variant(Variant { universes, .. })
@@ -421,7 +447,7 @@ impl Subterm {
     pub(crate) fn has_universe_data(&self) -> bool {
         match self {
             Subterm::Type(level) => level != &Level::zero(),
-            Subterm::UniverseInst(_) => true,
+            Subterm::Instance(_) => true,
             Subterm::InductType(InductType { universes, .. })
             | Subterm::Variant(Variant { universes, .. })
             | Subterm::StructType(StructType { universes, .. })
@@ -440,7 +466,12 @@ impl Subterm {
     ///
     /// A node that adds no identity of its own and whose free variables all arrive through one child shares that child's allocation ([`FreeVars::Shared`]) instead of copying it: on a chain-shaped term every link above the one free occurrence carries the same set, and copying it per link would cost O(set) where the pass-through costs O(1). The union only materializes once a second carrying child appears.
     pub(super) fn free_vars_from_children(&self) -> FreeVars {
-        if let Subterm::Var(var) = self
+        // An instance's variable head is this node's own identity exactly as a bare `Var`'s is, and in both shapes a variable head means there are no child terms to union.
+        if let Subterm::Var(var)
+        | Subterm::Instance(Instance {
+            head: InstanceHead::Var(var),
+            ..
+        }) = self
             && let Some(name) = var.as_free()
         {
             return FreeVars::Owned(BTreeSet::from([name.clone()]));
@@ -693,12 +724,31 @@ impl Bound for Subterm {
                 group: group.traverse(visit),
                 tail: visit.visit_scope(tail),
             }),
-            Subterm::UniverseInst(UniverseInst { head, .. }) if visit.erases_universes() => {
-                (*visit.visit_subterm(head)).clone()
-            }
-            Subterm::UniverseInst(UniverseInst { head, levels }) => {
-                Subterm::UniverseInst(UniverseInst {
-                    head: visit.visit_subterm(head),
+            // Erasure unwraps to the head's own spelling: the variable takes the ordinary `Var` route through the hook, and a projection rebuilds the `Rec` it abbreviates over the erased group. The projection's tail is a member variable below every hook's depth, so building it unvisited is the same as visiting it.
+            Subterm::Instance(Instance { head, .. }) if visit.erases_universes() => match head {
+                InstanceHead::Var(var) => {
+                    visit.call(var).unwrap_or_else(|| Subterm::Var(var.clone()))
+                }
+                InstanceHead::RecProj(group, index) => {
+                    (*Term::rec_proj(group.traverse(visit), *index)).clone()
+                }
+            },
+            Subterm::Instance(Instance { head, levels }) => {
+                let head = match head {
+                    InstanceHead::Var(var) => match visit.call(var) {
+                        None => InstanceHead::Var(var.clone()),
+                        Some(replacement) => match InstanceHead::from_subterm(&replacement) {
+                            Some(head) => head,
+                            // A replacement that is not a head shape can only arrive through a binder no scheme governs — a crafted module's `let` or lambda, never an elaborated term, since locals are never generalized. The kernel types a local-headed instance as its bare head with the levels inert (`curios-cert`'s sort fixtures pin this), so substitution resolves it the same way: the instance dissolves to the replacement. Anything but a total answer here would let a hand-built module abort a reducer that promises totality on arbitrary terms.
+                            None => return replacement,
+                        },
+                    },
+                    InstanceHead::RecProj(group, index) => {
+                        InstanceHead::RecProj(group.traverse(visit), *index)
+                    }
+                };
+                Subterm::Instance(Instance {
+                    head,
                     levels: levels
                         .iter()
                         .map(|level| visit.visit_level(level))
@@ -747,7 +797,14 @@ impl Bound for Subterm {
                 .map(|child| child.reach())
                 .fold(0, usize::max),
             Subterm::Metavar(Metavar { spine, .. }) => max_reach(spine.as_slice()),
-            Subterm::UniverseInst(UniverseInst { head, .. }) => head.reach(),
+            // A variable head reaches like a bare `Var`; a projection head like the `Rec` it abbreviates, whose tail — a member variable under the group's own binders — contributes nothing past the block boundary.
+            Subterm::Instance(Instance { head, .. }) => match head {
+                InstanceHead::Var(var) => match var.as_bound() {
+                    Some(index) => index + 1,
+                    None => 0,
+                },
+                InstanceHead::RecProj(group, _) => group.reach(),
+            },
             Subterm::Var(var) => match var.as_bound() {
                 Some(index) => index + 1,
                 None => 0,

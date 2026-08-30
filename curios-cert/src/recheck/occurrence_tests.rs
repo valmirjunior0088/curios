@@ -5,7 +5,6 @@
 //! It also holds the hand-built adversarial modules. A refusal the elaborator reaches first leaves no module behind, so a rule where `curios-elab` is the stricter of the two cannot be put to this crate by any surface program — `Expect::NotAsked` in `curios/src/tests/perimeter.rs` records exactly that gap. Reaching it means constructing the finished module here and asking `recheck_module_verdicts` directly.
 
 use {
-    super::recheck_module_verdicts,
     crate::{Globals, KernelError},
     curios_core::{
         Atom, Definition, DefinitionKind, Free, Func, FuncType, Global, InductParam, Intrinsic,
@@ -32,7 +31,7 @@ use super::test_support::*;
 #[test]
 fn an_occurrence_whose_arity_is_not_its_declarations_is_refused() {
     for (label, params, indices) in arity_cases() {
-        let verdicts = recheck_module_verdicts(
+        let verdicts = fixture_verdicts(
             &occurrence_module(params, indices),
             1_000_000,
             &Globals::default(),
@@ -57,7 +56,7 @@ fn an_occurrence_at_its_declared_arity_is_accepted() {
     );
 
     assert_eq!(
-        recheck_module_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX),
+        fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX),
         Vec::new(),
         "the boundary refused an occurrence at exactly the arity its declaration states",
     );
@@ -77,8 +76,7 @@ fn an_occurrence_at_its_declared_arity_is_accepted() {
 #[test]
 fn a_nominal_value_whose_arity_is_not_its_declarations_is_refused() {
     for (label, module) in nominal_value_cases() {
-        let verdicts =
-            recheck_module_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
+        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
 
         assert!(
             verdicts
@@ -95,7 +93,7 @@ fn a_nominal_value_at_its_declared_arity_is_accepted() {
     let nat = Term::intrinsic(Intrinsic::NatType);
 
     assert_eq!(
-        recheck_module_verdicts(
+        fixture_verdicts(
             &struct_value_module(vec![nat.clone()]),
             1_000_000,
             &Globals::default(),
@@ -105,7 +103,7 @@ fn a_nominal_value_at_its_declared_arity_is_accepted() {
         "a record literal at exactly its declared parameters was refused",
     );
     assert_eq!(
-        recheck_module_verdicts(
+        fixture_verdicts(
             &variant_value_module(vec![nat]),
             1_000_000,
             &Globals::default(),
@@ -132,8 +130,7 @@ fn a_nominal_value_at_its_declared_arity_is_accepted() {
 #[test]
 fn a_count_a_term_carries_is_refused_rather_than_indexed_with() {
     for (label, module) in unsaturated_cases() {
-        let verdicts =
-            recheck_module_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
+        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
 
         assert!(
             verdicts.iter().any(|verdict| matches!(
@@ -202,7 +199,7 @@ fn a_saturated_application_in_a_type_position_is_accepted() {
     };
 
     assert_eq!(
-        recheck_module_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX),
+        fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX),
         Vec::new(),
         "a saturated application in a type position was refused",
     );
@@ -226,7 +223,7 @@ fn a_binder_set_is_not_opened_at_a_count_the_term_supplied() {
     for (label, module) in unguarded_opener_cases() {
         // The demonstrated defect is the *abort*: `recheck_module_verdicts` is documented as walking to the end with each verdict independent of the others, and a panic makes that false.
         let verdicts = catch_unwind(AssertUnwindSafe(|| {
-            recheck_module_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX)
+            fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX)
         }))
         .unwrap_or_else(|_| panic!("{label}: reduction aborted the walk instead of refusing"));
 
@@ -243,7 +240,7 @@ fn an_arm_matching_its_payload_still_reduces() {
     let module = arm_module(vec![(Plicity::Explicit, Free::local(996, Some("a")))]);
 
     assert_eq!(
-        recheck_module_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX),
+        fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX),
         Vec::new(),
         "an arm binding exactly its payload was refused",
     );
@@ -260,7 +257,7 @@ fn an_arm_matching_its_payload_still_reduces() {
 /// Its control is [`an_indexed_occurrence_at_a_well_typed_index_is_accepted`], which keeps the same family at an index that genuinely inhabits `Nat`: without it, refusing every indexed occurrence would pass this.
 #[test]
 fn a_nominal_occurrence_types_its_arguments() {
-    let verdicts = recheck_module_verdicts(
+    let verdicts = fixture_verdicts(
         &index_forgery(),
         1_000_000,
         &Globals::default(),
@@ -313,7 +310,7 @@ fn an_indexed_occurrence_at_a_well_typed_index_is_accepted() {
     };
 
     assert_eq!(
-        recheck_module_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX),
+        fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX),
         Vec::new()
     );
 }
@@ -375,7 +372,7 @@ fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
         body: Some(Term::intrinsic(Intrinsic::NatType)),
     };
 
-    let verdicts = recheck_module_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
+    let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
 
     assert!(
         !verdicts.is_empty(),

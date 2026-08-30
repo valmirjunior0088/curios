@@ -14,8 +14,8 @@ mod tests;
 use {
     super::{Context, TermBuilders},
     curios_core::{
-        Apply, Bound, Field, Free, Global, Metavar, MetavarOrigin, Proj, Rec, RecGroup, StructType,
-        Subterm, Term, UniverseInst, Var, Visit,
+        Apply, Bound, Field, Free, Global, Instance, InstanceHead, Metavar, MetavarOrigin, Proj,
+        Rec, RecGroup, StructType, Subterm, Term, Var, Visit,
     },
     curios_utilities::InfixOp,
     std::{collections::BTreeMap, rc::Rc},
@@ -147,19 +147,18 @@ fn operator_call<'a>(
         return None;
     };
 
-    // A solved witness reference may carry its occurrence's universe instance; the identity lives in the head.
-    let witness = match &**witness {
-        Subterm::UniverseInst(UniverseInst { head, .. }) => head,
-        _ => witness,
-    };
-
+    // A solved witness reference may carry its occurrence's universe instance; the identity lives in the head, which the or-pattern reads through.
     let op = match &**witness {
         // Unsolved: the insertion provenance rides the metavariable and names the operator directly.
         Subterm::Metavar(Metavar {
             origin: MetavarOrigin::Witness(origin),
             ..
         }) => InfixOp::from_symbol(&origin.func)?,
-        Subterm::Var(var) => {
+        Subterm::Var(var)
+        | Subterm::Instance(Instance {
+            head: InstanceHead::Var(var),
+            ..
+        }) => {
             let Field::Index(index) = field else {
                 return None;
             };
@@ -184,13 +183,13 @@ fn concept_of(type_: &Term) -> Option<Global> {
         Subterm::Apply(Apply { head, .. }) => head,
         _ => type_,
     };
-    let head = match &**head {
-        Subterm::UniverseInst(UniverseInst { head, .. }) => head,
-        _ => head,
-    };
     match &**head {
         Subterm::StructType(StructType { name, .. }) => Some(name.clone()),
-        Subterm::Var(var) => match var.as_free()? {
+        Subterm::Var(var)
+        | Subterm::Instance(Instance {
+            head: InstanceHead::Var(var),
+            ..
+        }) => match var.as_free()? {
             Free::Global(global) => Some(global.clone()),
             Free::Local(_) => None,
         },

@@ -148,6 +148,7 @@ fn kernel_floor(entrypoint: &Entrypoint) -> Result<u64, u64> {
         typecheck_with_prelude(DEFAULT_STEP_BUDGET, entrypoint, &RootSource::none())
             .expect("the arm elaborates within the default budget");
 
+    let module = curios_core::Zonked::project(&module).expect("the checked module is zonked");
     floor(|budget| recheck_with_prelude(&module, budget).is_empty())
 }
 
@@ -551,6 +552,7 @@ fn declaration_cost(source: &str) -> (Consumption, u64, Consumption, u64) {
     let (module, _obligations, elaborator, elaborator_retained) =
         typecheck_with_prelude_measured(DEFAULT_STEP_BUDGET, &entrypoint, &RootSource::none())
             .expect("the program elaborates within the default budget");
+    let module = curios_core::Zonked::project(&module).expect("the checked module is zonked");
     let (verdicts, kernel) = recheck_with_prelude_measured(&module, DEFAULT_STEP_BUDGET);
 
     assert!(verdicts.is_empty(), "the kernel accepts it: {verdicts:?}");

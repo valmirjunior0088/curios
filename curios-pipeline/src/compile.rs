@@ -67,7 +67,7 @@ impl From<CompileError> for String {
 ///
 /// The [`Globals`] environment is assembled here rather than in `curios-unit`, because a unit is defined to stay below the kernel and cannot name it. Every caller that wants the compile path's rechecking gets this one rather than reconstructing it.
 pub fn recheck(
-    module: &curios_core::Module,
+    module: &curios_core::Zonked<curios_core::Module>,
     budget: u64,
     scope: Prefix<'_>,
     syntax: &SyntaxRegistry,
@@ -77,7 +77,7 @@ pub fn recheck(
 
 /// [`recheck`], handing back the walk's own kernel for a measurement to read rather than only its verdicts. See `curios_cert::recheck_module_measured`.
 pub fn recheck_measured(
-    module: &curios_core::Module,
+    module: &curios_core::Zonked<curios_core::Module>,
     budget: u64,
     scope: Prefix<'_>,
     syntax: &SyntaxRegistry,
@@ -243,7 +243,7 @@ pub fn check_entrypoint(
     loader: &RootSource,
 ) -> Result<curios_core::Module, CompileError> {
     check_observed(budget, scope, syntax, entrypoint, loader, &mut |_| {})
-        .map(|(module, _core_type, _foreigns)| module)
+        .map(|(module, _core_type, _foreigns)| module.into_module())
 }
 
 /// [`check_entrypoint`] with the stages it passes observed, and the entry's type and foreign rows kept for the lowering that follows it.
@@ -254,18 +254,24 @@ fn check_observed<O>(
     entrypoint: &Entrypoint,
     loader: &RootSource,
     observe: &mut O,
-) -> Result<(curios_core::Module, Term, ForeignStore), CompileError>
+) -> Result<(curios_core::Zonked<curios_core::Module>, Term, ForeignStore), CompileError>
 where
     O: FnMut(Stage<'_>),
 {
     let (module, core_type, foreigns) =
         elaborate_and_zonk(budget, scope, syntax, entrypoint, loader, observe)?;
 
+    // The zonk evidence the kernel and erasure consume, established where the module is final. A refusal here is a compiler invariant — `zonk_module` just enforced the same claim — surfacing as a failure rather than a panic.
+    let module = curios_core::Zonked::project(&module)
+        .map_err(|refusal| CompileError::failure(refusal.to_string()))?;
+
     // The independent kernel's second opinion, on the compile path: each unit in scope was walked when it was built and arrives here as environment, so only what it does not already answer for is judged — a refusal fails the compile.
     {
         curios_profile::profile!("recheck");
         if let Some(verdict) = recheck(&module, budget, scope, syntax).into_iter().next() {
-            let refusal = verdict.error.format_with(&module, &scope.cores());
+            let refusal = verdict
+                .error
+                .format_with(module.as_module(), &scope.cores());
             return Err(CompileError::failure(match &verdict.name {
                 Some(name) => format!("the kernel refused {name}: {refusal}"),
                 None => format!("the kernel refused the entrypoint: {refusal}"),
@@ -338,8 +344,11 @@ pub fn compile_unit(
         )
     })?;
 
+    let core = curios_core::Zonked::project(&core)
+        .map_err(|refusal| CompileError::failure(refusal.to_string()))?;
+
     if let Some(verdict) = recheck(&core, budget, scope, syntax).into_iter().next() {
-        let refusal = verdict.error.format_with(&core, &cores);
+        let refusal = verdict.error.format_with(core.as_module(), &cores);
         return Err(CompileError::failure(match &verdict.name {
             Some(name) => format!("the kernel refused {name}: {refusal}"),
             None => format!("the kernel refused a unit: {refusal}"),
@@ -352,8 +361,9 @@ pub fn compile_unit(
         &core,
         None,
     )
-    .map_err(|error| CompileError::Failure(error.reports_with(&core, &cores)))?;
+    .map_err(|error| CompileError::Failure(error.reports_with(core.as_module(), &cores)))?;
 
+    let core = core.into_module();
     let binder_floor = derived_binder_floor(&core);
 
     Ok(Unit::new(lowered, core, ersd, binder_floor))
@@ -464,7 +474,7 @@ where
         Some(&core_type),
     )
     .map(|erased| erased.into_module())
-    .map_err(|error| CompileError::Failure(error.reports_with(&module, &cores)))?;
+    .map_err(|error| CompileError::Failure(error.reports_with(module.as_module(), &cores)))?;
 
     // Every unit's rows, not the entry's alone: an embedder binds one registry, and a dependency that declares a `foreign` row has to reach it. Disjoint by mount, so the union cannot collide.
     let mut all_foreigns = scope.foreigns();

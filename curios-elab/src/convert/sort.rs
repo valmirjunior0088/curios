@@ -262,7 +262,7 @@ impl Sort {
                 }
             }
             Subterm::Type(level) => Sort::Type(level.succ().map_err(ReduceError::Universe)?),
-            Subterm::UniverseInst(instance) => Sort::of_in(context, opened, &instance.head)?,
+            Subterm::Instance(instance) => Sort::of_in(context, opened, &instance.head.to_term())?,
             // `Prop` reaches here too, and `Prop : Type 0` is exactly right, so it is not a fallback and is not worth reporting. A `Metavar` is the opposite: an unsolved type pinned to level 0 is precisely the collapse under investigation.
             _ => {
                 if !matches!(&*reduced, Subterm::Prop) {

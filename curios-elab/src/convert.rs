@@ -34,8 +34,8 @@ use {
         Apply, Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Intrinsic,
         Level, Match, Metavar, Proj, Rec, ReduceError, Scope, Struct, StructType, Subterm,
         Telescope, Term, Three, Tuple, TupleType, UniverseConstraintKind, UniverseConstraintOrigin,
-        UniverseContext, UniverseError, UniverseInst, Variant, Visit,
-        instantiate_universe_levels_scoped, rewrite_universe_levels_scoped,
+        UniverseContext, UniverseError, Variant, Visit, instantiate_universe_levels_scoped,
+        rewrite_universe_levels_scoped,
     },
     curios_utilities::Plicity,
     std::{
@@ -1642,11 +1642,11 @@ impl Convert {
                         .map_err(ReduceError::Universe)?;
                     true
                 }
-                (Subterm::UniverseInst(this), Subterm::UniverseInst(that)) => {
+                (Subterm::Instance(this), Subterm::Instance(that)) => {
                     if !Self::compare_levels(context, &this.levels, &that.levels)? {
                         false
                     } else {
-                        self.enqueue(type_, this.head, that.head);
+                        self.enqueue(type_, this.head.to_term(), that.head.to_term());
                         true
                     }
                 }

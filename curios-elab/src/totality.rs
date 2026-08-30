@@ -324,14 +324,8 @@ fn checked_type_positions(
     for (term, type_, site) in settled {
         // Once per distinct recorded type rather than once per recorded term — see `checked_proof_positions`, which memoizes the same call for the same reason. This walk reads `checked` rather than draining it, because (V)'s seeding still needs it.
         let type_ = zonked(context, cache, &type_)?;
-        // The term *is* a type exactly when its own type is a sort. A universe instance wraps one without changing that.
-        let sort = match &*type_ {
-            Subterm::Type(_) | Subterm::Prop => true,
-            Subterm::UniverseInst(instance) => {
-                matches!(&*instance.head, Subterm::Type(_) | Subterm::Prop)
-            }
-            _ => false,
-        };
+        // The term *is* a type exactly when its own type is a sort. An instance head is a variable or a projection, never a sort, so a wrapped type is not one.
+        let sort = matches!(&*type_, Subterm::Type(_) | Subterm::Prop);
         if sort {
             positions.push(Position {
                 term: zonked(context, cache, &term)?,

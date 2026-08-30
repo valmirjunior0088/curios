@@ -5,7 +5,6 @@
 //! It also holds the hand-built adversarial modules. A refusal the elaborator reaches first leaves no module behind, so a rule where `curios-elab` is the stricter of the two cannot be put to this crate by any surface program — `Expect::NotAsked` in `curios/src/tests/perimeter.rs` records exactly that gap. Reaching it means constructing the finished module here and asking `recheck_module_verdicts` directly.
 
 use {
-    super::recheck_module_verdicts,
     crate::Globals,
     curios_core::{Free, Global, Intrinsic, Many, Module, RecGroup, RecMemberScopes, Scope, Term},
     curios_utilities::Qualifier,
@@ -39,7 +38,7 @@ fn a_recursive_member_is_certified_only_with_its_group() {
             "expected",
         ),
     ] {
-        let verdicts = recheck_module_verdicts(
+        let verdicts = fixture_verdicts(
             &selection_module(body),
             1_000_000,
             &Globals::default(),
@@ -98,7 +97,7 @@ fn a_member_of_a_legal_group_is_still_accepted() {
     };
 
     assert_eq!(
-        recheck_module_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX),
+        fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX),
         Vec::new(),
         "general recursion at a relevant type is legal however it is spelled",
     );

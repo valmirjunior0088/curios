@@ -184,7 +184,7 @@ fn an_instance_must_satisfy_its_schemes_constraints() {
         },
     );
 
-    let at = |levels: Vec<Level>| Term::universe_inst(Term::free_var(&name), levels);
+    let at = |levels: Vec<Level>| Term::instance_of(&name, levels);
 
     assert_eq!(
         infer(&mut kernel, &at(vec![Level::zero(), one()])),

@@ -206,9 +206,9 @@ fn binder(index: u32, hint: &str) -> Free {
     Free::local(index, Some(hint))
 }
 
-// === The `UniverseInst` arm, which drops its levels ==========================
+// === The `Instance` arm, which drops its levels ==========================
 //
-// `Sort::of`'s `UniverseInst` arm classifies the head and drops the instance — the clause `documentation/soundness/per-term-rules/universe-instance-discharge.md` left standing on a reachability argument, attacked 2026-08-17. The audit enumerated what reaches it: `step_universe_inst` leaves a `UniverseInst` stuck only over a `Var` whose `value_at` is `None` — a local, or a global declared without a body — while every defined scheme instantiates its body at the instance before the arm can see it, and a rec-projection head steps to an instantiated projection. The three fixtures below hold one leg each, and together they are why the dropped levels cannot move a verdict.
+// `Sort::of`'s `Instance` arm classifies the head and drops the instance — the clause `documentation/soundness/per-term-rules/universe-instance-discharge.md` left standing on a reachability argument, attacked 2026-08-17. The audit enumerated what reaches it: `step_instance` leaves an `Instance` stuck only over a `Var` whose `value_at` is `None` — a local, or a global declared without a body — while every defined scheme instantiates its body at the instance before the arm can see it, and a rec-projection head steps to an instantiated projection. The three fixtures below hold one leg each, and together they are why the dropped levels cannot move a verdict.
 
 /// The one production-reachable head: a local. A local is monomorphic — it was opened at one type, so there is no scheme to instantiate — and its sort is its binder's, whatever levels the wrapper states and however many. The width-2 vector is deliberate: even an instance no typing rule would admit cannot move the lookup, because the arm never reads it.
 #[test]
@@ -223,23 +223,17 @@ fn a_universe_instance_over_a_local_head_takes_the_locals_sort() {
 
     for levels in [vec![Level::zero()], vec![one.clone(), Level::zero()]] {
         assert_eq!(
-            Sort::of(
-                &mut kernel,
-                &Term::universe_inst(Term::free_var(&hypothesis), levels.clone()),
-            ),
+            Sort::of(&mut kernel, &Term::instance_of(&hypothesis, levels.clone()),),
             Ok(Sort::Prop),
         );
         assert_eq!(
-            Sort::of(
-                &mut kernel,
-                &Term::universe_inst(Term::free_var(&data), levels),
-            ),
+            Sort::of(&mut kernel, &Term::instance_of(&data, levels),),
             Ok(Sort::Type(Level::zero())),
         );
     }
 }
 
-/// A defined scheme never reaches the arm: `step_universe_inst` instantiates its body at the stated instance first, so the sort lands at the *instance's* level — the second clause of the entry's Assumes, probed at the sort. `A<u> : Type (u + 1) = Type u` at `u := 1` classifies as `Type 2`, with no scheme parameter surviving to be captured.
+/// A defined scheme never reaches the arm: `step_instance` instantiates its body at the stated instance first, so the sort lands at the *instance's* level — the second clause of the entry's Assumes, probed at the sort. `A<u> : Type (u + 1) = Type u` at `u := 1` classifies as `Type 2`, with no scheme parameter surviving to be captured.
 #[test]
 fn a_universe_instance_over_a_defined_scheme_classifies_at_the_instances_level() {
     let mut kernel = kernel();
@@ -260,15 +254,12 @@ fn a_universe_instance_over_a_defined_scheme_classifies_at_the_instances_level()
     let two = one.clone().succ().expect("level one succeeds");
 
     assert_eq!(
-        Sort::of(
-            &mut kernel,
-            &Term::universe_inst(Term::free_var(&scheme), vec![one]),
-        ),
+        Sort::of(&mut kernel, &Term::instance_of(&scheme, vec![one]),),
         Ok(Sort::Type(two)),
     );
 }
 
-/// The one route that does bring a scheme head to the arm — a polymorphic global declared without a body, a permanent neutral — is refused, not captured: the arm drops the levels and classifies the bare head, which [`Kernel::type_of`]'s bare-occurrence rule refuses. That is the safe direction, and it is also an over-refusal this fixture pins as *latent*: the occurrence states its instance, so the correct answer is the instantiated scheme's sort, exactly what [`synth_neutral`](super::synth_neutral)'s own `UniverseInst` arm computes for the same head inside a spine. It stays latent because nothing on the compile path declares a bodiless global — the module walk `define`s every item with its real body, and `Globals::of` records bodies for every `Let` and `Rec` — so only [`Kernel::declare`], a public API with no production caller, can build this state. Verified while attacked: the refusal below, against the acceptance the fixture above shows for the same scheme with a body.
+/// The one route that does bring a scheme head to the arm — a polymorphic global declared without a body, a permanent neutral — is refused, not captured: the arm drops the levels and classifies the bare head, which [`Kernel::type_of`]'s bare-occurrence rule refuses. That is the safe direction, and it is also an over-refusal this fixture pins as *latent*: the occurrence states its instance, so the correct answer is the instantiated scheme's sort, exactly what [`synth_neutral`](super::synth_neutral)'s own `Instance` arm computes for the same head inside a spine. It stays latent because nothing on the compile path declares a bodiless global — the module walk `define`s every item with its real body, and `Globals::of` records bodies for every `Let` and `Rec` — so only [`Kernel::declare`], a public API with no production caller, can build this state. Verified while attacked: the refusal below, against the acceptance the fixture above shows for the same scheme with a body.
 #[test]
 fn a_universe_instance_over_a_bodiless_scheme_is_refused_rather_than_captured() {
     let mut kernel = kernel();
@@ -287,7 +278,7 @@ fn a_universe_instance_over_a_bodiless_scheme_is_refused_rather_than_captured() 
     assert!(matches!(
         Sort::of(
             &mut kernel,
-            &Term::universe_inst(Term::free_var(&scheme), vec![Level::zero()]),
+            &Term::instance_of(&scheme, vec![Level::zero()]),
         ),
         Err(KernelError::MissingUniverseInstance { .. }),
     ));

@@ -44,9 +44,9 @@ use {
     },
     curios_analysis::{Coverage, Declarations, Erased, positivity_vectors, satisfiable},
     curios_core::{
-        Bound, Definition, Free, Global, InductDecl, Item, Level, MetaId, Module, StructDecl, Term,
-        UniverseContext, derived_binder_floor_outside, rewrite_universe_levels_scoped,
-        universe_metas,
+        Bound, Definition, Free, Global, InductDecl, Item, Level, MetavarId, Module, StructDecl,
+        Term, UniverseContext, Zonked, derived_binder_floor_outside,
+        rewrite_universe_levels_scoped, universe_metas,
     },
     curios_utilities::{SyntaxRegistry, grown},
     std::collections::{BTreeSet, HashMap, HashSet},
@@ -132,8 +132,10 @@ pub struct Verdict {
 /// Re-check `module` with the independent kernel, with `globals` already in scope.
 ///
 /// `budget` is the reduction allowance each item gets, the same figure the elaborator's own `Context` is built with. [`Globals::default()`] is the whole-module walk: nothing in scope, so every item is judged.
+///
+/// The [`Zonked`] input is interface-level evidence, not a delegation: the kernel keeps its own metavariable refusals, so nothing here trusts the wrapper's constructor.
 pub fn recheck_module(
-    module: &Module,
+    module: &Zonked<Module>,
     budget: u64,
     globals: &Globals,
     syntax: SyntaxRegistry,
@@ -169,24 +171,28 @@ pub fn recheck_module(
 ///
 /// Everything module-wide still runs unconditionally — the entrypoint check, strict positivity, and declaration sizing — because a new declaration can reach an old one and those passes cost milliseconds; only the per-item typing judgment consults the environment.
 pub fn recheck_module_verdicts(
-    module: &Module,
+    module: &Zonked<Module>,
     budget: u64,
     globals: &Globals,
     syntax: SyntaxRegistry,
 ) -> Vec<Verdict> {
-    verdicts_from(Kernel::new(budget, syntax), module, globals)
+    verdicts_from(Kernel::new(budget, syntax), module.as_module(), globals)
 }
 
 /// [`recheck_module_verdicts`] with the kernel's evaluation memos off.
 ///
 /// Exists for one purpose: asserting that memoization changes no *semantic* verdict — the property that makes a memo an evaluation strategy rather than a store. A resource verdict may differ, since a term-keyed hit is free.
 pub fn recheck_module_verdicts_uncached(
-    module: &Module,
+    module: &Zonked<Module>,
     budget: u64,
     globals: &Globals,
     syntax: SyntaxRegistry,
 ) -> Vec<Verdict> {
-    verdicts_from(Kernel::uncached(budget, syntax), module, globals)
+    verdicts_from(
+        Kernel::uncached(budget, syntax),
+        module.as_module(),
+        globals,
+    )
 }
 
 /// What a whole-module walk consumed, beside the verdicts it reached — the walk's own kernel, handed back for a measurement to read.
@@ -195,13 +201,13 @@ pub fn recheck_module_verdicts_uncached(
 ///
 /// It hands back the kernel rather than a tuple of figures so that asking a new question of a finished walk costs a reader rather than a signature. A measurement's entry point, never a control; nothing in the compiler reads what it returns.
 pub fn recheck_module_measured(
-    module: &Module,
+    module: &Zonked<Module>,
     budget: u64,
     globals: &Globals,
     syntax: SyntaxRegistry,
 ) -> (Vec<Verdict>, Kernel) {
     let mut kernel = Kernel::new(budget, syntax);
-    let verdicts = verdicts_into(&mut kernel, module, globals);
+    let verdicts = verdicts_into(&mut kernel, module.as_module(), globals);
 
     (verdicts, kernel)
 }
@@ -210,9 +216,9 @@ pub fn recheck_module_measured(
 type ItemPositions = (Option<Global>, Vec<(Term, Erased)>);
 
 /// The first metavariable an `induct` registry entry carries, in the order the entry stores its parts.
-fn induct_metavar(declaration: &InductDecl) -> Option<MetaId> {
+fn induct_metavar(declaration: &InductDecl) -> Option<MetavarId> {
     let mut found = None;
-    let mut note = |id: MetaId| {
+    let mut note = |id: MetavarId| {
         found = Some(id);
         true
     };
@@ -230,9 +236,9 @@ fn induct_metavar(declaration: &InductDecl) -> Option<MetaId> {
 }
 
 /// [`induct_metavar`] for a `struct` registry entry.
-fn struct_metavar(declaration: &StructDecl) -> Option<MetaId> {
+fn struct_metavar(declaration: &StructDecl) -> Option<MetavarId> {
     let mut found = None;
-    let mut note = |id: MetaId| {
+    let mut note = |id: MetavarId| {
         found = Some(id);
         true
     };

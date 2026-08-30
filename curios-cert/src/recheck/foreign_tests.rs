@@ -5,7 +5,6 @@
 //! It also holds the hand-built adversarial modules. A refusal the elaborator reaches first leaves no module behind, so a rule where `curios-elab` is the stricter of the two cannot be put to this crate by any surface program — `Expect::NotAsked` in `curios/src/tests/perimeter.rs` records exactly that gap. Reaching it means constructing the finished module here and asking `recheck_module_verdicts` directly.
 
 use {
-    super::recheck_module_verdicts,
     crate::{Globals, KernelError},
     curios_core::{Global, Intrinsic, Term},
     curios_utilities::Qualifier,
@@ -27,7 +26,7 @@ fn a_forged_foreign_row_cannot_inhabit_a_proposition() {
     let false_name = Global::Authored(Qualifier::from(["False"]));
     let false_type = Term::induct_type(false_name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
 
-    let verdicts = recheck_module_verdicts(
+    let verdicts = fixture_verdicts(
         &forged_foreign(&false_type, &false_name),
         1_000_000,
         &Globals::default(),
@@ -48,7 +47,7 @@ fn a_forged_foreign_row_still_inhabits_its_wire_type() {
     let false_name = Global::Authored(Qualifier::from(["False"]));
 
     assert_eq!(
-        recheck_module_verdicts(
+        fixture_verdicts(
             &forged_foreign(
                 &Term::intrinsic(Intrinsic::io_type(Term::intrinsic(Intrinsic::NatType))),
                 &false_name

@@ -3,10 +3,15 @@
 //! Filed here because it is a perimeter instrument — it attacks the walk rather than any one rule — and it was a two-test module of its own before.
 
 use {
-    curios_core::{Item, Module, Term},
-    curios_pipeline::recheck_with_prelude as recheck,
+    curios_core::{Item, Module, Term, Zonked},
     curios_text::{Entrypoint, RootSource},
 };
+
+/// The compile path's walk over one fixture. Mutation edits bodies and sorts, never metavariables, so the zonk evidence re-projects for every mutant — and the kernel, not the wrapper, is what must catch the mutation.
+fn recheck(module: &Module, budget: u64) -> Vec<curios_cert::Verdict> {
+    let zonked = Zonked::project(module).expect("a mutant stays zonked");
+    curios_pipeline::recheck_with_prelude(&zonked, budget)
+}
 /// Programs whose items sit at deliberately varied types — intrinsic, propositional, functional, indexed, and nominal — so the property is exercised against more than one shape of declaration. None declares anything at a sort, which is what makes [`foreign_body`] foreign to all of them.
 const SUBJECTS: &[(&str, &str)] = &[
     (

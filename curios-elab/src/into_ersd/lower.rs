@@ -10,7 +10,7 @@ use {
     },
     crate::{validate_bound_universes, validate_universes},
     curios_core::{
-        ConceptDecl, Definition, Free, Global, InductParam, Item, Module, StructDecl,
+        ConceptDecl, Definition, Free, Global, InductParam, Item, Module, StructDecl, Zonked,
         project_erased_universes, wire_term,
     },
     curios_utilities::grown,
@@ -57,12 +57,15 @@ impl UniverseErased<Term> {
     }
 }
 
-impl UniverseErased<Module> {
-    pub(super) fn project(module: &Module) -> Result<Self, Error> {
-        validate_universes(module)?;
-        Ok(Self(project_module(module)))
+impl UniverseErased<Zonked<Module>> {
+    /// The composed evidence for the unit being erased: the input arrived zonked, and this projection removed its universe data — each layer justifying one family of impossible states in the walk below, no `Metavar` and no `Instance`. The outer layer claims the rewrite preserves the inner one, which `Zonked::map` re-validates in debug builds.
+    pub(super) fn project(module: &Zonked<Module>) -> Result<Self, Error> {
+        validate_universes(module.as_module())?;
+        Ok(Self(module.clone().map(|module| project_module(&module))))
     }
+}
 
+impl UniverseErased<Module> {
     /// Project a module whose universes were already validated by the boundary that produced it, skipping the check rather than repeating it.
     ///
     /// The archived prelude is the case this exists for: `curios-prelude` validates it as it restores, which is the point where untrusted bytes become a `Module`, and the value is immutable from then on. Re-validating at every use walked the whole standard library a second time per compilation — inside the erasure context's step budget, at that — to re-derive an answer the restore already had.
@@ -212,7 +215,7 @@ fn seal_entry(
 /// Erase a whole meta-free [`Module`] into a verified arena [`Module`]. Top-level items are erased in dominance order as the module's item chain; the entrypoint body becomes the entry block, checked against `expected`.
 pub fn erase_module(
     context: &mut Context,
-    module: &Module,
+    module: &Zonked<Module>,
     expected: &Term,
 ) -> Result<curios_ersd::Module, Error> {
     curios_profile::profile!("erase_module");
@@ -221,10 +224,12 @@ pub fn erase_module(
 
 fn erase_module_within(
     context: &mut Context,
-    module: &Module,
+    module: &Zonked<Module>,
     expected: &Term,
 ) -> Result<curios_ersd::Module, Error> {
-    let module = UniverseErased::<Module>::project(module)?.into_inner();
+    let module = UniverseErased::<Zonked<Module>>::project(module)?
+        .into_inner()
+        .into_module();
     let expected = UniverseErased::<Term>::project(expected)?.into_inner();
     // Erasure is re-derivation of elaborated terms, never surface elaboration, so the representation-privacy checks are suppressed for the whole walk.
     context.with_suppressed_privacy(|context| {
@@ -396,8 +401,8 @@ impl Lowering {
             | Subterm::TupleType(_)
             | Subterm::InductType(_)
             | Subterm::StructType(_) => Ok(Outcome::Emitted(self.unit())),
-            Subterm::UniverseInst(_) => {
-                unreachable!("UniverseInst survived the UniverseErased<Module> projection")
+            Subterm::Instance(_) => {
+                unreachable!("Instance survived the UniverseErased<Module> projection")
             }
             Subterm::Var(var) => {
                 let name = var.unwrap();
@@ -503,7 +508,7 @@ impl ErasedArena {
 pub fn erase_unit(
     context: &mut Context,
     resumed: Resumed<'_>,
-    module: &Module,
+    module: &Zonked<Module>,
     expected: Option<&Term>,
 ) -> Result<ErasedArena, Error> {
     curios_profile::profile!("erase_unit");
@@ -513,16 +518,18 @@ pub fn erase_unit(
 fn erase_unit_within(
     context: &mut Context,
     resumed: Resumed<'_>,
-    module: &Module,
+    module: &Zonked<Module>,
     expected: Option<&Term>,
 ) -> Result<ErasedArena, Error> {
     assert_eq!(
-        module.body.is_some(),
+        module.as_module().body.is_some(),
         expected.is_some(),
         "an entrypoint body and the type it is checked against arrive together or not at all",
     );
     let scope = resumed.projected_cores();
-    let module = UniverseErased::<Module>::project(module)?.into_inner();
+    let module = UniverseErased::<Zonked<Module>>::project(module)?
+        .into_inner()
+        .into_module();
     let expected = expected
         .map(|expected| Ok::<_, Error>(UniverseErased::<Term>::project(expected)?.into_inner()))
         .transpose()?;

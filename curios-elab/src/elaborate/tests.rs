@@ -276,7 +276,7 @@ fn check_on_a_hole_births_it_freezing_the_local_context() {
     );
     assert_eq!(type_, nat());
 
-    let entry = context.metavar_entry(MetaId(0)).expect("hole was born");
+    let entry = context.metavar_entry(MetavarId(0)).expect("hole was born");
     assert_eq!(entry.result, nat());
     assert_eq!(*entry.telescope, vec![(x, nat())]);
 }
@@ -299,10 +299,10 @@ fn infer_on_an_unborn_goal_births_it_with_a_meta_type() {
     // A written goal in synthesis position does not die with `CannotInfer`: a fresh unmarked metavariable stands in as its type, and the goal is birthed under it so zonk can report it.
     let (term, type_) = elaborate(&mut context, &Term::goal(0), Mode::Infer).unwrap();
 
-    assert!(matches!(&*term, Subterm::Metavar(m) if m.id == MetaId(0)));
-    assert!(matches!(&*type_, Subterm::Metavar(m) if m.id == MetaId(1)));
+    assert!(matches!(&*term, Subterm::Metavar(m) if m.id == MetavarId(0)));
+    assert!(matches!(&*type_, Subterm::Metavar(m) if m.id == MetavarId(1)));
 
-    let entry = context.metavar_entry(MetaId(0)).expect("goal was born");
+    let entry = context.metavar_entry(MetavarId(0)).expect("goal was born");
     assert_eq!(entry.result, type_);
 }
 

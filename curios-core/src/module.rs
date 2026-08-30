@@ -636,5 +636,97 @@ pub fn derived_binder_floor_outside(module: &Module, in_scope: impl Fn(&Global) 
     highest.map_or(0, |index| index as usize + 1)
 }
 
+/// Evidence that a module is finished with elaboration's metavariables: no `Metavar` node survives in any term-bearing position, and the lowering-time `universe_seeds` are cleared. `curios-elab`'s zonk is the pass that makes a module satisfy this; the validating [`Zonked::project`] is how any holder of a `Module` re-establishes it at a stage boundary, cheaply, because `has_metavar` is a per-node cached derivation.
+///
+/// The wrapper is interface-level evidence, never a license to trust: the kernel keeps its own metavariable refusals, so a `Zonked` constructed wrongly is still caught where soundness lives.
+#[derive(Debug, Clone)]
+pub struct Zonked<T>(T);
+
+impl Zonked<Module> {
+    /// Validate that `module` is zonked and take evidence of it. The clone is cheap — items share their terms by `Rc`.
+    pub fn project(module: &Module) -> Result<Self, ZonkedRefusal> {
+        match zonked_refusal(module) {
+            Some(place) => Err(ZonkedRefusal { place }),
+            None => Ok(Self(module.clone())),
+        }
+    }
+
+    pub fn as_module(&self) -> &Module {
+        &self.0
+    }
+
+    pub fn into_module(self) -> Module {
+        self.0
+    }
+
+    /// The carried module rewritten by a transform that preserves meta-freedom. The preservation claim is the caller's; debug builds re-validate it.
+    pub fn map(self, rewrite: impl FnOnce(Module) -> Module) -> Self {
+        let rewritten = rewrite(self.0);
+        debug_assert!(
+            zonked_refusal(&rewritten).is_none(),
+            "a Zonked::map rewrite must preserve meta-freedom"
+        );
+        Self(rewritten)
+    }
+}
+
+/// Why [`Zonked::project`] refused: the first term-bearing place where a metavariable survived, or the uncleared seeds.
+#[derive(Debug)]
+pub struct ZonkedRefusal {
+    place: String,
+}
+
+impl fmt::Display for ZonkedRefusal {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(formatter, "the module is not zonked: {}", self.place)
+    }
+}
+
+/// The four term-bearing places `curios-elab`'s zonk is answerable for — a definition's type and body, the entrypoint, and the two registries' telescopes — walked with the cached `has_metavar` bits, first offender wins.
+fn zonked_refusal(module: &Module) -> Option<String> {
+    if !module.universe_seeds.is_empty() {
+        return Some("the universe seeds are uncleared".to_owned());
+    }
+    for item in &module.items {
+        let survives = match item {
+            Item::Let(definition) => {
+                definition.type_.has_metavar() || definition.body.has_metavar()
+            }
+            Item::Rec(rec) => rec.group.iter().any(|member| {
+                member.type_.body().has_metavar() || member.body.body().has_metavar()
+            }),
+        };
+        if survives {
+            return Some(format!("a metavariable survives in {}", item.describe()));
+        }
+    }
+    if module.body.as_ref().is_some_and(Term::has_metavar)
+        || module.type_.as_ref().is_some_and(Term::has_metavar)
+    {
+        return Some("a metavariable survives in the entrypoint".to_owned());
+    }
+    for (name, decl) in &module.induct_decls {
+        if Bound::has_metavar(&decl.arity)
+            || decl.result_sort.has_metavar()
+            || decl
+                .constructors
+                .iter()
+                .any(|(_, param)| Bound::has_metavar(&param.telescope))
+        {
+            return Some(format!(
+                "a metavariable survives in the registry entry for {name}"
+            ));
+        }
+    }
+    for (name, decl) in &module.struct_decls {
+        if Bound::has_metavar(&decl.arity) || decl.result_sort.has_metavar() {
+            return Some(format!(
+                "a metavariable survives in the registry entry for {name}"
+            ));
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests;

@@ -20,8 +20,8 @@ mod tests;
 use {
     super::{Counted, Kernel, KernelError, infer::infer_type, whnf::whnf},
     curios_core::{
-        Apply, Bound, Field, FuncType, Intrinsic, Level, Proj, Reducer, StructType, Subterm,
-        Telescope, Term, TupleType, UniverseInst, instantiate_universe_levels_scoped,
+        Apply, Bound, Field, FuncType, Instance, InstanceHead, Intrinsic, Level, Proj, Reducer,
+        StructType, Subterm, Telescope, Term, TupleType, instantiate_universe_levels_scoped,
     },
 };
 
@@ -138,7 +138,7 @@ impl Sort {
             Subterm::Type(level) => Ok(Sort::Type(level.succ()?)),
             Subterm::Prop => Ok(Sort::Type(Level::zero())),
 
-            Subterm::UniverseInst(instance) => Sort::of(kernel, &instance.head),
+            Subterm::Instance(instance) => Sort::of(kernel, &instance.head.to_term()),
 
             _ => Err(KernelError::Unclassified(reduced.clone())),
         }
@@ -301,34 +301,31 @@ pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<T
         Subterm::Var(var) => Ok(kernel.type_of(var.unwrap())?.cloned()),
 
         // A polymorphic head at the levels this occurrence chose. The scheme is read *uninstantiated* and substituted at those levels; going through the `Var` arm would read an already-instantiated type and have nothing left to substitute.
-        Subterm::UniverseInst(UniverseInst { head, levels }) => {
-            if let Some((group, index)) = head.as_rec_proj() {
+        Subterm::Instance(Instance { head, levels }) => match head {
+            InstanceHead::RecProj(group, index) => {
                 kernel.check_instance(group.universes(), levels)?;
                 let group = group.instantiate_universes(levels)?;
 
-                return Ok(Some(group.member_type(index)));
+                Ok(Some(group.member_type(*index)))
             }
 
-            match &**head {
-                Subterm::Var(var) => {
-                    let name = var.unwrap();
+            InstanceHead::Var(var) => {
+                let name = var.unwrap();
 
-                    // A local binder is monomorphic: it was opened at one type, so there is no scheme to instantiate and the levels say nothing.
-                    if let Some(type_) = kernel.local_type(name) {
-                        return Ok(Some(type_.clone()));
-                    }
-
-                    let Some((scheme, context)) = kernel.scheme_of(name) else {
-                        return Ok(None);
-                    };
-                    let (scheme, context) = (scheme.clone(), context.clone());
-                    kernel.check_instance(&context, levels)?;
-
-                    Ok(Some(instantiate_universe_levels_scoped(&scheme, levels)?))
+                // A local binder is monomorphic: it was opened at one type, so there is no scheme to instantiate and the levels say nothing.
+                if let Some(type_) = kernel.local_type(name) {
+                    return Ok(Some(type_.clone()));
                 }
-                _ => Ok(None),
+
+                let Some((scheme, context)) = kernel.scheme_of(name) else {
+                    return Ok(None);
+                };
+                let (scheme, context) = (scheme.clone(), context.clone());
+                kernel.check_instance(&context, levels)?;
+
+                Ok(Some(instantiate_universe_levels_scoped(&scheme, levels)?))
             }
-        }
+        },
 
         Subterm::Apply(Apply { head, params, .. }) => {
             let Some(head_type) = synth_neutral(kernel, head)? else {

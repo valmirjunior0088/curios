@@ -3,7 +3,7 @@
 use {
     crate::{KernelError, check, infer},
     curios_core::{
-        Global, InductDecl, Intrinsic, MetaId, StructType, Subterm, Telescope, Term,
+        Global, InductDecl, Intrinsic, MetavarId, StructType, Subterm, Telescope, Term,
         UniverseContext,
     },
     curios_utilities::Qualifier,
@@ -78,7 +78,7 @@ fn a_list_or_cell_of_proofs_is_not_a_proposition() {
 fn elaboration_only_syntax_is_refused() {
     let mut kernel = kernel();
 
-    let metavar = Term::hole(MetaId::from(0usize));
+    let metavar = Term::hole(MetavarId::from(0usize));
     assert!(matches!(
         infer(&mut kernel, &metavar),
         Err(KernelError::NotCore(_)),

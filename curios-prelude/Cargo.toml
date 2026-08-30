@@ -22,4 +22,5 @@ curios-prelude-archive = { workspace = true }
 # re-elaborate the whole standard library for every certifier edit.
 [build-dependencies]
 curios-cert = { workspace = true, features = ["archive"] }
+curios-core = { workspace = true }
 curios-prelude-archive = { workspace = true }

@@ -598,6 +598,7 @@ fn checker_cost(budget: u64, source: &str) -> (Consumption, Consumption, u64, f6
     let (module, _obligations, elaborator, _retained) =
         typecheck_with_prelude_measured(budget, &entrypoint, &RootSource::none())
             .expect("the probe elaborates");
+    let module = curios_core::Zonked::project(&module).expect("the checked module is zonked");
     let (verdicts, kernel) = recheck_with_prelude_measured(&module, budget);
     let elapsed = start.elapsed().as_secs_f64();
 

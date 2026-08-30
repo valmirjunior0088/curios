@@ -4,8 +4,8 @@ mod tests;
 use super::{Context, Error, Mode, Outcome, ParkedWork, Sort, elaborate};
 use curios_core::{
     Apply, Bound, Field, Free, Func, FuncType, Global, Intrinsic, IntrinsicHead, Level, Many,
-    MetaId, Metavar, MetavarOrigin, Proj, ReduceError, Scope, Subterm, Telescope, Term, Transient,
-    UniverseConstraintKind, UniverseConstraintOrigin, UniverseRole, Visit,
+    Metavar, MetavarId, MetavarOrigin, Proj, ReduceError, Scope, Subterm, Telescope, Term,
+    Transient, UniverseConstraintKind, UniverseConstraintOrigin, UniverseRole, Visit,
 };
 use curios_utilities::Span;
 use std::{
@@ -268,7 +268,7 @@ pub(crate) fn blocked_on_metavar(
     context: &mut Context,
     arg: &Term,
     ty: &Term,
-    result_metavars: &BTreeSet<MetaId>,
+    result_metavars: &BTreeSet<MetavarId>,
     expected_ground: bool,
 ) -> Result<bool, Error> {
     let is_lambda = matches!(&**arg, Subterm::Func(_));
@@ -302,7 +302,7 @@ pub(crate) fn blocked_on_metavar(
 }
 
 /// Whether metavar `id` is solved *all the way down*: solved, and every metavar in its solution is itself transitively ground. `metavar_solution` only sees one level, and a solution can still embed unsolved metavars, so `expected_ground` needs this transitive view to be sure the turnaround will actually pin a result metavar rather than alias it flex-flex. Terminates: the occurs check forbids cyclic solutions.
-pub(crate) fn transitively_ground(context: &Context, id: MetaId) -> bool {
+pub(crate) fn transitively_ground(context: &Context, id: MetavarId) -> bool {
     match context.metavar_solution(id) {
         None => false,
         Some(solution) => solution
@@ -508,11 +508,11 @@ impl Context {
 /// The written goals a surviving conversion is held up by, when they are all that holds it up: every still-unsolved watched metavariable occurs in the goal with `Goal` provenance. `None` when any blocker is anything else — an uninferred implicit, a witness, a hole no occurrence names — or when nothing is watched at all, since a conversion nothing could wake is not the goals' to carry.
 fn blocked_on_written_goals(
     context: &Context,
-    watching: &BTreeSet<MetaId>,
+    watching: &BTreeSet<MetavarId>,
     goal: &super::Problem,
-) -> Option<BTreeSet<MetaId>> {
+) -> Option<BTreeSet<MetavarId>> {
     let origins = metavar_origins(&[&goal.this, &goal.that]);
-    let unsolved: BTreeSet<MetaId> = watching
+    let unsolved: BTreeSet<MetavarId> = watching
         .iter()
         .copied()
         .filter(|id| context.metavar_solution(*id).is_none())
@@ -529,7 +529,7 @@ fn blocked_on_written_goals(
 /// Render a surviving conversion goal's still-unsolved watched metavariables, each by what it *is* — the implicit or witness argument it fills, the written goal it stands for — never by its id: an id is elaboration state the reader cannot decode, and two blockers rendering alike decides nothing, for the reason the printer's anonymous-metavariable axis gives. Insertion provenance rides the *occurrence*, not the birth entry, so both sides are scanned for the watched ids; a watched metavariable no occurrence names (solved away from the spelling, or watched through a spine) is an inferred hole.
 fn watched_blockers(
     context: &Context,
-    watching: &BTreeSet<MetaId>,
+    watching: &BTreeSet<MetavarId>,
     this: &Term,
     that: &Term,
 ) -> Vec<String> {
@@ -564,8 +564,9 @@ fn watched_blockers(
 type Provenance = (MetavarOrigin, Option<Span>);
 
 /// Every metavariable occurrence across `terms` that carries an origin, by id, with the span of its first occurrence.
-fn metavar_origins(terms: &[&Term]) -> BTreeMap<MetaId, Provenance> {
-    let origins: Rc<RefCell<BTreeMap<MetaId, Provenance>>> = Rc::new(RefCell::new(BTreeMap::new()));
+fn metavar_origins(terms: &[&Term]) -> BTreeMap<MetavarId, Provenance> {
+    let origins: Rc<RefCell<BTreeMap<MetavarId, Provenance>>> =
+        Rc::new(RefCell::new(BTreeMap::new()));
     for term in terms {
         let sink = Rc::clone(&origins);
         let mut visit = Visit::rewriting(
@@ -653,7 +654,7 @@ fn retry_checking(
     context: &mut Context,
     term: Term,
     expected: Term,
-    placeholder: MetaId,
+    placeholder: MetavarId,
     origin: Term,
     frame: super::FrozenFrame,
 ) -> Result<(), Error> {

@@ -66,7 +66,7 @@ fn metavars_collects_ids_across_structure() {
             Term::intrinsic(Intrinsic::nat_add(Term::hole(3), Term::hole(1))),
         ],
     );
-    assert_eq!(term.metavars(), BTreeSet::from([1, 2, 3].map(MetaId)));
+    assert_eq!(term.metavars(), BTreeSet::from([1, 2, 3].map(MetavarId)));
 }
 
 #[test]
@@ -82,8 +82,8 @@ fn any_metavar_short_circuits_and_agrees_with_collection() {
     );
 
     // A predicate over the ids agrees with the collecting walk: a present id is found, an absent one is not.
-    assert!(term.any_metavar(&mut |id| id == MetaId(3)));
-    assert!(!term.any_metavar(&mut |id| id == MetaId(99)));
+    assert!(term.any_metavar(&mut |id| id == MetavarId(3)));
+    assert!(!term.any_metavar(&mut |id| id == MetavarId(99)));
     assert_eq!(term.any_metavar(&mut |_| true), !term.metavars().is_empty());
 
     // Bails on the first metavariable: the head's `?1` is reached first, so an accept-anything predicate runs exactly once instead of visiting all four.
@@ -112,7 +112,7 @@ fn any_metavar_visits_a_shared_subterm_once() {
         term = Term::apply(term.clone(), [term]);
     }
 
-    assert_eq!(term.metavars(), BTreeSet::from([MetaId(1)]));
+    assert_eq!(term.metavars(), BTreeSet::from([MetavarId(1)]));
 
     let mut visits = 0;
     assert!(!term.any_metavar(&mut |_| {
@@ -190,7 +190,7 @@ fn variant_collects_metavars_and_prints_as_function_call() {
         "success",
         [Term::hole(2)],
     );
-    assert_eq!(ctor.metavars(), BTreeSet::from([1, 2].map(MetaId)));
+    assert_eq!(ctor.metavars(), BTreeSet::from([1, 2].map(MetavarId)));
     assert_eq!(format!("{ctor}"), "/Result/success(?2)");
 
     let type_ = Term::induct_type(
@@ -198,7 +198,7 @@ fn variant_collects_metavars_and_prints_as_function_call() {
         [Term::intrinsic(Intrinsic::NatType), Term::hole(3)],
         Vec::<Term>::new(),
     );
-    assert_eq!(type_.metavars(), BTreeSet::from([3].map(MetaId)));
+    assert_eq!(type_.metavars(), BTreeSet::from([3].map(MetavarId)));
     assert_eq!(format!("{type_}"), "/Result(Nat, ?3)");
 }
 

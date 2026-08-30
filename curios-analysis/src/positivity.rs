@@ -649,7 +649,7 @@ impl<E: Env> Walk<'_, E> {
             | Subterm::Proj(_)
             | Subterm::Let(_)
             | Subterm::Rec(_)
-            | Subterm::UniverseInst(_)
+            | Subterm::Instance(_)
             | Subterm::Metavar(_)
             | Subterm::Transient(_) => self.opaque(&term),
         }

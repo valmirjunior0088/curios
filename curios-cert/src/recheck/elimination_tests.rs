@@ -5,7 +5,6 @@
 //! It also holds the hand-built adversarial modules. A refusal the elaborator reaches first leaves no module behind, so a rule where `curios-elab` is the stricter of the two cannot be put to this crate by any surface program — `Expect::NotAsked` in `curios/src/tests/perimeter.rs` records exactly that gap. Reaching it means constructing the finished module here and asking `recheck_module_verdicts` directly.
 
 use {
-    super::recheck_module_verdicts,
     crate::{Globals, KernelError},
     curios_core::{
         Atom, Free, Global, InductDecl, InductParam, Intrinsic, Many, Module, Scope, Subterm,
@@ -28,7 +27,7 @@ use super::test_support::*;
 /// The control is the same module with `Two` at `Type 0`, where the clash is genuine and the empty elimination must stay accepted — general vacuous elimination is how an indexed family rules its impossible cases out, and refusing it is how this hole would be shut with a brick.
 #[test]
 fn a_result_sort_that_only_reduces_to_a_sort_is_refused() {
-    let verdicts = recheck_module_verdicts(
+    let verdicts = fixture_verdicts(
         &aliased_sort_forgery(),
         1_000_000,
         &Globals::default(),
@@ -45,7 +44,7 @@ fn a_result_sort_that_only_reduces_to_a_sort_is_refused() {
 
 #[test]
 fn a_vacuous_elimination_at_a_relevant_index_is_still_accepted() {
-    let verdicts = recheck_module_verdicts(
+    let verdicts = fixture_verdicts(
         &relevant_index_control(),
         1_000_000,
         &Globals::default(),
@@ -69,7 +68,7 @@ fn a_vacuous_elimination_at_a_relevant_index_is_still_accepted() {
 /// The control is the same shape at two *distinct* tags, both targeting `Two/a()`. It must stay accepted: ruling impossible cases out is what an indexed family's vacuous elimination is for, and a clause that refused every multi-constructor declaration, or every empty elimination over one, would shut this hole with a brick.
 #[test]
 fn a_family_that_declares_one_tag_twice_is_refused() {
-    let verdicts = recheck_module_verdicts(
+    let verdicts = fixture_verdicts(
         &shadowed_constructor(["mk", "mk"]),
         1_000_000,
         &Globals::default(),
@@ -86,7 +85,7 @@ fn a_family_that_declares_one_tag_twice_is_refused() {
 
 #[test]
 fn a_vacuous_elimination_over_two_distinct_tags_is_still_accepted() {
-    let verdicts = recheck_module_verdicts(
+    let verdicts = fixture_verdicts(
         &shadowed_constructor(["mk", "mk2"]),
         1_000_000,
         &Globals::default(),
@@ -114,7 +113,7 @@ fn a_vacuous_elimination_over_two_distinct_tags_is_still_accepted() {
 /// The control is [`an_honest_motive_still_refuses_the_large_elimination`], the same module with the motive stating `Type` — where the motive is honest, the guard does fire, and the elimination is refused for the reason it should be. Together they pin that what was being skipped is the guard, and that closing the bypass did not close the guard itself.
 #[test]
 fn a_motive_that_misreports_its_sort_does_not_skip_the_large_elimination_guard() {
-    let verdicts = recheck_module_verdicts(
+    let verdicts = fixture_verdicts(
         &lying_motive(Term::prop()),
         1_000_000,
         &Globals::default(),
@@ -132,7 +131,7 @@ fn a_motive_that_misreports_its_sort_does_not_skip_the_large_elimination_guard()
 /// The control: the identical module whose motive states the `Type` its arms actually have. The guard sees a relevant result and refuses, which is what proves the fixture above is about the *classifier* rather than about eliminations in general.
 #[test]
 fn an_honest_motive_still_refuses_the_large_elimination() {
-    let verdicts = recheck_module_verdicts(
+    let verdicts = fixture_verdicts(
         &lying_motive(Term::type_ground()),
         1_000_000,
         &Globals::default(),
@@ -256,7 +255,7 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
         body: Some(Term::tuple(Vec::<Term>::new())),
     };
 
-    let verdicts = recheck_module_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
+    let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
 
     assert!(
         verdicts
@@ -280,8 +279,7 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
 #[test]
 fn no_type_position_admits_a_lying_motive() {
     for (position, module) in lying_type_positions() {
-        let verdicts =
-            recheck_module_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
+        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
 
         assert!(
             verdicts.iter().any(|verdict| matches!(

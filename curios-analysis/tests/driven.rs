@@ -13,9 +13,9 @@ use {
     },
     curios_cert::Kernel,
     curios_core::{
-        Atom, Free, Global, InductDecl, InductParam, Intrinsic, MetaId, Metavar, MetavarOrigin,
-        Nat, Polarity, Rec, StructType, Subterm, Telescope, Term, Totality, UniverseContext,
-        UniverseInst,
+        Atom, Free, Global, InductDecl, InductParam, Instance, InstanceHead, Intrinsic, Metavar,
+        MetavarId, MetavarOrigin, Nat, Polarity, Rec, StructType, Subterm, Telescope, Term,
+        Totality, UniverseContext, Var,
     },
     curios_utilities::{Plicity, Qualifier},
     std::{collections::BTreeMap, rc::Rc, slice},
@@ -364,12 +364,31 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
     // Every child position `Subterm::any_child_term` visits, and what the walk must say about it.
     let positions: Vec<(&str, Term, bool)> = vec![
         (
-            "a universe instance's head",
-            Subterm::UniverseInst(UniverseInst {
-                head: call(),
+            // The variable head is the node's own data rather than a child term since the head became typed, but it is still a call position the walk must see.
+            "a universe instance's variable head",
+            Subterm::Instance(Instance {
+                head: InstanceHead::Var(Var::free(planted())),
                 levels: Vec::new(),
             })
             .into(),
+            true,
+        ),
+        (
+            "a universe instance's projection head's member body",
+            {
+                let rec = Term::rec(
+                    vec![(binder(90), filler(), call())],
+                    Term::free_var(&binder(90)),
+                );
+                let Subterm::Rec(Rec { group, .. }) = &*rec else {
+                    panic!("the fixture changed shape");
+                };
+                Subterm::Instance(Instance {
+                    head: InstanceHead::RecProj(group.clone(), 0),
+                    levels: Vec::new(),
+                })
+                .into()
+            },
             true,
         ),
         (
@@ -494,7 +513,7 @@ fn the_walk_reaches_every_child_position_but_the_three_it_documents() {
         (
             "a metavariable's spine",
             Subterm::Metavar(Metavar {
-                id: MetaId::from(0usize),
+                id: MetavarId::from(0usize),
                 spine: Rc::new(vec![call()]),
                 origin: MetavarOrigin::Hole,
             })

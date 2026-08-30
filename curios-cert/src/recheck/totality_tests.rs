@@ -5,7 +5,6 @@
 //! It also holds the hand-built adversarial modules. A refusal the elaborator reaches first leaves no module behind, so a rule where `curios-elab` is the stricter of the two cannot be put to this crate by any surface program — `Expect::NotAsked` in `curios/src/tests/perimeter.rs` records exactly that gap. Reaching it means constructing the finished module here and asking `recheck_module_verdicts` directly.
 
 use {
-    super::recheck_module_verdicts,
     crate::{Globals, KernelError},
     curios_analysis::Erased,
     curios_core::{Global, Totality},
@@ -21,7 +20,7 @@ use super::test_support::*;
 /// No surface program reaches it: the only stamp writer is `record_totality`, whose closure is correct, so the lie must be constructed — which is why this lives here and why nothing in the corpus could have found it. The control is [`an_honest_stamp_on_a_definition_reaching_a_partial_one_is_accepted`]: a `Partial` stamp on the same definition is a classification, not an error, and must stay accepted.
 #[test]
 fn a_totality_stamp_contradicted_only_by_the_closure_is_refused() {
-    let verdicts = recheck_module_verdicts(
+    let verdicts = fixture_verdicts(
         &stamp_trial_module(Totality::Total, false),
         1_000_000,
         &Globals::default(),
@@ -47,7 +46,7 @@ fn a_totality_stamp_contradicted_only_by_the_closure_is_refused() {
 #[test]
 fn an_honest_stamp_on_a_definition_reaching_a_partial_one_is_accepted() {
     assert_eq!(
-        recheck_module_verdicts(
+        fixture_verdicts(
             &stamp_trial_module(Totality::Partial, false),
             1_000_000,
             &Globals::default(),
@@ -63,7 +62,7 @@ fn an_honest_stamp_on_a_definition_reaching_a_partial_one_is_accepted() {
 /// The first half is the compile path's exact shape: the environment is `Globals::of` over the lying library, its non-total set holds `sink` alone because the set is stamp-derived, and `held : Vouched` mentions only `reaches` — so the closure over the judged module never meets a partial name, (V) passes, and the walk returns no verdicts. That is by design and must stay: the belief is what keeps a compile from re-analyzing the standard library, and [`a_totality_stamp_contradicted_only_by_the_closure_is_refused`] is what makes it a belief in a verdict the kernel reached. The second half is the same three definitions in one module from an empty environment, where the closure runs over everything and the named route refuses the proof.
 #[test]
 fn a_lying_totality_stamp_is_believed_when_carried_and_refused_when_judged() {
-    let carried = recheck_module_verdicts(
+    let carried = fixture_verdicts(
         &carried_proof_module(),
         1_000_000,
         &Globals::of(&stamp_trial_module(Totality::Total, false), 1_000),
@@ -75,7 +74,7 @@ fn a_lying_totality_stamp_is_believed_when_carried_and_refused_when_judged() {
         "a carried totality stamp is believed, so a walk seeded from a lying one must accept",
     );
 
-    let judged = recheck_module_verdicts(
+    let judged = fixture_verdicts(
         &stamp_trial_module(Totality::Total, true),
         1_000_000,
         &Globals::default(),

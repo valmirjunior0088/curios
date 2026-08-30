@@ -5,7 +5,6 @@
 //! It also holds the hand-built adversarial modules. A refusal the elaborator reaches first leaves no module behind, so a rule where `curios-elab` is the stricter of the two cannot be put to this crate by any surface program — `Expect::NotAsked` in `curios/src/tests/perimeter.rs` records exactly that gap. Reaching it means constructing the finished module here and asking `recheck_module_verdicts` directly.
 
 use {
-    super::recheck_module_verdicts,
     crate::{Globals, KernelError},
     curios_core::{
         Definition, DefinitionKind, Global, InductDecl, Intrinsic, Item, Level, Module, Nat,
@@ -28,7 +27,7 @@ use super::test_support::*;
 /// The control is [`a_registry_index_target_of_a_real_term_is_accepted`], which is the same module with the metavariable replaced by a literal: the pass must refuse an elaboration-only node, not every registry entry.
 #[test]
 fn a_registry_index_target_is_checked_rather_than_believed() {
-    let verdicts = recheck_module_verdicts(
+    let verdicts = fixture_verdicts(
         &indexed_module(Term::hole(7_usize)),
         1_000_000,
         &Globals::default(),
@@ -49,7 +48,7 @@ fn a_registry_index_target_of_a_real_term_is_accepted() {
     let target = Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
 
     assert_eq!(
-        recheck_module_verdicts(
+        fixture_verdicts(
             &indexed_module(target),
             1_000_000,
             &Globals::default(),
@@ -74,7 +73,7 @@ fn a_registry_index_target_of_a_real_term_is_accepted() {
 #[test]
 fn a_partial_proof_in_a_registry_index_target_is_refused() {
     let family = Global::Authored(Qualifier::from(["Indexed"]));
-    let verdicts = recheck_module_verdicts(
+    let verdicts = fixture_verdicts(
         &indexed_by_proof(true),
         1_000_000,
         &Globals::default(),
@@ -94,7 +93,7 @@ fn a_partial_proof_in_a_registry_index_target_is_refused() {
 #[test]
 fn a_real_proof_in_a_registry_index_target_is_accepted() {
     assert_eq!(
-        recheck_module_verdicts(
+        fixture_verdicts(
             &indexed_by_proof(false),
             1_000_000,
             &Globals::default(),
@@ -122,7 +121,7 @@ fn a_registry_and_its_type_former_may_declare_different_schemes() {
         [("registry narrower", 1, 2), ("definition narrower", 2, 1)]
     {
         assert_eq!(
-            recheck_module_verdicts(
+            fixture_verdicts(
                 &disagreeing_schemes(registry, definition),
                 1_000_000,
                 &Globals::default(),
@@ -184,7 +183,7 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
         body: Some(Term::tuple(Vec::<Term>::new())),
     };
 
-    let verdicts = recheck_module_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
+    let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
 
     assert!(
         verdicts

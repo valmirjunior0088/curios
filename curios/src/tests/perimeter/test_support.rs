@@ -902,6 +902,8 @@ pub(super) fn both_checkers(source: &str) -> (Verdict, Verdict) {
                 None => Verdict::Accepts,
             };
             // Exactly as the compile path judges it: the archived prelude arrives as scope on the archive's word rather than being re-walked, which is both what production does and what keeps a fixture cheap.
+            let module =
+                curios_core::Zonked::project(&module).expect("the checked module is zonked");
             let kernel = match recheck(&module, curios_pipeline::DEFAULT_STEP_BUDGET)
                 .into_iter()
                 .next()

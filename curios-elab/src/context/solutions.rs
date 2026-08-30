@@ -5,7 +5,7 @@
 use {
     super::{FrozenFrame, SharedTelescope},
     crate::Problem,
-    curios_core::{Bound, MetaId, Metavar, MetavarOrigin, Subterm, Term, WitnessOrigin},
+    curios_core::{Bound, Metavar, MetavarId, MetavarOrigin, Subterm, Term, WitnessOrigin},
     curios_utilities::Entropy,
     std::{collections::BTreeSet, mem},
 };
@@ -38,11 +38,11 @@ pub(crate) enum ParkedWork {
     Checking {
         term: Term,
         expected: Term,
-        placeholder: MetaId,
+        placeholder: MetavarId,
     },
     /// A witness-resolution goal whose key type is not yet rigid: `slot` is the metavariable standing in the omitted `use`-argument's place, `goal` its (concept application) type. Woken when a watched metavariable solves; resolution then retries under the frozen frame.
     Witness {
-        slot: MetaId,
+        slot: MetavarId,
         goal: Term,
         provenance: WitnessOrigin,
     },
@@ -56,7 +56,7 @@ pub(crate) struct ParkedProblem {
     pub origin: Term,
     pub frame: FrozenFrame,
     /// The unsolved metavariables whose solutions could unblock this — solving any of them is the wake signal.
-    pub watching: BTreeSet<MetaId>,
+    pub watching: BTreeSet<MetavarId>,
 }
 
 /// The flat, frame-independent unification stores. `Context` holds exactly one of these; see the module documentation for the frame-independence contract.
@@ -65,13 +65,13 @@ pub(crate) struct Solutions {
     /// Metavariable records indexed by `Metavar::id` — monotonic facts about the program being elaborated, not lexically-scoped bindings.
     entries: Vec<Option<MetaEntry>>,
     /// The next metavariable id this store may mint (implicit-argument insertion). Seeded by `elaborate_module_suffix` with its `metavar_floor` argument so core-minted ids sit strictly above `into_core`'s.
-    next_metavar: Entropy<MetaId>,
+    next_metavar: Entropy<MetavarId>,
     /// Parked conversion constraints — frame-independent, like the entries.
     parked: Vec<ParkedProblem>,
     /// Ids solved since the last `wake_parked` sweep: the wake signal.
-    newly_solved: Vec<MetaId>,
+    newly_solved: Vec<MetavarId>,
     /// Journal of every committed solution id, in commit order — never consumed, only marked and rolled back. The watermark/rollback pair lets re-validation unwind solutions that landed while validating a candidate it then rejected.
-    solved_log: Vec<MetaId>,
+    solved_log: Vec<MetavarId>,
     /// While set, `expect` may not park: conversion is being used as a yes/no oracle (re-validation) and provisional success would leak into it.
     suppress_parking: bool,
     /// Witness goals whose key is rigid but has no table entry *yet*: a later item may register the missing witness (the table is program-wide while items elaborate in order), so these defer — retried after each item, reported as errors only when the whole module has been elaborated.
@@ -82,7 +82,7 @@ impl Solutions {
     pub(crate) fn new() -> Self {
         Self {
             entries: Vec::new(),
-            next_metavar: Entropy::<MetaId>::new(),
+            next_metavar: Entropy::<MetavarId>::new(),
             parked: Vec::new(),
             newly_solved: Vec::new(),
             solved_log: Vec::new(),
@@ -92,7 +92,7 @@ impl Solutions {
     }
 
     /// Mint the next metavariable id.
-    pub(crate) fn mint(&mut self) -> MetaId {
+    pub(crate) fn mint(&mut self) -> MetavarId {
         self.next_metavar.fresh()
     }
 
@@ -102,18 +102,23 @@ impl Solutions {
     }
 
     /// Materialize a metavariable's birth record. The store grows to cover `id`; births happen exactly once per id (each `_` is distinct and occurs once). The façade stamps the write.
-    pub(crate) fn birth(&mut self, id: MetaId, telescope: SharedTelescope, result: Term) {
+    pub(crate) fn birth(&mut self, id: MetavarId, telescope: SharedTelescope, result: Term) {
         self.birth_with_kind(id, telescope, result, MetaKind::Inference);
     }
 
     /// [`Solutions::birth`] for a recursive-elaboration slot, which only `fill_rec_slot` may solve.
-    pub(crate) fn birth_rec_slot(&mut self, id: MetaId, telescope: SharedTelescope, result: Term) {
+    pub(crate) fn birth_rec_slot(
+        &mut self,
+        id: MetavarId,
+        telescope: SharedTelescope,
+        result: Term,
+    ) {
         self.birth_with_kind(id, telescope, result, MetaKind::RecSlot);
     }
 
     fn birth_with_kind(
         &mut self,
-        id: MetaId,
+        id: MetavarId,
         telescope: SharedTelescope,
         result: Term,
         kind: MetaKind,
@@ -129,15 +134,15 @@ impl Solutions {
         });
     }
 
-    pub(crate) fn entry(&self, id: MetaId) -> Option<&MetaEntry> {
+    pub(crate) fn entry(&self, id: MetavarId) -> Option<&MetaEntry> {
         self.entries.get(id.0).and_then(Option::as_ref)
     }
 
-    pub(crate) fn solution(&self, id: MetaId) -> Option<&Term> {
+    pub(crate) fn solution(&self, id: MetavarId) -> Option<&Term> {
         self.entry(id).and_then(|entry| entry.solution.as_ref())
     }
 
-    pub(crate) fn is_rec_slot(&self, id: MetaId) -> bool {
+    pub(crate) fn is_rec_slot(&self, id: MetavarId) -> bool {
         self.entry(id)
             .is_some_and(|entry| entry.kind == MetaKind::RecSlot)
     }
@@ -145,7 +150,7 @@ impl Solutions {
     /// Commit a solution: sets the entry, records the wake signal, and journals for rollback. The façade stamps the write.
     ///
     /// An unborn id is the caller's broken contract, not a program error: every minting path births immediately, and the conversion solver's no-birth-record arm refuses before committing. A silent no-op here would surface as an unsolved metavariable far from the violation.
-    pub(crate) fn solve(&mut self, id: MetaId, term: Term) {
+    pub(crate) fn solve(&mut self, id: MetavarId, term: Term) {
         let entry = self
             .entries
             .get_mut(id.0)
@@ -212,7 +217,7 @@ impl Solutions {
 
     /// Park work under its frozen frame, recomputing the watch set from the work's currently unsolved metavariables.
     pub(crate) fn park(&mut self, work: ParkedWork, origin: Term, frame: FrozenFrame) {
-        let watching: BTreeSet<MetaId> = match &work {
+        let watching: BTreeSet<MetavarId> = match &work {
             ParkedWork::Conversion(goal) => goal
                 .this
                 .metavars()
@@ -292,7 +297,7 @@ impl Solutions {
     }
 
     /// The deferred witness goals' slots and goal types, read-only — the item drain's diagnosis of a conversion stuck on a witness whose registration never arrived in time.
-    pub(crate) fn deferred_witness_goals(&self) -> impl Iterator<Item = (MetaId, &Term)> {
+    pub(crate) fn deferred_witness_goals(&self) -> impl Iterator<Item = (MetavarId, &Term)> {
         self.deferred_witnesses
             .iter()
             .filter_map(|parked| match &parked.work {

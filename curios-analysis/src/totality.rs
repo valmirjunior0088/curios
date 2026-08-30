@@ -27,9 +27,9 @@ mod tests;
 use {
     crate::{Env, forceable},
     curios_core::{
-        Apply, Arity, Carrier, Cases, Free, FreeMonoid, Func, FuncType, InductType, Intrinsic,
-        Layer, Let, Many, Match, Nat, Proj, Rec, RecGroup, Scope, Struct, StructType, Subterm,
-        Telescope, Term, Three, Totality, Tuple, TupleType, Two, UniverseInst, Variant,
+        Apply, Arity, Carrier, Cases, Free, FreeMonoid, Func, FuncType, InductType, Instance,
+        Intrinsic, Layer, Let, Many, Match, Nat, Proj, Rec, RecGroup, Scope, Struct, StructType,
+        Subterm, Telescope, Term, Three, Totality, Tuple, TupleType, Two, Variant,
     },
     curios_num::Natural,
     curios_utilities::recurse,
@@ -696,9 +696,9 @@ impl<E: Env> Walk<'_, E> {
 
             Subterm::Tuple(Tuple { fields, .. }) => self.walks(fields),
 
-            Subterm::Proj(Proj { head, .. }) | Subterm::UniverseInst(UniverseInst { head, .. }) => {
-                self.walk_term(head)
-            }
+            Subterm::Proj(Proj { head, .. }) => self.walk_term(head),
+
+            Subterm::Instance(Instance { head, .. }) => self.walk_term(&head.to_term()),
 
             Subterm::InductType(InductType {
                 params, indices, ..
@@ -775,7 +775,7 @@ fn flatten(term: &Term) -> (Term, Vec<Term>) {
                 arguments = prefix;
                 head = inner.clone();
             }
-            Subterm::UniverseInst(UniverseInst { head: inner, .. }) => head = inner.clone(),
+            Subterm::Instance(Instance { head: inner, .. }) => head = inner.to_term(),
             _ => return (head, arguments),
         }
     }

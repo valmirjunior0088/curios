@@ -16,7 +16,7 @@ use {
 pub(crate) fn is_erasable(context: &mut Context, type_: &Term) -> Result<bool, Error> {
     match Term::unwrap_or_clone(reduce_with(context, type_)?) {
         Subterm::Type(_) | Subterm::Prop => Ok(true),
-        Subterm::UniverseInst(instance) => is_erasable(context, &instance.head),
+        Subterm::Instance(instance) => is_erasable(context, &instance.head.to_term()),
         // A function erases iff what it ultimately returns does — a proof-/type-producing function is pure, content-free; an effectful `X -> {}` is not. Recurse past the parameters (opened opaquely) into the codomain.
         Subterm::FuncType(FuncType { telescope, .. }) => {
             let vars: Vec<Term> = (0..telescope.len())

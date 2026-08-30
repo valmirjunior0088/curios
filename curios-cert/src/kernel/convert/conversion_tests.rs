@@ -4,7 +4,7 @@ use super::test_support::*;
 use {
     crate::{KernelError, convert},
     curios_core::{
-        FuncType, Global, Intrinsic, Level, MetaId, StructDecl, StructType, Subterm, Telescope,
+        FuncType, Global, Intrinsic, Level, MetavarId, StructDecl, StructType, Subterm, Telescope,
         Term, UniverseContext,
     },
     curios_utilities::{Plicity, Qualifier},
@@ -236,8 +236,8 @@ fn universes_convert_only_at_the_same_level() {
 #[test]
 fn a_metavariable_does_not_convert_with_anything_else() {
     let mut kernel = kernel();
-    let left = Term::hole(MetaId::from(0usize));
-    let right = Term::hole(MetaId::from(1usize));
+    let left = Term::hole(MetavarId::from(0usize));
+    let right = Term::hole(MetavarId::from(1usize));
 
     assert!(matches!(
         convert(&mut kernel, &Term::type_ground(), &left, &right),

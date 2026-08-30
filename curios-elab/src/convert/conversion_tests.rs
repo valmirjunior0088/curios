@@ -38,7 +38,7 @@ fn value_conversion_does_not_unfold_terms_differing_only_by_universes() {
     let u1 = context.universes_mut().fresh(UniverseRole::Flexible, None);
     let applied = |meta: UniverseMetaId| {
         Term::apply(
-            Term::universe_inst(Term::free_var(&partial), vec![Level::meta(meta)]),
+            Term::instance_of(&partial, vec![Level::meta(meta)]),
             [nat(0)],
         )
     };

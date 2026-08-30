@@ -37,9 +37,9 @@ use {
         sort::infer_sort, synth_neutral,
     },
     curios_core::{
-        Apply, Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Intrinsic,
-        Let, Many, Nat, One, Proj, Rec, Reducer, Scope, Struct, StructType, Subterm, Telescope,
-        Term, Tuple, TupleType, UniverseInst, Variant, wire_term,
+        Apply, Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Instance,
+        InstanceHead, Intrinsic, Let, Many, Nat, One, Proj, Rec, Reducer, Scope, Struct,
+        StructType, Subterm, Telescope, Term, Tuple, TupleType, Variant, wire_term,
     },
     curios_utilities::{Grain, PackedBin, recurse},
 };
@@ -417,9 +417,9 @@ fn infer_within(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
         }),
 
         // A polymorphic name at a stated instance: its scheme, substituted.
-        Subterm::UniverseInst(UniverseInst { head, .. }) => {
+        Subterm::Instance(Instance { head, .. }) => {
             // `synth_neutral` reads a projection's type off the group it carries, which is a lookup and must stay one — so the group is certified *here*, before the read, at the generic spelling the instance was taken from. Skipping this would leave the instance spelling as a way to type a member of a group nothing checked.
-            if let Some((group, _)) = head.as_rec_proj() {
+            if let InstanceHead::RecProj(group, _) = head {
                 let group = group.clone();
                 check_group(kernel, &group, |_, _| Ok(()))?;
             }

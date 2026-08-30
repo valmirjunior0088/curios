@@ -1,3 +1,4 @@
+use curios_core::Zonked;
 use curios_core::*;
 use {
     crate::*,
@@ -50,8 +51,12 @@ fn module(items: Vec<Item>, body: Term) -> Module {
     }
 }
 
+fn zonked(module: &Module) -> Zonked<Module> {
+    Zonked::project(module).expect("the fixture is zonked")
+}
+
 fn erase(context: &mut Context, module: &Module, expected: Term) -> curios_ersd::Module {
-    erase_module(context, module, &expected).expect("the module erases")
+    erase_module(context, &zonked(module), &expected).expect("the module erases")
 }
 
 #[test]
@@ -278,12 +283,13 @@ fn universe_erasure_is_a_validated_structural_projection() {
     };
     let source = module(
         vec![Item::Let(definition)],
-        Term::universe_inst(Term::free_var(&global("poly")), vec![Level::constant(2)]),
+        Term::instance_of(&global("poly"), vec![Level::constant(2)]),
     );
 
-    let projected = super::lower::UniverseErased::<Module>::project(&source)
+    let projected = super::lower::UniverseErased::<Zonked<Module>>::project(&zonked(&source))
         .unwrap()
-        .into_inner();
+        .into_inner()
+        .into_module();
     let Item::Let(definition) = &projected.items[0] else {
         panic!("expected definition")
     };
@@ -296,7 +302,7 @@ fn universe_erasure_is_a_validated_structural_projection() {
     assert_eq!(projected.body, Some(Term::free_var(&global("poly"))));
 
     let invalid = module(Vec::new(), Term::type_at(Level::meta(UniverseMetaId(0))));
-    assert!(super::lower::UniverseErased::<Module>::project(&invalid).is_err());
+    assert!(super::lower::UniverseErased::<Zonked<Module>>::project(&zonked(&invalid)).is_err());
 }
 
 #[test]
@@ -455,23 +461,20 @@ fn a_variant_constructs_with_its_registered_schema() {
         Atom::from("some"),
         [nat_lit(6)],
     );
-    let erased = erase_module(
-        &mut context,
-        &Module {
-            mounts: Vec::new(),
-            items: Vec::new(),
-            universe_seeds: vec![],
-            induct_decls,
-            struct_decls: BTreeMap::new(),
-            concepts: BTreeMap::new(),
-            witnesses: BTreeSet::new(),
-            binder_floor: 0,
-            type_: None,
-            body: Some(body),
-        },
-        &opt_type(),
-    )
-    .expect("the module erases");
+    let fixture = Module {
+        mounts: Vec::new(),
+        items: Vec::new(),
+        universe_seeds: vec![],
+        induct_decls,
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 0,
+        type_: None,
+        body: Some(body),
+    };
+    let erased =
+        erase_module(&mut context, &zonked(&fixture), &opt_type()).expect("the module erases");
     assert_eq!(
         erased.to_string(),
         "\
@@ -744,20 +747,21 @@ fn a_variant_match_binds_payload_without_projections() {
             ("some", vec![x.clone()], Term::free_var(&x)),
         ],
     );
+    let fixture = Module {
+        mounts: Vec::new(),
+        items: Vec::new(),
+        universe_seeds: vec![],
+        induct_decls,
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 0,
+        type_: None,
+        body: Some(body),
+    };
     let erased = erase_module(
         &mut context,
-        &Module {
-            mounts: Vec::new(),
-            items: Vec::new(),
-            universe_seeds: vec![],
-            induct_decls,
-            struct_decls: BTreeMap::new(),
-            concepts: BTreeMap::new(),
-            witnesses: BTreeSet::new(),
-            binder_floor: 0,
-            type_: None,
-            body: Some(body),
-        },
+        &zonked(&fixture),
         &Term::intrinsic(Intrinsic::NatType),
     )
     .expect("the module erases");
@@ -921,7 +925,7 @@ fn a_computed_only_evaluation_cycle_is_rejected_as_an_error() {
         ],
         Term::free_var(&a),
     );
-    let error = erase_module(&mut context, &module(Vec::new(), body), &type_)
+    let error = erase_module(&mut context, &zonked(&module(Vec::new(), body)), &type_)
         .expect_err("the value-level cycle is rejected");
     assert!(
         matches!(error, Error::ErasedModuleInvalid { .. }),
@@ -1073,23 +1077,20 @@ fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
         (d, induct_type("Chained")),
         (e, induct_type("Selfy")),
     ]);
-    let erased = erase_module(
-        &mut context,
-        &Module {
-            mounts: Vec::new(),
-            items: Vec::new(),
-            universe_seeds: vec![],
-            induct_decls,
-            struct_decls,
-            concepts: BTreeMap::new(),
-            witnesses: BTreeSet::new(),
-            binder_floor: 0,
-            type_: None,
-            body: Some(body),
-        },
-        &expected,
-    )
-    .expect("the module erases");
+    let fixture = Module {
+        mounts: Vec::new(),
+        items: Vec::new(),
+        universe_seeds: vec![],
+        induct_decls,
+        struct_decls,
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 0,
+        type_: None,
+        body: Some(body),
+    };
+    let erased =
+        erase_module(&mut context, &zonked(&fixture), &expected).expect("the module erases");
 
     let printed = erased.to_string();
     assert!(

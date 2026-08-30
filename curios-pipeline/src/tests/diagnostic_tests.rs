@@ -329,3 +329,31 @@ fn a_hard_error_preempts_the_goal_batch() {
     assert!(error.contains("type mismatch"), "unexpected error: {error}");
     assert!(!error.contains("goal `?`"), "unexpected error: {error}");
 }
+
+/// The reference's own span survives the instance wrapper elaboration mints around a polymorphic occurrence: the typed head is a bare `Var` with no span of its own, so the wrapper carries the occurrence's, and the mismatch renders with its source snippet and a caret under the reference rather than arriving unlocated.
+#[test]
+fn a_mismatch_at_a_polymorphic_reference_keeps_its_caret() {
+    let source = r#"
+        use /std/{Nat};
+        let g(A : Type) -> Nat = 0;
+        let f : ((Type) -> Type) -> Nat = g;
+        0
+    "#;
+
+    let error = compile(source, Some("/std/Nat")).unwrap_err();
+
+    let snippet = error
+        .lines()
+        .position(|line| line.ends_with("let f : ((Type) -> Type) -> Nat = g;"))
+        .unwrap_or_else(|| panic!("the mismatch lost its source snippet: {error}"));
+    let caret = error.lines().nth(snippet + 1).unwrap_or_default();
+    assert_eq!(
+        caret.chars().filter(|c| *c == '^').count(),
+        1,
+        "the caret under the reference is gone: {error}"
+    );
+    assert!(
+        caret.ends_with('^'),
+        "the caret drifted off the reference: {error}"
+    );
+}

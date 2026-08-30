@@ -69,8 +69,8 @@ fn leaves_a_meta_free_term_unchanged() {
 fn replaces_a_solved_metavariable_with_its_solution() {
     let mut context = context();
 
-    context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
-    context.solve_metavar(MetaId(0), nat());
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_ground());
+    context.solve_metavar(MetavarId(0), nat());
 
     let zonked = zonk(&context, &Term::hole(0)).unwrap();
 
@@ -81,8 +81,8 @@ fn replaces_a_solved_metavariable_with_its_solution() {
 fn resolves_a_metavariable_in_an_inductive_match_default() {
     let mut context = context();
 
-    context.birth_metavar(MetaId(0), Vec::new(), nat());
-    context.solve_metavar(MetaId(0), nat_lit(7));
+    context.birth_metavar(MetavarId(0), Vec::new(), nat());
+    context.solve_metavar(MetavarId(0), nat_lit(7));
 
     // The catch-all default is a real term position, so a solved metavar sitting in it is resolved like any other.
     let scrutinee = context.fresh(Some("r"));
@@ -110,8 +110,8 @@ fn resolves_a_metavariable_in_an_inductive_match_default() {
 fn resolves_a_metavariable_nested_in_a_structure() {
     let mut context = context();
 
-    context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
-    context.solve_metavar(MetaId(0), nat());
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_ground());
+    context.solve_metavar(MetavarId(0), nat());
 
     // A tuple `{ ?0 }` zonks to `{ Nat }`.
     let term = Subterm::Tuple(Tuple {
@@ -137,10 +137,10 @@ fn chases_a_solution_that_mentions_another_metavariable() {
     let mut context = context();
 
     // ?0 := ?1, ?1 := Nat. Zonking ?0 must resolve through to `Nat`.
-    context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
-    context.birth_metavar(MetaId(1), Vec::new(), Term::type_ground());
-    context.solve_metavar(MetaId(1), nat());
-    context.solve_metavar(MetaId(0), Term::hole(1));
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_ground());
+    context.birth_metavar(MetavarId(1), Vec::new(), Term::type_ground());
+    context.solve_metavar(MetavarId(1), nat());
+    context.solve_metavar(MetavarId(0), Term::hole(1));
 
     let zonked = zonk(&context, &Term::hole(0)).unwrap();
 
@@ -151,7 +151,7 @@ fn chases_a_solution_that_mentions_another_metavariable() {
 fn rejects_an_unsolved_metavariable() {
     let mut context = context();
 
-    context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_ground());
 
     let result = zonk(&context, &Term::hole(0));
 
@@ -164,8 +164,8 @@ fn reports_a_solved_goal() {
 
     // A written goal `?` errors even when solved — the report carries the frozen scope, the goal's type, and the committed solution.
     let x = context.fresh(Some("x"));
-    context.birth_metavar(MetaId(0), vec![(x.clone(), nat())], nat());
-    context.solve_metavar(MetaId(0), nat_lit(7));
+    context.birth_metavar(MetavarId(0), vec![(x.clone(), nat())], nat());
+    context.solve_metavar(MetavarId(0), nat_lit(7));
 
     let error = zonk(&context, &Term::goal(0)).unwrap_err();
 
@@ -181,7 +181,7 @@ fn reports_a_solved_goal() {
 fn reports_an_unsolved_goal_as_undetermined() {
     let mut context = context();
 
-    context.birth_metavar(MetaId(0), Vec::new(), nat());
+    context.birth_metavar(MetavarId(0), Vec::new(), nat());
 
     let error = zonk(&context, &Term::goal(0)).unwrap_err();
 

@@ -5,7 +5,6 @@
 //! It also holds the hand-built adversarial modules. A refusal the elaborator reaches first leaves no module behind, so a rule where `curios-elab` is the stricter of the two cannot be put to this crate by any surface program — `Expect::NotAsked` in `curios/src/tests/perimeter.rs` records exactly that gap. Reaching it means constructing the finished module here and asking `recheck_module_verdicts` directly.
 
 use {
-    super::recheck_module_verdicts,
     crate::{Globals, KernelError},
     curios_core::{
         Definition, DefinitionKind, Free, Global, Intrinsic, Item, Level, Module, Nat, Term,
@@ -59,7 +58,7 @@ fn an_unsatisfiable_universe_context_is_refused() {
     };
 
     assert!(
-        !recheck_module_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX).is_empty(),
+        !fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX).is_empty(),
         "the kernel assumed a contradiction as a hypothesis without noticing",
     );
 }
@@ -103,7 +102,7 @@ fn a_constraint_naming_an_undeclared_parameter_is_refused() {
     };
 
     assert!(
-        !recheck_module_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX).is_empty(),
+        !fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX).is_empty(),
         "the kernel assumed a constraint about a parameter the declaration does not have",
     );
 }
@@ -125,8 +124,7 @@ fn a_level_holding_an_unsolved_universe_metavariable_is_refused() {
         ("a definition's declared type", level_definition(&residue)),
         ("a registry entry's result sort", level_registry(&residue)),
     ] {
-        let verdicts =
-            recheck_module_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
+        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
 
         assert!(
             verdicts
@@ -147,7 +145,7 @@ fn a_ground_level_in_the_same_positions_is_accepted() {
         ("a registry entry's result sort", level_registry(&ground)),
     ] {
         assert_eq!(
-            recheck_module_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX),
+            fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX),
             Vec::new(),
             "{label}: the boundary pass refused a level that holds no residue",
         );
@@ -177,8 +175,7 @@ fn a_level_naming_an_undeclared_universe_parameter_is_refused() {
             scheme_registry(&escaping, 0),
         ),
     ] {
-        let verdicts =
-            recheck_module_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
+        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
 
         assert!(
             verdicts
@@ -205,7 +202,7 @@ fn a_level_naming_a_declared_universe_parameter_is_accepted() {
         ),
     ] {
         assert_eq!(
-            recheck_module_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX),
+            fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX),
             Vec::new(),
             "{label}: the boundary pass refused a parameter the declaration declares",
         );
@@ -214,7 +211,7 @@ fn a_level_naming_a_declared_universe_parameter_is_accepted() {
 
 /// A universe instance supplying fewer levels than the scheme it instantiates has parameters.
 ///
-/// `Kernel::check_instance` discharges a scheme's *constraints* at the levels an occurrence supplies, and that is all it does. A scheme with an empty constraint set therefore accepts an instance of any width — the loop body never runs — so nothing anywhere asked whether an occurrence supplies as many levels as the declaration declares. `curios-elab`'s `validate_instance_arities` asks exactly that, of every `UniverseInst`, `InductType`, `Variant`, `StructType` and `Struct` in the module, and this crate had no equivalent.
+/// `Kernel::check_instance` discharges a scheme's *constraints* at the levels an occurrence supplies, and that is all it does. A scheme with an empty constraint set therefore accepts an instance of any width — the loop body never runs — so nothing anywhere asked whether an occurrence supplies as many levels as the declaration declares. `curios-elab`'s `validate_instance_arities` asks exactly that, of every `Instance`, `InductType`, `Variant`, `StructType` and `Struct` in the module, and this crate had no equivalent.
 ///
 /// The consequence is the capture [`a_level_naming_an_undeclared_universe_parameter_is_refused`] records, reached from the other side. That fixture is about a declaration naming a parameter it does not have; this one is about a declaration naming a parameter it *does* have, at an occurrence that does not supply it. `instantiate_universe_levels_scoped` renumbers whatever the instance leaves unsupplied down by the instance's width, so `Levelled`'s `Type.{param 1}` at the one-level instance `[param 0]` becomes `Type.{param 0}` — and `param 0` at the use site is the *use site's* own first parameter, not the declaration's second. Two levels that were distinct are now one, and cumulativity is decided about the wrong one.
 ///
@@ -223,7 +220,7 @@ fn a_level_naming_a_declared_universe_parameter_is_accepted() {
 /// The control is [`a_universe_instance_of_the_declared_width_is_accepted`], the same occurrence supplying both levels. It is load-bearing: every occurrence of a universe-polymorphic declaration in the prelude carries an instance, so a width check that got the bound wrong would reject the standard library rather than this.
 #[test]
 fn a_universe_instance_narrower_than_its_scheme_is_refused() {
-    let verdicts = recheck_module_verdicts(
+    let verdicts = fixture_verdicts(
         &instance_of_width(1),
         1_000_000,
         &Globals::default(),
@@ -242,7 +239,7 @@ fn a_universe_instance_narrower_than_its_scheme_is_refused() {
 #[test]
 fn a_universe_instance_of_the_declared_width_is_accepted() {
     assert_eq!(
-        recheck_module_verdicts(
+        fixture_verdicts(
             &instance_of_width(2),
             1_000_000,
             &Globals::default(),
@@ -255,7 +252,7 @@ fn a_universe_instance_of_the_declared_width_is_accepted() {
 
 /// An occurrence of a universe-polymorphic definition that states no instance was typed at the scheme's own type, discharging nothing.
 ///
-/// A bare `Var` denotes no particular instance, and the rest of the codebase says so twice. `Globals::value` withholds such an occurrence's *body*, because a polymorphic definition unfolds only through a `UniverseInst` that names which instance; `curios-elab` never builds one at all, rebuilding every polymorphic occurrence as a `UniverseInst` at freshly minted levels, and its `Frames::var_reduct` withholds the body for the reason it states — letting a raw variable unfold "would leak those bound parameters into the ambient solver". `Globals::type_of` carried no such rule: it handed the definition's stored type back whole, scheme parameters and all.
+/// A bare `Var` denotes no particular instance, and the rest of the codebase says so twice. `Globals::value` withholds such an occurrence's *body*, because a polymorphic definition unfolds only through an `Instance` that names which instance; `curios-elab` never builds one at all, rebuilding every polymorphic occurrence as an `Instance` at freshly minted levels, and its `Frames::var_reduct` withholds the body for the reason it states — letting a raw variable unfold "would leak those bound parameters into the ambient solver". `Globals::type_of` carried no such rule: it handed the definition's stored type back whole, scheme parameters and all.
 ///
 /// Two things follow from that, and the second is what this asserts. The scheme's parameters are *captured* — `A`'s `Type v` is read as the ambient item's `v`, so a level belonging to one scheme becomes a level the using item quantifies over, which is the collapse `documentation/soundness/whole-module-passes/validate_universes-inside-zonk_module.md` already records as having admitted at the neighbouring position. And `check_instance` never runs, so the scheme's own constraints are discharged by nothing. `A` here is well formed only where `u + 1 <= v`, and the second case below is that same occurrence with its instance stated, refused for exactly that reason — so the two cases differ in nothing but whether dropping the instance also drops the rule.
 ///
@@ -275,8 +272,7 @@ fn a_bare_occurrence_of_a_universe_scheme_is_refused() {
         ),
     ] {
         let module = universe_scheme_module(Some((open_context(), body)));
-        let verdicts =
-            recheck_module_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
+        let verdicts = fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX);
 
         assert!(
             verdicts
@@ -295,7 +291,7 @@ fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
     let (_, instance) = scheme_occurrences();
 
     assert_eq!(
-        recheck_module_verdicts(
+        fixture_verdicts(
             &universe_scheme_module(None),
             1_000_000,
             &Globals::default(),
@@ -306,7 +302,7 @@ fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
     );
 
     assert_eq!(
-        recheck_module_verdicts(
+        fixture_verdicts(
             &universe_scheme_module(Some((scheme_context(), instance))),
             1_000_000,
             &Globals::default(),
@@ -342,7 +338,7 @@ fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
     };
 
     assert_eq!(
-        recheck_module_verdicts(&monomorphic, 1_000_000, &Globals::default(), crate::SYNTAX),
+        fixture_verdicts(&monomorphic, 1_000_000, &Globals::default(), crate::SYNTAX),
         Vec::new(),
         "a bare occurrence of a monomorphic definition was refused",
     );
@@ -366,8 +362,7 @@ fn a_case_equation_does_not_refine_an_occurrence_at_another_universe_instance() 
         ("with no arm open", Route::Direct),
     ] {
         let module = universe_refinement_module(one.clone(), route);
-        let verdicts =
-            recheck_module_verdicts(&module, 10_000_000, &Globals::default(), crate::SYNTAX);
+        let verdicts = fixture_verdicts(&module, 10_000_000, &Globals::default(), crate::SYNTAX);
 
         assert!(
             verdicts.iter().any(|verdict| {
@@ -389,8 +384,42 @@ fn a_case_equation_still_refines_the_occurrence_it_scrutinized() {
     let module = universe_refinement_module(Level::zero(), Route::DependentMotive);
 
     assert_eq!(
-        recheck_module_verdicts(&module, 10_000_000, &Globals::default(), crate::SYNTAX),
+        fixture_verdicts(&module, 10_000_000, &Globals::default(), crate::SYNTAX),
         Vec::new(),
         "the arm's own case equation stopped refining its scrutinee",
+    );
+}
+
+/// A crafted module can spell what no elaborated term does: an instance whose head is a `let`-bound variable, which let-reduction then substitutes with an arbitrary value. `whnf` promises totality on arbitrary terms — `infer_type` reduces a declared type before anything types it — so the walk must return a verdict rather than abort: the substitution dissolves the instance to its head's value, the same levels-inert reading the sort fixtures pin for local heads. The typed head made the shape unrepresentable everywhere else; this is the one seam substitution can still drive, and the regression it pins is the walk surviving it.
+#[test]
+fn a_let_bound_instance_head_dissolves_under_reduction_rather_than_aborting_the_walk() {
+    let alias = Free::local(960, Some("alias"));
+    let declared = Term::let_(
+        &alias,
+        Term::type_ground(),
+        Term::intrinsic(Intrinsic::NatType),
+        Term::instance_of(&alias, vec![Level::zero()]),
+    );
+    let module = Module {
+        mounts: Vec::new(),
+        items: vec![authored(
+            &Global::Authored(Qualifier::from(["dissolved"])),
+            declared,
+            Term::intrinsic(Intrinsic::Nat(Nat::new(5usize))),
+        )],
+        universe_seeds: Vec::new(),
+        induct_decls: BTreeMap::new(),
+        struct_decls: BTreeMap::new(),
+        concepts: BTreeMap::new(),
+        witnesses: BTreeSet::new(),
+        binder_floor: 0,
+        type_: None,
+        body: Some(Term::intrinsic(Intrinsic::NatType)),
+    };
+
+    assert_eq!(
+        fixture_verdicts(&module, 1_000_000, &Globals::default(), crate::SYNTAX),
+        Vec::new(),
+        "the declared type reduces through the dissolving instance to `Nat`, which `5` inhabits",
     );
 }

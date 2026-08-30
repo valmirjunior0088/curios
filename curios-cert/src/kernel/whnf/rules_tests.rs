@@ -49,7 +49,7 @@ fn a_universe_instance_unfolds_what_a_bare_occurrence_withholds() {
     let f = binder(0, "f");
     kernel.define(&f, &nat_type(), &nat(3), &polymorphic());
 
-    let instance = Term::universe_inst(Term::free_var(&f), vec![Level::zero()]);
+    let instance = Term::instance_of(&f, vec![Level::zero()]);
     assert_eq!(whnf(&mut kernel, instance), Ok(nat(3)));
 }
 

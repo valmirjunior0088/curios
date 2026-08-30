@@ -28,7 +28,7 @@ impl DefEntry {
 }
 
 /// The local frame a parked problem froze at park time: assumptions (in binding order), and the non-base-frame definitions, counterfactual refinements, projection refinements, and scrutinee refinements (each outermost frame first, so reapplying in order reproduces the shadowing). A retry must run under the same equalities its origin saw — including the arm-local refinements — while solution re-validation independently suppresses them, keeping committed solutions refinement-free.
-/// One stuck-application refinement: the scrutinee as *written* (unerased, so the probe-time canonicalization can still unfold its polymorphic heads — erasure strips the `UniverseInst` a global unfolds through, so reduce-then-erase and erase-then-reduce disagree exactly there), and the arm's value.
+/// One stuck-application refinement: the scrutinee as *written* (unerased, so the probe-time canonicalization can still unfold its polymorphic heads — erasure strips the `Instance` a global unfolds through, so reduce-then-erase and erase-then-reduce disagree exactly there), and the arm's value.
 #[derive(Debug, Clone)]
 pub(crate) struct ScrutineeEntry {
     pub(crate) original: Term,
@@ -338,7 +338,7 @@ impl Frames {
 
     /// Reduce a bare variable only when its definition is monomorphic.
     ///
-    /// A polymorphic definition's stored body is scoped by its universe context: its parameter levels are not meaningful at an occurrence until elaboration has rebuilt that occurrence as a `UniverseInst`. Letting a raw variable unfold would leak those bound parameters into the ambient solver. The explicit-instance reducer uses [`Frames::var_reduct_at`] after it has the occurrence's level arguments.
+    /// A polymorphic definition's stored body is scoped by its universe context: its parameter levels are not meaningful at an occurrence until elaboration has rebuilt that occurrence as an `Instance`. Letting a raw variable unfold would leak those bound parameters into the ambient solver. The explicit-instance reducer uses [`Frames::var_reduct_at`] after it has the occurrence's level arguments.
     pub(crate) fn var_reduct(&self, name: &Free) -> Option<&Term> {
         let is_polymorphic = self
             .assumption_universes

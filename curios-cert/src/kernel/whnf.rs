@@ -23,14 +23,14 @@ use {
     super::Kernel,
     curios_core::{
         Apply, Bound, Carrier, Cases, ClosedHost, Cost, Demand, Field, Free, FreeMonoid, Func,
-        Layer, Let, Many, Match, Nat, Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Struct,
-        Subterm, Term, Tuple, UniverseInst, Var, Variant, Visit, accelerable,
+        Instance, InstanceHead, Layer, Let, Many, Match, Nat, Proj, Rec, RecGroup, ReduceError,
+        Reducer, Scope, Struct, Subterm, Term, Tuple, Var, Variant, Visit, accelerable,
         instantiate_universe_levels_scoped, reduce_closed, reduce_intrinsic,
     },
     curios_utilities::recurse,
 };
 
-/// The kernel's side of the closed-machine seam: the same delta `step_var` and `step_universe_inst` perform, handed to the shared machine so a closed term evaluates at machine depth under this strategy's own charges.
+/// The kernel's side of the closed-machine seam: the same delta `step_var` and `step_instance` perform, handed to the shared machine so a closed term evaluates at machine depth under this strategy's own charges.
 impl ClosedHost for Kernel {
     fn closed_body(&self, name: &Free) -> Option<&Term> {
         self.value(name)
@@ -140,7 +140,7 @@ fn whnf_within(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
             Subterm::Proj(proj) => step_proj(kernel, proj)?,
             Subterm::Func(func) => step_func(kernel, func)?,
             Subterm::Let(let_) => Step::Continue(step_let(kernel, let_)?),
-            Subterm::UniverseInst(instance) => step_universe_inst(kernel, instance)?,
+            Subterm::Instance(instance) => step_instance(kernel, instance)?,
             // The scrutinee is reduced by a nested call, so a tower of matches over a deep closed spine — the scan-state chain a string literal lowers to — costs one native frame per link. That is data-shaped depth, which is what [`recurse`] at the entry point is for.
             Subterm::Match(Match {
                 head,
@@ -380,18 +380,25 @@ fn step_let(kernel: &mut Kernel, let_: Let) -> Result<Term, ReduceError> {
 /// Instantiate a universe-polymorphic definition at a stated instance.
 ///
 /// This is the only position from which a polymorphic definition unfolds — a bare occurrence of one denotes no particular instance, so [`Kernel::value`](super::Kernel) withholds it there.
-fn step_universe_inst(kernel: &mut Kernel, instance: UniverseInst) -> Result<Step, ReduceError> {
-    let UniverseInst { head, levels } = instance;
+fn step_instance(kernel: &mut Kernel, instance: Instance) -> Result<Step, ReduceError> {
+    let Instance { head, levels } = instance;
 
-    let reduct = match &*head {
-        Subterm::Var(var) => kernel.value_at(var.unwrap()).cloned(),
-        _ => Some(head.clone()),
+    let reduct = match &head {
+        InstanceHead::Var(var) => match kernel.value_at(var.unwrap()).cloned() {
+            Some(reduct) => reduct,
+            None => return Ok(Step::Stop(Term::instance(head, levels))),
+        },
+        InstanceHead::RecProj(group, index) => {
+            return Ok(Step::Continue(Term::rec_proj(
+                group
+                    .instantiate_universes(&levels)
+                    .map_err(ReduceError::Universe)?,
+                *index,
+            )));
+        }
     };
 
-    let Some(reduct) = reduct else {
-        return Ok(Step::Stop(Term::universe_inst(head, levels)));
-    };
-
+    // The variable's stored value may itself be a projection, whose group takes the instance whole rather than a per-level rewrite.
     Ok(Step::Continue(match reduct.as_rec_proj() {
         Some((group, index)) => Term::rec_proj(
             group

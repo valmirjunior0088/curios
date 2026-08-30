@@ -19,7 +19,7 @@ use {
 
 /// A top-level name's entry: what it is, and what it unfolds to if anything.
 ///
-/// The universe context is not decoration. A definition with universe parameters is *not* unfoldable through a bare occurrence, because such an occurrence denotes no particular instance; it reduces only through a [`UniverseInst`](curios_core::UniverseInst) that says which one.
+/// The universe context is not decoration. A definition with universe parameters is *not* unfoldable through a bare occurrence, because such an occurrence denotes no particular instance; it reduces only through an [`Instance`](curios_core::Instance) that says which one.
 #[derive(Clone)]
 struct Definition {
     type_: Term,

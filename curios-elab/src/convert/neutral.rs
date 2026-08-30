@@ -5,8 +5,8 @@
 use {
     super::*,
     curios_core::{
-        Apply, Free, FuncType, Level, Proj, StructType, Subterm, Term, UniverseConstraintKind,
-        UniverseConstraintOrigin,
+        Apply, Free, FuncType, Instance, InstanceHead, Level, Proj, StructType, Subterm, Term,
+        UniverseConstraintKind, UniverseConstraintOrigin,
     },
 };
 
@@ -115,31 +115,27 @@ pub(crate) fn synth_neutral(
                 .map_err(ReduceError::Universe)
         }
         // A universe-polymorphic head, at the levels this occurrence chose. The scheme is read *uninstantiated* and substituted at `levels`; going through the `Var` arm below would instead instantiate it at fresh levels and then have nothing left to substitute.
-        Subterm::UniverseInst(UniverseInst { head, levels }) => {
-            if let Some((group, index)) = head.as_rec_proj() {
+        Subterm::Instance(Instance { head, levels }) => match head {
+            InstanceHead::RecProj(group, index) => {
                 let group = group
                     .instantiate_universes(levels)
                     .map_err(ReduceError::Universe)?;
 
-                return Ok(Some(group.member_type(index)));
+                Ok(Some(group.member_type(*index)))
             }
-
-            match &**head {
-                Subterm::Var(var) => {
-                    let name = var.unwrap();
-                    if let Some((_, type_)) = opened.iter().rev().find(|(bound, _)| bound == name) {
-                        return Ok(Some(type_.clone()));
-                    }
-                    let Some(scheme) = context.assumption(name).cloned() else {
-                        return Ok(None);
-                    };
-                    instantiate_universe_levels_scoped(&scheme, levels)
-                        .map(Some)
-                        .map_err(ReduceError::Universe)
+            InstanceHead::Var(var) => {
+                let name = var.unwrap();
+                if let Some((_, type_)) = opened.iter().rev().find(|(bound, _)| bound == name) {
+                    return Ok(Some(type_.clone()));
                 }
-                _ => Ok(None),
+                let Some(scheme) = context.assumption(name).cloned() else {
+                    return Ok(None);
+                };
+                instantiate_universe_levels_scoped(&scheme, levels)
+                    .map(Some)
+                    .map_err(ReduceError::Universe)
             }
-        }
+        },
 
         Subterm::Apply(Apply { head, params, .. }) => {
             let Some(head_type) = synth_neutral(context, opened, head)? else {

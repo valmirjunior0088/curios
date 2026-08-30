@@ -550,21 +550,21 @@ pub enum MetavarOrigin {
 /// A metavariable's identity: a dense index into the `Context`'s `MetaStore`, minted monotonically by an `Entropy`(Entropy). A newtype so it can never be confused with the other `usize`-shaped notions the kernel juggles (de Bruijn indices, telescope arities, variant tags, `Nat` magnitudes).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[curios_archive::archived(derive(PartialEq, Eq, PartialOrd, Ord, Hash))]
-pub struct MetaId(pub usize);
+pub struct MetavarId(pub usize);
 
-impl From<usize> for MetaId {
+impl From<usize> for MetavarId {
     fn from(raw: usize) -> Self {
         Self(raw)
     }
 }
 
-impl Mint for MetaId {
+impl Mint for MetavarId {
     fn mint(entropy: usize) -> Self {
         Self(entropy)
     }
 }
 
-impl fmt::Display for MetaId {
+impl fmt::Display for MetavarId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.0)
     }
@@ -580,7 +580,7 @@ impl fmt::Display for MetaId {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct Metavar {
-    pub id: MetaId,
+    pub id: MetavarId,
     pub spine: Rc<Vec<Term>>,
     pub origin: MetavarOrigin,
 }
@@ -592,10 +592,46 @@ impl Metavar {
     }
 }
 
-/// An internal, occurrence-specific instantiation of a universe-polymorphic binding. The ordinary term binder structure remains entirely in `head`.
+/// An internal, occurrence-specific instantiation of a universe-polymorphic binding: a head at the levels this occurrence chose.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
-pub struct UniverseInst {
-    pub head: Term,
+pub struct Instance {
+    pub head: InstanceHead,
     pub levels: Vec<Level>,
+}
+
+/// The two shapes that denote a universe-polymorphic binding: a not-yet-reduced reference to one, or a projection out of a recursive group. Typed rather than held as a general term so an ill-formed head is unrepresentable; the nominal normal forms carry their instance in their own universe vectors instead (see `Term::stamp_declaration_node`).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[curios_archive::archived]
+pub enum InstanceHead {
+    Var(Var),
+    RecProj(RecGroup, usize),
+}
+
+impl InstanceHead {
+    /// This head spelled as the term it abbreviates: the variable itself, or the ordinary `Rec` node whose tail selects the member (see [`Term::rec_proj`]). The spelling is span-less; an occurrence's span lives on the wrapping instance term.
+    pub fn to_term(&self) -> Term {
+        match self {
+            InstanceHead::Var(var) => Term::var(var.clone()),
+            InstanceHead::RecProj(group, index) => Term::rec_proj(group.clone(), *index),
+        }
+    }
+
+    /// The free name a variable head references, mirroring `Term::head_name`: a projection head names no free variable, exactly as the `Rec` it abbreviates did.
+    pub fn head_name(&self) -> Option<&Free> {
+        match self {
+            InstanceHead::Var(var) => var.as_free(),
+            InstanceHead::RecProj(..) => None,
+        }
+    }
+
+    /// Classify a term as a head, when it has one of the two head shapes. This is the seam a substitution crosses: replacing a bound variable head with a group projection — the one replacement rec unfolding performs — re-enters the typed representation here.
+    pub fn from_subterm(subterm: &Subterm) -> Option<Self> {
+        match subterm {
+            Subterm::Var(var) => Some(InstanceHead::Var(var.clone())),
+            _ => subterm
+                .as_rec_proj()
+                .map(|(group, index)| InstanceHead::RecProj(group.clone(), index)),
+        }
+    }
 }

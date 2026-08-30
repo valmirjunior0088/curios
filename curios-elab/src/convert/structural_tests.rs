@@ -314,7 +314,7 @@ fn an_intrinsic_without_a_hand_written_arm_solves_a_metavariable_in_its_operand(
     let f = context.fresh(Some("f"));
     context.assume(&f, &mapper_type);
 
-    context.birth_metavar(MetaId(0), Vec::new(), mapper_type);
+    context.birth_metavar(MetavarId(0), Vec::new(), mapper_type);
 
     let flexible = Term::intrinsic(Intrinsic::list_map(
         nat_type.clone(),

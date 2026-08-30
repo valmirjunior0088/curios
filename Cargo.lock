@@ -701,6 +701,7 @@ name = "curios-prelude"
 version = "0.11.2"
 dependencies = [
  "curios-cert",
+ "curios-core",
  "curios-prelude-archive",
 ]
 

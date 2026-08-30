@@ -314,7 +314,7 @@ pub(super) fn infix_default_type(infix: &Infix) -> Intrinsic {
 /// What the operator *returns* is read here rather than restated beside [`InfixOp`]: the method's type at the operand type `?T` comes out of the concept's lowered field telescope, so `eql(A, A) -> Bool` and `add(A, A) -> A` are told apart by what `/syn` declares and not by a Rust-side list of which operators yield `Bool`.
 struct InfixMethod {
     /// The witness metavariable slot, filled by [`attempt_witness_goal`] once the operand type is pinned.
-    slot: MetaId,
+    slot: MetavarId,
     goal: Term,
     witness: Term,
     provenance: WitnessOrigin,

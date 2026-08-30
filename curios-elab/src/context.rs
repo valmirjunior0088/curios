@@ -20,7 +20,7 @@ use {
     curios_core::ReduceError,
     curios_core::{
         Bound, ConceptDecl, Consumption, Cost, DEFAULT_RETENTION_QUOTA, DefinitionKind, Free,
-        Global, HeadTag, ImplicitOrigin, Imports, InductDecl, Level, MetaId, Metavar,
+        Global, HeadTag, ImplicitOrigin, Imports, InductDecl, Level, Metavar, MetavarId,
         MetavarOrigin, RecGroup, Retention, StructDecl, Term, Totality, UniverseConstraintKind,
         UniverseConstraintOrigin, UniverseContext, UniverseError, UniverseMetaId, UniverseRole,
         UniverseSeed, WitnessOrigin, instantiate_universe_levels_scoped,
@@ -138,7 +138,7 @@ pub struct Context {
 /// A conversion the item drain surrendered to the written goals holding it up: the goals, and the two sides as a report displays them.
 #[derive(Debug, Clone)]
 pub(crate) struct GoalObligation {
-    pub goals: BTreeSet<MetaId>,
+    pub goals: BTreeSet<MetavarId>,
     pub this: Term,
     pub that: Term,
 }
@@ -178,7 +178,12 @@ impl Context {
     }
 
     /// Record a conversion the drain dropped because the written goals in `goals` were all that held it up, with its two sides already in display form. A program holding a goal never compiles, so nothing is lost by not deciding it; what is kept is the constraint the hole must satisfy, which the goal's report shows beside its type.
-    pub(crate) fn note_goal_obligation(&mut self, goals: BTreeSet<MetaId>, this: Term, that: Term) {
+    pub(crate) fn note_goal_obligation(
+        &mut self,
+        goals: BTreeSet<MetavarId>,
+        this: Term,
+        that: Term,
+    ) {
         self.goal_obligations
             .push(GoalObligation { goals, this, that });
     }
@@ -1027,7 +1032,7 @@ impl Context {
     }
 
     /// The deferred witness goals' slots and goal types ([`Solutions::deferred_witness_goals`]).
-    pub(crate) fn deferred_witness_goals(&self) -> impl Iterator<Item = (MetaId, &Term)> {
+    pub(crate) fn deferred_witness_goals(&self) -> impl Iterator<Item = (MetavarId, &Term)> {
         self.solutions.deferred_witness_goals()
     }
 
@@ -1057,7 +1062,7 @@ impl Context {
     /// Materialize a metavariable's birth record ([`Solutions::birth`]), stamping the write.
     pub(crate) fn birth_metavar(
         &mut self,
-        id: MetaId,
+        id: MetavarId,
         telescope: impl Into<SharedTelescope>,
         result: Term,
     ) {
@@ -1066,7 +1071,7 @@ impl Context {
     }
 
     /// Allocate the protected placeholder for one member of a recursive group. It has the same contextual spine as an inference metavariable so parked work can carry it across a popped local frame, but only `fill_rec_slot` may solve it.
-    pub(crate) fn fresh_rec_slot(&mut self, result: Term) -> (MetaId, Term) {
+    pub(crate) fn fresh_rec_slot(&mut self, result: Term) -> (MetavarId, Term) {
         self.caches.note_write();
         let id = self.solutions.mint();
         let (telescope, spine) = self.identity_snapshot();
@@ -1074,11 +1079,11 @@ impl Context {
         (id, Term::metavar_birthed(id, MetavarOrigin::Hole, spine))
     }
 
-    pub(crate) fn is_rec_slot(&self, id: MetaId) -> bool {
+    pub(crate) fn is_rec_slot(&self, id: MetavarId) -> bool {
         self.solutions.is_rec_slot(id)
     }
 
-    pub(crate) fn fill_rec_slot(&mut self, id: MetaId, term: Term) {
+    pub(crate) fn fill_rec_slot(&mut self, id: MetavarId, term: Term) {
         let entry = self
             .solutions
             .entry(id)
@@ -1118,7 +1123,7 @@ impl Context {
         result: Term,
         span: Option<Span>,
         origin: WitnessOrigin,
-    ) -> (MetaId, Term) {
+    ) -> (MetavarId, Term) {
         self.fresh_metavar_with(result, span, MetavarOrigin::Witness(origin))
     }
 
@@ -1132,7 +1137,7 @@ impl Context {
         result: Term,
         span: Option<Span>,
         origin: MetavarOrigin,
-    ) -> (MetaId, Term) {
+    ) -> (MetavarId, Term) {
         let id = self.solutions.mint();
         let (telescope, spine) = self.identity_snapshot();
         self.birth_metavar(id, telescope, result);
@@ -1146,7 +1151,7 @@ impl Context {
         (id, metavar)
     }
 
-    pub(crate) fn metavar_entry(&self, id: MetaId) -> Option<&MetaEntry> {
+    pub(crate) fn metavar_entry(&self, id: MetavarId) -> Option<&MetaEntry> {
         self.solutions.entry(id)
     }
 
@@ -1154,7 +1159,7 @@ impl Context {
         self.solutions.witness_hole(term)
     }
 
-    pub(crate) fn metavar_solution(&self, id: MetaId) -> Option<&Term> {
+    pub(crate) fn metavar_solution(&self, id: MetavarId) -> Option<&Term> {
         self.solutions.solution(id)
     }
 
@@ -1163,7 +1168,7 @@ impl Context {
     }
 
     /// Commit a metavariable's solution ([`Solutions::solve`]), stamping the write. Needs no reduction-cache clear: a WHNF that still named an unsolved metavariable was never memoized (see `Context::reduce`), and a solve is monotonic, so every surviving entry stays valid. (Re-validation's [`Context::rollback_solutions`], which *un*-solves, does clear.)
-    pub(crate) fn solve_metavar(&mut self, id: MetaId, term: Term) {
+    pub(crate) fn solve_metavar(&mut self, id: MetavarId, term: Term) {
         self.caches.note_write();
         self.solutions.solve(id, term);
     }
@@ -1353,7 +1358,11 @@ impl Context {
     }
 
     /// Mint the placeholder metavariable for a parked checking problem: birthed like any hole — frozen Γ, identity spine — with no insertion provenance. If it survives unsolved, the item drain reports the parked problem at its origin before zonk could ever meet the placeholder.
-    pub(crate) fn fresh_placeholder(&mut self, result: Term, span: Option<Span>) -> (MetaId, Term) {
+    pub(crate) fn fresh_placeholder(
+        &mut self,
+        result: Term,
+        span: Option<Span>,
+    ) -> (MetavarId, Term) {
         let id = self.solutions.mint();
         let (telescope, spine) = self.identity_snapshot();
         self.birth_metavar(id, telescope, result);

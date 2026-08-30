@@ -24,9 +24,9 @@
 
 use {
     super::{
-        Apply, Bound, Carrier, Cases, Cost, Field, Free, FreeMonoid, Func, Intrinsic, Layer, Let,
-        LetBinding, Many, Match, Nat, Proj, Rec, RecGroup, ReduceError, Reducer, Scope, Subterm,
-        Telescope, Term, instantiate_universe_levels_scoped, reduce_intrinsic,
+        Apply, Bound, Carrier, Cases, Cost, Field, Free, FreeMonoid, Func, InstanceHead, Intrinsic,
+        Layer, Let, LetBinding, Many, Match, Nat, Proj, Rec, RecGroup, ReduceError, Reducer, Scope,
+        Subterm, Telescope, Term, instantiate_universe_levels_scoped, reduce_intrinsic,
     },
     curios_abi::ForeignFunction,
     curios_utilities::Plicity,
@@ -433,28 +433,31 @@ impl Machine {
                 )
             }
 
-            Subterm::UniverseInst(instance) => {
-                let reduct = match &*instance.head {
-                    Subterm::Var(var) => host.closed_body_at(var.unwrap()).cloned(),
-                    _ => Some(instance.head.clone()),
-                };
-                let Some(reduct) = reduct else {
-                    return Ok(Step::Value(Term::universe_inst(
-                        instance.head,
-                        instance.levels,
-                    )));
-                };
-
+            Subterm::Instance(instance) => {
                 let levels = instance.levels;
-                let reduct = match reduct.as_rec_proj() {
-                    Some((group, index)) => Term::rec_proj(
+                let reduct = match instance.head {
+                    InstanceHead::Var(var) => {
+                        let Some(reduct) = host.closed_body_at(var.unwrap()).cloned() else {
+                            return Ok(Step::Value(Term::instance(InstanceHead::Var(var), levels)));
+                        };
+                        // The variable's stored body may itself be a projection, whose group takes the instance whole rather than a per-level rewrite.
+                        match reduct.as_rec_proj() {
+                            Some((group, index)) => Term::rec_proj(
+                                group
+                                    .instantiate_universes(&levels)
+                                    .map_err(ReduceError::Universe)?,
+                                index,
+                            ),
+                            None => instantiate_universe_levels_scoped(&reduct, &levels)
+                                .map_err(ReduceError::Universe)?,
+                        }
+                    }
+                    InstanceHead::RecProj(group, index) => Term::rec_proj(
                         group
                             .instantiate_universes(&levels)
                             .map_err(ReduceError::Universe)?,
                         index,
                     ),
-                    None => instantiate_universe_levels_scoped(&reduct, &levels)
-                        .map_err(ReduceError::Universe)?,
                 };
 
                 Ok(Step::Eval(reduct, demand))

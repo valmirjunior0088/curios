@@ -61,13 +61,13 @@ fn solves_flex_apply_against_inductive() {
     let mut context = context();
     register_list(&mut context);
     let kind = type_to_type(&mut context);
-    context.birth_metavar(MetaId(0), Vec::new(), kind);
+    context.birth_metavar(MetavarId(0), Vec::new(), kind);
 
     // ?0(Nat) ≟ List(Nat)  — commits ?0 := λA. List(A).
     let flex = Term::apply(Term::hole(0), [nat_type()]);
     let rigid = Term::induct_type(nominal("List"), [nat_type()], Vec::<Term>::new());
     assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
-    assert!(context.metavar_solution(MetaId(0)).is_some());
+    assert!(context.metavar_solution(MetavarId(0)).is_some());
 
     // The committed solution is the imitation, not the constant: applied to a different argument it yields List of *that* argument.
     let at_bool = Term::apply(Term::hole(0), [Term::intrinsic(Intrinsic::BoolType)]);
@@ -84,13 +84,13 @@ fn imitation_is_symmetric() {
     let mut context = context();
     register_list(&mut context);
     let kind = type_to_type(&mut context);
-    context.birth_metavar(MetaId(0), Vec::new(), kind);
+    context.birth_metavar(MetavarId(0), Vec::new(), kind);
 
     // Rigid on the left, stuck application on the right.
     let flex = Term::apply(Term::hole(0), [nat_type()]);
     let rigid = Term::induct_type(nominal("List"), [nat_type()], Vec::<Term>::new());
     assert_eq!(conv(&mut context, &rigid, &flex), Ok(true));
-    assert!(context.metavar_solution(MetaId(0)).is_some());
+    assert!(context.metavar_solution(MetavarId(0)).is_some());
 }
 
 #[test]
@@ -98,15 +98,15 @@ fn equates_arguments_pairwise() {
     let mut context = context();
     register_list(&mut context);
     let kind = type_to_type(&mut context);
-    context.birth_metavar(MetaId(0), Vec::new(), kind);
-    context.birth_metavar(MetaId(1), Vec::new(), Term::type_ground());
+    context.birth_metavar(MetavarId(0), Vec::new(), kind);
+    context.birth_metavar(MetavarId(1), Vec::new(), Term::type_ground());
 
     // ?0(?1) ≟ List(Nat) — the imitation solves ?0, the pairwise equation ?1.
     let flex = Term::apply(Term::hole(0), [Term::hole(1)]);
     let rigid = Term::induct_type(nominal("List"), [nat_type()], Vec::<Term>::new());
     assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
-    assert!(context.metavar_solution(MetaId(0)).is_some());
-    assert_eq!(context.metavar_solution(MetaId(1)), Some(&nat_type()));
+    assert!(context.metavar_solution(MetavarId(0)).is_some());
+    assert_eq!(context.metavar_solution(MetavarId(1)), Some(&nat_type()));
 }
 
 #[test]
@@ -116,7 +116,7 @@ fn splits_params_and_indices() {
     let n = context.fresh(Some("n"));
     register_vec(&mut context);
     context.birth_metavar(
-        MetaId(0),
+        MetavarId(0),
         Vec::new(),
         Term::func_type(
             [
@@ -131,7 +131,7 @@ fn splits_params_and_indices() {
     let flex = Term::apply(Term::hole(0), [nat_type(), nat(3)]);
     let rigid = Term::induct_type(nominal("Vec"), [nat_type()], [nat(3)]);
     assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
-    assert!(context.metavar_solution(MetaId(0)).is_some());
+    assert!(context.metavar_solution(MetavarId(0)).is_some());
 
     let at_two = Term::apply(
         Term::hole(0),
@@ -170,7 +170,7 @@ fn solves_against_struct_type() {
         )
         .unwrap();
     context.birth_metavar(
-        MetaId(0),
+        MetavarId(0),
         Vec::new(),
         Term::func_type(
             [
@@ -184,7 +184,7 @@ fn solves_against_struct_type() {
     let flex = Term::apply(Term::hole(0), [nat_type(), nat_type()]);
     let rigid = Term::struct_type(nominal("Pair"), [nat_type(), nat_type()]);
     assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
-    assert!(context.metavar_solution(MetaId(0)).is_some());
+    assert!(context.metavar_solution(MetavarId(0)).is_some());
 }
 
 #[test]
@@ -192,14 +192,14 @@ fn arity_mismatch_blocks() {
     let mut context = context();
     register_vec(&mut context);
     let kind = type_to_type(&mut context);
-    context.birth_metavar(MetaId(0), Vec::new(), kind);
+    context.birth_metavar(MetavarId(0), Vec::new(), kind);
 
     // ?0(Nat) ≟ Vec(Nat, 3) — apply arity 1 against constructor arity 2: v1 has no partial-application solutions, so the goal blocks (it is not provably unequal — a constant solution could exist).
     let flex = Term::apply(Term::hole(0), [nat_type()]);
     let rigid = Term::induct_type(nominal("Vec"), [nat_type()], [nat(3)]);
     let outcome = convert_outcome(&mut context, &Term::type_ground(), &flex, &rigid);
     assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
-    assert_eq!(context.metavar_solution(MetaId(0)), None);
+    assert_eq!(context.metavar_solution(MetavarId(0)), None);
 }
 
 #[test]
@@ -207,13 +207,13 @@ fn non_function_birth_type_blocks() {
     let mut context = context();
     register_list(&mut context);
     // ?0's frozen type is not a function type: no candidate can be built.
-    context.birth_metavar(MetaId(0), Vec::new(), Term::type_ground());
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_ground());
 
     let flex = Term::apply(Term::hole(0), [nat_type()]);
     let rigid = Term::induct_type(nominal("List"), [nat_type()], Vec::<Term>::new());
     let outcome = convert_outcome(&mut context, &Term::type_ground(), &flex, &rigid);
     assert!(matches!(outcome, Ok(Outcome::Blocked(_))));
-    assert_eq!(context.metavar_solution(MetaId(0)), None);
+    assert_eq!(context.metavar_solution(MetavarId(0)), None);
 }
 
 #[test]
@@ -234,13 +234,13 @@ fn leaves_rigid_apply_pairs_alone() {
 fn solves_flex_apply_against_intrinsic_former() {
     let mut context = context();
     let kind = type_to_type(&mut context);
-    context.birth_metavar(MetaId(0), Vec::new(), kind);
+    context.birth_metavar(MetavarId(0), Vec::new(), kind);
 
     // ?0(?1) ≟ List(Nat) — the imitation solves ?0 := λT. List(T), the pairwise equation ?1 := Nat. This is what pins `M := List` for `Monad(List)`.
-    context.birth_metavar(MetaId(1), Vec::new(), Term::type_ground());
+    context.birth_metavar(MetavarId(1), Vec::new(), Term::type_ground());
     let flex = Term::apply(Term::hole(0), [Term::hole(1)]);
     let rigid = Term::intrinsic(Intrinsic::ListType(nat_type()));
     assert_eq!(conv(&mut context, &flex, &rigid), Ok(true));
-    assert!(context.metavar_solution(MetaId(0)).is_some());
-    assert_eq!(context.metavar_solution(MetaId(1)), Some(&nat_type()));
+    assert!(context.metavar_solution(MetavarId(0)).is_some());
+    assert_eq!(context.metavar_solution(MetavarId(1)), Some(&nat_type()));
 }

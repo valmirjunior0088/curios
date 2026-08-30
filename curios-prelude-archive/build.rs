@@ -10,7 +10,7 @@ use syntax::SYNTAX;
 use {
     curios_abi::host_ops,
     curios_core::Item,
-    curios_core::{Global, Sharing, derived_binder_floor, validate_stored_identities},
+    curios_core::{Global, Sharing, Zonked, derived_binder_floor, validate_stored_identities},
     curios_elab::{
         Context, ErasedArena, Mode, Resumed, elaborate_and_zonk_module, erase_unit,
         validate_lowered_universe_seeds, validate_universes,
@@ -147,11 +147,15 @@ fn build() {
         panic!("elaborated fixed prelude carries a positional identity: {found}")
     });
 
+    // The archive's own zonk evidence, taken where the module is final: erasure below consumes it, and it is the same claim `zonk_module` just enforced, restated as a checked value rather than inherited.
+    let zonked = Zonked::project(&core)
+        .unwrap_or_else(|refusal| panic!("elaborated fixed prelude is not zonked: {refusal}"));
+
     // No entrypoint, so nothing to seal: this unit's arena stays open, which is what its successors resume over.
     let mut ersd = erase_unit(
         &mut Context::with_default_budget(SYNTAX),
         Resumed::of(&[], ErasedArena::default()),
-        &core,
+        &zonked,
         None,
     )
     .unwrap_or_else(|error| {
