@@ -645,7 +645,7 @@ pub fn derived_binder_floor_outside(module: &Module, in_scope: impl Fn(&Global) 
     highest.map_or(0, |index| index as usize + 1)
 }
 
-/// Evidence that a module is finished with elaboration's metavariables: no `Metavar` node survives in any term-bearing position, and the lowering-time `universe_seeds` are cleared. `curios-elab`'s zonk is the pass that makes a module satisfy this; the validating [`Zonked::project`] is how any holder of a `Module` re-establishes it at a stage boundary, cheaply, because `has_metavar` is a per-node cached derivation.
+/// Evidence that a module is finished with elaboration's own syntax — the kernel's whole `NotCore` class: no `Metavar` and no `Transient` node survives in any term-bearing position, and the lowering-time `universe_seeds` are cleared. `curios-elab`'s elaboration and zonk are the passes that make a module satisfy this; the validating [`Zonked::project`] is how any holder of a `Module` re-establishes it at a stage boundary, cheaply, because `has_metavar` and `has_transient` are per-node cached derivations.
 ///
 /// The wrapper is interface-level evidence, never a license to trust: the kernel keeps its own metavariable refusals, so a `Zonked` constructed wrongly is still caught where soundness lives.
 #[derive(Debug, Clone)]
@@ -679,7 +679,7 @@ impl Zonked<Module> {
     }
 }
 
-/// Why [`Zonked::project`] refused: the first term-bearing place where a metavariable survived, or the uncleared seeds.
+/// Why [`Zonked::project`] refused: the first term-bearing place where a metavariable or a transient survived, or the uncleared seeds.
 #[derive(Debug)]
 pub struct ZonkedRefusal {
     place: String,
@@ -691,46 +691,55 @@ impl fmt::Display for ZonkedRefusal {
     }
 }
 
-/// The four term-bearing places `curios-elab`'s zonk is answerable for — a definition's type and body, the entrypoint, and the two registries' telescopes — walked with the cached `has_metavar` bits, first offender wins.
+/// The four term-bearing places elaboration and zonk are answerable for — a definition's type and body, the entrypoint, and the two registries' telescopes — walked with the cached `has_metavar`/`has_transient` bits, first offender wins.
 fn zonked_refusal(module: &Module) -> Option<String> {
+    fn unfinished(term: &Term) -> bool {
+        term.has_metavar() || term.has_transient()
+    }
+    fn unfinished_bound<B: Bound>(value: &B) -> bool {
+        value.has_metavar() || value.has_transient()
+    }
+
     if !module.universe_seeds.is_empty() {
         return Some("the universe seeds are uncleared".to_owned());
     }
     for item in &module.items {
         let survives = match item {
-            Item::Let(definition) => {
-                definition.type_.has_metavar() || definition.body.has_metavar()
-            }
-            Item::Rec(rec) => rec.group.iter().any(|member| {
-                member.type_.body().has_metavar() || member.body.body().has_metavar()
-            }),
+            Item::Let(definition) => unfinished(&definition.type_) || unfinished(&definition.body),
+            Item::Rec(rec) => rec
+                .group
+                .iter()
+                .any(|member| unfinished(member.type_.body()) || unfinished(member.body.body())),
         };
         if survives {
-            return Some(format!("a metavariable survives in {}", item.describe()));
+            return Some(format!(
+                "elaboration-only syntax survives in {}",
+                item.describe()
+            ));
         }
     }
     if module.entry.as_ref().is_some_and(|entry| {
-        entry.body.has_metavar() || entry.type_.as_ref().is_some_and(Term::has_metavar)
+        unfinished(&entry.body) || entry.type_.as_ref().is_some_and(unfinished)
     }) {
-        return Some("a metavariable survives in the entrypoint".to_owned());
+        return Some("elaboration-only syntax survives in the entrypoint".to_owned());
     }
     for (name, decl) in &module.induct_decls {
-        if Bound::has_metavar(&decl.arity)
-            || decl.result_sort.has_metavar()
+        if unfinished_bound(&decl.arity)
+            || unfinished(&decl.result_sort)
             || decl
                 .constructors
                 .iter()
-                .any(|(_, param)| Bound::has_metavar(&param.telescope))
+                .any(|(_, param)| unfinished_bound(&param.telescope))
         {
             return Some(format!(
-                "a metavariable survives in the registry entry for {name}"
+                "elaboration-only syntax survives in the registry entry for {name}"
             ));
         }
     }
     for (name, decl) in &module.struct_decls {
-        if Bound::has_metavar(&decl.arity) || decl.result_sort.has_metavar() {
+        if unfinished_bound(&decl.arity) || unfinished(&decl.result_sort) {
             return Some(format!(
-                "a metavariable survives in the registry entry for {name}"
+                "elaboration-only syntax survives in the registry entry for {name}"
             ));
         }
     }

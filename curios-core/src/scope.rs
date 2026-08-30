@@ -163,6 +163,9 @@ pub trait Bound: Sized + Clone + Eq + Hash + fmt::Debug {
     /// Whether an elaboration metavariable occurs in this value.
     fn has_metavar(&self) -> bool;
 
+    /// Whether any elaboration-transient node survives in this value — the sibling of [`Bound::has_metavar`], asked by the same zonk-evidence boundary.
+    fn has_transient(&self) -> bool;
+
     /// `true` iff the term has no loose de Bruijn indices — i.e. it's not floating inside some outer scope.
     fn closed(&self) -> bool {
         self.reach() == 0
@@ -243,6 +246,10 @@ impl Bound for Vec<Term> {
     fn has_metavar(&self) -> bool {
         self.iter().any(Bound::has_metavar)
     }
+
+    fn has_transient(&self) -> bool {
+        self.iter().any(Bound::has_transient)
+    }
 }
 
 impl Bound for () {
@@ -257,6 +264,10 @@ impl Bound for () {
     }
 
     fn has_metavar(&self) -> bool {
+        false
+    }
+
+    fn has_transient(&self) -> bool {
         false
     }
 }
@@ -953,6 +964,19 @@ impl<B: Bound> Bound for Telescope<B> {
                     false => current = rest.body(),
                 },
                 Telescope::Done(body) => return body.has_metavar(),
+            }
+        }
+    }
+
+    fn has_transient(&self) -> bool {
+        let mut current = self;
+        loop {
+            match current {
+                Telescope::Cons(ty, rest) => match ty.has_transient() {
+                    true => return true,
+                    false => current = rest.body(),
+                },
+                Telescope::Done(body) => return body.has_transient(),
             }
         }
     }

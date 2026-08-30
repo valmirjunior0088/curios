@@ -1,4 +1,8 @@
-use {super::*, crate::WitnessId, curios_utilities::RootKind};
+use {
+    super::*,
+    crate::{NumLit, Subterm, Transient, WitnessId},
+    curios_utilities::RootKind,
+};
 
 fn definition(name: &str, universe_context: UniverseContext) -> Definition {
     let global = Global::Authored(Qualifier::from([name]));
@@ -251,4 +255,28 @@ fn a_surviving_metavariable_refuses_the_zonked_projection() {
 
     let refusal = Zonked::project(&module).expect_err("the hole must refuse the projection");
     assert!(refusal.to_string().contains("holed"), "{refusal}");
+}
+
+#[test]
+fn a_surviving_transient_refuses_the_zonked_projection() {
+    let mut infixed = definition("infixed", UniverseContext::empty());
+    infixed.body = Term::from(Subterm::Transient(Transient::NumLit(NumLit {
+        magnitude: 7u32.into(),
+        signed: false,
+        negative: false,
+    })));
+    let module = Module {
+        items: vec![Item::Let(infixed)],
+        mounts: Vec::new(),
+        universe_seeds: Vec::new(),
+        induct_decls: Default::default(),
+        struct_decls: Default::default(),
+        concepts: Default::default(),
+        witnesses: Default::default(),
+        binder_floor: 0,
+        entry: None,
+    };
+
+    let refusal = Zonked::project(&module).expect_err("the transient must refuse the projection");
+    assert!(refusal.to_string().contains("infixed"), "{refusal}");
 }

@@ -147,6 +147,11 @@ impl Term {
         self.scalars().has_metavar
     }
 
+    /// Whether any elaboration-transient node occurs in this term. Cached per node like `has_metavar` and for the same consumer: the zonk-evidence projection's O(children)-per-node walk.
+    pub(crate) fn has_transient(&self) -> bool {
+        self.scalars().has_transient
+    }
+
     /// Whether this term contains an unresolved universe metavariable in a `Type` level, universe instantiation, or nominal universe vector.
     pub fn has_universe_meta(&self) -> bool {
         self.scalars().has_universe_meta
@@ -1422,6 +1427,10 @@ impl Bound for Term {
 
     fn has_metavar(&self) -> bool {
         Term::has_metavar(self)
+    }
+
+    fn has_transient(&self) -> bool {
+        Term::has_transient(self)
     }
 
     /// Cached alongside `hash`/`reach`: a closed subterm that `traverse`'s pruning short-circuit (above) hands back via `Rc::clone` keeps this same cell across every later traversal, so a term shared across many conversion goals — e.g. a `rec` group's own unchanging members, re-enqueued each round an unfolding cycle revisits them — pays this O(size) walk once rather than once per goal. Uniform in every term, not specific to recursive ones; see `Convert::history_key`.

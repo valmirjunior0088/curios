@@ -15,6 +15,7 @@ fn round_trips_every_field() {
         reach: 123_456,
         has_local_free: true,
         has_metavar: false,
+        has_transient: true,
         has_universe_meta: true,
         has_universe_data: false,
         footprint: 987_654,
@@ -26,6 +27,7 @@ fn round_trips_every_field() {
     assert_eq!(read.reach, 123_456);
     assert!(read.has_local_free);
     assert!(!read.has_metavar);
+    assert!(read.has_transient);
     assert!(read.has_universe_meta);
     assert!(!read.has_universe_data);
     assert_eq!(read.footprint, 987_654);
@@ -40,6 +42,7 @@ fn zero_values_read_back_as_filled() {
         reach: 0,
         has_local_free: false,
         has_metavar: true,
+        has_transient: false,
         has_universe_meta: false,
         has_universe_data: true,
         footprint: 0,
@@ -51,6 +54,7 @@ fn zero_values_read_back_as_filled() {
     assert_eq!(read.reach, 0);
     assert!(!read.has_local_free);
     assert!(read.has_metavar);
+    assert!(!read.has_transient);
     assert!(!read.has_universe_meta);
     assert!(read.has_universe_data);
     assert_eq!(read.footprint, 0);
@@ -66,6 +70,7 @@ fn reach_and_footprint_keep_their_widest_packed_values() {
         reach: widest_reach,
         has_local_free: true,
         has_metavar: true,
+        has_transient: true,
         has_universe_meta: true,
         has_universe_data: true,
         footprint: FOOTPRINT_MAX,
@@ -85,6 +90,7 @@ fn an_oversized_footprint_clamps_rather_than_wrapping() {
         reach: 0,
         has_local_free: false,
         has_metavar: false,
+        has_transient: false,
         has_universe_meta: false,
         has_universe_data: false,
         footprint: u64::MAX,

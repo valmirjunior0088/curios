@@ -425,6 +425,14 @@ impl Subterm {
         }
     }
 
+    /// Whether any elaboration-transient node occurs in this subterm — the uncached spelling of [`Term::has_transient`], which supplies the per-node memoization.
+    pub(crate) fn has_transient(&self) -> bool {
+        match self {
+            Subterm::Transient(_) => true,
+            _ => self.any_child_term(&mut |t| t.has_transient()),
+        }
+    }
+
     pub(crate) fn has_universe_meta(&self) -> bool {
         let level_has_meta = |level: &Level| level.metas().next().is_some();
         match self {
@@ -878,6 +886,10 @@ impl Bound for Subterm {
 
     fn has_metavar(&self) -> bool {
         Subterm::has_metavar(self)
+    }
+
+    fn has_transient(&self) -> bool {
+        Subterm::has_transient(self)
     }
 }
 

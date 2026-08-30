@@ -14,12 +14,13 @@ use {
     },
 };
 
-/// One node's span-independent derivations: the structural hash, the loose-index `reach`, the four containment flags, and the logical footprint of everything the node reaches. Computed from the node's subterm with every child's own cache already filled, so [`Scalars::of`] costs O(children).
+/// One node's span-independent derivations: the structural hash, the loose-index `reach`, the five containment flags, and the logical footprint of everything the node reaches. Computed from the node's subterm with every child's own cache already filled, so [`Scalars::of`] costs O(children).
 #[derive(Clone, Copy)]
 pub(crate) struct Scalars {
     pub(crate) reach: usize,
     pub(crate) has_local_free: bool,
     pub(crate) has_metavar: bool,
+    pub(crate) has_transient: bool,
     pub(crate) has_universe_meta: bool,
     pub(crate) has_universe_data: bool,
     pub(crate) footprint: u64,
@@ -39,6 +40,7 @@ impl Scalars {
             reach: subterm.reach(),
             has_local_free: subterm.has_local_free(),
             has_metavar: subterm.has_metavar(),
+            has_transient: subterm.has_transient(),
             has_universe_meta: subterm.has_universe_meta(),
             has_universe_data: subterm.has_universe_data(),
             footprint: footprint_of(subterm),
@@ -73,15 +75,16 @@ const HAS_LOCAL_FREE: u64 = 1 << 0;
 const HAS_METAVAR: u64 = 1 << 1;
 const HAS_UNIVERSE_META: u64 = 1 << 2;
 const HAS_UNIVERSE_DATA: u64 = 1 << 3;
-const REACH_SHIFT: u32 = 4;
-const REACH_BITS: u32 = 29;
+const HAS_TRANSIENT: u64 = 1 << 4;
+const REACH_SHIFT: u32 = 5;
+const REACH_BITS: u32 = 28;
 const FOOTPRINT_SHIFT: u32 = REACH_SHIFT + REACH_BITS;
 const FOOTPRINT_BITS: u32 = 30;
 const FOOTPRINT_MAX: u64 = (1 << FOOTPRINT_BITS) - 1;
 
 /// A node's memoized [`Scalars`], packed into two `Cell<u64>` words: the flags, `reach`, the footprint, and a filled bit in `packed`, and the full hash in `hash`, whose validity the shared filled bit governs — a hash of any value (zero included) is legitimate once filled. `Default` is the unfilled state, which is also what an archived node restores to (the field is `rkyv`-skipped).
 ///
-/// **Two words rather than three, and the footprint is what made that a question.** A third `Cell<u64>` would cost eight bytes on every node of every term the compiler holds, which the fixed prelude alone counts in millions. The two figures share one word instead: `reach` is bounded by binder depth and keeps 29 bits, which is half a billion nested binders and unreachable on any stack; the footprint takes 30 and *saturates* rather than wrapping, which the specification names as an acceptable strategy and which is the safe direction for a quota that bounds an optimization.
+/// **Two words rather than three, and the footprint is what made that a question.** A third `Cell<u64>` would cost eight bytes on every node of every term the compiler holds, which the fixed prelude alone counts in millions. The two figures share one word instead: `reach` is bounded by binder depth and keeps 28 bits, which is a quarter billion nested binders and unreachable on any stack; the footprint takes 30 and *saturates* rather than wrapping, which the specification names as an acceptable strategy and which is the safe direction for a quota that bounds an optimization.
 #[derive(Default)]
 pub(crate) struct ScalarCache {
     packed: Cell<u64>,
@@ -99,6 +102,7 @@ impl ScalarCache {
             reach: ((packed >> REACH_SHIFT) & ((1 << REACH_BITS) - 1)) as usize,
             has_local_free: packed & HAS_LOCAL_FREE != 0,
             has_metavar: packed & HAS_METAVAR != 0,
+            has_transient: packed & HAS_TRANSIENT != 0,
             has_universe_meta: packed & HAS_UNIVERSE_META != 0,
             has_universe_data: packed & HAS_UNIVERSE_DATA != 0,
             footprint: (packed >> FOOTPRINT_SHIFT) & FOOTPRINT_MAX,
@@ -124,6 +128,9 @@ impl ScalarCache {
         }
         if scalars.has_metavar {
             packed |= HAS_METAVAR;
+        }
+        if scalars.has_transient {
+            packed |= HAS_TRANSIENT;
         }
         if scalars.has_universe_meta {
             packed |= HAS_UNIVERSE_META;
