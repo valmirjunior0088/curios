@@ -249,6 +249,85 @@ end
           (identifier))))))
 
 ================================================================================
+Structure and concept groups, members naming one another
+================================================================================
+
+pub struct Node: pub Type { value: Nat, next: Option(Edge) }
+and Edge: pub Type { weight: Nat, to: Node }
+concept A(T: Type): pub Type { fa(T) -> B(T) }
+and B(T: Type): pub Type { fb(T) -> Nat }
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (struct_item
+    (struct_member
+      (identifier)
+      (sort)
+      (field_declaration
+        (identifier)
+        (path
+          (identifier)))
+      (field_declaration
+        (identifier)
+        (call
+          (path
+            (identifier))
+          (arguments
+            (argument
+              (path
+                (identifier)))))))
+    (struct_member
+      (identifier)
+      (sort)
+      (field_declaration
+        (identifier)
+        (path
+          (identifier)))
+      (field_declaration
+        (identifier)
+        (path
+          (identifier)))))
+  (concept_item
+    (concept_member
+      (identifier)
+      (type_parameters
+        (type_parameter
+          (identifier)
+          (sort)))
+      (sort)
+      (concept_field
+        (field_declaration
+          (identifier)
+          (function_type_parameters
+            (function_type_parameter
+              (path
+                (identifier))))
+          (call
+            (path
+              (identifier))
+            (arguments
+              (argument
+                (path
+                  (identifier))))))))
+    (concept_member
+      (identifier)
+      (type_parameters
+        (type_parameter
+          (identifier)
+          (sort)))
+      (sort)
+      (concept_field
+        (field_declaration
+          (identifier)
+          (function_type_parameters
+            (function_type_parameter
+              (path
+                (identifier))))
+          (path
+            (identifier)))))))
+
+================================================================================
 Structures and concepts
 ================================================================================
 
@@ -267,75 +346,78 @@ pub concept Ord(A: Type): Type {
 
 (source_file
   (struct_item
-    (identifier)
-    (type_parameters
-      (type_parameter
-        (identifier)
-        (sort))
-      (type_parameter
-        (identifier)
-        (sort)))
-    (sort)
-    (field_declaration
+    (struct_member
       (identifier)
-      (path
-        (identifier)))
-    (field_declaration
-      (identifier)
-      (path
-        (identifier))))
+      (type_parameters
+        (type_parameter
+          (identifier)
+          (sort))
+        (type_parameter
+          (identifier)
+          (sort)))
+      (sort)
+      (field_declaration
+        (identifier)
+        (path
+          (identifier)))
+      (field_declaration
+        (identifier)
+        (path
+          (identifier)))))
   (struct_item
-    (identifier)
-    (sort)
-    (field_declaration
-      (path
-        (identifier))))
+    (struct_member
+      (identifier)
+      (sort)
+      (field_declaration
+        (path
+          (identifier)))))
   (concept_item
-    (identifier)
-    (type_parameters
-      (type_parameter
-        (identifier)
-        (sort)))
-    (sort)
-    (concept_field
-      (call
-        (path
-          (identifier))
-        (arguments
-          (argument
-            (path
-              (identifier))))))
-    (concept_field
-      (field_declaration
-        (identifier)
-        (function_type_parameters
-          (function_type_parameter
-            (path
-              (identifier)))
-          (function_type_parameter
-            (path
-              (identifier))))
-        (path
-          (identifier))))
-    (concept_field
-      (field_declaration
-        (identifier)
-        (function_type
+    (concept_member
+      (identifier)
+      (type_parameters
+        (type_parameter
+          (identifier)
+          (sort)))
+      (sort)
+      (concept_field
+        (call
+          (path
+            (identifier))
+          (arguments
+            (argument
+              (path
+                (identifier))))))
+      (concept_field
+        (field_declaration
+          (identifier)
           (function_type_parameters
             (function_type_parameter
-              (identifier)
+              (path
+                (identifier)))
+            (function_type_parameter
               (path
                 (identifier))))
-          (call
-            (path
-              (identifier))
-            (arguments
-              (argument
+          (path
+            (identifier))))
+      (concept_field
+        (field_declaration
+          (identifier)
+          (function_type
+            (function_type_parameters
+              (function_type_parameter
+                (identifier)
                 (path
-                  (identifier)))
-              (argument
-                (path
-                  (identifier))))))))))
+                  (identifier))))
+            (call
+              (path
+                (identifier))
+              (arguments
+                (argument
+                  (path
+                    (identifier)))
+                (argument
+                  (path
+                    (identifier)))))))))))
 
 ================================================================================
 A witness group, each member resolving through the other

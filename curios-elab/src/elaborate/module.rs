@@ -806,6 +806,11 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
         }
     }
 
+    // A struct group's formers check their parameters against registry arities lowered raw, exactly as a lone former does — see `share_struct_params`.
+    for (def, type_) in defs.iter().zip(&types) {
+        share_struct_params(context, &def.name, type_);
+    }
+
     // An inductive's type bindings always lower as one `rec` group whose member names are the registry keys. Rebuild the registry index telescopes here — after the rebuilt signatures are assumed (index types may mention the group), before any body's `InductType` node checks against them.
     for def in &defs {
         elaborate_induct_indices(context, &def.name)?;
@@ -835,6 +840,10 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
     // Registry rebuild, phase two: constructor payload types may apply the group's type constructors, so their signatures (and `InductType` terminals) elaborate only now that the rebuilt bodies are defined.
     for def in &defs {
         elaborate_induct_constructors(context, &def.name)?;
+    }
+    // A struct or concept group's field telescopes elaborate now that every former is defined, since each may name the others.
+    for def in &defs {
+        elaborate_struct(context, &def.name)?;
     }
     for def in &defs {
         if let Some(induct_decl) = context.induct_decl(&def.name).cloned() {
@@ -889,6 +898,34 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
             },
         );
     }
+    for def in &defs {
+        if let Some(struct_decl) = context.struct_decl(&def.name).cloned() {
+            let arity = zonk_arity(context, &struct_decl.arity)?;
+            let result_sort = zonk(context, &struct_decl.result_sort)?;
+            context.update_struct(
+                &def.name,
+                StructDecl {
+                    universe_context: struct_decl.universe_context,
+                    arity,
+                    result_sort,
+                    module: struct_decl.module,
+                    rep_public: struct_decl.rep_public,
+                    polarities: struct_decl.polarities,
+                },
+            );
+        }
+        if let Some(concept) = context.concept(&def.name).cloned() {
+            context.update_concept(
+                &def.name,
+                ConceptDecl {
+                    universe_context: concept.universe_context,
+                    params: zonk_solved_term_metas(context, &concept.params),
+                    fields: concept.fields,
+                    supers: concept.supers,
+                },
+            );
+        }
+    }
 
     // As for a single definition, the group's interface is its member signatures and registry telescopes; levels reachable only through a member body are internal and minimized rather than generalized, and so are the levels of a member's result sort that no member's domain mentions — see [`result_sort_only_metas`]. The rule is the one `finalize_definition` applies, read over the group: a level one member keeps in its interface stays there for all of them, since the group shares a context, and only a level every member confines to its result sort is determined. A group of one is then generalized exactly as the same signature would be as a `let`, which is what keeps the path a definition takes from showing in its scheme.
     let mut interface = types
@@ -915,6 +952,13 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
             for constructor in induct_decl.signatures() {
                 interface.extend(universe_metas(&constructor.telescope));
             }
+        }
+        if let Some(struct_decl) = context.struct_decl(&def.name) {
+            interface.extend(universe_metas(&struct_decl.arity));
+            interface.extend(struct_decl.result_sort.universe_metas());
+        }
+        if let Some(concept) = context.concept(&def.name) {
+            interface.extend(universe_metas(&concept.params));
         }
     }
     let mut internal = bodies
@@ -994,6 +1038,34 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
                 polarities: induct_decl.polarities,
             },
         );
+    }
+    // A struct or concept registry entry is stamped as an inductive's is: stored outside the group, so its self-references are free and carry the instance themselves.
+    for def in &defs {
+        let free = SelfReference::Free;
+        if let Some(struct_decl) = context.struct_decl(&def.name).cloned() {
+            context.update_struct(
+                &def.name,
+                StructDecl {
+                    universe_context: universe_context.clone(),
+                    arity: stamp(context, &struct_decl.arity, &owned, free, &instance)?,
+                    result_sort: stamp(context, &struct_decl.result_sort, &owned, free, &instance)?,
+                    module: struct_decl.module,
+                    rep_public: struct_decl.rep_public,
+                    polarities: struct_decl.polarities,
+                },
+            );
+        }
+        if let Some(concept) = context.concept(&def.name).cloned() {
+            context.update_concept(
+                &def.name,
+                ConceptDecl {
+                    universe_context: universe_context.clone(),
+                    params: stamp(context, &concept.params, &owned, free, &instance)?,
+                    fields: concept.fields,
+                    supers: concept.supers,
+                },
+            );
+        }
     }
 
     let definitions = defs

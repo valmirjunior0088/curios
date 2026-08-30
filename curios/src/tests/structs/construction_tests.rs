@@ -290,3 +290,20 @@ fn a_mismatch_names_an_unlabeled_tuple_the_way_source_writes_it() {
         "expected the unlabeled product spelled as written:\n{report}"
     );
 }
+
+// Structures whose fields name one another are declared as one group: the formers lower to one recursive item, so each field telescope elaborates with every former defined. A lone structure still names itself with nothing said.
+#[test]
+fn a_struct_group_may_name_one_another() {
+    let source = r#"
+        use /std/{Nat, Option, Handle};
+        struct Node : pub Type { value: Nat, next: Option(Edge) }
+        and Edge : pub Type { weight: Nat, to: Node }
+        let n : Node = Node {
+            value = 1,
+            next = Option/some(Edge { weight = 2, to = Node { value = 3, next = Option/none() } }),
+        };
+        /std/print(Nat/to_str(match n.next | some(e) => e.to.value | none() => 0 end))
+        "#;
+
+    assert_eq!(run(source), b"3");
+}

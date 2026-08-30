@@ -370,35 +370,46 @@ pub(super) fn parse_sort<'a>() -> Parser<'a, Term> {
     parse_prop().or(parse_type())
 }
 
-pub(super) fn parse_top_struct<'a>() -> Parser<'a, TopItem> {
-    catch(parse_pub().and(parse_keyword("struct"))).flat_map(|(vis_pub, ())| {
-        parse_identifier()
-            .and(
-                catch(
-                    parse_literal("(")
-                        .and_keep(sep_by0_trailing(parse_induct_param, || parse_literal(",")))
-                        .and_drop(parse_literal(")")),
-                )
-                .or(pure(vec![])),
+// One structure of a `struct` item, after its `pub` and keyword: the name, the parameters, the result sort with its own `pub`, and the fields.
+fn parse_struct_member<'a>(vis_pub: bool) -> Parser<'a, TopStruct> {
+    parse_identifier()
+        .and(
+            catch(
+                parse_literal("(")
+                    .and_keep(sep_by0_trailing(parse_induct_param, || parse_literal(",")))
+                    .and_drop(parse_literal(")")),
             )
-            // The result sort: `: Type` or `: Prop` after the parameters. Required.
-            .and(parse_literal(":").and_keep(parse_representation_sort()))
-            .and_drop(parse_literal("{"))
-            .and(sep_by0_trailing(parse_tuple_type_field, || {
-                parse_literal(",")
-            }))
-            .and_drop(parse_literal("}"))
-            .map(move |(((label, params), (rep_pub, result_sort)), fields)| {
-                TopItem::Struct(TopStruct {
-                    vis_pub,
-                    rep_pub,
-                    label: label.to_string(),
-                    params,
-                    result_sort,
-                    fields,
-                })
-            })
-    })
+            .or(pure(vec![])),
+        )
+        // The result sort: `: Type` or `: Prop` after the parameters. Required.
+        .and(parse_literal(":").and_keep(parse_representation_sort()))
+        .and_drop(parse_literal("{"))
+        .and(sep_by0_trailing(parse_tuple_type_field, || {
+            parse_literal(",")
+        }))
+        .and_drop(parse_literal("}"))
+        .map(
+            move |(((label, params), (rep_pub, result_sort)), fields)| TopStruct {
+                vis_pub,
+                rep_pub,
+                label: label.to_string(),
+                params,
+                result_sort,
+                fields,
+            },
+        )
+}
+
+// A `struct` item: one structure, or a `struct A … and B …` group whose fields name one another. Each member takes its own `pub`, before `struct` for the first and before `and` for the rest.
+pub(super) fn parse_top_struct<'a>() -> Parser<'a, TopItem> {
+    catch(parse_pub().and(parse_keyword("struct")))
+        .flat_map(|(vis_pub, ())| parse_struct_member(vis_pub))
+        .and(many0(|| {
+            catch(parse_pub().and(parse_keyword("and")))
+                .flat_map(|(vis_pub, ())| parse_struct_member(vis_pub))
+        }))
+        .map(|(first, rest)| iter::once(first).chain(rest).collect())
+        .map(TopItem::Struct)
 }
 
 // A concept field: `use? label : term`, or the signature sugar `label(params) -> term` — kept as written in the AST node (`func_params`); `into_core` undoes the sugar (mirroring top-level `let`'s function sugar). A `use`-prefixed field is a superclass edge — its type must be a concept application, checked at lowering.
@@ -438,33 +449,44 @@ pub(super) fn parse_concept_field<'a>() -> Parser<'a, ConceptField> {
     super_field.or(plain_or_sugar)
 }
 
-pub(super) fn parse_top_concept<'a>() -> Parser<'a, TopItem> {
-    catch(parse_pub().and(parse_keyword("concept"))).flat_map(|(vis_pub, ())| {
-        parse_identifier()
-            .and(
-                catch(
-                    parse_literal("(")
-                        .and_keep(sep_by0_trailing(parse_induct_param, || parse_literal(",")))
-                        .and_drop(parse_literal(")")),
-                )
-                .or(pure(vec![])),
+// One concept of a `concept` item, after its `pub` and keyword — the struct member's shape with concept fields.
+fn parse_concept_member<'a>(vis_pub: bool) -> Parser<'a, TopConcept> {
+    parse_identifier()
+        .and(
+            catch(
+                parse_literal("(")
+                    .and_keep(sep_by0_trailing(parse_induct_param, || parse_literal(",")))
+                    .and_drop(parse_literal(")")),
             )
-            // The representation sort: `: pub Type`, `: Type`, `: pub Prop`, or `: Prop` after the parameters. Required, like a struct's.
-            .and(parse_literal(":").and_keep(parse_representation_sort()))
-            .and_drop(parse_literal("{"))
-            .and(sep_by0_trailing(parse_concept_field, || parse_literal(",")))
-            .and_drop(parse_literal("}"))
-            .map(move |(((label, params), (rep_pub, result_sort)), fields)| {
-                TopItem::Concept(TopConcept {
-                    vis_pub,
-                    rep_pub,
-                    label: label.to_string(),
-                    params,
-                    result_sort,
-                    fields,
-                })
-            })
-    })
+            .or(pure(vec![])),
+        )
+        // The representation sort: `: pub Type`, `: Type`, `: pub Prop`, or `: Prop` after the parameters. Required, like a struct's.
+        .and(parse_literal(":").and_keep(parse_representation_sort()))
+        .and_drop(parse_literal("{"))
+        .and(sep_by0_trailing(parse_concept_field, || parse_literal(",")))
+        .and_drop(parse_literal("}"))
+        .map(
+            move |(((label, params), (rep_pub, result_sort)), fields)| TopConcept {
+                vis_pub,
+                rep_pub,
+                label: label.to_string(),
+                params,
+                result_sort,
+                fields,
+            },
+        )
+}
+
+// A `concept` item: one concept, or a `concept A … and B …` group whose method types name one another's dictionaries. Each member takes its own `pub`, as a `struct` group's do.
+pub(super) fn parse_top_concept<'a>() -> Parser<'a, TopItem> {
+    catch(parse_pub().and(parse_keyword("concept")))
+        .flat_map(|(vis_pub, ())| parse_concept_member(vis_pub))
+        .and(many0(|| {
+            catch(parse_pub().and(parse_keyword("and")))
+                .flat_map(|(vis_pub, ())| parse_concept_member(vis_pub))
+        }))
+        .map(|(first, rest)| iter::once(first).chain(rest).collect())
+        .map(TopItem::Concept)
 }
 
 // A witness field: `label = term`, or the definition sugar `label(params) = term` — the tuple-field grammar with the label mandatory, kept as written in the AST node (`func_params`); `into_core` undoes the sugar.

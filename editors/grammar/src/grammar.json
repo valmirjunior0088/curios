@@ -1006,6 +1006,43 @@
           "value": "struct"
         },
         {
+          "type": "SYMBOL",
+          "name": "struct_member"
+        },
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "SEQ",
+            "members": [
+              {
+                "type": "CHOICE",
+                "members": [
+                  {
+                    "type": "STRING",
+                    "value": "pub"
+                  },
+                  {
+                    "type": "BLANK"
+                  }
+                ]
+              },
+              {
+                "type": "STRING",
+                "value": "and"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "struct_member"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "struct_member": {
+      "type": "SEQ",
+      "members": [
+        {
           "type": "FIELD",
           "name": "name",
           "content": {
@@ -1199,6 +1236,43 @@
           "type": "STRING",
           "value": "concept"
         },
+        {
+          "type": "SYMBOL",
+          "name": "concept_member"
+        },
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "SEQ",
+            "members": [
+              {
+                "type": "CHOICE",
+                "members": [
+                  {
+                    "type": "STRING",
+                    "value": "pub"
+                  },
+                  {
+                    "type": "BLANK"
+                  }
+                ]
+              },
+              {
+                "type": "STRING",
+                "value": "and"
+              },
+              {
+                "type": "SYMBOL",
+                "name": "concept_member"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "concept_member": {
+      "type": "SEQ",
+      "members": [
         {
           "type": "FIELD",
           "name": "name",
@@ -4580,6 +4654,12 @@
     [
       "let_member",
       "_pattern"
+    ],
+    [
+      "struct_item"
+    ],
+    [
+      "concept_item"
     ],
     [
       "_atom",

@@ -286,11 +286,17 @@ fn scan_module_info(items: &[TopItem]) -> Result<ModuleInfo, Error> {
                 }
             }
             // A struct declares one binding (the type-former), like a `let` — there are no value constructors and no nested namespace, so no child module.
-            TopItem::Struct(s) => info.insert_binding(s.label.clone(), s.vis_pub)?,
+            TopItem::Struct(group) => {
+                for s in group {
+                    info.insert_binding(s.label.clone(), s.vis_pub)?;
+                }
+            }
             // A concept declares the type-former binding *and* a nested namespace (its method wrappers), like an inductive.
-            TopItem::Concept(c) => {
-                info.insert_child(c.label.clone(), c.vis_pub)?;
-                info.insert_binding(c.label.clone(), c.vis_pub)?;
+            TopItem::Concept(group) => {
+                for c in group {
+                    info.insert_child(c.label.clone(), c.vis_pub)?;
+                    info.insert_binding(c.label.clone(), c.vis_pub)?;
+                }
             }
             // A witness is anonymous: it declares no binding and occupies no lexical scope — its backing definition gets a compiler name.
             TopItem::Witness(_) => {}
@@ -371,13 +377,17 @@ fn process_items(
                 }
             }
             // The type-former binding only — like a `let` (no constructor namespace).
-            TopItem::Struct(s) => {
-                context.insert_binding(s.label.clone(), context.prefixed(&s.label))?
+            TopItem::Struct(group) => {
+                for s in group {
+                    context.insert_binding(s.label.clone(), context.prefixed(&s.label))?;
+                }
             }
             // A concept declares its type-former binding and a nested namespace for the method wrappers, like an inductive.
-            TopItem::Concept(c) => {
-                context.insert_scope(c.label.clone(), context.prefixed(&c.label))?;
-                context.insert_binding(c.label.clone(), context.prefixed(&c.label))?;
+            TopItem::Concept(group) => {
+                for c in group {
+                    context.insert_scope(c.label.clone(), context.prefixed(&c.label))?;
+                    context.insert_binding(c.label.clone(), context.prefixed(&c.label))?;
+                }
             }
             // A witness is anonymous — no binding, no scope entry.
             TopItem::Witness(_) => {}
@@ -762,257 +772,275 @@ fn process_items(
                 }
             }
             // A struct lowers to a single type-former `let` plus a registry entry — no value-constructor binding (the literal elaborates directly) and no indices.
-            TopItem::Struct(s) => {
-                let lower = Lowerer::new(context);
+            // A group of structures lowers its formers into one `rec` item, as an `induct` group does, so each member's fields may name the others; a lone structure stays a `let`, its own name reached through its registry telescope.
+            TopItem::Struct(group) => {
+                let mut formers = Vec::with_capacity(group.len());
+                for s in group {
+                    let lower = Lowerer::new(context);
 
-                let name = curios_core::Global::Authored(context.prefixed(&s.label));
-                // Declaring module: the type-former's qualifier prefix — identical to core's per-item `island` — for the representation-privacy checks.
-                let module = context.prefixed(&s.label).without_last();
+                    let name = curios_core::Global::Authored(context.prefixed(&s.label));
+                    // Declaring module: the type-former's qualifier prefix — identical to core's per-item `island` — for the representation-privacy checks.
+                    let module = context.prefixed(&s.label).without_last();
 
-                let param_binders = lower.mint(s.params.iter().map(|(_, n, _)| n.clone()));
-                let param_tys = s
-                    .params
-                    .iter()
-                    .enumerate()
-                    .map(|(i, (p, _, t))| {
-                        let ty = lower.bound(&param_binders[..i], || lower.input_type(t))?;
-                        Ok((*p, param_binders[i].1.clone(), ty))
-                    })
-                    .collect::<Result<Vec<_>, Error>>()?;
-                let param_tys_unmarked = param_tys
-                    .iter()
-                    .map(|(_, n, t)| (n.clone(), t.clone()))
-                    .collect::<Vec<_>>();
-                let param_vars = param_binders
-                    .iter()
-                    .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(id.clone())))
-                    .collect::<Vec<_>>();
-
-                // Field types, with declared or positional (`_i`) names so a later field type can depend on an earlier field. The signature sugar `f(params) -> T` is undone here.
-                let field_binders = lower.mint(
-                    s.fields
+                    let param_binders = lower.mint(s.params.iter().map(|(_, n, _)| n.clone()));
+                    let param_tys = s
+                        .params
                         .iter()
                         .enumerate()
-                        .map(|(i, param)| param.label.clone().unwrap_or_else(|| format!("_{i}"))),
-                );
-                let mut field_scope = param_binders.clone();
-                let field_tys = s
-                    .fields
-                    .iter()
-                    .enumerate()
-                    .map(|(i, param)| {
-                        let ty = lower
-                            .bound(&field_scope, || lower.input_type(&param.desugared_type()))?;
-                        field_scope.push(field_binders[i].clone());
-                        Ok((field_binders[i].1.clone(), ty))
-                    })
-                    .collect::<Result<Vec<_>, Error>>()?;
-
-                // Registry entry: the parameter telescope, and the full field telescope (parameter binders first — field types may mention them — then field binders), as in `Inductive::indices`. The declared result sort (`Type`/`Prop`) — closed; both the registry entry's sort and the type-former's codomain.
-                let result_sort = lower.term(&s.result_sort)?;
-
-                struct_decls.insert(
-                    name.clone(),
-                    curios_core::StructDecl {
-                        universe_context: curios_core::UniverseContext::empty(),
-                        arity: curios_core::Telescope::build(
-                            param_tys_unmarked.clone(),
-                            curios_core::Telescope::build(field_tys, ()),
-                        ),
-                        result_sort: result_sort.clone(),
-                        module,
-                        rep_public: s.rep_pub,
-                        // Positivity has not run yet: `curios-elab` computes each declaration's parameter polarities after elaboration and writes them back here.
-                        polarities: Vec::new(),
-                    },
-                );
-
-                // The type-former: `Pair : (A : Type, B : Type) -> Type` whose body is the `StructType` normal form (the bare node when parameterless), so `Pair(Nat, Bin)` reduces to `StructType { Pair, [Nat, Bin] }`. No value constructor.
-                let struct_type = curios_core::Term::struct_type(name.clone(), param_vars);
-                let (type_, body) = if param_tys.is_empty() {
-                    (result_sort, struct_type)
-                } else {
-                    (
-                        curios_core::Term::func_type_marked(param_tys.clone(), result_sort),
-                        curios_core::Term::func_marked(param_tys, struct_type),
-                    )
-                };
-
-                flat_items.push(FlatItem::Let(FlatLet {
-                    kind: curios_core::DefinitionKind::StructType,
-                    name: curios_core::Global::Authored(context.prefixed(&s.label)),
-                    island: context.island(),
-                    type_,
-                    body,
-                }));
-            }
-            // A concept lowers to a representation-public nominal `StructDecl` and its type-former `let` — plus a concept-registry entry (field labels, superclass edges, the parameter telescope) and one method-wrapper `let` per field, synthed into the concept's own namespace.
-            TopItem::Concept(concept) => {
-                let name = curios_core::Global::Authored(context.prefixed(&concept.label));
-                let module = context.prefixed(&concept.label).without_last();
-
-                let lower = Lowerer::new(context);
-                let param_binders = lower.mint(concept.params.iter().map(|(_, n, _)| n.clone()));
-                let param_tys = concept
-                    .params
-                    .iter()
-                    .enumerate()
-                    .map(|(i, (p, _, t))| {
-                        let ty = lower.bound(&param_binders[..i], || lower.input_type(t))?;
-                        Ok((*p, param_binders[i].1.clone(), ty))
-                    })
-                    .collect::<Result<Vec<_>, Error>>()?;
-                let param_tys_unmarked = param_tys
-                    .iter()
-                    .map(|(_, n, t)| (n.clone(), t.clone()))
-                    .collect::<Vec<_>>();
-                let param_vars = param_binders
-                    .iter()
-                    .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(id.clone())))
-                    .collect::<Vec<_>>();
-
-                // Superclass fields are anonymous in the surface syntax; mint a unique internal label per super so the record telescope and the registry's field list stay well-formed. The name is never surfaced — a superclass is reached by resolution, keyed by index, and never projected or wrapped by name.
-                let field_labels = concept
-                    .fields
-                    .iter()
-                    .enumerate()
-                    .map(|(i, field)| {
-                        if field.is_super {
-                            format!("_super{i}")
-                        } else {
-                            field.label.clone()
-                        }
-                    })
-                    .collect::<Vec<_>>();
-
-                // Field types, lowered under the parameter scope (a method field's label is the binder for later fields; a super field's minted label is inert). The signature sugar `f(params) -> T` is undone here.
-                let field_binders = lower.mint(field_labels.iter().cloned());
-                let mut field_scope = param_binders.clone();
-                let field_tys = concept
-                    .fields
-                    .iter()
-                    .enumerate()
-                    .map(|(i, field)| {
-                        let ty = lower
-                            .bound(&field_scope, || lower.input_type(&field.desugared_type()))?;
-                        field_scope.push(field_binders[i].clone());
-                        Ok((field_binders[i].1.clone(), ty))
-                    })
-                    .collect::<Result<Vec<_>, Error>>()?;
-
-                let result_sort = lower.term(&concept.result_sort)?;
-
-                // The record shape drives struct literals, projections, and — through `field_type_from` below — the declared type of every method wrapper.
-                let arity = curios_core::Telescope::build(
-                    param_tys_unmarked.clone(),
-                    curios_core::Telescope::build(field_tys, ()),
-                );
-                struct_decls.insert(
-                    name.clone(),
-                    curios_core::StructDecl {
-                        universe_context: curios_core::UniverseContext::empty(),
-                        arity: arity.clone(),
-                        result_sort: result_sort.clone(),
-                        module,
-                        rep_public: concept.rep_pub,
-                        // Positivity has not run yet: `curios-elab` computes each declaration's parameter polarities after elaboration and writes them back here.
-                        polarities: Vec::new(),
-                    },
-                );
-
-                // Superclass edges: each `use`-marked field names a super concept by its (resolved, qualified) head.
-                let supers = concept
-                    .fields
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, field)| field.is_super)
-                    .map(|(idx, field)| {
-                        let head = field.type_.concept_app_head().ok_or_else(|| {
-                            Error::MalformedSuperField {
-                                concept: concept.label.clone(),
-                            }
-                        })?;
-                        Ok((idx, resolve_concept_head(context, &head)?))
-                    })
-                    .collect::<Result<Vec<_>, Error>>()?;
-
-                concepts.insert(
-                    name.clone(),
-                    curios_core::ConceptDecl {
-                        universe_context: curios_core::UniverseContext::empty(),
-                        params: curios_core::Telescope::build(param_tys_unmarked.clone(), ()),
-                        fields: field_labels.clone(),
-                        supers,
-                    },
-                );
-
-                // The type-former, exactly like a representation-public struct's.
-                let struct_type = curios_core::Term::struct_type(name.clone(), param_vars.clone());
-                let (type_, body) = if param_tys.is_empty() {
-                    (result_sort, struct_type)
-                } else {
-                    (
-                        curios_core::Term::func_type_marked(param_tys.clone(), result_sort),
-                        curios_core::Term::func_marked(param_tys.clone(), struct_type),
-                    )
-                };
-                flat_items.push(FlatItem::Let(FlatLet {
-                    kind: curios_core::DefinitionKind::ConceptType,
-                    name: curios_core::Global::Authored(context.prefixed(&concept.label)),
-                    island: context.island(),
-                    type_,
-                    body,
-                }));
-
-                // Method wrappers: for each *method* field `f`, pub let C/f(@p₁ : P₁, …, use w : C(p₁, …)) -> F = w.f;
-                //
-                // Built in core rather than as surface AST, because `F` is not the field's *written* type: the record telescope above binds each field's label for the fields after it, so a field type may name the fields before it, and the wrapper has to state it with every such name opened at its own projection off `w`. Restating the written type instead leaves those names bound by nothing — well-formed only while no concept has a dependent field telescope, which is why it survived. Reading it out of the telescope also means the wrapper inherits the record's universe metas by construction, rather than by re-lowering the same spans under a role forced to match.
-                //
-                // Type and body are constructed together so both close over the one `w`, and both index the field positionally. Superclass fields are anonymous and get no wrapper: an instance of the outer concept already yields the inner one by resolution.
-                let param_refs = param_vars.iter().collect::<Vec<_>>();
-                for (index, field) in concept
-                    .fields
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, field)| !field.is_super)
-                {
-                    // `index` is the field's position in the *whole* telescope, superclass slots included. Counting only the fields that get wrappers would read every method after a superclass one slot early.
-                    let witness_id = lower.mint(["w".to_string()]).remove(0).1;
-                    let witness =
-                        curios_core::Term::var(curios_core::Var::free(witness_id.clone()));
-
-                    let params = param_tys
-                        .iter()
-                        .map(|(_, binder, type_)| {
-                            (Plicity::Implicit, binder.clone(), type_.clone())
+                        .map(|(i, (p, _, t))| {
+                            let ty = lower.bound(&param_binders[..i], || lower.input_type(t))?;
+                            Ok((*p, param_binders[i].1.clone(), ty))
                         })
-                        .chain(std::iter::once((
-                            Plicity::Witness,
-                            witness_id,
-                            curios_core::Term::struct_type(name.clone(), param_vars.clone()),
-                        )))
+                        .collect::<Result<Vec<_>, Error>>()?;
+                    let param_tys_unmarked = param_tys
+                        .iter()
+                        .map(|(_, n, t)| (n.clone(), t.clone()))
+                        .collect::<Vec<_>>();
+                    let param_vars = param_binders
+                        .iter()
+                        .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(id.clone())))
                         .collect::<Vec<_>>();
 
-                    let field_type = arity
-                        .open(&param_refs)
-                        .field_type_from(&witness, index)
-                        .expect("a concept's own field index is within its record telescope");
+                    // Field types, with declared or positional (`_i`) names so a later field type can depend on an earlier field. The signature sugar `f(params) -> T` is undone here.
+                    let field_binders =
+                        lower.mint(s.fields.iter().enumerate().map(|(i, param)| {
+                            param.label.clone().unwrap_or_else(|| format!("_{i}"))
+                        }));
+                    let mut field_scope = param_binders.clone();
+                    let field_tys = s
+                        .fields
+                        .iter()
+                        .enumerate()
+                        .map(|(i, param)| {
+                            let ty = lower.bound(&field_scope, || {
+                                lower.input_type(&param.desugared_type())
+                            })?;
+                            field_scope.push(field_binders[i].clone());
+                            Ok((field_binders[i].1.clone(), ty))
+                        })
+                        .collect::<Result<Vec<_>, Error>>()?;
 
-                    flat_items.push(FlatItem::Let(FlatLet {
-                        kind: curios_core::DefinitionKind::ConceptMethod {
-                            owner: context.prefixed(&concept.label),
+                    // Registry entry: the parameter telescope, and the full field telescope (parameter binders first — field types may mention them — then field binders), as in `Inductive::indices`. The declared result sort (`Type`/`Prop`) — closed; both the registry entry's sort and the type-former's codomain.
+                    let result_sort = lower.term(&s.result_sort)?;
+
+                    struct_decls.insert(
+                        name.clone(),
+                        curios_core::StructDecl {
+                            universe_context: curios_core::UniverseContext::empty(),
+                            arity: curios_core::Telescope::build(
+                                param_tys_unmarked.clone(),
+                                curios_core::Telescope::build(field_tys, ()),
+                            ),
+                            result_sort: result_sort.clone(),
+                            module,
+                            rep_public: s.rep_pub,
+                            // Positivity has not run yet: `curios-elab` computes each declaration's parameter polarities after elaboration and writes them back here.
+                            polarities: Vec::new(),
                         },
-                        name: curios_core::Global::Authored(
-                            context.prefixed(&concept.label).with(&field.label),
-                        ),
+                    );
+
+                    // The type-former: `Pair : (A : Type, B : Type) -> Type` whose body is the `StructType` normal form (the bare node when parameterless), so `Pair(Nat, Bin)` reduces to `StructType { Pair, [Nat, Bin] }`. No value constructor.
+                    let struct_type = curios_core::Term::struct_type(name.clone(), param_vars);
+                    let (type_, body) = if param_tys.is_empty() {
+                        (result_sort, struct_type)
+                    } else {
+                        (
+                            curios_core::Term::func_type_marked(param_tys.clone(), result_sort),
+                            curios_core::Term::func_marked(param_tys, struct_type),
+                        )
+                    };
+
+                    formers.push(FlatLet {
+                        kind: curios_core::DefinitionKind::StructType,
+                        name: curios_core::Global::Authored(context.prefixed(&s.label)),
                         island: context.island(),
-                        type_: curios_core::Term::func_type_marked(params.clone(), field_type),
-                        body: curios_core::Term::func_marked(
-                            params,
-                            curios_core::Term::proj(witness, index),
-                        ),
-                    }));
+                        type_,
+                        body,
+                    });
                 }
+                flat_items.push(match formers.len() {
+                    1 => FlatItem::Let(formers.pop().expect("a `struct` item has a member")),
+                    _ => FlatItem::Rec(formers),
+                });
+            }
+            // A concept lowers to a representation-public nominal `StructDecl` and its type-former `let` — plus a concept-registry entry (field labels, superclass edges, the parameter telescope) and one method-wrapper `let` per field, synthed into the concept's own namespace.
+            // A concept group lowers its formers into one `rec` item as a struct group does; the method wrappers stay `let` items of their own, since each names only its former.
+            TopItem::Concept(group) => {
+                let mut formers = Vec::with_capacity(group.len());
+                for concept in group {
+                    let name = curios_core::Global::Authored(context.prefixed(&concept.label));
+                    let module = context.prefixed(&concept.label).without_last();
+
+                    let lower = Lowerer::new(context);
+                    let param_binders =
+                        lower.mint(concept.params.iter().map(|(_, n, _)| n.clone()));
+                    let param_tys = concept
+                        .params
+                        .iter()
+                        .enumerate()
+                        .map(|(i, (p, _, t))| {
+                            let ty = lower.bound(&param_binders[..i], || lower.input_type(t))?;
+                            Ok((*p, param_binders[i].1.clone(), ty))
+                        })
+                        .collect::<Result<Vec<_>, Error>>()?;
+                    let param_tys_unmarked = param_tys
+                        .iter()
+                        .map(|(_, n, t)| (n.clone(), t.clone()))
+                        .collect::<Vec<_>>();
+                    let param_vars = param_binders
+                        .iter()
+                        .map(|(_, id)| curios_core::Term::var(curios_core::Var::free(id.clone())))
+                        .collect::<Vec<_>>();
+
+                    // Superclass fields are anonymous in the surface syntax; mint a unique internal label per super so the record telescope and the registry's field list stay well-formed. The name is never surfaced — a superclass is reached by resolution, keyed by index, and never projected or wrapped by name.
+                    let field_labels = concept
+                        .fields
+                        .iter()
+                        .enumerate()
+                        .map(|(i, field)| {
+                            if field.is_super {
+                                format!("_super{i}")
+                            } else {
+                                field.label.clone()
+                            }
+                        })
+                        .collect::<Vec<_>>();
+
+                    // Field types, lowered under the parameter scope (a method field's label is the binder for later fields; a super field's minted label is inert). The signature sugar `f(params) -> T` is undone here.
+                    let field_binders = lower.mint(field_labels.iter().cloned());
+                    let mut field_scope = param_binders.clone();
+                    let field_tys = concept
+                        .fields
+                        .iter()
+                        .enumerate()
+                        .map(|(i, field)| {
+                            let ty = lower.bound(&field_scope, || {
+                                lower.input_type(&field.desugared_type())
+                            })?;
+                            field_scope.push(field_binders[i].clone());
+                            Ok((field_binders[i].1.clone(), ty))
+                        })
+                        .collect::<Result<Vec<_>, Error>>()?;
+
+                    let result_sort = lower.term(&concept.result_sort)?;
+
+                    // The record shape drives struct literals, projections, and — through `field_type_from` below — the declared type of every method wrapper.
+                    let arity = curios_core::Telescope::build(
+                        param_tys_unmarked.clone(),
+                        curios_core::Telescope::build(field_tys, ()),
+                    );
+                    struct_decls.insert(
+                        name.clone(),
+                        curios_core::StructDecl {
+                            universe_context: curios_core::UniverseContext::empty(),
+                            arity: arity.clone(),
+                            result_sort: result_sort.clone(),
+                            module,
+                            rep_public: concept.rep_pub,
+                            // Positivity has not run yet: `curios-elab` computes each declaration's parameter polarities after elaboration and writes them back here.
+                            polarities: Vec::new(),
+                        },
+                    );
+
+                    // Superclass edges: each `use`-marked field names a super concept by its (resolved, qualified) head.
+                    let supers = concept
+                        .fields
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, field)| field.is_super)
+                        .map(|(idx, field)| {
+                            let head = field.type_.concept_app_head().ok_or_else(|| {
+                                Error::MalformedSuperField {
+                                    concept: concept.label.clone(),
+                                }
+                            })?;
+                            Ok((idx, resolve_concept_head(context, &head)?))
+                        })
+                        .collect::<Result<Vec<_>, Error>>()?;
+
+                    concepts.insert(
+                        name.clone(),
+                        curios_core::ConceptDecl {
+                            universe_context: curios_core::UniverseContext::empty(),
+                            params: curios_core::Telescope::build(param_tys_unmarked.clone(), ()),
+                            fields: field_labels.clone(),
+                            supers,
+                        },
+                    );
+
+                    // The type-former, exactly like a representation-public struct's.
+                    let struct_type =
+                        curios_core::Term::struct_type(name.clone(), param_vars.clone());
+                    let (type_, body) = if param_tys.is_empty() {
+                        (result_sort, struct_type)
+                    } else {
+                        (
+                            curios_core::Term::func_type_marked(param_tys.clone(), result_sort),
+                            curios_core::Term::func_marked(param_tys.clone(), struct_type),
+                        )
+                    };
+                    formers.push(FlatLet {
+                        kind: curios_core::DefinitionKind::ConceptType,
+                        name: curios_core::Global::Authored(context.prefixed(&concept.label)),
+                        island: context.island(),
+                        type_,
+                        body,
+                    });
+
+                    // Method wrappers: for each *method* field `f`, pub let C/f(@p₁ : P₁, …, use w : C(p₁, …)) -> F = w.f;
+                    //
+                    // Built in core rather than as surface AST, because `F` is not the field's *written* type: the record telescope above binds each field's label for the fields after it, so a field type may name the fields before it, and the wrapper has to state it with every such name opened at its own projection off `w`. Restating the written type instead leaves those names bound by nothing — well-formed only while no concept has a dependent field telescope, which is why it survived. Reading it out of the telescope also means the wrapper inherits the record's universe metas by construction, rather than by re-lowering the same spans under a role forced to match.
+                    //
+                    // Type and body are constructed together so both close over the one `w`, and both index the field positionally. Superclass fields are anonymous and get no wrapper: an instance of the outer concept already yields the inner one by resolution.
+                    let param_refs = param_vars.iter().collect::<Vec<_>>();
+                    for (index, field) in concept
+                        .fields
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, field)| !field.is_super)
+                    {
+                        // `index` is the field's position in the *whole* telescope, superclass slots included. Counting only the fields that get wrappers would read every method after a superclass one slot early.
+                        let witness_id = lower.mint(["w".to_string()]).remove(0).1;
+                        let witness =
+                            curios_core::Term::var(curios_core::Var::free(witness_id.clone()));
+
+                        let params = param_tys
+                            .iter()
+                            .map(|(_, binder, type_)| {
+                                (Plicity::Implicit, binder.clone(), type_.clone())
+                            })
+                            .chain(std::iter::once((
+                                Plicity::Witness,
+                                witness_id,
+                                curios_core::Term::struct_type(name.clone(), param_vars.clone()),
+                            )))
+                            .collect::<Vec<_>>();
+
+                        let field_type = arity
+                            .open(&param_refs)
+                            .field_type_from(&witness, index)
+                            .expect("a concept's own field index is within its record telescope");
+
+                        flat_items.push(FlatItem::Let(FlatLet {
+                            kind: curios_core::DefinitionKind::ConceptMethod {
+                                owner: context.prefixed(&concept.label),
+                            },
+                            name: curios_core::Global::Authored(
+                                context.prefixed(&concept.label).with(&field.label),
+                            ),
+                            island: context.island(),
+                            type_: curios_core::Term::func_type_marked(params.clone(), field_type),
+                            body: curios_core::Term::func_marked(
+                                params,
+                                curios_core::Term::proj(witness, index),
+                            ),
+                        }));
+                    }
+                }
+                flat_items.push(match formers.len() {
+                    1 => FlatItem::Let(formers.pop().expect("a `concept` item has a member")),
+                    _ => FlatItem::Rec(formers),
+                });
             }
             // A witness desugars to an anonymous top-level definition satisfy (tele) -> C(args) = C(args) { f = e, … }; and marks it for registration in the program-wide witness table. It gets an *identity*, not a manufactured name: a `satisfy` block has no name a programmer wrote, and the module a diagnostic reports for it comes from `Definition::island`.
             // A group `satisfy … and …` lowers to one `rec` item, so its members' anonymous names are bound in one another; a lone witness stays a `let` item, and may still resolve through its own entry — that repair is elaboration's, since a witness references itself by resolution rather than by name.

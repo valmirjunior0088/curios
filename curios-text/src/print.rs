@@ -1558,10 +1558,42 @@ fn print_top_induct(group: Vec<TopInduct>) -> Printer {
     ])
 }
 
-fn print_top_struct(item: TopStruct) -> Printer {
+/// A `struct` item: one structure, or a group joined by `and`, each later member marked at its head as a `let` group's clauses are.
+fn print_top_struct(items: Vec<TopStruct>) -> Printer {
+    let mut iter = items.into_iter();
+    let first = iter.next().expect("a `struct` item has a member");
+    let rest = iter
+        .map(|item| {
+            let start = struct_member_start(&item);
+            flat([
+                hard_line(),
+                marked(start, || print_struct_member(item, "and ")),
+            ])
+        })
+        .collect::<Vec<_>>();
+    flat([print_struct_member(first, "struct "), flat(rest)])
+}
+
+/// Where a struct member begins: its earliest spanned component — a parameter type, the result sort, or the first field type.
+fn struct_member_start(item: &TopStruct) -> Option<usize> {
+    [
+        item.params
+            .first()
+            .and_then(|(_, _, type_)| type_.span().map(|span| span.start)),
+        item.result_sort.span().map(|span| span.start),
+        item.fields
+            .first()
+            .and_then(|field| field.type_.span().map(|span| span.start)),
+    ]
+    .into_iter()
+    .flatten()
+    .min()
+}
+
+fn print_struct_member(item: TopStruct, keyword: &'static str) -> Printer {
     flat([
         print_pub(item.vis_pub),
-        pure("struct "),
+        pure(keyword),
         pure(item.label),
         print_top_induct_params(item.params),
         pure(": "),
@@ -1607,10 +1639,41 @@ fn print_concept_field(field: ConceptField) -> Printer {
     }
 }
 
-fn print_top_concept(item: TopConcept) -> Printer {
+/// A `concept` item: one concept, or a group joined by `and`, printed as a `struct` group is.
+fn print_top_concept(items: Vec<TopConcept>) -> Printer {
+    let mut iter = items.into_iter();
+    let first = iter.next().expect("a `concept` item has a member");
+    let rest = iter
+        .map(|item| {
+            let start = concept_member_start(&item);
+            flat([
+                hard_line(),
+                marked(start, || print_concept_member(item, "and ")),
+            ])
+        })
+        .collect::<Vec<_>>();
+    flat([print_concept_member(first, "concept "), flat(rest)])
+}
+
+fn concept_member_start(item: &TopConcept) -> Option<usize> {
+    [
+        item.params
+            .first()
+            .and_then(|(_, _, type_)| type_.span().map(|span| span.start)),
+        item.result_sort.span().map(|span| span.start),
+        item.fields
+            .first()
+            .and_then(|field| field.type_.span().map(|span| span.start)),
+    ]
+    .into_iter()
+    .flatten()
+    .min()
+}
+
+fn print_concept_member(item: TopConcept, keyword: &'static str) -> Printer {
     flat([
         print_pub(item.vis_pub),
-        pure("concept "),
+        pure(keyword),
         pure(item.label),
         print_top_induct_params(item.params),
         pure(": "),

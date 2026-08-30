@@ -291,12 +291,14 @@ fn seed(
     if let Some(interface) = public.get_mut(prefix) {
         for item in items {
             match item {
-                TopItem::Struct(item) if item.vis_pub && item.rep_pub => {
-                    interface
-                        .bindings
-                        .get_mut(&item.label)
-                        .expect("direct struct binding")
-                        .representation = Some(prefix.with(&item.label));
+                TopItem::Struct(group) => {
+                    for item in group.iter().filter(|item| item.vis_pub && item.rep_pub) {
+                        interface
+                            .bindings
+                            .get_mut(&item.label)
+                            .expect("direct struct binding")
+                            .representation = Some(prefix.with(&item.label));
+                    }
                 }
                 TopItem::Induct(group) => {
                     for item in group.iter().filter(|item| item.vis_pub && item.rep_pub) {
@@ -307,12 +309,14 @@ fn seed(
                             .representation = Some(prefix.with(&item.label));
                     }
                 }
-                TopItem::Concept(item) if item.vis_pub => {
-                    interface
-                        .bindings
-                        .get_mut(&item.label)
-                        .expect("direct concept binding")
-                        .representation = Some(prefix.with(&item.label));
+                TopItem::Concept(group) => {
+                    for item in group.iter().filter(|item| item.vis_pub) {
+                        interface
+                            .bindings
+                            .get_mut(&item.label)
+                            .expect("direct concept binding")
+                            .representation = Some(prefix.with(&item.label));
+                    }
                 }
                 _ => {}
             }
@@ -353,29 +357,31 @@ fn seed(
                     public.insert(ctor, interface);
                 }
             }
-            TopItem::Concept(concept) => {
-                // A concept's method wrappers live in a nested namespace, exactly like an inductive's constructors: seed both the direct info and the public interface of that module unconditionally (the fields are always public within it), so `Show/show` resolves. The concept's own visibility gates the walk from outside via the parent's child-module flag.
-                let namespace = prefix.with(&concept.label);
+            TopItem::Concept(group) => {
+                for concept in group {
+                    // A concept's method wrappers live in a nested namespace, exactly like an inductive's constructors: seed both the direct info and the public interface of that module unconditionally (the fields are always public within it), so `Show/show` resolves. The concept's own visibility gates the walk from outside via the parent's child-module flag.
+                    let namespace = prefix.with(&concept.label);
 
-                let mut direct = ModuleInfo::new();
-                // Superclass fields are anonymous — positional slots with no name to reach them by, and no wrapper (`into_core` filters them out of wrapper generation the same way). Registering their empty labels here is what made two superclasses collide as an empty-named duplicate declaration.
-                for field in concept.fields.iter().filter(|field| !field.is_super) {
-                    direct.insert_binding(field.label.clone(), true)?;
-                }
-                table.insert(namespace.clone(), direct);
+                    let mut direct = ModuleInfo::new();
+                    // Superclass fields are anonymous — positional slots with no name to reach them by, and no wrapper (`into_core` filters them out of wrapper generation the same way). Registering their empty labels here is what made two superclasses collide as an empty-named duplicate declaration.
+                    for field in concept.fields.iter().filter(|field| !field.is_super) {
+                        direct.insert_binding(field.label.clone(), true)?;
+                    }
+                    table.insert(namespace.clone(), direct);
 
-                let mut interface = PublicInterface::new();
-                for field in concept.fields.iter().filter(|field| !field.is_super) {
-                    let target = namespace.with(&field.label);
-                    interface.bindings.insert(
-                        field.label.clone(),
-                        Entry {
-                            target,
-                            representation: None,
-                        },
-                    );
+                    let mut interface = PublicInterface::new();
+                    for field in concept.fields.iter().filter(|field| !field.is_super) {
+                        let target = namespace.with(&field.label);
+                        interface.bindings.insert(
+                            field.label.clone(),
+                            Entry {
+                                target,
+                                representation: None,
+                            },
+                        );
+                    }
+                    public.insert(namespace, interface);
                 }
-                public.insert(namespace, interface);
             }
             TopItem::Mod(mod_item) => {
                 let path = prefix.with(&mod_item.label);

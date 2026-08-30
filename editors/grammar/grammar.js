@@ -39,6 +39,9 @@ module.exports = grammar({
     [$.function_type_parameter, $._pattern],
     [$.field_declaration, $.path],
     [$.let_member, $._pattern],
+    // After a member, `pub` may begin the next item or the group's next `and` member; the parser forks and the second token decides.
+    [$.struct_item],
+    [$.concept_item],
     [$._atom, $.struct_literal],
   ],
 
@@ -164,10 +167,17 @@ module.exports = grammar({
         field("type", $._term),
       ),
 
+    // One structure, or a `struct A … and B …` group whose fields name one another; each member takes its own `pub`.
     struct_item: ($) =>
       seq(
         optional("pub"),
         "struct",
+        $.struct_member,
+        repeat(seq(optional("pub"), "and", $.struct_member)),
+      ),
+
+    struct_member: ($) =>
+      seq(
         field("name", $.identifier),
         optional(field("parameters", $.type_parameters)),
         ":",
@@ -191,10 +201,17 @@ module.exports = grammar({
         field("type", $._term),
       ),
 
+    // One concept, or a `concept A … and B …` group whose method types name one another's dictionaries.
     concept_item: ($) =>
       seq(
         optional("pub"),
         "concept",
+        $.concept_member,
+        repeat(seq(optional("pub"), "and", $.concept_member)),
+      ),
+
+    concept_member: ($) =>
+      seq(
         field("name", $.identifier),
         optional(field("parameters", $.type_parameters)),
         ":",

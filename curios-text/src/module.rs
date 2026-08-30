@@ -181,15 +181,15 @@ pub struct TopWitness {
     pub entries: Vec<WitnessEntry>,
 }
 
-/// One top-level item of a module, one variant per declaration keyword. `Let`, `Induct` and `Witness` hold groups because each keyword chains with `and` — a `let f … and g …;` group of mutually recursive definitions, an `induct … and … end` group of mutually recursive inductive families, a `satisfy C(A) { … } and D(B) { … }` group of witnesses that resolve through one another. A lone `let` is a group of one; whether it recurses is read off its body, never declared.
+/// One top-level item of a module, one variant per declaration keyword. Every declaration keyword chains with `and`, so every variant but `Mod`, `Use` and `Foreign` holds a group: a `let f … and g …;` group of mutually recursive definitions, an `induct … and … end` group of mutually recursive inductive families, `struct` and `concept` groups whose fields name one another, and a `satisfy C(A) { … } and D(B) { … }` group of witnesses that resolve through one another. A lone `let` is a group of one; whether it recurses is read off its body, never declared.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TopItem {
     Mod(TopMod),
     Use(TopUse),
     Let(Vec<TopLet>),
     Induct(Vec<TopInduct>),
-    Struct(TopStruct),
-    Concept(TopConcept),
+    Struct(Vec<TopStruct>),
+    Concept(Vec<TopConcept>),
     Witness(Vec<TopWitness>),
     Foreign(TopForeign),
 }

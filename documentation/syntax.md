@@ -800,6 +800,13 @@ The outer `pub` exports the type name. The inner `pub` exports construction and 
 
 A `Prop` structure may contain only non-informative fields.
 
+Structures whose fields name one another are declared as one group with `and`; each member takes its own `pub` markers, before `struct` for the first and before `and` for each later one. A lone structure may name itself in its fields with nothing said.
+
+```crs
+pub struct Node: pub Type { value: Nat, next: Option(Edge) }
+and Edge: pub Type { weight: Nat, to: Node }
+```
+
 ### Structure literals
 
 A structure value names its type and supplies its fields. Parameterized heads may supply type parameters before the field block.
@@ -847,6 +854,8 @@ pub concept Monad(M: (Type) -> Type): pub Type {
 ```
 
 Every ordinary field receives a wrapper in the concept's namespace, so `Show/show(value)` asks for an implicit witness of `Show(A)` and projects its `show` implementation.
+
+Concepts whose method types name one another's dictionaries are declared as one group with `and`, as structures are. A superclass cycle — `use B(A)` in `A` and `use A(B)` in `B` — is refused whether or not the two are declared together, since resolution could never discharge it.
 
 The field list is a dependent telescope: later fields may refer to earlier named fields. In a generated wrapper such a reference becomes the corresponding projection of the resolved witness, so the wrapper's type constrains that witness's own implementations.
 
@@ -1023,4 +1032,6 @@ The standard equality operations include reflexivity, symmetry, transitivity, co
 | `satisfy C(args) { ... }` | Globally registered anonymous witness |
 | `satisfy (@A: Type, use C(A)) => D(args) { ... }` | Parameterized globally registered anonymous witness |
 | `satisfy C(A) { ... } and D(B) { ... }` | Witnesses that resolve through each other, declared as one group |
+| `struct A: pub Type { ... } and B: pub Type { ... }` | Structures whose fields name one another, declared as one group |
+| `concept A(T): pub Type { ... } and B(T): pub Type { ... }` | Concepts whose method types name one another, declared as one group |
 | `let f(…) -> T = … and g(…) -> U = …;` | Mutually recursive group, at the top level or locally |

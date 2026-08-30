@@ -251,9 +251,10 @@ fn struct_visibility_spellings() {
         ("pub struct Foo : pub Type { x : Type } u", true, true),
     ] {
         let entrypoint = source.parse::<Entrypoint>().unwrap();
-        let TopItem::Struct(s) = &entrypoint.module.items[0] else {
+        let TopItem::Struct(structs) = &entrypoint.module.items[0] else {
             panic!("expected a struct declaration for {source:?}");
         };
+        let s = &structs[0];
         assert_eq!((s.vis_pub, s.rep_pub), (vis_pub, rep_pub), "for {source:?}");
     }
 }
@@ -376,9 +377,10 @@ fn function_field_sugar_in_types() {
     let entrypoint = "struct Api : pub Type { version : Nat, ping(x : Nat) -> Nat } u"
         .parse::<Entrypoint>()
         .unwrap();
-    let TopItem::Struct(s) = &entrypoint.module.items[0] else {
+    let TopItem::Struct(structs) = &entrypoint.module.items[0] else {
         panic!("expected a struct declaration");
     };
+    let s = &structs[0];
     assert_eq!(s.fields[0].func_params, None);
     assert!(s.fields[1].func_params.is_some());
 }

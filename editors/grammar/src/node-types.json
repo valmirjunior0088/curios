@@ -944,6 +944,21 @@
   {
     "type": "concept_item",
     "named": true,
+    "fields": {},
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "concept_member",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "concept_member",
+    "named": true,
     "fields": {
       "name": {
         "multiple": false,
@@ -4637,38 +4652,13 @@
   {
     "type": "struct_item",
     "named": true,
-    "fields": {
-      "name": {
-        "multiple": false,
-        "required": true,
-        "types": [
-          {
-            "type": "identifier",
-            "named": true
-          }
-        ]
-      },
-      "parameters": {
-        "multiple": false,
-        "required": false,
-        "types": [
-          {
-            "type": "type_parameters",
-            "named": true
-          }
-        ]
-      }
-    },
+    "fields": {},
     "children": {
       "multiple": true,
       "required": true,
       "types": [
         {
-          "type": "field_declaration",
-          "named": true
-        },
-        {
-          "type": "sort",
+          "type": "struct_member",
           "named": true
         }
       ]
@@ -4731,6 +4721,46 @@
       "types": [
         {
           "type": "match_pattern_field",
+          "named": true
+        }
+      ]
+    }
+  },
+  {
+    "type": "struct_member",
+    "named": true,
+    "fields": {
+      "name": {
+        "multiple": false,
+        "required": true,
+        "types": [
+          {
+            "type": "identifier",
+            "named": true
+          }
+        ]
+      },
+      "parameters": {
+        "multiple": false,
+        "required": false,
+        "types": [
+          {
+            "type": "type_parameters",
+            "named": true
+          }
+        ]
+      }
+    },
+    "children": {
+      "multiple": true,
+      "required": true,
+      "types": [
+        {
+          "type": "field_declaration",
+          "named": true
+        },
+        {
+          "type": "sort",
           "named": true
         }
       ]

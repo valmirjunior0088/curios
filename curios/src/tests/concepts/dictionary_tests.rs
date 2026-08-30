@@ -199,3 +199,36 @@ fn concept_literal_spread_use_on_non_concept_rejected() {
 
     assert!(error(source).contains("not a concept"));
 }
+
+// Concepts whose method types name one another's dictionaries are declared as one group, exactly as structures are: their formers lower to one recursive item. The dictionaries sit in result positions — a dictionary left of an arrow is a negative occurrence, and positivity refuses it as it would for an inductive. `a` is a recursive value: `back` closes over it under a lambda, which is a knot forced by need.
+#[test]
+fn a_concept_group_may_name_one_anothers_dictionaries() {
+    let source = r#"
+        use /std/{Nat, Handle};
+        concept A(T : Type) : pub Type { fa(T) -> B(T) }
+        and B(T : Type) : pub Type { fb(T) -> Nat, back(T) -> A(T) }
+        let a : A(Nat) = A { fa(x) = B { fb(y) = x + y, back(y) = a } };
+        let b : B(Nat) = A/fa(use a, 1);
+        let again : B(Nat) = A/fa(use B/back(use b, 0), 10);
+        /std/print(Nat/to_str(B/fb(use b, 2) + B/fb(use again, 5)))
+        "#;
+
+    assert_eq!(run(source), b"18");
+}
+
+// A superclass cycle is a resolution loop, so it is refused whether or not the two concepts are declared together.
+#[test]
+fn a_superclass_cycle_is_refused_inside_a_group() {
+    let source = r#"
+        use /std/{Nat};
+        concept A(T : Type) : pub Type { use B(T), fa(T) -> Nat }
+        and B(T : Type) : pub Type { use A(T), fb(T) -> Nat }
+        /std/print("unreachable")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("superclass"),
+        "expected the cycle refused as a superclass cycle:\n{report}"
+    );
+}

@@ -12,9 +12,10 @@ fn parse_concept_item() {
             top : A \
         } u";
     let entrypoint = source.parse::<Entrypoint>().unwrap();
-    let TopItem::Concept(concept) = &entrypoint.module.items[0] else {
+    let TopItem::Concept(concepts) = &entrypoint.module.items[0] else {
         panic!("expected a concept declaration");
     };
+    let concept = &concepts[0];
 
     assert_eq!(concept.label, "Ord");
     assert_eq!(concept.params.len(), 1);
@@ -54,9 +55,10 @@ fn parse_concept_item() {
 fn out_stays_a_valid_parameter_name() {
     let source = "concept Weird(out : Type) : Type { get : out } u";
     let entrypoint = source.parse::<Entrypoint>().unwrap();
-    let TopItem::Concept(concept) = &entrypoint.module.items[0] else {
+    let TopItem::Concept(concepts) = &entrypoint.module.items[0] else {
         panic!("expected a concept declaration");
     };
+    let concept = &concepts[0];
 
     assert_eq!(concept.params.len(), 1);
     assert_eq!(concept.params[0].1, "out");
@@ -67,9 +69,10 @@ fn representation_sort_carries_visibility() {
     // `: pub Type` marks the representation transparent; the marker is independent from the name's `pub`.
     let source = "concept Show(A : Type) : pub Type { show : A } u";
     let entrypoint = source.parse::<Entrypoint>().unwrap();
-    let TopItem::Concept(concept) = &entrypoint.module.items[0] else {
+    let TopItem::Concept(concepts) = &entrypoint.module.items[0] else {
         panic!("expected a concept declaration");
     };
+    let concept = &concepts[0];
     assert!(!concept.vis_pub);
     assert!(concept.rep_pub);
 }
