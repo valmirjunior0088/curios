@@ -1686,7 +1686,10 @@ impl CpsModule {
 
         for atom in atoms(node) {
             match atom {
-                CpsAtom::Value(value) => self.require_value(*value, "operand")?,
+                CpsAtom::Value(value) => {
+                    // Naming the referencing statement turns a dangling-operand refusal from a value id into a site: which node, and — through its spelled form — which rewrite left it behind.
+                    self.require_value(*value, &format!("statement {id} ({node:?}) operand"))?
+                }
                 CpsAtom::Fun(function) => self.require_fun(*function, "function atom")?,
                 CpsAtom::Literal(_) | CpsAtom::Filler => {}
             }

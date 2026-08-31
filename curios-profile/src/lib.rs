@@ -75,9 +75,11 @@ macro_rules! profile_group {
 /// ```text
 /// curios_profile::sample!("universe::substitute_positions", positions.len());
 /// ```
+///
+/// The name is any const `&'static str`, so a wrapper macro may derive one — `concat!($name, "::nodes")` — and still land on one row per distinct name.
 #[macro_export]
 macro_rules! sample {
-    ($name:literal, $value:expr) => {
+    ($name:expr, $value:expr) => {
         #[cfg(feature = "profile")]
         $crate::tracing::event!(
             name: $name,

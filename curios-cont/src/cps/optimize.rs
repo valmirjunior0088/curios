@@ -56,6 +56,17 @@ pub fn optimize(module: &mut CpsModule) {
         ($name:literal, $pass:expr) => {{
             let changed = curios_profile::profile_span!($name, $pass);
             curios_profile::sample!($name, changed as u64);
+            // The growth ledger beside the fired ledger: what each pass left standing, so a size regression names its pass the way a time regression names its span.
+            curios_profile::sample!(
+                concat!($name, "::nodes"),
+                module.nodes.iter_live().count()
+            );
+            curios_profile::sample!(
+                concat!($name, "::conts"),
+                module.continuations.iter_live().count()
+            );
+            curios_profile::sample!(concat!($name, "::cap"), module.nodes.slots().len());
+            curios_profile::sample!(concat!($name, "::values"), module.values.live_count());
             changed
         }};
     }
@@ -112,6 +123,11 @@ pub fn optimize(module: &mut CpsModule) {
             | pass!("cont::prune_unreachable", prune_unreachable(module));
         // Windows are virtualized only once everything else has settled, because a window split is irrevocable in a way no other rewrite here is: it records a group over every position the region spans, and a later region that transfers into one of those positions is declined whole. A region's extent is a fact of the *converged* graph — the continuations inlining, contification and specialization mint do not exist in the round that split a region they will turn out to flow into — so deciding it earlier measures something transient and then freezes it. `programs/walk_mirror_held_scan.crs` was the case: its walk's continuation was minted a round after the sub-region below it had been split, and the walk sliced a fresh rope per character from then on.
         let changed = changed || pass!("cont::split_windows", split_windows(module));
+        // Debug builds verify at each round boundary, so an invalid rewrite is named within one round of its pass instead of surfacing at the exit gate arbitrarily later. The boundary is the round and not the pass on purpose: mid-round states are transiently unscoped by design — `rewrite_atoms` forwards a function atom whose binding a later pass of the same round re-establishes — and only the round's close, behind its prune, promises a canonical module.
+        #[cfg(debug_assertions)]
+        if let Err(error) = module.verify() {
+            panic!("invalid high CPS at the close of round {round}: {error:?}");
+        }
         if !changed {
             converged = Some(round);
             break;
