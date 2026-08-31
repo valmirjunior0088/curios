@@ -60,7 +60,7 @@ One line per test, path then outcome — `proved`, `passed`, `failed`, `trapped`
 ## Steps
 
 - [x] 1. Erasure agrees with itself about a dependent proof payload — landed: one threaded classification for every telescope walk (`curios-elab/src/into_ersd/classify.rs`), the three repros as tests in `curios/src/tests/erasure.rs`, and the verifier's display frame quoting its detail neutrally
-- [ ] 2. `/syn/Test`, `/std/Test`, `/std/Spell`, and the `/std` witness gap
+- [x] 2. `/syn/Test`, `/std/Test`, `/std/Spell`, and the `/std` witness gap — landed: the description and its combinators in `/syn/Test.crs` with `/std/Test` as facade, `/std/Spell.crs` with every carrier witness, written `Spell`+`Eql` for `Option`/`Result`/`Order` and `Eql` for `List`, pinned by `curios/src/tests/harness.rs`
 - [ ] 3. The `test` declaration form and registration
 - [ ] 4. The synthesized tail, and a unit compiled as its own test program
 - [ ] 5. `curios test`
@@ -68,12 +68,6 @@ One line per test, path then outcome — `proved`, `passed`, `failed`, `trapped`
 - [ ] 7. Documentation, the decision file, and this file's deletion
 
 Each step is one authorization and one commit, lands its tests before its mechanism, and runs the full gate at its end. 2 needs 1; 3 needs 2; 4 needs 3; 5 needs 4; 6 needs 3; 7 needs everything.
-
-### 2. `/syn/Test`, `/std/Test`, `/std/Spell`, and the `/std` witness gap
-
-**Lands.** `/syn/Test.crs` with `Verdict`, `Test`, the combinators and `Test/main`, registered in `curios-prelude-archive/syn.crs`; `/std/Test.crs` as the facade, in `std.crs`; `/std/Spell.crs` and every written witness under *The library*. No compiler change: everything is exercised as ordinary programs through `run`.
-
-**Verification.** A `curios/src/tests/harness.rs` in the `run(source)` style: the end-to-end scheduler program probed on 2026-08-31, its five report lines pinned verbatim; `equal` distinguishing `"a"` from `"a\n"`; the inline `perform` thunk form; a match on `Test` outside `/syn/Test` refused by representation privacy; `Test/main` selecting by scripted argument under `MockHost::builder().args(…)`; each `Spell` witness round-tripping its literal form.
 
 ### 3. The `test` declaration form and registration
 

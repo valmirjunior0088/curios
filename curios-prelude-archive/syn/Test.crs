@@ -1,0 +1,95 @@
+use /std/{Nat, Bool, Str, Bytes, List, Option, Io, Eq, Eql, Spell, print, proc};
+
+pub induct Verdict: pub Type
+| passed()
+| failed(Str)
+end
+
+-- The representation is private on purpose: a `Test` is a description, and like `Io` it has no eliminator outside its owner — a consumer builds one through the combinators below and only `main` schedules it.
+pub induct Test: Type
+| theorem()
+| verdict(Verdict)
+| action(Io(Test))
+end
+
+-- The evidence is consumed by the checker right here and would erase in any case, so the description carries only the fact that the proposition held.
+pub let prove(P: Prop, proof: P) -> Test =
+    Test/theorem();
+
+pub let refl(@A: Type, a: A, b: A, proof: Eq(a, b)) -> Test =
+    Test/theorem();
+
+pub let check(condition: Bool) -> Test =
+    Test/verdict(
+        match condition
+        | true => Verdict/passed()
+        | false => Verdict/failed("the condition was false")
+        end);
+
+pub let equal(@A: Type, use Eql(A), use Spell(A), actual: A, expected: A) -> Test =
+    match actual == expected
+    | true => Test/verdict(Verdict/passed())
+    | false =>
+        Test/verdict(
+            Verdict/failed(
+                Str/concat(
+                    "expected ",
+                    Str/concat(
+                        Spell/spell(expected),
+                        Str/concat(" but got ", Spell/spell(actual))))))
+    end;
+
+-- A thunk rather than a bare `Io(Test)` because a lambda body is a fresh sequencing region with its type pushed from this parameter, so an inline action's `!` binds in `Io`; a bare argument would read the caller's region, which is no monad.
+pub let perform(thunk: () -> Io(Test)) -> Test =
+    Test/action(thunk());
+
+let report(name: Str, t: Test) -> Io(Bool) =
+    match t
+    | theorem() =>
+        let _ = print(Str/concat(name, ": proved\n"))!;
+        Io/pure(true)
+    | verdict(v) =>
+        match v
+        | passed() =>
+            let _ = print(Str/concat(name, ": passed\n"))!;
+            Io/pure(true)
+        | failed(message) =>
+            let _ = print(Str/concat(name, Str/concat(": failed\n  ", Str/concat(message, "\n"))))!;
+            Io/pure(false)
+        end
+    | action(io) =>
+        let inner = io!;
+        report(name, inner)
+    end;
+
+let parse_index(raw: Bytes) -> Option(Nat) =
+    match Str/of_bytes(raw) | some(s) => Nat/of_str(s) | none() => Option/none() end;
+
+let run_all(tests: List({Str, () -> Test})) -> Io(Bool) =
+    List/fold(
+        tests,
+        Io/pure(true),
+        ((name, body), acc) =>
+            let earlier = acc!;
+            let here = report(name, body())!;
+            Io/pure(earlier && here));
+
+-- The selection protocol, spelled once: argv[1] names one test by index and the run exits with its outcome; no argument runs every test in declaration order and exits 1 when any failed.
+pub let main(tests: List({Str, () -> Test})) -> Io({}) =
+    let arguments = proc/args!;
+    match List/try_get(arguments, 1)
+    | some(raw) =>
+        match parse_index(raw)
+        | some(index) =>
+            match List/try_get(tests, index)
+            | some((name, body)) =>
+                let ok = report(name, body())!;
+                match ok | true => Io/pure(()) | false => proc/exit(1) end
+            | none() => proc/exit(1)
+            end
+        | none() => proc/exit(1)
+        end
+    | none() =>
+        let ok = run_all(tests)!;
+        match ok | true => Io/pure(()) | false => proc/exit(1) end
+    end;

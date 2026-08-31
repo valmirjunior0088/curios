@@ -1,4 +1,4 @@
-use /std/{Bool, Eq, False, Show};
+use /std/{Bool, Eq, Eql, False, Show};
 use /std/Bool/{false_neq_true};
 
 pub induct Order: pub Type
@@ -41,6 +41,16 @@ pub let eq_neq_gt(p: Eq(Order/eq(), Order/gt())) -> False =
 
 pub let lt_neq_gt(p: Eq(Order/lt(), Order/gt())) -> False =
     false_neq_true(match p: (s, t, q) => Eq(is_gt(s), is_gt(t)) | refl(@z) => Eq/refl() end);
+
+satisfy Eql(Order) {
+    eql(a, b) =
+        match a
+        | lt() => match b | lt() => true | _ => false end
+        | eq() => match b | eq() => true | _ => false end
+        | gt() => match b | gt() => true | _ => false end
+        end,
+    neq(a, b) = Bool/not(a == b),
+}
 
 satisfy Show(Order) {
     show(r) = match r | lt() => "lt" | eq() => "eq" | gt() => "gt" end,

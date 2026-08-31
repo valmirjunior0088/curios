@@ -1,6 +1,6 @@
 pub use /sys/{List};
 pub use /sys/List/{get, len, slice, map};
-use /std/{Nat, Bool, Option, Eq, Str, Show, Monad};
+use /std/{Nat, Bool, Option, Eq, Eql, Str, Show, Monad};
 
 pub let try_get(@T: Type, a: List(T), i: Nat) -> Option(T) =
     match i < len(a) | true => Option/some(get(a, i)) | false => Option/none() end;
@@ -54,6 +54,15 @@ pub let balanced(@A: Type, n: Nat, empty: A, single: (Nat) -> A, combine: (A, A)
         | _ => empty
         end;
     go(0, n);
+
+satisfy (@A: Type, use Eql(A)) => Eql(List(A)) {
+    eql(a, b) =
+        match a
+        | [] => match b | [] => true | _ => false end
+        | [x, ..xs] => match b | [] => false | [y, ..ys] => x == y && xs == ys end
+        end,
+    neq(a, b) = Bool/not(a == b),
+}
 
 satisfy (@A: Type, use Show(A)) => Show(List(A)) {
     show(l) = Str/concat("[", Str/concat(Str/join(", ", map(l, (x) => Show/show(x))), "]")),

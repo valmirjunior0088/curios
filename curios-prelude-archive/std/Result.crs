@@ -1,4 +1,4 @@
-use /std/{Bool, Show, Str};
+use /std/{Bool, Eql, Show, Str};
 
 pub induct Result(A: Type, E: Type): pub Type
 | success(A)
@@ -33,6 +33,17 @@ pub let is_success(@A: Type, @E: Type, r: Result(A, E)) -> Bool =
 
 pub let is_failure(@A: Type, @E: Type, r: Result(A, E)) -> Bool =
     match r | success(_) => false | failure(_) => true end;
+
+satisfy (@A: Type, @E: Type, use Eql(A), use Eql(E)) => Eql(Result(A, E)) {
+    eql(a, b) =
+        match (a, b)
+        | (success(x), success(y)) => x == y
+        | (success(x), failure(f)) => false
+        | (failure(e), success(y)) => false
+        | (failure(e), failure(f)) => e == f
+        end,
+    neq(a, b) = Bool/not(a == b),
+}
 
 satisfy (@A: Type, @E: Type, use Show(A), use Show(E)) => Show(Result(A, E)) {
     show(r) =

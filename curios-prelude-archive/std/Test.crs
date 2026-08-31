@@ -1,0 +1,1 @@
+pub use /syn/Test/{let Test, Verdict, prove, refl, check, equal, perform, main};

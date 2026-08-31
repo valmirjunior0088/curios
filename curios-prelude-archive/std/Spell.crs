@@ -1,0 +1,129 @@
+-- The tooling-facing rendering concept: `spell(v)` is Curios source text that denotes `v` at its type — a literal or an absolute constructor path that re-parses wherever the names in it are visible. `Show` stays the human-facing display; the two coincide only where a value's display already is its literal.
+use /std/{Nat, Int, Byte, Bool, Flt, Char, Str, Bits, Bytes, List, Option, Result, Order, Eql};
+
+pub concept Spell(A: Type): pub Type {
+    spell(A) -> Str,
+}
+
+satisfy Spell(Nat) {
+    spell(n) = Nat/to_str(n),
+}
+
+-- `Int/to_str` already writes an explicit sign, which is exactly what keeps the text `Int`-typed without context: a bare `3` would re-parse as `Nat`.
+satisfy Spell(Int) {
+    spell(n) = Int/to_str(n),
+}
+
+satisfy Spell(Byte) {
+    spell(b) = Nat/to_str(Byte/to_nat(b)),
+}
+
+satisfy Spell(Bool) {
+    spell(b) = Bool/to_str(b),
+}
+
+-- `Flt/to_str` writes `+2.5`, `+0`, `+inf` and `NaN`, none of which are literals as written: the sign is stripped, a missing point gains `.0`, and the non-finite values take their `/std/Flt` names, which no literal denotes. The non-finites are recognized from the rendered text, because `==` on `Flt` is IEEE and `NaN` never equals itself.
+satisfy Spell(Flt) {
+    spell(f) =
+        let raw = Flt/to_str(f);
+        choose
+        | Str/eql(raw, "NaN") => "/std/Flt/nan"
+        | Str/eql(raw, "+inf") => "/std/Flt/pos_inf"
+        | Str/eql(raw, "-inf") => "/std/Flt/neg_inf"
+        | _ =>
+            let unsigned =
+                match Str/try_get(raw, 0)
+                | some(head) =>
+                    match head == '+'
+                    | true => Str/slice(raw, 1, Str/len(raw) - 1)
+                    | false => raw
+                    end
+                | none() => raw
+                end;
+            let pointed = match Str/find(unsigned, '.') | some(_) => true | none() => false end;
+            let exponented = match Str/find(unsigned, 'e') | some(_) => true | none() => false end;
+            match pointed || exponented | true => unsigned | false => Str/concat(unsigned, ".0") end
+        end,
+}
+
+let verbatim(c: Char) -> Str =
+    Option/unwrap_or(Str/of_bytes(Char/to_utf8(c)), "");
+
+-- Each escape arm is the character it stands for, dispatched on the scalar value: `Char/to_nat` at the head makes the projection visible, and the literals in the arms are the escapes as written.
+satisfy Spell(Char) {
+    spell(c) =
+        let body =
+            match Char/to_nat(c)
+            | '\n' => "\\n"
+            | '\t' => "\\t"
+            | '\r' => "\\r"
+            | '\\' => "\\\\"
+            | '\'' => "\\'"
+            | _ => verbatim(c)
+            end;
+        Str/concat("'", Str/concat(body, "'")),
+}
+
+satisfy Spell(Str) {
+    spell(s) =
+        let body =
+            Str/fold(
+                s,
+                "",
+                (c, acc) =>
+                    Str/concat(
+                        acc,
+                        match Char/to_nat(c)
+                        | '\n' => "\\n"
+                        | '\t' => "\\t"
+                        | '\r' => "\\r"
+                        | '\\' => "\\\\"
+                        | '"' => "\\\""
+                        | _ => verbatim(c)
+                        end));
+        Str/concat("\"", Str/concat(body, "\"")),
+}
+
+satisfy Spell(Bits) {
+    spell(b) =
+        let parts =
+            Bits/fold(b, [], (bit, acc) => [..acc, match bit | true => "1" | false => "0" end]);
+        Str/concat("b[", Str/concat(Str/join(", ", parts), "]")),
+}
+
+satisfy Spell(Bytes) {
+    spell(b) =
+        let parts = Bytes/fold(b, [], (byte, acc) => [..acc, Nat/to_str(Byte/to_nat(byte))]);
+        Str/concat("x[", Str/concat(Str/join(", ", parts), "]")),
+}
+
+satisfy (@A: Type, use Spell(A)) => Spell(List(A)) {
+    spell(l) = Str/concat("[", Str/concat(Str/join(", ", List/map(l, (x) => Spell/spell(x))), "]")),
+}
+
+satisfy (@A: Type, use Spell(A)) => Spell(Option(A)) {
+    spell(m) =
+        match m
+        | some(x) => Str/concat("/std/Option/some(", Str/concat(Spell/spell(x), ")"))
+        | none() => "/std/Option/none()"
+        end,
+}
+
+satisfy (@A: Type, @E: Type, use Spell(A), use Spell(E)) => Spell(Result(A, E)) {
+    spell(r) =
+        match r
+        | success(x) => Str/concat("/std/Result/success(", Str/concat(Spell/spell(x), ")"))
+        | failure(e) => Str/concat("/std/Result/failure(", Str/concat(Spell/spell(e), ")"))
+        end,
+}
+
+satisfy Spell(Order) {
+    spell(r) =
+        match r
+        | lt() => "/std/Order/lt()"
+        | eq() => "/std/Order/eq()"
+        | gt() => "/std/Order/gt()"
+        end,
+}
+
+pub use Spell/*;

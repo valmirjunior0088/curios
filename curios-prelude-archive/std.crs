@@ -40,6 +40,9 @@ pub use Io/{let Io};
 pub mod Show;
 pub use Show/{let Show};
 
+pub mod Spell;
+pub use Spell/{let Spell};
+
 pub mod Ord;
 pub use Ord/{let Ord};
 
@@ -132,6 +135,9 @@ pub use Toml/{let Toml};
 
 pub mod Fmt;
 pub use Fmt/{let Fmt};
+
+pub mod Test;
+pub use Test/{let Test};
 
 pub mod tcp;
 

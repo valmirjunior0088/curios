@@ -1,4 +1,4 @@
-use /std/{Bool, Show, Str, Monad};
+use /std/{Bool, Eql, Show, Str, Monad};
 
 pub induct Option(A: Type): pub Type
 | some(A)
@@ -21,6 +21,17 @@ pub let is_some(@A: Type, m: Option(A)) -> Bool =
 
 pub let is_none(@A: Type, m: Option(A)) -> Bool =
     match m | some(_) => false | none() => true end;
+
+satisfy (@A: Type, use Eql(A)) => Eql(Option(A)) {
+    eql(a, b) =
+        match (a, b)
+        | (some(x), some(y)) => x == y
+        | (some(x), none()) => false
+        | (none(), some(y)) => false
+        | (none(), none()) => true
+        end,
+    neq(a, b) = Bool/not(a == b),
+}
 
 satisfy (@A: Type, use Show(A)) => Show(Option(A)) {
     show(m) =

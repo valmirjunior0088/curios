@@ -10,6 +10,7 @@ mod erasure;
 #[cfg(feature = "profile")]
 mod fixpoint;
 mod fmt;
+mod harness;
 mod host;
 mod inference;
 mod laws;
