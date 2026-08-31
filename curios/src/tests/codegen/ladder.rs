@@ -74,7 +74,7 @@ const WALK_MIRROR_INDEXED: &str = include_str!(concat!(
 /// Timings are taken over native binaries rather than in-process, because the in-process module is the raw pre-Binaryen one and the native path is what a user runs:
 ///
 /// ```sh
-/// cargo xtask runtime
+/// cargo x runtime
 /// cargo build --package curios
 /// cargo run --package curios -- compile programs/parse_digits.crs -o /tmp/parse_digits
 /// echo 1000000 | /usr/bin/time -v /tmp/parse_digits    # and the same for the other two rungs
@@ -449,7 +449,7 @@ fn the_per_character_walk_carries_its_scan_without_allocating() {
 /// Timings are taken over native binaries, same protocol as [`string_walk_ladder_measurements`]; the in-process route was tried and rejected, because the debug-built runtime executes the same modules fourteen to forty times slower than the native binaries — the GC libcalls compile at opt-level zero — which overweights exactly the allocation shares this family exists to divide.
 ///
 /// ```sh
-/// cargo xtask build
+/// cargo x build
 /// ./target/release/curios compile programs/walk_mirror_baseline.crs -o /tmp/wm-baseline    # and the other four
 /// echo 300000 | /usr/bin/time -f "%U" /tmp/wm-baseline                                    # five runs each
 /// ```

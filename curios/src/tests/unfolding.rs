@@ -288,7 +288,7 @@ fn compile_only(source: &str) -> (Result<(), String>, f64) {
 /// Write `grammar(16, Inner::InBlock)` and `grammar(16, Inner::Hoisted)` to files and take each under the profiler:
 ///
 /// ```sh
-/// cargo xtask profile <file>
+/// cargo x profile <file>
 /// ```
 ///
 /// Same date and host, with the group bound at item level:
@@ -396,7 +396,7 @@ fn combinator_sharing_measurements() {
 ///
 /// **The last column was the door this key does not reach**, and it is here so that a reader can see the two apart. `Eq(top(n), true)` eliminated at `refl` registers no case equation for the web — the scrutinee is a proof variable — and reduces it anyway, through the index inversion the elimination rule runs. It was unchanged by that commit, to the wall clock, and it was exponential in *both* checkers rather than one; the section above is where it went.
 ///
-/// Under `--features profile` at 13 definitions — `cargo xtask profile <the same program>` — `recheck` is **7.9 ms of a 64 ms compile**, 112 k allocations, tenth in the table and below `elaborate_and_zonk`'s 10.4 ms. Peak memory is 24.9 MiB. The figures it replaced are two paragraphs down.
+/// Under `--features profile` at 13 definitions — `cargo x profile <the same program>` — `recheck` is **7.9 ms of a 64 ms compile**, 112 k allocations, tenth in the table and below `elaborate_and_zonk`'s 10.4 ms. Peak memory is 24.9 MiB. The figures it replaced are two paragraphs down.
 ///
 /// # What it printed with the key at the reduced spelling
 ///

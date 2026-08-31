@@ -1,6 +1,6 @@
 # xtask
 
-The workspace's build recipes as a cargo subcommand: `cargo xtask runtime`, `build`, `js`, `profile`, `benchmarks`, `clean`, and the editor bridges `grammar`, `vscode` and `zed`, which run npm or cargo in their tree under `editors/` with the arguments given. The two npm bridges need `npm`; every other recipe needs cargo alone. The alias lives in `.cargo/config.toml`; the recipes and their reasons are the crate's own documentation.
+The workspace's build recipes as a cargo subcommand: `cargo x runtime`, `build`, `js`, `profile`, `benchmarks`, `clean`, and the editor bridges `grammar`, `vscode` and `zed`, which run npm or cargo in their tree under `editors/` with the arguments given. The two npm bridges need `npm`; every other recipe needs cargo alone. The alias lives in `.cargo/config.toml`; the recipes and their reasons are the crate's own documentation.
 
 ## Decisions
 

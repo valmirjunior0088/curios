@@ -19,7 +19,7 @@ use {
 ///
 /// Release only, for the reason `combinator_sharing_measurements` gives: the wall clocks are the fixpoint's, and a debug build prices its walks differently. `--all-features` supplies the `profile` feature this module is gated on.
 ///
-/// The memory columns are deliberately absent: the test binary installs no counting allocator, so they would read zero. For the allocation half write `TOML_DRIVER` to a file and take `cargo xtask profile <file>`, whose stage-level figures are the ones the specification quotes.
+/// The memory columns are deliberately absent: the test binary installs no counting allocator, so they would read zero. For the allocation half write `TOML_DRIVER` to a file and take `cargo x profile <file>`, whose stage-level figures are the ones the specification quotes.
 ///
 /// # What it prints
 ///
@@ -27,7 +27,7 @@ use {
 ///
 /// # What it last printed
 ///
-/// Taken **2026-08-21**, **release**, `x86_64-unknown-linux-gnu`, with `split_parameters`, `eliminate_dead_parameters` and `contify_calls` each draining every candidate one snapshot admits, and `forward_aggregate_projections` forwarding every projection in one sweep. `cont_optimize` was **634 ms of a 949 ms compile**, over **11 rounds**. The allocation columns are from the `cargo xtask profile` run on the same program, same day, same host: 240 MB across 3.87 M allocations for the fixpoint.
+/// Taken **2026-08-21**, **release**, `x86_64-unknown-linux-gnu`, with `split_parameters`, `eliminate_dead_parameters` and `contify_calls` each draining every candidate one snapshot admits, and `forward_aggregate_projections` forwarding every projection in one sweep. `cont_optimize` was **634 ms of a 949 ms compile**, over **11 rounds**. The allocation columns are from the `cargo x profile` run on the same program, same day, same host: 240 MB across 3.87 M allocations for the fixpoint.
 ///
 /// | pass | total | fired / 11 | allocated | allocs |
 /// | --- | --- | --- | --- | --- |

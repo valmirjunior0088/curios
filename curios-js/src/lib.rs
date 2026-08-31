@@ -1,4 +1,4 @@
-//! The Curios ↔ JavaScript boundary, for a browser build (`cargo xtask js`: `cargo build` for wasm32, then `--target web` bindings — no `wasm-pack`): a wasm-bindgen export of the pure compile pipeline ([`compile`]) plus the browser run harness ([`run`]). The harness spells the wire names (`sys`/`ffi` namespaces, `sys.*` keys, the entry export) directly, like any embedder; the numeric status/stdio codes it answers with derive from `curios-abi`, the same source the compiler and runtime cite.
+//! The Curios ↔ JavaScript boundary, for a browser build (`cargo x js`: `cargo build` for wasm32, then `--target web` bindings — no `wasm-pack`): a wasm-bindgen export of the pure compile pipeline ([`compile`]) plus the browser run harness ([`run`]). The harness spells the wire names (`sys`/`ffi` namespaces, `sys.*` keys, the entry export) directly, like any embedder; the numeric status/stdio codes it answers with derive from `curios-abi`, the same source the compiler and runtime cite.
 
 mod abi;
 use abi::*;

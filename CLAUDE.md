@@ -33,7 +33,7 @@ CRS
 
 **Read the sources for the rest.** Every fact `wonder` does not answer is on disk: `documentation/syntax.md` is the normative surface reference, `curios-prelude-archive/std/` is the idiom reference and where a standard-library signature is read, and a dependency's sources are materialized under `.curios/src/`. Search with `rg`, read the narrowest authoritative source, and widen only when the evidence requires it. Do not reconstruct from memory what a file states.
 
-**The binary is the tree's.** `cargo run --package curios --` runs the compiler this checkout builds, which is the one a change is being made to; it needs `cargo xtask runtime` once per checkout for the launcher it embeds. An installed `curios` on `PATH` is a different build and answers for it, not for the tree.
+**The binary is the tree's.** `cargo run --package curios --` runs the compiler this checkout builds, which is the one a change is being made to; it needs `cargo x runtime` once per checkout for the launcher it embeds. An installed `curios` on `PATH` is a different build and answers for it, not for the tree.
 
 ## Before changing anything
 
@@ -97,7 +97,7 @@ Data flows downward; Rust dependencies between stages point upward, because a lo
 | Native product | `curios` | The native back end — Binaryen optimization, Wasmtime precompilation, in-process running — plus the CLI, the unit cache, executable bundling, the cross-stage test corpus, and `wonder` in `src/wonder/`: the engine that answers a question from the compilation that would build the program, with its two transports, the one-shot `ask` and the language `server` (the workspace's only `lsp-server`/`lsp-types` rows) |
 | Browser product | `curios-js` | wasm-bindgen compiler exports and JavaScript execution harness |
 | Profiling | `curios-profile` | The workspace's only `tracing` dependency: `profile!`/`profile_span!` and the `capture` aggregate-timing subscriber, gated per crate on a `profile` feature |
-| Build recipes | `xtask` | The workspace recipes as `cargo xtask`: the isolated launcher, the compiler, the browser bundle, a profile run, the benchmarks, and a bridge onto each editor tree under `editors/`. Reached only through the alias in `.cargo/config.toml`, and a dependency of nothing |
+| Build recipes | `xtask` | The workspace recipes as `cargo x`: the isolated launcher, the compiler, the browser bundle, a profile run, the benchmarks, and a bridge onto each editor tree under `editors/`. Reached only through the alias in `.cargo/config.toml`, and a dependency of nothing |
 
 ### Change routing
 
@@ -124,7 +124,7 @@ Data flows downward; Rust dependencies between stages point upward, because a lo
 | Standard or syntax library | `curios-prelude-archive/std/`, `curios-prelude-archive/syn/` | Module indices, canonical syntax registry, `syntax.md`, and Curios integration tests |
 | Prelude archive or replay | `curios-prelude-archive/build.rs`, `curios-prelude-archive/src/` | Text preparation, Core elaboration/erasure replay APIs, pipeline integration, and archive validation tests |
 | Browser compiler or harness | `curios-js/` | Host ABI, wasm32 build, `xtask`'s `js` recipe, and CI release steps |
-| Profiling instrumentation | `curios-profile/src/lib.rs` | Each consumer crate's `profile` feature fan-out, and `cargo xtask profile` |
+| Profiling instrumentation | `curios-profile/src/lib.rs` | Each consumer crate's `profile` feature fan-out, and `cargo x profile` |
 | Binaryen version, build, or FFI | `curios-binaryen/` | Shared cache behavior, native compiler linkage, and optimize round-trip tests |
 | A build recipe | `xtask/src/main.rs` | `curios/build.rs`, which expects what `runtime` files; the CI workflows that call the recipe; `README.md`'s build steps |
 
@@ -134,7 +134,7 @@ Data flows downward; Rust dependencies between stages point upward, because a lo
 - `curios-pipeline` is the compiler boundary. It must not depend on Binaryen, Wasmtime, the runtime or the CLI. It may name the fixed prelude, in `standard.rs` alone; `compile_entrypoint` takes a scope and cannot tell which unit is `/std`.
 - `curios-package` sits beside that boundary, never under it: the driver folds its stages over whatever scope it is handed, and deciding that scope is a product's job. `curios-pipeline` must not depend on `curios-package`, and `curios-js` must not touch it.
 - `curios-unit` sits below the kernel: `cargo tree -p curios-unit --edges normal` must not contain `curios-cert`. A unit is produced by stages that do not judge and judged by the driver above, because `curios-prelude-archive`'s build script constructs a `Unit`, and a build script that reached the certifier would re-elaborate the whole standard library on every kernel edit.
-- `curios-runtime` is the runtime-only boundary in its default feature set, the set `cargo xtask runtime`'s isolated build uses. It must not depend on `curios` or Binaryen, and must not reach Cranelift by default: its `cranelift` feature exists for `curios` and never enters `default`. `curios/src/bundle.rs` enforces this on the launcher image that ships, refusing a backend marker or a size over the ceiling.
+- `curios-runtime` is the runtime-only boundary in its default feature set, the set `cargo x runtime`'s isolated build uses. It must not depend on `curios` or Binaryen, and must not reach Cranelift by default: its `cranelift` feature exists for `curios` and never enters `default`. `curios/src/bundle.rs` enforces this on the launcher image that ships, refusing a backend marker or a size over the ceiling.
 - `curios` is the only crate that combines Binaryen with Cranelift-enabled Wasmtime. It enables the latter through `curios-runtime`'s feature, names no wasmtime type, and reaches the runtime through `curios_runtime::validate` and `curios_runtime::precompile`. The Wasmtime pin lives in `curios-runtime/Cargo.toml` and nowhere else, so the precompiler and the launcher cannot disagree about the version.
 - Crate boundaries, not Cargo features, separate the compiler, runtime and browser products.
 - `curios-abi` is the source of truth for the host/guest wire contract. A host operation is complete only when its ABI row, compiler use, native runtime implementation and JavaScript implementation agree.
@@ -168,7 +168,7 @@ Data flows downward; Rust dependencies between stages point upward, because a lo
 
 ## Build and validation
 
-The build recipes are `cargo xtask <recipe>`: the `xtask` crate reached through the alias in `.cargo/config.toml`, and the only build tool a clone needs beside cargo is none. The native compiler embeds the slim `curios-runtime` launcher with `include_bytes!`, and that launcher must be built in its own Cargo invocation: `cargo xtask build` does both stages in order, and `cargo xtask runtime` is the first stage alone, building `curios-runtime` in a cargo process of its own so workspace feature unification keeps Cranelift and Binaryen out, and filing the launcher at `curios/.artifacts/<triple>`. A `curios-runtime` binary from a workspace build is not evidence the isolated launcher is slim. Building `curios` without that stage fails naming the recipe to run.
+The build recipes are `cargo x <recipe>`: the `xtask` crate reached through the alias in `.cargo/config.toml`, and the only build tool a clone needs beside cargo is none. The native compiler embeds the slim `curios-runtime` launcher with `include_bytes!`, and that launcher must be built in its own Cargo invocation: `cargo x build` does both stages in order, and `cargo x runtime` is the first stage alone, building `curios-runtime` in a cargo process of its own so workspace feature unification keeps Cranelift and Binaryen out, and filing the launcher at `curios/.artifacts/<triple>`. A `curios-runtime` binary from a workspace build is not evidence the isolated launcher is slim. Building `curios` without that stage fails naming the recipe to run.
 
 ### While iterating
 
@@ -186,7 +186,7 @@ The build recipes are `cargo xtask <recipe>`: the `xtask` crate reached through 
 Run this gate, in order. All commands must pass; Clippy warnings are errors in CI.
 
 ```sh
-cargo xtask runtime
+cargo x runtime
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -Dwarnings
 cargo test --workspace --all-targets --all-features
@@ -199,14 +199,14 @@ Measure a step and name the step; never quote a whole-gate total. Documentation-
 
 ### Additional gates
 
-- Changes to `curios-js` or its dependencies must also pass `cargo xtask js`.
+- Changes to `curios-js` or its dependencies must also pass `cargo x js`.
 - Changes to `curios-binaryen/build.rs` must verify an empty-cache build and a cache hit from a different Cargo mode or build-script fingerprint. The cache marker carries a hash of the build script, the target and the C++ toolchain's version string, so any change to the recipe invalidates every entry.
-- Changes to runtime dependencies must rebuild `curios-runtime` through `cargo xtask runtime` and confirm that neither `cranelift-codegen` nor `curios-binaryen` entered its graph — name those crates, since Wasmtime's runtime legitimately pulls the `cranelift-bitset`, `cranelift-bforest` and `cranelift-entity` utility crates. The ordinary suite checks the artifact through `curios/src/bundle.rs`'s guards; this manual step diagnoses a failure rather than detecting one.
+- Changes to runtime dependencies must rebuild `curios-runtime` through `cargo x runtime` and confirm that neither `cranelift-codegen` nor `curios-binaryen` entered its graph — name those crates, since Wasmtime's runtime legitimately pulls the `cranelift-bitset`, `cranelift-bforest` and `cranelift-entity` utility crates. The ordinary suite checks the artifact through `curios/src/bundle.rs`'s guards; this manual step diagnoses a failure rather than detecting one.
 - Changes to the bundle format must run the ignored end-to-end test in `curios/tests/bundle.rs` explicitly.
 
 ### Profiling
 
-Profile through the built-in `tracing` mechanism, not an external sampler: `cargo xtask profile programs/hello_world.crs` builds `curios` with `--features profile` — the only build in which the `profile` subcommand exists — and prints per-span aggregate timings sorted by total time. The instrumentation mechanics are documented in `curios-profile`.
+Profile through the built-in `tracing` mechanism, not an external sampler: `cargo x profile programs/hello_world.crs` builds `curios` with `--features profile` — the only build in which the `profile` subcommand exists — and prints per-span aggregate timings sorted by total time. The instrumentation mechanics are documented in `curios-profile`.
 
 ## Documentation ownership
 
@@ -239,4 +239,4 @@ Document each fact at the narrowest authoritative level and link to it elsewhere
 - `curios-binaryen` downloads, verifies and builds a pinned Binaryen source release with CMake, which needs a C++ toolchain. Every Cargo mode reuses `curios-binaryen/.artifacts/<triple>`.
 - A build product that outlives the build that made it lives in `.artifacts/` beside its owner, never under `target/`: `curios-binaryen/.artifacts/<triple>`, `curios/.artifacts/<triple>`, `curios-js/.artifacts/<triple>`, and `benchmarks/.artifacts`. One `**/.artifacts` line in `.gitignore` covers them, and `cargo clean` never removes them; delete one by hand to force a rebuild.
 - `target/debug/incremental` is pure rustc cache and safe to delete when no build is running; `CARGO_INCREMENTAL=0` suppresses it per invocation.
-- `curios-js` is built by `cargo xtask js`; do not introduce `wasm-pack` or `wasm-opt` without a design decision. Binaryen optimization belongs to the native product only.
+- `curios-js` is built by `cargo x js`; do not introduce `wasm-pack` or `wasm-opt` without a design decision. Binaryen optimization belongs to the native product only.

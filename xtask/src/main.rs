@@ -1,4 +1,4 @@
-//! The workspace's build recipes, as `cargo xtask <recipe>`.
+//! The workspace's build recipes, as `cargo x <recipe>`.
 //!
 //! **A recipe is cargo with flags, then one step cargo does not do.** Every recipe here spawns `cargo` as a separate process and then copies a file, generates the browser bindings, or runs a container. Nothing is a build script: a build script runs before its crate compiles and so cannot post-process that crate's output, and a nested `cargo` inside one contends for the target-directory lock. A process that `cargo run` has already launched holds no lock, so its nested builds are ordinary.
 //!
@@ -27,8 +27,8 @@ const HOST: &str = env!("CURIOS_HOST_TRIPLE");
 
 #[derive(Debug, Parser)]
 #[command(
-    name = "cargo xtask",
-    bin_name = "cargo xtask",
+    name = "cargo x",
+    bin_name = "cargo x",
     version,
     about = "The workspace's build recipes",
     help_template = "\

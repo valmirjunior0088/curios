@@ -434,7 +434,7 @@ benchmarks/
 The image build needs the Curios sources *and* the corpus, both of which live _above_ `benchmarks/`, so it must run with the **repo root as the build context**. The `benchmarks` recipe does that, from the repo root:
 
 ```sh
-cargo xtask benchmarks
+cargo x benchmarks
 
 # tune the workloads:
 docker run --rm --cpuset-cpus 0 -e N_LCG=200000000 -e D_TREES=23 -e K_CHAIN=3200 -e N_CHURN=150000000 -e N_SPINES=150000 -e RUNS=7 curios-benchmarks
@@ -442,7 +442,7 @@ docker run --rm --cpuset-cpus 0 -e N_LCG=200000000 -e D_TREES=23 -e K_CHAIN=3200
 
 The run splits its two audiences across the two streams, which is how a `--rm` container hands back a document without a bind mount:
 
-- **stdout** carries the ten markdown tables and nothing the harness adds to them, so `docker run … > run.md` is the whole capture, ready to paste into a results file. Through `cargo xtask benchmarks > run.md` the capture is the same: the recipe echoes its commands on stderr, not into the file.
+- **stdout** carries the ten markdown tables and nothing the harness adds to them, so `docker run … > run.md` is the whole capture, ready to paste into a results file. Through `cargo x benchmarks > run.md` the capture is the same: the recipe echoes its commands on stderr, not into the file.
 - **stderr** carries the build log, the correctness cross-check (all eight outputs must be identical), and hyperfine's own comparison with its relative "x times faster than" ratios. Watch this stream while it runs; read the ratio to Rust as the headline "where are we" number.
 
 A table hyperfine fails to produce is absent from stdout rather than empty in it, and its error is on stderr.

@@ -250,7 +250,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 
 - [x] CLI (`run` and `compile` subcommands; `compile` bundles a native executable)
 - [x] Staged IR debugging (`wonder stage <name>`, one pipeline rung reprinted to stdout)
-- [x] Built-in tracing-based profiling harness (`cargo xtask profile`, per-span aggregation)
+- [x] Built-in tracing-based profiling harness (`cargo x profile`, per-span aggregation)
 - [x] CI pipeline (fmt/check/clippy/test)
 - [x] Multi-platform release automation (Linux and macOS binaries, via tag-triggered releases)
 - [x] Browser playground

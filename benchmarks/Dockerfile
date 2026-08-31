@@ -78,7 +78,7 @@ RUN npm install -g assemblyscript \
 # --- Grain — handled by the amd64 `grain` stage above; its wasm is copied in near the end (no arm64 Grain toolchain exists).
 
 # --- Curios (built from the repo sources) -----------------------------------
-# Dockerfile.dockerignore is what keeps target/ and .artifacts/ out of the build context; these COPYs only decide layer granularity. `cargo xtask build` is the launcher first, then the compiler (vendored Binaryen via CMake — slow, layer-cached afterward).
+# Dockerfile.dockerignore is what keeps target/ and .artifacts/ out of the build context; these COPYs only decide layer granularity. `cargo x build` is the launcher first, then the compiler (vendored Binaryen via CMake — slow, layer-cached afterward).
 WORKDIR /curios
 COPY Cargo.toml Cargo.lock ./
 COPY .cargo .cargo
@@ -108,7 +108,7 @@ COPY curios curios
 COPY curios-binaryen curios-binaryen
 COPY curios-runtime curios-runtime
 COPY xtask xtask
-RUN cargo xtask build
+RUN cargo x build
 ENV PATH="/curios/target/release:${PATH}"
 
 # --- the corpus and the harness ---------------------------------------------

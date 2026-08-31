@@ -8,7 +8,7 @@ Nothing here is a test fixture. Fixtures are written inline in the probes that a
 
 - `curios/src/tests/codegen/` — `census.rs` surveys the fourteen Curios-only programs and three of the workloads, `ladder.rs` and `structural.rs` name individual programs, and `churn.rs` measures three under the collector. Figures live beside the probe that reproduces them, never here.
 - [`benchmarks/`](../benchmarks/README.md) — the Docker harness times the five workloads against seven other languages. That README owns the results, the toolchains, and the caveats that belong beside a number.
-- `cargo xtask profile programs/<file>.crs` — one compilation under the tracing profiler.
+- `cargo x profile programs/<file>.crs` — one compilation under the tracing profiler.
 
 Run one directly:
 
@@ -27,7 +27,7 @@ Every program except `hello_world.crs` and `dependent_vectors.crs` reads its wor
 
 **Subject and control pairs.** `state_monad.crs`/`state_manual.crs` and `rng_state.crs`/`rng_manual.crs` run the same loop through a monad and by hand, with identical arithmetic and identical output. `monad_io.crs`, `monad_throw.crs` and `monad_async.crs` run one loop in three carriers, to separate the cost of `bind` from the cost of what `bind` builds.
 
-**Samples.** `hello_world.crs` — also `cargo xtask profile`'s default subject — and `dependent_vectors.crs`, which show the language rather than measure it.
+**Samples.** `hello_world.crs` — also `cargo x profile`'s default subject — and `dependent_vectors.crs`, which show the language rather than measure it.
 
 ## The cross-language workloads
 

@@ -6,7 +6,7 @@ The runtime-only Curios engine: deserialize a precompiled `.cwasm` module and ru
 
 ### The launcher is slim by exclusion
 
-**Decision.** This crate never depends on Binaryen, and by default it does not reach Cranelift — it deserializes, and compiling is an opt-in the native product turns on. It *owns* the Wasmtime pin: the version lives in this manifest and nothing else in the workspace names wasmtime, so the compiler that precompiles a `.cwasm` and the launcher that deserializes it cannot drift apart (see `curios/README.md`, "Distribution is ahead-of-time"). The launcher is built in isolation (`cargo xtask runtime`), outside workspace feature unification.
+**Decision.** This crate never depends on Binaryen, and by default it does not reach Cranelift — it deserializes, and compiling is an opt-in the native product turns on. It *owns* the Wasmtime pin: the version lives in this manifest and nothing else in the workspace names wasmtime, so the compiler that precompiles a `.cwasm` and the launcher that deserializes it cannot drift apart (see `curios/README.md`, "Distribution is ahead-of-time"). The launcher is built in isolation (`cargo x runtime`), outside workspace feature unification.
 
 **What makes the slim launcher checkable rather than merely intended.** The isolated build used to be the *only* evidence, and evidence nobody re-derives decays — a workspace build even produces a same-named binary that carries Cranelift, so the wrong artifact is easy to inspect. The guards in `curios/src/bundle.rs` now scan the embedded image itself, and they were validated by building a Cranelift-linked launcher and watching both refuse it.
 

@@ -42,7 +42,7 @@ jobs:
             curios/.artifacts
             curios-binaryen/.artifacts
       - name: Build runtime launcher
-        run: cargo xtask runtime
+        run: cargo x runtime
       - name: Run cargo check
         run: cargo check --workspace --all-targets --all-features
 
@@ -61,7 +61,7 @@ jobs:
             curios/.artifacts
             curios-binaryen/.artifacts
       - name: Build runtime launcher
-        run: cargo xtask runtime
+        run: cargo x runtime
       - name: Run Clippy
         run: cargo clippy --workspace --all-targets --all-features -- -Dwarnings
 
@@ -78,7 +78,7 @@ jobs:
             curios/.artifacts
             curios-binaryen/.artifacts
       - name: Build runtime launcher
-        run: cargo xtask runtime
+        run: cargo x runtime
       - name: Run tests
         run: cargo test --workspace --all-targets --all-features
       - name: Run doctests
@@ -99,7 +99,7 @@ jobs:
             curios/.artifacts
             curios-binaryen/.artifacts
       - name: Build runtime launcher
-        run: cargo xtask runtime
+        run: cargo x runtime
       - name: Run cargo doc
         run: cargo doc --workspace --no-deps
 
@@ -116,7 +116,7 @@ jobs:
         with:
           key: wasm32-unknown-unknown
       - name: Build curios-js
-        run: cargo xtask js
+        run: cargo x js
 
   grammar:
     name: Grammar parser
@@ -134,9 +134,9 @@ jobs:
         with:
           key: xtask
       - name: Install dependencies
-        run: cargo xtask grammar ci
+        run: cargo x grammar ci
       - name: Run grammar tests
-        run: cargo xtask grammar test
+        run: cargo x grammar test
 
   vscode:
     name: VS Code extension
@@ -154,11 +154,11 @@ jobs:
         with:
           key: xtask
       - name: Install dependencies
-        run: cargo xtask vscode ci
+        run: cargo x vscode ci
       - name: Run grammar snapshot tests
-        run: cargo xtask vscode test
+        run: cargo x vscode test
       - name: Package the extension
-        run: cargo xtask vscode run package
+        run: cargo x vscode run package
 
   zed:
     name: Zed extension
@@ -174,8 +174,8 @@ jobs:
             .
             editors/zed
       - name: Run rustfmt
-        run: cargo xtask zed fmt --all -- --check
+        run: cargo x zed fmt --all -- --check
       - name: Run Clippy
-        run: cargo xtask zed clippy --target wasm32-wasip2 -- -Dwarnings
+        run: cargo x zed clippy --target wasm32-wasip2 -- -Dwarnings
       - name: Build extension
-        run: cargo xtask zed build --release --target wasm32-wasip2
+        run: cargo x zed build --release --target wasm32-wasip2
