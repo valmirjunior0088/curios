@@ -55,6 +55,7 @@ pub struct SyntaxRegistry {
     pub character: CharacterSyntax,
     pub string: StringSyntax,
     pub proof: ProofSyntax,
+    pub test: TestSyntax,
 }
 
 impl SyntaxRegistry {
@@ -69,6 +70,7 @@ impl SyntaxRegistry {
             character,
             string,
             proof,
+            test,
         } = self;
 
         monad
@@ -78,6 +80,7 @@ impl SyntaxRegistry {
             .chain(character.targets())
             .chain(string.targets())
             .chain(proof.targets())
+            .chain(test.targets())
     }
 
     /// Every registered concept method, for the prelude build's field check. A concept can exist under the registered name and still not declare the field the compiler projects, which is the drift a presence check alone cannot see.
@@ -91,6 +94,7 @@ impl SyntaxRegistry {
             character: _,
             string: _,
             proof: _,
+            test: _,
         } = self;
 
         operator.concept_fields().chain(std::iter::once(lift.lift))
@@ -284,5 +288,20 @@ impl ProofSyntax {
             flt_non_neg,
         ]
         .into_iter()
+    }
+}
+
+/// The names the `test` declaration form emits: `/syn/Test`, the declared output type of every lowered test, and `/syn/Test/main`, the scheduler the synthesized tail applies to the collected tests.
+#[derive(Debug, Clone, Copy)]
+pub struct TestSyntax {
+    pub test_type: SyntaxName,
+    pub main: SyntaxName,
+}
+
+impl TestSyntax {
+    fn targets(self) -> impl Iterator<Item = SyntaxName> {
+        let Self { test_type, main } = self;
+
+        [test_type, main].into_iter()
     }
 }

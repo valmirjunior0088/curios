@@ -2,7 +2,7 @@
 
 (comment) @comment
 
-; Keywords, including the contextual ones — the grammar only lexes `concept`, `satisfy` and `and` as keywords in their positions.
+; Keywords, including the contextual ones — the grammar only lexes `concept`, `satisfy`, `test` and `and` as keywords in their positions.
 [
   "let"
   "and"
@@ -15,6 +15,7 @@
   "concept"
   "satisfy"
   "foreign"
+  "test"
   "match"
   "choose"
 ] @keyword
@@ -31,6 +32,7 @@
 ; Definitions.
 (let_member name: (identifier) @function)
 (foreign_item name: (identifier) @function)
+(test_item name: (identifier) @function)
 (let_binding pattern: (identifier) @variable)
 (let_binding pattern: (identifier) @function parameters: (parameters))
 (mod_item name: (identifier) @type)

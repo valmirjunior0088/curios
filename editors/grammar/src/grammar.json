@@ -77,6 +77,10 @@
         {
           "type": "SYMBOL",
           "name": "foreign_item"
+        },
+        {
+          "type": "SYMBOL",
+          "name": "test_item"
         }
       ]
     },
@@ -1837,6 +1841,47 @@
         }
       ]
     },
+    "test_item": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "STRING",
+          "value": "test"
+        },
+        {
+          "type": "FIELD",
+          "name": "name",
+          "content": {
+            "type": "SYMBOL",
+            "name": "identifier"
+          }
+        },
+        {
+          "type": "STRING",
+          "value": "("
+        },
+        {
+          "type": "STRING",
+          "value": ")"
+        },
+        {
+          "type": "STRING",
+          "value": "="
+        },
+        {
+          "type": "FIELD",
+          "name": "body",
+          "content": {
+            "type": "SYMBOL",
+            "name": "_term"
+          }
+        },
+        {
+          "type": "STRING",
+          "value": ";"
+        }
+      ]
+    },
     "parameters": {
       "type": "SEQ",
       "members": [
@@ -3056,6 +3101,15 @@
           "name": "path"
         },
         {
+          "type": "ALIAS",
+          "content": {
+            "type": "SYMBOL",
+            "name": "keyword_head_path"
+          },
+          "named": true,
+          "value": "path"
+        },
+        {
           "type": "SYMBOL",
           "name": "sort"
         },
@@ -3163,6 +3217,47 @@
               "name": "identifier"
             }
           ]
+        },
+        {
+          "type": "REPEAT",
+          "content": {
+            "type": "SEQ",
+            "members": [
+              {
+                "type": "IMMEDIATE_TOKEN",
+                "content": {
+                  "type": "STRING",
+                  "value": "/"
+                }
+              },
+              {
+                "type": "ALIAS",
+                "content": {
+                  "type": "IMMEDIATE_TOKEN",
+                  "content": {
+                    "type": "PATTERN",
+                    "value": "[\\p{Alphabetic}\\p{N}_]+"
+                  }
+                },
+                "named": true,
+                "value": "identifier"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "keyword_head_path": {
+      "type": "SEQ",
+      "members": [
+        {
+          "type": "ALIAS",
+          "content": {
+            "type": "STRING",
+            "value": "test"
+          },
+          "named": true,
+          "value": "identifier"
         },
         {
           "type": "REPEAT",

@@ -164,3 +164,36 @@ fn a_recursive_local_action_binding_is_refused() {
         "unexpected report: {report}"
     );
 }
+
+#[test]
+fn a_test_declaration_registers_by_kind_in_declaration_order() {
+    // `Module::tests` keeps declaration order across module nesting — the order the synthesized tail will schedule — while the definition itself is an ordinary item of kind `Test`, pinned through the registry-built `() -> /syn/Test`.
+    let module =
+        lowered_module("mod Inner\ntest inner_holds() = x;\nend\ntest outer_holds() = y;\n()");
+    assert_eq!(
+        module.tests,
+        vec![global_name("Inner/inner_holds"), global_name("outer_holds")],
+    );
+    let kinds: Vec<_> = module
+        .items
+        .iter()
+        .filter_map(|item| match item {
+            curios_core::Item::Let(def) => {
+                Some((def.name.clone(), def.kind.clone(), def.type_.clone()))
+            }
+            curios_core::Item::Rec(_) => None,
+        })
+        .collect();
+    let expected_type = curios_core::Term::func_type(
+        [] as [(curios_core::Free, curios_core::Term); 0],
+        curios_core::Term::var(curios_core::Var::free(global("syn/Test/Test"))),
+    );
+    for name in ["Inner/inner_holds", "outer_holds"] {
+        let (_, kind, type_) = kinds
+            .iter()
+            .find(|(n, _, _)| *n == global_name(name))
+            .expect("the test lowers to a definition");
+        assert_eq!(*kind, curios_core::DefinitionKind::Test);
+        assert_eq!(*type_, expected_type);
+    }
+}

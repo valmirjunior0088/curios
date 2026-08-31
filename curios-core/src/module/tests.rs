@@ -85,6 +85,7 @@ fn the_floor_clears_every_local_a_term_mentions() {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         // The understated claim the walk must not believe.
         binder_floor: 0,
         entry: Some(Entrypoint {
@@ -114,6 +115,7 @@ fn stored(body: Term, entrypoint: Term) -> Module {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 0,
         entry: Some(Entrypoint {
             body: entrypoint,
@@ -230,6 +232,7 @@ fn a_meta_free_module_projects_as_zonked() {
         struct_decls: Default::default(),
         concepts: Default::default(),
         witnesses: Default::default(),
+        tests: Default::default(),
         binder_floor: 0,
         entry: None,
     };
@@ -249,6 +252,7 @@ fn a_surviving_metavariable_refuses_the_zonked_projection() {
         struct_decls: Default::default(),
         concepts: Default::default(),
         witnesses: Default::default(),
+        tests: Default::default(),
         binder_floor: 0,
         entry: None,
     };
@@ -272,6 +276,7 @@ fn a_surviving_transient_refuses_the_zonked_projection() {
         struct_decls: Default::default(),
         concepts: Default::default(),
         witnesses: Default::default(),
+        tests: Default::default(),
         binder_floor: 0,
         entry: None,
     };

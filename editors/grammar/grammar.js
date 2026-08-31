@@ -63,6 +63,7 @@ module.exports = grammar({
         $.concept_item,
         $.satisfy_item,
         $.foreign_item,
+        $.test_item,
       ),
 
     // An annotated top-level `let` is an item; an unannotated one is a local `let` opening the final term (`let_term`). The dynamic precedence settles the case both grammars accept — an annotated binding followed by a term — the way the compiler does, as an item.
@@ -270,6 +271,10 @@ module.exports = grammar({
         ";",
       ),
 
+    // A test declaration: `test name() = body;`. Never `pub`, and the parentheses are required and empty — the property-testing seam later opens them with a telescope.
+    test_item: ($) =>
+      seq("test", field("name", $.identifier), "(", ")", "=", field("body", $._term), ";"),
+
     // ---- Telescopes ----
 
     // A `let`/`rec`/`satisfy` telescope: every parameter annotated, `use` ones anonymous.
@@ -407,6 +412,7 @@ module.exports = grammar({
         $.goal,
         $.struct_literal,
         $.path,
+        alias($.keyword_head_path, $.path),
         $.sort,
         $.boolean,
         $.number,
@@ -430,6 +436,13 @@ module.exports = grammar({
     path: ($) =>
       seq(
         choice(seq("/", alias(token.immediate(IDENTIFIER), $.identifier)), $.identifier),
+        repeat(seq(token.immediate("/"), alias(token.immediate(IDENTIFIER), $.identifier))),
+      ),
+
+    // A term-position path whose head is the lexed `test` keyword, shown as the path it spells. Keyword extraction lexes `test` over `identifier` wherever an item may start, so a term spelled `test` there — `let x: Nat = 1; test(1)` — would strand the keyword in an ERROR node without this alternative. Term position only: binder and pattern paths never compete with an item start, and the compiler's parser backtracks out of the same overlap by itself.
+    keyword_head_path: ($) =>
+      seq(
+        alias("test", $.identifier),
         repeat(seq(token.immediate("/"), alias(token.immediate(IDENTIFIER), $.identifier))),
       ),
 

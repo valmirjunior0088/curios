@@ -134,6 +134,7 @@ fn a_proposition_carrying_a_computed_proof_is_still_accepted() {
         )]),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::intrinsic(Intrinsic::NatType),

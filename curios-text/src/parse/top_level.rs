@@ -5,6 +5,28 @@ pub(super) fn parse_pub<'a>() -> Parser<'a, bool> {
 }
 
 // A top-level `let` item: one definition, or the group `let f … and g …;`. Each member takes its own `pub` — before `let` for the first, before `and` for each later one — and one `;` terminates the whole item.
+
+// A `test` declaration: `test name() = body;`. The parentheses are the function sugar written out — required, and empty until the property-testing specification opens that seam, so anything between them fails as an unexpected token with no rule behind it. `pub` is refused by name: a test's identifier is its report line, not an export. Like `satisfy`, `test` stays a contextual word everywhere else.
+pub(super) fn parse_top_test<'a>() -> Parser<'a, TopItem> {
+    catch(parse_pub().and(parse_keyword("test")))
+        .flat_map(|(vis_pub, ())| match vis_pub {
+            true => fail("a test is never `pub`: its name is its report line, not an export"),
+            false => pure(()),
+        })
+        .and_keep(parse_identifier())
+        .and_drop(parse_literal("("))
+        .and_drop(parse_literal(")"))
+        .and_drop(parse_literal("="))
+        .and(lazy(parse_term))
+        .and_drop(parse_literal(";"))
+        .map(|(label, body)| {
+            TopItem::Test(TopTest {
+                label: label.to_string(),
+                body,
+            })
+        })
+}
+
 pub(super) fn parse_top_let<'a>() -> Parser<'a, TopItem> {
     let member = |vis_pub: bool| {
         parse_binding().map(move |(label, signature)| TopLet {
@@ -555,6 +577,7 @@ pub(crate) fn parse_top_item<'a>() -> Parser<'a, TopItem> {
         .or(parse_top_use())
         .or(parse_top_concept())
         .or(parse_top_witness())
+        .or(parse_top_test())
         .or(parse_top_let())
         .or(parse_top_induct())
         .or(parse_top_struct())

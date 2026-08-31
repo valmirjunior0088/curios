@@ -181,6 +181,13 @@ pub struct TopWitness {
     pub entries: Vec<WitnessEntry>,
 }
 
+/// A `test` declaration: `test name() = body;` — the harness's declared test, the parentheses required and empty until the property-testing specification opens that seam with a telescope. No `pub`: a test's name is its report line, not an export.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TopTest {
+    pub label: String,
+    pub body: Term,
+}
+
 /// One top-level item of a module, one variant per declaration keyword. Every declaration keyword chains with `and`, so every variant but `Mod`, `Use` and `Foreign` holds a group: a `let f … and g …;` group of mutually recursive definitions, an `induct … and … end` group of mutually recursive inductive families, `struct` and `concept` groups whose fields name one another, and a `satisfy C(A) { … } and D(B) { … }` group of witnesses that resolve through one another. A lone `let` is a group of one; whether it recurses is read off its body, never declared.
 #[derive(Debug, Clone, PartialEq)]
 pub enum TopItem {
@@ -192,6 +199,7 @@ pub enum TopItem {
     Concept(Vec<TopConcept>),
     Witness(Vec<TopWitness>),
     Foreign(TopForeign),
+    Test(TopTest),
 }
 
 /// A parsed module body: its top-level items in source order — an order that matters, since `use` scoping is point-of-use and flat-item order is the downstream topological-sort tiebreak. Parsed via `FromStr`, loaded from disk through a [`RootSource`](crate::RootSource), or built synthetically (the embedded `sys` prelude).

@@ -302,6 +302,8 @@ fn scan_module_info(items: &[TopItem]) -> Result<ModuleInfo, Error> {
             TopItem::Witness(_) => {}
             // A `foreign` declaration is an ordinary binding, like a `let` — it has no body of its own, but it is called the same way.
             TopItem::Foreign(f) => info.insert_binding(f.label.clone(), f.vis_pub)?,
+            // A test binds its name privately — referable within its subtree, colliding with a like-named sibling, never `pub`.
+            TopItem::Test(t) => info.insert_binding(t.label.clone(), false)?,
             _ => {}
         }
     }
@@ -362,6 +364,7 @@ fn process_items(
     struct_decls: &mut BTreeMap<curios_core::Global, curios_core::StructDecl>,
     concepts: &mut BTreeMap<curios_core::Global, curios_core::ConceptDecl>,
     witnesses: &mut BTreeSet<curios_core::Global>,
+    tests: &mut Vec<curios_core::Global>,
     foreigns: &mut ForeignStore,
     modules: &HashMap<Qualifier, Rc<Module>>,
 ) -> Result<(), Error> {
@@ -397,6 +400,9 @@ fn process_items(
             TopItem::Foreign(f) => {
                 context.insert_binding(f.label.clone(), context.prefixed(&f.label))?
             }
+            TopItem::Test(t) => {
+                context.insert_binding(t.label.clone(), context.prefixed(&t.label))?
+            }
             _ => {}
         }
     }
@@ -413,6 +419,7 @@ fn process_items(
                         struct_decls,
                         concepts,
                         witnesses,
+                        tests,
                         foreigns,
                         modules,
                     )?;
@@ -430,6 +437,7 @@ fn process_items(
                         struct_decls,
                         concepts,
                         witnesses,
+                        tests,
                         foreigns,
                         modules,
                     )?;
@@ -483,6 +491,32 @@ fn process_items(
                     true => FlatItem::Rec(items),
                     false => FlatItem::Let(items.pop().expect("a `let` item has a member")),
                 });
+            }
+            // A test is the function sugar its parentheses spell: declared type `() -> /syn/Test` through the registry slot, body the authored body under the nullary lambda — the same `LetSignature::Func` shape the property-testing seam later feeds a telescope.
+            // A test's declared type is `() -> /syn/Test`, emitted as core directly off the registry slot — a synthesized `Var` carries the resolved identity, so nothing here depends on `/syn` being importable — and its body is the authored body under the nullary lambda the written `()` spells, the same function sugar the property-testing seam later feeds a telescope.
+            TopItem::Test(test) => {
+                context.record_import_scope(Some(&context.prefixed(&test.label)));
+                let lower = Lowerer::new(context);
+                let type_ = curios_core::Term::func_type(
+                    [] as [(curios_core::Free, curios_core::Term); 0],
+                    curios_core::Term::var(curios_core::Var::free(curios_core::Free::global(
+                        context.syntax().test.test_type.qualifier(),
+                    ))),
+                );
+                let body: Term = Subterm::Func(Func {
+                    params: Vec::new(),
+                    body: test.body.clone(),
+                })
+                .into();
+                let name = curios_core::Global::Authored(context.prefixed(&test.label));
+                tests.push(name.clone());
+                flat_items.push(FlatItem::Let(FlatLet {
+                    kind: curios_core::DefinitionKind::Test,
+                    name,
+                    island: context.island(),
+                    type_,
+                    body: lower.value(&body)?,
+                }));
             }
             TopItem::Foreign(f) => {
                 // All FFI-specific bookkeeping (the `ForeignFunction`, its registration, and `host_fn`'s wire-typed signature shape) stays inside `prelude`; from here a `foreign` declaration lowers exactly like an ordinary `TopItem::Let`.
@@ -1299,6 +1333,7 @@ fn into_core_unit_within(
     let mut struct_decls = BTreeMap::new();
     let mut concepts = BTreeMap::new();
     let mut witnesses = BTreeSet::new();
+    let mut tests = Vec::new();
     let mut foreigns = ForeignStore::new();
 
     // The compilation root's own items — the entry's, and none for a unit with no entrypoint — then one pass per prefix this unit claims. Exactly one of the two does any work, because owning the empty prefix is what makes a unit the entry.
@@ -1310,6 +1345,7 @@ fn into_core_unit_within(
         &mut struct_decls,
         &mut concepts,
         &mut witnesses,
+        &mut tests,
         &mut foreigns,
         &modules,
     )?;
@@ -1329,6 +1365,7 @@ fn into_core_unit_within(
             &mut struct_decls,
             &mut concepts,
             &mut witnesses,
+            &mut tests,
             &mut foreigns,
             &modules,
         )?;
@@ -1375,6 +1412,7 @@ fn into_core_unit_within(
             struct_decls,
             concepts,
             witnesses,
+            tests,
             binder_floor: binders.count(),
             entry,
         },

@@ -8,8 +8,8 @@ use {
         Intrinsic, Let, LetSignature, ListEntry, ListPattern, Match, MatchPattern,
         MatchPatternField, Nat, NatLiteral, NatPattern, NumLit, Pattern, PatternField, Proj, Radix,
         StructLit, StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopForeign, TopInduct,
-        TopItem, TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType,
-        TupleTypeParam, UseGroup, WitnessEntry,
+        TopItem, TopLet, TopMod, TopStruct, TopTest, TopUse, TopWitness, Tuple, TupleField,
+        TupleType, TupleTypeParam, UseGroup, WitnessEntry,
     },
     crate::parse::op_precedence,
     curios_abi::{WireSignature, WireType, stdio},
@@ -1292,6 +1292,17 @@ fn print_top_use(item: TopUse) -> Printer {
     ])
 }
 
+fn print_top_test(test: TopTest) -> Printer {
+    flat([
+        pure("test "),
+        pure(test.label),
+        pure("() ="),
+        hard_line(),
+        indent(print_term(test.body)),
+        pure(";"),
+    ])
+}
+
 fn print_top_let(items: Vec<TopLet>) -> Printer {
     let mut iter = items.into_iter();
     let first = iter.next().expect("a `let` item has a member");
@@ -1807,5 +1818,6 @@ pub(crate) fn print_top_item(item: TopItem) -> Printer {
         TopItem::Concept(c) => print_top_concept(c),
         TopItem::Witness(w) => print_top_witness(w),
         TopItem::Foreign(f) => print_top_foreign(f),
+        TopItem::Test(t) => print_top_test(t),
     }
 }

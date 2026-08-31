@@ -23,6 +23,12 @@ fn embedded_archive_validates() {
     validate_archive().unwrap();
 }
 
+/// A prelude test would ride into every compilation and surface in every downstream `curios test` run, so the standard library shipping none is a contract, not an accident of today's sources.
+#[test]
+fn the_stored_prelude_declares_no_tests() {
+    with_prelude(|prelude| assert!(prelude.core().tests.is_empty()));
+}
+
 /// The declarations a literal expands into *per byte* are monomorphic, so no occurrence mints universe metavariables in the data's length.
 ///
 /// A literal's type is `Str` at a single level. It used to expand into one constructor application per byte, and when those carried universe parameters every application instantiated fresh levels — a declaration's level count grew with literal *length* and elaboration went quartic in it: a 500-byte literal took 50s in release and put `long_str_literal_compiles_on_the_default_test_stack` beyond any test budget. Pinning the per-byte targets at zero is what keeps that linear.

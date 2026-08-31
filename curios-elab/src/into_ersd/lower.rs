@@ -166,6 +166,7 @@ fn project_module(module: &Module) -> Module {
             })
             .collect(),
         witnesses: module.witnesses.clone(),
+        tests: module.tests.clone(),
         binder_floor: module.binder_floor,
         entry: module.entry.as_ref().map(|entry| Entrypoint {
             body: project_erased_universes(&entry.body),

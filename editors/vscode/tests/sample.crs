@@ -19,3 +19,6 @@ satisfy Show(Nat) {
 satisfy (@A: Type, use Show(A)) => Show(List(A)) {
     show = show_list,
 }
+
+test sample_map_holds() =
+    Test/check(even(zero));

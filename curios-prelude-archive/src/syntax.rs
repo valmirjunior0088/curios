@@ -2,7 +2,7 @@
 
 use curios_utilities::{
     CharacterSyntax, ConceptField, LiftSyntax, MonadSyntax, OperatorSyntax, ProofSyntax,
-    StringSyntax, SyntaxName, SyntaxRegistry,
+    StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
 };
 
 /// Each target is stated as its module segments, so no stage has to split a path back apart to learn where the name lives.
@@ -60,5 +60,9 @@ pub const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         bytes_four: name(&["syn", "Flt", "FourBytes"]),
         flt_finite: name(&["syn", "Flt", "Finite"]),
         flt_non_neg: name(&["syn", "Flt", "NonNeg"]),
+    },
+    test: TestSyntax {
+        test_type: name(&["syn", "Test", "Test"]),
+        main: name(&["syn", "Test", "main"]),
     },
 };

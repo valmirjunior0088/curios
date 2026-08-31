@@ -6,7 +6,7 @@ use crate::{Entrypoint, RootSource, sys_module};
 use curios_abi::host_ops;
 use curios_utilities::{
     CharacterSyntax, ConceptField, LiftSyntax, MonadSyntax, OperatorSyntax, ProofSyntax, Qualifier,
-    RootKind, StringSyntax, SyntaxName, SyntaxRegistry,
+    RootKind, StringSyntax, SyntaxName, SyntaxRegistry, TestSyntax,
 };
 use std::{
     fs,
@@ -71,6 +71,10 @@ pub(super) const SYNTAX: SyntaxRegistry = SyntaxRegistry {
         flt_finite: syn_name(&["syn", "Flt", "Finite"]),
         flt_non_neg: syn_name(&["syn", "Flt", "NonNeg"]),
     },
+    test: TestSyntax {
+        test_type: syn_name(&["syn", "Test", "Test"]),
+        main: syn_name(&["syn", "Test", "main"]),
+    },
 };
 
 pub(super) fn syntax() -> &'static SyntaxRegistry {
@@ -95,6 +99,17 @@ pub(super) fn run(src: &str) -> curios_core::Term {
     .unwrap();
 
     curios_core::test_support::into_nested_term(module)
+}
+
+pub(super) fn lowered_module(src: &str) -> curios_core::Module {
+    let (module, _, _, _) = super::into_core(
+        &src.parse::<Entrypoint>().unwrap(),
+        &RootSource::none(),
+        syntax(),
+    )
+    .unwrap();
+
+    module
 }
 
 pub(super) fn written_type(id: usize) -> curios_core::Term {
@@ -135,6 +150,7 @@ pub(super) fn elaboration_paths(src: &str) -> (curios_core::Module, curios_core:
     lowered_prefix.struct_decls.clear();
     lowered_prefix.concepts.clear();
     lowered_prefix.witnesses.clear();
+    lowered_prefix.tests.clear();
     lowered_prefix.entry = Some(curios_core::Entrypoint {
         body: curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(curios_core::Nat::Zero)),
         type_: None,

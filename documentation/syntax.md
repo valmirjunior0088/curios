@@ -681,6 +681,19 @@ pub let map(@A: Type, @B: Type, value: Option(A), f: (A) -> B) -> Option(B) =
 
 A top-level definition is in scope of its own body, so it may recurse with nothing said. Definitions that reference one another are declared as one group with `and`; each member takes its own `pub` marker — before `let` for the first member and before `and` for each later member — and one `;` terminates the whole group. Two definitions that reference each other without being declared as a group are refused, naming both.
 
+### Test declarations
+
+A `test` declaration declares a named test: a description of type `/syn/Test`, built with the combinators `/std/Test` exports. The parentheses are required and empty, and a binder between them is a parse error: the declaration is the function-definition sugar it lowers to — a definition of declared type `() -> /syn/Test`, its body checked under the nullary lambda the written `()` spells.
+
+```crs
+use /std/{Nat, Test};
+
+test the_answer_holds() =
+    Test/check(21 * 2 == 42);
+```
+
+`test` is contextual: it is a keyword only where an item may start, and `test` stays an ordinary name everywhere else. A test is never `pub` — its name is its report line, not an export — but it is otherwise registered like a private definition: referable within its subtree, and colliding with a sibling declaration of the same name. The body is its own sequencing region typed at `Test`, which is no monad, so a bare `!` is refused where it is written; an effectful test enters `Io` through `Test/perform`'s thunk. Each unit's tests are collected in declaration order.
+
 ### Modules
 
 A file-backed module ends its declaration with `;` and loads `Name.crs`. An inline module ends with `end`.
@@ -1039,6 +1052,7 @@ The standard equality operations include reflexivity, symmetry, transitivity, co
 | `Name { ..base, ... }` | Structure update |
 | `match term ... end` | Typed elimination or dispatch |
 | `choose ... end` | Ordered guarded ladder |
+| `test name() = body;` | Declared test — a `/syn/Test` description, collected per unit |
 | `satisfy C(args) { ... }` | Globally registered anonymous witness |
 | `satisfy (@A: Type, use C(A)) => D(args) { ... }` | Parameterized globally registered anonymous witness |
 | `satisfy C(A) { ... } and D(B) { ... }` | Witnesses that resolve through each other, declared as one group |

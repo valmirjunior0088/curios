@@ -158,6 +158,17 @@
               "name": "entity.name.type.curios"
             }
           }
+        },
+        {
+          "match": "\\b(test)\\s+([\\p{L}\\p{N}_]+)(?=\\s*\\()",
+          "captures": {
+            "1": {
+              "name": "keyword.other.curios"
+            },
+            "2": {
+              "name": "entity.name.function.curios"
+            }
+          }
         }
       ]
     },

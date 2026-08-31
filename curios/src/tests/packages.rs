@@ -264,3 +264,35 @@ fn a_stored_verdict_produces_the_program_a_fresh_one_does() {
 
     fs::remove_dir_all(root).unwrap();
 }
+
+/// Registration through a library unit and the store: a dependency's `test` declaration is an item of its unit, so the unit that carries it is filed on the cold compile and restored on the warm one — a schema the field broke would fail loudly here.
+#[test]
+fn a_library_test_declaration_rides_through_the_store() {
+    let root = tree(
+        "e2e-test-decl",
+        &[
+            ("curios.toml", "members = [\"app\", \"base\"]\n"),
+            ("base/curios.toml", "name = \"base\"\n"),
+            (
+                "base/lib.crs",
+                "use /std/{Nat, Test};\npub let answer: Nat = 42;\ntest answer_holds() =\n    Test/check(answer == 42);\n",
+            ),
+            (
+                "app/curios.toml",
+                "name = \"app\"\n\n[dependencies]\nbase = { source = \"member\" }\n\n[[executables]]\nname = \"app\"\n",
+            ),
+            ("app/app.crs", "/std/print(/std/Nat/to_str(/base/answer))\n"),
+        ],
+    );
+    let app = root.join("app");
+    let store = Verdicts::at(root.clone());
+
+    assert_eq!(cached(&app, None, Some(&store)), b"42");
+    assert!(
+        root.join(".curios/unit").is_dir(),
+        "the dependency's verdict is recorded"
+    );
+    assert_eq!(cached(&app, None, Some(&Verdicts::at(root.clone()))), b"42");
+
+    fs::remove_dir_all(root).unwrap();
+}

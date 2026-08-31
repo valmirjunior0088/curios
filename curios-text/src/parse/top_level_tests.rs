@@ -515,3 +515,42 @@ fn rec_is_an_ordinary_identifier() {
     let entrypoint = "let rec : Type = Type;\nrec".parse::<Entrypoint>().unwrap();
     assert!(matches!(&entrypoint.module.items[0], TopItem::Let(items) if items[0].label == "rec"));
 }
+
+#[test]
+fn a_test_declaration_parses_and_round_trips() {
+    let source = "test the_answer_holds() = Test/check(42 == 42);";
+    let module = source.parse::<Module>().unwrap();
+    let [TopItem::Test(test)] = module.items.as_slice() else {
+        panic!("expected one test item, got {:?}", module.items);
+    };
+    assert_eq!(test.label, "the_answer_holds");
+    let printed = module.to_string();
+    assert_eq!(
+        printed.trim(),
+        "test the_answer_holds() =\n    Test/check(42 == 42);"
+    );
+    assert_eq!(printed.parse::<Module>().unwrap().items, module.items);
+}
+
+#[test]
+fn a_test_takes_no_pub_and_no_binder() {
+    // The name is a report line, not an export; and what may stand between the parentheses is a seam the property-testing specification opens — a binder there has no rule behind it today.
+    assert!(
+        "pub test t() = Test/check(true);"
+            .parse::<Module>()
+            .is_err()
+    );
+    assert!(
+        "test t(n: Nat) = Test/check(true);"
+            .parse::<Module>()
+            .is_err()
+    );
+    // `test` stays a contextual word everywhere else.
+    assert!("let test : Type = Type;".parse::<Module>().is_ok());
+    assert!("test(1)".parse::<Entrypoint>().is_ok());
+    assert!(
+        "let test : Nat = 1;\ntest(test)"
+            .parse::<Entrypoint>()
+            .is_ok()
+    );
+}

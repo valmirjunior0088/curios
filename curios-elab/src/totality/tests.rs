@@ -31,6 +31,7 @@ fn module(items: Vec<Item>) -> Module {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 0,
         entry: Some(Entrypoint {
             body: Term::intrinsic(Intrinsic::Nat(Nat::new(0u32))),

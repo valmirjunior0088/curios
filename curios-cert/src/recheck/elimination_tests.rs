@@ -247,6 +247,7 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::tuple(Vec::<Term>::new()),

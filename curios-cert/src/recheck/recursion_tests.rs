@@ -93,6 +93,7 @@ fn a_member_of_a_legal_group_is_still_accepted() {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::tuple(Vec::<Term>::new()),

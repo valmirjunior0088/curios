@@ -311,6 +311,7 @@ pub(super) fn forgery() -> Module {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         // The module as a whole is a closed program of type `False`.
         entry: Some(Entrypoint {
@@ -348,6 +349,7 @@ pub(super) fn selection_module(body: Term) -> Module {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::free_var(&Free::from(&Global::Authored(Qualifier::from(["bad"])))),
@@ -388,6 +390,7 @@ pub(super) fn indexed_module(target: Term) -> Module {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::tuple(Vec::<Term>::new()),
@@ -416,6 +419,7 @@ pub(super) fn level_definition(level: &Level) -> Module {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::tuple(Vec::<Term>::new()),
@@ -445,6 +449,7 @@ pub(super) fn level_registry(level: &Level) -> Module {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::tuple(Vec::<Term>::new()),
@@ -502,6 +507,7 @@ pub(super) fn indexed_by_proof(diverging: bool) -> Module {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::tuple(Vec::<Term>::new()),
@@ -620,6 +626,7 @@ pub(super) fn aliased_sort_forgery() -> Module {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::free_var(&Free::from(&forged_name)),
@@ -675,6 +682,7 @@ pub(super) fn relevant_index_control() -> Module {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::tuple(Vec::<Term>::new()),
@@ -764,6 +772,7 @@ pub(super) fn shadowed_constructor(tags: [&str; 2]) -> Module {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::tuple(Vec::<Term>::new()),
@@ -795,6 +804,7 @@ pub(super) fn scheme_definition(level: &Level, parameter_count: usize) -> Module
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::tuple(Vec::<Term>::new()),
@@ -827,6 +837,7 @@ pub(super) fn scheme_registry(level: &Level, parameter_count: usize) -> Module {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::tuple(Vec::<Term>::new()),
@@ -880,6 +891,7 @@ pub(super) fn instance_of_width(width: usize) -> Module {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::tuple(Vec::<Term>::new()),
@@ -919,6 +931,7 @@ pub(super) fn forged_foreign(claimed: &Term, false_name: &Global) -> Module {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::tuple(Vec::<Term>::new()),
@@ -971,6 +984,7 @@ pub(super) fn disagreeing_schemes(registry: usize, definition: usize) -> Module 
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::tuple(Vec::<Term>::new()),
@@ -1047,6 +1061,7 @@ pub(super) fn lying_motive(sort: Term) -> Module {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::tuple(Vec::<Term>::new()),
@@ -1120,6 +1135,7 @@ pub(super) fn occurrence_module(params: Vec<Term>, indices: Vec<Term>) -> Module
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::tuple(Vec::<Term>::new()),
@@ -1186,6 +1202,7 @@ pub(super) fn struct_value_module(params: Vec<Term>) -> Module {
         struct_decls: BTreeMap::from([(name, declaration)]),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::tuple(Vec::<Term>::new()),
@@ -1243,6 +1260,7 @@ pub(super) fn variant_value_module(params: Vec<Term>) -> Module {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::tuple(Vec::<Term>::new()),
@@ -1269,6 +1287,7 @@ pub(super) fn unsaturated_cases() -> Vec<(&'static str, Module)> {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::tuple(Vec::<Term>::new()),
@@ -1366,6 +1385,7 @@ pub(super) fn arm_module(binders: Vec<(Plicity, Free)>) -> Module {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::tuple(Vec::<Term>::new()),
@@ -1411,6 +1431,7 @@ pub(super) fn rec_apply_module() -> Module {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::tuple(Vec::<Term>::new()),
@@ -1546,6 +1567,7 @@ pub(super) fn stamp_trial_module(reaches: Totality, with_proof: bool) -> Module 
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::tuple(Vec::<Term>::new()),
@@ -1566,6 +1588,7 @@ pub(super) fn carried_proof_module() -> Module {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::tuple(Vec::<Term>::new()),
@@ -1620,6 +1643,7 @@ pub(super) fn proof_carrying_unit(exiting: bool) -> Module {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 0,
         entry: Some(Entrypoint {
             body: Term::intrinsic(Intrinsic::NatType),
@@ -1678,6 +1702,7 @@ pub(super) fn plicity_module(honest: bool, payload_count: usize) -> Module {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::intrinsic(Intrinsic::NatType),
@@ -1834,6 +1859,7 @@ pub(super) fn index_forgery() -> Module {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::intrinsic(Intrinsic::NatType),
@@ -1880,6 +1906,7 @@ pub(super) fn lying_type_positions() -> Vec<(&'static str, Module)> {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::intrinsic(Intrinsic::NatType),
@@ -2132,6 +2159,7 @@ pub(super) fn computed_field_forgery() -> Module {
         )]),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::intrinsic(Intrinsic::NatType),
@@ -2201,6 +2229,7 @@ pub(super) fn universe_scheme_module(user: Option<(UniverseContext, Term)>) -> M
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 0,
         entry: Some(Entrypoint {
             body: Term::intrinsic(Intrinsic::NatType),
@@ -2378,6 +2407,7 @@ pub(super) fn universe_refinement_module(target: Level, route: Route) -> Module 
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::intrinsic(Intrinsic::NatType),
@@ -2404,6 +2434,7 @@ pub(super) fn collision_module(
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::tuple(Vec::<Term>::new()),

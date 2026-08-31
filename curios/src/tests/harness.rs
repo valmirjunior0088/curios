@@ -158,3 +158,45 @@ fn a_structural_fixture_compares_and_spells() {
         b"/tests/options: failed\n  expected /std/Option/some(4) but got /std/Option/some(3)\n"
     );
 }
+
+#[test]
+fn a_test_declaration_compiles_beside_the_entry() {
+    // Step 3's acceptance: a `test` declaration is an ordinary definition of kind `Test` — the program's authored entry still runs, and the unreferenced test rides through elaboration, certification and erasure without disturbing it.
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Str, Io, Test};
+        test the_answer_holds() =
+            Test/check(42 == 42);
+        /std/print("ran\n")
+        "#),
+        b"ran\n"
+    );
+}
+
+#[test]
+fn a_test_body_is_checked_against_the_description_type() {
+    // The declared type is `() -> /syn/Test` whatever the body: a `Nat` body is a type error at the declaration, not a value the runner later chokes on.
+    let error = error(
+        r#"
+        use /std/{Nat, Str, Io, Test};
+        test nope() =
+            42;
+        /std/print("ran\n")
+        "#,
+    );
+    assert!(error.contains("Test"), "unexpected error: {error}");
+}
+
+#[test]
+fn a_bare_bang_in_a_test_body_is_refused() {
+    // A test body's region is the description type, and `Test` is no monad: effects enter only through `perform`'s thunk, so a bare `!` is refused where it is written.
+    let error = error(
+        r#"
+        use /std/{Nat, Str, Io, Test};
+        test t() =
+            Test/check(Io/pure(true)!);
+        /std/print("ran\n")
+        "#,
+    );
+    assert!(error.contains("Monad"), "unexpected error: {error}");
+}

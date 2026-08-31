@@ -52,6 +52,7 @@ fn an_unsatisfiable_universe_context_is_refused() {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 0,
         entry: Some(Entrypoint {
             body: Term::intrinsic(Intrinsic::NatType),
@@ -98,6 +99,7 @@ fn a_constraint_naming_an_undeclared_parameter_is_refused() {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 0,
         entry: Some(Entrypoint {
             body: Term::intrinsic(Intrinsic::NatType),
@@ -336,6 +338,7 @@ fn an_occurrence_stating_its_universe_instance_is_still_accepted() {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 0,
         entry: Some(Entrypoint {
             body: Term::intrinsic(Intrinsic::NatType),
@@ -418,6 +421,7 @@ fn a_let_bound_instance_head_dissolves_under_reduction_rather_than_aborting_the_
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 0,
         entry: Some(Entrypoint {
             body: Term::intrinsic(Intrinsic::NatType),

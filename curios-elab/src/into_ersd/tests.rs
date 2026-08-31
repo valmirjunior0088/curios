@@ -45,6 +45,7 @@ fn module(items: Vec<Item>, body: Term) -> Module {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 0,
         entry: Some(Entrypoint { body, type_: None }),
     }
@@ -468,6 +469,7 @@ fn a_variant_constructs_with_its_registered_schema() {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 0,
         entry: Some(Entrypoint { body, type_: None }),
     };
@@ -753,6 +755,7 @@ fn a_variant_match_binds_payload_without_projections() {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 0,
         entry: Some(Entrypoint { body, type_: None }),
     };
@@ -1082,6 +1085,7 @@ fn payload_shapes_chase_newtype_chains_and_terminate_on_cycles() {
         struct_decls,
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 0,
         entry: Some(Entrypoint { body, type_: None }),
     };

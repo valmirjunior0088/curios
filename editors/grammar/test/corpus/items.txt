@@ -593,3 +593,49 @@ print(y)
         (argument
           (path
             (identifier)))))))
+
+================================================================================
+A test declaration
+================================================================================
+
+test the_answer_holds() =
+    Test/check(42 == 42);
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (test_item
+    (identifier)
+    (call
+      (path
+        (identifier)
+        (identifier))
+      (arguments
+        (argument
+          (binary
+            (number)
+            (number)))))))
+
+================================================================================
+The test keyword is contextual and stays an ordinary name elsewhere
+================================================================================
+
+let test: Nat = 1;
+test(test)
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (let_item
+    (let_member
+      (identifier)
+      (path
+        (identifier))
+      (number)))
+  (call
+    (path
+      (identifier))
+    (arguments
+      (argument
+        (path
+          (identifier))))))

@@ -178,6 +178,7 @@ fn a_family_takes_the_sort_its_registry_gives_the_levels_supplied() {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::tuple(Vec::<Term>::new()),

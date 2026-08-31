@@ -331,3 +331,24 @@
 >}
 #^ source.curios punctuation.bracket.curios
 >
+>test sample_map_holds() =
+#^^^^ source.curios keyword.other.curios
+#    ^ source.curios
+#     ^^^^^^^^^^^^^^^^ source.curios entity.name.function.curios
+#                     ^ source.curios punctuation.bracket.curios
+#                      ^ source.curios punctuation.bracket.curios
+#                       ^ source.curios
+#                        ^ source.curios keyword.operator.assignment.curios
+>    Test/check(even(zero));
+#^^^^ source.curios
+#    ^^^^ source.curios support.module.curios
+#        ^ source.curios punctuation.separator.path.curios
+#         ^^^^^ source.curios entity.name.function.curios
+#              ^ source.curios punctuation.bracket.curios
+#               ^^^^ source.curios entity.name.function.curios
+#                   ^ source.curios punctuation.bracket.curios
+#                    ^^^^ source.curios variable.other.curios
+#                        ^ source.curios punctuation.bracket.curios
+#                         ^ source.curios punctuation.bracket.curios
+#                          ^ source.curios punctuation.separator.curios
+>

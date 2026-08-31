@@ -22,6 +22,7 @@ fn lowered_module(body: Term, universe_seeds: Vec<UniverseSeed>) -> Module {
         struct_decls: Default::default(),
         concepts: Default::default(),
         witnesses: Default::default(),
+        tests: Default::default(),
         binder_floor: 0,
         entry: Some(Entrypoint { body, type_: None }),
     }

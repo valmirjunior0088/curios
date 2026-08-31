@@ -54,6 +54,7 @@ pub enum DefinitionKind {
     ConceptType,
     ConceptMethod { owner: Qualifier },
     Witness,
+    Test,
 }
 
 /// A single top-level definition: `name` bound to `body` of declared `type_`.
@@ -291,6 +292,8 @@ pub struct Module {
     pub concepts: BTreeMap<Global, ConceptDecl>,
     /// The definition names that are witness declarations. Elaboration registers each into the witness table when its signature elaborates — carried as names (not keys) because the table key needs the *elaborated* head, which only exists once elaboration runs.
     pub witnesses: BTreeSet<Global>,
+    /// The definition names that are `test` declarations, in declaration order — the order the synthesized test tail schedules them and the runner reports them, so a `Vec` rather than a set.
+    pub tests: Vec<Global>,
     /// One past the highest binder index `into_core` minted for this module.
     ///
     /// Binder identities are one space shared with `Context::fresh`, so elaboration seeds its counter here (`Context::set_local_floor`). The archived prelude carries its own high-water mark for the same reason: a replayed term's binders were minted in an earlier compiler run, and a fresh mint that aliased one of them would silently capture.
@@ -358,6 +361,7 @@ impl Module {
                 .map(|(name, concept)| (name.clone(), concept.shared(sharing)))
                 .collect(),
             witnesses: self.witnesses.clone(),
+            tests: self.tests.clone(),
             binder_floor: self.binder_floor,
             entry: self.entry.as_ref().map(|entry| Entrypoint {
                 body: sharing.share(&entry.body),

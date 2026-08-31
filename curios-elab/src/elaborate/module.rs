@@ -1323,6 +1323,7 @@ fn elaborate_module_suffix(
         struct_decls,
         concepts,
         witnesses,
+        tests: module.tests.clone(),
         binder_floor: module.binder_floor,
         entry,
     };

@@ -194,6 +194,7 @@ fn a_saturated_application_in_a_type_position_is_accepted() {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::tuple(Vec::<Term>::new()),
@@ -307,6 +308,7 @@ fn an_indexed_occurrence_at_a_well_typed_index_is_accepted() {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::intrinsic(Intrinsic::NatType),
@@ -369,6 +371,7 @@ fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 1_000,
         entry: Some(Entrypoint {
             body: Term::intrinsic(Intrinsic::NatType),
@@ -416,6 +419,7 @@ fn a_refusal_shortens_names_and_marks_implicit_parameters() {
         struct_decls: BTreeMap::new(),
         concepts: BTreeMap::new(),
         witnesses: BTreeSet::new(),
+        tests: Vec::new(),
         binder_floor: 0,
         entry: Some(Entrypoint {
             body: Term::intrinsic(Intrinsic::NatType),

@@ -207,6 +207,7 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
             })
             .collect::<Result<_, Error>>()?,
         witnesses: module.witnesses.clone(),
+        tests: module.tests.clone(),
         binder_floor: module.binder_floor,
         entry,
     };
@@ -503,7 +504,8 @@ fn validate_module_instance_arities(module: &Module) -> Result<(), Error> {
             | DefinitionKind::InductiveType
             | DefinitionKind::StructType
             | DefinitionKind::ConceptType
-            | DefinitionKind::Witness => {}
+            | DefinitionKind::Witness
+            | DefinitionKind::Test => {}
         }
     }
     if let Some(entry) = &module.entry {
