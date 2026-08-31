@@ -273,6 +273,11 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             })
             .collect();
 
+        // A program may need no rows at all, and an empty roster must emit no group: a zero-size recursion group encodes as `0x4e` with an empty vector, which Binaryen's reader refuses.
+        if fields.is_empty() {
+            return;
+        }
+
         // One recursion group for the whole roster: a row's slot may name another row, and a self-referential declaration names its own, so a forward reference is only well-formed inside a shared group.
         self.module
             .add_types(curios_wasm::RecType::from(fields.into_iter().map(

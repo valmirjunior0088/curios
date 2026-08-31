@@ -111,3 +111,28 @@ fn exit_in_local_binding_halts() {
     assert_eq!(code, 3);
     assert!(io.output().is_empty());
 }
+
+#[test]
+fn an_exit_alone_in_the_tail_carries_its_code() {
+    // A program needing no nominal rows used to emit an empty recursion group, which Binaryen's reader refuses; the roster group is omitted when there is nothing to declare.
+    let entrypoint = r#"
+        /std/proc/exit(3)
+        "#
+    .parse::<Entrypoint>()
+    .expect("failed to parse source");
+
+    let (module, _foreigns) = compile_with_prelude(
+        curios_pipeline::DEFAULT_STEP_BUDGET,
+        &entrypoint,
+        &RootSource::none(),
+        |_| {},
+    )
+    .expect("compile succeeded");
+
+    let (system, io) = MockHost::builder().build();
+    let code =
+        crate::run_wasm(&module, system, ForeignBindings::empty()).expect("execution succeeded");
+
+    assert_eq!(code, 3);
+    assert!(io.output().is_empty());
+}
