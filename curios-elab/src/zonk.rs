@@ -911,79 +911,82 @@ fn goal_report(context: &Context, id: MetavarId) -> Error {
 }
 
 fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
-    // A metavariable node *is* the substitution site: replace it by its solution, recursively zonked (the solution may itself mention solved metavariables).
-    if let Subterm::Metavar(Metavar { id, spine, origin }) = &**term {
-        // A written goal `?` never splices — the whole point of writing it was the report. Solved or not, error with what elaboration determined: the frozen scope, the goal's type, and the solution when one landed.
-        if matches!(origin, MetavarOrigin::Goal) {
-            return Err(goal_report(context, *id).at_opt(term.span()));
+    // The one choke point of the zonk walk's mutual recursion, guarded so a deeply nested term — a long sequencing chain's elaborated tail — buys depth with stack instead of overflowing the default test thread.
+    curios_utilities::recurse(|| {
+        // A metavariable node *is* the substitution site: replace it by its solution, recursively zonked (the solution may itself mention solved metavariables).
+        if let Subterm::Metavar(Metavar { id, spine, origin }) = &**term {
+            // A written goal `?` never splices — the whole point of writing it was the report. Solved or not, error with what elaboration determined: the frozen scope, the goal's type, and the solution when one landed.
+            if matches!(origin, MetavarOrigin::Goal) {
+                return Err(goal_report(context, *id).at_opt(term.span()));
+            }
+
+            let solution = context.metavar_solution(*id).ok_or_else(|| {
+                // An unsolved metavariable the *elaborator* minted (an omitted implicit or witness argument) is reported by the binder it filled — the provenance rides on the node itself — not as a bare hole: the user never wrote this metavariable, so a generic "cannot infer" would point at nothing they can see.
+                let error = match origin {
+                    MetavarOrigin::Implicit(origin) => {
+                        Error::uninferred_implicit(origin.func.clone(), origin.binder.clone())
+                    }
+                    MetavarOrigin::Witness(origin) => {
+                        // The birth record's `result` is the goal type; display it through whatever solutions landed, keeping the raw spelling if holes survive.
+                        let goal = context
+                            .metavar_entry(*id)
+                            .map(|entry| entry.result.clone())
+                            .unwrap_or_else(Term::type_ground);
+                        let goal = zonk_term(context, &goal).unwrap_or(goal);
+                        // No embedding diagnosis on this path: zonk holds the context immutably, and a `Lift` goal that survives to the splice report has already been reported richer by the resolution drains.
+                        Error::no_witness(goal, origin.func.clone(), origin.binder.clone(), None)
+                    }
+                    MetavarOrigin::Hole => Error::CannotInfer,
+                    // Handled by the unconditional report above.
+                    MetavarOrigin::Goal => unreachable!("a goal never reaches the splice path"),
+                };
+                match term.span() {
+                    Some(span) => error.at(span),
+                    None => error,
+                }
+            })?;
+
+            // Resolve the solution in its own (named) frame first: nested solved metavariables are substituted before the spine splice below.
+            let resolved = zonk_term(context, solution)?;
+
+            // A contextual occurrence: the spine records, in this site's own (already de-Bruijn-correct) form, what each birth binder corresponds to here. Zonk the spine entries (they may embed solved metavariables), then splice the solution through them — birth names captured, spine terms released.
+            let entry = context
+                .metavar_entry(*id)
+                .expect("a solved metavariable has a birth entry");
+            assert_eq!(
+                spine.len(),
+                entry.telescope.len(),
+                "a solved metavariable's occurrence carries its full spine"
+            );
+            let binders = entry
+                .telescope
+                .iter()
+                .map(|(name, _)| name)
+                .collect::<Vec<_>>();
+            let spine = zonk_terms(context, spine)?;
+            let refs = spine.iter().collect::<Vec<_>>();
+            let zonked = resolved.capture(&binders).release(&refs);
+
+            // Carry the hole's span only if the solution carries none of its own.
+            return Ok(match term.span() {
+                Some(span) => zonked.with_span(span),
+                None => zonked,
+            });
         }
 
-        let solution = context.metavar_solution(*id).ok_or_else(|| {
-            // An unsolved metavariable the *elaborator* minted (an omitted implicit or witness argument) is reported by the binder it filled — the provenance rides on the node itself — not as a bare hole: the user never wrote this metavariable, so a generic "cannot infer" would point at nothing they can see.
-            let error = match origin {
-                MetavarOrigin::Implicit(origin) => {
-                    Error::uninferred_implicit(origin.func.clone(), origin.binder.clone())
-                }
-                MetavarOrigin::Witness(origin) => {
-                    // The birth record's `result` is the goal type; display it through whatever solutions landed, keeping the raw spelling if holes survive.
-                    let goal = context
-                        .metavar_entry(*id)
-                        .map(|entry| entry.result.clone())
-                        .unwrap_or_else(Term::type_ground);
-                    let goal = zonk_term(context, &goal).unwrap_or(goal);
-                    // No embedding diagnosis on this path: zonk holds the context immutably, and a `Lift` goal that survives to the splice report has already been reported richer by the resolution drains.
-                    Error::no_witness(goal, origin.func.clone(), origin.binder.clone(), None)
-                }
-                MetavarOrigin::Hole => Error::CannotInfer,
-                // Handled by the unconditional report above.
-                MetavarOrigin::Goal => unreachable!("a goal never reaches the splice path"),
-            };
-            match term.span() {
-                Some(span) => error.at(span),
-                None => error,
-            }
-        })?;
+        // Fast path: a subtree with neither term nor universe metavariables is already fully zonked. A solved term metavariable's solution can be term-meta-free while still carrying levels that declaration finalization solved, so universe metas must keep descending.
+        //
+        // Both halves read cached per-node bits. Testing the metavariable *set* for emptiness instead answers the same question — the set is empty exactly when the bit is false — but re-walks the whole subtree at every level on the way down, which is quadratic on a deep spine.
+        if !term.has_metavar() && !term.has_universe_meta() {
+            return Ok(term.clone());
+        }
 
-        // Resolve the solution in its own (named) frame first: nested solved metavariables are substituted before the spine splice below.
-        let resolved = zonk_term(context, solution)?;
+        let inner = zonk_subterm(context, term)?;
 
-        // A contextual occurrence: the spine records, in this site's own (already de-Bruijn-correct) form, what each birth binder corresponds to here. Zonk the spine entries (they may embed solved metavariables), then splice the solution through them — birth names captured, spine terms released.
-        let entry = context
-            .metavar_entry(*id)
-            .expect("a solved metavariable has a birth entry");
-        assert_eq!(
-            spine.len(),
-            entry.telescope.len(),
-            "a solved metavariable's occurrence carries its full spine"
-        );
-        let binders = entry
-            .telescope
-            .iter()
-            .map(|(name, _)| name)
-            .collect::<Vec<_>>();
-        let spine = zonk_terms(context, spine)?;
-        let refs = spine.iter().collect::<Vec<_>>();
-        let zonked = resolved.capture(&binders).release(&refs);
-
-        // Carry the hole's span only if the solution carries none of its own.
-        return Ok(match term.span() {
-            Some(span) => zonked.with_span(span),
-            None => zonked,
-        });
-    }
-
-    // Fast path: a subtree with neither term nor universe metavariables is already fully zonked. A solved term metavariable's solution can be term-meta-free while still carrying levels that declaration finalization solved, so universe metas must keep descending.
-    //
-    // Both halves read cached per-node bits. Testing the metavariable *set* for emptiness instead answers the same question — the set is empty exactly when the bit is false — but re-walks the whole subtree at every level on the way down, which is quadratic on a deep spine.
-    if !term.has_metavar() && !term.has_universe_meta() {
-        return Ok(term.clone());
-    }
-
-    let inner = zonk_subterm(context, term)?;
-
-    Ok(match term.span() {
-        Some(span) => Term::spanned(span, inner),
-        None => Term::from(inner),
+        Ok(match term.span() {
+            Some(span) => Term::spanned(span, inner),
+            None => Term::from(inner),
+        })
     })
 }
 
