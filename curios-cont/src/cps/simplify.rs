@@ -975,6 +975,10 @@ pub(super) fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
                 _ => {}
             }
         }
+        // `Unused` means never *consumed*, not never occurring: the deferral arms of the demand walk leave a dropped parameter standing as a known call's argument, or in an edge into some other continuation whose receiving parameter is itself unused. Those occurrences are proven inert, so they become fillers — arity intact, and the receiving side's own dead-parameter drop erases them on a later round.
+        for &value in &removed {
+            module.replace_atom(CpsUseTarget::Value(value), CpsAtom::Filler);
+        }
         for value in removed {
             module.values.remove(value);
         }
@@ -1016,6 +1020,10 @@ pub(super) fn eliminate_dead_parameters(module: &mut CpsModule) -> bool {
             {
                 remove_parameter_indices(args, &dead);
             }
+        }
+        // The same inert occurrences as the continuation half above — see its comment.
+        for &value in &removed {
+            module.replace_atom(CpsUseTarget::Value(value), CpsAtom::Filler);
         }
         for value in removed {
             module.values.remove(value);

@@ -417,3 +417,14 @@ fn a_bang_in_an_inference_position_region_is_refused() {
         "expected an inference refusal, got: {error}"
     );
 }
+
+#[test]
+fn a_long_sequencing_chain_compiles_and_runs() {
+    // Regression: `inline_known_calls` used to leave each inlined callee's dead body standing between sweeps, so its call sites kept counting, callees turned multi-site, and a `!` chain's continuations duplicated exponentially — 16 sequenced actions did not finish compiling. Pruning once per sweep (the shape its sibling pass always had) makes the chain linear.
+    let mut source = String::from("use /std/{Str, Io, print};\n");
+    for _ in 0..24 {
+        source.push_str("let _ = print(\"x\")!;\n");
+    }
+    source.push_str("print(\"done\\n\")");
+    assert_eq!(run(&source), format!("{}done\n", "x".repeat(24)).as_bytes());
+}

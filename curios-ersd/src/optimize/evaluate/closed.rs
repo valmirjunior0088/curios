@@ -46,9 +46,10 @@ enum Kind {
 pub(crate) fn evaluate_closed_terms(module: &mut Module) -> bool {
     curios_profile::profile!("evaluate_closed_terms");
     let analysis = Analysis::analyze(module);
+    let summary = crate::Summary::analyze(module, &analysis);
     let owners = index_owners(module);
     let planned = plan(module, &analysis, &owners);
-    apply(module, planned)
+    apply(module, planned, summary)
 }
 
 fn plan(
@@ -95,7 +96,7 @@ fn plan(
 }
 
 /// Reification runs first, over every plan, and only *appends* to the arena; only once every plan is reified are the candidates rewritten and the materialized statements spliced in. The order matters: a reified closure deep-copies a source function and must read the original module, not one where an earlier plan's rewrite left an alias whose definition is not yet spliced into its block.
-fn apply(module: &mut Module, planned: Vec<Planned>) -> bool {
+fn apply(module: &mut Module, planned: Vec<Planned>, summary: crate::Summary) -> bool {
     if planned.is_empty() {
         return false;
     }
@@ -106,7 +107,7 @@ fn apply(module: &mut Module, planned: Vec<Planned>) -> bool {
     // Every replacement draws on one pool, so a pass cannot multiply the module however many candidates it found — see `PASS_REIFY_BUDGET`.
     let mut reify_pool = PASS_REIFY_BUDGET;
     // Stable for the whole pass: reification only appends, and the item list is rebuilt after this loop.
-    let mut scope = ReifyScope::new();
+    let mut scope = ReifyScope::new(summary);
     // Which item hosts each block, so a candidate inside one binds its group ahead of that item, and what an item binds — the two together decide whether a group *can* be lifted. Stable for the same reason.
     let block_items = index_block_items(module);
     let (item_functions, item_values) = item_binding_positions(module);

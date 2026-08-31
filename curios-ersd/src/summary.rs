@@ -60,6 +60,14 @@ impl Summary {
         Self { functions: current }
     }
 
+    /// The summarized behavior of one function, or the conservative top for an id the snapshot does not hold.
+    pub fn behavior_of(&self, function: FunctionId) -> LocalBehavior {
+        self.functions
+            .get(&function)
+            .copied()
+            .unwrap_or_else(LocalBehavior::unknown)
+    }
+
     /// The total behavior of evaluating a right-hand side: its own operation, its callee or callback, and every sub-block it evaluates.
     pub fn rhs_behavior(&self, module: &Module, rhs: &Rhs) -> LocalBehavior {
         Semantics::local_behavior(rhs)
