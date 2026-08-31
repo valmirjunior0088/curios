@@ -48,10 +48,7 @@ fn declare(kernel: &mut Kernel, path: &str, result_sort: Term) -> Global {
                 .map(|tag| {
                     (
                         Atom::from(tag),
-                        InductParam {
-                            telescope: Telescope::done(Vec::new()),
-                            plicities: Vec::new(),
-                        },
+                        InductParam::new(Telescope::done(Vec::new()), Vec::new()),
                     )
                 })
                 .collect(),
@@ -227,10 +224,10 @@ fn single_payload(payload_type: Term, result_sort: Term) -> InductDecl {
         arity: Telescope::done(Telescope::done(())),
         constructors: vec![(
             Atom::from("c"),
-            InductParam {
-                telescope: Telescope::build([(binder, payload_type)], Vec::new()),
-                plicities: vec![Plicity::Explicit],
-            },
+            InductParam::new(
+                Telescope::build([(binder, payload_type)], Vec::new()),
+                vec![Plicity::Explicit],
+            ),
         )],
         result_sort,
         module: Qualifier::from(["T"]),

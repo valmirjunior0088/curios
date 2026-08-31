@@ -343,10 +343,7 @@ fn a_bogus_occurrence_behind_a_tuple_field_is_refused() {
 
     let true_decl = proposition(vec![(
         Atom::from("qed"),
-        InductParam {
-            telescope: Telescope::done(Vec::new()),
-            plicities: Vec::new(),
-        },
+        InductParam::new(Telescope::done(Vec::new()), Vec::new()),
     )]);
 
     let equality_decl = equality_declaration();

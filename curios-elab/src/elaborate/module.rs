@@ -303,11 +303,11 @@ fn elaborate_induct_constructors(context: &mut Context, name: &Global) -> Result
         let label_refs = labels.iter().map(String::as_str).collect::<Vec<_>>();
         constructors.push((
             tag.clone(),
-            InductParam {
-                telescope: Telescope::build(entries, targets).relabel(&label_refs),
-                // Plicity is metadata parallel to the telescope; elaboration re-checks the types but never changes the calling convention.
-                plicities: param.plicities.clone(),
-            },
+            // Plicity is metadata parallel to the telescope; elaboration re-checks the types but never changes the calling convention.
+            InductParam::new(
+                Telescope::build(entries, targets).relabel(&label_refs),
+                param.plicities().to_vec(),
+            ),
         ));
     }
 
@@ -884,10 +884,10 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
                     .map(|(tag, constructor)| {
                         (
                             tag,
-                            InductParam {
-                                telescope: zonk_solved_term_metas(context, &constructor.telescope),
-                                plicities: constructor.plicities,
-                            },
+                            InductParam::new(
+                                zonk_solved_term_metas(context, &constructor.telescope),
+                                constructor.plicities().to_vec(),
+                            ),
                         )
                     })
                     .collect(),
@@ -1009,17 +1009,17 @@ fn elaborate_module_rec(context: &mut Context, rec: &RecItem) -> Result<RecItem,
             .map(|(tag, constructor)| {
                 Ok((
                     tag,
-                    InductParam {
-                        // A registry telescope is stored outside the group and instantiated per use site, so its self-references are free and must carry the instance themselves.
-                        telescope: stamp(
+                    // A registry telescope is stored outside the group and instantiated per use site, so its self-references are free and must carry the instance themselves.
+                    InductParam::new(
+                        stamp(
                             context,
                             &constructor.telescope,
                             &owned,
                             SelfReference::Free,
                             &instance,
                         )?,
-                        plicities: constructor.plicities,
-                    },
+                        constructor.plicities().to_vec(),
+                    ),
                 ))
             })
             .collect::<Result<_, Error>>()?;

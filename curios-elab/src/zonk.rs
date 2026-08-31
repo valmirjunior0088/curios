@@ -149,10 +149,10 @@ pub fn zonk_module(context: &Context, module: &Module) -> Result<Module, Error> 
                         .map(|(tag, param)| {
                             Ok((
                                 tag.clone(),
-                                InductParam {
-                                    telescope: zonk_signature(context, &param.telescope)?,
-                                    plicities: param.plicities.clone(),
-                                },
+                                InductParam::new(
+                                    zonk_signature(context, &param.telescope)?,
+                                    param.plicities().to_vec(),
+                                ),
                             ))
                         })
                         .collect::<Result<_, Error>>()?,

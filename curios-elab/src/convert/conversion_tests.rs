@@ -85,13 +85,13 @@ fn value_conversion_does_not_identify_distinct_type_payloads() {
         arity: Telescope::done(Telescope::done(())),
         constructors: vec![(
             Atom::from("wrap"),
-            InductParam {
-                telescope: Telescope::build(
+            InductParam::new(
+                Telescope::build(
                     [(Free::local(0, Some("T")), Term::type_at(two))],
                     Vec::new(),
                 ),
-                plicities: vec![Plicity::Explicit],
-            },
+                vec![Plicity::Explicit],
+            ),
         )],
         result_sort: Term::type_at(three),
         module: Qualifier::from(["E"]),

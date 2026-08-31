@@ -207,16 +207,16 @@ fn variant_unit_payload_is_irrelevant() {
                 arity: Telescope::done(Telescope::done(())),
                 constructors: Vec::from([(
                     Atom::from("wrap"),
-                    InductParam {
-                        telescope: Telescope::build(
+                    InductParam::new(
+                        Telescope::build(
                             [
                                 (x.clone(), Term::intrinsic(Intrinsic::NatType)),
                                 (u.clone(), Term::tuple_type_unit()),
                             ],
                             Vec::new(),
                         ),
-                        plicities: vec![Plicity::Explicit, Plicity::Explicit],
-                    },
+                        vec![Plicity::Explicit, Plicity::Explicit],
+                    ),
                 )]),
                 result_sort: Term::type_ground(),
                 module: Qualifier::empty(),

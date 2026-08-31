@@ -160,10 +160,7 @@ fn a_vacuous_elimination_still_has_its_motive_checked() {
     let nullary = |tag: &str, targets: Vec<Term>| {
         (
             Atom::from(tag),
-            InductParam {
-                telescope: Telescope::done(targets),
-                plicities: Vec::new(),
-            },
+            InductParam::new(Telescope::done(targets), Vec::new()),
         )
     };
     let at = |tag: &str| {

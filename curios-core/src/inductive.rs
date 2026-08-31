@@ -12,8 +12,24 @@ use {
 #[curios_archive::archived]
 pub struct InductParam {
     pub telescope: Telescope<Vec<Term>>,
-    /// One plicity mark per telescope binder — the value constructor's calling convention: every leading declaration parameter is `Implicit` (a value constructor infers them), each payload keeps its declared mark. Parallels `telescope`; `plicities.len()` equals `telescope.len()`.
-    pub plicities: Vec<Plicity>,
+    /// One plicity mark per telescope binder — the value constructor's calling convention: every leading declaration parameter is `Implicit` (a value constructor infers them), each payload keeps its declared mark. Parallels `telescope`, and is sealed behind [`InductParam::new`] so the correspondence is asserted at the one door rather than at every use.
+    plicities: Vec<Plicity>,
+}
+
+impl InductParam {
+    /// The one construction door: one mark per telescope binder, asserted here.
+    pub fn new(telescope: Telescope<Vec<Term>>, plicities: Vec<Plicity>) -> Self {
+        assert_eq!(plicities.len(), telescope.len());
+        Self {
+            telescope,
+            plicities,
+        }
+    }
+
+    /// The marks, one per telescope binder by construction.
+    pub fn plicities(&self) -> &[Plicity] {
+        &self.plicities
+    }
 }
 
 /// One inductive declaration's registry entry: the metadata an `induct` declaration produces alongside its type-constructor and value-constructor function bindings.
@@ -81,10 +97,10 @@ impl InductDecl {
                 .map(|(tag, constructor)| {
                     (
                         tag.clone(),
-                        InductParam {
-                            telescope: sharing.share(&constructor.telescope),
-                            plicities: constructor.plicities.clone(),
-                        },
+                        InductParam::new(
+                            sharing.share(&constructor.telescope),
+                            constructor.plicities.clone(),
+                        ),
                     )
                 })
                 .collect(),

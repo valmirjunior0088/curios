@@ -429,20 +429,17 @@ fn opt_induct() -> InductDecl {
         constructors: Vec::from([
             (
                 Atom::from("none"),
-                InductParam {
-                    telescope: Telescope::done(Vec::new()),
-                    plicities: vec![],
-                },
+                InductParam::new(Telescope::done(Vec::new()), vec![]),
             ),
             (
                 Atom::from("some"),
-                InductParam {
-                    telescope: Telescope::build(
+                InductParam::new(
+                    Telescope::build(
                         [(x.clone(), Term::intrinsic(Intrinsic::NatType))],
                         Vec::new(),
                     ),
-                    plicities: vec![Plicity::Explicit],
-                },
+                    vec![Plicity::Explicit],
+                ),
             ),
         ]),
         result_sort: Term::type_ground(),
@@ -1006,10 +1003,10 @@ fn unary_induct(payload: Term) -> InductDecl {
         arity: Telescope::done(Telescope::done(())),
         constructors: Vec::from([(
             Atom::from("mk"),
-            InductParam {
-                telescope: Telescope::build([(x, payload)], Vec::new()),
-                plicities: vec![Plicity::Explicit],
-            },
+            InductParam::new(
+                Telescope::build([(x, payload)], Vec::new()),
+                vec![Plicity::Explicit],
+            ),
         )]),
         result_sort: Term::type_ground(),
         module: Qualifier::empty(),

@@ -66,13 +66,7 @@ fn declare(kernel: &mut Kernel, path: &str, result_sort: Term, constructors: Vec
                 None => (Telescope::done(targets), Vec::new()),
             };
 
-            (
-                Atom::from(case.tag),
-                InductParam {
-                    telescope,
-                    plicities,
-                },
-            )
+            (Atom::from(case.tag), InductParam::new(telescope, plicities))
         })
         .collect();
 

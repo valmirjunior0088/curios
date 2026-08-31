@@ -604,10 +604,7 @@ fn process_items(
 
                                 Ok((
                                     curios_core::Atom::from(c.label.as_str()),
-                                    curios_core::InductParam {
-                                        telescope,
-                                        plicities,
-                                    },
+                                    curios_core::InductParam::new(telescope, plicities),
                                 ))
                             })
                             // Collected in written order: a constructor's position here is the runtime tag `erase` gives it (`InductDecl::constructors`), so the sequence is the declaration's, not a collation of its labels.

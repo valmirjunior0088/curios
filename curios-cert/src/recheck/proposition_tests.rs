@@ -119,10 +119,7 @@ fn a_proposition_carrying_a_computed_proof_is_still_accepted() {
     );
     let true_decl = proposition(vec![(
         Atom::from("qed"),
-        InductParam {
-            telescope: Telescope::done(Vec::new()),
-            plicities: Vec::new(),
-        },
+        InductParam::new(Telescope::done(Vec::new()), Vec::new()),
     )]);
 
     let wrap_name = Global::Authored(Qualifier::from(["Wrap"]));

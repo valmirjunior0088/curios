@@ -401,7 +401,7 @@ fn constructor_fits(
             let tags: Vec<_> = induct_decl
                 .constructors
                 .iter()
-                .map(|(tag, param)| (tag.clone(), param.plicities.clone()))
+                .map(|(tag, param)| (tag.clone(), param.plicities().to_vec()))
                 .collect();
 
             // A constructor candidate is spelled as its value-constructor *function* call — the pasteable form. The family is always an authored global; witnesses declare no inductives.

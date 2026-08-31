@@ -27,10 +27,10 @@ fn family(kernel: &mut Kernel, result_sort: Term, payload_type: Term) -> InductD
         arity: Telescope::done(Telescope::done(())),
         constructors: vec![(
             Atom::from("mk"),
-            InductParam {
-                telescope: Telescope::build([(payload, payload_type)], Vec::new()),
-                plicities: vec![Plicity::Explicit],
-            },
+            InductParam::new(
+                Telescope::build([(payload, payload_type)], Vec::new()),
+                vec![Plicity::Explicit],
+            ),
         )],
         result_sort,
         module: Qualifier::from(["Fam"]),
@@ -86,13 +86,13 @@ fn a_uniform_parameter_has_one_rung_of_slack() {
         arity: Telescope::build([(t.clone(), Term::type_ground())], Telescope::done(())),
         constructors: vec![(
             Atom::from("mk"),
-            InductParam {
-                telescope: Telescope::build(
+            InductParam::new(
+                Telescope::build(
                     [(t.clone(), Term::type_ground()), (x, Term::free_var(&t))],
                     Vec::new(),
                 ),
-                plicities: vec![Plicity::Implicit, Plicity::Explicit],
-            },
+                vec![Plicity::Implicit, Plicity::Explicit],
+            ),
         )],
         result_sort: Term::type_ground(),
         module: Qualifier::from(["Vec"]),
@@ -135,10 +135,7 @@ fn a_constructor_telescope_shorter_than_the_parameter_prefix_is_refused() {
         arity: Telescope::build([(t, Term::type_ground())], Telescope::done(())),
         constructors: vec![(
             Atom::from("mk"),
-            InductParam {
-                telescope: Telescope::done(Vec::new()),
-                plicities: Vec::new(),
-            },
+            InductParam::new(Telescope::done(Vec::new()), Vec::new()),
         )],
         result_sort: Term::type_ground(),
         module: Qualifier::from(["Fam"]),
@@ -172,13 +169,13 @@ fn prefixed(kernel: &mut Kernel, prefix: Term) -> InductDecl {
         arity: Telescope::build([(t.clone(), Term::type_ground())], Telescope::done(())),
         constructors: vec![(
             Atom::from("mk"),
-            InductParam {
-                telescope: Telescope::build(
+            InductParam::new(
+                Telescope::build(
                     [(t, prefix), (payload, Term::intrinsic(Intrinsic::NatType))],
                     Vec::new(),
                 ),
-                plicities: vec![Plicity::Implicit, Plicity::Explicit],
-            },
+                vec![Plicity::Implicit, Plicity::Explicit],
+            ),
         )],
         result_sort: Term::type_ground(),
         module: Qualifier::from(["Fam"]),

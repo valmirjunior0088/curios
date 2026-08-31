@@ -39,20 +39,17 @@ fn register_opt(context: &mut Context) {
                 constructors: Vec::from([
                     (
                         Atom::from("none"),
-                        InductParam {
-                            telescope: Telescope::done(Vec::new()),
-                            plicities: vec![],
-                        },
+                        InductParam::new(Telescope::done(Vec::new()), vec![]),
                     ),
                     (
                         Atom::from("some"),
-                        InductParam {
-                            telescope: Telescope::build(
+                        InductParam::new(
+                            Telescope::build(
                                 [(payload, Term::intrinsic(Intrinsic::NatType))],
                                 Vec::new(),
                             ),
-                            plicities: vec![Plicity::Explicit],
-                        },
+                            vec![Plicity::Explicit],
+                        ),
                     ),
                 ]),
                 result_sort: Term::type_ground(),
@@ -358,17 +355,11 @@ fn register_flag(context: &mut Context) {
                 constructors: Vec::from([
                     (
                         Atom::from("off"),
-                        InductParam {
-                            telescope: Telescope::done(vec![nat_lit(0)]),
-                            plicities: vec![],
-                        },
+                        InductParam::new(Telescope::done(vec![nat_lit(0)]), vec![]),
                     ),
                     (
                         Atom::from("on"),
-                        InductParam {
-                            telescope: Telescope::done(vec![nat_lit(1)]),
-                            plicities: vec![],
-                        },
+                        InductParam::new(Telescope::done(vec![nat_lit(1)]), vec![]),
                     ),
                 ]),
                 result_sort: Term::type_ground(),

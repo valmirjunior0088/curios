@@ -28,10 +28,10 @@ fn a_constructor_has_the_type_its_signature_ends_in() {
             arity: Telescope::done(Telescope::done(())),
             constructors: vec![(
                 Atom::from("mk"),
-                InductParam {
-                    telescope: Telescope::build([(payload, nat_type())], Vec::new()),
-                    plicities: vec![Plicity::Explicit],
-                },
+                InductParam::new(
+                    Telescope::build([(payload, nat_type())], Vec::new()),
+                    vec![Plicity::Explicit],
+                ),
             )],
             result_sort: Term::type_ground(),
             module: Qualifier::from(["Wrapped"]),
@@ -58,10 +58,10 @@ fn a_constructor_payload_of_the_wrong_type_is_refused() {
             arity: Telescope::done(Telescope::done(())),
             constructors: vec![(
                 Atom::from("mk"),
-                InductParam {
-                    telescope: Telescope::build([(payload, nat_type())], Vec::new()),
-                    plicities: vec![Plicity::Explicit],
-                },
+                InductParam::new(
+                    Telescope::build([(payload, nat_type())], Vec::new()),
+                    vec![Plicity::Explicit],
+                ),
             )],
             result_sort: Term::type_ground(),
             module: Qualifier::from(["Wrapped"]),
