@@ -378,6 +378,7 @@ fn print_match_pattern(pattern: MatchPattern) -> Printer {
         ]),
         MatchPattern::Bool(false) => pure("false"),
         MatchPattern::Bool(true) => pure("true"),
+        MatchPattern::Char(character) => print_char_literal(character),
         MatchPattern::Nat(NatPattern::Zero) => pure("0"),
         MatchPattern::Nat(NatPattern::Succ { pred_label, ih }) => {
             flat([pure(pred_label), pure(" + 1"), print_cons_ih(ih)])
@@ -975,17 +976,7 @@ fn print_term_inner(term: Term) -> Printer {
         Subterm::Name(name) => pure(name.join()),
         // Both spell `?`: the written/desugared distinction matters to zonk's reporting, not to how the term reads.
         Subterm::Hole | Subterm::Goal => pure("?"),
-        Subterm::Syn(Syn::Char(character)) => {
-            let escaped = match character {
-                '\'' => "\\'".to_string(),
-                '\\' => "\\\\".to_string(),
-                '\n' => "\\n".to_string(),
-                '\t' => "\\t".to_string(),
-                '\r' => "\\r".to_string(),
-                _ => character.to_string(),
-            };
-            pure(format!("'{escaped}'"))
-        }
+        Subterm::Syn(Syn::Char(character)) => print_char_literal(character),
         Subterm::Syn(Syn::Str(content)) => pure(format!(
             "\"{}\"",
             content
@@ -1204,19 +1195,26 @@ fn print_term_inner(term: Term) -> Printer {
         Subterm::NumLit(NumLit {
             magnitude,
             radix,
-            signed,
-            negative,
-        }) => {
-            let sign = if negative {
-                "-"
-            } else if signed {
-                "+"
-            } else {
-                ""
-            };
-            pure(format!("{sign}{}", format_radix(&magnitude, radix)))
-        }
+            sign,
+        }) => pure(format!(
+            "{}{}",
+            sign.symbol(),
+            format_radix(&magnitude, radix)
+        )),
     }
+}
+
+/// A character literal as written: the five escapes by their spellings, anything else verbatim — shared by the expression and match-pattern positions.
+fn print_char_literal(character: char) -> Printer {
+    let escaped = match character {
+        '\'' => "\\'".to_string(),
+        '\\' => "\\\\".to_string(),
+        '\n' => "\\n".to_string(),
+        '\t' => "\\t".to_string(),
+        '\r' => "\\r".to_string(),
+        _ => character.to_string(),
+    };
+    pure(format!("'{escaped}'"))
 }
 
 /// A `let` signature and body. `top` selects the corpus's top-level shape — the body *always* on the next line after `=` — while a local binding's body rides the `=` inline when it fits.

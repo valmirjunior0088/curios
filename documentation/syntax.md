@@ -76,7 +76,7 @@ Floating-point literals have type `Flt`. `5.` is not a floating-point literal.
 
 ### Character and string literals
 
-A character literal contains one Unicode scalar value or one supported escape and has the proof-certified type `Char`. `Char` excludes the surrogate range and values above `U+10FFFF`; use `Char/to_nat` for an explicit code-point conversion. Character literals are expressions only and are not accepted as `Nat` or `Byte` pattern spellings.
+A character literal contains one Unicode scalar value or one supported escape. It is a polymorphic literal spelled by its scalar value: it realizes as the proof-certified `Char` wherever nothing pins it, and as `Nat`, `Byte`, or `Int` — the code point — where one of those is expected, under the same rules as a numeral (`Byte` refuses a code point past `255`; `Bool` and `Flt` never realize from a character). `Char` excludes the surrogate range and values above `U+10FFFF`; use `Char/to_nat` for an explicit code-point conversion of a *value*, whose type is already fixed. In a match, a character literal is a `Nat` dispatch case — see [Natural-number dispatch](#natural-number-dispatch).
 
 ```crs
 'c'
@@ -123,7 +123,7 @@ Spreads may appear in any position and may be repeated. Every element and spread
 
 Packed literals are bracketed like [list literals](#list-literals) and selected by a grain letter glued to the bracket: `b[…]` builds `Bits`, `x[…]` builds `Bytes`. A bare `[…]` remains `List`.
 
-An entry is a term contributing one atom — a `Bool` in a `Bits` literal, a `Byte` in a `Bytes` literal — or a `..` spread contributing a whole packed value of the same kind. A constant atom is a [numeric literal](#numeric-literals) realized at the grain's element type: `0` or `1` in a `Bits` literal, `0` through `255` (any radix) in a `Bytes` literal.
+An entry is a term contributing one atom — a `Bool` in a `Bits` literal, a `Byte` in a `Bytes` literal — or a `..` spread contributing a whole packed value of the same kind. A constant atom is a [numeric literal](#numeric-literals) realized at the grain's element type: `0` or `1` in a `Bits` literal, `0` through `255` (any radix) in a `Bytes` literal. A [character literal](#character-and-string-literals) is a constant atom of a `Bytes` literal when its code point fits the byte — `x['H', 'i']` — and no character is a bit.
 
 ```crs
 b[]                -- empty Bits
@@ -612,7 +612,7 @@ end
 
 Induction arms and literal-dispatch arms cannot be mixed in one match.
 
-Natural-number pattern literals are numeric literals only. Character literals do not provide character, natural-number, or byte patterns. A dispatch literal must fit in 32 bits; a larger numeral is a parse error, even though `Nat` itself is unbounded.
+A dispatch literal is a numeric literal or a character literal — the latter matching its scalar value, so `match Char/to_nat(c) | '\n' => … | _ => … end` is how a `Char` is dispatched, with the conversion visible at the head. A dispatch literal must fit in 32 bits; a larger numeral is a parse error, even though `Nat` itself is unbounded.
 
 ### List fold and case split
 

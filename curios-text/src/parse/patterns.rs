@@ -222,6 +222,17 @@ pub(super) fn parse_nat_lit_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     }))
 }
 
+// A character literal leaf — a `Nat` dispatch case spelled by its scalar value, compiled exactly as the numeral it denotes.
+pub(super) fn parse_char_match_pattern<'a>() -> Parser<'a, MatchPattern> {
+    catch(
+        take_exact("'")
+            .and_keep(parse_char_value())
+            .and_drop(take_exact("'"))
+            .and_drop(parse_whitespace()),
+    )
+    .map(MatchPattern::Char)
+}
+
 // The `[]` leaf of a nested `List` pattern.
 pub(super) fn parse_list_nil_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     catch(parse_literal("[]")).map(|()| MatchPattern::List(ListPattern::Nil))
@@ -293,6 +304,7 @@ fn parse_match_pattern_inner<'a>() -> Parser<'a, MatchPattern> {
         .or(parse_struct_match_pattern())
         .or(parse_ctor_match_pattern())
         .or(parse_bool_match_pattern())
+        .or(parse_char_match_pattern())
         .or(parse_nat_zero_match_pattern())
         .or(parse_nat_succ_match_pattern())
         .or(parse_nat_lit_match_pattern())

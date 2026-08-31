@@ -5,7 +5,7 @@ use {
     curios_num::Natural,
     curios_parse::{ParserError, run_parser, take_eof},
     curios_print::run_printer,
-    curios_utilities::{Grain, InfixOp, Plicity, Source, Span},
+    curios_utilities::{Grain, InfixOp, Plicity, Sign, Source, Span},
     std::{fmt, ops::Deref, rc::Rc, str::FromStr, sync::Arc},
 };
 
@@ -308,6 +308,8 @@ pub enum MatchPattern {
     },
     /// A `Bool` literal leaf: `true` or `false`.
     Bool(bool),
+    /// A character literal leaf — a `Nat` dispatch case spelled by its scalar value, printed back as written.
+    Char(char),
     /// A nested `Nat` literal leaf — the `0`/`n+1; ih` (induction) or bare literal (dispatch) shapes a headed `Nat` match takes.
     Nat(NatPattern),
     /// A nested `List` literal leaf — the `[]`/`[head,..tail][; ih]` shapes a headed `List` match takes.
@@ -478,8 +480,7 @@ pub struct Infix {
 pub struct NumLit {
     pub magnitude: Natural,
     pub radix: Radix,
-    pub signed: bool,
-    pub negative: bool,
+    pub sign: Sign,
 }
 
 /// The term grammar proper, one variant per surface form. Spanless by design — a location rides on the wrapping [`Term`] — so `PartialEq` compares structure alone; bare terms are built via `From<Subterm> for Term`. Most variants lower one-to-one onto a core counterpart in `into_core`; the ones that exist only in the surface language are documented on their variants below.

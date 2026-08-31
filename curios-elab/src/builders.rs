@@ -8,7 +8,7 @@ use {
         Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple,
     },
     curios_num::Natural,
-    curios_utilities::InfixOp,
+    curios_utilities::{InfixOp, Sign},
 };
 
 /// Constructors for [`Intrinsic`] operations no judgment ever builds.
@@ -623,7 +623,10 @@ pub trait TermBuilders {
         M: Into<Term>;
 
     /// A polymorphic numeric literal ([`NumLit`]) — elaboration-transient, resolved to a concrete `Nat`/`Int`/`Flt` intrinsic by `elaborate_num_lit`.
-    fn num_lit(magnitude: Natural, signed: bool, negative: bool) -> Self;
+    fn num_lit(magnitude: Natural, sign: Sign) -> Self;
+
+    /// A character-spelled polymorphic literal ([`NumLit::Character`]) — elaboration-transient like the numeral form, defaulting to `/syn/Char`.
+    fn num_lit_char(character: char) -> Self;
 
     /// A struct literal carrying the written entry shapes from `into_core`; elaboration validates them against the declared fields and rebuilds entry-free, exactly like `tuple_named`.
     fn struct_entries<I, P, J, T>(name: Global, params: I, fields: J) -> Self
@@ -707,12 +710,17 @@ impl TermBuilders for Term {
         Scope::constant(Many(0), motive.into())
     }
 
-    fn num_lit(magnitude: Natural, signed: bool, negative: bool) -> Self {
-        Self::from(Subterm::Transient(Transient::NumLit(NumLit {
+    fn num_lit(magnitude: Natural, sign: Sign) -> Self {
+        Self::from(Subterm::Transient(Transient::NumLit(NumLit::Number {
             magnitude,
-            signed,
-            negative,
+            sign,
         })))
+    }
+
+    fn num_lit_char(character: char) -> Self {
+        Self::from(Subterm::Transient(Transient::NumLit(NumLit::Character(
+            character,
+        ))))
     }
 
     fn struct_entries<I, P, J, T>(name: Global, params: I, fields: J) -> Self

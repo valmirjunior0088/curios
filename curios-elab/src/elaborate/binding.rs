@@ -202,11 +202,14 @@ pub(super) fn elaborate_num_lit(
     let int_type: Term = Subterm::Intrinsic(Intrinsic::IntType).into();
     let flt_type: Term = Subterm::Intrinsic(Intrinsic::FltType).into();
 
-    // A written sign rules out `Nat`, so the default lands on `Int`.
-    let default_type: Term = if num_lit.signed {
-        int_type.clone()
-    } else {
-        nat_type.clone()
+    // A written sign rules out `Nat`, so a marked numeral defaults to `Int`; a character-spelled literal defaults to the certified `/syn/Char` value it has always denoted.
+    let default_type: Term = match num_lit {
+        NumLit::Number { sign, .. } if sign.is_marked() => int_type.clone(),
+        NumLit::Number { .. } => nat_type.clone(),
+        NumLit::Character(_) => Term::struct_type(
+            Global::Authored(context.syntax().character.character.qualifier()),
+            Vec::<Term>::new(),
+        ),
     };
 
     let target = match &mode {
@@ -223,67 +226,88 @@ pub(super) fn elaborate_num_lit(
         Mode::Infer => Term::unwrap_or_clone(default_type.clone()),
     };
 
-    let (intrinsic, type_) = match &target {
-        Subterm::Intrinsic(Intrinsic::NatType) if !num_lit.negative => (
-            Intrinsic::Nat(Nat::new(num_lit.magnitude.clone())),
-            nat_type,
-        ),
-        Subterm::Intrinsic(Intrinsic::ByteType) if !num_lit.negative => {
-            let Some(value) = num_lit.magnitude.to_u8() else {
-                return Err(Error::ByteLiteralOutOfRange {
-                    value: num_lit.magnitude.to_string(),
-                });
-            };
-            (Intrinsic::Byte(value), byte_type)
-        }
-        // A bit is a `Bool` in this language — `Bits` is the packed carrier of `Bool` — so `0` and `1` realize where a `Bool` is expected, which is what lets a packed literal's constant atoms be spelled as numerals.
-        Subterm::Intrinsic(Intrinsic::BoolType) if !num_lit.negative => {
-            let value = match num_lit.magnitude.to_u8() {
-                Some(0) => false,
-                Some(1) => true,
-                _ => {
-                    return Err(Error::BoolLiteralOutOfRange {
-                        value: num_lit.magnitude.to_string(),
+    let (intrinsic, type_) = match num_lit {
+        NumLit::Number { magnitude, sign } => match &target {
+            Subterm::Intrinsic(Intrinsic::NatType) if !sign.is_negative() => {
+                (Intrinsic::Nat(Nat::new(magnitude.clone())), nat_type)
+            }
+            Subterm::Intrinsic(Intrinsic::ByteType) if !sign.is_negative() => {
+                let Some(value) = magnitude.to_u8() else {
+                    return Err(Error::ByteLiteralOutOfRange {
+                        value: magnitude.to_string(),
+                    });
+                };
+                (Intrinsic::Byte(value), byte_type)
+            }
+            // A bit is a `Bool` in this language — `Bits` is the packed carrier of `Bool` — so `0` and `1` realize where a `Bool` is expected, which is what lets a packed literal's constant atoms stay ordinary numerals.
+            Subterm::Intrinsic(Intrinsic::BoolType) if !sign.is_negative() => {
+                let value = match magnitude.to_u8() {
+                    Some(0) => false,
+                    Some(1) => true,
+                    _ => {
+                        return Err(Error::BoolLiteralOutOfRange {
+                            value: magnitude.to_string(),
+                        });
+                    }
+                };
+                (Intrinsic::Bool(value), bool_type)
+            }
+            Subterm::Intrinsic(Intrinsic::IntType) => {
+                let magnitude = Integer::from(magnitude.clone());
+                let value = if sign.is_negative() {
+                    -magnitude
+                } else {
+                    magnitude
+                };
+                (Intrinsic::Int(value), int_type)
+            }
+            Subterm::Intrinsic(Intrinsic::FltType) => {
+                // `to_f32` saturates an overflowing magnitude to infinity, a value no literal can spell — refused like the `Byte` range above, never minted.
+                let value = magnitude.to_f32().unwrap_or(f32::INFINITY);
+                if !value.is_finite() {
+                    return Err(Error::FltLiteralOutOfRange {
+                        value: magnitude.to_string(),
                     });
                 }
-            };
-            (Intrinsic::Bool(value), bool_type)
-        }
-        Subterm::Intrinsic(Intrinsic::IntType) => {
-            let magnitude = Integer::from(num_lit.magnitude.clone());
-            let value = if num_lit.negative {
-                -magnitude
-            } else {
-                magnitude
-            };
-            (Intrinsic::Int(value), int_type)
-        }
-        Subterm::Intrinsic(Intrinsic::FltType) => {
-            // `to_f32` saturates an overflowing magnitude to infinity, a value no literal can spell — refused like the `Byte` range above, never minted.
-            let magnitude = num_lit.magnitude.to_f32().unwrap_or(f32::INFINITY);
-            if !magnitude.is_finite() {
-                return Err(Error::FltLiteralOutOfRange {
-                    value: num_lit.magnitude.to_string(),
-                });
+                let value = if sign.is_negative() { -value } else { value };
+                (Intrinsic::Flt(Floating::from_f32(value)), flt_type)
             }
-            let value = if num_lit.negative {
-                -magnitude
-            } else {
-                magnitude
-            };
-            (Intrinsic::Flt(Floating::from_f32(value)), flt_type)
-        }
-        // A concrete expected type that is non-numeric — or `Nat` for a negative literal — has no realization: report against the literal's own shape.
-        _ => {
-            let Mode::Check(expected) = &mode else {
-                unreachable!("Infer-mode target is always the Nat/Int shape default");
-            };
-            let inferred = if num_lit.negative {
-                int_type
-            } else {
-                default_type
-            };
-            return Err(Error::type_mismatch(inferred, expected.clone()));
+            // A concrete expected type that is non-numeric — or `Nat` for a negative literal — has no realization: report against the literal's own shape.
+            _ => {
+                let Mode::Check(expected) = &mode else {
+                    unreachable!("Infer-mode target is always the Nat/Int shape default");
+                };
+                let inferred = if sign.is_negative() {
+                    int_type
+                } else {
+                    default_type
+                };
+                return Err(Error::type_mismatch(inferred, expected.clone()));
+            }
+        },
+        NumLit::Character(character) => {
+            let code = *character as u32;
+            match &target {
+                Subterm::Intrinsic(Intrinsic::NatType) => {
+                    (Intrinsic::Nat(Nat::new(code)), nat_type)
+                }
+                Subterm::Intrinsic(Intrinsic::ByteType) => {
+                    let Ok(value) = u8::try_from(code) else {
+                        return Err(Error::ByteLiteralOutOfRange {
+                            value: code.to_string(),
+                        });
+                    };
+                    (Intrinsic::Byte(value), byte_type)
+                }
+                Subterm::Intrinsic(Intrinsic::IntType) => {
+                    (Intrinsic::Int(Integer::from(code)), int_type)
+                }
+                // Everything else — the `Char` default, an expected `/syn/Char`, an unsolved metavariable, or a genuine mismatch — is answered by the certified value itself: elaborating it infers the `Char` struct type, solves a waiting metavariable to it, and reports any mismatch against the type the literal has always had.
+                _ => {
+                    let value = character_value(context, *character);
+                    return elaborate(context, &value, mode);
+                }
+            }
         }
     };
 
@@ -294,11 +318,42 @@ pub(super) fn elaborate_num_lit(
     Ok((Term::intrinsic(intrinsic), type_))
 }
 
+/// The certified `/syn/Char` value a character literal denotes: the code point with its `Scalar` range proof, exactly the term the lowerer's meta-emitter used to build eagerly. A Rust `char` is already a Unicode scalar, so the range constructor is selected by the code alone and the proof is one closed `qed`.
+fn character_value(context: &Context, character: char) -> Term {
+    let syntax = context.syntax();
+    let code: Term = Subterm::Intrinsic(Intrinsic::Nat(Nat::new(character as u32))).into();
+    let constructor = if (character as u32) < 0xD800 {
+        syntax.character.scalar_below
+    } else {
+        syntax.character.scalar_above
+    };
+    let qed = Term::apply(
+        Term::var(curios_core::Var::free(curios_core::Free::global(
+            syntax.proof.true_qed.qualifier(),
+        ))),
+        Vec::<Term>::new(),
+    );
+    let scalar = Term::apply_marked(
+        Term::var(curios_core::Var::free(curios_core::Free::global(
+            constructor.qualifier(),
+        ))),
+        [
+            (curios_utilities::Plicity::Implicit, code.clone()),
+            (curios_utilities::Plicity::Explicit, qed),
+        ],
+    );
+    Term::struct_(
+        Global::Authored(syntax.character.character.qualifier()),
+        Vec::<Term>::new(),
+        [code, scalar],
+    )
+}
+
 /// The shape default for an infix operator whose operand type nothing pinned: any signed/negative literal operand forces `Int`, otherwise `Nat`.
 ///
 /// A free function rather than an inherent method on [`Infix`]: the node is representation and lives in `curios-core`, while literal defaulting is an elaboration decision.
 pub(super) fn infix_default_type(infix: &Infix) -> Intrinsic {
-    let signed = |operand: &Term| matches!(&**operand, Subterm::Transient(Transient::NumLit(num_lit)) if num_lit.signed);
+    let signed = |operand: &Term| matches!(&**operand, Subterm::Transient(Transient::NumLit(NumLit::Number { sign, .. })) if sign.is_marked());
 
     if signed(&infix.left) || signed(&infix.right) {
         Intrinsic::IntType

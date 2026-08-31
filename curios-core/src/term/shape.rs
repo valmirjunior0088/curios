@@ -13,15 +13,16 @@ pub struct Infix {
     pub right: Term,
 }
 
-/// A polymorphic numeric literal: an integer `magnitude` with an optional written sign. Resolved to a concrete `Nat`/`Int`/`Flt` intrinsic by `elaborate_num_lit` once the expected type is known (or defaulted by shape). Decimal literals are *not* `NumLit` — they parse straight to `Intrinsic::Flt`.
+/// A polymorphic literal, resolved to a concrete carrier by `elaborate_num_lit` once the expected type is known (or defaulted by shape). Decimal literals are *not* `NumLit` — they parse straight to `Intrinsic::Flt`.
+///
+/// The two spellings are one transient because they share the realization machinery, and an enum because they share nothing else: a numeral has a sign and no scalar constraint, a character has a scalar (Rust's `char` guarantees it) and no sign, and neither combination's absence is a convention — it is unrepresentable.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
-pub struct NumLit {
-    pub magnitude: Natural,
-    /// A `+`/`-` was written: drops `Nat` from the candidate set and defaults the literal to `Int`.
-    pub signed: bool,
-    /// The written sign was `-` (a negative literal can never be a `Nat`).
-    pub negative: bool,
+pub enum NumLit {
+    /// A numeral: candidates `Nat`/`Bool`/`Byte`/`Int`/`Flt`, defaulting by [`Sign`] — `Int` when marked, else `Nat`.
+    Number { magnitude: Natural, sign: Sign },
+    /// A character-spelled scalar value: candidates `Char` (the default), `Nat`, `Byte`, `Int`.
+    Character(char),
 }
 
 /// A postfix `!` sequencing site, already hoisted by lowering: `action` is the sequenced description, `continuation` the rest of its region as an ordinary one-parameter function (domain a lowering-minted hole). Consumed by `elaborate_bang`, which replaces it with the `/syn/Monad/bind` application the lowerer once spelled directly — the construction moved behind elaboration so the sequencing survives to the stage that can make type-directed decisions about it.

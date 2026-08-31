@@ -4,12 +4,11 @@
 
 use crate::*;
 
-pub(super) fn num_lit(magnitude: u32, signed: bool, negative: bool) -> Term {
+pub(super) fn num_lit(magnitude: u32, sign: curios_utilities::Sign) -> Term {
     Subterm::NumLit(NumLit {
         magnitude: magnitude.into(),
         radix: Radix::Dec,
-        signed,
-        negative,
+        sign,
     })
     .into()
 }

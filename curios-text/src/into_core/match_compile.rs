@@ -334,11 +334,14 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                 }
                 self.compile_bool(columns, rows, top_motive, leaf)
             }
-            MatchPattern::Nat(_) => {
-                if rows
-                    .iter()
-                    .any(|row| !matches!(row.patterns[0], MatchPattern::Nat(_)))
-                {
+            // A character leaf is a `Nat` dispatch case spelled by its scalar value, so the two shapes share one column kind and may mix freely among the dispatch literals.
+            MatchPattern::Nat(_) | MatchPattern::Char(_) => {
+                if rows.iter().any(|row| {
+                    !matches!(
+                        row.patterns[0],
+                        MatchPattern::Nat(_) | MatchPattern::Char(_)
+                    )
+                }) {
                     return Err(Error::MatrixInconsistentShape);
                 }
                 self.compile_nat(columns, rows, top_motive, leaf)
@@ -547,6 +550,7 @@ impl<'l, 'a, 'b> MatchCompiler<'l, 'a, 'b> {
                     succ_rows.push((pred_label.clone(), ih.clone(), row))
                 }
                 MatchPattern::Nat(NatPattern::Lit(value)) => lit_rows.push((*value, row)),
+                MatchPattern::Char(character) => lit_rows.push((*character as u32, row)),
                 _ => unreachable!("every row classified as Nat"),
             }
         }
@@ -988,6 +992,7 @@ fn refutation_count(pattern: &MatchPattern) -> usize {
             fields.iter().map(|f| refutation_count(&f.value)).sum()
         }
         MatchPattern::Bool(_)
+        | MatchPattern::Char(_)
         | MatchPattern::Nat(_)
         | MatchPattern::List(_)
         | MatchPattern::Bin(_) => 1,

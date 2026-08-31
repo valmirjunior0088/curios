@@ -260,10 +260,9 @@ fn a_surviving_metavariable_refuses_the_zonked_projection() {
 #[test]
 fn a_surviving_transient_refuses_the_zonked_projection() {
     let mut infixed = definition("infixed", UniverseContext::empty());
-    infixed.body = Term::from(Subterm::Transient(Transient::NumLit(NumLit {
+    infixed.body = Term::from(Subterm::Transient(Transient::NumLit(NumLit::Number {
         magnitude: 7u32.into(),
-        signed: false,
-        negative: false,
+        sign: curios_utilities::Sign::Unmarked,
     })));
     let module = Module {
         items: vec![Item::Let(infixed)],

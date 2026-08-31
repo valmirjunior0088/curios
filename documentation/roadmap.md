@@ -210,6 +210,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
 - [x] Key-value map (`std/Map`: a canonical crit-bit trie over `Bytes` keys)
 - [x] Proof-carrying UTF-8 string storage and decoding (`std/Str`, over packed `Bytes`)
 - [x] Certified Unicode-scalar `Char` type and `Str` migration (`'…' : Char`, typed APIs)
+- [x] Character literals realize as numerals (`Char` by default; `Nat`/`Byte`/`Int` from context; `Nat` dispatch patterns and `Bytes` atoms)
 - [x] Parser-combinator library (`std/Parse`)
 - [x] Typed format strings (`std/Fmt`)
 - [x] Decimal numeric conversions (`of_str`/`to_str` for `Nat`, `Int` and `Flt`; they round-trip)

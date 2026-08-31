@@ -160,36 +160,6 @@ impl<'a, 'b> Lowerer<'a, 'b> {
         )
     }
 
-    /// A Rust `char` is already a Unicode scalar, so the literal meta-emitter selects the corresponding `/syn/Char/Scalar` range constructor and supplies a closed reflected proof. The proof erases and the single relevant `code` field collapses to the ordinary Nat carrier.
-    pub(super) fn char_literal(&self, character: char) -> curios_core::Term {
-        let code = curios_core::Term::intrinsic(curios_core::Intrinsic::Nat(
-            curios_core::Nat::new(character as u32),
-        ));
-        let constructor = if (character as u32) < 0xD800 {
-            self.context.syntax().character.scalar_below
-        } else {
-            self.context.syntax().character.scalar_above
-        };
-        let scalar = curios_core::Term::apply_marked(
-            curios_core::Term::var(curios_core::Var::free(curios_core::Free::global(
-                constructor.qualifier(),
-            ))),
-            [
-                (Plicity::Implicit, code.clone()),
-                (
-                    Plicity::Explicit,
-                    Self::syn_call(self.context.syntax().proof.true_qed, []),
-                ),
-            ],
-        );
-
-        curios_core::Term::struct_(
-            curios_core::Global::Authored(self.context.syntax().character.character.qualifier()),
-            Vec::<curios_core::Term>::new(),
-            [code, scalar],
-        )
-    }
-
     // A constructor/function `Var` applied to `args` — the absolute core name as the parser would resolve it (privacy is a surface-resolution concern; these are already-resolved core `Var`s, so referencing a private `/syn` helper is fine).
     pub(super) fn syn_call(
         name: SyntaxName,
@@ -206,7 +176,8 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     // The `Utf8(state, bytes)` derivation. `state` is carried as a *symbolic* term — `lead()` at the top, then `step(c, state)` per byte — so each recursive `rest`'s expected index (`Utf8(step(c, state), tail)`) is definitionally the state we thread in, with no metavar/`step`-inversion. The final `stop : Utf8(lead, x[])` matches because `step` of the last byte reduces back to `lead` for valid UTF-8 (a string literal is valid UTF-8 by construction). A `/syn` literal — its value is synthesized from `/syn` by the meta-emitter rather than lowered to a core intrinsic.
     pub(super) fn syn_literal(&self, syn: &Syn) -> Result<curios_core::Term, Error> {
         match syn {
-            Syn::Char(character) => Ok(self.char_literal(*character)),
+            // A character literal is a polymorphic literal like a numeral: elaboration realizes it — `/syn/Char` by default, a numeric carrier where one is expected — so the certified value is built there, not here.
+            Syn::Char(character) => Ok(curios_core::Term::num_lit_char(*character)),
             Syn::Str(string) => Ok(self.str_literal(string.as_bytes())),
         }
     }
@@ -233,11 +204,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
                     .map(|arg| self.term(arg))
                     .collect::<Result<_, _>>()?,
             ),
-            Subterm::NumLit(num_lit) => curios_core::Term::num_lit(
-                num_lit.magnitude.clone(),
-                num_lit.signed,
-                num_lit.negative,
-            ),
+            Subterm::NumLit(num_lit) => {
+                curios_core::Term::num_lit(num_lit.magnitude.clone(), num_lit.sign)
+            }
             Subterm::Infix(infix) => curios_core::Term::infix(
                 infix.op,
                 self.term(&infix.left)?,
@@ -944,9 +913,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             (
                 Grain::B,
                 Subterm::NumLit(NumLit {
-                    magnitude, signed, ..
+                    magnitude, sign, ..
                 }),
-            ) => match signed {
+            ) => match sign.is_marked() {
                 true => None,
                 false => magnitude.to_u8().filter(|bit| *bit <= 1),
             },
@@ -954,12 +923,14 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             (
                 Grain::X,
                 Subterm::NumLit(NumLit {
-                    magnitude, signed, ..
+                    magnitude, sign, ..
                 }),
-            ) => match signed {
+            ) => match sign.is_marked() {
                 true => None,
                 false => magnitude.to_u8(),
             },
+            // A character-spelled atom folds as its code point when it fits the byte; past that it stays an atom term and elaboration refuses the range exactly as for a numeral.
+            (Grain::X, Subterm::Syn(Syn::Char(character))) => u8::try_from(*character as u32).ok(),
             _ => None,
         }
     }

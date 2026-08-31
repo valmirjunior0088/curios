@@ -7,6 +7,7 @@ use {
 };
 
 use super::test_support::*;
+use curios_utilities::Sign;
 
 #[test]
 fn let_func_and_apply() {
@@ -57,7 +58,7 @@ fn let_func_and_apply() {
 
 #[test]
 fn parse_intrinsic() {
-    assert_eq!("42".parse::<Term>().unwrap(), num_lit(42, false, false));
+    assert_eq!("42".parse::<Term>().unwrap(), num_lit(42, Sign::Unmarked));
     assert_eq!(
         "1.5".parse::<Term>().unwrap(),
         Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f32(1.5))))
@@ -114,7 +115,7 @@ fn infix_requires_spaces_and_disambiguates_signs() {
         Subterm::Infix(Infix {
             op: InfixOp::Sub,
             left: name("a"),
-            right: num_lit(42, false, false),
+            right: num_lit(42, Sign::Unmarked),
         })
         .into()
     );

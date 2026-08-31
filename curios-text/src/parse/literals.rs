@@ -16,18 +16,17 @@ pub(super) fn parse_prop<'a>() -> Parser<'a, Term> {
 pub(super) fn parse_num_lit<'a>() -> Parser<'a, Term> {
     catch(
         catch(take_exact("-"))
-            .map(|()| (true, true))
-            .or(catch(take_exact("+")).map(|()| (true, false)))
-            .or(pure((false, false)))
+            .map(|()| Sign::Negative)
+            .or(catch(take_exact("+")).map(|()| Sign::Positive))
+            .or(pure(Sign::Unmarked))
             .and(parse_nat_digits()),
     )
-    .map(|((signed, negative), lit)| {
+    .map(|(sign, lit)| {
         let NatLiteral(magnitude, radix) = lit;
         Subterm::NumLit(NumLit {
             magnitude,
             radix,
-            signed,
-            negative,
+            sign,
         })
     })
     .map(Into::into)

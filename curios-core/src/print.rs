@@ -1,8 +1,8 @@
 use {
     super::{
         Apply, Arity, Atom, Bang, Bound, Carrier, Cases, Enter, Field, Free, Func, FuncType,
-        Global, InductType, Infix, Intrinsic, Let, Level, Match, Nat, Proj, Rec, Scope, Struct,
-        StructType, Subterm, Telescope, Term, Three, Transient, Tuple, TupleType, Two, Var,
+        Global, InductType, Infix, Intrinsic, Let, Level, Match, Nat, NumLit, Proj, Rec, Scope,
+        Struct, StructType, Subterm, Telescope, Term, Three, Transient, Tuple, TupleType, Two, Var,
         Variant,
     },
     curios_abi::stdio,
@@ -1439,15 +1439,11 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             ])
         }
         Subterm::Var(var) => print_var(var, frame.spelling),
-        Subterm::Transient(Transient::NumLit(num_lit)) => {
-            let sign = if num_lit.negative {
-                "-"
-            } else if num_lit.signed {
-                "+"
-            } else {
-                ""
-            };
-            pure(format!("{sign}{}", num_lit.magnitude))
+        Subterm::Transient(Transient::NumLit(NumLit::Number { magnitude, sign })) => {
+            pure(format!("{}{magnitude}", sign.symbol()))
+        }
+        Subterm::Transient(Transient::NumLit(NumLit::Character(character))) => {
+            pure(format!("'{}'", escape_character(character)))
         }
         // Through `print_infix` so nested operands parenthesize — `(a + b) * c` — exactly like the intrinsic operators; display folds (`denoise`) nest these nodes.
         Subterm::Transient(Transient::Infix(Infix { op, left, right })) => {
@@ -1488,3 +1484,15 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
 
 #[cfg(test)]
 mod tests;
+
+/// A character rendered as its literal body: the five escapes by their spellings, anything else verbatim.
+fn escape_character(character: char) -> String {
+    match character {
+        '\n' => "\\n".to_string(),
+        '\t' => "\\t".to_string(),
+        '\r' => "\\r".to_string(),
+        '\\' => "\\\\".to_string(),
+        '\'' => "\\'".to_string(),
+        other => other.to_string(),
+    }
+}

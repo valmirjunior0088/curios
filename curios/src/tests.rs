@@ -1,6 +1,7 @@
 mod aggregates;
 mod big_num;
 mod binders;
+mod characters;
 mod codegen;
 mod concepts;
 mod effects;

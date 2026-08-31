@@ -4045,6 +4045,10 @@
         },
         {
           "type": "SYMBOL",
+          "name": "character"
+        },
+        {
+          "type": "SYMBOL",
           "name": "successor_pattern"
         },
         {

@@ -1,15 +1,19 @@
 //! Numeric, character, string, list and binary literals, and the spread segments inside them.
 
-use {crate::*, curios_num::Floating, curios_utilities::Grain};
+use {
+    crate::*,
+    curios_num::Floating,
+    curios_utilities::{Grain, Sign},
+};
 
 use super::test_support::*;
 
 #[test]
 fn integer_literals_are_polymorphic_num_lits() {
     // Integer literals are polymorphic `NumLit`s; the sign is optional and only records whether `Nat` is still a candidate. Decimals stay monomorphic `Flt`.
-    assert_eq!("42".parse::<Term>().unwrap(), num_lit(42, false, false));
-    assert_eq!("+42".parse::<Term>().unwrap(), num_lit(42, true, false));
-    assert_eq!("-42".parse::<Term>().unwrap(), num_lit(42, true, true));
+    assert_eq!("42".parse::<Term>().unwrap(), num_lit(42, Sign::Unmarked));
+    assert_eq!("+42".parse::<Term>().unwrap(), num_lit(42, Sign::Positive));
+    assert_eq!("-42".parse::<Term>().unwrap(), num_lit(42, Sign::Negative));
     assert_eq!(
         "42.0".parse::<Term>().unwrap(),
         Term::from(Subterm::Intrinsic(Intrinsic::Flt(Floating::from_f32(42.0))))
@@ -86,8 +90,24 @@ fn char_literals_round_trip_unicode_and_supported_escapes() {
 }
 
 #[test]
-fn character_literal_is_not_a_natural_pattern() {
-    assert!("match 97 | 'a' => 0 | _ => 1 end".parse::<Term>().is_err());
+fn a_character_literal_is_a_dispatch_pattern() {
+    // The former exclusion, overturned: a character pattern is a `Nat` dispatch case spelled by its scalar value, and it round-trips as written.
+    let source = "match 97 | 'a' => 0 | '\\n' => 1 | _ => 2 end";
+    let term = source.parse::<Term>().unwrap();
+    let Subterm::Match(match_) = term.as_subterm() else {
+        panic!("expected a match");
+    };
+    assert!(
+        matches!(match_.arms[0].pattern, MatchPattern::Char('a')),
+        "{:?}",
+        match_.arms[0].pattern
+    );
+    assert!(
+        matches!(match_.arms[1].pattern, MatchPattern::Char('\n')),
+        "{:?}",
+        match_.arms[1].pattern
+    );
+    assert_eq!(term.to_string(), source);
 }
 
 #[test]
@@ -97,8 +117,7 @@ fn hex_literal_is_num_lit() {
         Subterm::NumLit(NumLit {
             magnitude: 194usize.into(),
             radix: Radix::Hex,
-            signed: false,
-            negative: false,
+            sign: Sign::Unmarked,
         })
         .into()
     );
@@ -111,8 +130,7 @@ fn bin_literal_is_num_lit() {
         Subterm::NumLit(NumLit {
             magnitude: 10usize.into(),
             radix: Radix::Bin,
-            signed: false,
-            negative: false,
+            sign: Sign::Unmarked,
         })
         .into()
     );
@@ -189,8 +207,7 @@ fn list_literal_spread_entries() {
         Subterm::NumLit(NumLit {
             magnitude: n.into(),
             radix: Radix::Dec,
-            signed: false,
-            negative: false,
+            sign: Sign::Unmarked,
         })
         .into()
     };
@@ -231,9 +248,9 @@ fn bin_literal_spread_segments() {
         Subterm::Intrinsic(Intrinsic::Bin(
             Grain::X,
             vec![
-                BinSegment::Atom(num_lit(0, false, false)),
+                BinSegment::Atom(num_lit(0, Sign::Unmarked)),
                 BinSegment::Spread(name("xs")),
-                BinSegment::Atom(num_lit(1, false, false)),
+                BinSegment::Atom(num_lit(1, Sign::Unmarked)),
             ]
         ))
         .into()
@@ -243,11 +260,11 @@ fn bin_literal_spread_segments() {
         Subterm::Intrinsic(Intrinsic::Bin(
             Grain::X,
             vec![
-                BinSegment::Atom(num_lit(0, false, false)),
-                BinSegment::Atom(num_lit(1, false, false)),
+                BinSegment::Atom(num_lit(0, Sign::Unmarked)),
+                BinSegment::Atom(num_lit(1, Sign::Unmarked)),
                 BinSegment::Spread(name("x")),
-                BinSegment::Atom(num_lit(2, false, false)),
-                BinSegment::Atom(num_lit(3, false, false)),
+                BinSegment::Atom(num_lit(2, Sign::Unmarked)),
+                BinSegment::Atom(num_lit(3, Sign::Unmarked)),
             ]
         ))
         .into()
@@ -346,9 +363,9 @@ fn bin_literal_atom_segments() {
         Subterm::Intrinsic(Intrinsic::Bin(
             Grain::X,
             vec![
-                BinSegment::Atom(num_lit(72, false, false)),
+                BinSegment::Atom(num_lit(72, Sign::Unmarked)),
                 BinSegment::Atom(name("b")),
-                BinSegment::Atom(num_lit(0, false, false)),
+                BinSegment::Atom(num_lit(0, Sign::Unmarked)),
             ]
         ))
         .into()
@@ -358,9 +375,9 @@ fn bin_literal_atom_segments() {
         Subterm::Intrinsic(Intrinsic::Bin(
             Grain::B,
             vec![
-                BinSegment::Atom(num_lit(1, false, false)),
+                BinSegment::Atom(num_lit(1, Sign::Unmarked)),
                 BinSegment::Atom(name("flag")),
-                BinSegment::Atom(num_lit(0, false, false)),
+                BinSegment::Atom(num_lit(0, Sign::Unmarked)),
             ]
         ))
         .into()

@@ -532,6 +532,7 @@ module.exports = grammar({
       choice(
         $.constructor_pattern,
         $.boolean,
+        $.character,
         $.successor_pattern,
         $.number,
         $.list_pattern,

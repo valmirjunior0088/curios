@@ -3,6 +3,7 @@
 use {crate::*, curios_utilities::Plicity};
 
 use super::test_support::*;
+use curios_utilities::Sign;
 
 #[test]
 fn inductive_match_nullary_and_unary() {
@@ -226,10 +227,10 @@ fn parse_choose() {
             .unwrap(),
         Subterm::Choose(Choose {
             arms: vec![
-                cond_arm(name("p"), num_lit(1, false, false)),
-                cond_arm(name("q"), num_lit(2, false, false)),
+                cond_arm(name("p"), num_lit(1, Sign::Unmarked)),
+                cond_arm(name("q"), num_lit(2, Sign::Unmarked)),
             ],
-            default: num_lit(3, false, false),
+            default: num_lit(3, Sign::Unmarked),
         })
         .into()
     );
@@ -242,7 +243,7 @@ fn a_choose_of_only_a_default_parses() {
         "choose\n| _ => 0\nend".parse::<Term>().unwrap(),
         Subterm::Choose(Choose {
             arms: vec![],
-            default: num_lit(0, false, false),
+            default: num_lit(0, Sign::Unmarked),
         })
         .into()
     );
@@ -256,8 +257,8 @@ fn choose_leading_underscore_condition() {
             .parse::<Term>()
             .unwrap(),
         Subterm::Choose(Choose {
-            arms: vec![cond_arm(name("_ready"), num_lit(1, false, false))],
-            default: num_lit(2, false, false),
+            arms: vec![cond_arm(name("_ready"), num_lit(1, Sign::Unmarked))],
+            default: num_lit(2, Sign::Unmarked),
         })
         .into()
     );
@@ -282,9 +283,9 @@ fn choose_bind_arm() {
                     },
                     body: name("x"),
                 },
-                cond_arm(name("ready"), num_lit(1, false, false)),
+                cond_arm(name("ready"), num_lit(1, Sign::Unmarked)),
             ],
-            default: num_lit(2, false, false),
+            default: num_lit(2, Sign::Unmarked),
         })
         .into()
     );

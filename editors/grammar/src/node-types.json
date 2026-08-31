@@ -1127,6 +1127,10 @@
           "named": true
         },
         {
+          "type": "character",
+          "named": true
+        },
+        {
           "type": "constructor_pattern",
           "named": true
         },
@@ -3100,6 +3104,10 @@
             "named": true
           },
           {
+            "type": "character",
+            "named": true
+          },
+          {
             "type": "constructor_pattern",
             "named": true
           },
@@ -3160,6 +3168,10 @@
       "types": [
         {
           "type": "boolean",
+          "named": true
+        },
+        {
+          "type": "character",
           "named": true
         },
         {
@@ -3893,6 +3905,10 @@
       "types": [
         {
           "type": "boolean",
+          "named": true
+        },
+        {
+          "type": "character",
           "named": true
         },
         {
@@ -5098,6 +5114,10 @@
       "types": [
         {
           "type": "boolean",
+          "named": true
+        },
+        {
+          "type": "character",
           "named": true
         },
         {
