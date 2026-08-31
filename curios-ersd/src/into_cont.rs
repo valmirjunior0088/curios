@@ -36,7 +36,7 @@ use {
 
 /// Lower a verified arena [`Module`] into the landed Cont [`curios_cont::CpsModule`]. The module's top level — its item chain followed by its entry block — becomes the parameterless Cps entry `main`, delivering its result to a bodyless `return_cont`. The produced module is verified; a failure is a lowering bug, not a user error, so it panics.
 ///
-/// The walk recurses once per statement and once per block nesting, inside [`recurse`], and the stage takes its first segment with [`grown`]: a folded parser is a chain of thousands of statements, which overflowed the default test-thread stack at about 1 900 levels.
+/// The walk recurses once per statement and once per block nesting, inside [`recurse`](curios_utilities::recurse), and the stage takes its first segment with [`grown`]: a folded parser is a chain of thousands of statements, which overflowed the default test-thread stack at about 1 900 levels.
 pub fn lower_to_cont(source: &Module) -> curios_cont::CpsModule {
     curios_profile::profile!("lower_to_cont");
     grown(|| lower_to_cont_within(source))
