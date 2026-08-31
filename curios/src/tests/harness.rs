@@ -1,7 +1,7 @@
-//! The test-harness library half: the `Test` description, its combinators, `Test/main`'s dispatch, and the `Spell` witnesses the reports rely on.
+//! The test harness across the stages: the `Test` description, its combinators, `Test/main`'s dispatch, the `Spell` witnesses the reports rely on, the `test` declaration, and the synthesized tail a unit's test program runs.
 
 use {
-    super::{error, run, run_text},
+    super::{error, ersd_optm, ersd_optm_tests, run, run_tests_program, run_text},
     curios_runtime::MockHost,
 };
 
@@ -199,4 +199,51 @@ fn a_bare_bang_in_a_test_body_is_refused() {
         "#,
     );
     assert!(error.contains("Monad"), "unexpected error: {error}");
+}
+
+/// Whether any optimized function's debug name starts with `needle` — presence of a definition in the arena, by the name erasure stamped.
+fn survives(module: &curios_ersd::Module, needle: &str) -> bool {
+    module.functions().iter().flatten().any(|function| {
+        function
+            .debug_name
+            .as_deref()
+            .is_some_and(|name| name.starts_with(needle))
+    })
+}
+
+#[test]
+fn declared_tests_schedule_through_the_synthesized_tail() {
+    // Step 4's acceptance: the unit compiled as its own test program runs every declared test in declaration order — a private `mod`'s included — under the synthesized `Test/main` tail, and the authored entry does not run.
+    assert_eq!(
+        run_tests_program(
+            r#"
+        use /std/{Nat, Str, Io, Eq, Test};
+        mod checks
+            use /std/{Nat, Test};
+            test addition_holds() = Test/check(1 + 1 == 2);
+        end
+        test the_answer_holds() = Test/refl(21 * 2, 42, Eq/refl());
+        /std/print("ran\n")
+        "#
+        ),
+        b"/checks/addition_holds: passed\n/the_answer_holds: proved\n"
+    );
+}
+
+#[test]
+fn a_unit_with_no_tests_runs_nothing() {
+    // `Test/main([])`: the authored tail is replaced, nothing is scheduled, nothing is written, and the program exits cleanly.
+    assert_eq!(run_tests_program(r#"/std/print("ran\n")"#), b"");
+}
+
+#[test]
+fn the_ordinary_program_prunes_what_the_test_program_keeps() {
+    // The same unit compiles to two programs: the ordinary one neither reaches nor runs its tests, so the prune drops them; the test program's tail references every one, which is what keeps them.
+    let source = r#"
+        use /std/{Nat, Str, Io, Test};
+        test the_answer_holds() = Test/check(42 == 42);
+        /std/print("ran\n")
+        "#;
+    assert!(!survives(&ersd_optm(source), "/the_answer_holds"));
+    assert!(survives(&ersd_optm_tests(source), "/the_answer_holds"));
 }

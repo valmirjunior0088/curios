@@ -6,7 +6,7 @@ use {
         LetGroup, LetSignature, ListEntry, Name, Nat, NatLiteral, NumLit, Pattern, PatternField,
         StructLitEntry, Subterm, Syn, Term,
     },
-    curios_utilities::{Grain, PackedBin, Plicity, Qualifier, Span, SyntaxName, recurse},
+    curios_utilities::{Grain, PackedBin, Plicity, Qualifier, Span, recurse},
     std::{cell::RefCell, sync::Arc},
 };
 
@@ -139,38 +139,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
     //
     // The two remedies an earlier version of this note deferred are settled by that machine rather than taken. A native scan intrinsic is refused where `documentation/design/toolchain/evaluating-a-closed-term-is-representation-not-judgment.md` records — it would bless one type's fold where the machine accelerates every closed fold on the same terms, `Str`'s and a user's alike. And full reflection — restating `Valid` as an equation on `scan_from` and rewriting `/std/Str/utf8`'s lemmas as fold algebra — stays unnecessary, because the derivation this bridge preserves now costs what the machine prices it rather than a frame per link.
     pub(super) fn str_literal(&self, bytes: &[u8]) -> curios_core::Term {
-        let packed = curios_core::Term::intrinsic(curios_core::Intrinsic::Bin(
-            Grain::X,
-            PackedBin::from_bytes(bytes.to_vec()),
-        ));
-
-        let syntax = self.context.syntax().string;
-        let valid = Self::syn_call(
-            syntax.of_scan_eq,
-            [
-                packed.clone(),
-                Self::syn_call(syntax.refl_scan, [packed.clone()]),
-            ],
-        );
-
-        curios_core::Term::struct_(
-            curios_core::Global::Authored(syntax.string.qualifier()),
-            Vec::<curios_core::Term>::new(),
-            [packed, valid],
-        )
-    }
-
-    // A constructor/function `Var` applied to `args` — the absolute core name as the parser would resolve it (privacy is a surface-resolution concern; these are already-resolved core `Var`s, so referencing a private `/syn` helper is fine).
-    pub(super) fn syn_call(
-        name: SyntaxName,
-        args: impl IntoIterator<Item = curios_core::Term>,
-    ) -> curios_core::Term {
-        curios_core::Term::apply(
-            curios_core::Term::var(curios_core::Var::free(curios_core::Free::global(
-                name.qualifier(),
-            ))),
-            args.into_iter().collect::<Vec<_>>(),
-        )
+        curios_elab::str_literal(&self.context.syntax().string, bytes)
     }
 
     // The `Utf8(state, bytes)` derivation. `state` is carried as a *symbolic* term — `lead()` at the top, then `step(c, state)` per byte — so each recursive `rest`'s expected index (`Utf8(step(c, state), tail)`) is definitionally the state we thread in, with no metavar/`step`-inversion. The final `stop : Utf8(lead, x[])` matches because `step` of the last byte reduces back to `lead` for valid UTF-8 (a string literal is valid UTF-8 by construction). A `/syn` literal — its value is synthesized from `/syn` by the meta-emitter rather than lowered to a core intrinsic.

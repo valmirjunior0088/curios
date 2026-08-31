@@ -6,8 +6,8 @@
 
 use {
     crate::{
-        Cache, CompileError, Progress, Stage, check_entrypoint, compile_entrypoint, compile_units,
-        recheck,
+        Cache, CompileError, Progress, Stage, check_entrypoint, compile_entrypoint,
+        compile_unit_as_tests, compile_units, recheck,
     },
     curios_prelude::{SYNTAX, with_prelude},
     curios_unit::Prefix,
@@ -47,6 +47,25 @@ where
 {
     fold_with_units(budget, units, cache, progress, |scope| {
         compile_entrypoint(budget, scope, &SYNTAX, entrypoint, loader, observe)
+    })
+}
+
+/// [`compile_with_units`] with the entry compiled as its own test program — the synthesized `Test/main([...])` tail over the unit's registered tests in place of the authored one; see [`compile_unit_as_tests`].
+pub fn compile_tests_with_units<O, P>(
+    budget: u64,
+    units: &[curios_text::RootSource],
+    entrypoint: &curios_text::Entrypoint,
+    loader: &curios_text::RootSource,
+    cache: Option<&dyn Cache>,
+    observe: O,
+    progress: P,
+) -> Result<(curios_wasm::Module, curios_abi::ForeignStore), CompileError>
+where
+    O: FnMut(Stage<'_>),
+    P: FnMut(Progress<'_>),
+{
+    fold_with_units(budget, units, cache, progress, |scope| {
+        compile_unit_as_tests(budget, scope, &SYNTAX, entrypoint, loader, observe)
     })
 }
 

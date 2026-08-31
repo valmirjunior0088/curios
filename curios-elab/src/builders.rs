@@ -5,11 +5,63 @@
 use {
     curios_core::{
         Apply, Bang, Free, Func, FuncType, Global, Infix, Intrinsic, Level, Many, NumLit, Scope,
-        Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple,
+        Struct, StructEntry, StructType, Subterm, Term, Transient, Tuple, Var,
     },
     curios_num::Natural,
-    curios_utilities::{InfixOp, Sign},
+    curios_utilities::{Grain, InfixOp, PackedBin, Sign, StringSyntax, SyntaxName, SyntaxRegistry},
 };
+
+/// A `/syn` function or constructor `Var`, applied — the absolute core identity a registry slot denotes, so privacy is no obstacle: these are already-resolved core references, not surface names.
+fn syn_call(name: SyntaxName, args: impl IntoIterator<Item = Term>) -> Term {
+    Term::apply(
+        Term::var(Var::free(Free::global(name.qualifier()))),
+        args.into_iter().collect::<Vec<_>>(),
+    )
+}
+
+/// The Core expansion of a string literal: the `/syn/Str` struct over the packed bytes and the `of_scan_eq(b, refl_scan(b))` validity derivation, built from the [`StringSyntax`] slots alone. Owned here so the surface lowering and the synthesized test tail expand a literal identically — two expansions would be two opportunities for the scan bridge to drift.
+pub fn str_literal(syntax: &StringSyntax, bytes: &[u8]) -> Term {
+    let packed = Term::intrinsic(Intrinsic::Bin(
+        Grain::X,
+        PackedBin::from_bytes(bytes.to_vec()),
+    ));
+
+    let valid = syn_call(
+        syntax.of_scan_eq,
+        [packed.clone(), syn_call(syntax.refl_scan, [packed.clone()])],
+    );
+
+    Term::struct_(
+        Global::Authored(syntax.string.qualifier()),
+        Vec::<Term>::new(),
+        [packed, valid],
+    )
+}
+
+/// The synthesized tail of a unit compiled as its own test program: `Test/main([("path", thunk), …])` over `tests` in declaration order, each pair the test's path as its `Global` renders it and a `Var` at the test itself — already a `() -> Test`, so the declaration is its own thunk. The list's element type is the single fresh hole `element_hole`, solved bidirectionally from `Test/main`'s parameter exactly as a written literal's would be; no binder is minted, so the module's binder floor is untouched.
+pub fn test_program_tail(syntax: &SyntaxRegistry, tests: &[Global], element_hole: usize) -> Term {
+    let items = tests
+        .iter()
+        .map(|test| {
+            let path = match test.qualifier() {
+                Some(path) => path.join(),
+                None => String::new(),
+            };
+            Term::tuple([
+                str_literal(&syntax.string, path.as_bytes()),
+                Term::var(Var::free(Free::from(test))),
+            ])
+        })
+        .collect::<Vec<_>>();
+
+    syn_call(
+        syntax.test.main,
+        [Term::intrinsic(Intrinsic::List {
+            element: Term::hole(element_hole),
+            items,
+        })],
+    )
+}
 
 /// Constructors for [`Intrinsic`] operations no judgment ever builds.
 pub trait IntrinsicBuilders {

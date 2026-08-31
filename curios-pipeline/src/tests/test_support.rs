@@ -77,6 +77,7 @@ pub(super) fn typecheck(source: &str, type_: Option<&str>) -> Result<(), String>
             &SYNTAX,
             &entrypoint,
             &RootSource::none(),
+            crate::EntryTail::Authored,
             &mut |_| {},
         )
     })
@@ -96,6 +97,7 @@ pub(super) fn erase_to_ersd(source: &str, type_: Option<&str>) -> curios_ersd::M
             &SYNTAX,
             &entrypoint,
             &RootSource::none(),
+            crate::EntryTail::Authored,
             &mut |_| {},
         )
     })
