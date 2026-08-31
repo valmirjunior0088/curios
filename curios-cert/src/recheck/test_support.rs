@@ -1313,9 +1313,12 @@ pub(super) fn unsaturated_cases() -> Vec<(&'static str, Module)> {
         three.clone(),
     );
 
-    // `held : (g : (a : Nat, b : Nat) -> Type) -> g(3)`, where `g`'s type carries no plicities at all.
-    let short_plicities: Term =
-        Subterm::FuncType(FuncType::new(two_binder(Term::type_ground()), Vec::new())).into();
+    // `held : (g : (a : Nat, b : Nat) -> Type) -> g(3)`, where `g`'s type carries no plicities at all — a drift the sealed constructor refuses to build, spelled through the test-only verbatim door because archive restoration can still deliver it and the kernel's guard is what this fixture pins.
+    let short_plicities: Term = Subterm::FuncType(curios_core::test_support::func_type_verbatim(
+        two_binder(Term::type_ground()),
+        Vec::new(),
+    ))
+    .into();
     let neutral = authored(
         &Global::Authored(Qualifier::from(["held"])),
         Subterm::FuncType(FuncType::new(
