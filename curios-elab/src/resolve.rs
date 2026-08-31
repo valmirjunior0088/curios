@@ -49,7 +49,7 @@ fn no_witness_error(context: &mut Context, goal: &Term, provenance: &WitnessOrig
     )
 }
 
-/// When `goal` keys on a *labeled* tuple shape and the same key with every label dropped does have a witness, the shape-specific diagnosis its missing-witness report carries: the two keys, so the reader meets the rule that labels are part of a tuple type's identity rather than a bare miss. That is the one surprise keying on a shape has — every other way to miss the table is a miss for the ordinary reason. Error-path only; a diagnosis that cannot be computed is simply absent.
+/// When `goal` keys on a *labeled* tuple shape or a *marked* function type and the same key with every label dropped and every mark made explicit does have a witness, the shape-specific diagnosis its missing-witness report carries: the two keys, so the reader meets the rule — labels are part of a tuple type's identity, plicity marks of a function type's — rather than a bare miss. Those are the surprises keying on an anonymous shape has; every other way to miss the table is a miss for the ordinary reason. Error-path only; a diagnosis that cannot be computed is simply absent.
 pub(crate) fn diagnose_shape(context: &mut Context, goal: &Term) -> Option<Box<ShapeDiagnosis>> {
     let goal = reduce_with(context, goal).ok()?;
     let (concept_name, _, params) = as_concept_app(context, &goal)?;
@@ -60,25 +60,28 @@ pub(crate) fn diagnose_shape(context: &mut Context, goal: &Term) -> Option<Box<S
         wanted.push(HeadKey::of_whnf(&head)?);
     }
 
-    let positional: Vec<HeadKey> = wanted
+    let bare: Vec<HeadKey> = wanted
         .iter()
         .map(|head| match head {
             HeadKey::TupleType(labels) => HeadKey::TupleType(vec![String::new(); labels.len()]),
+            HeadKey::FuncType(plicities) => {
+                HeadKey::FuncType(vec![Plicity::Explicit; plicities.len()])
+            }
             head => head.clone(),
         })
         .collect();
 
-    // Equal keys mean no label was dropped: either no parameter is a tuple, or every one of them is already positional, and the goal simply misses.
-    if positional == wanted {
+    // Equal keys mean nothing was dropped: no parameter is an anonymous shape, or every one is already bare, and the goal simply misses.
+    if bare == wanted {
         return None;
     }
 
-    let positional = WitnessKey(positional);
-    context.witness(&concept_name, &positional)?;
+    let bare = WitnessKey(bare);
+    context.witness(&concept_name, &bare)?;
 
     Some(Box::new(ShapeDiagnosis {
         wanted: WitnessKey(wanted),
-        positional,
+        bare,
     }))
 }
 

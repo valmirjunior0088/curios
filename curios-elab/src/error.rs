@@ -2,7 +2,7 @@ mod display;
 use display::*;
 
 use {
-    super::{Erased, WitnessKey},
+    super::{Erased, HeadKey, WitnessKey},
     curios_core::{
         Atom, Free, Global, Imports, Level, Module, Polarity, ReduceError, Spelling, Subterm, Term,
         UniverseConstraintOrigin, UniverseError, build_rename, build_shorten, display_names,
@@ -59,11 +59,11 @@ pub struct EmbeddingDiagnosis {
     pub chain: Vec<(String, Qualifier)>,
 }
 
-/// The shape-specific half of a missing-witness report, computed when the unresolved goal keys on a *labeled* tuple shape and the same key with every label dropped does have a witness. Labels are part of a tuple type's identity, which is the one surprise the shape key has; a reader who meets it deserves the rule rather than a bare miss.
+/// The shape-specific half of a missing-witness report, computed when the unresolved goal keys on a *labeled* tuple shape or a *marked* function type and the same key with every label dropped and every mark made explicit does have a witness. Labels are part of a tuple type's identity and plicity marks of a function type's, which are the surprises an anonymous-shape key has; a reader who meets one deserves the rule rather than a bare miss.
 #[derive(Debug)]
 pub struct ShapeDiagnosis {
     pub wanted: WitnessKey,
-    pub positional: WitnessKey,
+    pub bare: WitnessKey,
 }
 
 /// Source-location anchoring is the [`Error::Located`] wrapper's job — the elaborate/erase/zonk drivers attach the offending term's span as the error propagates. Variants therefore carry only what their message displays; a variant carries a `Term` only when the message prints it.
@@ -359,7 +359,7 @@ pub enum Error {
         binder: String,
         /// Present when the goal is the registry's `Lift`: the embedding-specific half of the report.
         embedding: Option<EmbeddingDiagnosis>,
-        /// Present when the goal keys on a labeled tuple shape whose positional twin is registered: the shape-specific half of the report. Boxed because two [`WitnessKey`]s inline push this variant — already the roster's largest — past what `result_large_err` admits.
+        /// Present when the goal keys on a labeled tuple shape or a marked function type whose bare twin is registered: the shape-specific half of the report. Boxed because two [`WitnessKey`]s inline push this variant — already the roster's largest — past what `result_large_err` admits.
         shape: Option<Box<ShapeDiagnosis>>,
     },
     /// Two witnesses that resolve each other. A witness may recurse through its *own* table entry — its declaration registers before its body elaborates for exactly that reason — but a cycle between two of them has no binding order: whichever is emitted first names one that does not exist yet, and the kernel refuses it as an unbound name. Caught here so the refusal is stated in the language's own terms, at a span, with the way out named.

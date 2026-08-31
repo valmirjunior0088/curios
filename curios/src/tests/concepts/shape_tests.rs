@@ -170,6 +170,28 @@ fn plicity_distinct_shapes_are_distinct_entries() {
     assert_eq!(run(source), b"explicitimplicit");
 }
 
+// Plicity is part of a function type's identity, so an all-explicit witness does not cover a goal with hidden slots. That is the surprise this key has, so the miss carries the rule — the plicity twin of the labeled-tuple hint above.
+#[test]
+fn a_marked_goal_does_not_reach_the_explicit_witness() {
+    let source = r#"
+        use /std/{Nat, Str};
+        pub concept Tag(A: Type): pub Type {
+            tag(A) -> Str,
+        }
+        satisfy Tag((Nat) -> Nat) {
+            tag(f) = "func",
+        }
+        let g: (@n: Nat) -> Nat = (@n) => n;
+        /std/print(Tag/tag(g))
+        "#;
+
+    assert!(error(source).contains(
+        "no witness of Tag((@n: Nat) -> Nat) found\n  \
+         plicity marks are part of the type: the witness for (_) -> _ does not cover (@_) -> _\n  \
+         declare the witness for this shape"
+    ));
+}
+
 // The higher-kinded position keys on the constructor's body, so a constructor whose body is a function type keys on that body's plicity vector — beside the tuple-bodied constructor above and `Monad(Option)`.
 #[test]
 fn a_constructor_whose_body_is_a_function_type_is_keyed() {

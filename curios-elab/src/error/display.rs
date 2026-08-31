@@ -6,7 +6,7 @@
 mod tests;
 
 use {
-    super::{Erased, Error, GoalReport, ShapeDiagnosis},
+    super::{Erased, Error, GoalReport, HeadKey, ShapeDiagnosis},
     curios_core::{Spelling, Subterm, Term},
     curios_utilities::{Grain, Plicity, Qualifier},
     std::{fmt, rc::Rc},
@@ -553,11 +553,21 @@ impl fmt::Display for Displayed<'_> {
                 let goal = goal.spelled(spelling);
                 write!(f, "no witness of {goal} found")?;
                 if let Some(diagnosis) = shape {
-                    let ShapeDiagnosis { wanted, positional } = &**diagnosis;
-                    write!(
-                        f,
-                        "\n  labels are part of the type: the witness for {positional} does not cover {wanted}\n  name a struct for the labeled product, or declare the witness for this shape"
-                    )?;
+                    let ShapeDiagnosis { wanted, bare } = &**diagnosis;
+                    // Which identity the twin dropped decides the sentence: a differing tuple pair means labels were dropped, otherwise the difference sits in a function type's marks. A key that mixes both surprises takes the label sentence — the remedy line names declaring the shape's witness either way.
+                    let labels = wanted.0.iter().zip(bare.0.iter()).any(|(wanted, bare)| {
+                        matches!(wanted, HeadKey::TupleType(_)) && wanted != bare
+                    });
+                    match labels {
+                        true => write!(
+                            f,
+                            "\n  labels are part of the type: the witness for {bare} does not cover {wanted}\n  name a struct for the labeled product, or declare the witness for this shape"
+                        )?,
+                        false => write!(
+                            f,
+                            "\n  plicity marks are part of the type: the witness for {bare} does not cover {wanted}\n  declare the witness for this shape"
+                        )?,
+                    }
                 }
                 match embedding {
                     None => write!(f, "\n  needed by '{func}' for {binder}"),
