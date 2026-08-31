@@ -1,7 +1,7 @@
 //! Handles, reads and writes, and the drain that surfaces an error rather than a partial prefix.
 
 use {
-    super::super::{run, run_text},
+    crate::tests::{run, run_text},
     curios_runtime::MockHost,
 };
 

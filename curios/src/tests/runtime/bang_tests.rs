@@ -1,7 +1,7 @@
 //! `!` regions at runtime: dispatch through a user witness, left-to-right threading, and mixed action types.
 
 use {
-    super::super::{run, run_entrypoint},
+    crate::tests::{run, run_entrypoint},
     curios_runtime::MockHost,
     curios_text::{Entrypoint, RootSource},
 };

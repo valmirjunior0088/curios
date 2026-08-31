@@ -1,6 +1,6 @@
 //! JSON escapes and structural refusals, and the characters that do not coerce to a numeric domain.
 
-use super::super::{error, run};
+use crate::tests::{error, run};
 
 #[test]
 fn unicode_escapes_require_well_formed_surrogate_pairs() {

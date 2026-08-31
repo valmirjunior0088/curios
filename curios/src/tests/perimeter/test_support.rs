@@ -11,7 +11,7 @@
 //! Each rejection asserts its *own* diagnostic, following `tests::soundness`. A perimeter test that accepts any error is worse than none: an invalid fixture passes it while the rule it names goes unchecked. That is not hypothetical — the first draft of these probes "passed" on `unbound variable`, having never reached the check at all.
 
 use {
-    super::super::run_text,
+    crate::tests::run_text,
     curios_pipeline::recheck_with_prelude as recheck,
     curios_runtime::MockHost,
     curios_text::{Entrypoint, RootSource},

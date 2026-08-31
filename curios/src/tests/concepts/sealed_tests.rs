@@ -1,6 +1,6 @@
 //! A sealed concept admits no foreign witness, and still resolves and projects across modules.
 
-use super::super::{error, run};
+use crate::tests::{error, run};
 
 // A sealed concept (`: Type`, no `pub` on the representation) rejects a witness declared outside its module: the satisfy body is a dictionary literal, and construction requires the representation.
 #[test]

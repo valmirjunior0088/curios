@@ -1,7 +1,7 @@
 //! The process surface: argv, environment, and exit.
 
 use {
-    super::super::{run, run_text},
+    crate::tests::{run, run_text},
     curios_pipeline::compile_with_prelude,
     curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},

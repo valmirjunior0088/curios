@@ -1,7 +1,7 @@
 //! Nested constructor patterns over every carrier, and the shapes that lower without synthetic indirection.
 
 use {
-    super::super::{run, run_text},
+    crate::tests::{run, run_text},
     curios_runtime::MockHost,
 };
 

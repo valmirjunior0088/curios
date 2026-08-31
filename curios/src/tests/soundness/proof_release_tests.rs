@@ -8,7 +8,7 @@
 //!
 //! Each rejection asserts the *diagnostic*, not merely that compilation failed. A soundness test that accepts any error is worthless: a typo in the fixture would pass it while the hole stayed open.
 
-use super::super::run;
+use crate::tests::run;
 
 use super::test_support::*;
 

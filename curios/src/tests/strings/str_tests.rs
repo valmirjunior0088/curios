@@ -1,6 +1,6 @@
 //! The `Str` surface: indexing, slicing and trimming at codepoint boundaries.
 
-use super::super::run;
+use crate::tests::run;
 
 #[test]
 fn literal_prints_its_bytes() {

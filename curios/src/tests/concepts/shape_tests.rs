@@ -1,6 +1,6 @@
 //! Keying a witness on an anonymous type — a tuple's shape or a function type's plicity vector: what registers, what resolves, and the surprise each key's identity holds.
 
-use super::super::{error, run};
+use crate::tests::{error, run};
 
 // The base case: a tuple type has no name to be headed by, so its shape — the label at each position — is the head. `Tag/tag(z)` reduces the parameter to `{Nat, Bool}`, keys it as `{_, _}`, and finds the entry; the field types were never in the key and are checked by unification after the lookup.
 #[test]

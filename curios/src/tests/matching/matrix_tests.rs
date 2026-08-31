@@ -1,6 +1,6 @@
 //! The matrix form's own rules: consistent arity, no duplicate row or tag, and where a motive may sit.
 
-use super::super::{error, run};
+use crate::tests::{error, run};
 
 // Two rows write a tuple pattern of different arity in the same column — there is no single shape to explode into projections.
 #[test]

@@ -5,7 +5,7 @@
 //! The numeric envelope gates: every constant folder computes in exact `u32`/`i32` (the numeric law), and the i31 backend boundary appears only as a trap in emitted Wasm — an overflowing computation traps, and a folded literal the carrier cannot box traps at its materialization point. The differential half runs each scalar expression twice — fully constant (folded at compile time) and with a runtime-zero perturbation (executed by the emitted Wasm) — and demands identical output, pinning the folders and the backend to one semantics.
 
 use {
-    super::super::{Compiled, compile},
+    crate::tests::{Compiled, compile},
     curios_runtime::MockHost,
 };
 

@@ -1,6 +1,6 @@
 //! One witness per key: duplicates, orphans, and the standard library's witnesses that a user program may not shadow.
 
-use super::super::{error, run};
+use crate::tests::{error, run};
 
 // Registering two witnesses for the same `(concept, head)` key is a coherence error (global uniqueness) — independent of, and checked alongside, the orphan rule below.
 #[test]

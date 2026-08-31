@@ -1,7 +1,7 @@
 //! Loops that stay linear, and the values they carry through storage and retrieval.
 
 use {
-    super::super::{cont_optm, run, run_text},
+    crate::tests::{cont_optm, run, run_text},
     curios_runtime::MockHost,
 };
 

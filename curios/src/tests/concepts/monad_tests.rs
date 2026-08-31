@@ -1,6 +1,6 @@
 //! `!` sequencing through a user monad witness, including a two-parameter region.
 
-use super::super::run;
+use crate::tests::run;
 
 // The List witness: bind is concat-map.
 #[test]

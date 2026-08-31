@@ -1,6 +1,6 @@
 //! Filling a concept's fields explicitly: `use` entries, superclass slots, and literal spreads.
 
-use super::super::{error, run};
+use crate::tests::{error, run};
 
 // An explicit `use <term>` fill in a concept literal overrides table resolution for that field: the flipped equality rides inside the `Ord2` value, while the registered witness is untouched. The superclass field is anonymous, so the override is observed by resolution — with `o` in instance scope, the omitted `Eq2(Nat)` goal projects its superclass (the flipped equality), taking precedence over the global table.
 #[test]

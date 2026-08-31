@@ -10,7 +10,7 @@
 //!
 //! Each rejection asserts the *diagnostic*, not merely that compilation failed. A soundness test that accepts any error is worthless: a typo in the fixture would pass it while the hole stayed open.
 
-use {super::super::run_text, curios_runtime::MockHost};
+use {crate::tests::run_text, curios_runtime::MockHost};
 
 pub(super) fn rejected(source: &str) {
     let (system, _io) = MockHost::builder().build();

@@ -1,7 +1,7 @@
 //! What an arm learns from its scrutinee, and the equations it may not assume.
 
 use {
-    super::super::{error, run, run_text},
+    crate::tests::{error, run, run_text},
     curios_runtime::MockHost,
 };
 

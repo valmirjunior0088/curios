@@ -2,7 +2,7 @@
 //!
 //! These were filed under `big_nat`, whose subject is an arbitrary-precision magnitude rather than a fixed-width float.
 
-use super::super::run;
+use crate::tests::run;
 
 /// The codec round-trips at runtime: `to_str` prints the shortest decimal that reads back as its input, and `of_str` reads it back exactly. Every value is scaled by a runtime-tainted `1.0` so the whole pair runs in emitted Wasm rather than folding at compile time; a closed program would only exercise the partial evaluator. Before `of_str` was exact, about forty percent of finite values failed this.
 #[test]

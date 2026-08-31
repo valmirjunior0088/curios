@@ -1,7 +1,7 @@
 //! What may be matched on: tuples, structs, opaque families, and an effectful scrutinee.
 
 use {
-    super::super::{error, run, run_text},
+    crate::tests::{error, run, run_text},
     curios_runtime::MockHost,
 };
 

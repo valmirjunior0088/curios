@@ -1,7 +1,7 @@
 //! Opening, reading and writing a file, and the bracket its handle lives inside.
 
 use {
-    super::super::{run, run_text},
+    crate::tests::{run, run_text},
     curios_runtime::MockHost,
 };
 

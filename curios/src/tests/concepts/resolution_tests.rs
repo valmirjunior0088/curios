@@ -1,6 +1,6 @@
 //! Resolving a witness: through a method wrapper, a premise, a superclass, a higher-kinded argument, or imitation against a partially applied family.
 
-use super::super::{error, run};
+use crate::tests::{error, run};
 
 // The base case: a concept, a witness keyed on a rigid nominal head, and a call through the generated method wrapper. `Show/show(n)` saturates `@A` with a metavar and the `use` slot with a witness goal; solving `A := Nat` from `n` wakes the goal, which the global table resolves to `show_nat`.
 #[test]

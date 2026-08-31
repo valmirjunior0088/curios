@@ -1,7 +1,7 @@
 //! The `/std` surfaces a program reaches at runtime: randomness, parsing, the clock, and cells.
 
 use {
-    super::super::{run, run_text},
+    crate::tests::{run, run_text},
     curios_runtime::MockHost,
 };
 

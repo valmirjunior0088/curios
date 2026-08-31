@@ -1,6 +1,6 @@
 //! What a motive may name and bind over an indexed family, and the binder count it is checked against.
 
-use super::super::{error, run};
+use crate::tests::{error, run};
 
 // === Motives ================================================================
 //

@@ -1,6 +1,6 @@
 //! List and binary spreads: the segments they concatenate, and the operands they hoist.
 
-use super::super::{error, run};
+use crate::tests::{error, run};
 
 #[test]
 fn list_spread_concats_segments() {

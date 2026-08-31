@@ -1,7 +1,7 @@
 //! Calling and serving over the network, TLS, and the foreign declaration that reaches the host through supplied bindings.
 
 use {
-    super::super::{run, run_text},
+    crate::tests::{run, run_text},
     curios_pipeline::compile_with_prelude,
     curios_runtime::{ForeignBindings, MockHost},
     curios_text::{Entrypoint, RootSource},

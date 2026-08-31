@@ -1,6 +1,6 @@
 //! What a runtime diagnostic names: source binder names, shortened globals, and infix index arithmetic.
 
-use super::super::error;
+use crate::tests::error;
 
 #[test]
 fn uses_source_binder_names() {

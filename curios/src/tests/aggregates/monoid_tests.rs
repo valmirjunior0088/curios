@@ -1,6 +1,6 @@
 //! `Bin` and `List` as free monoids: a value does not depend on how its run is grouped, and a window must meet at its seam.
 
-use super::super::{error, run};
+use crate::tests::{error, run};
 
 #[test]
 fn list_match_is_a_foldr() {

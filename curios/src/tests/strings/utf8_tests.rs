@@ -1,6 +1,6 @@
 //! UTF-8 validity, decoding, and the automaton that certifies a slice.
 
-use super::super::run;
+use crate::tests::run;
 
 #[test]
 fn slice_proof_aligns_with_byte_walk() {

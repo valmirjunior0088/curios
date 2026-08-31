@@ -1,6 +1,6 @@
 //! A recursive value knot: what is forced before it is read, and what traps rather than reading a hole.
 
-use super::super::{error, run};
+use crate::tests::{error, run};
 
 /// A knot mixing a function member with value members whose initializers build closures *through a call* — `wrap(…)` here, the `bind`/`peek` combinators in `/std/Toml/values` — where one value's closure captures, via the function member, a value initialized later. Every knot ties through cells now; this knot once lowered to a `RecInit` node whose machine lowering patched only *member* closures at the ready point, and `second`'s closure — a non-member born inside an initializer, calling `helper`, which reads `first` — captured a value that did not exist yet. The random byte keeps both closures live as values, so neither is folded away before the knot is lowered.
 #[test]

@@ -1,6 +1,6 @@
 //! Declaring a struct and building one: labels, parameter inference, dependent fields, and the sorts a struct may carry.
 
-use super::super::{error, run};
+use crate::tests::{error, run};
 
 #[test]
 fn named_fields_run_end_to_end() {

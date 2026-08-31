@@ -1,6 +1,6 @@
 //! Packed atom splices, indexed vectors, and the folds that sum a sequence.
 
-use super::super::run;
+use crate::tests::run;
 
 #[test]
 fn atom_splice_builds_the_written_sequence() {
