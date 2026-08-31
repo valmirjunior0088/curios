@@ -706,7 +706,7 @@ fn elaborate_induct_match(
             .payload_plicities(tag)
             .expect("constructor payload plicities parallel its telescope");
         for (position, (written, canonical)) in
-            scope.plicities.iter().zip(payload_plicities).enumerate()
+            scope.plicities().iter().zip(payload_plicities).enumerate()
         {
             if written != canonical {
                 return Err(Error::BinderPlicityMismatch {
@@ -782,10 +782,10 @@ fn elaborate_induct_match(
         // Rebuild the arm with the constructor's canonical payload plicities, so a re-elaborated arm re-checks identically (idempotence).
         cases_elaborated.push((
             tag.clone(),
-            InductArm {
-                body: Scope::close(Many(arity), &label_strs, body_elaborated),
-                plicities: payload_plicities.to_vec(),
-            },
+            InductArm::new(
+                Scope::close(Many(arity), &label_strs, body_elaborated),
+                payload_plicities.to_vec(),
+            ),
         ));
     }
 
@@ -924,7 +924,7 @@ fn check_generalized_arm(
         .collect::<Vec<_>>();
 
     let mut domains = Vec::with_capacity(generalized.len());
-    let plicities = ft.plicities.clone();
+    let plicities = ft.plicities().to_vec();
     let codomain = ft.telescope.walk(&names, |i, name, type_| {
         let name = name.head_name().expect("walked at a fresh free variable");
         context.assume(name, type_);

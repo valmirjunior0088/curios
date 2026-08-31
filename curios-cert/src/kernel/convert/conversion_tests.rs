@@ -207,13 +207,13 @@ fn plicity_distinguishes_two_function_types() {
     let a = binder(0, "a");
 
     let explicit = Term::func_type([(a.clone(), nat_type())], nat_type());
-    let implicit = Term::from(Subterm::FuncType(FuncType {
-        telescope: match &*explicit {
+    let implicit = Term::from(Subterm::FuncType(FuncType::new(
+        match &*explicit {
             Subterm::FuncType(func) => func.telescope.clone(),
             _ => unreachable!("built as a function type"),
         },
-        plicities: vec![Plicity::Implicit],
-    }));
+        vec![Plicity::Implicit],
+    )));
 
     assert_eq!(
         convert(&mut kernel, &Term::type_ground(), &explicit, &implicit),

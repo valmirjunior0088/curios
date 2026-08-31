@@ -97,14 +97,14 @@ pub(super) fn insert_implicits_on_check(
     let Subterm::FuncType(ift) = &*inferred else {
         return Ok((rebuilt, type_));
     };
-    if matches!(ift.plicities.first(), Some(Plicity::Explicit) | None) {
+    if matches!(ift.plicities().first(), Some(Plicity::Explicit) | None) {
         return Ok((rebuilt, type_));
     }
 
     let expected_reduced = reduce_with(context, expected)?;
     let fires = match &*expected_reduced {
         Subterm::FuncType(eft) => !matches!(
-            eft.plicities.first(),
+            eft.plicities().first(),
             Some(Plicity::Implicit) | Some(Plicity::Witness)
         ),
         _ => !flexible(context, &expected_reduced),
@@ -124,7 +124,7 @@ pub(super) fn insert_implicits_on_check(
     let mut binders: Vec<(Free, Term)> = Vec::new();
     let output = context.with_frame(|context| -> Result<Term, Error> {
         let mut tele = ift.telescope.clone();
-        let mut plicities = ift.plicities.iter();
+        let mut plicities = ift.plicities().iter();
         let mut auto_premises = 0usize;
         loop {
             match tele {

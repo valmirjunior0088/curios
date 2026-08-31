@@ -399,10 +399,7 @@ fn inductive_match_default_is_allowed_on_an_indexed_family() {
         cases: Cases::Induct {
             cases: Vec::from([(
                 Atom::from("on"),
-                InductArm {
-                    body: Scope::close(Many(0), &[], nat_lit(0)),
-                    plicities: vec![],
-                },
+                InductArm::new(Scope::close(Many(0), &[], nat_lit(0)), vec![]),
             )]),
             default: Some(nat_lit(1)),
         },
@@ -431,10 +428,7 @@ fn motive_binder_count_is_checked_against_the_index_telescope() {
         cases: Cases::Induct {
             cases: Vec::from([(
                 Atom::from("on"),
-                InductArm {
-                    body: Scope::close(Many(0), &[], nat_lit(0)),
-                    plicities: vec![],
-                },
+                InductArm::new(Scope::close(Many(0), &[], nat_lit(0)), vec![]),
             )]),
             default: Some(nat_lit(1)),
         },

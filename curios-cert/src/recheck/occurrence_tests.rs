@@ -155,21 +155,21 @@ fn a_saturated_application_in_a_type_position_is_accepted() {
     let plicities = vec![Plicity::Explicit, Plicity::Explicit];
     let former_def = authored(
         &former,
-        Subterm::FuncType(FuncType {
-            telescope: Telescope::build(
+        Subterm::FuncType(FuncType::new(
+            Telescope::build(
                 [(a.clone(), nat.clone()), (b.clone(), nat.clone())],
                 Term::type_ground(),
             ),
-            plicities: plicities.clone(),
-        })
+            plicities.clone(),
+        ))
         .into(),
-        Subterm::Func(Func {
-            telescope: Telescope::build(
+        Subterm::Func(Func::new(
+            Telescope::build(
                 [(a.clone(), nat.clone()), (b.clone(), nat.clone())],
                 nat.clone(),
             ),
             plicities,
-        })
+        ))
         .into(),
     );
 

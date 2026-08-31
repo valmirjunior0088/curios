@@ -1300,16 +1300,12 @@ pub(super) fn unsaturated_cases() -> Vec<(&'static str, Module)> {
     let plicities = vec![Plicity::Explicit, Plicity::Explicit];
     let former_def = authored(
         &former,
-        Subterm::FuncType(FuncType {
-            telescope: two_binder(Term::type_ground()),
-            plicities: plicities.clone(),
-        })
+        Subterm::FuncType(FuncType::new(
+            two_binder(Term::type_ground()),
+            plicities.clone(),
+        ))
         .into(),
-        Subterm::Func(Func {
-            telescope: two_binder(nat.clone()),
-            plicities,
-        })
-        .into(),
+        Subterm::Func(Func::new(two_binder(nat.clone()), plicities)).into(),
     );
     let under_applied = authored(
         &Global::Authored(Qualifier::from(["held"])),
@@ -1318,20 +1314,17 @@ pub(super) fn unsaturated_cases() -> Vec<(&'static str, Module)> {
     );
 
     // `held : (g : (a : Nat, b : Nat) -> Type) -> g(3)`, where `g`'s type carries no plicities at all.
-    let short_plicities: Term = Subterm::FuncType(FuncType {
-        telescope: two_binder(Term::type_ground()),
-        plicities: Vec::new(),
-    })
-    .into();
+    let short_plicities: Term =
+        Subterm::FuncType(FuncType::new(two_binder(Term::type_ground()), Vec::new())).into();
     let neutral = authored(
         &Global::Authored(Qualifier::from(["held"])),
-        Subterm::FuncType(FuncType {
-            telescope: Telescope::build(
+        Subterm::FuncType(FuncType::new(
+            Telescope::build(
                 [(g.clone(), short_plicities)],
                 Term::apply(Term::free_var(&g), [three.clone()]),
             ),
-            plicities: vec![Plicity::Explicit],
-        })
+            vec![Plicity::Explicit],
+        ))
         .into(),
         three,
     );
@@ -1434,18 +1427,18 @@ pub(super) fn rec_apply_module() -> Module {
     let three = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
     let plicities = vec![Plicity::Explicit, Plicity::Explicit];
 
-    let member_type: Term = Subterm::FuncType(FuncType {
-        telescope: Telescope::build(
+    let member_type: Term = Subterm::FuncType(FuncType::new(
+        Telescope::build(
             [(a.clone(), nat.clone()), (b.clone(), nat.clone())],
             Term::type_ground(),
         ),
-        plicities: plicities.clone(),
-    })
+        plicities.clone(),
+    ))
     .into();
-    let member_body: Term = Subterm::Func(Func {
-        telescope: Telescope::build([(a.clone(), nat.clone()), (b.clone(), nat.clone())], nat),
+    let member_body: Term = Subterm::Func(Func::new(
+        Telescope::build([(a.clone(), nat.clone()), (b.clone(), nat.clone())], nat),
         plicities,
-    })
+    ))
     .into();
 
     let selection = Term::rec([(f.clone(), member_type, member_body)], Term::free_var(&f));

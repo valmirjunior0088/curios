@@ -78,12 +78,28 @@ impl Transient {
     }
 }
 
-/// `plicities` parallels the telescope, one mark per binder; the builder asserts the lengths agree. `Telescope` itself is unchanged. Erasure is sort-driven (a proof or a type erases), so a function type carries no runtime-multiplicity marks of its own.
+/// `plicities` parallels the telescope, one mark per binder — sealed at the crate boundary so the correspondence is enforced by [`FuncType::new`], the one door an outside constructor has. `Telescope` itself is unchanged. Erasure is sort-driven (a proof or a type erases), so a function type carries no runtime-multiplicity marks of its own.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct FuncType {
     pub telescope: Telescope<Term>,
-    pub plicities: Vec<Plicity>,
+    pub(crate) plicities: Vec<Plicity>,
+}
+
+impl FuncType {
+    /// The one construction door outside this crate: one mark per telescope binder, asserted here rather than at every use.
+    pub fn new(telescope: Telescope<Term>, plicities: Vec<Plicity>) -> Self {
+        assert_eq!(plicities.len(), telescope.len());
+        Self {
+            telescope,
+            plicities,
+        }
+    }
+
+    /// The marks, one per telescope binder by construction.
+    pub fn plicities(&self) -> &[Plicity] {
+        &self.plicities
+    }
 }
 
 /// A function literal: the parameter annotations and the body as one [`Telescope`] (each entry a parameter type, the `Done` payload the body), with `plicities` paralleling the telescope one mark per binder — the builder asserts the lengths agree. Plicity is part of a function's identity and calling convention: a lambda carries the marks its binders were written with (before elaboration) and the complete canonical marks of its checked type (after elaboration, once omitted hidden binders are inserted). Derived `Eq`/`Hash` include `plicities` so that two lambdas differing only in a written mark never share an elaboration-cache entry.
@@ -93,7 +109,23 @@ pub struct FuncType {
 #[curios_archive::archived]
 pub struct Func {
     pub telescope: Telescope<Term>,
-    pub plicities: Vec<Plicity>,
+    pub(crate) plicities: Vec<Plicity>,
+}
+
+impl Func {
+    /// The one construction door outside this crate: one mark per telescope binder, asserted here rather than at every use.
+    pub fn new(telescope: Telescope<Term>, plicities: Vec<Plicity>) -> Self {
+        assert_eq!(plicities.len(), telescope.len());
+        Self {
+            telescope,
+            plicities,
+        }
+    }
+
+    /// The marks, one per telescope binder by construction.
+    pub fn plicities(&self) -> &[Plicity] {
+        &self.plicities
+    }
 }
 
 /// One call-site argument: the term with its written `@`/`use` mark. One vector of these rather than two parallel ones, so a mark can never drift out of correspondence with its term — the pairing `Cases::Induct` arms state for their bodies, applied to the spine. Core must carry the marks (rather than `into_core` resolving them) because `into_core` is type-blind: only the elaborator, holding the head's function type, can decide which binder an `@`-argument fills.
@@ -238,15 +270,26 @@ pub struct Match {
     pub cases: Cases,
 }
 
-/// One enumerated arm of a [`Cases::Induct`]: the arm body closed over its payload binders, plus a plicity vector paralleling those binders one mark per slot. `plicities.len()` equals `body.arity()`. Before elaboration the marks are the written constructor-pattern plicities; after elaboration they are the constructor's canonical payload plicities. Reduction and erasure open the body positionally and never read the marks; conversion compares them alongside the bodies. Kept beside the body (rather than in a second map) so the two can never drift apart.
+/// One enumerated arm of a [`Cases::Induct`]: the arm body closed over its payload binders, plus a plicity vector paralleling those binders one mark per slot. `plicities.len()` equals `body.arity()`. Before elaboration the marks are the written constructor-pattern plicities; after elaboration they are the constructor's canonical payload plicities. Reduction and erasure open the body positionally and never read the marks; conversion compares them alongside the bodies. Kept beside the body (rather than in a second map) and sealed at the crate boundary behind [`InductArm::new`], so the two can never drift apart.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub struct InductArm {
     pub body: Scope<Many>,
-    pub plicities: Vec<Plicity>,
+    pub(crate) plicities: Vec<Plicity>,
 }
 
 impl InductArm {
+    /// The one construction door outside this crate: one mark per payload binder, asserted here rather than at every use.
+    pub fn new(body: Scope<Many>, plicities: Vec<Plicity>) -> Self {
+        assert_eq!(plicities.len(), body.arity());
+        Self { body, plicities }
+    }
+
+    /// The marks, one per payload binder by construction.
+    pub fn plicities(&self) -> &[Plicity] {
+        &self.plicities
+    }
+
     /// The arm's payload arity — equal to `plicities.len()`.
     pub fn arity(&self) -> usize {
         self.body.arity()

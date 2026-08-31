@@ -236,7 +236,7 @@ impl Convert {
         that: FuncType,
     ) -> Result<bool, ReduceError> {
         // Plicity is part of a function type's identity and calling convention: an explicit slot and an implicit/witness slot are *not* convertible even when their domains and results are, so that a convertible annotation or alias can never reinterpret which binders elaboration inserts. Compare the whole plicity vector (arity included) up front — the telescope walk below then compares the dependent domains.
-        if this.plicities != that.plicities {
+        if this.plicities() != that.plicities() {
             return Ok(false);
         }
         fn walk(
@@ -290,7 +290,7 @@ impl Convert {
         type_: Term,
     ) -> Result<bool, ReduceError> {
         // Plicity is part of a function's canonical identity. Well-typed functions compared at the same function type necessarily agree, but the explicit check preserves the Core invariant and rejects malformed or pre-elaboration terms that reach conversion unexpectedly.
-        if this.plicities != that.plicities {
+        if this.plicities() != that.plicities() {
             return Ok(false);
         }
         let (ys, output_type) = self.func_eta_args(context, this.telescope.len(), type_)?;
@@ -1403,14 +1403,14 @@ impl Convert {
         let Subterm::FuncType(func_type) = &*result else {
             return self.block(context, problem);
         };
-        if func_type.plicities.len() != spine {
+        if func_type.plicities().len() != spine {
             return self.block(context, problem);
         }
 
         // The candidate copies `?m`'s birth function type's plicities so the imitation is convertible with that type (plicity is part of function identity — see `compare_func`).
         let mut domains: Vec<(Plicity, Free, Term)> = Vec::with_capacity(arity);
         let mut telescope = func_type.telescope.clone();
-        for plicity in func_type.plicities.iter().copied() {
+        for plicity in func_type.plicities().iter().copied() {
             let Telescope::Cons(ty, rest) = telescope else {
                 unreachable!("plicities parallel the telescope");
             };

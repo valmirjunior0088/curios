@@ -1030,21 +1030,15 @@ fn zonk_subterm(context: &Context, term: &Term) -> Result<Subterm, Error> {
 
         Subterm::Intrinsic(intrinsic) => Subterm::Intrinsic(zonk_intrinsic(context, intrinsic)?),
 
-        Subterm::Func(Func {
-            telescope,
-            plicities,
-        }) => Subterm::Func(Func {
-            telescope: zonk_telescope(context, telescope)?,
-            plicities: plicities.clone(),
-        }),
+        Subterm::Func(func) => Subterm::Func(Func::new(
+            zonk_telescope(context, &func.telescope)?,
+            func.plicities().to_vec(),
+        )),
 
-        Subterm::FuncType(FuncType {
-            telescope,
-            plicities,
-        }) => Subterm::FuncType(FuncType {
-            telescope: zonk_telescope(context, telescope)?,
-            plicities: plicities.clone(),
-        }),
+        Subterm::FuncType(func_type) => Subterm::FuncType(FuncType::new(
+            zonk_telescope(context, &func_type.telescope)?,
+            func_type.plicities().to_vec(),
+        )),
 
         Subterm::Apply(Apply { head, arguments }) => Subterm::Apply(Apply {
             head: zonk_term(context, head)?,

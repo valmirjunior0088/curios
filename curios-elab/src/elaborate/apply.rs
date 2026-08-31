@@ -29,10 +29,10 @@ pub(super) fn elaborate_func_type(
 
     let mut domains = Vec::new();
     let output = context
-        .with_frame(|context| walk(context, ft.telescope.clone(), &ft.plicities, &mut domains))?;
+        .with_frame(|context| walk(context, ft.telescope.clone(), ft.plicities(), &mut domains))?;
 
     let rebuilt = Term::func_type_marked(
-        ft.plicities
+        ft.plicities()
             .iter()
             .zip(domains)
             .map(|(&plicity, (label, domain))| (plicity, label, domain)),
@@ -164,15 +164,18 @@ pub(super) fn elaborate_apply(
             other => return Err(Error::not_a_function(other.clone())),
         };
 
-        let all_auto = !ft.plicities.is_empty()
-            && ft.plicities.iter().all(|p| !matches!(p, Plicity::Explicit));
+        let all_auto = !ft.plicities().is_empty()
+            && ft
+                .plicities()
+                .iter()
+                .all(|p| !matches!(p, Plicity::Explicit));
         if !all_auto || plain.is_empty() {
             break ft;
         }
 
-        let mut args = Vec::with_capacity(ft.plicities.len());
+        let mut args = Vec::with_capacity(ft.plicities().len());
         let mut tele = ft.telescope.clone();
-        for plicity in &ft.plicities {
+        for plicity in ft.plicities() {
             let Telescope::Cons(ty, rest) = tele else {
                 unreachable!("plicities parallel the telescope");
             };
@@ -212,17 +215,17 @@ pub(super) fn elaborate_apply(
 
     // Arity is checked per queue: plain arguments must exactly cover the explicit slots; `@`- and `use`-arguments may undershoot their slots (the remainder is inserted/resolved) but never overshoot them.
     let explicit_slots = ft
-        .plicities
+        .plicities()
         .iter()
         .filter(|p| matches!(p, Plicity::Explicit))
         .count();
     let implicit_slots = ft
-        .plicities
+        .plicities()
         .iter()
         .filter(|p| matches!(p, Plicity::Implicit))
         .count();
     let witness_slots = ft
-        .plicities
+        .plicities()
         .iter()
         .filter(|p| matches!(p, Plicity::Witness))
         .count();
@@ -251,11 +254,11 @@ pub(super) fn elaborate_apply(
 
     // The single walk. Every slot settles in telescope order, and the dependent substitution only ever receives elaborated terms or compiler-born metavariables — the invariant is the code path, not a guard. A written argument is checked at its domain, opened through the elaborated prefix; a checked-only intro form whose structure is still blocked (see `blocked_on_metavar`) becomes a parked checking problem whose placeholder stands in the telescope, retried by the wake machinery the moment a solution lands — which subsumes the retired clear loop, since a sibling's turnaround retries the parked check before any later slot opens through it. The park is minted in both modes: an inferred apply has no turnaround, but the force tier below settles what the walk leaves blocked, and a park `check` made on its own would sit in the store beyond that tier's reach. A missing hidden slot is inserted at that same true domain. Under suppressed parking the blocked case checks eagerly instead: re-validation re-elaborates rebuilt nodes whose types are already solved, so the branch is dead over the corpus (fact F1) and merely safe.
     let original = ft.telescope.clone();
-    let mut elaborated: Vec<Term> = Vec::with_capacity(ft.plicities.len());
+    let mut elaborated: Vec<Term> = Vec::with_capacity(ft.plicities().len());
     // The pendings this apply minted: (slot, placeholder, written term), consulted by the fallback pin below.
     let mut pendings: Vec<(usize, MetavarId, Term)> = Vec::new();
     let mut tele = original.clone();
-    for plicity in &ft.plicities {
+    for plicity in ft.plicities() {
         let Telescope::Cons(ty, rest) = tele else {
             unreachable!("plicities parallel the telescope");
         };
@@ -357,7 +360,7 @@ pub(super) fn elaborate_apply(
 
     // The rebuilt application is fully saturated; each argument's mark is its binder's plicity (inserted metavariables recorded like any other argument), so re-elaborating the rebuilt node is stable: both queues then match their slots exactly and nothing is minted twice.
     Ok((
-        Term::apply_marked(head, ft.plicities.iter().copied().zip(elaborated)),
+        Term::apply_marked(head, ft.plicities().iter().copied().zip(elaborated)),
         output,
     ))
 }

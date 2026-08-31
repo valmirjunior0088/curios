@@ -243,8 +243,8 @@ fn structural(
         }
 
         // Plicity is part of a function type's identity: `(A) -> A` and `(@A) -> A` have different calling conventions, and conflating them would let a value be applied through the wrong one.
-        (Subterm::FuncType(left), Subterm::FuncType(right)) => Ok(left.plicities
-            == right.plicities
+        (Subterm::FuncType(left), Subterm::FuncType(right)) => Ok(left.plicities()
+            == right.plicities()
             && compare_telescope(
                 kernel,
                 history,
@@ -253,7 +253,7 @@ fn structural(
             )?),
 
         // Two lambdas with no expected type to eta against: compare their bodies under one shared set of binders.
-        (Subterm::Func(left), Subterm::Func(right)) => Ok(left.plicities == right.plicities
+        (Subterm::Func(left), Subterm::Func(right)) => Ok(left.plicities() == right.plicities()
             && compare_telescope(
                 kernel,
                 history,
@@ -633,7 +633,7 @@ fn ground_cases(
             }
             for ((this_tag, this_arm), (that_tag, that_arm)) in this_cases.iter().zip(that_cases) {
                 if this_tag != that_tag
-                    || this_arm.plicities != that_arm.plicities
+                    || this_arm.plicities() != that_arm.plicities()
                     || !ground_scope(kernel, history, &this_arm.body, &that_arm.body)?
                 {
                     return Ok(false);

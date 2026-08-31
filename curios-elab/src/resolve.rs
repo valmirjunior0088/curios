@@ -458,11 +458,11 @@ fn instantiate(
 
     let (args, premises, terminal) = match &*signature {
         Subterm::FuncType(ft) => {
-            let mut args: Vec<(Plicity, Term)> = Vec::with_capacity(ft.plicities.len());
+            let mut args: Vec<(Plicity, Term)> = Vec::with_capacity(ft.plicities().len());
             let mut premises: Vec<(MetavarId, Term, WitnessOrigin)> = Vec::new();
             let mut resolved_premises = 0usize;
             let mut tele = ft.telescope.clone();
-            for plicity in &ft.plicities {
+            for plicity in ft.plicities() {
                 let Telescope::Cons(ty, rest) = tele else {
                     unreachable!("plicities parallel the telescope");
                 };
@@ -722,7 +722,7 @@ pub(crate) fn register_witness(
     let terminal = match &*reduced {
         Subterm::FuncType(ft) => {
             let mut tele = ft.telescope.clone();
-            for plicity in &ft.plicities {
+            for plicity in ft.plicities() {
                 let Telescope::Cons(ty, rest) = tele else {
                     unreachable!("plicities parallel the telescope");
                 };

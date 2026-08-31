@@ -866,20 +866,20 @@ pub(crate) fn normalize(context: &mut Context, term: Term) -> Result<Term, Reduc
             fields: normalize_each(context, fields)?,
             names,
         }),
-        Subterm::FuncType(FuncType {
-            telescope,
-            plicities,
-        }) => Subterm::FuncType(FuncType {
-            telescope: normalize_telescope(context, telescope)?,
-            plicities,
-        }),
-        Subterm::Func(Func {
-            telescope,
-            plicities,
-        }) => Subterm::Func(Func {
-            telescope: normalize_telescope(context, telescope)?,
-            plicities,
-        }),
+        Subterm::FuncType(func_type) => {
+            let plicities = func_type.plicities().to_vec();
+            Subterm::FuncType(FuncType::new(
+                normalize_telescope(context, func_type.telescope)?,
+                plicities,
+            ))
+        }
+        Subterm::Func(func) => {
+            let plicities = func.plicities().to_vec();
+            Subterm::Func(Func::new(
+                normalize_telescope(context, func.telescope)?,
+                plicities,
+            ))
+        }
         Subterm::TupleType(TupleType { telescope }) => Subterm::TupleType(TupleType {
             telescope: normalize_tuple_telescope(context, telescope)?,
         }),

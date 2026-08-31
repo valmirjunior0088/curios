@@ -37,9 +37,9 @@ use {
         sort::infer_sort, synth_neutral,
     },
     curios_core::{
-        Bound, Carrier, Cases, Cost, Field, Free, Func, FuncType, InductType, Instance,
-        InstanceHead, Intrinsic, Let, Many, Nat, One, Proj, Rec, Reducer, Scope, Struct,
-        StructType, Subterm, Telescope, Term, Tuple, TupleType, Variant, wire_term,
+        Bound, Carrier, Cases, Cost, Field, Free, FuncType, InductType, Instance, InstanceHead,
+        Intrinsic, Let, Many, Nat, One, Proj, Rec, Reducer, Scope, Struct, StructType, Subterm,
+        Telescope, Term, Tuple, TupleType, Variant, wire_term,
     },
     curios_utilities::{Grain, PackedBin, recurse},
 };
@@ -114,17 +114,10 @@ fn infer_within(kernel: &mut Kernel, term: &Term) -> Result<Term, KernelError> {
         Subterm::FuncType(_) | Subterm::TupleType(_) => Ok(infer_sort(kernel, term)?.term()),
 
         // λ: check each domain is a type, then the body under those binders. The result is the Π over the same telescope.
-        Subterm::Func(Func {
-            telescope,
-            plicities,
-        }) => {
-            let telescope = infer_telescope(kernel, telescope.clone())?;
+        Subterm::Func(func) => {
+            let telescope = infer_telescope(kernel, func.telescope.clone())?;
 
-            Ok(Subterm::FuncType(FuncType {
-                telescope,
-                plicities: plicities.clone(),
-            })
-            .into())
+            Ok(Subterm::FuncType(FuncType::new(telescope, func.plicities().to_vec())).into())
         }
 
         // Application: the head must be a function of matching arity, each argument checks against its domain, and the result is the codomain with the arguments substituted — which is where dependency lives.
@@ -800,17 +793,13 @@ pub fn check(kernel: &mut Kernel, term: &Term, expected: &Term) -> Result<(), Ke
     }
 
     // The Π-introduction half of the checked rules below: a lambda checks against a function type by walking both telescopes under one shared binder set — each domain pair invariant by conversion, exactly as subsumption compares them — and checking the body against the expected codomain. Routing the body through `check` rather than inference is what lets a tuple body reach the Σ rule with its expectation intact; the inferred route would manufacture the non-dependent codomain first.
-    if let Subterm::Func(Func {
-        telescope,
-        plicities,
-    }) = &**term
-    {
+    if let Subterm::Func(func) = &**term {
         let reduced = kernel.reduce_forced(expected.clone())?;
         if let Subterm::FuncType(expected_func) = &*reduced
-            && *plicities == expected_func.plicities
-            && telescope.len() == expected_func.telescope.len()
+            && func.plicities() == expected_func.plicities()
+            && func.telescope.len() == expected_func.telescope.len()
         {
-            let lambda = telescope.clone();
+            let lambda = func.telescope.clone();
             let against = expected_func.telescope.clone();
             return kernel.scoped(|kernel| check_lambda(kernel, lambda, against));
         }
@@ -933,7 +922,7 @@ fn subsumes(kernel: &mut Kernel, inferred: &Term, expected: &Term) -> Result<boo
         (Subterm::Prop, Subterm::Type(_)) => return Ok(true),
         // Plicity is part of a function type's identity, exactly as in `convert`: `(A) -> A` and `(@A) -> A` have different calling conventions, so a difference there is a mismatch and not a codomain question.
         (Subterm::FuncType(lower), Subterm::FuncType(upper))
-            if lower.plicities == upper.plicities =>
+            if lower.plicities() == upper.plicities() =>
         {
             let (lower, upper) = (lower.telescope.clone(), upper.telescope.clone());
 

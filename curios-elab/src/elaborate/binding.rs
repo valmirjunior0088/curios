@@ -159,10 +159,8 @@ pub(super) fn elaborate_func(
     term: &Term,
     mode: Mode,
 ) -> Result<(Term, Term), Error> {
-    let Func {
-        telescope,
-        plicities,
-    } = func;
+    let telescope = &func.telescope;
+    let plicities = func.plicities();
 
     match mode {
         Mode::Check(expected) => {
@@ -432,13 +430,11 @@ fn infix_method(
         .open(&[operand_type])
         .field_type_from(&witness, index)
         .expect("a concept's own field index is in range");
-    let Subterm::FuncType(FuncType {
-        telescope,
-        plicities,
-    }) = &*method_type
-    else {
+    let Subterm::FuncType(method_func_type) = &*method_type else {
         panic!("a syn operator concept declares its method as an arrow");
     };
+    let telescope = &method_func_type.telescope;
+    let plicities = method_func_type.plicities();
 
     Ok(Some(InfixMethod {
         slot,
@@ -447,7 +443,7 @@ fn infix_method(
         provenance,
         index,
         signature: telescope.clone(),
-        plicities: plicities.clone(),
+        plicities: plicities.to_vec(),
     }))
 }
 
@@ -535,7 +531,7 @@ fn declared_result_key(
     let result = match &**declared {
         Subterm::FuncType(func_type) => {
             let explicit_binders = func_type
-                .plicities
+                .plicities()
                 .iter()
                 .filter(|plicity| matches!(plicity, Plicity::Explicit))
                 .count();
@@ -691,8 +687,8 @@ pub(super) fn elaborate_func_check(
     let mut domains: Vec<(Plicity, Free, Term)> = Vec::new();
     let body = context.with_frame(|context| {
         let mut written = telescope.clone();
+        let e_plicities = ft.plicities().to_vec();
         let mut expected_tele = ft.telescope;
-        let e_plicities = &ft.plicities;
         let (mut w_idx, mut e_idx) = (0usize, 0usize);
 
         loop {

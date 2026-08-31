@@ -17,8 +17,7 @@ use {
     },
     curios_analysis::{Invert, case_target_indices, invert_indices},
     curios_core::{
-        Apply, Free, FuncType, Global, InductType, Item, Module, StructType, Subterm, Telescope,
-        Term, Var,
+        Apply, Free, Global, InductType, Item, Module, StructType, Subterm, Telescope, Term, Var,
     },
     curios_utilities::Plicity,
     std::collections::{BTreeMap, BTreeSet},
@@ -231,13 +230,11 @@ fn apply_fit(
     let Ok(reduced) = reduce_with(context, head_type) else {
         return None;
     };
-    let Subterm::FuncType(FuncType {
-        telescope: params,
-        plicities,
-    }) = &*reduced
-    else {
+    let Subterm::FuncType(head_func_type) = &*reduced else {
         return None;
     };
+    let params = &head_func_type.telescope;
+    let plicities = head_func_type.plicities();
 
     let mark = context.solution_mark();
     let mut args: Vec<(Term, Term)> = Vec::new();
