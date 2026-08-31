@@ -422,7 +422,7 @@ pub enum Error {
     NatOverflow {
         value: Natural,
     },
-    /// A program whose erased module fails the erased representation's verifier — today exactly the recursion classes the language rejects (a computed-only recursive cycle no initialization order satisfies). The verifier owns rejection; erasure only surfaces its diagnostic.
+    /// A program whose erased module fails the erased representation's verifier — any of its rules, from the recursion classes the language rejects (a computed-only recursive cycle no initialization order satisfies) to the structural ones, and the frame quotes the detail rather than presuming which. The verifier owns rejection; erasure only surfaces its diagnostic.
     ErasedModuleInvalid {
         detail: String,
     },

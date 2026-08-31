@@ -255,3 +255,56 @@ fn proof_in_an_erased_position_is_not_evaluated() {
         "#;
     assert_eq!(run(source), b"42");
 }
+
+#[test]
+fn a_dependent_proof_payload_leaves_its_constructor_a_bare_tag() {
+    // The declaration mask and the application walk agree that a `(P: Prop, proof: P)` payload pair drops: the construction carries no arguments, and the emitted module verifies.
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Eq, Io};
+        pub induct Box: pub Type
+        | theorem(P: Prop, proof: P)
+        | other(Nat)
+        end
+        let t: Box = Box/theorem(Eq(1 + 1, 2), Eq/refl());
+        match t
+        | theorem(P, p) => /std/print("proved\n")
+        | other(n) => /std/print("other\n")
+        end
+        "#),
+        b"proved\n"
+    );
+}
+
+#[test]
+fn a_kept_field_survives_beside_a_dependent_proof_payload() {
+    // Declaration arity one, application arity one: the proposition and its proof drop on both sides of the seam while the `Nat` rides through.
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Str, True, Io};
+        pub induct Rec: pub Type
+        | mixed(n: Nat, @P: Prop, proof: P)
+        end
+        let r: Rec = Rec/mixed(7, True/qed());
+        match r | mixed(n, @P, p) => /std/print(Str/concat(Nat/to_str(n), "\n")) end
+        "#),
+        b"7\n"
+    );
+}
+
+#[test]
+fn a_function_of_only_proofs_is_called_with_nothing() {
+    // A signature every parameter of which erases has runtime arity zero, and its call sites agree.
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Eq, Io};
+        pub induct Box: pub Type
+        | tag()
+        end
+        let prove(P: Prop, proof: P) -> Box = Box/tag();
+        let b: Box = prove(Eq(2 * 21, 42), Eq/refl());
+        match b | tag() => /std/print("called\n") end
+        "#),
+        b"called\n"
+    );
+}

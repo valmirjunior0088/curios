@@ -710,7 +710,7 @@ impl fmt::Display for Displayed<'_> {
                 write!(f, "Nat literal {value} overflows u32 at the erase boundary")
             }
             Error::ErasedModuleInvalid { detail } => {
-                write!(f, "unsupported recursion at the erase boundary: {detail}")
+                write!(f, "the erased module failed verification: {detail}")
             }
             Error::IntOverflow { value } => {
                 write!(

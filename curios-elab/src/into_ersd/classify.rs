@@ -2,8 +2,8 @@
 
 use {
     super::Lowering,
-    crate::{Context, Error, is_prop, reduce_with},
-    curios_core::{Bound, FuncType, Global, Intrinsic, Subterm, Telescope, Term, TupleType},
+    crate::{Context, Error, is_prop_in, reduce_with},
+    curios_core::{Bound, Free, FuncType, Global, Intrinsic, Subterm, Telescope, Term, TupleType},
     curios_utilities::Grain,
     std::collections::BTreeSet,
 };
@@ -14,34 +14,56 @@ use {
 ///
 /// CRITICAL: evaluate against the binder's *declared* (signature) type, opened only with the surrounding binders as opaque variables — never with concrete call arguments. A polymorphic field `value : A` is kept (its abstract `A` is neither prop nor type); re-classifying it at a call where `A := SomeProp` would diverge the construction's arity from the constructor function's fixed arity. [`signature_entries`] enforces the opaque-open discipline.
 pub(crate) fn is_erasable(context: &mut Context, type_: &Term) -> Result<bool, Error> {
+    is_erasable_in(context, &mut Vec::new(), type_)
+}
+
+/// [`is_erasable`] under the binders a surrounding telescope walk has opened, each carried with its declared type — threaded rather than assumed for the reason [`crate::is_prop_in`] states. A domain that is a bound variable of `Prop` sort — `proof: P` under `P: Prop` — classifies as a proof only through this record, and every telescope walk in this module threads it so the declaration's mask and the application's agree.
+fn is_erasable_in(
+    context: &mut Context,
+    opened: &mut Vec<(Free, Term)>,
+    type_: &Term,
+) -> Result<bool, Error> {
     match Term::unwrap_or_clone(reduce_with(context, type_)?) {
         Subterm::Type(_) | Subterm::Prop => Ok(true),
-        Subterm::Instance(instance) => is_erasable(context, &instance.head.to_term()),
-        // A function erases iff what it ultimately returns does — a proof-/type-producing function is pure, content-free; an effectful `X -> {}` is not. Recurse past the parameters (opened opaquely) into the codomain.
+        Subterm::Instance(instance) => is_erasable_in(context, opened, &instance.head.to_term()),
+        // A function erases iff what it ultimately returns does — a proof-/type-producing function is pure, content-free; an effectful `X -> {}` is not. Recurse past the parameters into the codomain, each opened binder joining `opened` so the codomain can read its sort.
         Subterm::FuncType(FuncType { telescope, .. }) => {
-            let vars: Vec<Term> = (0..telescope.len())
-                .map(|_| Term::free_var(&context.fresh(None)))
-                .collect();
-            let refs: Vec<&Term> = vars.iter().collect();
-            is_erasable(context, &telescope.open(&refs))
+            let mark = opened.len();
+            let mut telescope = telescope;
+            let result = loop {
+                match telescope {
+                    Telescope::Cons(domain, rest) => {
+                        let name = context.fresh(None);
+                        let variable = Term::free_var(&name);
+                        opened.push((name, domain));
+                        telescope = rest.open(&[&variable]);
+                    }
+                    Telescope::Done(output) => break is_erasable_in(context, opened, &output),
+                }
+            };
+            opened.truncate(mark);
+            result
         }
-        _ => is_prop(context, type_),
+        _ => is_prop_in(context, opened, type_),
     }
 }
 
-/// The signature view of a telescope: one entry per binder — its label and whether it is erased — classifying each domain with the *preceding* binders opened as fresh opaque variables (see [`is_erasable`]). That opaque-open discipline is what keeps a function's runtime arity fixed across every instantiation, so this is the only walk that computes it; the terminal body is ignored. Pairs with a concrete walk over the actual values: the signature decides which to drop, the concrete walk erases the kept ones against their (dependent, instantiated) types.
+/// The signature view of a telescope: one entry per binder — its label and whether it is erased — classifying each domain with the *preceding* binders opened as fresh opaque variables carrying their declared types (see [`is_erasable_in`]). That opaque-open discipline is what keeps a function's runtime arity fixed across every instantiation, so this is the only walk that computes it; the terminal body is ignored. Pairs with a concrete walk over the actual values: the signature decides which to drop, the concrete walk erases the kept ones against their (dependent, instantiated) types.
 pub(crate) fn signature_entries<B: Bound>(
     context: &mut Context,
     mut telescope: Telescope<B>,
 ) -> Result<Vec<(Option<String>, bool)>, Error> {
     let mut entries = Vec::new();
+    let mut opened = Vec::new();
     loop {
         match telescope {
             Telescope::Cons(type_, rest) => {
                 let label = rest.first_hint().map(str::to_string);
-                let erasable = is_erasable(context, &type_)?;
-                let variable = Term::free_var(&context.fresh(label.as_deref()));
+                let erasable = is_erasable_in(context, &mut opened, &type_)?;
+                let name = context.fresh(label.as_deref());
+                let variable = Term::free_var(&name);
                 entries.push((label, erasable));
+                opened.push((name, type_));
                 telescope = rest.open(&[&variable]);
             }
             Telescope::Done(_) => break Ok(entries),
@@ -67,17 +89,20 @@ pub(crate) fn constructor_entries<B: Bound>(
     mut telescope: Telescope<B>,
 ) -> Result<Vec<(Option<String>, bool, curios_ersd::FieldShape)>, Error> {
     let mut entries = Vec::new();
+    let mut opened = Vec::new();
     loop {
         match telescope {
             Telescope::Cons(type_, rest) => {
                 let label = rest.first_hint().map(str::to_string);
-                let erasable = is_erasable(context, &type_)?;
+                let erasable = is_erasable_in(context, &mut opened, &type_)?;
                 let shape = match erasable {
                     true => curios_ersd::FieldShape::Opaque,
                     false => field_shape(lowering, context, &mut BTreeSet::new(), &type_)?,
                 };
-                let variable = Term::free_var(&context.fresh(label.as_deref()));
+                let name = context.fresh(label.as_deref());
+                let variable = Term::free_var(&name);
                 entries.push((label, erasable, shape));
+                opened.push((name, type_));
                 telescope = rest.open(&[&variable]);
             }
             Telescope::Done(_) => break Ok(entries),
@@ -185,14 +210,17 @@ fn relevant_chain<B: Bound>(
 ) -> Result<Chain, Error> {
     let mut first = None;
     let mut relevant = 0;
+    let mut opened = Vec::new();
     while let Telescope::Cons(type_, rest) = telescope {
-        if !is_erasable(context, &type_)? {
+        if !is_erasable_in(context, &mut opened, &type_)? {
             relevant += 1;
             if first.is_none() {
-                first = Some(type_);
+                first = Some(type_.clone());
             }
         }
-        let variable = Term::free_var(&context.fresh(None));
+        let name = context.fresh(None);
+        let variable = Term::free_var(&name);
+        opened.push((name, type_));
         telescope = rest.open(&[&variable]);
     }
     match (relevant, first) {
