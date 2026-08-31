@@ -161,3 +161,63 @@ fn a_group_member_with_a_taken_key_is_a_duplicate() {
         "expected the member refused as a duplicate:\n{report}"
     );
 }
+
+// A shape is a key like any other, so two witnesses of one shape collide exactly as two of one name do — and the report spells the key by its shape, field types elided, because the key does not carry them.
+#[test]
+fn a_duplicate_tuple_shape_is_refused() {
+    let source = r#"
+        use /std/{Nat, Bool, Str};
+        pub concept Tag(A: Type): pub Type {
+            tag(A) -> Str,
+        }
+        satisfy Tag({Nat, Bool}) {
+            tag(t) = "one",
+        }
+        satisfy Tag({Nat, Bool}) {
+            tag(t) = "two",
+        }
+        /std/print("unreachable")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("duplicate witness of '/Tag' for head '{_, _}'"),
+        "expected the shape refused as a duplicate:\n{report}"
+    );
+}
+
+// A tuple shape is owned by no module, as an intrinsic former is, so it contributes nothing to ownership: an entry program may not key a witness on one for a concept `/std` declares. Two independent packages each declaring `Show({Nat, Bool})` would otherwise collide at link with neither in the wrong.
+#[test]
+fn a_tuple_witness_for_a_standard_concept_is_an_orphan() {
+    let source = r#"
+        use /std/{Show, Nat, Bool};
+        satisfy Show({Nat, Bool}) {
+            show(t) = "mine",
+        }
+        /std/print("unreachable")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("orphan witness of '/std/Show/Show' for head '{_, _}'"),
+        "expected the shape refused as an orphan:\n{report}"
+    );
+}
+
+// The other half of the rule: the shape contributes nothing, but a concept the entry root declares does, so a program writes tuple witnesses for its own concepts freely. `a_concept_resolves_on_a_tuple_value` in `shape_tests` is the same admission seen from the resolution side.
+#[test]
+fn a_tuple_witness_for_an_entry_concept_registers() {
+    let source = r#"
+        use /std/{Nat, Bool, Str};
+        pub concept Tag(A: Type): pub Type {
+            tag(A) -> Str,
+        }
+        satisfy Tag({Nat, Bool}) {
+            tag(t) = "mine",
+        }
+        let z: {Nat, Bool} = (1, true);
+        /std/print(Tag/tag(z))
+        "#;
+
+    assert_eq!(run(source), b"mine");
+}

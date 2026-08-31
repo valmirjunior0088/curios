@@ -933,8 +933,14 @@ fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
                             .map(|entry| entry.result.clone())
                             .unwrap_or_else(Term::type_ground);
                         let goal = zonk_term(context, &goal).unwrap_or(goal);
-                        // No embedding diagnosis on this path: zonk holds the context immutably, and a `Lift` goal that survives to the splice report has already been reported richer by the resolution drains.
-                        Error::no_witness(goal, origin.func.clone(), origin.binder.clone(), None)
+                        // No embedding or shape diagnosis on this path: both read the witness table through a mutable context to reduce, zonk holds it immutably, and a goal that survives to the splice report has already been reported richer by the resolution drains.
+                        Error::no_witness(
+                            goal,
+                            origin.func.clone(),
+                            origin.binder.clone(),
+                            None,
+                            None,
+                        )
                     }
                     MetavarOrigin::Hole => Error::CannotInfer,
                     // Handled by the unconditional report above.

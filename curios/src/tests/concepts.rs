@@ -7,3 +7,5 @@ mod monad_tests;
 mod recursion_tests;
 mod resolution_tests;
 mod sealed_tests;
+mod shape_tests;
+mod tuple_tests;

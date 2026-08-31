@@ -6,7 +6,7 @@
 mod tests;
 
 use {
-    curios_core::{Free, Global, Intrinsic, Subterm, Telescope, Term, UniverseContext},
+    curios_core::{Free, Global, Intrinsic, Subterm, Telescope, Term, TupleType, UniverseContext},
     curios_utilities::{Grain, Qualifier},
     std::fmt,
 };
@@ -45,7 +45,7 @@ impl fmt::Display for WitnessKey {
     }
 }
 
-/// One rigid head inside a [`WitnessKey`]: the nominal (inductive or struct) qualified name, or an intrinsic type constructor. Parameters past the heads are checked by unification at resolution time, not by the key.
+/// One rigid head inside a [`WitnessKey`]: the nominal (inductive or struct) qualified name, an intrinsic type constructor, or an anonymous product's shape. Parameters past the heads are checked by unification at resolution time, not by the key.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[curios_archive::archived]
 pub enum HeadKey {
@@ -60,15 +60,19 @@ pub enum HeadKey {
     List,
     Cell,
     Io,
+    /// A tuple type, keyed by its *shape*: the label at each field position, `""` where the field is positional, arity implied by the length. A tuple type has no name to be headed by, so the shape plays the role a nominal name plays — it is precisely the half of the type's identity that conversion does not delegate to the fields (`compare_tuple_type` refuses differing labels before enqueuing one), so keying here splits the type along the seam conversion already splits it on. `{Nat, Bool}` and `{x: Nat, y: Bool}` are two keys because they are two types.
+    TupleType(Vec<String>),
 }
 
 impl HeadKey {
-    /// The key of a term already in weak-head normal form, if its head is rigid and nominal/intrinsic. A `Func` head is the higher-kinded case (a type constructor like `Option` reduces to `λA. Option-normal-form`): its *body* supplies the key, so `Monad(Option)` keys on `Option`. `None` for anything else — variables, metavariables, Π/Σ types, `Type`/`Prop` — which are not keyable.
+    /// The key of a term already in weak-head normal form, if its head is rigid and nominal/intrinsic/tuple. A `Func` head is the higher-kinded case (a type constructor like `Option` reduces to `λA. Option-normal-form`): its *body* supplies the key, so `Monad(Option)` keys on `Option`. `None` for anything else — variables, metavariables, Π types, `Type`/`Prop` — which are not keyable.
     pub(crate) fn of_whnf(term: &Term) -> Option<HeadKey> {
         match &**term {
             Subterm::InductType(induct_decl) => Some(HeadKey::Nominal(induct_decl.name.clone())),
             Subterm::StructType(struct_decl) => Some(HeadKey::Nominal(struct_decl.name.clone())),
             Subterm::Intrinsic(intrinsic) => Self::of_intrinsic(intrinsic),
+            // The weak-head form of a tuple type is the node itself and its labels are structural, so keying costs a walk down the spine and reduces no field type.
+            Subterm::TupleType(tuple_type) => Some(Self::of_tuple_type(tuple_type)),
             // The higher-kinded head: the type-constructor function's body is the normal form the applied constructor would reduce to (`λA. InductType(Option, [A])`, or `λT. ListType(T)` for an intrinsic former like `/sys/List`). The binders need not be opened — the name/former sits on the node.
             Subterm::Func(func) => {
                 let mut telescope = &func.telescope;
@@ -86,6 +90,8 @@ impl HeadKey {
                         Some(HeadKey::Nominal(struct_decl.name.clone()))
                     }
                     Subterm::Intrinsic(intrinsic) => Self::of_intrinsic(intrinsic),
+                    // A constructor whose body is an anonymous product — `let Pair(A: Type) -> Type = {Nat, A};` reduces to `(A: Type) => {Nat, A}` — keys on that body's shape, so `Functor(Pair)` registers where `Monad(Option)` does. Symmetry with the nominal case, not a consumer's demand; it does not extend imitation, since `?M(?A) ≡ {Nat, Nat}` has no unique solution.
+                    Subterm::TupleType(tuple_type) => Some(Self::of_tuple_type(tuple_type)),
                     // A *partially applied* family: `(A : Type) => State(S, A)` leaves the body a stuck application under the binder, since weak-head reduction never descends into a `Func`. Its head names the former — a registry entry and its type-former definition share one finalized context, so the reference's global *is* the declaration's key — and the universes riding an `Instance` wrapper are irrelevant to keying, which reads names alone. Arguments below the head stay unification's job at resolution time, exactly as for a saturated node.
                     Subterm::Apply(apply) => {
                         let name = match &*apply.head {
@@ -103,6 +109,18 @@ impl HeadKey {
             }
             _ => None,
         }
+    }
+
+    /// The key of a tuple type, shared by the first-order and higher-kinded (`Func`-body) positions of [`of_whnf`](Self::of_whnf). `labels` walks the spine without opening a binder, which is the same read `TupleType`'s own `Eq` performs.
+    fn of_tuple_type(tuple_type: &TupleType) -> HeadKey {
+        HeadKey::TupleType(
+            tuple_type
+                .telescope
+                .labels()
+                .into_iter()
+                .map(str::to_owned)
+                .collect(),
+        )
     }
 
     /// The key of an intrinsic type former, shared by the first-order and higher-kinded (`Func`-body) positions of [`of_whnf`](Self::of_whnf).
@@ -138,6 +156,20 @@ impl fmt::Display for HeadKey {
             HeadKey::List => write!(f, "List"),
             HeadKey::Cell => write!(f, "Cell"),
             HeadKey::Io => write!(f, "Io"),
+            // A shape displays as the type it stands for with every field type elided: `{}`, `{_, _}`, `{x: _, y: _}`. The field types are not in the key, so there is nothing truthful to print in their place.
+            HeadKey::TupleType(labels) => {
+                write!(f, "{{")?;
+                for (index, label) in labels.iter().enumerate() {
+                    if index > 0 {
+                        write!(f, ", ")?;
+                    }
+                    match label.is_empty() {
+                        true => write!(f, "_")?,
+                        false => write!(f, "{label}: _")?,
+                    }
+                }
+                write!(f, "}}")
+            }
         }
     }
 }

@@ -49,17 +49,19 @@ fn a_one_field_tuple_literal_synthesizes_against_a_written_goal() {
 }
 
 // Settling the literal wakes whatever was parked on the metavariable it solved, and a woken obligation reports for itself. Here that is the missing tuple witness — the answer the program deserves, where before the same program said only that some type never gained structure.
+//
+// The literal is *labeled* so the woken goal is one that genuinely misses: `/std/Tuple` shows every positional shape, and labels are part of a tuple type's identity. Synthesis from a labeled literal solves the metavariable exactly as a positional one does, so the mechanism under test is untouched.
 #[test]
 fn a_settled_tuple_reports_the_obligation_it_unblocked() {
     let source = r#"
         use /std/{Bool, Show, Str};
-        let s : Str = Show/show((true, false));
+        let s : Str = Show/show((x = true, y = false));
         /std/print("ok\n")
         "#;
 
     let report = error(source);
     assert!(
-        report.contains("no witness of Show({Bool, Bool})"),
+        report.contains("no witness of Show({x: Bool, y: Bool})"),
         "expected the witness goal the tuple unblocked:\n{report}"
     );
 }

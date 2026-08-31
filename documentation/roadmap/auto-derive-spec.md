@@ -6,7 +6,7 @@ The elaborator ground is prepared and pinned by tests in the tree; nothing of th
 
 ## Mission
 
-A witness declaration may omit its body: `satisfy Spell(Point);`. The compiler then writes the body from the declaration of the type in the witness's key, or refuses compilation naming what it could not write. Derivability is a property of the concept, registered in the compiler against its registry slot; this specification registers two, `Spell` and `Eql`. Hand-written witnesses remain the norm everywhere else: carriers keep their written witnesses, `Show` stays human-facing and underivable, and tuple shapes take written per-arity witnesses under the [tuple-key specification](tuple-witness-keys-spec.md), not derivation.
+A witness declaration may omit its body: `satisfy Spell(Point);`. The compiler then writes the body from the declaration of the type in the witness's key, or refuses compilation naming what it could not write. Derivability is a property of the concept, registered in the compiler against its registry slot; this specification registers two, `Spell` and `Eql`. Hand-written witnesses remain the norm everywhere else: carriers keep their written witnesses, `Show` stays human-facing and underivable, and tuple shapes take `/std/Tuple`'s written per-arity witnesses ([A tuple type is keyed by its shape](../design/language/a-tuple-type-is-keyed-by-its-shape.md)), not derivation.
 
 ## Steps
 

@@ -910,7 +910,15 @@ satisfy (@A: Type, use Show(A)) => Show(List(A)) {
 }
 ```
 
-Every registered witness is keyed by the concept name and the tuple of rigid heads of every concept parameter. Each head must reduce to an inductive, structure, intrinsic type, or supported higher-kinded type constructor — including a *partially applied* family written as a lambda, `(A: Type) => State(S, A)`, which keys on the applied head. Remaining arguments below those heads are checked by unification after lookup.
+Every registered witness is keyed by the concept name and the tuple of rigid heads of every concept parameter. Each head must reduce to an inductive, structure, intrinsic type, tuple type, or supported higher-kinded type constructor — including a *partially applied* family written as a lambda, `(A: Type) => State(S, A)`, which keys on the applied head. Remaining arguments below those heads are checked by unification after lookup.
+
+A tuple type is keyed by its *shape*: the label at each field position, arity implied, field types excluded. Labels are part of a tuple type's identity, so `Show({Nat, Bool})`, `Show({a: Nat, b: Bool})` and `Show({x: Nat, y: Bool})` are three keys for three types, and a witness for one does not serve another. `{}` keys as the empty shape, and a constructor whose body is a tuple type — `let Pair(A: Type) -> Type = {Nat, A};` — keys on that body's shape in the higher-kinded position. The standard library writes `Show`, `Eql` and `Ord` for the positional shapes up to eight fields, in `/std/Tuple`; a labeled product wanting the same is written as a `struct`.
+
+```crs
+satisfy (@A: Type, @B: Type, use Show(A), use Show(B)) => Show({A, B}) {
+    show(t) = Str/concat("(", Str/concat(Show/show(t.0), Str/concat(", ", Str/concat(Show/show(t.1), ")")))),
+}
+```
 
 Two witnesses that resolve through each other are declared as one group with `and`; each member is a whole witness, with its own telescope where it has one, and the group's members register before any body elaborates. A lone witness may resolve through its own entry with nothing said; two that resolve through each other without being declared as a group are refused, naming both.
 
@@ -943,6 +951,8 @@ A witness premise must be a concept applied only to variables bound by the witne
 ### Orphan rule
 
 A witness may be declared only by the compilation root that owns its concept or at least one rigid type head in its key. This prevents independent third parties from defining the same globally coherent instance.
+
+A tuple shape is owned by no root, as an intrinsic type former is. A tuple-keyed witness is therefore declared where its concept is declared, or by a privileged root: a program writes tuple witnesses for its own concepts, and cannot add one for a `/std` concept at a shape `/std` did not write.
 
 The coordinated `/sys`, `/syn`, and `/std` roots are exempt from the restriction against one another.
 

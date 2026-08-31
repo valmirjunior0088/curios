@@ -439,11 +439,13 @@ fn a_witness_keys_through_a_partially_applied_family() {
 }
 
 // Which call needs the witness. A curried application — every partial application, and `Fmt/print(fmt)(a)(b)` in particular — heads its outer apply with another apply, so reading only the outermost node named `<function>` for exactly the calls a reader most needs identified.
+//
+// The argument is a *labeled* tuple deliberately: `/std/Tuple` shows every positional shape, and labels are part of a tuple type's identity, so the labeled product is what still has no `Show`.
 #[test]
 fn a_missing_witness_names_a_curried_head_by_its_innermost_reference() {
     let source = r#"
         use /std/{Nat, Bool, Fmt, Handle};
-        let s = Fmt/print("issue % -> %")(42)((1, true));
+        let s = Fmt/print("issue % -> %")(42)((x = 1, y = true));
         /std/print("unreachable")
         "#;
 
@@ -455,12 +457,14 @@ fn a_missing_witness_names_a_curried_head_by_its_innermost_reference() {
 }
 
 // Which premise needs it. A `use` parameter is anonymous by design — `let`, `rec` and `satisfy` sugar declare one without a name — so naming the binder reported `_` for every premise a program actually writes. The position is always there to be named.
+//
+// The argument is a *labeled* tuple for the reason above: the positional shapes all have a `Show`.
 #[test]
 fn a_missing_witness_names_the_premise_by_position() {
     let source = r#"
         use /std/{Nat, Bool, Show, Str, Handle};
         let f(@A : Type, use Show(A), a : A) -> Str = Show/show(a);
-        let s : Str = f((1, true));
+        let s : Str = f((x = 1, y = true));
         /std/print("unreachable")
         "#;
 

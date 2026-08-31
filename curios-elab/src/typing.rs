@@ -439,11 +439,13 @@ impl Context {
                             {
                                 Some((origin, witness_goal)) => {
                                     let embedding = super::diagnose_embedding(self, &witness_goal);
+                                    let shape = super::diagnose_shape(self, &witness_goal);
                                     Error::no_witness(
                                         resolved_for_display(self, &witness_goal),
                                         origin.func,
                                         origin.binder,
                                         embedding,
+                                        shape,
                                     )
                                     .at_opt(parked_origin.span())
                                 }
@@ -486,11 +488,13 @@ impl Context {
                             goal, provenance, ..
                         } => {
                             let embedding = super::diagnose_embedding(self, &goal);
+                            let shape = super::diagnose_shape(self, &goal);
                             Error::no_witness(
                                 resolved_for_display(self, &goal),
                                 provenance.func,
                                 provenance.binder,
                                 embedding,
+                                shape,
                             )
                             .at_opt(parked_origin.span())
                         }

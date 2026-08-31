@@ -124,6 +124,9 @@ pub use Str/{let Str};
 pub mod Bool;
 pub use Bool/{let Bool};
 
+-- The anonymous product has no namesake binding to re-export: the module is here for the witnesses it registers on the tuple shapes.
+pub mod Tuple;
+
 pub mod Parse;
 pub use Parse/{let Parse};
 

@@ -9,8 +9,8 @@
 
 use {
     super::{
-        Context, EmbeddingDiagnosis, Error, HeadKey, Outcome, ParkedProblem, ParkedWork, Witness,
-        WitnessKey, convert_outcome, reduce_with,
+        Context, EmbeddingDiagnosis, Error, HeadKey, Outcome, ParkedProblem, ParkedWork,
+        ShapeDiagnosis, Witness, WitnessKey, convert_outcome, reduce_with,
     },
     curios_core::{
         ConceptDecl, Field, Free, Global, ImplicitOrigin, Level, Metavar, MetavarId, StructType,
@@ -39,12 +39,47 @@ fn display_goal(context: &Context, goal: &Term) -> Term {
 
 fn no_witness_error(context: &mut Context, goal: &Term, provenance: &WitnessOrigin) -> Error {
     let embedding = diagnose_embedding(context, goal);
+    let shape = diagnose_shape(context, goal);
     Error::no_witness(
         display_goal(context, goal),
         provenance.func.clone(),
         provenance.binder.clone(),
         embedding,
+        shape,
     )
+}
+
+/// When `goal` keys on a *labeled* tuple shape and the same key with every label dropped does have a witness, the shape-specific diagnosis its missing-witness report carries: the two keys, so the reader meets the rule that labels are part of a tuple type's identity rather than a bare miss. That is the one surprise keying on a shape has — every other way to miss the table is a miss for the ordinary reason. Error-path only; a diagnosis that cannot be computed is simply absent.
+pub(crate) fn diagnose_shape(context: &mut Context, goal: &Term) -> Option<Box<ShapeDiagnosis>> {
+    let goal = reduce_with(context, goal).ok()?;
+    let (concept_name, _, params) = as_concept_app(context, &goal)?;
+
+    let mut wanted = Vec::with_capacity(params.len());
+    for param in &params {
+        let head = reduce_with(context, param).ok()?;
+        wanted.push(HeadKey::of_whnf(&head)?);
+    }
+
+    let positional: Vec<HeadKey> = wanted
+        .iter()
+        .map(|head| match head {
+            HeadKey::TupleType(labels) => HeadKey::TupleType(vec![String::new(); labels.len()]),
+            head => head.clone(),
+        })
+        .collect();
+
+    // Equal keys mean no label was dropped: either no parameter is a tuple, or every one of them is already positional, and the goal simply misses.
+    if positional == wanted {
+        return None;
+    }
+
+    let positional = WitnessKey(positional);
+    context.witness(&concept_name, &positional)?;
+
+    Some(Box::new(ShapeDiagnosis {
+        wanted: WitnessKey(wanted),
+        positional,
+    }))
 }
 
 /// When `goal` is an application of the registry's `Lift` concept, the embedding-specific diagnosis its missing-witness report carries: the two monads in display form, whether the source is a monad at all, and any chain of declared edges between the pair — each fact the report needs to steer the fix (declare the edge, fix the action, or spell the composite) without the reader reconstructing the table. Error-path only; a diagnosis that cannot be computed is simply absent.

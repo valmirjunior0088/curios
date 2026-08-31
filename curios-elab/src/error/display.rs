@@ -6,7 +6,7 @@
 mod tests;
 
 use {
-    super::{Erased, Error, GoalReport},
+    super::{Erased, Error, GoalReport, ShapeDiagnosis},
     curios_core::{Spelling, Subterm, Term},
     curios_utilities::{Grain, Plicity, Qualifier},
     std::{fmt, rc::Rc},
@@ -542,9 +542,17 @@ impl fmt::Display for Displayed<'_> {
                 func,
                 binder,
                 embedding,
+                shape,
             } => {
                 let goal = goal.spelled(spelling);
                 write!(f, "no witness of {goal} found")?;
+                if let Some(diagnosis) = shape {
+                    let ShapeDiagnosis { wanted, positional } = &**diagnosis;
+                    write!(
+                        f,
+                        "\n  labels are part of the type: the witness for {positional} does not cover {wanted}\n  name a struct for the labeled product, or declare the witness for this shape"
+                    )?;
+                }
                 match embedding {
                     None => write!(f, "\n  needed by '{func}' for {binder}"),
                     Some(diagnosis) => {
@@ -676,7 +684,7 @@ impl fmt::Display for Displayed<'_> {
                 let head = head.spelled(spelling);
                 write!(
                     f,
-                    "witness '{witness}' cannot be keyed: its concept's parameter {n} reduces to {head}\n  every parameter's head must be an inductive, a struct, or an intrinsic type",
+                    "witness '{witness}' cannot be keyed: its concept's parameter {n} reduces to {head}\n  every parameter's head must be an inductive, a struct, an intrinsic type, or a tuple type",
                     n = position + 1
                 )
             }
