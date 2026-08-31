@@ -595,7 +595,7 @@ pub struct WitnessOrigin {
     pub binder: String,
 }
 
-/// Provenance of a metavariable — which mechanism minted it, deciding both how zonk reports it unsolved and what an elaboration site may do with it. An unsolved `Implicit`/`Witness` survivor names the binder it filled and an unsolved `Hole` is a bare "cannot infer", while a `Goal` is reported unconditionally.
+/// Provenance of a metavariable — which mechanism minted it, deciding both how zonk reports it unsolved and what an elaboration site may do with it. An unsolved `Implicit`/`Witness` survivor names the binder it filled, an unsolved `Domain` the lambda parameter whose type was never determined, and an unsolved `Hole` is a bare "cannot infer", while a `Goal` is reported unconditionally.
 ///
 /// **A site may special-case a `Hole`; a `Goal` always takes the general path.** Inferring a binding over an elided annotation, synthesizing an elided motive, refusing a lambda whose domain nothing pins — each of those is a decision about a *silent* hole, and each once matched any bare metavariable, which is how a written `?` in those positions was discarded unelaborated and the program compiled with a goal in it. [`Metavar::is_hole`] is the one predicate those sites ask, so the rule is stated in the type rather than re-derived per site.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -603,6 +603,8 @@ pub struct WitnessOrigin {
 pub enum MetavarOrigin {
     /// A silent inference hole: an elided annotation, motive, lambda domain or element type (`into_core` mints it via `Term::hole`), or an elaborator placeholder with no provenance of its own — a parked problem's stand-in, a recursive group's slot, the type a goal in synthesis position stands over. Its solution is spliced without comment; unsolved, it is the bare "cannot infer".
     Hole,
+    /// A settle-synthesized lambda's unannotated domain, named by its binder: minted when a lambda whose expectation never gained structure is synthesized at a settle tier, replacing the silent hole (which is solved with it). Solved — by the body, or by whatever the settled type later unifies with — it splices silently like a hole; unsolved, zonk reports the parameter whose type was never determined, by name.
+    Domain(String),
     Implicit(ImplicitOrigin),
     Witness(WitnessOrigin),
     /// A written goal `?` (`into_core` mints it via `Term::goal`): the user asked what elaboration determines here, so zonk errors with the goal's scope, type, and solution — solved or not — instead of splicing.

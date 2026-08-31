@@ -51,6 +51,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Packed-literal views in unification decomposition (solving-side only)
   - [x] Right-biased partial imitation for flex-apply (what pins a two-parameter monad's `?M`)
   - [x] Witness keying through a partially applied type constructor (keyed on the stuck head)
+  - [x] A lambda whose expectation never gains structure settles by synthesizing its type (unannotated domains stand as named metavariables for the body to pin)
 - [ ] [Equality is defined at the type, not assumed over all of them](roadmap/observational-equality-spec.md) (not refined yet)
 
 ## Pattern Matching

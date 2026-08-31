@@ -97,11 +97,9 @@ fn postponed_lambda_projecting_by_label_elaborates() {
     assert_eq!(run(source), b"7");
 }
 
-// A parked checking problem that survives every retry is reported by the item drain at the expression's own span, naming the expected type it waited on rather than the bare `cannot infer` it used to raise.
-//
-// The subject is a lambda rather than a tuple, and that is the whole distinction: a tuple has a product to fall back on and settles, a lambda has no domain to invent and cannot. Both once produced this message, which is what made them look like one problem.
+// A lambda whose expectation never gains structure settles by synthesizing its own type — annotations state what they state, and an unannotated domain stands as a metavariable for the body, or whatever the settled type later meets, to pin. `(x) => x` pins nothing anywhere, so the survivor is the domain itself, and it is reported as the parameter it is rather than as the internal expectation that once waited on it.
 #[test]
-fn unresolvable_parked_check_reports_its_expected_type() {
+fn a_domain_nothing_pins_is_reported_as_its_parameter() {
     let source = r#"
         use /std/{Nat, Str};
         let use_it(@A : Type, a : A) -> Nat = 0;
@@ -109,7 +107,34 @@ fn unresolvable_parked_check_reports_its_expected_type() {
         /std/print(Nat/to_str(z))
         "#;
     let error = error(source);
-    assert!(error.contains("never gained structure"), "{error}");
+    assert!(
+        error.contains("the type of parameter 'x' was never determined"),
+        "{error}"
+    );
+}
+
+// The settle in action, annotated: the lambda's own annotation is the type nothing else could supply, so the bare implicit pins to `(Nat) -> Nat` and the call compiles.
+#[test]
+fn an_annotated_lambda_settles_a_bare_implicit() {
+    let source = r#"
+        use /std/{Nat, Str};
+        let use_it(@A : Type, a : A) -> Nat = 0;
+        let z : Nat = use_it((n : Nat) => n + 1);
+        /std/print(Nat/to_str(z))
+        "#;
+    assert_eq!(run(source), b"0");
+}
+
+// The settle in action, unannotated: the domain stands as a metavariable and the body pins it — `n + 1` defaults its operand type to `Nat` — so the bare spelling compiles too.
+#[test]
+fn a_lambda_body_pins_its_settled_domain() {
+    let source = r#"
+        use /std/{Nat, Str};
+        let use_it(@A : Type, a : A) -> Nat = 0;
+        let z : Nat = use_it((n) => n + 1);
+        /std/print(Nat/to_str(z))
+        "#;
+    assert_eq!(run(source), b"0");
 }
 
 #[test]

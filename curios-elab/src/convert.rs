@@ -1073,11 +1073,11 @@ impl Convert {
             return Ok(Solved::Failed);
         }
 
-        // Embedded-metavariable guard: any *other* unsolved metavariable in the candidate may carry a wider context than `id`'s, so solving now could let the solution escape its scope. Postpone (the stand-in for pruning).
-        if metavars
-            .iter()
-            .any(|other| context.metavar_solution(*other).is_none())
-        {
+        // Embedded-metavariable guard: any *other* unsolved metavariable in the candidate may carry a wider context than `id`'s, so solving now could let the solution escape its scope. Postpone (the stand-in for pruning) — except a metavariable whose birth context is *contained* in `id`'s, which provably cannot smuggle a name out: everything it can ever inject — its spine entries now, its own solution's names later, arriving only through that scope-checked spine — lies inside `id`'s scope already. The exemption is what lets a settle-synthesized lambda type, whose unannotated domains are metavariables minted at the settling expectation's own scope, commit instead of stranding.
+        if metavars.iter().any(|other| {
+            context.metavar_solution(*other).is_none()
+                && !context.metavar_context_contained(*other, id)
+        }) {
             #[cfg(feature = "profile")]
             curios_profile::tracing::debug!(
                 target: "curios_elab::solve",
@@ -1247,7 +1247,7 @@ impl Convert {
             abstracted.capture(&binders).release(&refs)
         };
 
-        // The equation must hold by construction: resolving the candidate solution back through this occurrence's spine must reproduce the candidate. This guards the whole abstraction/inversion pair — a missed occurrence or an unfaithful rename postpones instead of committing a wrong solution. Syntactic equality is the fast path; an abstraction that matched a *reduced* spelling resolves back to the raw one, so the fallback criterion is definitional — a strict conversion, which cannot solve anything here since both sides are meta-free past the embedded guard.
+        // The equation must hold by construction: resolving the candidate solution back through this occurrence's spine must reproduce the candidate. This guards the whole abstraction/inversion pair — a missed occurrence or an unfaithful rename postpones instead of committing a wrong solution. Syntactic equality is the fast path; an abstraction that matched a *reduced* spelling resolves back to the raw one, so the fallback criterion is definitional — a strict conversion, which cannot solve anything here since past the embedded guard the sides carry at most context-contained metavariables, and an undecided verdict postpones.
         if !metavar.spine.is_empty() {
             let binders = telescope.iter().map(|(name, _)| name).collect::<Vec<_>>();
             let refs = entries.iter().collect::<Vec<_>>();

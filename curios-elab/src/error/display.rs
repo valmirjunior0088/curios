@@ -517,6 +517,12 @@ impl fmt::Display for Displayed<'_> {
                     "implicit argument '{binder}' of '{func}' was not inferred; supply it explicitly: {func}(@...)"
                 )
             }
+            Error::DomainNeverDetermined { binder } => {
+                write!(
+                    f,
+                    "the type of parameter '{binder}' was never determined\n  a lambda's parameter type comes from its annotation, its body, or its position's expected type, and none supplied one\n  annotate the parameter: ({binder}: T) => ..."
+                )
+            }
             Error::TooManyImplicits { expected, got } => {
                 write!(
                     f,

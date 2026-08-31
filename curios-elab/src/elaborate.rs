@@ -28,8 +28,8 @@ mod tests;
 
 use {
     super::{
-        Context, Error, ParkedWork, attempt_witness_goal, blocked_on_metavar, check, expect,
-        reduce_with, sort_term, transitively_ground,
+        Context, DomainScope, Error, ParkedWork, attempt_witness_goal, blocked_on_metavar, check,
+        expect, reduce_with, sort_term, transitively_ground,
     },
     curios_core::{
         Apply, Bang, Bound, Field, Free, Func, FuncType, ImplicitOrigin, InductType, Infix,
@@ -89,6 +89,23 @@ pub(crate) fn elaborate(
 
         Ok((rebuilt, type_))
     })
+}
+
+/// Synthesize a lambda for the settle tiers ([`settle_against`](super::settle_against)): the infer walk with each unannotated domain admitted as a metavariable named after its binder, pinned by the body or by whatever the settled type later unifies with, rather than refused. Only a settle tier may call this — while the expectation could still gain structure, committing the lambda's written shape would guess. Deliberately outside the elaboration cache: admitting the holes is a side effect, and a cached settle result under an `Infer` key would let a plain inference of the same lambda succeed where it must refuse. The span restamp and checked-record mirror [`elaborate`]'s tail, so the settled node reaches the module exactly as an ordinarily elaborated one does.
+pub(crate) fn elaborate_func_settle(
+    context: &mut Context,
+    func: &Func,
+    term: &Term,
+) -> Result<(Term, Term), Error> {
+    let (rebuilt, type_) =
+        elaborate_func_infer(context, &func.telescope, func.plicities(), Some(term))
+            .map_err(|error| error.at_opt(term.span()))?;
+    let rebuilt = match term.span() {
+        Some(span) => rebuilt.with_span(span),
+        None => rebuilt,
+    };
+    context.record_checked(&rebuilt, &type_);
+    Ok((rebuilt, type_))
 }
 
 fn elaborate_subterm(

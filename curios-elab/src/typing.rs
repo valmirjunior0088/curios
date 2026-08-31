@@ -235,15 +235,17 @@ pub(crate) fn stuck_on_metavar(context: &Context, reduced: &Term) -> bool {
 
 /// Synthesize a checked-only form whose expectation never gained structure, and pin the expectation to what it inferred.
 ///
-/// `None` when the form cannot be synthesized — a lambda has no domain to invent — or when the expectation *does* have structure, in which case ordinary checking owns it.
+/// `None` when the form cannot be synthesized, or when the expectation *does* have structure, in which case ordinary checking owns it.
 ///
-/// Parking a non-empty tuple literal against a bare metavariable is right while a dependent telescope could still arrive from that expectation, since only an expectation can supply one. This serves the two places where nothing is left to send one: an apply's force tier — after the turnaround when the apply is checked, and directly when it is inferred — with no later slot opening through this one, and the drain's no-progress sweep. `()` and a list literal reach the same conclusion at their own arms and `elaborate_num_lit` reaches it for a numeral; the non-empty tuple is the one checked-only form that had no route to it.
+/// Parking a non-empty tuple literal or a lambda against a bare metavariable is right while structure could still arrive from that expectation, since only an expectation can supply a dependent telescope or a hidden binder. This serves the two places where nothing is left to send one: an apply's force tier — after the turnaround when the apply is checked, and directly when it is inferred — with no later slot opening through this one, and the drain's no-progress sweep. `()` and a list literal reach the same conclusion at their own arms and `elaborate_num_lit` reaches it for a numeral. A tuple settles to its non-dependent product; a lambda settles to the type its annotations and body state ([`elaborate_func_settle`](super::elaborate_func_settle)), an unannotated domain standing as a named metavariable for the body — or whatever the settled type later unifies with — to pin.
 pub(crate) fn settle_against(
     context: &mut Context,
     term: &Term,
     expected: &Term,
 ) -> Result<Option<Term>, Error> {
-    if !matches!(&**term, Subterm::Tuple(tuple) if !tuple.fields.is_empty()) {
+    let settleable = matches!(&**term, Subterm::Tuple(tuple) if !tuple.fields.is_empty())
+        || matches!(&**term, Subterm::Func(_));
+    if !settleable {
         return Ok(None);
     }
 
@@ -255,7 +257,10 @@ pub(crate) fn settle_against(
         return Ok(None);
     }
 
-    let (rebuilt, inferred) = elaborate(context, term, Mode::Infer)?;
+    let (rebuilt, inferred) = match &**term {
+        Subterm::Func(func) => super::elaborate_func_settle(context, func, term)?,
+        _ => elaborate(context, term, Mode::Infer)?,
+    };
     expect(context, term, &inferred, expected)?;
     Ok(Some(rebuilt))
 }
@@ -342,7 +347,7 @@ impl Context {
     ///
     /// A non-empty tuple literal parks against a bare expected metavariable, and rightly: a dependent telescope can only ever arrive from the expectation, so committing to the non-dependent product while one could still arrive would be a guess. When nothing is left to send one the guess is no longer a guess — the non-dependent product is the only thing the literal could be — and this is the point where "nothing newly solved, nothing left to retry" is decidable. `()` and a list literal reach the same conclusion eagerly at their own arms, `elaborate_num_lit` reaches it for a numeral; this is where the non-empty tuple reaches it.
     ///
-    /// A lambda is deliberately not settled here. It cannot be synthesized at all — there is no domain to invent — so it stays parked and is reported, which is the honest answer rather than this defect.
+    /// A lambda settles by the same reasoning: its annotations and body state its type, and an unannotated domain — the one part synthesis cannot state — stands as a metavariable named after its binder, pinned by the body, by whatever the settled type unifies with as parked work wakes, or reported by zonk as the parameter whose type was never determined ([`elaborate_func_settle`](super::elaborate_func_settle)).
     ///
     /// Answers whether anything settled, so the drain can loop once more: an obligation watching the metavariable this just solved — a witness goal on the tuple's own type — must get its retry before anything is reported.
     fn settle_synthesizable(&mut self) -> Result<bool, Error> {
@@ -556,6 +561,9 @@ fn watched_blockers(
                 format!("the written goal `?` at {line}:{column}")
             }
             Some((MetavarOrigin::Goal, None)) => "a written goal `?`".to_string(),
+            Some((MetavarOrigin::Domain(binder), _)) => {
+                format!("the type of parameter '{binder}'")
+            }
             Some((MetavarOrigin::Hole, _)) | None => "an inferred hole".to_string(),
         })
         .collect()

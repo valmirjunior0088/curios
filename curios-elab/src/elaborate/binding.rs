@@ -166,7 +166,7 @@ pub(super) fn elaborate_func(
         Mode::Check(expected) => {
             elaborate_func_check(context, telescope, plicities, term, expected)
         }
-        Mode::Infer => elaborate_func_infer(context, telescope, plicities),
+        Mode::Infer => elaborate_func_infer(context, telescope, plicities, None),
     }
 }
 
@@ -815,16 +815,21 @@ pub(super) fn elaborate_func_check(
     Ok((Term::func_marked(domains, body), expected))
 }
 
-/// Synthesize a function type from a lambda's own domain annotations — the mirror of `elaborate_func_type`. Without an expected type no binders can be inserted, so the lambda's written plicity sequence is already canonical: the walk keeps each written mark, entering a `use` binder into the witness scope for later domains and the body, and the synthesized `FuncType`/rebuilt `Func` both carry exactly that sequence. A domain that stays an unconstrained hole (the bare `(x) => …` sugar, or `(x : _)`) offers nothing to synthesize from, so inference fails — exactly as a bare lambda in inference position did before annotations existed. The rebuilt lambda and its type share the same closed domains, so both stay de-Bruijn-correct.
+/// Synthesize a function type from a lambda's own domain annotations — the mirror of `elaborate_func_type`. Without an expected type no binders can be inserted, so the lambda's written plicity sequence is already canonical: the walk keeps each written mark, entering a `use` binder into the witness scope for later domains and the body, and the synthesized `FuncType`/rebuilt `Func` both carry exactly that sequence. A domain that stays an unconstrained hole (the bare `(x) => …` sugar, or `(x : _)`) offers nothing to synthesize from, so inference fails — unless `settle` carries the lambda term: a settle tier has established that no structure is coming from the expectation, so the hole is replaced by a metavariable named after its binder ([`MetavarOrigin::Domain`](curios_core::MetavarOrigin)), pinned by the body or by whatever the settled type later unifies with, and reported by zonk as the parameter whose type was never determined when nothing ever pins it. The rebuilt lambda and its type share the same closed domains, so both stay de-Bruijn-correct.
 pub(super) fn elaborate_func_infer(
     context: &mut Context,
     telescope: &Telescope<Term>,
     plicities: &[Plicity],
+    settle: Option<&Term>,
 ) -> Result<(Term, Term), Error> {
+    // The settle scope is captured before the walk assumes a single binder: every domain metavariable is born at the settling expectation's own frame, never under the lambda's, which is what the embedded-metavariable exemption in `solve` needs to commit the settled type.
+    let scope = settle.map(|_| context.domain_scope());
+
     fn walk(
         context: &mut Context,
         body: Telescope<Term>,
         plicities: &[Plicity],
+        settle: Option<(&Term, &DomainScope)>,
         domains: &mut Vec<(Plicity, Free, Term)>,
     ) -> Result<(Term, Term), Error> {
         match body {
@@ -832,11 +837,25 @@ pub(super) fn elaborate_func_infer(
             Telescope::Cons(domain, body_rest) => {
                 let domain = crate::check_is_sort(context, &domain)?.0;
 
-                // A domain nothing pins is refused here rather than left to fail obscurely downstream — but only a silent hole is: a written `?` domain is the author asking what the domain is, and it rides on to zonk's report (`MetavarOrigin` states the rule).
-                if matches!(&*reduce_with(context, &domain)?, Subterm::Metavar(metavar) if metavar.is_hole())
-                {
-                    return Err(Error::CannotInfer);
-                }
+                // A domain nothing pins is refused here rather than left to fail obscurely downstream — but only a silent hole is: a written `?` domain is the author asking what the domain is, and it rides on to zonk's report (`MetavarOrigin` states the rule). A settle tier instead admits the hole as a named domain metavariable, per the function's contract above.
+                let reduced = reduce_with(context, &domain)?;
+                let domain = match &*reduced {
+                    Subterm::Metavar(metavar) if metavar.is_hole() => match settle {
+                        None => return Err(Error::CannotInfer),
+                        Some((lambda, scope)) => {
+                            let result = context
+                                .metavar_entry(metavar.id)
+                                .map(|entry| entry.result.clone())
+                                .unwrap_or_else(Term::type_ground);
+                            let binder = body_rest.first_hint().unwrap_or("_").to_string();
+                            let named =
+                                context.fresh_domain_metavar(scope, result, lambda.span(), binder);
+                            context.solve_metavar(metavar.id, named.clone());
+                            named
+                        }
+                    },
+                    _ => domain,
+                };
 
                 let plicity = plicities[domains.len()];
                 let name = context.fresh(body_rest.first_hint());
@@ -846,14 +865,18 @@ pub(super) fn elaborate_func_infer(
                     _ => context.assume(&name, &domain),
                 }
                 domains.push((plicity, name, domain));
-                walk(context, body_rest.open(&[&x]), plicities, domains)
+                walk(context, body_rest.open(&[&x]), plicities, settle, domains)
             }
         }
     }
 
     let mut domains = Vec::new();
-    let (body, output) =
-        context.with_frame(|context| walk(context, telescope.clone(), plicities, &mut domains))?;
+    let settle = match (settle, &scope) {
+        (Some(lambda), Some(scope)) => Some((lambda, scope)),
+        _ => None,
+    };
+    let (body, output) = context
+        .with_frame(|context| walk(context, telescope.clone(), plicities, settle, &mut domains))?;
 
     Ok((
         Term::func_marked(domains.clone(), body),

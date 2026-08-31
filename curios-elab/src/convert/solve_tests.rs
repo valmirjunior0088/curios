@@ -150,13 +150,35 @@ fn conversion_cannot_solve_a_protected_recursive_slot() {
 }
 
 #[test]
-fn embedded_metavar_postpones_to_residual() {
+fn embedded_metavar_within_the_target_context_commits() {
     let mut context = context();
     let x = context.fresh(Some("x"));
     context.birth_metavar(MetavarId(0), Vec::new(), Term::type_ground());
     context.birth_metavar(MetavarId(1), Vec::new(), Term::type_ground());
 
-    // ?0 ≟ (x : ?1) -> Nat — ?1 is an unsolved embedded metavariable, so the solve is postponed; nothing solves ?1, so it stays residual.
+    // ?0 ≟ (x : ?1) -> Nat — ?1 is unsolved but its birth context is contained in ?0's, so nothing it can ever inject escapes ?0's scope: the forced solution commits with ?1 riding embedded, instead of stranding as a residual. This is what lets a settle-synthesized lambda type pin its expectation while a domain metavariable is still open.
+    let candidate = Term::func_type(
+        [(x.clone(), Term::hole(1))],
+        Term::intrinsic(Intrinsic::NatType),
+    );
+    assert_eq!(conv(&mut context, &Term::hole(0), &candidate), Ok(true));
+    assert!(context.metavar_solution(MetavarId(0)).is_some());
+    assert_eq!(context.metavar_solution(MetavarId(1)), None);
+}
+
+#[test]
+fn embedded_metavar_of_a_wider_context_postpones_to_residual() {
+    let mut context = context();
+    let x = context.fresh(Some("x"));
+    let y = context.fresh(Some("y"));
+    context.birth_metavar(MetavarId(0), Vec::new(), Term::type_ground());
+    context.birth_metavar(
+        MetavarId(1),
+        vec![(y.clone(), Term::intrinsic(Intrinsic::NatType))],
+        Term::type_ground(),
+    );
+
+    // ?0 ≟ (x : ?1) -> Nat — ?1's birth context holds a binder ?0's lacks, so its eventual solution could smuggle `y` past ?0's scope: postponed, the stand-in for pruning.
     let candidate = Term::func_type(
         [(x.clone(), Term::hole(1))],
         Term::intrinsic(Intrinsic::NatType),

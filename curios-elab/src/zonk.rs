@@ -945,6 +945,7 @@ fn zonk_term(context: &Context, term: &Term) -> Result<Term, Error> {
                         )
                     }
                     MetavarOrigin::Hole => Error::CannotInfer,
+                    MetavarOrigin::Domain(binder) => Error::domain_never_determined(binder.clone()),
                     // Handled by the unconditional report above.
                     MetavarOrigin::Goal => unreachable!("a goal never reaches the splice path"),
                 };

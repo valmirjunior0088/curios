@@ -338,6 +338,10 @@ pub enum Error {
         func: String,
         binder: String,
     },
+    /// A settle-synthesized lambda's domain that nothing ever pinned — not the body, not anything the settled type met. Carries only the binder's name: the metavariable is elaboration state the reader cannot see, and the parameter is what they can annotate.
+    DomainNeverDetermined {
+        binder: String,
+    },
     /// A call supplies more `@`-arguments than the function has implicit binders (the explicit-slot counterpart is `WrongNumberOfArguments`).
     TooManyImplicits {
         expected: usize,
@@ -820,6 +824,10 @@ impl Error {
 
     pub(crate) fn uninferred_implicit(func: String, binder: String) -> Self {
         Self::UninferredImplicit { func, binder }
+    }
+
+    pub(crate) fn domain_never_determined(binder: String) -> Self {
+        Self::DomainNeverDetermined { binder }
     }
 
     pub(crate) fn too_many_implicits(expected: usize, got: usize) -> Self {

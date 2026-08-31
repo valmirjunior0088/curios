@@ -62,6 +62,13 @@ type SharedTelescope = Rc<Vec<(Free, Term)>>;
 /// The identity spine over a [`SharedTelescope`] — one `Var::free` per binder — shared the same way.
 type SharedSpine = Rc<Vec<Term>>;
 
+/// The frozen scope a settle-synthesized lambda's domain metavariables are born under: the settle site's ambient frame, captured by [`Context::domain_scope`] before the lambda's own binders are assumed and consumed by [`Context::fresh_domain_metavar`]. Opaque outside this module — the walk that holds one can only pass it back.
+#[derive(Clone)]
+pub(crate) struct DomainScope {
+    telescope: SharedTelescope,
+    spine: SharedSpine,
+}
+
 pub(crate) struct UniverseMutation<'a> {
     solver: &'a mut UniverseSolver,
     stamp: &'a Entropy,
@@ -1130,6 +1137,44 @@ impl Context {
     /// Mint a silent hole — the stand-in type a written goal in synthesis position gets, so the goal survives to zonk's report instead of dying with `CannotInfer` (`elaborate_metavar`).
     pub(crate) fn fresh_hole_metavar(&mut self, result: Term, span: Option<Span>) -> Term {
         self.fresh_metavar_with(result, span, MetavarOrigin::Hole).1
+    }
+
+    /// The frozen ambient scope a settle-synthesized lambda's domain metavariables are born under — captured before the settle walk assumes a single lambda binder, so a domain's birth context is never wider than the expectation it will inhabit, which the embedded-metavariable exemption in `solve` relies on ([`Context::metavar_context_contained`]).
+    pub(crate) fn domain_scope(&mut self) -> DomainScope {
+        let (telescope, spine) = self.identity_snapshot();
+        DomainScope { telescope, spine }
+    }
+
+    /// Mint the metavariable standing for a settle-synthesized lambda's unannotated domain — like [`Context::fresh_hole_metavar`] but carrying the binder's name, so zonk's unsolved report can point at the parameter whose type was never determined instead of raising a bare "cannot infer", and born at the settle site's ambient `scope` rather than under the lambda's own binders.
+    pub(crate) fn fresh_domain_metavar(
+        &mut self,
+        scope: &DomainScope,
+        result: Term,
+        span: Option<Span>,
+        binder: String,
+    ) -> Term {
+        let id = self.solutions.mint();
+        self.birth_metavar(id, scope.telescope.clone(), result);
+        let metavar = Term::metavar_birthed(id, MetavarOrigin::Domain(binder), scope.spine.clone());
+        match span {
+            Some(span) => metavar.with_span(span),
+            None => metavar,
+        }
+    }
+
+    /// Whether `inner`'s birth context is contained in `outer`'s: every binder name of `inner`'s birth telescope is a binder name of `outer`'s. Binder names are entropy-fresh, so name identity is context identity, and the type at a shared name is the one both frames recorded. `solve`'s embedded-metavariable guard asks this to tell a candidate metavariable that could smuggle a name past `outer`'s scope from one that provably cannot.
+    pub(crate) fn metavar_context_contained(&self, inner: MetavarId, outer: MetavarId) -> bool {
+        let (Some(inner_entry), Some(outer_entry)) =
+            (self.metavar_entry(inner), self.metavar_entry(outer))
+        else {
+            return false;
+        };
+        let outer_names: BTreeSet<&Free> =
+            outer_entry.telescope.iter().map(|(name, _)| name).collect();
+        inner_entry
+            .telescope
+            .iter()
+            .all(|(name, _)| outer_names.contains(name))
     }
 
     fn fresh_metavar_with(
