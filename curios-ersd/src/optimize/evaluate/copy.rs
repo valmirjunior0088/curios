@@ -102,6 +102,7 @@ pub(super) fn deep_copy_function(
                 .map(|&p| lookup(&values, p))
                 .collect(),
             body: lookup(&block_ids, function.body),
+            description: function.description,
         };
         module.define_function(lookup(&function_ids, *old), remapped);
     }

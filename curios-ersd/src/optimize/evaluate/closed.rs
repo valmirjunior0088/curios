@@ -7,7 +7,7 @@ mod tests;
 
 use {
     super::{
-        budget::{PASS_REIFY_BUDGET, ReifyBudget},
+        budget::{DESCRIPTION_COPY_NODE_LIMIT, PASS_REIFY_BUDGET, ReifyBudget},
         interpret::{Evaluator, Outcome, Residual},
         reify::{ReifyScope, free_references, reify, reify_all, reify_check, reify_check_all},
         value::Value,
@@ -46,10 +46,9 @@ enum Kind {
 pub(crate) fn evaluate_closed_terms(module: &mut Module) -> bool {
     curios_profile::profile!("evaluate_closed_terms");
     let analysis = Analysis::analyze(module);
-    let summary = crate::Summary::analyze(module, &analysis);
     let owners = index_owners(module);
     let planned = plan(module, &analysis, &owners);
-    apply(module, planned, summary)
+    apply(module, planned)
 }
 
 fn plan(
@@ -96,7 +95,7 @@ fn plan(
 }
 
 /// Reification runs first, over every plan, and only *appends* to the arena; only once every plan is reified are the candidates rewritten and the materialized statements spliced in. The order matters: a reified closure deep-copies a source function and must read the original module, not one where an earlier plan's rewrite left an alias whose definition is not yet spliced into its block.
-fn apply(module: &mut Module, planned: Vec<Planned>, summary: crate::Summary) -> bool {
+fn apply(module: &mut Module, planned: Vec<Planned>) -> bool {
     if planned.is_empty() {
         return false;
     }
@@ -107,7 +106,7 @@ fn apply(module: &mut Module, planned: Vec<Planned>, summary: crate::Summary) ->
     // Every replacement draws on one pool, so a pass cannot multiply the module however many candidates it found — see `PASS_REIFY_BUDGET`.
     let mut reify_pool = PASS_REIFY_BUDGET;
     // Stable for the whole pass: reification only appends, and the item list is rebuilt after this loop.
-    let mut scope = ReifyScope::new(summary);
+    let mut scope = ReifyScope::new();
     // Which item hosts each block, so a candidate inside one binds its group ahead of that item, and what an item binds — the two together decide whether a group *can* be lifted. Stable for the same reason.
     let block_items = index_block_items(module);
     let (item_functions, item_values) = item_binding_positions(module);
@@ -148,9 +147,23 @@ fn apply(module: &mut Module, planned: Vec<Planned>, summary: crate::Summary) ->
                 Owner::Items => None,
             },
         );
+        // A candidate holding a description gets the tight cap: a big description-bearing replacement is a sequencing chain's suffix, and copying it per link per round is the compounding the cap stops; the small staged residuals pass untouched. Probe and real run share the cap, or a plan the probe admits would strand at the tighter gate.
+        let contains_description = match &plan.kind {
+            Kind::Value(value) => value.contains_description(module),
+            Kind::Foreign(_, operands) | Kind::Call(_, operands) => operands
+                .iter()
+                .any(|operand| operand.contains_description(module)),
+        };
+        let capped = |pool: usize| {
+            if contains_description {
+                ReifyBudget::within_capped(pool, DESCRIPTION_COPY_NODE_LIMIT)
+            } else {
+                ReifyBudget::within(pool)
+            }
+        };
         // Dry-run first: a plan that cannot fully materialize is skipped before anything is emitted, so nothing is ever stranded.
         {
-            let mut probe = ReifyBudget::within(reify_pool);
+            let mut probe = capped(reify_pool);
             let ok = match &plan.kind {
                 Kind::Value(value) => reify_check(module, value, &mut probe, &mut scope).is_ok(),
                 Kind::Foreign(_, values) | Kind::Call(_, values) => {
@@ -162,7 +175,7 @@ fn apply(module: &mut Module, planned: Vec<Planned>, summary: crate::Summary) ->
             }
         }
         let mut spliced = Vec::new();
-        let mut budget = ReifyBudget::within(reify_pool);
+        let mut budget = capped(reify_pool);
         // The probe above shares nothing, so it charges at least what this run will; the memos only ever remove copies from under a gate that already fit without them.
         let rhs = match plan.kind {
             Kind::Value(value) => {

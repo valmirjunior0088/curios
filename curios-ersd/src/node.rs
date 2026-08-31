@@ -220,6 +220,8 @@ pub struct Function {
     pub debug_name: Option<String>,
     pub params: Vec<ValueId>,
     pub body: BlockId,
+    /// Whether this function is an erased effect description's performance — stamped where descriptions are born, the erasure's `thunk`, and read where copying one would buy nothing: the host runs a description once per force, so the reifier declines to specialize it.
+    pub description: bool,
 }
 
 /// A mutually recursive group mixing functions and computed values. Every member is in scope in every member body and initializer and in the rest of the enclosing scope. A computed member is forced by need: its initializer runs the first time something reads the member, so members may reference one another in any order, and what the verifier refuses is an initializer that evaluates itself — directly, or through the functions it applies — and one that performs an effect, which forcing could not keep in its place. Member order is source order and decides nothing but spelling.

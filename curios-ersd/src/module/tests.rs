@@ -110,6 +110,7 @@ fn functions_reserve_before_they_define() {
             debug_name: Some("self".into()),
             params: vec![n],
             body,
+            description: false,
         },
     );
     assert_eq!(module.function(function).unwrap().params, vec![n]);

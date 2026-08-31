@@ -17,6 +17,9 @@ pub(super) const MAX_CALL_DEPTH: usize = 256;
 pub(super) const MAX_REIFY_NODES: usize = 2_048;
 pub(super) const MAX_REIFY_BYTES: usize = 65_536;
 
+/// The heaviest copy a description closure may reify. A performance is small by construction — a write is one foreign call, a bind two forces, a pure a return — so a description whose copy extent runs past this is carrying program code: a sequencing chain's continuation drags its whole suffix along as extent, and copying that per level per round is the compounding this cap exists to stop. The staged-formatter residuals the collapse pins protect weigh a few dozen nodes; a chain's first link weighs its program.
+pub(crate) const DESCRIPTION_COPY_NODE_LIMIT: usize = 128;
+
 /// Shared node pool for a whole reification pass — the growth analogue of [`PASS_BUDGET`].
 ///
 /// [`MAX_REIFY_NODES`] bounds one replacement; nothing bounded how many replacements a pass performs, so a round could reify thousands of times and multiply the module, and the next round then walked the multiplied module. Measured before this existed, on a one-line program whose prelude had been rewritten in combinator style: 23,822 live values after round 0, 62,879 after round 1, and 1,539,000 after round 2, with the round times tracking the size at 1.5 s, 5.8 s and 30.7 s. The eight-round loop above never finished.
@@ -86,8 +89,13 @@ impl ReifyBudget {
 
     /// One replacement bounded by both its own cap and what the pass's shared pool has left.
     pub(super) fn within(pool: usize) -> Self {
+        Self::within_capped(pool, MAX_REIFY_NODES)
+    }
+
+    /// [`Self::within`] under a tighter node cap — the description-containing candidate's budget, [`DESCRIPTION_COPY_NODE_LIMIT`].
+    pub(super) fn within_capped(pool: usize, nodes: usize) -> Self {
         Self {
-            nodes: MAX_REIFY_NODES,
+            nodes,
             payload: MAX_REIFY_BYTES,
             pool,
             spent: 0,

@@ -57,10 +57,6 @@ pub(super) fn reify_check(
             if scope.escapes_knot(module, closure.function) {
                 return Err(Bail::Unsupported);
             }
-            // The same description gate `reify_closure` applies — see its comment.
-            if scope.description(closure.function) {
-                return Err(Bail::Unsupported);
-            }
             // Captures first, then the copy, in `reify_closure`'s order. The real run pays a subset of these charges, so charging the same amounts *in the same sequence* is what makes "the probe fits" imply "the real run fits". The order is the real run's, not this one's: a memo key cannot be formed until the captures have atoms.
             for (_, held) in closure.env.borrow().iter() {
                 reify_check(module, held, budget, scope)?;
@@ -176,10 +172,6 @@ fn reify_closure(
     if scope.escapes_knot(module, closure.function) {
         return Err(Bail::Unsupported);
     }
-    // An effectful closure is an erased description: the host runs it once per force, so a specialized copy pre-pays construction the program performs once and multiplies the module for it — the compounding that turned a sequencing chain's suffixes exponential. Folding less is always sound, and the pure walks later rounds consume still pass.
-    if scope.description(closure.function) {
-        return Err(Bail::Unsupported);
-    }
     let mut substitution = BTreeMap::new();
     for (value, held) in &captures {
         substitution.insert(*value, reify(module, held, budget, out, scope)?);
@@ -234,8 +226,6 @@ type Specialization = (FunctionId, Vec<(ValueId, Atom)>);
 ///
 /// The two memos are the exception. Reifying a closure deep-copies its whole region, and the same specialization is reached along two independent axes: within one replacement, because a combinator names a sub-parser twice (`alt(a, a)`), and across replacements, because many definitions name one shared sub-parser. Measured on a generated grammar, the first axis costs `2^depth` copies without [`ReifyScope::local`] and one per level with it; the second costs five functions per referencing definition without [`ReifyScope::shared`]. Only the first is unconditionally safe to reuse, which is what [`ReifyScope::reusable`] arbitrates.
 pub(super) struct ReifyScope {
-    /// The per-function effect summary the description gate reads — computed once per pass, over the module state the plan evaluated.
-    summary: crate::Summary,
     item_bound: Option<BTreeSet<FunctionId>>,
     weights: BTreeMap<FunctionId, Option<usize>>,
     outward: BTreeMap<FunctionId, bool>,
@@ -251,16 +241,9 @@ pub(super) struct ReifyScope {
 }
 
 impl ReifyScope {
-    /// Whether `function` is host-facing — an erased description's body rather than a specializable computation: it interacts with the host or exits. Traps and divergence stay reifiable on purpose; the pure recursive walks are exactly the profitable copies, and every recursive component is seeded with divergence.
-    fn description(&self, function: FunctionId) -> bool {
-        let observable = self.summary.behavior_of(function).observable;
-        observable.host_effect || observable.may_exit
-    }
-
     /// Every fact here is computed on first use, not on construction. A caller that reifies no closure -- a literal constructor spine, typically -- must not pay for the item walk at all, which is what an eager scope charged it.
-    pub(super) fn new(summary: crate::Summary) -> Self {
+    pub(super) fn new() -> Self {
         Self {
-            summary,
             item_bound: None,
             weights: BTreeMap::new(),
             outward: BTreeMap::new(),

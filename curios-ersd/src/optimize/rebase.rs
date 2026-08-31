@@ -217,12 +217,14 @@ fn rebase_one(module: &mut Module, binding: StatementId, function: FunctionId) {
     let mut worker_params = params;
     worker_params.push(acc);
     let worker_name = debug_name.as_ref().map(|name| format!("{name}@w"));
+    // A description is a zero-parameter thunk and never reaches the accumulator split, so both halves are ordinary computations.
     module.define_function(
         worker,
         Function {
             debug_name: worker_name,
             params: worker_params,
             body,
+            description: false,
         },
     );
     module.set_function(
@@ -231,6 +233,7 @@ fn rebase_one(module: &mut Module, binding: StatementId, function: FunctionId) {
             debug_name,
             params: wrapper_params,
             body: wrapper_body,
+            description: false,
         },
     );
 

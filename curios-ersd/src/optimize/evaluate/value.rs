@@ -3,7 +3,7 @@
 //! A [`Value`] is the compile-time result of running a closed computation — internal to the evaluator, never stored in the module — so it carries the shapes the constant alphabet deliberately omits: `Rc`-shared list, product, and constructor aggregates, and a closure over a module function with its resolved local captures. Reification ([`super::reify`]) turns a value back into arena statements.
 
 use {
-    crate::{Constant, ConstructorId, FunctionId, ProductId, ValueId},
+    crate::{Constant, ConstructorId, FunctionId, Module, ProductId, ValueId},
     curios_num::Floating,
     curios_utilities::{Grain, PackedBin},
     std::{cell::RefCell, rc::Rc},
@@ -36,6 +36,34 @@ pub(super) struct Closure {
 }
 
 impl Value {
+    /// Whether this value holds an erased description anywhere — a closure stamped at its birth by erasure's `thunk`, directly or through captures and containers. A candidate holding one gets the tight description budget: the host runs a description once per force, so a big replacement is a sequencing chain's suffix riding along, while the small staged residuals the collapse pins protect pass untouched.
+    pub(super) fn contains_description(&self, module: &Module) -> bool {
+        match self {
+            Value::Unit
+            | Value::Bool(_)
+            | Value::Nat(_)
+            | Value::Byte(_)
+            | Value::Int(_)
+            | Value::Flt(_)
+            | Value::Handle(_)
+            | Value::Bin(..) => false,
+            Value::List(items) => items.iter().any(|item| item.contains_description(module)),
+            Value::Product(_, fields) | Value::Construct(_, fields) => fields
+                .iter()
+                .any(|field| field.contains_description(module)),
+            Value::Closure(closure) => {
+                module
+                    .function(closure.function)
+                    .is_some_and(|function| function.description)
+                    || closure
+                        .env
+                        .borrow()
+                        .iter()
+                        .any(|(_, held)| held.contains_description(module))
+            }
+        }
+    }
+
     /// The value as an interned constant, if it is a leaf.
     pub(super) fn as_constant(&self) -> Option<Constant> {
         Some(match self {

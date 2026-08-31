@@ -108,6 +108,8 @@ impl Lowering {
         let block = self.seal(outcome);
         self.builder
             .define_function(function, name, Vec::new(), block);
+        // Every thunk is a description's performance — the fact the reifier's decline reads.
+        self.builder.mark_description(function);
         self.builder.let_functions(vec![function]);
 
         Ok(Outcome::Emitted(curios_ersd::Atom::Function(function)))

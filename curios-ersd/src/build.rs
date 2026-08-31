@@ -118,8 +118,22 @@ impl ErsdBuilder {
                 debug_name,
                 params,
                 body,
+                description: false,
             },
         );
+    }
+
+    /// Stamp a defined function as an erased effect description's performance — see [`Function::description`]. Called by the one birthplace of descriptions, the erasure's `thunk`.
+    pub fn mark_description(&mut self, id: FunctionId) {
+        if let Some(function) = self.module.function(id).cloned() {
+            self.module.set_function(
+                id,
+                Function {
+                    description: true,
+                    ..function
+                },
+            );
+        }
     }
 
     /// Group a set of computed recursive-group members with their initializer blocks into a registered group.

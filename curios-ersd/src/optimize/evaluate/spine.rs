@@ -309,8 +309,7 @@ impl Minter {
 
         // Materialize the spine locally, deep-copy the target, drop the baked parameter and bind it to the spine ahead of the copied body. Dry-run first so a declined mint strands nothing.
         // One scope for this mint's probe and its real run: the module does not change between them, and sharing it across *mints* would be unsound because a deep copy rewrites bodies the scope has already answered for.
-        // Spines are literal data, so the description gate has nothing to read here; the default summary answers the conservative top for any closure met anyway, which declines the copy — folding less, still sound.
-        let mut scope = super::reify::ReifyScope::new(crate::Summary::default());
+        let mut scope = super::reify::ReifyScope::new();
         {
             let mut probe = ReifyBudget::new();
             super::reify::reify_check(module, spine, &mut probe, &mut scope).ok()?;
@@ -342,6 +341,7 @@ impl Minter {
                 debug_name: definition.debug_name,
                 params,
                 body: definition.body,
+                description: definition.description,
             },
         );
 
