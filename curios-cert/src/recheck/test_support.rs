@@ -1255,7 +1255,6 @@ pub(super) fn variant_value_module(params: Vec<Term>) -> Module {
 pub(super) fn unsaturated_cases() -> Vec<(&'static str, Module)> {
     let a = Free::local(990, Some("a"));
     let b = Free::local(991, Some("b"));
-    let g = Free::local(992, Some("g"));
     let nat = Term::intrinsic(Intrinsic::NatType);
     let three = Term::intrinsic(Intrinsic::Nat(Nat::new(3usize)));
 
