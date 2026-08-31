@@ -6,8 +6,10 @@
 mod tests;
 
 use {
-    curios_core::{Free, Global, Intrinsic, Subterm, Telescope, Term, TupleType, UniverseContext},
-    curios_utilities::{Grain, Qualifier},
+    curios_core::{
+        Free, FuncType, Global, Intrinsic, Subterm, Telescope, Term, TupleType, UniverseContext,
+    },
+    curios_utilities::{Grain, Plicity, Qualifier},
     std::fmt,
 };
 
@@ -45,7 +47,7 @@ impl fmt::Display for WitnessKey {
     }
 }
 
-/// One rigid head inside a [`WitnessKey`]: the nominal (inductive or struct) qualified name, an intrinsic type constructor, or an anonymous product's shape. Parameters past the heads are checked by unification at resolution time, not by the key.
+/// One rigid head inside a [`WitnessKey`]: the nominal (inductive or struct) qualified name, an intrinsic type constructor, an anonymous product's shape, or a function type's plicity vector. Parameters past the heads are checked by unification at resolution time, not by the key.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 #[curios_archive::archived]
 pub enum HeadKey {
@@ -62,10 +64,12 @@ pub enum HeadKey {
     Io,
     /// A tuple type, keyed by its *shape*: the label at each field position, `""` where the field is positional, arity implied by the length. A tuple type has no name to be headed by, so the shape plays the role a nominal name plays — it is precisely the half of the type's identity that conversion does not delegate to the fields (`compare_tuple_type` refuses differing labels before enqueuing one), so keying here splits the type along the seam conversion already splits it on. `{Nat, Bool}` and `{x: Nat, y: Bool}` are two keys because they are two types.
     TupleType(Vec<String>),
+    /// A function type, keyed by its *plicity vector*: the mark at each parameter position, arity implied by the length, domains and result excluded. The marks are the non-subterm half of a function type's identity, exactly as a tuple's labels are (`compare_func_type` refuses differing vectors before enqueuing one domain), so `(A) -> B` and `(@A: T) -> B` are two keys because they are two types — while `(a: Nat) -> Nat` and `(b: Nat) -> Nat` are one, because binder names feed freshness, never equality: the opposite of tuple labels, and the same rule seen from the other side, since the key is whatever half of identity conversion keeps for itself.
+    FuncType(Vec<Plicity>),
 }
 
 impl HeadKey {
-    /// The key of a term already in weak-head normal form, if its head is rigid and nominal/intrinsic/tuple. A `Func` head is the higher-kinded case (a type constructor like `Option` reduces to `λA. Option-normal-form`): its *body* supplies the key, so `Monad(Option)` keys on `Option`. `None` for anything else — variables, metavariables, Π types, `Type`/`Prop` — which are not keyable.
+    /// The key of a term already in weak-head normal form, if its head is rigid and nominal/intrinsic/tuple/function. A `Func` head is the higher-kinded case (a type constructor like `Option` reduces to `λA. Option-normal-form`): its *body* supplies the key, so `Monad(Option)` keys on `Option`. `None` for anything else — variables, metavariables, `Type`/`Prop` — which are not keyable.
     pub(crate) fn of_whnf(term: &Term) -> Option<HeadKey> {
         match &**term {
             Subterm::InductType(induct_decl) => Some(HeadKey::Nominal(induct_decl.name.clone())),
@@ -73,6 +77,8 @@ impl HeadKey {
             Subterm::Intrinsic(intrinsic) => Self::of_intrinsic(intrinsic),
             // The weak-head form of a tuple type is the node itself and its labels are structural, so keying costs a walk down the spine and reduces no field type.
             Subterm::TupleType(tuple_type) => Some(Self::of_tuple_type(tuple_type)),
+            // The weak-head form of a function type is likewise the node itself and its marks sit on it, so keying costs a copy of the vector and no evaluation.
+            Subterm::FuncType(func_type) => Some(Self::of_func_type(func_type)),
             // The higher-kinded head: the type-constructor function's body is the normal form the applied constructor would reduce to (`λA. InductType(Option, [A])`, or `λT. ListType(T)` for an intrinsic former like `/sys/List`). The binders need not be opened — the name/former sits on the node.
             Subterm::Func(func) => {
                 let mut telescope = &func.telescope;
@@ -92,6 +98,8 @@ impl HeadKey {
                     Subterm::Intrinsic(intrinsic) => Self::of_intrinsic(intrinsic),
                     // A constructor whose body is an anonymous product — `let Pair(A: Type) -> Type = {Nat, A};` reduces to `(A: Type) => {Nat, A}` — keys on that body's shape, so `Functor(Pair)` registers where `Monad(Option)` does. Symmetry with the nominal case, not a consumer's demand; it does not extend imitation, since `?M(?A) ≡ {Nat, Nat}` has no unique solution.
                     Subterm::TupleType(tuple_type) => Some(Self::of_tuple_type(tuple_type)),
+                    // A constructor whose body is a function type — `let Reader(A: Type) -> Type = (Nat) -> A;` reduces to `(A: Type) => (Nat) -> A` — keys on that body's plicity vector, by the same symmetry. Imitation is likewise not extended: `?M(?A) ≡ (Nat) -> Nat` has no unique solution, so a goal reaches such a witness only where it spells the constructor.
+                    Subterm::FuncType(func_type) => Some(Self::of_func_type(func_type)),
                     // A *partially applied* family: `(A : Type) => State(S, A)` leaves the body a stuck application under the binder, since weak-head reduction never descends into a `Func`. Its head names the former — a registry entry and its type-former definition share one finalized context, so the reference's global *is* the declaration's key — and the universes riding an `Instance` wrapper are irrelevant to keying, which reads names alone. Arguments below the head stay unification's job at resolution time, exactly as for a saturated node.
                     Subterm::Apply(apply) => {
                         let name = match &*apply.head {
@@ -121,6 +129,11 @@ impl HeadKey {
                 .map(str::to_owned)
                 .collect(),
         )
+    }
+
+    /// The key of a function type, shared by the first-order and higher-kinded (`Func`-body) positions of [`of_whnf`](Self::of_whnf). The marks sit on the node, so the read opens no binder and evaluates nothing.
+    fn of_func_type(func_type: &FuncType) -> HeadKey {
+        HeadKey::FuncType(func_type.plicities().to_vec())
     }
 
     /// The key of an intrinsic type former, shared by the first-order and higher-kinded (`Func`-body) positions of [`of_whnf`](Self::of_whnf).
@@ -169,6 +182,21 @@ impl fmt::Display for HeadKey {
                     }
                 }
                 write!(f, "}}")
+            }
+            // A key displays as the type it stands for with everything but the marks elided: `() -> _`, `(_) -> _`, `(@_, use _, _) -> _`. The domains and result are not in the key, so there is nothing truthful to print in their place.
+            HeadKey::FuncType(plicities) => {
+                write!(f, "(")?;
+                for (index, plicity) in plicities.iter().enumerate() {
+                    if index > 0 {
+                        write!(f, ", ")?;
+                    }
+                    match plicity {
+                        Plicity::Explicit => write!(f, "_")?,
+                        Plicity::Implicit => write!(f, "@_")?,
+                        Plicity::Witness => write!(f, "use _")?,
+                    }
+                }
+                write!(f, ") -> _")
             }
         }
     }

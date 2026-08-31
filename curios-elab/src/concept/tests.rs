@@ -1,7 +1,7 @@
 use {
     super::{HeadKey, WitnessKey},
     curios_core::{Free, Global, Term},
-    curios_utilities::{Grain, Qualifier},
+    curios_utilities::{Grain, Plicity, Qualifier},
 };
 
 /// A tuple type whose fields are all `Type` — the field types are not in the key, so any term does.
@@ -11,6 +11,20 @@ fn tuple_type(labels: [Option<&str>; 2]) -> Term {
             .into_iter()
             .enumerate()
             .map(|(index, label)| (Free::local(index as u32, label), Term::type_ground())),
+    )
+}
+
+/// A function type whose domains and result are all `Type`, every binder named `name` — the domains and result are not in the key, and the names must not be either.
+fn func_type(marks: &[Plicity], name: &str) -> Term {
+    Term::func_type_marked(
+        marks.iter().enumerate().map(|(index, mark)| {
+            (
+                *mark,
+                Free::local(index as u32, Some(name)),
+                Term::type_ground(),
+            )
+        }),
+        Term::type_ground(),
     )
 }
 
@@ -72,6 +86,49 @@ fn the_unit_type_keys_on_the_empty_shape() {
     );
 }
 
+// The vector is the mark at each parameter position, so the key carries every mark in order and nothing about the domains or result.
+#[test]
+fn a_function_type_keys_on_its_plicity_vector() {
+    assert_eq!(
+        HeadKey::of_whnf(&func_type(
+            &[Plicity::Explicit, Plicity::Implicit, Plicity::Witness],
+            "p"
+        )),
+        Some(HeadKey::FuncType(vec![
+            Plicity::Explicit,
+            Plicity::Implicit,
+            Plicity::Witness
+        ]))
+    );
+}
+
+// Binder names are alpha-convertible in a function type — the exact opposite of tuple labels — so two spellings of one type are one key.
+#[test]
+fn binder_names_are_not_part_of_a_function_key() {
+    assert_eq!(
+        HeadKey::of_whnf(&func_type(&[Plicity::Explicit], "a")),
+        HeadKey::of_whnf(&func_type(&[Plicity::Explicit], "b"))
+    );
+}
+
+// `() -> A` is a distinct type from `A`, and its key is the empty vector rather than `A`'s head.
+#[test]
+fn a_nullary_function_type_keys_on_the_empty_vector() {
+    assert_eq!(
+        HeadKey::of_whnf(&func_type(&[], "p")),
+        Some(HeadKey::FuncType(Vec::new()))
+    );
+}
+
+// Plicity is part of a function type's identity, so two vectors of one arity are two table entries rather than a duplicate.
+#[test]
+fn marks_separate_two_vectors_of_one_arity() {
+    assert_ne!(
+        HeadKey::of_whnf(&func_type(&[Plicity::Explicit], "p")),
+        HeadKey::of_whnf(&func_type(&[Plicity::Implicit], "p"))
+    );
+}
+
 // A shape stands for a type whose field types it does not carry, so it displays them elided rather than inventing a spelling for them.
 #[test]
 fn a_shape_displays_its_field_types_elided() {
@@ -87,5 +144,26 @@ fn a_shape_displays_its_field_types_elided() {
             .unwrap()
             .to_string(),
         "{x: _, y: _}"
+    );
+}
+
+// A function key stands for a type whose domains and result it does not carry, so it displays them elided too — the marks alone are truthful to print.
+#[test]
+fn a_function_key_displays_its_domains_and_result_elided() {
+    assert_eq!(HeadKey::FuncType(Vec::new()).to_string(), "() -> _");
+    assert_eq!(
+        HeadKey::of_whnf(&func_type(&[Plicity::Explicit], "p"))
+            .unwrap()
+            .to_string(),
+        "(_) -> _"
+    );
+    assert_eq!(
+        HeadKey::of_whnf(&func_type(
+            &[Plicity::Implicit, Plicity::Witness, Plicity::Explicit],
+            "p"
+        ))
+        .unwrap()
+        .to_string(),
+        "(@_, use _, _) -> _"
     );
 }

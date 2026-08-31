@@ -221,3 +221,63 @@ fn a_tuple_witness_for_an_entry_concept_registers() {
 
     assert_eq!(run(source), b"mine");
 }
+
+// A plicity vector is a key like any other, so two witnesses of one vector collide exactly as two of one name do — and the report spells the key by its marks, domains and result elided, because the key does not carry them.
+#[test]
+fn a_duplicate_function_shape_is_refused() {
+    let source = r#"
+        use /std/{Nat, Str};
+        pub concept Tag(A: Type): pub Type {
+            tag(A) -> Str,
+        }
+        satisfy Tag((Nat) -> Nat) {
+            tag(f) = "one",
+        }
+        satisfy Tag((Nat) -> Str) {
+            tag(f) = "two",
+        }
+        /std/print("unreachable")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("duplicate witness of '/Tag' for head '(_) -> _'"),
+        "expected the vector refused as a duplicate:\n{report}"
+    );
+}
+
+// A function type is owned by no module, as a tuple shape is, so it contributes nothing to ownership: an entry program may not key a witness on one for a concept `/std` declares. The key space here is nearly one point — `(_) -> _` above all — which is what makes the standing worth pinning.
+#[test]
+fn a_function_witness_for_a_standard_concept_is_an_orphan() {
+    let source = r#"
+        use /std/{Show, Nat};
+        satisfy Show((Nat) -> Nat) {
+            show(f) = "mine",
+        }
+        /std/print("unreachable")
+        "#;
+
+    let report = error(source);
+    assert!(
+        report.contains("orphan witness of '/std/Show/Show' for head '(_) -> _'"),
+        "expected the vector refused as an orphan:\n{report}"
+    );
+}
+
+// The admission half, function side: the concept the entry root declares carries the whole verdict, so a program writes function witnesses for its own concepts freely. `a_concept_resolves_on_a_function_value` in `shape_tests` is the same admission seen from the resolution side.
+#[test]
+fn a_function_witness_for_an_entry_concept_registers() {
+    let source = r#"
+        use /std/{Nat, Str};
+        pub concept Tag(A: Type): pub Type {
+            tag(A) -> Str,
+        }
+        satisfy Tag((Nat) -> Nat) {
+            tag(f) = "mine",
+        }
+        let f: (Nat) -> Nat = (n) => n + 1;
+        /std/print(Tag/tag(f))
+        "#;
+
+    assert_eq!(run(source), b"mine");
+}
