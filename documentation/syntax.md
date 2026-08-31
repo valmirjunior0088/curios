@@ -923,7 +923,7 @@ satisfy (@A: Type, use Show(A)) => Show(List(A)) {
 }
 ```
 
-Every registered witness is keyed by the concept name and the tuple of rigid heads of every concept parameter. Each head must reduce to an inductive, structure, intrinsic type, tuple type, or supported higher-kinded type constructor — including a *partially applied* family written as a lambda, `(A: Type) => State(S, A)`, which keys on the applied head. Remaining arguments below those heads are checked by unification after lookup.
+Every registered witness is keyed by the concept name and the tuple of rigid heads of every concept parameter. Each head must reduce to an inductive, structure, intrinsic type, tuple type, function type, or supported higher-kinded type constructor — including a *partially applied* family written as a lambda, `(A: Type) => State(S, A)`, which keys on the applied head. Remaining arguments below those heads are checked by unification after lookup.
 
 A tuple type is keyed by its *shape*: the label at each field position, arity implied, field types excluded. Labels are part of a tuple type's identity, so `Show({Nat, Bool})`, `Show({a: Nat, b: Bool})` and `Show({x: Nat, y: Bool})` are three keys for three types, and a witness for one does not serve another. `{}` keys as the empty shape, and a constructor whose body is a tuple type — `let Pair(A: Type) -> Type = {Nat, A};` — keys on that body's shape in the higher-kinded position. The standard library writes `Show`, `Eql` and `Ord` for the positional shapes up to eight fields, in `/std/Tuple`; a labeled product wanting the same is written as a `struct`.
 
@@ -932,6 +932,8 @@ satisfy (@A: Type, @B: Type, use Show(A), use Show(B)) => Show({A, B}) {
     show(t) = Str/concat("(", Str/concat(Show/show(t.0), Str/concat(", ", Str/concat(Show/show(t.1), ")")))),
 }
 ```
+
+A function type is keyed by its *plicity vector*: the mark at each parameter position, arity implied, domains and result excluded. Plicity and arity are part of a function type's identity, so `Tag((Nat) -> Nat)`, `Tag((@n: Nat) -> Nat)` and `Tag((Nat) -> (Nat) -> Nat)` are three keys for three types, and a witness for one does not serve another — while binder names are not part of it: `(a: Nat) -> Nat` and `(b: Nat) -> Nat` are one key. `() -> A` keys as the empty vector, a distinct type from `A`, and a constructor whose body is a function type — `let Reader(A: Type) -> Type = (Nat) -> A;` — keys on that body's vector in the higher-kinded position. The result type is not in the key, so a concept commits, per shape, to one result discipline. The standard library writes no function-keyed witness: no meaningful `Show` exists at a function type, `Eql` at one is undecidable, and `Monad` at one is declined deliberately — the nominal wrapper, `/std/State`'s idiom, is how a function becomes a monad.
 
 Two witnesses that resolve through each other are declared as one group with `and`; each member is a whole witness, with its own telescope where it has one, and the group's members register before any body elaborates. A lone witness may resolve through its own entry with nothing said; two that resolve through each other without being declared as a group are refused, naming both.
 
@@ -966,6 +968,8 @@ A witness premise must be a concept applied only to variables bound by the witne
 A witness may be declared only by the compilation root that owns its concept or at least one rigid type head in its key. This prevents independent third parties from defining the same globally coherent instance.
 
 A tuple shape is owned by no root, as an intrinsic type former is. A tuple-keyed witness is therefore declared where its concept is declared, or by a privileged root: a program writes tuple witnesses for its own concepts, and cannot add one for a `/std` concept at a shape `/std` did not write.
+
+A function type's plicity vector is owned by no root either, and there the consequence bites harder: the useful key space is nearly one point — `(_) -> _` above all — so a concept's owner claiming a shape claims it program-wide. A program writes function witnesses for its own concepts, and cannot add one for a `/std` concept at any shape.
 
 The coordinated `/sys`, `/syn`, and `/std` roots are exempt from the restriction against one another.
 

@@ -2,7 +2,7 @@
 
 ## Status
 
-Nothing is built. This specification depends on two grounds: the landed test harness (see [the decision](../design/toolchain/a-test-is-a-declared-description-run-by-a-synthesized-tail.md)) — the `test name() = body;` form whose empty parentheses it opens as its seam, the synthesized tail, `Test`/`Verdict` and the combinators — and the [function-key specification](func-witness-keys-spec.md), because every goal below keys on a function type. The machinery it composes was probed on 2026-08-31 against the tuple landing: premise regularity, superclass projection, per-shape witness rosters, and deferral all behave as cited.
+Nothing is built, and both of this specification's grounds are landed: the test harness ([the decision](../design/toolchain/a-test-is-a-declared-description-run-by-a-synthesized-tail.md)) — the `test name() = body;` form whose empty parentheses it opens as its seam, the synthesized tail, `Test`/`Verdict` and the combinators — and function-type witness keys ([A function type is keyed by its plicities](../design/language/a-function-type-is-keyed-by-its-plicities.md)), which is what every goal below keys on. The machinery it composes was probed on 2026-08-31 against the tuple landing: premise regularity, superclass projection, per-shape witness rosters, and deferral all behave as cited.
 
 ## Mission
 
@@ -102,4 +102,4 @@ A parameterized test is a property probed over drawn arguments with one body typ
 - Derived `Draw` through the auto-derive seam.
 - Effectful properties through `Property(Test)`'s `action` arm.
 - `Draw(Flt)` with a deliberate distribution.
-- `Dec` by enumeration, the proof-side sibling ([function-key specification](func-witness-keys-spec.md), Adjacent work).
+- `Dec` by enumeration, the proof-side sibling — `Dec((a: A) -> P(a))` from an `Enum(A)` completeness witness, deciding a Π over a finite domain by exhaustion. Speculative: extracting `P` from the goal leans on higher-order unification in a way nothing here does.

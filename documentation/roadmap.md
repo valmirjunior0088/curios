@@ -31,7 +31,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Structure and concept groups (`struct A … and B …`, `concept A … and B …`, members naming one another)
   - [x] Concept-based operators (every infix, `&&`/`||` included, dispatches through a concept)
   - [x] Tuple witness keys (a witness on `{A, B}` keys on the shape `{_, _}`, labels included)
-  - [ ] [A function type is a witness key](roadmap/func-witness-keys-spec.md) (a witness on `(A) -> B` is refused as unkeyable)
+  - [x] Function witness keys (a witness on `(A) -> B` keys on the plicity vector `(_) -> _`)
 - [ ] [Auto-derive: a witness whose body the compiler writes](roadmap/auto-derive-spec.md)
 - [x] Unified `struct` declarations (independent nominal and representation visibility)
 - [x] Inductive types (`induct` declarations)
