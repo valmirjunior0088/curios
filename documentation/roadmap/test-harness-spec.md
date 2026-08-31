@@ -59,7 +59,7 @@ One line per test, path then outcome — `proved`, `passed`, `failed`, `trapped`
 
 ## Steps
 
-- [ ] 1. Erasure agrees with itself about a dependent proof payload
+- [x] 1. Erasure agrees with itself about a dependent proof payload — landed: one threaded classification for every telescope walk (`curios-elab/src/into_ersd/classify.rs`), the three repros as tests in `curios/src/tests/erasure.rs`, and the verifier's display frame quoting its detail neutrally
 - [ ] 2. `/syn/Test`, `/std/Test`, `/std/Spell`, and the `/std` witness gap
 - [ ] 3. The `test` declaration form and registration
 - [ ] 4. The synthesized tail, and a unit compiled as its own test program
@@ -68,12 +68,6 @@ One line per test, path then outcome — `proved`, `passed`, `failed`, `trapped`
 - [ ] 7. Documentation, the decision file, and this file's deletion
 
 Each step is one authorization and one commit, lands its tests before its mechanism, and runs the full gate at its end. 2 needs 1; 3 needs 2; 4 needs 3; 5 needs 4; 6 needs 3; 7 needs everything.
-
-### 1. Erasure agrees with itself about a dependent proof payload
-
-**Lands.** One classification for a payload or argument whose declared type is a bound variable of `Prop` sort. Today the declaration side erases it — `theorem(P: Prop, proof: P)` registers arity 0 (`curios-elab/src/into_ersd/environment.rs`, the `ConstructorRow` mask) — while the application side keeps the proof and emits the extra argument, and the module verifier refuses the mismatch (`curios-ersd/src/verify.rs`). The kernel is untouched: dropping the payload is what sort-driven erasure licenses (`curios-elab/src/into_ersd/classify.rs`); the fix makes the application walk agree with the declaration walk. Beside it, the `ErasedModuleInvalid` display frame stops claiming "unsupported recursion" for every detail it carries (`curios-elab/src/error/display.rs`).
-
-**Verification.** The three probed repros as tests: a constructor whose payloads all erase (`theorem(P: Prop, proof: P)`, applied), one with a kept field beside the erased pair (`mixed(n: Nat, @P: Prop, proof: P)`, the arm reading `n`), and a function whose parameters all erase (`prove(P: Prop, proof: P)`, called). Each constructs, matches and runs; `wonder stage ersd` shows the bare tag.
 
 ### 2. `/syn/Test`, `/std/Test`, `/std/Spell`, and the `/std` witness gap
 
