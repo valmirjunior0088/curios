@@ -102,7 +102,7 @@ The kernel is untouched. A tuple-keyed witness is an ordinary top-level definiti
 
 ### Non-goals
 
-- Arity-generic or label-generic tuple witnesses: one witness serving every shape. That needs a description of the fields the language does not have, and is the auto-derive specification's territory.
+- Arity-generic or label-generic tuple witnesses: one witness serving every shape. That needs a description of the fields the language does not have.
 - Standard witnesses for labeled tuple types.
 - Imitation of a tuple-typed type constructor from a stuck application.
 - Any change to the orphan rule.
@@ -110,7 +110,7 @@ The kernel is untouched. A tuple-keyed witness is an ordinary top-level definiti
 
 ## Relation to the auto-derive specification
 
-[Auto-derive](auto-derive-spec.md) has a Tuples section resting on the sentence "a tuple type is not a witness key", and builds a `Fields`/`Tupled` bridge because of it. When this lands, that sentence is false and the bridge is no longer what tuple witnesses need: per-shape witnesses are written in the language, and a derived `Spell` for a tuple shape, should the derivation ever want one, can register under the same key like any other derived witness. The section is rewritten to depend on this key; the `SpellAll` question in its Decisions still open loses its tuple motivation and stands, if at all, on its own.
+[Auto-derive](auto-derive-spec.md) never touches tuples: derivation is nominal-only by its eligibility, and tuple shapes take the written per-arity witnesses step 2 supplies. `Spell` joins that roster in the same written form once the [test-harness specification](test-harness-spec.md) has landed the concept. Neither of those specifications depends on this one, and this one depends on neither.
 
 ## What is left to build
 
@@ -119,7 +119,7 @@ Each item is one authorization and one commit, with its tests; the full gate run
 1. `HeadKey::TupleType(Vec<String>)`: the variant, the first-order arm and the constructor-body arm of `of_whnf`, the display, and the comment and diagnostic lines that stop being true (`HeadKey`'s and `of_whnf`'s documentation, `mount_of_head`'s, the refusal's second line). Tests: shape keys in `curios-elab/src/concept/tests.rs`; a user concept resolving on `(1, true)`, a labeled goal missing an unlabeled witness, a later-declared tuple witness serving an earlier use, `{}` keyed, in `curios/src/tests/concepts/resolution_tests.rs`; a duplicate shape and an entry-root `Show({Nat, Bool})` refused, in `coherence_tests.rs`.
 2. `/std/Tuple.crs` with `Show`, `Eql` and `Ord` for `{}` and arities 1 through the ceiling, registered in `std.crs`. Tests: `Show/show((1, true))`, `Show(List({Nat, Bool}))`, `%` over a tuple, `Eql` and `Ord` on pairs, in the cross-stage corpus; the prelude build exercises every witness on each workspace check.
 3. The labeled-goal hint, if it costs a few lines at the report site.
-4. Documentation: `syntax.md`'s keying and orphan paragraphs; the auto-derive specification's Tuples section; a decision file, `documentation/design/language/a-tuple-type-is-keyed-by-its-shape.md`, holding the decision and the rejected alternatives above; this file deleted and its roadmap line checked.
+4. Documentation: `syntax.md`'s keying and orphan paragraphs; a decision file, `documentation/design/language/a-tuple-type-is-keyed-by-its-shape.md`, holding the decision and the rejected alternatives above; this file deleted and its roadmap line checked.
 
 ## Verification
 
