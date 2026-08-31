@@ -44,10 +44,10 @@ fn let_func_and_apply() {
             }],
             tail: Subterm::Apply(Apply {
                 head: Subterm::Name(Name::from(["id".to_string()])).into(),
-                params: vec![(
-                    Plicity::Explicit,
-                    Subterm::Name(Name::from(["a".to_string()])).into()
-                )],
+                arguments: vec![Argument {
+                    term: Subterm::Name(Name::from(["a".to_string()])).into(),
+                    plicity: Plicity::Explicit
+                }],
             })
             .into(),
         })
@@ -164,8 +164,8 @@ fn implicit_marks_on_binders_and_arguments() {
     let t = "foo(x, @Nat)".parse::<Term>().unwrap();
     match t.as_subterm() {
         Subterm::Apply(apply) => {
-            assert_eq!(apply.params[0].0, Plicity::Explicit);
-            assert_eq!(apply.params[1].0, Plicity::Implicit);
+            assert_eq!(apply.arguments[0].plicity, Plicity::Explicit);
+            assert_eq!(apply.arguments[1].plicity, Plicity::Implicit);
         }
         other => panic!("expected an apply, got {other:?}"),
     }
@@ -244,8 +244,14 @@ fn goal_as_argument() {
     let term = "id(?)".parse::<Term>().unwrap();
     match term.into_subterm() {
         Subterm::Apply(apply) => {
-            assert_eq!(apply.params.len(), 1);
-            assert_eq!(apply.params[0], (Plicity::Explicit, Subterm::Goal.into()));
+            assert_eq!(apply.arguments.len(), 1);
+            assert_eq!(
+                apply.arguments[0],
+                Argument {
+                    term: Subterm::Goal.into(),
+                    plicity: Plicity::Explicit,
+                }
+            );
         }
         other => panic!("expected apply, got {other:?}"),
     }
@@ -377,9 +383,15 @@ fn multi_bang_in_apply() {
         "f(x!, y!)".parse::<Term>().unwrap(),
         Subterm::Apply(Apply {
             head: name("f"),
-            params: vec![
-                (Plicity::Explicit, Subterm::Bang(name("x")).into()),
-                (Plicity::Explicit, Subterm::Bang(name("y")).into()),
+            arguments: vec![
+                Argument {
+                    term: Subterm::Bang(name("x")).into(),
+                    plicity: Plicity::Explicit
+                },
+                Argument {
+                    term: Subterm::Bang(name("y")).into(),
+                    plicity: Plicity::Explicit
+                }
             ],
         })
         .into()
@@ -431,7 +443,10 @@ fn bang_binds_tighter_than_application() {
         Subterm::Bang(
             Subterm::Apply(Apply {
                 head: name("f"),
-                params: vec![(Plicity::Explicit, name("x"))],
+                arguments: vec![Argument {
+                    term: name("x"),
+                    plicity: Plicity::Explicit
+                }],
             })
             .into()
         )

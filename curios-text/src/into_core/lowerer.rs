@@ -270,9 +270,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Subterm::Apply(apply) => curios_core::Term::apply_marked(
                 self.term(&apply.head)?,
                 apply
-                    .params
+                    .arguments
                     .iter()
-                    .map(|(plicity, p)| Ok((*plicity, self.term(p)?)))
+                    .map(|argument| Ok((argument.plicity, self.term(&argument.term)?)))
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
             // A dependent Σ-type: each field type sees the preceding fields' labels, so they lower under a progressively-extended scope. The signature sugar `f(params) -> T` is undone here.
@@ -559,9 +559,9 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Subterm::Apply(apply) => curios_core::Term::apply_marked(
                 self.collect(&apply.head, binds)?,
                 apply
-                    .params
+                    .arguments
                     .iter()
-                    .map(|(plicity, p)| Ok((*plicity, self.collect(p, binds)?)))
+                    .map(|argument| Ok((argument.plicity, self.collect(&argument.term, binds)?)))
                     .collect::<Result<Vec<_>, Error>>()?,
             ),
             Subterm::Tuple(tuple) => curios_core::Term::tuple_named(

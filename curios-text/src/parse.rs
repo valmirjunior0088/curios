@@ -38,7 +38,7 @@ mod tuples_tests;
 
 use {
     super::{
-        Apply, BinPattern, BinSegment, CasePayloadParam, Choose, ChooseArm, ChooseTest,
+        Apply, Argument, BinPattern, BinSegment, CasePayloadParam, Choose, ChooseArm, ChooseTest,
         ConceptField, Field, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem,
         Infix, Intrinsic, Let, LetBinding, LetGroup, LetSignature, ListEntry, ListPattern, Match,
         MatchPattern, MatchPatternField, MatrixArm, Module, Name, NatLiteral, NatPattern, NumLit,

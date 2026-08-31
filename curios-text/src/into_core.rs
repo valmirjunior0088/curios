@@ -318,9 +318,12 @@ fn witness_concept_application(concept: &Name, args: &[Term]) -> Term {
 
     Subterm::Apply(Apply {
         head,
-        params: args
+        arguments: args
             .iter()
-            .map(|arg| (Plicity::Explicit, arg.clone()))
+            .map(|arg| Argument {
+                term: arg.clone(),
+                plicity: Plicity::Explicit,
+            })
             .collect(),
     })
     .into()
@@ -678,26 +681,25 @@ fn process_items(
                         };
 
                         // Output type term `T`, `T(A, ...)`, or — indexed — the case's full terminal `T(A, ..., target...)`, elaborated as a name ref applied to the parameters and the target's index expressions.
-                        let output_args: Vec<(Plicity, Term)> = u
+                        let output_args: Vec<Argument> = u
                             .params
                             .iter()
-                            .map(|(p, n, _)| {
+                            .map(|(p, n, _)| Argument {
+                                term: Subterm::Name(Name::from(vec![n.clone()])).into(),
                                 // Each argument's mark must match its binder on the type constructor (the two-queue rule): an `@`-marked parameter is filled from the implicit queue.
-                                (*p, Subterm::Name(Name::from(vec![n.clone()])).into())
+                                plicity: *p,
                             })
-                            .chain(
-                                c.target
-                                    .iter()
-                                    .flatten()
-                                    .map(|t| (Plicity::Explicit, t.clone())),
-                            )
+                            .chain(c.target.iter().flatten().map(|t| Argument {
+                                term: t.clone(),
+                                plicity: Plicity::Explicit,
+                            }))
                             .collect();
                         let output_type: Term = if output_args.is_empty() {
                             Subterm::Name(Name::from(vec![u.label.clone()])).into()
                         } else {
                             Subterm::Apply(Apply {
                                 head: Subterm::Name(Name::from(vec![u.label.clone()])).into(),
-                                params: output_args,
+                                arguments: output_args,
                             })
                             .into()
                         };

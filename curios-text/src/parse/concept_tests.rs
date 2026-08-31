@@ -152,8 +152,8 @@ fn use_argument_form() {
     let Subterm::Apply(apply) = term.as_subterm() else {
         panic!("expected an application");
     };
-    assert_eq!(apply.params[0].0, Plicity::Witness);
-    assert_eq!(apply.params[1].0, Plicity::Explicit);
+    assert_eq!(apply.arguments[0].plicity, Plicity::Witness);
+    assert_eq!(apply.arguments[1].plicity, Plicity::Explicit);
 }
 
 #[test]

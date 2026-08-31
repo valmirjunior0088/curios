@@ -34,7 +34,7 @@ fn top_foreign_without_pub() {
             signature: WireSignature {
                 params: vec![
                     ("a0".to_string(), WireType::Nat),
-                    ("a1".to_string(), WireType::Bytes),
+                    ("a1".to_string(), WireType::Bytes)
                 ],
                 results: vec![("_".to_string(), WireType::Nat)],
             },
@@ -55,7 +55,7 @@ fn top_foreign_with_pub() {
             signature: WireSignature {
                 params: vec![
                     ("a0".to_string(), WireType::Nat),
-                    ("a1".to_string(), WireType::Bytes),
+                    ("a1".to_string(), WireType::Bytes)
                 ],
                 results: vec![("_".to_string(), WireType::Nat)],
             },
@@ -102,7 +102,7 @@ fn top_foreign_list_of_leaf() {
             signature: WireSignature {
                 params: vec![
                     ("a0".to_string(), WireType::List(WireLeaf::Bytes)),
-                    ("a1".to_string(), WireType::List(WireLeaf::Handle)),
+                    ("a1".to_string(), WireType::List(WireLeaf::Handle))
                 ],
                 results: vec![("_".to_string(), WireType::List(WireLeaf::Nat))],
             },

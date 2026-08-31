@@ -3,12 +3,12 @@ mod tests;
 
 use {
     super::{
-        Apply, BinPattern, BinSegment, Choose, ChooseArm, ChooseTest, ConceptField, Field, Func,
-        FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix, Intrinsic, Let,
-        LetSignature, ListEntry, ListPattern, Match, MatchPattern, MatchPatternField, Nat,
-        NatLiteral, NatPattern, NumLit, Pattern, PatternField, Proj, Radix, StructLit,
-        StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopForeign, TopInduct, TopItem,
-        TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType,
+        Apply, Argument, BinPattern, BinSegment, Choose, ChooseArm, ChooseTest, ConceptField,
+        Field, Func, FuncParam, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Infix,
+        Intrinsic, Let, LetSignature, ListEntry, ListPattern, Match, MatchPattern,
+        MatchPatternField, Nat, NatLiteral, NatPattern, NumLit, Pattern, PatternField, Proj, Radix,
+        StructLit, StructLitEntry, Subterm, Syn, Term, TopCase, TopConcept, TopForeign, TopInduct,
+        TopItem, TopLet, TopMod, TopStruct, TopUse, TopWitness, Tuple, TupleField, TupleType,
         TupleTypeParam, UseGroup, WitnessEntry,
     },
     crate::parse::op_precedence,
@@ -132,10 +132,10 @@ fn filled(open: &'static str, items: Vec<String>, close: &'static str) -> Printe
 /// One shape regardless of what the last argument is. A call whose trailing lambda hung on the head line read well in isolation, but it made the layout depend on the *kind* of the final argument, and a leading argument that then broke — a lambda too wide for the line, a `let` in a nested call — stranded the block after its own closing bracket. Reading a call should not require knowing which of two layouts it got.
 ///
 /// It is `listed` minus two things: no trailing comma, and no break before the closer. The last argument already ends the call, and saying so with `,` and a lone `)` spends two lines on punctuation.
-fn riding_call(head: Term, params: Vec<(Plicity, Term)>) -> Printer {
-    let items = params
+fn riding_call(head: Term, arguments: Vec<Argument>) -> Printer {
+    let items = arguments
         .into_iter()
-        .map(|(plicity, param)| flat([print_plicity(plicity), print_term(param)]))
+        .map(|argument| flat([print_plicity(argument.plicity), print_term(argument.term)]))
         .collect::<Vec<_>>();
     flat([
         print_suffix_head(head),
@@ -1018,7 +1018,7 @@ fn print_term_inner(term: Term) -> Printer {
             ),
             attached_body(" =>", body),
         ]),
-        Subterm::Apply(Apply { head, params }) => riding_call(head, params),
+        Subterm::Apply(Apply { head, arguments }) => riding_call(head, arguments),
         Subterm::TupleType(TupleType { fields }) => {
             listed("{", fields.into_iter().map(print_field).collect(), "}")
         }

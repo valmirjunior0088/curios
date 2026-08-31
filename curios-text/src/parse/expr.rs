@@ -138,16 +138,17 @@ pub(super) fn parse_proj_suffix<'a>() -> Parser<'a, Field> {
 
 pub(super) enum Suffix {
     Proj(Field),
-    Apply(Vec<(Plicity, Term)>),
+    Apply(Vec<Argument>),
     Bang,
 }
 
 // A call-site argument's plicity: `use <term>` fills a witness slot, `@<term>` an implicit slot, a plain term an explicit slot. `use` is reserved, so it can never begin a plain-argument term.
-pub(super) fn parse_apply_argument<'a>() -> Parser<'a, (Plicity, Term)> {
+pub(super) fn parse_apply_argument<'a>() -> Parser<'a, Argument> {
     catch(parse_keyword("use"))
         .map(|()| Plicity::Witness)
         .or(parse_plicity())
         .and(lazy(parse_term))
+        .map(|(plicity, term)| Argument { term, plicity })
 }
 
 pub(super) fn parse_suffix<'a>() -> Parser<'a, Suffix> {
@@ -173,7 +174,7 @@ pub(super) fn apply_suffixes(head: Term, suffixes: Vec<Suffix>) -> Term {
         .into_iter()
         .fold(head, |head, suffix| match suffix {
             Suffix::Proj(field) => Subterm::Proj(Proj { head, field }).into(),
-            Suffix::Apply(params) => Subterm::Apply(Apply { head, params }).into(),
+            Suffix::Apply(arguments) => Subterm::Apply(Apply { head, arguments }).into(),
             Suffix::Bang => Subterm::Bang(head).into(),
         })
 }

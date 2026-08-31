@@ -142,11 +142,18 @@ pub struct Func {
     pub body: Term,
 }
 
-/// Each argument carries its call-site plicity mark: `@`-arguments fill implicit binders, plain arguments fill explicit ones. The marks lower to core untouched — `into_core` is type-blind and cannot match them to slots.
+/// One call-site argument: the term with its written mark — `use` fills a witness slot, `@` an implicit one, a plain term an explicit one. The same pairing `curios-core`'s `Argument` carries, spelled over surface terms; one vector of these rather than two parallel ones, so a mark can never drift out of correspondence with its term.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Argument {
+    pub term: Term,
+    pub plicity: Plicity,
+}
+
+/// The marks lower to core untouched — `into_core` is type-blind and cannot match them to slots.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Apply {
     pub head: Term,
-    pub params: Vec<(Plicity, Term)>,
+    pub arguments: Vec<Argument>,
 }
 
 /// A Σ-/tuple type `(fst : A, snd : B(fst))`: a dependent telescope of fields — a later field's type may mention an earlier field's label. Its field grammar ([`TupleTypeParam`]) is also what `struct` declarations reuse.

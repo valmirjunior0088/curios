@@ -1,8 +1,8 @@
 use {
     super::{
-        Apply, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Intrinsic, LetSignature, Module,
-        Name, Nat, NatLiteral, Pattern, Subterm, Term, TopForeign, TopItem, TopLet, TopMod, TopUse,
-        TupleType, TupleTypeParam, UseGroup,
+        Apply, Argument, FuncSugarParam, FuncType, FuncTypeParam, GroupItem, Intrinsic,
+        LetSignature, Module, Name, Nat, NatLiteral, Pattern, Subterm, Term, TopForeign, TopItem,
+        TopLet, TopMod, TopUse, TupleType, TupleTypeParam, UseGroup,
     },
     curios_abi::{ForeignFunction, ForeignStore, Namespace, WireType, mode, poll, status, stdio},
     curios_utilities::{Grain, Plicity, SyntaxName, SyntaxRegistry},
@@ -23,9 +23,12 @@ fn registered(target: SyntaxName) -> Term {
 fn applied(head: Term, args: Vec<Term>) -> Term {
     Subterm::Apply(Apply {
         head,
-        params: args
+        arguments: args
             .into_iter()
-            .map(|arg| (Plicity::Explicit, arg))
+            .map(|arg| Argument {
+                term: arg,
+                plicity: Plicity::Explicit,
+            })
             .collect(),
     })
     .into()
