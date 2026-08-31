@@ -4,26 +4,7 @@
 //!
 //! **Behind `test-support`, not `#[cfg(test)]`.** The caller is `curios-text`'s lowering suite, a different crate, and that cfg is set only while *this* crate is its own test harness — so a `cfg(test)` item would be invisible to it. The gate is also what keeps a shape no compiler stage produces any more out of every build that ships.
 
-use {
-    crate::{Free, Func, FuncType, Item, Module, Telescope, Term},
-    curios_utilities::Plicity,
-};
-
-/// A `FuncType` with its mark vector taken verbatim — mismatched lengths included. The sealed field makes a drifted pairing unconstructible through product API; this door exists for the adversarial fixtures that pin the kernel's guards against exactly such values, which archive restoration can still deliver.
-pub fn func_type_verbatim(telescope: Telescope<Term>, plicities: Vec<Plicity>) -> FuncType {
-    FuncType {
-        telescope,
-        plicities,
-    }
-}
-
-/// [`func_type_verbatim`], for a lambda.
-pub fn func_verbatim(telescope: Telescope<Term>, plicities: Vec<Plicity>) -> Func {
-    Func {
-        telescope,
-        plicities,
-    }
-}
+use crate::{Free, Item, Module, Term};
 
 /// Re-fold the flat module into the legacy nested `Let`/`Rec` [`Term`] it replaced (items are already in binding order).
 ///

@@ -8,11 +8,11 @@ use crate::Globals;
 
 use super::test_support::*;
 
-/// `plicities` is the one field on a registry entry that no clause of `check_induct_decl` establishes, and the stated reason it needs none is that this kernel never reads it — its only consumer is `curios-elab`'s `payload_plicities`, which slices at the parameter count, so a short vector is a panic in the elaborator rather than a judgment here.
+/// `plicities` is the one field on a registry entry that no clause of `check_induct_decl` establishes, and the stated reason it needs none is that this kernel never reads it — its only consumer is `curios-elab`'s `payload_plicities`. Its *length* is no longer anyone's to check: `InductParam::new` pairs the vector with its telescope at the one door that builds one, so since 2026-08-30 a short vector is unrepresentable rather than a panic waiting in the elaborator.
 ///
 /// That reason is an *inventory*: every consumer of a registry entry, read against the clauses. An inventory is exactly the kind of claim that goes stale as code moves, and the polarity vector beside it on the same entry already has `positivity::tests::a_carried_polarity_vector_is_recomputed_rather_than_believed` holding its own version of this. This holds the plicity half executably instead: the same declaration, once with the honest vector and once with a lie, must produce the same verdicts.
 ///
-/// The lie is unusable rather than merely wrong — an empty vector where the constructor carries one payload binder, which is the shape `payload_plicities` would slice out of range on. What must not happen is this kernel quietly deciding something *differently* because of it, which is what a future nominal rule reading the field would introduce without any clause noticing.
+/// The lie is therefore merely wrong — an `Implicit` mark where the declaration says `Explicit`, the one lie the sealed constructor still admits (it used to be an empty vector, the shape `payload_plicities` would have sliced out of range on). What must not happen is this kernel quietly deciding something *differently* because of it, which is what a future nominal rule reading the field would introduce without any clause noticing.
 ///
 /// The control is [`a_wrong_payload_count_is_still_refused_under_a_lying_plicity_vector`]: the same lie beside a genuine error. Without it, "the kernel ignores plicities" and "the kernel ignores this module" read alike.
 #[test]

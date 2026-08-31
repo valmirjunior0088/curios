@@ -5,14 +5,14 @@ use {
         Globals, KernelError, recheck_module_measured, recheck_module_verdicts,
         recheck_module_verdicts_uncached,
     },
-    curios_core::Global,
-    curios_core::Item,
-    curios_core::Term,
-    curios_core::Zonked,
-    curios_core::derived_binder_floor,
+    curios_core::{
+        Bound, Cases, Global, Item, Match, Subterm, Term, Visit, Zonked, derived_binder_floor,
+    },
     curios_elab::{Context, DEFAULT_STEP_BUDGET, ErasedArena, Resumed, erase_unit},
     std::{
+        cell::{Cell, RefCell},
         collections::{BTreeMap, BTreeSet},
+        rc::Rc,
         thread,
         time::Instant,
     },
@@ -381,6 +381,65 @@ fn stored_prelude_measurements() {
 
         println!(
             "\nNot measured here: the elaboration figures, which the build script already writes to `OUT_DIR/profile.tsv` (retake with `cargo build --release --package curios-prelude --features profile`), and the witness inventory B1 needs, which is a term walk.\n"
+        );
+    });
+}
+
+/// Every mark vector in the restored standard library sits beside a telescope of the same length. The pairing is a construction invariant — `FuncType::new`, `Func::new`, `InductArm::new` and `InductParam::new` assert it — and the archive restores exactly the constructor-built value its build wrote, so this is not a defense the compiler runs but the one place the claim is checked against the real image, once per test run. The retired kernel guard in `curios-cert`'s `sort.rs` rests on it.
+#[test]
+fn the_restored_prelude_pairs_every_mark_with_its_binder() {
+    with_prelude(|prelude| {
+        let core = prelude.core();
+        let drifted = Rc::new(RefCell::new(Vec::new()));
+        let inspected = Rc::new(Cell::new(0usize));
+        let (sink, counter) = (Rc::clone(&drifted), Rc::clone(&inspected));
+        let mut visit = Visit::rewriting(
+            |_, _| None,
+            Box::new(move |_, term: &Term| {
+                let paired = match &**term {
+                    Subterm::Func(func) => Some(func.plicities().len() == func.telescope.len()),
+                    Subterm::FuncType(func_type) => {
+                        Some(func_type.plicities().len() == func_type.telescope.len())
+                    }
+                    Subterm::Match(Match {
+                        cases: Cases::Induct { cases, .. },
+                        ..
+                    }) => Some(
+                        cases
+                            .iter()
+                            .all(|(_, arm)| arm.plicities().len() == arm.arity()),
+                    ),
+                    _ => None,
+                };
+                if let Some(paired) = paired {
+                    counter.set(counter.get() + 1);
+                    if !paired {
+                        sink.borrow_mut().push(term.clone());
+                    }
+                }
+                None
+            }),
+        );
+
+        for definition in core.items.iter().flat_map(Item::definitions) {
+            definition.type_.traverse(&mut visit);
+            definition.body.traverse(&mut visit);
+        }
+        for declaration in core.induct_decls.values() {
+            for (tag, constructor) in &declaration.constructors {
+                assert_eq!(
+                    constructor.plicities().len(),
+                    constructor.telescope.len(),
+                    "constructor {tag} carries a drifted mark vector"
+                );
+            }
+        }
+
+        assert!(inspected.get() > 0, "the walk reached no function nodes");
+        assert!(
+            drifted.borrow().is_empty(),
+            "drifted mark vectors survived into the archive: {:?}",
+            drifted.borrow()
         );
     });
 }

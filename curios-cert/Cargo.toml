@@ -14,7 +14,6 @@ profile = ["curios-profile/enabled", "curios-analysis/profile", "curios-core/pro
 
 # Tests only. `curios-abi` is already inside this crate's normal graph through `curios-core` — `documentation/design/language/an-independent-kernel-re-checks-what-the-elaborator-accepts.md`'s enumeration of the trusted base names it — so this adds nothing to what `cargo tree -p curios-cert -e normal` reaches. It is here so a fixture can forge an ABI row by hand.
 [dev-dependencies]
-curios-core = { workspace = true, features = ["test-support"] }
 curios-abi = { workspace = true }
 # The shared `/syn` registry stand-in in `curios_analysis::fixture`, which every kernel this crate's tests build is handed. A dev-dependency entry beside the normal one, because the feature must not reach a build that ships.
 curios-analysis = { workspace = true, features = ["test-support"] }
