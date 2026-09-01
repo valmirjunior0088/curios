@@ -9,6 +9,12 @@ use {
 /// [`curios_pipeline::Stage::NAMES`] joined with `, `, computed once on first use — `wonder stage`'s help text.
 static NAMES: LazyLock<String> = LazyLock::new(|| Stage::NAMES.join(", "));
 
+/// What a TARGET names, for every subcommand that takes one and means the governing package's sole or `default` executable by none. The lexical rule is `curios_package::Form`'s; the sentence is written once so five subcommands cannot describe it five ways.
+const TARGET_HELP: &str = "A declared executable's name, a path to a .crs file, or `-` for standard input (default: the governing package's sole or `default` executable)";
+
+/// The same, for a query that takes the governing package entire when nothing is named.
+const TARGET_HELP_PACKAGE: &str = "A declared executable's name, a path to a .crs file, or `-` for standard input (default: the governing package entire)";
+
 #[derive(Debug, Subcommand)]
 pub(crate) enum Mode {
     /// What the four forms mean is `documentation/usage.md`'s Running and compiling. The dispatch is lexical and probes no disk: the four spaces cannot overlap, so nothing here needs to look before deciding.
@@ -16,7 +22,7 @@ pub(crate) enum Mode {
     Run {
         #[arg(
             value_name = "TARGET",
-            help = "A declared executable's name, a path to a .crs file, or `-` for standard input (default: the governing package's sole or `default` executable)"
+            help = TARGET_HELP
         )]
         target: Option<String>,
 
@@ -36,7 +42,7 @@ pub(crate) enum Mode {
     Compile {
         #[arg(
             value_name = "TARGET",
-            help = "A declared executable's name, a path to a .crs file, or `-` for standard input (default: the governing package's sole or `default` executable)"
+            help = TARGET_HELP
         )]
         target: Option<String>,
 
@@ -114,7 +120,7 @@ pub(crate) enum Query {
     Diagnostics {
         #[arg(
             value_name = "TARGET",
-            help = "A declared executable's name, a path to a .crs file, or `-` for standard input (default: the governing package entire)"
+            help = TARGET_HELP_PACKAGE
         )]
         target: Option<String>,
     },
@@ -123,7 +129,7 @@ pub(crate) enum Query {
     Tests {
         #[arg(
             value_name = "TARGET",
-            help = "A declared executable's name, a path to a .crs file, or `-` for standard input (default: the governing package entire)"
+            help = TARGET_HELP_PACKAGE
         )]
         target: Option<String>,
     },
@@ -135,7 +141,7 @@ pub(crate) enum Query {
 
         #[arg(
             value_name = "TARGET",
-            help = "A declared executable's name, a path to a .crs file, or `-` for standard input (default: the governing package's sole or `default` executable)"
+            help = TARGET_HELP
         )]
         target: Option<String>,
     },

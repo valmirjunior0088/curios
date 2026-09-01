@@ -35,6 +35,27 @@ pub enum Target {
     },
 }
 
+/// What a TARGET argument lexically names, decided before anything looks at a manifest or the disk — the one spelling of the rule the module documentation states, which `run`, `compile` and every `wonder` query dispatch on.
+pub enum Form {
+    /// `-`: the program on standard input.
+    Stdin,
+    /// A path, by its `.crs` suffix or a separator.
+    File(PathBuf),
+    /// An executable's name, or nothing. What nothing means is the caller's to decide — the governing package's sole or `default` executable for `run`, the package entire for a question — and it is the one place the callers legitimately differ.
+    Named(Option<String>),
+}
+
+impl Form {
+    /// The form `argument` takes, by spelling alone.
+    pub fn of(argument: Option<&str>) -> Self {
+        match argument {
+            Some(Target::STDIN) => Self::Stdin,
+            Some(argument) if names_a_file(argument) => Self::File(PathBuf::from(argument)),
+            argument => Self::Named(argument.map(str::to_string)),
+        }
+    }
+}
+
 impl Target {
     /// How standard input is asked for. Not an identifier, so it cannot collide with an executable's name, and not path-shaped, so it cannot collide with a file's.
     pub const STDIN: &'static str = "-";
@@ -68,17 +89,15 @@ impl Target {
         directory: &Path,
     ) -> Result<Self, String> {
         // Both standalone forms answer here, before anything looks for a manifest — which is what "triggers no walk at all" means operationally.
-        match argument {
-            Some(Self::STDIN) => return Ok(Self::Stdin),
-            Some(argument) if names_a_file(argument) => {
-                return Ok(Self::File(PathBuf::from(argument)));
-            }
-            _ => {}
-        }
+        let name = match Form::of(argument) {
+            Form::Stdin => return Ok(Self::Stdin),
+            Form::File(path) => return Ok(Self::File(path)),
+            Form::Named(name) => name,
+        };
 
         let governing = Governing::found(manifest, directory)?;
 
-        let executable = match argument {
+        let executable = match &name {
             Some(name) => named(&governing.package, name)?,
             None => sole(&governing.package)?,
         };
@@ -107,8 +126,8 @@ impl Target {
 ///
 /// Both separators, not the platform's: an executable's name is an identifier, so neither can appear in one, and a path written with the other spelling is still plainly a path.
 ///
-/// Public because `curios wonder` resolves the same argument the same way, and a second spelling of one lexical rule is one the two subcommands can come to disagree about. Named for what it decides rather than `is_file`, which at this altitude reads as a question about the disk — and this asks nothing of it, which is the module's first sentence.
-pub fn names_a_file(argument: &str) -> bool {
+/// Reached through [`Form::of`], which is how `curios wonder` resolves the same argument the same way — a second spelling of one lexical rule is one the subcommands can come to disagree about. Named for what it decides rather than `is_file`, which at this altitude reads as a question about the disk — and this asks nothing of it, which is the module's first sentence.
+fn names_a_file(argument: &str) -> bool {
     argument.ends_with(".crs") || argument.contains('/') || argument.contains('\\')
 }
 

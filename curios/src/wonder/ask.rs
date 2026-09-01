@@ -9,7 +9,7 @@ use {
         Diagnostic, Origin, Reached, Refusal, STDIN_LABEL, Subject, Verdicts, declared_tests,
         diagnostics, stage, wasm_optm,
     },
-    curios_package::{Governing, LIBRARY, Membership, Target, mounted, names_a_file, order},
+    curios_package::{Form, Governing, LIBRARY, Membership, Target, mounted, order},
     curios_text::{Overlay, RootSource},
     std::{
         collections::BTreeSet,
@@ -138,13 +138,13 @@ fn resolve(
     manifest: Option<&Path>,
     target: Option<&str>,
 ) -> Result<Vec<Asked>, String> {
-    Ok(match target {
-        Some(Target::STDIN) => vec![Asked::about_stdin(mounted, read_stdin()?)?],
-        Some(argument) if names_a_file(argument) => {
-            vec![Asked::about_file(Path::new(argument), mounted, manifest)?]
+    Ok(match Form::of(target) {
+        Form::Stdin => vec![Asked::about_stdin(mounted, read_stdin()?)?],
+        Form::File(path) => vec![Asked::about_file(&path, mounted, manifest)?],
+        Form::Named(Some(name)) => {
+            vec![Asked::about_executable(Some(&name), mounted, manifest)?]
         }
-        Some(name) => vec![Asked::about_executable(Some(name), mounted, manifest)?],
-        None => {
+        Form::Named(None) => {
             let governing = Governing::here(manifest)?;
             let mut asked = Vec::new();
             if governing.directory.join(LIBRARY).is_file() {
@@ -213,12 +213,10 @@ pub fn wonder_stage(
 ) -> Result<(), String> {
     let overlay = Overlay::default();
 
-    let asked = match target {
-        Some(Target::STDIN) => Asked::about_stdin(mounted, read_stdin()?)?,
-        Some(argument) if names_a_file(argument) => {
-            Asked::about_file(Path::new(argument), mounted, manifest)?
-        }
-        name => Asked::about_executable(name, mounted, manifest)?,
+    let asked = match Form::of(target) {
+        Form::Stdin => Asked::about_stdin(mounted, read_stdin()?)?,
+        Form::File(path) => Asked::about_file(&path, mounted, manifest)?,
+        Form::Named(name) => Asked::about_executable(name.as_deref(), mounted, manifest)?,
     };
 
     let Subject::Entry { units, origin } = asked.subject else {
