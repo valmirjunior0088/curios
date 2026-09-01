@@ -447,6 +447,18 @@ impl fmt::Display for Displayed<'_> {
                     "the representation of type '{name}' is private to its declaring module and its descendants"
                 )
             }
+            Error::NoDerivation { concept } => {
+                write!(
+                    f,
+                    "no derivation exists for '{concept}'; write the body\n  a body-less `satisfy` asks the compiler to write the witness, which it does only for a concept registered as derivable"
+                )
+            }
+            Error::DeriveOutsideWitness => {
+                write!(
+                    f,
+                    "a derived body is legal only as a witness body checked against its concept application"
+                )
+            }
             Error::CtorArityMismatch {
                 atom,
                 expected,

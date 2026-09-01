@@ -43,6 +43,8 @@ pub enum Transient {
     NumLit(NumLit),
     /// A postfix `!` sequencing site; consumed by `elaborate_bang`.
     Bang(Bang),
+    /// A witness body the compiler writes — the body position of a body-less `satisfy C(T);`; consumed by `elaborate_derive`, which reads the concept application it is checked against and expands it or refuses. Carries nothing: the expected type is the whole of its input.
+    Derive,
 }
 
 impl Transient {
@@ -50,7 +52,7 @@ impl Transient {
     pub fn subterms(&self) -> impl Iterator<Item = &Term> {
         let children = match self {
             Transient::Infix(Infix { left, right, .. }) => [Some(left), Some(right)],
-            Transient::NumLit(_) => [None, None],
+            Transient::NumLit(_) | Transient::Derive => [None, None],
             Transient::Bang(Bang {
                 action,
                 continuation,
@@ -68,6 +70,7 @@ impl Transient {
                 right: f(right),
             }),
             Transient::NumLit(num_lit) => Transient::NumLit(num_lit.clone()),
+            Transient::Derive => Transient::Derive,
             Transient::Bang(Bang {
                 action,
                 continuation,

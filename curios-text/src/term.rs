@@ -509,6 +509,8 @@ pub enum Subterm {
     Hole,
     /// A written goal `?`: elaborated to a metavariable like [`Subterm::Hole`], but marked so zonk *reports* what elaboration determined for it (scope, type, and solution, if any) instead of splicing silently — writing `?` always fails compilation with that report. Minted only by the parser; carries no payload — its span rides on the wrapping [`Term`].
     Goal,
+    /// The body of a body-less witness, `satisfy C(T);`: lowered to the `Derive` elaboration transient, which the concept's derivation expands or refuses. Desugar-only — minted by the witness lowering, never parsed — so that the declaration's telescope wraps it exactly as it wraps a written body. Carries no payload; its span rides on the wrapping [`Term`].
+    Derive,
     /// A literal whose value is synthesized from `/syn` rather than lowered to a core intrinsic (see [`Syn`]). The lowerer runs a meta-emitter on it instead of `intrinsic()`.
     Syn(Syn),
     /// An infix operator application `left <op> right` (see [`Infix`]).

@@ -162,6 +162,7 @@ impl<'a, 'b> Lowerer<'a, 'b> {
             Subterm::Hole => curios_core::Term::hole(self.context.fresh_metavar()),
             // A written goal `?`: same fresh metavariable, but marked so zonk reports what elaboration determined for it instead of splicing.
             Subterm::Goal => curios_core::Term::goal(self.context.fresh_metavar()),
+            Subterm::Derive => curios_core::Term::derive(),
             // A `/syn` literal (string or list) desugars via the meta-emitter to a `/syn` construction (see `syn_literal`), never a core intrinsic.
             Subterm::Syn(syn) => self.syn_literal(syn)?,
             Subterm::Intrinsic(intrinsic) => {

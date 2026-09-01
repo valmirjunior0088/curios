@@ -667,6 +667,9 @@ pub trait TermBuilders {
     /// A postfix `!` sequencing site ([`Bang`]) — elaboration-transient, consumed by `elaborate_bang`. `action` is the sequenced description; `continuation` is the hoisted rest of the region as an ordinary one-parameter function.
     fn bang(action: Term, continuation: Term) -> Self;
 
+    /// The body of a body-less witness ([`Transient::Derive`]) — elaboration-transient, consumed by `elaborate_derive` against the concept application it is checked at.
+    fn derive() -> Self;
+
     /// Carry a *written* motive — the surface term `into_core` lowered, before elaboration has closed it into a scope — as an arity-0 [`Scope`].
     ///
     /// Lowering cannot close the scope itself: the motive's arity is `n_indices + 1`, and the eliminated family is only known once the scrutinee's type is inferred. Arity 0 is a free tag for "not yet scoped" because no elaborated motive can have it — every eliminator binds at least the scrutinee, so `check_motive` always re-closes at arity 1 or more. `Scope::constant` performs no capture, so the term goes in and comes back out of `body()` untouched.
@@ -753,6 +756,10 @@ impl TermBuilders for Term {
             action,
             continuation,
         })))
+    }
+
+    fn derive() -> Self {
+        Self::from(Subterm::Transient(Transient::Derive))
     }
 
     fn match_motive_written<M>(motive: M) -> Scope<Many>

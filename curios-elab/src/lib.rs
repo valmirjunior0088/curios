@@ -27,6 +27,9 @@ pub use universe_solver::*;
 mod concept;
 pub use concept::*;
 
+mod derive;
+pub(crate) use derive::*;
+
 mod positivity;
 pub use positivity::*;
 

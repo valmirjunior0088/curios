@@ -29,7 +29,7 @@ mod tests;
 use {
     super::{
         Context, DomainScope, Error, ParkedWork, attempt_witness_goal, blocked_on_metavar, check,
-        expect, reduce_with, sort_term, transitively_ground,
+        elaborate_derive, expect, reduce_with, sort_term, transitively_ground,
     },
     curios_core::{
         Apply, Bang, Bound, Field, Free, Func, FuncType, ImplicitOrigin, InductType, Infix,
@@ -208,6 +208,7 @@ fn elaborate_subterm(
         Subterm::Transient(Transient::Bang(bang)) => {
             return elaborate_bang(context, bang, term, mode);
         }
+        Subterm::Transient(Transient::Derive) => return elaborate_derive(context, term, mode),
         Subterm::Metavar(metavar) => return elaborate_metavar(context, metavar, term, mode),
         Subterm::InductType(ut) => elaborate_induct_type(context, ut)?,
         Subterm::Variant(uc) => elaborate_variant(context, uc, term)?,

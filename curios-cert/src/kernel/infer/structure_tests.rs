@@ -3,7 +3,7 @@
 use {
     crate::{KernelError, check, infer},
     curios_core::{
-        Global, InductDecl, Intrinsic, MetavarId, StructType, Subterm, Telescope, Term,
+        Global, InductDecl, Intrinsic, MetavarId, StructType, Subterm, Telescope, Term, Transient,
         UniverseContext,
     },
     curios_utilities::Qualifier,
@@ -77,6 +77,13 @@ fn a_list_or_cell_of_proofs_is_not_a_proposition() {
 #[test]
 fn elaboration_only_syntax_is_refused() {
     let mut kernel = kernel();
+
+    // A derived witness body that elaboration never wrote is the same class of residue as a metavariable: the transient is refused wholesale, so no derivation can smuggle an unchecked body past the kernel.
+    let derive = Term::from(Subterm::Transient(Transient::Derive));
+    assert!(matches!(
+        infer(&mut kernel, &derive),
+        Err(KernelError::NotCore(_)),
+    ));
 
     let metavar = Term::hole(MetavarId::from(0usize));
     assert!(matches!(

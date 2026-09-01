@@ -1454,6 +1454,8 @@ fn term_doc(term: Term, frame: Frame) -> Printer {
             action,
             continuation,
         })) => flat([sub(action, frame), pure("!; "), sub(continuation, frame)]),
+        // The body a derived witness asks for, before elaboration has written it: no surface form spells it, so the dump names the transient.
+        Subterm::Transient(Transient::Derive) => pure("derive"),
         // Identity and renaming spines (every entry a variable) are the uninteresting common case and print as the bare id; a spine carrying anything else is exactly the one worth seeing. Under axis (e) neither is: the spine is elaboration state like the id, and the reader gets `?`.
         Subterm::Metavar(metavar) => {
             if frame.spelling.anonymous_metavars {

@@ -15,6 +15,22 @@ fn context() -> Context {
     Context::with_default_budget(crate::SYNTAX)
 }
 
+// Only the witness lowering mints a `Derive`, always in checked position against a concept application; met in inference, or checked against anything else, the transient has nothing to derive from and refuses rather than passing through.
+#[test]
+fn a_derive_transient_is_refused_outside_a_checked_witness_body() {
+    let mut context = context();
+    let term = Term::derive();
+
+    assert!(matches!(
+        elaborate(&mut context, &term, Mode::Infer),
+        Err(Error::DeriveOutsideWitness)
+    ));
+    assert!(matches!(
+        elaborate(&mut context, &term, Mode::Check(nat())),
+        Err(Error::DeriveOutsideWitness)
+    ));
+}
+
 fn nat() -> Term {
     Subterm::Intrinsic(Intrinsic::NatType).into()
 }

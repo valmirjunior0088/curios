@@ -307,6 +307,12 @@ pub enum Error {
     PrivateRepresentation {
         name: String,
     },
+    /// A body-less `satisfy` for a concept the compiler has no derivation for. Derivability is registered per concept, never inferred from its shape.
+    NoDerivation {
+        concept: String,
+    },
+    /// A `Derive` transient met anywhere but as a witness body checked against its concept application — unreachable from the surface, where only the witness lowering mints one.
+    DeriveOutsideWitness,
     UnboundVariable {
         term: Box<Term>,
     },
@@ -799,6 +805,16 @@ impl Error {
 
     pub(crate) fn private_representation<N: Into<String>>(name: N) -> Self {
         Self::PrivateRepresentation { name: name.into() }
+    }
+
+    pub(crate) fn no_derivation<N: Into<String>>(concept: N) -> Self {
+        Self::NoDerivation {
+            concept: concept.into(),
+        }
+    }
+
+    pub(crate) fn derive_outside_witness() -> Self {
+        Self::DeriveOutsideWitness
     }
 
     pub(crate) fn ctor_arity_mismatch<A: Into<Atom>>(atom: A, expected: usize, got: usize) -> Self {

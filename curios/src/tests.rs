@@ -4,6 +4,7 @@ mod binders;
 mod characters;
 mod codegen;
 mod concepts;
+mod derive;
 mod effects;
 mod erasure;
 // The fixpoint probe reads the per-pass spans `curios_cont::optimize` carries only under `curios-profile`'s `enabled` feature, reached through this crate's `profile` feature as `churn` is.
@@ -200,6 +201,25 @@ fn census_settles(source: &str, family: &str, constructor: &str, field: &str) ->
         constructor,
         field,
     )
+}
+
+/// The lowered Core printout of `source` — observed when the rung is reached, whether or not a later stage refuses the program, which is what lets a pin read a transient that elaboration goes on to consume or refuse.
+fn core(source: &str) -> String {
+    let entrypoint = source.parse::<Entrypoint>().expect("fixture parses");
+
+    let mut printed = None;
+    let _ = compile_with_prelude(
+        DEFAULT_STEP_BUDGET,
+        &entrypoint,
+        &RootSource::none(),
+        |stage| {
+            if let Stage::Core(module) = stage {
+                printed = Some(module.to_string());
+            }
+        },
+    );
+
+    printed.expect("the pipeline emits the lowered Core stage")
 }
 
 /// Compile through production and capture the optimized Cont printout.

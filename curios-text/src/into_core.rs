@@ -1085,32 +1085,36 @@ fn process_items(
 
                         let concept_app =
                             witness_concept_application(&witness.concept, &witness.args);
-                        // The derived form has no Core to lower to yet: refused here, at the declaration, until the elaboration transient that carries it exists.
-                        let Some(entries) = &witness.body else {
-                            let span = witness.args.first().and_then(|arg| arg.span());
-                            return Err(match span {
-                                Some(span) => Error::DerivedWitnessUnsupported.at(span.clone()),
-                                None => Error::DerivedWitnessUnsupported,
-                            });
+                        // A written body is the concept literal; a body-less one is the `Derive` transient, spanned at the concept application so a refusal lands on the declaration. Either way the telescope below wraps it identically.
+                        let body: Term = match &witness.body {
+                            Some(entries) => Subterm::StructLit(StructLit {
+                                head: witness.concept.clone(),
+                                params: witness.args.clone(),
+                                entries: entries
+                                    .iter()
+                                    .map(|entry| match entry {
+                                        WitnessEntry::Field(field) => {
+                                            StructLitEntry::Field(TupleField {
+                                                label: Some(field.label.clone()),
+                                                func_params: field.func_params.clone(),
+                                                value: field.value.clone(),
+                                            })
+                                        }
+                                        WitnessEntry::Use(term) => {
+                                            StructLitEntry::Use(term.clone())
+                                        }
+                                    })
+                                    .collect(),
+                            })
+                            .into(),
+                            None => {
+                                let derive: Term = Subterm::Derive.into();
+                                match witness.args.first().and_then(|arg| arg.span()) {
+                                    Some(span) => derive.with_span(span.clone()),
+                                    None => derive,
+                                }
+                            }
                         };
-                        let body: Term = Subterm::StructLit(StructLit {
-                            head: witness.concept.clone(),
-                            params: witness.args.clone(),
-                            entries: entries
-                                .iter()
-                                .map(|entry| match entry {
-                                    WitnessEntry::Field(field) => {
-                                        StructLitEntry::Field(TupleField {
-                                            label: Some(field.label.clone()),
-                                            func_params: field.func_params.clone(),
-                                            value: field.value.clone(),
-                                        })
-                                    }
-                                    WitnessEntry::Use(term) => StructLitEntry::Use(term.clone()),
-                                })
-                                .collect(),
-                        })
-                        .into();
 
                         let signature = if witness.params.is_empty() {
                             LetSignature::Name {
