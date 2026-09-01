@@ -172,13 +172,14 @@ pub enum WitnessEntry {
     Use(Term),
 }
 
-/// A `witness` declaration: a registered inhabitant of a concept. Witnesses are anonymous — they are only ever reached through resolution (or an explicit `use <term>` carrying an ordinary value), so there is no name and no `pub`. The declaration desugars to a compiler-named top-level definition `let witness@N(tele) -> C(args) = C(args) { … }` registered in the program-wide witness table; diagnostics identify it by concept, key, and declaring module. Surface syntax writes a nonempty telescope as `satisfy (tele) => C(args) { … }`; the telescope admits only `@` and `use` parameters (explicit binders are rejected at lowering). `concept`/`args` are the witnessed concept application, reused verbatim as the struct-literal head.
+/// A `witness` declaration: a registered inhabitant of a concept. Witnesses are anonymous — they are only ever reached through resolution (or an explicit `use <term>` carrying an ordinary value), so there is no name and no `pub`. The declaration desugars to a compiler-named top-level definition `let witness@N(tele) -> C(args) = C(args) { … }` registered in the program-wide witness table; diagnostics identify it by concept, key, and declaring module. Surface syntax writes a nonempty telescope as `satisfy (tele) => C(args) { … }`; the telescope admits only `@` and `use` parameters (explicit binders are rejected at lowering). `concept`/`args` are the witnessed concept application, reused verbatim as the struct-literal head. The body is written, or omitted as `satisfy C(args);` — the derived form, whose body the compiler writes.
 #[derive(Debug, Clone, PartialEq)]
 pub struct TopWitness {
     pub params: Vec<FuncSugarParam>,
     pub concept: Name,
     pub args: Vec<Term>,
-    pub entries: Vec<WitnessEntry>,
+    /// The written entries, or `None` for the derived form.
+    pub body: Option<Vec<WitnessEntry>>,
 }
 
 /// A `test` declaration: `test name() = body;` — the harness's declared test, the parentheses required and empty until the property-testing specification opens that seam with a telescope. No `pub`: a test's name is its report line, not an export.

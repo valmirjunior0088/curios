@@ -27,6 +27,13 @@ fn a_module_file_without_a_tail_formats() {
 }
 
 #[test]
+fn a_derived_witness_stays_a_declaration() {
+    // The formatter leaves the body-less form unexpanded, alone and inside a mixed group: `;` is the whole of what was written, so nothing is there to break across lines.
+    let source = "use /std/{Nat, Bool, Spell, Eql};\n\nsatisfy Spell(Nat);\n\nsatisfy Spell(Bool);\nand Eql(Bool) {\n    eql = eql,\n    neq = xor,\n}\n";
+    assert_eq!(formatted(source), source);
+}
+
+#[test]
 fn formatting_is_idempotent() {
     let source = "use /std/{Nat};\n\nlet double(n : Nat) -> Nat =\n    n + n;\n\ndouble(21)\n";
     let once = formatted(source);

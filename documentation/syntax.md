@@ -907,7 +907,7 @@ A concept returning `Prop` (or `pub Prop`) has proof-irrelevant witnesses that e
 
 ### Witness declarations
 
-`satisfy` registers an anonymous witness. Its terminal type is a concept application and its body supplies the concept fields.
+`satisfy` registers an anonymous witness. Its terminal type is a concept application and its body supplies the concept fields. A witness may also omit its body — `satisfy Spell(Point);` — asking the compiler to write it: a *derived* witness, admitted only for the concepts the compiler knows how to derive.
 
 ```crs
 satisfy Show(Nat) {
@@ -1058,6 +1058,7 @@ The standard equality operations include reflexivity, symmetry, transitivity, co
 | `choose ... end` | Ordered guarded ladder |
 | `test name() = body;` | Declared test — a `/syn/Test` description, collected per unit |
 | `satisfy C(args) { ... }` | Globally registered anonymous witness |
+| `satisfy C(args);` | Derived witness — the compiler writes the body |
 | `satisfy (@A: Type, use C(A)) => D(args) { ... }` | Parameterized globally registered anonymous witness |
 | `satisfy C(A) { ... } and D(B) { ... }` | Witnesses that resolve through each other, declared as one group |
 | `struct A: pub Type { ... } and B: pub Type { ... }` | Structures whose fields name one another, declared as one group |

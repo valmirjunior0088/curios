@@ -1745,19 +1745,21 @@ fn print_witness_member(item: TopWitness, keyword: &'static str) -> Printer {
         ])
     };
 
-    flat([
-        pure(keyword),
-        params,
-        pure(" "),
-        app,
-        pure(" "),
-        listed_hard(
-            "{",
-            item.entries.first().and_then(witness_entry_start),
-            item.entries.into_iter().map(print_witness_entry).collect(),
-            "}",
-        ),
-    ])
+    // A derived witness ends at the `;` in the brace block's place: the declaration is the whole of what was written.
+    let body = match item.body {
+        Some(entries) => flat([
+            pure(" "),
+            listed_hard(
+                "{",
+                entries.first().and_then(witness_entry_start),
+                entries.into_iter().map(print_witness_entry).collect(),
+                "}",
+            ),
+        ]),
+        None => pure(";"),
+    };
+
+    flat([pure(keyword), params, pure(" "), app, body])
 }
 
 /// Where a witness-body entry begins, for the mark that pays a comment riding the opening brace's line.
@@ -1770,7 +1772,10 @@ fn witness_member_start(item: &TopWitness) -> Option<usize> {
         item.args
             .first()
             .and_then(|arg| arg.span().map(|span| span.start)),
-        item.entries.first().and_then(witness_entry_start),
+        item.body
+            .as_ref()
+            .and_then(|entries| entries.first())
+            .and_then(witness_entry_start),
     ]
     .into_iter()
     .flatten()

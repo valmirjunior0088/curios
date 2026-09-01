@@ -106,12 +106,13 @@ fn parse_witness_item() {
     assert_eq!(witness.params[1].plicity, Plicity::Witness);
 
     // The definition-sugar field keeps its written parameter list; the value slot holds the body, and only the struct-literal lowering builds the lambda (via `TupleField::desugared_value`). The `use eql_list` entry fills the concept's `use`-marked field without naming it.
-    assert_eq!(witness.entries.len(), 2);
-    let WitnessEntry::Use(fill) = &witness.entries[0] else {
+    let entries = witness.body.as_ref().expect("a written body");
+    assert_eq!(entries.len(), 2);
+    let WitnessEntry::Use(fill) = &entries[0] else {
         panic!("expected a use fill");
     };
     assert!(matches!(fill.as_subterm(), Subterm::Name(_)));
-    let WitnessEntry::Field(cmp) = &witness.entries[1] else {
+    let WitnessEntry::Field(cmp) = &entries[1] else {
         panic!("expected an implementation field");
     };
     assert_eq!(cmp.label, "cmp");
@@ -169,6 +170,11 @@ fn witness_use_round_trip() {
         "satisfy (@A : Type, use Show(A)) => Show(List(A)) { show = g } u",
         "satisfy Show(Nat) { show = f } and Show(Bool) { show = g } u",
         "satisfy Show(Nat) { show = f } and (@A : Type, use Show(A)) => Show(List(A)) { show = g } u",
+        "satisfy Show(Nat); u",
+        "satisfy (@A : Type, use Show(A)) => Show(List(A)); u",
+        "satisfy Show(Nat); and Show(Bool); u",
+        "satisfy Show(Nat); and Show(Bool) { show = g } u",
+        "satisfy Show(Nat) { show = f } and (@A : Type, use Show(A)) => Show(List(A)); u",
         "f(use dict, x)",
         "(@A : Type, use Show(A), x : A) -> A",
     ] {
@@ -198,6 +204,58 @@ fn witness_telescope_requires_nonempty_separator_form() {
         "satisfy(@A : Type) Show(A) { show = f } u",
         "satisfy (@A : Type) -> Show(A) { show = f } u",
         "satisfy () => Show(Nat) { show = f } u",
+    ] {
+        assert!(
+            source.parse::<Entrypoint>().is_err(),
+            "unexpectedly parsed {source:?}"
+        );
+    }
+}
+
+#[test]
+fn a_derived_witness_has_no_body_and_prints_as_its_declaration() {
+    // `;` in the brace block's place is the derived form: the AST records no entries, and the printer writes the declaration back without inventing a block.
+    let source = "satisfy (@A : Type, use Show(A)) => Show(List(A));\nu";
+    let entrypoint = source.parse::<Entrypoint>().unwrap();
+    let TopItem::Witness(witnesses) = &entrypoint.module.items[0] else {
+        panic!("expected a witness declaration");
+    };
+    assert_eq!(witnesses.len(), 1);
+    assert!(witnesses[0].body.is_none());
+    assert_eq!(witnesses[0].params.len(), 2);
+    assert_eq!(
+        entrypoint.to_string(),
+        "satisfy (@A: Type, use Show(A)) => Show(List(A));\nu"
+    );
+}
+
+#[test]
+fn a_witness_group_mixes_derived_and_written_members() {
+    // A body-less member joins an `and` group exactly as a written one does, in either position; the `;` ends the member, and the group's next member still begins at `and`.
+    let source = "satisfy Show(Nat); and Show(Bool) { show = g } and Show(Str);\nu";
+    let entrypoint = source.parse::<Entrypoint>().unwrap();
+    let TopItem::Witness(witnesses) = &entrypoint.module.items[0] else {
+        panic!("expected a witness declaration");
+    };
+    assert_eq!(
+        witnesses
+            .iter()
+            .map(|w| w.body.is_some())
+            .collect::<Vec<_>>(),
+        [false, true, false]
+    );
+    assert_eq!(
+        entrypoint.to_string(),
+        "satisfy Show(Nat);\nand Show(Bool) {\n    show = g,\n}\nand Show(Str);\nu"
+    );
+}
+
+#[test]
+fn a_witness_needs_a_body_or_a_semicolon() {
+    for source in [
+        "satisfy Show(Nat) u",
+        "satisfy Show(Nat) and Show(Bool); u",
+        "satisfy Show(Nat) { show = f }; u",
     ] {
         assert!(
             source.parse::<Entrypoint>().is_err(),

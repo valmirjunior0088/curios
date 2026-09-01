@@ -530,7 +530,7 @@ pub(super) fn parse_witness_entry<'a>() -> Parser<'a, WitnessEntry> {
         .or(parse_witness_field().map(WitnessEntry::Field))
 }
 
-// One witness: `Concept(args) { … }`, or `(params) => Concept(args) { … }` with a nonempty telescope. The separator makes the parameterized form's terminal concept application explicit; an empty telescope must use the bare form instead.
+// One witness: `Concept(args) { … }`, or `(params) => Concept(args) { … }` with a nonempty telescope. The separator makes the parameterized form's terminal concept application explicit; an empty telescope must use the bare form instead. The body is the brace block, or `;` in its place — the derived form, whose body the compiler writes — and either may follow either head.
 fn parse_witness_member<'a>() -> Parser<'a, TopWitness> {
     catch(
         parse_literal("(")
@@ -550,14 +550,18 @@ fn parse_witness_member<'a>() -> Parser<'a, TopWitness> {
         )
         .or(pure(vec![])),
     )
-    .and_drop(parse_literal("{"))
-    .and(sep_by0_trailing(parse_witness_entry, || parse_literal(",")))
-    .and_drop(parse_literal("}"))
-    .map(|(((params, concept), args), entries)| TopWitness {
+    .and(
+        catch(parse_literal("{"))
+            .and_keep(sep_by0_trailing(parse_witness_entry, || parse_literal(",")))
+            .and_drop(parse_literal("}"))
+            .map(Some)
+            .or(parse_literal(";").map(|()| None)),
+    )
+    .map(|(((params, concept), args), body)| TopWitness {
         params,
         concept,
         args,
-        entries,
+        body,
     })
 }
 

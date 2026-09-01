@@ -82,6 +82,8 @@ pub enum Error {
     },
     /// A postfix `!` was reached through a *type* lowering (an annotation, a motive, a Π/Σ component): types have no region to hoist the action to.
     BangInTypePosition,
+    /// A body-less witness, `satisfy C(T);`, reached lowering before Core had a form to carry it: the surface form lands ahead of the elaboration transient that consumes it.
+    DerivedWitnessUnsupported,
     /// A motive was written on a match whose head does not dispatch on a single tag or literal shape directly — every arm matches a tuple/struct, is a plain binder, or arms disagree on which carrier (`Ctor`/`Bool`/`Nat`/`List`/`Bits`/`Bytes`) they dispatch on. Such a head explodes into projections and builds no core `Match` node for the motive to attach to, so the motive would be silently discarded.
     MatrixMotiveRequiresCtorHead,
     /// Two match-arm rows write incompatible shapes for the same column — mixing a plain binder with a concrete constructor/tuple/struct shape (a "Path A" full-enumeration violation: no wildcard/catch-all is allowed alongside a concrete case), or two concrete shapes that disagree (a tuple/struct of different arity or field labels, a struct with a different head name, or the same constructor tag applied with a different number of arguments).
@@ -237,6 +239,12 @@ impl fmt::Display for Error {
             }
             Error::BangInTypePosition => {
                 write!(f, "postfix `!` is not allowed inside a type")
+            }
+            Error::DerivedWitnessUnsupported => {
+                write!(
+                    f,
+                    "a derived witness (`satisfy C(T);`) is not supported yet; write the body"
+                )
             }
             Error::MatrixMotiveRequiresCtorHead => {
                 write!(

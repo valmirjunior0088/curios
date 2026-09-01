@@ -1085,11 +1085,18 @@ fn process_items(
 
                         let concept_app =
                             witness_concept_application(&witness.concept, &witness.args);
+                        // The derived form has no Core to lower to yet: refused here, at the declaration, until the elaboration transient that carries it exists.
+                        let Some(entries) = &witness.body else {
+                            let span = witness.args.first().and_then(|arg| arg.span());
+                            return Err(match span {
+                                Some(span) => Error::DerivedWitnessUnsupported.at(span.clone()),
+                                None => Error::DerivedWitnessUnsupported,
+                            });
+                        };
                         let body: Term = Subterm::StructLit(StructLit {
                             head: witness.concept.clone(),
                             params: witness.args.clone(),
-                            entries: witness
-                                .entries
+                            entries: entries
                                 .iter()
                                 .map(|entry| match entry {
                                     WitnessEntry::Field(field) => {

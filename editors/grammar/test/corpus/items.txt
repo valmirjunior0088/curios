@@ -639,3 +639,72 @@ test(test)
       (argument
         (path
           (identifier))))))
+
+================================================================================
+A derived witness omits its body, alone and inside a mixed group
+================================================================================
+
+satisfy Spell(Point);
+satisfy (@A: Type, use Spell(A)) => Spell(Tree(A));
+and Eql(Point) {
+    eql(a, b) = same(a, b),
+}
+
+--------------------------------------------------------------------------------
+
+(source_file
+  (satisfy_item
+    (satisfy_member
+      (path
+        (identifier))
+      (type_arguments
+        (path
+          (identifier)))))
+  (satisfy_item
+    (satisfy_member
+      (parameters
+        (parameter
+          (identifier)
+          (sort))
+        (parameter
+          (call
+            (path
+              (identifier))
+            (arguments
+              (argument
+                (path
+                  (identifier)))))))
+      (path
+        (identifier))
+      (type_arguments
+        (call
+          (path
+            (identifier))
+          (arguments
+            (argument
+              (path
+                (identifier)))))))
+    (satisfy_member
+      (path
+        (identifier))
+      (type_arguments
+        (path
+          (identifier)))
+      (witness_entry
+        (field_definition
+          (identifier)
+          (sugar_parameters
+            (sugar_parameter
+              (identifier))
+            (sugar_parameter
+              (identifier)))
+          (call
+            (path
+              (identifier))
+            (arguments
+              (argument
+                (path
+                  (identifier)))
+              (argument
+                (path
+                  (identifier))))))))))
