@@ -1,8 +1,17 @@
 # curios-package
 
-What a Curios package is, and everything that reads one: the `curios.toml` manifest, the walk that decides which manifest governs an invocation, the resolver that turns a declared dependency into a module tree, and the store the results are filed in. It sits *beside* the compiler boundary rather than under it — `curios-pipeline` folds its stages over whatever scope it is handed, and deciding that scope is a product's job. The subsystem's invariants and its refusal discipline belong to the crate rustdoc; the command-line and manifest reference belongs to [documentation/usage.md](../documentation/usage.md).
+What a Curios package is, and everything that reads one: the `curios.toml` manifest, the walk that decides which manifest governs an invocation, the resolver that turns a declared dependency into a module tree, and the store the results are filed in. It sits *beside* the compiler boundary rather than under it — `curios-pipeline` folds its stages over whatever scope it is handed, and deciding that scope is a product's job. The four laws the crate enforces are stated below, where its comments cite them by number; the subsystem's invariants and its refusal discipline belong to the crate rustdoc, and the command-line and manifest reference belongs to [documentation/usage.md](../documentation/usage.md).
 
 ## Design
+
+### The four laws
+
+Every refusal and every placement in this crate follows from four rules, cited by number throughout its comments. They were first stated in the projects specification, which was retired into the places that own its facts; this is where the list itself lives now.
+
+1. **Declaration decides; location does not.** Modules exist because a header declares `mod`, artifacts because the manifest declares them, members because the umbrella enumerates them — a file nothing names is inert, wherever it sits. The two exceptions are a package's own `lib.crs` and `exe.crs`, whose presence beside the manifest *is* their declaration, for the reason `layout.rs` states.
+2. **Identity is declared exactly once, by its owner.** A package names itself, every consumer refers to it by that name, and the filesystem spells structure, never names; nothing positional — no identity meaningful only in the compilation that assigned it — is ever stored.
+3. **Membership organizes; dependency compiles.** The umbrella's tree decides where the store goes and what a marker may resolve to; only declared dependencies order compilation, and neither implies the other.
+4. **A refusal fires early and names both parties.** Conflicts, collisions, cycles and missing obligations are diagnosed before elaboration, against the file somebody wrote, never surfaced as an unbound name or a conversion failure holding no span.
 
 ### Three things measured and not built
 
