@@ -120,6 +120,16 @@ where
 }
 
 /// Downgrades the parser's failure to recoverable even when it consumed input, so an enclosing [`Parser::or`] or repetition backtracks instead of aborting. The escape hatch from progress-based commitment, for alternatives that share a prefix — e.g. the WAT parser wraps each `(keyword` head in `catch` so consuming the `(` while probing one form doesn't kill the others.
+/// Upgrades the parser's failure to fatal, so an enclosing [`Parser::or`] or repetition stops at it instead of trying the next alternative. The dual of [`catch`]: `catch` says a failure must not kill its siblings, this says that past this point the failure *is* the diagnosis.
+///
+/// Only meaningful once input has been consumed, because commitment is progress-based — [`ParserError::is_uncaught`] asks for a fatal error whose offset has moved past the choice point, so committing a parser that fails without consuming anything still backtracks. The use it exists for is a keyword-dispatched alternative: the head is already eaten when the body runs, so the body's failure is always past the choice point.
+pub fn commit<'a, T>(parser: Parser<'a, T>) -> Parser<'a, T>
+where
+    T: 'a,
+{
+    Parser::new(move |state| parser.parse(state).map_err(ParserError::commit))
+}
+
 pub fn catch<'a, T>(parser: Parser<'a, T>) -> Parser<'a, T>
 where
     T: 'a,

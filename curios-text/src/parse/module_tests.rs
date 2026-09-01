@@ -206,3 +206,70 @@ fn use_entries_are_struct_literal_only() {
     // ...but not in a tuple literal: `use` is reserved, so the tuple parser cannot take it as a field, and the term fails to parse.
     assert!("(use my_eql, 2)".parse::<Term>().is_err());
 }
+
+/// A malformed item is reported by the arm its head names, not by the first arm of a choice chain.
+///
+/// Every top-level form is keyword-led, and `parse_keyword` rejects only after consuming the identifier, so nine ordered alternatives all failed at one offset and the earliest — `mod` — won the tie. Each case below names a head that is not `mod`.
+#[test]
+fn a_malformed_item_is_reported_by_the_head_it_names() {
+    for (source, expected) in [
+        ("pub let a : /std/Nat -> 1;", "Expected '='"),
+        ("satisfy => /std/Eql { }", "Expected identifier"),
+        ("use /std/Nat, /std/Bool;", "Expected '/'"),
+    ] {
+        let report = source.parse::<Module>().unwrap_err().format();
+        assert!(
+            report.contains(expected),
+            "{source:?} reported {report}, wanted {expected:?}"
+        );
+        assert!(
+            !report.contains("end-of-file"),
+            "{source:?} fell through to the end-of-input expectation: {report}"
+        );
+    }
+}
+
+/// Input that begins no item names the heads that would, rather than reporting end of input against a module that has no tail to end with.
+#[test]
+fn a_head_that_names_no_item_lists_the_heads_that_do() {
+    let report = "pub mod util;\na\n".parse::<Module>().unwrap_err().format();
+    assert!(report.contains("Expected a top-level item"), "{report}");
+    assert!(report.contains("'satisfy'"), "{report}");
+}
+
+/// A trailing token that begins no item at all still reports as end of input: the item parser and the end-of-input expectation fail at one offset, and the tie keeps the latter.
+#[test]
+fn a_trailing_token_still_reports_end_of_input() {
+    let report = "pub let a : /std/Nat = 1;\n%%%\n"
+        .parse::<Module>()
+        .unwrap_err()
+        .format();
+    assert!(report.contains("end-of-file"), "{report}");
+}
+
+/// The contextual heads stay ordinary names, which is why their arms may not commit: a program's tail calling `test`, `satisfy` or `concept` is not a declaration that went wrong.
+#[test]
+fn a_contextual_head_still_begins_a_program_tail() {
+    for source in [
+        "test(1)",
+        "satisfy(1)",
+        "concept(1)",
+        "let test : Type = Type;\ntest",
+    ] {
+        assert!(
+            source.parse::<Entrypoint>().is_ok(),
+            "{source:?} stopped parsing as a program"
+        );
+    }
+}
+
+/// `let` is reserved but shared with the term grammar, so a top-level `let` that states no type falls through to the tail as a local binding rather than failing as a declaration.
+#[test]
+fn a_top_level_let_without_a_type_falls_through_to_the_tail() {
+    assert!("let x = 1;\nx".parse::<Entrypoint>().is_ok());
+    assert!(
+        "let (a, b) : Type = (a, b);\na"
+            .parse::<Entrypoint>()
+            .is_ok()
+    );
+}

@@ -8,7 +8,7 @@ use {
         take_comments,
     },
     curios_abi::WireSignature,
-    curios_parse::{ParserError, lazy, many0, run_parser, spanned, take_eof},
+    curios_parse::{Parser, ParserError, lazy, many0, run_parser, spanned, take_eof},
     curios_print::{flat, pure, run_printer},
     curios_utilities::{Plicity, Source, Span},
     std::{fmt, path::Path, rc::Rc, str::FromStr},
@@ -211,6 +211,13 @@ pub struct Module {
     pub items: Vec<TopItem>,
 }
 
+/// End of a module's item sequence: the input is exhausted, or the item parser explains why it is not.
+///
+/// **A bare `take_eof` here reported the wrong thing.** A module has no tail expression, so anything left after the item loop is a failed item — but the loop drops a recoverable item failure (`curios_parse`'s repetition keeps only uncaught ones), leaving `take_eof` to invent `Expected 'end-of-file'` at the item's first column. Re-running the item parser recovers the diagnosis it already had; [`Parser::or`] then keeps whichever error reached further, so a genuine trailing token still reports as end-of-input while a malformed item reports at the token that broke it. The alternative never succeeds — the loop stopped here precisely because the item parser failed — so nothing is consumed twice.
+fn parse_items_end<'a>() -> Parser<'a, ()> {
+    take_eof().or(lazy(parse_top_item).map(|_| ()))
+}
+
 impl Module {
     pub(crate) fn parse(source: &Rc<Source>) -> Result<Self, ParserError> {
         Self::parse_with_comments(source).map(|(module, _)| module)
@@ -224,7 +231,7 @@ impl Module {
         let module = run_parser(
             parse_whitespace()
                 .and_keep(many0(parse_top_item))
-                .and_drop(take_eof())
+                .and_drop(parse_items_end())
                 .map(|items| Module { items }),
             source,
         )?;

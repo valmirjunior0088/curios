@@ -33,6 +33,13 @@ impl ParserError {
         }
     }
 
+    pub(crate) fn commit(self) -> Self {
+        Self {
+            fatal: true,
+            ..self
+        }
+    }
+
     pub(crate) fn with_message<M: Into<String>>(self, message: M) -> Self {
         Self {
             message: message.into(),

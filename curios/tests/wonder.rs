@@ -304,10 +304,13 @@ fn a_header_that_does_not_parse_is_located_without_a_snippet() {
         "{published}"
     );
     assert!(
-        published.contains(r#""start":{"character":0,"line":1}"#),
+        published.contains(r#""start":{"character":1,"line":1}"#),
         "{published}"
     );
-    assert!(published.contains("Expected 'end-of-file'"), "{published}");
+    assert!(
+        published.contains("Expected a top-level item"),
+        "{published}"
+    );
     assert!(
         !published.contains("-->"),
         "no snippet in a message: {published}"
