@@ -197,7 +197,6 @@ impl<'a> Layout<'a> {
         }
     }
 
-    /// The family a constructor belongs to.
     /// The Cont layout of `family`, computed on first use and memoized.
     ///
     /// Slot zero is the tag; the payload slots are grouped by carrier, each group as wide as the constructor holding the most fields of that carrier. So two constructors agreeing on a carrier share its slots and only a disagreement costs width, which is what lets every slot name a carrier without the family widening: over the standard library this settles 22 slots against positional assignment's 11, for ten slots more across the whole roster and no growth at all in the families that allocate hot.
@@ -335,6 +334,7 @@ impl<'a> Layout<'a> {
         self.row_layout(module, family).places[tag].clone()
     }
 
+    /// The family a constructor belongs to.
     pub(super) fn constructor_family(&self, constructor: ConstructorId) -> FamilyId {
         self.source
             .constructor(constructor)
