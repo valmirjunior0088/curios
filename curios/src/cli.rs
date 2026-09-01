@@ -119,6 +119,15 @@ pub(crate) enum Query {
         target: Option<String>,
     },
 
+    #[command(about = "Every test the target declares, one path per line; nothing executes")]
+    Tests {
+        #[arg(
+            value_name = "TARGET",
+            help = "A declared executable's name, a path to a .crs file, or `-` for standard input (default: the governing package entire)"
+        )]
+        target: Option<String>,
+    },
+
     #[command(about = "The program's representation at one rung of the pipeline, reprinted")]
     Stage {
         #[arg(value_name = "STAGE", help = format!("One of: {}", *NAMES))]

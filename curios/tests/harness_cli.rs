@@ -161,3 +161,63 @@ fn run_neither_runs_nor_reports_a_test() {
 
     fs::remove_dir_all(root).unwrap();
 }
+
+#[test]
+fn wonder_tests_lists_declared_paths_per_target_form() {
+    let root = temporary("wonder-tests");
+    write(
+        &root,
+        "curios.toml",
+        "name = \"app\"\n\n[[executables]]\nname = \"app\"\n",
+    );
+    write(
+        &root,
+        "lib.crs",
+        "use /std/{Nat, Test};\n\ntest lib_first() =\n    Test/check(1 == 1);\n\ntest lib_second() =\n    Test/check(2 == 2);\n",
+    );
+    write(
+        &root,
+        "app.crs",
+        "use /std/{Nat, Str, Io, Test};\n\ntest app_holds() =\n    Test/check(3 == 3);\n\n/std/print(\"ran\\n\")\n",
+    );
+
+    // The package entire: the library's tests, then each executable's, in declaration order — and nothing executes, so the authored entry never prints.
+    let whole = curios(&root, &["wonder", "tests"]);
+    assert_eq!(
+        stdout(&whole),
+        "/app/lib_first\n/app/lib_second\n/app_holds\n",
+        "stderr: {}",
+        stderr(&whole)
+    );
+    assert_eq!(whole.status.code(), Some(0));
+
+    // An executable by name lists its own alone.
+    let executable = curios(&root, &["wonder", "tests", "app"]);
+    assert_eq!(stdout(&executable), "/app_holds\n");
+    assert_eq!(executable.status.code(), Some(0));
+
+    // A file is placed in the unit that declares it, so the library header answers as the library.
+    let file = curios(&root, &["wonder", "tests", "lib.crs"]);
+    assert_eq!(stdout(&file), "/app/lib_first\n/app/lib_second\n");
+    assert_eq!(file.status.code(), Some(0));
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn wonder_tests_on_a_testless_package_lists_nothing_and_exits_zero() {
+    let root = temporary("wonder-none");
+    write(
+        &root,
+        "curios.toml",
+        "name = \"app\"\n\n[[executables]]\nname = \"app\"\n",
+    );
+    write(&root, "lib.crs", "pub let zero: /std/Nat = 0;\n");
+    write(&root, "app.crs", "/std/print(\"ran\\n\")\n");
+
+    let output = curios(&root, &["wonder", "tests"]);
+    assert_eq!(stdout(&output), "", "stderr: {}", stderr(&output));
+    assert_eq!(output.status.code(), Some(0));
+
+    fs::remove_dir_all(root).unwrap();
+}

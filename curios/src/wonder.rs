@@ -16,6 +16,9 @@ mod tests;
 mod record;
 pub use record::*;
 
+mod declared;
+pub use declared::*;
+
 mod diagnostics;
 pub use diagnostics::*;
 

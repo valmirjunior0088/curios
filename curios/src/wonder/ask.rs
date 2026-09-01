@@ -6,8 +6,8 @@
 
 use {
     crate::{
-        Diagnostic, Origin, Reached, Refusal, STDIN_LABEL, Subject, Verdicts, diagnostics, stage,
-        wasm_optm,
+        Diagnostic, Origin, Reached, Refusal, STDIN_LABEL, Subject, Verdicts, declared_tests,
+        diagnostics, stage, wasm_optm,
     },
     curios_package::{Governing, LIBRARY, Membership, Target, mounted, names_a_file, order},
     curios_text::{Overlay, RootSource},
@@ -122,13 +122,28 @@ pub fn wonder_diagnostics(
 ) -> Result<(), String> {
     let overlay = Overlay::default();
 
-    let answers = match target {
+    let answers = resolve(mounted, manifest, target)?;
+
+    let reports = rendered(answers, budget, &overlay);
+    if !reports.is_empty() {
+        println!("{}", reports.join("\n\n"));
+    }
+
+    Ok(())
+}
+
+/// The subjects `target` names, resolved the way `diagnostics` and `tests` share it: one for a file, an executable or standard input, and the governing package entire — its library, then every executable it declares, each a subject of its own — for none.
+fn resolve(
+    mounted: &[PathBuf],
+    manifest: Option<&Path>,
+    target: Option<&str>,
+) -> Result<Vec<Asked>, String> {
+    Ok(match target {
         Some(Target::STDIN) => vec![Asked::about_stdin(mounted, read_stdin()?)?],
         Some(argument) if names_a_file(argument) => {
             vec![Asked::about_file(Path::new(argument), mounted, manifest)?]
         }
         Some(name) => vec![Asked::about_executable(Some(name), mounted, manifest)?],
-        // The governing package entire: its library, then every executable it declares, each a subject of its own.
         None => {
             let governing = Governing::here(manifest)?;
             let mut asked = Vec::new();
@@ -149,11 +164,24 @@ pub fn wonder_diagnostics(
             }
             asked
         }
-    };
+    })
+}
 
-    let reports = rendered(answers, budget, &overlay);
-    if !reports.is_empty() {
-        println!("{}", reports.join("\n\n"));
+/// `wonder tests [TARGET]`: every test the target declares, one path per line, in declaration order — the library's, then each executable's, when the target is the governing package entire. Nothing executes, and a package with no tests answers with nothing and exit 0.
+pub fn wonder_tests(
+    budget: u64,
+    mounted: &[PathBuf],
+    manifest: Option<&Path>,
+    target: Option<&str>,
+) -> Result<(), String> {
+    let overlay = Overlay::default();
+
+    for asked in resolve(mounted, manifest, target)? {
+        let records = declared_tests(budget, asked.subject, &overlay, asked.store.as_ref())
+            .map_err(|error| error.to_string())?;
+        for record in records {
+            println!("{}", record.path);
+        }
     }
 
     Ok(())

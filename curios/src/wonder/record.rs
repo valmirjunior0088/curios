@@ -25,3 +25,9 @@ impl Diagnostic {
         self.report.render()
     }
 }
+
+/// One declared test: the path that names, filters and reports it. Deliberately without a rung — a rung is a constructor the body builds at run time, and this record is read from a compilation that executes nothing.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeclaredTest {
+    pub path: String,
+}

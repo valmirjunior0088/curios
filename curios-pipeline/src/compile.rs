@@ -195,6 +195,19 @@ pub struct TestRecord {
     pub body: String,
 }
 
+/// The declaration-ordered paths of a module's registered tests — how `curios test` and `wonder tests` name them, read off [`Module::tests`](curios_core::Module) so the two cannot disagree with the schedule.
+pub fn declared_test_paths(module: &curios_core::Module) -> Vec<String> {
+    module
+        .tests
+        .iter()
+        .map(|test| {
+            test.qualifier()
+                .map(|qualifier| qualifier.join())
+                .unwrap_or_default()
+        })
+        .collect()
+}
+
 /// The report metadata of each registered test, read off the definitions that carry them. A test's body is the nullary lambda's interior, which is where the authored span lives — the wrapper node is synthesized and spans nothing.
 fn test_records(tests: &[curios_core::Global], items: &[curios_core::Item]) -> Vec<TestRecord> {
     tests

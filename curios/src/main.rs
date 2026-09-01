@@ -21,7 +21,7 @@ use test_runner::*;
 
 use {
     clap::Parser,
-    curios::{serve, wonder_diagnostics, wonder_stage},
+    curios::{serve, wonder_diagnostics, wonder_stage, wonder_tests},
     curios_package::{Governing, Target, curate, scaffold},
     curios_pipeline::CompileError,
     curios_runtime::{ForeignBindings, OsHost, run_bytes},
@@ -184,6 +184,9 @@ fn dispatch() -> Result<(), Failure> {
         Mode::Wonder { query } => match query {
             Query::Diagnostics { target } => {
                 wonder_diagnostics(budget, &units, manifest.as_deref(), target.as_deref())?
+            }
+            Query::Tests { target } => {
+                wonder_tests(budget, &units, manifest.as_deref(), target.as_deref())?
             }
             Query::Stage { name, target } => wonder_stage(
                 budget,

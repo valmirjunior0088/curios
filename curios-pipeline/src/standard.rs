@@ -7,7 +7,7 @@
 use {
     crate::{
         Cache, CompileError, EntryTail, Progress, Stage, TestRecord, check_entrypoint,
-        compile_entrypoint, compile_unit_as_tests, compile_units, recheck,
+        compile_entrypoint, compile_unit_as_tests, compile_units, declared_test_paths, recheck,
     },
     curios_prelude::{SYNTAX, with_prelude},
     curios_unit::Prefix,
@@ -120,6 +120,38 @@ where
             &mut progress,
         )
         .map(|_produced| ())
+    })
+}
+
+/// The declaration-ordered test paths of the last of `units` — what `wonder tests` answers for a library. The same fold [`check_units_with_prelude`] runs, read for its `Module::tests` instead of its verdicts; nothing executes.
+pub fn unit_test_paths<P>(
+    budget: u64,
+    units: &[curios_text::RootSource],
+    cache: Option<&dyn Cache>,
+    mut progress: P,
+) -> Result<Vec<String>, CompileError>
+where
+    P: FnMut(Progress<'_>),
+{
+    with_prelude(|prelude| {
+        let sources = units
+            .iter()
+            .map(curios_text::UnitSource::mounted)
+            .collect::<Vec<_>>();
+        compile_units(
+            budget,
+            Prefix::over(from_ref(&prelude)),
+            &SYNTAX,
+            &sources,
+            cache,
+            &mut progress,
+        )
+        .map(|produced| {
+            produced
+                .last()
+                .map(|unit| declared_test_paths(unit.core()))
+                .unwrap_or_default()
+        })
     })
 }
 
