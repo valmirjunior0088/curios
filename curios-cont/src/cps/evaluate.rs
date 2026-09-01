@@ -58,7 +58,7 @@ pub(super) fn evaluate(op: CpsIntrinsic, args: &[CpsAtom]) -> Option<CpsLiteral>
         CpsIntrinsic::NatShl => Some(CpsLiteral::Nat(nat_shl(nat(0)?, nat(1)?).ok()?)),
         CpsIntrinsic::NatShr => Some(CpsLiteral::Nat(nat_shr(nat(0)?, nat(1)?))),
         CpsIntrinsic::NatEqz => bool_(nat(0)? == 0),
-        CpsIntrinsic::NatToInt => Some(CpsLiteral::Int(nat_to_int(nat(0)?)?)),
+        CpsIntrinsic::NatToInt => Some(CpsLiteral::Int(nat_to_int(nat(0)?).ok()?)),
         CpsIntrinsic::NatToFlt => flt_(Floating::of_natural(&Natural::from(nat(0)?))),
         CpsIntrinsic::IntEql => bool_(int(0)? == int(1)?),
         CpsIntrinsic::IntNeq => bool_(int(0)? != int(1)?),
@@ -75,7 +75,7 @@ pub(super) fn evaluate(op: CpsIntrinsic, args: &[CpsAtom]) -> Option<CpsLiteral>
         CpsIntrinsic::IntShl => Some(CpsLiteral::Int(int_shl(int(0)?, int(1)?)?.ok()?)),
         CpsIntrinsic::IntShr => Some(CpsLiteral::Int(int_shr(int(0)?, int(1)?)?)),
         CpsIntrinsic::IntEqz => bool_(int(0)? == 0),
-        CpsIntrinsic::IntToNat => Some(CpsLiteral::Nat(int_to_nat(int(0)?)?)),
+        CpsIntrinsic::IntToNat => Some(CpsLiteral::Nat(int_to_nat(int(0)?).ok()?)),
         CpsIntrinsic::IntToFlt => flt_(Floating::of_integer(&Integer::from(int(0)?))),
         CpsIntrinsic::FltAdd => flt_(flt(0)? + flt(1)?),
         CpsIntrinsic::FltSub => flt_(flt(0)? - flt(1)?),
@@ -96,8 +96,8 @@ pub(super) fn evaluate(op: CpsIntrinsic, args: &[CpsAtom]) -> Option<CpsLiteral>
         CpsIntrinsic::FltTrunc => flt_(flt(0)?.trunc()),
         CpsIntrinsic::FltNearest => flt_(flt(0)?.nearest()),
         CpsIntrinsic::FltCopysign => flt_(flt(0)?.copysign(flt(1)?)),
-        CpsIntrinsic::FltToNat => Some(CpsLiteral::Nat(flt_to_nat(flt(0)?)?)),
-        CpsIntrinsic::FltToInt => Some(CpsLiteral::Int(flt_to_int(flt(0)?)?)),
+        CpsIntrinsic::FltToNat => Some(CpsLiteral::Nat(flt_to_nat(flt(0)?).ok()?)),
+        CpsIntrinsic::FltToInt => Some(CpsLiteral::Int(flt_to_int(flt(0)?).ok()?)),
         // Folds over the *runtime* representation, not the literal's kind: `Nat` and `Int` ride i31, while an `Flt` is a boxed struct and a `Bin` a rope reference, so both answer 0.
         CpsIntrinsic::IsImmediate => Some(CpsLiteral::Nat(match literals[0] {
             CpsLiteral::Nat(_) | CpsLiteral::Int(_) => 1,

@@ -2,19 +2,21 @@
 //!
 //! Only operations with semantic freedom live here — saturating-versus-refusing choices, trap conditions, fold-decline conditions. Comparisons and plain bitwise operations have exactly one meaning and stay as native operators at their use sites.
 //!
-//! **What a signature here says.** `Result<_, ScalarTrap>` is an operation that always has an answer in the theory and sometimes cannot represent it: `Err` means the program traps, and a folder must record that rather than decline. `Option` is an operation the theory itself leaves undefined at that argument — a negative shift count, which `Integer::checked_shl` also declines — so a folder must stay silent and leave the term alone. A bare return is total. `curios-core` folds the same operations over unbounded `Natural`/`Integer` and over `Floating`'s binary32 model, and is the oracle for every one of them: what is stated here must be Core's answer or a refusal, never a third value. That is why the `Flt` narrowings below compute through the model and add only the carrier's own width — the semantics is not consulted about `u32`, and the carrier is not consulted about what a float means.
+//! **What a signature here says.** `Result<_, ScalarTrap>` is an operation the program can trap on, and `Err` means it does at this argument: an answer the theory has that the carrier cannot hold, or an operand the operation's proof precondition excludes — which only an unsound proof delivers, and the runtime refuses. A folder must record that rather than decline. `Option` is an operation the theory leaves undefined at a *well-typed* argument — a negative shift count, which `Integer::checked_shl` also declines — so a folder must stay silent and leave the term alone. A bare return is total. `curios-core` folds the same operations over unbounded `Natural`/`Integer` and over `Floating`'s binary32 model, and is the oracle for every one of them: what is stated here must be Core's answer or a refusal, never a third value. That is why the `Flt` narrowings below compute through the model and add only the carrier's own width — the semantics is not consulted about `u32`, and the carrier is not consulted about what a float means.
 
 #[cfg(test)]
 mod tests;
 
 use crate::Floating;
 
-/// Why an operation with an answer in the theory cannot produce one in its carrier.
+/// Why an operation traps in its carrier: an answer the theory has that the carrier cannot hold, or an operand the operation's precondition excludes and the runtime refuses.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ScalarTrap {
     DivisionByZero,
     /// A value outside the carrier: a sum, product or shift past its width, or `i32::MIN / -1`.
     Overflow,
+    /// A conversion with nothing to answer: a `Nat` or `Int` the other carrier does not hold, or a float outside the domain its precondition states — a NaN, an infinity, a negative where a natural is asked for — or whose integer part is past the carrier's width.
+    ConversionRange,
 }
 
 /// `Nat` addition, refusing a sum past the carrier.
@@ -128,24 +130,30 @@ pub fn int_rem(left: i32, right: i32) -> Result<i32, ScalarTrap> {
     }
 }
 
-/// `Nat` to `Int` preserving the number; `None` traps above `i32::MAX`, where no `i32` holds the same value. The conversions carry values, never bit views — reinterpretation belongs to explicit `Bin` casts.
-pub fn nat_to_int(value: u32) -> Option<i32> {
-    i32::try_from(value).ok()
+/// `Nat` to `Int` preserving the number, refusing a value above `i32::MAX`, where no `i32` holds the same one. The conversions carry values, never bit views — reinterpretation belongs to explicit `Bin` casts.
+pub fn nat_to_int(value: u32) -> Result<i32, ScalarTrap> {
+    i32::try_from(value).map_err(|_| ScalarTrap::ConversionRange)
 }
 
-/// `Int` to `Nat` preserving the number; `None` traps on a negative, which no natural equals.
-pub fn int_to_nat(value: i32) -> Option<u32> {
-    u32::try_from(value).ok()
+/// `Int` to `Nat` preserving the number, refusing a negative, which no natural equals.
+pub fn int_to_nat(value: i32) -> Result<u32, ScalarTrap> {
+    u32::try_from(value).map_err(|_| ScalarTrap::ConversionRange)
 }
 
-/// Truncate a binary32 to `u32`; `None` outside the domain [`Floating::to_natural`] states, or past the carrier.
+/// Truncate a binary32 to `u32`, refusing outside the domain [`Floating::to_natural`] states and past the carrier.
 ///
 /// Two refusals, and only the second belongs here. The model decides what the truncation *is* — undefined on a NaN, an infinity or a negative — and this adds the erased carrier's own width on top of it. The semantics is not consulted about `u32`, and the carrier is not consulted about what a float means.
-pub fn flt_to_nat(value: Floating) -> Option<u32> {
-    value.to_natural()?.to_u32()
+pub fn flt_to_nat(value: Floating) -> Result<u32, ScalarTrap> {
+    value
+        .to_natural()
+        .and_then(|value| value.to_u32())
+        .ok_or(ScalarTrap::ConversionRange)
 }
 
 /// Truncate a binary32 to `i32`, the twin of [`flt_to_nat`] over [`Floating::to_integer`]'s domain.
-pub fn flt_to_int(value: Floating) -> Option<i32> {
-    value.to_integer()?.to_i32()
+pub fn flt_to_int(value: Floating) -> Result<i32, ScalarTrap> {
+    value
+        .to_integer()
+        .and_then(|value| value.to_i32())
+        .ok_or(ScalarTrap::ConversionRange)
 }

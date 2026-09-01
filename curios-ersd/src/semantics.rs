@@ -443,12 +443,12 @@ impl Semantics {
 
                 HandleEql => Constant::Bool(io(0)? == io(1)?),
 
-                NatToInt => return Some(fold_nat_to_int(nat(0)?)),
+                NatToInt => return Some(scalar_result(nat_to_int(nat(0)?), Constant::Int)),
                 NatToFlt => Constant::Flt(Floating::of_natural(&Natural::from(nat(0)?))),
-                IntToNat => return Some(fold_int_to_nat(int(0)?)),
+                IntToNat => return Some(scalar_result(int_to_nat(int(0)?), Constant::Nat)),
                 IntToFlt => Constant::Flt(Floating::of_integer(&Integer::from(int(0)?))),
-                FltToNat => return Some(fold_flt_to_nat(flt(0)?)),
-                FltToInt => return Some(fold_flt_to_int(flt(0)?)),
+                FltToNat => return Some(scalar_result(flt_to_nat(flt(0)?), Constant::Nat)),
+                FltToInt => return Some(scalar_result(flt_to_int(flt(0)?), Constant::Int)),
                 ByteToNat => Constant::Nat(byte(0)? as u32),
                 NatToByte => Constant::Byte(nat(0)? as u8),
                 FltToLeBytes => Constant::Bin(
@@ -552,34 +552,8 @@ fn scalar_result<T>(
         Ok(value) => Ok(wrap(value)),
         Err(ScalarTrap::DivisionByZero) => Err(TrapKind::DivisionByZero),
         Err(ScalarTrap::Overflow) => Err(TrapKind::IntegerOverflow),
+        Err(ScalarTrap::ConversionRange) => Err(TrapKind::ConversionRange),
     }
-}
-
-/// `Nat` to `Int` preserving the number, trapping above `i32::MAX`.
-fn fold_nat_to_int(value: u32) -> Result<Constant, TrapKind> {
-    nat_to_int(value)
-        .map(Constant::Int)
-        .ok_or(TrapKind::ConversionRange)
-}
-
-/// `Int` to `Nat` preserving the number, trapping on a negative.
-fn fold_int_to_nat(value: i32) -> Result<Constant, TrapKind> {
-    int_to_nat(value)
-        .map(Constant::Nat)
-        .ok_or(TrapKind::ConversionRange)
-}
-
-fn fold_flt_to_nat(value: Floating) -> Result<Constant, TrapKind> {
-    flt_to_nat(value)
-        .map(Constant::Nat)
-        .ok_or(TrapKind::ConversionRange)
-}
-
-/// Truncate to `i32`, trapping outside `[-2^31, 2^31)`.
-fn fold_flt_to_int(value: Floating) -> Result<Constant, TrapKind> {
-    flt_to_int(value)
-        .map(Constant::Int)
-        .ok_or(TrapKind::ConversionRange)
 }
 
 /// Decode a little-endian binary32, trapping unless exactly four bytes.
