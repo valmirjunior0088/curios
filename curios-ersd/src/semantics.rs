@@ -302,7 +302,7 @@ pub enum FoldOutcome {
     Value(Constant),
     /// The operation is known to trap at runtime; the optimizer must keep it as an explicit residual computation.
     WouldTrap(TrapKind),
-    /// Nothing is known: an operand is not a constant, the operation has no constant carrier (a list operation), or the fold deliberately declines (a float min/max with a NaN operand, which Rust and wasm disagree on).
+    /// Nothing is known: an operand is not a constant, the operation has no constant carrier (a list operation), or the fold deliberately declines (an `Int` shift by a negative count, which `curios-core` also leaves unfolded).
     Unknown,
 }
 
