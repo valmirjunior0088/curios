@@ -118,18 +118,22 @@ impl OsHost {
     {
         let table = self.table.lock().unwrap();
 
-        let socket = match table.get(handle) {
-            Some(OsResource::Unconnected(socket) | OsResource::Connected(socket)) => socket,
-            // The listener is `Arc`-held, and an arm's value position is not a coercion site the way the old `apply(socket)` call argument was.
-            Some(OsResource::Listener(socket)) => socket.as_ref(),
-            // A TLS stream forwards setters to its underlying socket, so a timeout set after the upgrade still takes effect.
-            Some(OsResource::ClientTls(stream)) => &stream.sock,
-            Some(OsResource::ServerTls(stream)) => &stream.sock,
-            // A file, a config token, and an in-flight lookup have no socket options: record nothing.
-            Some(OsResource::File(_) | OsResource::TlsConfig(_) | OsResource::Resolving { .. }) => {
-                return Status::Ok;
-            }
-            None => return Status::NotFound,
+        let socket = match handle {
+            // The standard streams are the process's, shared with everything else on the terminal or pipe: no socket option applies to them, and a non-blocking flag set on fd 0/1/2 would change every other user of the descriptor. So, like a file, they record nothing and succeed — which is what lets `Async/read`/`write`, whose first step is `set_nonblocking`, serve them; their reads then block the scheduler as a file's do. They are never in the table, so asking it would answer `NotFound`, the verdict for a closed handle.
+            Handle::Stdin | Handle::Stdout | Handle::Stderr => return Status::Ok,
+            Handle::Other(_) => match table.get(handle) {
+                Some(OsResource::Unconnected(socket) | OsResource::Connected(socket)) => socket,
+                // The listener is `Arc`-held, and an arm's value position is not a coercion site the way the old `apply(socket)` call argument was.
+                Some(OsResource::Listener(socket)) => socket.as_ref(),
+                // A TLS stream forwards setters to its underlying socket, so a timeout set after the upgrade still takes effect.
+                Some(OsResource::ClientTls(stream)) => &stream.sock,
+                Some(OsResource::ServerTls(stream)) => &stream.sock,
+                // A file, a config token, and an in-flight lookup have no socket options: record nothing.
+                Some(
+                    OsResource::File(_) | OsResource::TlsConfig(_) | OsResource::Resolving { .. },
+                ) => return Status::Ok,
+                None => return Status::NotFound,
+            },
         };
 
         match apply(socket) {
