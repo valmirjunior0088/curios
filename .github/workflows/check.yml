@@ -166,6 +166,17 @@ jobs:
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
+      - name: Check the grammar rev publishes this grammar
+        run: |
+          rev=$(sed -n 's/^rev = "\(.*\)"/\1/p' editors/zed/extension.toml)
+          git fetch --depth=1 origin "$rev"
+          pinned=$(git rev-parse "${rev}:editors/grammar")
+          here=$(git rev-parse HEAD:editors/grammar)
+          if [ "$pinned" != "$here" ]; then
+            echo "editors/zed/extension.toml pins $rev, holding grammar tree $pinned, but this tree holds $here"
+            echo "commit and push editors/grammar, then move the rev"
+            exit 1
+          fi
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
