@@ -1,7 +1,10 @@
-use super::{
-    CpsAtom, CpsContId, CpsContinuation, CpsEdge, CpsFunId, CpsFunction, CpsIntrinsic, CpsLiteral,
-    CpsModule, CpsNode, CpsNodeId, CpsRow, CpsSlot, CpsUseTarget, CpsValueExpr, CpsValueId,
-    FieldGroup,
+use {
+    super::{
+        CpsAtom, CpsContId, CpsContinuation, CpsEdge, CpsFunId, CpsFunction, CpsIntrinsic,
+        CpsLiteral, CpsModule, CpsNode, CpsNodeId, CpsRow, CpsSlot, CpsUseTarget, CpsValueExpr,
+        CpsValueId, FieldGroup,
+    },
+    std::collections::BTreeMap,
 };
 
 /// Splitting a lower parameter after a higher one moves the higher group along: recording a start without shifting what follows it leaves a record the verifier reads as overlapping, which is how this was found.
@@ -167,6 +170,90 @@ fn verifier_rejects_a_read_in_the_other_vocabulary() {
             "{error}"
         );
     }
+}
+
+/// The vocabulary clause's one legal violation, and why the round boundary must not check it: constant folding pushes a decided reply's payload into both arms of its dispatch, so the dead arm reads the payload in the other vocabulary with only the decided tag keeping it honest, until a later round threads the switch and prunes the arm. The full verify keeps refusing the state — the entry and exit gates check it where its premise holds — while `verify_structure`, the round boundary's set, leaves the vocabulary clause to convergence.
+#[test]
+fn the_round_boundary_accepts_the_dead_arm_only_convergence_removes() {
+    let mut module = minimal_module();
+    let row = module.add_row(CpsRow {
+        debug_name: Some("Refusal".into()),
+        slots: vec![CpsSlot::Tag, CpsSlot::Opaque],
+    });
+    let built = module.add_value(Some("built".into()));
+    let field = module.add_value(Some("field".into()));
+    let live_body = module.function(CpsFunId(0)).unwrap().body;
+    let return_cont = module.function(CpsFunId(0)).unwrap().return_cont;
+
+    // The dead arm reads the value in the row vocabulary its live construction below does not carry.
+    let dead = module.reserve_continuation();
+    let live = module.reserve_continuation();
+    let dead_return = module.add_node(CpsNode::ApplyCont(CpsEdge {
+        target: return_cont,
+        args: vec![CpsAtom::Value(field)],
+    }));
+    let dead_read = module.add_node(CpsNode::LetIntrinsic {
+        result: field,
+        op: CpsIntrinsic::RowGet(row, 1),
+        args: vec![CpsAtom::Value(built)],
+        next: dead_return,
+    });
+    module.define_continuation(
+        dead,
+        CpsContinuation {
+            debug_name: None,
+            params: vec![],
+            body: dead_read,
+        },
+    );
+    module.define_continuation(
+        live,
+        CpsContinuation {
+            debug_name: None,
+            params: vec![],
+            body: live_body,
+        },
+    );
+
+    let switch = module.add_node(CpsNode::Switch {
+        scrutinee: CpsAtom::Literal(CpsLiteral::Nat(0)),
+        cases: BTreeMap::from([
+            (
+                0,
+                CpsEdge {
+                    target: live,
+                    args: vec![],
+                },
+            ),
+            (
+                1,
+                CpsEdge {
+                    target: dead,
+                    args: vec![],
+                },
+            ),
+        ]),
+        default: None,
+    });
+    let let_cont = module.add_node(CpsNode::LetCont {
+        continuations: vec![live, dead],
+        body: switch,
+    });
+    let construction = module.add_node(CpsNode::LetValue {
+        result: built,
+        value: CpsValueExpr::Tuple(vec![
+            CpsAtom::Literal(CpsLiteral::Nat(0)),
+            CpsAtom::Literal(CpsLiteral::Nat(0)),
+        ]),
+        next: let_cont,
+    });
+    module.functions.get_mut(CpsFunId(0)).unwrap().body = construction;
+
+    // The full set refuses the mismatch; the boundary set accepts everything else about the module and leaves the mismatch to the exit gate.
+    assert!(module.verify().unwrap_err().0.contains("was built as"));
+    module
+        .verify_structure()
+        .expect("the boundary leaves the vocabulary clause to convergence");
 }
 
 #[test]

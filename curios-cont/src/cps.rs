@@ -1053,6 +1053,17 @@ impl CpsModule {
     }
 
     pub fn verify(&self) -> Result<(), CpsVerifyError> {
+        self.verify_with(true)
+    }
+
+    /// The round-boundary subset of [`CpsModule::verify`]: every structural clause, without the row-vocabulary one.
+    ///
+    /// A round's close leaves scoping, ownership and arities canonical, but the vocabulary clause holds only of the *converged* module: constant folding pushes a decided reply's payload into both arms of its dispatch, so until a later round threads the decided switch and prunes behind it, the dead arm legitimately reads that payload in the other vocabulary — the tag the fold decided is what keeps it honest, and no per-round rewrite is obliged to have cleaned it up yet. `/std/Parse`'s reply dispatches reach this state on every `pure`-fed combinator, which is how the full check at the boundary broke half the cross-stage corpus while the exit gate stayed green. The entry and exit verifies keep the full set, so a mismatch that survives convergence is still refused where its premise actually holds.
+    pub fn verify_structure(&self) -> Result<(), CpsVerifyError> {
+        self.verify_with(false)
+    }
+
+    fn verify_with(&self, rows: bool) -> Result<(), CpsVerifyError> {
         let entry = self
             .entry
             .ok_or_else(|| CpsVerifyError("module has no entry function".into()))?;
@@ -1108,7 +1119,9 @@ impl CpsModule {
             )?;
         }
         self.verify_lexical_scopes(entry)?;
-        self.verify_rows()?;
+        if rows {
+            self.verify_rows()?;
+        }
 
         let live_nodes = self.nodes.live_ids().collect::<BTreeSet<_>>();
         let owned_nodes = node_owners.keys().copied().collect::<BTreeSet<_>>();
