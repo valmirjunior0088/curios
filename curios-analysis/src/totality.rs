@@ -148,7 +148,6 @@ struct Walk<'a, E: Env> {
     payloads: BTreeSet<Free>,
     /// The nested groups whose bodies the walk is currently inside, entered and left exactly like `refined`. A group reached from within itself would regenerate its own bodies without end, since every member reference materializes as a projection carrying the whole group.
     entered: Vec<RecGroup>,
-    /// The work still owed, innermost last. The traversal's depth lives here rather than on the native stack: a member body nests as deep as its source is written, and a program-generating spelling of it is unbounded by anything the walk controls.
     /// One entry per scope [`Walk::enter`] has opened and [`Walk::exit`] has yet to close.
     scopes: Vec<Undo>,
     calls: Vec<(usize, usize, Matrix)>,
