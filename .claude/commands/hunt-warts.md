@@ -1,7 +1,7 @@
 ---
 description: Iterative bug, wart, and misfit hunt — find one, present it, fix on approval, commit, repeat
 argument-hint: "[crate or path to hunt in — curios-cont, curios-elab/src/convert.rs, …]"
-allowed-tools: Read, Edit, Write, Grep, Glob, Bash(rg:*), Bash(cargo:*), Bash(git:*), Bash(make:*)
+allowed-tools: Read, Edit, Write, Grep, Glob, Bash(rg:*), Bash(cargo:*), Bash(git:*)
 ---
 
 Hunt the scope `$ARGUMENTS` names for one thing at a time worth fixing. With no scope given, pick a crate, and say why.

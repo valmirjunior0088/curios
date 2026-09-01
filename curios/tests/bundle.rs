@@ -1,6 +1,6 @@
 //! End-to-end test of the `compile` subcommand's bundler: compile a program to a native executable, run it, and check its output.
 //!
-//! Gated with `#[ignore]` because it execs a produced binary. The compiler embeds its launcher, so the produced executable is self-contained — but the compiler itself only builds once `make` has generated its target-scoped runtime launcher. Run it with:
+//! Gated with `#[ignore]` because it execs a produced binary. The compiler embeds its launcher, so the produced executable is self-contained — but the compiler itself only builds once `cargo x runtime` has generated its target-scoped runtime launcher. Run it with:
 //!
 //! ```sh
 //! cargo x runtime
@@ -10,7 +10,7 @@
 use std::{fs, process::Command};
 
 #[test]
-#[ignore = "execs a produced executable; build the compiler with `make` first"]
+#[ignore = "execs a produced executable; build the compiler with `cargo x runtime` first"]
 fn compile_produces_a_runnable_executable() {
     let compiler = env!("CARGO_BIN_EXE_curios");
 

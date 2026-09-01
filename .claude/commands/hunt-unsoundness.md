@@ -1,7 +1,7 @@
 ---
 description: Hunt for an unsoundness in the trusted base, record it as a regression test, and land the fix only when it is unambiguous
 argument-hint: "[perimeter row — check_positivity, (V), Coverage, Large-elimination guard, Index inversion and K, …]"
-allowed-tools: Read, Edit, Write, Grep, Glob, Bash(rg:*), Bash(cargo:*), Bash(git:*), Bash(make:*)
+allowed-tools: Read, Edit, Write, Grep, Glob, Bash(rg:*), Bash(cargo:*), Bash(git:*)
 ---
 
 Hunt for an unsoundness in the trusted base.
@@ -16,7 +16,7 @@ Hunt for an unsoundness in the trusted base.
 
 **Pre-flight, before any investigation.** Run `git status`. Every file already modified belongs to the user: do not edit it, stage it, or read a finding into its contents. If the row you mean to attack is implemented in one, choose another row or stop. A regression test left uncommitted by an earlier run is covered by the same rule — it is a finding waiting for a human, not work to resume, and the row it names is spent for this run.
 
-Running a witness needs the embedded launcher built first — `make curios/runtime`, then `cargo run --package curios -- run <file.crs>`. Scratch programs stay in the scratchpad; they are how you find the hole, never how you record it.
+Running a witness needs the embedded launcher built first — `cargo x runtime`, then `cargo run --package curios -- run <file.crs>`. Scratch programs stay in the scratchpad; they are how you find the hole, never how you record it.
 
 ## Read before forming a hypothesis
 
@@ -68,7 +68,7 @@ Counting deserves particular weight. Every defect this design has produced was f
 
 Attacking a row and finding nothing is a result, not a wasted iteration: it is the difference between *unprobed* and *probed*. Commit the probe and the Status it updates — that entry's Status in `documentation/soundness.md` is this hunt's only memory across runs, so an unrecorded null result will be re-attacked.
 
-**A null's gate is everything below except the suite** — `make curios/runtime` (the workspace does not build without the embedded launcher), `cargo fmt --all -- --check`, clippy as the fix gate spells it, and one targeted run of the probe in the form being committed: `cargo test --package <crate> <probe_name>`. That last is not the suite creeping back in — fmt and clippy compile a test without running it, and evidence gathered from an earlier spelling of the probe is evidence about that spelling. Clear those and commit. The reason the suite is missing is the reason it is present for a fix: it is there to catch a rule that now over-refuses, and a probe leaves every rule exactly as it found it — that is what makes it a null. The compiler decides the same thing after the commit as before, so there is nothing for the suite to catch, and running it costs minutes per iteration to confirm an answer it cannot change.
+**A null's gate is everything below except the suite** — `cargo x runtime` (the workspace does not build without the embedded launcher), `cargo fmt --all -- --check`, clippy as the fix gate spells it, and one targeted run of the probe in the form being committed: `cargo test --package <crate> <probe_name>`. That last is not the suite creeping back in — fmt and clippy compile a test without running it, and evidence gathered from an earlier spelling of the probe is evidence about that spelling. Clear those and commit. The reason the suite is missing is the reason it is present for a fix: it is there to catch a rule that now over-refuses, and a probe leaves every rule exactly as it found it — that is what makes it a null. The compiler decides the same thing after the commit as before, so there is nothing for the suite to catch, and running it costs minutes per iteration to confirm an answer it cannot change.
 
 ## Recording a find
 
@@ -93,7 +93,7 @@ A certifier dependency on elaborator output is the one finding with no natural f
 A fix changes what the compiler decides, so it clears all of this, in order, and you read the output:
 
 ```sh
-make curios/runtime
+cargo x runtime
 cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -Dwarnings
 cargo test --workspace --all-targets --all-features > /tmp/curios-hunt.txt 2>&1
