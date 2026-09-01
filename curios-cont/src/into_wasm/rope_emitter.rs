@@ -1706,7 +1706,7 @@ impl<'a, 'b> RopeEmitter<'a, 'b> {
                         curios_wasm::Instr::StructNew {
                             type_name: bin.leaf.clone(),
                         },
-                        // A host-built element enters the guest world canonical: a small `Bytes` becomes the i31 here. A `Handle` element is always four bytes, so the call answers it unchanged.
+                        // A host-built element enters the guest world canonical: a small `Bytes` or `Handle` becomes the i31 here.
                         curios_wasm::Instr::Call {
                             func_name: self.table.bytes_norm_func(),
                         },

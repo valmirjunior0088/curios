@@ -724,11 +724,11 @@ impl<'a, 'b> Context<'a, 'b> {
         vec![curios_wasm::Instr::Call { func_name: force }]
     }
 
-    /// The wire→rope step for one host result: a reference re-enters as a host-built flat payload and is embedded into a fresh leaf — deeply for `List(Bytes)`, whose elements the host lowered as raw `$bytes`. A `Bytes` result is then normalised, so a small host answer enters the guest world already canonical; a `Handle` is exempt statically — its token is always four bytes, past the immediate envelope.
+    /// The wire→rope step for one host result: a reference re-enters as a host-built flat payload and is embedded into a fresh leaf — deeply for `List(Bytes)`, whose elements the host lowered as raw `$bytes`. A `Bytes` or `Handle` result is then normalised, so a small host answer enters the guest world already canonical. A handle is not exempt: its token is the minimal little-endian bytes of its `Natural` (`Handle::encode` in `curios-abi`), one byte for every token below 256, so it packs into the i31 exactly as a small `Bytes` does — and `HandleEql`'s immediate fast path answers a mixed pair `false` without reading a byte, so a producer that skipped this call would make two spellings of one handle compare unequal.
     fn wire_embed_instrs(&self, wire_type: &WireType) -> Vec<curios_wasm::Instr> {
         let embed = match wire_type {
             WireType::Nat | WireType::Bool | WireType::Int => return vec![],
-            WireType::Bytes => {
+            WireType::Bytes | WireType::Handle => {
                 return vec![
                     curios_wasm::Instr::Call {
                         func_name: self.table().bytes_embed_func(),
@@ -738,7 +738,6 @@ impl<'a, 'b> Context<'a, 'b> {
                     },
                 ];
             }
-            WireType::Handle => self.table().bytes_embed_func(),
             WireType::List(inner) => match inner {
                 WireLeaf::Bytes | WireLeaf::Handle => self.table().list_bytes_embed_func(),
                 WireLeaf::Nat | WireLeaf::Bool | WireLeaf::Int => self.table().list_embed_func(),
