@@ -2,11 +2,7 @@
 //!
 //! A compilation is a set of units, and each unit claims one or more *prefixes*. The fixed prelude claims three — `/sys`, `/syn` and `/std`, which cannot be three units because `/syn` and `/std` reference each other — a package claims one, and the entry program claims the empty prefix, which is what makes it the entry. [`Mount`] pairs a prefix with the privilege tier that prefix carries.
 //!
-//! # Why a prefix and not an identity beside it
-//!
-//! A declaration used to carry a `RootId` stamp naming its root, cached beside the name whose leading segment already determined it. That stamp was archived, which made it mean something only in the compilation that wrote it — the shape rustc pays a `cnum_map` to translate. Here the name *is* the identity: which mount owns a declaration is [`Mount::owning`] over the name, and the only thing carried is the mount list itself, one per module rather than one per declaration.
-//!
-//! There is deliberately no answer derivable from a name alone. A leading segment identifies a mount only against the table of what is mounted, because a package's prefix and a module the entry declares are the same shape.
+//! The name *is* the identity: which mount owns a declaration is [`Mount::owning`] over the name against the table of what is mounted, and the only thing carried is the mount list itself, one per module rather than one per declaration. Why a prefix and not an identity beside it is `README.md`'s decision.
 
 #[cfg(test)]
 mod tests;

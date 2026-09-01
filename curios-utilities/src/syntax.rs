@@ -1,8 +1,8 @@
 //! The shape of the compiler's `/syn` vocabulary — every name a stage emits, with the values supplied by the crate that owns the source declarations.
 //!
-//! Every enumeration below opens by destructuring the struct it enumerates, which is not a stylistic choice: a pattern naming fewer fields than the struct has does not compile, so a slot added to a group is a compile error until it is enumerated — exactly as it is a compile error at every fill site until it is filled. The lists were written out by hand before, and [`ProofSyntax::bytes_four`] sat in the registry unenumerated, and so unchecked, from the commit that added it.
+//! Every enumeration below opens by destructuring the struct it enumerates: a pattern naming fewer fields than the struct has does not compile, so a slot added to a group is a compile error until it is enumerated — exactly as it is a compile error at every fill site until it is filled.
 //!
-//! The registry is *shape only*: it names slots, never spellings. `curios-prelude-archive` fills them, because that is the crate holding both the authored `.crs` declarations and the archive that proves each one exists; the two stages that emit `/syn` names — `curios-text`'s lowering and `curios-elab`'s type-directed features — read the filled registry rather than spelling anything themselves. That inversion is why this file lives below both consumers instead of beside the sources: a consumer must see the type, and the prelude sits above every consumer in the crate graph.
+//! The registry is *shape only*: it names slots, never spellings. `curios-prelude-archive` fills them, and the two stages that emit `/syn` names — `curios-text`'s lowering and `curios-elab`'s type-directed features — read the filled registry rather than spelling anything themselves. Why the shape lives below both consumers, and what the destructuring once caught, are `README.md`'s decisions.
 
 use crate::{InfixOp, Qualifier};
 

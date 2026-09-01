@@ -1,6 +1,6 @@
 //! The typed, tombstoning arena shared by the identity-addressed IRs.
 //!
-//! One slot vector per entity kind, addressed by a `u32`-backed [`ArenaId`]: identities are minted monotonically and never reused, removal writes `None` (a tombstone) instead of moving slots, and iteration order is identity order — construction is deterministic, so identities are too. This is the representation contract `curios-ersd` and `curios-cont` state per-module; owning it here means the discipline — and its eventual explicit compaction pass — is written once.
+//! One slot vector per entity kind, addressed by a `u32`-backed [`ArenaId`]: identities are minted monotonically and never reused, removal writes `None` (a tombstone) instead of moving slots, and iteration order is identity order — construction is deterministic, so identities are too. This is the representation contract `curios-ersd` and `curios-cont` share, written once here; `README.md` states why every identity space has one source.
 //!
 //! The arena deliberately supports the *reserve* pattern: a slot minted empty (`reserve`) so recursive bodies can reference their own or a sibling's identity before the definition exists (`define` fills it exactly once). Before a module is finished, an empty slot is a pending reservation; after, it is an ordinary tombstone — the arena does not distinguish them, the owning builder's finish check does.
 
