@@ -1,4 +1,4 @@
-//! Encoding a module and parsing it back, which is what every case here asserts through.
+//! Printing a module and parsing it back, which is what every case here asserts through — never encoding it: the binary side is checked against the engine in `curios/src/tests/wasm_conformance.rs`, which this crate cannot name.
 //!
 //! `pub(super)` rather than private: consumed by the sibling suites across this module, and nothing outside it.
 
