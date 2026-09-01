@@ -16,6 +16,7 @@ fn node_reference_names(
     declared: &[curios_core::Global],
     induct_decls: &BTreeMap<curios_core::Global, curios_core::InductDecl>,
     struct_decls: &BTreeMap<curios_core::Global, curios_core::StructDecl>,
+    syntax: &SyntaxRegistry,
 ) -> HashSet<curios_core::Global> {
     let mut names = item.free_vars();
     for name in declared {
@@ -26,7 +27,39 @@ fn node_reference_names(
             names.extend(struct_free_vars(struct_decl));
         }
     }
+    names.extend(derived_vocabulary(item, syntax));
     names
+}
+
+/// The names a derived witness body will reference once elaboration writes it — the vocabulary of the derivation registered for the concept its signature names, which the `Derive` transient stands for without spelling. Hard edges, as the written body's `Var`s would be: within the prelude's own unit the renderers and method wrappers must elaborate before the witness that applies them. Restricted to the signature's concept so one derivation's edges never reach the other's rows, and empty for an item that derives nothing.
+fn derived_vocabulary(item: &FlatItem, syntax: &SyntaxRegistry) -> Vec<curios_core::Global> {
+    let lets = match item {
+        FlatItem::Let(let_) => std::slice::from_ref(let_),
+        FlatItem::Rec(lets) => lets.as_slice(),
+    };
+    let method = |field: curios_utilities::ConceptField| {
+        curios_core::Global::Authored(field.concept.qualifier().with(field.field))
+    };
+
+    let mut vocabulary = Vec::new();
+    for let_ in lets.iter().filter(|let_| let_.body.has_derive()) {
+        let Some(concept) = witness_concept(let_) else {
+            continue;
+        };
+        let spell = syntax.spell.spell;
+        if concept.qualifier() == Some(&spell.concept.qualifier()) {
+            vocabulary.extend([
+                method(spell),
+                curios_core::Global::Authored(syntax.spell.call.qualifier()),
+                curios_core::Global::Authored(syntax.spell.record.qualifier()),
+            ]);
+        }
+        let eql = syntax.operator.eql;
+        if concept.qualifier() == Some(&eql.concept.qualifier()) {
+            vocabulary.push(method(eql));
+        }
+    }
+    vocabulary
 }
 
 /// The concept a witness row registers into — the head of its signature's terminal concept application, peeled through the premise telescope. Lowered form only: pre-elaboration the terminal is an `Apply`/`Var` spine, so the head is a free global rather than a `StructType` normal form (kept as a fallback for synthetic inputs).
@@ -225,7 +258,7 @@ fn prelude_permutation(
     let mut soft_deps = HashMap::with_capacity(prelude_nodes.len());
     for &n in prelude_nodes {
         let declared = items[n].names();
-        let names = node_reference_names(&items[n], &declared, induct_decls, struct_decls);
+        let names = node_reference_names(&items[n], &declared, induct_decls, struct_decls, syntax);
         if let Some(name) = names
             .iter()
             .find(|name| !owner.contains_key(*name) && rest_owner.contains_key(*name))
@@ -318,7 +351,7 @@ pub(super) fn order_flat_items(
     let mut rest_soft_deps = HashMap::with_capacity(rest.len());
     for &n in &rest {
         let declared = items[n].names();
-        let names = node_reference_names(&items[n], &declared, induct_decls, struct_decls);
+        let names = node_reference_names(&items[n], &declared, induct_decls, struct_decls, syntax);
         rest_deps.insert(n, dep_nodes(n, &names, &rest_owner));
         rest_soft_deps.insert(
             n,

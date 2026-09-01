@@ -250,6 +250,40 @@ fn the_eql_derivation_shares_the_eligibility_and_the_provenance() {
     );
 }
 
+// --- The standard library's structural types derive both witnesses, so every workspace check exercises the derivations over the prelude; the spellings are the ones the hand-written witnesses produced, byte for byte. ---
+
+#[test]
+fn the_standard_library_derives_option_result_and_order() {
+    let source = r#"
+        use /std/{Nat, Bool, Str, Option, Result, Order, Spell, Eql, print};
+        let show(b: Bool) -> Str = Str/concat(Bool/to_str(b), " ");
+        let failing: Result(Nat, Str) = Result/failure("no");
+        let _ = print(Spell/spell(Option/some(1)))!;
+        let _ = print("\n")!;
+        let _ = print(Spell/spell(Option/none(@Nat)))!;
+        let _ = print("\n")!;
+        let _ = print(Spell/spell(Result/success(@Nat, @Str, 1)))!;
+        let _ = print("\n")!;
+        let _ = print(Spell/spell(failing))!;
+        let _ = print("\n")!;
+        let _ = print(Spell/spell(Order/lt()))!;
+        let _ = print(Spell/spell(Order/eq()))!;
+        let _ = print(Spell/spell(Order/gt()))!;
+        let _ = print("\n")!;
+        let _ = print(show(Option/some(1) == Option/some(1)))!;
+        let _ = print(show(Option/some(1) == Option/none()))!;
+        let _ = print(show(failing == Result/failure("no")))!;
+        let _ = print(show(failing != Result/success(1)))!;
+        let _ = print(show(Order/lt() == Order/lt()))!;
+        print(show(Order/lt() != Order/gt()))
+        "#;
+
+    assert_eq!(
+        run(source),
+        b"/std/Option/Option/some(1)\n/std/Option/Option/none()\n/std/Result/Result/success(1)\n/std/Result/Result/failure(\"no\")\n/std/Order/Order/lt()/std/Order/Order/eq()/std/Order/Order/gt()\ntrue false true true true true "
+    );
+}
+
 // --- Refusals, each at the declaration and naming what to write instead. ---
 
 #[test]

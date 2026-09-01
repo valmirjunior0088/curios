@@ -431,6 +431,14 @@ impl Subterm {
         }
     }
 
+    /// Whether a `Derive` transient occurs in this subterm: the mark of a derived witness body, which will reference its derivation's vocabulary without spelling it. Like [`Subterm::infix_ops`], this feeds `order_flat_items`' edges — the scheduler learns the dependency from the transient, since no `Var` carries it before elaboration writes the body.
+    pub fn has_derive(&self) -> bool {
+        match self {
+            Subterm::Transient(Transient::Derive) => true,
+            _ => self.any_child_term(&mut |t| t.has_derive()),
+        }
+    }
+
     pub(crate) fn has_universe_meta(&self) -> bool {
         let level_has_meta = |level: &Level| level.metas().next().is_some();
         match self {

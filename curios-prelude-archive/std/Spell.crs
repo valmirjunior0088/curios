@@ -98,27 +98,9 @@ satisfy (@A: Type, use Spell(A)) => Spell(List(A)) {
     spell(l) = Str/concat("[", Str/concat(Str/join(", ", List/map(l, (x) => Spell/spell(x))), "]")),
 }
 
-satisfy (@A: Type, use Spell(A)) => Spell(Option(A)) {
-    spell(m) =
-        match m
-        | some(x) => Str/concat("/std/Option/some(", Str/concat(Spell/spell(x), ")"))
-        | none() => "/std/Option/none()"
-        end,
-}
+-- The structural types derive, so every workspace check exercises both derivations over the prelude; the intrinsic carriers above are written by design.
+satisfy (@A: Type, use Spell(A)) => Spell(Option(A));
 
-satisfy (@A: Type, @E: Type, use Spell(A), use Spell(E)) => Spell(Result(A, E)) {
-    spell(r) =
-        match r
-        | success(x) => Str/concat("/std/Result/success(", Str/concat(Spell/spell(x), ")"))
-        | failure(e) => Str/concat("/std/Result/failure(", Str/concat(Spell/spell(e), ")"))
-        end,
-}
+satisfy (@A: Type, @E: Type, use Spell(A), use Spell(E)) => Spell(Result(A, E));
 
-satisfy Spell(Order) {
-    spell(r) =
-        match r
-        | lt() => "/std/Order/lt()"
-        | eq() => "/std/Order/eq()"
-        | gt() => "/std/Order/gt()"
-        end,
-}
+satisfy Spell(Order);
