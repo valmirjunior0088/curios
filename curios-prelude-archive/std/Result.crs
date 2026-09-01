@@ -1,4 +1,4 @@
-use /std/{Bool, Eql, Show, Str};
+use /std/{Bool, Eql, Show, Str, Option};
 
 pub induct Result(A: Type, E: Type): pub Type
 | success(A)
@@ -33,6 +33,12 @@ pub let is_success(@A: Type, @E: Type, r: Result(A, E)) -> Bool =
 
 pub let is_failure(@A: Type, @E: Type, r: Result(A, E)) -> Bool =
     match r | success(_) => false | failure(_) => true end;
+
+pub let to_option(@A: Type, @E: Type, r: Result(A, E)) -> Option(A) =
+    match r | success(a) => Option/some(a) | failure(_) => Option/none() end;
+
+pub let unwrap_or_else(@A: Type, @E: Type, r: Result(A, E), default: (E) -> A) -> A =
+    match r | success(a) => a | failure(e) => default(e) end;
 
 satisfy (@A: Type, @E: Type, use Eql(A), use Eql(E)) => Eql(Result(A, E));
 
