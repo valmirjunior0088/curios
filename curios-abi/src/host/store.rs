@@ -7,7 +7,7 @@
 //! - the wasm emitter's `sys.*`/`ffi.*` import types and call-site operand loads,
 //! - the runtime linker's `wasmtime::FuncType`s.
 //!
-//! A [`ForeignStore`] is the set of foreign functions declared under one tier. [`host_ops`](super::host_ops) seeds the fixed builtin (`sys`) tier, consumable only by the standard library, created per compilation by the pipeline driver; a second store, accumulated from a program's own `foreign` declarations (`curios_text`'s generated foreign signature), holds the `ffi` tier. The two are never merged, but the wasm namespace is the row's own `namespace` field, stamped at declaration time — the store split only governs who may consume a tier. `exit` is deliberately absent from either store: it traps rather than returns, so no results row describes it, and it stays a hardcoded intrinsic — the guest sees it as `(n : Nat) -> Io({})`, minted by hand beside the `proc` rows in `curios-text`'s `sys_module`, and only its import name lives here, as [`EXIT`].
+//! A [`ForeignStore`] is the set of foreign functions declared under one tier. [`host_ops`](super::host_ops) seeds the fixed builtin (`sys`) tier, consumable only by the standard library, created per compilation by the pipeline driver; a second store, accumulated from a program's own `foreign` declarations (`curios_text`'s generated foreign signature), holds the `ffi` tier. The two are never merged, but the wasm namespace is the row's own `namespace` field, stamped at declaration time — the store split only governs who may consume a tier. `exit` is in neither store; only its import name lives here, as [`EXIT`].
 
 use std::{
     fmt::{self, Display, Formatter},
@@ -71,7 +71,7 @@ pub enum Namespace {
     Ffi,
 }
 
-/// The one `sys` import that is not a store row: `exit` traps rather than returns, so no [`WireSignature`] describes it and it stays a hardcoded intrinsic — but its *name* is still wire, stamped by the emitter and matched by the runtime linker, so it is spelled here where both ends read it rather than once at each.
+/// The one `sys` import that is not a store row: `exit` traps rather than returns, so no [`WireSignature`] describes it and it stays a hardcoded intrinsic — but its *name* is still wire, stamped by the emitter and matched by the runtime linker, so it is spelled here where both ends read it rather than once at each; the guest declaration and its type are `curios-text`'s prelude's.
 pub const EXIT: &str = "exit";
 
 impl Namespace {
