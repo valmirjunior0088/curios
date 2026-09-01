@@ -2,7 +2,7 @@
 //!
 //! This is deliberately the last stage of the pipeline: it consumes and produces serialized module bytes, after `wasm::to_bytes`, and knows nothing about any Curios IR. Semantic optimization belongs in `optimize`.
 //!
-//! [`optimize_with_text`] additionally renders the optimized module through Binaryen's own text writer — the `--print wasm-optm` payload. The text is eyes-only: nothing in the workspace parses it, and the folded s-expression dialect is Binaryen's to change.
+//! [`optimize_with_text`] additionally renders the optimized module through Binaryen's own text writer — the `wonder stage wasm-optm` payload. The text is eyes-only: nothing in the workspace parses it, and the folded s-expression dialect is Binaryen's to change.
 
 mod sys;
 

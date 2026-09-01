@@ -307,7 +307,7 @@ impl fmt::Display for Module {
 }
 
 impl Module {
-    /// A `Display` adapter rendering the module within `width` columns — long runs (a wide function signature's `param` bindings) break one per line instead of sharing one. The `--print wasm` inspection path; plain `Display` keeps the unbounded flat layout.
+    /// A `Display` adapter rendering the module within `width` columns — long runs (a wide function signature's `param` bindings) break one per line instead of sharing one. The `wonder stage wasm` inspection path; plain `Display` keeps the unbounded flat layout.
     pub fn display_within(&self, width: usize) -> impl fmt::Display + '_ {
         struct Within<'a>(&'a Module, usize);
         impl fmt::Display for Within<'_> {

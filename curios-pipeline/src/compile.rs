@@ -547,7 +547,7 @@ where
 ///
 /// Sequential by construction — the fold compiles one unit at a time — so [`Progress::Reused`] and [`Progress::Compiled`] refer to whichever subject was announced last and need not name it again.
 ///
-/// Deliberately separate from the [`Stage`] observer, which belongs to `--print`: one reports *what is happening* and the other *what was produced*, and a caller wants either without the other.
+/// Deliberately separate from the [`Stage`] observer, which belongs to `wonder stage`: one reports *what is happening* and the other *what was produced*, and a caller wants either without the other.
 pub enum Progress<'a> {
     /// A mounted unit is about to be compiled, named by the prefix it claims.
     Compiling(&'a Qualifier),

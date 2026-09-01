@@ -14,7 +14,7 @@ WebAssembly-level optimization for the Curios native product via a statically li
 
 ### The optimized module is observed through Binaryen's own text writer
 
-**Decision.** `optimize_with_text` renders the optimized module with `BinaryenModuleAllocateAndWriteText`, from the same in-memory module the optimizer just rewrote, and that text is the `--print wasm-optm` stage dump. It is eyes-only: nothing in the workspace parses it, and the folded s-expression dialect is Binaryen's to change.
+**Decision.** `optimize_with_text` renders the optimized module with `BinaryenModuleAllocateAndWriteText`, from the same in-memory module the optimizer just rewrote, and that text is the `wonder stage wasm-optm` dump. It is eyes-only: nothing in the workspace parses it, and the folded s-expression dialect is Binaryen's to change.
 
 **Rationale.** The observation's whole purpose is trust — seeing what the optimizer actually did — and the optimizer's own printer is the one renderer that cannot misrepresent it. The module is already alive inside the session between `BinaryenModuleOptimize` and `BinaryenModuleDispose`, so the capture costs one C call and no second parse of anything.
 

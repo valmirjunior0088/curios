@@ -12,7 +12,7 @@ fn repeated_compilation_restores_an_unmutated_ersd_prefix() {
     assert_eq!(to_bytes(&first), to_bytes(&second));
 }
 
-/// `Stage::NAMES`, `Stage::name`, and the driver's emission order are three spellings of one fact, and only `name` is forced by the compiler when a stage is added — a variant missing from `NAMES` would leave bare `--print` silently incomplete. One compile pins all three to each other.
+/// `Stage::NAMES`, `Stage::name`, and the driver's emission order are three spellings of one fact, and only `name` is forced by the compiler when a stage is added — a variant missing from `NAMES` would leave `wonder stage`'s roster silently incomplete. One compile pins all three to each other.
 #[test]
 fn every_stage_is_observed_once_in_names_order() {
     let entrypoint = with_entrypoint_type("/std/Nat/add(20, 22)", Some("/std/Nat"));

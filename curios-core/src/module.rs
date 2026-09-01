@@ -422,7 +422,7 @@ impl Module {
 }
 
 impl fmt::Display for Module {
-    // Printed by *iterating* the flat items (never re-folding into a nested term), so `--print core` stays O(N) and cannot re-trigger the prelude-depth overflow this representation removed.
+    // Printed by *iterating* the flat items (never re-folding into a nested term), so `wonder stage core` stays O(N) and cannot re-trigger the prelude-depth overflow this representation removed.
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Shortened against this module's own symbols (axis (b)) and nothing else, which is the one shortening site in the workspace that does not union its scope — both checkers' `format_with` take `&[&Module]` and merge. Deliberate, on three grounds. A value printing itself has no scope to be handed without ceasing to be `Display`. No ambiguity can follow from the narrower table: `build_shorten` records only names that actually shorten, and `Spelling::symbol` falls back to the full path, so a name from outside the unit prints qualified rather than misleadingly short. And a dump is read *about* the compiler, where a qualified `/std/Str/concat` beside a bare `append` says which unit each came from — the distinction a scope-wide table would erase. Its universes stay visible for the same reason a diagnostic suppresses them.
         let spelling = Rc::new(
