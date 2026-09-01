@@ -1,4 +1,4 @@
-use /std/{Bool, Eql, Show, Str, Monad, Result, True, False};
+use /std/{Bool, Eql, Show, Str, Monad, Result, True, False, Order, Cmp, Ord};
 
 pub induct Option(A: Type): pub Type
 | some(A)
@@ -66,4 +66,22 @@ satisfy (@A: Type, use Show(A)) => Show(Option(A)) {
 satisfy Monad(Option) {
     pure = some,
     bind = bind,
+}
+
+-- `none` below `some`.
+pub let cmp(@A: Type, use Ord(A), a: Option(A), b: Option(A)) -> Order =
+    match a
+    | none() => match b | none() => Order/eq() | some(_) => Order/lt() end
+    | some(x) => match b | none() => Order/gt() | some(y) => Ord/cmp(x, y) end
+    end;
+
+satisfy (@A: Type, use Ord(A)) => Cmp(Option(A)) {
+    lt(a, b) = Order/is_lt(cmp(a, b)),
+    le(a, b) = Order/is_le(cmp(a, b)),
+    gt(a, b) = Order/is_gt(cmp(a, b)),
+    ge(a, b) = Order/is_ge(cmp(a, b)),
+}
+
+satisfy (@A: Type, use Ord(A)) => Ord(Option(A)) {
+    cmp = cmp,
 }

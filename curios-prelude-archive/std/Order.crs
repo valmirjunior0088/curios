@@ -15,14 +15,21 @@ pub let flip(r: Order) -> Order =
 pub let cong_flip(@s: Order, @t: Order, p: Eq(s, t)) -> Eq(flip(s), flip(t)) =
     Eq/cong(flip, p);
 
-let is_lt(r: Order) -> Bool =
+-- The five readings of a comparison, which is what a `Cmp` witness written over a `cmp` spells its four methods with.
+pub let is_lt(r: Order) -> Bool =
     match r | lt() => true | eq() => false | gt() => false end;
 
-let is_eq(r: Order) -> Bool =
+pub let is_eq(r: Order) -> Bool =
     match r | lt() => false | eq() => true | gt() => false end;
 
-let is_gt(r: Order) -> Bool =
+pub let is_gt(r: Order) -> Bool =
     match r | lt() => false | eq() => false | gt() => true end;
+
+pub let is_le(r: Order) -> Bool =
+    match r | lt() => true | eq() => true | gt() => false end;
+
+pub let is_ge(r: Order) -> Bool =
+    match r | lt() => false | eq() => true | gt() => true end;
 
 pub let lt_neq_eq(p: Eq(Order/lt(), Order/eq())) -> False =
     false_neq_true(match p: (s, t, q) => Eq(is_eq(s), is_eq(t)) | refl(@z) => Eq/refl() end);

@@ -1,4 +1,4 @@
-use /std/{Bool, Eql, Show, Str, Option};
+use /std/{Bool, Eql, Show, Str, Option, Order, Cmp, Ord};
 
 pub induct Result(A: Type, E: Type): pub Type
 | success(A)
@@ -48,4 +48,22 @@ satisfy (@A: Type, @E: Type, use Show(A), use Show(E)) => Show(Result(A, E)) {
         | success(x) => Str/concat("success(", Str/concat(Show/show(x), ")"))
         | failure(e) => Str/concat("failure(", Str/concat(Show/show(e), ")"))
         end,
+}
+
+-- `failure` below `success`.
+pub let cmp(@A: Type, @E: Type, use Ord(A), use Ord(E), a: Result(A, E), b: Result(A, E)) -> Order =
+    match a
+    | failure(e) => match b | failure(f) => Ord/cmp(e, f) | success(_) => Order/lt() end
+    | success(x) => match b | failure(_) => Order/gt() | success(y) => Ord/cmp(x, y) end
+    end;
+
+satisfy (@A: Type, @E: Type, use Ord(A), use Ord(E)) => Cmp(Result(A, E)) {
+    lt(a, b) = Order/is_lt(cmp(a, b)),
+    le(a, b) = Order/is_le(cmp(a, b)),
+    gt(a, b) = Order/is_gt(cmp(a, b)),
+    ge(a, b) = Order/is_ge(cmp(a, b)),
+}
+
+satisfy (@A: Type, @E: Type, use Ord(A), use Ord(E)) => Ord(Result(A, E)) {
+    cmp = cmp,
 }

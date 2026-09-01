@@ -1,6 +1,6 @@
 pub use /sys/{List};
 pub use /sys/List/{get, len, slice, map};
-use /std/{Nat, Bool, Option, Eq, Eql, Str, Show, Monad};
+use /std/{Nat, Bool, Option, Eq, Eql, Str, Show, Monad, Order, Cmp, Ord};
 
 pub let try_get(@T: Type, a: List(T), i: Nat) -> Option(T) =
     match i < len(a) | true => Option/some(get(a, i)) | false => Option/none() end;
@@ -71,4 +71,27 @@ satisfy (@A: Type, use Show(A)) => Show(List(A)) {
 satisfy Monad(List) {
     pure(x) = [x],
     bind(m, f) = fold(m, [], (x, acc) => [..acc, ..f(x)]),
+}
+
+-- Lexicographic, the shorter prefix first.
+pub let cmp(@T: Type, use Ord(T), a: List(T), b: List(T)) -> Order =
+    match a
+    | [] => match b | [] => Order/eq() | _ => Order/lt() end
+    | [x, ..xs] =>
+        match b
+        | [] => Order/gt()
+        | [y, ..ys] =>
+            match Ord/cmp(x, y) | eq() => cmp(xs, ys) | lt() => Order/lt() | gt() => Order/gt() end
+        end
+    end;
+
+satisfy (@T: Type, use Ord(T)) => Cmp(List(T)) {
+    lt(a, b) = Order/is_lt(cmp(a, b)),
+    le(a, b) = Order/is_le(cmp(a, b)),
+    gt(a, b) = Order/is_gt(cmp(a, b)),
+    ge(a, b) = Order/is_ge(cmp(a, b)),
+}
+
+satisfy (@T: Type, use Ord(T)) => Ord(List(T)) {
+    cmp = cmp,
 }

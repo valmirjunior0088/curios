@@ -1,6 +1,6 @@
 pub use /sys/{Bool};
 pub use /sys/Bool/{and, or, xor, eql};
-use /std/{Str, Option, Eq, False, True, Eql, Or, And, Show};
+use /std/{Str, Option, Eq, False, True, Eql, Or, And, Show, Order, Cmp, Ord};
 
 pub let not(b: Bool) -> Bool =
     xor(b, true);
@@ -35,4 +35,22 @@ satisfy And(Bool) {
 
 satisfy Show(Bool) {
     show = to_str,
+}
+
+-- `false` below `true`.
+pub let cmp(a: Bool, b: Bool) -> Order =
+    match a
+    | false => match b | false => Order/eq() | true => Order/lt() end
+    | true => match b | false => Order/gt() | true => Order/eq() end
+    end;
+
+satisfy Cmp(Bool) {
+    lt(a, b) = Order/is_lt(cmp(a, b)),
+    le(a, b) = Order/is_le(cmp(a, b)),
+    gt(a, b) = Order/is_gt(cmp(a, b)),
+    ge(a, b) = Order/is_ge(cmp(a, b)),
+}
+
+satisfy Ord(Bool) {
+    cmp = cmp,
 }

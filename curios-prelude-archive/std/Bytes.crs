@@ -1,5 +1,5 @@
 pub use /sys/Bytes/{let Bytes, get, len, eql, slice};
-use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Eql, Show};
+use /std/{List, Nat, Byte, Bool, Option, Eq, Char, Str, Eql, Show, Order, Cmp, Ord};
 
 pub let try_get(b: Bytes, i: Nat) -> Option(Byte) =
     match i < len(b) | true => Option/some(get(b, i)) | false => Option/none() end;
@@ -55,9 +55,35 @@ pub let join(sep: Bytes, parts: List(Bytes)) -> Bytes =
         (i) => Option/unwrap_or(List/try_get(parts, i), x[]),
         (l, r) => x[..l, ..sep, ..r]);
 
+-- Bytewise, the shorter prefix first. Each index is scrutinised against the length it reads through, which is what discharges `get`'s bound with nothing written.
+pub let cmp(a: Bytes, b: Bytes) -> Order =
+    let go(i: Nat) -> Order =
+        match i < len(a)
+        | false => match i < len(b) | true => Order/lt() | false => Order/eq() end
+        | true =>
+            match i < len(b)
+            | false => Order/gt()
+            | true =>
+                let r = Nat/cmp(Byte/to_nat(get(a, i)), Byte/to_nat(get(b, i)));
+                match r | eq() => go(i + 1) | _ => r end
+            end
+        end;
+    go(0);
+
 satisfy Eql(Bytes) {
     eql = eql,
     neq(a, b) = Bool/not(eql(a, b)),
+}
+
+satisfy Cmp(Bytes) {
+    lt(a, b) = Order/is_lt(cmp(a, b)),
+    le(a, b) = Order/is_le(cmp(a, b)),
+    gt(a, b) = Order/is_gt(cmp(a, b)),
+    ge(a, b) = Order/is_ge(cmp(a, b)),
+}
+
+satisfy Ord(Bytes) {
+    cmp = cmp,
 }
 
 satisfy Show(Bytes) {

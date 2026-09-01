@@ -1,7 +1,7 @@
 pub use /syn/{Str};
 pub use /syn/Str/{Class, classify, Scan, step, Utf8, Valid};
 use /syn/{True, False};
-use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Eq, Eql, Show};
+use /std/{Char, Nat, Byte, Bytes, Bool, List, Option, Eq, Eql, Show, Order, Cmp, Ord};
 
 -- The scan-witness machinery every operation below rests on.
 pub mod utf8;
@@ -289,4 +289,19 @@ satisfy Eql(Str) {
 
 satisfy Show(Str) {
     show(s) = s,
+}
+
+-- Code-point order without decoding: UTF-8 bytewise order is scalar-value order, so the comparison is `Bytes/cmp` over the storage and `sort` on strings means code-point order.
+pub let cmp(a: Str, b: Str) -> Order =
+    Bytes/cmp(to_bytes(a), to_bytes(b));
+
+satisfy Cmp(Str) {
+    lt(a, b) = Order/is_lt(cmp(a, b)),
+    le(a, b) = Order/is_le(cmp(a, b)),
+    gt(a, b) = Order/is_gt(cmp(a, b)),
+    ge(a, b) = Order/is_ge(cmp(a, b)),
+}
+
+satisfy Ord(Str) {
+    cmp = cmp,
 }
