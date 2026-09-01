@@ -11,6 +11,8 @@ pub(super) const STEP_BUDGET: usize = 50_000;
 pub(super) const PASS_BUDGET: usize = 500_000;
 
 /// Call-nesting cap: each interpreted call recurses into a host Rust frame.
+///
+/// Measured on 2026-09-01 in release over `programs/`: no candidate in any program reached it, so a recursive walk deeper than this — a hand-written one over a literal longer than 256 elements — is left unfolded and nothing in the corpus is.
 pub(super) const MAX_CALL_DEPTH: usize = 256;
 
 /// Caps on one replacement: materialized nodes, and packed payload bytes plus list elements.

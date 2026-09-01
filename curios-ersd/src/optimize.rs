@@ -20,7 +20,7 @@ pub fn optimize(module: &mut Module) {
     let analysis = Analysis::analyze(module);
     prune::prune_unreachable(module, &analysis);
     compact(module);
-    // A curried chain folds one application per round; eight rounds cover any corpus chain with room to spare, and each round's reification draws on one shared node pool, so a round cannot multiply the module however many candidates it found.
+    // A curried chain folds one application per round. Eight is a cap the loop reaches, not a bound it stays under: measured on 2026-09-01 in release over `programs/`, every program installed replacements in all eight rounds — at least 105 in its quietest — because each reified closure copy carries closed applications of its own into the next round. What keeps that from multiplying the module is each round's reification drawing on one shared node pool, and the prune after the loop drops the copies nothing kept.
     for _ in 0..8 {
         if !evaluate::evaluate_closed_terms(module) {
             break;
