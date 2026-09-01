@@ -3,7 +3,7 @@ use {
         Handle, HostOps, Lift, Lower, Mode, Poll,
         lower::{anyref_array_type, i8_array_type},
     },
-    curios_abi::{EXIT, ForeignFunction, ForeignStore, Namespace, WireType, host_ops},
+    curios_abi::{ENTRY, EXIT, ForeignFunction, ForeignStore, Namespace, WireType, host_ops},
     std::{
         collections::HashMap,
         error::Error,
@@ -413,8 +413,8 @@ fn instantiate<H: HostOps + Send + Sync + 'static>(
         .map_err(|error| format!("failed to instantiate module: {error}"))?;
 
     let function = instance
-        .get_typed_func::<(), Rooted<AnyRef>>(&mut store, "func/main")
-        .map_err(|error| format!("failed to access func/main: {error}"))?;
+        .get_typed_func::<(), Rooted<AnyRef>>(&mut store, ENTRY)
+        .map_err(|error| format!("failed to access {ENTRY}: {error}"))?;
 
     match function.call(&mut store, ()) {
         Ok(_) => Ok(0),

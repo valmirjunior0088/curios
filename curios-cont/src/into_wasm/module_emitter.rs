@@ -6,7 +6,7 @@ use {
         rope_leaf_sub_type, rope_node_sub_type, rope_view_sub_type,
     },
     crate::CpsSlot,
-    curios_abi::{EXIT, Namespace, WireType},
+    curios_abi::{ENTRY, EXIT, Namespace, WireType},
     curios_utilities::{Grain, PackedBin},
     std::iter,
 };
@@ -841,11 +841,11 @@ impl<'a, 'b> ModuleEmitter<'a, 'b> {
             self.emit_let_func(name, func);
         }
 
-        // The entrypoint is the module's sole export — the value the host invokes. Every other function, closure, and const is reached only internally.
+        // The entrypoint is the module's sole export — the value the host invokes, under the wire name `curios-abi` states rather than under whatever the naming scheme spelled the function. Every other function, closure, and const is reached only internally.
         if let Some(name) = module.entry() {
             let func_name = self.table.find_func(name).func_name();
             self.module
-                .add_export(func_name.as_string(), curios_wasm::Export::Func(func_name));
+                .add_export(ENTRY, curios_wasm::Export::Func(func_name));
         }
 
         self.emit_rope_funcs();

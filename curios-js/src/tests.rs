@@ -1,7 +1,7 @@
 //! Tests for the browser bridge helpers and the harness's host table. Program-side `Bytes` is a rope (`$rope/bin/leaf` / `$rope/bin/node` structs); what crosses to a host is always the forced flat payload, which is what the bridge accessors read and write.
 
 use {
-    curios_abi::{EXIT, host_ops},
+    curios_abi::{ENTRY, EXIT, host_ops},
     curios_runtime::test_support::{GuestInstance, GuestValue},
     curios_wasm::{CompType, Export, SubType, TypeName},
 };
@@ -126,6 +126,12 @@ fn harness_implements_every_host_op() {
             "harness.js's sysEnv lacks an entry for host op `{name}`"
         );
     }
+
+    // The entry export is the other wire name the harness spells by hand, and it is invoked outside `sysEnv`, so it is pinned on its own.
+    assert!(
+        source.contains(&format!("exports[\"{ENTRY}\"]")),
+        "harness.js does not invoke the entry export `{ENTRY}`"
+    );
 }
 
 /// The bulk lane end to end: bytes written into the exported memory become a `bytes` array via `bytes_store`, and `bytes_load` copies them back out.

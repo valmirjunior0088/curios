@@ -74,6 +74,9 @@ pub enum Namespace {
 /// The one `sys` import that is not a store row: `exit` traps rather than returns, so no [`WireSignature`] describes it and it stays a hardcoded intrinsic — but its *name* is still wire, stamped by the emitter and matched by the runtime linker, so it is spelled here where both ends read it rather than once at each; the guest declaration and its type are `curios-text`'s prelude's.
 pub const EXIT: &str = "exit";
 
+/// The one export both ends link on: the entrypoint the emitter exports and the runtime looks up to run a program. It spells the entry function's own name under the compiler's naming scheme, so a module dump reads as it links — but the name is a contract stated here, not a consequence of that scheme or of the hint the entry happens to carry, which is what let a debug name decide a wire string before this row existed.
+pub const ENTRY: &str = "func/main";
+
 impl Namespace {
     /// The wasm import string: what the emitter stamps on the import and the runtime linker matches.
     pub const fn as_str(self) -> &'static str {
