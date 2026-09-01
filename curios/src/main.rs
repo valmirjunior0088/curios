@@ -82,7 +82,7 @@ fn dispatch() -> Result<(), Failure> {
             let subject = subject_of(&target);
             let cwasm = payload_of(budget, &units, target)?;
 
-            fact(Heading::Running, &subject);
+            step(Heading::Running, &subject);
 
             let code = run_bytes(
                 &cwasm,
@@ -135,9 +135,9 @@ fn dispatch() -> Result<(), Failure> {
 
             emit_exe(&cwasm, &output)?;
 
-            // Where it landed rather than what it was called: that is the one fact a finished build is read for, and the group above already named the target twice.
+            // Where it landed rather than what it was called: that is the one fact a finished build is read for, and the group above already named the target twice. The time is the whole invocation's, payload and emission both, so it is measured here rather than by the line.
             let mut line = Line::open(Heading::Finished, &Subject::File(output));
-            line.outcome(&format!("done {:.1}s", started.elapsed().as_secs_f64()));
+            line.outcome(&format!("{:.1}s", started.elapsed().as_secs_f64()));
             eprintln!();
         }
         Mode::New { directory } => {
@@ -157,8 +157,9 @@ fn dispatch() -> Result<(), Failure> {
         Mode::Curate => {
             let governing = Governing::here(manifest.as_deref())?;
 
+            // Past tense because it is: every round has fetched before the acquisitions come back to be reported.
             for acquisition in curate(&governing)? {
-                fact(Heading::Fetching, Subject::package(&acquisition.name));
+                fact(Heading::Fetched, Subject::package(&acquisition.name));
             }
         }
         Mode::Format { paths, check } => {

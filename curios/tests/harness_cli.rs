@@ -107,6 +107,23 @@ fn the_six_outcomes_report_in_declaration_order_and_exit_one() {
             "3 passed, 1 failed, 1 trapped, 1 exited\n",
         ],
     );
+    // The library is taken on, compiled, tested and tallied; the executable, which declares no tests, is taken on and compiled and nothing more.
+    in_order(
+        &stderr(&output),
+        &[
+            "Processing     /app\n",
+            "↳ Compiling    /app; ",
+            "↳ Testing      /app\n",
+            "↳ Tested       /app; 3 passed, 1 failed, 1 trapped, 1 exited\n",
+            "Processing     app\n",
+            "↳ Compiling    /app; ",
+        ],
+    );
+    assert!(
+        !stderr(&output).contains("Testing      app"),
+        "a unit with nothing to run reports no testing step, stderr: {}",
+        stderr(&output)
+    );
     assert_eq!(output.status.code(), Some(1));
 
     fs::remove_dir_all(root).unwrap();
@@ -119,7 +136,7 @@ fn a_filter_selects_by_path_prefix_and_a_second_run_reuses_the_payload() {
     let cold = curios(&root, &["test", "/app/addition"]);
     assert_eq!(
         stdout(&cold),
-        "/app/addition_passes: passed\n1 passed\n",
+        "/app/addition_passes: passed\n1 passed, 0 failed\n",
         "stderr: {}",
         stderr(&cold)
     );
@@ -127,10 +144,17 @@ fn a_filter_selects_by_path_prefix_and_a_second_run_reuses_the_payload() {
 
     let warm = curios(&root, &["test", "/app/addition"]);
     assert_eq!(stdout(&warm), stdout(&cold));
-    assert!(
-        stderr(&warm).contains("reused"),
-        "expected a reused payload, stderr: {}",
-        stderr(&warm)
+    // Each payload comes back whole, so each target's one step names the target rather than a unit.
+    in_order(
+        &stderr(&warm),
+        &[
+            "Processing     /app\n",
+            "↳ Compiling    /app; reused\n",
+            "↳ Testing      /app\n",
+            "↳ Tested       /app; 1 passed, 0 failed\n",
+            "Processing     app\n",
+            "↳ Compiling    app; reused\n",
+        ],
     );
 
     fs::remove_dir_all(root).unwrap();
@@ -157,6 +181,15 @@ fn run_neither_runs_nor_reports_a_test() {
     let output = curios(&root, &["run"]);
 
     assert_eq!(stdout(&output), "ran\n", "stderr: {}", stderr(&output));
+    // The target is taken on, its library compiled as a step, and the handover is the last step before the program's own output.
+    in_order(
+        &stderr(&output),
+        &[
+            "Processing     app\n",
+            "↳ Compiling    /app; ",
+            "↳ Running      app\n",
+        ],
+    );
     assert_eq!(output.status.code(), Some(0));
 
     fs::remove_dir_all(root).unwrap();
@@ -218,6 +251,47 @@ fn wonder_tests_on_a_testless_package_lists_nothing_and_exits_zero() {
     let output = curios(&root, &["wonder", "tests"]);
     assert_eq!(stdout(&output), "", "stderr: {}", stderr(&output));
     assert_eq!(output.status.code(), Some(0));
+
+    fs::remove_dir_all(root).unwrap();
+}
+
+#[test]
+fn every_target_files_its_payload_so_the_second_invocation_reuses_them_all() {
+    let root = temporary("payloads");
+    write(
+        &root,
+        "curios.toml",
+        "name = \"app\"\n\n[[executables]]\nname = \"app\"\n\n[[executables]]\nname = \"other\"\n",
+    );
+    write(
+        &root,
+        "lib.crs",
+        "use /std/{Nat, Test};\n\ntest lib_holds() =\n    Test/check(1 == 1);\n",
+    );
+    write(&root, "app.crs", "/std/print(\"ran\\n\")\n");
+    write(
+        &root,
+        "other.crs",
+        "use /std/{Nat, Test};\n\ntest other_holds() =\n    Test/check(2 == 2);\n\n/std/print(\"ran\\n\")\n",
+    );
+
+    let cold = curios(&root, &["test"]);
+    assert_eq!(cold.status.code(), Some(0), "stderr: {}", stderr(&cold));
+
+    // Each target is filed against its own chain, so the second invocation compiles nothing: every target's one step names the target itself. A store handle shared across targets used to carry the library's placement into every later fold, withholding each executable's payload on the invocation that first compiled it.
+    let warm = curios(&root, &["test"]);
+    assert_eq!(stdout(&warm), stdout(&cold));
+    in_order(
+        &stderr(&warm),
+        &[
+            "Processing     /app\n",
+            "↳ Compiling    /app; reused\n",
+            "Processing     app\n",
+            "↳ Compiling    app; reused\n",
+            "Processing     other\n",
+            "↳ Compiling    other; reused\n",
+        ],
+    );
 
     fs::remove_dir_all(root).unwrap();
 }

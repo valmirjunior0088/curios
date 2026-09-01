@@ -3,7 +3,7 @@
 //! The store is consulted exactly as `run` consults it: one payload per target, filed under a reserved executable name no identifier can spell (it contains `/`), holding the records beside the machine code so a warm run recompiles nothing and still reports everything.
 
 use {
-    crate::{Heading, Line, Subject, fact, load_units, report},
+    crate::{Heading, Line, Subject, fact, load_units, report, step},
     curios::{Program, Verdicts, to_cwasm},
     curios_package::{Governing, LIBRARY, order},
     curios_pipeline::{Cache, CompileError, EntryTail, TestRecord, compile_tests_with_units},
@@ -12,7 +12,7 @@ use {
     std::path::{Path, PathBuf},
 };
 
-/// The tally the count line reports, in the order it spells them.
+/// The tally a `↳ Tested` step and the count line report, in the order they spell it.
 #[derive(Default)]
 struct Totals {
     passed: usize,
@@ -26,24 +26,26 @@ impl Totals {
         self.failed == 0 && self.trapped == 0 && self.exited == 0
     }
 
-    /// The count line: every nonzero category in fixed order, `no tests` when nothing ran.
+    fn add(&mut self, other: &Self) {
+        self.passed += other.passed;
+        self.failed += other.failed;
+        self.trapped += other.trapped;
+        self.exited += other.exited;
+    }
+
+    /// The tally: `passed` and `failed` always, since that pair is what the exit code turns on, and the rarer `trapped` and `exited` only when they happened.
     fn line(&self) -> String {
-        let mut parts = Vec::new();
-        for (count, word) in [
-            (self.passed, "passed"),
-            (self.failed, "failed"),
-            (self.trapped, "trapped"),
-            (self.exited, "exited"),
-        ] {
+        let mut parts = vec![
+            format!("{} passed", self.passed),
+            format!("{} failed", self.failed),
+        ];
+        for (count, word) in [(self.trapped, "trapped"), (self.exited, "exited")] {
             if count > 0 {
                 parts.push(format!("{count} {word}"));
             }
         }
 
-        match parts.is_empty() {
-            true => "no tests".to_string(),
-            false => parts.join(", "),
-        }
+        parts.join(", ")
     }
 }
 
@@ -55,7 +57,6 @@ pub(crate) fn run_tests(
     filter: Option<&str>,
 ) -> Result<bool, CompileError> {
     let governing = Governing::here(manifest).map_err(CompileError::failure)?;
-    let store = Verdicts::at(governing.root.clone());
 
     // The same scope for every target: the `--unit` mounts in front, then the dependency graph with the governing package's own library last — the order `wonder` walks and `run` compiles.
     let mut units = load_units(mounted_dirs)?;
@@ -63,10 +64,13 @@ pub(crate) fn run_tests(
 
     let mut totals = Totals::default();
     let mut matched_any = false;
+    // One store handle per target, as `run` holds one per invocation: a handle's placed chain is one compilation's, and a second fold on the same handle would carry the first's placements into the chain the second payload is filed against — one entry too long, which the store withholds without a word. The first refusal is what is kept, since a store nobody can write refuses every target for one reason.
+    let mut refusal: Option<String> = None;
 
     // The library first, when there is one, then every executable in declaration order — each a test program of its own, scheduling only its own unit's tests.
     let library = governing.directory.join(LIBRARY);
     if library.is_file() {
+        let store = Verdicts::at(governing.root.clone());
         let subject = Subject::package(&governing.package.name);
         // The entry is a dummy program — `()` is the smallest text an entrypoint parses, and the tests tail replaces it before anything checks it: the subject is the scope's final unit, and `EntryTail::LastUnitTests` schedules that unit's tests. The constant text is also what keys the payload — the library's own content rides in through the unit chain.
         let (entrypoint, loader, source) = Entrypoint::supplied(LIBRARY, "()")
@@ -84,10 +88,12 @@ pub(crate) fn run_tests(
             EntryTail::LastUnitTests,
             &subject,
         )?;
+        refusal = refusal.or_else(|| store.refused());
         run_selected(
             &records,
             &cwasm,
             &library,
+            &subject,
             filter,
             &mut totals,
             &mut matched_any,
@@ -95,6 +101,7 @@ pub(crate) fn run_tests(
     }
 
     for executable in &governing.package.executables {
+        let store = Verdicts::at(governing.root.clone());
         let subject = Subject::Executable(executable.name.clone());
         let entry = governing.directory.join(&executable.path);
         let (entrypoint, loader, source) = Entrypoint::opened(&entry)
@@ -112,17 +119,19 @@ pub(crate) fn run_tests(
             EntryTail::Tests,
             &subject,
         )?;
+        refusal = refusal.or_else(|| store.refused());
         run_selected(
             &records,
             &cwasm,
             &entry,
+            &subject,
             filter,
             &mut totals,
             &mut matched_any,
         )?;
     }
 
-    if let Some(refusal) = store.refused() {
+    if let Some(refusal) = refusal {
         fact(
             Heading::Skipped,
             format!("storing what this built; {refusal}"),
@@ -167,14 +176,15 @@ fn tests_payload(
     if let Some(bytes) = store.payload_get(&program, &sources)
         && let Some(decoded) = decode(&bytes)
     {
-        let mut line = Line::open(Heading::Building, subject);
+        fact(Heading::Processing, subject);
+        let mut line = Line::nested(Heading::Compiling, subject);
         line.outcome("reused");
         eprintln!();
 
         return Ok(decoded);
     }
 
-    fact(Heading::Building, subject);
+    fact(Heading::Processing, subject);
     let mut line: Option<Line> = None;
     let compiled = compile_tests_with_units(
         budget,
@@ -197,25 +207,34 @@ fn tests_payload(
     Ok((records, cwasm))
 }
 
-/// Run every record `filter` selects, one instantiation each, folding outcomes into `totals`. The guest prints the outcome line for what it survives; a trap or a stray exit never reaches the printing, so those lines are written here.
+/// Run every record `filter` selects, one instantiation each, between a `↳ Testing` step and a `↳ Tested` step carrying the unit's tally, which is folded into `totals`. The guest prints the outcome line for what it survives; a trap or a stray exit never reaches the printing, so those lines are written here.
+#[allow(clippy::too_many_arguments)]
 fn run_selected(
     records: &[TestRecord],
     cwasm: &[u8],
     entry: &Path,
+    subject: &Subject,
     filter: Option<&str>,
     totals: &mut Totals,
     matched_any: &mut bool,
 ) -> Result<(), CompileError> {
+    let selected = records
+        .iter()
+        .enumerate()
+        .filter(|(_, record)| filter.is_none_or(|prefix| record.path.starts_with(prefix)))
+        .collect::<Vec<_>>();
+
+    // A unit with nothing to run reports its compile and nothing more: a tally of zeros would only restate the absence of lines above it.
+    if selected.is_empty() {
+        return Ok(());
+    }
+    *matched_any = true;
+
+    step(Heading::Testing, subject);
     let argv0 = entry.to_string_lossy().into_owned();
+    let mut unit = Totals::default();
 
-    for (index, record) in records.iter().enumerate() {
-        if let Some(prefix) = filter
-            && !record.path.starts_with(prefix)
-        {
-            continue;
-        }
-        *matched_any = true;
-
+    for (index, record) in selected {
         let arguments = vec![argv0.clone().into_bytes(), index.to_string().into_bytes()];
         match run_bytes(
             cwasm,
@@ -223,20 +242,20 @@ fn run_selected(
             ForeignBindings::empty(),
         ) {
             // The guest printed `path: proved` or `path: passed` and returned.
-            Ok(0) => totals.passed += 1,
+            Ok(0) => unit.passed += 1,
             // The guest printed `path: failed` and its report, then exited 1; the body as written is what only the records know.
             Ok(1) => {
-                totals.failed += 1;
+                unit.failed += 1;
                 body(record);
             }
             // The test exited on its own, before the scheduler could report — its line is written here.
             Ok(code) => {
-                totals.exited += 1;
+                unit.exited += 1;
                 println!("{}: exited {code}", record.path);
                 body(record);
             }
             Err(trap) => {
-                totals.trapped += 1;
+                unit.trapped += 1;
                 println!("{}: trapped", record.path);
                 for line in trap.lines() {
                     println!("  {line}");
@@ -245,6 +264,11 @@ fn run_selected(
             }
         }
     }
+
+    let mut line = Line::nested(Heading::Tested, subject);
+    line.outcome(&unit.line());
+    eprintln!();
+    totals.add(&unit);
 
     Ok(())
 }

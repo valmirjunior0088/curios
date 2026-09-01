@@ -74,8 +74,9 @@ pub(crate) fn payload_of(
     if let Some((cache, program)) = &filed
         && let Some(payload) = cache.payload_get(program, &sources)
     {
-        // Announced after the store is consulted, exactly as the fold announces a reused unit: a reported operation is one that actually happened.
-        let mut line = Line::open(Heading::Building, &subject);
+        // Announced after the store is consulted, exactly as the fold announces a reused unit: a reported operation is one that actually happened. The step names the target rather than a unit, because what came back is the whole program's machine code.
+        fact(Heading::Processing, &subject);
+        let mut line = Line::nested(Heading::Compiling, &subject);
         line.outcome("reused");
         eprintln!();
 
@@ -143,12 +144,9 @@ pub(crate) fn compile_entry(
     subject: &Subject,
     cache: Option<&dyn Cache>,
 ) -> Result<Module, CompileError> {
-    // Having a scope to show is what makes this a group: with units to nest, the target heads them and its own compile closes that header, and with none the header *is* that compile's line. A group of one line under a heading naming the same work twice is worse than the plain line it replaces.
-    let grouped = !units.is_empty();
-
-    if grouped {
-        fact(Heading::Building, subject);
-    }
+    // Every target heads a group, since a compile and a handover always follow it. What the scope decides is whether the entry's own compile is a step of its own: with units to fold, those are the steps and the entry finishes among them unannounced; with none, the entry's compile is the one step there is.
+    let has_units = !units.is_empty();
+    fact(Heading::Processing, subject);
 
     // The entry is the one subject the fold cannot name — it owns the empty prefix — so it is reported under the name the caller was asked for.
     let mut line: Option<Line> = None;
@@ -161,7 +159,7 @@ pub(crate) fn compile_entry(
         loader,
         cache,
         |_| {},
-        |progress| report(&mut line, subject, grouped, progress),
+        |progress| report(&mut line, subject, has_units, progress),
     );
 
     // A refusal is not a compiler dying mid-operation, which is the one case an unterminated line is left to mean: this one finished, and is about to say why. Closing the innermost line here is what lets the report below start at column zero, as every line of it after the first already does — and as the same `Report` renders through `wonder`.
@@ -188,28 +186,28 @@ pub(crate) fn compile_file(
 
 /// Fold one [`Progress`] event onto the open status line, opening and closing lines as subjects begin and end.
 ///
-/// The line outlives each event, which is why it is threaded rather than owned here: `↳ Processing /hello` and the `; compiling... done 1.4s` that completes it are three separate writes to one line.
+/// The line outlives each event, which is why it is threaded rather than owned here: `↳ Compiling /hello` and the `; 1.4s` that completes it are two separate writes to one line.
 pub(crate) fn report(
     line: &mut Option<Line>,
     target: &Subject,
-    grouped: bool,
+    has_units: bool,
     progress: Progress<'_>,
 ) {
     match progress {
         Progress::Compiling(prefix) => {
-            *line = Some(opened(Line::nested(
-                Heading::Processing,
+            *line = Some(Line::nested(
+                Heading::Compiling,
                 &Subject::Mounted(prefix.clone()),
-            )));
+            ));
         }
-        // The entry program *is* the target, so a group that has already named it has nothing to add: its compile finishes the header rather than standing among the units as another step. Ungrouped there is no header yet, and this is it.
+        // The entry program *is* the target the header named, so among unit steps its compile adds none of its own. With no units there is no other step, and this is it.
         Progress::Entry => {
-            if !grouped {
-                *line = Some(opened(Line::open(Heading::Building, target)));
+            if !has_units {
+                *line = Some(Line::nested(Heading::Compiling, target));
             }
         }
         Progress::Reused(prefix) => {
-            Line::nested(Heading::Processing, &Subject::Mounted(prefix.clone())).outcome("reused");
+            Line::nested(Heading::Compiling, &Subject::Mounted(prefix.clone())).outcome("reused");
             eprintln!();
         }
         Progress::Compiled => {
@@ -219,13 +217,6 @@ pub(crate) fn report(
             }
         }
     }
-}
-
-/// `line` with its `compiling` step already announced, so the clock starts where the work does.
-fn opened(mut line: Line) -> Line {
-    line.step("compiling");
-
-    line
 }
 
 /// Read every `--unit DIR`'s manifest in the order written, which is the order they are compiled in.
