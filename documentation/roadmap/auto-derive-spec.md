@@ -12,7 +12,7 @@ A witness declaration may omit its body: `satisfy Spell(Point);`. The compiler t
 
 - [ ] 1. The body-less `satisfy` form
 - [ ] 2. `Transient::Derive`
-- [ ] 3. `Spell` moves to `/syn`
+- [ ] 3. `Spell` moves to `/syn`, and gains its renderers
 - [ ] 4. The `Spell` derivation
 - [ ] 5. The `Eql` derivation
 - [ ] 6. Derived witnesses in `/std`
@@ -32,19 +32,19 @@ Each step is one authorization and one commit, lands its tests before its mechan
 
 **Verification.** `wonder stage core` shows the transient; a body-less witness for `Show` and for a user concept reports the no-derivation refusal at the declaration's span; orphan, duplicate-key and sealed-concept refusals fire on a body-less signature exactly as on a written one.
 
-### 3. `Spell` moves to `/syn`
+### 3. `Spell` moves to `/syn`, and gains its renderers
 
-**Lands.** The concept relocates from `/std/Spell.crs` to `/syn/Spell.crs`, registered in `syn.crs`, the `/std` module becoming the facade (`pub use /syn/{Spell}; pub use /syn/Spell/{spell};`); a `SyntaxRegistry` slot, spelled in `curios-prelude-archive/src/syntax.rs`, covered by the prelude presence check. The carrier witnesses stay where the harness put them. The move happens because step 4's generated bodies name `Spell/spell`, and a compiler-emitted name lives in `/syn`.
+**Lands.** The concept relocates from `/std/Spell.crs` to `/syn/Spell.crs`, registered in `syn.crs`, the `/std` module becoming the facade (`pub use /syn/{Spell}; pub use /syn/Spell/{spell};`). Beside the concept, the two renderers the derivation emits — `pub let call(head: Str, args: List(Str)) -> Str`, rendering `head(a, b)` and `head()` alike, and `pub let record(head: Str, fields: List({Str, Str})) -> Str`, rendering `head { l = v, l = v }` — authored in the `Show(List)`/`Str/join` idiom `/std` already renders with, free to name `/std/Str` as `/syn/Test`'s `report` does, and `pub` without a facade row: they are compiler vocabulary, not user API. A `SpellSyntax` registry group — the concept's `spell` as a `ConceptField`, `call` and `record` as names, a `LiftSyntax`/`StringSyntax` hybrid — spelled in `curios-prelude-archive/src/syntax.rs` and filled at the fixture and test-support sites the exhaustive destructure enumerates, covered by the prelude presence check. The carrier witnesses stay where the harness put them. The move happens because step 4's generated bodies name `Spell/spell` and the renderers, and a compiler-emitted name lives in `/syn`; the renderers exist so the re-parse grammar — parentheses, commas, `l = `, braces — is spelled once, in Curios, where the kernel re-certifies it on every prelude build, on the principle the synthesized test tail set with `Test/main`.
 
-**Verification.** The prelude builds; every harness test that spells passes unchanged; no consumer names `/syn/Spell` directly.
+**Verification.** The prelude builds; every harness test that spells passes unchanged; the renderers' output is pinned for the empty, unary and n-ary call and the record; no `/std` source or compiler stage names `/syn/Spell` outside the registry.
 
 ### 4. The `Spell` derivation
 
 **Lands.** The derivation registered for `Spell`'s slot. Eligibility, per concept parameter, each refusal a hard error at the `satisfy` span in a frame naming concept, key and declaring module: a registered `induct` or `struct` — not an intrinsic carrier, not a concept's backing struct, not `Prop`-sorted; representation-transparent at the declaring island; fully applied, every parameter and index bound by the witness's telescope or given concretely.
 
-The generated body is the Core the lowerer would produce for the equivalent surface program: one `match` arm per constructor in declaration order (omitted motive; index inversion prunes as for written matches), `Proj` for struct fields, `Str/concat` of the pieces. A value spells as its constructor's absolute path applied to its explicit payloads — `/Tree/node(/Tree/leaf(1), …)`, `/Point { x = 1, y = 2 }`, labels where fields have them — so the text re-parses from any module that sees the names. Field populations: an implicit payload is omitted (the re-parsed call infers it); an explicit payload of sort `Type` or `Prop` is refused; an explicit proof payload spells `?`, a written goal; every other payload is spelled by `Spell/spell(field)`, resolved by ordinary resolution in the witness's scope — a telescope variable's premise from its `use` binder, recursion through the witness's own entry, a mutual family through one body-less `and` group, an occurrence under another former through that former's witness. A missing field witness reports inside a derive frame naming constructor and payload, adding "add `use Spell(A)` to the telescope" when the failing type is a telescope variable.
+The generated body is the Core the lowerer would produce for the equivalent surface program: one `match` arm per constructor in declaration order (omitted motive; index inversion prunes as for written matches), `Proj` for struct fields, and per arm a single application of a step-3 renderer over structured pieces — `Spell/call("/Tree/node", [Spell/spell(l), …])` for a constructor, `Spell/record("/Point", [("x", Spell/spell(x)), …])` for a struct — the same emission the synthesized test tail already proves out: string literals through `str_literal`, the list, the pairs, one `Var` application. A value spells as its constructor's absolute path applied to its explicit payloads — `/Tree/node(/Tree/leaf(1), …)`, `/Point { x = 1, y = 2 }` — so the text re-parses from any module that sees the names; a struct spells labeled always, because the literal grammar has no positional form. Field populations: an implicit payload is omitted (the re-parsed call infers it); an explicit payload of sort `Type` or `Prop` is refused; an explicit proof payload contributes the literal `"?"`, a written goal in the re-parsed text; every other payload is spelled by `Spell/spell(field)`, resolved by ordinary resolution in the witness's scope — a telescope variable's premise from its `use` binder, recursion through the witness's own entry, a mutual family through one body-less `and` group, an occurrence under another former through that former's witness. A missing field witness reports inside a derive frame naming constructor and payload, adding "add `use Spell(A)` to the telescope" when the failing type is a telescope variable.
 
-**Verification.** A `curios/src/tests/derive.rs` in the `run(source)`/`error(source)` style: an enumeration, payloads, a parameterized family under a premise, a recursive family, a mutual group, nesting through `List`, a user struct and a tuple, labeled and positional structs, a `Prop` field spelling `?`, an indexed family; spelled text re-elaborated at the type and compared through `Eql`; every refusal asserting its frame text; `wonder stage core-elab` showing an expansion and `stage core` the transient.
+**Verification.** A `curios/src/tests/derive.rs` in the `run(source)`/`error(source)` style: an enumeration, payloads, a parameterized family under a premise, a recursive family, a mutual group, nesting through `List`, a user struct and a tuple payload, a `Prop` field spelling `?`, an indexed family; spelled text re-elaborated at the type and compared through `Eql`; every refusal asserting its frame text; `wonder stage core-elab` showing an expansion and `stage core` the transient.
 
 ### 5. The `Eql` derivation
 
@@ -65,7 +65,7 @@ The generated body is the Core the lowerer would produce for the equivalent surf
 ## Completion criteria
 
 - `satisfy C(T);` parses, prints and formats; the grammar agrees; `Transient::Derive` exists and cannot survive to the kernel.
-- `/syn/Spell` has its slot and facade; `Spell` and `Eql` derive; `/std`'s structural types hold derived witnesses, exercised by every workspace check.
+- `/syn/Spell` has its slot group, renderers and facade; `Spell` and `Eql` derive; `/std`'s structural types hold derived witnesses, exercised by every workspace check.
 - Every step's Verification row is a test, and the gate passes.
 - The decision file exists, the roadmap line is checked, and this file is deleted.
 
