@@ -60,7 +60,7 @@ A property failure flows through the harness's ordinary `failed` rendering; the 
 
 - Shrinking: small-first sizing keeps early counterexamples small, and a `shrink` field is a compatible later addition to `Draw`.
 - Effectful properties, and any change to `Property(Test)`'s `action` refusal.
-- Derived `Draw` — the auto-derive seam, later.
+- Derived `Draw` — a third derivation at the seam [A witness body may be written by the compiler](../design/language/a-witness-body-may-be-written-by-the-compiler.md) leaves open, later.
 - `Bool`-bodied tests, and any type-directed dispatch at the `test` form.
 - `Draw` at labeled tuple shapes.
 - Any change to `Verdict`, `Test`, or the harness's pinned combinator signatures.
@@ -99,7 +99,7 @@ A parameterized test is a property probed over drawn arguments with one body typ
 
 - Shrinking, as a `Draw` extension.
 - A conditional-property combinator (draw-retry with a give-up bound), for the preconditions the non-dependent limit excludes.
-- Derived `Draw` through the auto-derive seam.
+- Derived `Draw`, as a third derivation beside `Spell` and `Eql` ([A witness body may be written by the compiler](../design/language/a-witness-body-may-be-written-by-the-compiler.md)).
 - Effectful properties through `Property(Test)`'s `action` arm.
 - `Draw(Flt)` with a deliberate distribution.
 - `Dec` by enumeration, the proof-side sibling — `Dec((a: A) -> P(a))` from an `Enum(A)` completeness witness, deciding a Π over a finite domain by exhaustion. Speculative: extracting `P` from the goal leans on higher-order unification in a way nothing here does.

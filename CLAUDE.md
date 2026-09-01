@@ -110,6 +110,7 @@ Data flows downward; Rust dependencies between stages point upward, because a lo
 | A shared analysis | `curios-analysis/src/` | Both drivers — `curios-cert`'s `Kernel` and `curios-elab`'s `Context` — and `curios-analysis/tests/driven.rs` |
 | A numeric carrier or its arithmetic | `curios-num/src/` | Every constant folder sharing `scalar` (`curios-core`, `curios-ersd`, `curios-cont`), and `documentation/design/toolchain/numeric-carriers-narrow-by-refusing-never-by-changing-a-value.md` |
 | Concepts or witness resolution | `curios-elab/src/concept.rs`, `resolve.rs` | Surface declarations, standard-library witnesses, and syntax documentation |
+| A derivation | `curios-elab/src/derive.rs` | The `SpellSyntax` slots, `/syn/Spell`'s renderers, the derived-vocabulary edges in `curios-text/src/into_core/order.rs`, and `curios/src/tests/derive.rs` |
 | Type erasure | `curios-elab/src/into_ersd*` | `curios-ersd` representation and downstream tests |
 | Erased optimization | `curios-ersd/src/optimize/` | `into_cont.rs`, derived analyses, deep-input and specialization tests |
 | CPS optimization or Wasm emission | `curios-cont/src/` | `curios-wasm`, codegen tests, and runtime behavior |

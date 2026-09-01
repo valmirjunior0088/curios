@@ -32,7 +32,7 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] Concept-based operators (every infix, `&&`/`||` included, dispatches through a concept)
   - [x] Tuple witness keys (a witness on `{A, B}` keys on the shape `{_, _}`, labels included)
   - [x] Function witness keys (a witness on `(A) -> B` keys on the plicity vector `(_) -> _`)
-- [ ] [Auto-derive: a witness whose body the compiler writes](roadmap/auto-derive-spec.md)
+- [x] [Derived witnesses](design/language/a-witness-body-may-be-written-by-the-compiler.md) (`satisfy C(T);` — the compiler writes `Spell` and `Eql` bodies from the declaration of the type in the key; `/std`'s structural types derive theirs)
 - [x] Unified `struct` declarations (independent nominal and representation visibility)
 - [x] Inductive types (`induct` declarations)
   - [x] Independent nominal/representation visibility, with opaque construction

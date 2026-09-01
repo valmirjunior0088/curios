@@ -907,7 +907,7 @@ A concept returning `Prop` (or `pub Prop`) has proof-irrelevant witnesses that e
 
 ### Witness declarations
 
-`satisfy` registers an anonymous witness. Its terminal type is a concept application and its body supplies the concept fields. A witness may also omit its body — `satisfy Spell(Point);` — asking the compiler to write it: a *derived* witness, admitted only for the concepts the compiler knows how to derive.
+`satisfy` registers an anonymous witness. Its terminal type is a concept application and its body supplies the concept fields — or is omitted, asking the compiler to write it; see [Derived witnesses](#derived-witnesses).
 
 ```crs
 satisfy Show(Nat) {
@@ -958,6 +958,23 @@ To use a second dictionary for the same key on a *transparent* concept, construc
 let reverse: Ord(Nat) = Ord { cmp(a, b) = compare_reverse(a, b) };
 sort(use reverse, values)
 ```
+
+### Derived witnesses
+
+A witness may omit its body: `satisfy Spell(Point);`, or `satisfy (@A: Type, use Spell(A)) => Spell(Tree(A));` under a telescope, and either form may join an `and` group beside written members. The signature is the programmer's — it registers, keys, and meets the orphan and sealing rules exactly as a written witness does — and the compiler writes the body from the declaration of the type in the key. Derivability is a property of the concept: `Spell` and `Eql` derive, every other concept refuses the form by name, and the hand-written witness remains the norm.
+
+```crs
+struct Point: pub Type { x: Nat, y: Nat }
+induct Tree(A: Type): pub Type | leaf(A) | node(Tree(A), Tree(A)) end
+
+satisfy Spell(Point);
+satisfy (@A: Type, use Spell(A)) => Spell(Tree(A));
+and (@A: Type, use Eql(A)) => Eql(Tree(A));
+```
+
+The key must be a declared `induct` or `struct` — not an intrinsic carrier, a tuple or function shape, or a concept's own record — fully applied, representation-transparent where the witness is declared, and not a proposition. An implicit payload is inferred by the re-parsed text and takes no part; a proof payload spells as the written goal `?` and compares as nothing; a payload that is itself a type is refused; every other payload goes through its own witness, resolved in the witness's scope — a telescope premise, the witness's own entry, or a member of the same `and` group — and a missing one is reported against the constructor and payload, naming the `use` premise to add when the payload's type is a telescope variable.
+
+A derived `Spell` spells a value as its constructor's absolute path applied to its explicit payloads — `/Tree/node(/Tree/leaf(1), /Tree/leaf(2))`, `/std/Option/Option/some(3)` — and a struct as its literal, `/Point { x = 1, y = 2 }`, positionally where a field has no label; the text re-parses wherever those names are visible. A derived `Eql` is structural — the same constructor with pairwise equal payloads — and `!=` is its negation. The standard library derives both for `Option`, `Result` and `Order`.
 
 ### Witness premises
 
