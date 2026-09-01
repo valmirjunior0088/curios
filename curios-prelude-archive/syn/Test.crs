@@ -1,4 +1,5 @@
 use /std/{Nat, Bool, Str, Bytes, List, Option, Io, Eq, Eql, Spell, print, proc};
+use /std/Test/{Seed, Property};
 
 pub induct Verdict: pub Type
 | passed()
@@ -93,3 +94,24 @@ pub let main(tests: List({Str, () -> Test})) -> Io({}) =
         let ok = run_all(tests)!;
         match ok | true => Io/pure(()) | false => proc/exit(1) end
     end;
+
+-- Only this module may eliminate a description, so the one `Property` witness that sees a `Test` lives here: a theorem was settled by the kernel over its open binders once, at elaboration, so every case passes; a verdict is the case's own; an action cannot be probed by a pure runner, and says so.
+satisfy Property(Test) {
+    probe(t, seed, size) =
+        match t
+        | theorem() => Verdict/passed()
+        | verdict(v) => v
+        | action(_) => Verdict/failed("an action cannot be probed")
+        end,
+}
+
+-- The default run: a fixed case count from a fixed seed, so a property's verdict is a function of the sources alone. Each is one number, in one place.
+let default_seed: Seed =
+    Seed/make(20260831);
+
+let default_cases: Nat =
+    100;
+
+-- A property closed into a description: `prop` is anything `Property` judges — a nullary `Test`, or a function whose arguments the roster draws — and the tail of a unit compiled as its test program is what applies this to every parameterized test declaration. Public rather than emission-only, so a property is also built and combined by hand.
+pub let property(@A: Type, use Property(A), prop: A) -> Test =
+    Test/verdict(Property/run(prop, default_seed, default_cases));

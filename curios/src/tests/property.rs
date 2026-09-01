@@ -1,6 +1,6 @@
 //! Property-based testing across the stages: the pure splittable `Seed`, the `Draw` roster and the tuple `Spell` witnesses a counterexample renders, `Property` and `Test/property`, and the parameterized `test` declaration the synthesized tail closes through `Test/property`.
 
-use super::run;
+use super::{error, run};
 
 #[test]
 fn a_drawn_sequence_is_a_function_of_its_seed() {
@@ -85,4 +85,64 @@ fn the_generator_never_leaves_the_envelope() {
         "#),
         b"true\n"
     );
+}
+
+#[test]
+fn a_property_is_probed_over_drawn_arguments() {
+    // `Test/property` applied by hand, through the harness's own scheduler: a law holds over every drawn case, a claim that fails reports the first counterexample — small, since the size is the case index — spelled in parameter order before the inner report, and a curried spelling resolves through the arity-1 witness twice.
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Str, Io, Test};
+        let commutes(n: Nat, m: Nat) -> Test = Test/check(n + m == m + n);
+        let bounded(n: Nat, m: Nat) -> Test = Test/check(n + m < 7);
+        let curried: (Nat) -> (Nat) -> Test = (a) => (b) => Test/equal(a * b, b * a);
+        Test/main([
+            ("/commutes", () => Test/property(commutes)),
+            ("/bounded", () => Test/property(bounded)),
+            ("/curried", () => Test/property(curried)),
+        ])
+        "#),
+        b"/commutes: passed\n/bounded: failed\n  for 6, 6: the condition was false\n/curried: passed\n"
+    );
+}
+
+#[test]
+fn a_theorem_bodied_property_passes_without_a_case_failing() {
+    // The kernel settled `n + 0 = n` over the open binder once, at elaboration, so the runner meets `theorem()` at every case and has nothing left to decide — and still reports `passed` rather than `proved`, because a property is a verdict decided by running it, whatever each case turned out to be.
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Str, Io, Eq, Test};
+        let plus_zero(n: Nat) -> Test = Test/refl(n + 0, n, Eq/refl());
+        Test/main([("/plus_zero", () => Test/property(plus_zero))])
+        "#),
+        b"/plus_zero: passed\n"
+    );
+}
+
+#[test]
+fn a_nullary_description_is_its_own_property() {
+    // `Property(Test)` is the base of every function-shape witness and stands on its own: a bare description probes as the verdict it carries, and an action is refused rather than performed by the pure runner.
+    assert_eq!(
+        run(r#"
+        use /std/{Nat, Str, Io, Test};
+        Test/main([
+            ("/verdict", () => Test/property(Test/check(2 == 2))),
+            ("/action", () => Test/property(Test/perform(() => Io/pure(Test/check(true))))),
+        ])
+        "#),
+        b"/verdict: passed\n/action: failed\n  an action cannot be probed\n"
+    );
+}
+
+#[test]
+fn a_parameter_the_roster_cannot_draw_reports_the_missing_witness() {
+    // A dependent telescope never unifies with a function-shape witness, and a parameter type with no `Draw` fails the premise: either way the report names the `Property` goal at the application.
+    let error = error(
+        r#"
+        use /std/{Nat, Str, Io, Test};
+        let bounded(n: Nat, p: Nat/Lt(n, 100)) -> Test = Test/check(true);
+        Test/main([("/bounded", () => Test/property(bounded))])
+        "#,
+    );
+    assert!(error.contains("Property"), "unexpected error: {error}");
 }

@@ -298,18 +298,23 @@ impl ProofSyntax {
     }
 }
 
-/// The names the `test` declaration form emits: `/syn/Test`, the declared output type of every lowered test, and `/syn/Test/main`, the scheduler the synthesized tail applies to the collected tests.
+/// The names the `test` declaration form emits: `/syn/Test`, the declared output type of every lowered test; `/syn/Test/main`, the scheduler the synthesized tail applies to the collected tests; and `/syn/Test/property`, what that tail closes a parameterized test through.
 #[derive(Debug, Clone, Copy)]
 pub struct TestSyntax {
     pub test_type: SyntaxName,
     pub main: SyntaxName,
+    pub property: SyntaxName,
 }
 
 impl TestSyntax {
     fn targets(self) -> impl Iterator<Item = SyntaxName> {
-        let Self { test_type, main } = self;
+        let Self {
+            test_type,
+            main,
+            property,
+        } = self;
 
-        [test_type, main].into_iter()
+        [test_type, main, property].into_iter()
     }
 }
 

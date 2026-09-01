@@ -1,0 +1,268 @@
+-- The per-case judgment behind a property test: `probe(prop, seed, size)` puts one drawn case to the claim and answers in `Verdict`, purely — only `/syn/Test`'s own witness sees a `Test`, since a description is matched nowhere else. The witnesses at the function shapes draw every argument, apply, and hand the result to the premise on the result type, so a curried spelling composes through recursion while a declaration's uncurried type finds its arity directly; the result type is not part of a function key, so `-> Test` at each arity is the concept's one canonical discipline. The ceiling is eight parameters, matching the tuple shapes'.
+use /std/{Nat, Str, List, Spell};
+use /std/Test/{Seed, Draw, Verdict};
+
+pub concept Property(A: Type): pub Type {
+    probe(A, Seed, Nat) -> Verdict,
+}
+
+-- `cases` probes from a seed split once per case, the case's index as its size, the first failure ending the run.
+pub let run(@A: Type, use Property(A), prop: A, seed: Seed, cases: Nat) -> Verdict =
+    cases_from(prop, seed, cases, 0);
+
+let cases_from(
+    @A: Type,
+    use Property(A),
+    prop: A,
+    seed: Seed,
+    remaining: Nat,
+    index: Nat,
+) -> Verdict =
+    match remaining
+    | 0 => Verdict/passed()
+    | fewer + 1 =>
+        let (here, rest) = Seed/split(seed);
+        match Property/probe(prop, here, index)
+        | passed() => cases_from(prop, rest, fewer, index + 1)
+        | failed(message) => Verdict/failed(message)
+        end
+    end;
+
+-- A failure names the case that produced it: the drawn arguments, spelled in parameter order, before the inner report.
+let counterexample(arguments: List(Str), verdict: Verdict) -> Verdict =
+    match verdict
+    | passed() => Verdict/passed()
+    | failed(message) =>
+        Verdict/failed(
+            Str/concat("for ", Str/concat(Str/join(", ", arguments), Str/concat(": ", message))))
+    end;
+
+satisfy (@A: Type, @R: Type, use Draw(A), use Spell(A), use Property(R)) => Property((A) -> R) {
+    probe(prop, seed, size) =
+        let (a, rest) = Draw/draw(@A, seed, size);
+        counterexample([Spell/spell(a)], Property/probe(prop(a), rest, size)),
+}
+
+satisfy (
+    @A: Type,
+    @B: Type,
+    @R: Type,
+    use Draw(A),
+    use Draw(B),
+    use Spell(A),
+    use Spell(B),
+    use Property(R)) => Property((A, B) -> R) {
+    probe(prop, seed, size) =
+        let (a, s1) = Draw/draw(@A, seed, size);
+        let (b, rest) = Draw/draw(@B, s1, size);
+        counterexample([Spell/spell(a), Spell/spell(b)], Property/probe(prop(a, b), rest, size)),
+}
+
+satisfy (
+    @A: Type,
+    @B: Type,
+    @C: Type,
+    @R: Type,
+    use Draw(A),
+    use Draw(B),
+    use Draw(C),
+    use Spell(A),
+    use Spell(B),
+    use Spell(C),
+    use Property(R)) => Property((A, B, C) -> R) {
+    probe(prop, seed, size) =
+        let (a, s1) = Draw/draw(@A, seed, size);
+        let (b, s2) = Draw/draw(@B, s1, size);
+        let (c, rest) = Draw/draw(@C, s2, size);
+        counterexample(
+            [Spell/spell(a), Spell/spell(b), Spell/spell(c)],
+            Property/probe(prop(a, b, c), rest, size)),
+}
+
+satisfy (
+    @A: Type,
+    @B: Type,
+    @C: Type,
+    @D: Type,
+    @R: Type,
+    use Draw(A),
+    use Draw(B),
+    use Draw(C),
+    use Draw(D),
+    use Spell(A),
+    use Spell(B),
+    use Spell(C),
+    use Spell(D),
+    use Property(R)) => Property((A, B, C, D) -> R) {
+    probe(prop, seed, size) =
+        let (a, s1) = Draw/draw(@A, seed, size);
+        let (b, s2) = Draw/draw(@B, s1, size);
+        let (c, s3) = Draw/draw(@C, s2, size);
+        let (d, rest) = Draw/draw(@D, s3, size);
+        counterexample(
+            [Spell/spell(a), Spell/spell(b), Spell/spell(c), Spell/spell(d)],
+            Property/probe(prop(a, b, c, d), rest, size)),
+}
+
+satisfy (
+    @A: Type,
+    @B: Type,
+    @C: Type,
+    @D: Type,
+    @E: Type,
+    @R: Type,
+    use Draw(A),
+    use Draw(B),
+    use Draw(C),
+    use Draw(D),
+    use Draw(E),
+    use Spell(A),
+    use Spell(B),
+    use Spell(C),
+    use Spell(D),
+    use Spell(E),
+    use Property(R)) => Property((A, B, C, D, E) -> R) {
+    probe(prop, seed, size) =
+        let (a, s1) = Draw/draw(@A, seed, size);
+        let (b, s2) = Draw/draw(@B, s1, size);
+        let (c, s3) = Draw/draw(@C, s2, size);
+        let (d, s4) = Draw/draw(@D, s3, size);
+        let (e, rest) = Draw/draw(@E, s4, size);
+        counterexample(
+            [Spell/spell(a), Spell/spell(b), Spell/spell(c), Spell/spell(d), Spell/spell(e)],
+            Property/probe(prop(a, b, c, d, e), rest, size)),
+}
+
+satisfy (
+    @A: Type,
+    @B: Type,
+    @C: Type,
+    @D: Type,
+    @E: Type,
+    @F: Type,
+    @R: Type,
+    use Draw(A),
+    use Draw(B),
+    use Draw(C),
+    use Draw(D),
+    use Draw(E),
+    use Draw(F),
+    use Spell(A),
+    use Spell(B),
+    use Spell(C),
+    use Spell(D),
+    use Spell(E),
+    use Spell(F),
+    use Property(R)) => Property((A, B, C, D, E, F) -> R) {
+    probe(prop, seed, size) =
+        let (a, s1) = Draw/draw(@A, seed, size);
+        let (b, s2) = Draw/draw(@B, s1, size);
+        let (c, s3) = Draw/draw(@C, s2, size);
+        let (d, s4) = Draw/draw(@D, s3, size);
+        let (e, s5) = Draw/draw(@E, s4, size);
+        let (f, rest) = Draw/draw(@F, s5, size);
+        counterexample(
+            [
+                Spell/spell(a),
+                Spell/spell(b),
+                Spell/spell(c),
+                Spell/spell(d),
+                Spell/spell(e),
+                Spell/spell(f)],
+            Property/probe(prop(a, b, c, d, e, f), rest, size)),
+}
+
+satisfy (
+    @A: Type,
+    @B: Type,
+    @C: Type,
+    @D: Type,
+    @E: Type,
+    @F: Type,
+    @G: Type,
+    @R: Type,
+    use Draw(A),
+    use Draw(B),
+    use Draw(C),
+    use Draw(D),
+    use Draw(E),
+    use Draw(F),
+    use Draw(G),
+    use Spell(A),
+    use Spell(B),
+    use Spell(C),
+    use Spell(D),
+    use Spell(E),
+    use Spell(F),
+    use Spell(G),
+    use Property(R)) => Property((A, B, C, D, E, F, G) -> R) {
+    probe(prop, seed, size) =
+        let (a, s1) = Draw/draw(@A, seed, size);
+        let (b, s2) = Draw/draw(@B, s1, size);
+        let (c, s3) = Draw/draw(@C, s2, size);
+        let (d, s4) = Draw/draw(@D, s3, size);
+        let (e, s5) = Draw/draw(@E, s4, size);
+        let (f, s6) = Draw/draw(@F, s5, size);
+        let (g, rest) = Draw/draw(@G, s6, size);
+        counterexample(
+            [
+                Spell/spell(a),
+                Spell/spell(b),
+                Spell/spell(c),
+                Spell/spell(d),
+                Spell/spell(e),
+                Spell/spell(f),
+                Spell/spell(g)],
+            Property/probe(prop(a, b, c, d, e, f, g), rest, size)),
+}
+
+satisfy (
+    @A: Type,
+    @B: Type,
+    @C: Type,
+    @D: Type,
+    @E: Type,
+    @F: Type,
+    @G: Type,
+    @H: Type,
+    @R: Type,
+    use Draw(A),
+    use Draw(B),
+    use Draw(C),
+    use Draw(D),
+    use Draw(E),
+    use Draw(F),
+    use Draw(G),
+    use Draw(H),
+    use Spell(A),
+    use Spell(B),
+    use Spell(C),
+    use Spell(D),
+    use Spell(E),
+    use Spell(F),
+    use Spell(G),
+    use Spell(H),
+    use Property(R)) => Property((A, B, C, D, E, F, G, H) -> R) {
+    probe(prop, seed, size) =
+        let (a, s1) = Draw/draw(@A, seed, size);
+        let (b, s2) = Draw/draw(@B, s1, size);
+        let (c, s3) = Draw/draw(@C, s2, size);
+        let (d, s4) = Draw/draw(@D, s3, size);
+        let (e, s5) = Draw/draw(@E, s4, size);
+        let (f, s6) = Draw/draw(@F, s5, size);
+        let (g, s7) = Draw/draw(@G, s6, size);
+        let (h, rest) = Draw/draw(@H, s7, size);
+        counterexample(
+            [
+                Spell/spell(a),
+                Spell/spell(b),
+                Spell/spell(c),
+                Spell/spell(d),
+                Spell/spell(e),
+                Spell/spell(f),
+                Spell/spell(g),
+                Spell/spell(h)],
+            Property/probe(prop(a, b, c, d, e, f, g, h), rest, size)),
+}
+
+pub use Property/*;
