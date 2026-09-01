@@ -481,3 +481,43 @@ fn an_aliased_sort_that_descends_is_still_accepted() {
         "#;
     assert_eq!(run(source), b"ok");
 }
+
+// The accessibility shape, which is the one well-founded recursion in a proof needs and the one the structural rung could not read: the recursive call descends through `below(m, lt)`, an application of a function-typed constructor payload, rather than through a syntactically smaller subterm. A function-typed payload is a branching node whose children are its applications, so the application grades below the constructor for the reason the payload does, and the group descends on `acc`. The result is `Prop`-sorted, so this is (V) reading the verdict, and it is the shape every well-founded fixpoint takes.
+#[test]
+fn a_call_through_a_constructor_payload_descends() {
+    let source = r#"
+        use /std/{Nat, True};
+
+        induct Accessible(@A : Type, R : (A, A) -> Prop) : (A) -> Prop
+        | intro(@x : A, below : (y : A, r : R(y, x)) -> Accessible(R, y)) : (x)
+        end
+
+        let strong(
+            P : (Nat) -> Prop,
+            step : (n : Nat, ih : (m : Nat, lt : Nat/Lt(m, n)) -> P(m)) -> P(n),
+            n : Nat,
+            acc : Accessible((a : Nat, b : Nat) => Nat/Lt(a, b), n),
+        ) -> P(n) =
+            match acc : (w, _) => P(w)
+            | intro(@w, below) => step(w, (m, lt) => strong(P, step, m, below(m, lt)))
+            end;
+
+        /std/print("ok")
+        "#;
+    assert_eq!(run(source), b"ok");
+}
+
+// The control: the same call through a function that is *not* a constructor payload. `again` is a parameter, so nothing relates `again(n)` to anything smaller, the group does not descend, and (V) refuses the proof position. A rule that read every application of a binder as a decrease would accept this, and `loop(P, 0, (m) => m)` then proves any `P`.
+#[test]
+fn a_call_through_a_parameter_bound_function_does_not_descend() {
+    rejected_as_a_proof(
+        r#"
+        use /std/{Nat};
+
+        let loop(P : Prop, n : Nat, again : (m : Nat) -> Nat) -> P =
+            loop(P, again(n), again);
+
+        /std/print("unreachable")
+        "#,
+    );
+}

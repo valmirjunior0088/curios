@@ -8,6 +8,8 @@
 //!
 //! **Match refinement is part of the size order, not an optimization.** A parameter scrutinized by an enclosing arm is expanded through that arm's constructor before it is compared, so in `add/raw`'s empty-`x` arm the literal argument `b[]` grades *equal* to `x` rather than unknown. Without that, the two nil-arm matrices compose to an all-unknown matrix, which is idempotent with no decrease anywhere on its diagonal, and `add/raw` is rejected on a call path that cannot actually occur.
 //!
+//! **An application of a constructor payload is a child of the constructor, and that is the whole of what lets a proof recurse along an accessibility predicate.** The size order reads a value as a finite tree, and a function-typed payload is a branching node whose children are its applications, so `below(y, r)` sits below `intro(x, below)` for the reason `below` itself does. The premise — that a payload's value *is* a finite tree — is what obligations (T) and (V) already guarantee at every position this verdict is consulted, since a partial value stored in a payload is refused by reachability before the verdict matters. Agda's structural order states the same rule for any function-typed constructor argument; Rocq's guard states a narrower one keyed to the payload's codomain, which refuses no cycle this admits, because a payload of a foreign type cannot reach the parameter's column.
+//!
 //! # Shared, not duplicated
 //!
 //! Both checkers run *this* engine, through [`Env`]: it is a total function of post-zonk terms, so a second implementation would be a second run of the same function on the same input rather than a second opinion. What differs is the obligation each driver hangs on the verdict. The elaborator's is positional and whole-module — obligations (T) and (V), seeded from what elaboration settled, turning a `Partial` classification into a rejection only where erasure deletes. The kernel's is local and self-derivable: a `rec` member whose declared type is a proof or yields a sort must descend, because assuming it at that type otherwise certifies `rec f : False = f`. Rejection by the *engine* is a classification, not an error — corecursive and productive definitions classify `Partial` and stay usable everywhere erasure keeps them.
@@ -70,6 +72,7 @@ pub fn group_totality<E: Env>(env: &mut E, group: &RecGroup) -> Totality {
             params: &member.params,
             refined: BTreeMap::new(),
             nonzero: BTreeSet::new(),
+            payloads: BTreeSet::new(),
             entered: Vec::new(),
             scopes: Vec::new(),
             calls: Vec::new(),
@@ -139,6 +142,10 @@ struct Walk<'a, E: Env> {
     ///
     /// This is what makes an arithmetic decrease sound rather than merely plausible: `n / k` is below `n` only when `n` is nonzero, and without the guard `rec loop(n : Nat) -> Nat = loop(n / 10)` would be accepted while looping forever at zero.
     nonzero: BTreeSet<Free>,
+    /// The binders the enclosing inductive arms bound as constructor payloads, entered and left exactly like `refined`.
+    ///
+    /// An application whose head is one of these reads as the payload itself, which is what grades `below(y, r)` below the `intro(x, below)` an arm refined the scrutinee to. A head bound anywhere else — a parameter, a lambda binder — is not in the set and reads as it always did.
+    payloads: BTreeSet<Free>,
     /// The nested groups whose bodies the walk is currently inside, entered and left exactly like `refined`. A group reached from within itself would regenerate its own bodies without end, since every member reference materializes as a projection carrying the whole group.
     entered: Vec<RecGroup>,
     /// The work still owed, innermost last. The traversal's depth lives here rather than on the native stack: a member body nests as deep as its source is written, and a program-generating spelling of it is unbounded by anything the walk controls.
@@ -155,6 +162,8 @@ struct Undo {
     refined: Option<(Free, Option<Shape>)>,
     /// The binder this scope added to `nonzero`, `None` when it added none — an already-known binder included.
     nonzero: Option<Free>,
+    /// The binders this scope added to `payloads`, empty when it added none.
+    payloads: Vec<Free>,
     /// Whether this scope pushed a group onto `entered`.
     entered: bool,
 }
@@ -284,6 +293,18 @@ impl<E: Env> Walk<'_, E> {
                 self.arithmetic_shape(left, right, &Natural::from(1usize))
             }
 
+            // An application of a constructor payload reads as the payload it came from: a function-typed payload is a branching node whose children are its applications, so `below(y, r)` grades below `intro(x, below)` for the reason `below` does. The head is read through the same refinement expansion a parameter gets, so a payload bound by a nested pattern reads the same. Any other head — a parameter, a lambda binder, a global — falls through to unfolding, as every application did before.
+            Subterm::Apply(_) => {
+                let (head, _) = flatten(term);
+                if let Subterm::Var(var) = &*head
+                    && let Some(free) = var.as_free()
+                    && self.payloads.contains(free)
+                {
+                    return self.expand(free, EXPAND_FUEL);
+                }
+                self.unfolded_shape(term)
+            }
+
             _ => self.unfolded_shape(term),
         }
     }
@@ -397,11 +418,12 @@ impl<E: Env> Walk<'_, E> {
 
     /// Apply what one scope establishes, recording its [`Undo`].
     ///
-    /// The three kinds of scoped knowledge open together because they close together: a boolean arm refines its scrutinee *and* rules out zero, and one bracket is one thing to keep balanced instead of three.
+    /// The four kinds of scoped knowledge open together because they close together: a boolean arm refines its scrutinee *and* rules out zero, an inductive arm refines its scrutinee *and* binds payloads, and one bracket is one thing to keep balanced instead of four.
     fn enter(
         &mut self,
         refine: Option<(Free, Shape)>,
         nonzero: Option<Free>,
+        payloads: Vec<Free>,
         entered: Option<RecGroup>,
     ) {
         let refined = refine.map(|(binder, shape)| {
@@ -412,6 +434,10 @@ impl<E: Env> Walk<'_, E> {
             Some(atom) if self.nonzero.insert(atom.clone()) => Some(atom),
             _ => None,
         };
+        let payloads = payloads
+            .into_iter()
+            .filter(|binder| self.payloads.insert(binder.clone()))
+            .collect();
         let entered = match entered {
             Some(group) => {
                 self.entered.push(group);
@@ -423,6 +449,7 @@ impl<E: Env> Walk<'_, E> {
         self.scopes.push(Undo {
             refined,
             nonzero,
+            payloads,
             entered,
         });
     }
@@ -442,6 +469,9 @@ impl<E: Env> Walk<'_, E> {
         }
         if let Some(atom) = undo.nonzero {
             self.nonzero.remove(&atom);
+        }
+        for binder in undo.payloads {
+            self.payloads.remove(&binder);
         }
         if undo.entered {
             self.entered
@@ -507,8 +537,14 @@ impl<E: Env> Walk<'_, E> {
     }
 
     /// Take on what an arm establishes, walk its body under it, and put it back.
-    fn scoped(&mut self, refine: Option<(Free, Shape)>, nonzero: Option<Free>, body: &Term) {
-        self.enter(refine, nonzero, None);
+    fn scoped(
+        &mut self,
+        refine: Option<(Free, Shape)>,
+        nonzero: Option<Free>,
+        payloads: Vec<Free>,
+        body: &Term,
+    ) {
+        self.enter(refine, nonzero, payloads, None);
         self.walk_term(body);
         self.exit();
     }
@@ -572,7 +608,7 @@ impl<E: Env> Walk<'_, E> {
                         .filter(|guard| guard.establishes_nonzero(taken))
                         .map(|guard| guard.atom);
                     let shape = Shape::Node(Tag::Bool(taken), Vec::new());
-                    self.scoped(refine(scrutinee.clone(), shape), atom, body);
+                    self.scoped(refine(scrutinee.clone(), shape), atom, Vec::new(), body);
                 }
             }
 
@@ -580,13 +616,14 @@ impl<E: Env> Walk<'_, E> {
                 for (value, body) in cases {
                     let literal = Term::intrinsic(Intrinsic::Nat(Nat::new(*value)));
                     let shape = self.shape_of(&literal);
-                    self.scoped(refine(scrutinee.clone(), shape), None, body);
+                    self.scoped(refine(scrutinee.clone(), shape), None, Vec::new(), body);
                 }
                 // The default arm stands for every value *not* enumerated, so it refines the scrutinee to nothing — but enumerating zero is exactly what rules zero out everywhere else.
                 let atom = scrutinee.filter(|_| cases.contains_key(&0));
-                self.scoped(None, atom, default);
+                self.scoped(None, atom, Vec::new(), default);
             }
 
+            // The arm's binders are the constructor's payloads, whether or not the scrutinee is a binder the arm can refine: what an application of one reads as is a fact about the payload, not about what it was projected from.
             Cases::Induct { cases, default } => {
                 for (tag, case) in cases {
                     let (binders, body) = self.open_many(&case.body);
@@ -594,7 +631,7 @@ impl<E: Env> Walk<'_, E> {
                         Tag::Variant(tag.clone()),
                         binders.iter().map(|b| Shape::Atom(b.clone())).collect(),
                     );
-                    self.scoped(refine(scrutinee.clone(), shape), None, &body);
+                    self.scoped(refine(scrutinee.clone(), shape), None, binders, &body);
                 }
                 if let Some(default) = default {
                     self.walk_term(default);
@@ -611,7 +648,7 @@ impl<E: Env> Walk<'_, E> {
                     let (binders, body) = self.open_two(cons_case);
                     let shape =
                         Shape::unary_run(Natural::from(1usize), Shape::Atom(binders[0].clone()));
-                    self.scoped(refine(scrutinee, shape), None, &body);
+                    self.scoped(refine(scrutinee, shape), None, Vec::new(), &body);
                 }
                 Carrier::Bin {
                     empty_case,
@@ -637,7 +674,12 @@ impl<E: Env> Walk<'_, E> {
     /// The identity arm of a free-monoid eliminator, refining the scrutinee to that carrier's empty value — a shape stated without opening anything.
     fn empty_arm(&mut self, scrutinee: &Option<Free>, carriers: Carriers, empty_case: &Term) {
         let shape = Shape::Node(Tag::Empty(carriers), Vec::new());
-        self.scoped(refine(scrutinee.clone(), shape), None, empty_case);
+        self.scoped(
+            refine(scrutinee.clone(), shape),
+            None,
+            Vec::new(),
+            empty_case,
+        );
     }
 
     /// The cons arm of a `Bin`/`List` eliminator, binding the generator, the tail, and the induction hypothesis.
@@ -648,7 +690,7 @@ impl<E: Env> Walk<'_, E> {
             vec![Shape::Atom(binders[0].clone())],
             Shape::Atom(binders[1].clone()),
         );
-        self.scoped(refine(scrutinee, shape), None, &body);
+        self.scoped(refine(scrutinee, shape), None, Vec::new(), &body);
     }
 
     fn step(&mut self, term: &Term) {
@@ -741,7 +783,7 @@ impl<E: Env> Walk<'_, E> {
             // `entered` is what keeps the descent finite. `RecGroup::member_body` materializes every member reference as a projection carrying the whole group, so a group reached from inside its own bodies would regenerate them without end — which is why a projection of *this* group is answered above rather than descended into, and why any other group is walked at most once per path. It is entered and left exactly like `refined`, so a group met twice in sibling positions is still walked under each one's refinements.
             Subterm::Rec(Rec { group, tail }) => {
                 if !self.entered.contains(group) {
-                    self.enter(None, None, Some(group.clone()));
+                    self.enter(None, None, Vec::new(), Some(group.clone()));
                     // One body at a time: each materializes a projection carrying the whole group, so holding them together would hold every member at once.
                     for index in 0..group.length() {
                         self.walk_term(&group.member_body(index));

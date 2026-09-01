@@ -4,7 +4,7 @@
 
 use {
     super::*,
-    curios_core::{Free, Global, InductDecl, Intrinsic, Rec, StructDecl, Subterm, Term},
+    curios_core::{Atom, Free, Global, InductDecl, Intrinsic, Rec, StructDecl, Subterm, Term},
     curios_utilities::{Grain, PackedBin},
 };
 
@@ -311,6 +311,7 @@ fn a_peeled_prefix_keeps_its_binder_tail() {
         params: &[],
         refined: BTreeMap::new(),
         nonzero: BTreeSet::new(),
+        payloads: BTreeSet::new(),
         entered: Vec::new(),
         scopes: Vec::new(),
         calls: Vec::new(),
@@ -375,6 +376,7 @@ fn a_deeply_nested_body_walks_without_native_recursion() {
         params: &params,
         refined: BTreeMap::new(),
         nonzero: BTreeSet::new(),
+        payloads: BTreeSet::new(),
         entered: Vec::new(),
         scopes: Vec::new(),
         calls: Vec::new(),
@@ -384,4 +386,57 @@ fn a_deeply_nested_body_walks_without_native_recursion() {
     // The call passes the parameter itself, so it grades `Same` — a grade only a walk that reached the bottom of the nest can record.
     assert_eq!(walk.calls.len(), 1);
     assert_eq!(walk.calls[0].2.entry(0, 0), SAME);
+}
+
+#[test]
+fn an_application_of_a_constructor_payload_grades_below_the_constructor() {
+    // The accessibility shape: `a` refined by an arm to `intro(w, below)`, and the call argument `below(y, r)`. A function-typed payload is a branching node whose children are its applications, so the application reads as the payload it came from and grades below the constructor for the reason the payload does. The control is the same application with `below` bound anywhere but a constructor pattern — outside the set, the head is a stuck binder the reduce-nothing environment cannot move, and the argument stays unread.
+    let mut kernel = Probe::default();
+    let f = Free::local(1, Some("f"));
+    let rec = Term::rec(
+        vec![(
+            f.clone(),
+            Term::intrinsic(Intrinsic::NatType),
+            Term::free_var(&f),
+        )],
+        Term::free_var(&f),
+    );
+    let Subterm::Rec(Rec { group, .. }) = &*rec else {
+        panic!("the fixture changed shape");
+    };
+
+    let a = Free::local(2, Some("a"));
+    let w = Free::local(3, Some("w"));
+    let below = Free::local(4, Some("below"));
+    let y = Free::local(5, Some("y"));
+    let r = Free::local(6, Some("r"));
+    let intro = Shape::Node(
+        Tag::Variant(Atom::from("intro")),
+        vec![Shape::Atom(w), Shape::Atom(below.clone())],
+    );
+    let params = [a.clone()];
+    let arities = vec![1];
+    let mut walk = Walk {
+        env: &mut kernel,
+        group,
+        arities: &arities,
+        caller: 0,
+        params: &params,
+        refined: BTreeMap::from([(a.clone(), intro)]),
+        nonzero: BTreeSet::new(),
+        payloads: BTreeSet::from([below.clone()]),
+        entered: Vec::new(),
+        scopes: Vec::new(),
+        calls: Vec::new(),
+    };
+    let applied = Term::apply(
+        Term::free_var(&below),
+        [Term::free_var(&y), Term::free_var(&r)],
+    );
+
+    let parameter = walk.expand(&a, EXPAND_FUEL);
+    assert_eq!(walk.shape_of(&applied).against(&parameter), LESS);
+
+    walk.payloads.clear();
+    assert_eq!(walk.shape_of(&applied).against(&parameter), Size::Unknown);
 }

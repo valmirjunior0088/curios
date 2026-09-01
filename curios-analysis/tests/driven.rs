@@ -712,3 +712,65 @@ fn a_self_calling_type_level_rec_leaves_the_walk_terminating() {
     .expect("a payload the walk cannot see through is admitted, not refused");
     assert_eq!(vectors.get(&name), Some(&Vec::new()));
 }
+
+/// Well-founded recursion's shape, put to the engine under the kernel: `rec f : (a : T) -> Nat = (a) => match a | c(g) => f(g(0)) end`, where `T`'s one constructor stores a function. The call descends on `a` only because `g(0)` reads as the payload `g` it came from — a function-typed payload is a branching node whose children are its applications. The control moves the applied function out of the constructor into a second parameter, `rec f : (a : T, g : (Nat) -> T) -> Nat = (a, g) => f(g(0), g)`, and is `Partial`: `g` is bound by no arm, so nothing relates `g(0)` to `a`, and a rule that read every application of a binder as a decrease would have accepted it.
+#[test]
+fn an_application_of_a_constructor_payload_descends_only_from_its_arm() {
+    let mut kernel = kernel();
+
+    let name = Global::Authored(Qualifier::from(["T"]));
+    let self_type = Term::induct_type(name.clone(), Vec::<Term>::new(), Vec::<Term>::new());
+    let nat = || Term::intrinsic(Intrinsic::NatType);
+    let zero = || Term::intrinsic(Intrinsic::Nat(Nat::new(0usize)));
+    let function = || Term::func_type([(Free::local(1, Some("n")), nat())], self_type.clone());
+    kernel.declare_induct(&name, &single_payload(function(), Term::type_ground()));
+
+    let f = Free::local(2, Some("f"));
+    let a = Free::local(3, Some("a"));
+    let g = Free::local(4, Some("g"));
+    let applied = || Term::apply(Term::free_var(&g), [zero()]);
+
+    let descending = Term::rec(
+        vec![(
+            f.clone(),
+            Term::func_type([(a.clone(), self_type.clone())], nat()),
+            Term::func(
+                [(a.clone(), self_type.clone())],
+                Term::induct_match(
+                    Term::free_var(&a),
+                    None,
+                    nat(),
+                    [(
+                        "c",
+                        vec![g.clone()],
+                        Term::apply(Term::free_var(&f), [applied()]),
+                    )],
+                ),
+            ),
+        )],
+        Term::free_var(&f),
+    );
+    let Subterm::Rec(Rec { group, .. }) = &*descending else {
+        panic!("the fixture changed shape");
+    };
+    assert_eq!(group_totality(&mut kernel, group), Totality::Total);
+
+    let control = Term::rec(
+        vec![(
+            f.clone(),
+            Term::func_type(
+                [(a.clone(), self_type.clone()), (g.clone(), function())],
+                nat(),
+            ),
+            Term::func(
+                [(a.clone(), self_type.clone()), (g.clone(), function())],
+                Term::apply(Term::free_var(&f), [applied(), Term::free_var(&g)]),
+            ),
+        )],
+        Term::free_var(&f),
+    );
+    let Subterm::Rec(Rec { group, .. }) = &*control else {
+        panic!("the fixture changed shape");
+    };
+    assert_eq!(group_totality(&mut kernel, group), Totality::Partial);
+}
