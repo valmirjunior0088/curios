@@ -1,0 +1,159 @@
+-- What the property runner draws an argument from: `draw(seed, size)` yields one value of the type and the seed that follows it, the value no larger than `size` admits, so a run that grows its size meets small counterexamples first. Every carrier `Spell` renders is drawn here but `Flt`, whose distribution — the non-finite values included — is a decision nobody has taken; the positional tuple shapes are drawn through arity 3, the shapes `Spell` renders.
+use /std/{Nat, Int, Byte, Bool, Char, Str, Bits, Bytes, List, Option, Result, Order};
+use /std/Test/{Seed};
+
+pub concept Draw(A: Type): pub Type {
+    draw(Seed, Nat) -> {A, Seed},
+}
+
+-- A number in `0 ..= size`: the size is the bound, so the first cases are the smallest numbers.
+satisfy Draw(Nat) {
+    draw(seed, size) =
+        let (n, rest) = Seed/next(seed);
+        (n % (size + 1), rest),
+}
+
+-- A magnitude drawn as a `Nat`, and one more bit for the sign.
+satisfy Draw(Int) {
+    draw(seed, size) =
+        let (magnitude, after) = Draw/draw(@Nat, seed, size);
+        let (sign, rest) = Seed/next(after);
+        let value = Nat/to_int(magnitude);
+        (match Nat/and(sign, 1) == 1 | true => 0 - value | false => value end, rest),
+}
+
+-- `n % 256` is known to the reducer by its remainder bound, so `Byte/of_nat`'s precondition decides definitionally.
+satisfy Draw(Byte) {
+    draw(seed, size) =
+        let (n, rest) = Seed/next(seed);
+        (Byte/of_nat(n % 256), rest),
+}
+
+satisfy Draw(Bool) {
+    draw(seed, size) =
+        let (n, rest) = Seed/next(seed);
+        (Nat/and(n, 1) == 1, rest),
+}
+
+-- Printable ASCII, so a drawn character spells as itself and a drawn string reads as text. `of_nat` cannot refuse a code below 128, so the fallback is never reached.
+satisfy Draw(Char) {
+    draw(seed, size) =
+        let (n, rest) = Seed/next(seed);
+        (Option/unwrap_or(Char/of_nat(32 + n % 95), ' '), rest),
+}
+
+let chars(seed: Seed, size: Nat, count: Nat) -> {Str, Seed} =
+    match count
+    | 0 => ("", seed)
+    | more + 1; (acc, after) =>
+        let (c, rest) = Draw/draw(@Char, after, size);
+        (Str/concat(acc, Option/unwrap_or(Str/of_bytes(Char/to_utf8(c)), "")), rest)
+    end;
+
+-- At most `size` characters, each drawn as a `Char`.
+satisfy Draw(Str) {
+    draw(seed, size) =
+        let (count, after) = Draw/draw(@Nat, seed, size);
+        chars(after, size, count),
+}
+
+let bits(seed: Seed, count: Nat) -> {Bits, Seed} =
+    match count
+    | 0 => (b[], seed)
+    | more + 1; (acc, after) =>
+        let (bit, rest) = Draw/draw(@Bool, after, 0);
+        (b[..acc, bit], rest)
+    end;
+
+satisfy Draw(Bits) {
+    draw(seed, size) =
+        let (count, after) = Draw/draw(@Nat, seed, size);
+        bits(after, count),
+}
+
+let bytes(seed: Seed, count: Nat) -> {Bytes, Seed} =
+    match count
+    | 0 => (x[], seed)
+    | more + 1; (acc, after) =>
+        let (byte, rest) = Draw/draw(@Byte, after, 0);
+        (x[..acc, byte], rest)
+    end;
+
+satisfy Draw(Bytes) {
+    draw(seed, size) =
+        let (count, after) = Draw/draw(@Nat, seed, size);
+        bytes(after, count),
+}
+
+satisfy Draw(Order) {
+    draw(seed, size) =
+        let (n, rest) = Seed/next(seed);
+        (match n % 3 | 0 => Order/lt() | 1 => Order/eq() | _ => Order/gt() end, rest),
+}
+
+-- `none` one case in four, so a drawn option is usually inhabited and the empty case still turns up early.
+satisfy (@A: Type, use Draw(A)) => Draw(Option(A)) {
+    draw(seed, size) =
+        let (n, after) = Seed/next(seed);
+        match n % 4 == 0
+        | true => (Option/none(), after)
+        | false =>
+            let (value, rest) = Draw/draw(@A, after, size);
+            (Option/some(value), rest)
+        end,
+}
+
+satisfy (@A: Type, @E: Type, use Draw(A), use Draw(E)) => Draw(Result(A, E)) {
+    draw(seed, size) =
+        let (n, after) = Seed/next(seed);
+        match n % 4 == 0
+        | true =>
+            let (failure, rest) = Draw/draw(@E, after, size);
+            (Result/failure(failure), rest)
+        | false =>
+            let (value, rest) = Draw/draw(@A, after, size);
+            (Result/success(value), rest)
+        end,
+}
+
+let elements(@A: Type, use Draw(A), seed: Seed, size: Nat, count: Nat) -> {List(A), Seed} =
+    match count
+    | 0 => ([], seed)
+    | more + 1; (acc, after) =>
+        let (value, rest) = Draw/draw(@A, after, size);
+        ([..acc, value], rest)
+    end;
+
+-- At most `size` elements, each drawn at the same size.
+satisfy (@A: Type, use Draw(A)) => Draw(List(A)) {
+    draw(seed, size) =
+        let (count, after) = Draw/draw(@Nat, seed, size);
+        elements(after, size, count),
+}
+
+satisfy Draw({}) {
+    draw(seed, size) = ((), seed),
+}
+
+satisfy (@A: Type, use Draw(A)) => Draw({A}) {
+    draw(seed, size) =
+        let (a, rest) = Draw/draw(@A, seed, size);
+        ((a,), rest),
+}
+
+satisfy (@A: Type, @B: Type, use Draw(A), use Draw(B)) => Draw({A, B}) {
+    draw(seed, size) =
+        let (a, after) = Draw/draw(@A, seed, size);
+        let (b, rest) = Draw/draw(@B, after, size);
+        ((a, b), rest),
+}
+
+satisfy (@A: Type, @B: Type, @C: Type, use Draw(A), use Draw(B), use Draw(C)) => Draw({A, B, C}) {
+    draw(seed, size) =
+        let (a, first) = Draw/draw(@A, seed, size);
+        let (b, second) = Draw/draw(@B, first, size);
+        let (c, rest) = Draw/draw(@C, second, size);
+        ((a, b, c), rest),
+}
+
+pub use Draw/*;

@@ -22,6 +22,7 @@ mod operators;
 mod packages;
 mod perimeter;
 mod positivity;
+mod property;
 mod recursion;
 mod reduction;
 mod runtime;
