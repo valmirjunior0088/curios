@@ -151,7 +151,11 @@ export async function run(config) {
     },
     random: (count) => {
       const bytes = new Uint8Array(count);
-      crypto.getRandomValues(bytes);
+
+      // Web Crypto caps one `getRandomValues` at 65536 bytes (a `QuotaExceededError` past it), so a larger request is filled a slice at a time; the native host has no such ceiling, and `rand/bytes` promises none.
+      for (let offset = 0; offset < count; offset += 65536) {
+        crypto.getRandomValues(bytes.subarray(offset, offset + 65536));
+      }
 
       return encodeBytes(bytes);
     },
