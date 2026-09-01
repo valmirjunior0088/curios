@@ -15,7 +15,7 @@ use std::{
     sync::Arc,
 };
 
-/// The element type of a wire [`WireType::List`] — the same vocabulary minus `List` itself, so a list of lists is unrepresentable rather than merely unchecked. Codegen's host-boundary force and embed steps handle exactly one level of nesting (a deep force for `Bytes`/`Handle` elements, a shallow one for scalars), and the runtime's uniform `List` load cannot distinguish layers, so a second level would silently hand the host rope structs where flat arrays belong. This type is what makes that unwritable.
+/// The element type of a wire [`WireType::List`] — the same vocabulary minus `List` itself, so a list of lists is unrepresentable rather than merely unchecked; `README.md` states why one level is all the boundary handles.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum WireLeaf {
@@ -63,7 +63,7 @@ pub struct WireSignature {
 
 /// The wasm import namespace a foreign function links under — the closed pair both ends agree on. `Sys` is the fixed builtin substrate, consumable only by the standard library; `Ffi` is a user's own `foreign` declaration.
 ///
-/// Two variants rather than a `&'static str`, so the namespaces that exist are exactly the namespaces that can be written. It archives as its own discriminant, which is the byte a hand-rolled code table used to assign — and that table came with a panic asserting a validity the string type could not give it.
+/// Two variants rather than a `&'static str`, so the namespaces that exist are exactly the namespaces that can be written — `README.md`'s decision, with what the string type it replaced could not give.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[curios_archive::archived]
 pub enum Namespace {
