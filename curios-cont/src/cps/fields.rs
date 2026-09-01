@@ -1,4 +1,4 @@
-//! Continuation scalar replacement: a tuple that travels a join point as one aggregate parameter becomes that many field parameters, and the record in [`FieldGroup`] is what makes the change a fact of the program.
+//! Continuation scalar replacement: a tuple that travels a join point as one aggregate parameter becomes that many field parameters, and the record in [`FieldGroup`](super::FieldGroup) is what makes the change a fact of the program.
 //!
 //! Admission composes the two halves `documentation/design/toolchain/a-value-costs-when-it-is-kept-not-when-it-is-named.md` keeps separate: the backward half says every use of the parameter is a projection or an eligible transfer (`demands`, `Projected`), and the forward half says every flow reaching it is a construction or an alias of one (`origins`, `Constructed`). Loop backedges are the central case rather than an exclusion — an edge carrying the join's own parameter reads as the constructions that entered it, which is precisely what the forward fixpoint establishes.
 //!

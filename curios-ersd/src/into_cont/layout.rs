@@ -7,7 +7,7 @@ use {
     std::collections::BTreeMap,
 };
 
-/// How a variant family is encoded at runtime, decided per family from its registered schema alone — see [`Lowerer::family_encoding`].
+/// How a variant family is encoded at runtime, decided per family from its registered schema alone — see [`Layout::family_encoding`].
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum FamilyEncoding {
     /// Every constructor a tagged tuple `(tag, payload…)` — the general encoding.
@@ -106,7 +106,7 @@ impl<'a> Layout<'a> {
     ///
     /// Two shapes answer [`curios_cont::CpsSlot::Opaque`] whatever else is true, and for one reason: a carrier that is *sometimes* an immediate has no single heap type to name. A packed value is one; so is a value of an [`FamilyEncoding::Immediate`] family, whose bare constructor rides the i31 while its siblings allocate. Everything unshaped is opaque by definition.
     ///
-    /// A *family*-typed field is named here but not necessarily kept: slots are grouped by carrier, so giving a family its own carrier can cost the row width it would otherwise share with the uniform range. [`Lowerer::compute_row_layout`] lays the row out both ways and keeps this one only where it is free.
+    /// A *family*-typed field is named here but not necessarily kept: slots are grouped by carrier, so giving a family its own carrier can cost the row width it would otherwise share with the uniform range. [`Layout::compute_row_layout`] lays the row out both ways and keeps this one only where it is free.
     pub(super) fn slot_of(
         &mut self,
         module: &mut curios_cont::CpsModule,
@@ -254,12 +254,12 @@ impl<'a> Layout<'a> {
         &self.products[&schema]
     }
 
-    /// Whether every row of this width shares `schema` — see [`ProductSchema::shared`](curios_ersd::ProductSchema::shared).
+    /// Whether every row of this width shares `schema` — see [`ProductSchema::shared`](crate::ProductSchema::shared).
     pub(super) fn is_shared(&self, schema: ProductId) -> bool {
         self.source.product(schema).expect("live product").shared
     }
 
-    /// The Cont identity of a product schema, laying its row out on first use. See [`Lowerer::row_identity`] for why the reservation comes first.
+    /// The Cont identity of a product schema, laying its row out on first use. See [`Layout::row_identity`] for why the reservation comes first.
     pub(super) fn product_identity(
         &mut self,
         module: &mut curios_cont::CpsModule,

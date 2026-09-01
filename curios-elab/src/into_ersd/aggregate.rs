@@ -164,9 +164,7 @@ impl Lowering {
         schema
     }
 
-    /// Lower a tuple against its checked tuple type. Erasable fields drop; a type left with one relevant field collapses to it, whether or not a drop produced that width — the same relevant-arity rule [`struct_row`] applies, and the rule [`erase_proj`] reads back.
-    ///
-    /// [`struct_row`]: Self::struct_row [`erase_proj`]: Self::erase_proj
+    /// Lower a tuple against its checked tuple type. Erasable fields drop; a type left with one relevant field collapses to it, whether or not a drop produced that width — the same relevant-arity rule [`struct_row`](Self::struct_row) applies, and the rule [`erase_proj`](Self::erase_proj) reads back.
     pub(super) fn erase_tuple(
         &mut self,
         context: &mut Context,

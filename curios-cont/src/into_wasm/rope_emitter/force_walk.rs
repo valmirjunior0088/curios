@@ -2,7 +2,7 @@
 
 use super::{RopeData, shorthand::*};
 
-/// The walk machinery shared verbatim by [`RopeEmitter::emit_force_func`] and [`RopeEmitter::emit_bits_force_func`]: one scratch-local roster plus the invariant-bearing instruction blocks — entry shortcuts, view resolution, worklist growth and descent, pop, memoization — so the two grains cannot silently diverge on the discipline. Each emitter inlines only what genuinely differs: destination sizing, the chunk-count source, and the copy body.
+/// The walk machinery shared verbatim by [`RopeEmitter::emit_force_func`](super::RopeEmitter::emit_force_func) and [`RopeEmitter::emit_bits_force_func`](super::RopeEmitter::emit_bits_force_func): one scratch-local roster plus the invariant-bearing instruction blocks — entry shortcuts, view resolution, worklist growth and descent, pop, memoization — so the two grains cannot silently diverge on the discipline. Each emitter inlines only what genuinely differs: destination sizing, the chunk-count source, and the copy body.
 pub(super) struct ForceWalk<'r> {
     rope: &'r RopeData,
     elems: curios_wasm::TypeName,

@@ -1,6 +1,6 @@
 //! Core erasure into the erased representation ([`curios_ersd::Module`]).
 //!
-//! It consumes the meta-free Core [`Module`] and lowers it through the checked [`curios_ersd::ErsdBuilder`] into a verified [`curios_ersd::Module`], preserving the language's semantic identities — distinct `Bool`/`Byte` shapes, first-class switches and folds, schema-carrying products and variants. Every encoding decision (carriers, tag layouts, dispatch, loop synthesis) belongs to the later lowering out of the representation, not to erasure.
+//! It consumes the meta-free Core [`Module`](curios_core::Module) and lowers it through the checked [`curios_ersd::ErsdBuilder`] into a verified [`curios_ersd::Module`], preserving the language's semantic identities — distinct `Bool`/`Byte` shapes, first-class switches and folds, schema-carrying products and variants. Every encoding decision (carriers, tag layouts, dispatch, loop synthesis) belongs to the later lowering out of the representation, not to erasure.
 //!
 //! Erasure is a transcription under the **operand law**: every source subexpression erases to exactly one operand ([`curios_ersd::Atom`]) — an atomic value directly, a compound one bound by a statement in the builder's innermost open block, in evaluation order — and every reuse references the bound atom, never a re-erased copy. Divergence is explicit: an expression that provably never yields a value (a process exit, a vacuous elimination) reports the terminator that seals its block instead of an atom, and dead code after it is never erased.
 //!

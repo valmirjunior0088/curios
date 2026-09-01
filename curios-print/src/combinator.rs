@@ -2,7 +2,7 @@
 
 use super::Printer;
 
-/// Emits a literal string. Not a raw write: any newline it contains arms the pending-indentation logic, so multi-line literals indent correctly under [`indent`](crate::indent).
+/// Emits a literal string. Not a raw write: any newline it contains arms the pending-indentation logic, so multi-line literals indent correctly under [`indent`].
 pub fn pure<A>(a: A) -> Printer
 where
     A: Into<String>,
@@ -56,7 +56,7 @@ pub fn indent(printer: Printer) -> Printer {
     Printer::Indent(Box::new(printer))
 }
 
-/// A soft separator: a single space when the enclosing [`group`](crate::group) renders flat, a newline (plus indentation) when it breaks — or unconditionally, when no group encloses it.
+/// A soft separator: a single space when the enclosing [`group`] renders flat, a newline (plus indentation) when it breaks — or unconditionally, when no group encloses it.
 pub fn line() -> Printer {
     Printer::Line {
         flat: " ".into(),
@@ -72,7 +72,7 @@ pub fn soft_line() -> Printer {
     }
 }
 
-/// A mandatory break: always a newline, and no [`group`](crate::group) containing one renders flat — the fits scan fails on it.
+/// A mandatory break: always a newline, and no [`group`] containing one renders flat — the fits scan fails on it.
 pub fn hard_line() -> Printer {
     Printer::Line {
         flat: String::new(),
@@ -82,7 +82,7 @@ pub fn hard_line() -> Printer {
 
 /// A width-adaptive *sequence* of already-punctuated items: each gap becomes a space or a newline on its own, so the run wraps like prose instead of breaking everywhere at once.
 ///
-/// Use this where the items are short and interchangeable — the names of an import — and [`group`](crate::group) where they are structural parts that belong together or apart as a unit. Each item is measured and printed flat, so a fill never breaks *inside* an item; give it items that are already whole.
+/// Use this where the items are short and interchangeable — the names of an import — and [`group`] where they are structural parts that belong together or apart as a unit. Each item is measured and printed flat, so a fill never breaks *inside* an item; give it items that are already whole.
 pub fn fill(items: impl IntoIterator<Item = Printer>) -> Printer {
     Printer::Fill(items.into_iter().collect())
 }

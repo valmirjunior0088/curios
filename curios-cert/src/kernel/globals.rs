@@ -132,7 +132,7 @@ impl Globals {
         &self.partial
     }
 
-    /// The `induct` registry in scope here, as the base of a declaration set. See [`crate::Declarations`] on why the base is analyzed rather than believed.
+    /// The `induct` registry in scope here, as the base of a declaration set. See [`curios_analysis::Declarations`] on why the base is analyzed rather than believed.
     pub(crate) fn inducts(&self) -> &BTreeMap<Global, InductDecl> {
         &self.inducts
     }

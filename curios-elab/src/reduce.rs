@@ -965,7 +965,7 @@ fn normalize_arguments(context: &mut Context, term: Term) -> Result<Term, Reduce
     })
 }
 
-/// Normalize a function/Π telescope (`Func`/`FuncType`): each parameter type, then the body opened under a fresh variable and re-closed under its label — the display-side counterpart of [`convert`]'s `compare_func_type` walk.
+/// Normalize a function/Π telescope (`Func`/`FuncType`): each parameter type, then the body opened under a fresh variable and re-closed under its label — the display-side counterpart of [`convert`](mod@crate::convert)'s `compare_func_type` walk.
 fn normalize_telescope(
     context: &mut Context,
     telescope: Telescope<Term>,

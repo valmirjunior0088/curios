@@ -23,7 +23,7 @@ use {
 
 /// Where compaction moved the identities a caller outside the module may still hold.
 ///
-/// Only the two an [`Atom`](crate::Atom) can carry. A consumer that stored atoms — `curios-elab`'s erased environment is the one that does — must rewrite them through these before using the module again.
+/// Only the two an [`Atom`] can carry. A consumer that stored atoms — `curios-elab`'s erased environment is the one that does — must rewrite them through these before using the module again.
 #[derive(Debug, Clone)]
 pub struct Compaction {
     pub values: std::collections::BTreeMap<ValueId, ValueId>,
@@ -330,7 +330,7 @@ impl Module {
 
     /// Drop every tombstone from every arena and rewrite each stored identity to where it moved.
     ///
-    /// The one pass that invalidates identities, so it reports the two spaces anything *outside* a module can hold: [`Atom`](crate::Atom) carries a `ValueId`, a `FunctionId`, or a `ConstantId`, and constants are interned in a plain vector this never touches. Blocks, statements and recursive groups are named only from within, so they are compacted and not reported.
+    /// The one pass that invalidates identities, so it reports the two spaces anything *outside* a module can hold: [`Atom`] carries a `ValueId`, a `FunctionId`, or a `ConstantId`, and constants are interned in a plain vector this never touches. Blocks, statements and recursive groups are named only from within, so they are compacted and not reported.
     ///
     /// Valid only on a finished module — a reserved-but-undefined slot reads as a tombstone here and would be dropped. Callers verify afterwards: a remap gap rewrites nothing and says nothing, and a stale index still addresses a live slot, so the walk cannot be trusted to fail loudly on its own.
     pub fn compact(&mut self) -> Compaction {

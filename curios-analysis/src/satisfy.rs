@@ -1,6 +1,6 @@
 //! Whether a declaration's universe constraints can be satisfied at all.
 //!
-//! The kernel *assumes* an item's [`UniverseContext`] while checking it — that is what lets a correct polymorphic definition through, since its recorded constraints are exactly the hypotheses its level questions need. An unsatisfiable set is therefore not a harmless oddity but a hypothesis set from which everything follows: [`entails`](crate::entails) starts proving whatever it is asked, `check_instance` stops discharging anything, and the universe discipline that keeps the paradox out stops applying.
+//! The kernel *assumes* an item's [`UniverseContext`](curios_core::UniverseContext) while checking it — that is what lets a correct polymorphic definition through, since its recorded constraints are exactly the hypotheses its level questions need. An unsatisfiable set is therefore not a harmless oddity but a hypothesis set from which everything follows: `entails` starts proving whatever it is asked, `check_instance` stops discharging anything, and the universe discipline that keeps the paradox out stops applying.
 //!
 //! `curios-elab` decides the same question in its solver, and this is deliberately a *second* implementation rather than a copy. A transcription would inherit whatever the original gets wrong and agree for that reason, which is the failure the shared analyses already demonstrate; written from the constraint semantics instead, the two can disagree, and a disagreement is a signal.
 //!
@@ -8,7 +8,7 @@
 //!
 //! # The closure half is not here, and that is the correction
 //!
-//! Deciding whether a context is *closed* used to sit beside this as a second `pub fn`, and it was a character-for-character transcription of the elaborator's own test — a second opinion known to be worth nothing, which `documentation/soundness.md` recorded as such. Rewriting it independently was the proposed remedy and does not survive inspection: the predicate is "every parameter index is below the declared count and no level holds a metavariable", which has essentially one implementation, so any rewrite would agree by construction rather than by independence. It is now [`UniverseContext::is_closed`], decided once on the data it is about.
+//! Deciding whether a context is *closed* used to sit beside this as a second `pub fn`, and it was a character-for-character transcription of the elaborator's own test — a second opinion known to be worth nothing, which `documentation/soundness.md` recorded as such. Rewriting it independently was the proposed remedy and does not survive inspection: the predicate is "every parameter index is below the declared count and no level holds a metavariable", which has essentially one implementation, so any rewrite would agree by construction rather than by independence. It is now [`UniverseContext::is_closed`](curios_core::UniverseContext::is_closed), decided once on the data it is about.
 //!
 //! Satisfiability is the opposite case and stays written twice, because here there is real algorithmic freedom for the two to differ in: this is a difference-constraint search with backtracking, and the elaborator's is a run of its solver. That is the line — a property of the data is read once; a question that needs a procedure is answered twice.
 //!

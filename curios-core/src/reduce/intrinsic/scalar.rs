@@ -1,6 +1,6 @@
 //! The per-carrier operand folds: reduce both sides, and answer from the values when both are literals.
 //!
-//! One function per carrier and arity, each doing the same three things — reduce, match a literal pair, rebuild the redex when the match fails. What a failed match falls through to is the caller's business: the laws in [`laws`](super::laws), or nothing.
+//! One function per carrier and arity, each doing the same three things — reduce, match a literal pair, rebuild the redex when the match fails. What a failed match falls through to is the caller's business: the laws in [`laws`], or nothing.
 
 use {
     super::*,
@@ -106,7 +106,7 @@ pub(super) fn reduce_int_binary(
     }))
 }
 
-/// `Int/div`/`Int/rem`: like [`reduce_int_binary`], but a divisor that reduces to literal zero is a reported error — mathematically undefined, following `BinGet`'s pattern. The fold itself is exact and total past that: the type level pretends ℤ (see [`Int`]).
+/// `Int/div`/`Int/rem`: like [`reduce_int_binary`], but a divisor that reduces to literal zero is a reported error — mathematically undefined, following `BinGet`'s pattern. The fold itself is exact and total past that: the type level pretends ℤ (see `Int`).
 pub(super) fn reduce_int_division(
     reducer: &mut impl Reducer,
     left: &Term,

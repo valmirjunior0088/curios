@@ -157,7 +157,7 @@ pub(crate) fn check_rec_group(
 /// 7. Every constructor's parameter prefix agrees with the arity's, domain by domain — `check_constructed`. See the note below on why that prefix exists at all.
 /// 8. Every constructor states as many index targets as the family declares indices — `check_constructed`.
 /// 9. Every index target inhabits the index telescope at the constructor's own parameters — `check_constructed`. This is the clause nothing asked for a long time: a target is read by inversion and by the arm rule, and both reached it without any judgment having typed it.
-/// 10. The declaration is strictly positive modulo polarity. That one is *deliberately* not here: the occurrence relation closes transitively across declarations, so it is decided over the whole set at once by [`positivity_vectors`](crate::positivity_vectors) rather than per entry.
+/// 10. The declaration is strictly positive modulo polarity. That one is *deliberately* not here: the occurrence relation closes transitively across declarations, so it is decided over the whole set at once by [`positivity_vectors`](curios_analysis::positivity_vectors) rather than per entry.
 ///
 /// # What is unspellable rather than checked
 ///
@@ -202,7 +202,7 @@ pub(crate) fn check_induct_decl(
 
 /// The declared result sort is a *literal* sort, not a term that reduces to one.
 ///
-/// Every other consumer of this field reduces before reading it — `Sort::of` through `as_sort`, `check_signature` and `check_non_informative` through `Reducer::reduce_forced` — and exactly one does not: the `Prop`-valued index guard in [`invert_indices`](crate::invert_indices) matches `Subterm::Prop` on the nose. So a `result_sort` that unfolds to `Prop` made the family a proposition to every reader but that one, which is the reader whose silence is unsound: inversion went on to tell a proposition's constructors apart, and the arm it excused as impossible was reachable. Requiring the field to be literal is what makes that syntactic match correct rather than lucky; teaching each reader to reduce would instead leave the next syntactic reader to rediscover the same hole.
+/// Every other consumer of this field reduces before reading it — `Sort::of` through `as_sort`, `check_signature` and `check_non_informative` through `Reducer::reduce_forced` — and exactly one does not: the `Prop`-valued index guard in [`invert_indices`](curios_analysis::invert_indices) matches `Subterm::Prop` on the nose. So a `result_sort` that unfolds to `Prop` made the family a proposition to every reader but that one, which is the reader whose silence is unsound: inversion went on to tell a proposition's constructors apart, and the arm it excused as impossible was reachable. Requiring the field to be literal is what makes that syntactic match correct rather than lucky; teaching each reader to reduce would instead leave the next syntactic reader to rediscover the same hole.
 ///
 /// Nothing legitimate is refused: the surface grammar admits only the keywords `Type` and `Prop` after a declaration's `:`, so an entry the elaborator builds satisfies this by construction.
 fn check_declared_sort(result_sort: &Term) -> Result<(), KernelError> {

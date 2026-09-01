@@ -575,7 +575,7 @@ impl<'m> Evaluator<'m> {
         Outcome::Done(accumulator)
     }
 
-    /// One peel, evaluated: the empty block on an empty sequence, else the cons block over the head and the suffix after it. The non-looping sibling of [`Interpreter::eval_fold_sequence`], sharing its element view and its suffix view so the two cannot disagree about what a peel exposes.
+    /// One peel, evaluated: the empty block on an empty sequence, else the cons block over the head and the suffix after it. The non-looping sibling of [`Evaluator::eval_fold_sequence`], sharing its element view and its suffix view so the two cannot disagree about what a peel exposes.
     fn eval_uncons_sequence(
         &mut self,
         grain: SequenceGrain,

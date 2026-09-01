@@ -1042,7 +1042,7 @@ impl Term {
         }
     }
 
-    /// Build a match node around an already-built motive scope. The `*_scoped` constructors are `into_core`'s entry points: lowering carries the *written* motive term (see [`Term::match_motive_written`]) rather than a label and a body, because it cannot know the arity to close at. Every label-taking constructor above delegates here after building the canonical arity-1 scope.
+    /// Build a match node around an already-built motive scope. The `*_scoped` constructors are `into_core`'s entry points: lowering carries the *written* motive term (see `Term::match_motive_written`) rather than a label and a body, because it cannot know the arity to close at. Every label-taking constructor above delegates here after building the canonical arity-1 scope.
     fn match_scoped(head: Term, motive: Scope<Many>, cases: Cases) -> Self {
         Self::from(Subterm::Match(Match {
             head,
@@ -1492,7 +1492,7 @@ impl Term {
     ///
     /// What it replaces is a fresh `Rc` whose caches start empty, discarding every `hash`, `frees` and `scalars` fill the original had earned. That is affordable when a rewrite rewrites something and pure waste when it does not — and *does not* is the common case. `project_erased_universes` was measured returning an equal term on 1 491 163 of 1 491 163 calls on a nine-definition web of definitions each naming the one before it twice, spending 1.0 s rebuilding and a further 1.6 s re-hashing what it rebuilt, for 4.9 GB of allocation that answered the identity function.
     ///
-    /// No caller can tell the difference, because three of them already receive the original node: [`Visit::universes_only`] and [`Visit::prune`] both short-circuit to `self.clone()`, and [`Mode::Sharing`] substitutes a canonical node outright. A span lives on this wrapper rather than on the node, so sharing one node across occurrences was always representable.
+    /// No caller can tell the difference, because three of them already receive the original node: [`Visit::universes_only`] and [`Visit::prune`] both short-circuit to `self.clone()`, and `Mode::Sharing` substitutes a canonical node outright. A span lives on this wrapper rather than on the node, so sharing one node across occurrences was always representable.
     fn rebuilt(&self, subterm: Subterm) -> Self {
         if subterm == **self {
             return self.clone();

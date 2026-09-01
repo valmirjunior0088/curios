@@ -884,7 +884,7 @@ pub(crate) fn print_term(term: Term) -> Printer {
     })
 }
 
-/// Note that `build`'s document begins at `offset`, so the renderer can place there whatever the source held and the document does not — see [`Printer::Mark`](curios_print::Printer::Mark). `None` (a spanless node) notes nothing.
+/// Note that `build`'s document begins at `offset`, so the renderer can place there whatever the source held and the document does not — see [`Printer::Mark`]. `None` (a spanless node) notes nothing.
 ///
 /// **Nothing is claimed and nothing is decided here.** A comment's place is a fact about the output — which line it rides, or which line it takes — and only the renderer knows that. What this marks is the one thing the builder does know: where in the source the document has reached.
 fn marked(offset: Option<usize>, build: impl FnOnce() -> Printer) -> Printer {

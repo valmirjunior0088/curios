@@ -69,7 +69,7 @@ impl Slot {
     }
 }
 
-/// The worker's half of a lookup's wakeup pipe: the write end whose single byte makes the host's polled read end fire. The matching read end travels to the host as [`Pending::ready`].
+/// The worker's half of a lookup's wakeup pipe: the write end whose single byte makes the host's polled read end fire. The matching read end travels to the host as [`Pending::fd`].
 struct Signal {
     fd: OwnedFd,
 }

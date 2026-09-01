@@ -10,7 +10,7 @@
 //!
 //! # What is already in scope
 //!
-//! A compile judges only the user's items, so the prelude's classification arrives on [`Definition::totality`] rather than being recomputed. That field is not taken on faith: the walk that runs when the archive is built starts from an empty environment, recomputes every flag, and refuses a definition whose recorded verdict is more generous than the kernel's own. Trusting it afterwards is trusting a verdict this crate already reached — the same structure as the rest of the archive-verdict pattern.
+//! A compile judges only the user's items, so the prelude's classification arrives on [`Definition::totality`](curios_core::Definition::totality) rather than being recomputed. That field is not taken on faith: the walk that runs when the archive is built starts from an empty environment, recomputes every flag, and refuses a definition whose recorded verdict is more generous than the kernel's own. Trusting it afterwards is trusting a verdict this crate already reached — the same structure as the rest of the archive-verdict pattern.
 
 use {
     super::{Globals, Kernel, KernelError, Sort},
@@ -44,7 +44,7 @@ fn locally_partial(kernel: &mut Kernel, term: &Term, memo: &mut HashMap<Term, bo
 
 /// Every definition in `module` that is not known to terminate, closed transitively over what each one mentions.
 ///
-/// What `globals` already answers for is read rather than recomputed: its non-total set seeds the closure, and an item it declares has its flags read from [`Definition::totality`]. That is what keeps a compile from re-analyzing the standard library, and it is certified rather than believed — the walk from an empty environment recomputes every flag and refuses a definition whose recorded verdict is more generous than the kernel's own, so an archive that exists carries verdicts this crate reached.
+/// What `globals` already answers for is read rather than recomputed: its non-total set seeds the closure, and an item it declares has its flags read from [`Definition::totality`](curios_core::Definition::totality). That is what keeps a compile from re-analyzing the standard library, and it is certified rather than believed — the walk from an empty environment recomputes every flag and refuses a definition whose recorded verdict is more generous than the kernel's own, so an archive that exists carries verdicts this crate reached.
 ///
 /// The stamp comparison runs after the closure, against the closed set, because a stamp *asserts* the closure: it is what `Globals::of` seeds a later walk's non-total set from, so a `Total` on a definition partial only through its mentions is exactly as generous as one on a diverging body. Compared against the local half alone — which this once was — that lie passed the filing walk, and a proof reaching the mis-stamped definition was then certified on the compile path with nothing anywhere refusing the route.
 ///

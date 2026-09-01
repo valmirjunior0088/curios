@@ -25,7 +25,7 @@ pub(crate) enum Origin {
     Unreached,
     /// Every flow reaching it is a tuple construction, or an alias of one, and these are the widths they carry. One width is an exact product; several are a variant, which travels as its widest constructor with each narrower edge filled.
     Constructed(BTreeSet<usize>),
-    /// Every flow reaching it is a [`CpsValueExpr::Row`](super::CpsValueExpr::Row) of this row, or an alias of one — all at the row's width, carried here so the rewrite needs no module access. Always settled, because the door pads every construction; a merge with a different row or with a structural tuple is `Opaque`, which upstream typing makes unreachable and this lattice makes safe anyway.
+    /// Every flow reaching it is a [`CpsValueExpr::Row`] of this row, or an alias of one — all at the row's width, carried here so the rewrite needs no module access. Always settled, because the door pads every construction; a merge with a different row or with a structural tuple is `Opaque`, which upstream typing makes unreachable and this lattice makes safe anyway.
     Row(super::CpsRowId, usize),
     /// Some flow is not a visible construction — a call result, a literal, a closure, a projection.
     Opaque,

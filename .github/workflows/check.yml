@@ -99,7 +99,7 @@ jobs:
       - name: Build runtime launcher
         run: cargo x runtime
       - name: Run cargo doc
-        run: cargo doc --workspace --no-deps
+        run: cargo doc --workspace --no-deps --document-private-items
 
   wasm:
     name: Browser bundle

@@ -3,7 +3,7 @@ use {
     std::hash::{Hash, Hasher},
 };
 
-/// A surface reference, exactly as written in source: a [`Qualifier`](Qualifier) plus an `is_abs` flag marking a leading `/` (an absolute, root-anchored path). It is *not* a canonical identity — resolution turns a `Name` into an always-absolute `Qualifier` — so equality and hashing compare the written form (ignoring the span, as everywhere in this crate).
+/// A surface reference, exactly as written in source: a [`Qualifier`] plus an `is_abs` flag marking a leading `/` (an absolute, root-anchored path). It is *not* a canonical identity — resolution turns a `Name` into an always-absolute `Qualifier` — so equality and hashing compare the written form (ignoring the span, as everywhere in this crate).
 #[derive(Debug, Clone)]
 pub struct Name {
     span: Option<Span>,

@@ -252,7 +252,7 @@ fn struct_metavar(declaration: &StructDecl) -> Option<MetavarId> {
 
 /// The first unsolved *universe* metavariable one of `value`'s levels holds.
 ///
-/// A level holding one is elaboration residue exactly as a `Metavar` node is, and no judgment refuses it: `Sort::of` reads `Type(?u)` and answers `Type(?u + 1)` without ever asking whether the level is ground, and [`closed`] inspects a `UniverseContext`'s *constraints* — the only place this crate looked for a meta level — never a level sitting inside a term. So this is not a question of which terms the walk reaches; it is the level algebra having no opinion about an unsolved level, which is why the refusal belongs at the boundary rather than inside a judgment.
+/// A level holding one is elaboration residue exactly as a `Metavar` node is, and no judgment refuses it: `Sort::of` reads `Type(?u)` and answers `Type(?u + 1)` without ever asking whether the level is ground, and [`closed`](curios_core::UniverseContext::is_closed) inspects a `UniverseContext`'s *constraints* — the only place this crate looked for a meta level — never a level sitting inside a term. So this is not a question of which terms the walk reaches; it is the level algebra having no opinion about an unsolved level, which is why the refusal belongs at the boundary rather than inside a judgment.
 fn universe_residue<B: Bound>(value: &B) -> Option<KernelError> {
     universe_metas(value)
         .into_iter()

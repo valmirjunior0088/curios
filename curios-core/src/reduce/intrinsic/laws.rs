@@ -1,6 +1,6 @@
 //! The algebraic rewrites a fold falls through to when its operands are not both literals.
 //!
-//! A total fold answers from values alone; these answer from *form* — an idempotent lattice operation on one operand, a ring identity, a self-comparison — so a term with a symbol in it still decides. Each is applied by [`then_laws`](super::then_laws) only after the value fold declined, which is what keeps a law from ever contradicting arithmetic.
+//! A total fold answers from values alone; these answer from *form* — an idempotent lattice operation on one operand, a ring identity, a self-comparison — so a term with a symbol in it still decides. Each is applied by [`then_laws`] only after the value fold declined, which is what keeps a law from ever contradicting arithmetic.
 
 use {
     crate::{Intrinsic, Nat, Subterm, Term},

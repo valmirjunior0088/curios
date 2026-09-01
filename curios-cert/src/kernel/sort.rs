@@ -2,13 +2,13 @@
 //!
 //! Conversion is type-directed in Curios: a goal at a `Prop`-sorted type is discharged without comparing the sides at all, because any two inhabitants of a proposition are definitionally equal. So before conversion can compare anything it has to know a type's *sort*, and that is a typing question.
 //!
-//! Answering it in full would need [`infer`](super::infer), which needs conversion, which is a cycle. The way out is the same one the elaborator takes: a *synthesis-only* type computation for neutral spines ([`synth_neutral`]) that reads types off binders and declarations without ever checking anything, and therefore never reaches conversion. It answers "what type does this spine have, if it has one" and nothing else.
+//! Answering it in full would need [`infer`](super::infer()), which needs conversion, which is a cycle. The way out is the same one the elaborator takes: a *synthesis-only* type computation for neutral spines ([`synth_neutral`]) that reads types off binders and declarations without ever checking anything, and therefore never reaches conversion. It answers "what type does this spine have, if it has one" and nothing else.
 //!
 //! Unlike the elaborator's, neither function here guesses. Where a shape cannot be classified the kernel refuses; see the module documentation on [`kernel`](super) for why a guessed level is the unsound direction.
 //!
 //! # Two roles, one body
 //!
-//! Asking a type's sort is two different questions depending on who asks, and they were one function for as long as that went unnoticed. [`Sort::of`] is a **lookup**: it classifies a type something has already checked, which is the only thing conversion can afford to call, since typing reaches conversion and the cycle would close. [`infer_sort`] is a **judgment**: it accepts a term *as* a type, and is what [`infer`](super::infer) calls.
+//! Asking a type's sort is two different questions depending on who asks, and they were one function for as long as that went unnoticed. [`Sort::of`] is a **lookup**: it classifies a type something has already checked, which is the only thing conversion can afford to call, since typing reaches conversion and the cycle would close. [`infer_sort`] is a **judgment**: it accepts a term *as* a type, and is what [`infer`](super::infer()) calls.
 //!
 //! They differ in exactly one function — [`Establish`], which says whether a type former's parts are classified or typed — and share everything else, the Π and Σ rules included. That is deliberate: the rules are subtle enough that a second copy would be a second chance to get them wrong, while the role is a one-word choice a caller has to make at the call site.
 //!
@@ -253,7 +253,7 @@ fn sort_of_binders<B: Bound>(
 ///
 /// A closed intrinsic quantifies over nothing and sits at level 0. A parameterized one carries its parameter's level: `List : Type u -> Type u`, and pinning that at 0 would claim the type is smaller than it is — the unsound direction, and what would let a large type be stored in a small universe.
 ///
-/// Reachable from [`infer_intrinsic`](super::infer::infer_intrinsic) as well, which types these formers rather than restating the rule: a second copy read the element's sort as the former's and typed a list of proofs at `Prop`.
+/// Reachable from `infer_intrinsic` as well, which types these formers rather than restating the rule: a second copy read the element's sort as the former's and typed a list of proofs at `Prop`.
 pub(crate) fn sort_of_intrinsic(
     kernel: &mut Kernel,
     intrinsic: &Intrinsic,
@@ -290,7 +290,7 @@ pub(crate) fn sort_of_intrinsic(
 ///
 /// `None` where the spine is not one this can type — a shape whose type would need a judgment rather than a lookup. Callers turn that into a refusal; nothing here guesses.
 ///
-/// This must never reach [`convert`](super::convert): it is what breaks the cycle between conversion and inference, and it stays broken only because every arm below is a lookup, a substitution, or a reduction.
+/// This must never reach [`convert`](super::convert()): it is what breaks the cycle between conversion and inference, and it stays broken only because every arm below is a lookup, a substitution, or a reduction.
 pub(crate) fn synth_neutral(kernel: &mut Kernel, term: &Term) -> Result<Option<Term>, KernelError> {
     // A projection's type is carried by its own group, so this is a read rather than a lookup and cannot re-enter the group it names.
     if let Some((group, index)) = term.as_rec_proj() {

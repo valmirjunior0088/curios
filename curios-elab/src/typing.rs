@@ -926,7 +926,7 @@ impl MotiveShape<'_> {
 
 /// Check that `motive` is a well-formed type family for an eliminator of the given [`MotiveShape`], returning it closed at that shape's arity.
 ///
-/// Two inputs reach here. A motive already closed at the eliminator's arity — synthesized, or a rebuilt match coming back through re-elaboration — is opened under its assumed binders and its body checked against `Type`, then re-closed so the motive carries its solved form. A *written* motive arrives from `into_core` un-scoped, in an arity-0 scope ([`Term::match_motive_written`]): it is an ordinary term, checked against the shape's motive type and then decomposed into the same canonical scope.
+/// Two inputs reach here. A motive already closed at the eliminator's arity — synthesized, or a rebuilt match coming back through re-elaboration — is opened under its assumed binders and its body checked against `Type`, then re-closed so the motive carries its solved form. A *written* motive arrives from `into_core` un-scoped, in an arity-0 scope (`Term::match_motive_written`): it is an ordinary term, checked against the shape's motive type and then decomposed into the same canonical scope.
 ///
 /// The elided hole — the bare metavariable `into_core` mints for an absent motive — is neither: it is wrapped at the eliminator's arity and left for synthesis or for `solve` to fill in.
 pub(crate) fn check_motive(

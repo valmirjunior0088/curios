@@ -364,7 +364,7 @@ pub fn check_proof_totality(
 ///
 /// Two properties follow from the seed rather than from care. **Coverage** is a consequence of elaboration being a typechecker: a position it never settles is a position the program was never typed at. And the **prelude boundary** is a consequence of replay — the archived prefix is defined into the context rather than elaborated, so it settles nothing and seeds nothing, and its verdicts arrive through [`recorded_totality`] instead.
 ///
-/// Sort-hood is decided here rather than at the hook because a type may still carry unsolved metavariables while elaborating. Post-zonk every solution is materialized, so [`is_prop`](crate::is_prop) is asked once per *distinct* type, and hash-consing keeps that set far smaller than the term count.
+/// Sort-hood is decided here rather than at the hook because a type may still carry unsolved metavariables while elaborating. Post-zonk every solution is materialized, so [`is_prop`] is asked once per *distinct* type, and hash-consing keeps that set far smaller than the term count.
 fn checked_proof_positions(
     context: &mut Context,
     cache: &mut Zonked,

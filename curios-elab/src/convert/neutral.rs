@@ -1,6 +1,6 @@
 //! Synthesizing the type of a neutral spine, and the universe-level identification that decides a problem whose sides differ in nothing else.
 //!
-//! Both are the *non*-structural half of conversion: [`synth_neutral`] answers what type a head-and-arguments term inhabits, which is what type-directed comparison needs before it can compare anything, and [`identify_universe_levels`] disposes of a problem by committing level equalities rather than by descending. The structural comparison that calls them lives with [`Convert`](super::Convert).
+//! Both are the *non*-structural half of conversion: [`synth_neutral`] answers what type a head-and-arguments term inhabits, which is what type-directed comparison needs before it can compare anything, and [`identify_universe_levels`] disposes of a problem by committing level equalities rather than by descending. The structural comparison that calls them lives with [`Convert`].
 
 use {
     super::*,

@@ -14,7 +14,7 @@ use {
     std::{fmt, path::Path, rc::Rc, str::FromStr},
 };
 
-/// A `mod` declaration: `module` is `Some` for an inline body (`mod m … end`) and `None` for the file-backed form (`mod m;`), whose body module discovery loads through the active [`RootSource`](crate::RootSource). The span locates a failed load at the declaration that requested it; like `Term`'s, it is excluded from `PartialEq`.
+/// A `mod` declaration: `module` is `Some` for an inline body (`mod m … end`) and `None` for the file-backed form (`mod m;`), whose body module discovery loads through the active [`RootSource`]. The span locates a failed load at the declaration that requested it; like `Term`'s, it is excluded from `PartialEq`.
 #[derive(Debug, Clone)]
 pub struct TopMod {
     pub span: Option<Span>,
@@ -205,7 +205,7 @@ pub enum TopItem {
     Test(TopTest),
 }
 
-/// A parsed module body: its top-level items in source order — an order that matters, since `use` scoping is point-of-use and flat-item order is the downstream topological-sort tiebreak. Parsed via `FromStr`, loaded from disk through a [`RootSource`](crate::RootSource), or built synthetically (the embedded `sys` prelude).
+/// A parsed module body: its top-level items in source order — an order that matters, since `use` scoping is point-of-use and flat-item order is the downstream topological-sort tiebreak. Parsed via `FromStr`, loaded from disk through a [`RootSource`], or built synthetically (the embedded `sys` prelude).
 #[derive(Debug, Clone, PartialEq)]
 pub struct Module {
     pub items: Vec<TopItem>,
@@ -238,14 +238,14 @@ impl Module {
         Ok((module, take_comments()))
     }
 
-    /// Read and parse a standalone module while retaining its source path for diagnostics. The prelude artifact builder uses this for `/syn` and `/std`; ordinary compilation reaches file-backed modules through [`RootSource`](crate::RootSource).
+    /// Read and parse a standalone module while retaining its source path for diagnostics. The prelude artifact builder uses this for `/syn` and `/std`; ordinary compilation reaches file-backed modules through [`RootSource`].
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, LoadError> {
         Self::read(path.as_ref()).map(|(module, _)| module)
     }
 
     /// [`Module::from_path`], additionally handing back the [`Source`] it parsed.
     ///
-    /// For [`RootSource`](crate::RootSource), which records what it read so a cache can verify a stored unit against the exact text that produced it. Handing the source back rather than the file's bytes is what keeps that record free: the parsed module's spans already hold this `Rc`, so retaining it costs a refcount.
+    /// For [`RootSource`], which records what it read so a cache can verify a stored unit against the exact text that produced it. Handing the source back rather than the file's bytes is what keeps that record free: the parsed module's spans already hold this `Rc`, so retaining it costs a refcount.
     pub(crate) fn read(path: &Path) -> Result<(Self, Rc<Source>), LoadError> {
         let source = Source::read(path).map_err(|error| LoadError::Read {
             path: path.into(),
@@ -353,7 +353,7 @@ pub(crate) fn parse_for_format(source: &Rc<Source>) -> Result<FormatInput, Parse
 }
 
 impl Entrypoint {
-    /// Reads and parses `path` as an entrypoint (top-level items followed by a tail expression). The file-path counterpart of the `FromStr` impl below, distinguished by keeping the real path in the [`Source`](Source) so diagnostics name the file; a parsed `Entrypoint` resolves its file-backed `mod` declarations separately, through whatever [`RootSource`](crate::RootSource) the caller pairs it with.
+    /// Reads and parses `path` as an entrypoint (top-level items followed by a tail expression). The file-path counterpart of the `FromStr` impl below, distinguished by keeping the real path in the [`Source`] so diagnostics name the file; a parsed `Entrypoint` resolves its file-backed `mod` declarations separately, through whatever [`RootSource`] the caller pairs it with.
     pub fn from_path(path: impl AsRef<Path>) -> Result<Self, LoadError> {
         Self::sourced(path).map(|(entrypoint, _)| entrypoint)
     }
@@ -371,7 +371,7 @@ impl Entrypoint {
             .map_err(LoadError::Parse)
     }
 
-    /// Reads `path` as an entrypoint, paired with the [`RootSource`](crate::RootSource) its own stem directory anchors and the text that was parsed — a bare file is a header like any other, so `mod util` in `main.crs` reads `main/util.crs`.
+    /// Reads `path` as an entrypoint, paired with the [`RootSource`] its own stem directory anchors and the text that was parsed — a bare file is a header like any other, so `mod util` in `main.crs` reads `main/util.crs`.
     ///
     /// The pairing is the point: [`from_path`](Self::from_path) leaves a parsed entrypoint's file-backed `mod` declarations unresolved, and every caller that opens a file then has to know which `RootSource` goes with it. That is one answer, not a caller's choice, so it lives beside the two calls it makes.
     ///
@@ -399,7 +399,7 @@ impl Entrypoint {
 }
 
 impl Entrypoint {
-    /// [`opened`](Self::opened) with `text` standing in for what `path` holds — an editor's unsaved buffer — paired with the same [`RootSource`](crate::RootSource) the file would get, so its file-backed `mod` declarations resolve from its stem directory exactly as if it had been saved. The source names `path`, so a diagnostic about it reads as one about the file.
+    /// [`opened`](Self::opened) with `text` standing in for what `path` holds — an editor's unsaved buffer — paired with the same [`RootSource`] the file would get, so its file-backed `mod` declarations resolve from its stem directory exactly as if it had been saved. The source names `path`, so a diagnostic about it reads as one about the file.
     ///
     /// The overlay for the *rest* of the unit is the loader's to carry (`RootSource::with_overlay`); this is the one file the loader never reads, supplied the one way it can be.
     pub fn overlaid(

@@ -1,6 +1,6 @@
 //! The walk that decides what to emit: one pass over the erased arena, statement by statement and block by block, in continuation-passing order.
 //!
-//! Every method here answers "what does this construct become", and hands the answer to the [`Emitter`](super::Emitter) that writes it or the [`Layout`](super::Layout) that shapes it. The split is what keeps this file about control flow alone — nothing below mints a Cont value or lays out a row, and nothing there descends into a block.
+//! Every method here answers "what does this construct become", and hands the answer to the [`Emitter`] that writes it or the [`Layout`] that shapes it. The split is what keeps this file about control flow alone — nothing below mints a Cont value or lays out a row, and nothing there descends into a block.
 
 use {
     super::{
@@ -1156,7 +1156,7 @@ impl Lowerer<'_> {
 
     /// One collapsed arm body: a lone payload aliases the scrutinee, which *is* the payload under the collapsed encoding; a wider row projects untagged fields. Returns a body rather than a continuation because the caller inlines it with no dispatch to target it.
     ///
-    /// The aliasing is sound *here* and only here. A collapsed family has one constructor, so the scrutinee is the payload on every path there is. The immediate encoding looks like the same shape and is not — its scrutinee is a scalar on one path and a tuple on the other — so it binds through [`lower_immediate_arm`] instead. Sharing this function with it miscompiled a loop that did arithmetic on the payload; see [`curios_cont::CpsIntrinsic::ImmediateGet`].
+    /// The aliasing is sound *here* and only here. A collapsed family has one constructor, so the scrutinee is the payload on every path there is. The immediate encoding looks like the same shape and is not — its scrutinee is a scalar on one path and a tuple on the other — so it binds through [`lower_immediate_arm`](Self::lower_immediate_arm) instead. Sharing this function with it miscompiled a loop that did arithmetic on the payload; see [`curios_cont::CpsIntrinsic::ImmediateGet`].
     fn lower_collapsed_arm(
         &mut self,
         arm: &VariantArm,

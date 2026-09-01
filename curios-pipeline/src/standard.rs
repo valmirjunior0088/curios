@@ -1,6 +1,6 @@
 //! The fold with the fixed prelude in front of it.
 //!
-//! **The scope-agnostic half is [`compile_entrypoint`](crate::compile_entrypoint), and it stays that way.** It takes a [`Prefix`](curios_unit::Prefix) and cannot tell which unit is `/std`; nothing here changes that, and nothing there calls anything here. What this module adds is the *standard* prefix — the one every product puts in scope — so that the answer to "what does a Curios program get for free" is written once.
+//! **The scope-agnostic half is [`compile_entrypoint`], and it stays that way.** It takes a [`Prefix`] and cannot tell which unit is `/std`; nothing here changes that, and nothing there calls anything here. What this module adds is the *standard* prefix — the one every product puts in scope — so that the answer to "what does a Curios program get for free" is written once.
 //!
 //! It used to be written three times. The native product, the browser product and this crate's own test suite each spelled `with_prelude(|prelude| … Prefix::over(from_ref(&prelude)), &SYNTAX, …)` by hand, under the reading that naming the standard library is a product's decision. That reading survives — a product may still hand the fold any prefix it likes — but three callers deciding it identically is a missing function rather than a policy, and the third of them was not a product at all.
 

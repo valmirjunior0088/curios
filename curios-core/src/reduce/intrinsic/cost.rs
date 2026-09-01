@@ -16,7 +16,7 @@ pub(super) fn packed_bound(grain: Grain, bits: u64) -> Cost {
 
 /// What a closed binary fold on two big numbers may construct, charged before it runs.
 ///
-/// Every operation routed through [`reduce_nat_binary`] and [`reduce_int_binary`] has a result no wider than `left + right + 1` bits: a sum is at most one bit past the wider operand, a product is exactly the two widths together, a quotient or remainder is no wider than its dividend, and a bitwise operation is no wider than the wider operand. One conservative bound rather than six exact ones, because the price list permits overcharging and forbids the opposite — six formulas would be six chances to get the direction wrong for a saving no program would notice.
+/// Every operation routed through [`reduce_nat_binary`](super::nat::reduce_nat_binary) and [`reduce_int_binary`](super::scalar::reduce_int_binary) has a result no wider than `left + right + 1` bits: a sum is at most one bit past the wider operand, a product is exactly the two widths together, a quotient or remainder is no wider than its dividend, and a bitwise operation is no wider than the wider operand. One conservative bound rather than six exact ones, because the price list permits overcharging and forbids the opposite — six formulas would be six chances to get the direction wrong for a saving no program would notice.
 ///
 /// **The shifts are deliberately not routed through those two**, and that is the whole reason this is a named function with a doc rather than an expression. See [`shift_bound`].
 pub(super) fn operand_bound(left: u64, right: u64) -> Cost {

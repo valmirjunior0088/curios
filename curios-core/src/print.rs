@@ -538,7 +538,7 @@ fn bin_concat_entries(grain: Grain, operands: Vec<Term>, frame: Frame, entries: 
     }
 }
 
-/// The surface infix symbol an operator intrinsic prints as, or `None` for an intrinsic with no infix spelling — the bitwise ops, conversions, `min`/`max`, and the `Bool.xor` that `!=` desugars through. Exactly the operators the surface language spells infix ([`InfixOp::symbol`](super::InfixOp::symbol)); the concept-dispatched arithmetic/comparison operators plus the two hardcoded `Bool` short-circuits.
+/// The surface infix symbol an operator intrinsic prints as, or `None` for an intrinsic with no infix spelling — the bitwise ops, conversions, `min`/`max`, and the `Bool.xor` that `!=` desugars through. Exactly the operators the surface language spells infix (`InfixOp::symbol`); the concept-dispatched arithmetic/comparison operators plus the two hardcoded `Bool` short-circuits.
 fn infix_symbol(intrinsic: &Intrinsic) -> Option<&'static str> {
     Some(match intrinsic {
         Intrinsic::NatAdd(..) | Intrinsic::IntAdd(..) | Intrinsic::FltAdd(..) => "+",

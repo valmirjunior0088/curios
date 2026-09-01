@@ -216,7 +216,7 @@ impl Free {
 ///
 /// A key set that could occur has at most one entry per index — two mints with the same index are one value — so this also agrees with the structural order on every map that survives a round trip.
 ///
-/// Both halves are written by hand for that reason, and **a third comparison surface on [`Mint`](super::Mint) must be written by hand too — a derive there is the bug this note exists to prevent.** A derived comparison reads the hint, so the live and archived orderings would disagree only on maps that round-trip, with nothing to surface the divergence.
+/// Both halves are written by hand for that reason, and **a third comparison surface on [`Mint`] must be written by hand too — a derive there is the bug this note exists to prevent.** A derived comparison reads the hint, so the live and archived orderings would disagree only on maps that round-trip, with nothing to surface the divergence.
 #[cfg(feature = "archive")]
 mod archived_mint {
     use {

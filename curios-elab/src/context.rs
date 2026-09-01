@@ -450,7 +450,7 @@ impl Context {
         }
     }
 
-    /// Read half of the elaboration cache (see [`Context::get_or_init_elaborated`] for the full contract). Applies the O(1) groundness gate, then either answers from the cache (`Hit`), reports the term ineligible (`Uncacheable`), or snapshots `mutation_stamp` for the caller to thread back into [`record_elaborated`] (`Miss`). Pure: it never mutates the context, so a driver may probe speculatively at a frame push.
+    /// Read half of the elaboration cache (see [`Context::get_or_init_elaborated`] for the full contract). Applies the O(1) groundness gate, then either answers from the cache (`Hit`), reports the term ineligible (`Uncacheable`), or snapshots `mutation_stamp` for the caller to thread back into [`record_elaborated`](Self::record_elaborated) (`Miss`). Pure: it never mutates the context, so a driver may probe speculatively at a frame push.
     pub(crate) fn probe_elaborated(&self, term: &Term, expected: Option<&Term>) -> ElabProbe {
         let ground = |t: &Term| {
             !t.has_metavar() && !self.has_unsolved_universe_meta(t) && !t.has_local_free()
@@ -471,9 +471,7 @@ impl Context {
         }
     }
 
-    /// Write half of the elaboration cache, paired with a [`probe_elaborated`] `Miss`. Keys the same way the probe did (spans excluded from `Term` equality, so the un-restamped result the caller passes keys identically) and defers to [`insert_elaborated`]'s purity/groundness condition against the snapshotted `stamp`.
-    ///
-    /// [`probe_elaborated`]: Context::probe_elaborated [`insert_elaborated`]: Context::insert_elaborated
+    /// Write half of the elaboration cache, paired with a [`probe_elaborated`](Self::probe_elaborated) `Miss`. Keys the same way the probe did (spans excluded from `Term` equality, so the un-restamped result the caller passes keys identically) and defers to [`insert_elaborated`](Self::insert_elaborated)'s purity/groundness condition against the snapshotted `stamp`.
     pub(crate) fn record_elaborated(
         &mut self,
         term: &Term,
@@ -499,9 +497,7 @@ impl Context {
         }
     }
 
-    /// Whether a [`probe_elaborated`] `Miss` may be recorded: the purity and groundness condition, plus the *settled-globals* gate. Every global the entry names — in the result, and in the `Check` `expected` half of the key — must already be defined. Definedness is the one ambient fact a pure, ground elaboration reads (through the conversions in `expect`, which unfold definitions), so an entry that surfaces only settled globals cannot be invalidated by a later *fresh* `define` — the name analogue of the reduction cache's unsolved-metavariable refusal (`Context::reduce`), and what lets [`define_entry`] drop its wholesale elaboration-cache clear. A constructor, intrinsic, inductive, or struct is not a free `Var`, so it never trips the gate; only a `/`-qualified definition or a `rec` member does, and a `rec` member is defined (as a slot) before any sibling body elaborates, so it counts as settled here — the slot→member redefinition later clears wholesale.
-    ///
-    /// [`probe_elaborated`]: Context::probe_elaborated [`define_entry`]: Context::define_entry
+    /// Whether a [`probe_elaborated`](Self::probe_elaborated) `Miss` may be recorded: the purity and groundness condition, plus the *settled-globals* gate. Every global the entry names — in the result, and in the `Check` `expected` half of the key — must already be defined. Definedness is the one ambient fact a pure, ground elaboration reads (through the conversions in `expect`, which unfold definitions), so an entry that surfaces only settled globals cannot be invalidated by a later *fresh* `define` — the name analogue of the reduction cache's unsolved-metavariable refusal (`Context::reduce`), and what lets [`define_entry`](Self::define_entry) drop its wholesale elaboration-cache clear. A constructor, intrinsic, inductive, or struct is not a free `Var`, so it never trips the gate; only a `/`-qualified definition or a `rec` member does, and a `rec` member is defined (as a slot) before any sibling body elaborates, so it counts as settled here — the slot→member redefinition later clears wholesale.
     fn elaboration_cacheable(
         &self,
         stamp: &ElaborationStamp,

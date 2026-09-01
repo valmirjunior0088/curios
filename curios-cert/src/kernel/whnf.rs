@@ -4,7 +4,7 @@
 //!
 //! It resembles the elaborator's reducer closely, and that resemblance is the point of writing it out rather than sharing it. Reduction decides which programs convert, and conversion decides which programs typecheck; a bug shared by both checkers is a bug neither can catch. The crate boundary enforces this — `curios-elab`'s reducer is not visible from here — so the duplication cannot quietly collapse back into a call.
 //!
-//! Two things *are* shared, and both are representation rather than judgment: the binder discipline that `open`/`release` implement, and [`reduce_intrinsic`](curios_core::reduce_intrinsic), which decides what `2 + 2` folds to. Neither can admit an ill-typed program on its own.
+//! Two things *are* shared, and both are representation rather than judgment: the binder discipline that `open`/`release` implement, and [`reduce_intrinsic`], which decides what `2 + 2` folds to. Neither can admit an ill-typed program on its own.
 
 #[cfg(test)]
 mod budget_tests;
@@ -83,7 +83,7 @@ enum Step {
 
 /// Reduce `term` until its head constructor is stable.
 ///
-/// Guarded by [`recurse`] for the same reason the crate duplicates the strategy at all: the kernel has to accept every term the elaborator produced, on the same thread stack, so a depth it aborts at that the elaborator does not is a term that typechecks and then fails to certify. That is how the need was found — the elaborator was given its reserve first, and the abort simply moved here. An intrinsic's operands re-enter through [`reduce_intrinsic`](curios_core::reduce_intrinsic), which is shared, so a deep `add` chain puts one native frame per link on this side exactly as it does on the other.
+/// Guarded by [`recurse`] for the same reason the crate duplicates the strategy at all: the kernel has to accept every term the elaborator produced, on the same thread stack, so a depth it aborts at that the elaborator does not is a term that typechecks and then fails to certify. That is how the need was found — the elaborator was given its reserve first, and the abort simply moved here. An intrinsic's operands re-enter through [`reduce_intrinsic`], which is shared, so a deep `add` chain puts one native frame per link on this side exactly as it does on the other.
 pub(crate) fn whnf(kernel: &mut Kernel, term: Term) -> Result<Term, ReduceError> {
     // The level itself, charged when it is deeper than any this judgment has reached — see `Spend::enter_level`. What it buys is that depth is bounded by the budget rather than by how much stack the host handed the process, which is the one resource this walk could previously consume without being counted.
     kernel.enter_level()?;

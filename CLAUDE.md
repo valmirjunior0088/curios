@@ -111,10 +111,10 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -Dwarnings
 cargo test --workspace --all-targets --all-features
 cargo test --workspace --doc --all-features
-cargo doc --workspace --no-deps
+cargo doc --workspace --no-deps --document-private-items
 ```
 
-`cargo check` is deliberately absent: `clippy` is the same compilation with more lints. The doctest step is separate because `--all-targets` excludes `--doc`, so nothing above it compiles a documentation example. The documentation build is CI's Documentation job verbatim, and has been red on its own while every step above it was green: rustdoc's lints — a broken intra-doc link above all — are checked by no other step. Its denial is `[workspace.lints.rustdoc] all = "deny"` in the root manifest, inherited by every crate through `[lints] workspace = true`, so neither this gate nor CI carries an environment variable that can be forgotten in one of them. Measure a step and name the step; never quote a whole-gate total.
+`cargo check` is deliberately absent: `clippy` is the same compilation with more lints. The doctest step is separate because `--all-targets` excludes `--doc`, so nothing above it compiles a documentation example. The documentation build is CI's Documentation job verbatim, and has been red on its own while every step above it was green: rustdoc's lints — a broken intra-doc link above all — are checked by no other step. It carries `--document-private-items` because these crates state their invariants on `pub(crate)` items: without it the step lints the public surface alone, which in this tree is a small fraction of the prose it exists to check. Its denial is `[workspace.lints.rustdoc] all = "deny"` in the root manifest, inherited by every crate through `[lints] workspace = true`, so neither this gate nor CI carries an environment variable that can be forgotten in one of them. Measure a step and name the step; never quote a whole-gate total.
 
 ### Additional gates
 

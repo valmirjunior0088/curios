@@ -61,7 +61,7 @@ pub struct OsHost {
     table: Mutex<Table<OsResource>>,
     /// Monotonic origin: `clock_mono` reports elapsed time since this.
     start: Instant,
-    /// The process arguments served by `args` (argv[0] is the program name).
+    /// The process arguments served by `args` (argv\[0\] is the program name).
     args: Vec<Vec<u8>>,
     /// The blocking-DNS worker pool, started on the first `lookup` so programs that never resolve a name pay for no threads.
     resolver: OnceLock<OsResolver>,

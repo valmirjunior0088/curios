@@ -4,7 +4,7 @@
 //!
 //! The independence is structural, not a matter of discipline. This crate does not depend on `curios-elab`, so nothing here can consult a metavariable store, a refinement, or a cached elaboration — not because the code declines to, but because those types are not in scope. A judgment the elaborator gets wrong is re-decided here from the term alone.
 //!
-//! What the kernel *does* share is the representation: [`Term`], its binder discipline, the intrinsic roster, and the intrinsic folds. Sharing a representation is not sharing a judgment. Two checkers that disagree about a term's type while agreeing on what a term *is* still catch each other's mistakes; two that share the rule that admits a bad program catch nothing. That line is why [`Reducer`](curios_core::Reducer) exists, and it is why the match dispatch in `whnf` is written out again here rather than lifted from the elaborator's reducer, which it closely resembles.
+//! What the kernel *does* share is the representation: [`Term`], its binder discipline, the intrinsic roster, and the intrinsic folds. Sharing a representation is not sharing a judgment. Two checkers that disagree about a term's type while agreeing on what a term *is* still catch each other's mistakes; two that share the rule that admits a bad program catch nothing. That line is why [`Reducer`] exists, and it is why the match dispatch in `whnf` is written out again here rather than lifted from the elaborator's reducer, which it closely resembles.
 //!
 //! # Refusing beats guessing
 //!
@@ -504,7 +504,7 @@ impl Kernel {
         self.spend.heaviest()
     }
 
-    /// See [`Spend::consumption`].
+    /// See [`Spend::snapshot`].
     pub(crate) fn consumption(&self) -> (u64, usize) {
         self.spend.snapshot()
     }
