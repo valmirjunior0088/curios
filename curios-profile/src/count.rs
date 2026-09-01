@@ -2,7 +2,7 @@
 //!
 //! A binary opts in by installing [`CountingAllocator`] as its `#[global_allocator]` under its own `profile` feature. Nothing else observes the counters, so a build that installs no allocator reports every memory column as zero while its timings stay exactly as they were — the columns are absent evidence, never a claim that nothing allocated.
 //!
-//! The counters are process-wide rather than per-thread because a `GlobalAlloc` cannot allocate the thread-local state per-thread attribution would need. Spans therefore measure whatever the whole process did while they were entered, which is precise for the single-threaded stage pipelines the workspace profiles and an overcount anywhere else.
+//! The counters are process-wide, so a span measures whatever the whole process did while it was entered — precise for the single-threaded stage pipelines the workspace profiles and an overcount anywhere else; `README.md` states why.
 
 use std::{
     alloc::{GlobalAlloc, Layout, System},
