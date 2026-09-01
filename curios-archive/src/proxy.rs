@@ -2,7 +2,7 @@
 //!
 //! Every hand-written field adapter in this workspace was the same three-impl shape — `ArchiveWith`, `SerializeWith`, `DeserializeWith` — around one idea: *this value is not archivable, but it converts to one that is.* A namespace is a `u8`, a bignum is its little-endian bytes, a hash map is a sorted vector of pairs, a shared name is the vector behind the `Rc`.
 //!
-//! [`Proxy`] states just that conversion, and [`Via`] supplies the three impls. The point is not brevity: it is that a crate declaring one now names no rkyv trait, so the dependency stays inside this crate where the pin is.
+//! [`Proxy`] states just that conversion, and [`Via`] supplies the three impls; why the shape is written once, here, is `README.md`'s decision.
 
 use {
     crate::rkyv::{

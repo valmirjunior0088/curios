@@ -1,8 +1,6 @@
 //! The four serialization entry points, with rkyv's vocabulary kept inside.
 //!
-//! rkyv's own signatures are generic over an error type and expose a serializer, a validator and a deserializer alias in their bounds. Every call site in this workspace instantiates all of that identically — `rancor::Error` throughout — so the generality bought nothing and cost each caller a `curios_archive::rkyv::` path in return.
-//!
-//! These fix the error type, hand back a `String`, and take the bounds on themselves. A caller says [`to_bytes`] and [`from_bytes`]; the crate that owns the dependency says the rest.
+//! These fix rkyv's error type to `rancor::Error`, hand back a `String`, and take rkyv's serializer, validator and deserializer bounds on themselves. A caller says [`to_bytes`] and [`from_bytes`]; the crate that owns the dependency says the rest, and `README.md` says why.
 
 use {
     rkyv::{

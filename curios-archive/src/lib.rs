@@ -1,6 +1,6 @@
 //! Zero-copy archiving for the Curios workspace: the one crate that names rkyv.
 //!
-//! The pattern is `curios-profile`'s. That crate is the workspace's only `tracing` dependency and names its pins in its own manifest; this is the same arrangement for serialization, and for the same reason — a dependency that exists in exactly one manifest cannot be added elsewhere without someone writing the version down again, which is a question a reviewer will ask. A `[workspace.dependencies]` row shares *configuration* and concentrates no authority at all.
+//! Why the dependency is named here and nowhere else, why a type rkyv cannot archive is described by a stand-in written once, and why the entry points fix rkyv's error type are `README.md`'s decisions.
 //!
 //! **Nothing outside this crate and its `curios-archive-derive` companion spells `rkyv` at all** — not a type, not a trait, not a function, not the helper attribute. That is the whole point, and it is checkable: grep the workspace.
 //!
