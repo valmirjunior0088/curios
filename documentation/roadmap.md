@@ -277,5 +277,5 @@ Unchecked items may link to working implementation specifications. Unchecked ite
   - [x] One-line installer (`install.sh`, versioned by its URL and checksum-verified)
   - [ ] Linter
   - [x] [Test runner](design/toolchain/a-test-is-a-declared-description-run-by-a-synthesized-tail.md) (`test name() = body;` declarations run by `curios test`, listed by `wonder tests`)
-  - [ ] [Property-based testing](roadmap/property-testing-spec.md) (a parameterized test probed over drawn arguments; nothing draws one today)
+  - [x] [Property-based testing](design/language/a-parameterized-test-is-a-property.md) (`test name(params) = body;` probed over drawn arguments by `curios test`, a failure spelling its counterexample)
   - [ ] Documentation generator

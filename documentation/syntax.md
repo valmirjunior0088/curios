@@ -683,14 +683,19 @@ A top-level definition is in scope of its own body, so it may recurse with nothi
 
 ### Test declarations
 
-A `test` declaration declares a named test: a description of type `/syn/Test`, built with the combinators `/std/Test` exports. The parentheses are required and empty, and a binder between them is a parse error: the declaration is the function-definition sugar it lowers to — a definition of declared type `() -> /syn/Test`, its body checked under the nullary lambda the written `()` spells.
+A `test` declaration declares a named test: a description of type `/syn/Test`, built with the combinators `/std/Test` exports. The parentheses are required and hold the telescope a `let` signature holds: the declaration is the function-definition sugar it lowers to — a definition of declared type `(params) -> /syn/Test`, its body checked under the lambda binding every parameter.
 
 ```crs
 use /std/{Nat, Test};
 
 test the_answer_holds() =
     Test/check(21 * 2 == 42);
+
+test add_commutes(n: Nat, m: Nat) =
+    Test/check(n + m == m + n);
 ```
+
+A test with empty parentheses runs once. A test with parameters is a *property*: `curios test` probes its body over drawn arguments, small first, and a failing case reports the drawn arguments, spelled in parameter order, before the body's own report — `for 6, 6: the condition was false`. Which types can be drawn is the standard library's roster: `/std/Test/Draw` is written for every carrier `/std/Spell` renders but `Flt`, for `Option`, `Result` and `List` over their element types, and for the positional tuple shapes up to three fields; a program writes `Draw` for its own types. The property is resolved as a witness of `/std/Test/Property` at the test's function type, so a parameter of a type nothing draws — or a dependent telescope, such as a proof about an earlier parameter — is reported at the declaration as that missing witness. The run is deterministic: a fixed case count from a fixed seed, a function of the sources alone.
 
 `test` is contextual: it is a keyword only where an item may start, and `test` stays an ordinary name everywhere else. A test is never `pub` — its name is its report line, not an export — but it is otherwise registered like a private definition: referable within its subtree, and colliding with a sibling declaration of the same name. The body is its own sequencing region typed at `Test`, which is no monad, so a bare `!` is refused where it is written; an effectful test enters `Io` through `Test/perform`'s thunk. Each unit's tests are collected in declaration order.
 
@@ -925,7 +930,7 @@ satisfy (@A: Type, use Show(A)) => Show(List(A)) {
 
 Every registered witness is keyed by the concept name and the tuple of rigid heads of every concept parameter. Each head must reduce to an inductive, structure, intrinsic type, tuple type, function type, or supported higher-kinded type constructor — including a *partially applied* family written as a lambda, `(A: Type) => State(S, A)`, which keys on the applied head. Remaining arguments below those heads are checked by unification after lookup.
 
-A tuple type is keyed by its *shape*: the label at each field position, arity implied, field types excluded. Labels are part of a tuple type's identity, so `Show({Nat, Bool})`, `Show({a: Nat, b: Bool})` and `Show({x: Nat, y: Bool})` are three keys for three types, and a witness for one does not serve another. `{}` keys as the empty shape, and a constructor whose body is a tuple type — `let Pair(A: Type) -> Type = {Nat, A};` — keys on that body's shape in the higher-kinded position. The standard library writes `Show`, `Eql` and `Ord` for the positional shapes up to eight fields, in `/std/Tuple`; a labeled product wanting the same is written as a `struct`.
+A tuple type is keyed by its *shape*: the label at each field position, arity implied, field types excluded. Labels are part of a tuple type's identity, so `Show({Nat, Bool})`, `Show({a: Nat, b: Bool})` and `Show({x: Nat, y: Bool})` are three keys for three types, and a witness for one does not serve another. `{}` keys as the empty shape, and a constructor whose body is a tuple type — `let Pair(A: Type) -> Type = {Nat, A};` — keys on that body's shape in the higher-kinded position. The standard library writes `Show`, `Eql` and `Ord` for the positional shapes up to eight fields, and `Spell` up to three, in `/std/Tuple`; a labeled product wanting the same is written as a `struct`.
 
 ```crs
 satisfy (@A: Type, @B: Type, use Show(A), use Show(B)) => Show({A, B}) {
@@ -933,7 +938,7 @@ satisfy (@A: Type, @B: Type, use Show(A), use Show(B)) => Show({A, B}) {
 }
 ```
 
-A function type is keyed by its *plicity vector*: the mark at each parameter position, arity implied, domains and result excluded. Plicity and arity are part of a function type's identity, so `Tag((Nat) -> Nat)`, `Tag((@n: Nat) -> Nat)` and `Tag((Nat) -> (Nat) -> Nat)` are three keys for three types, and a witness for one does not serve another — while binder names are not part of it: `(a: Nat) -> Nat` and `(b: Nat) -> Nat` are one key. `() -> A` keys as the empty vector, a distinct type from `A`, and a constructor whose body is a function type — `let Reader(A: Type) -> Type = (Nat) -> A;` — keys on that body's vector in the higher-kinded position. The result type is not in the key, so a concept commits, per shape, to one result discipline. The standard library writes no function-keyed witness: no meaningful `Show` exists at a function type, `Eql` at one is undecidable, and `Monad` at one is declined deliberately — the nominal wrapper, `/std/State`'s idiom, is how a function becomes a monad.
+A function type is keyed by its *plicity vector*: the mark at each parameter position, arity implied, domains and result excluded. Plicity and arity are part of a function type's identity, so `Tag((Nat) -> Nat)`, `Tag((@n: Nat) -> Nat)` and `Tag((Nat) -> (Nat) -> Nat)` are three keys for three types, and a witness for one does not serve another — while binder names are not part of it: `(a: Nat) -> Nat` and `(b: Nat) -> Nat` are one key. `() -> A` keys as the empty vector, a distinct type from `A`, and a constructor whose body is a function type — `let Reader(A: Type) -> Type = (Nat) -> A;` — keys on that body's vector in the higher-kinded position. The result type is not in the key, so a concept commits, per shape, to one result discipline. The standard library writes function-keyed witnesses for one concept alone, `/std/Test/Property`, whose function instance has one canonical meaning — a property probed at its arity, `-> Test` the discipline at every shape. No meaningful `Show` exists at a function type, `Eql` at one is undecidable, and `Monad` at one is declined deliberately — the nominal wrapper, `/std/State`'s idiom, is how a function becomes a monad.
 
 Two witnesses that resolve through each other are declared as one group with `and`; each member is a whole witness, with its own telescope where it has one, and the group's members register before any body elaborates. A lone witness may resolve through its own entry with nothing said; two that resolve through each other without being declared as a group are refused, naming both.
 
@@ -1073,7 +1078,7 @@ The standard equality operations include reflexivity, symmetry, transitivity, co
 | `Name { ..base, ... }` | Structure update |
 | `match term ... end` | Typed elimination or dispatch |
 | `choose ... end` | Ordered guarded ladder |
-| `test name() = body;` | Declared test — a `/syn/Test` description, collected per unit |
+| `test name(params) = body;` | Declared test — a `/syn/Test` description, collected per unit; with parameters, a property probed over drawn arguments |
 | `satisfy C(args) { ... }` | Globally registered anonymous witness |
 | `satisfy C(args);` | Derived witness — the compiler writes the body |
 | `satisfy (@A: Type, use C(A)) => D(args) { ... }` | Parameterized globally registered anonymous witness |
