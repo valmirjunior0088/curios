@@ -4,7 +4,7 @@ use crate::tests::run;
 
 #[test]
 fn slice_proof_aligns_with_byte_walk() {
-    // The corrected `slice_closed` shape: a RELEVANT byte walk (`to_lead_bytes`) and a MIRRORING proof walk (`to_lead_proof : Valid(to_lead_bytes(s, b))`). The proof peels the derivation while the byte function reduces in lockstep — which only works now that the `Bytes` eliminator decodes a *symbolic* cons (the new reduce rule). The `cont`/`bad` arms reduce `to_lead_bytes(cont, cons(c,t))` to `to_lead_bytes(step(c,cont), t)`, matching the recursive proof's index.
+    // The corrected slicing shape: a RELEVANT byte walk (`to_lead_bytes`) and a MIRRORING proof walk (`to_lead_proof : Valid(to_lead_bytes(s, b))`). The proof peels the derivation while the byte function reduces in lockstep — which only works now that the `Bytes` eliminator decodes a *symbolic* cons (the new reduce rule). The `cont`/`bad` arms reduce `to_lead_bytes(cont, cons(c,t))` to `to_lead_bytes(step(c,cont), t)`, matching the recursive proof's index.
     let source = r#"
         use /std/{Handle, Byte, Bytes, Nat, Bool};
 

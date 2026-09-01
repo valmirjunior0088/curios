@@ -132,7 +132,7 @@ fn nested_bin_pattern_dispatches_by_shape() {
     assert_eq!(run(source), b"65");
 }
 
-// A `Bool` literal leaf (`true`/`false`) nested inside a constructor payload — two full rows, since a bare top-level `true`/`false` would otherwise be swallowed by the separate flat `parse_bool_match` before ever reaching the matrix grammar.
+// A `Bool` literal leaf (`true`/`false`) nested inside a constructor payload — two full rows.
 #[test]
 fn nested_bool_pattern_dispatches_by_shape() {
     let source = r#"

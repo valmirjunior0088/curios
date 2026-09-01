@@ -238,7 +238,7 @@ pub(super) fn parse_list_nil_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     catch(parse_literal("[]")).map(|()| MatchPattern::List(ListPattern::Nil))
 }
 
-// The `[head, ..tail][; ih]` leaf of a nested `List` pattern — mirrors `parse_list_cons_branch` minus the leading `|` and trailing `=> body`.
+// The `[head, ..tail][; ih]` leaf of a nested `List` pattern.
 pub(super) fn parse_list_cons_match_pattern<'a>() -> Parser<'a, MatchPattern> {
     catch(
         parse_literal("[")

@@ -18,7 +18,7 @@ pub enum Stage<'a> {
     Cont(&'a CpsModule),
     ContOptm(&'a CpsModule),
     Wasm(&'a curios_wasm::Module),
-    /// The Binaryen-optimized module, rendered by Binaryen's own text writer — ground truth from the session that optimized it, not a reader's reconstruction. The native product's `to_cwasm_dumped` emits it, mirroring the driver's own observe-at-production idiom; `compile_entrypoint` never does, and `every_stage_is_observed_once_in_names_order` pins that deliberate absence.
+    /// The Binaryen-optimized module, rendered by Binaryen's own text writer — ground truth from the session that optimized it, not a reader's reconstruction. The native product's `wasm_optm` emits it, mirroring the driver's own observe-at-production idiom; `compile_entrypoint` never does, and `every_stage_is_observed_once_in_names_order` pins that deliberate absence.
     WasmOptm(&'a str),
 }
 

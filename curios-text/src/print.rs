@@ -1056,7 +1056,7 @@ fn print_term_inner(term: Term) -> Printer {
         ]),
         // An arm ladder is width-adaptive: `match carry | true => b[\\1] | false => b[] end` is how the corpus writes a two-arm decision and how it reads best, and forcing every one of them onto five lines is what made a proof-heavy module half again as tall as it was written.
         //
-        // Two ladders are broken regardless of width, by [`ladder_breaks`]. Arms sit at the ladder's own column when broken, never indented, so `| pattern =>` and the `end` that closes it line up.
+        // Two ladders are broken regardless of width, by [`is_ladder`]. Arms sit at the ladder's own column when broken, never indented, so `| pattern =>` and the `end` that closes it line up.
         Subterm::Choose(Choose { arms, default }) => {
             let forced = arms.len() + 1 > MAX_FLAT_ARMS
                 || std::iter::once(&default)

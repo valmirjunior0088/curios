@@ -106,7 +106,7 @@ fn match_rejects_a_motive_on_tuple_head() {
     );
 }
 
-// A nested `Nat` pattern column missing its `0` case entirely — reachable only through the matrix grammar (the flat two-branch `parse_nat_match` can't even express incompleteness, since it requires both cases up front). These four hardcoded carriers have no core-side exhaustiveness mechanism to fall back on, unlike an ordinary constructor tag.
+// A nested `Nat` pattern column missing its `0` case entirely. These four hardcoded carriers have no core-side exhaustiveness mechanism to fall back on, unlike an ordinary constructor tag.
 #[test]
 fn match_rejects_incomplete_nat_pattern() {
     let source = r#"

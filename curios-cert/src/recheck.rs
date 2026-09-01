@@ -381,7 +381,7 @@ fn verdicts_within(kernel: &mut Kernel, module: &Module, globals: &Globals) -> V
         }
     }
 
-    // A registry entry is data that no judgment in this walk types. `check_sizing` walks a constructor telescope's *domains* and stops at the terminal, so the index targets a constructor states reach index inversion and the arm rule without ever having been checked, and `check_induct_decl` leaves them to the `rec` group a declaration lowers to — a lowering nothing here confirms exists. `infer` and `convert` refuse an elaboration-only node wherever a judgment meets one; this is the boundary pass that decides the same thing for the positions no judgment visits, so that "no unsolved metavariable survives" is this walk's own verdict rather than the elaborator's word.
+    // A registry entry is data that no judgment in this walk types. `check_arity` walks a constructor telescope's *domains* and stops at the terminal, so the index targets a constructor states reach index inversion and the arm rule without ever having been checked, and `check_induct_decl` leaves them to the `rec` group a declaration lowers to — a lowering nothing here confirms exists. `infer` and `convert` refuse an elaboration-only node wherever a judgment meets one; this is the boundary pass that decides the same thing for the positions no judgment visits, so that "no unsolved metavariable survives" is this walk's own verdict rather than the elaborator's word.
     for (name, declaration) in module.induct_decls.iter().filter(|(name, _)| fresh(name)) {
         if let Some(error) = induct_residue(declaration) {
             verdicts.push(Verdict {

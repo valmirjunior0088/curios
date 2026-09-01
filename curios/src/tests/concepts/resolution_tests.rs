@@ -185,7 +185,7 @@ fn open_parameter_does_not_infer_from_the_witness() {
     assert!(message.contains("witness") || message.contains("infer"));
 }
 
-// The full higher-kinded chain: `Monad/bind(o, f)` parks its `Monad(?M)` goal on the flex parameter, checking `o : Option(Nat)` against `?M(?A)` fires the flex-apply imitation rule inside the conversion checker, and the committed `?M := Option` wakes the parked goal, which the table resolves to the prelude's `monad_option`. Also covers the cached-prelude replay of a higher-kinded witness.
+// The full higher-kinded chain: `Monad/bind(o, f)` parks its `Monad(?M)` goal on the flex parameter, checking `o : Option(Nat)` against `?M(?A)` fires the flex-apply imitation rule inside the conversion checker, and the committed `?M := Option` wakes the parked goal, which the table resolves to the prelude's `Monad(Option)` witness. Also covers the cached-prelude replay of a higher-kinded witness.
 #[test]
 fn prelude_monad_resolves_by_imitation() {
     let source = r#"

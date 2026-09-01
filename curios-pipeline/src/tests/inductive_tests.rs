@@ -22,7 +22,7 @@ fn omitted_motive_mentioning_a_type_param_lowers() {
 
 #[test]
 fn projection_through_a_stuck_inductive_payload_lowers() {
-    // `Fmt/print`'s return type is `format_type_with({}, parse(s))`, so erasing `print` evaluates `parse(s)` at compile time with a *symbolic* `s`. The `Parse` combinator's result is a `Result` inductive whose discriminant is therefore stuck, and the inlined `success` payload is reached by a projection. `erase` must lower that projection through the neutral payload `match` (every variant carries the field at the same index) instead of demanding a literal `TupleType`. Guards `projectable_at`; without it this panics `erase: projected a non-tuple`.
+    // `Fmt/print`'s return type is `format_type_with({}, parse(s))`, so erasing `print` evaluates `parse(s)` at compile time with a *symbolic* `s`. The `Parse` combinator's result is a `Result` inductive whose discriminant is therefore stuck, and the inlined `success` payload is reached by a projection. `erase` must lower that projection through the neutral payload `match` (every variant carries the field at the same index) instead of demanding a literal `TupleType`. Guards the projection lowering; without it this panics `erase: projected a non-tuple/struct`.
     let source = r#"
         use /std/{Fmt, Bytes};
         Fmt/print("% is %")("a")(1)

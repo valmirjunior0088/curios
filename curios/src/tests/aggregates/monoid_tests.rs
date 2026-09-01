@@ -277,7 +277,7 @@ fn list_slice_window_seam_mismatch_is_rejected() {
 
 #[test]
 fn bin_len_reduces_across_a_cons_spine() {
-    // The `Bytes/len` partner of the slice/get cons-reduction: length distributes over concatenation and an `append` is one byte longer, so a cons spine's length reduces to a `succ` over the tail's — `len(cons(h, t)) = succ(len t)`. `Nat/lt` then discharges the codepoint walk's bounds guard on that spine: `lt(0, succ _) = true` (the left literal is below the successor floor) and `lt(succ _, 0) = false` (the left is at least the floor). All by `refl` for a SYMBOLIC tail, the pair that lets `advance_codepoint` step a symbolic cons.
+    // The `Bytes/len` partner of the slice/get cons-reduction: length distributes over concatenation and an `append` is one byte longer, so a cons spine's length reduces to a `succ` over the tail's — `len(cons(h, t)) = succ(len t)`. `Nat/lt` then discharges the codepoint walk's bounds guard on that spine: `lt(0, succ _) = true` (the left literal is below the successor floor) and `lt(succ _, 0) = false` (the left is at least the floor). All by `refl` for a SYMBOLIC tail, the pair that lets the codepoint walk step a symbolic cons.
     let source = r#"
         use /std/{Handle, Str, Eq, Byte, Bytes, Nat};
         let len(h : Byte, t : Bytes)
