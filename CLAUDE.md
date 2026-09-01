@@ -191,9 +191,10 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets --all-features -- -Dwarnings
 cargo test --workspace --all-targets --all-features
 cargo test --workspace --doc --all-features
+RUSTDOCFLAGS=-Dwarnings cargo doc --workspace --no-deps
 ```
 
-`cargo check` is deliberately absent: `clippy` is the same compilation with more lints. The doctest step is a separate invocation because `--all-targets` expands to lib/bins/tests/benches/examples and excludes `--doc`, so the step above it never compiles a documentation example; the workspace has none today, and this is the guard that the first one written is actually run. The denial is passed after `--` rather than as `RUSTFLAGS`, because `RUSTFLAGS` is a global fingerprint input that would rebuild and re-certify the prelude for that step alone. The gate is latency-bound: the crate graph is a deep near-linear chain, so wall clock is the critical path and more parallelism does not shorten it.
+`cargo check` is deliberately absent: `clippy` is the same compilation with more lints. The doctest step is a separate invocation because `--all-targets` expands to lib/bins/tests/benches/examples and excludes `--doc`, so the step above it never compiles a documentation example; the workspace has none today, and this is the guard that the first one written is actually run. The documentation build is CI's Documentation job verbatim: rustdoc's lints — a broken intra-doc link above all — are checked by no other step, and that job has been red on its own while every step above it was green; its denial rides in `RUSTDOCFLAGS`, which fingerprints only the doc units, so it recompiles and re-certifies nothing. The denial is passed after `--` rather than as `RUSTFLAGS`, because `RUSTFLAGS` is a global fingerprint input that would rebuild and re-certify the prelude for that step alone. The gate is latency-bound: the crate graph is a deep near-linear chain, so wall clock is the critical path and more parallelism does not shorten it.
 
 Measure a step and name the step; never quote a whole-gate total. Documentation-only changes need no rebuild unless they alter documented commands or make claims that need executable verification.
 
