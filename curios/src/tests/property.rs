@@ -60,7 +60,7 @@ fn tuple_shapes_draw_and_spell_through_their_premises() {
                     Spell/spell((1, "a", ('x', true))),
                     ""]))
         "#),
-        b"(), ()\n(0,), (2,), (0,)\n(0, true), (0, true), (2, false), (4, false)\n(0, 'r', /std/Option/none()), (2, '1', /std/Option/none()), (4, ':', /std/Option/some(false))\n(1, \"a\", ('x', true))\n"
+        b"(), ()\n(0,), (2,), (0,)\n(0, true), (0, true), (2, false), (4, false)\n(0, 'r', /std/Option/Option/none()), (2, '1', /std/Option/Option/none()), (4, ':', /std/Option/Option/some(false))\n(1, \"a\", ('x', true))\n"
     );
 }
 
