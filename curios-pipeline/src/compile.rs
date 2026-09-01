@@ -197,15 +197,7 @@ pub struct TestRecord {
 
 /// The declaration-ordered paths of a module's registered tests — how `curios test` and `wonder tests` name them, read off [`Module::tests`](curios_core::Module) so the two cannot disagree with the schedule.
 pub fn declared_test_paths(module: &curios_core::Module) -> Vec<String> {
-    module
-        .tests
-        .iter()
-        .map(|test| {
-            test.qualifier()
-                .map(|qualifier| qualifier.join())
-                .unwrap_or_default()
-        })
-        .collect()
+    module.tests.iter().map(curios_core::Global::path).collect()
 }
 
 /// The definition a registered test names, among the unit's items.
@@ -246,11 +238,7 @@ fn test_records(scheduled: &[curios_elab::ScheduledTest]) -> Vec<TestRecord> {
     scheduled
         .iter()
         .map(|test| TestRecord {
-            path: test
-                .name
-                .qualifier()
-                .map(|qualifier| qualifier.join())
-                .unwrap_or_default(),
+            path: test.name.path(),
             body: test
                 .span
                 .as_ref()

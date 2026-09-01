@@ -57,10 +57,7 @@ pub fn test_program_tail(
     let items = tests
         .iter()
         .map(|test| {
-            let path = match test.name.qualifier() {
-                Some(path) => path.join(),
-                None => String::new(),
-            };
+            let path = test.name.path();
             let declaration = Term::var(Var::free(Free::from(&test.name)));
             let thunk = match test.arity {
                 0 => declaration,
