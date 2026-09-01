@@ -1,6 +1,8 @@
 //! The TOML codec, decoded and re-encoded in emitted wasm.
 //!
-//! **Every document in this module is a row of one program, compiled once.** The program is the codec plus a `match` over a row number the host supplies on stdin, and each test runs its own rows against it; `codec()` compiles it the first time any test asks. This is the shape `numeric.rs` uses for its scalar tables, one level up, and it exists for one reason: compiling a program that reaches `Toml/decode` and `Toml/encode` costs the Cont fixpoint seventy-odd rounds over the whole codec — about twenty seconds in release and a minute and more in debug — and that cost is per *program*, not per document. Ten programs of a handful of documents each were ten of those; one program is one.
+//! **Every document in this module is a row of one program, compiled once, and run by one test.** The program is the codec plus a `match` over a row number the host supplies on stdin; `codec()` compiles it and the test runs every table's rows against it. This is the shape `numeric.rs` uses for its scalar tables, one level up, and it exists for one reason: compiling a program that reaches `Toml/decode` and `Toml/encode` costs the Cont fixpoint seventy-odd rounds over the whole codec — about twenty seconds in release and three and a half minutes in debug — and that cost is per *program*, not per document. Ten programs of a handful of documents each were ten of those; one program is one.
+//!
+//! One test rather than one per table, for the same cost seen from the test harness: a test per table shared the program through a `OnceLock`, so the first to ask compiled it while the other ten held a test thread each doing nothing but wait — eleven of the suite's twelve threads parked for the whole compile, at the end of the run where nothing was left to fill them. One test holds one thread, and reports every mismatched row at once where the split reported a table's first.
 //!
 //! The documents are literals and reach the decoder as written. The evaluator does not unroll a closed decode — a claim this module's header once made, and which the stage profile of such a program refutes: elaboration and `evaluate_closed_terms` together are under a second of it, and the fixpoint is the rest — so nothing here needs a taint to reach the emitted codec. The long binary literals still use one, digit runs repeated a `(opaque + 1) * n` number of times, because a literal of thirty digits is the thing a reader should not have to count.
 
@@ -593,74 +595,38 @@ fn run_row(index: usize) -> String {
     String::from_utf8(io.output()).expect("a row prints text")
 }
 
-/// The program-order index of `table`'s first row.
-fn offset_of(table: &[Row]) -> usize {
-    TABLES
+/// Every row of every table, then the rounded floats, in the program's order: what each prints against what its table expects.
+///
+/// The tables — scalar documents round-tripping deterministically, string forms and escapes, the RFC 3339 subset of date-times, integer boundaries in every radix, binary32 bit patterns and correctly rounded floats, the rejections of malformed numbers and escapes and of table-construction conflicts, nested arrays and inline tables reaching a fixpoint, comments and line endings and trailing input — were one test each until the compile they share made that a cost; see the module header. A mismatch names its row, and every mismatch is reported at once.
+#[test]
+fn every_document_prints_what_its_table_expects() {
+    let expectations = TABLES
         .iter()
-        .take_while(|candidate| !std::ptr::eq(**candidate, table))
-        .map(|candidate| candidate.len())
-        .sum()
-}
+        .flat_map(|table| {
+            table
+                .iter()
+                .map(|row| (row.expr.to_string(), row.expected.to_string()))
+        })
+        .chain(rounded_float_rows())
+        .collect::<Vec<_>>();
 
-/// Run every row of `table` and hold each to its expectation.
-fn check(table: &'static [Row]) {
-    let offset = offset_of(table);
-    for (index, row) in table.iter().enumerate() {
-        assert_eq!(run_row(offset + index), row.expected, "for: {}", row.expr);
+    let mut mismatched = Vec::new();
+    for (index, (expr, expected)) in expectations.iter().enumerate() {
+        let printed = run_row(index);
+        if printed != *expected {
+            mismatched.push(format!(
+                "{expr}: expected {expected:?}, printed {printed:?}"
+            ));
+        }
     }
-}
 
-#[test]
-fn scalar_documents_round_trip_deterministically() {
-    check(SCALARS);
-}
-
-#[test]
-fn string_forms_and_escapes_decode() {
-    check(STRINGS);
-}
-
-#[test]
-fn date_times_cover_the_rfc3339_subset() {
-    check(DATE_TIMES);
-}
-
-#[test]
-fn integer_boundaries_hold_in_every_radix() {
-    check(INTEGERS);
-}
-
-#[test]
-fn floats_pin_binary32_bit_patterns() {
-    check(FLOAT_BITS);
-}
-
-#[test]
-fn floats_are_correctly_rounded() {
-    let offset = TABLES.iter().map(|table| table.len()).sum::<usize>();
-    for (index, (expr, expected)) in rounded_float_rows().iter().enumerate() {
-        assert_eq!(run_row(offset + index), *expected, "for: {expr}");
-    }
-}
-
-#[test]
-fn malformed_numbers_and_escapes_reject() {
-    check(REASONS);
-}
-
-#[test]
-fn table_construction_conflicts_reject() {
-    check(TABLE_CONFLICTS);
-}
-
-#[test]
-fn arrays_and_inline_tables_nest_and_reach_a_fixpoint() {
-    check(NESTING);
-}
-
-#[test]
-fn comments_line_endings_and_trailing_input() {
-    check(COMMENTS);
+    assert!(
+        mismatched.is_empty(),
+        "{} of {} rows printed something else:\n  {}",
+        mismatched.len(),
+        expectations.len(),
+        mismatched.join("\n  ")
+    );
 }
 
 /// The encoder on a map built by hand rather than decoded, which is the one path no row above reaches.
