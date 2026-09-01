@@ -9,6 +9,7 @@ use {
         Atom, BlockId, Constant, ConstantId, FunctionId, Module, SequenceGrain, Statement,
         StatementId, Terminator, ValueId, edge, sequence_get_op, sequence_rest_op,
     },
+    curios_abi::Handle,
     curios_num::Natural,
     curios_utilities::{Grain, PackedBin},
     std::collections::{BTreeMap, BTreeSet},
@@ -116,10 +117,10 @@ impl<'a> Emitter<'a> {
             Constant::Int(value) => curios_cont::CpsLiteral::Int(*value),
             Constant::Flt(value) => curios_cont::CpsLiteral::Flt(*value),
             Constant::Bin(grain, value) => curios_cont::CpsLiteral::Bin(*grain, value.clone()),
-            // A Handle descriptor token rides the packed-binary carrier: its little-endian bytes at byte grain.
+            // A Handle descriptor token rides the packed-binary carrier at byte grain, spelled by the one encoding the host reads back.
             Constant::Handle(token) => curios_cont::CpsLiteral::Bin(
                 Grain::X,
-                PackedBin::from_bytes(Natural::from(*token).to_bytes_le()),
+                PackedBin::from_bytes(Handle::encode(&Natural::from(*token))),
             ),
         }
     }

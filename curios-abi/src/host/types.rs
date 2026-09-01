@@ -26,28 +26,28 @@ impl Handle {
     /// The first handle token a host mints, one past the stdio tokens so a minted file or socket handle never collides with stdin/stdout/stderr; each host counts up from here with a [`TokenMint`].
     pub const HANDLE_SEED: u32 = Self::STDERR + 1;
 
-    /// The canonical byte encoding of a token integer: its little-endian [`Natural`] bytes. The single shared convention — [`TokenMint`] mints on it, hosts key their tables on it, and the `ersd → cont` lowering encodes the stdio constants `Handle(0/1/2)` the same way — so the three ends cannot drift.
-    fn encode(token: u32) -> Vec<u8> {
-        Natural::from(token).to_bytes_le()
+    /// The canonical byte encoding of a token: its little-endian [`Natural`] bytes — one zero byte for zero, never the empty string, and never padded to a fixed width. This is the one place the convention is spelled: [`TokenMint`] mints through it, hosts key their tables on the bytes it returns, and the `ersd → cont` lowering calls it for the stdio constants `Handle(0/1/2)` — so the three ends cannot drift.
+    pub fn encode(token: &Natural) -> Vec<u8> {
+        token.to_bytes_le()
     }
 
     /// The raw wire token bytes: the stdio encodings, or the minted handle.
     pub fn bytes(&self) -> Vec<u8> {
         match self {
-            Handle::Stdin => Self::encode(Self::STDIN),
-            Handle::Stdout => Self::encode(Self::STDOUT),
-            Handle::Stderr => Self::encode(Self::STDERR),
+            Handle::Stdin => Self::encode(&Natural::from(Self::STDIN)),
+            Handle::Stdout => Self::encode(&Natural::from(Self::STDOUT)),
+            Handle::Stderr => Self::encode(&Natural::from(Self::STDERR)),
             Handle::Other(bytes) => bytes.clone(),
         }
     }
 
     /// Lift wire token bytes back to a descriptor: the three stdio encodings map to the named streams, anything else is a host-minted handle. The inverse of [`bytes`](Self::bytes).
     pub fn from_bytes(bytes: Vec<u8>) -> Self {
-        if bytes == Self::encode(Self::STDIN) {
+        if bytes == Self::encode(&Natural::from(Self::STDIN)) {
             Handle::Stdin
-        } else if bytes == Self::encode(Self::STDOUT) {
+        } else if bytes == Self::encode(&Natural::from(Self::STDOUT)) {
             Handle::Stdout
-        } else if bytes == Self::encode(Self::STDERR) {
+        } else if bytes == Self::encode(&Natural::from(Self::STDERR)) {
             Handle::Stderr
         } else {
             Handle::Other(bytes)
@@ -74,7 +74,7 @@ impl TokenMint {
 
     /// The next token's canonical bytes, advancing the counter past it so no later call can reproduce them.
     pub fn mint(&mut self) -> Vec<u8> {
-        let bytes = self.next.to_bytes_le();
+        let bytes = Handle::encode(&self.next);
         self.next = &self.next + Natural::one();
 
         bytes
