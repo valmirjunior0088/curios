@@ -1,6 +1,6 @@
 //! The attribute macro behind `curios-archive`. Depend on that crate, never on this one.
 //!
-//! A `proc-macro = true` crate can export nothing but macros, which is the only reason this is separate — the serde/serde_derive arrangement, for the same reason serde has it.
+//! Why this is a crate of its own, why the expansion rather than the attribute is feature-gated, why it depends on nothing, and why the field markers are inert are `README.md`'s decisions.
 
 use proc_macro::{Delimiter, Group, TokenStream, TokenTree};
 
@@ -18,17 +18,13 @@ use proc_macro::{Delimiter, Group, TokenStream, TokenTree};
 /// pub struct Atom(String);
 /// ```
 ///
-/// # Why the expansion is `cfg_attr` rather than `cfg`
-///
-/// The annotation is unconditional at the call site and the *expansion* is what the feature gates. `cfg_attr` is evaluated where the macro expands, so `feature = "archive"` names the consuming crate's own feature — each crate keeps its gate, and this one neither knows nor needs to know which crates have it on.
-///
-/// That is also why this macro is not itself feature-gated. A macro that vanished with the feature would make every annotated type a compile error in a build with archiving off.
+/// The annotation is unconditional at the call site and the *expansion* is what the feature gates, through `cfg_attr`, so `feature = "archive"` names the consuming crate's own feature.
 ///
 /// # Field markers
 ///
 /// A field says `#[archived_with(SomeAdapter)]` or `#[archived_omit_bounds]`, and this rewrites it into the gated `rkyv(…)` helper. Both are inert: nothing declares them, so a field carrying one outside an `#[archived]` item is an unresolved-attribute error rather than a silently ignored line.
 ///
-/// This is what lets rkyv be spelled nowhere but its two owning crates, and it means the macro now *does* read the item's body — reversing what this paragraph used to say. The reversal is deliberate and the reasoning is worth keeping: reading the body was declined while "field adapters are rare" stood in for a number, and the number turned out to be fifteen. What made it cheap in the end is that recognizing a marker needs no grammar — it is `#`, a bracket group, and one of two idents — so the walk is over token trees and this crate still depends on nothing. `syn` was never the price; it was only assumed to be.
+/// Recognizing a marker needs no grammar — it is `#`, a bracket group, and one of two idents — so the walk is over token trees and this crate depends on nothing.
 #[proc_macro_attribute]
 pub fn archived(args: TokenStream, item: TokenStream) -> TokenStream {
     let arguments = args.to_string();
